@@ -5,7 +5,7 @@
  * Module: `@app/(app)/gov/view`
  * Purpose: Client component displaying DAO governance status — credit balance, next run, recent runs, and activity charts.
  * Scope: Renders governance data fetched via React Query hooks. Does not perform server-side logic or direct DB access.
- * Invariants: Matches dashboard layout pattern (max-width-container-screen); 30s polling for status, stale-while-revalidate for activity.
+ * Invariants: Layout container owned by gov/layout.tsx; 30s polling for status, stale-while-revalidate for activity.
  * Side-effects: IO (via useGovernanceStatus hook and activity fetch)
  * Links: docs/spec/governance-status-api.md
  * @public
@@ -72,7 +72,7 @@ export function GovernanceView(): ReactElement {
   // Error state — matches activity/schedules pattern
   if (error) {
     return (
-      <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-8 p-4 md:p-8 lg:px-16">
+      <div className="flex flex-col gap-8">
         <div className="rounded-lg border border-destructive bg-destructive/10 p-6">
           <h2 className="font-semibold text-destructive text-lg">
             Error loading governance data
@@ -88,7 +88,7 @@ export function GovernanceView(): ReactElement {
   // Loading skeleton — matches activity page pattern
   if (isLoading || !data) {
     return (
-      <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-8 p-4 md:p-8 lg:px-16">
+      <div className="flex flex-col gap-8">
         <div className="animate-pulse space-y-8">
           <div className="h-8 w-64 rounded-md bg-muted" />
           <div className="grid gap-4 md:grid-cols-2">
@@ -107,7 +107,7 @@ export function GovernanceView(): ReactElement {
   }
 
   return (
-    <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-8 p-4 md:p-8 lg:px-16">
+    <div className="flex flex-col gap-8">
       <h1 className="font-bold text-3xl tracking-tight">
         Cogni System Activity
       </h1>
