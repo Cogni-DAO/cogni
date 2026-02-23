@@ -68,7 +68,7 @@ The system uses several orthogonal identity keys. Each has a single, non-overlap
 | Key                  | Type | Purpose                            | Scope                | Overloading Prohibited                            |
 | -------------------- | ---- | ---------------------------------- | -------------------- | ------------------------------------------------- |
 | `node_id`            | UUID | Deployment/instance identity       | Infra, DB tenancy    | Never used for governance domain or epoch scoping |
-| `scope_id`           | TEXT | Governance/payout domain (project) | Ledger, epochs       | Never used for deployment identity                |
+| `scope_id`           | UUID | Governance/payout domain (project) | Ledger, epochs       | Never used for deployment identity                |
 | `user_id`            | UUID | Person identity                    | Cross-node           | Never replaced by wallet address or DID           |
 | `billing_account_id` | UUID | Payment/subscription tenancy       | Within a Node's DB   | Never used for governance or deployment identity  |
 | `dao_address`        | TEXT | On-chain contract identity         | Per-project on-chain | Attribute, not a database key                     |

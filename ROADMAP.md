@@ -163,13 +163,13 @@ Requirements:
 
 ### Terminology & ID Mapping
 
-| Term                 | Layer             | Value                             | Purpose                                                                                      |
-| -------------------- | ----------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `billing_account_id` | DB column         | `billing_accounts.id` (UUID)      | Canonical tenant key for all RLS, FK references, data isolation                              |
-| `tenantId`           | Runtime context   | Same UUID as `billing_account_id` | Canonical name in `ToolInvocationContext`, `ToolPolicyContext`, workflow IDs, authz contexts |
-| `node_id`            | Deployment        | `.cogni/repo-spec.yaml` (UUID)    | Deployment/instance identity. One node = one DB, one infra. Never governance scoping.        |
-| `scope_id`           | Governance domain | `.cogni/projects/*.yaml` (TEXT)   | Governance/payout domain (project). Each scope has its own DAO, weight policy, epoch stream. |
-| `dao_address`        | On-chain          | Contract address                  | Attribute of a scope (project), not a tenant key. Lives in project manifest.                 |
+| Term                 | Layer             | Value                             | Purpose                                                                                                                    |
+| -------------------- | ----------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `billing_account_id` | DB column         | `billing_accounts.id` (UUID)      | Canonical tenant key for all RLS, FK references, data isolation                                                            |
+| `tenantId`           | Runtime context   | Same UUID as `billing_account_id` | Canonical name in `ToolInvocationContext`, `ToolPolicyContext`, workflow IDs, authz contexts                               |
+| `node_id`            | Deployment        | `.cogni/repo-spec.yaml` (UUID)    | Deployment/instance identity. One node = one DB, one infra. Never governance scoping.                                      |
+| `scope_id`           | Governance domain | `.cogni/projects/*.yaml` (UUID)   | Governance/payout domain (project). `uuidv5(node_id, scope_key)`. Each scope has its own DAO, weight policy, epoch stream. |
+| `dao_address`        | On-chain          | Contract address                  | Attribute of a scope (project), not a tenant key. Lives in project manifest.                                               |
 
 > See [Identity Model spec](docs/spec/identity-model.md) for the full taxonomy, relationships, and prohibited overloading.
 

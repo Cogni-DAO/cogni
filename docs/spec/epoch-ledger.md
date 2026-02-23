@@ -52,8 +52,8 @@ tags: [governance, transparency, payments, ledger]
 | CURATION_FREEZE_ON_FINALIZE    | DB trigger rejects INSERT/UPDATE/DELETE on `activity_curation` when the referenced epoch has `status = 'finalized'`. Curation is mutable during `open` and `review`, immutable only after finalize.                                                                                                                                                                             |
 | CURATION_AUTO_POPULATE         | Auto-population inserts curation rows for new events and updates `user_id` only on rows where it's NULL. Never overwrites admin-set fields (`included`, `weight_override_milli`, `note`). Delta processing: skip events already curated with a resolved `user_id`.                                                                                                              |
 | NODE_SCOPED                    | All ledger tables include `node_id UUID NOT NULL`. Per node-operator-contract spec, prevents collisions in multi-node scenarios.                                                                                                                                                                                                                                                |
-| SCOPE_SCOPED                   | All epoch-level tables include `scope_id TEXT NOT NULL DEFAULT 'default'`. `scope_id` identifies the governance/payout domain (project) within a node. See [Project Scoping](#project-scoping).                                                                                                                                                                                 |
-| SCOPE_VALIDATED                | Every activity event's `scope_id` must be validated against current project manifests (`.cogni/projects/*.yaml`) or resolve to the `'default'` fallback scope. Unrecognized scope IDs are rejected at ingestion time.                                                                                                                                                           |
+| SCOPE_SCOPED                   | All epoch-level tables include `scope_id UUID NOT NULL`. `scope_id` identifies the governance/payout domain (project) within a node. Derived deterministically: `uuidv5(node_id, scope_key)`. See [Project Scoping](#project-scoping).                                                                                                                                          |
+| SCOPE_VALIDATED                | Every activity event's `scope_id` must be validated against current project manifests (`.cogni/projects/*.yaml`) or match the node's configured `scope_id` (V0 default scope). Unrecognized scope IDs are rejected at ingestion time.                                                                                                                                           |
 | POOL_REPRODUCIBLE              | `pool_total_credits = SUM(epoch_pool_components.amount_credits)`. Each component stores algorithm version + inputs + amount.                                                                                                                                                                                                                                                    |
 | POOL_UNIQUE_PER_TYPE           | `UNIQUE(epoch_id, component_id)` — each component type appears at most once per epoch.                                                                                                                                                                                                                                                                                          |
 | POOL_REQUIRES_BASE             | At least one `base_issuance` component must exist before epoch finalize is allowed.                                                                                                                                                                                                                                                                                             |
@@ -74,11 +74,11 @@ tags: [governance, transparency, payments, ledger]
 The ledger uses two orthogonal scoping keys:
 
 - **`node_id`** (UUID) — Deployment identity. Identifies the running instance. One node = one database, one set of infrastructure, one `docker compose up`. Never overloaded for governance semantics. See [identity-model spec](./identity-model.md).
-- **`scope_id`** (TEXT) — Governance/payout domain. Identifies which **project** an epoch, its activity, and its payouts belong to. A project is a human-defined ownership boundary (e.g., "chat service", "shared infrastructure", "code review daemon") with its own DAO, weight policy, and payment rails.
+- **`scope_id`** (UUID) — Governance/payout domain. Identifies which **project** an epoch, its activity, and its payouts belong to. Derived deterministically as `uuidv5(node_id, scope_key)` where `scope_key` is the human-readable slug (e.g., `'default'`). A project is a human-defined ownership boundary (e.g., "chat service", "shared infrastructure", "code review daemon") with its own DAO, weight policy, and payment rails.
 
 **Terminology:** "Project" is the human concept. `scope_id` is the canonical database key. `scope_id` is not necessarily a filesystem path — path-based routing is one resolver strategy, but scopes can also be assigned by repository, by label, or by explicit declaration.
 
-**V0 default:** All nodes start with a single scope: `scope_id = 'default'`. The `DEFAULT 'default'` column constraint means existing single-project nodes require zero migration. Multi-scope support activates when `.cogni/projects/*.yaml` manifests are added.
+**V0 default:** All nodes start with a single scope: `scope_key = 'default'`, `scope_id = uuidv5(node_id, 'default')`. The scope UUID is declared in `repo-spec.yaml`. Multi-scope support activates when `.cogni/projects/*.yaml` manifests are added.
 
 **Composite invariants:**
 
@@ -93,7 +93,7 @@ The ledger uses two orthogonal scoping keys:
 3. If the resolved `scope_id` is not in the current manifest set, the event is **rejected** (not silently dropped, not assigned to default)
 4. Events touching files in multiple scopes generate **one event per scope** (the same PR can attribute to multiple projects)
 
-**Scope validation:** The `scope_id` on every `activity_events` row must reference a scope declared in `.cogni/projects/*.yaml` (or be `'default'`). This is enforced at the application layer during ingestion — not via FK constraint, since manifests are YAML files, not DB rows.
+**Scope validation:** The `scope_id` on every `activity_events` row must reference a scope UUID declared in `.cogni/projects/*.yaml` (or match the node's `scope_id` from `repo-spec.yaml` for V0 default scope). This is enforced at the application layer during ingestion — not via FK constraint, since manifests are YAML files, not DB rows.
 
 ## Design
 
@@ -235,7 +235,7 @@ Each component stores `algorithm_version`, `inputs_json`, `amount_credits`, and 
 | --------------------- | ------------ | ---------------------------------------------------------------------------------------- |
 | `id`                  | BIGSERIAL PK |                                                                                          |
 | `node_id`             | UUID         | NOT NULL — per NODE_SCOPED                                                               |
-| `scope_id`            | TEXT         | NOT NULL DEFAULT `'default'` — per SCOPE_SCOPED (project)                                |
+| `scope_id`            | UUID         | NOT NULL — per SCOPE_SCOPED (project). Derived: `uuidv5(node_id, scope_key)`             |
 | `status`              | TEXT         | CHECK IN (`'open'`, `'review'`, `'finalized'`)                                           |
 | `period_start`        | TIMESTAMPTZ  | Epoch coverage start (NOT NULL)                                                          |
 | `period_end`          | TIMESTAMPTZ  | Epoch coverage end (NOT NULL)                                                            |
@@ -257,7 +257,7 @@ Constraints:
 | Column             | Type        | Notes                                                             |
 | ------------------ | ----------- | ----------------------------------------------------------------- |
 | `node_id`          | UUID        | NOT NULL — part of composite PK (NODE_SCOPED)                     |
-| `scope_id`         | TEXT        | NOT NULL DEFAULT `'default'` — per SCOPE_SCOPED (project)         |
+| `scope_id`         | UUID        | NOT NULL — per SCOPE_SCOPED (project)                             |
 | `id`               | TEXT        | Deterministic from source (e.g., `github:pr:org/repo:42`)         |
 | `source`           | TEXT        | NOT NULL — `github`, `discord`                                    |
 | `event_type`       | TEXT        | NOT NULL — `pr_merged`, `review_submitted`, etc.                  |
@@ -325,15 +325,15 @@ Constraint: `UNIQUE(epoch_id, user_id)`
 
 ### `source_cursors` — adapter sync state
 
-| Column         | Type        | Notes                                                     |
-| -------------- | ----------- | --------------------------------------------------------- |
-| `node_id`      | UUID        | NOT NULL (NODE_SCOPED)                                    |
-| `scope_id`     | TEXT        | NOT NULL DEFAULT `'default'` — per SCOPE_SCOPED (project) |
-| `source`       | TEXT        | `github`, `discord`                                       |
-| `stream`       | TEXT        | `pull_requests`, `reviews`, `messages`                    |
-| `source_ref`   | TEXT        | `cogni-dao/cogni-template`, `guild:123456`                |
-| `cursor_value` | TEXT        | Timestamp or opaque pagination token                      |
-| `retrieved_at` | TIMESTAMPTZ | When this cursor was last used                            |
+| Column         | Type        | Notes                                      |
+| -------------- | ----------- | ------------------------------------------ |
+| `node_id`      | UUID        | NOT NULL (NODE_SCOPED)                     |
+| `scope_id`     | UUID        | NOT NULL — per SCOPE_SCOPED (project)      |
+| `source`       | TEXT        | `github`, `discord`                        |
+| `stream`       | TEXT        | `pull_requests`, `reviews`, `messages`     |
+| `source_ref`   | TEXT        | `cogni-dao/cogni-template`, `guild:123456` |
+| `cursor_value` | TEXT        | Timestamp or opaque pagination token       |
+| `retrieved_at` | TIMESTAMPTZ | When this cursor was last used             |
 
 Primary key: `(node_id, scope_id, source, stream, source_ref)`
 

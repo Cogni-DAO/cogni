@@ -6,8 +6,8 @@ status: needs_design
 priority: 1
 rank: 3
 estimate: 3
-summary: "Make node_id and scope_id real, persisted identities: node_id generated at init, scope_id defaulting to 'default' with multi-scope via .cogni/projects/*.yaml. Both persisted in DB, validated on boot."
-outcome: "Every deployment has a stable node_id; ledger tables carry scope_id with DEFAULT 'default'; composite invariants (node_id, scope_id) enforced at DB level; .cogni/projects/*.yaml manifests are the source of truth for named scopes; startup fails on node_id mismatch."
+summary: "Make node_id and scope_id real, persisted identities: node_id generated at init, scope_id as UUID (uuidv5(node_id, scope_key)) with multi-scope via .cogni/projects/*.yaml. Both persisted in DB, validated on boot."
+outcome: "Every deployment has a stable node_id; ledger tables carry scope_id UUID NOT NULL; composite invariants (node_id, scope_id) enforced at DB level; .cogni/projects/*.yaml manifests are the source of truth for named scopes; startup fails on node_id mismatch."
 labels: [ledger, infra, identity]
 assignees: []
 credit:
@@ -36,13 +36,13 @@ updated: 2026-02-22
 
 ### scope_id (governance/payout domain)
 
-- **Ledger schema**: add `scope_id TEXT NOT NULL DEFAULT 'default'` to all epoch-level tables: `epochs`, `activity_events`, `source_cursors`, `epoch_allocations` (via epoch FK), `epoch_pool_components` (via epoch FK), `payout_statements` (via epoch FK).
+- **Ledger schema**: add `scope_id UUID NOT NULL` to all epoch-level tables: `epochs`, `activity_events`, `source_cursors`, `epoch_allocations` (via epoch FK), `epoch_pool_components` (via epoch FK), `payout_statements` (via epoch FK). `scope_id` is derived deterministically: `uuidv5(node_id, scope_key)`.
 - **Composite constraints**:
   - `ONE_OPEN_EPOCH` → `UNIQUE(node_id, scope_id, status) WHERE status = 'open'`
   - `EPOCH_WINDOW_UNIQUE` → `UNIQUE(node_id, scope_id, period_start, period_end)`
   - `source_cursors` PK → `(node_id, scope_id, source, stream, source_scope)`
 - **Index update**: `activity_events` index `(node_id, event_time)` → `(node_id, scope_id, event_time)`.
-- **V0 default**: `DEFAULT 'default'` means zero migration for existing single-project nodes. No `.cogni/projects/` directory required for V0.
+- **V0 default**: `scope_key = 'default'`, `scope_id = uuidv5(node_id, 'default')` declared in `repo-spec.yaml`. No `.cogni/projects/` directory required for V0.
 - **Manifest discovery**: When `.cogni/projects/*.yaml` files exist, read them at boot and validate that any `scope_id` values in the DB match declared scopes. Log a warning (not hard fail) for unrecognized scopes — they may be leftover from a removed project.
 - **Validation at ingestion**: Activity events must have their `scope_id` validated against current manifests at ingestion time (SCOPE_VALIDATED invariant). Unrecognized scope IDs are rejected, not silently dropped.
 
@@ -68,12 +68,12 @@ updated: 2026-02-22
 
 ### scope_id
 
-- [ ] Add `scope_id TEXT NOT NULL DEFAULT 'default'` column to `epochs`, `activity_events`, `source_cursors` in `packages/db-schema/src/ledger.ts`
+- [ ] Add `scope_id UUID NOT NULL` column to `epochs`, `activity_events`, `source_cursors` in `packages/db-schema/src/ledger.ts`
 - [ ] Update composite unique constraints/indexes to include `scope_id`
 - [ ] Migration: add column with default (zero-downtime for existing rows)
 - [ ] Add scope manifest reader: parse `.cogni/projects/*.yaml` → `Map<scopeId, ProjectManifest>`
 - [ ] Add SCOPE_VALIDATED check in ingestion path (reject unknown scope_ids)
-- [ ] Add test: epoch insert without explicit scope_id gets `'default'`
+- [ ] Add test: epoch insert requires explicit scope_id UUID (no default)
 - [ ] Add test: `ONE_OPEN_EPOCH` enforced per (node_id, scope_id) — two scopes can each have an open epoch
 
 ## Identity Semantics

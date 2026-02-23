@@ -44,10 +44,11 @@ tags: [identity, architecture, governance]
 │    ┌──────────────────────────────────────────────────────────┐     │
 │    │                  GOVERNANCE LAYER                         │     │
 │    │                                                          │     │
-│    │  scope_id (TEXT)                        1:N per node     │     │
+│    │  scope_id (UUID)                        1:N per node     │     │
 │    │  ─ Governance/payout domain (project)                    │     │
 │    │  ─ Each scope has: DAO, weight policy, payment rails     │     │
-│    │  ─ DEFAULT 'default' (single-project nodes)              │     │
+│    │  ─ Deterministic: uuidv5(node_id, scope_key)            │     │
+│    │  ─ scope_key = human slug (e.g. 'default')              │     │
 │    │  ─ Lives in: .cogni/projects/*.yaml, epoch tables        │     │
 │    │                                                          │     │
 │    │    ┌──────────────────────────────────────────────┐      │     │
@@ -90,7 +91,8 @@ tags: [identity, architecture, governance]
 | Key                  | Type | Minted When              | Mutable | Purpose                            | Canonical Location                        |
 | -------------------- | ---- | ------------------------ | ------- | ---------------------------------- | ----------------------------------------- |
 | `node_id`            | UUID | Node formation           | No      | Deployment/instance identity       | `.cogni/repo-spec.yaml`                   |
-| `scope_id`           | TEXT | Project manifest created | No      | Governance/payout domain (project) | `.cogni/projects/*.yaml`                  |
+| `scope_id`           | UUID | Project manifest created | No      | Governance/payout domain (project) | `.cogni/projects/*.yaml`                  |
+| `scope_key`          | TEXT | Project manifest created | No      | Human-readable scope slug          | `.cogni/projects/*.yaml`, repo-spec.yaml  |
 | `user_id`            | UUID | First user contact       | No      | Person identity                    | `users.id`                                |
 | `billing_account_id` | UUID | Account creation         | No      | Payment/subscription tenancy       | `billing_accounts.id`                     |
 | `dao_address`        | TEXT | DAO contract deployed    | No      | On-chain contract identity         | `.cogni/projects/*.yaml` → `dao.contract` |
@@ -157,12 +159,13 @@ These are hard constraints. Violating any of them is a design error.
 
 In V0 (single-project nodes), most keys resolve to a single value:
 
-| Key        | V0 Value                                         | Multi-Project Behavior           |
-| ---------- | ------------------------------------------------ | -------------------------------- |
-| `node_id`  | From `.cogni/repo-spec.yaml`                     | Unchanged — one per deployment   |
-| `scope_id` | `'default'` (column DEFAULT, no manifest needed) | One per `.cogni/projects/*.yaml` |
+| Key         | V0 Value                                                       | Multi-Project Behavior           |
+| ----------- | -------------------------------------------------------------- | -------------------------------- |
+| `node_id`   | From `.cogni/repo-spec.yaml`                                   | Unchanged — one per deployment   |
+| `scope_id`  | `uuidv5(node_id, 'default')` — deterministic UUID in repo-spec | One per `.cogni/projects/*.yaml` |
+| `scope_key` | `'default'`                                                    | Human slug per project manifest  |
 
-The `DEFAULT 'default'` column constraint on `scope_id` means existing single-project nodes require **zero migration** to adopt the scope model. Multi-scope support activates when project manifests are added.
+`scope_id` is a deterministic UUID derived from `uuidv5(node_id, scope_key)`. The UUID is declared in `repo-spec.yaml` (V0) or `.cogni/projects/*.yaml` (multi-scope). `scope_key` is the human-readable slug used for display, logging, and as the derivation input.
 
 ## Goal
 
