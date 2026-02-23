@@ -73,6 +73,10 @@ export const EVENT_NAMES = {
   ADAPTER_RIPGREP_OPEN: "adapter.ripgrep.open",
   ADAPTER_OPENCLAW_GATEWAY_ERROR: "adapter.openclaw_gateway.error",
 
+  // Ledger Domain
+  LEDGER_ALLOCATIONS_UPDATED: "ledger.allocations_updated",
+  LEDGER_POOL_COMPONENT_RECORDED: "ledger.pool_component_recorded",
+
   // Scheduling Domain
   SCHEDULE_CREDIT_GATE_REJECTED: "schedules.credit_gate_rejected",
 

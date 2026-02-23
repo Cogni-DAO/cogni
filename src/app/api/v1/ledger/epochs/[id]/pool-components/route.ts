@@ -19,7 +19,12 @@ import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { recordPoolComponentOperation } from "@/contracts/ledger.record-pool-component.v1.contract";
 import { getNodeId } from "@/shared/config";
-import { logRequestWarn, type RequestContext } from "@/shared/observability";
+import {
+  EVENT_NAMES,
+  logEvent,
+  logRequestWarn,
+  type RequestContext,
+} from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -89,10 +94,12 @@ export const POST = wrapRouteHandlerWithLogging<{
         evidenceRef: input.evidenceRef ?? null,
       });
 
-      ctx.log.info(
-        { epochId: id, componentId: input.componentId },
-        "ledger.record-pool-component_success"
-      );
+      logEvent(ctx.log, EVENT_NAMES.LEDGER_POOL_COMPONENT_RECORDED, {
+        reqId: ctx.reqId,
+        routeId: "ledger.record-pool-component",
+        epochId: id,
+        componentId: input.componentId,
+      });
 
       return NextResponse.json(
         recordPoolComponentOperation.output.parse(

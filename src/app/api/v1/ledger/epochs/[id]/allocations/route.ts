@@ -17,7 +17,12 @@ import { checkApprover } from "@/app/api/v1/ledger/_lib/approver-guard";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { updateAllocationsOperation } from "@/contracts/ledger.update-allocations.v1.contract";
-import { logRequestWarn, type RequestContext } from "@/shared/observability";
+import {
+  EVENT_NAMES,
+  logEvent,
+  logRequestWarn,
+  type RequestContext,
+} from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -101,10 +106,12 @@ export const PATCH = wrapRouteHandlerWithLogging<{
         updated++;
       }
 
-      ctx.log.info(
-        { epochId: id, updated },
-        "ledger.update-allocations_success"
-      );
+      logEvent(ctx.log, EVENT_NAMES.LEDGER_ALLOCATIONS_UPDATED, {
+        reqId: ctx.reqId,
+        routeId: "ledger.update-allocations",
+        epochId: id,
+        updated,
+      });
 
       return NextResponse.json(
         updateAllocationsOperation.output.parse({ updated })
