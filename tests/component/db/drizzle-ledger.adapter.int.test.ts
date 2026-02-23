@@ -15,6 +15,7 @@ import { DrizzleLedgerAdapter } from "@cogni/db-client";
 import {
   AllocationNotFoundError,
   EpochNotFoundError,
+  EpochNotOpenError,
 } from "@cogni/ledger-core";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
@@ -169,6 +170,38 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         EpochNotFoundError
       );
     });
+
+    it("finalizeEpoch on open epoch throws EpochNotOpenError (must review first)", async () => {
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...weekWindow(8),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+
+      await expect(adapter.finalizeEpoch(epoch.id, 100n)).rejects.toThrow(
+        EpochNotOpenError
+      );
+
+      // Cleanup: transition to finalized so ONE_OPEN_EPOCH doesn't block later tests
+      await adapter.closeIngestion(epoch.id, "cleanup-hash");
+      await adapter.finalizeEpoch(epoch.id, 0n);
+    });
+
+    it("closeIngestion on finalized epoch returns it idempotently", async () => {
+      const list = await adapter.listEpochs(TEST_NODE_ID);
+      const finalized = list.find((e) => e.status === "finalized");
+      expect(finalized).toBeDefined();
+      if (!finalized) throw new Error("Expected finalized epoch");
+
+      const result = await adapter.closeIngestion(
+        finalized.id,
+        "should-be-ignored"
+      );
+      expect(result.status).toBe("finalized");
+      // approverSetHash unchanged — not overwritten
+      expect(result.approverSetHash).not.toBe("should-be-ignored");
+    });
   });
 
   // ── Activity Events ───────────────────────────────────────────
@@ -301,8 +334,24 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       expect(unresolved).toHaveLength(0);
     });
 
+    it("CURATION_FREEZE_ON_FINALIZE: curation is mutable during review", async () => {
+      await adapter.closeIngestion(epochId, "review-curation-test");
+
+      // Curation writes should succeed while epoch is in review
+      await expect(
+        adapter.upsertCuration([
+          makeCuration({
+            epochId,
+            eventId: "github:pr:test/repo:1",
+            userId: actor.user.id,
+            note: "updated during review",
+          }),
+        ])
+      ).resolves.not.toThrow();
+    });
+
     it("CURATION_FREEZE_ON_FINALIZE: rejects curation writes after epoch finalize", async () => {
-      await adapter.closeIngestion(epochId, "freeze-test-hash");
+      // Epoch is already in review from the previous test
       await adapter.finalizeEpoch(epochId, 5000n);
 
       await expect(
