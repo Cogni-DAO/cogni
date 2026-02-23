@@ -2,7 +2,7 @@
 id: task.0100
 type: task
 title: "Epoch 3-phase state machine + approvers + canonical signing message"
-status: needs_merge
+status: done
 priority: 1
 rank: 6
 estimate: 2

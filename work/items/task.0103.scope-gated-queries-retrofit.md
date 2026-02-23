@@ -2,7 +2,7 @@
 id: task.0103
 type: task
 title: "SCOPE_GATED_QUERIES: scope-gate all epochId-based adapter methods"
-status: needs_merge
+status: done
 priority: 1
 rank: 4
 estimate: 1

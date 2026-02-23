@@ -2,7 +2,7 @@
 id: task.0097
 type: task
 title: "GitHub + Discord source adapters for epoch activity collection"
-status: needs_implement
+status: done
 priority: 1
 rank: 3
 estimate: 3
@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
 branch: worktree-ingestion-core-github-adapter
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/458
 reviewer:
 revision: 0
 blocked_by: task.0089, task.0094
