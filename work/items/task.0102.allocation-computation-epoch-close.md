@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
 branch: feat/task-0102-allocation-epoch-close
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/470
 reviewer:
 revision: 2
 blocked_by: task.0100, task.0101
