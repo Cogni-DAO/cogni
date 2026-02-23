@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-22
+- **Last reviewed:** 2026-02-23
 - **Status:** draft
 
 ## Purpose
@@ -79,7 +79,7 @@ src/
 
 ## Responsibilities
 
-- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow, execute scheduler activities (validateGrant, executeGraph, updateRun, createRun) and ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertEvents, saveCursor, curateAndResolve), handle SIGTERM/SIGINT
+- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow, execute scheduler activities (validateGrant, executeGraph, updateRun, createRun) and ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertEvents, saveCursor, curateAndResolve, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), handle SIGTERM/SIGINT
 - This directory **does not**: Import from src/, create/modify/delete schedules (CRUD is authority), define port interfaces (those live in packages)
 
 ## Usage
@@ -102,7 +102,7 @@ docker build -f services/scheduler-worker/Dockerfile -t scheduler-worker .
 ## Dependencies
 
 - **Internal:** `@cogni/scheduler-core` (ports), `@cogni/ingestion-core` (ports), `@cogni/ledger-core` (domain logic + epoch window), `@cogni/db-client` (adapters, bootstrap only), `@cogni/ids`
-- **External:** `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/activity`, `pino`, `zod`
+- **External:** `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/activity`, `pino`, `viem` (EIP-191 verification), `zod`
 
 ## Change Protocol
 

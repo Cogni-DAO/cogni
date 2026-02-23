@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-22
+- **Last reviewed:** 2026-02-23
 - **Status:** draft
 
 ## Purpose
 
-Pure domain logic for the epoch ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, payout computation (BIGINT, largest-remainder), allocation set hashing (SHA-256), port interface (`ActivityLedgerStore`), and domain error classes.
+Pure domain logic for the epoch ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, payout computation (BIGINT, largest-remainder), hashing (allocation sets, weight configs), versioned allocation algorithm framework, pool estimation, port interface (`ActivityLedgerStore`), and domain error classes.
 
 ## Pointers
 
@@ -50,6 +50,15 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
   - `EpochWindow`, `EpochWindowParams` — Types for epoch window computation
   - `computePayouts()` — BIGINT proportional distribution with largest-remainder rounding
   - `computeAllocationSetHash()` — SHA-256 of canonical sorted allocation data
+  - `computeWeightConfigHash()` — SHA-256 of canonical weight config JSON (key-sorted)
+  - `computeProposedAllocations()` — Versioned allocation dispatch (V0: `weight-sum-v0`)
+  - `validateWeightConfig()` — Rejects floats, NaN, Infinity, unsafe integers
+  - `deriveAllocationAlgoRef()` — Maps `credit_estimate_algo` to internal algorithm ref
+  - `CuratedEventForAllocation`, `ProposedAllocation` — Allocation input/output types
+  - `AllocationAlgoRef` — Type alias for algorithm version string
+  - `estimatePoolComponentsV0()` — Pool component estimation from config (V0: base_issuance only)
+  - `PoolComponentEstimate`, `PoolComponentId`, `POOL_COMPONENT_ALLOWLIST` — Pool types and validation
+  - `validatePoolComponentId()` — V0 allowlist validation
   - `EpochNotOpenError`, `EpochAlreadyFinalizedError`, `PoolComponentMissingError` — Domain errors with type guards
   - `buildCanonicalMessage()`, `computeApproverSetHash()` — EIP-191 signing helpers (pure, zero runtime deps)
 - **CLI:** none
@@ -59,11 +68,11 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
 
 - **Uses ports:** none
 - **Implements ports:** none
-- **Defines ports:** `ActivityLedgerStore` (implemented by `DrizzleLedgerAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`) for curation auto-population.
+- **Defines ports:** `ActivityLedgerStore` (implemented by `DrizzleLedgerAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), and atomic finalization (`finalizeEpochAtomic`).
 
 ## Responsibilities
 
-- This directory **does**: Define ledger domain types, port interface, compute deterministic payouts, compute allocation set hashes, define domain errors
+- This directory **does**: Define ledger domain types, port interface, compute deterministic payouts, compute allocation set/config hashes, versioned allocation algorithm dispatch, pool estimation, define domain errors
 - This directory **does not**: Perform I/O, access databases, import from `src/` or `services/`
 
 ## Usage

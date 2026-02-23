@@ -2,7 +2,7 @@
 id: task.0102
 type: task
 title: "Allocation computation, epoch auto-close, and FinalizeEpochWorkflow"
-status: done
+status: needs_merge
 priority: 1
 rank: 8
 estimate: 3

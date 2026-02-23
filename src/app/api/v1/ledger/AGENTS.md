@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all epochs and PII-containing activity streams, plus approver-gated write mutations for allocation adjustments and pool components.
+Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all epochs and PII-containing activity streams, plus approver-gated write mutations for allocation adjustments, pool components, epoch review transitions, and epoch finalization.
 
 ## Pointers
 
@@ -35,9 +35,11 @@ Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all
   - `GET /api/v1/ledger/epochs/[id]/activity` — activity events with curation join (SIWE auth, PII)
   - `PATCH /api/v1/ledger/epochs/[id]/allocations` — adjust allocation final_units (SIWE + approver)
   - `POST /api/v1/ledger/epochs/[id]/pool-components` — record pool component (SIWE + approver)
+  - `POST /api/v1/ledger/epochs/[id]/review` — close ingestion, transition open → review (SIWE + approver)
+  - `POST /api/v1/ledger/epochs/[id]/finalize` — sign + finalize epoch, returns 202 + workflowId (SIWE + approver, WRITES_VIA_TEMPORAL)
 - **CLI:** none
 - **Env/Config keys:** none
-- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/pool-components/route.ts`
+- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/finalize/route.ts`
 
 ## Ports
 

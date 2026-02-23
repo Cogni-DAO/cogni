@@ -3,7 +3,7 @@ id: epoch-ledger-spec
 type: spec
 title: "Epoch Ledger: Weekly Activity Pipeline for Credit Payouts"
 status: draft
-spec_state: proposed
+spec_state: active
 trust: draft
 summary: "Epoch-based ledger where source adapters ingest contribution activity (GitHub, Discord), the system proposes credit allocations via weight policy, and an admin finalizes the distribution. Payouts are deterministic and recomputable from stored data."
 read_when: Working on credit payouts, activity ingestion, epoch lifecycle, weight policy, source adapters, or the ledger API.

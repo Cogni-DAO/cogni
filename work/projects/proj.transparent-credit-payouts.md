@@ -39,21 +39,21 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 
 **Goal:** Automated weekly activity collection from GitHub + Discord, best-effort attribution, admin-finalized credit distribution. Anyone can recompute payouts from stored data.
 
-| Deliverable                                                  | Status    | Est | Work Item       |
-| ------------------------------------------------------------ | --------- | --- | --------------- |
-| Design spike: schema, signing, storage, epoch model          | Done      | 2   | spike.0082      |
-| Design revision: activity-ingestion reframe                  | Done      | 1   | (this document) |
-| Spec: epoch-ledger.md (revised)                              | Done      | 1   | —               |
-| DB schema (foundation tables) + core domain (rules, errors)  | Done      | 3   | task.0093       |
-| Identity bindings (user_bindings + identity_events)          | Done      | 2   | task.0089       |
-| Ledger port + Drizzle adapter + schema migration + container | Done      | 2   | task.0094       |
-| GitHub source adapter                                        | Done      | 3   | task.0097       |
-| Temporal workflows (collection phase)                        | Done      | 2   | task.0095       |
-| Identity resolution + curation auto-population               | Done      | 2   | task.0101       |
-| Allocation computation + epoch close + FinalizeEpochWorkflow | In Review | 3   | task.0102       |
-| Epoch 3-phase state machine + EIP-191 signing                | Done      | 3   | task.0100       |
-| Zod contracts + API routes + stack tests                     | Done      | 2   | task.0096       |
-| Scope-gate all epochId-based adapter methods                 | Done      | 1   | task.0103       |
+| Deliverable                                                  | Status                  | Est | Work Item       |
+| ------------------------------------------------------------ | ----------------------- | --- | --------------- |
+| Design spike: schema, signing, storage, epoch model          | Done                    | 2   | spike.0082      |
+| Design revision: activity-ingestion reframe                  | Done                    | 1   | (this document) |
+| Spec: epoch-ledger.md (revised)                              | Done                    | 1   | —               |
+| DB schema (foundation tables) + core domain (rules, errors)  | Done                    | 3   | task.0093       |
+| Identity bindings (user_bindings + identity_events)          | Done                    | 2   | task.0089       |
+| Ledger port + Drizzle adapter + schema migration + container | Done                    | 2   | task.0094       |
+| GitHub source adapter                                        | Done                    | 3   | task.0097       |
+| Temporal workflows (collection phase)                        | Done                    | 2   | task.0095       |
+| Identity resolution + curation auto-population               | Done                    | 2   | task.0101       |
+| Allocation computation + epoch close + FinalizeEpochWorkflow | In Review (needs_merge) | 3   | task.0102       |
+| Epoch 3-phase state machine + EIP-191 signing                | Done                    | 3   | task.0100       |
+| Zod contracts + API routes + stack tests                     | Done                    | 2   | task.0096       |
+| Scope-gate all epochId-based adapter methods                 | Done                    | 1   | task.0103       |
 
 **V0 user story:**
 

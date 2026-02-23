@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/activities/ledger`
- * Purpose: Temporal Activities for ledger epoch collection and curation — cursor-based ingestion + identity resolution.
- * Scope: Plain async functions that perform I/O (DB, GitHub API). Called by CollectEpochWorkflow.
+ * Purpose: Temporal Activities for the full ledger pipeline — ingestion, curation, allocation, pool, auto-close, and finalization.
+ * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-191 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
  * Invariants:
  *   - Per ACTIVITY_IDEMPOTENT: All activities idempotent via PK constraints or upsert
  *   - Per CURSOR_STATE_PERSISTED: Cursors saved after each collect() call
@@ -12,7 +12,10 @@
  *   - Per TEMPORAL_DETERMINISM: Activities contain all I/O; workflows call only these proxies
  *   - Per CURATION_AUTO_POPULATE: curateAndResolve inserts new curations (DO NOTHING on conflict), updates only userId on unresolved rows
  *   - Per IDENTITY_BEST_EFFORT: Unresolved events get userId=null in curation rows, never dropped
- * Side-effects: IO (database, GitHub API)
+ *   - Per ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations never touches admin-set final_units
+ *   - Per CONFIG_LOCKED_AT_REVIEW: autoCloseIngestion pins allocationAlgoRef + weightConfigHash
+ *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
+ * Side-effects: IO (database, GitHub API, viem EIP-191 verification)
  * Links: docs/spec/epoch-ledger.md, docs/spec/temporal-patterns.md
  * @internal
  */
