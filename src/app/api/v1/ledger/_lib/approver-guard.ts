@@ -36,7 +36,7 @@ export function checkApprover(
   if (!approvers.includes(walletAddress.toLowerCase())) {
     logRequestWarn(
       ctx.log,
-      { walletAddress: walletAddress.slice(0, 10) + "..." },
+      { walletAddress: `${walletAddress.slice(0, 10)}...` },
       "LEDGER_NOT_APPROVER"
     );
     return NextResponse.json(

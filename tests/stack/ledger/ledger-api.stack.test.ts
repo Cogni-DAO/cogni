@@ -101,7 +101,7 @@ describe("Public ledger API routes", () => {
           `Seeded epoch ${seeded.epoch.id} not found in response. Got IDs: ${parsed.data.epochs.map((e) => e.id).join(", ")}`
         );
       }
-      expect(found.status).toBe("closed");
+      expect(found.status).toBe("finalized");
       expect(found.poolTotalCredits).toBe("10000");
     });
 
@@ -116,7 +116,7 @@ describe("Public ledger API routes", () => {
 
       // Every epoch in the public response must be closed
       for (const epoch of parsed.epochs) {
-        expect(epoch.status).toBe("closed");
+        expect(epoch.status).toBe("finalized");
       }
     });
 

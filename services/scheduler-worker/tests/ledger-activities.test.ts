@@ -44,7 +44,8 @@ function makeMockStore(
     getEpochByWindow: vi.fn().mockResolvedValue(null),
     getEpoch: vi.fn(),
     listEpochs: vi.fn(),
-    closeEpoch: vi.fn(),
+    closeIngestion: vi.fn(),
+    finalizeEpoch: vi.fn(),
     insertActivityEvents: vi.fn(),
     getActivityForWindow: vi.fn(),
     upsertCuration: vi.fn(),
@@ -301,8 +302,8 @@ describe("ensureEpochForWindow", () => {
     expect(store.createEpoch).not.toHaveBeenCalled();
   });
 
-  it("returns closed epoch found by window — does not create new", async () => {
-    const epoch = makeEpoch({ status: "closed", closedAt: new Date() });
+  it("returns finalized epoch found by window — does not create new", async () => {
+    const epoch = makeEpoch({ status: "finalized", closedAt: new Date() });
     const store = makeMockStore({
       getEpochByWindow: vi.fn().mockResolvedValue(epoch),
     });
@@ -322,7 +323,7 @@ describe("ensureEpochForWindow", () => {
     });
 
     expect(result.isNew).toBe(false);
-    expect(result.status).toBe("closed");
+    expect(result.status).toBe("finalized");
     expect(store.createEpoch).not.toHaveBeenCalled();
   });
 

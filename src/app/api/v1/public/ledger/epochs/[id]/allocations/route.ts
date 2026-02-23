@@ -3,9 +3,9 @@
 
 /**
  * Module: `@app/api/v1/public/ledger/epochs/[id]/allocations/route`
- * Purpose: Public HTTP endpoint for epoch allocations (closed epochs only).
- * Scope: Public route using wrapPublicRoute(); returns proposed and final allocations for closed epochs. Does not contain business logic.
- * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_CLOSED_ONLY.
+ * Purpose: Public HTTP endpoint for epoch allocations (finalized epochs only).
+ * Scope: Public route using wrapPublicRoute(); returns proposed and final allocations for finalized epochs. Does not contain business logic.
+ * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
  * Links: docs/spec/epoch-ledger.md, contracts/ledger.epoch-allocations.v1.contract
  * @public
@@ -37,9 +37,9 @@ export const GET = wrapPublicRoute(
 
     const store = getContainer().activityLedgerStore;
 
-    // PUBLIC_READS_CLOSED_ONLY: verify epoch is closed
+    // PUBLIC_READS_FINALIZED_ONLY: verify epoch is finalized
     const epoch = await store.getEpoch(epochId);
-    if (!epoch || epoch.status !== "closed") {
+    if (!epoch || epoch.status !== "finalized") {
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
 

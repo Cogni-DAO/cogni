@@ -148,7 +148,8 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
       expect(created.isNew).toBe(true);
 
       // Close the epoch via the store directly
-      await ledger.closeEpoch(BigInt(created.epochId), 0n);
+      await ledger.closeIngestion(BigInt(created.epochId), "test-hash");
+      await ledger.finalizeEpoch(BigInt(created.epochId), 0n);
 
       // Now ensureEpochForWindow should handle the closed epoch gracefully.
       // Current code: getOpenEpoch returns null (epoch is closed), createEpoch
@@ -168,7 +169,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
         });
         // If we get here, the activity handled it correctly
         expect(result.epochId).toBe(created.epochId);
-        expect(result.status).toBe("closed");
+        expect(result.status).toBe("finalized");
       } catch (err) {
         // Expected until feedback #2 is fixed — document the failure mode
         expect(String(err)).toMatch(/unique|constraint|duplicate/i);

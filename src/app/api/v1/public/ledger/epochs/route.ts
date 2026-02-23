@@ -4,8 +4,8 @@
 /**
  * Module: `@app/api/v1/public/ledger/epochs/route`
  * Purpose: Public HTTP endpoint for listing closed (finalized) ledger epochs.
- * Scope: Public route using wrapPublicRoute(); only returns closed epochs. Does not expose open/current epoch data.
- * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_CLOSED_ONLY.
+ * Scope: Public route using wrapPublicRoute(); only returns finalized epochs. Does not expose open/review epoch data.
+ * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
  * Links: docs/spec/epoch-ledger.md, contracts/ledger.list-epochs.v1.contract
  * @public
@@ -35,8 +35,8 @@ export const GET = wrapPublicRoute(
 
     const store = getContainer().activityLedgerStore;
     const allEpochs = await store.listEpochs(getNodeId());
-    // PUBLIC_READS_CLOSED_ONLY: only expose finalized epochs
-    const closedEpochs = allEpochs.filter((e) => e.status === "closed");
+    // PUBLIC_READS_FINALIZED_ONLY: only expose finalized epochs
+    const closedEpochs = allEpochs.filter((e) => e.status === "finalized");
     const page = closedEpochs.slice(offset, offset + limit);
 
     return NextResponse.json(

@@ -10,7 +10,7 @@
  * - SCOPE_GATED_QUERIES: Every epochId-based method enforces scope_id = this.scopeId. Scope mismatches throw EpochNotFoundError.
  * - ACTIVITY_IDEMPOTENT: insertActivityEvents uses onConflictDoNothing on PK.
  * - CURATION_AUTO_POPULATE: insertCurationDoNothing uses onConflictDoNothing; updateCurationUserId only sets userId where NULL.
- * - CURATION_FREEZE_ON_CLOSE: DB trigger enforces; adapter does not duplicate check.
+ * - CURATION_FREEZE_ON_FINALIZE: DB trigger enforces; adapter does not duplicate check.
  * - ONE_OPEN_EPOCH: DB constraint enforces; adapter lets DB error propagate.
  * Side-effects: IO (database operations)
  * Links: docs/spec/epoch-ledger.md, packages/ledger-core/src/store.ts
@@ -67,6 +67,7 @@ function toEpoch(row: typeof epochs.$inferSelect): LedgerEpoch {
     periodEnd: row.periodEnd,
     weightConfig: row.weightConfig,
     poolTotalCredits: row.poolTotalCredits,
+    approverSetHash: row.approverSetHash,
     openedAt: row.openedAt,
     closedAt: row.closedAt,
     createdAt: row.createdAt,
@@ -299,13 +300,15 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     return rows.map(toEpoch);
   }
 
-  async closeEpoch(epochId: bigint, poolTotal: bigint): Promise<LedgerEpoch> {
+  async closeIngestion(
+    epochId: bigint,
+    approverSetHash: string
+  ): Promise<LedgerEpoch> {
     const [row] = await this.db
       .update(epochs)
       .set({
-        status: "closed",
-        poolTotalCredits: poolTotal,
-        closedAt: new Date(),
+        status: "review",
+        approverSetHash,
       })
       .where(
         and(
@@ -316,12 +319,43 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       )
       .returning();
     if (!row) {
-      // Distinguish not-found/wrong-scope from already-closed for EPOCH_CLOSE_IDEMPOTENT
+      // Distinguish not-found/wrong-scope from already-review/finalized
       const existing = await this.getEpoch(epochId);
       if (!existing) {
         throw new EpochNotFoundError(epochId.toString());
       }
-      // Already closed — return as-is (caller implements EPOCH_CLOSE_IDEMPOTENT)
+      // Already in review or finalized — return as-is (idempotent)
+      return existing;
+    }
+    return toEpoch(row);
+  }
+
+  async finalizeEpoch(
+    epochId: bigint,
+    poolTotal: bigint
+  ): Promise<LedgerEpoch> {
+    const [row] = await this.db
+      .update(epochs)
+      .set({
+        status: "finalized",
+        poolTotalCredits: poolTotal,
+        closedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(epochs.id, epochId),
+          eq(epochs.scopeId, this.scopeId),
+          eq(epochs.status, "review")
+        )
+      )
+      .returning();
+    if (!row) {
+      // Distinguish not-found/wrong-scope from already-finalized
+      const existing = await this.getEpoch(epochId);
+      if (!existing) {
+        throw new EpochNotFoundError(epochId.toString());
+      }
+      // Already finalized — return as-is (EPOCH_FINALIZE_IDEMPOTENT)
       return existing;
     }
     return toEpoch(row);

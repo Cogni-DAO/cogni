@@ -20,7 +20,7 @@ describe("ledger.list-epochs.v1 contract", () => {
       epochs: [
         {
           id: "1",
-          status: "closed",
+          status: "finalized",
           periodStart: "2026-02-01T00:00:00.000Z",
           periodEnd: "2026-02-08T00:00:00.000Z",
           weightConfig: { pull_requests: 1, reviews: 2 },
@@ -66,7 +66,7 @@ describe("ledger.list-epochs.v1 contract", () => {
       epochs: [
         {
           id: "999999999999",
-          status: "closed",
+          status: "finalized",
           periodStart: "2026-02-01T00:00:00.000Z",
           periodEnd: "2026-02-08T00:00:00.000Z",
           weightConfig: {},

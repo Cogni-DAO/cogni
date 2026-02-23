@@ -267,11 +267,12 @@ export async function seedClosedEpoch(
     })
   );
 
-  // 6. Close the epoch
+  // 6. Transition epoch: open → review → finalized
   const poolTotal = 10000n;
-  const closedEpoch = await store.closeEpoch(epoch.id, poolTotal);
+  await store.closeIngestion(epoch.id, "test-approver-set-hash");
+  const finalizedEpoch = await store.finalizeEpoch(epoch.id, poolTotal);
 
-  // 7. Insert payout statement (after close)
+  // 7. Insert payout statement (after finalize)
   const statement = await store.insertPayoutStatement(
     makePayoutStatement({
       nodeId,
@@ -279,5 +280,5 @@ export async function seedClosedEpoch(
     })
   );
 
-  return { epoch: closedEpoch, poolComponent, statement };
+  return { epoch: finalizedEpoch, poolComponent, statement };
 }

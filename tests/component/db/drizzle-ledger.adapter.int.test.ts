@@ -4,8 +4,8 @@
 /**
  * Module: `@tests/component/db/drizzle-ledger.adapter.int`
  * Purpose: Component tests for DrizzleLedgerAdapter against real PostgreSQL via testcontainers.
- * Scope: Verifies adapter + DB triggers (ACTIVITY_APPEND_ONLY, CURATION_FREEZE_ON_CLOSE, ONE_OPEN_EPOCH, ACTIVITY_IDEMPOTENT). Does not test domain logic or routes.
- * Invariants: ACTIVITY_APPEND_ONLY, ACTIVITY_IDEMPOTENT, CURATION_FREEZE_ON_CLOSE, ONE_OPEN_EPOCH, EPOCH_WINDOW_UNIQUE, NODE_SCOPED, SCOPE_GATED_QUERIES
+ * Scope: Verifies adapter + DB triggers (ACTIVITY_APPEND_ONLY, CURATION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, ACTIVITY_IDEMPOTENT). Does not test domain logic or routes.
+ * Invariants: ACTIVITY_APPEND_ONLY, ACTIVITY_IDEMPOTENT, CURATION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, SCOPE_GATED_QUERIES
  * Side-effects: IO (database operations via testcontainers)
  * Links: packages/db-client/src/adapters/drizzle-ledger.adapter.ts, packages/ledger-core/src/store.ts
  * @public
@@ -59,7 +59,10 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     afterAll(async () => {
       // Ensure no open epoch leaks to subsequent describes
       const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
-      if (open) await adapter.closeEpoch(open.id, 0n);
+      if (open) {
+        await adapter.closeIngestion(open.id, "cleanup-hash");
+        await adapter.finalizeEpoch(open.id, 0n);
+      }
     });
 
     it("creates an epoch and retrieves it", async () => {
@@ -106,8 +109,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     it("EPOCH_WINDOW_UNIQUE: rejects duplicate window for same node", async () => {
-      // Close the open epoch so we can test the window constraint in isolation
-      await adapter.closeEpoch(createdEpochId, 10000n);
+      // Finalize the open epoch so we can test the window constraint in isolation
+      await adapter.closeIngestion(createdEpochId, "test-hash");
+      await adapter.finalizeEpoch(createdEpochId, 10000n);
 
       await expect(
         adapter.createEpoch({
@@ -119,7 +123,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       ).rejects.toThrow();
     });
 
-    it("closeEpoch sets status, poolTotal, and closedAt", async () => {
+    it("closeIngestion transitions open → review with approverSetHash", async () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
@@ -127,28 +131,41 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         weightConfig: TEST_WEIGHT_CONFIG,
       });
 
-      const closed = await adapter.closeEpoch(epoch.id, 50000n);
-      expect(closed.status).toBe("closed");
-      expect(closed.poolTotalCredits).toBe(50000n);
-      expect(closed.closedAt).not.toBeNull();
+      const reviewed = await adapter.closeIngestion(epoch.id, "abc123hash");
+      expect(reviewed.status).toBe("review");
+      expect(reviewed.approverSetHash).toBe("abc123hash");
     });
 
-    it("closeEpoch on already-closed epoch returns it (EPOCH_CLOSE_IDEMPOTENT)", async () => {
-      // Find the epoch we just closed (50000n pool)
+    it("finalizeEpoch transitions review → finalized with poolTotal and closedAt", async () => {
+      // Find the review epoch we just created
       const list = await adapter.listEpochs(TEST_NODE_ID);
-      const closed = list.find(
-        (e) => e.status === "closed" && e.poolTotalCredits === 50000n
+      const review = list.find(
+        (e) => e.status === "review" && e.approverSetHash === "abc123hash"
       );
-      expect(closed).toBeDefined();
+      expect(review).toBeDefined();
+      if (!review) throw new Error("Expected review epoch");
 
-      if (!closed) throw new Error("Expected closed epoch");
-      const result = await adapter.closeEpoch(closed.id, 99999n);
-      expect(result.status).toBe("closed");
+      const finalized = await adapter.finalizeEpoch(review.id, 50000n);
+      expect(finalized.status).toBe("finalized");
+      expect(finalized.poolTotalCredits).toBe(50000n);
+      expect(finalized.closedAt).not.toBeNull();
+    });
+
+    it("finalizeEpoch on already-finalized epoch returns it (EPOCH_FINALIZE_IDEMPOTENT)", async () => {
+      const list = await adapter.listEpochs(TEST_NODE_ID);
+      const finalized = list.find(
+        (e) => e.status === "finalized" && e.poolTotalCredits === 50000n
+      );
+      expect(finalized).toBeDefined();
+
+      if (!finalized) throw new Error("Expected finalized epoch");
+      const result = await adapter.finalizeEpoch(finalized.id, 99999n);
+      expect(result.status).toBe("finalized");
       expect(result.poolTotalCredits).toBe(50000n); // unchanged
     });
 
-    it("closeEpoch on non-existent epoch throws EpochNotFoundError", async () => {
-      await expect(adapter.closeEpoch(999999n, 100n)).rejects.toThrow(
+    it("finalizeEpoch on non-existent epoch throws EpochNotFoundError", async () => {
+      await expect(adapter.finalizeEpoch(999999n, 100n)).rejects.toThrow(
         EpochNotFoundError
       );
     });
@@ -238,10 +255,13 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       epochId = epoch.id;
     });
 
-    // Freeze test closes the epoch; afterAll is a safety net
+    // Freeze test finalizes the epoch; afterAll is a safety net
     afterAll(async () => {
       const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
-      if (open) await adapter.closeEpoch(open.id, 0n);
+      if (open) {
+        await adapter.closeIngestion(open.id, "cleanup-hash");
+        await adapter.finalizeEpoch(open.id, 0n);
+      }
     });
 
     it("upserts curation entries and retrieves them", async () => {
@@ -281,8 +301,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       expect(unresolved).toHaveLength(0);
     });
 
-    it("CURATION_FREEZE_ON_CLOSE: rejects curation writes after epoch close", async () => {
-      await adapter.closeEpoch(epochId, 5000n);
+    it("CURATION_FREEZE_ON_FINALIZE: rejects curation writes after epoch finalize", async () => {
+      await adapter.closeIngestion(epochId, "freeze-test-hash");
+      await adapter.finalizeEpoch(epochId, 5000n);
 
       await expect(
         adapter.upsertCuration([
@@ -293,7 +314,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
             note: "should fail",
           }),
         ])
-      ).rejects.toSatisfy((err: unknown) => /closed/i.test(drizzleCause(err)));
+      ).rejects.toSatisfy((err: unknown) =>
+        /finalized/i.test(drizzleCause(err))
+      );
     });
   });
 
@@ -313,7 +336,8 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     afterAll(async () => {
-      await adapter.closeEpoch(epochId, 0n);
+      await adapter.closeIngestion(epochId, "cleanup-hash");
+      await adapter.finalizeEpoch(epochId, 0n);
     });
 
     it("inserts allocations and retrieves them", async () => {
@@ -424,7 +448,8 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     afterAll(async () => {
-      await adapter.closeEpoch(epochId, 0n);
+      await adapter.closeIngestion(epochId, "cleanup-hash");
+      await adapter.finalizeEpoch(epochId, 0n);
     });
 
     it("inserts and retrieves pool components", async () => {
@@ -468,7 +493,8 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         ...weekWindow(6),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
-      await adapter.closeEpoch(epoch.id, 10000n);
+      await adapter.closeIngestion(epoch.id, "stmt-test-hash");
+      await adapter.finalizeEpoch(epoch.id, 10000n);
       epochId = epoch.id;
     });
 
@@ -516,7 +542,8 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         ...weekWindow(7),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
-      await adapter.closeEpoch(epoch.id, 20000n);
+      await adapter.closeIngestion(epoch.id, "sig-test-hash");
+      await adapter.finalizeEpoch(epoch.id, 20000n);
 
       const stmt = await adapter.insertPayoutStatement({
         nodeId: TEST_NODE_ID,
@@ -572,7 +599,10 @@ describe("DrizzleLedgerAdapter (Component)", () => {
 
     afterAll(async () => {
       const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
-      if (open) await adapter.closeEpoch(open.id, 0n);
+      if (open) {
+        await adapter.closeIngestion(open.id, "cleanup-hash");
+        await adapter.finalizeEpoch(open.id, 0n);
+      }
     });
 
     it("getEpoch returns null for cross-scope epochId", async () => {
@@ -580,9 +610,15 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       expect(result).toBeNull();
     });
 
-    it("closeEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+    it("closeIngestion throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.closeEpoch(scopeTestEpochId, 100n)
+        otherScopeAdapter.closeIngestion(scopeTestEpochId, "test-hash")
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("finalizeEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.finalizeEpoch(scopeTestEpochId, 100n)
       ).rejects.toThrow(EpochNotFoundError);
     });
 

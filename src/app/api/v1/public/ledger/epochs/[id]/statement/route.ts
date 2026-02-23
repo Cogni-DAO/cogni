@@ -5,7 +5,7 @@
  * Module: `@app/api/v1/public/ledger/epochs/[id]/statement/route`
  * Purpose: Public HTTP endpoint for epoch payout statement.
  * Scope: Public route using wrapPublicRoute(); returns payout statement (null if none exists). Always 200. Does not contain business logic.
- * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_CLOSED_ONLY.
+ * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
  * Links: docs/spec/epoch-ledger.md, contracts/ledger.epoch-statement.v1.contract
  * @public
@@ -37,9 +37,9 @@ export const GET = wrapPublicRoute(
 
     const store = getContainer().activityLedgerStore;
 
-    // PUBLIC_READS_CLOSED_ONLY: verify epoch is closed
+    // PUBLIC_READS_FINALIZED_ONLY: verify epoch is finalized
     const epoch = await store.getEpoch(epochId);
-    if (!epoch || epoch.status !== "closed") {
+    if (!epoch || epoch.status !== "finalized") {
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
 

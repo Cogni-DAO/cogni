@@ -23,7 +23,7 @@ export const PaginationQuerySchema = z.object({
 
 export const EpochSchema = z.object({
   id: z.string(), // bigint as string
-  status: z.enum(["open", "closed"]),
+  status: z.enum(["open", "review", "finalized"]),
   periodStart: z.string().datetime(),
   periodEnd: z.string().datetime(),
   weightConfig: z.record(z.string(), z.number()),
