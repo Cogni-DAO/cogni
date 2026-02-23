@@ -68,6 +68,10 @@ export interface LedgerScheduleConfig {
       streams: string[];
     }
   >;
+  /** Pool budget: base_issuance_credits as string (bigint serialized). */
+  baseIssuanceCredits?: string;
+  /** EVM approver addresses for epoch close. */
+  approvers?: string[];
 }
 
 /** Minimal governance config shape (no @/ imports — pure type) */
@@ -213,6 +217,13 @@ export async function syncGovernanceSchedules(
         scopeKey: config.ledger.scopeKey,
         epochLengthDays: config.ledger.epochLengthDays,
         activitySources: config.ledger.activitySources,
+        ...(config.ledger.baseIssuanceCredits && {
+          baseIssuanceCredits: config.ledger.baseIssuanceCredits,
+        }),
+        ...(config.ledger.approvers &&
+          config.ledger.approvers.length > 0 && {
+            approvers: config.ledger.approvers,
+          }),
       };
       workflowType = COLLECT_EPOCH_WORKFLOW_TYPE;
       taskQueueOverride = LEDGER_TASK_QUEUE;

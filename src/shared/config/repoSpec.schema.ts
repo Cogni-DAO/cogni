@@ -94,6 +94,18 @@ export const activitySourceSpecSchema = z.object({
 
 export type ActivitySourceSpec = z.infer<typeof activitySourceSpecSchema>;
 
+/**
+ * Schema for pool_config — governance-managed pool budget parameters.
+ */
+export const poolConfigSpecSchema = z.object({
+  /** Base issuance in credits (string → bigint). Governance-set budget per epoch. */
+  base_issuance_credits: z
+    .string()
+    .min(1, "base_issuance_credits must be a non-empty string"),
+});
+
+export type PoolConfigSpec = z.infer<typeof poolConfigSpecSchema>;
+
 export const activityLedgerSpecSchema = z.object({
   /** Epoch length in days (1–90) */
   epoch_length_days: z.number().int().min(1).max(90),
@@ -110,6 +122,8 @@ export const activityLedgerSpecSchema = z.object({
     .default([]),
   /** Map of source name → source config */
   activity_sources: z.record(z.string(), activitySourceSpecSchema),
+  /** Pool budget configuration (optional — defaults to 0 base issuance if missing) */
+  pool_config: poolConfigSpecSchema.optional(),
 });
 
 export type ActivityLedgerSpec = z.infer<typeof activityLedgerSpecSchema>;

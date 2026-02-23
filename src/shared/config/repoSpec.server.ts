@@ -27,6 +27,10 @@ export interface GovernanceSchedule {
   entrypoint: string;
 }
 
+export interface LedgerPoolConfig {
+  baseIssuanceCredits: bigint;
+}
+
 export interface LedgerConfig {
   scopeId: string;
   scopeKey: string;
@@ -35,6 +39,11 @@ export interface LedgerConfig {
     string,
     { creditEstimateAlgo: string; sourceRefs: string[]; streams: string[] }
   >;
+  poolConfig: LedgerPoolConfig;
+  /** base_issuance_credits as string (bigint serialized) for schedule payload. */
+  baseIssuanceCredits?: string;
+  /** EVM approver addresses from repo-spec. */
+  approvers?: string[];
 }
 
 export interface GovernanceConfig {
@@ -176,11 +185,20 @@ function mapGovernanceConfig(spec: RepoSpec): GovernanceConfig {
         streams: src.streams,
       };
     }
+    const poolCfg = spec.activity_ledger.pool_config;
+    const baseIssuanceCredits = poolCfg
+      ? BigInt(poolCfg.base_issuance_credits)
+      : 0n;
     config.ledger = {
       scopeId: spec.scope_id,
       scopeKey: spec.scope_key,
       epochLengthDays: spec.activity_ledger.epoch_length_days,
       activitySources: sources,
+      poolConfig: {
+        baseIssuanceCredits,
+      },
+      baseIssuanceCredits: baseIssuanceCredits.toString(),
+      approvers: spec.activity_ledger.approvers,
     };
   }
 

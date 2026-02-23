@@ -16,7 +16,10 @@
  * @internal
  */
 
-import { computeEpochWindowV1 } from "@cogni/ledger-core";
+import {
+  computeEpochWindowV1,
+  deriveAllocationAlgoRef,
+} from "@cogni/ledger-core";
 import {
   ApplicationFailure,
   proxyActivities,
@@ -33,6 +36,9 @@ const {
   saveCursor,
   insertEvents,
   curateAndResolve,
+  computeAllocations,
+  ensurePoolComponents,
+  autoCloseIngestion,
 } = proxyActivities<LedgerActivities>({
   startToCloseTimeout: "2 minutes",
   retry: {
@@ -77,6 +83,12 @@ export interface LedgerIngestRunV1 {
       streams: string[];
     }
   >;
+  /** Pool budget config — base_issuance_credits as string (bigint serialized). Optional for backward compat. */
+  readonly baseIssuanceCredits?: string;
+  /** EVM approver addresses for epoch close. Optional for backward compat. */
+  readonly approvers?: string[];
+  /** Grace period in ms after periodEnd before auto-close (default: 24h). */
+  readonly autoCloseGracePeriodMs?: number;
 }
 
 /**
@@ -155,6 +167,37 @@ export async function CollectEpochWorkflow(
 
   // 5. Curate events and resolve identities (CURATION_AUTO_POPULATE)
   await curateAndResolve({ epochId: epoch.epochId });
+
+  // 6. Compute allocations (periodic — runs every collection pass)
+  const creditEstimateAlgo =
+    Object.values(config.activitySources)[0]?.creditEstimateAlgo ??
+    "cogni-v0.0";
+  await computeAllocations({
+    epochId: epoch.epochId,
+    algorithmId: deriveAllocationAlgoRef(creditEstimateAlgo),
+    weightConfig: epoch.weightConfig,
+  });
+
+  // 7. Ensure pool components (base_issuance from config, idempotent)
+  if (config.baseIssuanceCredits) {
+    await ensurePoolComponents({
+      epochId: epoch.epochId,
+      baseIssuanceCredits: config.baseIssuanceCredits,
+    });
+  }
+
+  // 8. Auto-close check: if now > periodEnd + gracePeriod → closeIngestion
+  if (config.approvers && config.approvers.length > 0) {
+    const gracePeriodMs = config.autoCloseGracePeriodMs ?? 24 * 60 * 60 * 1000; // default 24h
+    await autoCloseIngestion({
+      epochId: epoch.epochId,
+      periodEnd: periodEndIso,
+      gracePeriodMs,
+      weightConfig: epoch.weightConfig,
+      creditEstimateAlgo,
+      approvers: config.approvers,
+    });
+  }
 }
 
 /** V0 weight config derivation — pure, deterministic. */

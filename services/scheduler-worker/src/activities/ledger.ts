@@ -18,8 +18,15 @@
  */
 
 import type { ActivityEvent } from "@cogni/ingestion-core";
-
 import type { UncuratedEvent } from "@cogni/ledger-core";
+import {
+  computeApproverSetHash,
+  computeProposedAllocations,
+  computeWeightConfigHash,
+  deriveAllocationAlgoRef,
+  estimatePoolComponentsV0,
+  validateWeightConfig,
+} from "@cogni/ledger-core";
 
 import type { Logger } from "../observability/logger.js";
 import type { ActivityLedgerStore, SourceAdapter } from "../ports/index.js";
@@ -119,6 +126,58 @@ export interface CurateAndResolveOutput {
   readonly newCurations: number;
   readonly resolved: number;
   readonly unresolved: number;
+}
+
+/**
+ * Input for computeAllocations activity.
+ */
+export interface ComputeAllocationsInput {
+  readonly epochId: string; // bigint serialized
+  readonly algorithmId: string;
+  readonly weightConfig: Record<string, number>;
+}
+
+/**
+ * Output from computeAllocations activity.
+ */
+export interface ComputeAllocationsOutput {
+  readonly totalAllocations: number;
+  readonly totalProposedUnits: string; // bigint serialized
+}
+
+/**
+ * Input for ensurePoolComponents activity.
+ */
+export interface EnsurePoolComponentsInput {
+  readonly epochId: string; // bigint serialized
+  readonly baseIssuanceCredits: string; // bigint serialized
+}
+
+/**
+ * Output from ensurePoolComponents activity.
+ */
+export interface EnsurePoolComponentsOutput {
+  readonly componentsEnsured: number;
+}
+
+/**
+ * Input for autoCloseIngestion activity.
+ */
+export interface AutoCloseIngestionInput {
+  readonly epochId: string; // bigint serialized
+  readonly periodEnd: string; // ISO date
+  readonly gracePeriodMs: number;
+  readonly weightConfig: Record<string, number>;
+  readonly creditEstimateAlgo: string;
+  readonly approvers: string[];
+}
+
+/**
+ * Output from autoCloseIngestion activity.
+ */
+export interface AutoCloseIngestionOutput {
+  readonly closed: boolean;
+  readonly reason: string;
 }
 
 /**
@@ -482,6 +541,199 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     };
   }
 
+  /**
+   * Compute proposed allocations from curated events.
+   * Upserts results (ALLOCATION_PRESERVES_OVERRIDES) and removes stale allocations.
+   */
+  async function computeAllocations(
+    input: ComputeAllocationsInput
+  ): Promise<ComputeAllocationsOutput> {
+    const epochId = BigInt(input.epochId);
+    const { algorithmId, weightConfig } = input;
+
+    logger.info(
+      { epochId: input.epochId, algorithmId },
+      "Computing allocations"
+    );
+
+    // 1. Load curated events (resolved users only)
+    const events = await ledgerStore.getCuratedEventsForAllocation(epochId);
+
+    if (events.length === 0) {
+      logger.info({ epochId: input.epochId }, "No curated events — skipping");
+      return { totalAllocations: 0, totalProposedUnits: "0" };
+    }
+
+    // 2. Compute proposed allocations (pure)
+    const proposed = computeProposedAllocations(
+      algorithmId,
+      events,
+      weightConfig
+    );
+
+    // 3. Upsert allocations (preserves admin final_units)
+    await ledgerStore.upsertAllocations(
+      proposed.map((p) => ({
+        nodeId,
+        epochId,
+        userId: p.userId,
+        proposedUnits: p.proposedUnits,
+        activityCount: p.activityCount,
+      }))
+    );
+
+    // 4. Remove stale allocations (guard: skip if proposed is empty)
+    if (proposed.length > 0) {
+      const activeUserIds = proposed.map((p) => p.userId);
+      await ledgerStore.deleteStaleAllocations(epochId, activeUserIds);
+    }
+
+    const totalProposedUnits = proposed.reduce(
+      (acc, p) => acc + p.proposedUnits,
+      0n
+    );
+
+    logger.info(
+      {
+        epochId: input.epochId,
+        totalAllocations: proposed.length,
+        totalProposedUnits: totalProposedUnits.toString(),
+      },
+      "Allocations computed"
+    );
+
+    return {
+      totalAllocations: proposed.length,
+      totalProposedUnits: totalProposedUnits.toString(),
+    };
+  }
+
+  /**
+   * Ensure pool components exist for an epoch. Idempotent via POOL_UNIQUE_PER_TYPE.
+   * Only inserts when epoch is open (POOL_LOCKED_AT_REVIEW enforced by adapter).
+   */
+  async function ensurePoolComponents(
+    input: EnsurePoolComponentsInput
+  ): Promise<EnsurePoolComponentsOutput> {
+    const epochId = BigInt(input.epochId);
+    const baseIssuanceCredits = BigInt(input.baseIssuanceCredits);
+
+    logger.info(
+      {
+        epochId: input.epochId,
+        baseIssuanceCredits: input.baseIssuanceCredits,
+      },
+      "Ensuring pool components"
+    );
+
+    // Check epoch is open before attempting inserts
+    const epoch = await ledgerStore.getEpoch(epochId);
+    if (!epoch) {
+      throw new Error(`ensurePoolComponents: epoch ${input.epochId} not found`);
+    }
+    if (epoch.status !== "open") {
+      logger.info(
+        { epochId: input.epochId, status: epoch.status },
+        "Epoch not open — skipping pool component insert"
+      );
+      return { componentsEnsured: 0 };
+    }
+
+    const estimates = estimatePoolComponentsV0({ baseIssuanceCredits });
+    let ensured = 0;
+
+    for (const estimate of estimates) {
+      try {
+        await ledgerStore.insertPoolComponent({
+          nodeId,
+          epochId,
+          componentId: estimate.componentId,
+          algorithmVersion: estimate.algorithmVersion,
+          inputsJson: estimate.inputsJson,
+          amountCredits: estimate.amountCredits,
+          evidenceRef: estimate.evidenceRef,
+        });
+        ensured++;
+      } catch (err) {
+        // Idempotent: PK conflict means component already exists — skip
+        const msg = err instanceof Error ? err.message : String(err);
+        if (
+          msg.includes("duplicate key") ||
+          msg.includes("unique constraint")
+        ) {
+          logger.info(
+            { componentId: estimate.componentId },
+            "Pool component already exists — skipping"
+          );
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    logger.info(
+      { epochId: input.epochId, componentsEnsured: ensured },
+      "Pool components ensured"
+    );
+
+    return { componentsEnsured: ensured };
+  }
+
+  /**
+   * Auto-close ingestion if epoch period has passed + grace period.
+   * Locks config at review: pins allocationAlgoRef, weightConfigHash, approverSetHash.
+   */
+  async function autoCloseIngestion(
+    input: AutoCloseIngestionInput
+  ): Promise<AutoCloseIngestionOutput> {
+    const epochId = BigInt(input.epochId);
+    const periodEnd = new Date(input.periodEnd);
+    const now = new Date();
+
+    // Check if grace period has elapsed
+    const graceDeadline = new Date(periodEnd.getTime() + input.gracePeriodMs);
+    if (now < graceDeadline) {
+      logger.info(
+        {
+          epochId: input.epochId,
+          periodEnd: input.periodEnd,
+          graceDeadline: graceDeadline.toISOString(),
+        },
+        "Grace period not elapsed — skipping auto-close"
+      );
+      return { closed: false, reason: "grace_period_not_elapsed" };
+    }
+
+    // Validate and compute config hashes
+    validateWeightConfig(input.weightConfig);
+    const weightConfigHash = await computeWeightConfigHash(input.weightConfig);
+    const allocationAlgoRef = deriveAllocationAlgoRef(input.creditEstimateAlgo);
+    const approverSetHash = computeApproverSetHash(input.approvers);
+
+    logger.info(
+      {
+        epochId: input.epochId,
+        allocationAlgoRef,
+        weightConfigHash: `${weightConfigHash.slice(0, 12)}...`,
+      },
+      "Auto-closing ingestion"
+    );
+
+    const epoch = await ledgerStore.closeIngestion(
+      epochId,
+      approverSetHash,
+      allocationAlgoRef,
+      weightConfigHash
+    );
+
+    logger.info(
+      { epochId: input.epochId, status: epoch.status },
+      "Ingestion auto-closed"
+    );
+
+    return { closed: true, reason: "auto_closed" };
+  }
+
   return {
     ensureEpochForWindow,
     loadCursor,
@@ -489,6 +741,9 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     insertEvents,
     saveCursor,
     curateAndResolve,
+    computeAllocations,
+    ensurePoolComponents,
+    autoCloseIngestion,
   };
 }
 
