@@ -182,14 +182,32 @@ Allocations are recomputed on every collection run so admins always see current 
 
 3. **`deleteStaleAllocations(epochId, activeUserIds)`** — new method. Removes allocation rows where `user_id NOT IN (activeUserIds)` AND `final_units IS NULL`. Admin-overridden allocations are never auto-deleted (the admin explicitly valued that user; system doesn't second-guess).
 
+4. **`closeIngestion` updated signature** — extends the existing `(epochId, approverSetHash)` from task.0100. Full signature:
+
+```typescript
+closeIngestion(
+  epochId: bigint,
+  approverSetHash: string,
+  allocationAlgoRef: string,
+  weightConfigHash: string
+): Promise<LedgerEpoch>;
+```
+
+Sets `approver_set_hash` (task.0100), `allocation_algo_ref`, and `weight_config_hash` on the epoch row atomically. All three are NULL while open, immutable after review.
+
+5. **`insertPoolComponent` enforcement** — port signature unchanged. Adapter (`DrizzleLedgerAdapter`) checks epoch status internally via `resolveEpochScoped` and rejects if `status != 'open'` (POOL_LOCKED_AT_REVIEW). Consistent with existing scope-gating pattern.
+
 **`computeAllocations` activity:**
 
 ```typescript
 async function computeAllocations(input: {
+  nodeId: string;
   epochId: string;
   algorithmId: string;
   weightConfig: Record<string, number>;
 }): Promise<{ totalAllocations: number; totalProposedUnits: string }> {
+  const { nodeId, epochId, algorithmId, weightConfig } = input;
+
   // 1. Load curated events (joined query — resolved users only)
   const events = await store.getCuratedEventsForAllocation(BigInt(epochId));
 
@@ -212,12 +230,19 @@ async function computeAllocations(input: {
   );
 
   // 4. Remove stale allocations (users no longer in proposed set)
-  const activeUserIds = proposed.map((p) => p.userId);
-  await store.deleteStaleAllocations(BigInt(epochId), activeUserIds);
+  // Guard: skip if proposed is empty (no resolved events) — don't wipe all allocations
+  if (proposed.length > 0) {
+    const activeUserIds = proposed.map((p) => p.userId);
+    await store.deleteStaleAllocations(BigInt(epochId), activeUserIds);
+  }
 
+  const totalProposedUnits = proposed.reduce(
+    (acc, p) => acc + p.proposedUnits,
+    0n
+  );
   return {
     totalAllocations: proposed.length,
-    totalProposedUnits: sum.toString(),
+    totalProposedUnits: totalProposedUnits.toString(),
   };
 }
 ```
@@ -262,16 +287,18 @@ New workflow: `services/scheduler-worker/src/workflows/finalize-epoch.workflow.t
 
 ```
 Input: { epochId, signature, signerAddress }
+  signerAddress: derived from SIWE session (never client-supplied)
 Deterministic ID: ledger-finalize-{scopeId}-{epochId}
 
 1. Activity: loadEpochForFinalize(epochId)
    → Verify epoch exists, is 'review'. If 'finalized' → return existing statement (idempotent).
+   → Verify allocation_algo_ref and weight_config_hash are set (CONFIG_LOCKED_AT_REVIEW).
    → Load approverSetHash from epoch row.
 
 2. Activity: verifySignatureAndFinalize(epochId, signature, signerAddress)
    → Verify signer is in scope's approvers[] AND matches pinned approverSetHash.
-   → Build canonical message from epoch data.
-   → ecrecover(message, signature) — verify signer matches.
+   → Build canonical finalize message from epoch data.
+   → ecrecover(message, signature) — verify recovered address matches signerAddress.
    → Read epoch_allocations — use final_units where set, fall back to proposed_units.
    → Read pool components → pool_total = SUM(amount_credits).
    → Verify ≥1 base_issuance component (POOL_REQUIRES_BASE).
@@ -284,13 +311,13 @@ Deterministic ID: ledger-finalize-{scopeId}-{epochId}
    → Return statement.
 ```
 
-Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_FINALIZE_IDEMPOTENT.
+Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_FINALIZE_IDEMPOTENT. V0 is sign-at-finalize — no separate `/sign` route (deferred to V1 for multi-approver quorum).
 
 **Finalize API route**: `POST /api/v1/ledger/epochs/:id/finalize`
 
 ```typescript
 // Input: { signature: string } (EIP-191 hex)
-// Auth: SIWE session required. Wallet must be in scope's approvers[].
+// Auth: SIWE session required. signerAddress derived from session wallet.
 // Action: Start FinalizeEpochWorkflow with { epochId, signature, signerAddress }.
 // Response: 202 + workflowId (WRITES_VIA_TEMPORAL)
 ```
@@ -335,7 +362,7 @@ Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_F
 - Modify: `.cogni/repo-spec.yaml` — add `pool_config.base_issuance_credits`
 - Modify: `src/shared/config/repoSpec.schema.ts` — add `pool_config` schema
 - Modify: `src/shared/config/repoSpec.server.ts` — add `getLedgerPoolConfig()` accessor
-- Modify: migration SQL files — add `allocation_algo_ref` column (edit in place, never deployed)
+- Modify: migration SQL files — add `allocation_algo_ref` and `weight_config_hash` columns (edit in place, never deployed)
 - Test: `tests/unit/packages/ledger-core/allocation.test.ts` — weight-sum-v0, deterministic ordering, weight overrides, empty inputs
 - Test: `tests/unit/packages/ledger-core/pool.test.ts` — estimatePoolComponentsV0
 - Test: `tests/unit/packages/ledger-core/hashing.test.ts` — allocation set hash determinism

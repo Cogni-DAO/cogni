@@ -446,14 +446,13 @@ Adapters live in `services/scheduler-worker/src/adapters/ingestion/` (ADAPTERS_N
 
 ### Write Routes (SIWE + scope approver check → Temporal workflow → 202)
 
-| Method | Route                                       | Purpose                                                                |
-| ------ | ------------------------------------------- | ---------------------------------------------------------------------- |
-| POST   | `/api/v1/ledger/epochs/collect`             | Trigger activity collection for new/existing epoch                     |
-| PATCH  | `/api/v1/ledger/epochs/:id/allocations`     | Admin adjusts final_units for users (epoch must be `open` or `review`) |
-| POST   | `/api/v1/ledger/epochs/:id/pool-components` | Record a pool component (epoch must be `open` — POOL_LOCKED_AT_REVIEW) |
-| POST   | `/api/v1/ledger/epochs/:id/review`          | Close ingestion, transition `open → review` (or auto via Temporal)     |
-| POST   | `/api/v1/ledger/epochs/:id/sign`            | Submit EIP-191 signature for payout statement (epoch must be `review`) |
-| POST   | `/api/v1/ledger/epochs/:id/finalize`        | Finalize epoch → compute payouts (requires signature + base_issuance)  |
+| Method | Route                                       | Purpose                                                                              |
+| ------ | ------------------------------------------- | ------------------------------------------------------------------------------------ |
+| POST   | `/api/v1/ledger/epochs/collect`             | Trigger activity collection for new/existing epoch                                   |
+| PATCH  | `/api/v1/ledger/epochs/:id/allocations`     | Admin adjusts final_units for users (epoch must be `open` or `review`)               |
+| POST   | `/api/v1/ledger/epochs/:id/pool-components` | Record a pool component (epoch must be `open` — POOL_LOCKED_AT_REVIEW)               |
+| POST   | `/api/v1/ledger/epochs/:id/review`          | Close ingestion, transition `open → review` (or auto via Temporal)                   |
+| POST   | `/api/v1/ledger/epochs/:id/finalize`        | Sign + finalize epoch → compute payouts (requires EIP-191 signature + base_issuance) |
 
 ### Public Read Routes (no auth, closed-epoch data only)
 
@@ -522,17 +521,20 @@ Deterministic workflow ID: managed by Temporal Schedule (overlap=SKIP, run IDs p
 
 ### FinalizeEpochWorkflow
 
+Input: `{ epochId, signature }` — `signerAddress` derived from SIWE session (never client-supplied).
+
 1. Verify epoch exists and is `review`
 2. If epoch already `finalized`, return existing statement (EPOCH_FINALIZE_IDEMPOTENT)
 3. Verify `allocation_algo_ref` and `weight_config_hash` are set (CONFIG_LOCKED_AT_REVIEW)
 4. Verify at least one `base_issuance` pool component exists (POOL_REQUIRES_BASE)
-5. Verify at least one valid signature exists from scope's `approvers[]` (APPROVERS_PER_SCOPE)
-6. Read `epoch_allocations` — use `final_units` where set, fall back to `proposed_units`
-7. Read pool components, compute `pool_total_credits = SUM(amount_credits)`
-8. `computePayouts(allocations, pool_total)` — BIGINT, largest-remainder
-9. Compute `allocation_set_hash`
-10. Atomic transaction: set `pool_total_credits` on epoch, update status to `'finalized'`, insert payout statement
-11. Return statement
+5. Verify signer is in scope's `approvers[]` AND matches pinned `approverSetHash` (APPROVERS_PER_SCOPE)
+6. Build canonical finalize message from epoch data, `ecrecover(message, signature)` — verify recovered address matches `signerAddress`
+7. Read `epoch_allocations` — use `final_units` where set, fall back to `proposed_units`
+8. Read pool components, compute `pool_total_credits = SUM(amount_credits)`
+9. `computePayouts(allocations, pool_total)` — BIGINT, largest-remainder
+10. Compute `allocation_set_hash`
+11. Atomic transaction: set `pool_total_credits` on epoch, update status to `'finalized'`, insert payout statement + statement signature
+12. Return statement
 
 Deterministic workflow ID: `ledger-finalize-{scopeId}-{epochId}`
 
@@ -551,7 +553,7 @@ Allocation Hash: {allocation_set_hash}
 Pool Total: {pool_total_credits}
 ```
 
-Frontend constructs this message from epoch data, calls `walletClient.signMessage()` (EIP-191 `personal_sign`), and POSTs the signature to the sign route.
+Frontend constructs this message from epoch data, calls `walletClient.signMessage()` (EIP-191 `personal_sign`), and POSTs the signature to the finalize route. V0: single API call signs and finalizes atomically.
 
 ### Verification
 
@@ -567,8 +569,9 @@ Signatures stored in `statement_signatures` table (schema unchanged). The `signe
 ### Future Path
 
 ```
-V0 (now):    DB-stored EIP-191 sigs, 1-of-N from scope approvers
-V1:          Multi-sig thresholds (close_epoch_threshold: 2), separate curation_admins vs payout_approvers
+V0 (now):    Single EIP-191 sig passed at finalize time, 1-of-N from scope approvers
+V1:          Separate /sign route for collecting signatures over time, multi-sig thresholds (close_epoch_threshold: 2)
+V1:          Role separation (curation_admins vs payout_approvers)
 V1:          Post sig hash to IPFS/Arweave → content hash on-chain
 V2:          On-chain attestation registry (smart contract accepts epoch_hash + sig)
 V3:          DAO multisig (Safe) — N-of-M signers required
@@ -578,6 +581,7 @@ V3:          DAO multisig (Safe) — N-of-M signers required
 
 The following are explicitly deferred from V0 and will be designed when needed:
 
+- **Separate `/sign` route** (`POST /epochs/:id/sign`) — V1: collect signatures independently before finalize, needed for multi-approver quorum
 - **Multi-sig thresholds** (`close_epoch_threshold: N`) — V1: require N-of-M approver signatures
 - **Role separation** (`curation_admins` vs `payout_approvers`) — V1: separate who curates from who signs
 - **`ledger_issuers` role system** (can_issue, can_approve, can_close_epoch) — V1: multi-role authorization
