@@ -61,7 +61,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       // Ensure no open epoch leaks to subsequent describes
       const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
       if (open) {
-        await adapter.closeIngestion(open.id, "cleanup-hash");
+        await adapter.closeIngestion(
+          open.id,
+          "cleanup-hash",
+          "weight-sum-v0",
+          "cleanup-wch"
+        );
         await adapter.finalizeEpoch(open.id, 0n);
       }
     });
@@ -111,7 +116,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
 
     it("EPOCH_WINDOW_UNIQUE: rejects duplicate window for same node", async () => {
       // Finalize the open epoch so we can test the window constraint in isolation
-      await adapter.closeIngestion(createdEpochId, "test-hash");
+      await adapter.closeIngestion(
+        createdEpochId,
+        "test-hash",
+        "weight-sum-v0",
+        "test-wch"
+      );
       await adapter.finalizeEpoch(createdEpochId, 10000n);
 
       await expect(
@@ -132,7 +142,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         weightConfig: TEST_WEIGHT_CONFIG,
       });
 
-      const reviewed = await adapter.closeIngestion(epoch.id, "abc123hash");
+      const reviewed = await adapter.closeIngestion(
+        epoch.id,
+        "abc123hash",
+        "weight-sum-v0",
+        "test-wch"
+      );
       expect(reviewed.status).toBe("review");
       expect(reviewed.approverSetHash).toBe("abc123hash");
     });
@@ -184,7 +199,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       );
 
       // Cleanup: transition to finalized so ONE_OPEN_EPOCH doesn't block later tests
-      await adapter.closeIngestion(epoch.id, "cleanup-hash");
+      await adapter.closeIngestion(
+        epoch.id,
+        "cleanup-hash",
+        "weight-sum-v0",
+        "cleanup-wch"
+      );
       await adapter.finalizeEpoch(epoch.id, 0n);
     });
 
@@ -196,7 +216,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
 
       const result = await adapter.closeIngestion(
         finalized.id,
-        "should-be-ignored"
+        "should-be-ignored",
+        "weight-sum-v0",
+        "ignored-wch"
       );
       expect(result.status).toBe("finalized");
       // approverSetHash unchanged — not overwritten
@@ -292,7 +314,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     afterAll(async () => {
       const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
       if (open) {
-        await adapter.closeIngestion(open.id, "cleanup-hash");
+        await adapter.closeIngestion(
+          open.id,
+          "cleanup-hash",
+          "weight-sum-v0",
+          "cleanup-wch"
+        );
         await adapter.finalizeEpoch(open.id, 0n);
       }
     });
@@ -335,7 +362,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     it("CURATION_FREEZE_ON_FINALIZE: curation is mutable during review", async () => {
-      await adapter.closeIngestion(epochId, "review-curation-test");
+      await adapter.closeIngestion(
+        epochId,
+        "review-curation-test",
+        "weight-sum-v0",
+        "review-wch"
+      );
 
       // Curation writes should succeed while epoch is in review
       await expect(
@@ -385,7 +417,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     afterAll(async () => {
-      await adapter.closeIngestion(epochId, "cleanup-hash");
+      await adapter.closeIngestion(
+        epochId,
+        "cleanup-hash",
+        "weight-sum-v0",
+        "cleanup-wch"
+      );
       await adapter.finalizeEpoch(epochId, 0n);
     });
 
@@ -497,7 +534,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     afterAll(async () => {
-      await adapter.closeIngestion(epochId, "cleanup-hash");
+      await adapter.closeIngestion(
+        epochId,
+        "cleanup-hash",
+        "weight-sum-v0",
+        "cleanup-wch"
+      );
       await adapter.finalizeEpoch(epochId, 0n);
     });
 
@@ -542,7 +584,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         ...epochWindow(6),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
-      await adapter.closeIngestion(epoch.id, "stmt-test-hash");
+      await adapter.closeIngestion(
+        epoch.id,
+        "stmt-test-hash",
+        "weight-sum-v0",
+        "stmt-wch"
+      );
       await adapter.finalizeEpoch(epoch.id, 10000n);
       epochId = epoch.id;
     });
@@ -591,7 +638,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         ...epochWindow(7),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
-      await adapter.closeIngestion(epoch.id, "sig-test-hash");
+      await adapter.closeIngestion(
+        epoch.id,
+        "sig-test-hash",
+        "weight-sum-v0",
+        "sig-wch"
+      );
       await adapter.finalizeEpoch(epoch.id, 20000n);
 
       const stmt = await adapter.insertPayoutStatement({
@@ -649,7 +701,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     afterAll(async () => {
       const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
       if (open) {
-        await adapter.closeIngestion(open.id, "cleanup-hash");
+        await adapter.closeIngestion(
+          open.id,
+          "cleanup-hash",
+          "weight-sum-v0",
+          "cleanup-wch"
+        );
         await adapter.finalizeEpoch(open.id, 0n);
       }
     });
@@ -661,7 +718,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
 
     it("closeIngestion throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.closeIngestion(scopeTestEpochId, "test-hash")
+        otherScopeAdapter.closeIngestion(
+          scopeTestEpochId,
+          "test-hash",
+          "weight-sum-v0",
+          "test-wch"
+        )
       ).rejects.toThrow(EpochNotFoundError);
     });
 

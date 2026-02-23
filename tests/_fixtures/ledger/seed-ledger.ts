@@ -272,7 +272,12 @@ export async function seedClosedEpoch(
 
   // 6. Transition epoch: open → review → finalized
   const poolTotal = 10000n;
-  await store.closeIngestion(epoch.id, "test-approver-set-hash");
+  await store.closeIngestion(
+    epoch.id,
+    "test-approver-set-hash",
+    "weight-sum-v0",
+    "test-weight-config-hash"
+  );
   const finalizedEpoch = await store.finalizeEpoch(epoch.id, poolTotal);
 
   // 7. Insert payout statement (after finalize)

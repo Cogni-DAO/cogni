@@ -26,6 +26,24 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 /**
+ * Compute a deterministic SHA-256 hash of a weight config object.
+ * Canonical JSON: keys sorted, values as-is. Deterministic for same config.
+ *
+ * @param config - Weight config (key → milli-unit value)
+ * @returns SHA-256 hex string
+ */
+export async function computeWeightConfigHash(
+  config: Record<string, number>
+): Promise<string> {
+  const sortedKeys = Object.keys(config).sort();
+  const canonical: Record<string, number> = {};
+  for (const key of sortedKeys) {
+    canonical[key] = config[key]!;
+  }
+  return sha256Hex(JSON.stringify(canonical));
+}
+
+/**
  * Compute a deterministic hash of a set of allocations for epoch close.
  *
  * Canonical format: sort allocations by userId, then serialize as

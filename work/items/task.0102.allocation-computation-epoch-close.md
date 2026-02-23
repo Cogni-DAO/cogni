@@ -12,7 +12,7 @@ spec_refs: epoch-ledger-spec
 assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
-branch:
+branch: feat/task-0102-allocation-epoch-close
 pr:
 reviewer:
 revision: 1

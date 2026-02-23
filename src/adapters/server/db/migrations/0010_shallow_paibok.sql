@@ -81,6 +81,8 @@ CREATE TABLE "epochs" (
 	"weight_config" jsonb NOT NULL,
 	"pool_total_credits" bigint,
 	"approver_set_hash" text,
+	"allocation_algo_ref" text,
+	"weight_config_hash" text,
 	"opened_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"closed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

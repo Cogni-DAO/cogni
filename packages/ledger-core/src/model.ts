@@ -29,3 +29,6 @@ export interface FinalizedAllocation {
   readonly userId: string;
   readonly valuationUnits: bigint;
 }
+
+/** Allocation algorithm ref — pinned at closeIngestion, NULL while open */
+export type AllocationAlgoRef = string;

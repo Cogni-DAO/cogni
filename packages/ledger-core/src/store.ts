@@ -17,6 +17,7 @@
  * @public
  */
 
+import type { CuratedEventForAllocation } from "./allocation";
 import type { EpochStatus } from "./model";
 
 // ---------------------------------------------------------------------------
@@ -33,6 +34,8 @@ export interface LedgerEpoch {
   readonly weightConfig: Record<string, number>;
   readonly poolTotalCredits: bigint | null;
   readonly approverSetHash: string | null;
+  readonly allocationAlgoRef: string | null;
+  readonly weightConfigHash: string | null;
   readonly openedAt: Date;
   readonly closedAt: Date | null;
   readonly createdAt: Date;
@@ -251,10 +254,12 @@ export interface ActivityLedgerStore {
   getEpoch(id: bigint): Promise<LedgerEpoch | null>;
   listEpochs(nodeId: string): Promise<LedgerEpoch[]>;
   /** Transition epoch open → review (INGESTION_CLOSED_ON_REVIEW).
-   *  Pins approverSetHash — SHA-256 of sorted, lowercased approver addresses. */
+   *  Pins approverSetHash, allocationAlgoRef, and weightConfigHash. */
   closeIngestion(
     epochId: bigint,
-    approverSetHash: string
+    approverSetHash: string,
+    allocationAlgoRef: string,
+    weightConfigHash: string
   ): Promise<LedgerEpoch>;
 
   /** Transition epoch review → finalized. Sets poolTotalCredits and closedAt. */
@@ -267,6 +272,15 @@ export interface ActivityLedgerStore {
     since: Date,
     until: Date
   ): Promise<LedgerActivityEvent[]>;
+
+  // Allocation computation (joined query)
+  /**
+   * Returns curated events with resolved user IDs for allocation computation.
+   * Joined query: activity_curation JOIN activity_events, filtered to userId IS NOT NULL.
+   */
+  getCuratedEventsForAllocation(
+    epochId: bigint
+  ): Promise<CuratedEventForAllocation[]>;
 
   // Curation (mutable while epoch open)
   upsertCuration(params: UpsertCurationParams[]): Promise<void>;
@@ -281,6 +295,19 @@ export interface ActivityLedgerStore {
 
   // Allocations
   insertAllocations(allocations: InsertAllocationParams[]): Promise<void>;
+  /**
+   * Upsert allocations — ON CONFLICT (epoch_id, user_id) UPDATE proposed_units and activity_count.
+   * Never touches final_units or override_reason (ALLOCATION_PRESERVES_OVERRIDES).
+   */
+  upsertAllocations(allocations: InsertAllocationParams[]): Promise<void>;
+  /**
+   * Delete allocation rows where user_id NOT IN activeUserIds AND final_units IS NULL.
+   * Admin-overridden allocations (final_units set) are never auto-deleted.
+   */
+  deleteStaleAllocations(
+    epochId: bigint,
+    activeUserIds: string[]
+  ): Promise<void>;
   updateAllocationFinalUnits(
     epochId: bigint,
     userId: string,

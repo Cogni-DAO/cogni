@@ -11,6 +11,15 @@
  * @public
  */
 
+// Allocation algorithm framework (pure, deterministic)
+export {
+  type CuratedEventForAllocation,
+  computeProposedAllocations,
+  deriveAllocationAlgoRef,
+  type ProposedAllocation,
+  validateWeightConfig,
+} from "./allocation";
+
 // Epoch window computation (pure, deterministic — safe in Temporal workflow code)
 export {
   computeEpochWindowV1,
@@ -33,15 +42,28 @@ export {
 } from "./errors";
 
 // Hashing
-export { computeAllocationSetHash } from "./hashing";
+export {
+  computeAllocationSetHash,
+  computeWeightConfigHash,
+} from "./hashing";
 
 // Model types and enums
 export type {
+  AllocationAlgoRef,
   EpochStatus,
   FinalizedAllocation,
   PayoutLineItem,
 } from "./model";
 export { EPOCH_STATUSES } from "./model";
+
+// Pool estimation (pure, deterministic)
+export {
+  estimatePoolComponentsV0,
+  POOL_COMPONENT_ALLOWLIST,
+  type PoolComponentEstimate,
+  type PoolComponentId,
+  validatePoolComponentId,
+} from "./pool";
 
 // Rules
 export { computePayouts } from "./rules";

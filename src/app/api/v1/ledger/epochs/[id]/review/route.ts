@@ -11,7 +11,12 @@
  * @public
  */
 
-import { computeApproverSetHash } from "@cogni/ledger-core";
+import {
+  computeApproverSetHash,
+  computeWeightConfigHash,
+  deriveAllocationAlgoRef,
+  validateWeightConfig,
+} from "@cogni/ledger-core";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/ledger/_lib/approver-guard";
@@ -49,7 +54,27 @@ export const POST = wrapRouteHandlerWithLogging<{
     const approverSetHash = computeApproverSetHash(getLedgerApprovers());
 
     const store = getContainer().activityLedgerStore;
-    const epoch = await store.closeIngestion(epochId, approverSetHash);
+
+    // Load epoch to get weightConfig for CONFIG_LOCKED_AT_REVIEW
+    const existing = await store.getEpoch(epochId);
+    if (!existing) {
+      return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
+    }
+
+    // Validate and lock config at review
+    validateWeightConfig(existing.weightConfig);
+    const weightConfigHash = await computeWeightConfigHash(
+      existing.weightConfig
+    );
+    // V0: derive from first source's credit_estimate_algo or default
+    const allocationAlgoRef = deriveAllocationAlgoRef("cogni-v0.0");
+
+    const epoch = await store.closeIngestion(
+      epochId,
+      approverSetHash,
+      allocationAlgoRef,
+      weightConfigHash
+    );
 
     ctx.log.info(
       { epochId: id, approverSetHash: `${approverSetHash.slice(0, 12)}...` },

@@ -148,7 +148,12 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
       expect(created.isNew).toBe(true);
 
       // Close the epoch via the store directly
-      await ledger.closeIngestion(BigInt(created.epochId), "test-hash");
+      await ledger.closeIngestion(
+        BigInt(created.epochId),
+        "test-hash",
+        "weight-sum-v0",
+        "test-wch"
+      );
       await ledger.finalizeEpoch(BigInt(created.epochId), 0n);
 
       // Now ensureEpochForWindow should handle the closed epoch gracefully.

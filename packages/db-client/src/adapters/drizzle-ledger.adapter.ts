@@ -30,6 +30,7 @@ import {
 } from "@cogni/db-schema/ledger";
 import type {
   ActivityLedgerStore,
+  CuratedEventForAllocation,
   InsertActivityEventParams,
   InsertAllocationParams,
   InsertCurationAutoParams,
@@ -53,7 +54,18 @@ import {
   EpochNotOpenError,
   type EpochStatus,
 } from "@cogni/ledger-core";
-import { and, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import {
+  and,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Database } from "../client";
 
 // ── Row mappers ─────────────────────────────────────────────────
@@ -69,6 +81,8 @@ function toEpoch(row: typeof epochs.$inferSelect): LedgerEpoch {
     weightConfig: row.weightConfig,
     poolTotalCredits: row.poolTotalCredits,
     approverSetHash: row.approverSetHash,
+    allocationAlgoRef: row.allocationAlgoRef,
+    weightConfigHash: row.weightConfigHash,
     openedAt: row.openedAt,
     closedAt: row.closedAt,
     createdAt: row.createdAt,
@@ -303,13 +317,17 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 
   async closeIngestion(
     epochId: bigint,
-    approverSetHash: string
+    approverSetHash: string,
+    allocationAlgoRef: string,
+    weightConfigHash: string
   ): Promise<LedgerEpoch> {
     const [row] = await this.db
       .update(epochs)
       .set({
         status: "review",
         approverSetHash,
+        allocationAlgoRef,
+        weightConfigHash,
       })
       .where(
         and(
@@ -366,6 +384,45 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       throw new EpochNotOpenError(epochId.toString());
     }
     return toEpoch(row);
+  }
+
+  // ── Allocation computation ──────────────────────────────────
+
+  async getCuratedEventsForAllocation(
+    epochId: bigint
+  ): Promise<CuratedEventForAllocation[]> {
+    await this.resolveEpochScoped(epochId);
+    const rows = await this.db
+      .select({
+        eventId: activityCuration.eventId,
+        userId: activityCuration.userId,
+        source: activityEvents.source,
+        eventType: activityEvents.eventType,
+        included: activityCuration.included,
+        weightOverrideMilli: activityCuration.weightOverrideMilli,
+      })
+      .from(activityCuration)
+      .innerJoin(
+        activityEvents,
+        and(
+          eq(activityEvents.id, activityCuration.eventId),
+          eq(activityEvents.nodeId, activityCuration.nodeId)
+        )
+      )
+      .where(
+        and(
+          eq(activityCuration.epochId, epochId),
+          isNotNull(activityCuration.userId)
+        )
+      );
+    return rows.map((r) => ({
+      eventId: r.eventId,
+      userId: r.userId!,
+      source: r.source,
+      eventType: r.eventType,
+      included: r.included,
+      weightOverrideMilli: r.weightOverrideMilli,
+    }));
   }
 
   // ── Activity events ─────────────────────────────────────────
@@ -508,6 +565,49 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     );
   }
 
+  async upsertAllocations(params: InsertAllocationParams[]): Promise<void> {
+    if (params.length === 0) return;
+    await this.validateEpochIds(params.map((a) => a.epochId));
+    for (const a of params) {
+      await this.db
+        .insert(epochAllocations)
+        .values({
+          nodeId: a.nodeId,
+          epochId: a.epochId,
+          userId: a.userId,
+          proposedUnits: a.proposedUnits,
+          finalUnits: a.finalUnits ?? null,
+          overrideReason: a.overrideReason ?? null,
+          activityCount: a.activityCount,
+        })
+        .onConflictDoUpdate({
+          target: [epochAllocations.epochId, epochAllocations.userId],
+          set: {
+            proposedUnits: sql`EXCLUDED.proposed_units`,
+            activityCount: sql`EXCLUDED.activity_count`,
+            updatedAt: new Date(),
+          },
+        });
+    }
+  }
+
+  async deleteStaleAllocations(
+    epochId: bigint,
+    activeUserIds: string[]
+  ): Promise<void> {
+    await this.resolveEpochScoped(epochId);
+    if (activeUserIds.length === 0) return;
+    await this.db
+      .delete(epochAllocations)
+      .where(
+        and(
+          eq(epochAllocations.epochId, epochId),
+          notInArray(epochAllocations.userId, activeUserIds),
+          isNull(epochAllocations.finalUnits)
+        )
+      );
+  }
+
   async updateAllocationFinalUnits(
     epochId: bigint,
     userId: string,
@@ -607,7 +707,11 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   async insertPoolComponent(
     params: InsertPoolComponentParams
   ): Promise<LedgerPoolComponent> {
-    await this.resolveEpochScoped(params.epochId);
+    const epoch = await this.resolveEpochScoped(params.epochId);
+    // POOL_LOCKED_AT_REVIEW: reject pool component inserts after closeIngestion
+    if (epoch.status !== "open") {
+      throw new EpochNotOpenError(params.epochId.toString());
+    }
     const [row] = await this.db
       .insert(epochPoolComponents)
       .values({
