@@ -7,7 +7,7 @@
  * Scope: Type definitions only. Does not contain implementations or I/O.
  * Invariants:
  * - ACTIVITY_APPEND_ONLY: insertActivityEvents never updates existing rows.
- * - CURATION_FREEZE_ON_CLOSE: upsertCuration rejects writes when epoch is closed.
+ * - CURATION_FREEZE_ON_FINALIZE: upsertCuration rejects writes when epoch is finalized.
  * - CURATION_AUTO_POPULATE: insertCurationDoNothing + updateCurationUserId never overwrite admin-set fields.
  * - IDENTITY_BEST_EFFORT: resolveIdentities is best-effort; unresolved events get userId=null.
  * - ONE_OPEN_EPOCH: createEpoch enforced by DB constraint.
@@ -32,6 +32,7 @@ export interface LedgerEpoch {
   readonly periodEnd: Date;
   readonly weightConfig: Record<string, number>;
   readonly poolTotalCredits: bigint | null;
+  readonly approverSetHash: string | null;
   readonly openedAt: Date;
   readonly closedAt: Date | null;
   readonly createdAt: Date;
@@ -249,7 +250,15 @@ export interface ActivityLedgerStore {
   ): Promise<LedgerEpoch | null>;
   getEpoch(id: bigint): Promise<LedgerEpoch | null>;
   listEpochs(nodeId: string): Promise<LedgerEpoch[]>;
-  closeEpoch(epochId: bigint, poolTotal: bigint): Promise<LedgerEpoch>;
+  /** Transition epoch open → review (INGESTION_CLOSED_ON_REVIEW).
+   *  Pins approverSetHash — SHA-256 of sorted, lowercased approver addresses. */
+  closeIngestion(
+    epochId: bigint,
+    approverSetHash: string
+  ): Promise<LedgerEpoch>;
+
+  /** Transition epoch review → finalized. Sets poolTotalCredits and closedAt. */
+  finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<LedgerEpoch>;
 
   // Activity events (append-only, epoch-agnostic raw log)
   insertActivityEvents(events: InsertActivityEventParams[]): Promise<void>;

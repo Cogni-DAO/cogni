@@ -21,11 +21,11 @@ export {
 // Errors
 export {
   AllocationNotFoundError,
-  EpochAlreadyClosedError,
+  EpochAlreadyFinalizedError,
   EpochNotFoundError,
   EpochNotOpenError,
   isAllocationNotFoundError,
-  isEpochAlreadyClosedError,
+  isEpochAlreadyFinalizedError,
   isEpochNotFoundError,
   isEpochNotOpenError,
   isPoolComponentMissingError,
@@ -45,6 +45,13 @@ export { EPOCH_STATUSES } from "./model";
 
 // Rules
 export { computePayouts } from "./rules";
+
+// Signing
+export {
+  buildCanonicalMessage,
+  type CanonicalMessageParams,
+  computeApproverSetHash,
+} from "./signing";
 
 // Store port interface + types
 export type {

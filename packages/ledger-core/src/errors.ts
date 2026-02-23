@@ -19,11 +19,11 @@ export class EpochNotOpenError extends Error {
   }
 }
 
-export class EpochAlreadyClosedError extends Error {
-  public readonly code = "EPOCH_ALREADY_CLOSED" as const;
+export class EpochAlreadyFinalizedError extends Error {
+  public readonly code = "EPOCH_ALREADY_FINALIZED" as const;
   constructor(public readonly epochId: string) {
-    super(`Epoch ${epochId} is already closed`);
-    this.name = "EpochAlreadyClosedError";
+    super(`Epoch ${epochId} is already finalized`);
+    this.name = "EpochAlreadyFinalizedError";
   }
 }
 
@@ -67,10 +67,10 @@ export function isEpochNotOpenError(
   return error instanceof Error && error.name === "EpochNotOpenError";
 }
 
-export function isEpochAlreadyClosedError(
+export function isEpochAlreadyFinalizedError(
   error: unknown
-): error is EpochAlreadyClosedError {
-  return error instanceof Error && error.name === "EpochAlreadyClosedError";
+): error is EpochAlreadyFinalizedError {
+  return error instanceof Error && error.name === "EpochAlreadyFinalizedError";
 }
 
 export function isPoolComponentMissingError(

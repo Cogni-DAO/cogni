@@ -80,10 +80,11 @@ CREATE TABLE "epochs" (
 	"period_end" timestamp with time zone NOT NULL,
 	"weight_config" jsonb NOT NULL,
 	"pool_total_credits" bigint,
+	"approver_set_hash" text,
 	"opened_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"closed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "epochs_status_check" CHECK ("epochs"."status" IN ('open', 'closed'))
+	CONSTRAINT "epochs_status_check" CHECK ("epochs"."status" IN ('open', 'review', 'finalized'))
 );
 --> statement-breakpoint
 CREATE TABLE "payout_statements" (

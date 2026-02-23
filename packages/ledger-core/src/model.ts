@@ -11,8 +11,8 @@
  * @public
  */
 
-/** Epoch statuses */
-export const EPOCH_STATUSES = ["open", "closed"] as const;
+/** Epoch statuses — 3-phase lifecycle: open → review → finalized */
+export const EPOCH_STATUSES = ["open", "review", "finalized"] as const;
 export type EpochStatus = (typeof EPOCH_STATUSES)[number];
 
 /** Payout line item produced by computePayouts */

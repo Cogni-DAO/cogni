@@ -8,7 +8,7 @@
  * Invariants:
  * - All credit/unit columns use BIGINT (ALL_MATH_BIGINT).
  * - Layer 1 (activity_events, epoch_pool_components) are append-only (DB triggers in migration).
- * - Layer 2 (activity_curation) is mutable while epoch open, frozen on close (CURATION_FREEZE_ON_CLOSE).
+ * - Layer 2 (activity_curation) is mutable while epoch open/review, frozen on finalize (CURATION_FREEZE_ON_FINALIZE).
  * - ONE_OPEN_EPOCH: partial unique index on epochs WHERE status = 'open', scoped to (node_id, scope_id).
  * - EPOCH_WINDOW_UNIQUE: unique(node_id, scope_id, period_start, period_end).
  * - NODE_SCOPED: all ledger tables include node_id.
@@ -58,6 +58,7 @@ export const epochs = pgTable(
       .$type<Record<string, number>>()
       .notNull(),
     poolTotalCredits: bigint("pool_total_credits", { mode: "bigint" }),
+    approverSetHash: text("approver_set_hash"),
     openedAt: timestamp("opened_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -67,7 +68,10 @@ export const epochs = pgTable(
       .defaultNow(),
   },
   (table) => [
-    check("epochs_status_check", sql`${table.status} IN ('open', 'closed')`),
+    check(
+      "epochs_status_check",
+      sql`${table.status} IN ('open', 'review', 'finalized')`
+    ),
     // EPOCH_WINDOW_UNIQUE: no overlapping windows per node+scope
     uniqueIndex("epochs_window_unique").on(
       table.nodeId,
