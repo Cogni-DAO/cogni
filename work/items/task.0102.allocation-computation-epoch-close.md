@@ -444,7 +444,7 @@ pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/st
 
 ## PR / Links
 
--
+- Handoff: [handoff](../handoffs/task.0102.handoff.md)
 
 ## Attribution
 
