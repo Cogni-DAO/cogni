@@ -19,6 +19,7 @@ import {
 } from "@cogni/ledger-core";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
+  epochWindow,
   makeActivityEvent,
   makeAllocation,
   makeCuration,
@@ -26,7 +27,6 @@ import {
   TEST_NODE_ID,
   TEST_SCOPE_ID,
   TEST_WEIGHT_CONFIG,
-  weekWindow,
 } from "@tests/_fixtures/ledger/seed-ledger";
 import { seedTestActor, type TestActor } from "@tests/_fixtures/stack/seed";
 import { sql } from "drizzle-orm";
@@ -67,7 +67,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     it("creates an epoch and retrieves it", async () => {
-      const window = weekWindow(0);
+      const window = epochWindow(0);
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
@@ -103,7 +103,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         adapter.createEpoch({
           nodeId: TEST_NODE_ID,
           scopeId: TEST_SCOPE_ID,
-          ...weekWindow(1),
+          ...epochWindow(1),
           weightConfig: TEST_WEIGHT_CONFIG,
         })
       ).rejects.toThrow();
@@ -118,7 +118,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         adapter.createEpoch({
           nodeId: TEST_NODE_ID,
           scopeId: TEST_SCOPE_ID,
-          ...weekWindow(0), // same window as the closed epoch
+          ...epochWindow(0), // same window as the closed epoch
           weightConfig: TEST_WEIGHT_CONFIG,
         })
       ).rejects.toThrow();
@@ -128,7 +128,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(2),
+        ...epochWindow(2),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
 
@@ -175,7 +175,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(8),
+        ...epochWindow(8),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
 
@@ -282,7 +282,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(3),
+        ...epochWindow(3),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
       epochId = epoch.id;
@@ -378,7 +378,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(4),
+        ...epochWindow(4),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
       epochId = epoch.id;
@@ -490,7 +490,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(5),
+        ...epochWindow(5),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
       epochId = epoch.id;
@@ -539,7 +539,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(6),
+        ...epochWindow(6),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
       await adapter.closeIngestion(epoch.id, "stmt-test-hash");
@@ -588,7 +588,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(7),
+        ...epochWindow(7),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
       await adapter.closeIngestion(epoch.id, "sig-test-hash");
@@ -640,7 +640,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
-        ...weekWindow(10),
+        ...epochWindow(10),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
       scopeTestEpochId = epoch.id;

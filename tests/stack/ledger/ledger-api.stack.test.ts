@@ -66,7 +66,7 @@ beforeAll(async () => {
   seeded = await seedClosedEpoch(store, {
     nodeId: REPO_NODE_ID,
     scopeId: REPO_SCOPE_ID,
-    weekOffset: -10, // far in the past to avoid collisions
+    epochOffset: -10, // far in the past to avoid collisions
   });
 });
 

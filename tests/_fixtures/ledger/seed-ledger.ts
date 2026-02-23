@@ -30,16 +30,19 @@ export const TEST_NODE_ID = "00000000-0000-4000-8000-000000000001";
 /** Stable test scope ID for ledger integration tests */
 export const TEST_SCOPE_ID = "00000000-0000-4000-8000-000000000002";
 
-/** Epoch window helpers */
-export function weekWindow(weekOffset = 0): {
+/** Non-overlapping epoch window for test isolation. Default length = 7 days (V0 default). */
+export function epochWindow(
+  offset = 0,
+  lengthDays = 7
+): {
   periodStart: Date;
   periodEnd: Date;
 } {
-  const base = new Date("2026-01-05T00:00:00Z"); // Monday
+  const base = new Date("2026-01-05T00:00:00Z"); // Monday-aligned anchor
   const start = new Date(base);
-  start.setDate(start.getDate() + weekOffset * 7);
+  start.setDate(start.getDate() + offset * lengthDays);
   const end = new Date(start);
-  end.setDate(end.getDate() + 7);
+  end.setDate(end.getDate() + lengthDays);
   return { periodStart: start, periodEnd: end };
 }
 
@@ -171,19 +174,19 @@ export interface SeededClosedEpoch {
  * @param store - The ActivityLedgerStore to seed into
  * @param opts.nodeId - Node ID (defaults to TEST_NODE_ID)
  * @param opts.scopeId - Scope ID (defaults to TEST_SCOPE_ID)
- * @param opts.weekOffset - Week offset for epoch window (defaults to 0)
+ * @param opts.epochOffset - Epoch window offset for test isolation (defaults to 0)
  */
 export async function seedClosedEpoch(
   store: ActivityLedgerStore,
   opts: {
     nodeId?: string;
     scopeId?: string;
-    weekOffset?: number;
+    epochOffset?: number;
   } = {}
 ): Promise<SeededClosedEpoch> {
   const nodeId = opts.nodeId ?? TEST_NODE_ID;
   const scopeId = opts.scopeId ?? TEST_SCOPE_ID;
-  const { periodStart, periodEnd } = weekWindow(opts.weekOffset ?? 0);
+  const { periodStart, periodEnd } = epochWindow(opts.epochOffset ?? 0);
 
   // 1. Create epoch
   const epoch = await store.createEpoch({
