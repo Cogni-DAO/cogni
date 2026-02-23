@@ -74,7 +74,7 @@ const mockLogger = {
 
 describeWithAuth("Ledger Collection Pipeline (external)", () => {
   const db = getSeedDb();
-  const ledger = new DrizzleLedgerAdapter(db);
+  const ledger = new DrizzleLedgerAdapter(db, TEST_SCOPE_ID);
 
   const tokenProvider = new GitHubAppTokenProvider({
     appId: GITHUB_REVIEW_APP_ID,

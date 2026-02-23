@@ -100,7 +100,7 @@ export function createLedgerContainer(
   const db = createServiceDbClient(config.DATABASE_URL);
   const ledgerLogger = logger.child?.({ component: "ledger" }) ?? logger;
 
-  const ledgerStore = new DrizzleLedgerAdapter(db);
+  const ledgerStore = new DrizzleLedgerAdapter(db, config.SCOPE_ID);
 
   // Build source adapters
   const adapters = new Map<string, SourceAdapter>();

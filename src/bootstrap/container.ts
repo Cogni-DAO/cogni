@@ -83,6 +83,7 @@ import type {
   ThreadPersistencePort,
   TreasuryReadPort,
 } from "@/ports";
+import { getScopeId } from "@/shared/config";
 import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
@@ -385,7 +386,7 @@ function createContainer(): Container {
       db,
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
     ),
-    activityLedgerStore: new DrizzleLedgerAdapter(serviceDb),
+    activityLedgerStore: new DrizzleLedgerAdapter(serviceDb, getScopeId()),
   };
 }
 

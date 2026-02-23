@@ -2,18 +2,18 @@
 id: task.0103
 type: task
 title: "SCOPE_GATED_QUERIES: scope-gate all epochId-based adapter methods"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 4
 estimate: 1
-summary: "Retrofit DrizzleLedgerAdapter so every epochId-based read/write enforces scope_id via a validated epoch lookup. Prevents cross-tenant data access. No port signature changes."
+summary: "Retrofit DrizzleLedgerAdapter so every epochId-based read AND write enforces scope_id via a validated epoch lookup. Prevents cross-tenant data access. No port signature changes."
 outcome: "Every adapter method that accepts epochId verifies the epoch belongs to the expected scope before operating on child data. Callers get EpochNotFoundError for scope mismatches (same as non-existent epoch)."
 spec_refs: epoch-ledger-spec
 assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
-branch:
-pr:
+branch: fix/scope-gated-queries
+pr: https://github.com/Cogni-DAO/node-template/pull/465
 reviewer:
 revision: 0
 blocked_by: task.0093
@@ -210,7 +210,7 @@ pnpm dotenv -e .env.test -- vitest run tests/component/db/drizzle-ledger.adapter
 
 ## PR / Links
 
--
+- Handoff: [handoff](../handoffs/task.0103.handoff.md)
 
 ## Attribution
 

@@ -38,7 +38,7 @@ Server-only configuration helpers sourced from versioned repo metadata (`.cogni/
 
 ## Public Surface
 
-- **Exports:** `getNodeId()`, `getPaymentConfig()`, `InboundPaymentConfig`, `getGovernanceConfig()`, `GovernanceConfig`, `GovernanceSchedule`, `getLedgerApprovers()` - server-only helpers reading repo-spec metadata
+- **Exports:** `getNodeId()`, `getScopeId()`, `getPaymentConfig()`, `InboundPaymentConfig`, `getGovernanceConfig()`, `GovernanceConfig`, `GovernanceSchedule`, `getLedgerApprovers()` - server-only helpers reading repo-spec metadata
 - **Exports (schema):** `repoSpecSchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, `governanceSpecSchema`, `activityLedgerSpecSchema` - Zod schemas and derived types
 - **Routes/CLI:** none
 - **Env/Config keys:** none (reads versioned files only)

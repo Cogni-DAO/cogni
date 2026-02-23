@@ -2,7 +2,7 @@
 id: task.0093
 type: task
 title: "Ledger DB schema (6 tables) + core domain (model, rules, signing, errors)"
-status: needs_merge
+status: done
 priority: 1
 rank: 1
 estimate: 3
@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
 branch: feat/ledger-v0
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/452
 reviewer:
 revision: 1
 blocked_by:

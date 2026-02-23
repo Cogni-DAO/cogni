@@ -14,6 +14,7 @@
 
 import { DrizzleLedgerAdapter } from "@cogni/db-client";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
+import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import type { SeededClosedEpoch } from "@tests/_fixtures/ledger/seed-ledger";
 import { seedClosedEpoch } from "@tests/_fixtures/ledger/seed-ledger";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -61,7 +62,7 @@ beforeAll(async () => {
     ])
     .onConflictDoNothing();
 
-  const store = new DrizzleLedgerAdapter(db);
+  const store = new DrizzleLedgerAdapter(db, REPO_SCOPE_ID);
   seeded = await seedClosedEpoch(store, {
     nodeId: REPO_NODE_ID,
     scopeId: REPO_SCOPE_ID,
@@ -76,7 +77,7 @@ beforeAll(async () => {
 describe("Public ledger API routes", () => {
   describe("GET /api/v1/public/ledger/epochs", () => {
     it("returns closed epochs matching ListEpochsOutputSchema", async () => {
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl("/api/v1/public/ledger/epochs?limit=100&offset=0")
       );
       expect(response.status).toBe(200);
@@ -105,7 +106,7 @@ describe("Public ledger API routes", () => {
     });
 
     it("only returns closed epochs (not open)", async () => {
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl("/api/v1/public/ledger/epochs?limit=200&offset=0")
       );
       expect(response.status).toBe(200);
@@ -120,7 +121,7 @@ describe("Public ledger API routes", () => {
     });
 
     it("respects pagination parameters", async () => {
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl("/api/v1/public/ledger/epochs?limit=1&offset=0")
       );
       expect(response.status).toBe(200);
@@ -134,7 +135,7 @@ describe("Public ledger API routes", () => {
   describe("GET /api/v1/public/ledger/epochs/{id}/allocations", () => {
     it("returns allocations for a closed epoch", async () => {
       const epochId = String(seeded.epoch.id);
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl(`/api/v1/public/ledger/epochs/${epochId}/allocations`)
       );
       expect(response.status).toBe(200);
@@ -159,14 +160,14 @@ describe("Public ledger API routes", () => {
     });
 
     it("returns 404 for non-existent epoch", async () => {
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl("/api/v1/public/ledger/epochs/999999/allocations")
       );
       expect(response.status).toBe(404);
     });
 
     it("returns 400 for invalid epoch ID", async () => {
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl("/api/v1/public/ledger/epochs/not-a-number/allocations")
       );
       expect(response.status).toBe(400);
@@ -176,7 +177,7 @@ describe("Public ledger API routes", () => {
   describe("GET /api/v1/public/ledger/epochs/{id}/statement", () => {
     it("returns payout statement for a closed epoch", async () => {
       const epochId = String(seeded.epoch.id);
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl(`/api/v1/public/ledger/epochs/${epochId}/statement`)
       );
       expect(response.status).toBe(200);
@@ -207,14 +208,14 @@ describe("Public ledger API routes", () => {
     });
 
     it("returns 404 for non-existent epoch", async () => {
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl("/api/v1/public/ledger/epochs/999999/statement")
       );
       expect(response.status).toBe(404);
     });
 
     it("returns 400 for invalid epoch ID", async () => {
-      const response = await fetch(
+      const response = await fetchStackTest(
         baseUrl("/api/v1/public/ledger/epochs/not-a-number/statement")
       );
       expect(response.status).toBe(400);

@@ -2,7 +2,7 @@
 id: task.0092
 type: task
 title: "Derive _index.md from frontmatter — stop merge-conflict factory"
-status: needs_merge
+status: done
 priority: 0
 rank: 1
 estimate: 2

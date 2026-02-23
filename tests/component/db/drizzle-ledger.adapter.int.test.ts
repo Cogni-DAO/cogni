@@ -5,7 +5,7 @@
  * Module: `@tests/component/db/drizzle-ledger.adapter.int`
  * Purpose: Component tests for DrizzleLedgerAdapter against real PostgreSQL via testcontainers.
  * Scope: Verifies adapter + DB triggers (ACTIVITY_APPEND_ONLY, CURATION_FREEZE_ON_CLOSE, ONE_OPEN_EPOCH, ACTIVITY_IDEMPOTENT). Does not test domain logic or routes.
- * Invariants: ACTIVITY_APPEND_ONLY, ACTIVITY_IDEMPOTENT, CURATION_FREEZE_ON_CLOSE, ONE_OPEN_EPOCH, EPOCH_WINDOW_UNIQUE, NODE_SCOPED
+ * Invariants: ACTIVITY_APPEND_ONLY, ACTIVITY_IDEMPOTENT, CURATION_FREEZE_ON_CLOSE, ONE_OPEN_EPOCH, EPOCH_WINDOW_UNIQUE, NODE_SCOPED, SCOPE_GATED_QUERIES
  * Side-effects: IO (database operations via testcontainers)
  * Links: packages/db-client/src/adapters/drizzle-ledger.adapter.ts, packages/ledger-core/src/store.ts
  * @public
@@ -41,7 +41,7 @@ function drizzleCause(err: unknown): string {
 
 describe("DrizzleLedgerAdapter (Component)", () => {
   const db = getSeedDb();
-  const adapter = new DrizzleLedgerAdapter(db);
+  const adapter = new DrizzleLedgerAdapter(db, TEST_SCOPE_ID);
 
   let actor: TestActor;
 
@@ -496,9 +496,10 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       expect(fetched?.id).toBe(stmt.id);
     });
 
-    it("getStatementForEpoch returns null for epoch without statement", async () => {
-      const result = await adapter.getStatementForEpoch(999999n);
-      expect(result).toBeNull();
+    it("getStatementForEpoch throws EpochNotFoundError for non-existent epoch", async () => {
+      await expect(adapter.getStatementForEpoch(999999n)).rejects.toThrow(
+        EpochNotFoundError
+      );
     });
   });
 
@@ -548,6 +549,114 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       expect(sigs[0]?.signerWallet).toBe(
         "0x1234567890abcdef1234567890abcdef12345678"
       );
+    });
+  });
+
+  // ── SCOPE_GATED_QUERIES ─────────────────────────────────────────
+
+  describe("SCOPE_GATED_QUERIES", () => {
+    const OTHER_SCOPE_ID = "00000000-0000-4000-8000-000000000099";
+    const otherScopeAdapter = new DrizzleLedgerAdapter(db, OTHER_SCOPE_ID);
+    let scopeTestEpochId: bigint;
+
+    beforeAll(async () => {
+      // Create epoch in TEST_SCOPE_ID (via the main adapter)
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...weekWindow(10),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      scopeTestEpochId = epoch.id;
+    });
+
+    afterAll(async () => {
+      const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
+      if (open) await adapter.closeEpoch(open.id, 0n);
+    });
+
+    it("getEpoch returns null for cross-scope epochId", async () => {
+      const result = await otherScopeAdapter.getEpoch(scopeTestEpochId);
+      expect(result).toBeNull();
+    });
+
+    it("closeEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.closeEpoch(scopeTestEpochId, 100n)
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("getCurationForEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.getCurationForEpoch(scopeTestEpochId)
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("getUnresolvedCuration throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.getUnresolvedCuration(scopeTestEpochId)
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("getAllocationsForEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.getAllocationsForEpoch(scopeTestEpochId)
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("getPoolComponentsForEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.getPoolComponentsForEpoch(scopeTestEpochId)
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("getStatementForEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.getStatementForEpoch(scopeTestEpochId)
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("updateAllocationFinalUnits throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.updateAllocationFinalUnits(
+          scopeTestEpochId,
+          "any-user",
+          100n
+        )
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("getUncuratedEvents throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.getUncuratedEvents(
+          TEST_NODE_ID,
+          scopeTestEpochId,
+          new Date("2026-01-01"),
+          new Date("2026-12-31")
+        )
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("updateCurationUserId throws EpochNotFoundError for cross-scope epochId", async () => {
+      await expect(
+        otherScopeAdapter.updateCurationUserId(
+          scopeTestEpochId,
+          "any-event",
+          "any-user"
+        )
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+
+    it("listEpochs returns empty for wrong scope", async () => {
+      const results = await otherScopeAdapter.listEpochs(TEST_NODE_ID);
+      const match = results.find((e) => e.id === scopeTestEpochId);
+      expect(match).toBeUndefined();
+    });
+
+    it("same-scope adapter can access the epoch normally", async () => {
+      const result = await adapter.getEpoch(scopeTestEpochId);
+      expect(result).not.toBeNull();
+      expect(result?.scopeId).toBe(TEST_SCOPE_ID);
     });
   });
 });

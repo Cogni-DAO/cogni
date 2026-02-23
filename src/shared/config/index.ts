@@ -18,5 +18,6 @@ export {
   getLedgerApprovers,
   getNodeId,
   getPaymentConfig,
+  getScopeId,
   type InboundPaymentConfig,
 } from "./repoSpec.server";

@@ -7,6 +7,7 @@
  * Scope: Single adapter shared by app (via container.ts) and scheduler-worker. Implements all ActivityLedgerStore methods including identity resolution via user_bindings (cross-domain). Does not contain domain logic or define port interfaces.
  * Invariants:
  * - Uses serviceDb (BYPASSRLS) — no RLS in V0.
+ * - SCOPE_GATED_QUERIES: Every epochId-based method enforces scope_id = this.scopeId. Scope mismatches throw EpochNotFoundError.
  * - ACTIVITY_IDEMPOTENT: insertActivityEvents uses onConflictDoNothing on PK.
  * - CURATION_AUTO_POPULATE: insertCurationDoNothing uses onConflictDoNothing; updateCurationUserId only sets userId where NULL.
  * - CURATION_FREEZE_ON_CLOSE: DB trigger enforces; adapter does not duplicate check.
@@ -185,7 +186,38 @@ function toSignature(
 // ── Adapter ─────────────────────────────────────────────────────
 
 export class DrizzleLedgerAdapter implements ActivityLedgerStore {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly scopeId: string
+  ) {}
+
+  // ── Scope gate ────────────────────────────────────────────────
+
+  /**
+   * Validate that an epoch belongs to this adapter's scope.
+   * SCOPE_GATED_QUERIES: scope mismatches throw EpochNotFoundError
+   * (indistinguishable from a genuinely missing epoch).
+   */
+  private async resolveEpochScoped(epochId: bigint): Promise<LedgerEpoch> {
+    const rows = await this.db
+      .select()
+      .from(epochs)
+      .where(and(eq(epochs.id, epochId), eq(epochs.scopeId, this.scopeId)))
+      .limit(1);
+    if (!rows[0]) throw new EpochNotFoundError(epochId.toString());
+    return toEpoch(rows[0]);
+  }
+
+  /**
+   * Validate that all epochIds in a batch belong to this adapter's scope.
+   * Deduplicates before querying. Throws on first mismatch.
+   */
+  private async validateEpochIds(epochIds: bigint[]): Promise<void> {
+    const unique = [...new Set(epochIds.map((id) => id.toString()))];
+    for (const id of unique) {
+      await this.resolveEpochScoped(BigInt(id));
+    }
+  }
 
   // ── Epochs ──────────────────────────────────────────────────
 
@@ -253,7 +285,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     const rows = await this.db
       .select()
       .from(epochs)
-      .where(eq(epochs.id, id))
+      .where(and(eq(epochs.id, id), eq(epochs.scopeId, this.scopeId)))
       .limit(1);
     return rows[0] ? toEpoch(rows[0]) : null;
   }
@@ -262,7 +294,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     const rows = await this.db
       .select()
       .from(epochs)
-      .where(eq(epochs.nodeId, nodeId))
+      .where(and(eq(epochs.nodeId, nodeId), eq(epochs.scopeId, this.scopeId)))
       .orderBy(epochs.id);
     return rows.map(toEpoch);
   }
@@ -275,10 +307,16 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
         poolTotalCredits: poolTotal,
         closedAt: new Date(),
       })
-      .where(and(eq(epochs.id, epochId), eq(epochs.status, "open")))
+      .where(
+        and(
+          eq(epochs.id, epochId),
+          eq(epochs.scopeId, this.scopeId),
+          eq(epochs.status, "open")
+        )
+      )
       .returning();
     if (!row) {
-      // Distinguish not-found from already-closed for EPOCH_CLOSE_IDEMPOTENT
+      // Distinguish not-found/wrong-scope from already-closed for EPOCH_CLOSE_IDEMPOTENT
       const existing = await this.getEpoch(epochId);
       if (!existing) {
         throw new EpochNotFoundError(epochId.toString());
@@ -341,6 +379,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 
   async upsertCuration(params: UpsertCurationParams[]): Promise<void> {
     if (params.length === 0) return;
+    await this.validateEpochIds(params.map((p) => p.epochId));
     for (const p of params) {
       await this.db
         .insert(activityCuration)
@@ -370,6 +409,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     params: InsertCurationAutoParams[]
   ): Promise<void> {
     if (params.length === 0) return;
+    await this.validateEpochIds(params.map((p) => p.epochId));
     for (const p of params) {
       await this.db
         .insert(activityCuration)
@@ -387,6 +427,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   }
 
   async getCurationForEpoch(epochId: bigint): Promise<LedgerCuration[]> {
+    await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
       .from(activityCuration)
@@ -395,6 +436,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   }
 
   async getUnresolvedCuration(epochId: bigint): Promise<LedgerCuration[]> {
+    await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
       .from(activityCuration)
@@ -411,6 +453,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 
   async insertAllocations(params: InsertAllocationParams[]): Promise<void> {
     if (params.length === 0) return;
+    await this.validateEpochIds(params.map((a) => a.epochId));
     await this.db.insert(epochAllocations).values(
       params.map((a) => ({
         nodeId: a.nodeId,
@@ -430,6 +473,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     finalUnits: bigint,
     overrideReason?: string
   ): Promise<void> {
+    await this.resolveEpochScoped(epochId);
     const [row] = await this.db
       .update(epochAllocations)
       .set({
@@ -450,6 +494,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   }
 
   async getAllocationsForEpoch(epochId: bigint): Promise<LedgerAllocation[]> {
+    await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
       .from(epochAllocations)
@@ -521,6 +566,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   async insertPoolComponent(
     params: InsertPoolComponentParams
   ): Promise<LedgerPoolComponent> {
+    await this.resolveEpochScoped(params.epochId);
     const [row] = await this.db
       .insert(epochPoolComponents)
       .values({
@@ -540,6 +586,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   async getPoolComponentsForEpoch(
     epochId: bigint
   ): Promise<LedgerPoolComponent[]> {
+    await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
       .from(epochPoolComponents)
@@ -552,6 +599,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   async insertPayoutStatement(
     params: InsertPayoutStatementParams
   ): Promise<LedgerPayoutStatement> {
+    await this.resolveEpochScoped(params.epochId);
     const [row] = await this.db
       .insert(payoutStatements)
       .values({
@@ -570,6 +618,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   async getStatementForEpoch(
     epochId: bigint
   ): Promise<LedgerPayoutStatement | null> {
+    await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
       .from(payoutStatements)
@@ -629,6 +678,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     periodStart: Date,
     periodEnd: Date
   ): Promise<UncuratedEvent[]> {
+    await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select({
         event: activityEvents,
@@ -665,6 +715,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     eventId: string,
     userId: string
   ): Promise<void> {
+    await this.resolveEpochScoped(epochId);
     await this.db
       .update(activityCuration)
       .set({ userId, updatedAt: new Date() })

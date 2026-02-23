@@ -53,6 +53,7 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 | Allocation computation + epoch close + FinalizeEpochWorkflow | Not Started | 3   | task.0102       |
 | Epoch 3-phase state machine + EIP-191 signing                | Not Started | 3   | task.0100       |
 | Zod contracts + API routes + stack tests                     | In Review   | 2   | task.0096       |
+| Scope-gate all epochId-based adapter methods                 | In Review   | 1   | task.0103       |
 
 **V0 user story:**
 

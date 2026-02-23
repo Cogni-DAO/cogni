@@ -198,7 +198,7 @@ describeWithAuth("GitHubSourceAdapter (external)", () => {
 
   describe("ledger round-trip", () => {
     const db = getSeedDb();
-    const ledger = new DrizzleLedgerAdapter(db);
+    const ledger = new DrizzleLedgerAdapter(db, TEST_SCOPE_ID);
     beforeAll(async () => {
       await seedTestActor(db);
       await ledger.createEpoch({

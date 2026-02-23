@@ -136,6 +136,27 @@ export function getNodeId(): string {
   return cachedNodeId;
 }
 
+let cachedScopeId: string | null = null;
+
+/**
+ * Scope identity from repo-spec. Used by DrizzleLedgerAdapter for SCOPE_GATED_QUERIES.
+ * Fails fast if repo-spec is missing scope_id.
+ */
+export function getScopeId(): string {
+  if (cachedScopeId) {
+    return cachedScopeId;
+  }
+
+  const spec = loadRepoSpec();
+  if (!spec.scope_id) {
+    throw new Error(
+      "repo-spec missing scope_id — required for ledger scope gating"
+    );
+  }
+  cachedScopeId = spec.scope_id;
+  return cachedScopeId;
+}
+
 let cachedGovernanceConfig: GovernanceConfig | null = null;
 
 function mapGovernanceConfig(spec: RepoSpec): GovernanceConfig {
