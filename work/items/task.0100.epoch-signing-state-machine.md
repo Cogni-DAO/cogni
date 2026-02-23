@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
 branch: feat/task-0100-epoch-state-machine
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/468
 reviewer:
 revision: 4
 blocked_by: task.0093, task.0103
