@@ -18,10 +18,7 @@ import type {
   EpochDto,
 } from "@/features/governance/lib/compose-epoch";
 import { composeEpochView } from "@/features/governance/lib/compose-epoch";
-import { MOCK_CURRENT_EPOCH } from "@/features/governance/mock/epoch-mock-data";
 import type { CurrentEpochData } from "@/features/governance/types";
-
-const USE_MOCK = false;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, {
@@ -70,7 +67,7 @@ async function fetchCurrentEpoch(): Promise<CurrentEpochData> {
 export function useCurrentEpoch(): UseQueryResult<CurrentEpochData, Error> {
   return useQuery({
     queryKey: ["governance", "epoch", "current"],
-    queryFn: USE_MOCK ? async () => MOCK_CURRENT_EPOCH : fetchCurrentEpoch,
+    queryFn: fetchCurrentEpoch,
     staleTime: 60_000,
   });
 }

@@ -19,10 +19,8 @@ import type {
   StatementDto,
 } from "@/features/governance/lib/compose-epoch";
 import { composeEpochViewFromStatement } from "@/features/governance/lib/compose-epoch";
-import { MOCK_EPOCH_HISTORY } from "@/features/governance/mock/epoch-mock-data";
 import type { EpochHistoryData, EpochView } from "@/features/governance/types";
 
-const USE_MOCK = false;
 const limit = pLimit(3);
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -84,7 +82,7 @@ async function fetchHistory(): Promise<EpochHistoryData> {
 export function useEpochHistory(): UseQueryResult<EpochHistoryData, Error> {
   return useQuery({
     queryKey: ["governance", "epoch", "history"],
-    queryFn: USE_MOCK ? async () => MOCK_EPOCH_HISTORY : fetchHistory,
+    queryFn: fetchHistory,
     staleTime: 60_000,
   });
 }

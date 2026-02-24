@@ -19,10 +19,8 @@ import type {
   StatementDto,
 } from "@/features/governance/lib/compose-epoch";
 import { composeHoldings } from "@/features/governance/lib/compose-holdings";
-import { MOCK_HOLDINGS } from "@/features/governance/mock/epoch-mock-data";
 import type { HoldingsData } from "@/features/governance/types";
 
-const USE_MOCK = false;
 const limit = pLimit(3);
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -61,7 +59,7 @@ async function fetchHoldings(): Promise<HoldingsData> {
 export function useHoldings(): UseQueryResult<HoldingsData, Error> {
   return useQuery({
     queryKey: ["governance", "holdings"],
-    queryFn: USE_MOCK ? async () => MOCK_HOLDINGS : fetchHoldings,
+    queryFn: fetchHoldings,
     staleTime: 60_000,
   });
 }
