@@ -18,7 +18,10 @@ import { getContainer } from "@/bootstrap/container";
 import type { PaymentIntentOutput } from "@/contracts/payments.intent.v1.contract";
 import type { PaymentStatusOutput } from "@/contracts/payments.status.v1.contract";
 import type { PaymentSubmitOutput } from "@/contracts/payments.submit.v1.contract";
-import { AuthUserNotFoundError } from "@/features/payments/errors";
+import {
+  AuthUserNotFoundError,
+  WalletRequiredError,
+} from "@/features/payments/errors";
 import {
   createIntent,
   getStatus,
@@ -66,7 +69,9 @@ export async function createPaymentIntentFacade(
   try {
     billingAccount = await getOrCreateBillingAccountForUser(accountService, {
       userId: params.sessionUser.id,
-      walletAddress: params.sessionUser.walletAddress,
+      ...(params.sessionUser.walletAddress
+        ? { walletAddress: params.sessionUser.walletAddress }
+        : {}),
     });
   } catch (error) {
     // Check for FK constraint violation (user not found in DB)
@@ -92,6 +97,9 @@ export async function createPaymentIntentFacade(
     }),
   };
 
+  if (!params.sessionUser.walletAddress) {
+    throw new WalletRequiredError();
+  }
   const fromAddress = getAddress(params.sessionUser.walletAddress);
 
   const result = await createIntent(userRepo, clock, {
@@ -160,7 +168,9 @@ export async function submitPaymentTxHashFacade(
   try {
     billingAccount = await getOrCreateBillingAccountForUser(accountService, {
       userId: params.sessionUser.id,
-      walletAddress: params.sessionUser.walletAddress,
+      ...(params.sessionUser.walletAddress
+        ? { walletAddress: params.sessionUser.walletAddress }
+        : {}),
     });
   } catch (error) {
     // Check for FK constraint violation (user not found in DB)
@@ -277,7 +287,9 @@ export async function getPaymentStatusFacade(
   try {
     billingAccount = await getOrCreateBillingAccountForUser(accountService, {
       userId: params.sessionUser.id,
-      walletAddress: params.sessionUser.walletAddress,
+      ...(params.sessionUser.walletAddress
+        ? { walletAddress: params.sessionUser.walletAddress }
+        : {}),
     });
   } catch (error) {
     // Check for FK constraint violation (user not found in DB)

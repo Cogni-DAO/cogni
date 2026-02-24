@@ -33,6 +33,17 @@ export class AuthUserNotFoundError extends Error {
 }
 
 /**
+ * Thrown when wallet address is required but user authenticated via OAuth without a linked wallet.
+ * Maps to 403 at HTTP layer.
+ */
+export class WalletRequiredError extends Error {
+  constructor() {
+    super("Wallet address required for payment operations");
+    this.name = "WalletRequiredError";
+  }
+}
+
+/**
  * Thrown when payment attempt not found or not owned by user
  * Maps to 404 at HTTP layer
  */

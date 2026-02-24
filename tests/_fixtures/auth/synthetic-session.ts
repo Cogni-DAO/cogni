@@ -26,7 +26,7 @@ import { encode } from "next-auth/jwt";
 import type { NextAuthSessionCookie } from "./nextauth-http-helpers";
 
 export interface SyntheticSessionParams {
-  walletAddress: string;
+  walletAddress?: string | null;
   userId?: string; // Optional UUID v4 for user ID (defaults to random UUID)
   authSecret?: string;
 }
@@ -59,7 +59,7 @@ export async function createSyntheticSession(
     `${secret.substring(0, 10)}...`
   );
 
-  const address = params.walletAddress.toLowerCase();
+  const address = params.walletAddress?.toLowerCase() ?? null;
   const userId = params.userId ?? randomUUID(); // Use provided UUID or generate one
 
   // Use NextAuth's own encode function to create a valid JWT

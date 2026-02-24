@@ -47,7 +47,9 @@ export async function confirmCreditsPaymentFacade(
   try {
     billingAccount = await getOrCreateBillingAccountForUser(accountService, {
       userId: params.sessionUser.id,
-      walletAddress: params.sessionUser.walletAddress,
+      ...(params.sessionUser.walletAddress
+        ? { walletAddress: params.sessionUser.walletAddress }
+        : {}),
     });
   } catch (error) {
     if (
@@ -117,7 +119,9 @@ export async function getCreditsSummaryFacade(
   try {
     billingAccount = await getOrCreateBillingAccountForUser(accountService, {
       userId: params.sessionUser.id,
-      walletAddress: params.sessionUser.walletAddress,
+      ...(params.sessionUser.walletAddress
+        ? { walletAddress: params.sessionUser.walletAddress }
+        : {}),
     });
   } catch (error) {
     if (

@@ -26,12 +26,12 @@ Provide a stable, auth-method-agnostic identity for every user. The canonical id
 
 **Goal:** Unify Discord + GitHub + optional wallet under `users.id`. Ledger can attribute work and spend to a user.
 
-| Deliverable                                                                  | Status      | Est | Work Item  |
-| ---------------------------------------------------------------------------- | ----------- | --- | ---------- |
-| Research spike: gap analysis + design doc                                    | Done        | 2   | spike.0080 |
-| `user_bindings` table + `identity_events` audit trail                        | In Review   | 2   | task.0089  |
-| Multi-provider auth: Discord + GitHub OAuth on NextAuth v4 via user_bindings | Not Started | 3   | task.0107  |
-| Backfill: existing `users.wallet_address` → `user_bindings`                  | In Review   | 1   | task.0089  |
+| Deliverable                                                                           | Status    | Est | Work Item  |
+| ------------------------------------------------------------------------------------- | --------- | --- | ---------- |
+| Research spike: gap analysis + design doc                                             | Done      | 2   | spike.0080 |
+| `user_bindings` table + `identity_events` audit trail                                 | In Review | 2   | task.0089  |
+| Multi-provider auth: GitHub + Discord + Google OAuth on NextAuth v4 via user_bindings | In Review | 3   | task.0107  |
+| Backfill: existing `users.wallet_address` → `user_bindings`                           | In Review | 1   | task.0089  |
 
 **Exit criteria:** You can attribute work + messages to a user, deterministically, with `user_id` as the single stable ID that the ledger references.
 
@@ -100,6 +100,7 @@ These existing specs reference wallet address as identity and will need updates 
 ## As-Built Specs
 
 - [decentralized-identity](../../docs/spec/decentralized-identity.md) — user_bindings + identity_events schema, invariants, auth flow
+- [authentication](../../docs/spec/authentication.md) — multi-provider auth (SIWE + OAuth), account linking, wallet-session coherence
 
 ## Design Notes
 

@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-02
+- **Last reviewed:** 2026-02-24
 - **Status:** stable
 
 ## Purpose
@@ -40,12 +40,14 @@ Shared authentication types used across app layer and adapters. Provides TypeScr
 ## Public Surface
 
 - **Exports:**
-  - `SessionUser` - User identity type with walletAddress (required) and id (DB UUID)
+  - `SessionUser` - User identity type with id (DB UUID) and walletAddress (`string | null` — null for OAuth-only users)
+  - `LinkIntent` - Link intent type for account linking via AsyncLocalStorage
+  - `linkIntentStore` - AsyncLocalStorage instance for request-scoped link intent propagation
   - Re-exports all from `./session.ts`
 - **Routes (if any):** none
 - **CLI (if any):** none
 - **Env/Config keys:** none
-- **Files considered API:** `index.ts`, `session.ts`
+- **Files considered API:** `index.ts`, `session.ts`, `link-intent-store.ts`
 
 ## Ports (optional)
 
@@ -55,8 +57,8 @@ Shared authentication types used across app layer and adapters. Provides TypeScr
 
 ## Responsibilities
 
-- This directory **does**: Define shared TypeScript types for NextAuth session data with wallet address extension
-- This directory **does not**: Implement runtime authentication logic, handle session management, perform I/O operations, or interact with React/Next.js APIs
+- This directory **does**: Define shared TypeScript types for NextAuth session data, and provide the AsyncLocalStorage primitive for link-intent propagation
+- This directory **does not**: Implement runtime authentication logic, handle session management, perform database I/O, or interact with React/Next.js APIs
 
 ## Usage
 
@@ -87,5 +89,6 @@ import type { Session, SessionUser } from "@/shared/auth";
 ## Notes
 
 - Session types must match what NextAuth JWT callbacks populate
-- `walletAddress` is the primary user identifier in this system (wallet-first auth)
+- `user_id` (UUID) is the canonical identity; `walletAddress` is nullable (null for OAuth-only users)
 - Sign-out must be explicit user action only - no auto sign-out based on wallet state
+- `link-intent-store.ts` requires Node.js runtime (AsyncLocalStorage) — not compatible with Edge

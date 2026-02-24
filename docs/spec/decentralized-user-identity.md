@@ -10,7 +10,7 @@ read_when: Working on identity, auth, account linking, RBAC actor types, user co
 implements: proj.decentralized-identity
 owner: derekg1729
 created: 2026-02-19
-verified: 2026-02-21
+verified: 2026-02-24
 tags: [identity, auth, web3]
 ---
 
@@ -46,7 +46,7 @@ tags: [identity, auth, web3]
 │               user_bindings table                     │
 │  id: UUID (PK)                                        │
 │  user_id: UUID (FK → users.id)                        │
-│  provider: 'wallet' | 'discord' | 'github'           │
+│  provider: 'wallet' | 'discord' | 'github' | 'google' │
 │  external_id: TEXT (UNIQUE per provider)               │
 │  created_at: TIMESTAMPTZ                              │
 └──────────────────────────────────────────────────────┘
@@ -78,30 +78,47 @@ Examples:
 
 **Why `user_id` not `contributor_id`?** "User" is the stable concept — accounts, billing, sessions, permissions all reference users. "Contributor" is contextual and mutable (a user exists before contributing). Naming the canonical ID `contributor_id` would leak domain assumptions into every table and API.
 
-### Auth Flow (SIWE + User Binding)
+### Auth Flows
+
+**SIWE wallet login:**
 
 ```
 Wallet Sign (RainbowKit) → SIWE Verify (src/auth.ts)
   → User Lookup by wallet_address
-  → IF new user:
-      createUser() → users.id (UUID)
-      createBinding('wallet', address, { method: 'siwe', ... }) → user_bindings INSERT + identity_events INSERT
-  → IF existing user:
-      createBinding('wallet', address, { method: 'siwe', ... }) → UPSERT (idempotent)
-  → JWT Session { id, walletAddress }
-  → SessionUser { id, walletAddress }
+  → IF new user: createUser() → createBinding('wallet', address, { method: 'siwe' })
+  → IF existing: createBinding() idempotent (onConflictDoNothing)
+  → JWT { id, walletAddress }
+```
+
+**OAuth login (GitHub, Discord, Google):**
+
+```
+NextAuth OAuth → signIn callback → user_bindings lookup(provider, providerAccountId)
+  → IF binding exists: return existing user.id
+  → IF no binding: atomic tx (user + binding + event) → return new user.id
+  → JWT { id, walletAddress: null }
+```
+
+**Account linking (authenticated user adds provider):**
+
+```
+GET /api/auth/link/{provider} → set signed link_intent cookie (5min TTL)
+  → redirect to /api/auth/signin/{provider}
+  → signIn callback reads linkIntentStore (AsyncLocalStorage)
+  → createBinding(provider, externalId) for existing user
+  → IF UNIQUE violation for different user → reject (NO_AUTO_MERGE)
 ```
 
 ### Session Type
 
 ```typescript
 interface SessionUser {
-  id: string; // users.id (UUID) — canonical identity, FK target, all attribution
-  walletAddress: string; // 0x... — kept for SIWE wallet-session coherence
+  id: string; // users.id (UUID) — canonical identity
+  walletAddress: string | null; // null for OAuth-only users
 }
 ```
 
-Business logic references `id` (= `user_id`). `walletAddress` is retained for the SIWE wallet-session coherence invariant (authentication spec).
+Business logic references `id` (= `user_id`). `walletAddress` is nullable — `null` for OAuth-only users. Wallet-gated operations (payments, ledger approval) guard on `walletAddress !== null`.
 
 ## Goal
 
@@ -145,13 +162,13 @@ Provide a stable, auth-method-agnostic identity for every user. `users.id` works
 
 **Table:** `user_bindings` (new)
 
-| Column        | Type        | Constraints                                        | Description                                                       |
-| ------------- | ----------- | -------------------------------------------------- | ----------------------------------------------------------------- |
-| `id`          | TEXT        | PK                                                 | UUID v4                                                           |
-| `user_id`     | TEXT        | FK → users.id, NOT NULL                            | User this binding belongs to                                      |
-| `provider`    | TEXT        | NOT NULL, CHECK IN ('wallet', 'discord', 'github') | Binding type                                                      |
-| `external_id` | TEXT        | NOT NULL                                           | Provider-specific ID (address, discord snowflake, github user id) |
-| `created_at`  | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                            | When the binding was created                                      |
+| Column        | Type        | Constraints                                                  | Description                                                       |
+| ------------- | ----------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `id`          | TEXT        | PK                                                           | UUID v4                                                           |
+| `user_id`     | TEXT        | FK → users.id, NOT NULL                                      | User this binding belongs to                                      |
+| `provider`    | TEXT        | NOT NULL, CHECK IN ('wallet', 'discord', 'github', 'google') | Binding type                                                      |
+| `external_id` | TEXT        | NOT NULL                                                     | Provider-specific ID (address, discord snowflake, github user id) |
+| `created_at`  | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                                      | When the binding was created                                      |
 
 **Constraint:** `UNIQUE(provider, external_id)` — same external ID across different providers is allowed (GitHub numeric ID can equal a Discord snowflake). Proof/evidence lives in `identity_events.payload`, not on the binding row.
 
@@ -173,13 +190,16 @@ Provide a stable, auth-method-agnostic identity for every user. `users.id` works
 
 ### File Pointers
 
-| File                                 | Purpose                                                       |
-| ------------------------------------ | ------------------------------------------------------------- |
-| `packages/db-schema/src/identity.ts` | `user_bindings` + `identity_events` table definitions (new)   |
-| `src/auth.ts`                        | SIWE authorize — bind wallet on login                         |
-| `src/shared/auth/session.ts`         | `SessionUser` type (id is already user_id)                    |
-| `src/types/next-auth.d.ts`           | NextAuth type augmentation (no change needed if id = user_id) |
-| `src/lib/auth/server.ts`             | `getServerSessionUser()` (no change needed if id = user_id)   |
+| File                                             | Purpose                                                           |
+| ------------------------------------------------ | ----------------------------------------------------------------- |
+| `packages/db-schema/src/identity.ts`             | `user_bindings` + `identity_events` table definitions             |
+| `src/auth.ts`                                    | SIWE + OAuth providers, signIn callback (binding resolution)      |
+| `src/adapters/server/identity/create-binding.ts` | Atomic binding + identity_event insert (idempotent)               |
+| `src/shared/auth/session.ts`                     | `SessionUser` type (id + nullable walletAddress)                  |
+| `src/shared/auth/link-intent-store.ts`           | AsyncLocalStorage for account linking intent propagation          |
+| `src/app/api/auth/[...nextauth]/route.ts`        | Route handler with link_intent cookie → AsyncLocalStorage wrapper |
+| `src/app/api/auth/link/[provider]/route.ts`      | Account linking initiation endpoint                               |
+| `src/lib/auth/server.ts`                         | `getServerSessionUser()` — requires only `id`                     |
 
 ## DID Readiness (P2)
 
@@ -204,12 +224,15 @@ pnpm check:docs    # docs metadata valid
 
 **Manual / Stack Test:**
 
-1. New user SIWE login → `users` row created with UUID (existing behavior)
-2. Same login → `user_bindings` row with provider=wallet, external_id=address
-3. Second login (same wallet) → no duplicate binding (idempotent)
-4. Attempt to bind an external_id already bound to another user → constraint error (NO_AUTO_MERGE)
-5. Existing SIWE login/logout/switch flows unbroken
-6. `identity_events` has a `bind` event for each new binding
+1. New user SIWE login → `users` row created with UUID, `walletAddress` populated
+2. Same SIWE login → `user_bindings` row with provider=wallet, external_id=address (idempotent)
+3. OAuth login (GitHub/Discord/Google) → new user, `walletAddress` is null
+4. Same OAuth login again → same user returned via binding lookup
+5. Attempt to bind an external_id already bound to another user → constraint error (NO_AUTO_MERGE)
+6. Account linking: authenticated user → OAuth → binding created for existing user
+7. Existing SIWE login/logout/switch flows unbroken
+8. `identity_events` has a `bind` event for each new binding
+9. OAuth-only user hits payment endpoint → clean 403 (WalletRequiredError)
 
 ## Open Questions
 

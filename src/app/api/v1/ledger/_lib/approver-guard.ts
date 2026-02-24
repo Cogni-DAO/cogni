@@ -22,7 +22,7 @@ import { logRequestWarn } from "@/shared/observability";
  */
 export function checkApprover(
   ctx: RequestContext,
-  walletAddress: string | undefined
+  walletAddress: string | null | undefined
 ): NextResponse | null {
   if (!walletAddress) {
     logRequestWarn(ctx.log, { walletAddress }, "LEDGER_NO_WALLET");

@@ -18,7 +18,10 @@ import { createPaymentIntentFacade } from "@/app/_facades/payments/attempts.serv
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { paymentIntentOperation } from "@/contracts/payments.intent.v1.contract";
-import { AuthUserNotFoundError } from "@/features/payments/errors";
+import {
+  AuthUserNotFoundError,
+  WalletRequiredError,
+} from "@/features/payments/errors";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +49,14 @@ function handleRouteError(
     return NextResponse.json(
       { error: "User not provisioned; please re-authenticate" },
       { status: 401 }
+    );
+  }
+
+  if (error instanceof WalletRequiredError) {
+    logRequestWarn(ctx.log, error, "WALLET_REQUIRED");
+    return NextResponse.json(
+      { error: "Wallet address required for payment operations" },
+      { status: 403 }
     );
   }
 

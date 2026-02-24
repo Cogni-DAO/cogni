@@ -26,14 +26,14 @@ import { identityEvents, userBindings } from "@/shared/db/schema";
  *
  * @param db - Drizzle database instance (service-role for auth callbacks)
  * @param userId - The user's canonical UUID (users.id)
- * @param provider - Binding provider: 'wallet' | 'discord' | 'github'
+ * @param provider - Binding provider: 'wallet' | 'discord' | 'github' | 'google'
  * @param externalId - Provider-specific identifier (address, snowflake, numeric ID)
  * @param payload - Evidence payload stored in identity_events (e.g. { method: 'siwe', ... })
  */
 export async function createBinding(
   db: Database,
   userId: string,
-  provider: "wallet" | "discord" | "github",
+  provider: "wallet" | "discord" | "github" | "google",
   externalId: string,
   payload: Record<string, unknown>
 ): Promise<void> {

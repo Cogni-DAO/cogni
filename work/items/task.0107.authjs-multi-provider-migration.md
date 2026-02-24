@@ -1,21 +1,21 @@
 ---
 id: task.0107
 type: task
-title: Multi-provider auth — Discord + GitHub OAuth on NextAuth v4
-status: needs_implement
+title: Multi-provider auth — GitHub + Discord + Google OAuth on NextAuth v4
+status: needs_merge
 priority: 1
 rank: 10
 estimate: 3
-summary: Add Discord and GitHub OAuth providers to the existing NextAuth v4 setup. Resolve all providers to canonical user_id via user_bindings. Make SessionUser.walletAddress optional. No version upgrade, no new tables, no DrizzleAdapter.
-outcome: Users can sign in via SIWE wallet, Discord OAuth, or GitHub OAuth. All methods resolve to the same canonical user_id (UUID). SessionUser.walletAddress becomes optional. Existing SIWE login unchanged. Explicit account linking for binding additional providers to an existing user.
+summary: Add GitHub, Discord, and Google OAuth providers to the existing NextAuth v4 setup. Resolve all providers to canonical user_id via user_bindings. Make SessionUser.walletAddress optional. No version upgrade, no new tables, no DrizzleAdapter.
+outcome: Users can sign in via SIWE wallet, GitHub, Discord, or Google OAuth. All methods resolve to the same canonical user_id (UUID). SessionUser.walletAddress becomes optional. Existing SIWE login unchanged. Explicit account linking for binding additional providers to an existing user.
 spec_refs: decentralized-user-identity, authentication-spec
 assignees: derekg1729
 credit:
 project: proj.decentralized-identity
-branch:
-pr:
+branch: feat/user-accounts
+pr: https://github.com/Cogni-DAO/node-template/pull/480
 reviewer:
-revision: 0
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-02-24
@@ -107,17 +107,46 @@ Authenticated user → hits /api/auth/link/discord (requires existing session)
 
 ### Files
 
-- Modify: `src/auth.ts` — add Discord/GitHub providers, `signIn` callback for user resolution via `user_bindings`, `jwt`/`session` callbacks for optional walletAddress. **Footgun:** `jwt` callback must explicitly propagate `token.id → session.user.id` and `walletAddress → session.user.walletAddress`; Auth.js does not auto-forward custom fields. Never enable `allowDangerousEmailAccountLinking`.
-- Modify: `src/shared/auth/session.ts` — `SessionUser.walletAddress: string | null`
-- Modify: `src/lib/auth/server.ts` — `getServerSessionUser()` requires only `id`
-- Modify: `src/types/next-auth.d.ts` — no change needed (already has `walletAddress?: string | null`)
-- Modify: `src/app/_facades/payments/attempts.server.ts` — guard `getAddress()` call with null check (clean error for non-wallet users)
-- Modify: `src/app/api/v1/governance/activity/route.ts` — system principal: `walletAddress: null` instead of `""`
-- Modify: `docs/spec/authentication.md` — relax `SIWE_CANONICAL_IDENTITY`, add OAuth providers, update Non-Goals
-- Modify: `.env.local.example` — add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
-- Modify: `tests/_fixtures/auth/synthetic-session.ts` — make walletAddress optional in test helpers
-- Create: `src/app/api/auth/link/[provider]/route.ts` — account-linking API route (requires session, sets HttpOnly `link_intent` cookie, redirects to NextAuth's standard `/api/auth/signin/[provider]`)
-- Test: `tests/unit/auth/multi-provider.test.ts` — OAuth user resolution, binding creation, linking, NO_AUTO_MERGE rejection
+**Modified (Steps 1-3, GitHub-only v0):**
+
+- `src/auth.ts` — added `GitHubProvider`, `signIn` callback (user_bindings resolution, atomic new-user tx, link-intent detection, race-safe UNIQUE handling), explicit jwt/session token plumbing
+- `src/shared/auth/session.ts` — `SessionUser.walletAddress: string | null`
+- `src/lib/auth/server.ts` — `getServerSessionUser()` requires only `id`
+- `src/app/_facades/payments/attempts.server.ts` — `WalletRequiredError` guard before `getAddress()`, conditional spreads
+- `src/app/_facades/payments/credits.server.ts` — conditional spreads for walletAddress
+- `src/app/api/v1/payments/intents/route.ts` — `WalletRequiredError` → 403 handler
+- `src/app/api/v1/governance/activity/route.ts` — system principal: `walletAddress: null`
+- `src/app/api/v1/ledger/_lib/approver-guard.ts` — accept `string | null | undefined`
+- `src/app/api/auth/[...nextauth]/route.ts` — wrapped with `AsyncLocalStorage.run()` for link_intent cookie propagation
+- `src/app/_lib/auth/session.ts` — doc comment update
+- `.env.local.example` — `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
+- `tests/_fixtures/auth/synthetic-session.ts` — walletAddress optional
+- `src/features/payments/errors.ts` — added `WalletRequiredError`
+
+**Created:**
+
+- `src/shared/auth/link-intent-store.ts` — `AsyncLocalStorage<LinkIntent | null>`, pure shared primitive
+- `src/app/api/auth/link/[provider]/route.ts` — account-linking initiation (session-bound signed JWT cookie, 5min TTL, redirects to OAuth)
+- `tests/unit/auth/oauth-signin-branches.test.ts` — unit tests for signIn early-return branches + WalletRequiredError guard
+- `tests/stack/auth/oauth-signin.stack.test.ts` — stack tests for signIn DB paths (new user, returning user, linking, NO_AUTO_MERGE)
+
+**Not modified (no change needed):**
+
+- `src/types/next-auth.d.ts` — already has `walletAddress?: string | null`
+
+### Implementation Notes
+
+**Scope reduction:** This implementation is GitHub-only v0. Discord provider deferred to follow-up PR.
+
+**Architecture decision — link_intent cookie propagation:** NextAuth v4's `signIn` callback receives `{ user, account, profile }` — no `req`, no cookies. Solution: `AsyncLocalStorage` in `[...nextauth]/route.ts` reads the `link_intent` cookie, populates the store, and the `signIn` callback reads it via `linkIntentStore.getStore()`. The store lives in `src/shared/auth/` (not `src/lib/`) to satisfy dependency boundary rules (`auth` → `shared` is allowed).
+
+**Safety hardening:**
+
+1. **Session binding:** link_intent JWT includes `sessionTokenHash` — prevents replay by different session
+2. **Race safety:** on UNIQUE(provider, external_id) violation, re-fetch binding and proceed idempotently if same user, reject if different user (NO_AUTO_MERGE)
+3. **Runtime guard:** `export const runtime = "nodejs"` on both route files — `AsyncLocalStorage` requires Node.js
+4. **Cookie correctness:** `HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=300` — cleared with identical attrs in all code paths
+5. **Atomicity:** new-user creation inlines user + binding + identity_event in a single DB transaction
 
 ## Requirements
 
@@ -151,32 +180,43 @@ Authenticated user → hits /api/auth/link/discord (requires existing session)
 
 ## Plan
 
-### Step 1: Types & guards (no runtime behavior change)
+### Step 1: Types & guards (no runtime behavior change) — DONE
 
-- [ ] Change `SessionUser.walletAddress` from `string` to `string | null` in `src/shared/auth/session.ts`
-- [ ] Update `getServerSessionUser()` in `src/lib/auth/server.ts` to require only `id`
-- [ ] Add null guard on `getAddress()` call in `src/app/_facades/payments/attempts.server.ts` (throw domain error for non-wallet users)
-- [ ] Clean up system principal in governance activity route (`walletAddress: null` instead of `""`)
-- [ ] Update test fixtures (`tests/_fixtures/auth/synthetic-session.ts`) for optional walletAddress
-- [ ] `pnpm check` — verify all type changes compile clean
+- [x] Change `SessionUser.walletAddress` from `string` to `string | null` in `src/shared/auth/session.ts`
+- [x] Update `getServerSessionUser()` in `src/lib/auth/server.ts` to require only `id`
+- [x] Add `WalletRequiredError` guard on `getAddress()` call in `src/app/_facades/payments/attempts.server.ts` → clean 403
+- [x] Add `WalletRequiredError` handler in `src/app/api/v1/payments/intents/route.ts`
+- [x] Conditional spread for `walletAddress` in all payment facades (`exactOptionalPropertyTypes`)
+- [x] Ledger approver guard: accept `string | null | undefined`
+- [x] Clean up system principal in governance activity route (`walletAddress: null` instead of `""`)
+- [x] Update test fixtures (`tests/_fixtures/auth/synthetic-session.ts`) for optional walletAddress
+- [x] Update doc comments in `src/app/_lib/auth/session.ts`
+- [x] `pnpm typecheck` + `pnpm arch:check` + `pnpm lint:fix` — all pass
 
-### Step 2: OAuth providers + callbacks
+### Step 2: GitHub OAuth provider + callbacks — DONE (GitHub only; Discord deferred)
 
-- [ ] Add `DiscordProvider` and `GitHubProvider` to `src/auth.ts` providers array
-- [ ] Add `signIn` callback that resolves OAuth users via `user_bindings` lookup: find existing binding → return user, or create new user + `createBinding()`
-- [ ] Update `jwt` callback: explicitly propagate `token.id` and `token.walletAddress` (Auth.js does not auto-forward custom fields). Never enable `allowDangerousEmailAccountLinking`.
-- [ ] Update `session` callback: explicitly propagate `session.user.id` and `session.user.walletAddress` from token
-- [ ] Add OAuth env vars to `.env.local.example`
+- [x] Add `GitHubProvider` to `src/auth.ts` providers array
+- [x] Add `signIn` callback: SIWE passthrough, `user_bindings` lookup for returning users, atomic new-user creation (single tx: user + binding + event)
+- [x] Link-intent detection in signIn callback via `linkIntentStore.getStore()` (shared primitive)
+- [x] Race-safe UNIQUE violation handling (re-fetch + idempotent check vs NO_AUTO_MERGE)
+- [x] Explicit `jwt` callback: `token.id` and `token.walletAddress` always set from `user`
+- [x] Explicit `session` callback: `session.user.id` and `session.user.walletAddress` always set from `token`
+- [x] Add `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` to `.env.local.example`
 
-### Step 3: Account linking endpoint
+### Step 3: Account linking endpoint — DONE
 
-- [ ] Create `src/app/api/auth/link/[provider]/route.ts` — requires authenticated session, sets HttpOnly `link_intent` cookie (signed nonce mapping to user_id), redirects to NextAuth's standard `/api/auth/signin/[provider]`
-- [ ] In `signIn` callback: detect `link_intent` cookie → bind provider to existing user instead of creating new user → clear cookie
+- [x] Create `src/shared/auth/link-intent-store.ts` — `AsyncLocalStorage<LinkIntent | null>`, pure primitive (only imports `node:async_hooks`), no arch boundary violations
+- [x] Wrap `src/app/api/auth/[...nextauth]/route.ts` — reads `link_intent` cookie, decodes signed JWT, verifies `sessionTokenHash`, populates `linkIntentStore.run()`, clears cookie in all cases. `export const runtime = "nodejs"`.
+- [x] Create `src/app/api/auth/link/[provider]/route.ts` — requires session, signs 5-min TTL JWT (`userId + sessionTokenHash + purpose`), sets `HttpOnly; Secure; SameSite=Lax; Path=/` cookie, redirects to `/api/auth/signin/{provider}`. `export const runtime = "nodejs"`.
+- [x] `pnpm typecheck` + `pnpm arch:check` + `pnpm lint:fix` — all pass
 
-### Step 4: Spec + tests
+### Step 4: Spec + tests — DONE
 
-- [ ] Update `docs/spec/authentication.md`: relax `SIWE_CANONICAL_IDENTITY` to `CANONICAL_IS_USER_ID`, add OAuth to design, move "Social login providers" from Non-Goals to design
-- [ ] Write tests: new OAuth user, returning OAuth user, link flow, NO_AUTO_MERGE rejection, null-wallet payment 403
+- [x] Update `docs/spec/authentication.md`: multi-provider auth flows, invariants, file pointers, acceptance checks
+- [x] Update `docs/spec/decentralized-user-identity.md`: OAuth auth flows, session type, file pointers, acceptance checks
+- [x] Write unit tests: SIWE passthrough, null account, unknown provider rejection, WalletRequiredError guard
+- [x] Write stack tests: new GitHub user (atomic), returning user, link-intent binding, idempotent link, NO_AUTO_MERGE rejection
+- [ ] Manual smoke test with real GitHub OAuth app (untested end-to-end)
 
 ## Validation
 
@@ -208,6 +248,7 @@ pnpm check:docs     # docs metadata valid
 - No new database tables (user_bindings + identity_events already exist)
 - No merge/conflict resolution workflow (P1)
 - No admin binding review tooling (P1)
+- No Apple OAuth (P2 — requires team ID, key ID, private key file, form_post response mode; more setup than other providers)
 - No DID minting or VC export (P2)
 - No sign-in page UI redesign (can use NextAuth default pages initially; custom UI is a follow-up)
 - No email/password provider
@@ -226,6 +267,29 @@ pnpm check:docs     # docs metadata valid
 - Depends on: task.0089 (user_bindings schema — done)
 - Spec: docs/spec/decentralized-user-identity.md
 - Spec: docs/spec/authentication.md
+- Handoff: [handoff](../handoffs/task.0107.handoff.md)
+
+## Review Feedback (revision 2)
+
+### Blocking Issues
+
+1. **New-user transaction race condition** (`src/auth.ts:265-291`): `onConflictDoNothing` on binding insert but unconditional `identity_events` insert. On concurrent first-login for the same GitHub account, creates orphaned users + phantom events. **Fix:** Use `.returning()` pattern from `createBinding()` utility — only insert event if binding was actually inserted. Handle the skipped-binding case (re-fetch existing binding's userId, use that instead of creating a new user, or abort the transaction).
+
+2. **Catch-all error swallowing in link-intent** (`src/auth.ts:223`): The `catch` block catches ALL errors from `createBinding()` and treats them as UNIQUE constraint races — DB connection failures, FK violations, timeouts all silently rejected. **Fix:** Check for Postgres error code `23505` (unique_violation) before race-check path; re-throw unknown errors.
+
+3. **`pnpm check` failures**:
+   - `format`: this work item markdown needs `pnpm format --write`
+   - `check:docs`: `src/app/api/auth/[...nextauth]/route.ts` header Scope missing negative clause (DH004)
+
+4. **No tests** (Step 4): Zero coverage for critical paths (OAuth user creation, returning user, link flow, NO_AUTO_MERGE, null-wallet 403).
+
+### Non-blocking suggestions
+
+- Conditionally register GitHub provider only when env vars are non-empty
+- Use `new URL()` constructor in link route redirect
+- Clean up double-cast `user as unknown as Record<string, unknown>` → single cast through augmented `User` type
+- Update `src/shared/auth/AGENTS.md` Public Surface + Notes for nullable walletAddress
+- Update `src/app/_lib/auth/session.ts` doc Notes — still says "wallet-first session model"
 
 ## Attribution
 
