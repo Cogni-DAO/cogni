@@ -10,7 +10,7 @@ summary: "Epoch-based ledger where source adapters collect contribution activity
 outcome: "A third party can recompute the payout table exactly from stored activity events + pool components + weight config. All activity is attributed to contributors via identity bindings. Admin finalizes once per epoch."
 assignees: derekg1729
 created: 2026-02-17
-updated: 2026-02-23
+updated: 2026-02-24
 labels: [governance, transparency, payments, web3]
 ---
 
@@ -39,22 +39,26 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 
 **Goal:** Automated weekly activity collection from GitHub + Discord, best-effort attribution, admin-finalized credit distribution. Anyone can recompute payouts from stored data.
 
-| Deliverable                                                  | Status                  | Est | Work Item       |
-| ------------------------------------------------------------ | ----------------------- | --- | --------------- |
-| Design spike: schema, signing, storage, epoch model          | Done                    | 2   | spike.0082      |
-| Design revision: activity-ingestion reframe                  | Done                    | 1   | (this document) |
-| Spec: epoch-ledger.md (revised)                              | Done                    | 1   | —               |
-| DB schema (foundation tables) + core domain (rules, errors)  | Done                    | 3   | task.0093       |
-| Identity bindings (user_bindings + identity_events)          | Done                    | 2   | task.0089       |
-| Ledger port + Drizzle adapter + schema migration + container | Done                    | 2   | task.0094       |
-| GitHub source adapter                                        | Done                    | 3   | task.0097       |
-| Temporal workflows (collection phase)                        | Done                    | 2   | task.0095       |
-| Identity resolution + curation auto-population               | Done                    | 2   | task.0101       |
-| Allocation computation + epoch close + FinalizeEpochWorkflow | In Review (needs_merge) | 3   | task.0102       |
-| Epoch 3-phase state machine + EIP-191 signing                | Done                    | 3   | task.0100       |
-| Zod contracts + API routes + stack tests                     | Done                    | 2   | task.0096       |
-| Scope-gate all epochId-based adapter methods                 | Done                    | 1   | task.0103       |
-| Dev seed script for governance UI visual testing             | Not Started             | 2   | task.0106       |
+| Deliverable                                                                                                     | Status                  | Est | Work Item       |
+| --------------------------------------------------------------------------------------------------------------- | ----------------------- | --- | --------------- |
+| Design spike: schema, signing, storage, epoch model                                                             | Done                    | 2   | spike.0082      |
+| Design revision: activity-ingestion reframe                                                                     | Done                    | 1   | (this document) |
+| Spec: epoch-ledger.md (revised)                                                                                 | Done                    | 1   | —               |
+| DB schema (foundation tables) + core domain (rules, errors)                                                     | Done                    | 3   | task.0093       |
+| Identity bindings (user_bindings + identity_events)                                                             | Done                    | 2   | task.0089       |
+| Ledger port + Drizzle adapter + schema migration + container                                                    | Done                    | 2   | task.0094       |
+| GitHub source adapter                                                                                           | Done                    | 3   | task.0097       |
+| Temporal workflows (collection phase)                                                                           | Done                    | 2   | task.0095       |
+| Identity resolution + curation auto-population                                                                  | Done                    | 2   | task.0101       |
+| Allocation computation + epoch close + FinalizeEpochWorkflow                                                    | In Review (needs_merge) | 3   | task.0102       |
+| Epoch 3-phase state machine + EIP-191 signing                                                                   | Done                    | 3   | task.0100       |
+| Zod contracts + API routes + stack tests                                                                        | Done                    | 2   | task.0096       |
+| Scope-gate all epochId-based adapter methods                                                                    | Done                    | 1   | task.0103       |
+| Dev seed script for governance UI visual testing                                                                | Not Started             | 2   | task.0106       |
+| **Collection pipeline hardening (from [gap analysis](../../docs/research/ledger-collection-gap-analysis.md)):** |                         |     |                 |
+| Fix: unresolved contributors silently excluded                                                                  | needs_triage            | 2   | bug.0092        |
+| Collection completeness verification                                                                            | needs_triage            | 2   | task.0108       |
+| Expand GitHub adapter (PR comments, review comments, issues)                                                    | needs_triage            | 2   | task.0109       |
 
 **V0 user story:**
 
@@ -98,10 +102,25 @@ repo-spec.yaml → schedule sync → Temporal schedule → CollectEpochWorkflow 
 - [x] **Remaining read/write API routes** — list epochs, activity, allocations, statement (task.0096 — verify deferred to task.0102)
 - [ ] **Discord source adapter** — deferred (GitHub-only for V0 launch)
 
+**Collection pipeline gap analysis ([ledger-collection-gap-analysis](../../docs/research/ledger-collection-gap-analysis.md), 2026-02-24):**
+
+Critical comparison against SourceCred's full-history mirror model. SourceCred incrementally updates a persistent SQLite mirror and rebuilds the full contribution graph from complete state each run. Cogni's windowed epoch model is simpler and more transparent but introduces specific blindspots that must be addressed before the first real payout:
+
+| Gap                                                                | Severity | Work Item        | Status       |
+| ------------------------------------------------------------------ | -------- | ---------------- | ------------ |
+| Unresolved contributors silently get zero credit                   | High     | bug.0092         | needs_triage |
+| No collection completeness verification                            | High     | task.0108        | needs_triage |
+| Only 3 GitHub event types (misses review comments, issue creation) | High     | task.0109        | needs_triage |
+| Missed events permanently lost after finalization (no backfill)    | Medium   | (P1 — task.0110) | not filed    |
+| No pending credit for unresolved identities                        | Medium   | (P1 — task.0111) | not filed    |
+| Webhook-first collection eliminates window-boundary issues         | Medium   | (P1 — task.0112) | not filed    |
+
 **Definition of done:**
 
 - [ ] Weekly epoch collects GitHub PRs/reviews automatically (Discord deferred)
 - [ ] Activity attributed to contributors via identity bindings (unresolved events flagged)
+- [ ] Unresolved contributors visible in epoch UI; finalization warns when unresolved activity exists (bug.0092)
+- [ ] Collection completeness verified against GitHub API totals before close (task.0108)
 - [ ] Admin can review and adjust proposed allocations before finalizing
 - [ ] A third party can recompute the payout table from stored data exactly
 - [ ] Duplicate activity collection is idempotent (deterministic event IDs)
@@ -109,20 +128,23 @@ repo-spec.yaml → schedule sync → Temporal schedule → CollectEpochWorkflow 
 - [ ] All write operations execute in Temporal workflows (Next.js stateless)
 - [ ] All math is BIGINT — no floating point, including weight values (milli-units)
 
-### Walk (P1) — Signed Receipts + UI + More Sources
+### Walk (P1) — Signed Receipts + UI + Collection Hardening
 
-**Goal:** Per-receipt wallet signatures for cryptographic audit trail. UI surfaces. Additional activity sources.
+**Goal:** Per-receipt wallet signatures for cryptographic audit trail. UI surfaces. Fix collection pipeline blindspots identified in [gap analysis](../../docs/research/ledger-collection-gap-analysis.md).
 
-| Deliverable                                           | Status      | Est | Work Item            |
-| ----------------------------------------------------- | ----------- | --- | -------------------- |
-| Per-receipt EIP-191 wallet signing                    | Not Started | 2   | (create at P1 start) |
-| `ledger_issuers` role system (can_issue, can_approve) | Not Started | 2   | (create at P1 start) |
-| Statement signing (DAO multisig / key store)          | Not Started | 2   | (create at P1 start) |
-| UI: `/epochs/:id`, `/contributors/:id` pages          | Not Started | 3   | (create at P1 start) |
-| X/Twitter activity adapter                            | Not Started | 2   | (create at P1 start) |
-| Funding activity adapter                              | Not Started | 2   | (create at P1 start) |
-| Merkle tree per epoch + inclusion proofs              | Not Started | 2   | (create at P1 start) |
-| SourceCred grain → activity migration strategy        | Not Started | 2   | (create at P1 start) |
+| Deliverable                                           | Status      | Est | Work Item             |
+| ----------------------------------------------------- | ----------- | --- | --------------------- |
+| Retroactive backfill for finalized epochs             | Not Started | 2   | task.0110 (not filed) |
+| Pending credit for unresolved identities              | Not Started | 2   | task.0111 (not filed) |
+| Webhook-first GitHub collection                       | Not Started | 3   | task.0112 (not filed) |
+| Per-receipt EIP-191 wallet signing                    | Not Started | 2   | (create at P1 start)  |
+| `ledger_issuers` role system (can_issue, can_approve) | Not Started | 2   | (create at P1 start)  |
+| Statement signing (DAO multisig / key store)          | Not Started | 2   | (create at P1 start)  |
+| UI: `/epochs/:id`, `/contributors/:id` pages          | Not Started | 3   | (create at P1 start)  |
+| X/Twitter activity adapter                            | Not Started | 2   | (create at P1 start)  |
+| Funding activity adapter                              | Not Started | 2   | (create at P1 start)  |
+| Merkle tree per epoch + inclusion proofs              | Not Started | 2   | (create at P1 start)  |
+| SourceCred grain → activity migration strategy        | Not Started | 2   | (create at P1 start)  |
 
 ### Run (P2+) — Federation + SourceCred Removal
 
@@ -177,6 +199,11 @@ If the weight policy becomes a black box (complex formulas, hidden multipliers, 
 
 - [epoch-ledger](../../docs/spec/epoch-ledger.md) — V0 schema, invariants, API, architecture
 
+## Research
+
+- [ledger-collection-gap-analysis](../../docs/research/ledger-collection-gap-analysis.md) — Critical comparison vs. SourceCred's full-history model; collection blindspots + P0/P1 remediation plan
+- [epoch-event-ingestion-pipeline](../../docs/research/epoch-event-ingestion-pipeline.md) — Original adapter design spike, SourceCred plugin analysis, OSS tooling survey
+
 ## Design Notes
 
 ### Key reframes
@@ -209,7 +236,10 @@ If the weight policy becomes a black box (complex formulas, hidden multipliers, 
 
 ### Known issues
 
-- **GitHub adapter only captures merged PRs and closed issues.** Reviews are only searched on merged PRs. This means: (1) opened-but-unmerged PRs are invisible, (2) reviews on open PRs are missed, (3) newly opened issues aren't tracked. The adapter should use broader queries (`created:`, `updated:`) and emit lifecycle event types (`pr_opened`/`pr_merged`, `issue_opened`/`issue_closed`) to capture all contribution activity. Low risk for V0 since epochs are weekly and most PRs merge within a week, but will under-count reviewers and issue authors.
+- **GitHub adapter only captures merged PRs and closed issues.** Reviews are only searched on merged PRs. This means: (1) opened-but-unmerged PRs are invisible, (2) reviews on open PRs are missed, (3) newly opened issues aren't tracked. The adapter should use broader queries (`created:`, `updated:`) and emit lifecycle event types (`pr_opened`/`pr_merged`, `issue_opened`/`issue_closed`) to capture all contribution activity. Low risk for V0 since epochs are weekly and most PRs merge within a week, but will under-count reviewers and issue authors. → **task.0109**
+- **Unresolved contributors silently excluded.** Contributors without `user_bindings` get `user_id=NULL` in curation and are dropped from allocations with no UI feedback. → **bug.0092**
+- **No collection completeness verification.** Under-collection from rate limits or API failures is indistinguishable from a quiet week. No comparison of collected counts vs. GitHub API totals. → **task.0108**
+- **No retroactive backfill.** If collection misses events and the epoch finalizes, those events are permanently lost. SourceCred's mirror model catches up on next run; our windowed model has no equivalent. → **P1 task.0110**
 
 ### What V0 explicitly defers
 
