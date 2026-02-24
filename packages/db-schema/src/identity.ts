@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/db-schema/identity`
- * Purpose: User identity binding tables — links external accounts (wallet, Discord, GitHub) to users.
+ * Purpose: User identity binding tables — links external accounts (wallet, Discord, GitHub, Google) to users.
  * Scope: Defines user_bindings (current-state index) and identity_events (append-only audit trail). Does not contain queries or business logic.
  * Invariants:
  * - BINDINGS_ARE_EVIDENCED: Proof lives in identity_events.payload, not on the binding row.
@@ -49,7 +49,7 @@ export const userBindings = pgTable(
   (table) => [
     check(
       "user_bindings_provider_check",
-      sql`${table.provider} IN ('wallet', 'discord', 'github')`
+      sql`${table.provider} IN ('wallet', 'discord', 'github', 'google')`
     ),
     uniqueIndex("user_bindings_provider_external_id_unique").on(
       table.provider,

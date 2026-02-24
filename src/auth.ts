@@ -5,7 +5,7 @@
  * Module: `@/auth`
  * Purpose: NextAuth.js configuration and export.
  * Scope: App-wide authentication configuration. Does not handle client-side session management.
- * Invariants: SIWE Credentials provider (id="credentials") + GitHub OAuth. All providers resolve to canonical user_id via user_bindings.
+ * Invariants: SIWE Credentials + OAuth providers. All resolve to canonical user_id via user_bindings.
  * Side-effects: IO
  * Notes: Handles session creation, validation, and persistence.
  * Links: docs/spec/authentication.md
@@ -19,7 +19,9 @@ import nodeCrypto, { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import Discord from "next-auth/providers/discord";
 import GitHub from "next-auth/providers/github";
+import Google from "next-auth/providers/google";
 import { getCsrfToken } from "next-auth/react";
 import { SiweMessage } from "siwe";
 
@@ -178,10 +180,31 @@ export const authOptions: NextAuthOptions = {
         }
       },
     }),
-    GitHub({
-      clientId: process.env.GITHUB_CLIENT_ID ?? "",
-      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
-    }),
+    // Only register OAuth providers when credentials are configured
+    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+      ? [
+          GitHub({
+            clientId: process.env.GITHUB_CLIENT_ID,
+            clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          }),
+        ]
+      : []),
+    ...(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET
+      ? [
+          Discord({
+            clientId: process.env.DISCORD_CLIENT_ID,
+            clientSecret: process.env.DISCORD_CLIENT_SECRET,
+          }),
+        ]
+      : []),
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? [
+          Google({
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          }),
+        ]
+      : []),
   ],
   callbacks: {
     async signIn({ user, account, profile }) {
@@ -189,10 +212,11 @@ export const authOptions: NextAuthOptions = {
       if (!account || account.provider === "credentials") return true;
 
       // Only handle known OAuth providers
-      if (account.provider !== "github") return false;
+      const KNOWN_OAUTH = new Set(["github", "discord", "google"]);
+      if (!KNOWN_OAUTH.has(account.provider)) return false;
 
       const db = getServiceDb();
-      const provider = account.provider as "github";
+      const provider = account.provider as "github" | "discord" | "google";
       const externalId = account.providerAccountId;
 
       // Lookup existing binding
@@ -237,10 +261,11 @@ export const authOptions: NextAuthOptions = {
           return false;
         }
 
+        const profileData = profile as Record<string, unknown> | undefined;
         await createBinding(db, linkIntent.userId, provider, externalId, {
           method: "oauth_link",
-          githubLogin:
-            (profile as Record<string, unknown> | undefined)?.login ?? null,
+          login: profileData?.login ?? profileData?.username ?? null,
+          name: profileData?.name ?? null,
         });
 
         user.id = linkIntent.userId;
@@ -264,17 +289,14 @@ export const authOptions: NextAuthOptions = {
       const userId = randomUUID();
       const bindingId = randomUUID();
       const eventId = randomUUID();
-      const githubLogin =
-        (profile as Record<string, unknown> | undefined)?.login ?? null;
+      const profileData = profile as Record<string, unknown> | undefined;
+      const oauthLogin = profileData?.login ?? profileData?.username ?? null;
 
       try {
         await db.transaction(async (tx) => {
           await tx.insert(users).values({
             id: userId,
-            name: (profile as Record<string, unknown> | undefined)?.name as
-              | string
-              | null
-              | undefined,
+            name: (profileData?.name as string | null | undefined) ?? null,
             walletAddress: null,
           });
           const [inserted] = await tx
@@ -296,7 +318,7 @@ export const authOptions: NextAuthOptions = {
               provider,
               external_id: externalId,
               method: "oauth",
-              githubLogin,
+              login: oauthLogin,
             },
           });
         });

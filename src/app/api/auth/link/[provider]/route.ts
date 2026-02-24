@@ -24,7 +24,7 @@ import { getServerSessionUser } from "@/lib/auth/server";
 
 export const runtime = "nodejs";
 
-const ALLOWED_PROVIDERS = new Set(["github"]);
+const ALLOWED_PROVIDERS = new Set(["github", "discord", "google"]);
 const SESSION_COOKIE = "next-auth.session-token";
 const LINK_INTENT_COOKIE = "link_intent";
 const LINK_INTENT_SALT = "link-intent";
@@ -85,5 +85,6 @@ export async function GET(
   // Redirect to NextAuth's standard OAuth flow
   // biome-ignore lint/style/noProcessEnv: auth infra runs before serverEnv() is available
   const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-  return NextResponse.redirect(`${baseUrl}/api/auth/signin/${provider}`);
+  const redirectUrl = new URL(`/api/auth/signin/${provider}`, baseUrl);
+  return NextResponse.redirect(redirectUrl);
 }
