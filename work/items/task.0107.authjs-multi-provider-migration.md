@@ -249,6 +249,7 @@ pnpm check:docs     # docs metadata valid
 - No new database tables (user_bindings + identity_events already exist)
 - No merge/conflict resolution workflow (P1)
 - No admin binding review tooling (P1)
+- No Apple OAuth (P2 — requires team ID, key ID, private key file, form_post response mode; more setup than other providers)
 - No DID minting or VC export (P2)
 - No sign-in page UI redesign (can use NextAuth default pages initially; custom UI is a follow-up)
 - No email/password provider
