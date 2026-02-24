@@ -41,7 +41,7 @@
     "db:migrate:test": "dotenv -e .env.test -- tsx node_modules/drizzle-kit/bin.cjs migrate",
     "db:migrate:direct": "tsx node_modules/drizzle-kit/bin.cjs migrate",
     "db:migrate:container": "pnpm db:migrate:direct",
-    "db:seed": "[ -f scripts/db/seed.ts ] && tsx scripts/db/seed.ts || echo 'ℹ️  Skipping seed (not implemented yet)'",
+    "db:seed": "dotenv -e .env.local -- node --import tsx/esm scripts/db/seed.mts",
     "db:setup": "pnpm db:provision && pnpm db:migrate && pnpm db:seed",
     "db:setup:test": "pnpm db:provision:test && pnpm db:migrate:test",
     "db:drop:test": "pnpm tsx --tsconfig tsconfig.scripts.json scripts/db/drop-test-db.ts",
