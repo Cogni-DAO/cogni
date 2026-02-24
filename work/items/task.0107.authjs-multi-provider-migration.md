@@ -226,6 +226,7 @@ pnpm check:docs     # docs metadata valid
 - Depends on: task.0089 (user_bindings schema — done)
 - Spec: docs/spec/decentralized-user-identity.md
 - Spec: docs/spec/authentication.md
+- Handoff: [handoff](../handoffs/task.0107.handoff.md)
 
 ## Attribution
 
