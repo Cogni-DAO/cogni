@@ -86,7 +86,7 @@ describe("computeProposedAllocations", () => {
     );
 
     expect(result).toHaveLength(1);
-    expect(result[0]!.userId).toBe("alice");
+    expect(result[0]?.userId).toBe("alice");
   });
 
   it("uses weightOverrideMilli when present", () => {
@@ -104,7 +104,7 @@ describe("computeProposedAllocations", () => {
       weightConfig
     );
 
-    expect(result[0]!.proposedUnits).toBe(5000n);
+    expect(result[0]?.proposedUnits).toBe(5000n);
   });
 
   it("returns empty array for empty events", () => {
@@ -148,7 +148,7 @@ describe("computeProposedAllocations", () => {
       weightConfig
     );
 
-    expect(result[0]!.proposedUnits).toBe(0n);
+    expect(result[0]?.proposedUnits).toBe(0n);
   });
 
   it("throws for unknown algorithm ref", () => {

@@ -37,7 +37,7 @@ describe("estimatePoolComponentsV0", () => {
       baseIssuanceCredits: 999999999999n,
     });
 
-    expect(result[0]!.amountCredits).toBe(999999999999n);
+    expect(result[0]?.amountCredits).toBe(999999999999n);
   });
 
   it("is pure — same inputs → same output", () => {

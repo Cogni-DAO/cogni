@@ -38,7 +38,7 @@ export async function computeWeightConfigHash(
   const sortedKeys = Object.keys(config).sort();
   const canonical: Record<string, number> = {};
   for (const key of sortedKeys) {
-    canonical[key] = config[key]!;
+    canonical[key] = config[key] as number;
   }
   return sha256Hex(JSON.stringify(canonical));
 }

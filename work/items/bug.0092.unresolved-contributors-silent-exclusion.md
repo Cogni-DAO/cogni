@@ -2,9 +2,9 @@
 id: bug.0092
 type: bug
 title: "Unresolved contributors silently excluded from epoch allocations"
-status: needs_triage
+status: needs_merge
 priority: 1
-rank:
+rank: 99
 estimate: 2
 summary: "Contributors without user_bindings get user_id=NULL in activity_curation and are silently excluded from allocations. No UI visibility, no finalization warning. First-time contributors get zero credit with no feedback."
 outcome: "Unresolved contributors visible in epoch UI. Finalization blocked or warned when unresolved contributors have activity in the epoch. Admin can manually resolve or acknowledge exclusion."
@@ -12,9 +12,9 @@ spec_refs: epoch-ledger-spec
 assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
-branch:
-pr:
-reviewer:
+branch: fix/bug-0092-unresolved-visibility
+pr: https://github.com/Cogni-DAO/node-template/pull/475
+reviewer: derekg1729
 revision: 0
 blocked_by:
 deploy_verified: false

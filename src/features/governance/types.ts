@@ -9,6 +9,7 @@
  * Invariants:
  *   - ALL_MATH_BIGINT: credit/unit values are strings (BigInt serialized)
  *   - avatar/color are placeholder defaults until a profile system exists
+ *   - EpochView.unresolvedCount reflects events with no resolved user_id (IDENTITY_BEST_EFFORT)
  * Side-effects: none
  * Links: src/contracts/ledger.list-epochs.v1.contract.ts, src/contracts/ledger.epoch-allocations.v1.contract.ts
  * @public
@@ -37,6 +38,13 @@ export interface EpochContributor {
   readonly activities: readonly ActivityEvent[];
 }
 
+/** An activity event that could not be attributed to a known user. */
+export interface UnresolvedActivity {
+  readonly platformLogin: string | null;
+  readonly source: string;
+  readonly eventCount: number;
+}
+
 /** Composite view of a single epoch (current or historical). */
 export interface EpochView {
   readonly id: string;
@@ -45,6 +53,10 @@ export interface EpochView {
   readonly periodEnd: string;
   readonly poolTotalCredits: string | null;
   readonly contributors: readonly EpochContributor[];
+  /** Number of activity events with no resolved user_id. */
+  readonly unresolvedCount: number;
+  /** Breakdown of unresolved activity by platform login. */
+  readonly unresolvedActivities: readonly UnresolvedActivity[];
 }
 
 /** Hook return shape for current epoch. */

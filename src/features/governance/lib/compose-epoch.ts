@@ -8,6 +8,7 @@
  * Invariants:
  *   - ALL_MATH_BIGINT: credit/unit values stay as strings; Number() only for sorting/display derivation
  *   - Avatar/color are static placeholders (no profile system yet)
+ *   - Events with curation.userId=null are counted in unresolvedCount/unresolvedActivities, not silently dropped
  * Side-effects: none
  * Links: src/features/governance/types.ts
  * @public
@@ -17,6 +18,7 @@ import type {
   ActivityEvent,
   EpochContributor,
   EpochView,
+  UnresolvedActivity,
 } from "@/features/governance/types";
 
 const DEFAULT_AVATAR = "👤";
@@ -72,22 +74,41 @@ export interface StatementDto {
 }
 
 /**
- * Compose an EpochView for a current (open/review) epoch from live allocations + activity.
- * Uses mutable allocations as source of truth (appropriate for in-progress data).
+ * Partition events into resolved (grouped by userId) and unresolved (grouped by platformLogin+source).
+ * Pure helper — no IO.
  */
-export function composeEpochView(
-  epoch: EpochDto,
-  allocations: readonly AllocationDto[],
-  events: readonly ApiActivityEvent[]
-): EpochView {
-  // Group events by resolved userId (curation.userId)
+function partitionEvents(events: readonly ApiActivityEvent[]): {
+  eventsByUser: Map<string, ActivityEvent[]>;
+  loginByUser: Map<string, string>;
+  unresolvedCount: number;
+  unresolvedActivities: UnresolvedActivity[];
+} {
   const eventsByUser = new Map<string, ActivityEvent[]>();
-  // Track platformLogin per userId for display name
   const loginByUser = new Map<string, string>();
+  // Key: "source::platformLogin" → count
+  const unresolvedMap = new Map<
+    string,
+    { login: string | null; source: string; count: number }
+  >();
+  let unresolvedCount = 0;
 
   for (const ev of events) {
     const resolvedUser = ev.curation?.userId;
-    if (!resolvedUser) continue;
+    if (!resolvedUser) {
+      unresolvedCount++;
+      const key = `${ev.source}::${ev.platformLogin ?? "<unknown>"}`;
+      const existing = unresolvedMap.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        unresolvedMap.set(key, {
+          login: ev.platformLogin,
+          source: ev.source,
+          count: 1,
+        });
+      }
+      continue;
+    }
     const mapped: ActivityEvent = {
       id: ev.id,
       source: ev.source,
@@ -106,6 +127,29 @@ export function composeEpochView(
       loginByUser.set(resolvedUser, ev.platformLogin);
     }
   }
+
+  const unresolvedActivities: UnresolvedActivity[] = [...unresolvedMap.values()]
+    .map((v) => ({
+      platformLogin: v.login,
+      source: v.source,
+      eventCount: v.count,
+    }))
+    .sort((a, b) => b.eventCount - a.eventCount);
+
+  return { eventsByUser, loginByUser, unresolvedCount, unresolvedActivities };
+}
+
+/**
+ * Compose an EpochView for a current (open/review) epoch from live allocations + activity.
+ * Uses mutable allocations as source of truth (appropriate for in-progress data).
+ */
+export function composeEpochView(
+  epoch: EpochDto,
+  allocations: readonly AllocationDto[],
+  events: readonly ApiActivityEvent[]
+): EpochView {
+  const { eventsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
+    partitionEvents(events);
 
   // Sum all proposed units for share calculation
   const totalProposed = allocations.reduce(
@@ -147,6 +191,8 @@ export function composeEpochView(
     periodEnd: epoch.periodEnd,
     poolTotalCredits: epoch.poolTotalCredits,
     contributors,
+    unresolvedCount,
+    unresolvedActivities,
   };
 }
 
@@ -159,31 +205,8 @@ export function composeEpochViewFromStatement(
   statement: StatementDto,
   events: readonly ApiActivityEvent[]
 ): EpochView {
-  // Group events by resolved userId for drill-down
-  const eventsByUser = new Map<string, ActivityEvent[]>();
-  const loginByUser = new Map<string, string>();
-
-  for (const ev of events) {
-    const resolvedUser = ev.curation?.userId;
-    if (!resolvedUser) continue;
-    const mapped: ActivityEvent = {
-      id: ev.id,
-      source: ev.source,
-      eventType: ev.eventType,
-      platformLogin: ev.platformLogin,
-      artifactUrl: ev.artifactUrl,
-      eventTime: ev.eventTime,
-    };
-    const list = eventsByUser.get(resolvedUser);
-    if (list) {
-      list.push(mapped);
-    } else {
-      eventsByUser.set(resolvedUser, [mapped]);
-    }
-    if (ev.platformLogin && !loginByUser.has(resolvedUser)) {
-      loginByUser.set(resolvedUser, ev.platformLogin);
-    }
-  }
+  const { eventsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
+    partitionEvents(events);
 
   const contributors: EpochContributor[] = statement.payouts.map((payout) => {
     const userEvents = eventsByUser.get(payout.user_id) ?? [];
@@ -216,5 +239,7 @@ export function composeEpochViewFromStatement(
     periodEnd: epoch.periodEnd,
     poolTotalCredits: statement.poolTotalCredits,
     contributors,
+    unresolvedCount,
+    unresolvedActivities,
   };
 }

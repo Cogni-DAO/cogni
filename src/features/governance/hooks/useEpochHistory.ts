@@ -5,7 +5,9 @@
  * Module: `@features/governance/hooks/useEpochHistory`
  * Purpose: React Query hook for finalized epoch history with contributor drill-down.
  * Scope: Client-side data fetching for /gov/history page; does not access database directly. Fetches finalized epochs, then for each fetches statement + activity, composing into EpochView[].
- * Invariants: Uses payout statements as source of truth for finalized epochs (frozen, deterministic).
+ * Invariants:
+ *   - Uses payout statements as source of truth for finalized epochs (frozen, deterministic)
+ *   - Throws if a finalized epoch has no statement (data integrity violation)
  * Side-effects: IO (HTTP GET to ledger API endpoints)
  * Links: src/features/governance/types.ts, src/features/governance/lib/compose-epoch.ts
  * @public
@@ -55,16 +57,10 @@ async function fetchHistory(): Promise<EpochHistoryData> {
           ),
         ]);
 
-        // If no statement yet, return epoch with empty contributors
         if (!statementRes.statement) {
-          return {
-            id: epoch.id,
-            status: epoch.status,
-            periodStart: epoch.periodStart,
-            periodEnd: epoch.periodEnd,
-            poolTotalCredits: epoch.poolTotalCredits,
-            contributors: [],
-          };
+          throw new Error(
+            `Epoch ${epoch.id} is finalized but has no payout statement — data integrity issue`
+          );
         }
 
         return composeEpochViewFromStatement(

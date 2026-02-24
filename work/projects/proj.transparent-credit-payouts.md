@@ -56,7 +56,7 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 | Scope-gate all epochId-based adapter methods                                                                    | Done                    | 1   | task.0103       |
 | Dev seed script for governance UI visual testing                                                                | Not Started             | 2   | task.0106       |
 | **Collection pipeline hardening (from [gap analysis](../../docs/research/ledger-collection-gap-analysis.md)):** |                         |     |                 |
-| Fix: unresolved contributors silently excluded                                                                  | needs_triage            | 2   | bug.0092        |
+| Fix: unresolved contributors silently excluded                                                                  | In Review (needs_merge) | 2   | bug.0092        |
 | Collection completeness verification                                                                            | needs_triage            | 2   | task.0108       |
 | Expand GitHub adapter (PR comments, review comments, issues)                                                    | needs_triage            | 2   | task.0109       |
 

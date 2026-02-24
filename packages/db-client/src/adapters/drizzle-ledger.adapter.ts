@@ -420,7 +420,8 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       );
     return rows.map((r) => ({
       eventId: r.eventId,
-      userId: r.userId!,
+      // Safe: WHERE clause filters to userId IS NOT NULL
+      userId: r.userId as string,
       source: r.source,
       eventType: r.eventType,
       included: r.included,
