@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.decentralized-identity
 branch: feat/user-accounts
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/480
 reviewer:
 revision: 2
 blocked_by:
