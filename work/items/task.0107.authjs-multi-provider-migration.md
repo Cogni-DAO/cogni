@@ -95,14 +95,19 @@ NextAuth OAuth → signIn callback → user_bindings lookup by (provider, provid
 **Account Linking (new — authenticated user adds provider):**
 
 ```
-Authenticated user → clicks "Link Discord" → OAuth flow with state={linking: true, userId: session.user.id}
-  → signIn callback detects linking mode → createBinding(provider, providerAccountId, evidence) for EXISTING user
+Authenticated user → hits /api/auth/link/discord (requires existing session)
+  → server sets HttpOnly cookie: link_intent=<signed nonce> (nonce→user_id stored server-side or in signed JWT)
+  → server redirects to NextAuth's /api/auth/signin/discord (standard CSRF state preserved)
+  → signIn callback reads link_intent cookie → binds provider to EXISTING user via createBinding()
+  → clears link_intent cookie
   → IF binding already exists for different user → reject (NO_AUTO_MERGE)
 ```
 
+**Why not custom OAuth state?** NextAuth generates/validates OAuth `state` for CSRF protection. Injecting custom data would break CSRF validation. The HttpOnly cookie approach is safe because the linking endpoint requires an authenticated session before setting the cookie.
+
 ### Files
 
-- Modify: `src/auth.ts` — add Discord/GitHub providers, `signIn` callback for user resolution via `user_bindings`, `jwt`/`session` callbacks for optional walletAddress
+- Modify: `src/auth.ts` — add Discord/GitHub providers, `signIn` callback for user resolution via `user_bindings`, `jwt`/`session` callbacks for optional walletAddress. **Footgun:** `jwt` callback must explicitly propagate `token.id → session.user.id` and `walletAddress → session.user.walletAddress`; Auth.js does not auto-forward custom fields. Never enable `allowDangerousEmailAccountLinking`.
 - Modify: `src/shared/auth/session.ts` — `SessionUser.walletAddress: string | null`
 - Modify: `src/lib/auth/server.ts` — `getServerSessionUser()` requires only `id`
 - Modify: `src/types/next-auth.d.ts` — no change needed (already has `walletAddress?: string | null`)
@@ -111,7 +116,7 @@ Authenticated user → clicks "Link Discord" → OAuth flow with state={linking:
 - Modify: `docs/spec/authentication.md` — relax `SIWE_CANONICAL_IDENTITY`, add OAuth providers, update Non-Goals
 - Modify: `.env.local.example` — add `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 - Modify: `tests/_fixtures/auth/synthetic-session.ts` — make walletAddress optional in test helpers
-- Create: `src/app/api/auth/link/[provider]/route.ts` — account-linking API route (redirects to OAuth with linking context)
+- Create: `src/app/api/auth/link/[provider]/route.ts` — account-linking API route (requires session, sets HttpOnly `link_intent` cookie, redirects to NextAuth's standard `/api/auth/signin/[provider]`)
 - Test: `tests/unit/auth/multi-provider.test.ts` — OAuth user resolution, binding creation, linking, NO_AUTO_MERGE rejection
 
 ## Requirements
@@ -146,18 +151,32 @@ Authenticated user → clicks "Link Discord" → OAuth flow with state={linking:
 
 ## Plan
 
-- [ ] Add `DiscordProvider` and `GitHubProvider` to `src/auth.ts` providers array
-- [ ] Add `signIn` callback in `src/auth.ts` that resolves OAuth users via `user_bindings` lookup: find existing binding → return user, or create new user + binding
-- [ ] Update `jwt` and `session` callbacks to handle `walletAddress: null` for OAuth-only users
+### Step 1: Types & guards (no runtime behavior change)
+
 - [ ] Change `SessionUser.walletAddress` from `string` to `string | null` in `src/shared/auth/session.ts`
 - [ ] Update `getServerSessionUser()` in `src/lib/auth/server.ts` to require only `id`
 - [ ] Add null guard on `getAddress()` call in `src/app/_facades/payments/attempts.server.ts` (throw domain error for non-wallet users)
 - [ ] Clean up system principal in governance activity route (`walletAddress: null` instead of `""`)
-- [ ] Create account-linking API route (`src/app/api/auth/link/[provider]/route.ts`) — authenticated redirect to OAuth with linking context in state
-- [ ] Update `docs/spec/authentication.md`: relax `SIWE_CANONICAL_IDENTITY` to `CANONICAL_IS_USER_ID`, add OAuth to design, move "Social login providers" from Non-Goals to design
-- [ ] Add OAuth env vars to `.env.local.example`
 - [ ] Update test fixtures (`tests/_fixtures/auth/synthetic-session.ts`) for optional walletAddress
-- [ ] Write tests: OAuth login (new user), OAuth login (returning user), account linking, NO_AUTO_MERGE rejection, null-wallet payment denial
+- [ ] `pnpm check` — verify all type changes compile clean
+
+### Step 2: OAuth providers + callbacks
+
+- [ ] Add `DiscordProvider` and `GitHubProvider` to `src/auth.ts` providers array
+- [ ] Add `signIn` callback that resolves OAuth users via `user_bindings` lookup: find existing binding → return user, or create new user + `createBinding()`
+- [ ] Update `jwt` callback: explicitly propagate `token.id` and `token.walletAddress` (Auth.js does not auto-forward custom fields). Never enable `allowDangerousEmailAccountLinking`.
+- [ ] Update `session` callback: explicitly propagate `session.user.id` and `session.user.walletAddress` from token
+- [ ] Add OAuth env vars to `.env.local.example`
+
+### Step 3: Account linking endpoint
+
+- [ ] Create `src/app/api/auth/link/[provider]/route.ts` — requires authenticated session, sets HttpOnly `link_intent` cookie (signed nonce mapping to user_id), redirects to NextAuth's standard `/api/auth/signin/[provider]`
+- [ ] In `signIn` callback: detect `link_intent` cookie → bind provider to existing user instead of creating new user → clear cookie
+
+### Step 4: Spec + tests
+
+- [ ] Update `docs/spec/authentication.md`: relax `SIWE_CANONICAL_IDENTITY` to `CANONICAL_IS_USER_ID`, add OAuth to design, move "Social login providers" from Non-Goals to design
+- [ ] Write tests: new OAuth user, returning OAuth user, link flow, NO_AUTO_MERGE rejection, null-wallet payment 403
 
 ## Validation
 
