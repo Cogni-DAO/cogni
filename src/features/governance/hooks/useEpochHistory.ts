@@ -4,9 +4,8 @@
 /**
  * Module: `@features/governance/hooks/useEpochHistory`
  * Purpose: React Query hook for finalized epoch history with contributor drill-down.
- * Scope: Client-side data fetching for /gov/history page. Fetches finalized epochs, then
- * for each fetches statement + activity, composing into EpochView[].
- * Invariants: Uses payout statements as source of truth for finalized epochs (frozen, deterministic). Does not access database directly.
+ * Scope: Client-side data fetching for /gov/history page; does not access database directly. Fetches finalized epochs, then for each fetches statement + activity, composing into EpochView[].
+ * Invariants: Uses payout statements as source of truth for finalized epochs (frozen, deterministic).
  * Side-effects: IO (HTTP GET to ledger API endpoints)
  * Links: src/features/governance/types.ts, src/features/governance/lib/compose-epoch.ts
  * @public
@@ -14,13 +13,12 @@
 
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import pLimit from "p-limit";
-
-import { composeEpochViewFromStatement } from "@/features/governance/lib/compose-epoch";
 import type {
   ApiActivityEvent,
   EpochDto,
   StatementDto,
 } from "@/features/governance/lib/compose-epoch";
+import { composeEpochViewFromStatement } from "@/features/governance/lib/compose-epoch";
 import { MOCK_EPOCH_HISTORY } from "@/features/governance/mock/epoch-mock-data";
 import type { EpochHistoryData, EpochView } from "@/features/governance/types";
 

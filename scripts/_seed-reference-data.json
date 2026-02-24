@@ -1,0 +1,195 @@
+{
+  "_comment": "Reference data from Cogni-DAO/node-template GitHub API (2026-02-24). Used to model dev seed script.",
+  "repo": "Cogni-DAO/node-template",
+  "fetchedAt": "2026-02-24T05:15:00Z",
+  "contributors": {
+    "derekg1729": { "databaseId": 58641509, "role": "admin/primary dev" },
+    "Cogni-1729": { "databaseId": 207977700, "role": "AI agent (Claude Code)" }
+  },
+  "patterns": {
+    "observation": "2 contributors: human (derekg1729) authors most PRs, AI agent (Cogni-1729) authors some. derekg1729 reviews+approves Cogni-1729's PRs. No closed issues in recent history.",
+    "prTitleConventions": [
+      "feat(scope): description",
+      "fix(scope): description",
+      "docs: description",
+      "release: timestamp"
+    ],
+    "reviewPattern": "derekg1729 approves Cogni-1729's PRs; no other reviewers",
+    "eventIdFormat": "github:{type}:{owner/repo}:{number}[:{reviewId}]",
+    "eventTypes": ["pr_merged", "review_submitted"],
+    "payloadHashFormat": "SHA-256 hex of canonicalJson({authorId, id, mergedAt|submittedAt})",
+    "producerVersion": "0.3.0"
+  },
+  "representativePRs": [
+    {
+      "number": 470,
+      "title": "feat(ledger): allocation computation, epoch auto-close, and FinalizeEpochWorkflow (task.0102)",
+      "mergedAt": "2026-02-23T08:25:26Z",
+      "author": "derekg1729",
+      "additions": 2762,
+      "deletions": 82,
+      "changedFiles": 48,
+      "reviews": []
+    },
+    {
+      "number": 468,
+      "title": "feat(ledger): epoch 3-phase state machine + approvers + canonical signing (task.0100)",
+      "mergedAt": "2026-02-23T06:39:51Z",
+      "author": "derekg1729",
+      "additions": 1202,
+      "deletions": 350,
+      "changedFiles": 46,
+      "reviews": []
+    },
+    {
+      "number": 464,
+      "title": "feat(ledger): Zod contracts + API routes for epoch ledger (task.0096)",
+      "mergedAt": "2026-02-22T17:24:13Z",
+      "author": "derekg1729",
+      "additions": 2523,
+      "deletions": 146,
+      "changedFiles": 40,
+      "reviews": []
+    },
+    {
+      "number": 451,
+      "title": "fix(gov): less frequent heartbeat, generated _index.md",
+      "mergedAt": "2026-02-19T15:44:15Z",
+      "author": "Cogni-1729",
+      "additions": 1522,
+      "deletions": 423,
+      "changedFiles": 32,
+      "reviews": [
+        {
+          "databaseId": 3826727409,
+          "state": "APPROVED",
+          "author": "derekg1729",
+          "submittedAt": "2026-02-19T15:43:58Z"
+        }
+      ]
+    },
+    {
+      "number": 447,
+      "title": "feat(openclaw): Discord channel agents with lifecycle dispatch",
+      "mergedAt": "2026-02-19T07:39:38Z",
+      "author": "Cogni-1729",
+      "additions": 583,
+      "deletions": 35,
+      "changedFiles": 18,
+      "reviews": [
+        {
+          "databaseId": 3823960987,
+          "state": "APPROVED",
+          "author": "derekg1729",
+          "submittedAt": "2026-02-19T07:39:23Z"
+        }
+      ]
+    },
+    {
+      "number": 445,
+      "title": "docs(dev): development lifecycle status updates, agent fixes",
+      "mergedAt": "2026-02-18T04:09:22Z",
+      "author": "Cogni-1729",
+      "additions": 3941,
+      "deletions": 696,
+      "changedFiles": 145,
+      "reviews": [
+        {
+          "databaseId": 3816021663,
+          "state": "APPROVED",
+          "author": "derekg1729",
+          "submittedAt": "2026-02-17T20:05:41Z"
+        },
+        {
+          "databaseId": 3817607627,
+          "state": "APPROVED",
+          "author": "derekg1729",
+          "submittedAt": "2026-02-18T04:09:09Z"
+        }
+      ]
+    },
+    {
+      "number": 435,
+      "title": "feat(activity): stacked bar charts, and openclaw agent raw thinking streaming",
+      "mergedAt": "2026-02-17T03:07:06Z",
+      "author": "Cogni-1729",
+      "additions": 1327,
+      "deletions": 239,
+      "changedFiles": 35,
+      "reviews": [
+        {
+          "databaseId": 3811406373,
+          "state": "APPROVED",
+          "author": "derekg1729",
+          "submittedAt": "2026-02-17T03:06:54Z"
+        }
+      ]
+    },
+    {
+      "number": 460,
+      "title": "feat(ledger): add epoch collection pipeline via Temporal workflows",
+      "mergedAt": "2026-02-22T14:31:17Z",
+      "author": "derekg1729",
+      "additions": 3070,
+      "deletions": 108,
+      "changedFiles": 34,
+      "reviews": []
+    },
+    {
+      "number": 458,
+      "title": "feat(ingestion): add ingestion-core package, GitHub adapter, and App auth",
+      "mergedAt": "2026-02-22T07:59:55Z",
+      "author": "derekg1729",
+      "additions": 5012,
+      "deletions": 381,
+      "changedFiles": 72,
+      "reviews": []
+    },
+    {
+      "number": 434,
+      "title": "feat(streaming): OpenClaw agent status events in chat UI (task.0074)",
+      "mergedAt": "2026-02-17T03:07:08Z",
+      "author": "Cogni-1729",
+      "additions": 734,
+      "deletions": 20,
+      "changedFiles": 16,
+      "reviews": []
+    }
+  ],
+  "storeApi": {
+    "createEpoch": "store.createEpoch({ nodeId, scopeId, periodStart, periodEnd, weightConfig })",
+    "insertActivityEvents": "store.insertActivityEvents([InsertActivityEventParams...])",
+    "insertCurationDoNothing": "store.insertCurationDoNothing([InsertCurationAutoParams...])",
+    "insertAllocations": "store.insertAllocations([InsertAllocationParams...])",
+    "insertPoolComponent": "store.insertPoolComponent(InsertPoolComponentParams)",
+    "closeIngestion": "store.closeIngestion(epochId, approverSetHash, allocAlgoRef, weightConfigHash)",
+    "finalizeEpoch": "store.finalizeEpoch(epochId, poolTotal)",
+    "insertPayoutStatement": "store.insertPayoutStatement(InsertPayoutStatementParams)"
+  },
+  "bootstrap": {
+    "db": "createServiceDbClient(process.env.DATABASE_SERVICE_URL)",
+    "store": "new DrizzleLedgerAdapter(db, scopeId)",
+    "nodeId": "getNodeId() from repo-spec.yaml",
+    "scopeId": "getScopeId() from repo-spec.yaml",
+    "weightConfig": {
+      "github:pr_merged": 8000,
+      "github:review_submitted": 2000,
+      "discord:message_sent": 500
+    }
+  },
+  "testFixtureFactories": {
+    "file": "tests/_fixtures/ledger/seed-ledger.ts",
+    "exports": [
+      "TEST_NODE_ID",
+      "TEST_SCOPE_ID",
+      "TEST_WEIGHT_CONFIG",
+      "epochWindow",
+      "makeActivityEvent",
+      "makeCurationAuto",
+      "makeAllocation",
+      "makePoolComponent",
+      "makePayoutStatement",
+      "seedClosedEpoch"
+    ]
+  }
+}

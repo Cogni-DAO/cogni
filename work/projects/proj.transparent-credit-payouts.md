@@ -54,6 +54,7 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 | Epoch 3-phase state machine + EIP-191 signing                | Done                    | 3   | task.0100       |
 | Zod contracts + API routes + stack tests                     | Done                    | 2   | task.0096       |
 | Scope-gate all epochId-based adapter methods                 | Done                    | 1   | task.0103       |
+| Dev seed script for governance UI visual testing             | Not Started             | 2   | task.0106       |
 
 **V0 user story:**
 

@@ -4,8 +4,7 @@
 /**
  * Module: `@features/governance/hooks/useCurrentEpoch`
  * Purpose: React Query hook for current open/review epoch data.
- * Scope: Client-side data fetching for /gov/epoch page. Multi-fetches ledger API endpoints
- * and composes into EpochView. Falls back to mock data when USE_MOCK is true. Does not access database directly.
+ * Scope: Client-side data fetching for /gov/epoch page; does not access database directly. Multi-fetches ledger API endpoints and composes into EpochView.
  * Invariants: Typed with view model types from types.ts. Prefers open epoch, falls back to review.
  * Side-effects: IO (HTTP GET to ledger API endpoints)
  * Links: src/features/governance/types.ts, src/features/governance/lib/compose-epoch.ts
@@ -13,13 +12,12 @@
  */
 
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
-
-import { composeEpochView } from "@/features/governance/lib/compose-epoch";
 import type {
   AllocationDto,
   ApiActivityEvent,
   EpochDto,
 } from "@/features/governance/lib/compose-epoch";
+import { composeEpochView } from "@/features/governance/lib/compose-epoch";
 import { MOCK_CURRENT_EPOCH } from "@/features/governance/mock/epoch-mock-data";
 import type { CurrentEpochData } from "@/features/governance/types";
 

@@ -4,9 +4,8 @@
 /**
  * Module: `@features/governance/hooks/useHoldings`
  * Purpose: React Query hook for cumulative credit holdings across finalized epochs.
- * Scope: Client-side data fetching for /gov/holdings page. Fetches finalized epochs,
- * then for each fetches statement, aggregating payouts into holdings.
- * Invariants: Uses payout statements as source of truth (frozen, deterministic). Does not access database directly.
+ * Scope: Client-side data fetching for /gov/holdings page; does not access database directly. Fetches finalized epochs, then for each fetches statement, aggregating payouts into holdings.
+ * Invariants: Uses payout statements as source of truth (frozen, deterministic).
  * Side-effects: IO (HTTP GET to ledger API endpoints)
  * Links: src/features/governance/types.ts, src/features/governance/lib/compose-holdings.ts
  * @public

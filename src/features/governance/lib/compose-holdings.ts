@@ -13,7 +13,7 @@
  * @public
  */
 
-import type { HoldingView, HoldingsData } from "@/features/governance/types";
+import type { HoldingsData, HoldingView } from "@/features/governance/types";
 
 import type { EpochDto, StatementDto } from "./compose-epoch";
 
