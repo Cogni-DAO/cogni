@@ -5,7 +5,7 @@
  * Module: `@/auth`
  * Purpose: NextAuth.js configuration and export.
  * Scope: App-wide authentication configuration. Does not handle client-side session management.
- * Invariants: SIWE Credentials + OAuth providers. All resolve to canonical user_id via user_bindings.
+ * Invariants: SIWE + OAuth resolve to canonical user_id via user_bindings ; NO_AUTO_MERGE enforced on link-intent conflicts ; atomic new-user tx (user + binding + event)
  * Side-effects: IO
  * Notes: Handles session creation, validation, and persistence.
  * Links: docs/spec/authentication.md

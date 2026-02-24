@@ -3,8 +3,8 @@ id: authentication-spec
 type: spec
 title: Authentication
 status: active
-spec_state: draft
-trust: draft
+spec_state: active
+trust: reviewed
 summary: Multi-provider auth (SIWE wallet + GitHub/Discord/Google OAuth) on NextAuth v4. All providers resolve to canonical user_id via user_bindings. Wallet-session coherence preserved for SIWE users.
 read_when: Working on login flow, wallet connection, OAuth providers, account linking, or session management.
 owner: derekg1729
