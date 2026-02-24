@@ -1,6 +1,6 @@
 {
-  "id": "12f9616c-7085-443b-8619-3e10de7844ec",
-  "prevId": "b3f5166f-616a-4e58-90d7-467af19a4c86",
+  "id": "a76e1a3e-5cba-45b7-bd9e-277d5d3fa416",
+  "prevId": "12f9616c-7085-443b-8619-3e10de7844ec",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2116,6 +2116,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "approver_set_hash": {
+          "name": "approver_set_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "allocation_algo_ref": {
+          "name": "allocation_algo_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "weight_config_hash": {
+          "name": "weight_config_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "opened_at": {
           "name": "opened_at",
           "type": "timestamp with time zone",
@@ -2207,7 +2225,7 @@
       "checkConstraints": {
         "epochs_status_check": {
           "name": "epochs_status_check",
-          "value": "\"epochs\".\"status\" IN ('open', 'closed')"
+          "value": "\"epochs\".\"status\" IN ('open', 'review', 'finalized')"
         }
       },
       "isRLSEnabled": false

@@ -92,13 +92,6 @@
       "when": 1771900000000,
       "tag": "0012_add_scope_id",
       "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1771941716312,
-      "tag": "0013_strange_ma_gnuci",
-      "breakpoints": true
     }
   ]
 }
