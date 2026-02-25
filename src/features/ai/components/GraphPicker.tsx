@@ -17,7 +17,6 @@
 import { Bot, Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 
-import { ScrollArea } from "@/components/kit/data-display/ScrollArea";
 import {
   Dialog,
   DialogContent,
@@ -92,22 +91,22 @@ export function GraphPicker({
 
       <DialogContent
         className={cn(
-          // Mobile: bottom sheet — reset base DialogContent centering
-          "fixed inset-x-0 top-auto bottom-0 translate-x-0 translate-y-0 rounded-t-2xl",
-          "max-w-full",
+          // Mobile: centered card with margins
+          "fixed inset-3 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-2xl",
+          "max-h-[70vh]",
           // Desktop: centered modal
-          "sm:top-[var(--center-50)] sm:bottom-auto sm:left-[var(--center-50)]",
+          "sm:inset-auto sm:top-[var(--center-50)] sm:left-[var(--center-50)] sm:w-full",
           "sm:translate-x-[var(--center-neg-50)] sm:translate-y-[var(--center-neg-50)]",
-          "sm:max-w-md sm:rounded-2xl",
-          // Shared
-          "flex max-h-[var(--max-height-dialog)] flex-col gap-4"
+          "sm:max-h-[var(--max-height-dialog)] sm:max-w-md sm:rounded-2xl",
+          // Shared — override base grid with flex
+          "flex flex-col gap-4"
         )}
       >
         <DialogHeader>
           <DialogTitle>Select Agent</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="-mx-6 flex-1 px-6">
+        <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">
           <div className="space-y-1">
             {graphs.map((graph) => {
               const isSelected = graph.graphId === value;
@@ -144,7 +143,7 @@ export function GraphPicker({
               );
             })}
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
