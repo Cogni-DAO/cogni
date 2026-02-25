@@ -5,9 +5,9 @@
  * Module: `@app/(app)/chat/layout`
  * Purpose: Chat-specific layout that creates a fixed-height viewport container.
  * Scope: Wraps chat page with height constraints to pin composer to bottom. Uses `flex` (horizontal) to support sidebar + chat area layout. Does not affect other routes.
- * Invariants: Fills remaining height within SidebarInset; overflow-hidden prevents document scroll.
+ * Invariants: Height is exactly viewport minus top bar; overflow-hidden prevents document scroll.
  * Side-effects: none
- * Notes: Uses flex-1 to fill the remaining space within the app layout (SidebarInset > AppTopBar > content area).
+ * Notes: Uses --app-header-h CSS variable via chat-viewport utility. Same approach as before sidebar migration.
  * Links: src/app/(app)/chat/page.tsx
  * @public
  */
@@ -19,5 +19,5 @@ export default function ChatLayout({
 }: Readonly<{
   children: ReactNode;
 }>): ReactNode {
-  return <div className="flex flex-1 overflow-hidden">{children}</div>;
+  return <div className="chat-viewport flex overflow-hidden">{children}</div>;
 }
