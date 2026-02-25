@@ -86,15 +86,19 @@ export function ActivityChart({
 
   return (
     <Card>
-      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
-        <div className="grid flex-1 gap-1 text-center sm:text-left">
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+      <CardHeader className="pt-4 pb-2 sm:pt-5 sm:pb-3">
+        <div className="grid flex-1 gap-0.5">
+          <CardTitle className="font-medium text-muted-foreground text-sm">
+            {title}
+          </CardTitle>
+          <CardDescription className="font-bold text-foreground text-lg">
+            {description}
+          </CardDescription>
         </div>
       </CardHeader>
-      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
-          <BarChart data={data} barCategoryGap="10%">
+      <CardContent className="px-2 pb-2 sm:px-4">
+        <ChartContainer config={config} className="aspect-auto h-36 w-full">
+          <BarChart data={data} barCategoryGap="6%" barSize={14}>
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
