@@ -29,6 +29,13 @@
   "linter": {
     "rules": {
       "style": {
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": {
+            "requireAscii": true,
+            "filenameCases": ["kebab-case", "PascalCase", "camelCase", "snake_case"]
+          }
+        },
         "noDefaultExport": "error",
         "noProcessEnv": "error",
         "noRestrictedImports": {
