@@ -92,6 +92,12 @@
           }
         }
       },
+      "performance": {
+        "noBarrelFile": "off"
+      },
+      "suspicious": {
+        "noSkippedTests": "warn"
+      },
       "nursery": {
         "useSortedClasses": {
           "level": "error",
