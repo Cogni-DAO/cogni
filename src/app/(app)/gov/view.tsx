@@ -132,8 +132,8 @@ export function GovernanceView(): ReactElement {
             <ul className="space-y-3">
               {data.upcomingRuns.map((run) => (
                 <li
-                  key={run.name}
                   className="flex items-baseline justify-between gap-4"
+                  key={run.name}
                 >
                   <span className="text-muted-foreground">{run.name}</span>
                   <Countdown target={new Date(run.nextRunAt)} />
@@ -152,24 +152,24 @@ export function GovernanceView(): ReactElement {
           </h2>
           <div className="flex items-center gap-3">
             <ToggleGroup
-              type="single"
-              value={groupBy ?? ""}
+              className="rounded-lg border"
               onValueChange={(v) =>
                 setGroupBy((v as ActivityGroupBy) || undefined)
               }
-              className="rounded-lg border"
+              type="single"
+              value={groupBy ?? ""}
             >
-              <ToggleGroupItem value="model" className="px-3 text-xs">
+              <ToggleGroupItem className="px-3 text-xs" value="model">
                 By Model
               </ToggleGroupItem>
-              <ToggleGroupItem value="graphId" className="px-3 text-xs">
+              <ToggleGroupItem className="px-3 text-xs" value="graphId">
                 By Agent
               </ToggleGroupItem>
             </ToggleGroup>
             <TimeRangeSelector
-              value={range}
-              onValueChange={handleRangeChange}
               className="w-40 rounded-lg"
+              onValueChange={handleRangeChange}
+              value={range}
             />
           </div>
         </div>
@@ -313,25 +313,25 @@ function ActivityCharts({ activity }: { activity: ActivityData }) {
   return (
     <div className="grid gap-4 md:grid-cols-3">
       <ActivityChart
-        title="Spend"
-        description={`$${activity.totals.spend.total} total`}
-        data={spend.data}
         config={spend.config}
+        data={spend.data}
+        description={`$${activity.totals.spend.total} total`}
         effectiveStep={effectiveStep}
+        title="Spend"
       />
       <ActivityChart
-        title="Tokens"
-        description={`${activity.totals.tokens.total.toLocaleString()} tokens`}
-        data={tokens.data}
         config={tokens.config}
+        data={tokens.data}
+        description={`${activity.totals.tokens.total.toLocaleString()} tokens`}
         effectiveStep={effectiveStep}
+        title="Tokens"
       />
       <ActivityChart
-        title="Requests"
-        description={`${activity.totals.requests.total.toLocaleString()} requests`}
-        data={requests.data}
         config={requests.config}
+        data={requests.data}
+        description={`${activity.totals.requests.total.toLocaleString()} requests`}
         effectiveStep={effectiveStep}
+        title="Requests"
       />
     </div>
   );

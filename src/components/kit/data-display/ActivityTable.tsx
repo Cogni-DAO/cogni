@@ -58,7 +58,7 @@ export function ActivityTable({ logs }: ActivityTableProps) {
         <TableBody>
           {logs.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center">
+              <TableCell className="h-24 text-center" colSpan={6}>
                 No activity found.
               </TableCell>
             </TableRow>

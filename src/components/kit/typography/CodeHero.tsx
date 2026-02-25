@@ -83,11 +83,11 @@ export function CodeTokenLine({
       const replacement = tokenReplacements?.[token.id];
       return (
         <span
-          key={token.id}
           className={codeToken({
             kind: token.kind,
             spacingRight: token.spacingRight,
           })}
+          key={token.id}
         >
           {replacement ?? token.text}
         </span>

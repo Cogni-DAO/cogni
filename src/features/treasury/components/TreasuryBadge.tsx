@@ -75,10 +75,10 @@ export function TreasuryBadge(): ReactElement {
   if (explorerUrl) {
     return (
       <Link
-        href={explorerUrl}
-        target="_blank"
-        rel="noopener noreferrer"
         className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-sm transition-colors hover:bg-accent"
+        href={explorerUrl}
+        rel="noopener noreferrer"
+        target="_blank"
         title={
           staleWarning
             ? "Treasury balance unavailable (RPC timeout) - Click to view on Aragon"

@@ -195,8 +195,8 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <Select
-          value={typeFilter}
           onValueChange={(v) => setParam("type", v === "all" ? "" : v)}
+          value={typeFilter}
         >
           <SelectTrigger className="w-36">
             <SelectValue placeholder="All types" />
@@ -212,8 +212,8 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
         </Select>
 
         <Select
-          value={statusFilter}
           onValueChange={(v) => setParam("status", v === "all" ? "" : v)}
+          value={statusFilter}
         >
           <SelectTrigger className="w-40">
             <SelectValue placeholder="All statuses" />
@@ -229,8 +229,8 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
         </Select>
 
         <Select
-          value={maxPri}
           onValueChange={(v) => setParam("maxPri", v === "any" ? "" : v)}
+          value={maxPri}
         >
           <SelectTrigger className="w-36">
             <SelectValue placeholder="Any priority" />
@@ -246,9 +246,9 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
 
         <Input
           className="w-48"
+          onChange={(e) => setParam("q", e.target.value)}
           placeholder="Search id, title, labels..."
           value={query}
-          onChange={(e) => setParam("q", e.target.value)}
         />
       </div>
 
@@ -270,8 +270,8 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
             {filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={7}
                   className="py-8 text-center text-muted-foreground"
+                  colSpan={7}
                 >
                   No work items found.
                 </TableCell>

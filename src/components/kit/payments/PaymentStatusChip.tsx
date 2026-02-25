@@ -34,12 +34,12 @@ export function PaymentStatusChip({
   return (
     <div className="flex flex-col gap-2">
       <button
-        type="button"
-        onClick={onClick}
         className={cn(
           "flex w-full items-center justify-between rounded-md border border-border bg-muted px-4 py-3",
           "text-muted-foreground text-sm hover:bg-muted/80"
         )}
+        onClick={onClick}
+        type="button"
       >
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -49,11 +49,11 @@ export function PaymentStatusChip({
       </button>
 
       <a
-        href={explorerUrl}
-        target="_blank"
-        rel="noopener noreferrer"
         className="flex items-center justify-center gap-1 text-primary text-xs hover:underline"
-        onClick={(e) => e.stopPropagation()} // Don't trigger chip click
+        href={explorerUrl}
+        onClick={(e) => e.stopPropagation()}
+        rel="noopener noreferrer"
+        target="_blank" // Don't trigger chip click
       >
         <span>View transaction</span>
         <ExternalLink className="h-3 w-3" />

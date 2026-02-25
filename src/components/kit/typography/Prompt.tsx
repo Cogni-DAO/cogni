@@ -26,7 +26,7 @@ export interface PromptProps extends SpanNoClass, VariantProps<typeof prompt> {}
 
 export const Prompt = forwardRef<HTMLSpanElement, PromptProps>(
   ({ tone, ...props }, ref) => (
-    <span ref={ref} className={prompt({ tone })} {...props} />
+    <span className={prompt({ tone })} ref={ref} {...props} />
   )
 );
 Prompt.displayName = "Prompt";

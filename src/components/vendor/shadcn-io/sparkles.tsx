@@ -73,9 +73,8 @@ export const SparklesCore = (props: ParticlesProps) => {
     <motion.div animate={controls} className={cn("opacity-0", className)}>
       {init && (
         <Particles
-          id={id || generatedId}
           className={cn("h-full w-full")}
-          particlesLoaded={particlesLoaded}
+          id={id || generatedId}
           options={{
             background: {
               color: {
@@ -422,6 +421,7 @@ export const SparklesCore = (props: ParticlesProps) => {
             },
             detectRetina: true,
           }}
+          particlesLoaded={particlesLoaded}
         />
       )}
     </motion.div>

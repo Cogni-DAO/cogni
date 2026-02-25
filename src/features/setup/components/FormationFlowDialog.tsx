@@ -118,10 +118,10 @@ function ErrorStateContent({
         {/* Transaction link (if formation reached on-chain) */}
         {displayTxHash && explorerUrl && (
           <a
-            href={explorerUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             className="flex items-center justify-center gap-1 text-primary text-sm hover:underline"
+            href={explorerUrl}
+            rel="noopener noreferrer"
+            target="_blank"
           >
             <span>View transaction</span>
             <ExternalLink className="h-4 w-4" />
@@ -160,12 +160,12 @@ export function FormationFlowDialog({
 
   return (
     <Dialog
-      open={open}
       onOpenChange={(isOpen) => {
         if (!isOpen && dismissible) {
           onClose();
         }
       }}
+      open={open}
     >
       <DialogContent
         className="sm:max-w-md"
@@ -198,10 +198,10 @@ export function FormationFlowDialog({
               {/* Transaction link (when available) */}
               {displayTxHash && explorerUrl && (
                 <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="flex items-center gap-1 text-primary text-sm hover:underline"
+                  href={explorerUrl}
+                  rel="noopener noreferrer"
+                  target="_blank"
                 >
                   <span>View transaction</span>
                   <ExternalLink className="h-4 w-4" />
@@ -249,7 +249,7 @@ export function FormationFlowDialog({
                 {/* Primary action: View on Aragon */}
                 {daoUrl && (
                   <Button asChild size="lg">
-                    <a href={daoUrl} target="_blank" rel="noopener noreferrer">
+                    <a href={daoUrl} rel="noopener noreferrer" target="_blank">
                       View on Aragon
                       <ExternalLink className="ml-2 h-4 w-4" />
                     </a>
@@ -260,8 +260,8 @@ export function FormationFlowDialog({
                   onClick={() => {
                     onReset();
                   }}
-                  variant={daoUrl ? "outline" : "default"}
                   size="lg"
+                  variant={daoUrl ? "outline" : "default"}
                 >
                   Done
                 </Button>
@@ -269,10 +269,10 @@ export function FormationFlowDialog({
                 {/* Copy YAML button */}
                 {repoSpecYaml && (
                   <Button
-                    variant="outline"
                     onClick={() => {
                       void navigator.clipboard.writeText(repoSpecYaml);
                     }}
+                    variant="outline"
                   >
                     Copy repo-spec.yaml
                   </Button>
@@ -281,10 +281,10 @@ export function FormationFlowDialog({
                 {/* Transaction link */}
                 {displayTxHash && explorerUrl && (
                   <a
-                    href={explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="flex items-center justify-center gap-1 text-primary text-sm hover:underline"
+                    href={explorerUrl}
+                    rel="noopener noreferrer"
+                    target="_blank"
                   >
                     <span>View transaction</span>
                     <ExternalLink className="h-4 w-4" />
@@ -297,8 +297,8 @@ export function FormationFlowDialog({
           {/* ERROR state */}
           {isTerminal && phase === "ERROR" && (
             <ErrorStateContent
-              errorMessage={errorMessage}
               displayTxHash={displayTxHash}
+              errorMessage={errorMessage}
               explorerUrl={explorerUrl}
               onReset={onReset}
             />

@@ -77,9 +77,11 @@ export function HeroActionWords({
       }}
     >
       <motion.div
-        key={currentWord}
-        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
+        className={cn(
+          "relative inline-flex px-[var(--spacing-sm)]",
+          codeToken({ kind, spacingRight: "none" })
+        )}
         exit={{
           opacity: 0,
           y: -40,
@@ -88,37 +90,35 @@ export function HeroActionWords({
           scale: 2,
           position: "absolute",
         }}
+        initial={{ opacity: 0, y: 10 }}
+        key={currentWord}
         transition={{
           type: "spring",
           stiffness: 120,
           damping: 14,
         }}
-        className={cn(
-          "relative inline-flex px-[var(--spacing-sm)]",
-          codeToken({ kind, spacingRight: "none" })
-        )}
       >
         {(currentWord ?? "").split(" ").map((word, wordIndex) => (
           <motion.span
-            key={`${wordIndex}-${word}`}
-            initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            className="inline-block whitespace-nowrap"
+            initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
+            key={`${wordIndex}-${word}`}
             transition={{
               delay: wordIndex * 0.3,
               duration: 0.3,
             }}
-            className="inline-block whitespace-nowrap"
           >
             {word.split("").map((letter, letterIndex) => (
               <motion.span
-                key={`${wordIndex}-${letterIndex}-${letter}`}
-                initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
                 animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                className="inline-block"
+                initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
+                key={`${wordIndex}-${letterIndex}-${letter}`}
                 transition={{
                   delay: wordIndex * 0.3 + letterIndex * 0.05,
                   duration: 0.2,
                 }}
-                className="inline-block"
               >
                 {letter}
               </motion.span>

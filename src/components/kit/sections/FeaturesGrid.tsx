@@ -97,11 +97,11 @@ export function FeaturesGrid({
         <div className={grid({ cols: "3", gap: "md" })}>
           {features.map((feature, index) => (
             <FeatureGridItem
-              key={feature.id}
-              icon={feature.icon}
-              title={feature.title}
               description={feature.description}
+              icon={feature.icon}
               isFirst={index === 0}
+              key={feature.id}
+              title={feature.title}
             />
           ))}
         </div>

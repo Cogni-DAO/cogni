@@ -47,13 +47,13 @@ export function Terminal(): ReactElement {
   };
 
   return (
-    <TerminalFrame onCopy={onCopy} copied={copied}>
+    <TerminalFrame copied={copied} onCopy={onCopy}>
       {steps.map((step, index) => (
         <Reveal
+          delay="none"
+          duration="normal"
           key={step}
           state={index > currentStep ? "hidden" : "visible"}
-          duration="normal"
-          delay="none"
         >
           <Prompt tone="success">$</Prompt> {step}
         </Reveal>

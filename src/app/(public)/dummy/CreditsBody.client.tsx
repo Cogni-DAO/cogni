@@ -39,9 +39,9 @@ export function CreditsBody() {
       <Card className="flex items-center justify-between p-6">
         <span className="font-bold text-4xl">$ 30.64</span>
         <Button
-          variant="ghost"
-          size="sm"
           className="h-9 w-9 rounded-full border border-border"
+          size="sm"
+          variant="ghost"
         >
           <Info size={20} />
         </Button>
@@ -51,9 +51,9 @@ export function CreditsBody() {
       <SectionCard title="Buy Credits">
         <SplitInput
           label="Amount"
-          value={amount}
           onChange={(val) => setAmount(val.replace(/[^0-9]/g, ""))}
           placeholder="1 - 100000"
+          value={amount}
         />
 
         {showError ? (
@@ -61,7 +61,7 @@ export function CreditsBody() {
             <p className="text-muted-foreground text-sm">Invalid amount</p>
           </div>
         ) : (
-          <Button variant="default" size="lg" className="w-full">
+          <Button className="w-full" size="lg" variant="default">
             Purchase
           </Button>
         )}
@@ -71,8 +71,8 @@ export function CreditsBody() {
         </HintText>
 
         <a
-          href="/usage"
           className="flex items-center gap-2 font-semibold text-primary text-sm hover:text-primary/80"
+          href="/usage"
         >
           View Usage <ExternalLink size={16} />
         </a>

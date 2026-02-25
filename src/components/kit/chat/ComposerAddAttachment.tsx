@@ -23,12 +23,12 @@ export function ComposerAddAttachment() {
   return (
     <ComposerPrimitive.AddAttachment asChild>
       <TooltipIconButton
-        tooltip="Add Attachment"
-        side="bottom"
-        size="icon"
-        // eslint-disable-next-line ui-governance/no-arbitrary-non-token-values -- Matches vendor composer button size
-        className="aui-composer-add-attachment size-[34px] rounded-full border-none bg-transparent p-1 text-muted-foreground shadow-none transition-colors hover:bg-accent hover:text-foreground dark:hover:bg-accent"
         aria-label="Add Attachment"
+        className="aui-composer-add-attachment size-[34px] rounded-full border-none bg-transparent p-1 text-muted-foreground shadow-none transition-colors hover:bg-accent hover:text-foreground dark:hover:bg-accent"
+        side="bottom"
+        // eslint-disable-next-line ui-governance/no-arbitrary-non-token-values -- Matches vendor composer button size
+        size="icon"
+        tooltip="Add Attachment"
       >
         {/* eslint-disable-next-line ui-governance/no-arbitrary-non-token-values -- Matches vendor icon stroke */}
         <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />

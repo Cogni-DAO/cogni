@@ -63,7 +63,7 @@ export function ContributorCard({
         </div>
         <div className="space-y-1.5">
           {contributor.activities.map((activity) => (
-            <ContributionRow key={activity.id} activity={activity} />
+            <ContributionRow activity={activity} key={activity.id} />
           ))}
         </div>
       </CardContent>

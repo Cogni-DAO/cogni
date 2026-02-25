@@ -75,9 +75,9 @@ export function EpochHistoryView(): ReactElement {
         <div className="space-y-4">
           {data.epochs.map((epoch) => (
             <EpochCard
-              key={epoch.id}
               epoch={epoch}
               expanded={expandedId === epoch.id}
+              key={epoch.id}
               onToggle={() =>
                 setExpandedId(expandedId === epoch.id ? null : epoch.id)
               }

@@ -93,35 +93,35 @@ export function ActivityChart({
         </div>
       </CardHeader>
       <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
-          <BarChart data={data} barCategoryGap="10%">
+        <ChartContainer className="aspect-auto h-64 w-full" config={config}>
+          <BarChart barCategoryGap="10%" data={data}>
             <CartesianGrid vertical={false} />
             <XAxis
-              dataKey="date"
-              tickLine={false}
               axisLine={false}
-              tickMargin={8}
+              dataKey="date"
               minTickGap={32}
               tickFormatter={formatTick}
+              tickLine={false}
+              tickMargin={8}
             />
             <ChartTooltip
-              cursor={false}
               content={
                 <ChartTooltipContent
-                  labelFormatter={formatTooltipLabel}
                   indicator="dot"
+                  labelFormatter={formatTooltipLabel}
                 />
               }
+              cursor={false}
             />
             {seriesKeys.map((key, i) => (
               <Bar
-                key={key}
                 dataKey={key}
-                stackId="a"
                 fill={`var(--color-${key})`}
+                key={key}
                 radius={
                   i === seriesKeys.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]
                 }
+                stackId="a"
               />
             ))}
             <ChartLegend content={<ChartLegendContent />} />

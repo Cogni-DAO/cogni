@@ -89,10 +89,10 @@ export function CurrentEpochView(): ReactElement {
       </div>
 
       <EpochCountdown
-        periodStart={epoch.periodStart}
-        periodEnd={epoch.periodEnd}
-        status={epoch.status}
         contributorCount={sorted.length}
+        periodEnd={epoch.periodEnd}
+        periodStart={epoch.periodStart}
+        status={epoch.status}
         totalPoints={totalPoints}
       />
 
@@ -100,7 +100,7 @@ export function CurrentEpochView(): ReactElement {
         <h2 className="mb-4 font-semibold text-lg">Contributions & Scoring</h2>
         <div className="space-y-3">
           {sorted.map((c, i) => (
-            <ContributorCard key={c.userId} contributor={c} rank={i + 1} />
+            <ContributorCard contributor={c} key={c.userId} rank={i + 1} />
           ))}
         </div>
       </div>

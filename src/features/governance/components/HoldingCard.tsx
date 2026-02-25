@@ -59,8 +59,8 @@ export function HoldingCard({ holding, rank }: HoldingCardProps): ReactElement {
           </div>
         </div>
         <Progress
-          value={holding.ownershipPercent}
           className="h-1.5 bg-secondary"
+          value={holding.ownershipPercent}
         />
       </CardContent>
     </Card>

@@ -24,13 +24,13 @@ export function SourceBadge({ source }: { source: Source }): ReactElement {
   const isGithub = source === "github";
   return (
     <Badge
-      intent="outline"
-      size="sm"
       className={`gap-1 text-xs ${
         isGithub
           ? "border-primary/40 text-primary"
           : "border-accent/40 text-accent"
       }`}
+      intent="outline"
+      size="sm"
     >
       {isGithub ? (
         <GitBranch className="h-3 w-3" />

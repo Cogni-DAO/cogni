@@ -21,14 +21,11 @@ import { CtaSection as CtaSectionKit } from "@/components/kit/sections";
 export function HomeCtaSection(): ReactElement {
   return (
     <CtaSectionKit
-      surface="muted"
-      heading="Ready to build autonomous AI?"
-      paragraph="Our template provides everything you need for crypto-funded, AI-powered organizations. Focus on your domain logic, not infrastructure."
       action={
         <a
           href="https://github.com/cogni-template/cogni-template"
-          target="_blank"
           rel="noopener"
+          target="_blank"
         >
           <Button size="lg" variant="outline">
             View the code
@@ -36,6 +33,9 @@ export function HomeCtaSection(): ReactElement {
           </Button>
         </a>
       }
+      heading="Ready to build autonomous AI?"
+      paragraph="Our template provides everything you need for crypto-funded, AI-powered organizations. Focus on your domain logic, not infrastructure."
+      surface="muted"
     />
   );
 }

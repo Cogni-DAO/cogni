@@ -6,11 +6,11 @@ import type { SVGProps } from "react";
 export function QwenIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      viewBox="0 0 200 200"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
+      fill="none"
       focusable="false"
+      viewBox="0 0 200 200"
+      xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
       <path
@@ -27,23 +27,23 @@ export function QwenIcon(props: SVGProps<SVGSVGElement>) {
       />
       <defs>
         <radialGradient
-          id="qwen-gradient-0"
           cx="0"
           cy="0"
-          r="1"
-          gradientUnits="userSpaceOnUse"
           gradientTransform="translate(100 100) rotate(90) scale(100)"
+          gradientUnits="userSpaceOnUse"
+          id="qwen-gradient-0"
+          r="1"
         >
           <stop stopColor="#665CEE" />
           <stop offset="1" stopColor="#332E91" />
         </radialGradient>
         <radialGradient
-          id="qwen-gradient-1"
           cx="0"
           cy="0"
-          r="1"
-          gradientUnits="userSpaceOnUse"
           gradientTransform="translate(100 100) rotate(90) scale(100)"
+          gradientUnits="userSpaceOnUse"
+          id="qwen-gradient-1"
+          r="1"
         >
           <stop stopColor="#665CEE" />
           <stop offset="1" stopColor="#332E91" />

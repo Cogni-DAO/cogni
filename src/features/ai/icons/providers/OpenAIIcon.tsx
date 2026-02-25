@@ -6,11 +6,11 @@ import type { SVGProps } from "react";
 export function OpenAIIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      viewBox="0 0 24 24"
-      fillRule="evenodd"
-      xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
+      fillRule="evenodd"
       focusable="false"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
       <path

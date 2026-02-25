@@ -32,8 +32,8 @@ export interface ContainerProps
 export const Container = React.forwardRef<HTMLDivElement, ContainerProps>(
   ({ size, spacing, className, ...props }, ref) => (
     <div
-      ref={ref}
       className={cn(container({ size, spacing }), className)}
+      ref={ref}
       {...props}
     />
   )

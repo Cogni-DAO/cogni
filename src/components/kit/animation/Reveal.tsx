@@ -33,8 +33,8 @@ export interface RevealProps extends DivNoClass, VariantProps<typeof reveal> {
 export const Reveal = forwardRef<HTMLDivElement, RevealProps>(
   ({ state, duration, delay, className, ...props }, ref) => (
     <div
-      ref={ref}
       className={cn(reveal({ state, duration, delay }), className)}
+      ref={ref}
       {...props}
     />
   )

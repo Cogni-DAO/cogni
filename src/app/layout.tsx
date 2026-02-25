@@ -40,7 +40,7 @@ export default function RootLayout({
   children: ReactNode;
 }>): ReactNode {
   return (
-    <html lang="en" className={manrope.className} suppressHydrationWarning>
+    <html className={manrope.className} lang="en" suppressHydrationWarning>
       <head>
         <Script src="/theme-init.js" strategy="beforeInteractive" />
       </head>
@@ -48,8 +48,8 @@ export default function RootLayout({
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
-          enableSystem
           disableTransitionOnChange
+          enableSystem
         >
           <AppProviders>
             <AppHeader />

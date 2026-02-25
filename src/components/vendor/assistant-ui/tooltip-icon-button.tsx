@@ -23,8 +23,8 @@ export const TooltipIconButton = forwardRef<
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
-          variant="ghost"
           size="icon"
+          variant="ghost"
           {...rest}
           className={cn("aui-button-icon size-6 p-1", className)}
           ref={ref}

@@ -37,28 +37,28 @@ export function SheetThemeToggle(): ReactElement {
     // Render placeholder during SSR to avoid hydration mismatch
     return (
       <ToggleGroup
+        className="grid w-full grid-cols-3"
         type="single"
         value="system"
-        className="grid w-full grid-cols-3"
       >
         <ToggleGroupItem
-          value="light"
           aria-label="Light theme"
           className="h-12 w-full"
+          value="light"
         >
           <Sun className="h-5 w-5" />
         </ToggleGroupItem>
         <ToggleGroupItem
-          value="dark"
           aria-label="Dark theme"
           className="h-12 w-full"
+          value="dark"
         >
           <Moon className="h-5 w-5" />
         </ToggleGroupItem>
         <ToggleGroupItem
-          value="system"
           aria-label="System theme"
           className="h-12 w-full"
+          value="system"
         >
           <Monitor className="h-5 w-5" />
         </ToggleGroupItem>
@@ -68,33 +68,33 @@ export function SheetThemeToggle(): ReactElement {
 
   return (
     <ToggleGroup
-      type="single"
-      value={theme ?? "system"}
+      className="grid w-full grid-cols-3"
       onValueChange={(value) => {
         if (value) {
           setTheme(value);
         }
       }}
-      className="grid w-full grid-cols-3"
+      type="single"
+      value={theme ?? "system"}
     >
       <ToggleGroupItem
-        value="light"
         aria-label="Light theme"
         className="h-12 w-full"
+        value="light"
       >
         <Sun className="h-5 w-5" />
       </ToggleGroupItem>
       <ToggleGroupItem
-        value="dark"
         aria-label="Dark theme"
         className="h-12 w-full"
+        value="dark"
       >
         <Moon className="h-5 w-5" />
       </ToggleGroupItem>
       <ToggleGroupItem
-        value="system"
         aria-label="System theme"
         className="h-12 w-full"
+        value="system"
       >
         <Monitor className="h-5 w-5" />
       </ToggleGroupItem>

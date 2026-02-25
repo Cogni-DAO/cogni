@@ -90,12 +90,12 @@ export function KpiBadge({
     kind === "external-image" && imageSrc ? (
       // biome-ignore lint/performance/noImgElement: Feature layer cannot import Next.js Image component due to hexagonal architecture boundaries; external third-party badge SVGs
       <img
-        src={imageSrc}
         alt={imageAlt ?? ariaLabel ?? label ?? ""}
-        width={100}
-        height={24}
         className={kpiBadgeImage()}
+        height={24}
         loading="lazy"
+        src={imageSrc}
+        width={100}
       />
     ) : (
       <span className={kpiBadge({ tone, size })}>
@@ -110,11 +110,11 @@ export function KpiBadge({
 
   return (
     <a
-      href={href}
       aria-label={ariaLabel ?? label}
-      target="_blank"
-      rel="noopener noreferrer"
       className={kpiBadgeLink()}
+      href={href}
+      rel="noopener noreferrer"
+      target="_blank"
     >
       {content}
     </a>

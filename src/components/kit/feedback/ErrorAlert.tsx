@@ -151,8 +151,8 @@ export const ErrorAlert = forwardRef<ErrorAlertRef, ErrorAlertProps>(
 
     return (
       <Alert
-        variant="destructive"
         className={cn("fade-in animate-in", className)}
+        variant="destructive"
       >
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>{displayCode.replace(/_/g, " ")}</AlertTitle>
@@ -162,22 +162,22 @@ export const ErrorAlert = forwardRef<ErrorAlertRef, ErrorAlertProps>(
             <div className="flex gap-2">
               {showRetry && onRetry && (
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onRetry}
                   className="gap-1"
+                  onClick={onRetry}
+                  size="sm"
+                  variant="outline"
                 >
                   <RefreshCw className="h-3 w-3" />
                   Retry
                 </Button>
               )}
               {showSwitchFree && onSwitchFreeModel && (
-                <Button variant="outline" size="sm" onClick={onSwitchFreeModel}>
+                <Button onClick={onSwitchFreeModel} size="sm" variant="outline">
                   Use Free Model
                 </Button>
               )}
               {showAddCredits && onAddCredits && (
-                <Button variant="outline" size="sm" onClick={onAddCredits}>
+                <Button onClick={onAddCredits} size="sm" variant="outline">
                   Add Credits
                 </Button>
               )}

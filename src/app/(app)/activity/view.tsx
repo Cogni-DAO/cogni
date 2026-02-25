@@ -114,49 +114,49 @@ export function ActivityView() {
         <h1 className="font-bold text-3xl tracking-tight">Your Activity</h1>
         <div className="flex items-center gap-3">
           <ToggleGroup
-            type="single"
-            value={groupBy ?? ""}
+            className="rounded-lg border"
             onValueChange={(v) =>
               setGroupBy((v as ActivityGroupBy) || undefined)
             }
-            className="rounded-lg border"
+            type="single"
+            value={groupBy ?? ""}
           >
-            <ToggleGroupItem value="model" className="px-3 text-xs">
+            <ToggleGroupItem className="px-3 text-xs" value="model">
               By Model
             </ToggleGroupItem>
-            <ToggleGroupItem value="graphId" className="px-3 text-xs">
+            <ToggleGroupItem className="px-3 text-xs" value="graphId">
               By Agent
             </ToggleGroupItem>
           </ToggleGroup>
           <TimeRangeSelector
-            value={range}
-            onValueChange={handleRangeChange}
             className="w-40 rounded-lg"
+            onValueChange={handleRangeChange}
+            value={range}
           />
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <ActivityChart
-          title="Spend"
-          description={`$${totals.spend.total} total`}
-          data={spend.data}
           config={spend.config}
+          data={spend.data}
+          description={`$${totals.spend.total} total`}
           effectiveStep={effectiveStep}
+          title="Spend"
         />
         <ActivityChart
-          title="Tokens"
-          description={`${totals.tokens.total.toLocaleString()} tokens`}
-          data={tokens.data}
           config={tokens.config}
+          data={tokens.data}
+          description={`${totals.tokens.total.toLocaleString()} tokens`}
           effectiveStep={effectiveStep}
+          title="Tokens"
         />
         <ActivityChart
-          title="Requests"
-          description={`${totals.requests.total.toLocaleString()} requests`}
-          data={requests.data}
           config={requests.config}
+          data={requests.data}
+          description={`${totals.requests.total.toLocaleString()} requests`}
           effectiveStep={effectiveStep}
+          title="Requests"
         />
       </div>
 

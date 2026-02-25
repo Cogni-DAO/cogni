@@ -44,11 +44,11 @@ export function SplitInput({
       <div className="relative flex flex-1 items-center bg-muted">
         <span className="absolute left-6 text-muted-foreground text-xl">$</span>
         <input
-          type="text"
-          value={value}
+          className="w-full bg-transparent px-12 text-center text-foreground text-xl placeholder-muted-foreground focus:outline-none"
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full bg-transparent px-12 text-center text-foreground text-xl placeholder-muted-foreground focus:outline-none"
+          type="text"
+          value={value}
           {...props}
         />
       </div>

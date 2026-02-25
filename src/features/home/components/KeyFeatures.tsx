@@ -40,7 +40,7 @@ export function KeyFeatures(): ReactElement {
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
         <div className="grid gap-12 md:grid-cols-3 md:gap-8">
           {FEATURES.map((feature) => (
-            <div key={feature.title} className="flex flex-col items-start">
+            <div className="flex flex-col items-start" key={feature.title}>
               <div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <feature.icon className="size-6" />
               </div>

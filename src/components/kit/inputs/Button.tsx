@@ -56,7 +56,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) => {
     const iconElement = rightIcon ? (
-      <span className={icon({ size: iconSize })} aria-hidden="true">
+      <span aria-hidden="true" className={icon({ size: iconSize })}>
         {rightIcon}
       </span>
     ) : null;
@@ -85,8 +85,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
       return (
         <Slot
-          data-slot="button"
           className={cn(button({ variant, size }), className)}
+          data-slot="button"
           ref={ref}
           {...props}
         >
@@ -97,8 +97,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     return (
       <button
-        data-slot="button"
         className={cn(button({ variant, size }), className)}
+        data-slot="button"
         ref={ref}
         {...props}
       >

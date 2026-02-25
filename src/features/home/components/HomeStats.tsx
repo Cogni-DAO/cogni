@@ -37,12 +37,12 @@ export function HomeStats(): ReactElement {
       <div className="mx-auto grid max-w-7xl grid-cols-2 gap-8 px-4 sm:px-6 lg:grid-cols-4">
         {STATS.map((stat) => (
           <motion.div
-            key={stat.label}
             className={cn(
               "relative flex flex-col items-center justify-center overflow-hidden rounded-2xl bg-transparent p-8"
             )}
             initial="initial"
-            whileHover="hover"
+            key={stat.label}
+            transition={{ duration: 0.2 }}
             variants={{
               initial: {
                 scale: 1,
@@ -60,7 +60,7 @@ export function HomeStats(): ReactElement {
                 backgroundColor: "rgba(var(--primary), 0.02)", // Very subtle tint
               },
             }}
-            transition={{ duration: 0.2 }}
+            whileHover="hover"
           >
             <span className="font-bold text-4xl text-foreground tracking-tight sm:text-5xl">
               {stat.value}

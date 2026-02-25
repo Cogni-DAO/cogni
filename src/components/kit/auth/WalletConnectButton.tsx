@@ -71,11 +71,11 @@ export function WalletConnectButton({
           if (!ready) {
             return (
               <div
+                aria-hidden="true"
                 className={cn(
                   BASE_BADGE_CLASSES,
                   "pointer-events-none cursor-default"
                 )}
-                aria-hidden="true"
               >
                 <span className="text-muted-foreground">Connect</span>
               </div>
@@ -86,9 +86,9 @@ export function WalletConnectButton({
           if (!connected) {
             return (
               <button
-                type="button"
-                onClick={openConnectModal}
                 className={BASE_BADGE_CLASSES}
+                onClick={openConnectModal}
+                type="button"
               >
                 <span className="text-muted-foreground">Connect</span>
               </button>
@@ -99,12 +99,12 @@ export function WalletConnectButton({
           if (chain.unsupported) {
             return (
               <button
-                type="button"
-                onClick={openChainModal}
                 className={cn(
                   BASE_BADGE_CLASSES,
                   "border-destructive bg-destructive/10"
                 )}
+                onClick={openChainModal}
+                type="button"
               >
                 <span className="text-destructive">Wrong network</span>
               </button>
@@ -114,9 +114,9 @@ export function WalletConnectButton({
           // Connected: show address only, same styling as Connect
           return (
             <button
-              type="button"
-              onClick={openAccountModal}
               className={BASE_BADGE_CLASSES}
+              onClick={openAccountModal}
+              type="button"
             >
               <span className="text-muted-foreground">
                 {account.displayName}

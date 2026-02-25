@@ -63,11 +63,10 @@ export function ModelPicker({
     selectedModel?.name || selectedModel?.id || "Select model";
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger asChild>
         <button
-          type="button"
-          disabled={disabled}
+          aria-label="Select model"
           className={cn(
             // Base styles - rounded-full like attachment button, proper sizing
             "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
@@ -82,7 +81,8 @@ export function ModelPicker({
             // Disabled state
             "disabled:pointer-events-none disabled:opacity-50"
           )}
-          aria-label="Select model"
+          disabled={disabled}
+          type="button"
         >
           <span className="max-w-[var(--max-width-model-trigger)] truncate">
             {displayName}
@@ -109,11 +109,11 @@ export function ModelPicker({
 
         {/* Search input */}
         <input
-          type="text"
-          placeholder="Search models..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-offset-background"
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search models..."
+          type="text"
+          value={searchQuery}
         />
 
         {/* Models list */}
@@ -134,16 +134,6 @@ export function ModelPicker({
 
                 return (
                   <button
-                    key={model.id}
-                    type="button"
-                    disabled={isPaidAndNoBalance}
-                    onClick={() => {
-                      if (!isPaidAndNoBalance) {
-                        onValueChange(model.id);
-                        setOpen(false);
-                        setSearchQuery("");
-                      }
-                    }}
                     className={cn(
                       "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left",
                       "transition-colors hover:bg-accent",
@@ -151,6 +141,16 @@ export function ModelPicker({
                       isPaidAndNoBalance &&
                         "cursor-not-allowed opacity-50 hover:bg-transparent"
                     )}
+                    disabled={isPaidAndNoBalance}
+                    key={model.id}
+                    onClick={() => {
+                      if (!isPaidAndNoBalance) {
+                        onValueChange(model.id);
+                        setOpen(false);
+                        setSearchQuery("");
+                      }
+                    }}
+                    type="button"
                   >
                     <Icon className="size-5 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1 truncate font-medium text-sm">

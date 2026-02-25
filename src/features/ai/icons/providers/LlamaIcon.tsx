@@ -6,10 +6,10 @@ import type { SVGProps } from "react";
 export function LlamaIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      viewBox="294 159 1405 1857"
-      xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       focusable="false"
+      viewBox="294 159 1405 1857"
+      xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
       <path

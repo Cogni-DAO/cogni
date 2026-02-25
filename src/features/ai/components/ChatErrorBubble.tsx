@@ -57,30 +57,30 @@ export const ChatErrorBubble: FC<ChatErrorBubbleProps> = ({
         </span>
         {showRetry && onRetry && (
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRetry}
             className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onRetry}
+            size="sm"
+            variant="ghost"
           >
             Retry
           </Button>
         )}
         {showSwitchFree && onSwitchFreeModel && (
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={onSwitchFreeModel}
             className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onSwitchFreeModel}
+            size="sm"
+            variant="ghost"
           >
             Use Free Model
           </Button>
         )}
         {showAddCredits && onAddCredits && (
           <Button
-            variant="ghost"
-            size="sm"
-            onClick={onAddCredits}
             className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onAddCredits}
+            size="sm"
+            variant="ghost"
           >
             Add Credits
           </Button>

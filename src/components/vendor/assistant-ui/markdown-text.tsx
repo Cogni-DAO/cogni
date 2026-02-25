@@ -18,9 +18,9 @@ import { cn } from "@/shared/util/cn";
 const MarkdownTextImpl = () => {
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
       className="aui-md"
       components={defaultComponents}
+      remarkPlugins={[remarkGfm]}
     />
   );
 };
@@ -41,7 +41,7 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
       <span className="aui-code-header-language lowercase [&>span]:text-xs">
         {language}
       </span>
-      <TooltipIconButton tooltip="Copy" onClick={onCopy}>
+      <TooltipIconButton onClick={onCopy} tooltip="Copy">
         {!isCopied && <CopyIcon />}
         {isCopied && <CheckIcon />}
       </TooltipIconButton>

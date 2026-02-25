@@ -77,11 +77,11 @@ export function NavigationLink({
 
   return (
     <Link
-      href={href}
       className={cn(
         navLink({ size, state: isActive ? "active" : "default" }),
         className
       )}
+      href={href}
       {...linkProps}
       aria-current={isActive ? "page" : undefined}
     >

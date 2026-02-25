@@ -36,12 +36,12 @@ export function MobileNav({ className }: MobileNavProps): ReactElement {
     <Sheet>
       <SheetTrigger asChild>
         <button
-          type="button"
+          aria-label="Open menu"
           className={cn(
             "inline-flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-accent-foreground",
             className
           )}
-          aria-label="Open menu"
+          type="button"
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -49,8 +49,8 @@ export function MobileNav({ className }: MobileNavProps): ReactElement {
       <SheetContent className="flex w-48 flex-col sm:w-52">
         <SheetTitle className="sr-only">Navigation menu</SheetTitle>
         <nav
-          className="flex flex-col gap-4 py-4"
           aria-label="Mobile navigation"
+          className="flex flex-col gap-4 py-4"
         >
           <NavigationLink href="/chat">Chat</NavigationLink>
           <NavigationLink href="/work">Work</NavigationLink>
@@ -58,19 +58,19 @@ export function MobileNav({ className }: MobileNavProps): ReactElement {
           <NavigationLink href="/gov">Gov</NavigationLink>
           <NavigationLink href="/credits">Credits</NavigationLink>
           <a
-            href="https://github.com/cogni-DAO/cogni-template"
-            target="_blank"
-            rel="noopener noreferrer"
             className="flex items-center gap-2 font-medium text-muted-foreground text-sm transition-colors hover:text-foreground"
+            href="https://github.com/cogni-DAO/cogni-template"
+            rel="noopener noreferrer"
+            target="_blank"
           >
             GitHub
             <ExternalLink className="h-4 w-4" />
           </a>
           <a
-            href="https://discord.gg/3b9sSyhZ4z"
-            target="_blank"
-            rel="noopener noreferrer"
             className="flex items-center gap-2 font-medium text-muted-foreground text-sm transition-colors hover:text-foreground"
+            href="https://discord.gg/3b9sSyhZ4z"
+            rel="noopener noreferrer"
+            target="_blank"
           >
             Discord
             <ExternalLink className="h-4 w-4" />

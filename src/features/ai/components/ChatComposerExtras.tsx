@@ -108,17 +108,17 @@ export function ChatComposerExtras({
   return (
     <div className="flex items-center gap-1">
       <ModelPicker
-        models={modelsQuery.data?.models ?? []}
-        value={localModel}
-        onValueChange={handleModelChange}
-        disabled={modelsQuery.isLoading || modelsQuery.isError}
         balance={balance}
+        disabled={modelsQuery.isLoading || modelsQuery.isError}
+        models={modelsQuery.data?.models ?? []}
+        onValueChange={handleModelChange}
+        value={localModel}
       />
       <GraphPicker
-        graphs={AVAILABLE_GRAPHS}
-        value={selectedGraph}
-        onValueChange={handleGraphChange}
         disabled={!onGraphChange}
+        graphs={AVAILABLE_GRAPHS}
+        onValueChange={handleGraphChange}
+        value={selectedGraph}
       />
     </div>
   );

@@ -38,8 +38,8 @@ export const Avatar = React.forwardRef<
   AvatarProps
 >(({ size, className, ...props }, ref) => (
   <AvatarPrimitive.Root
-    ref={ref}
     className={cn(avatar({ size }), className)}
+    ref={ref}
     {...props}
   />
 ));
@@ -55,8 +55,8 @@ export const AvatarImage = React.forwardRef<
   }
 >(({ className, ...props }, ref) => (
   <AvatarPrimitive.Image
-    ref={ref}
     className={cn(avatarImage(), className)}
+    ref={ref}
     {...props}
   />
 ));
@@ -72,8 +72,8 @@ export const AvatarFallback = React.forwardRef<
   }
 >(({ className, ...props }, ref) => (
   <AvatarPrimitive.Fallback
-    ref={ref}
     className={cn(avatarFallback(), className)}
+    ref={ref}
     {...props}
   />
 ));

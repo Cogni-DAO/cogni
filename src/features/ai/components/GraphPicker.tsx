@@ -61,11 +61,10 @@ export function GraphPicker({
   const displayName = selectedGraph?.name || "Select agent";
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog onOpenChange={setOpen} open={open}>
       <DialogTrigger asChild>
         <button
-          type="button"
-          disabled={disabled}
+          aria-label="Select agent"
           className={cn(
             // Base styles - rounded-full like model picker
             "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
@@ -80,7 +79,8 @@ export function GraphPicker({
             // Disabled state
             "disabled:pointer-events-none disabled:opacity-50"
           )}
-          aria-label="Select agent"
+          disabled={disabled}
+          type="button"
         >
           <Bot className="size-3.5 shrink-0" />
           <span className="max-w-[var(--max-width-model-trigger)] truncate">
@@ -113,17 +113,17 @@ export function GraphPicker({
 
               return (
                 <button
-                  key={graph.graphId}
-                  type="button"
-                  onClick={() => {
-                    onValueChange(graph.graphId);
-                    setOpen(false);
-                  }}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left",
                     "transition-colors hover:bg-accent",
                     isSelected && "bg-accent"
                   )}
+                  key={graph.graphId}
+                  onClick={() => {
+                    onValueChange(graph.graphId);
+                    setOpen(false);
+                  }}
+                  type="button"
                 >
                   <Bot className="size-5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">

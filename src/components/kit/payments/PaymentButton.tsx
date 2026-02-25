@@ -42,10 +42,10 @@ export function PaymentButton({
 
   return (
     <Button
-      onClick={onClick}
-      disabled={disabled || isInFlight}
-      rightIcon={isInFlight ? <Loader2 className="animate-spin" /> : undefined}
       className="w-full"
+      disabled={disabled || isInFlight}
+      onClick={onClick}
+      rightIcon={isInFlight ? <Loader2 className="animate-spin" /> : undefined}
       size="lg"
     >
       {isInFlight ? "Processing..." : `Pay $${amountDisplay}`}

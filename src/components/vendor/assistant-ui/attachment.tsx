@@ -79,17 +79,17 @@ const AttachmentPreview: FC<AttachmentPreviewProps> = ({ src }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   return (
     <Image
-      src={src}
       alt="Image Preview"
-      width={1}
-      height={1}
       className={
         isLoaded
           ? "aui-attachment-preview-image-loaded block h-auto max-h-[80vh] w-auto max-w-full object-contain"
           : "aui-attachment-preview-image-loading hidden"
       }
+      height={1}
       onLoadingComplete={() => setIsLoaded(true)}
       priority={false}
+      src={src}
+      width={1}
     />
   );
 };
@@ -104,8 +104,8 @@ const AttachmentPreviewDialog: FC<PropsWithChildren> = ({ children }) => {
   return (
     <Dialog>
       <DialogTrigger
-        className="aui-attachment-preview-trigger cursor-pointer transition-colors hover:bg-accent/50"
         asChild
+        className="aui-attachment-preview-trigger cursor-pointer transition-colors hover:bg-accent/50"
       >
         {children}
       </DialogTrigger>
@@ -130,9 +130,9 @@ const AttachmentThumb: FC = () => {
   return (
     <Avatar className="aui-attachment-tile-avatar h-full w-full rounded-none">
       <AvatarImage
-        src={src}
         alt="Attachment preview"
         className="aui-attachment-tile-image object-cover"
+        src={src}
       />
       <AvatarFallback delayMs={isImage ? 200 : 0}>
         <FileText className="aui-attachment-tile-fallback-icon size-8 text-muted-foreground" />
@@ -176,14 +176,14 @@ const AttachmentUI: FC = () => {
         <AttachmentPreviewDialog>
           <TooltipTrigger asChild>
             <button
-              type="button"
+              aria-label={`${typeLabel} attachment`}
               className={cn(
                 "aui-attachment-tile size-14 cursor-pointer overflow-hidden rounded-[14px] border bg-muted transition-opacity hover:opacity-75",
                 isComposer &&
                   "aui-attachment-tile-composer border-foreground/20"
               )}
               id="attachment-tile"
-              aria-label={`${typeLabel} attachment`}
+              type="button"
             >
               <AttachmentThumb />
             </button>
@@ -202,9 +202,9 @@ const AttachmentRemove: FC = () => {
   return (
     <AttachmentPrimitive.Remove asChild>
       <TooltipIconButton
-        tooltip="Remove file"
         className="aui-attachment-tile-remove hover:!bg-white absolute top-1.5 right-1.5 size-3.5 rounded-full bg-white text-muted-foreground opacity-100 shadow-sm [&_svg]:text-black hover:[&_svg]:text-destructive"
         side="top"
+        tooltip="Remove file"
       >
         <XIcon className="aui-attachment-remove-icon size-3 dark:stroke-[2.5px]" />
       </TooltipIconButton>
@@ -234,12 +234,12 @@ export const ComposerAddAttachment: FC = () => {
   return (
     <ComposerPrimitive.AddAttachment asChild>
       <TooltipIconButton
-        tooltip="Add Attachment"
-        side="bottom"
-        variant="ghost"
-        size="icon"
-        className="aui-composer-add-attachment size-[34px] rounded-full p-1 font-semibold text-xs hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
         aria-label="Add Attachment"
+        className="aui-composer-add-attachment size-[34px] rounded-full p-1 font-semibold text-xs hover:bg-muted-foreground/15 dark:border-muted-foreground/15 dark:hover:bg-muted-foreground/30"
+        side="bottom"
+        size="icon"
+        tooltip="Add Attachment"
+        variant="ghost"
       >
         <PlusIcon className="aui-attachment-add-icon size-5 stroke-[1.5px]" />
       </TooltipIconButton>

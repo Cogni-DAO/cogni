@@ -96,17 +96,17 @@ export function DAOFormationPageClient(): ReactElement {
         {/* Token Name */}
         <div className="space-y-2">
           <label
-            htmlFor="tokenName"
             className="font-medium text-foreground text-sm"
+            htmlFor="tokenName"
           >
             Token Name
           </label>
           <Input
+            disabled={!isIdle}
             id="tokenName"
-            value={tokenName}
             onChange={(e) => setTokenName(e.target.value)}
             placeholder="e.g., Cogni Governance"
-            disabled={!isIdle}
+            value={tokenName}
           />
           {tokenName && !isValidName && (
             <p className="text-destructive text-sm">
@@ -118,17 +118,17 @@ export function DAOFormationPageClient(): ReactElement {
         {/* Token Symbol */}
         <div className="space-y-2">
           <label
-            htmlFor="tokenSymbol"
             className="font-medium text-foreground text-sm"
+            htmlFor="tokenSymbol"
           >
             Token Symbol
           </label>
           <Input
+            disabled={!isIdle}
             id="tokenSymbol"
-            value={tokenSymbol}
             onChange={(e) => setTokenSymbol(e.target.value.toUpperCase())}
             placeholder="e.g., COGNI"
-            disabled={!isIdle}
+            value={tokenSymbol}
           />
           {tokenSymbol && !isValidSymbol && (
             <p className="text-destructive text-sm">
@@ -140,17 +140,17 @@ export function DAOFormationPageClient(): ReactElement {
         {/* Initial Holder */}
         <div className="space-y-2">
           <label
-            htmlFor="initialHolder"
             className="font-medium text-foreground text-sm"
+            htmlFor="initialHolder"
           >
             Initial Token Holder
           </label>
           <Input
+            disabled={!isIdle}
             id="initialHolder"
-            value={initialHolder}
             onChange={(e) => setInitialHolder(e.target.value)}
             placeholder={walletAddress || "0x..."}
-            disabled={!isIdle}
+            value={initialHolder}
           />
           <p className="text-muted-foreground text-sm">
             Defaults to your connected wallet if left empty
@@ -162,9 +162,9 @@ export function DAOFormationPageClient(): ReactElement {
 
         {/* Submit Button */}
         <Button
-          onClick={handleSubmit}
-          disabled={!canSubmit || !isIdle}
           className="w-full"
+          disabled={!canSubmit || !isIdle}
+          onClick={handleSubmit}
         >
           {isInFlight ? "Creating..." : "Create DAO"}
         </Button>
@@ -179,18 +179,18 @@ export function DAOFormationPageClient(): ReactElement {
 
       {/* Formation Flow Dialog */}
       <FormationFlowDialog
-        open={isDialogOpen}
-        phase={formation.state.phase}
-        daoTxHash={formation.state.daoTxHash}
-        signalTxHash={formation.state.signalTxHash}
-        errorMessage={formation.state.errorMessage}
-        repoSpecYaml={formation.state.repoSpecYaml}
         addresses={formation.state.addresses}
-        tokenName={formation.state.config?.tokenName ?? null}
+        daoTxHash={formation.state.daoTxHash}
+        errorMessage={formation.state.errorMessage}
         isInFlight={isInFlight}
         isTerminal={isTerminal}
         onClose={handleDialogClose}
         onReset={handleReset}
+        open={isDialogOpen}
+        phase={formation.state.phase}
+        repoSpecYaml={formation.state.repoSpecYaml}
+        signalTxHash={formation.state.signalTxHash}
+        tokenName={formation.state.config?.tokenName ?? null}
       />
     </PageContainer>
   );

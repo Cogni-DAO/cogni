@@ -60,7 +60,7 @@ function StatusBadge({
   switch (status) {
     case "open":
       return (
-        <Badge intent="default" size="sm" className="animate-pulse">
+        <Badge className="animate-pulse" intent="default" size="sm">
           ACTIVE
         </Badge>
       );
@@ -103,7 +103,7 @@ export function EpochCountdown({
         <div className="mb-3 font-bold font-mono text-4xl text-foreground">
           {timeLeft}
         </div>
-        <Progress value={progress} className="h-2 bg-secondary" />
+        <Progress className="h-2 bg-secondary" value={progress} />
         <div className="mt-3 flex justify-between text-muted-foreground text-xs">
           <span>{contributorCount} contributors</span>
           <span>{totalPoints} total points</span>

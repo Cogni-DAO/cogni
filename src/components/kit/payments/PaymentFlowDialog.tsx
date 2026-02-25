@@ -103,12 +103,12 @@ export function PaymentFlowDialog({
 
   return (
     <Dialog
-      open={open}
       onOpenChange={(isOpen) => {
         if (!isOpen && dismissible) {
           onClose();
         }
       }}
+      open={open}
     >
       <DialogContent
         className="sm:max-w-md"
@@ -142,10 +142,10 @@ export function PaymentFlowDialog({
               {/* Transaction link (when available) */}
               {txHash && explorerUrl && (
                 <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="flex items-center gap-1 text-primary text-sm hover:underline"
+                  href={explorerUrl}
+                  rel="noopener noreferrer"
+                  target="_blank"
                 >
                   <span>View transaction</span>
                   <ExternalLink className="h-4 w-4" />
@@ -180,10 +180,10 @@ export function PaymentFlowDialog({
                 {/* Transaction link */}
                 {txHash && explorerUrl && (
                   <a
-                    href={explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="flex items-center justify-center gap-1 text-primary text-sm hover:underline"
+                    href={explorerUrl}
+                    rel="noopener noreferrer"
+                    target="_blank"
                   >
                     <span>View transaction</span>
                     <ExternalLink className="h-4 w-4" />
@@ -206,10 +206,10 @@ export function PaymentFlowDialog({
               {/* Transaction link (if payment reached on-chain) */}
               {txHash && explorerUrl && (
                 <a
-                  href={explorerUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
                   className="flex items-center justify-center gap-1 text-primary text-sm hover:underline"
+                  href={explorerUrl}
+                  rel="noopener noreferrer"
+                  target="_blank"
                 >
                   <span>View transaction</span>
                   <ExternalLink className="h-4 w-4" />

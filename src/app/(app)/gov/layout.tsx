@@ -53,15 +53,15 @@ export default function GovLayout({
   return (
     <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-6 p-4 md:p-8 lg:px-16">
       <nav
-        className="flex items-center gap-1 overflow-x-auto rounded-lg border bg-card p-1"
         aria-label="Governance sections"
+        className="flex items-center gap-1 overflow-x-auto rounded-lg border bg-card p-1"
       >
         {GOV_TABS.map(({ href, label, icon: Icon, match }) => (
           <NavigationLink
-            key={href}
-            href={href}
-            match={match}
             className="flex items-center gap-2 rounded-md px-3 py-2"
+            href={href}
+            key={href}
+            match={match}
           >
             <Icon className="h-4 w-4 shrink-0" />
             <span className="whitespace-nowrap">{label}</span>

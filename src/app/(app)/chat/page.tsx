@@ -248,13 +248,13 @@ export default function ChatPage(): ReactNode {
             <ErrorAlert
               code={errorAlertProps.code}
               message={errorAlertProps.message}
-              retryable={errorAlertProps.retryable}
-              showRetry={errorAlertProps.showRetry}
-              showSwitchFree={errorAlertProps.showSwitchFree}
-              showAddCredits={errorAlertProps.showAddCredits}
+              onAddCredits={handleAddCredits}
               onRetry={handleRetry}
               onSwitchFreeModel={handleSwitchFreeModel}
-              onAddCredits={handleAddCredits}
+              retryable={errorAlertProps.retryable}
+              showAddCredits={errorAlertProps.showAddCredits}
+              showRetry={errorAlertProps.showRetry}
+              showSwitchFree={errorAlertProps.showSwitchFree}
             />
           )}
         </div>
@@ -298,9 +298,9 @@ export default function ChatPage(): ReactNode {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between p-3">
         <Button
-          variant="ghost"
           className="justify-start gap-2"
           onClick={handleNewThread}
+          variant="ghost"
         >
           <Plus className="h-4 w-4" />
           New chat
@@ -308,13 +308,13 @@ export default function ChatPage(): ReactNode {
         <Tooltip>
           <TooltipTrigger asChild>
             <button
-              type="button"
+              aria-label="Close sidebar"
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => {
                 setDesktopSidebarOpen(false);
                 setSidebarOpen(false);
               }}
-              aria-label="Close sidebar"
+              type="button"
             >
               <PanelLeftClose className="h-4 w-4" />
             </button>
@@ -327,24 +327,24 @@ export default function ChatPage(): ReactNode {
           const isActive = activeThreadKey === thread.stateKey;
           return (
             <div
-              key={thread.stateKey}
               className={cn(
                 "group relative flex items-center rounded-lg px-3 py-2 text-sm transition-colors hover:bg-accent/50",
                 isActive && "bg-accent"
               )}
+              key={thread.stateKey}
             >
               <button
-                type="button"
                 className="min-w-0 flex-1 truncate text-left"
                 onClick={() => handleSelectThread(thread.stateKey)}
+                type="button"
               >
                 {thread.title || "Untitled"}
               </button>
               <button
-                type="button"
+                aria-label="Delete thread"
                 className="ml-1 shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                 onClick={() => handleDeleteThread(thread.stateKey)}
-                aria-label="Delete thread"
+                type="button"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
@@ -377,10 +377,10 @@ export default function ChatPage(): ReactNode {
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                type="button"
+                aria-label="Open sidebar"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 onClick={() => setDesktopSidebarOpen(true)}
-                aria-label="Open sidebar"
+                type="button"
               >
                 <PanelLeft className="h-4 w-4" />
               </button>
@@ -391,8 +391,8 @@ export default function ChatPage(): ReactNode {
       )}
 
       {/* Mobile sidebar — Sheet */}
-      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-        <SheetContent side="left" className="w-72 p-0" hideClose>
+      <Sheet onOpenChange={setSidebarOpen} open={sidebarOpen}>
+        <SheetContent className="w-72 p-0" hideClose side="left">
           <SheetTitle className="sr-only">Thread history</SheetTitle>
           {sidebarContent}
         </SheetContent>
@@ -403,10 +403,10 @@ export default function ChatPage(): ReactNode {
         {/* Mobile sidebar toggle */}
         <div className="flex items-center border-b px-2 py-1.5 lg:hidden">
           <button
-            type="button"
+            aria-label="Open thread list"
             className="inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-accent"
             onClick={() => setSidebarOpen(true)}
-            aria-label="Open thread list"
+            type="button"
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -418,41 +418,41 @@ export default function ChatPage(): ReactNode {
           </div>
         ) : (
           <ChatRuntimeProvider
-            key={activeThreadKey ?? "new"}
-            selectedModel={selectedModel}
-            selectedGraph={selectedGraph}
             defaultModelId={uiDefaultModelId}
             initialMessages={initialMessages}
             initialStateKey={activeThreadKey}
+            key={activeThreadKey ?? "new"}
             onAuthExpired={() => signOut()}
             onError={handleError}
             onFinish={handleThreadFinish}
+            selectedGraph={selectedGraph}
+            selectedModel={selectedModel}
           >
             <Thread
-              welcomeMessage={<ChatWelcomeWithHint />}
               composerLeft={
                 <ChatComposerExtras
-                  selectedModel={selectedModel}
-                  onModelChange={handleModelChange}
-                  defaultModelId={uiDefaultModelId}
                   balance={balance}
-                  selectedGraph={selectedGraph}
+                  defaultModelId={uiDefaultModelId}
                   onGraphChange={handleGraphChange}
+                  onModelChange={handleModelChange}
+                  selectedGraph={selectedGraph}
+                  selectedModel={selectedModel}
                 />
               }
               errorMessage={
                 errorAlertProps ? (
                   <ChatErrorBubble
                     message={errorAlertProps.message}
-                    showRetry={errorAlertProps.showRetry}
-                    showSwitchFree={errorAlertProps.showSwitchFree}
-                    showAddCredits={errorAlertProps.showAddCredits}
+                    onAddCredits={handleAddCredits}
                     onRetry={handleRetry}
                     onSwitchFreeModel={handleSwitchFreeModel}
-                    onAddCredits={handleAddCredits}
+                    showAddCredits={errorAlertProps.showAddCredits}
+                    showRetry={errorAlertProps.showRetry}
+                    showSwitchFree={errorAlertProps.showSwitchFree}
                   />
                 ) : undefined
               }
+              welcomeMessage={<ChatWelcomeWithHint />}
             />
           </ChatRuntimeProvider>
         )}

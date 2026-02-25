@@ -118,35 +118,35 @@ export function UsdcPaymentFlow({
       {/* Payment Button */}
       <PaymentButton
         amountUsdCents={amountUsdCents}
+        disabled={disabled || state.result !== null}
         isInFlight={state.isInFlight}
         onClick={() => {
           onStartPayment();
           setIsDialogOpen(true);
         }}
-        disabled={disabled || state.result !== null}
       />
 
       {/* Status Chip (when dialog closed but payment in progress) */}
       {showStatusChip && state.txHash && state.explorerUrl && (
         <PaymentStatusChip
-          txHash={state.txHash}
           explorerUrl={state.explorerUrl}
           onClick={() => setIsDialogOpen(true)}
+          txHash={state.txHash}
         />
       )}
 
       {/* Payment Flow Dialog */}
       <PaymentFlowDialog
-        open={isDialogOpen}
-        isInFlight={state.isInFlight}
-        walletStep={state.walletStep}
-        txHash={state.txHash}
-        explorerUrl={state.explorerUrl}
-        result={state.result}
-        errorMessage={state.errorMessage}
         creditsAdded={state.creditsAdded}
-        onReset={onReset}
+        errorMessage={state.errorMessage}
+        explorerUrl={state.explorerUrl}
+        isInFlight={state.isInFlight}
         onClose={handleDialogClose}
+        onReset={onReset}
+        open={isDialogOpen}
+        result={state.result}
+        txHash={state.txHash}
+        walletStep={state.walletStep}
       />
     </div>
   );

@@ -6,10 +6,10 @@ import type { SVGProps } from "react";
 export function XAIIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      viewBox="0 0 841.89 595.28"
-      xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       focusable="false"
+      viewBox="0 0 841.89 595.28"
+      xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
       <g fill="currentColor">

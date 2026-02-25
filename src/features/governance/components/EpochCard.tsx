@@ -33,9 +33,9 @@ function StatusBadge({
     case "finalized":
       return (
         <Badge
+          className="gap-1 border-success/40 text-success"
           intent="outline"
           size="sm"
-          className="gap-1 border-success/40 text-success"
         >
           <CheckCircle className="h-3 w-3" />
           Finalized
@@ -44,9 +44,9 @@ function StatusBadge({
     case "review":
       return (
         <Badge
+          className="gap-1 border-warning/40 text-warning"
           intent="outline"
           size="sm"
-          className="gap-1 border-warning/40 text-warning"
         >
           <Eye className="h-3 w-3" />
           Review
@@ -54,7 +54,7 @@ function StatusBadge({
       );
     default:
       return (
-        <Badge intent="default" size="sm" className="animate-pulse gap-1">
+        <Badge className="animate-pulse gap-1" intent="default" size="sm">
           <Clock className="h-3 w-3" />
           Active
         </Badge>
@@ -127,8 +127,8 @@ export function EpochCard({
 
               return (
                 <div
-                  key={c.userId}
                   className="flex items-center justify-between rounded-lg bg-secondary/30 p-3"
+                  key={c.userId}
                 >
                   <div className="flex items-center gap-3">
                     <div

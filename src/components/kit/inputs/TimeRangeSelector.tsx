@@ -41,18 +41,18 @@ export function TimeRangeSelector({
   className,
 }: TimeRangeSelectorProps) {
   return (
-    <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className={className} aria-label="Select time range">
+    <Select onValueChange={onValueChange} value={value}>
+      <SelectTrigger aria-label="Select time range" className={className}>
         <SelectValue placeholder={timeRangeLabels[value]} />
       </SelectTrigger>
       <SelectContent className="rounded-xl">
-        <SelectItem value="1d" className="rounded-lg">
+        <SelectItem className="rounded-lg" value="1d">
           Last Day
         </SelectItem>
-        <SelectItem value="1w" className="rounded-lg">
+        <SelectItem className="rounded-lg" value="1w">
           Last Week
         </SelectItem>
-        <SelectItem value="1m" className="rounded-lg">
+        <SelectItem className="rounded-lg" value="1m">
           Last Month
         </SelectItem>
       </SelectContent>

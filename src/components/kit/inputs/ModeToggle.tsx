@@ -45,9 +45,9 @@ const DROPDOWN_MENU_CONTENT = React.forwardRef<
 >(({ className, sideOffset = 4, size = "md", ...props }, ref) => (
   <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.Content
+      className={cn(dropdownContent({ size }), className)}
       ref={ref}
       sideOffset={sideOffset}
-      className={cn(dropdownContent({ size }), className)}
       {...props}
     />
   </DropdownMenuPrimitive.Portal>
@@ -59,8 +59,8 @@ const DROPDOWN_MENU_ITEM = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
-    ref={ref}
     className={cn(dropdownMenuItem(), className)}
+    ref={ref}
     {...props}
   />
 ));
@@ -118,10 +118,10 @@ export const ModeToggle = forwardRef<HTMLButtonElement, ModeToggleProps>(
       <DROPDOWN_MENU>
         <DROPDOWN_MENU_TRIGGER asChild>
           <button
+            aria-label="Select theme"
+            className={cn(modeToggle({ variant, size }), className)}
             ref={ref}
             type="button"
-            className={cn(modeToggle({ variant, size }), className)}
-            aria-label="Select theme"
             {...props}
           >
             <CURRENT_ICON className={themeIcon({ state: "visible" })} />
@@ -129,8 +129,8 @@ export const ModeToggle = forwardRef<HTMLButtonElement, ModeToggleProps>(
         </DROPDOWN_MENU_TRIGGER>
         <DROPDOWN_MENU_CONTENT align="end" size="md">
           <DROPDOWN_MENU_ITEM
-            onClick={() => setTheme("light")}
             className={dropdownMenuItem()}
+            onClick={() => setTheme("light")}
           >
             <Sun className={cn(icon({ size: "sm" }), "shrink-0")} />
             <span>Light</span>
@@ -141,8 +141,8 @@ export const ModeToggle = forwardRef<HTMLButtonElement, ModeToggleProps>(
             )}
           </DROPDOWN_MENU_ITEM>
           <DROPDOWN_MENU_ITEM
-            onClick={() => setTheme("dark")}
             className={dropdownMenuItem()}
+            onClick={() => setTheme("dark")}
           >
             <Moon className={cn(icon({ size: "sm" }), "shrink-0")} />
             <span>Dark</span>
@@ -153,8 +153,8 @@ export const ModeToggle = forwardRef<HTMLButtonElement, ModeToggleProps>(
             )}
           </DROPDOWN_MENU_ITEM>
           <DROPDOWN_MENU_ITEM
-            onClick={() => setTheme("system")}
             className={dropdownMenuItem()}
+            onClick={() => setTheme("system")}
           >
             <Monitor className={cn(icon({ size: "sm" }), "shrink-0")} />
             <span>System</span>

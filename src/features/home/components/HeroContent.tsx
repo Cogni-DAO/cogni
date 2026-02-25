@@ -33,7 +33,6 @@ export function HeroContent(): ReactElement {
     <HeroCodeBlock>
       {/* Line 1: while together(action) { with inline animated action word */}
       <CodeTokenLine
-        tokens={heroLine1}
         tokenReplacements={{
           "action-word": (
             <HeroActionContainer>
@@ -41,16 +40,17 @@ export function HeroContent(): ReactElement {
             </HeroActionContainer>
           ),
         }}
+        tokens={heroLine1}
       />
 
       {/* Line 2: community++; */}
       <HeroCodeBlock spacing="normal">
-        <CodeTokenLine tokens={heroLine2} tone="subdued" level="p" />
+        <CodeTokenLine level="p" tokens={heroLine2} tone="subdued" />
       </HeroCodeBlock>
 
       {/* Line 3: } */}
       <HeroCodeBlock spacing="normal">
-        <CodeTokenLine tokens={heroLine3} tone="subdued" level="p" />
+        <CodeTokenLine level="p" tokens={heroLine3} tone="subdued" />
       </HeroCodeBlock>
     </HeroCodeBlock>
   );

@@ -85,8 +85,12 @@ export function CreditsPageClient(): ReactElement {
       {/* Buy Credits Section */}
       <SectionCard title="Buy Credits">
         <SplitInput
+          disabled={
+            // Lock input when: on-chain tx exists OR terminal state (requires explicit reset)
+            paymentFlow.state.txHash !== null ||
+            paymentFlow.state.result !== null
+          }
           label="Amount"
-          value={amountInput}
           onChange={(val) => {
             // Allow typing: digits with optional decimal and up to 2 decimal places
             if (isValidAmountInput(val)) {
@@ -94,27 +98,23 @@ export function CreditsPageClient(): ReactElement {
             }
           }}
           placeholder="1.00 - 100000.00"
-          disabled={
-            // Lock input when: on-chain tx exists OR terminal state (requires explicit reset)
-            paymentFlow.state.txHash !== null ||
-            paymentFlow.state.result !== null
-          }
+          value={amountInput}
         />
 
         {/* Payment Flow */}
         {isValidAmount ? (
           <UsdcPaymentFlow
             amountUsdCents={amountCents}
-            state={paymentFlow.state}
-            onStartPayment={paymentFlow.startPayment}
-            onReset={handleResetAndClear}
             disabled={summaryQuery.isLoading}
+            onReset={handleResetAndClear}
+            onStartPayment={paymentFlow.startPayment}
+            state={paymentFlow.state}
           />
         ) : (
           <button
-            type="button"
-            disabled
             className="w-full cursor-not-allowed rounded-md bg-muted px-4 py-2 text-muted-foreground"
+            disabled
+            type="button"
           >
             Invalid amount
           </button>

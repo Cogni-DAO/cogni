@@ -220,9 +220,9 @@ export function SchedulesView() {
       <div className="flex items-center justify-between">
         <h1 className="font-bold text-3xl tracking-tight">Schedules</h1>
         <Button
-          variant="default"
-          size="sm"
           onClick={() => setIsFormOpen(!isFormOpen)}
+          size="sm"
+          variant="default"
         >
           {isFormOpen ? (
             <ChevronUp className="mr-2 h-4 w-4" />
@@ -248,22 +248,22 @@ export function SchedulesView() {
             {/* Prompt */}
             <div className="md:col-span-2">
               <label
-                htmlFor="prompt"
                 className="mb-2 block font-medium text-sm"
+                htmlFor="prompt"
               >
                 Prompt
               </label>
               <Input
                 id="prompt"
+                onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Enter the prompt for this scheduled run..."
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
               />
             </div>
 
             {/* Agent Select */}
             <div>
-              <label htmlFor="agent" className="mb-2 block font-medium text-sm">
+              <label className="mb-2 block font-medium text-sm" htmlFor="agent">
                 Agent
               </label>
               {!hasAgents ? (
@@ -271,7 +271,7 @@ export function SchedulesView() {
                   No agents available. Configure agents first.
                 </p>
               ) : (
-                <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                <Select onValueChange={setSelectedAgent} value={selectedAgent}>
                   <SelectTrigger id="agent">
                     <SelectValue placeholder="Select an agent" />
                   </SelectTrigger>
@@ -288,7 +288,7 @@ export function SchedulesView() {
 
             {/* Model Select */}
             <div>
-              <label htmlFor="model" className="mb-2 block font-medium text-sm">
+              <label className="mb-2 block font-medium text-sm" htmlFor="model">
                 Model
               </label>
               {!hasModels ? (
@@ -297,8 +297,8 @@ export function SchedulesView() {
                 </p>
               ) : (
                 <Select
-                  value={selectedModel || defaultModelId}
                   onValueChange={setSelectedModel}
+                  value={selectedModel || defaultModelId}
                 >
                   <SelectTrigger id="model">
                     <SelectValue placeholder="Select a model" />
@@ -318,12 +318,12 @@ export function SchedulesView() {
             {/* Frequency Select */}
             <div>
               <label
-                htmlFor="frequency"
                 className="mb-2 block font-medium text-sm"
+                htmlFor="frequency"
               >
                 Frequency
               </label>
-              <Select value={selectedCron} onValueChange={setSelectedCron}>
+              <Select onValueChange={setSelectedCron} value={selectedCron}>
                 <SelectTrigger id="frequency">
                   <SelectValue placeholder="Select frequency" />
                 </SelectTrigger>
@@ -340,14 +340,14 @@ export function SchedulesView() {
             {/* Timezone Select */}
             <div>
               <label
-                htmlFor="timezone"
                 className="mb-2 block font-medium text-sm"
+                htmlFor="timezone"
               >
                 Timezone
               </label>
               <Select
-                value={selectedTimezone}
                 onValueChange={setSelectedTimezone}
+                value={selectedTimezone}
               >
                 <SelectTrigger id="timezone">
                   <SelectValue placeholder="Select timezone" />
@@ -365,9 +365,9 @@ export function SchedulesView() {
             {/* Submit */}
             <div className="flex items-end md:col-span-2">
               <Button
-                variant="default"
-                onClick={handleCreate}
                 disabled={!isFormValid || createMutation.isPending}
+                onClick={handleCreate}
+                variant="default"
               >
                 {createMutation.isPending ? "Creating..." : "Create Schedule"}
               </Button>
@@ -445,20 +445,20 @@ export function SchedulesView() {
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button
-                          variant="ghost"
-                          size="sm"
+                          disabled={updateMutation.isPending}
                           onClick={() =>
                             handleToggle(schedule.id, schedule.enabled)
                           }
-                          disabled={updateMutation.isPending}
+                          size="sm"
+                          variant="ghost"
                         >
                           {schedule.enabled ? "Disable" : "Enable"}
                         </Button>
                         <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(schedule.id)}
                           disabled={deleteMutation.isPending}
+                          onClick={() => handleDelete(schedule.id)}
+                          size="sm"
+                          variant="ghost"
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
