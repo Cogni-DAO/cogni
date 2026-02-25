@@ -16,3 +16,4 @@ export { AppFooter } from "./components/AppFooter";
 export { AppHeader } from "./components/AppHeader";
 export { AppSidebar } from "./components/AppSidebar";
 export { AppTopBar } from "./components/AppTopBar";
+export { UserAvatarMenu } from "./components/UserAvatarMenu";
