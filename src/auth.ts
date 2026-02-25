@@ -63,7 +63,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         try {
-          if (!credentials?.message || !credentials?.signature) {
+          if (!(credentials?.message && credentials?.signature)) {
             getLog().error("[SIWE] Missing credentials");
             return null;
           }

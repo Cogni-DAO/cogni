@@ -151,7 +151,7 @@ export function SchedulesView() {
   });
 
   const handleCreate = () => {
-    if (!prompt.trim() || !selectedAgent || !selectedCron || !selectedModel) {
+    if (!(prompt.trim() && selectedAgent && selectedCron && selectedModel)) {
       return;
     }
     createMutation.mutate({

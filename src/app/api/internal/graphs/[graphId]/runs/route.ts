@@ -149,7 +149,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     const authHeader = request.headers.get("authorization");
     const providedToken = extractBearerToken(authHeader);
 
-    if (!providedToken || !safeCompare(providedToken, configuredToken)) {
+    if (!(providedToken && safeCompare(providedToken, configuredToken))) {
       log.warn("Invalid or missing SCHEDULER_API_TOKEN");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -161,7 +161,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     }
     const params = await routeParams.params;
     const rawGraphId = params.graphId;
-    if (!rawGraphId || !rawGraphId.includes(":")) {
+    if (!(rawGraphId && rawGraphId.includes(":"))) {
       log.warn(
         { graphId: rawGraphId },
         "Missing or invalid graphId in path (expected providerId:graphName)"

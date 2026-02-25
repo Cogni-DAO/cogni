@@ -164,10 +164,7 @@ function createResearcherSubgraph(opts: CreateResearcherSubgraphOptions) {
       state.researcherMessages[state.researcherMessages.length - 1];
 
     // Type guard: check if message is AIMessage with tool_calls
-    if (
-      !(lastMessage instanceof AIMessage) ||
-      !lastMessage.tool_calls?.length
-    ) {
+    if (!(lastMessage instanceof AIMessage && lastMessage.tool_calls?.length)) {
       return { researcherMessages: [] };
     }
 
@@ -325,10 +322,7 @@ function createSupervisorSubgraph(opts: CreateSupervisorSubgraphOptions) {
       state.supervisorMessages[state.supervisorMessages.length - 1];
 
     // Type guard for AIMessage with tool_calls
-    if (
-      !(lastMessage instanceof AIMessage) ||
-      !lastMessage.tool_calls?.length
-    ) {
+    if (!(lastMessage instanceof AIMessage && lastMessage.tool_calls?.length)) {
       return { supervisorMessages: [], notes: [] };
     }
 
@@ -410,10 +404,7 @@ function createSupervisorSubgraph(opts: CreateSupervisorSubgraphOptions) {
       state.supervisorMessages[state.supervisorMessages.length - 1];
 
     // No tool calls or not an AIMessage → end
-    if (
-      !(lastMessage instanceof AIMessage) ||
-      !lastMessage.tool_calls?.length
-    ) {
+    if (!(lastMessage instanceof AIMessage && lastMessage.tool_calls?.length)) {
       return "__end__";
     }
 

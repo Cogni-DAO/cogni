@@ -62,7 +62,7 @@ export function DAOFormationPageClient(): ReactElement {
     formation.state.phase === "SUCCESS" || formation.state.phase === "ERROR";
 
   const handleSubmit = () => {
-    if (!canSubmit || !isIdle) {
+    if (!(canSubmit && isIdle)) {
       return;
     }
 
@@ -163,7 +163,7 @@ export function DAOFormationPageClient(): ReactElement {
         {/* Submit Button */}
         <Button
           className="w-full"
-          disabled={!canSubmit || !isIdle}
+          disabled={!(canSubmit && isIdle)}
           onClick={handleSubmit}
         >
           {isInFlight ? "Creating..." : "Create DAO"}

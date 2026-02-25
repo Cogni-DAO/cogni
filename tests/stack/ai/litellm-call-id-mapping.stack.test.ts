@@ -46,7 +46,7 @@ describe("LiteLLM Call ID → Spend Log Mapping (Contract Test)", () => {
   it.skip("verifies x-litellm-call-id header equals spend_logs.request_id field", async () => {
     // Skip if not in appropriate test environment
     const env = serverEnv();
-    if (!env.LITELLM_BASE_URL || !env.LITELLM_MASTER_KEY) {
+    if (!(env.LITELLM_BASE_URL && env.LITELLM_MASTER_KEY)) {
       console.log(
         "Skipping LiteLLM contract test - requires LITELLM_BASE_URL and LITELLM_MASTER_KEY"
       );

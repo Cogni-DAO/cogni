@@ -68,7 +68,7 @@ export const GET = wrapRouteHandlerWithLogging(
         from = derivedFrom.toISOString();
         to = derivedTo.toISOString();
       } else {
-        if (!inputResult.data.from || !inputResult.data.to) {
+        if (!(inputResult.data.from && inputResult.data.to)) {
           return NextResponse.json(
             { error: "Missing from/to parameters" },
             { status: 400 }

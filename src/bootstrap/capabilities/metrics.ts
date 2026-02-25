@@ -74,7 +74,7 @@ export function createMetricsCapability(env: ServerEnv): MetricsCapability {
   const password = env.PROMETHEUS_READ_PASSWORD;
 
   // Not configured: stub that throws on use
-  if (!queryUrl || !username || !password) {
+  if (!(queryUrl && username && password)) {
     return stubMetricsCapability;
   }
 

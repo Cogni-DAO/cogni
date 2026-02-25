@@ -22,7 +22,7 @@ export async function getServerSessionUser(): Promise<SessionUser | null> {
   const walletAddress = session?.user?.walletAddress;
 
   // Enforce wallet-first invariant: require both id and walletAddress
-  if (!id || !walletAddress) {
+  if (!(id && walletAddress)) {
     return null;
   }
 

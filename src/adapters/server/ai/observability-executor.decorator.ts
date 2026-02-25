@@ -250,7 +250,7 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
 
     // Handle stream ending without done event (edge case)
     const handleStreamEnd = (): void => {
-      if (!streamEnded && !terminal.resolved) {
+      if (!(streamEnded || terminal.resolved)) {
         // Stream ended without done - start finalization timer
         terminal.finalizationTimer = setTimeout(() => {
           void resolveTerminal("finalization_lost", {});

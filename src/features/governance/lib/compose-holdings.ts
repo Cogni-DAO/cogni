@@ -43,7 +43,7 @@ export function composeHoldings(
   for (let i = 0; i < epochs.length; i++) {
     const epoch = epochs[i];
     const statement = statements[i];
-    if (!epoch || !statement) {
+    if (!(epoch && statement)) {
       continue;
     }
 

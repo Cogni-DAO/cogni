@@ -832,7 +832,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     }
 
     // 2. CONFIG_LOCKED_AT_REVIEW: verify config is locked
-    if (!epoch.allocationAlgoRef || !epoch.weightConfigHash) {
+    if (!(epoch.allocationAlgoRef && epoch.weightConfigHash)) {
       throw new Error(
         `finalizeEpoch: epoch ${input.epochId} missing allocation_algo_ref or weight_config_hash (CONFIG_LOCKED_AT_REVIEW violated)`
       );

@@ -57,7 +57,7 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
         fileContent.includes("startPump");
       const hasForAwaitDrain = fileContent.includes("for await");
 
-      if (!hasPumpDrain && !hasForAwaitDrain) {
+      if (!(hasPumpDrain || hasForAwaitDrain)) {
         violations.push(site);
       }
     }

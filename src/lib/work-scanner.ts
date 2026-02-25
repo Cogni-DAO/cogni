@@ -134,7 +134,7 @@ export async function getWorkItems(): Promise<WorkItem[]> {
 
       // Projects use "state" instead of "status"
       const status = toStr(fm.status || fm.state);
-      if (!status && !fm.id) {
+      if (!(status || fm.id)) {
         continue; // Skip files with no meaningful frontmatter
       }
 

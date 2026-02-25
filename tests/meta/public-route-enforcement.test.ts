@@ -135,7 +135,7 @@ describe("Public API Namespace Enforcement", () => {
       const stackTestPath = `tests/stack/public/${routeName.split("/").pop()}.stack.test.ts`;
       const stackTestExists = require("node:fs").existsSync(stackTestPath);
 
-      if (!contractTestExists && !stackTestExists) {
+      if (!(contractTestExists || stackTestExists)) {
         violations.push(
           `${routePath}: No tests found (expected ${contractTestPath} or ${stackTestPath})`
         );

@@ -71,7 +71,7 @@ export const GET = wrapRouteHandlerWithLogging(
       } else {
         // Custom range (from/to explicitly provided)
         // Safe: Zod refine validates that both from and to exist when range is absent
-        if (!inputResult.data.from || !inputResult.data.to) {
+        if (!(inputResult.data.from && inputResult.data.to)) {
           return NextResponse.json(
             { error: "Missing from/to parameters" },
             { status: 400 }

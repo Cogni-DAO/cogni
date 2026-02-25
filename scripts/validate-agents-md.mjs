@@ -210,7 +210,7 @@ function validateBoundaries(block, filePathRaw) {
   if (!VALID_LAYERS.includes(j.layer)) {
     errors.push("Boundaries: invalid layer");
   }
-  if (!Array.isArray(j.may_import) || !Array.isArray(j.must_not_import)) {
+  if (!(Array.isArray(j.may_import) && Array.isArray(j.must_not_import))) {
     errors.push("Boundaries: may_import and must_not_import must be arrays");
     return errors;
   }

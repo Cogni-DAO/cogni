@@ -100,7 +100,7 @@ export async function register(): Promise<void> {
       const baseUrl = process.env.LITELLM_BASE_URL;
       // biome-ignore lint/style/noProcessEnv: startup check before config framework
       const masterKey = process.env.LITELLM_MASTER_KEY;
-      if (!baseUrl || !masterKey) {
+      if (!(baseUrl && masterKey)) {
         return;
       }
       try {

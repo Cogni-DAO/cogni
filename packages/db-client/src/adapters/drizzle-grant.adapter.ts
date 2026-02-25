@@ -74,7 +74,7 @@ function checkGrantScopes(
   const hasWildcard = grant.scopes.includes("graph:execute:*");
   const hasSpecificScope = grant.scopes.includes(`graph:execute:${graphId}`);
 
-  if (!hasWildcard && !hasSpecificScope) {
+  if (!(hasWildcard || hasSpecificScope)) {
     throw new GrantScopeMismatchError(grant.id, graphId, grant.scopes);
   }
 

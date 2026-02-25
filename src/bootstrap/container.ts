@@ -216,9 +216,11 @@ function createContainer(): Container {
     : (() => {
         const queryUrl = derivePrometheusQueryUrl(env);
         if (
-          !queryUrl ||
-          !env.PROMETHEUS_READ_USERNAME ||
-          !env.PROMETHEUS_READ_PASSWORD
+          !(
+            queryUrl &&
+            env.PROMETHEUS_READ_USERNAME &&
+            env.PROMETHEUS_READ_PASSWORD
+          )
         ) {
           // Return stub that throws on use - allows app to start without metrics config
           const notConfiguredError = new Error(
@@ -276,7 +278,7 @@ function createContainer(): Container {
 
   // ScheduleControlPort: Temporal is required infrastructure
   // Per SCHEDULER_SPEC.md: TEMPORAL_ADDRESS + TEMPORAL_NAMESPACE must be configured
-  if (!env.TEMPORAL_ADDRESS || !env.TEMPORAL_NAMESPACE) {
+  if (!(env.TEMPORAL_ADDRESS && env.TEMPORAL_NAMESPACE)) {
     throw new Error(
       "TEMPORAL_ADDRESS and TEMPORAL_NAMESPACE are required. " +
         "Start Temporal with: pnpm dev:infra"

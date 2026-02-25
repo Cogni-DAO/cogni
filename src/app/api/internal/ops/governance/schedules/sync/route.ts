@@ -74,7 +74,7 @@ export const POST = wrapRouteHandlerWithLogging(
 
     const authHeader = request.headers.get("authorization");
     const providedToken = extractBearerToken(authHeader);
-    if (!providedToken || !safeCompare(providedToken, configuredToken)) {
+    if (!(providedToken && safeCompare(providedToken, configuredToken))) {
       ctx.log.warn("Invalid or missing INTERNAL_OPS_TOKEN");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

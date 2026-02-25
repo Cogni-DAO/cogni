@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   }
 
   // 5) Validate required connection parameters
-  if (!user || !password) {
+  if (!(user && password)) {
     throw new Error(
       `❌ CONFIGURATION ERROR: Missing required database credentials.\n` +
         `   POSTGRES_USER: ${user ? "✓" : "❌ missing"}\n` +

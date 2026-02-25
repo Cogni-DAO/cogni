@@ -56,7 +56,7 @@ export function parseCitation(citation: string): ParsedCitation | null {
   const endStr = match[4];
   const sha = match[5];
 
-  if (!repoId || !path || !startStr || !endStr || !sha) {
+  if (!(repoId && path && startStr && endStr && sha)) {
     return null;
   }
 

@@ -245,7 +245,7 @@ export class GitHubSourceAdapter implements SourceAdapter {
       }
 
       const [owner, repoName] = repo.split("/");
-      if (!owner || !repoName) {
+      if (!(owner && repoName)) {
         this.logger.warn(`Invalid repo format, expected owner/repo: ${repo}`);
         continue;
       }
@@ -290,8 +290,7 @@ export class GitHubSourceAdapter implements SourceAdapter {
 
   private async getClient(): Promise<GitHubClient> {
     const needsRefresh =
-      !this.octokit ||
-      !this.tokenExpiresAt ||
+      !(this.octokit && this.tokenExpiresAt) ||
       Date.now() >= this.tokenExpiresAt.getTime() - TOKEN_REFRESH_BUFFER_MS;
 
     if (needsRefresh) {

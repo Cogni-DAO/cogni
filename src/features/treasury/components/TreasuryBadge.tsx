@@ -49,7 +49,7 @@ export function TreasuryBadge(): ReactElement {
 
   // Determine display value
   let displayValue = "--";
-  if (!isLoading && !error && usdcBalance !== null) {
+  if (!(isLoading || error) && usdcBalance !== null) {
     displayValue = formatBalanceForDisplay(usdcBalance);
   }
 

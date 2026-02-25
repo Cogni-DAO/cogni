@@ -169,7 +169,7 @@ export function ModelPicker({
                           Free
                         </span>
                       )}
-                      {!model.isFree && !model.isZdr && isSelected && (
+                      {!(model.isFree || model.isZdr) && isSelected && (
                         <Check className="size-4 text-primary" />
                       )}
                       {model.isZdr && isSelected && (

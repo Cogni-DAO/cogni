@@ -325,7 +325,7 @@ function createClassRule(ruleId, filterTypes) {
        * Determine if call expression callee matches trackedNames
        */
       function isTrackedCall(node) {
-        if (!node || !node.callee) {
+        if (!(node && node.callee)) {
           return false;
         }
         if (

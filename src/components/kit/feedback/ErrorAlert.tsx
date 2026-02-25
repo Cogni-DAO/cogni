@@ -99,7 +99,7 @@ export const ErrorAlert = forwardRef<ErrorAlertRef, ErrorAlertProps>(
     }));
 
     useEffect(() => {
-      if (!code || !message) {
+      if (!(code && message)) {
         setVisible(false);
         return;
       }

@@ -18,7 +18,7 @@ export default async function preflightLitellmConfig() {
   const litellmBaseUrl = process.env.LITELLM_BASE_URL;
   const litellmMasterKey = process.env.LITELLM_MASTER_KEY;
 
-  if (!litellmBaseUrl || !litellmMasterKey) {
+  if (!(litellmBaseUrl && litellmMasterKey)) {
     // Other preflights will catch missing env vars
     return;
   }

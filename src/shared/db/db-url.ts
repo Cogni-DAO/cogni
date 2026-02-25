@@ -30,7 +30,7 @@ export function buildDatabaseUrl(env: DbEnvInput): string {
       ? env.DB_PORT
       : Number(env.DB_PORT ?? "5432");
 
-  if (!user || !password || !db) {
+  if (!(user && password && db)) {
     throw new TypeError(
       "Missing required DB env vars: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB"
     );

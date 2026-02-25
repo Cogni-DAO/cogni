@@ -228,7 +228,7 @@ export function serverEnv(): ServerEnv {
           const dbUrl = new URL(parsed.DATABASE_URL);
           const host = dbUrl.hostname;
           const isLocal = host === "localhost" || host === "127.0.0.1";
-          if (!isLocal && !dbUrl.searchParams.has("sslmode")) {
+          if (!(isLocal || dbUrl.searchParams.has("sslmode"))) {
             throw new Error(
               `DATABASE_URL points to non-localhost host "${host}" but is missing sslmode= parameter. ` +
                 "Add ?sslmode=require (or stricter) for production safety."
@@ -248,7 +248,7 @@ export function serverEnv(): ServerEnv {
           const svcUrl = new URL(parsed.DATABASE_SERVICE_URL);
           const host = svcUrl.hostname;
           const isLocal = host === "localhost" || host === "127.0.0.1";
-          if (!isLocal && !svcUrl.searchParams.has("sslmode")) {
+          if (!(isLocal || svcUrl.searchParams.has("sslmode"))) {
             throw new Error(
               `DATABASE_SERVICE_URL points to non-localhost host "${host}" but is missing sslmode= parameter. ` +
                 "Add ?sslmode=require (or stricter) for production safety."
@@ -268,8 +268,10 @@ export function serverEnv(): ServerEnv {
         throw new Error(`COGNI_REPO_ROOT does not exist: ${COGNI_REPO_ROOT}`);
       }
       if (
-        !existsSync(join(COGNI_REPO_ROOT, "package.json")) &&
-        !existsSync(join(COGNI_REPO_ROOT, ".git"))
+        !(
+          existsSync(join(COGNI_REPO_ROOT, "package.json")) ||
+          existsSync(join(COGNI_REPO_ROOT, ".git"))
+        )
       ) {
         throw new Error(
           `COGNI_REPO_ROOT missing package.json and .git: ${COGNI_REPO_ROOT}`

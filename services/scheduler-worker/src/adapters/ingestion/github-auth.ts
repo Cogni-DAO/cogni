@@ -62,7 +62,7 @@ export class GitHubAppTokenProvider implements VcsTokenProvider {
   private async resolveInstallationId(repoRef: string): Promise<number> {
     const { token } = await this.auth({ type: "app" });
     const [owner, repo] = repoRef.split("/");
-    if (!owner || !repo) {
+    if (!(owner && repo)) {
       throw new Error(
         `Invalid repoRef format "${repoRef}", expected "owner/repo"`
       );

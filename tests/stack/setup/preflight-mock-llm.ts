@@ -20,7 +20,7 @@ export default async function preflightMockLlm() {
   const litellmBaseUrl = process.env.LITELLM_BASE_URL;
   const litellmMasterKey = process.env.LITELLM_MASTER_KEY;
 
-  if (!litellmBaseUrl || !litellmMasterKey) {
+  if (!(litellmBaseUrl && litellmMasterKey)) {
     throw new Error(
       "LITELLM_BASE_URL and LITELLM_MASTER_KEY must be set for stack tests."
     );

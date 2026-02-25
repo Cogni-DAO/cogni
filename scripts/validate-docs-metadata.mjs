@@ -235,7 +235,7 @@ function validateDoc(file, props, content, allIds) {
     errors.push(...checkRequiredHeadings(content, SPEC_REQUIRED_HEADINGS));
     // Accept either "Invariants" or "Core Invariants"
     const h2s = extractH2Headings(content);
-    if (!h2s.includes("Invariants") && !h2s.includes("Core Invariants")) {
+    if (!(h2s.includes("Invariants") || h2s.includes("Core Invariants"))) {
       errors.push(`missing required heading: ## Invariants`);
     }
   }

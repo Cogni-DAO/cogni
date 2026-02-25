@@ -92,7 +92,7 @@ export function createLedgerContainer(
   config: Env,
   logger: Logger
 ): LedgerContainer | null {
-  if (!config.NODE_ID || !config.SCOPE_ID) {
+  if (!(config.NODE_ID && config.SCOPE_ID)) {
     logger.info("NODE_ID or SCOPE_ID not set — ledger worker disabled");
     return null;
   }
