@@ -3,7 +3,7 @@
 
 /**
  * Module: `@features/layout/components/AppFooter`
- * Purpose: Data-driven site footer with link columns and brand section.
+ * Purpose: Data-driven site footer with link columns, brand section, and social icons.
  * Scope: Renders footer for public pages. Does not handle authentication or dynamic content.
  * Invariants: Columns sourced from footer-items.ts; external links open in new tab.
  * Side-effects: none
@@ -15,11 +15,12 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactElement } from "react";
 
-import { FOOTER_COLUMNS } from "./footer-items";
+import { FOOTER_COLUMNS, SOCIAL_LINKS } from "./footer-items";
 
 export function AppFooter(): ReactElement {
   return (
-    <footer className="border-t bg-background">
+    <footer className="border-t bg-muted/40">
+      {/* Link columns */}
       <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
           {/* Brand column */}
@@ -38,7 +39,6 @@ export function AppFooter(): ReactElement {
             </p>
           </div>
 
-          {/* Link columns */}
           {FOOTER_COLUMNS.map((column) => (
             <div key={column.title}>
               <h3 className="font-semibold text-foreground text-sm">
@@ -70,11 +70,28 @@ export function AppFooter(): ReactElement {
             </div>
           ))}
         </div>
+      </div>
 
-        <div className="mt-10 border-t pt-6">
-          <p className="text-center text-muted-foreground text-xs">
-            &copy; {new Date().getFullYear()} Cogni DAO. All rights reserved.
+      {/* Bottom bar — full width */}
+      <div className="border-t">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 sm:px-6">
+          <p className="text-muted-foreground text-xs">
+            &copy; {new Date().getFullYear()} Cogni DAO
           </p>
+          <div className="flex items-center gap-5">
+            {SOCIAL_LINKS.map(({ label, href, icon: Icon }) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <Icon className="h-5 w-5" />
+              </a>
+            ))}
+          </div>
         </div>
       </div>
     </footer>
