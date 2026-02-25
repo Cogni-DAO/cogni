@@ -7,7 +7,7 @@
  * Scope: Provides HTML structure and font loading for entire application. Does not handle routing or content.
  * Invariants: Renders valid HTML5 structure; applies consistent font variables; includes global CSS.
  * Side-effects: none
- * Notes: Geist fonts loaded with CSS variables for theme consistency.
+ * Notes: Manrope font loaded with CSS variables for theme consistency.
  * Links: Next.js App Router layout specification
  * @public
  */

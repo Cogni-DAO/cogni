@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/page`
+ * Module: `@app/(public)/page`
  * Purpose: Homepage with hero section and feature showcase. Redirects signed-in users to /chat.
  * Scope: Server component that checks session and either redirects or renders landing page. Does not handle authentication logic.
  *        AuthRedirect client component handles post-sign-in redirect when session changes client-side.
