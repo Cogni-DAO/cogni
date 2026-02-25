@@ -108,7 +108,7 @@ export function GovernanceView(): ReactElement {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="font-bold text-3xl tracking-tight">
+      <h1 className="font-bold text-2xl tracking-tight">
         Cogni System Activity
       </h1>
 
@@ -146,7 +146,7 @@ export function GovernanceView(): ReactElement {
 
       {/* Activity charts */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="font-semibold text-xl tracking-tight">
             Usage Metrics
           </h2>
