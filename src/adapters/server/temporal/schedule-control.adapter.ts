@@ -276,7 +276,7 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
       const recentActions = description.info.recentActions;
 
       const nextTime = nextActionTimes[0];
-      const lastAction = recentActions[recentActions.length - 1];
+      const lastAction = recentActions.at(-1);
 
       // Extract config fields for drift detection
       // NOTE: Temporal compiles cronExpressions into calendars at create time,

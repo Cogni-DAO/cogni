@@ -43,7 +43,7 @@ function extractAssistantContent(messages: BaseMessage[]): string {
     return "";
   }
 
-  const lastMessage = messages[messages.length - 1];
+  const lastMessage = messages.at(-1);
   if (!lastMessage) {
     return "";
   }

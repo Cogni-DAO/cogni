@@ -92,7 +92,7 @@ async function testBasicOutboundHeaders(): Promise<void> {
       `Expected >=1 capture, got ${captures.length}`
     );
 
-    const last = captures[captures.length - 1];
+    const last = captures.at(-1);
     console.log("  Captured headers:", JSON.stringify(last.headers, null, 2));
 
     // Check static header
@@ -239,7 +239,7 @@ async function testClearOutboundHeaders(): Promise<void> {
     const before = readEchoCaptures();
     assert(before.length >= 1, "No captures from first call");
     assert(
-      before[before.length - 1].headers["x-billing-tag"] === "should-disappear",
+      before.at(-1).headers["x-billing-tag"] === "should-disappear",
       "x-billing-tag not set in first call"
     );
     console.log("  Headers present on first call: OK");
@@ -264,7 +264,7 @@ async function testClearOutboundHeaders(): Promise<void> {
     const after = readEchoCaptures();
     assert(after.length >= 1, "No captures from second call");
 
-    const lastAfter = after[after.length - 1];
+    const lastAfter = after.at(-1);
     assert(
       lastAfter.headers["x-billing-tag"] === undefined,
       `x-billing-tag still present after clear: ${lastAfter.headers["x-billing-tag"]}`

@@ -38,6 +38,6 @@ export class FakeAiTelemetryAdapter implements AiTelemetryPort {
 
   /** Get last recorded invocation (or undefined if none) */
   getLast(): RecordInvocationParams | undefined {
-    return this.invocations[this.invocations.length - 1];
+    return this.invocations.at(-1);
   }
 }

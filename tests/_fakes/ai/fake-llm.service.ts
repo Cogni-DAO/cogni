@@ -156,6 +156,6 @@ export class FakeLlmService implements LlmService {
   }
 
   getLastCall(): (typeof this.callLog)[0] | undefined {
-    return this.callLog[this.callLog.length - 1];
+    return this.callLog.at(-1);
   }
 }

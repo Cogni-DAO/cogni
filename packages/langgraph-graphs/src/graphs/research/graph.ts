@@ -160,8 +160,7 @@ function createResearcherSubgraph(opts: CreateResearcherSubgraphOptions) {
     state: ResearcherState,
     config: RunnableConfig
   ) {
-    const lastMessage =
-      state.researcherMessages[state.researcherMessages.length - 1];
+    const lastMessage = state.researcherMessages.at(-1);
 
     // Type guard: check if message is AIMessage with tool_calls
     if (!(lastMessage instanceof AIMessage && lastMessage.tool_calls?.length)) {
@@ -225,8 +224,7 @@ function createResearcherSubgraph(opts: CreateResearcherSubgraphOptions) {
 
   // Routing: continue research or compress
   function routeResearcher(state: ResearcherState): string {
-    const lastMessage =
-      state.researcherMessages[state.researcherMessages.length - 1];
+    const lastMessage = state.researcherMessages.at(-1);
     const hasToolCalls =
       lastMessage instanceof AIMessage &&
       lastMessage.tool_calls &&
@@ -318,8 +316,7 @@ function createSupervisorSubgraph(opts: CreateSupervisorSubgraphOptions) {
     state: SupervisorState,
     config: RunnableConfig
   ) {
-    const lastMessage =
-      state.supervisorMessages[state.supervisorMessages.length - 1];
+    const lastMessage = state.supervisorMessages.at(-1);
 
     // Type guard for AIMessage with tool_calls
     if (!(lastMessage instanceof AIMessage && lastMessage.tool_calls?.length)) {
@@ -400,8 +397,7 @@ function createSupervisorSubgraph(opts: CreateSupervisorSubgraphOptions) {
 
   // Routing: decide whether to process tools
   function routeSupervisor(state: SupervisorState): string {
-    const lastMessage =
-      state.supervisorMessages[state.supervisorMessages.length - 1];
+    const lastMessage = state.supervisorMessages.at(-1);
 
     // No tool calls or not an AIMessage → end
     if (!(lastMessage instanceof AIMessage && lastMessage.tool_calls?.length)) {
@@ -478,7 +474,7 @@ export function createResearchGraph(opts: CreateReactAgentGraphOptions) {
   ) {
     const messages = coerceMessages(state.messages);
     const userMessages = messages.filter((m) => getMessageType(m) === "human");
-    const lastUserMessage = userMessages[userMessages.length - 1];
+    const lastUserMessage = userMessages.at(-1);
     const userQuestion =
       lastUserMessage && typeof lastUserMessage.content === "string"
         ? lastUserMessage.content
@@ -535,7 +531,7 @@ export function createResearchGraph(opts: CreateReactAgentGraphOptions) {
   async function finalReport(state: ResearchState, config: RunnableConfig) {
     const messages = coerceMessages(state.messages);
     const userMessages = messages.filter((m) => getMessageType(m) === "human");
-    const lastUserMessage = userMessages[userMessages.length - 1];
+    const lastUserMessage = userMessages.at(-1);
     const userQuestion =
       lastUserMessage && typeof lastUserMessage.content === "string"
         ? lastUserMessage.content

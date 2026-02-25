@@ -157,7 +157,7 @@ describe("LangGraphInProcProvider", () => {
       expect(dones).toHaveLength(1);
 
       // done is last
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // Result reflects success
       expect(result.ok).toBe(true);
@@ -191,7 +191,7 @@ describe("LangGraphInProcProvider", () => {
       // done must be last
       const dones = events.filter((e) => e.type === "done");
       expect(dones).toHaveLength(1);
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // Result reflects failure
       expect(result.ok).toBe(false);
@@ -222,7 +222,7 @@ describe("LangGraphInProcProvider", () => {
       expect(errors[0]).toEqual({ type: "error", error: "invalid_request" });
 
       // done must be last
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // Result reflects failure
       expect(result.ok).toBe(false);

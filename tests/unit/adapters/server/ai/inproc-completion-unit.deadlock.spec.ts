@@ -141,8 +141,6 @@ describe("InProcCompletionUnitAdapter deadlock prevention", () => {
     expect(usageIndex).toBeGreaterThan(-1);
 
     // Assert: usage_report is the last event (no done from completion unit)
-    expect(collectedEvents[collectedEvents.length - 1].type).toBe(
-      "usage_report"
-    );
+    expect(collectedEvents.at(-1).type).toBe("usage_report");
   });
 });

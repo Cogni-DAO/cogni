@@ -158,7 +158,7 @@ describe("createInProcGraphRunner", () => {
       expect(errors).toHaveLength(0);
 
       // done must be last
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // assistant_final must precede done
       const assistantFinalIndex = events.findIndex(
@@ -197,7 +197,7 @@ describe("createInProcGraphRunner", () => {
       expect(dones).toHaveLength(1);
 
       // done must be last
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // error must precede done
       const errorIndex = events.findIndex((e) => e.type === "error");
@@ -235,7 +235,7 @@ describe("createInProcGraphRunner", () => {
       expect(dones).toHaveLength(1);
 
       // done must be last
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // error should be 'aborted'
       expect(errors[0]).toEqual({ type: "error", error: "aborted" });

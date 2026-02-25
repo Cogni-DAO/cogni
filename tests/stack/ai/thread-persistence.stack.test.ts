@@ -155,7 +155,7 @@ describe("Thread Persistence", () => {
     const messages = rows[0]?.messages as Array<{ role: string }>;
     expect(messages.length).toBeGreaterThanOrEqual(2);
     expect(messages[0]?.role).toBe("user");
-    expect(messages[messages.length - 1]?.role).toBe("assistant");
+    expect(messages.at(-1)?.role).toBe("assistant");
 
     // --- Turn 2: SERVER_OWNS_MESSAGES — server loads turn 1 from DB ---
     // P1 contract: client sends only { message: string }, not messages[]

@@ -304,7 +304,7 @@ describe("Runner ToolExecFn seam (integration)", () => {
 
       // done is last
       expect(dones).toHaveLength(1);
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // No error events
       expect(errors).toHaveLength(0);
@@ -377,7 +377,7 @@ describe("Runner ToolExecFn seam (integration)", () => {
 
       // Graph completed successfully (done is last event)
       expect(dones).toHaveLength(1);
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+      expect(events.at(-1)).toEqual({ type: "done" });
 
       // Graph result is ok (LLM received policy_denied JSON and responded)
       expect(result.ok).toBe(true);

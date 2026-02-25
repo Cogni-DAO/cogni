@@ -280,7 +280,7 @@ export class MimirMetricsAdapter implements MetricsQueryPort {
       return { current: 0 };
     }
 
-    const lastPoint = series[series.length - 1];
+    const lastPoint = series.at(-1);
     const current = lastPoint?.value ?? 0;
 
     if (series.length < 2) {

@@ -131,7 +131,7 @@ describe("Chat Streaming", () => {
     // Assert - Multiple deltas arrive at different times (proves not buffered)
     expect(deltas.length).toBeGreaterThanOrEqual(2);
     const firstTime = deltas[0]?.t ?? 0;
-    const lastDelta = deltas[deltas.length - 1];
+    const lastDelta = deltas.at(-1);
     const lastTime = lastDelta?.t ?? 0;
     // At least some time difference between first and last delta
     expect(lastTime).toBeGreaterThanOrEqual(firstTime);
