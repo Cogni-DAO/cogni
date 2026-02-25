@@ -5,7 +5,7 @@
  * Module: `@shared/auth/session`
  * Purpose: Canonical session identity type shared across layers.
  * Scope: Minimal user identity fields used by app facades and adapters; does not contain runtime behavior.
- * Invariants: id is always DB UUID; contains only serializable primitives; no runtime behavior. walletAddress is null for OAuth-only users.
+ * Invariants: id is always DB UUID; serializable primitives only, no runtime behavior; fields are strict nullable (string | null), never optional.
  * Side-effects: none
  * Notes: walletAddress is null when user authenticated via OAuth (GitHub) without a linked wallet.
  * Links: app/_lib/auth/session, docs/spec/security-auth.md
@@ -19,6 +19,6 @@ export interface SessionUser {
    */
   id: string;
   walletAddress: string | null;
-  displayName?: string | null;
-  avatarColor?: string | null;
+  displayName: string | null;
+  avatarColor: string | null;
 }

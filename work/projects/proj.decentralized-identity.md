@@ -32,7 +32,7 @@ Provide a stable, auth-method-agnostic identity for every user. The canonical id
 | `user_bindings` table + `identity_events` audit trail                                 | In Review   | 2   | task.0089  |
 | Multi-provider auth: GitHub + Discord + Google OAuth on NextAuth v4 via user_bindings | In Review   | 3   | task.0107  |
 | Backfill: existing `users.wallet_address` → `user_bindings`                           | In Review   | 1   | task.0089  |
-| Profile + identity DB correctness: RLS, constraints, type tightening                  | Not Started | 2   | task.0110  |
+| Profile + identity DB correctness: RLS, constraints, type tightening                  | In Review   | 2   | task.0110  |
 | Auth UX: /sign-in page, middleware guards, account linking buttons, profile polish    | Not Started | 3   | task.0111  |
 | SIWE zero-flash: immediate post-sign navigation                                       | Not Started | 1   | task.0112  |
 

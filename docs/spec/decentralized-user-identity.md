@@ -192,7 +192,7 @@ Provide a stable, auth-method-agnostic identity for every user. `users.id` works
 | Column         | Type        | Constraints             | Description                  |
 | -------------- | ----------- | ----------------------- | ---------------------------- |
 | `user_id`      | TEXT        | PK, FK → users.id       | Exactly one profile per user |
-| `display_name` | TEXT        | CHECK length ≤ 100      | User-chosen display name     |
+| `display_name` | TEXT        | CHECK length ≤ 50       | User-chosen display name     |
 | `avatar_color` | TEXT        | CHECK hex `#RRGGBB`     | Avatar background color      |
 | `updated_at`   | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last profile update          |
 

@@ -10,6 +10,7 @@
  * - NO_AUTO_MERGE: UNIQUE(provider, external_id) — same external ID for same provider can't bind to two users.
  * - APPEND_ONLY_EVENTS: identity_events rows are append-only; DB trigger rejects UPDATE/DELETE.
  * - USER_ID_AT_CREATION: All FKs reference users.id (UUID).
+ * - RLS_ENABLED: Both tables have row-level security enabled.
  * Side-effects: none (schema definitions only)
  * Links: docs/spec/decentralized-identity.md
  * @public
@@ -58,7 +59,7 @@ export const userBindings = pgTable(
     ),
     index("user_bindings_user_id_idx").on(table.userId),
   ]
-);
+).enableRLS();
 
 /**
  * Identity events — append-only audit trail for binding lifecycle.
@@ -85,4 +86,4 @@ export const identityEvents = pgTable(
     ),
     index("identity_events_user_id_idx").on(table.userId),
   ]
-);
+).enableRLS();

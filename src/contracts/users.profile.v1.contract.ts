@@ -9,6 +9,8 @@
  *   - Contract remains stable; breaking changes require new version
  *   - All consumers use z.infer types
  *   - DISPLAY_NAME_FALLBACK: resolved_display_name applies fallback chain (profile → primary binding → any binding → wallet truncation)
+ *   - DISPLAY_NAME_MAX_50: displayName input validated to max 50 chars
+ *   - AVATAR_COLOR_HEX: avatarColor input validated to ^#[0-9a-fA-F]{6}$
  * Side-effects: none
  * Links: /api/v1/users/me route
  * @internal
@@ -26,8 +28,11 @@ export const profileReadOperation = {
   summary: "Read current user profile",
   input: z.object({}),
   output: z.object({
-    displayName: z.string().nullable(),
-    avatarColor: z.string().nullable(),
+    displayName: z.string().max(50).nullable(),
+    avatarColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .nullable(),
     resolvedDisplayName: z.string(),
     linkedProviders: z.array(LinkedProviderSchema),
   }),
@@ -37,12 +42,19 @@ export const profileUpdateOperation = {
   id: "users.profile.update.v1",
   summary: "Update current user profile",
   input: z.object({
-    displayName: z.string().nullable().optional(),
-    avatarColor: z.string().nullable().optional(),
+    displayName: z.string().max(50).nullable().optional(),
+    avatarColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .nullable()
+      .optional(),
   }),
   output: z.object({
-    displayName: z.string().nullable(),
-    avatarColor: z.string().nullable(),
+    displayName: z.string().max(50).nullable(),
+    avatarColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .nullable(),
     resolvedDisplayName: z.string(),
   }),
 } as const;

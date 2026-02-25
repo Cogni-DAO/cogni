@@ -2,7 +2,7 @@
 id: task.0110
 type: task
 title: "Profile + identity DB correctness: RLS, constraints, type tightening"
-status: needs_implement
+status: needs_merge
 priority: 0
 rank: 10
 estimate: 2
@@ -12,7 +12,7 @@ spec_refs: decentralized-user-identity, authentication-spec
 assignees: unassigned
 credit:
 project: proj.decentralized-identity
-branch:
+branch: feat/profile
 pr:
 reviewer:
 revision: 0
@@ -51,13 +51,28 @@ external_refs:
 
 ## Plan
 
-- [ ] Add `.enableRLS()` to `userBindings` and `identityEvents` in `packages/db-schema/src/identity.ts`
-- [ ] Add `.enableRLS()` to `userProfiles` and `userSettings` in `packages/db-schema/src/profile.ts`
-- [ ] Add `display_name` length CHECK and `avatar_color` hex CHECK to `userProfiles`
-- [ ] Run `pnpm db:generate` to create migration
-- [ ] Tighten Zod contract inputs: `displayName.max(100)`, `avatarColor.regex()`
-- [ ] Audit `SessionUser` type across `session.ts`, `next-auth.d.ts`, `auth.ts` — ensure consistent `string | null`
-- [ ] Run `pnpm check` and `pnpm test`
+- [ ] **Checkpoint 1 — Schema changes (RLS + CHECK constraints)**
+  - Milestone: All user-owned identity/profile tables have `.enableRLS()` and CHECK constraints
+  - Note: `userSettings` was pruned — only `userProfiles` in profile.ts
+  - Todos:
+    - [ ] Add `.enableRLS()` to `userBindings` and `identityEvents` in `packages/db-schema/src/identity.ts`
+    - [ ] Add `.enableRLS()` to `userProfiles` in `packages/db-schema/src/profile.ts`
+    - [ ] Add `display_name` length CHECK (max 100) and `avatar_color` hex CHECK to `userProfiles`
+  - Validation: `pnpm check` passes
+
+- [ ] **Checkpoint 2 — Migration generation**
+  - Milestone: New migration file generated for RLS + constraints
+  - Todos:
+    - [ ] Run `pnpm db:generate` to create migration
+    - [ ] Verify migration SQL is correct
+  - Validation: `pnpm check` passes
+
+- [ ] **Checkpoint 3 — Zod + type tightening**
+  - Milestone: Contract inputs validated; SessionUser types consistent
+  - Todos:
+    - [ ] Tighten Zod contract: `displayName.max(100)`, `avatarColor.regex(/^#[0-9a-fA-F]{6}$/)`
+    - [ ] Audit `SessionUser` across `session.ts`, `next-auth.d.ts`, `auth.ts` — ensure `string | null` (not optional)
+  - Validation: `pnpm check` + `pnpm test` pass
 
 ## Validation
 
