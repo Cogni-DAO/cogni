@@ -154,8 +154,8 @@
     "@cogni/db-schema": "workspace:*",
     "@cogni/ids": "workspace:*",
     "@cogni/ingestion-core": "workspace:*",
-    "@cogni/ledger-core": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
+    "@cogni/ledger-core": "workspace:*",
     "@cogni/scheduler-core": "workspace:*",
     "@langchain/langgraph-sdk": "^0.0.32",
     "@opentelemetry/api": "^1.9.0",
@@ -217,6 +217,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@0xsplits/splits-sdk": "6.4.1",
     "@axe-core/playwright": "^4.11.0",
     "@biomejs/biome": "^2.3.7",
     "@commitlint/cli": "^19.8.1",

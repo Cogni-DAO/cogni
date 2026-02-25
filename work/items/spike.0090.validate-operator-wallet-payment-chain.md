@@ -99,4 +99,8 @@ The operator wallet project (proj.ai-operator-wallet) depends on three building 
 
 ## Budget
 
-~$15 total: $5 OpenRouter minimum + $5 USDC for Split testing + ~$5 ETH for gas across all experiments.
+~$3 total: $1 OpenRouter top-up (may need $5 if minimum enforced) + $1 USDC for Split testing + trace ETH for gas (Base L2 gas < $0.001/tx).
+
+## PR / Links
+
+- Handoff: [handoff](../handoffs/spike.0090.handoff.md)
