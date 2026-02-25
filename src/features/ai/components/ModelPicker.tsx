@@ -94,7 +94,7 @@ export function ModelPicker({
         className={cn(
           // Mobile: centered card with margins
           "fixed inset-3 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-2xl",
-          "max-h-[70vh]",
+          "max-h-[var(--max-height-dialog-mobile)]",
           // Desktop: centered modal
           "sm:inset-auto sm:top-[var(--center-50)] sm:left-[var(--center-50)] sm:w-full",
           "sm:translate-x-[var(--center-neg-50)] sm:translate-y-[var(--center-neg-50)]",

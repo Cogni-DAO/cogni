@@ -88,7 +88,10 @@ export function ChatThreadsSidebarGroup(): ReactElement {
             const title = thread.title ?? "Untitled";
 
             return (
-              <SidebarMenuSubItem key={thread.stateKey}>
+              <SidebarMenuSubItem
+                key={thread.stateKey}
+                className="group/thread"
+              >
                 <SidebarMenuSubButton
                   size="sm"
                   isActive={isActive}
@@ -107,14 +110,14 @@ export function ChatThreadsSidebarGroup(): ReactElement {
                     </Link>
                   )}
                 </SidebarMenuSubButton>
-                <SidebarMenuAction
-                  showOnHover
+                <button
+                  type="button"
                   onClick={() => handleDeleteThread(thread.stateKey)}
                   aria-label="Delete thread"
-                  className="text-muted-foreground hover:text-destructive"
+                  className="absolute top-1 right-1 flex size-5 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/thread:opacity-100"
                 >
-                  <Trash2 />
-                </SidebarMenuAction>
+                  <Trash2 className="size-3.5" />
+                </button>
               </SidebarMenuSubItem>
             );
           })}

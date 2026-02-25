@@ -77,6 +77,7 @@
   --size-composer-spacer: 42px;
   --max-width-model-trigger: 120px;
   --max-height-dialog: 80vh;
+  --max-height-dialog-mobile: 70vh;
 
   /* Positioning - centering transforms */
   --center-50: 50%;

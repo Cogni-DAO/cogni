@@ -77,6 +77,7 @@ function SidebarProvider({
       } else {
         _setOpen(openState);
       }
+      // biome-ignore lint/suspicious/noDocumentCookie: vendor pattern — persists sidebar open/collapsed state across page loads (same as OC upstream)
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
     [setOpenProp, open]
