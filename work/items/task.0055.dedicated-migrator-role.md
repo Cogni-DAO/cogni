@@ -6,7 +6,7 @@ status: needs_triage
 priority: 2
 estimate: 2
 summary: "app_user is both DB owner (DDL for migrations) and runtime role (DML with RLS). A compromised app_user credential can ALTER/DROP tables. Split into app_migrator (DDL, BYPASSRLS, used only by drizzle-kit) and app_user (DML-only, RLS enforced, no schema mutation)."
-outcome: "Three DB roles: app_migrator (DDL + BYPASSRLS, migrations only), app_user (DML + RLS enforced, runtime), app_service (DML + BYPASSRLS, workers). app_user is no longer DB owner and cannot CREATE/ALTER/DROP."
+outcome: "Three DB roles: app_migrator (DDL + BYPASSRLS, migrations only), app_user (DML + RLS enforced, runtime), app_service (DML + BYPASSRLS, workers). app_user is no longer DB owner and cannot CREATE/ALTER/DROP. FORCE RLS becomes defense-in-depth instead of a critical requirement."
 spec_refs:
   - database-rls-spec
   - databases-spec
@@ -33,6 +33,10 @@ rank: 10
 Today `app_user` is the DB owner. This means it can run DDL (CREATE TABLE, ALTER TABLE, DROP TABLE) — needed for drizzle-kit migrations — but also means the runtime web app role has far more privilege than needed. The RLS spec (database-rls-spec, invariant LEAST_PRIVILEGE_APP_ROLE) acknowledges this and flags "separate migrator role" as P1 future work.
 
 The system tenant seed migration (0008) exposed this tension: we considered running migrations as `app_service` (BYPASSRLS) to avoid RLS issues, but `app_service` lacks DDL rights. The fix was `set_config()` in the migration SQL, but the root issue remains — `app_user` wears two hats.
+
+### FORCE RLS hack debt
+
+Because `app_user` owns tables, Postgres lets it bypass RLS by default. Every table with `.enableRLS()` requires a **hand-written** companion migration adding `FORCE ROW LEVEL SECURITY` + `CREATE POLICY`. Drizzle has no API for `FORCE RLS` (confirmed Feb 2026). This creates a pattern where every Drizzle-generated migration must be paired with a hand-written one (see 0004, 0005, 0006, 0015). Once `app_user` is no longer table owner, `FORCE RLS` becomes optional defense-in-depth and the hand-written migration pattern can be replaced by a single post-migrate hook.
 
 ## Requirements
 
