@@ -9,7 +9,7 @@ summary: Research how CogniDAO could become a minimal passthrough layer (SDK/gat
 outcome: Research doc with option analysis (gateway vs SDK vs x402), phased recommendation, and proposed project/task layout.
 spec_refs:
 assignees: derekg1729
-credit: SnappedAI (Kai) / Connor (moonbags) — MDI partnership proposal (story.0092) motivated this spike
+credit: SnappedAI (Kai) / Connor (moonbags) — MDI partnership proposal (story.0118) motivated this spike
 project:
 branch:
 pr:
@@ -19,7 +19,7 @@ updated: 2026-02-26
 labels: [dao, sdk, billing, product]
 external_refs:
   - docs/research/dao-gateway-sdk.md
-  - story.0092 (MDI partnership — motivated this research)
+  - story.0118 (MDI partnership — motivated this research)
 revision: 0
 blocked_by:
 deploy_verified: false

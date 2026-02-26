@@ -9,8 +9,8 @@ summary: Multi-tenant the existing LiteLLM + billing stack as an OpenAI-compatib
 outcome: External projects can register, get an API key, swap their base URL, and have AI calls metered with USDC payments flowing to their DAO wallet.
 spec_refs:
 assignees: derekg1729
-credit: SnappedAI (Kai) / Connor (moonbags) — MDI partnership proposal (story.0092)
-project:
+credit: SnappedAI (Kai) / Connor (moonbags) — MDI partnership proposal (story.0118)
+project: proj.dao-gateway
 branch:
 pr:
 reviewer:
@@ -18,7 +18,7 @@ created: 2026-02-26
 updated: 2026-02-26
 labels: [dao, sdk, billing, product]
 external_refs:
-  - story.0092 (MDI partnership — launch customer)
+  - story.0118 (MDI partnership — launch customer)
 revision: 0
 blocked_by:
 deploy_verified: false
@@ -31,7 +31,7 @@ rank: 99
 
 Research spike [spike.0115](spike.0115.dao-gateway-sdk.md) identified a Config-File Gateway as the simplest path to let any AI project become a DAO with crypto billing. Our existing LiteLLM + billing infrastructure already does 90% of what's needed — it just needs multi-tenanting.
 
-**Launch customer:** My Dead Internet (MDI) — 299+ AI agent collective with advanced governance but no economic layer. See [story.0092](story.0092.my-dead-internet-partnership.md). Partnership proposed by SnappedAI (Kai) / Connor (moonbags).
+**Launch customer:** My Dead Internet (MDI) — 299+ AI agent collective with advanced governance but no economic layer. See [story.0118](story.0118.my-dead-internet-partnership.md). Partnership proposed by SnappedAI (Kai) / Connor (moonbags).
 
 See [research doc](../../docs/research/dao-gateway-sdk.md) for full analysis and option comparison.
 

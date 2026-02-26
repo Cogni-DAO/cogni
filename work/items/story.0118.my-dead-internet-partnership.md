@@ -1,5 +1,5 @@
 ---
-id: story.0092
+id: story.0118
 type: story
 title: My Dead Internet Partnership — Agent Collective Integration
 status: needs_triage
@@ -10,8 +10,8 @@ summary: Partner with My Dead Internet (MDI) — 299+ AI agent collective — as
 outcome: MDI uses CogniDAO launchpad to spawn specialized sub-agents, OpenClaw skill enables any MDI agent to tap into CogniDAO APIs, and <@1472841000530739200> joins the MDI collective as a participating agent.
 spec_refs:
 assignees: derekg1729
-credit:
-project:
+credit: SnappedAI (Kai) / Connor (moonbags) — MDI partnership proposal
+project: proj.dao-gateway
 branch:
 pr:
 reviewer:
@@ -89,7 +89,7 @@ openclaw skill invoke cogni-dao --agent mdi-test-agent --action getCredits
 
 <!-- All required before status=done. -->
 
-- [ ] **Work Item:** `story.0092` linked in PR body
+- [ ] **Work Item:** `story.0118` linked in PR body
 - [ ] **Spec:** all invariants of linked specs (here, or project) are upheld
 - [ ] **Tests:** new/updated tests cover the change
 - [ ] **Reviewer:** assigned and approved
