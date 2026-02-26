@@ -21,5 +21,10 @@ export async function getServerSessionUser(): Promise<SessionUser | null> {
   const id = session?.user?.id;
   if (!id) return null;
 
-  return { id, walletAddress: session?.user?.walletAddress ?? null };
+  return {
+    id,
+    walletAddress: session?.user?.walletAddress ?? null,
+    displayName: session?.user?.displayName ?? null,
+    avatarColor: session?.user?.avatarColor ?? null,
+  };
 }

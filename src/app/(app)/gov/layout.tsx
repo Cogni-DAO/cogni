@@ -51,7 +51,7 @@ export default function GovLayout({
   children: ReactNode;
 }): ReactElement {
   return (
-    <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-6 p-4 md:p-8 lg:px-16">
+    <div className="flex flex-col gap-6 p-5 md:p-6">
       <nav
         className="flex items-center gap-1 overflow-x-auto rounded-lg border bg-card p-1"
         aria-label="Governance sections"

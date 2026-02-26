@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/(app)/layout`
- * Purpose: Auth guard layout for protected application pages.
- * Scope: Client layout component that enforces authentication for all routes under (app). Does not handle business logic or page content.
+ * Purpose: Auth guard layout with sidebar navigation for protected application pages.
+ * Scope: Client layout component that enforces authentication and provides sidebar + top bar shell for all routes under (app). Does not handle business logic or page content.
  * Invariants: Requires valid session to render children; redirects unauthenticated to home; no auto sign-out.
  * Side-effects: IO (NextAuth session retrieval via client hook, Next.js navigation)
  * Notes: All pages under (app)/* require authentication. Auth session is source of truth.
@@ -18,6 +18,9 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+
+import { SidebarInset, SidebarProvider } from "@/components";
+import { AppSidebar, AppTopBar } from "@/features/layout";
 
 export default function AppLayout({
   children,
@@ -49,6 +52,14 @@ export default function AppLayout({
     return null;
   }
 
-  // Authenticated: render children
-  return <>{children}</>;
+  // Authenticated: render sidebar layout
+  return (
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <AppTopBar />
+        <div className="flex flex-1 flex-col overflow-auto">{children}</div>
+      </SidebarInset>
+    </SidebarProvider>
+  );
 }

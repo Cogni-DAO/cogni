@@ -72,7 +72,7 @@ export function GovernanceView(): ReactElement {
   // Error state — matches activity/schedules pattern
   if (error) {
     return (
-      <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-6">
         <div className="rounded-lg border border-destructive bg-destructive/10 p-6">
           <h2 className="font-semibold text-destructive text-lg">
             Error loading governance data
@@ -88,7 +88,7 @@ export function GovernanceView(): ReactElement {
   // Loading skeleton — matches activity page pattern
   if (isLoading || !data) {
     return (
-      <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-6">
         <div className="animate-pulse space-y-8">
           <div className="h-8 w-64 rounded-md bg-muted" />
           <div className="grid gap-4 md:grid-cols-2">
@@ -96,19 +96,19 @@ export function GovernanceView(): ReactElement {
             <div className="h-32 rounded-lg bg-muted" />
           </div>
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="h-64 rounded-lg bg-muted" />
-            <div className="h-64 rounded-lg bg-muted" />
-            <div className="h-64 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
           </div>
-          <div className="h-64 rounded-lg bg-muted" />
+          <div className="h-48 rounded-lg bg-muted" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-8">
-      <h1 className="font-bold text-3xl tracking-tight">
+    <div className="flex flex-col gap-6">
+      <h1 className="font-bold text-2xl tracking-tight">
         Cogni System Activity
       </h1>
 
@@ -146,7 +146,7 @@ export function GovernanceView(): ReactElement {
 
       {/* Activity charts */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h2 className="font-semibold text-xl tracking-tight">
             Usage Metrics
           </h2>
@@ -182,9 +182,9 @@ export function GovernanceView(): ReactElement {
           </div>
         ) : activityLoading || !activity ? (
           <div className="grid animate-pulse gap-4 md:grid-cols-3">
-            <div className="h-64 rounded-lg bg-muted" />
-            <div className="h-64 rounded-lg bg-muted" />
-            <div className="h-64 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
           </div>
         ) : (
           <ActivityCharts activity={activity} />
@@ -314,21 +314,21 @@ function ActivityCharts({ activity }: { activity: ActivityData }) {
     <div className="grid gap-4 md:grid-cols-3">
       <ActivityChart
         title="Spend"
-        description={`$${activity.totals.spend.total} total`}
+        description={`$${activity.totals.spend.total}`}
         data={spend.data}
         config={spend.config}
         effectiveStep={effectiveStep}
       />
       <ActivityChart
         title="Tokens"
-        description={`${activity.totals.tokens.total.toLocaleString()} tokens`}
+        description={activity.totals.tokens.total.toLocaleString()}
         data={tokens.data}
         config={tokens.config}
         effectiveStep={effectiveStep}
       />
       <ActivityChart
         title="Requests"
-        description={`${activity.totals.requests.total.toLocaleString()} requests`}
+        description={activity.totals.requests.total.toLocaleString()}
         data={requests.data}
         config={requests.config}
         effectiveStep={effectiveStep}

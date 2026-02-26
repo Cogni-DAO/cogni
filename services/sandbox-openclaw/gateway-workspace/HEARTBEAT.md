@@ -1,1 +1,1 @@
-Governance uses scheduled triggers, not heartbeat polls. See `.openclaw/skills/gov-core/SKILL.md`.
+Heartbeat runs `heartbeat-sync.sh` per gov branch (fetch, merge staging, push) and posts results to Discord. See `.openclaw/skills/git-sync/SKILL.md`.

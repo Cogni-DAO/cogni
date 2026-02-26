@@ -7,9 +7,13 @@
  * Scope: Public API for layout feature components. Does not contain implementation logic.
  * Invariants: Only exports public components.
  * Side-effects: none
- * Notes: Exposes AppHeader for use in app/layout.tsx.
- * Links: src/features/layout/components/AppHeader.tsx
+ * Notes: Exposes layout components for use in app layouts.
+ * Links: src/features/layout/components/
  * @public
  */
 
+export { AppFooter } from "./components/AppFooter";
 export { AppHeader } from "./components/AppHeader";
+export { AppSidebar } from "./components/AppSidebar";
+export { AppTopBar } from "./components/AppTopBar";
+export { UserAvatarMenu } from "./components/UserAvatarMenu";

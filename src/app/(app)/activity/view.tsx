@@ -49,7 +49,7 @@ export function ActivityView() {
 
   if (error) {
     return (
-      <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-8 p-4 md:p-8 lg:px-16">
+      <div className="flex flex-col gap-6 p-5 md:p-6">
         <div className="rounded-lg border border-destructive bg-destructive/10 p-6">
           <h2 className="font-semibold text-destructive text-lg">
             Error loading activity data
@@ -64,13 +64,13 @@ export function ActivityView() {
 
   if (isLoading || !data) {
     return (
-      <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-8 p-4 md:p-8 lg:px-16">
+      <div className="flex flex-col gap-6 p-5 md:p-6">
         <div className="animate-pulse space-y-8">
           <div className="h-8 w-48 rounded-md bg-muted" />
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="h-64 rounded-lg bg-muted" />
-            <div className="h-64 rounded-lg bg-muted" />
-            <div className="h-64 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
           </div>
         </div>
       </div>
@@ -109,9 +109,9 @@ export function ActivityView() {
       );
 
   return (
-    <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-8 p-4 md:p-8 lg:px-16">
-      <div className="flex items-center justify-between">
-        <h1 className="font-bold text-3xl tracking-tight">Your Activity</h1>
+    <div className="flex flex-col gap-6 p-5 md:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="font-bold text-2xl tracking-tight">Your Activity</h1>
         <div className="flex items-center gap-3">
           <ToggleGroup
             type="single"
@@ -139,21 +139,21 @@ export function ActivityView() {
       <div className="grid gap-4 md:grid-cols-3">
         <ActivityChart
           title="Spend"
-          description={`$${totals.spend.total} total`}
+          description={`$${totals.spend.total}`}
           data={spend.data}
           config={spend.config}
           effectiveStep={effectiveStep}
         />
         <ActivityChart
           title="Tokens"
-          description={`${totals.tokens.total.toLocaleString()} tokens`}
+          description={totals.tokens.total.toLocaleString()}
           data={tokens.data}
           config={tokens.config}
           effectiveStep={effectiveStep}
         />
         <ActivityChart
           title="Requests"
-          description={`${totals.requests.total.toLocaleString()} requests`}
+          description={totals.requests.total.toLocaleString()}
           data={requests.data}
           config={requests.config}
           effectiveStep={effectiveStep}

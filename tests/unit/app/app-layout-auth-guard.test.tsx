@@ -26,6 +26,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({
     replace: mockReplace,
   }),
+  usePathname: () => "/chat",
 }));
 
 // Mock next-auth/react hooks
@@ -38,12 +39,19 @@ vi.mock("next-auth/react", () => ({
   useSession: () => mockSessionData,
 }));
 
-// Mock RainbowKit (causes Vanilla Extract CommonJS errors in happy-dom)
-vi.mock("@rainbow-me/rainbowkit", () => ({
-  ConnectButton: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  RainbowKitProvider: ({ children }: { children?: ReactNode }) => (
-    <>{children}</>
+// Stub sidebar shell so this test stays scoped to the auth guard branches
+vi.mock("@/components", () => ({
+  SidebarProvider: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="sidebar-provider">{children}</div>
   ),
+  SidebarInset: ({ children }: { children?: ReactNode }) => (
+    <div data-testid="sidebar-inset">{children}</div>
+  ),
+}));
+
+vi.mock("@/features/layout", () => ({
+  AppSidebar: () => <div data-testid="app-sidebar" />,
+  AppTopBar: () => <div data-testid="app-topbar" />,
 }));
 
 describe("AppLayout Auth Guard", () => {

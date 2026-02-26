@@ -10,7 +10,7 @@ read_when: Working on identity, auth, account linking, RBAC actor types, user co
 implements: proj.decentralized-identity
 owner: derekg1729
 created: 2026-02-19
-verified: 2026-02-24
+verified: 2026-02-26
 tags: [identity, auth, web3]
 ---
 
@@ -162,13 +162,14 @@ Provide a stable, auth-method-agnostic identity for every user. `users.id` works
 
 **Table:** `user_bindings` (new)
 
-| Column        | Type        | Constraints                                                  | Description                                                       |
-| ------------- | ----------- | ------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `id`          | TEXT        | PK                                                           | UUID v4                                                           |
-| `user_id`     | TEXT        | FK → users.id, NOT NULL                                      | User this binding belongs to                                      |
-| `provider`    | TEXT        | NOT NULL, CHECK IN ('wallet', 'discord', 'github', 'google') | Binding type                                                      |
-| `external_id` | TEXT        | NOT NULL                                                     | Provider-specific ID (address, discord snowflake, github user id) |
-| `created_at`  | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                                      | When the binding was created                                      |
+| Column           | Type        | Constraints                                                  | Description                                                                 |
+| ---------------- | ----------- | ------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `id`             | TEXT        | PK                                                           | UUID v4                                                                     |
+| `user_id`        | TEXT        | FK → users.id, NOT NULL                                      | User this binding belongs to                                                |
+| `provider`       | TEXT        | NOT NULL, CHECK IN ('wallet', 'discord', 'github', 'google') | Binding type                                                                |
+| `external_id`    | TEXT        | NOT NULL                                                     | Provider-specific ID (address, discord snowflake, github user id)           |
+| `provider_login` | TEXT        |                                                              | OAuth username/login from provider profile (used for display name fallback) |
+| `created_at`     | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                                      | When the binding was created                                                |
 
 **Constraint:** `UNIQUE(provider, external_id)` — same external ID across different providers is allowed (GitHub numeric ID can equal a Discord snowflake). Proof/evidence lives in `identity_events.payload`, not on the binding row.
 
@@ -186,6 +187,26 @@ Provide a stable, auth-method-agnostic identity for every user. `users.id` works
 
 **Trigger:** `reject_identity_events_mutation` — rejects UPDATE/DELETE on `identity_events` (same pattern as ledger append-only triggers).
 
+**Table:** `user_profiles` (1:1 with users)
+
+| Column         | Type        | Constraints             | Description                  |
+| -------------- | ----------- | ----------------------- | ---------------------------- |
+| `user_id`      | TEXT        | PK, FK → users.id       | Exactly one profile per user |
+| `display_name` | TEXT        | CHECK length ≤ 50       | User-chosen display name     |
+| `avatar_color` | TEXT        | CHECK hex `#RRGGBB`     | Avatar background color      |
+| `updated_at`   | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Last profile update          |
+
+### Display Name Fallback
+
+When resolving a display name for UI, the fallback chain is:
+
+1. `user_profiles.display_name` (user-chosen)
+2. `provider_login` from any `user_bindings` row (OAuth username)
+3. Truncated `wallet_address` (e.g., `0x1234…abcd`)
+4. `"Anonymous"`
+
+Implemented in `src/app/_facades/users/profile.server.ts:resolveDisplayName()`.
+
 **NO_AUTO_MERGE enforcement:** `UNIQUE(provider, external_id)` on `user_bindings`. Inserting a binding where that provider+external_id is already linked to a different user is a constraint violation at the DB level. No application-level race conditions.
 
 ### File Pointers
@@ -193,6 +214,9 @@ Provide a stable, auth-method-agnostic identity for every user. `users.id` works
 | File                                             | Purpose                                                           |
 | ------------------------------------------------ | ----------------------------------------------------------------- |
 | `packages/db-schema/src/identity.ts`             | `user_bindings` + `identity_events` table definitions             |
+| `packages/db-schema/src/profile.ts`              | `user_profiles` table definition                                  |
+| `src/app/_facades/users/profile.server.ts`       | Profile read/update facade, display name fallback chain           |
+| `src/contracts/users.profile.v1.contract.ts`     | Zod contracts for `/api/v1/users/me`                              |
 | `src/auth.ts`                                    | SIWE + OAuth providers, signIn callback (binding resolution)      |
 | `src/adapters/server/identity/create-binding.ts` | Atomic binding + identity_event insert (idempotent)               |
 | `src/shared/auth/session.ts`                     | `SessionUser` type (id + nullable walletAddress)                  |

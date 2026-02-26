@@ -25,6 +25,7 @@ import type { ActivityLedgerStore } from "@cogni/ledger-core";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { Logger } from "pino";
 import {
+  type Database,
   DrizzleAiTelemetryAdapter,
   DrizzleExecutionGrantUserAdapter,
   DrizzleExecutionGrantWorkerAdapter,
@@ -434,4 +435,12 @@ export function resolveSchedulingDeps(): SchedulingDeps {
     scheduleRunRepository: container.scheduleRunRepository,
     scheduleManager: container.scheduleManager,
   };
+}
+
+/**
+ * Resolve appDb for facade-level queries that don't need a full port abstraction.
+ * Uses appDb (RLS-scoped) — caller must be authenticated.
+ */
+export function resolveAppDb(): Database {
+  return getAppDb();
 }

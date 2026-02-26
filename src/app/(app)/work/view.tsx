@@ -92,20 +92,6 @@ function getUnique(items: WorkItem[], key: keyof WorkItem): string[] {
   return [...set].sort();
 }
 
-function countByField(
-  items: WorkItem[],
-  key: keyof WorkItem
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const item of items) {
-    const val = item[key];
-    if (typeof val === "string" && val) {
-      counts[val] = (counts[val] ?? 0) + 1;
-    }
-  }
-  return counts;
-}
-
 export function WorkDashboardView({ items }: { items: WorkItem[] }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -157,36 +143,20 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
 
   const types = getUnique(items, "type");
   const statuses = getUnique(items, "status");
-  const statusCounts = countByField(filtered, "status");
 
   return (
-    <div className="mx-auto flex max-w-[var(--max-width-container-screen)] flex-col gap-6 p-4 md:p-8 lg:px-16">
-      <div>
-        <h1 className="font-semibold text-2xl">Work Dashboard</h1>
-        <p className="text-muted-foreground text-sm">
-          {filtered.length} of {items.length} items
-          {Object.entries(statusCounts).length > 0 && (
-            <span className="ml-2">
-              (
-              {Object.entries(statusCounts)
-                .sort(
-                  ([a], [b]) => (STATUS_ORDER[a] ?? 6) - (STATUS_ORDER[b] ?? 6)
-                )
-                .map(([s, c]) => `${s}: ${c}`)
-                .join(" / ")}
-              )
-            </span>
-          )}
-        </p>
-      </div>
+    <div className="flex flex-col gap-6 p-5 md:p-6">
+      <h1 className="font-semibold text-xl tracking-tight md:text-2xl">
+        Work Dashboard
+      </h1>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3">
         <Select
           value={typeFilter}
           onValueChange={(v) => setParam("type", v === "all" ? "" : v)}
         >
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-full sm:w-36">
             <SelectValue placeholder="All types" />
           </SelectTrigger>
           <SelectContent>
@@ -203,7 +173,7 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
           value={statusFilter}
           onValueChange={(v) => setParam("status", v === "all" ? "" : v)}
         >
-          <SelectTrigger className="w-40">
+          <SelectTrigger className="w-full sm:w-40">
             <SelectValue placeholder="All statuses" />
           </SelectTrigger>
           <SelectContent>
@@ -220,7 +190,7 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
           value={maxPri}
           onValueChange={(v) => setParam("maxPri", v === "any" ? "" : v)}
         >
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-full sm:w-36">
             <SelectValue placeholder="Any priority" />
           </SelectTrigger>
           <SelectContent>
@@ -233,24 +203,24 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
         </Select>
 
         <Input
-          className="w-48"
+          className="col-span-3 sm:w-48"
           placeholder="Search id, title, labels..."
           value={query}
           onChange={(e) => setParam("q", e.target.value)}
         />
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
+      {/* Table — edge-to-edge on mobile, rounded on md+ */}
+      <div className="-mx-5 overflow-x-auto border-t border-b md:mx-0 md:rounded-md md:border">
+        <Table className="min-w-[var(--min-width-table-scroll)]">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-14">Pri</TableHead>
-              <TableHead className="w-12">Est</TableHead>
-              <TableHead className="w-28">ID</TableHead>
+              <TableHead className="w-10 md:w-14">Pri</TableHead>
+              <TableHead className="w-10">Est</TableHead>
+              <TableHead className="w-44 md:w-72">ID</TableHead>
+              <TableHead className="w-24 md:w-28">Status</TableHead>
               <TableHead>Title</TableHead>
-              <TableHead className="w-28">Status</TableHead>
-              <TableHead className="w-28">Updated</TableHead>
+              <TableHead className="w-24">Updated</TableHead>
               <TableHead>Branch</TableHead>
             </TableRow>
           </TableHeader>
@@ -267,9 +237,9 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
             ) : (
               filtered.map((item) => (
                 <TableRow key={item.path}>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center text-xs">
                     <span
-                      className={`inline-flex w-8 justify-center rounded-md px-2 py-1 font-medium text-xs ${priorityPill(item.priority)}`}
+                      className={`inline-flex w-8 justify-center rounded-md px-2 py-0.5 font-medium ${priorityPill(item.priority)}`}
                     >
                       {item.priority ?? "\u2014"}
                     </span>
@@ -277,29 +247,27 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
                   <TableCell className="text-center text-xs">
                     {item.estimate ?? "\u2014"}
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="text-xs">
                     {item.id || "\u2014"}
                   </TableCell>
-                  <TableCell className="text-sm">
-                    {item.title || "\u2014"}
-                  </TableCell>
-                  <TableCell>
+                  <TableCell className="text-xs">
                     {item.status ? (
                       <span
-                        className={`inline-flex w-24 justify-center rounded-md px-2 py-1 text-center font-medium text-xs ${STATUS_PILL[item.status] ?? "bg-muted text-muted-foreground"}`}
+                        className={`inline-flex rounded-md px-2 py-0.5 font-medium text-xs ${STATUS_PILL[item.status] ?? "bg-muted text-muted-foreground"}`}
                       >
                         {item.status}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground text-xs">
-                        {"\u2014"}
-                      </span>
+                      "\u2014"
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
+                  <TableCell className="text-xs">
+                    {item.title || "\u2014"}
+                  </TableCell>
+                  <TableCell className="text-xs">
                     {item.updated || item.created || "\u2014"}
                   </TableCell>
-                  <TableCell className="font-mono text-muted-foreground text-xs">
+                  <TableCell className="text-xs">
                     {item.branch || "\u2014"}
                   </TableCell>
                 </TableRow>

@@ -91,6 +91,14 @@ const SEMANTIC_COLOR_SUFFIXES = [
   "chart-5",
   "chart-6",
   "offset-background",
+  "sidebar",
+  "sidebar-foreground",
+  "sidebar-primary",
+  "sidebar-primary-foreground",
+  "sidebar-accent",
+  "sidebar-accent-foreground",
+  "sidebar-border",
+  "sidebar-ring",
 ];
 
 const COLOR_SUFFIX_ALLOWLIST = SEMANTIC_COLOR_SUFFIXES;

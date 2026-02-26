@@ -28,7 +28,12 @@ import { SiweMessage } from "siwe";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { createBinding } from "@/adapters/server/identity/create-binding";
 import { linkIntentStore } from "@/shared/auth/link-intent-store";
-import { identityEvents, userBindings, users } from "@/shared/db/schema";
+import {
+  identityEvents,
+  userBindings,
+  userProfiles,
+  users,
+} from "@/shared/db/schema";
 import { makeLogger } from "@/shared/observability";
 
 export const authSecret =
@@ -136,16 +141,30 @@ export const authOptions: NextAuthOptions = {
 
           if (!user) {
             // Create new user if not exists
+            const newUserId = randomUUID();
             const [newUser] = await db
               .insert(users)
               .values({
-                // Generate ID manually since it's not auto-generated in schema
-                id: randomUUID(),
+                id: newUserId,
                 walletAddress: fields.address,
-                // role: "user", // Removed as it might not be in schema, relying on default
               })
               .returning();
             user = newUser;
+
+            // Create empty profile row for new user
+            if (user) {
+              try {
+                await db
+                  .insert(userProfiles)
+                  .values({ userId: user.id })
+                  .onConflictDoNothing();
+              } catch {
+                getLog().warn(
+                  { userId: user.id },
+                  "[SIWE] Profile row creation failed — non-critical"
+                );
+              }
+            }
           }
 
           if (!user) {
@@ -233,7 +252,26 @@ export const authOptions: NextAuthOptions = {
       // the binding owner if it's a different user.
       const linkIntent = linkIntentStore.getStore();
 
+      // Extract provider login from OAuth profile
+      const profileData = profile as Record<string, unknown> | undefined;
+      const oauthLogin =
+        (profileData?.login as string | undefined) ??
+        (profileData?.username as string | undefined) ??
+        null;
+
       if (existing) {
+        // Update provider login on existing binding
+        if (oauthLogin) {
+          try {
+            await db
+              .update(userBindings)
+              .set({ providerLogin: oauthLogin })
+              .where(eq(userBindings.id, existing.id));
+          } catch {
+            // Non-critical metadata update
+          }
+        }
+
         if (linkIntent) {
           if (existing.userId === linkIntent.userId) {
             // Idempotent — already linked to this user
@@ -253,7 +291,6 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (linkIntent) {
-        const profileData = profile as Record<string, unknown> | undefined;
         await createBinding(db, linkIntent.userId, provider, externalId, {
           method: "oauth_link",
           login: profileData?.login ?? profileData?.username ?? null,
@@ -274,15 +311,13 @@ export const authOptions: NextAuthOptions = {
         return true;
       }
 
-      // New user — single transaction (user + binding + event atomically).
+      // New user — single transaction (user + binding + profile + event atomically).
       // If the binding insert is skipped (concurrent first-login race), the
       // transaction rolls back so no orphaned user row is committed.
       const BINDING_RACE = "BINDING_RACE";
       const userId = randomUUID();
       const bindingId = randomUUID();
       const eventId = randomUUID();
-      const profileData = profile as Record<string, unknown> | undefined;
-      const oauthLogin = profileData?.login ?? profileData?.username ?? null;
 
       try {
         await db.transaction(async (tx) => {
@@ -293,7 +328,13 @@ export const authOptions: NextAuthOptions = {
           });
           const [inserted] = await tx
             .insert(userBindings)
-            .values({ id: bindingId, userId, provider, externalId })
+            .values({
+              id: bindingId,
+              userId,
+              provider,
+              externalId,
+              providerLogin: oauthLogin,
+            })
             .onConflictDoNothing({
               target: [userBindings.provider, userBindings.externalId],
             })
@@ -313,6 +354,11 @@ export const authOptions: NextAuthOptions = {
               login: oauthLogin,
             },
           });
+          // Create empty profile row
+          await tx
+            .insert(userProfiles)
+            .values({ userId })
+            .onConflictDoNothing();
         });
       } catch (txError) {
         if (!(txError instanceof Error) || txError.message !== BINDING_RACE) {
@@ -346,12 +392,41 @@ export const authOptions: NextAuthOptions = {
       getLog().info({ provider, externalId }, "[OAuth] New user created");
       return true;
     },
-    async jwt({ token, user }) {
+    /** Redirect authenticated users to /chat instead of landing on homepage */
+    redirect({ url, baseUrl }) {
+      // Default post-sign-in lands on "/"; send to /chat instead
+      if (url === baseUrl || url === `${baseUrl}/`) {
+        return `${baseUrl}/chat`;
+      }
+      // Allow relative URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Allow same-origin URLs
+      if (url.startsWith(baseUrl)) return url;
+      return baseUrl;
+    },
+    async jwt({ token, user, trigger }) {
       // ALWAYS explicitly set — NextAuth does not auto-forward custom fields
       if (user) {
         token.id = user.id;
         token.walletAddress =
           (user as { walletAddress?: string | null }).walletAddress ?? null;
+      }
+
+      // Load profile into token on initial sign-in or explicit update()
+      if (user || trigger === "update") {
+        try {
+          const db = getServiceDb();
+          const userId = (token.id as string) ?? user?.id;
+          if (userId) {
+            const profile = await db.query.userProfiles.findFirst({
+              where: eq(userProfiles.userId, userId),
+            });
+            token.displayName = profile?.displayName ?? null;
+            token.avatarColor = profile?.avatarColor ?? null;
+          }
+        } catch {
+          // Non-critical — profile fields stay null
+        }
       }
       return token;
     },
@@ -361,6 +436,8 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.walletAddress =
           (token.walletAddress as string | null) ?? null;
+        session.user.displayName = (token.displayName as string | null) ?? null;
+        session.user.avatarColor = (token.avatarColor as string | null) ?? null;
       }
       return session;
     },

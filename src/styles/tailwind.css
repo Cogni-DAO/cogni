@@ -35,6 +35,16 @@
   --color-syntax-string: hsl(var(--syntax-string));
   --color-syntax-keyword: hsl(var(--syntax-keyword));
 
+  /* Sidebar colors */
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
   /* Font families */
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
@@ -57,6 +67,7 @@
   --max-width-container-2xl: 72rem;
   --max-width-container-3xl: 80rem;
   --max-width-container-screen: 1280px;
+  --min-width-table-scroll: 800px;
 
   /* Z-index layers */
   --z-index-overlay: 50;
@@ -67,6 +78,7 @@
   --size-composer-spacer: 42px;
   --max-width-model-trigger: 120px;
   --max-height-dialog: 80vh;
+  --max-height-dialog-mobile: 70vh;
 
   /* Positioning - centering transforms */
   --center-50: 50%;
@@ -142,6 +154,16 @@
     --color-warning: 43 74% 66%;
     --color-success: 142 71% 45%;
 
+    /* Sidebar */
+    --sidebar: 0 0% 98%;
+    --sidebar-foreground: 222.2 84% 4.9%;
+    --sidebar-primary: 222.2 47.4% 11.2%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 210 40% 96.1%;
+    --sidebar-accent-foreground: 222.2 47.4% 11.2%;
+    --sidebar-border: 214.3 31.8% 91.4%;
+    --sidebar-ring: 222.2 84% 4.9%;
+
     --radius: 0.5rem;
   }
 
@@ -183,6 +205,16 @@
     --accent-from: 217 80% 45%;
     --accent-to: 217 100% 60%;
     --accent-glow: 217 90% 52%;
+
+    /* Sidebar */
+    --sidebar: 0 0% 3%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 71% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217.2 32.6% 17.5%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 217 71% 40%;
   }
 
   /* Hero animation tokens (isolated, code.ts only) */

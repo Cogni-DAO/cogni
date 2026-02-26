@@ -9,7 +9,7 @@ summary: Multi-provider auth (SIWE wallet + GitHub/Discord/Google OAuth) on Next
 read_when: Working on login flow, wallet connection, OAuth providers, account linking, or session management.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-24
+verified: 2026-02-26
 tags: [auth]
 ---
 
@@ -89,8 +89,27 @@ graph TD
 interface SessionUser {
   id: string; // users.id (UUID) — canonical identity
   walletAddress: string | null; // null for OAuth-only users
+  displayName: string | null; // from user_profiles (loaded into JWT on sign-in)
+  avatarColor: string | null; // from user_profiles (loaded into JWT on sign-in)
 }
 ```
+
+`displayName` and `avatarColor` are loaded from `user_profiles` into the JWT on initial sign-in and on explicit `session.update()` calls. They are not re-fetched on every request.
+
+### Post-Auth Redirect
+
+The `redirect` callback in `src/auth.ts` routes authenticated users:
+
+- Default post-sign-in (`/`) → `/chat`
+- Relative URLs → allowed (prefixed with `baseUrl`)
+- Same-origin URLs → allowed
+- Cross-origin URLs → blocked (returns `baseUrl`)
+
+For SIWE, RainbowKit uses `signIn("credentials", { redirect: false })`, so this callback does not fire. SIWE post-auth redirect is handled client-side (see task.0112).
+
+### Sign-In Routing
+
+NextAuth `pages.signIn` points to `/sign-in` (custom page). Unauthenticated users are redirected to `/sign-in` via Next.js middleware. Authenticated users are redirected off `/sign-in` to `/chat`.
 
 ### OAuth Provider Registration
 
@@ -104,16 +123,18 @@ Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECR
 
 ### File Pointers
 
-| File                                        | Purpose                                                      |
-| ------------------------------------------- | ------------------------------------------------------------ |
-| `src/auth.ts`                               | NextAuth config: providers, signIn/jwt/session callbacks     |
-| `src/app/api/auth/[...nextauth]/route.ts`   | Route handler with AsyncLocalStorage wrapper for link_intent |
-| `src/app/api/auth/link/[provider]/route.ts` | Account linking initiation (signed cookie + redirect)        |
-| `src/shared/auth/link-intent-store.ts`      | AsyncLocalStorage primitive for link_intent propagation      |
-| `src/shared/auth/session.ts`                | SessionUser type (id + nullable walletAddress)               |
-| `src/lib/auth/server.ts`                    | `getServerSessionUser()` — requires only `id`                |
-| `src/app/providers/wallet.client.tsx`       | RainbowKit + SIWE provider wiring                            |
-| `src/features/payments/errors.ts`           | `WalletRequiredError` for null-wallet payment guard          |
+| File                                        | Purpose                                                        |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| `src/auth.ts`                               | NextAuth config: providers, signIn/jwt/session callbacks       |
+| `src/app/api/auth/[...nextauth]/route.ts`   | Route handler with AsyncLocalStorage wrapper for link_intent   |
+| `src/app/api/auth/link/[provider]/route.ts` | Account linking initiation (signed cookie + redirect)          |
+| `src/shared/auth/link-intent-store.ts`      | AsyncLocalStorage primitive for link_intent propagation        |
+| `src/shared/auth/session.ts`                | SessionUser type (id, walletAddress, displayName, avatarColor) |
+| `src/app/(auth)/sign-in/page.tsx`           | Custom sign-in page (WalletConnect + OAuth buttons)            |
+| `src/middleware.ts`                         | Auth route guards (redirect unauthed → /sign-in)               |
+| `src/lib/auth/server.ts`                    | `getServerSessionUser()` — requires only `id`                  |
+| `src/app/providers/wallet.client.tsx`       | RainbowKit + SIWE provider wiring                              |
+| `src/features/payments/errors.ts`           | `WalletRequiredError` for null-wallet payment guard            |
 
 ## Acceptance Checks
 
