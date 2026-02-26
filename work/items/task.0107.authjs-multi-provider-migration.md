@@ -2,7 +2,7 @@
 id: task.0107
 type: task
 title: Multi-provider auth — GitHub + Discord + Google OAuth on NextAuth v4
-status: needs_merge
+status: done
 priority: 1
 rank: 10
 estimate: 3

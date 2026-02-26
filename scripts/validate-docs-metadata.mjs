@@ -40,6 +40,7 @@ const ITEM_STATUS = [
 const ITEM_TYPES = ["task", "bug", "spike", "story", "subtask"];
 const PRIORITY = [0, 1, 2, 3];
 const ESTIMATE = [0, 1, 2, 3, 4, 5];
+const PROJECT_ESTIMATE_MAX = 50;
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -275,9 +276,14 @@ function validateProject(file, props, content, allIds) {
       `invalid priority: ${props.priority} (expected: ${PRIORITY.join("|")})`
     );
   }
-  if (props.estimate !== undefined && !ESTIMATE.includes(props.estimate)) {
+  if (
+    props.estimate !== undefined &&
+    (typeof props.estimate !== "number" ||
+      props.estimate < 0 ||
+      props.estimate > PROJECT_ESTIMATE_MAX)
+  ) {
     errors.push(
-      `invalid estimate: ${props.estimate} (expected: ${ESTIMATE.join("|")})`
+      `invalid estimate: ${props.estimate} (expected: 0-${PROJECT_ESTIMATE_MAX})`
     );
   }
   if (props.id && !String(props.id).startsWith("proj.")) {

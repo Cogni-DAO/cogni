@@ -2,7 +2,7 @@
 id: bug.0092
 type: bug
 title: "Unresolved contributors silently excluded from epoch allocations"
-status: needs_merge
+status: done
 priority: 1
 rank: 99
 estimate: 2
