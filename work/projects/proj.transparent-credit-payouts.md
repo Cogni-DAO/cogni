@@ -39,26 +39,26 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 
 **Goal:** Automated weekly activity collection from GitHub + Discord, best-effort attribution, admin-finalized credit distribution. Anyone can recompute payouts from stored data.
 
-| Deliverable                                                                                                     | Status                  | Est | Work Item       |
-| --------------------------------------------------------------------------------------------------------------- | ----------------------- | --- | --------------- |
-| Design spike: schema, signing, storage, epoch model                                                             | Done                    | 2   | spike.0082      |
-| Design revision: activity-ingestion reframe                                                                     | Done                    | 1   | (this document) |
-| Spec: epoch-ledger.md (revised)                                                                                 | Done                    | 1   | —               |
-| DB schema (foundation tables) + core domain (rules, errors)                                                     | Done                    | 3   | task.0093       |
-| Identity bindings (user_bindings + identity_events)                                                             | Done                    | 2   | task.0089       |
-| Ledger port + Drizzle adapter + schema migration + container                                                    | Done                    | 2   | task.0094       |
-| GitHub source adapter                                                                                           | Done                    | 3   | task.0097       |
-| Temporal workflows (collection phase)                                                                           | Done                    | 2   | task.0095       |
-| Identity resolution + curation auto-population                                                                  | Done                    | 2   | task.0101       |
-| Allocation computation + epoch close + FinalizeEpochWorkflow                                                    | In Review (needs_merge) | 3   | task.0102       |
-| Epoch 3-phase state machine + EIP-191 signing                                                                   | Done                    | 3   | task.0100       |
-| Zod contracts + API routes + stack tests                                                                        | Done                    | 2   | task.0096       |
-| Scope-gate all epochId-based adapter methods                                                                    | Done                    | 1   | task.0103       |
-| Dev seed script for governance UI visual testing                                                                | Not Started             | 2   | task.0106       |
-| **Collection pipeline hardening (from [gap analysis](../../docs/research/ledger-collection-gap-analysis.md)):** |                         |     |                 |
-| Fix: unresolved contributors silently excluded                                                                  | In Review (needs_merge) | 2   | bug.0092        |
-| Collection completeness verification                                                                            | needs_triage            | 2   | task.0108       |
-| Expand GitHub adapter (PR comments, review comments, issues)                                                    | needs_triage            | 2   | task.0109       |
+| Deliverable                                                                                                     | Status       | Est | Work Item       |
+| --------------------------------------------------------------------------------------------------------------- | ------------ | --- | --------------- |
+| Design spike: schema, signing, storage, epoch model                                                             | Done         | 2   | spike.0082      |
+| Design revision: activity-ingestion reframe                                                                     | Done         | 1   | (this document) |
+| Spec: epoch-ledger.md (revised)                                                                                 | Done         | 1   | —               |
+| DB schema (foundation tables) + core domain (rules, errors)                                                     | Done         | 3   | task.0093       |
+| Identity bindings (user_bindings + identity_events)                                                             | Done         | 2   | task.0089       |
+| Ledger port + Drizzle adapter + schema migration + container                                                    | Done         | 2   | task.0094       |
+| GitHub source adapter                                                                                           | Done         | 3   | task.0097       |
+| Temporal workflows (collection phase)                                                                           | Done         | 2   | task.0095       |
+| Identity resolution + curation auto-population                                                                  | Done         | 2   | task.0101       |
+| Allocation computation + epoch close + FinalizeEpochWorkflow                                                    | Done         | 3   | task.0102       |
+| Epoch 3-phase state machine + EIP-191 signing                                                                   | Done         | 3   | task.0100       |
+| Zod contracts + API routes + stack tests                                                                        | Done         | 2   | task.0096       |
+| Scope-gate all epochId-based adapter methods                                                                    | Done         | 1   | task.0103       |
+| Dev seed script for governance UI visual testing                                                                | Not Started  | 2   | task.0106       |
+| **Collection pipeline hardening (from [gap analysis](../../docs/research/ledger-collection-gap-analysis.md)):** |              |     |                 |
+| Fix: unresolved contributors silently excluded                                                                  | Done         | 2   | bug.0092        |
+| Collection completeness verification                                                                            | needs_triage | 2   | task.0108       |
+| Expand GitHub adapter (PR comments, review comments, issues)                                                    | needs_triage | 2   | task.0109       |
 
 **V0 user story:**
 
@@ -229,6 +229,10 @@ If the weight policy becomes a black box (complex formulas, hidden multipliers, 
 | GitHub client  | `@octokit/graphql` + `@octokit/webhooks-types`       | Official, typed, maintained by GitHub             |
 | Discord client | `discord.js`                                         | Only serious Discord library for Node.js          |
 | Verification   | Recompute from stored data only                      | External sources may be private/non-deterministic |
+
+### Actor integration (planned)
+
+`user_id` is correct for P0 (humans-only attribution). When `actors` ships ([proj.operator-plane](proj.operator-plane.md)), `epoch_allocations` gains `actor_id` alongside `user_id`. Human actors bridge 1:1; agent actors are a new attribution path. Provenance is always preserved: `earned_by_actor_id` records who did the work (even if an agent). `beneficiary_actor_id` determines who may claim — a separate field, never collapsed. No schema changes until the actor table exists. See [identity-model.md](../../docs/spec/identity-model.md) for the `actor_id` primitive.
 
 ## PR / Links
 

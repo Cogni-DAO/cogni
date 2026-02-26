@@ -598,6 +598,10 @@ The following are explicitly deferred from V0 and will be designed when needed:
 
 Enable transparent, verifiable credit distribution where contribution activity is automatically collected, valued via explicit weight policy, and finalized by an admin. Anyone can recompute the payout table from stored data.
 
+### Actor Migration Path (Planned)
+
+`epoch_allocations.user_id` is the current canonical subject for rewards — this is current truth, not planned. `actor_id` is a **migration target**: when the `actors` table ships ([proj.operator-plane](../../work/projects/proj.operator-plane.md) v1), allocations will gain an `actor_id` column alongside `user_id`. For human actors (`kind=user`), `actor_id` bridges 1:1 to `user_id` via the actors table. For agent actors, `actor_id` enables new attribution paths (gateway usage → agent → rewards). Every economic event remains scoped by `(node_id, scope_id)` — `actor_id` is locally unique per node, not a global identity. No invariant changes — PAYOUT_DETERMINISTIC and ALL_MATH_BIGINT apply regardless of subject key. See [identity-model.md](./identity-model.md).
+
 ## Non-Goals
 
 - Algorithmic valuation (SourceCred-style scoring) — weights are transparent, admin adjustable
@@ -613,5 +617,5 @@ Enable transparent, verifiable credit distribution where contribution activity i
 - [architecture](./architecture.md) — System architecture
 - [sourcecred](./sourcecred.md) — SourceCred as-built (being superseded)
 - [decentralized-user-identity](./decentralized-user-identity.md) — User identity bindings (`user_id` is canonical)
-- [identity-model](./identity-model.md) — All identity primitives (`node_id`, `scope_id`, `user_id`, `billing_account_id`, `dao_address`)
+- [identity-model](./identity-model.md) — All identity primitives (`node_id`, `scope_id`, `user_id`, `actor_id`, `billing_account_id`, `dao_address`)
 - [ai-governance-data](./ai-governance-data.md) — Autonomous governance agents (separate concern)
