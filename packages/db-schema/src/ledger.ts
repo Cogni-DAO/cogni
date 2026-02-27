@@ -12,6 +12,8 @@
  * - ONE_OPEN_EPOCH: partial unique index on epochs WHERE status = 'open', scoped to (node_id, scope_id).
  * - EPOCH_WINDOW_UNIQUE: unique(node_id, scope_id, period_start, period_end).
  * - NODE_SCOPED: all ledger tables include node_id.
+ * - ARTIFACT_UNIQUE_PER_TYPE_STATUS: UNIQUE(epoch_id, artifact_type, status) — one draft + one locked per type.
+ * - ARTIFACT_FINAL_ATOMIC: locked artifact writes + artifacts_hash + epoch open→review in one transaction (enforced in store).
  * - No RLS in V0 — worker uses service-role connection.
  * Side-effects: none (schema definitions only)
  * Links: docs/spec/epoch-ledger.md
@@ -64,6 +66,7 @@ export const epochs = pgTable(
     openedAt: timestamp("opened_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    artifactsHash: text("artifacts_hash"),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -325,6 +328,52 @@ export const payoutStatements = pgTable(
  * Statement signatures — client-side EIP-191 signatures on payout statements.
  * Schema only — signing flow is a follow-up task.
  */
+// ---------------------------------------------------------------------------
+// Epoch Artifacts — enrichment outputs (draft/locked lifecycle)
+// ---------------------------------------------------------------------------
+
+/**
+ * Epoch artifacts — typed enrichment outputs for scoring pipeline.
+ * ARTIFACT_UNIQUE_PER_TYPE_STATUS: one draft + one locked row per artifact_type per epoch.
+ * Drafts overwritten via UPSERT each collection pass. Locked artifacts written once at closeIngestion.
+ */
+export const epochArtifacts = pgTable(
+  "epoch_artifacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    nodeId: uuid("node_id").notNull(),
+    epochId: bigint("epoch_id", { mode: "bigint" })
+      .notNull()
+      .references(() => epochs.id),
+    artifactType: text("artifact_type").notNull(),
+    status: text("status").notNull().default("draft"),
+    algoRef: text("algo_ref").notNull(),
+    inputsHash: text("inputs_hash").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    payloadJson: jsonb("payload_json").$type<Record<string, unknown>>(),
+    payloadRef: text("payload_ref"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("epoch_artifacts_type_status_unique").on(
+      table.epochId,
+      table.artifactType,
+      table.status
+    ),
+    check(
+      "epoch_artifacts_status_check",
+      sql`${table.status} IN ('draft', 'locked')`
+    ),
+    check(
+      "epoch_artifacts_payload_check",
+      sql`${table.payloadJson} IS NOT NULL OR ${table.payloadRef} IS NOT NULL`
+    ),
+    index("epoch_artifacts_epoch_idx").on(table.epochId),
+  ]
+);
+
 export const statementSignatures = pgTable(
   "statement_signatures",
   {

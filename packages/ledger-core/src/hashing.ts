@@ -3,10 +3,11 @@
 
 /**
  * Module: `@cogni/ledger-core/hashing`
- * Purpose: Deterministic SHA-256 hashing for allocation sets.
+ * Purpose: Deterministic SHA-256 hashing for allocation sets and epoch artifacts.
  * Scope: Pure functions. Does not perform network I/O or hold secrets.
  * Invariants:
  * - PAYOUT_DETERMINISTIC: Same inputs → byte-for-byte identical hash output.
+ * - CANONICAL_JSON: canonicalJsonStringify sorts keys at every depth, no whitespace, BigInt as string.
  * - Allocations are canonically sorted before hashing.
  * Side-effects: none (uses Web Crypto API)
  * Links: docs/spec/epoch-ledger.md
@@ -23,6 +24,61 @@ async function sha256Hex(input: string): Promise<string> {
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+/**
+ * Deterministic JSON serialization — CANONICAL_JSON invariant.
+ * Sorted keys at every depth, no whitespace, BigInt serialized as string.
+ * Used for all artifact payload hashing and inputs_hash computation.
+ *
+ * @param value - Any JSON-compatible value (supports BigInt)
+ * @returns Canonical JSON string
+ */
+export function canonicalJsonStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, val) => {
+    if (typeof val === "bigint") return val.toString();
+    if (val !== null && typeof val === "object" && !Array.isArray(val)) {
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(val).sort()) {
+        sorted[k] = val[k];
+      }
+      return sorted;
+    }
+    return val;
+  });
+}
+
+/**
+ * Compute SHA-256 hash of a canonical JSON value.
+ * Convenience wrapper: canonicalJsonStringify → sha256Hex.
+ */
+export async function sha256OfCanonicalJson(value: unknown): Promise<string> {
+  return sha256Hex(canonicalJsonStringify(value));
+}
+
+/**
+ * Compute artifacts_hash for an epoch from locked artifact records.
+ * SHA-256 of sorted (artifact_type, algo_ref, inputs_hash, payload_hash) tuples.
+ * Only locked artifacts contribute. Deterministic for same inputs.
+ *
+ * @param artifacts - Array of locked artifact records
+ * @returns SHA-256 hex string
+ */
+export async function computeArtifactsHash(
+  artifacts: ReadonlyArray<{
+    readonly artifactType: string;
+    readonly algoRef: string;
+    readonly inputsHash: string;
+    readonly payloadHash: string;
+  }>
+): Promise<string> {
+  const sorted = [...artifacts].sort((a, b) =>
+    a.artifactType.localeCompare(b.artifactType)
+  );
+  const canonical = canonicalJsonStringify(
+    sorted.map((a) => [a.artifactType, a.algoRef, a.inputsHash, a.payloadHash])
+  );
+  return sha256Hex(canonical);
 }
 
 /**

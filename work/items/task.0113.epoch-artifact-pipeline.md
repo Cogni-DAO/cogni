@@ -2,9 +2,9 @@
 id: task.0113
 type: task
 title: "Epoch artifact pipeline + hello-world GitHub enricher"
-status: needs_triage
+status: needs_implement
 priority: 1
-rank:
+rank: 1
 estimate: 3
 summary: "Generic epoch_artifacts table, canonical JSON hashing, draft/final lifecycle, and a hello-world GitHub enricher that extracts work-item IDs from PR metadata and snapshots .md frontmatter. No budget math, no allocation changes — those are task.0114."
 outcome: "Enrichers can emit typed artifacts into a single generic table. The hello-world enricher proves the full pipeline: link extraction from GitHub PR metadata, frontmatter snapshot, draft/final lifecycle, artifacts pinned at closeIngestion. Allocation algorithms can consume artifacts via opaque map without coupling to enricher internals."

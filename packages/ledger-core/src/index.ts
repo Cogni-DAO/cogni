@@ -43,8 +43,11 @@ export {
 
 // Hashing
 export {
+  canonicalJsonStringify,
   computeAllocationSetHash,
+  computeArtifactsHash,
   computeWeightConfigHash,
+  sha256OfCanonicalJson,
 } from "./hashing";
 
 // Model types and enums
@@ -78,6 +81,8 @@ export {
 // Store port interface + types
 export type {
   ActivityLedgerStore,
+  CloseIngestionWithArtifactsParams,
+  CuratedEventWithMetadata,
   InsertActivityEventParams,
   InsertAllocationParams,
   InsertCurationAutoParams,
@@ -88,10 +93,12 @@ export type {
   LedgerAllocation,
   LedgerCuration,
   LedgerEpoch,
+  LedgerEpochArtifact,
   LedgerPayoutStatement,
   LedgerPoolComponent,
   LedgerSourceCursor,
   LedgerStatementSignature,
   UncuratedEvent,
+  UpsertArtifactParams,
   UpsertCurationParams,
 } from "./store";

@@ -4,7 +4,7 @@ type: task
 title: "Work-item budget enrichment + budget allocation algorithm"
 status: needs_triage
 priority: 1
-rank:
+rank: 2
 estimate: 2
 summary: "Adds budget computation to the work-item enricher (computeWorkItemBudgetMilli, priorityMultipliers) and introduces work-item-budget-v0 allocation algorithm that distributes fixed per-work-item budgets among contributors. Builds on the generic artifact pipeline from task.0113."
 outcome: "Credit allocation is anchored to planned work items with capped budgets. Event-spam on a single work item splits a fixed budget, not an unbounded sum. Priority and estimate from .md frontmatter directly affect payout distribution. Unlinked events fall back to flat weights (known v0 limitation)."
