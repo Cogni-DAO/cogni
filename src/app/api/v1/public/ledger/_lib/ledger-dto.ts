@@ -12,12 +12,12 @@
  */
 
 import type {
-  LedgerActivityEvent,
   LedgerAllocation,
-  LedgerCuration,
   LedgerEpoch,
-  LedgerPayoutStatement,
+  LedgerEpochStatement,
+  LedgerIngestionReceipt,
   LedgerPoolComponent,
+  LedgerSelection,
 } from "@cogni/ledger-core";
 
 export function toEpochDto(e: LedgerEpoch) {
@@ -34,9 +34,9 @@ export function toEpochDto(e: LedgerEpoch) {
   };
 }
 
-export function toActivityEventDto(e: LedgerActivityEvent) {
+export function toIngestionReceiptDto(e: LedgerIngestionReceipt) {
   return {
-    id: e.id,
+    receiptId: e.receiptId,
     source: e.source,
     eventType: e.eventType,
     platformUserId: e.platformUserId,
@@ -47,7 +47,7 @@ export function toActivityEventDto(e: LedgerActivityEvent) {
   };
 }
 
-export function toCurationDto(c: LedgerCuration) {
+export function toSelectionDto(c: LedgerSelection) {
   return {
     userId: c.userId,
     included: c.included,
@@ -69,7 +69,7 @@ export function toAllocationDto(a: LedgerAllocation) {
   };
 }
 
-export function toStatementDto(s: LedgerPayoutStatement) {
+export function toStatementDto(s: LedgerEpochStatement) {
   return {
     id: s.id,
     epochId: s.epochId.toString(),

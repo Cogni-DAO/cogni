@@ -20,7 +20,7 @@ export type {
 } from "@cogni/ingestion-core";
 
 // Ledger ports from @cogni/ledger-core
-export type { ActivityLedgerStore } from "@cogni/ledger-core";
+export type { EpochLedgerStore } from "@cogni/ledger-core";
 // Scheduling ports from @cogni/scheduler-core
 export type {
   ExecutionGrantWorkerPort,

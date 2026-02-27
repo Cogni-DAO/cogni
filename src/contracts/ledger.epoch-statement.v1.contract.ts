@@ -3,8 +3,8 @@
 
 /**
  * Module: `@contracts/ledger.epoch-statement.v1.contract`
- * Purpose: Defines operation contract for retrieving a payout statement for an epoch.
- * Scope: Zod schemas and types for payout statement wire format. Does not contain business logic.
+ * Purpose: Defines operation contract for retrieving an epoch statement (entitlement plan).
+ * Scope: Zod schemas and types for epoch statement wire format. Does not contain business logic.
  * Invariants:
  *   - ALL_MATH_BIGINT: BigInt values serialized as strings
  *   - Contract remains stable; breaking changes require new version
@@ -39,9 +39,9 @@ export const EpochStatementOutputSchema = z.object({
 
 export const epochStatementOperation = {
   id: "ledger.epoch-statement.v1",
-  summary: "Get payout statement for an epoch",
+  summary: "Get statement for an epoch",
   description:
-    "Returns the payout statement for the specified epoch. statement is null if none exists yet. Always 200.",
+    "Returns the statement (entitlement plan) for the specified epoch. statement is null if none exists yet. Always 200.",
   input: z.object({}),
   output: EpochStatementOutputSchema,
 } as const;

@@ -3,7 +3,7 @@
 
 /**
  * Module: `@app/api/v1/ledger/epochs/[id]/statement/route`
- * Purpose: Authenticated HTTP endpoint for retrieving a payout statement for an epoch.
+ * Purpose: Authenticated HTTP endpoint for retrieving an epoch statement for an epoch.
  * Scope: SIWE-protected GET endpoint. Returns statement or null if none exists. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO.
  * Side-effects: IO (HTTP response, database read)
@@ -38,7 +38,7 @@ export const GET = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
     const epoch = await store.getEpoch(epochId);
     if (!epoch) {
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });

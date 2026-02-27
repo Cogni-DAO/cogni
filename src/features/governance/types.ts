@@ -15,9 +15,9 @@
  * @public
  */
 
-/** A single activity event as displayed in the UI. */
-export interface ActivityEvent {
-  readonly id: string;
+/** A single ingestion receipt as displayed in the UI. */
+export interface IngestionReceipt {
+  readonly receiptId: string;
   readonly source: string;
   readonly eventType: string;
   readonly platformLogin: string | null;
@@ -35,7 +35,7 @@ export interface EpochContributor {
   readonly finalUnits: string | null;
   readonly creditShare: number;
   readonly activityCount: number;
-  readonly activities: readonly ActivityEvent[];
+  readonly receipts: readonly IngestionReceipt[];
 }
 
 /** An activity event that could not be attributed to a known user. */

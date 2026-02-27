@@ -3,36 +3,36 @@
 
 /**
  * Module: `@cogni/ledger-core/validated-store`
- * Purpose: Thin wrapper around ActivityLedgerStore that enforces validateArtifactEnvelope at write time.
+ * Purpose: Thin wrapper around EpochLedgerStore that enforces validateEvaluationEnvelope at write time.
  * Scope: Wraps store methods. Does not contain business logic beyond validation.
  * Invariants:
- * - ENVELOPE_VALIDATED_ON_WRITE: All artifact writes pass through validateArtifactEnvelope.
+ * - ENVELOPE_VALIDATED_ON_WRITE: All evaluation writes pass through validateEvaluationEnvelope.
  * Side-effects: none (delegates to inner store)
  * Links: work/items/task.0113.epoch-artifact-pipeline.md
  * @public
  */
 
-import { validateArtifactEnvelope } from "./artifact-envelope";
-import type { ActivityLedgerStore } from "./store";
+import { validateEvaluationEnvelope } from "./artifact-envelope";
+import type { EpochLedgerStore } from "./store";
 
 /**
- * Wrap an ActivityLedgerStore with envelope validation on artifact writes.
+ * Wrap an EpochLedgerStore with envelope validation on evaluation writes.
  * Plugins cannot bypass validation by swapping adapters.
  */
 export function createValidatedLedgerStore(
-  inner: ActivityLedgerStore
-): ActivityLedgerStore {
+  inner: EpochLedgerStore
+): EpochLedgerStore {
   return {
     ...inner,
-    upsertDraftArtifact: async (params) => {
-      validateArtifactEnvelope(params);
-      return inner.upsertDraftArtifact(params);
+    upsertDraftEvaluation: async (params) => {
+      validateEvaluationEnvelope(params);
+      return inner.upsertDraftEvaluation(params);
     },
-    closeIngestionWithArtifacts: async (params) => {
-      for (const a of params.artifacts) {
-        validateArtifactEnvelope(a);
+    closeIngestionWithEvaluations: async (params) => {
+      for (const e of params.evaluations) {
+        validateEvaluationEnvelope(e);
       }
-      return inner.closeIngestionWithArtifacts(params);
+      return inner.closeIngestionWithEvaluations(params);
     },
   };
 }

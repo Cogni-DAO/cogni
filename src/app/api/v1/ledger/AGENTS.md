@@ -32,7 +32,7 @@ Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all
 - **Exports:** none (route handlers only)
 - **Routes:**
   - `GET /api/v1/ledger/epochs` — list all epochs including open (SIWE auth)
-  - `GET /api/v1/ledger/epochs/[id]/activity` — activity events with curation join (SIWE auth, PII)
+  - `GET /api/v1/ledger/epochs/[id]/activity` — ingestion receipts with selection join (SIWE auth, PII)
   - `PATCH /api/v1/ledger/epochs/[id]/allocations` — adjust allocation final_units (SIWE + approver)
   - `POST /api/v1/ledger/epochs/[id]/pool-components` — record pool component (SIWE + approver)
   - `POST /api/v1/ledger/epochs/[id]/review` — close ingestion, transition open → review (SIWE + approver)
@@ -43,12 +43,12 @@ Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all
 
 ## Ports
 
-- **Uses ports:** `ActivityLedgerStore` (via container)
+- **Uses ports:** `EpochLedgerStore` (via container)
 - **Implements ports:** none
 
 ## Responsibilities
 
-- This directory **does:** authenticate via SIWE session, check approver allowlist for write routes, validate I/O via Zod contracts, delegate to `ActivityLedgerStore`.
+- This directory **does:** authenticate via SIWE session, check approver allowlist for write routes, validate I/O via Zod contracts, delegate to `EpochLedgerStore`.
 - This directory **does not:** contain business logic, expose unauthenticated data, or bypass approver checks.
 
 ## Usage

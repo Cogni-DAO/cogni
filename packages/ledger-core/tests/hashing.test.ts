@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/ledger-core/tests/hashing`
- * Purpose: Unit tests for canonical JSON serialization and artifact hashing.
+ * Purpose: Unit tests for canonical JSON serialization and evaluation hashing.
  * Scope: Tests canonicalJsonStringify determinism, BigInt handling, and computeArtifactsHash sorting. Does not test store or I/O.
  * Invariants: CANONICAL_JSON — sorted keys, no whitespace, BigInt as string.
  * Side-effects: none
@@ -68,24 +68,24 @@ describe("sha256OfCanonicalJson", () => {
 });
 
 describe("computeArtifactsHash", () => {
-  it("produces deterministic hash sorted by artifactRef", async () => {
-    const artifacts = [
+  it("produces deterministic hash sorted by evaluationRef", async () => {
+    const evaluations = [
       {
-        artifactRef: "cogni.work_item_links.v0",
+        evaluationRef: "cogni.work_item_links.v0",
         algoRef: "work-item-linker-v0",
         inputsHash: "hash1",
         payloadHash: "hash2",
       },
       {
-        artifactRef: "cogni.ai_scores.v0",
+        evaluationRef: "cogni.ai_scores.v0",
         algoRef: "ai-scorer-v0",
         inputsHash: "hash3",
         payloadHash: "hash4",
       },
     ];
 
-    const hash1 = await computeArtifactsHash(artifacts);
-    const hash2 = await computeArtifactsHash([...artifacts].reverse());
+    const hash1 = await computeArtifactsHash(evaluations);
+    const hash2 = await computeArtifactsHash([...evaluations].reverse());
     expect(hash1).toBe(hash2);
     expect(hash1).toMatch(/^[a-f0-9]{64}$/);
   });
@@ -93,7 +93,7 @@ describe("computeArtifactsHash", () => {
   it("returns different hash for different inputs", async () => {
     const hash1 = await computeArtifactsHash([
       {
-        artifactRef: "a",
+        evaluationRef: "a",
         algoRef: "b",
         inputsHash: "c",
         payloadHash: "d",
@@ -101,7 +101,7 @@ describe("computeArtifactsHash", () => {
     ]);
     const hash2 = await computeArtifactsHash([
       {
-        artifactRef: "a",
+        evaluationRef: "a",
         algoRef: "b",
         inputsHash: "c",
         payloadHash: "e",

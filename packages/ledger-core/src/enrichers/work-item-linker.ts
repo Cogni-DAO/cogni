@@ -7,7 +7,7 @@
  * Scope: Link extraction regex, artifact payload construction. Does not perform I/O or hold state.
  * Invariants:
  * - ENRICHER_SNAPSHOT_RULE: All external data must be snapshotted into the artifact payload.
- * - INPUTS_HASH_COMPLETE: inputs_hash covers epoch_id, sorted (event_id, event_payload_hash), sorted (work_item_id, frontmatter_hash). NOT repoCommitSha.
+ * - INPUTS_HASH_COMPLETE: inputs_hash covers epoch_id, sorted (receipt_id, receipt_payload_hash), sorted (work_item_id, frontmatter_hash). NOT repoCommitSha.
  * Side-effects: none
  * Links: work/items/task.0113.epoch-artifact-pipeline.md
  * @public

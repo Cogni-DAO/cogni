@@ -3,7 +3,7 @@
 
 /**
  * Module: `@contracts/ledger.epoch-activity.v1.contract`
- * Purpose: Defines operation contract for retrieving activity events for an epoch.
+ * Purpose: Defines operation contract for retrieving ingestion receipts for an epoch.
  * Scope: Zod schemas and types for epoch activity wire format. Does not contain business logic.
  * Invariants:
  *   - ALL_MATH_BIGINT: BigInt values serialized as strings
@@ -18,15 +18,15 @@ import { z } from "zod";
 
 import { PaginationQuerySchema } from "./ledger.list-epochs.v1.contract";
 
-export const CurationSchema = z.object({
+export const SelectionSchema = z.object({
   userId: z.string().nullable(),
   included: z.boolean(),
   weightOverrideMilli: z.string().nullable(), // bigint as string
   note: z.string().nullable(),
 });
 
-export const ActivityEventSchema = z.object({
-  id: z.string(),
+export const IngestionReceiptSchema = z.object({
+  receiptId: z.string(),
   source: z.string(),
   eventType: z.string(),
   platformUserId: z.string(),
@@ -34,23 +34,23 @@ export const ActivityEventSchema = z.object({
   artifactUrl: z.string().nullable(),
   metadata: z.record(z.string(), z.unknown()).nullable(),
   eventTime: z.string().datetime(),
-  curation: CurationSchema.nullable(),
+  selection: SelectionSchema.nullable(),
 });
 
 export const EpochActivityOutputSchema = z.object({
-  events: z.array(ActivityEventSchema),
+  events: z.array(IngestionReceiptSchema),
   epochId: z.string(),
   total: z.number(),
 });
 
 export const epochActivityOperation = {
   id: "ledger.epoch-activity.v1",
-  summary: "Get activity events for an epoch",
+  summary: "Get ingestion receipts for an epoch",
   description:
-    "Returns activity events for the specified epoch, joined with curation data. Authenticated endpoint.",
+    "Returns ingestion receipts for the specified epoch, joined with selection data. Authenticated endpoint.",
   input: PaginationQuerySchema,
   output: EpochActivityOutputSchema,
 } as const;
 
-export type ActivityEventDto = z.infer<typeof ActivityEventSchema>;
+export type IngestionReceiptDto = z.infer<typeof IngestionReceiptSchema>;
 export type EpochActivityOutput = z.infer<typeof EpochActivityOutputSchema>;

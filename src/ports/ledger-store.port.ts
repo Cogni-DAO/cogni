@@ -3,7 +3,7 @@
 
 /**
  * Module: `@ports/ledger-store`
- * Purpose: Re-exports ActivityLedgerStore port and related types from @cogni/ledger-core.
+ * Purpose: Re-exports EpochLedgerStore port and related types from @cogni/ledger-core.
  * Scope: Type re-exports only. Does not contain implementations.
  * Invariants: Named exports only, no runtime coupling.
  * Side-effects: none
@@ -12,19 +12,19 @@
  */
 
 export type {
-  ActivityLedgerStore,
-  InsertActivityEventParams,
+  EpochLedgerStore,
   InsertAllocationParams,
-  InsertPayoutStatementParams,
+  InsertEpochStatementParams,
+  InsertIngestionReceiptParams,
   InsertPoolComponentParams,
-  InsertSignatureParams,
-  LedgerActivityEvent,
+  InsertStatementSignatureParams,
   LedgerAllocation,
-  LedgerCuration,
   LedgerEpoch,
-  LedgerPayoutStatement,
+  LedgerEpochStatement,
+  LedgerIngestionCursor,
+  LedgerIngestionReceipt,
   LedgerPoolComponent,
-  LedgerSourceCursor,
+  LedgerSelection,
   LedgerStatementSignature,
-  UpsertCurationParams,
+  UpsertSelectionParams,
 } from "@cogni/ledger-core";

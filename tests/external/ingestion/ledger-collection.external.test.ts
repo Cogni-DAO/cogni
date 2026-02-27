@@ -208,7 +208,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
       expect(result.events.length).toBeGreaterThan(0);
 
       // Insert events
-      await activities.insertEvents({ events: result.events });
+      await activities.insertReceipts({ events: result.events });
 
       // Save cursor
       await activities.saveCursor({
@@ -239,7 +239,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
       });
 
       // Re-insert — onConflictDoNothing means no error
-      await activities.insertEvents({ events: result.events });
+      await activities.insertReceipts({ events: result.events });
 
       // Count events after — should be same (no duplicates)
       const after = await ledger.getActivityForWindow(

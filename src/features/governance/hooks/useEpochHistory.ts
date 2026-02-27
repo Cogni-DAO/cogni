@@ -6,7 +6,7 @@
  * Purpose: React Query hook for finalized epoch history with contributor drill-down.
  * Scope: Client-side data fetching for /gov/history page; does not access database directly. Fetches finalized epochs, then for each fetches statement + activity, composing into EpochView[].
  * Invariants:
- *   - Uses payout statements as source of truth for finalized epochs (frozen, deterministic)
+ *   - Uses statements as source of truth for finalized epochs (frozen, deterministic)
  *   - Throws if a finalized epoch has no statement (data integrity violation)
  * Side-effects: IO (HTTP GET to ledger API endpoints)
  * Links: src/features/governance/types.ts, src/features/governance/lib/compose-epoch.ts
@@ -16,7 +16,7 @@
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import pLimit from "p-limit";
 import type {
-  ApiActivityEvent,
+  ApiIngestionReceipt,
   EpochDto,
   StatementDto,
 } from "@/features/governance/lib/compose-epoch";
@@ -52,14 +52,14 @@ async function fetchHistory(): Promise<EpochHistoryData> {
           fetchJson<{ statement: StatementDto | null }>(
             `/api/v1/ledger/epochs/${epoch.id}/statement`
           ),
-          fetchJson<{ events: ApiActivityEvent[] }>(
+          fetchJson<{ events: ApiIngestionReceipt[] }>(
             `/api/v1/ledger/epochs/${epoch.id}/activity?limit=200`
           ),
         ]);
 
         if (!statementRes.statement) {
           throw new Error(
-            `Epoch ${epoch.id} is finalized but has no payout statement — data integrity issue`
+            `Epoch ${epoch.id} is finalized but has no statement — data integrity issue`
           );
         }
 

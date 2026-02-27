@@ -28,7 +28,7 @@ import {
 import type { Logger } from "../observability/logger.js";
 
 import type {
-  ActivityLedgerStore,
+  EpochLedgerStore,
   ExecutionGrantWorkerPort,
   ScheduleRunRepository,
   SourceAdapter,
@@ -54,7 +54,7 @@ export interface ServiceContainer {
  * Created separately because ledger env vars (NODE_ID, SCOPE_ID) are optional.
  */
 export interface LedgerContainer {
-  ledgerStore: ActivityLedgerStore;
+  ledgerStore: EpochLedgerStore;
   sourceAdapters: ReadonlyMap<string, SourceAdapter>;
   nodeId: string;
   scopeId: string;

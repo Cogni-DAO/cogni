@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/api/v1/public/ledger/epochs/[id]/statement/route`
- * Purpose: Public HTTP endpoint for epoch payout statement.
- * Scope: Public route using wrapPublicRoute(); returns payout statement (null if none exists). Always 200. Does not contain business logic.
+ * Purpose: Public HTTP endpoint for epoch statement.
+ * Scope: Public route using wrapPublicRoute(); returns epoch statement (null if none exists). Always 200. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
  * Links: docs/spec/epoch-ledger.md, contracts/ledger.epoch-statement.v1.contract
@@ -35,7 +35,7 @@ export const GET = wrapPublicRoute(
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
 
     // PUBLIC_READS_FINALIZED_ONLY: verify epoch is finalized
     const epoch = await store.getEpoch(epochId);

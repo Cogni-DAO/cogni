@@ -40,7 +40,7 @@ Public (unauthenticated) HTTP endpoints for finalized ledger data. Exposes close
 
 ## Ports
 
-- **Uses ports:** `ActivityLedgerStore` (via container)
+- **Uses ports:** `EpochLedgerStore` (via container)
 - **Implements ports:** none
 
 ## Responsibilities

@@ -3,18 +3,18 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/activities/ledger`
- * Purpose: Temporal Activities for the full ledger pipeline — ingestion, curation, allocation, pool, auto-close, and finalization.
+ * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, auto-close, and finalization.
  * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-191 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
  * Invariants:
- *   - Per ACTIVITY_IDEMPOTENT: All activities idempotent via PK constraints or upsert
+ *   - Per RECEIPT_IDEMPOTENT: All activities idempotent via PK constraints or upsert
  *   - Per CURSOR_STATE_PERSISTED: Cursors saved after each collect() call
  *   - Per NODE_SCOPED: All operations pass nodeId + scopeId from deps
  *   - Per TEMPORAL_DETERMINISM: Activities contain all I/O; workflows call only these proxies
- *   - Per CURATION_AUTO_POPULATE: curateAndResolve inserts new curations (DO NOTHING on conflict), updates only userId on unresolved rows
- *   - Per IDENTITY_BEST_EFFORT: Unresolved events get userId=null in curation rows, never dropped
+ *   - Per SELECTION_AUTO_POPULATE: materializeSelection inserts new selections (DO NOTHING on conflict), updates only userId on unresolved rows
+ *   - Per IDENTITY_BEST_EFFORT: Unresolved receipts get userId=null in selection rows, never dropped
  *   - Per ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations never touches admin-set final_units
  *   - Per CONFIG_LOCKED_AT_REVIEW: autoCloseIngestion pins allocationAlgoRef + weightConfigHash
- *   - Per ARTIFACT_FINAL_ATOMIC: autoCloseIngestion passes artifacts to closeIngestionWithArtifacts for atomic write
+ *   - Per EVALUATION_FINAL_ATOMIC: autoCloseIngestion passes evaluations to closeIngestionWithEvaluations for atomic write
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
  * Side-effects: IO (database, GitHub API, viem EIP-191 verification)
  * Links: docs/spec/epoch-ledger.md, docs/spec/temporal-patterns.md
@@ -22,7 +22,7 @@
  */
 
 import type { ActivityEvent } from "@cogni/ingestion-core";
-import type { UncuratedEvent } from "@cogni/ledger-core";
+import type { UnselectedReceipt } from "@cogni/ledger-core";
 import {
   buildCanonicalMessage,
   computeAllocationSetHash,
@@ -38,13 +38,13 @@ import {
 import { verifyMessage } from "viem";
 
 import type { Logger } from "../observability/logger.js";
-import type { ActivityLedgerStore, SourceAdapter } from "../ports/index.js";
+import type { EpochLedgerStore, SourceAdapter } from "../ports/index.js";
 
 /**
  * Dependencies injected into ledger activities at worker creation.
  */
 export interface LedgerActivityDeps {
-  readonly ledgerStore: ActivityLedgerStore;
+  readonly ledgerStore: EpochLedgerStore;
   readonly sourceAdapters: ReadonlyMap<string, SourceAdapter>;
   readonly nodeId: string;
   readonly scopeId: string;
@@ -102,9 +102,9 @@ export interface CollectFromSourceOutput {
 }
 
 /**
- * Input for insertEvents activity.
+ * Input for insertReceipts activity.
  */
-export interface InsertEventsInput {
+export interface InsertReceiptsInput {
   readonly events: ActivityEvent[];
   readonly producerVersion: string;
 }
@@ -120,19 +120,19 @@ export interface SaveCursorInput {
 }
 
 /**
- * Input for curateAndResolve activity.
+ * Input for materializeSelection activity.
  * epochId is the sole input — activity loads epoch row for period dates.
  */
-export interface CurateAndResolveInput {
+export interface MaterializeSelectionInput {
   readonly epochId: string; // bigint serialized as string for Temporal
 }
 
 /**
- * Output from curateAndResolve activity.
+ * Output from materializeSelection activity.
  */
-export interface CurateAndResolveOutput {
-  readonly totalEvents: number;
-  readonly newCurations: number;
+export interface MaterializeSelectionOutput {
+  readonly totalReceipts: number;
+  readonly newSelections: number;
   readonly resolved: number;
   readonly unresolved: number;
 }
@@ -179,10 +179,10 @@ export interface AutoCloseIngestionInput {
   readonly weightConfig: Record<string, number>;
   readonly creditEstimateAlgo: string;
   readonly approvers: string[];
-  readonly artifacts: ReadonlyArray<{
+  readonly evaluations: ReadonlyArray<{
     readonly nodeId: string;
     readonly epochId: string; // bigint as decimal string for Temporal wire format
-    readonly artifactRef: string;
+    readonly evaluationRef: string;
     readonly status: "draft" | "locked";
     readonly algoRef: string;
     readonly inputsHash: string;
@@ -405,19 +405,18 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
   }
 
   /**
-   * Stores events via ledgerStore. Idempotent via onConflictDoNothing on PK.
+   * Stores receipts via ledgerStore. Idempotent via onConflictDoNothing on PK.
    */
-  async function insertEvents(input: InsertEventsInput): Promise<void> {
+  async function insertReceipts(input: InsertReceiptsInput): Promise<void> {
     const { events, producerVersion } = input;
     if (events.length === 0) return;
 
-    logger.info({ count: events.length }, "Inserting activity events");
+    logger.info({ count: events.length }, "Inserting ingestion receipts");
 
-    await ledgerStore.insertActivityEvents(
+    await ledgerStore.insertIngestionReceipts(
       events.map((e) => ({
-        id: e.id,
+        receiptId: e.id,
         nodeId,
-        scopeId,
         source: e.source,
         eventType: e.eventType,
         platformUserId: e.platformUserId,
@@ -432,7 +431,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       }))
     );
 
-    logger.info({ count: events.length }, "Events inserted");
+    logger.info({ count: events.length }, "Receipts inserted");
   }
 
   /**
@@ -475,41 +474,45 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
   }
 
   /**
-   * Curates events and resolves platform identities for an epoch.
-   * Two-phase writes: INSERT new curation rows, UPDATE userId on existing unresolved rows.
-   * CURATION_AUTO_POPULATE: never overwrites admin-set included/weight_override_milli/note.
-   * IDENTITY_BEST_EFFORT: unresolved events get userId=null, never dropped.
+   * Materializes selection rows and resolves platform identities for an epoch.
+   * Two-phase writes: INSERT new selection rows, UPDATE userId on existing unresolved rows.
+   * SELECTION_AUTO_POPULATE: never overwrites admin-set included/weight_override_milli/note.
+   * IDENTITY_BEST_EFFORT: unresolved receipts get userId=null, never dropped.
    */
-  async function curateAndResolve(
-    input: CurateAndResolveInput
-  ): Promise<CurateAndResolveOutput> {
+  async function materializeSelection(
+    input: MaterializeSelectionInput
+  ): Promise<MaterializeSelectionOutput> {
     const epochId = BigInt(input.epochId);
 
     // 1. Load epoch → get period dates
     const epoch = await ledgerStore.getEpoch(epochId);
     if (!epoch) {
-      throw new Error(`curateAndResolve: epoch ${input.epochId} not found`);
+      throw new Error(`materializeSelection: epoch ${input.epochId} not found`);
     }
 
-    // 2. Get uncurated events (delta: only events needing work)
-    const uncurated: UncuratedEvent[] = await ledgerStore.getUncuratedEvents(
-      nodeId,
-      epochId,
-      epoch.periodStart,
-      epoch.periodEnd
-    );
+    // 2. Get unselected receipts (delta: only receipts needing work)
+    const unselected: UnselectedReceipt[] =
+      await ledgerStore.getUnselectedReceipts(
+        nodeId,
+        epochId,
+        epoch.periodStart,
+        epoch.periodEnd
+      );
 
-    if (uncurated.length === 0) {
-      logger.info({ epochId: input.epochId }, "No uncurated events — skipping");
-      return { totalEvents: 0, newCurations: 0, resolved: 0, unresolved: 0 };
+    if (unselected.length === 0) {
+      logger.info(
+        { epochId: input.epochId },
+        "No unselected receipts — skipping"
+      );
+      return { totalReceipts: 0, newSelections: 0, resolved: 0, unresolved: 0 };
     }
 
     // 3. Collect unique platformUserIds by source
     const idsBySource = new Map<string, Set<string>>();
-    for (const { event } of uncurated) {
-      const ids = idsBySource.get(event.source) ?? new Set();
-      ids.add(event.platformUserId);
-      idsBySource.set(event.source, ids);
+    for (const { receipt } of unselected) {
+      const ids = idsBySource.get(receipt.source) ?? new Set();
+      ids.add(receipt.platformUserId);
+      idsBySource.set(receipt.source, ids);
     }
 
     // 4. Batch resolve identities per source
@@ -526,31 +529,31 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     }
 
     // 5. Two-phase writes
-    let newCurations = 0;
+    let newSelections = 0;
     let resolved = 0;
     let unresolved = 0;
 
-    for (const { event, hasExistingCuration } of uncurated) {
-      const resolvedUserId = resolvedMap.get(event.platformUserId) ?? null;
+    for (const { receipt, hasExistingSelection } of unselected) {
+      const resolvedUserId = resolvedMap.get(receipt.platformUserId) ?? null;
 
-      if (!hasExistingCuration) {
-        // Phase 1: INSERT new curation row (ON CONFLICT DO NOTHING for race safety)
-        // Uses insertCurationDoNothing — NOT upsertCuration which overwrites all fields
-        await ledgerStore.insertCurationDoNothing([
+      if (!hasExistingSelection) {
+        // Phase 1: INSERT new selection row (ON CONFLICT DO NOTHING for race safety)
+        // Uses insertSelectionDoNothing — NOT upsertSelection which overwrites all fields
+        await ledgerStore.insertSelectionDoNothing([
           {
             nodeId,
             epochId,
-            eventId: event.id,
+            receiptId: receipt.receiptId,
             userId: resolvedUserId,
             included: true,
           },
         ]);
-        newCurations++;
+        newSelections++;
       } else if (resolvedUserId) {
         // Phase 2: UPDATE userId on existing unresolved row
-        await ledgerStore.updateCurationUserId(
+        await ledgerStore.updateSelectionUserId(
           epochId,
-          event.id,
+          receipt.receiptId,
           resolvedUserId
         );
       }
@@ -565,24 +568,24 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     logger.info(
       {
         epochId: input.epochId,
-        totalEvents: uncurated.length,
-        newCurations,
+        totalReceipts: unselected.length,
+        newSelections,
         resolved,
         unresolved,
       },
-      "Curation and identity resolution complete"
+      "Selection materialization and identity resolution complete"
     );
 
     return {
-      totalEvents: uncurated.length,
-      newCurations,
+      totalReceipts: unselected.length,
+      newSelections,
       resolved,
       unresolved,
     };
   }
 
   /**
-   * Compute proposed allocations from curated events.
+   * Compute proposed allocations from selected receipts.
    * Upserts results (ALLOCATION_PRESERVES_OVERRIDES) and removes stale allocations.
    */
   async function computeAllocations(
@@ -596,18 +599,22 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       "Computing allocations"
     );
 
-    // 1. Load curated events (resolved users only)
-    const events = await ledgerStore.getCuratedEventsForAllocation(epochId);
+    // 1. Load selected receipts (resolved users only)
+    const receipts =
+      await ledgerStore.getSelectedReceiptsForAllocation(epochId);
 
-    if (events.length === 0) {
-      logger.info({ epochId: input.epochId }, "No curated events — skipping");
+    if (receipts.length === 0) {
+      logger.info(
+        { epochId: input.epochId },
+        "No selected receipts — skipping"
+      );
       return { totalAllocations: 0, totalProposedUnits: "0" };
     }
 
     // 2. Compute proposed allocations (pure)
     const proposed = computeProposedAllocations(
       algorithmId,
-      events,
+      receipts,
       weightConfig
     );
 
@@ -755,29 +762,29 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         epochId: input.epochId,
         allocationAlgoRef,
         weightConfigHash: `${weightConfigHash.slice(0, 12)}...`,
-        artifactCount: input.artifacts.length,
+        evaluationCount: input.evaluations.length,
       },
-      "Auto-closing ingestion with artifacts"
+      "Auto-closing ingestion with evaluations"
     );
 
     // Reconstruct bigint epochId from wire string for domain layer
-    const artifacts = input.artifacts.map((a) => ({
-      ...a,
-      epochId: BigInt(a.epochId),
+    const evaluations = input.evaluations.map((e) => ({
+      ...e,
+      epochId: BigInt(e.epochId),
     }));
 
-    const epoch = await ledgerStore.closeIngestionWithArtifacts({
+    const epoch = await ledgerStore.closeIngestionWithEvaluations({
       epochId,
       approverSetHash,
       allocationAlgoRef,
       weightConfigHash,
-      artifacts,
+      evaluations,
       artifactsHash: input.artifactsHash,
     });
 
     logger.info(
       { epochId: input.epochId, status: epoch.status },
-      "Ingestion auto-closed with artifacts"
+      "Ingestion auto-closed with evaluations"
     );
 
     return { closed: true, reason: "auto_closed" };
@@ -982,9 +989,9 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     ensureEpochForWindow,
     loadCursor,
     collectFromSource,
-    insertEvents,
+    insertReceipts,
     saveCursor,
-    curateAndResolve,
+    materializeSelection,
     computeAllocations,
     ensurePoolComponents,
     autoCloseIngestion,

@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/ledger-core/allocation`
- * Purpose: Versioned allocation algorithm framework — pure function dispatch for computing proposed allocations from curated events.
+ * Purpose: Versioned allocation algorithm framework — pure function dispatch for computing proposed allocations from selected receipts.
  * Scope: Pure functions. Does not perform I/O or hold state. Deterministic output for same inputs.
  * Invariants:
  * - ALLOCATION_ALGO_VERSIONED: dispatch by algoRef; same inputs → identical output.
@@ -14,9 +14,9 @@
  * @public
  */
 
-/** Input: joined curation + activity_events data (only resolved, included events) */
-export interface CuratedEventForAllocation {
-  readonly eventId: string;
+/** Input: joined selection + ingestion_receipts data (only resolved, included receipts) */
+export interface SelectedReceiptForAllocation {
+  readonly receiptId: string;
   readonly userId: string;
   readonly source: string;
   readonly eventType: string;
@@ -37,7 +37,7 @@ export interface ProposedAllocation {
  */
 export function computeProposedAllocations(
   algoRef: string,
-  events: readonly CuratedEventForAllocation[],
+  events: readonly SelectedReceiptForAllocation[],
   weightConfig: Record<string, number>
 ): ProposedAllocation[] {
   switch (algoRef) {
@@ -56,7 +56,7 @@ export function computeProposedAllocations(
  * 4. Return sorted by userId (deterministic)
  */
 function weightSumV0(
-  events: readonly CuratedEventForAllocation[],
+  events: readonly SelectedReceiptForAllocation[],
   weightConfig: Record<string, number>
 ): ProposedAllocation[] {
   const userUnits = new Map<string, bigint>();

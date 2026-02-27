@@ -6,8 +6,8 @@
 /**
  * Module: `@scripts/db/seed`
  * Purpose: Dev seed script for governance epoch UI — populates ledger with realistic multi-state epoch data.
- * Scope: Seeds users, epochs, activity events, curations, allocations, pool components, and payout statements for local dev. Does not modify production databases or run in CI.
- * Invariants: ONE_OPEN_EPOCH (only 1 open epoch per node/scope); epoch windows aligned via computeEpochWindowV1 (same grid as scheduler); idempotent via onConflictDoNothing on activity events and users.
+ * Scope: Seeds users, epochs, ingestion receipts, selections, allocations, pool components, and epoch statements for local dev. Does not modify production databases or run in CI.
+ * Invariants: ONE_OPEN_EPOCH (only 1 open epoch per node/scope); epoch windows aligned via computeEpochWindowV1 (same grid as scheduler); idempotent via onConflictDoNothing on ingestion receipts and users.
  * Side-effects: IO (database writes, console output)
  * Links: work/items/task.0106.ledger-dev-seed.md, tests/_fixtures/ledger/seed-ledger.ts
  * @public
@@ -328,12 +328,11 @@ async function seedFinalizedEpoch(
     `  Created epoch ${epoch.id} (${epochDef.periodStart.toISOString().slice(0, 10)} → ${epochDef.periodEnd.toISOString().slice(0, 10)})`
   );
 
-  // 2. Insert activity events
-  await store.insertActivityEvents(
+  // 2. Insert ingestion receipts
+  await store.insertIngestionReceipts(
     epochDef.events.map((ev) => ({
-      id: ev.id,
+      receiptId: ev.id,
       nodeId: NODE_ID,
-      scopeId: SCOPE_ID,
       source: ev.source,
       eventType: ev.eventType,
       platformUserId: ev.contributor.platformUserId,
@@ -351,19 +350,19 @@ async function seedFinalizedEpoch(
       retrievedAt: ev.eventTime,
     }))
   );
-  console.log(`  Inserted ${epochDef.events.length} activity events`);
+  console.log(`  Inserted ${epochDef.events.length} ingestion receipts`);
 
-  // 3. Insert curations (link events to epoch with resolved userId)
-  await store.insertCurationDoNothing(
+  // 3. Insert selections (link receipts to epoch with resolved userId)
+  await store.insertSelectionDoNothing(
     epochDef.events.map((ev) => ({
       nodeId: NODE_ID,
       epochId: epoch.id,
-      eventId: ev.id,
+      receiptId: ev.id,
       userId: ev.contributor.userId,
       included: true,
     }))
   );
-  console.log(`  Inserted ${epochDef.events.length} curations`);
+  console.log(`  Inserted ${epochDef.events.length} selections`);
 
   // 4. Compute and insert allocations
   const allocs = computeAllocations(epochDef.events, WEIGHT_CONFIG);
@@ -402,9 +401,9 @@ async function seedFinalizedEpoch(
   await store.finalizeEpoch(epoch.id, POOL_CREDITS);
   console.log("  Finalized epoch (review → finalized)");
 
-  // 8. Insert payout statement
+  // 8. Insert epoch statement
   const payouts = computePayouts(allocs, POOL_CREDITS);
-  await store.insertPayoutStatement({
+  await store.insertEpochStatement({
     nodeId: NODE_ID,
     epochId: epoch.id,
     allocationSetHash: sha256(
@@ -418,7 +417,7 @@ async function seedFinalizedEpoch(
     poolTotalCredits: POOL_CREDITS,
     payoutsJson: payouts,
   });
-  console.log("  Inserted payout statement");
+  console.log("  Inserted epoch statement");
 }
 
 async function seedOpenEpoch(
@@ -437,12 +436,11 @@ async function seedOpenEpoch(
     `  Created epoch ${epoch.id} (${epochDef.periodStart.toISOString().slice(0, 10)} → ${epochDef.periodEnd.toISOString().slice(0, 10)}) [OPEN]`
   );
 
-  // 2. Insert activity events
-  await store.insertActivityEvents(
+  // 2. Insert ingestion receipts
+  await store.insertIngestionReceipts(
     epochDef.events.map((ev) => ({
-      id: ev.id,
+      receiptId: ev.id,
       nodeId: NODE_ID,
-      scopeId: SCOPE_ID,
       source: ev.source,
       eventType: ev.eventType,
       platformUserId: ev.contributor.platformUserId,
@@ -460,19 +458,19 @@ async function seedOpenEpoch(
       retrievedAt: ev.eventTime,
     }))
   );
-  console.log(`  Inserted ${epochDef.events.length} activity events`);
+  console.log(`  Inserted ${epochDef.events.length} ingestion receipts`);
 
-  // 3. Insert curations
-  await store.insertCurationDoNothing(
+  // 3. Insert selections (link receipts to epoch with resolved userId)
+  await store.insertSelectionDoNothing(
     epochDef.events.map((ev) => ({
       nodeId: NODE_ID,
       epochId: epoch.id,
-      eventId: ev.id,
+      receiptId: ev.id,
       userId: ev.contributor.userId,
       included: true,
     }))
   );
-  console.log(`  Inserted ${epochDef.events.length} curations`);
+  console.log(`  Inserted ${epochDef.events.length} selections`);
 
   // 4. Compute and insert allocations (live, mutable)
   const allocs = computeAllocations(epochDef.events, WEIGHT_CONFIG);
@@ -529,7 +527,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    // Seed user rows (FK target for activity_curation.user_id and epoch_allocations.user_id)
+    // Seed user rows (FK target for epoch_selections.user_id and epoch_allocations.user_id)
     console.log("👤 Seeding contributor user rows...");
     await db
       .insert(users)

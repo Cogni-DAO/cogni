@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/ledger-core/hashing`
- * Purpose: Deterministic SHA-256 hashing for allocation sets and epoch artifacts.
+ * Purpose: Deterministic SHA-256 hashing for allocation sets and epoch evaluations.
  * Scope: Pure functions. Does not perform network I/O or hold secrets.
  * Invariants:
  * - PAYOUT_DETERMINISTIC: Same inputs → byte-for-byte identical hash output.
@@ -57,26 +57,26 @@ export async function sha256OfCanonicalJson(value: unknown): Promise<string> {
 }
 
 /**
- * Compute artifacts_hash for an epoch from locked artifact records.
- * SHA-256 of sorted (artifact_ref, algo_ref, inputs_hash, payload_hash) tuples.
- * Only locked artifacts contribute. Deterministic for same inputs.
+ * Compute artifacts_hash for an epoch from locked evaluation records.
+ * SHA-256 of sorted (evaluation_ref, algo_ref, inputs_hash, payload_hash) tuples.
+ * Only locked evaluations contribute. Deterministic for same inputs.
  *
- * @param artifacts - Array of locked artifact records
+ * @param evaluations - Array of locked evaluation records
  * @returns SHA-256 hex string
  */
 export async function computeArtifactsHash(
-  artifacts: ReadonlyArray<{
-    readonly artifactRef: string;
+  evaluations: ReadonlyArray<{
+    readonly evaluationRef: string;
     readonly algoRef: string;
     readonly inputsHash: string;
     readonly payloadHash: string;
   }>
 ): Promise<string> {
-  const sorted = [...artifacts].sort((a, b) =>
-    a.artifactRef.localeCompare(b.artifactRef)
+  const sorted = [...evaluations].sort((a, b) =>
+    a.evaluationRef.localeCompare(b.evaluationRef)
   );
   const canonical = canonicalJsonStringify(
-    sorted.map((a) => [a.artifactRef, a.algoRef, a.inputsHash, a.payloadHash])
+    sorted.map((a) => [a.evaluationRef, a.algoRef, a.inputsHash, a.payloadHash])
   );
   return sha256Hex(canonical);
 }

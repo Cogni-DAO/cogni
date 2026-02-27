@@ -4,8 +4,8 @@
 /**
  * Module: `@tests/component/db/drizzle-ledger.adapter.int`
  * Purpose: Component tests for DrizzleLedgerAdapter against real PostgreSQL via testcontainers.
- * Scope: Verifies adapter + DB triggers (ACTIVITY_APPEND_ONLY, CURATION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, ACTIVITY_IDEMPOTENT). Does not test domain logic or routes.
- * Invariants: ACTIVITY_APPEND_ONLY, ACTIVITY_IDEMPOTENT, CURATION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, SCOPE_GATED_QUERIES
+ * Scope: Verifies adapter + DB triggers (RECEIPT_APPEND_ONLY, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, RECEIPT_IDEMPOTENT). Does not test domain logic or routes.
+ * Invariants: RECEIPT_APPEND_ONLY, RECEIPT_IDEMPOTENT, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, SCOPE_GATED_QUERIES
  * Side-effects: IO (database operations via testcontainers)
  * Links: packages/db-client/src/adapters/drizzle-ledger.adapter.ts, packages/ledger-core/src/store.ts
  * @public
@@ -20,10 +20,13 @@ import {
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
   epochWindow,
-  makeActivityEvent,
   makeAllocation,
-  makeCuration,
+  makeEvaluation,
+  makeIngestionReceipt,
   makePoolComponent,
+  makeSelection,
+  makeSelectionAuto,
+  OTHER_SCOPE_ID,
   TEST_NODE_ID,
   TEST_SCOPE_ID,
   TEST_WEIGHT_CONFIG,
@@ -226,68 +229,70 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
   });
 
-  // ── Activity Events ───────────────────────────────────────────
+  // ── Ingestion Receipts ───────────────────────────────────────────
 
-  describe("activity events", () => {
-    it("inserts events and retrieves by time window", async () => {
+  describe("ingestion receipts", () => {
+    it("inserts receipts and retrieves by time window", async () => {
       const events = [
-        makeActivityEvent({
-          id: "github:pr:test/repo:1",
+        makeIngestionReceipt({
+          receiptId: "github:pr:test/repo:1",
           eventTime: new Date("2026-01-06T10:00:00Z"),
           platformUserId: "111",
         }),
-        makeActivityEvent({
-          id: "github:pr:test/repo:2",
+        makeIngestionReceipt({
+          receiptId: "github:pr:test/repo:2",
           eventTime: new Date("2026-01-07T10:00:00Z"),
           platformUserId: "222",
         }),
       ];
 
-      await adapter.insertActivityEvents(events);
+      await adapter.insertIngestionReceipts(events);
 
-      const results = await adapter.getActivityForWindow(
+      const results = await adapter.getReceiptsForWindow(
         TEST_NODE_ID,
         new Date("2026-01-06T00:00:00Z"),
         new Date("2026-01-08T00:00:00Z")
       );
 
       expect(results.length).toBeGreaterThanOrEqual(2);
-      const ids = results.map((e) => e.id);
+      const ids = results.map((e) => e.receiptId);
       expect(ids).toContain("github:pr:test/repo:1");
       expect(ids).toContain("github:pr:test/repo:2");
     });
 
-    it("ACTIVITY_IDEMPOTENT: re-inserting same event is a no-op", async () => {
-      const event = makeActivityEvent({
-        id: "github:pr:test/repo:1",
+    it("RECEIPT_IDEMPOTENT: re-inserting same receipt is a no-op", async () => {
+      const event = makeIngestionReceipt({
+        receiptId: "github:pr:test/repo:1",
         platformUserId: "111",
       });
 
-      await adapter.insertActivityEvents([event]);
+      await adapter.insertIngestionReceipts([event]);
 
-      const results = await adapter.getActivityForWindow(
+      const results = await adapter.getReceiptsForWindow(
         TEST_NODE_ID,
         new Date("2026-01-06T00:00:00Z"),
         new Date("2026-01-08T00:00:00Z")
       );
-      const matching = results.filter((e) => e.id === "github:pr:test/repo:1");
+      const matching = results.filter(
+        (e) => e.receiptId === "github:pr:test/repo:1"
+      );
       expect(matching).toHaveLength(1);
     });
 
-    it("ACTIVITY_APPEND_ONLY: UPDATE on activity_events is rejected by trigger", async () => {
+    it("RECEIPT_APPEND_ONLY: UPDATE on ingestion_receipts is rejected by trigger", async () => {
       await expect(
         db.execute(
-          sql`UPDATE activity_events SET source = 'modified' WHERE id = 'github:pr:test/repo:1' AND node_id = ${TEST_NODE_ID}::uuid`
+          sql`UPDATE ingestion_receipts SET source = 'modified' WHERE receipt_id = 'github:pr:test/repo:1' AND node_id = ${TEST_NODE_ID}::uuid`
         )
       ).rejects.toSatisfy((err: unknown) =>
         /not allowed/i.test(drizzleCause(err))
       );
     });
 
-    it("ACTIVITY_APPEND_ONLY: DELETE on activity_events is rejected by trigger", async () => {
+    it("RECEIPT_APPEND_ONLY: DELETE on ingestion_receipts is rejected by trigger", async () => {
       await expect(
         db.execute(
-          sql`DELETE FROM activity_events WHERE id = 'github:pr:test/repo:1' AND node_id = ${TEST_NODE_ID}::uuid`
+          sql`DELETE FROM ingestion_receipts WHERE receipt_id = 'github:pr:test/repo:1' AND node_id = ${TEST_NODE_ID}::uuid`
         )
       ).rejects.toSatisfy((err: unknown) =>
         /not allowed/i.test(drizzleCause(err))
@@ -295,9 +300,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
   });
 
-  // ── Curation ──────────────────────────────────────────────────
+  // ── Selection ──────────────────────────────────────────────────
 
-  describe("curation", () => {
+  describe("selection", () => {
     let epochId: bigint;
 
     beforeAll(async () => {
@@ -324,44 +329,44 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       }
     });
 
-    it("upserts curation entries and retrieves them", async () => {
-      await adapter.upsertCuration([
-        makeCuration({
+    it("upserts selection entries and retrieves them", async () => {
+      await adapter.upsertSelection([
+        makeSelection({
           epochId,
-          eventId: "github:pr:test/repo:1",
+          receiptId: "github:pr:test/repo:1",
           userId: actor.user.id,
         }),
-        makeCuration({
+        makeSelection({
           epochId,
-          eventId: "github:pr:test/repo:2",
+          receiptId: "github:pr:test/repo:2",
           userId: null,
         }),
       ]);
 
-      const all = await adapter.getCurationForEpoch(epochId);
+      const all = await adapter.getSelectionForEpoch(epochId);
       expect(all).toHaveLength(2);
     });
 
-    it("getUnresolvedCuration returns only entries with null userId", async () => {
-      const unresolved = await adapter.getUnresolvedCuration(epochId);
+    it("getUnresolvedSelection returns only entries with null userId", async () => {
+      const unresolved = await adapter.getUnresolvedSelection(epochId);
       expect(unresolved).toHaveLength(1);
-      expect(unresolved[0]?.eventId).toBe("github:pr:test/repo:2");
+      expect(unresolved[0]?.receiptId).toBe("github:pr:test/repo:2");
     });
 
-    it("upsert updates existing curation (same epoch+event)", async () => {
-      await adapter.upsertCuration([
-        makeCuration({
+    it("upsert updates existing selection (same epoch+receipt)", async () => {
+      await adapter.upsertSelection([
+        makeSelection({
           epochId,
-          eventId: "github:pr:test/repo:2",
+          receiptId: "github:pr:test/repo:2",
           userId: actor.user.id,
         }),
       ]);
 
-      const unresolved = await adapter.getUnresolvedCuration(epochId);
+      const unresolved = await adapter.getUnresolvedSelection(epochId);
       expect(unresolved).toHaveLength(0);
     });
 
-    it("CURATION_FREEZE_ON_FINALIZE: curation is mutable during review", async () => {
+    it("SELECTION_FREEZE_ON_FINALIZE: selection is mutable during review", async () => {
       await adapter.closeIngestion(
         epochId,
         "review-curation-test",
@@ -369,12 +374,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         "review-wch"
       );
 
-      // Curation writes should succeed while epoch is in review
+      // Selection writes should succeed while epoch is in review
       await expect(
-        adapter.upsertCuration([
-          makeCuration({
+        adapter.upsertSelection([
+          makeSelection({
             epochId,
-            eventId: "github:pr:test/repo:1",
+            receiptId: "github:pr:test/repo:1",
             userId: actor.user.id,
             note: "updated during review",
           }),
@@ -382,15 +387,15 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       ).resolves.not.toThrow();
     });
 
-    it("CURATION_FREEZE_ON_FINALIZE: rejects curation writes after epoch finalize", async () => {
+    it("SELECTION_FREEZE_ON_FINALIZE: rejects selection writes after epoch finalize", async () => {
       // Epoch is already in review from the previous test
       await adapter.finalizeEpoch(epochId, 5000n);
 
       await expect(
-        adapter.upsertCuration([
-          makeCuration({
+        adapter.upsertSelection([
+          makeSelection({
             epochId,
-            eventId: "github:pr:test/repo:1",
+            receiptId: "github:pr:test/repo:1",
             userId: null,
             note: "should fail",
           }),
@@ -401,9 +406,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
   });
 
-  // ── getCuratedEventsForAllocation ─────────────────────────────
+  // ── getSelectedReceiptsForAllocation ─────────────────────────────
 
-  describe("getCuratedEventsForAllocation", () => {
+  describe("getSelectedReceiptsForAllocation", () => {
     let epochId: bigint;
     let resolvedActor: TestActor;
 
@@ -418,25 +423,25 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       });
       epochId = epoch.id;
 
-      // Insert activity events within epoch window
+      // Insert ingestion receipts within epoch window
       const eventTime = new Date("2026-08-20T12:00:00Z");
-      await adapter.insertActivityEvents([
-        makeActivityEvent({
-          id: "join-test:resolved",
+      await adapter.insertIngestionReceipts([
+        makeIngestionReceipt({
+          receiptId: "join-test:resolved",
           eventTime,
           platformUserId: "gh-resolved",
           source: "github",
           eventType: "pr_merged",
         }),
-        makeActivityEvent({
-          id: "join-test:unresolved",
+        makeIngestionReceipt({
+          receiptId: "join-test:unresolved",
           eventTime,
           platformUserId: "gh-unresolved",
           source: "github",
           eventType: "review_submitted",
         }),
-        makeActivityEvent({
-          id: "join-test:excluded",
+        makeIngestionReceipt({
+          receiptId: "join-test:excluded",
           eventTime,
           platformUserId: "gh-excluded",
           source: "github",
@@ -444,23 +449,23 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         }),
       ]);
 
-      // Curate: one resolved, one unresolved (null userId), one excluded
-      await adapter.upsertCuration([
-        makeCuration({
+      // Select: one resolved, one unresolved (null userId), one excluded
+      await adapter.upsertSelection([
+        makeSelection({
           epochId,
-          eventId: "join-test:resolved",
+          receiptId: "join-test:resolved",
           userId: resolvedActor.user.id,
           included: true,
         }),
-        makeCuration({
+        makeSelection({
           epochId,
-          eventId: "join-test:unresolved",
+          receiptId: "join-test:unresolved",
           userId: null,
           included: true,
         }),
-        makeCuration({
+        makeSelection({
           epochId,
-          eventId: "join-test:excluded",
+          receiptId: "join-test:excluded",
           userId: resolvedActor.user.id,
           included: false,
         }),
@@ -477,21 +482,21 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       await adapter.finalizeEpoch(epochId, 0n);
     });
 
-    it("returns only curations with non-null userId", async () => {
-      const events = await adapter.getCuratedEventsForAllocation(epochId);
+    it("returns only selections with non-null userId", async () => {
+      const events = await adapter.getSelectedReceiptsForAllocation(epochId);
 
       // "resolved" has userId set → included
       // "unresolved" has userId=null → excluded by join filter
       // "excluded" has userId set but included=false → still returned (filtering is domain logic)
-      const eventIds = events.map((e) => e.eventId);
-      expect(eventIds).toContain("join-test:resolved");
-      expect(eventIds).toContain("join-test:excluded");
-      expect(eventIds).not.toContain("join-test:unresolved");
+      const receiptIds = events.map((e) => e.receiptId);
+      expect(receiptIds).toContain("join-test:resolved");
+      expect(receiptIds).toContain("join-test:excluded");
+      expect(receiptIds).not.toContain("join-test:unresolved");
     });
 
-    it("join populates source and eventType from activity_events", async () => {
-      const events = await adapter.getCuratedEventsForAllocation(epochId);
-      const resolved = events.find((e) => e.eventId === "join-test:resolved");
+    it("join populates source and eventType from ingestion_receipts", async () => {
+      const events = await adapter.getSelectedReceiptsForAllocation(epochId);
+      const resolved = events.find((e) => e.receiptId === "join-test:resolved");
 
       expect(resolved).toBeDefined();
       expect(resolved?.source).toBe("github");
@@ -769,9 +774,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
   });
 
-  // ── Payout Statements ─────────────────────────────────────────
+  // ── Epoch Statements ─────────────────────────────────────────
 
-  describe("payout statements", () => {
+  describe("epoch statements", () => {
     let epochId: bigint;
 
     beforeAll(async () => {
@@ -791,8 +796,8 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       epochId = epoch.id;
     });
 
-    it("inserts and retrieves a payout statement", async () => {
-      const stmt = await adapter.insertPayoutStatement({
+    it("inserts and retrieves an epoch statement", async () => {
+      const stmt = await adapter.insertEpochStatement({
         nodeId: TEST_NODE_ID,
         epochId,
         allocationSetHash: "abc123def456",
@@ -843,7 +848,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       );
       await adapter.finalizeEpoch(epoch.id, 20000n);
 
-      const stmt = await adapter.insertPayoutStatement({
+      const stmt = await adapter.insertEpochStatement({
         nodeId: TEST_NODE_ID,
         epochId: epoch.id,
         allocationSetHash: "sig-test-hash",
@@ -1111,7 +1116,6 @@ describe("DrizzleLedgerAdapter (Component)", () => {
   // ── SCOPE_GATED_QUERIES ─────────────────────────────────────────
 
   describe("SCOPE_GATED_QUERIES", () => {
-    const OTHER_SCOPE_ID = "00000000-0000-4000-8000-000000000099";
     const otherScopeAdapter = new DrizzleLedgerAdapter(db, OTHER_SCOPE_ID);
     let scopeTestEpochId: bigint;
 
@@ -1163,13 +1167,13 @@ describe("DrizzleLedgerAdapter (Component)", () => {
 
     it("getCurationForEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.getCurationForEpoch(scopeTestEpochId)
+        otherScopeAdapter.getSelectionForEpoch(scopeTestEpochId)
       ).rejects.toThrow(EpochNotFoundError);
     });
 
     it("getUnresolvedCuration throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.getUnresolvedCuration(scopeTestEpochId)
+        otherScopeAdapter.getUnresolvedSelection(scopeTestEpochId)
       ).rejects.toThrow(EpochNotFoundError);
     });
 
@@ -1201,9 +1205,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       ).rejects.toThrow(EpochNotFoundError);
     });
 
-    it("getUncuratedEvents throws EpochNotFoundError for cross-scope epochId", async () => {
+    it("getUnselectedReceipts throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.getUncuratedEvents(
+        otherScopeAdapter.getUnselectedReceipts(
           TEST_NODE_ID,
           scopeTestEpochId,
           new Date("2026-01-01"),
@@ -1212,9 +1216,9 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       ).rejects.toThrow(EpochNotFoundError);
     });
 
-    it("updateCurationUserId throws EpochNotFoundError for cross-scope epochId", async () => {
+    it("updateSelectionUserId throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.updateCurationUserId(
+        otherScopeAdapter.updateSelectionUserId(
           scopeTestEpochId,
           "any-event",
           "any-user"
@@ -1232,6 +1236,301 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const result = await adapter.getEpoch(scopeTestEpochId);
       expect(result).not.toBeNull();
       expect(result?.scopeId).toBe(TEST_SCOPE_ID);
+    });
+  });
+
+  // ── Evaluations ───────────────────────────────────────────────
+
+  describe("upsertDraftEvaluation + reads", () => {
+    let evalEpochId: bigint;
+
+    beforeAll(async () => {
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(40),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      evalEpochId = epoch.id;
+    });
+
+    afterAll(async () => {
+      // Transition to review then finalized to free ONE_OPEN_EPOCH slot
+      await adapter.closeIngestion(
+        evalEpochId,
+        "test-approver-set-hash",
+        "weight-sum-v0",
+        "test-weight-config-hash"
+      );
+      await adapter.finalizeEpoch(evalEpochId, 0n);
+    });
+
+    it("upsertDraftEvaluation inserts and getEvaluation retrieves it", async () => {
+      const params = makeEvaluation({ epochId: evalEpochId });
+      await adapter.upsertDraftEvaluation(params);
+
+      const result = await adapter.getEvaluation(
+        evalEpochId,
+        "cogni.echo.v0",
+        "draft"
+      );
+      expect(result).not.toBeNull();
+      expect(result!.evaluationRef).toBe("cogni.echo.v0");
+      expect(result!.algoRef).toBe("echo-enricher-v0");
+      expect(result!.inputsHash).toBe("a".repeat(64));
+      expect(result!.payloadHash).toBe("b".repeat(64));
+      expect(result!.payloadJson).toEqual({ test: true });
+      expect(result!.status).toBe("draft");
+    });
+
+    it("upsertDraftEvaluation overwrites existing draft (same ref)", async () => {
+      const newHash = "c".repeat(64);
+      await adapter.upsertDraftEvaluation(
+        makeEvaluation({
+          epochId: evalEpochId,
+          payloadHash: newHash,
+          payloadJson: { updated: true },
+        })
+      );
+
+      const all = await adapter.getEvaluationsForEpoch(evalEpochId, "draft");
+      expect(all).toHaveLength(1);
+      expect(all[0]!.payloadHash).toBe(newHash);
+      expect(all[0]!.payloadJson).toEqual({ updated: true });
+    });
+
+    it("getEvaluation returns null for nonexistent ref", async () => {
+      const result = await adapter.getEvaluation(
+        evalEpochId,
+        "cogni.nonexistent.v0"
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("closeIngestionWithEvaluations", () => {
+    let closeEpochId: bigint;
+    const evalRef = "cogni.echo.v0";
+    const testArtifactsHash = "d".repeat(64);
+
+    beforeAll(async () => {
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(41),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      closeEpochId = epoch.id;
+
+      // Seed receipts + selections + allocations + pool (required for close)
+      const { periodStart, periodEnd } = epochWindow(41);
+      const mid = new Date((periodStart.getTime() + periodEnd.getTime()) / 2);
+
+      await adapter.insertIngestionReceipts([
+        makeIngestionReceipt({
+          receiptId: `eval-close-receipt-${closeEpochId}-1`,
+          nodeId: TEST_NODE_ID,
+          platformUserId: "gh-user-101",
+          platformLogin: "alice",
+          eventTime: mid,
+          retrievedAt: mid,
+        }),
+      ]);
+
+      await adapter.insertSelectionDoNothing([
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: closeEpochId,
+          receiptId: `eval-close-receipt-${closeEpochId}-1`,
+          userId: actor.user.id,
+          included: true,
+        }),
+      ]);
+
+      await adapter.insertAllocations([
+        makeAllocation({
+          nodeId: TEST_NODE_ID,
+          epochId: closeEpochId,
+          userId: actor.user.id,
+          proposedUnits: 1000n,
+          activityCount: 1,
+        }),
+      ]);
+
+      await adapter.insertPoolComponent(
+        makePoolComponent({
+          nodeId: TEST_NODE_ID,
+          epochId: closeEpochId,
+        })
+      );
+
+      // Insert a draft evaluation first (to test coexistence with locked)
+      await adapter.upsertDraftEvaluation(
+        makeEvaluation({ epochId: closeEpochId })
+      );
+    });
+
+    it("atomic close: inserts locked evaluations + sets artifactsHash + transitions to review", async () => {
+      const result = await adapter.closeIngestionWithEvaluations({
+        epochId: closeEpochId,
+        approverSetHash: "test-approver-set-hash",
+        allocationAlgoRef: "weight-sum-v0",
+        weightConfigHash: "test-weight-config-hash",
+        evaluations: [
+          makeEvaluation({ epochId: closeEpochId, status: "locked" }),
+        ],
+        artifactsHash: testArtifactsHash,
+      });
+
+      expect(result.status).toBe("review");
+      expect(result.artifactsHash).toBe(testArtifactsHash);
+
+      // Locked evaluation retrievable
+      const locked = await adapter.getEvaluation(
+        closeEpochId,
+        evalRef,
+        "locked"
+      );
+      expect(locked).not.toBeNull();
+      expect(locked!.status).toBe("locked");
+
+      // Draft still exists (coexistence)
+      const draft = await adapter.getEvaluation(closeEpochId, evalRef, "draft");
+      expect(draft).not.toBeNull();
+      expect(draft!.status).toBe("draft");
+
+      // getEvaluationsForEpoch returns both
+      const all = await adapter.getEvaluationsForEpoch(closeEpochId);
+      expect(all).toHaveLength(2);
+      const statuses = all.map((e) => e.status).sort();
+      expect(statuses).toEqual(["draft", "locked"]);
+    });
+
+    it("idempotent on already-reviewed epoch", async () => {
+      const result = await adapter.closeIngestionWithEvaluations({
+        epochId: closeEpochId,
+        approverSetHash: "test-approver-set-hash",
+        allocationAlgoRef: "weight-sum-v0",
+        weightConfigHash: "test-weight-config-hash",
+        evaluations: [
+          makeEvaluation({ epochId: closeEpochId, status: "locked" }),
+        ],
+        artifactsHash: testArtifactsHash,
+      });
+
+      expect(result.status).toBe("review");
+    });
+
+    it("throws EpochNotFoundError for wrong scope", async () => {
+      const wrongScopeAdapter = new DrizzleLedgerAdapter(db, OTHER_SCOPE_ID);
+      await expect(
+        wrongScopeAdapter.closeIngestionWithEvaluations({
+          epochId: closeEpochId,
+          approverSetHash: "test-approver-set-hash",
+          allocationAlgoRef: "weight-sum-v0",
+          weightConfigHash: "test-weight-config-hash",
+          evaluations: [],
+          artifactsHash: testArtifactsHash,
+        })
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+  });
+
+  describe("getSelectedReceiptsWithMetadata", () => {
+    let metaEpochId: bigint;
+    let actorMeta: TestActor;
+
+    beforeAll(async () => {
+      actorMeta = await seedTestActor(db);
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(42),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      metaEpochId = epoch.id;
+
+      const { periodStart, periodEnd } = epochWindow(42);
+      const mid = new Date((periodStart.getTime() + periodEnd.getTime()) / 2);
+
+      await adapter.insertIngestionReceipts([
+        makeIngestionReceipt({
+          receiptId: `meta-receipt-${metaEpochId}-1`,
+          nodeId: TEST_NODE_ID,
+          platformUserId: "gh-user-301",
+          platformLogin: "charlie",
+          metadata: {
+            body: "fixes task.0102",
+            branch: "feat/foo",
+            labels: ["governance"],
+          },
+          payloadHash: "meta-hash-1",
+          eventTime: mid,
+          retrievedAt: mid,
+        }),
+        makeIngestionReceipt({
+          receiptId: `meta-receipt-${metaEpochId}-2`,
+          nodeId: TEST_NODE_ID,
+          platformUserId: "gh-user-302",
+          platformLogin: "diana",
+          metadata: { body: "no work items here" },
+          payloadHash: "meta-hash-2",
+          eventTime: mid,
+          retrievedAt: mid,
+        }),
+      ]);
+
+      // Select with resolved user IDs
+      await adapter.insertSelectionDoNothing([
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: metaEpochId,
+          receiptId: `meta-receipt-${metaEpochId}-1`,
+          userId: actor.user.id,
+          included: true,
+        }),
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: metaEpochId,
+          receiptId: `meta-receipt-${metaEpochId}-2`,
+          userId: actorMeta.user.id,
+          included: true,
+        }),
+      ]);
+    });
+
+    afterAll(async () => {
+      await adapter.closeIngestion(
+        metaEpochId,
+        "test-approver-set-hash",
+        "weight-sum-v0",
+        "test-weight-config-hash"
+      );
+      await adapter.finalizeEpoch(metaEpochId, 0n);
+    });
+
+    it("returns metadata + payloadHash alongside selection fields", async () => {
+      const results =
+        await adapter.getSelectedReceiptsWithMetadata(metaEpochId);
+
+      expect(results).toHaveLength(2);
+
+      const first = results.find((r) => r.userId === actor.user.id);
+      expect(first).toBeDefined();
+      expect(first!.metadata).toEqual({
+        body: "fixes task.0102",
+        branch: "feat/foo",
+        labels: ["governance"],
+      });
+      expect(first!.payloadHash).toBe("meta-hash-1");
+      expect(first!.source).toBe("github");
+      expect(first!.eventType).toBe("pr_merged");
+      expect(first!.included).toBe(true);
+
+      const second = results.find((r) => r.userId === actorMeta.user.id);
+      expect(second).toBeDefined();
+      expect(second!.metadata).toEqual({ body: "no work items here" });
+      expect(second!.payloadHash).toBe("meta-hash-2");
     });
   });
 });

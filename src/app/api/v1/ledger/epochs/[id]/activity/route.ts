@@ -3,7 +3,7 @@
 
 /**
  * Module: `@app/api/v1/ledger/epochs/[id]/activity/route`
- * Purpose: Authenticated HTTP endpoint for epoch activity events with curation join.
+ * Purpose: Authenticated HTTP endpoint for epoch ingestion receipts with selection join.
  * Scope: SIWE-protected route; exposes PII fields (platformUserId, platformLogin, etc.). Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, ACTIVITY_AUTHED.
  * Side-effects: IO (HTTP response, database read)
@@ -14,8 +14,8 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {
-  toActivityEventDto,
-  toCurationDto,
+  toIngestionReceiptDto,
+  toSelectionDto,
 } from "@/app/api/v1/public/ledger/_lib/ledger-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
@@ -49,7 +49,7 @@ export const GET = wrapRouteHandlerWithLogging<{
     });
     const { limit, offset } = parsed;
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
     const nodeId = getNodeId();
 
     // Load epoch to get window bounds
@@ -58,20 +58,20 @@ export const GET = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
 
-    // Load events + curations and join in-memory (V0 data sizes are small)
-    const events = await store.getActivityForWindow(
+    // Load receipts + selections and join in-memory (V0 data sizes are small)
+    const receipts = await store.getReceiptsForWindow(
       nodeId,
       epoch.periodStart,
       epoch.periodEnd
     );
-    const curations = await store.getCurationForEpoch(epochId);
-    const curationMap = new Map(curations.map((c) => [c.eventId, c]));
+    const selections = await store.getSelectionForEpoch(epochId);
+    const selectionMap = new Map(selections.map((s) => [s.receiptId, s]));
 
-    const enriched = events.map((e) => {
-      const curation = curationMap.get(e.id);
+    const enriched = receipts.map((r) => {
+      const selection = selectionMap.get(r.receiptId);
       return {
-        ...toActivityEventDto(e),
-        curation: curation ? toCurationDto(curation) : null,
+        ...toIngestionReceiptDto(r),
+        selection: selection ? toSelectionDto(selection) : null,
       };
     });
 

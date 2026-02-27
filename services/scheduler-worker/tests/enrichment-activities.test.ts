@@ -3,26 +3,26 @@
 
 /**
  * Module: `@cogni/scheduler-worker/tests/enrichment-activities.test`
- * Purpose: Verifies enrichEpochDraft and buildFinalArtifacts activity behavior — payload structure, idempotency, and Temporal wire-format safety.
+ * Purpose: Verifies evaluateEpochDraft and buildLockedEvaluations activity behavior — payload structure, idempotency, and Temporal wire-format safety.
  * Scope: Covers echo enricher (cogni.echo.v0) with mocked store. Does NOT cover workflow orchestration or DB integration.
  * Invariants:
- * - ENRICHER_IDEMPOTENT: Same events produce same hashes across draft and locked runs.
- * - BIGINT_WIRE_SAFE: buildFinalArtifacts output survives JSON.stringify (no BigInt in wire format).
+ * - ENRICHER_IDEMPOTENT: Same receipts produce same hashes across draft and locked runs.
+ * - BIGINT_WIRE_SAFE: buildLockedEvaluations output survives JSON.stringify (no BigInt in wire format).
  * Side-effects: none (mocked store)
  * Links: services/scheduler-worker/src/activities/enrichment.ts
  * @internal
  */
 
 import type {
-  ActivityLedgerStore,
-  CuratedEventWithMetadata,
+  EpochLedgerStore,
+  SelectedReceiptWithMetadata,
 } from "@cogni/ledger-core";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   createEnrichmentActivities,
   ECHO_ALGO_REF,
-  ECHO_ARTIFACT_REF,
+  ECHO_EVALUATION_REF,
 } from "../src/activities/enrichment.js";
 
 const NODE_ID = "aaaaaaaa-0000-0000-0000-000000000001";
@@ -36,8 +36,8 @@ const mockLogger = {
 } as unknown as Parameters<typeof createEnrichmentActivities>[0]["logger"];
 
 function makeMockStore(
-  overrides: Partial<ActivityLedgerStore> = {}
-): ActivityLedgerStore {
+  overrides: Partial<EpochLedgerStore> = {}
+): EpochLedgerStore {
   return {
     createEpoch: vi.fn(),
     getOpenEpoch: vi.fn().mockResolvedValue(null),
@@ -45,43 +45,43 @@ function makeMockStore(
     getEpoch: vi.fn(),
     listEpochs: vi.fn(),
     closeIngestion: vi.fn(),
-    closeIngestionWithArtifacts: vi.fn(),
+    closeIngestionWithEvaluations: vi.fn(),
     finalizeEpoch: vi.fn(),
-    upsertDraftArtifact: vi.fn(),
-    getArtifactsForEpoch: vi.fn().mockResolvedValue([]),
-    getArtifact: vi.fn().mockResolvedValue(null),
-    getCuratedEventsWithMetadata: vi.fn().mockResolvedValue([]),
-    insertActivityEvents: vi.fn(),
-    getActivityForWindow: vi.fn(),
-    upsertCuration: vi.fn(),
-    getCurationForEpoch: vi.fn(),
-    getUnresolvedCuration: vi.fn(),
+    upsertDraftEvaluation: vi.fn(),
+    getEvaluationsForEpoch: vi.fn().mockResolvedValue([]),
+    getEvaluation: vi.fn().mockResolvedValue(null),
+    getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue([]),
+    insertIngestionReceipts: vi.fn(),
+    getReceiptsForWindow: vi.fn(),
+    upsertSelection: vi.fn(),
+    getSelectionForEpoch: vi.fn(),
+    getUnresolvedSelection: vi.fn(),
     insertAllocations: vi.fn(),
     upsertAllocations: vi.fn(),
     deleteStaleAllocations: vi.fn(),
     updateAllocationFinalUnits: vi.fn(),
     getAllocationsForEpoch: vi.fn(),
-    getCuratedEventsForAllocation: vi.fn().mockResolvedValue([]),
+    getSelectedReceiptsForAllocation: vi.fn().mockResolvedValue([]),
     upsertCursor: vi.fn(),
     getCursor: vi.fn().mockResolvedValue(null),
     insertPoolComponent: vi.fn(),
     getPoolComponentsForEpoch: vi.fn(),
-    insertPayoutStatement: vi.fn(),
+    insertEpochStatement: vi.fn(),
     getStatementForEpoch: vi.fn(),
     insertStatementSignature: vi.fn(),
     getSignaturesForStatement: vi.fn(),
-    insertCurationDoNothing: vi.fn(),
+    insertSelectionDoNothing: vi.fn(),
     resolveIdentities: vi.fn().mockResolvedValue(new Map()),
     finalizeEpochAtomic: vi.fn(),
-    getUncuratedEvents: vi.fn().mockResolvedValue([]),
-    updateCurationUserId: vi.fn(),
+    getUnselectedReceipts: vi.fn().mockResolvedValue([]),
+    updateSelectionUserId: vi.fn(),
     ...overrides,
-  } as ActivityLedgerStore;
+  } as EpochLedgerStore;
 }
 
-function makeEvents(count: number): CuratedEventWithMetadata[] {
+function makeReceipts(count: number): SelectedReceiptWithMetadata[] {
   return Array.from({ length: count }, (_, i) => ({
-    eventId: `ev-${i}`,
+    receiptId: `ev-${i}`,
     userId: i % 2 === 0 ? "user-aaa" : "user-bbb",
     source: "github",
     eventType: i % 3 === 0 ? "pr_merged" : "review_submitted",
@@ -92,30 +92,30 @@ function makeEvents(count: number): CuratedEventWithMetadata[] {
   }));
 }
 
-// ── enrichEpochDraft ────────────────────────────────────────────
+// ── evaluateEpochDraft ────────────────────────────────────────────
 
-describe("enrichEpochDraft", () => {
+describe("evaluateEpochDraft", () => {
   it("produces correct echo payload structure", async () => {
-    const events = makeEvents(5);
+    const receipts = makeReceipts(5);
     const store = makeMockStore({
-      getCuratedEventsWithMetadata: vi.fn().mockResolvedValue(events),
+      getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue(receipts),
     });
 
-    const { enrichEpochDraft } = createEnrichmentActivities({
+    const { evaluateEpochDraft } = createEnrichmentActivities({
       ledgerStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
 
-    const result = await enrichEpochDraft({ epochId: "1" });
+    const result = await evaluateEpochDraft({ epochId: "1" });
 
-    expect(result.artifactRef).toBe(ECHO_ARTIFACT_REF);
-    expect(result.eventCount).toBe(5);
+    expect(result.evaluationRef).toBe(ECHO_EVALUATION_REF);
+    expect(result.receiptCount).toBe(5);
 
-    // Verify upsertDraftArtifact was called with correct payload structure
-    expect(store.upsertDraftArtifact).toHaveBeenCalledOnce();
-    const call = vi.mocked(store.upsertDraftArtifact).mock.calls[0][0];
-    expect(call.artifactRef).toBe(ECHO_ARTIFACT_REF);
+    // Verify upsertDraftEvaluation was called with correct payload structure
+    expect(store.upsertDraftEvaluation).toHaveBeenCalledOnce();
+    const call = vi.mocked(store.upsertDraftEvaluation).mock.calls[0][0];
+    expect(call.evaluationRef).toBe(ECHO_EVALUATION_REF);
     expect(call.algoRef).toBe(ECHO_ALGO_REF);
     expect(call.status).toBe("draft");
     expect(call.nodeId).toBe(NODE_ID);
@@ -134,84 +134,88 @@ describe("enrichEpochDraft", () => {
     expect(payload.byUserId["user-bbb"]).toBe(2);
   });
 
-  it("calls upsertDraftArtifact with status='draft'", async () => {
+  it("calls upsertDraftEvaluation with status='draft'", async () => {
     const store = makeMockStore({
-      getCuratedEventsWithMetadata: vi.fn().mockResolvedValue(makeEvents(2)),
+      getSelectedReceiptsWithMetadata: vi
+        .fn()
+        .mockResolvedValue(makeReceipts(2)),
     });
 
-    const { enrichEpochDraft } = createEnrichmentActivities({
+    const { evaluateEpochDraft } = createEnrichmentActivities({
       ledgerStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
 
-    await enrichEpochDraft({ epochId: "1" });
+    await evaluateEpochDraft({ epochId: "1" });
 
-    const call = vi.mocked(store.upsertDraftArtifact).mock.calls[0][0];
+    const call = vi.mocked(store.upsertDraftEvaluation).mock.calls[0][0];
     expect(call.status).toBe("draft");
   });
 
-  it("handles no events — writes artifact with empty counts", async () => {
+  it("handles no receipts — writes evaluation with empty counts", async () => {
     const store = makeMockStore({
-      getCuratedEventsWithMetadata: vi.fn().mockResolvedValue([]),
+      getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue([]),
     });
 
-    const { enrichEpochDraft } = createEnrichmentActivities({
+    const { evaluateEpochDraft } = createEnrichmentActivities({
       ledgerStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
 
-    const result = await enrichEpochDraft({ epochId: "1" });
+    const result = await evaluateEpochDraft({ epochId: "1" });
 
-    expect(result.eventCount).toBe(0);
-    expect(store.upsertDraftArtifact).toHaveBeenCalledOnce();
+    expect(result.receiptCount).toBe(0);
+    expect(store.upsertDraftEvaluation).toHaveBeenCalledOnce();
 
-    const payload = vi.mocked(store.upsertDraftArtifact).mock.calls[0][0]
+    const payload = vi.mocked(store.upsertDraftEvaluation).mock.calls[0][0]
       .payloadJson as { totalEvents: number };
     expect(payload.totalEvents).toBe(0);
   });
 });
 
-// ── buildFinalArtifacts ─────────────────────────────────────────
+// ── buildLockedEvaluations ─────────────────────────────────────────
 
-describe("buildFinalArtifacts", () => {
-  it("returns artifacts and artifactsHash without writing to store", async () => {
-    const events = makeEvents(3);
+describe("buildLockedEvaluations", () => {
+  it("returns evaluations and artifactsHash without writing to store", async () => {
+    const receipts = makeReceipts(3);
     const store = makeMockStore({
-      getCuratedEventsWithMetadata: vi.fn().mockResolvedValue(events),
+      getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue(receipts),
     });
 
-    const { buildFinalArtifacts } = createEnrichmentActivities({
+    const { buildLockedEvaluations } = createEnrichmentActivities({
       ledgerStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
 
-    const result = await buildFinalArtifacts({ epochId: "1" });
+    const result = await buildLockedEvaluations({ epochId: "1" });
 
-    expect(result.artifacts).toHaveLength(1);
-    expect(result.artifacts[0].artifactRef).toBe(ECHO_ARTIFACT_REF);
-    expect(result.artifacts[0].status).toBe("locked");
+    expect(result.evaluations).toHaveLength(1);
+    expect(result.evaluations[0].evaluationRef).toBe(ECHO_EVALUATION_REF);
+    expect(result.evaluations[0].status).toBe("locked");
     expect(result.artifactsHash).toMatch(/^[a-f0-9]{64}$/);
 
     // Should NOT write to store
-    expect(store.upsertDraftArtifact).not.toHaveBeenCalled();
-    expect(store.closeIngestionWithArtifacts).not.toHaveBeenCalled();
+    expect(store.upsertDraftEvaluation).not.toHaveBeenCalled();
+    expect(store.closeIngestionWithEvaluations).not.toHaveBeenCalled();
   });
 
   it("returns valid artifactsHash", async () => {
     const store = makeMockStore({
-      getCuratedEventsWithMetadata: vi.fn().mockResolvedValue(makeEvents(2)),
+      getSelectedReceiptsWithMetadata: vi
+        .fn()
+        .mockResolvedValue(makeReceipts(2)),
     });
 
-    const { buildFinalArtifacts } = createEnrichmentActivities({
+    const { buildLockedEvaluations } = createEnrichmentActivities({
       ledgerStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
 
-    const result = await buildFinalArtifacts({ epochId: "1" });
+    const result = await buildLockedEvaluations({ epochId: "1" });
     expect(result.artifactsHash).toMatch(/^[a-f0-9]{64}$/);
   });
 });
@@ -219,10 +223,10 @@ describe("buildFinalArtifacts", () => {
 // ── Idempotency ─────────────────────────────────────────────────
 
 describe("idempotency", () => {
-  it("same events produce same hashes across enrichEpochDraft and buildFinalArtifacts", async () => {
-    const events = makeEvents(4);
+  it("same receipts produce same hashes across evaluateEpochDraft and buildLockedEvaluations", async () => {
+    const receipts = makeReceipts(4);
     const store = makeMockStore({
-      getCuratedEventsWithMetadata: vi.fn().mockResolvedValue(events),
+      getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue(receipts),
     });
 
     const activities = createEnrichmentActivities({
@@ -231,33 +235,37 @@ describe("idempotency", () => {
       logger: mockLogger,
     });
 
-    await activities.enrichEpochDraft({ epochId: "1" });
-    const finalResult = await activities.buildFinalArtifacts({ epochId: "1" });
-
-    // Draft and final should have same payload hash and inputs hash
-    const draftCall = vi.mocked(store.upsertDraftArtifact).mock.calls[0][0];
-    const finalArtifact = finalResult.artifacts[0];
-
-    expect(draftCall.payloadHash).toBe(finalArtifact.payloadHash);
-    expect(draftCall.inputsHash).toBe(finalArtifact.inputsHash);
-
-    // buildFinalArtifacts returns wire format (epochId as string, not bigint)
-    expect(finalArtifact.epochId).toBe("1");
-    expect(typeof finalArtifact.epochId).toBe("string");
-  });
-
-  it("buildFinalArtifacts output survives JSON.stringify (no BigInt regression)", async () => {
-    const store = makeMockStore({
-      getCuratedEventsWithMetadata: vi.fn().mockResolvedValue(makeEvents(3)),
+    await activities.evaluateEpochDraft({ epochId: "1" });
+    const finalResult = await activities.buildLockedEvaluations({
+      epochId: "1",
     });
 
-    const { buildFinalArtifacts } = createEnrichmentActivities({
+    // Draft and final should have same payload hash and inputs hash
+    const draftCall = vi.mocked(store.upsertDraftEvaluation).mock.calls[0][0];
+    const finalEvaluation = finalResult.evaluations[0];
+
+    expect(draftCall.payloadHash).toBe(finalEvaluation.payloadHash);
+    expect(draftCall.inputsHash).toBe(finalEvaluation.inputsHash);
+
+    // buildLockedEvaluations returns wire format (epochId as string, not bigint)
+    expect(finalEvaluation.epochId).toBe("1");
+    expect(typeof finalEvaluation.epochId).toBe("string");
+  });
+
+  it("buildLockedEvaluations output survives JSON.stringify (no BigInt regression)", async () => {
+    const store = makeMockStore({
+      getSelectedReceiptsWithMetadata: vi
+        .fn()
+        .mockResolvedValue(makeReceipts(3)),
+    });
+
+    const { buildLockedEvaluations } = createEnrichmentActivities({
       ledgerStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
 
-    const result = await buildFinalArtifacts({ epochId: "999" });
+    const result = await buildLockedEvaluations({ epochId: "999" });
 
     // This is the exact operation Temporal performs on activity return values.
     // If any nested field is bigint, JSON.stringify throws TypeError.

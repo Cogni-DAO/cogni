@@ -3,23 +3,24 @@
 
 /**
  * Module: `@cogni/ledger-core/store`
- * Purpose: Port interface for the activity ledger store. Shared by app and scheduler-worker.
+ * Purpose: Port interface for the epoch ledger store. Shared by app and scheduler-worker.
  * Scope: Type definitions only. Does not contain implementations or I/O.
  * Invariants:
- * - ACTIVITY_APPEND_ONLY: insertActivityEvents never updates existing rows.
- * - CURATION_FREEZE_ON_FINALIZE: upsertCuration rejects writes when epoch is finalized.
- * - CURATION_AUTO_POPULATE: insertCurationDoNothing + updateCurationUserId never overwrite admin-set fields.
- * - IDENTITY_BEST_EFFORT: resolveIdentities is best-effort; unresolved events get userId=null.
+ * - RECEIPT_APPEND_ONLY: insertIngestionReceipts never updates existing rows.
+ * - SELECTION_FREEZE_ON_FINALIZE: upsertSelection rejects writes when epoch is finalized.
+ * - SELECTION_AUTO_POPULATE: insertSelectionDoNothing + updateSelectionUserId never overwrite admin-set fields.
+ * - IDENTITY_BEST_EFFORT: resolveIdentities is best-effort; unresolved receipts get userId=null.
  * - ONE_OPEN_EPOCH: createEpoch enforced by DB constraint.
  * - NODE_SCOPED: all operations are scoped to a node_id.
- * - ARTIFACT_FINAL_ATOMIC: locked artifact writes + artifacts_hash + epoch open→review in one transaction.
- * - PAYOUT_FROM_FINAL_ONLY: allocation for payouts consumes only status='locked' artifacts.
+ * - RECEIPT_SCOPE_AGNOSTIC: receipts carry no scope_id; scope assigned at selection via epoch membership.
+ * - EVALUATION_FINAL_ATOMIC: locked evaluation writes + artifacts_hash + epoch open→review in one transaction.
+ * - STATEMENT_FROM_FINAL_ONLY: allocation for statements consumes only status='locked' evaluations.
  * Side-effects: none
  * Links: docs/spec/epoch-ledger.md
  * @public
  */
 
-import type { CuratedEventForAllocation } from "./allocation";
+import type { SelectedReceiptForAllocation } from "./allocation";
 import type { EpochStatus } from "./model";
 
 // ---------------------------------------------------------------------------
@@ -44,10 +45,9 @@ export interface LedgerEpoch {
   readonly createdAt: Date;
 }
 
-export interface LedgerActivityEvent {
-  readonly id: string;
+export interface LedgerIngestionReceipt {
+  readonly receiptId: string;
   readonly nodeId: string;
-  readonly scopeId: string;
   readonly source: string;
   readonly eventType: string;
   readonly platformUserId: string;
@@ -62,11 +62,11 @@ export interface LedgerActivityEvent {
   readonly ingestedAt: Date;
 }
 
-export interface LedgerCuration {
+export interface LedgerSelection {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly eventId: string;
+  readonly receiptId: string;
   readonly userId: string | null;
   readonly included: boolean;
   readonly weightOverrideMilli: bigint | null;
@@ -88,7 +88,7 @@ export interface LedgerAllocation {
   readonly updatedAt: Date;
 }
 
-export interface LedgerSourceCursor {
+export interface LedgerIngestionCursor {
   readonly nodeId: string;
   readonly scopeId: string;
   readonly source: string;
@@ -110,7 +110,7 @@ export interface LedgerPoolComponent {
   readonly computedAt: Date;
 }
 
-export interface LedgerPayoutStatement {
+export interface LedgerEpochStatement {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
@@ -135,11 +135,11 @@ export interface LedgerStatementSignature {
   readonly signedAt: Date;
 }
 
-export interface LedgerEpochArtifact {
+export interface LedgerEpochEvaluation {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly artifactRef: string;
+  readonly evaluationRef: string;
   readonly status: "draft" | "locked";
   readonly algoRef: string;
   readonly inputsHash: string;
@@ -149,8 +149,9 @@ export interface LedgerEpochArtifact {
   readonly createdAt: Date;
 }
 
-/** Curated event with raw event metadata, for enricher consumption. */
-export interface CuratedEventWithMetadata extends CuratedEventForAllocation {
+/** Selected receipt with raw receipt metadata, for enricher consumption. */
+export interface SelectedReceiptWithMetadata
+  extends SelectedReceiptForAllocation {
   readonly metadata: Record<string, unknown> | null;
   readonly payloadHash: string;
 }
@@ -159,10 +160,9 @@ export interface CuratedEventWithMetadata extends CuratedEventForAllocation {
 // Write-side parameter types
 // ---------------------------------------------------------------------------
 
-export interface InsertActivityEventParams {
-  readonly id: string;
+export interface InsertIngestionReceiptParams {
+  readonly receiptId: string;
   readonly nodeId: string;
-  readonly scopeId: string;
   readonly source: string;
   readonly eventType: string;
   readonly platformUserId: string;
@@ -176,10 +176,10 @@ export interface InsertActivityEventParams {
   readonly retrievedAt: Date;
 }
 
-export interface UpsertCurationParams {
+export interface UpsertSelectionParams {
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly eventId: string;
+  readonly receiptId: string;
   readonly userId?: string | null;
   readonly included?: boolean;
   readonly weightOverrideMilli?: bigint | null;
@@ -206,7 +206,7 @@ export interface InsertPoolComponentParams {
   readonly evidenceRef?: string | null;
 }
 
-export interface InsertPayoutStatementParams {
+export interface InsertEpochStatementParams {
   readonly nodeId: string;
   readonly epochId: bigint;
   readonly allocationSetHash: string;
@@ -220,7 +220,7 @@ export interface InsertPayoutStatementParams {
   readonly supersedesStatementId?: string | null;
 }
 
-export interface InsertSignatureParams {
+export interface InsertStatementSignatureParams {
   readonly nodeId: string;
   readonly statementId: string;
   readonly signerWallet: string;
@@ -228,10 +228,10 @@ export interface InsertSignatureParams {
   readonly signedAt: Date;
 }
 
-export interface UpsertArtifactParams {
+export interface UpsertEvaluationParams {
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly artifactRef: string;
+  readonly evaluationRef: string;
   readonly status: "draft" | "locked";
   readonly algoRef: string;
   readonly inputsHash: string;
@@ -239,23 +239,23 @@ export interface UpsertArtifactParams {
   readonly payloadJson: Record<string, unknown>;
 }
 
-export interface CloseIngestionWithArtifactsParams {
+export interface CloseIngestionWithEvaluationsParams {
   readonly epochId: bigint;
   readonly approverSetHash: string;
   readonly allocationAlgoRef: string;
   readonly weightConfigHash: string;
-  readonly artifacts: ReadonlyArray<UpsertArtifactParams>;
+  readonly evaluations: ReadonlyArray<UpsertEvaluationParams>;
   readonly artifactsHash: string;
 }
 
 /**
- * Narrowed params for auto-population INSERT (CURATION_AUTO_POPULATE).
+ * Narrowed params for auto-population INSERT (SELECTION_AUTO_POPULATE).
  * Intentionally excludes weightOverrideMilli and note to prevent accidental overwrites.
  */
-export interface InsertCurationAutoParams {
+export interface InsertSelectionAutoParams {
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly eventId: string;
+  readonly receiptId: string;
   readonly userId: string | null;
   readonly included: boolean;
 }
@@ -265,20 +265,20 @@ export interface InsertCurationAutoParams {
 // ---------------------------------------------------------------------------
 
 /**
- * An event that needs curation work — either no curation row exists,
- * or the curation row has user_id IS NULL (unresolved).
+ * A receipt that needs selection work — either no selection row exists,
+ * or the selection row has user_id IS NULL (unresolved).
  */
-export interface UncuratedEvent {
-  readonly event: LedgerActivityEvent;
-  /** true = curation row exists with userId=NULL; false = no curation row */
-  readonly hasExistingCuration: boolean;
+export interface UnselectedReceipt {
+  readonly receipt: LedgerIngestionReceipt;
+  /** true = selection row exists with userId=NULL; false = no selection row */
+  readonly hasExistingSelection: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Port interface
 // ---------------------------------------------------------------------------
 
-export interface ActivityLedgerStore {
+export interface EpochLedgerStore {
   // Epochs
   createEpoch(params: {
     nodeId: string;
@@ -296,7 +296,7 @@ export interface ActivityLedgerStore {
   ): Promise<LedgerEpoch | null>;
   getEpoch(id: bigint): Promise<LedgerEpoch | null>;
   listEpochs(nodeId: string): Promise<LedgerEpoch[]>;
-  /** Transition epoch open → review (INGESTION_CLOSED_ON_REVIEW).
+  /** Transition epoch open → review (INGESTION_STOPS_AT_REVIEW).
    *  Pins approverSetHash, allocationAlgoRef, and weightConfigHash. */
   closeIngestion(
     epochId: bigint,
@@ -308,59 +308,61 @@ export interface ActivityLedgerStore {
   /** Transition epoch review → finalized. Sets poolTotalCredits and closedAt. */
   finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<LedgerEpoch>;
 
-  /** Transition epoch open → review with locked artifacts in a single transaction (ARTIFACT_FINAL_ATOMIC).
-   *  Inserts locked artifacts + sets artifacts_hash + pins approverSetHash, allocationAlgoRef, weightConfigHash.
+  /** Transition epoch open → review with locked evaluations in a single transaction (EVALUATION_FINAL_ATOMIC).
+   *  Inserts locked evaluations + sets artifacts_hash + pins approverSetHash, allocationAlgoRef, weightConfigHash.
    *  Rejects if epoch is not open. */
-  closeIngestionWithArtifacts(
-    params: CloseIngestionWithArtifactsParams
+  closeIngestionWithEvaluations(
+    params: CloseIngestionWithEvaluationsParams
   ): Promise<LedgerEpoch>;
 
-  // Artifacts
-  /** Upsert draft artifact — overwrites on (epoch_id, artifact_ref, status='draft'). */
-  upsertDraftArtifact(params: UpsertArtifactParams): Promise<void>;
-  /** Get all artifacts for an epoch, optionally filtered by status. */
-  getArtifactsForEpoch(
+  // Evaluations
+  /** Upsert draft evaluation — overwrites on (epoch_id, evaluation_ref, status='draft'). */
+  upsertDraftEvaluation(params: UpsertEvaluationParams): Promise<void>;
+  /** Get all evaluations for an epoch, optionally filtered by status. */
+  getEvaluationsForEpoch(
     epochId: bigint,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochArtifact[]>;
-  /** Get single artifact by ref and optional status. */
-  getArtifact(
+  ): Promise<LedgerEpochEvaluation[]>;
+  /** Get single evaluation by ref and optional status. */
+  getEvaluation(
     epochId: bigint,
-    artifactRef: string,
+    evaluationRef: string,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochArtifact | null>;
-  /** Get curated events with raw metadata and payload hash for enricher consumption. */
-  getCuratedEventsWithMetadata(
+  ): Promise<LedgerEpochEvaluation | null>;
+  /** Get selected receipts with raw metadata and payload hash for enricher consumption. */
+  getSelectedReceiptsWithMetadata(
     epochId: bigint
-  ): Promise<CuratedEventWithMetadata[]>;
+  ): Promise<SelectedReceiptWithMetadata[]>;
 
-  // Activity events (append-only, epoch-agnostic raw log)
-  insertActivityEvents(events: InsertActivityEventParams[]): Promise<void>;
-  getActivityForWindow(
+  // Ingestion receipts (append-only, epoch-agnostic raw log)
+  insertIngestionReceipts(
+    receipts: InsertIngestionReceiptParams[]
+  ): Promise<void>;
+  getReceiptsForWindow(
     nodeId: string,
     since: Date,
     until: Date
-  ): Promise<LedgerActivityEvent[]>;
+  ): Promise<LedgerIngestionReceipt[]>;
 
   // Allocation computation (joined query)
   /**
-   * Returns curated events with resolved user IDs for allocation computation.
-   * Joined query: activity_curation JOIN activity_events, filtered to userId IS NOT NULL.
+   * Returns selected receipts with resolved user IDs for allocation computation.
+   * Joined query: epoch_selection JOIN ingestion_receipts, filtered to userId IS NOT NULL.
    */
-  getCuratedEventsForAllocation(
+  getSelectedReceiptsForAllocation(
     epochId: bigint
-  ): Promise<CuratedEventForAllocation[]>;
+  ): Promise<SelectedReceiptForAllocation[]>;
 
-  // Curation (mutable while epoch open)
-  upsertCuration(params: UpsertCurationParams[]): Promise<void>;
+  // Selection (mutable while epoch open)
+  upsertSelection(params: UpsertSelectionParams[]): Promise<void>;
   /**
-   * Insert curation rows with ON CONFLICT DO NOTHING semantics.
-   * Used by auto-population (CURATION_AUTO_POPULATE) to avoid overwriting
-   * admin-set fields if a row is created between getUncuratedEvents and insert.
+   * Insert selection rows with ON CONFLICT DO NOTHING semantics.
+   * Used by auto-population (SELECTION_AUTO_POPULATE) to avoid overwriting
+   * admin-set fields if a row is created between getUnselectedReceipts and insert.
    */
-  insertCurationDoNothing(params: InsertCurationAutoParams[]): Promise<void>;
-  getCurationForEpoch(epochId: bigint): Promise<LedgerCuration[]>;
-  getUnresolvedCuration(epochId: bigint): Promise<LedgerCuration[]>;
+  insertSelectionDoNothing(params: InsertSelectionAutoParams[]): Promise<void>;
+  getSelectionForEpoch(epochId: bigint): Promise<LedgerSelection[]>;
+  getUnresolvedSelection(epochId: bigint): Promise<LedgerSelection[]>;
 
   // Allocations
   insertAllocations(allocations: InsertAllocationParams[]): Promise<void>;
@@ -385,7 +387,7 @@ export interface ActivityLedgerStore {
   ): Promise<void>;
   getAllocationsForEpoch(epochId: bigint): Promise<LedgerAllocation[]>;
 
-  // Cursors (one stream per call)
+  // Ingestion cursors (one stream per call)
   upsertCursor(
     nodeId: string,
     scopeId: string,
@@ -400,7 +402,7 @@ export interface ActivityLedgerStore {
     source: string,
     stream: string,
     sourceRef: string
-  ): Promise<LedgerSourceCursor | null>;
+  ): Promise<LedgerIngestionCursor | null>;
 
   // Pool components
   insertPoolComponent(
@@ -408,11 +410,11 @@ export interface ActivityLedgerStore {
   ): Promise<LedgerPoolComponent>;
   getPoolComponentsForEpoch(epochId: bigint): Promise<LedgerPoolComponent[]>;
 
-  // Payout statements
-  insertPayoutStatement(
-    params: InsertPayoutStatementParams
-  ): Promise<LedgerPayoutStatement>;
-  getStatementForEpoch(epochId: bigint): Promise<LedgerPayoutStatement | null>;
+  // Epoch statements
+  insertEpochStatement(
+    params: InsertEpochStatementParams
+  ): Promise<LedgerEpochStatement>;
+  getStatementForEpoch(epochId: bigint): Promise<LedgerEpochStatement | null>;
 
   /**
    * Atomic finalize: epoch transition + statement upsert + signature upsert in one DB transaction.
@@ -425,13 +427,15 @@ export interface ActivityLedgerStore {
   finalizeEpochAtomic(params: {
     epochId: bigint;
     poolTotal: bigint;
-    statement: Omit<InsertPayoutStatementParams, "epochId">;
-    signature: Omit<InsertSignatureParams, "statementId">;
+    statement: Omit<InsertEpochStatementParams, "epochId">;
+    signature: Omit<InsertStatementSignatureParams, "statementId">;
     expectedAllocationSetHash: string;
-  }): Promise<{ epoch: LedgerEpoch; statement: LedgerPayoutStatement }>;
+  }): Promise<{ epoch: LedgerEpoch; statement: LedgerEpochStatement }>;
 
-  // Statement signatures (schema only — signing flow is a follow-up)
-  insertStatementSignature(params: InsertSignatureParams): Promise<void>;
+  // Statement signatures
+  insertStatementSignature(
+    params: InsertStatementSignatureParams
+  ): Promise<void>;
   getSignaturesForStatement(
     statementId: string
   ): Promise<LedgerStatementSignature[]>;
@@ -447,24 +451,24 @@ export interface ActivityLedgerStore {
   ): Promise<Map<string, string>>;
 
   /**
-   * Returns events in the epoch window that need curation work:
-   * - No curation row exists (new events)
-   * - Curation row exists but user_id IS NULL (unresolved)
+   * Returns receipts in the epoch window that need selection work:
+   * - No selection row exists (new receipts)
+   * - Selection row exists but user_id IS NULL (unresolved)
    */
-  getUncuratedEvents(
+  getUnselectedReceipts(
     nodeId: string,
     epochId: bigint,
     periodStart: Date,
     periodEnd: Date
-  ): Promise<UncuratedEvent[]>;
+  ): Promise<UnselectedReceipt[]>;
 
   /**
-   * Update user_id on a curation row ONLY when existing user_id IS NULL.
-   * Never touches included, weight_override_milli, or note (CURATION_AUTO_POPULATE).
+   * Update user_id on a selection row ONLY when existing user_id IS NULL.
+   * Never touches included, weight_override_milli, or note (SELECTION_AUTO_POPULATE).
    */
-  updateCurationUserId(
+  updateSelectionUserId(
     epochId: bigint,
-    eventId: string,
+    receiptId: string,
     userId: string
   ): Promise<void>;
 }

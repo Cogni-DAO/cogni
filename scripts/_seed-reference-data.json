@@ -158,13 +158,13 @@
   ],
   "storeApi": {
     "createEpoch": "store.createEpoch({ nodeId, scopeId, periodStart, periodEnd, weightConfig })",
-    "insertActivityEvents": "store.insertActivityEvents([InsertActivityEventParams...])",
-    "insertCurationDoNothing": "store.insertCurationDoNothing([InsertCurationAutoParams...])",
+    "insertIngestionReceipts": "store.insertIngestionReceipts([InsertIngestionReceiptParams...])",
+    "insertSelectionDoNothing": "store.insertSelectionDoNothing([InsertSelectionAutoParams...])",
     "insertAllocations": "store.insertAllocations([InsertAllocationParams...])",
     "insertPoolComponent": "store.insertPoolComponent(InsertPoolComponentParams)",
     "closeIngestion": "store.closeIngestion(epochId, approverSetHash, allocAlgoRef, weightConfigHash)",
     "finalizeEpoch": "store.finalizeEpoch(epochId, poolTotal)",
-    "insertPayoutStatement": "store.insertPayoutStatement(InsertPayoutStatementParams)"
+    "insertEpochStatement": "store.insertEpochStatement(InsertEpochStatementParams)"
   },
   "bootstrap": {
     "db": "createServiceDbClient(process.env.DATABASE_SERVICE_URL)",
@@ -184,11 +184,11 @@
       "TEST_SCOPE_ID",
       "TEST_WEIGHT_CONFIG",
       "epochWindow",
-      "makeActivityEvent",
-      "makeCurationAuto",
+      "makeIngestionReceipt",
+      "makeSelection",
       "makeAllocation",
       "makePoolComponent",
-      "makePayoutStatement",
+      "makeEpochStatement",
       "seedClosedEpoch"
     ]
   }

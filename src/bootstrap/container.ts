@@ -21,7 +21,7 @@ import type {
 import { DrizzleLedgerAdapter } from "@cogni/db-client";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
-import type { ActivityLedgerStore } from "@cogni/ledger-core";
+import type { EpochLedgerStore } from "@cogni/ledger-core";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { Logger } from "pino";
 import {
@@ -137,8 +137,8 @@ export interface Container {
   threadPersistenceForUser(userId: UserId): ThreadPersistencePort;
   /** Governance status queries (system tenant scope) */
   governanceStatus: GovernanceStatusPort;
-  /** Activity ledger store — shared by app and scheduler-worker */
-  activityLedgerStore: ActivityLedgerStore;
+  /** Epoch ledger store — shared by app and scheduler-worker */
+  epochLedgerStore: EpochLedgerStore;
 }
 
 // Feature-specific dependency types
@@ -387,7 +387,7 @@ function createContainer(): Container {
       db,
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
     ),
-    activityLedgerStore: new DrizzleLedgerAdapter(serviceDb, getScopeId()),
+    epochLedgerStore: new DrizzleLedgerAdapter(serviceDb, getScopeId()),
   };
 }
 

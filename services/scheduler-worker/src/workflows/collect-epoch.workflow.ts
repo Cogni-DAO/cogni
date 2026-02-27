@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/workflows/collect-epoch`
- * Purpose: Temporal Workflow for epoch activity collection, curation, allocation, pool estimation, and auto-close.
- * Scope: Deterministic orchestration only. All I/O happens in Activities. Steps: compute window → ensure epoch → collect per source → curate → compute allocations → ensure pool → auto-close check. Does not handle finalization (see FinalizeEpochWorkflow).
+ * Purpose: Temporal Workflow for epoch ingestion, selection, allocation, pool estimation, and auto-close.
+ * Scope: Deterministic orchestration only. All I/O happens in Activities. Steps: compute window → ensure epoch → collect per source → materialize selection → compute allocations → ensure pool → auto-close check. Does not handle finalization (see FinalizeEpochWorkflow).
  * Invariants:
  *   - Per TEMPORAL_DETERMINISM: No I/O, network calls, or direct imports of adapters
  *   - Per WRITES_VIA_TEMPORAL: All writes execute in Temporal activities
@@ -35,8 +35,8 @@ const {
   ensureEpochForWindow,
   loadCursor,
   saveCursor,
-  insertEvents,
-  curateAndResolve,
+  insertReceipts,
+  materializeSelection,
   computeAllocations,
   ensurePoolComponents,
   autoCloseIngestion,
@@ -60,7 +60,7 @@ const { collectFromSource } = proxyActivities<LedgerActivities>({
   },
 });
 
-const { enrichEpochDraft, buildFinalArtifacts } =
+const { evaluateEpochDraft, buildLockedEvaluations } =
   proxyActivities<EnrichmentActivities>({
     startToCloseTimeout: "2 minutes",
     retry: {
@@ -162,7 +162,7 @@ export async function CollectEpochWorkflow(
           periodEnd: periodEndIso,
         });
         if (result.events.length > 0) {
-          await insertEvents({
+          await insertReceipts({
             events: result.events,
             producerVersion: result.producerVersion,
           });
@@ -177,11 +177,11 @@ export async function CollectEpochWorkflow(
     }
   }
 
-  // 5. Curate events and resolve identities (CURATION_AUTO_POPULATE)
-  await curateAndResolve({ epochId: epoch.epochId });
+  // 5. Materialize selection and resolve identities (SELECTION_AUTO_POPULATE)
+  await materializeSelection({ epochId: epoch.epochId });
 
-  // 6. Enrich epoch with draft artifacts (echo enricher)
-  await enrichEpochDraft({ epochId: epoch.epochId });
+  // 6. Evaluate epoch with draft evaluations (echo enricher)
+  await evaluateEpochDraft({ epochId: epoch.epochId });
 
   // 7. Compute allocations (periodic — runs every collection pass)
   const creditEstimateAlgo =
@@ -201,10 +201,10 @@ export async function CollectEpochWorkflow(
     });
   }
 
-  // 9. Auto-close check: if now > periodEnd + gracePeriod → closeIngestion with artifacts
+  // 9. Auto-close check: if now > periodEnd + gracePeriod → closeIngestion with evaluations
   if (config.approvers && config.approvers.length > 0) {
     const gracePeriodMs = config.autoCloseGracePeriodMs ?? 24 * 60 * 60 * 1000; // default 24h
-    const { artifacts, artifactsHash } = await buildFinalArtifacts({
+    const { evaluations, artifactsHash } = await buildLockedEvaluations({
       epochId: epoch.epochId,
     });
     await autoCloseIngestion({
@@ -214,7 +214,7 @@ export async function CollectEpochWorkflow(
       weightConfig: epoch.weightConfig,
       creditEstimateAlgo,
       approvers: config.approvers,
-      artifacts,
+      evaluations,
       artifactsHash,
     });
   }

@@ -3,19 +3,19 @@
 
 /**
  * Module: `@cogni/db-client/adapters/drizzle-ledger`
- * Purpose: Drizzle ORM implementation of ActivityLedgerStore port.
- * Scope: Single adapter shared by app (via container.ts) and scheduler-worker. Implements all ActivityLedgerStore methods including identity resolution via user_bindings (cross-domain). Does not contain domain logic or define port interfaces.
+ * Purpose: Drizzle ORM implementation of EpochLedgerStore port.
+ * Scope: Single adapter shared by app (via container.ts) and scheduler-worker. Implements all EpochLedgerStore methods including identity resolution via user_bindings (cross-domain). Does not contain domain logic or define port interfaces.
  * Invariants:
  * - Uses serviceDb (BYPASSRLS) — no RLS in V0.
  * - SCOPE_GATED_QUERIES: Every epochId-based method enforces scope_id = this.scopeId. Scope mismatches throw EpochNotFoundError.
- * - ACTIVITY_IDEMPOTENT: insertActivityEvents uses onConflictDoNothing on PK.
- * - CURATION_AUTO_POPULATE: insertCurationDoNothing uses onConflictDoNothing; updateCurationUserId only sets userId where NULL.
- * - CURATION_FREEZE_ON_FINALIZE: DB trigger enforces; adapter does not duplicate check.
+ * - RECEIPT_SCOPE_AGNOSTIC: ingestion_receipts has no scope_id — scope assigned at selection via epoch membership.
+ * - SELECTION_AUTO_POPULATE: insertSelectionDoNothing uses onConflictDoNothing; updateSelectionUserId only sets userId where NULL.
+ * - SELECTION_FREEZE_ON_FINALIZE: DB trigger enforces; adapter does not duplicate check.
  * - ONE_OPEN_EPOCH: DB constraint enforces; adapter lets DB error propagate.
  * - ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations updates proposed_units/activity_count only; never touches final_units.
  * - POOL_LOCKED_AT_REVIEW: insertPoolComponent rejects inserts when epoch status != 'open'.
  * - CONFIG_LOCKED_AT_REVIEW: closeIngestion pins allocationAlgoRef + weightConfigHash.
- * - ARTIFACT_FINAL_ATOMIC: closeIngestionWithArtifacts inserts locked artifacts + sets artifacts_hash + transitions epoch in one transaction.
+ * - EVALUATION_FINAL_ATOMIC: closeIngestionWithEvaluations inserts locked evaluations + sets artifacts_hash + transitions epoch in one transaction.
  * Side-effects: IO (database operations)
  * Links: docs/spec/epoch-ledger.md, packages/ledger-core/src/store.ts
  * @public
@@ -23,39 +23,39 @@
 
 import { userBindings } from "@cogni/db-schema/identity";
 import {
-  activityCuration,
-  activityEvents,
   epochAllocations,
-  epochArtifacts,
+  epochEvaluations,
   epochPoolComponents,
+  epochSelection,
+  epochStatementSignatures,
+  epochStatements,
   epochs,
-  payoutStatements,
-  sourceCursors,
-  statementSignatures,
+  ingestionCursors,
+  ingestionReceipts,
 } from "@cogni/db-schema/ledger";
 import type {
-  ActivityLedgerStore,
-  CloseIngestionWithArtifactsParams,
-  CuratedEventForAllocation,
-  CuratedEventWithMetadata,
-  InsertActivityEventParams,
+  CloseIngestionWithEvaluationsParams,
+  EpochLedgerStore,
   InsertAllocationParams,
-  InsertCurationAutoParams,
-  InsertPayoutStatementParams,
+  InsertEpochStatementParams,
+  InsertIngestionReceiptParams,
   InsertPoolComponentParams,
-  InsertSignatureParams,
-  LedgerActivityEvent,
+  InsertSelectionAutoParams,
+  InsertStatementSignatureParams,
   LedgerAllocation,
-  LedgerCuration,
   LedgerEpoch,
-  LedgerEpochArtifact,
-  LedgerPayoutStatement,
+  LedgerEpochEvaluation,
+  LedgerEpochStatement,
+  LedgerIngestionCursor,
+  LedgerIngestionReceipt,
   LedgerPoolComponent,
-  LedgerSourceCursor,
+  LedgerSelection,
   LedgerStatementSignature,
-  UncuratedEvent,
-  UpsertArtifactParams,
-  UpsertCurationParams,
+  SelectedReceiptForAllocation,
+  SelectedReceiptWithMetadata,
+  UnselectedReceipt,
+  UpsertEvaluationParams,
+  UpsertSelectionParams,
 } from "@cogni/ledger-core";
 import {
   AllocationNotFoundError,
@@ -99,13 +99,12 @@ function toEpoch(row: typeof epochs.$inferSelect): LedgerEpoch {
   };
 }
 
-function toActivityEvent(
-  row: typeof activityEvents.$inferSelect
-): LedgerActivityEvent {
+function toIngestionReceipt(
+  row: typeof ingestionReceipts.$inferSelect
+): LedgerIngestionReceipt {
   return {
-    id: row.id,
+    receiptId: row.receiptId,
     nodeId: row.nodeId,
-    scopeId: row.scopeId,
     source: row.source,
     eventType: row.eventType,
     platformUserId: row.platformUserId,
@@ -121,12 +120,12 @@ function toActivityEvent(
   };
 }
 
-function toCuration(row: typeof activityCuration.$inferSelect): LedgerCuration {
+function toSelection(row: typeof epochSelection.$inferSelect): LedgerSelection {
   return {
     id: row.id,
     nodeId: row.nodeId,
     epochId: row.epochId,
-    eventId: row.eventId,
+    receiptId: row.receiptId,
     userId: row.userId,
     included: row.included,
     weightOverrideMilli: row.weightOverrideMilli,
@@ -153,7 +152,9 @@ function toAllocation(
   };
 }
 
-function toCursor(row: typeof sourceCursors.$inferSelect): LedgerSourceCursor {
+function toCursor(
+  row: typeof ingestionCursors.$inferSelect
+): LedgerIngestionCursor {
   return {
     nodeId: row.nodeId,
     scopeId: row.scopeId,
@@ -182,8 +183,8 @@ function toPoolComponent(
 }
 
 function toStatement(
-  row: typeof payoutStatements.$inferSelect
-): LedgerPayoutStatement {
+  row: typeof epochStatements.$inferSelect
+): LedgerEpochStatement {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -196,8 +197,8 @@ function toStatement(
   };
 }
 
-function toSignature(
-  row: typeof statementSignatures.$inferSelect
+function toStatementSignature(
+  row: typeof epochStatementSignatures.$inferSelect
 ): LedgerStatementSignature {
   return {
     id: row.id,
@@ -209,14 +210,14 @@ function toSignature(
   };
 }
 
-function toEpochArtifact(
-  row: typeof epochArtifacts.$inferSelect
-): LedgerEpochArtifact {
+function toEvaluation(
+  row: typeof epochEvaluations.$inferSelect
+): LedgerEpochEvaluation {
   return {
     id: row.id,
     nodeId: row.nodeId,
     epochId: row.epochId,
-    artifactRef: row.artifactRef,
+    evaluationRef: row.evaluationRef,
     status: row.status as "draft" | "locked",
     algoRef: row.algoRef,
     inputsHash: row.inputsHash,
@@ -229,7 +230,7 @@ function toEpochArtifact(
 
 // ── Adapter ─────────────────────────────────────────────────────
 
-export class DrizzleLedgerAdapter implements ActivityLedgerStore {
+export class DrizzleLedgerAdapter implements EpochLedgerStore {
   constructor(
     private readonly db: Database,
     private readonly scopeId: string
@@ -414,10 +415,10 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     return toEpoch(row);
   }
 
-  // ── Artifacts ──────────────────────────────────────────────
+  // ── Evaluations ──────────────────────────────────────────────
 
-  async closeIngestionWithArtifacts(
-    params: CloseIngestionWithArtifactsParams
+  async closeIngestionWithEvaluations(
+    params: CloseIngestionWithEvaluationsParams
   ): Promise<LedgerEpoch> {
     return await this.db.transaction(async (tx) => {
       // 1. Scope gate + status check (inline)
@@ -442,25 +443,25 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
         throw new EpochNotOpenError(params.epochId.toString());
       }
 
-      // 2. Insert locked artifacts
-      for (const artifact of params.artifacts) {
+      // 2. Insert locked evaluations
+      for (const evaluation of params.evaluations) {
         await tx
-          .insert(epochArtifacts)
+          .insert(epochEvaluations)
           .values({
-            nodeId: artifact.nodeId,
-            epochId: artifact.epochId,
-            artifactRef: artifact.artifactRef,
+            nodeId: evaluation.nodeId,
+            epochId: evaluation.epochId,
+            evaluationRef: evaluation.evaluationRef,
             status: "locked",
-            algoRef: artifact.algoRef,
-            inputsHash: artifact.inputsHash,
-            payloadHash: artifact.payloadHash,
-            payloadJson: artifact.payloadJson,
+            algoRef: evaluation.algoRef,
+            inputsHash: evaluation.inputsHash,
+            payloadHash: evaluation.payloadHash,
+            payloadJson: evaluation.payloadJson,
           })
           .onConflictDoNothing({
             target: [
-              epochArtifacts.epochId,
-              epochArtifacts.artifactRef,
-              epochArtifacts.status,
+              epochEvaluations.epochId,
+              epochEvaluations.evaluationRef,
+              epochEvaluations.status,
             ],
           });
       }
@@ -503,14 +504,14 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     });
   }
 
-  async upsertDraftArtifact(params: UpsertArtifactParams): Promise<void> {
+  async upsertDraftEvaluation(params: UpsertEvaluationParams): Promise<void> {
     await this.resolveEpochScoped(params.epochId);
     await this.db
-      .insert(epochArtifacts)
+      .insert(epochEvaluations)
       .values({
         nodeId: params.nodeId,
         epochId: params.epochId,
-        artifactRef: params.artifactRef,
+        evaluationRef: params.evaluationRef,
         status: "draft",
         algoRef: params.algoRef,
         inputsHash: params.inputsHash,
@@ -519,9 +520,9 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       })
       .onConflictDoUpdate({
         target: [
-          epochArtifacts.epochId,
-          epochArtifacts.artifactRef,
-          epochArtifacts.status,
+          epochEvaluations.epochId,
+          epochEvaluations.evaluationRef,
+          epochEvaluations.status,
         ],
         set: {
           algoRef: params.algoRef,
@@ -533,70 +534,70 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       });
   }
 
-  async getArtifactsForEpoch(
+  async getEvaluationsForEpoch(
     epochId: bigint,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochArtifact[]> {
+  ): Promise<LedgerEpochEvaluation[]> {
     await this.resolveEpochScoped(epochId);
-    const conditions = [eq(epochArtifacts.epochId, epochId)];
-    if (status) conditions.push(eq(epochArtifacts.status, status));
+    const conditions = [eq(epochEvaluations.epochId, epochId)];
+    if (status) conditions.push(eq(epochEvaluations.status, status));
     const rows = await this.db
       .select()
-      .from(epochArtifacts)
+      .from(epochEvaluations)
       .where(and(...conditions));
-    return rows.map(toEpochArtifact);
+    return rows.map(toEvaluation);
   }
 
-  async getArtifact(
+  async getEvaluation(
     epochId: bigint,
-    artifactRef: string,
+    evaluationRef: string,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochArtifact | null> {
+  ): Promise<LedgerEpochEvaluation | null> {
     await this.resolveEpochScoped(epochId);
     const conditions = [
-      eq(epochArtifacts.epochId, epochId),
-      eq(epochArtifacts.artifactRef, artifactRef),
+      eq(epochEvaluations.epochId, epochId),
+      eq(epochEvaluations.evaluationRef, evaluationRef),
     ];
-    if (status) conditions.push(eq(epochArtifacts.status, status));
+    if (status) conditions.push(eq(epochEvaluations.status, status));
     const rows = await this.db
       .select()
-      .from(epochArtifacts)
+      .from(epochEvaluations)
       .where(and(...conditions))
       .limit(1);
-    return rows[0] ? toEpochArtifact(rows[0]) : null;
+    return rows[0] ? toEvaluation(rows[0]) : null;
   }
 
-  async getCuratedEventsWithMetadata(
+  async getSelectedReceiptsWithMetadata(
     epochId: bigint
-  ): Promise<CuratedEventWithMetadata[]> {
+  ): Promise<SelectedReceiptWithMetadata[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select({
-        eventId: activityCuration.eventId,
-        userId: activityCuration.userId,
-        source: activityEvents.source,
-        eventType: activityEvents.eventType,
-        included: activityCuration.included,
-        weightOverrideMilli: activityCuration.weightOverrideMilli,
-        metadata: activityEvents.metadata,
-        payloadHash: activityEvents.payloadHash,
+        receiptId: epochSelection.receiptId,
+        userId: epochSelection.userId,
+        source: ingestionReceipts.source,
+        eventType: ingestionReceipts.eventType,
+        included: epochSelection.included,
+        weightOverrideMilli: epochSelection.weightOverrideMilli,
+        metadata: ingestionReceipts.metadata,
+        payloadHash: ingestionReceipts.payloadHash,
       })
-      .from(activityCuration)
+      .from(epochSelection)
       .innerJoin(
-        activityEvents,
+        ingestionReceipts,
         and(
-          eq(activityEvents.id, activityCuration.eventId),
-          eq(activityEvents.nodeId, activityCuration.nodeId)
+          eq(ingestionReceipts.receiptId, epochSelection.receiptId),
+          eq(ingestionReceipts.nodeId, epochSelection.nodeId)
         )
       )
       .where(
         and(
-          eq(activityCuration.epochId, epochId),
-          isNotNull(activityCuration.userId)
+          eq(epochSelection.epochId, epochId),
+          isNotNull(epochSelection.userId)
         )
       );
     return rows.map((r) => ({
-      eventId: r.eventId,
+      receiptId: r.receiptId,
       userId: r.userId as string,
       source: r.source,
       eventType: r.eventType,
@@ -609,35 +610,35 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 
   // ── Allocation computation ──────────────────────────────────
 
-  async getCuratedEventsForAllocation(
+  async getSelectedReceiptsForAllocation(
     epochId: bigint
-  ): Promise<CuratedEventForAllocation[]> {
+  ): Promise<SelectedReceiptForAllocation[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select({
-        eventId: activityCuration.eventId,
-        userId: activityCuration.userId,
-        source: activityEvents.source,
-        eventType: activityEvents.eventType,
-        included: activityCuration.included,
-        weightOverrideMilli: activityCuration.weightOverrideMilli,
+        receiptId: epochSelection.receiptId,
+        userId: epochSelection.userId,
+        source: ingestionReceipts.source,
+        eventType: ingestionReceipts.eventType,
+        included: epochSelection.included,
+        weightOverrideMilli: epochSelection.weightOverrideMilli,
       })
-      .from(activityCuration)
+      .from(epochSelection)
       .innerJoin(
-        activityEvents,
+        ingestionReceipts,
         and(
-          eq(activityEvents.id, activityCuration.eventId),
-          eq(activityEvents.nodeId, activityCuration.nodeId)
+          eq(ingestionReceipts.receiptId, epochSelection.receiptId),
+          eq(ingestionReceipts.nodeId, epochSelection.nodeId)
         )
       )
       .where(
         and(
-          eq(activityCuration.epochId, epochId),
-          isNotNull(activityCuration.userId)
+          eq(epochSelection.epochId, epochId),
+          isNotNull(epochSelection.userId)
         )
       );
     return rows.map((r) => ({
-      eventId: r.eventId,
+      receiptId: r.receiptId,
       // Safe: WHERE clause filters to userId IS NOT NULL
       userId: r.userId as string,
       source: r.source,
@@ -647,19 +648,18 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     }));
   }
 
-  // ── Activity events ─────────────────────────────────────────
+  // ── Ingestion receipts ─────────────────────────────────────
 
-  async insertActivityEvents(
-    events: InsertActivityEventParams[]
+  async insertIngestionReceipts(
+    receipts: InsertIngestionReceiptParams[]
   ): Promise<void> {
-    if (events.length === 0) return;
+    if (receipts.length === 0) return;
     await this.db
-      .insert(activityEvents)
+      .insert(ingestionReceipts)
       .values(
-        events.map((e) => ({
+        receipts.map((e) => ({
           nodeId: e.nodeId,
-          scopeId: e.scopeId,
-          id: e.id,
+          receiptId: e.receiptId,
           source: e.source,
           eventType: e.eventType,
           platformUserId: e.platformUserId,
@@ -676,44 +676,45 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       .onConflictDoNothing();
   }
 
-  async getActivityForWindow(
+  async getReceiptsForWindow(
     nodeId: string,
     since: Date,
     until: Date
-  ): Promise<LedgerActivityEvent[]> {
+  ): Promise<LedgerIngestionReceipt[]> {
+    // RECEIPT_SCOPE_AGNOSTIC: no scope filter — returns all receipts for node in window
     const rows = await this.db
       .select()
-      .from(activityEvents)
+      .from(ingestionReceipts)
       .where(
         and(
-          eq(activityEvents.nodeId, nodeId),
-          gte(activityEvents.eventTime, since),
-          lte(activityEvents.eventTime, until)
+          eq(ingestionReceipts.nodeId, nodeId),
+          gte(ingestionReceipts.eventTime, since),
+          lte(ingestionReceipts.eventTime, until)
         )
       )
-      .orderBy(activityEvents.eventTime);
-    return rows.map(toActivityEvent);
+      .orderBy(ingestionReceipts.eventTime);
+    return rows.map(toIngestionReceipt);
   }
 
-  // ── Curation ────────────────────────────────────────────────
+  // ── Selection ────────────────────────────────────────────────
 
-  async upsertCuration(params: UpsertCurationParams[]): Promise<void> {
+  async upsertSelection(params: UpsertSelectionParams[]): Promise<void> {
     if (params.length === 0) return;
     await this.validateEpochIds(params.map((p) => p.epochId));
     for (const p of params) {
       await this.db
-        .insert(activityCuration)
+        .insert(epochSelection)
         .values({
           nodeId: p.nodeId,
           epochId: p.epochId,
-          eventId: p.eventId,
+          receiptId: p.receiptId,
           userId: p.userId ?? null,
           included: p.included ?? true,
           weightOverrideMilli: p.weightOverrideMilli ?? null,
           note: p.note ?? null,
         })
         .onConflictDoUpdate({
-          target: [activityCuration.epochId, activityCuration.eventId],
+          target: [epochSelection.epochId, epochSelection.receiptId],
           set: {
             userId: p.userId ?? null,
             included: p.included ?? true,
@@ -725,48 +726,45 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     }
   }
 
-  async insertCurationDoNothing(
-    params: InsertCurationAutoParams[]
+  async insertSelectionDoNothing(
+    params: InsertSelectionAutoParams[]
   ): Promise<void> {
     if (params.length === 0) return;
     await this.validateEpochIds(params.map((p) => p.epochId));
     for (const p of params) {
       await this.db
-        .insert(activityCuration)
+        .insert(epochSelection)
         .values({
           nodeId: p.nodeId,
           epochId: p.epochId,
-          eventId: p.eventId,
+          receiptId: p.receiptId,
           userId: p.userId ?? null,
           included: p.included,
         })
         .onConflictDoNothing({
-          target: [activityCuration.epochId, activityCuration.eventId],
+          target: [epochSelection.epochId, epochSelection.receiptId],
         });
     }
   }
 
-  async getCurationForEpoch(epochId: bigint): Promise<LedgerCuration[]> {
+  async getSelectionForEpoch(epochId: bigint): Promise<LedgerSelection[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
-      .from(activityCuration)
-      .where(eq(activityCuration.epochId, epochId));
-    return rows.map(toCuration);
+      .from(epochSelection)
+      .where(eq(epochSelection.epochId, epochId));
+    return rows.map(toSelection);
   }
 
-  async getUnresolvedCuration(epochId: bigint): Promise<LedgerCuration[]> {
+  async getUnresolvedSelection(epochId: bigint): Promise<LedgerSelection[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
-      .from(activityCuration)
+      .from(epochSelection)
       .where(
-        and(
-          eq(activityCuration.epochId, epochId),
-          isNull(activityCuration.userId)
-        )
+        and(eq(epochSelection.epochId, epochId), isNull(epochSelection.userId))
       );
-    return rows.map(toCuration);
+    return rows.map(toSelection);
   }
 
   // ── Allocations ─────────────────────────────────────────────
@@ -876,7 +874,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     cursorValue: string
   ): Promise<void> {
     await this.db
-      .insert(sourceCursors)
+      .insert(ingestionCursors)
       .values({
         nodeId,
         scopeId,
@@ -888,11 +886,11 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       })
       .onConflictDoUpdate({
         target: [
-          sourceCursors.nodeId,
-          sourceCursors.scopeId,
-          sourceCursors.source,
-          sourceCursors.stream,
-          sourceCursors.sourceRef,
+          ingestionCursors.nodeId,
+          ingestionCursors.scopeId,
+          ingestionCursors.source,
+          ingestionCursors.stream,
+          ingestionCursors.sourceRef,
         ],
         set: {
           cursorValue,
@@ -907,17 +905,17 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     source: string,
     stream: string,
     sourceRef: string
-  ): Promise<LedgerSourceCursor | null> {
+  ): Promise<LedgerIngestionCursor | null> {
     const rows = await this.db
       .select()
-      .from(sourceCursors)
+      .from(ingestionCursors)
       .where(
         and(
-          eq(sourceCursors.nodeId, nodeId),
-          eq(sourceCursors.scopeId, scopeId),
-          eq(sourceCursors.source, source),
-          eq(sourceCursors.stream, stream),
-          eq(sourceCursors.sourceRef, sourceRef)
+          eq(ingestionCursors.nodeId, nodeId),
+          eq(ingestionCursors.scopeId, scopeId),
+          eq(ingestionCursors.source, source),
+          eq(ingestionCursors.stream, stream),
+          eq(ingestionCursors.sourceRef, sourceRef)
         )
       )
       .limit(1);
@@ -961,14 +959,14 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     return rows.map(toPoolComponent);
   }
 
-  // ── Payout statements ──────────────────────────────────────
+  // ── Epoch statements ──────────────────────────────────────
 
-  async insertPayoutStatement(
-    params: InsertPayoutStatementParams
-  ): Promise<LedgerPayoutStatement> {
+  async insertEpochStatement(
+    params: InsertEpochStatementParams
+  ): Promise<LedgerEpochStatement> {
     await this.resolveEpochScoped(params.epochId);
     const [row] = await this.db
-      .insert(payoutStatements)
+      .insert(epochStatements)
       .values({
         nodeId: params.nodeId,
         epochId: params.epochId,
@@ -978,18 +976,18 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
         supersedesStatementId: params.supersedesStatementId ?? null,
       })
       .returning();
-    if (!row) throw new Error("insertPayoutStatement: INSERT returned no rows");
+    if (!row) throw new Error("insertEpochStatement: INSERT returned no rows");
     return toStatement(row);
   }
 
   async getStatementForEpoch(
     epochId: bigint
-  ): Promise<LedgerPayoutStatement | null> {
+  ): Promise<LedgerEpochStatement | null> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
-      .from(payoutStatements)
-      .where(eq(payoutStatements.epochId, epochId))
+      .from(epochStatements)
+      .where(eq(epochStatements.epochId, epochId))
       .limit(1);
     return rows[0] ? toStatement(rows[0]) : null;
   }
@@ -999,10 +997,10 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   async finalizeEpochAtomic(params: {
     epochId: bigint;
     poolTotal: bigint;
-    statement: Omit<InsertPayoutStatementParams, "epochId">;
-    signature: Omit<InsertSignatureParams, "statementId">;
+    statement: Omit<InsertEpochStatementParams, "epochId">;
+    signature: Omit<InsertStatementSignatureParams, "statementId">;
     expectedAllocationSetHash: string;
-  }): Promise<{ epoch: LedgerEpoch; statement: LedgerPayoutStatement }> {
+  }): Promise<{ epoch: LedgerEpoch; statement: LedgerEpochStatement }> {
     return await this.db.transaction(async (tx) => {
       // 1. Load epoch with scope gate (inline — avoid separate connection)
       const epochRows = await tx
@@ -1074,7 +1072,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 
       // 2b/3a. Upsert statement — ON CONFLICT (node_id, epoch_id) DO NOTHING
       await tx
-        .insert(payoutStatements)
+        .insert(epochStatements)
         .values({
           nodeId: params.statement.nodeId,
           epochId: params.epochId,
@@ -1084,81 +1082,86 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
           supersedesStatementId: params.statement.supersedesStatementId ?? null,
         })
         .onConflictDoNothing({
-          target: [payoutStatements.nodeId, payoutStatements.epochId],
+          target: [epochStatements.nodeId, epochStatements.epochId],
         });
 
       // Fetch the statement (either just inserted or previously existing)
-      const [stmtRow] = await tx
+      const [statementRow] = await tx
         .select()
-        .from(payoutStatements)
+        .from(epochStatements)
         .where(
           and(
-            eq(payoutStatements.nodeId, params.statement.nodeId),
-            eq(payoutStatements.epochId, params.epochId)
+            eq(epochStatements.nodeId, params.statement.nodeId),
+            eq(epochStatements.epochId, params.epochId)
           )
         )
         .limit(1);
 
-      if (!stmtRow) {
+      if (!statementRow) {
         throw new Error(
           `finalizeEpochAtomic: statement insert/select failed for epoch ${params.epochId.toString()}`
         );
       }
 
       // Hash assertion — if statement pre-existed, verify hash matches
-      if (stmtRow.allocationSetHash !== params.expectedAllocationSetHash) {
+      if (statementRow.allocationSetHash !== params.expectedAllocationSetHash) {
         throw new Error(
-          `finalizeEpochAtomic: allocationSetHash mismatch — expected ${params.expectedAllocationSetHash}, found ${stmtRow.allocationSetHash}`
+          `finalizeEpochAtomic: allocationSetHash mismatch — expected ${params.expectedAllocationSetHash}, found ${statementRow.allocationSetHash}`
         );
       }
 
       // 2d/3b. Upsert signature — ON CONFLICT (statement_id, signer_wallet) DO NOTHING
       await tx
-        .insert(statementSignatures)
+        .insert(epochStatementSignatures)
         .values({
           nodeId: params.signature.nodeId,
-          statementId: stmtRow.id,
+          statementId: statementRow.id,
           signerWallet: params.signature.signerWallet,
           signature: params.signature.signature,
           signedAt: params.signature.signedAt,
         })
         .onConflictDoNothing({
           target: [
-            statementSignatures.statementId,
-            statementSignatures.signerWallet,
+            epochStatementSignatures.statementId,
+            epochStatementSignatures.signerWallet,
           ],
         });
 
       // 2e/3c. Verify signature — if row exists with DIFFERENT signature text, throw
       const [sigRow] = await tx
         .select()
-        .from(statementSignatures)
+        .from(epochStatementSignatures)
         .where(
           and(
-            eq(statementSignatures.statementId, stmtRow.id),
-            eq(statementSignatures.signerWallet, params.signature.signerWallet)
+            eq(epochStatementSignatures.statementId, statementRow.id),
+            eq(
+              epochStatementSignatures.signerWallet,
+              params.signature.signerWallet
+            )
           )
         )
         .limit(1);
 
       if (sigRow && sigRow.signature !== params.signature.signature) {
         throw new Error(
-          `finalizeEpochAtomic: signature divergence — signer ${params.signature.signerWallet} has different signature on statement ${stmtRow.id}`
+          `finalizeEpochAtomic: signature divergence — signer ${params.signature.signerWallet} has different signature on statement ${statementRow.id}`
         );
       }
 
       return {
         epoch: toEpoch(finalEpochRow),
-        statement: toStatement(stmtRow),
+        statement: toStatement(statementRow),
       };
     });
   }
 
   // ── Statement signatures ───────────────────────────────────
 
-  async insertStatementSignature(params: InsertSignatureParams): Promise<void> {
+  async insertStatementSignature(
+    params: InsertStatementSignatureParams
+  ): Promise<void> {
     await this.db
-      .insert(statementSignatures)
+      .insert(epochStatementSignatures)
       .values({
         nodeId: params.nodeId,
         statementId: params.statementId,
@@ -1168,8 +1171,8 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       })
       .onConflictDoNothing({
         target: [
-          statementSignatures.statementId,
-          statementSignatures.signerWallet,
+          epochStatementSignatures.statementId,
+          epochStatementSignatures.signerWallet,
         ],
       });
   }
@@ -1179,9 +1182,9 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
   ): Promise<LedgerStatementSignature[]> {
     const rows = await this.db
       .select()
-      .from(statementSignatures)
-      .where(eq(statementSignatures.statementId, statementId));
-    return rows.map(toSignature);
+      .from(epochStatementSignatures)
+      .where(eq(epochStatementSignatures.statementId, statementId));
+    return rows.map(toStatementSignature);
   }
 
   // ── Identity resolution ───────────────────────────────────────
@@ -1207,58 +1210,58 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
     return new Map(rows.map((r) => [r.externalId, r.userId]));
   }
 
-  async getUncuratedEvents(
+  async getUnselectedReceipts(
     nodeId: string,
     epochId: bigint,
     periodStart: Date,
     periodEnd: Date
-  ): Promise<UncuratedEvent[]> {
+  ): Promise<UnselectedReceipt[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select({
-        event: activityEvents,
-        curationId: activityCuration.id,
+        receipt: ingestionReceipts,
+        selectionId: epochSelection.id,
       })
-      .from(activityEvents)
+      .from(ingestionReceipts)
       .leftJoin(
-        activityCuration,
+        epochSelection,
         and(
-          eq(activityCuration.epochId, epochId),
-          eq(activityCuration.eventId, activityEvents.id)
+          eq(epochSelection.epochId, epochId),
+          eq(epochSelection.receiptId, ingestionReceipts.receiptId)
         )
       )
       .where(
         and(
-          eq(activityEvents.nodeId, nodeId),
-          gte(activityEvents.eventTime, periodStart),
-          lte(activityEvents.eventTime, periodEnd),
+          eq(ingestionReceipts.nodeId, nodeId),
+          gte(ingestionReceipts.eventTime, periodStart),
+          lte(ingestionReceipts.eventTime, periodEnd),
           or(
-            isNull(activityCuration.id), // no curation row
-            isNull(activityCuration.userId) // curation exists but unresolved
+            isNull(epochSelection.id), // no selection row
+            isNull(epochSelection.userId) // selection exists but unresolved
           )
         )
       )
-      .orderBy(activityEvents.eventTime);
+      .orderBy(ingestionReceipts.eventTime);
     return rows.map((r) => ({
-      event: toActivityEvent(r.event),
-      hasExistingCuration: r.curationId !== null,
+      receipt: toIngestionReceipt(r.receipt),
+      hasExistingSelection: r.selectionId !== null,
     }));
   }
 
-  async updateCurationUserId(
+  async updateSelectionUserId(
     epochId: bigint,
-    eventId: string,
+    receiptId: string,
     userId: string
   ): Promise<void> {
     await this.resolveEpochScoped(epochId);
     await this.db
-      .update(activityCuration)
+      .update(epochSelection)
       .set({ userId, updatedAt: new Date() })
       .where(
         and(
-          eq(activityCuration.epochId, epochId),
-          eq(activityCuration.eventId, eventId),
-          isNull(activityCuration.userId)
+          eq(epochSelection.epochId, epochId),
+          eq(epochSelection.receiptId, receiptId),
+          isNull(epochSelection.userId)
         )
       );
   }

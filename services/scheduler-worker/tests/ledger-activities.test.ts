@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/scheduler-worker/tests/ledger-activities.test`
- * Purpose: Unit tests for ledger activity functions, epoch window computation, and curateAndResolve.
- * Scope: Tests each activity in isolation with mocked store/adapter. Covers identity resolution, curation auto-population, and admin-field preservation.
+ * Purpose: Unit tests for ledger activity functions, epoch window computation, and materializeSelection.
+ * Scope: Tests each activity in isolation with mocked store/adapter. Covers identity resolution, selection auto-population, and admin-field preservation.
  * @internal
  */
 
@@ -14,10 +14,10 @@ import type {
   SourceAdapter,
 } from "@cogni/ingestion-core";
 import type {
-  ActivityLedgerStore,
+  EpochLedgerStore,
   LedgerEpoch,
-  LedgerSourceCursor,
-  UncuratedEvent,
+  LedgerIngestionCursor,
+  UnselectedReceipt,
 } from "@cogni/ledger-core";
 import { computeEpochWindowV1 } from "@cogni/ledger-core";
 import { describe, expect, it, vi } from "vitest";
@@ -36,8 +36,8 @@ const mockLogger = {
 } as unknown as Parameters<typeof createLedgerActivities>[0]["logger"];
 
 function makeMockStore(
-  overrides: Partial<ActivityLedgerStore> = {}
-): ActivityLedgerStore {
+  overrides: Partial<EpochLedgerStore> = {}
+): EpochLedgerStore {
   return {
     createEpoch: vi.fn(),
     getOpenEpoch: vi.fn().mockResolvedValue(null),
@@ -45,17 +45,17 @@ function makeMockStore(
     getEpoch: vi.fn(),
     listEpochs: vi.fn(),
     closeIngestion: vi.fn(),
-    closeIngestionWithArtifacts: vi.fn(),
+    closeIngestionWithEvaluations: vi.fn(),
     finalizeEpoch: vi.fn(),
-    upsertDraftArtifact: vi.fn(),
-    getArtifactsForEpoch: vi.fn().mockResolvedValue([]),
-    getArtifact: vi.fn().mockResolvedValue(null),
-    getCuratedEventsWithMetadata: vi.fn().mockResolvedValue([]),
-    insertActivityEvents: vi.fn(),
-    getActivityForWindow: vi.fn(),
-    upsertCuration: vi.fn(),
-    getCurationForEpoch: vi.fn(),
-    getUnresolvedCuration: vi.fn(),
+    upsertDraftEvaluation: vi.fn(),
+    getEvaluationsForEpoch: vi.fn().mockResolvedValue([]),
+    getEvaluation: vi.fn().mockResolvedValue(null),
+    getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue([]),
+    insertIngestionReceipts: vi.fn(),
+    getReceiptsForWindow: vi.fn(),
+    upsertSelection: vi.fn(),
+    getSelectionForEpoch: vi.fn(),
+    getUnresolvedSelection: vi.fn(),
     insertAllocations: vi.fn(),
     updateAllocationFinalUnits: vi.fn(),
     getAllocationsForEpoch: vi.fn(),
@@ -63,20 +63,20 @@ function makeMockStore(
     getCursor: vi.fn().mockResolvedValue(null),
     insertPoolComponent: vi.fn(),
     getPoolComponentsForEpoch: vi.fn(),
-    insertPayoutStatement: vi.fn(),
+    insertEpochStatement: vi.fn(),
     getStatementForEpoch: vi.fn(),
     insertStatementSignature: vi.fn(),
     getSignaturesForStatement: vi.fn(),
-    insertCurationDoNothing: vi.fn(),
+    insertSelectionDoNothing: vi.fn(),
     resolveIdentities: vi.fn().mockResolvedValue(new Map()),
     upsertAllocations: vi.fn(),
     deleteStaleAllocations: vi.fn(),
-    getCuratedEventsForAllocation: vi.fn().mockResolvedValue([]),
+    getSelectedReceiptsForAllocation: vi.fn().mockResolvedValue([]),
     finalizeEpochAtomic: vi.fn(),
-    getUncuratedEvents: vi.fn().mockResolvedValue([]),
-    updateCurationUserId: vi.fn(),
+    getUnselectedReceipts: vi.fn().mockResolvedValue([]),
+    updateSelectionUserId: vi.fn(),
     ...overrides,
-  } as ActivityLedgerStore;
+  } as EpochLedgerStore;
 }
 
 function makeMockAdapter(events: ActivityEvent[] = []): SourceAdapter {
@@ -137,17 +137,16 @@ function makeEvent(id = "github:pr:test/repo:1"): ActivityEvent {
   };
 }
 
-function makeUncuratedEvent(
-  overrides: Partial<UncuratedEvent["event"]> & {
-    hasExistingCuration?: boolean;
+function makeUnselectedReceipt(
+  overrides: Partial<UnselectedReceipt["receipt"]> & {
+    hasExistingSelection?: boolean;
   } = {}
-): UncuratedEvent {
-  const { hasExistingCuration = false, ...eventOverrides } = overrides;
+): UnselectedReceipt {
+  const { hasExistingSelection = false, ...receiptOverrides } = overrides;
   return {
-    event: {
-      id: "github:pr:test/repo:1",
+    receipt: {
+      receiptId: "github:pr:test/repo:1",
       nodeId: NODE_ID,
-      scopeId: SCOPE_ID,
       source: "github",
       eventType: "pr_merged",
       platformUserId: "12345",
@@ -160,9 +159,9 @@ function makeUncuratedEvent(
       eventTime: new Date("2026-02-20T12:00:00Z"),
       retrievedAt: new Date("2026-02-20T12:01:00Z"),
       ingestedAt: new Date("2026-02-20T12:02:00Z"),
-      ...eventOverrides,
+      ...receiptOverrides,
     },
-    hasExistingCuration,
+    hasExistingSelection,
   };
 }
 
@@ -254,7 +253,7 @@ describe("createLedgerActivities", () => {
     expect(activities.ensureEpochForWindow).toBeTypeOf("function");
     expect(activities.loadCursor).toBeTypeOf("function");
     expect(activities.collectFromSource).toBeTypeOf("function");
-    expect(activities.insertEvents).toBeTypeOf("function");
+    expect(activities.insertReceipts).toBeTypeOf("function");
     expect(activities.saveCursor).toBeTypeOf("function");
   });
 });
@@ -399,7 +398,7 @@ describe("loadCursor", () => {
   });
 
   it("returns cursor value when one exists", async () => {
-    const cursor: LedgerSourceCursor = {
+    const cursor: LedgerIngestionCursor = {
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
       source: "github",
@@ -482,12 +481,12 @@ describe("collectFromSource", () => {
   });
 });
 
-// ── insertEvents ────────────────────────────────────────────────
+// ── insertReceipts ────────────────────────────────────────────
 
-describe("insertEvents", () => {
+describe("insertReceipts", () => {
   it("does nothing when events array is empty", async () => {
     const store = makeMockStore();
-    const { insertEvents } = createLedgerActivities({
+    const { insertReceipts } = createLedgerActivities({
       ledgerStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
@@ -495,14 +494,14 @@ describe("insertEvents", () => {
       logger: mockLogger,
     });
 
-    await insertEvents({ events: [], producerVersion: "0.3.0" });
+    await insertReceipts({ events: [], producerVersion: "0.3.0" });
 
-    expect(store.insertActivityEvents).not.toHaveBeenCalled();
+    expect(store.insertIngestionReceipts).not.toHaveBeenCalled();
   });
 
   it("maps events and uses producerVersion from input", async () => {
     const store = makeMockStore();
-    const { insertEvents } = createLedgerActivities({
+    const { insertReceipts } = createLedgerActivities({
       ledgerStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
@@ -510,12 +509,11 @@ describe("insertEvents", () => {
       logger: mockLogger,
     });
 
-    await insertEvents({ events: [makeEvent()], producerVersion: "0.3.0" });
+    await insertReceipts({ events: [makeEvent()], producerVersion: "0.3.0" });
 
-    expect(store.insertActivityEvents).toHaveBeenCalledOnce();
-    const args = vi.mocked(store.insertActivityEvents).mock.calls[0][0];
+    expect(store.insertIngestionReceipts).toHaveBeenCalledOnce();
+    const args = vi.mocked(store.insertIngestionReceipts).mock.calls[0][0];
     expect(args[0].nodeId).toBe(NODE_ID);
-    expect(args[0].scopeId).toBe(SCOPE_ID);
     expect(args[0].source).toBe("github");
     expect(args[0].producerVersion).toBe("0.3.0");
   });
@@ -552,7 +550,7 @@ describe("saveCursor", () => {
   });
 
   it("enforces monotonic cursor — keeps later value", async () => {
-    const existingCursor: LedgerSourceCursor = {
+    const existingCursor: LedgerIngestionCursor = {
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
       source: "github",
@@ -592,7 +590,7 @@ describe("saveCursor", () => {
   });
 
   it("advances cursor when new value is later", async () => {
-    const existingCursor: LedgerSourceCursor = {
+    const existingCursor: LedgerIngestionCursor = {
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
       source: "github",
@@ -631,119 +629,119 @@ describe("saveCursor", () => {
   });
 });
 
-// ── curateAndResolve ────────────────────────────────────────────
+// ── materializeSelection ────────────────────────────────────────
 
-describe("curateAndResolve", () => {
+describe("materializeSelection", () => {
   const epoch = makeEpoch({ id: 1n });
 
-  function makeDeps(storeOverrides: Partial<ActivityLedgerStore> = {}) {
+  function makeDeps(storeOverrides: Partial<EpochLedgerStore> = {}) {
     const store = makeMockStore({
       getEpoch: vi.fn().mockResolvedValue(epoch),
       ...storeOverrides,
     });
-    const { curateAndResolve } = createLedgerActivities({
+    const { materializeSelection } = createLedgerActivities({
       ledgerStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
       logger: mockLogger,
     });
-    return { store, curateAndResolve };
+    return { store, materializeSelection };
   }
 
-  it("returns zero counts when no uncurated events", async () => {
-    const { curateAndResolve } = makeDeps({
-      getUncuratedEvents: vi.fn().mockResolvedValue([]),
+  it("returns zero counts when no unselected receipts", async () => {
+    const { materializeSelection } = makeDeps({
+      getUnselectedReceipts: vi.fn().mockResolvedValue([]),
     });
 
-    const result = await curateAndResolve({ epochId: "1" });
+    const result = await materializeSelection({ epochId: "1" });
 
     expect(result).toEqual({
-      totalEvents: 0,
-      newCurations: 0,
+      totalReceipts: 0,
+      newSelections: 0,
       resolved: 0,
       unresolved: 0,
     });
   });
 
   it("throws when epoch not found", async () => {
-    const { curateAndResolve } = makeDeps({
+    const { materializeSelection } = makeDeps({
       getEpoch: vi.fn().mockResolvedValue(null),
     });
 
-    await expect(curateAndResolve({ epochId: "999" })).rejects.toThrow(
+    await expect(materializeSelection({ epochId: "999" })).rejects.toThrow(
       "epoch 999 not found"
     );
   });
 
-  it("creates new curation rows with resolved userId", async () => {
-    const uncurated = [
-      makeUncuratedEvent({ id: "ev1", platformUserId: "111" }),
-      makeUncuratedEvent({ id: "ev2", platformUserId: "222" }),
+  it("creates new selection rows with resolved userId", async () => {
+    const unselected = [
+      makeUnselectedReceipt({ receiptId: "ev1", platformUserId: "111" }),
+      makeUnselectedReceipt({ receiptId: "ev2", platformUserId: "222" }),
     ];
     const identityMap = new Map([["111", "user-aaa"]]);
-    const { store, curateAndResolve } = makeDeps({
-      getUncuratedEvents: vi.fn().mockResolvedValue(uncurated),
+    const { store, materializeSelection } = makeDeps({
+      getUnselectedReceipts: vi.fn().mockResolvedValue(unselected),
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
     });
 
-    const result = await curateAndResolve({ epochId: "1" });
+    const result = await materializeSelection({ epochId: "1" });
 
-    expect(result.totalEvents).toBe(2);
-    expect(result.newCurations).toBe(2);
+    expect(result.totalReceipts).toBe(2);
+    expect(result.newSelections).toBe(2);
     expect(result.resolved).toBe(1);
     expect(result.unresolved).toBe(1);
 
-    // Should have called upsertCuration for each new event
-    expect(store.insertCurationDoNothing).toHaveBeenCalledTimes(2);
+    // Should have called insertSelectionDoNothing for each new receipt
+    expect(store.insertSelectionDoNothing).toHaveBeenCalledTimes(2);
 
     // First call: resolved
-    expect(vi.mocked(store.insertCurationDoNothing).mock.calls[0][0]).toEqual([
+    expect(vi.mocked(store.insertSelectionDoNothing).mock.calls[0][0]).toEqual([
       expect.objectContaining({
         nodeId: NODE_ID,
         epochId: 1n,
-        eventId: "ev1",
+        receiptId: "ev1",
         userId: "user-aaa",
         included: true,
       }),
     ]);
 
     // Second call: unresolved (userId null)
-    expect(vi.mocked(store.insertCurationDoNothing).mock.calls[1][0]).toEqual([
+    expect(vi.mocked(store.insertSelectionDoNothing).mock.calls[1][0]).toEqual([
       expect.objectContaining({
-        eventId: "ev2",
+        receiptId: "ev2",
         userId: null,
         included: true,
       }),
     ]);
 
-    // No updateCurationUserId calls (all new events)
-    expect(store.updateCurationUserId).not.toHaveBeenCalled();
+    // No updateSelectionUserId calls (all new receipts)
+    expect(store.updateSelectionUserId).not.toHaveBeenCalled();
   });
 
-  it("updates userId on existing unresolved curation rows", async () => {
-    const uncurated = [
-      makeUncuratedEvent({
-        id: "ev1",
+  it("updates userId on existing unresolved selection rows", async () => {
+    const unselected = [
+      makeUnselectedReceipt({
+        receiptId: "ev1",
         platformUserId: "111",
-        hasExistingCuration: true,
+        hasExistingSelection: true,
       }),
     ];
     const identityMap = new Map([["111", "user-aaa"]]);
-    const { store, curateAndResolve } = makeDeps({
-      getUncuratedEvents: vi.fn().mockResolvedValue(uncurated),
+    const { store, materializeSelection } = makeDeps({
+      getUnselectedReceipts: vi.fn().mockResolvedValue(unselected),
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
     });
 
-    const result = await curateAndResolve({ epochId: "1" });
+    const result = await materializeSelection({ epochId: "1" });
 
-    expect(result.totalEvents).toBe(1);
-    expect(result.newCurations).toBe(0);
+    expect(result.totalReceipts).toBe(1);
+    expect(result.newSelections).toBe(0);
     expect(result.resolved).toBe(1);
 
     // Should update, not insert
-    expect(store.insertCurationDoNothing).not.toHaveBeenCalled();
-    expect(store.updateCurationUserId).toHaveBeenCalledWith(
+    expect(store.insertSelectionDoNothing).not.toHaveBeenCalled();
+    expect(store.updateSelectionUserId).toHaveBeenCalledWith(
       1n,
       "ev1",
       "user-aaa"
@@ -751,97 +749,97 @@ describe("curateAndResolve", () => {
   });
 
   it("skips existing unresolved rows when identity still not found", async () => {
-    const uncurated = [
-      makeUncuratedEvent({
-        id: "ev1",
+    const unselected = [
+      makeUnselectedReceipt({
+        receiptId: "ev1",
         platformUserId: "111",
-        hasExistingCuration: true,
+        hasExistingSelection: true,
       }),
     ];
-    const { store, curateAndResolve } = makeDeps({
-      getUncuratedEvents: vi.fn().mockResolvedValue(uncurated),
+    const { store, materializeSelection } = makeDeps({
+      getUnselectedReceipts: vi.fn().mockResolvedValue(unselected),
       resolveIdentities: vi.fn().mockResolvedValue(new Map()),
     });
 
-    const result = await curateAndResolve({ epochId: "1" });
+    const result = await materializeSelection({ epochId: "1" });
 
-    expect(result.totalEvents).toBe(1);
-    expect(result.newCurations).toBe(0);
+    expect(result.totalReceipts).toBe(1);
+    expect(result.newSelections).toBe(0);
     expect(result.resolved).toBe(0);
     expect(result.unresolved).toBe(1);
 
     // Neither insert nor update — existing row stays as-is
-    expect(store.insertCurationDoNothing).not.toHaveBeenCalled();
-    expect(store.updateCurationUserId).not.toHaveBeenCalled();
+    expect(store.insertSelectionDoNothing).not.toHaveBeenCalled();
+    expect(store.updateSelectionUserId).not.toHaveBeenCalled();
   });
 
   it("does NOT overwrite admin-set fields on re-run", async () => {
-    // Simulate: event has existing curation (hasExistingCuration=true) with userId already set
-    // getUncuratedEvents wouldn't return it (it filters by userId IS NULL).
-    // This test verifies the contract: updateCurationUserId is conditional.
-    // The activity only calls updateCurationUserId, which has WHERE user_id IS NULL.
+    // Simulate: receipt has existing selection (hasExistingSelection=true) with userId already set
+    // getUnselectedReceipts wouldn't return it (it filters by userId IS NULL).
+    // This test verifies the contract: updateSelectionUserId is conditional.
+    // The activity only calls updateSelectionUserId, which has WHERE user_id IS NULL.
     // So an admin who manually set userId to something else is never overwritten.
 
-    // Scenario: event has existing unresolved curation, gets resolved
-    const uncurated = [
-      makeUncuratedEvent({
-        id: "ev1",
+    // Scenario: receipt has existing unresolved selection, gets resolved
+    const unselected = [
+      makeUnselectedReceipt({
+        receiptId: "ev1",
         platformUserId: "111",
-        hasExistingCuration: true,
+        hasExistingSelection: true,
       }),
     ];
     const identityMap = new Map([["111", "user-aaa"]]);
-    const { store, curateAndResolve } = makeDeps({
-      getUncuratedEvents: vi.fn().mockResolvedValue(uncurated),
+    const { store, materializeSelection } = makeDeps({
+      getUnselectedReceipts: vi.fn().mockResolvedValue(unselected),
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
     });
 
-    await curateAndResolve({ epochId: "1" });
+    await materializeSelection({ epochId: "1" });
 
-    // updateCurationUserId called — but the adapter's WHERE clause
+    // updateSelectionUserId called — but the adapter's WHERE clause
     // ensures it only updates when user_id IS NULL
-    expect(store.updateCurationUserId).toHaveBeenCalledWith(
+    expect(store.updateSelectionUserId).toHaveBeenCalledWith(
       1n,
       "ev1",
       "user-aaa"
     );
-    // upsertCuration (which overwrites all fields) is NOT called for existing rows
-    expect(store.insertCurationDoNothing).not.toHaveBeenCalled();
+    // insertSelectionDoNothing (which overwrites all fields) is NOT called for existing rows
+    expect(store.insertSelectionDoNothing).not.toHaveBeenCalled();
   });
 
-  it("handles mixed new and existing unresolved events", async () => {
-    const uncurated = [
-      makeUncuratedEvent({
-        id: "ev-new",
+  it("handles mixed new and existing unresolved receipts", async () => {
+    const unselected = [
+      makeUnselectedReceipt({
+        receiptId: "ev-new",
         platformUserId: "111",
-        hasExistingCuration: false,
+        hasExistingSelection: false,
       }),
-      makeUncuratedEvent({
-        id: "ev-existing",
+      makeUnselectedReceipt({
+        receiptId: "ev-existing",
         platformUserId: "222",
-        hasExistingCuration: true,
+        hasExistingSelection: true,
       }),
     ];
     const identityMap = new Map([
       ["111", "user-aaa"],
       ["222", "user-bbb"],
     ]);
-    const { store, curateAndResolve } = makeDeps({
-      getUncuratedEvents: vi.fn().mockResolvedValue(uncurated),
+    const { store, materializeSelection } = makeDeps({
+      getUnselectedReceipts: vi.fn().mockResolvedValue(unselected),
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
     });
 
-    const result = await curateAndResolve({ epochId: "1" });
+    const result = await materializeSelection({ epochId: "1" });
 
-    expect(result.totalEvents).toBe(2);
-    expect(result.newCurations).toBe(1);
+    expect(result.totalReceipts).toBe(2);
+    expect(result.newSelections).toBe(1);
     expect(result.resolved).toBe(2);
     expect(result.unresolved).toBe(0);
 
-    // New event → upsertCuration
-    expect(store.insertCurationDoNothing).toHaveBeenCalledTimes(1);
-    // Existing unresolved → updateCurationUserId
-    expect(store.updateCurationUserId).toHaveBeenCalledWith(
+    // New receipt → insertSelectionDoNothing
+    expect(store.insertSelectionDoNothing).toHaveBeenCalledTimes(1);
+    // Existing unresolved → updateSelectionUserId
+    expect(store.updateSelectionUserId).toHaveBeenCalledWith(
       1n,
       "ev-existing",
       "user-bbb"

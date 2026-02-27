@@ -3,11 +3,11 @@
 
 /**
  * Module: `@features/governance/lib/compose-holdings`
- * Purpose: Aggregates payout statements across finalized epochs into cumulative holdings.
+ * Purpose: Aggregates statements across finalized epochs into cumulative holdings.
  * Scope: Pure function. Does not perform IO or access external services.
  * Invariants:
  *   - ALL_MATH_BIGINT: credit values stay as strings until final display derivation
- *   - Source of truth is frozen payout statements (not mutable allocations)
+ *   - Source of truth is frozen statements (not mutable allocations)
  * Side-effects: none
  * Links: src/features/governance/types.ts
  * @public
@@ -21,7 +21,7 @@ const DEFAULT_AVATAR = "👤";
 const DEFAULT_COLOR = "220 15% 50%";
 
 /**
- * Aggregate statement payouts across all finalized epochs into cumulative holdings.
+ * Aggregate statement line items across all finalized epochs into cumulative holdings.
  * Each entry in `statements` corresponds 1:1 with the epoch at the same index in `epochs`.
  * Statements may be null if not yet generated (skip those epochs).
  */

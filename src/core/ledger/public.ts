@@ -13,24 +13,24 @@
 
 // Store port re-exports
 export type {
-  ActivityLedgerStore,
+  EpochLedgerStore,
   EpochStatus,
   FinalizedAllocation,
-  InsertActivityEventParams,
   InsertAllocationParams,
-  InsertPayoutStatementParams,
+  InsertEpochStatementParams,
+  InsertIngestionReceiptParams,
   InsertPoolComponentParams,
-  InsertSignatureParams,
-  LedgerActivityEvent,
+  InsertStatementSignatureParams,
   LedgerAllocation,
-  LedgerCuration,
   LedgerEpoch,
-  LedgerPayoutStatement,
+  LedgerEpochStatement,
+  LedgerIngestionCursor,
+  LedgerIngestionReceipt,
   LedgerPoolComponent,
-  LedgerSourceCursor,
+  LedgerSelection,
   LedgerStatementSignature,
   PayoutLineItem,
-  UpsertCurationParams,
+  UpsertSelectionParams,
 } from "@cogni/ledger-core";
 export {
   AllocationNotFoundError,

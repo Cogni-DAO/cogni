@@ -13,7 +13,7 @@
 
 import { DrizzleLedgerAdapter } from "@cogni/db-client";
 import type { ActivityEvent } from "@cogni/ingestion-core";
-import type { InsertActivityEventParams } from "@cogni/ledger-core";
+import type { InsertIngestionReceiptParams } from "@cogni/ledger-core";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
   TEST_NODE_ID,
@@ -219,12 +219,11 @@ describeWithAuth("GitHubSourceAdapter (external)", () => {
       });
       expect(result.events.length).toBeGreaterThan(0);
 
-      // Map ActivityEvent → InsertActivityEventParams
-      const params: InsertActivityEventParams[] = result.events.map(
+      // Map ActivityEvent → InsertIngestionReceiptParams
+      const params: InsertIngestionReceiptParams[] = result.events.map(
         (e: ActivityEvent) => ({
-          id: e.id,
+          receiptId: e.id,
           nodeId: TEST_NODE_ID,
-          scopeId: TEST_SCOPE_ID,
           source: e.source,
           eventType: e.eventType,
           platformUserId: e.platformUserId,
@@ -240,10 +239,10 @@ describeWithAuth("GitHubSourceAdapter (external)", () => {
       );
 
       // First insert
-      await ledger.insertActivityEvents(params);
+      await ledger.insertIngestionReceipts(params);
 
       // Verify data persisted
-      const stored = await ledger.getActivityForWindow(
+      const stored = await ledger.getReceiptsForWindow(
         TEST_NODE_ID,
         WIDE_WINDOW.since,
         WIDE_WINDOW.until
@@ -252,7 +251,7 @@ describeWithAuth("GitHubSourceAdapter (external)", () => {
 
       // Re-insert same events — idempotent, no error
       await expect(
-        ledger.insertActivityEvents(params)
+        ledger.insertIngestionReceipts(params)
       ).resolves.toBeUndefined();
     });
   });

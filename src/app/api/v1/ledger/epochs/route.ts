@@ -34,7 +34,7 @@ export const GET = wrapRouteHandlerWithLogging(
       offset: url.searchParams.get("offset") ?? undefined,
     });
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
     const allEpochs = await store.listEpochs(getNodeId());
     const page = allEpochs.slice(offset, offset + limit);
 

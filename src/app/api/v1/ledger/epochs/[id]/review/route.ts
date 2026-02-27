@@ -53,7 +53,7 @@ export const POST = wrapRouteHandlerWithLogging<{
     // APPROVERS_PINNED_AT_REVIEW: pin current approver set on the epoch
     const approverSetHash = computeApproverSetHash(getLedgerApprovers());
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
 
     // Load epoch to get weightConfig for CONFIG_LOCKED_AT_REVIEW
     const existing = await store.getEpoch(epochId);

@@ -3,9 +3,9 @@
 
 /**
  * Module: `@cogni/ledger-core/tests/artifact-envelope`
- * Purpose: Unit tests for artifact envelope validation and enricher inputs hashing.
- * Scope: Tests validation rules for artifact refs and envelopes. Does not test store or I/O.
- * Invariants: ARTIFACT_REF_NAMESPACED, CANONICAL_JSON
+ * Purpose: Unit tests for evaluation envelope validation and enricher inputs hashing.
+ * Scope: Tests validation rules for evaluation refs and envelopes. Does not test store or I/O.
+ * Invariants: EVALUATION_REF_NAMESPACED, CANONICAL_JSON
  * Side-effects: none
  * Links: packages/ledger-core/src/artifact-envelope.ts
  * @internal
@@ -14,55 +14,59 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  validateArtifactEnvelope,
-  validateArtifactRef,
+  validateEvaluationEnvelope,
+  validateEvaluationRef,
 } from "../src/artifact-envelope";
 import { computeEnricherInputsHash } from "../src/enricher-inputs";
 
-// ── validateArtifactRef ─────────────────────────────────────────
+// ── validateEvaluationRef ─────────────────────────────────────────
 
-describe("validateArtifactRef", () => {
+describe("validateEvaluationRef", () => {
   it("accepts valid namespaced refs", () => {
-    expect(() => validateArtifactRef("cogni.echo.v0")).not.toThrow();
-    expect(() => validateArtifactRef("cogni.work_item_links.v0")).not.toThrow();
-    expect(() => validateArtifactRef("cogni.ai_scores.v1")).not.toThrow();
-    expect(() => validateArtifactRef("x.y.v99")).not.toThrow();
+    expect(() => validateEvaluationRef("cogni.echo.v0")).not.toThrow();
+    expect(() =>
+      validateEvaluationRef("cogni.work_item_links.v0")
+    ).not.toThrow();
+    expect(() => validateEvaluationRef("cogni.ai_scores.v1")).not.toThrow();
+    expect(() => validateEvaluationRef("x.y.v99")).not.toThrow();
   });
 
   it("rejects empty string", () => {
-    expect(() => validateArtifactRef("")).toThrow("Invalid artifactRef");
+    expect(() => validateEvaluationRef("")).toThrow("Invalid evaluationRef");
   });
 
   it("rejects unnamespaced ref", () => {
-    expect(() => validateArtifactRef("echo")).toThrow("Invalid artifactRef");
+    expect(() => validateEvaluationRef("echo")).toThrow(
+      "Invalid evaluationRef"
+    );
   });
 
   it("rejects ref without version", () => {
-    expect(() => validateArtifactRef("cogni.echo")).toThrow(
-      "Invalid artifactRef"
+    expect(() => validateEvaluationRef("cogni.echo")).toThrow(
+      "Invalid evaluationRef"
     );
   });
 
   it("rejects uppercase", () => {
-    expect(() => validateArtifactRef("Cogni.Echo.v0")).toThrow(
-      "Invalid artifactRef"
+    expect(() => validateEvaluationRef("Cogni.Echo.v0")).toThrow(
+      "Invalid evaluationRef"
     );
   });
 
   it("rejects version without number", () => {
-    expect(() => validateArtifactRef("cogni.echo.v")).toThrow(
-      "Invalid artifactRef"
+    expect(() => validateEvaluationRef("cogni.echo.v")).toThrow(
+      "Invalid evaluationRef"
     );
   });
 });
 
-// ── validateArtifactEnvelope ────────────────────────────────────
+// ── validateEvaluationEnvelope ────────────────────────────────────
 
-describe("validateArtifactEnvelope", () => {
+describe("validateEvaluationEnvelope", () => {
   const hash64 = "0123456789abcdef".repeat(4);
 
   const validParams = {
-    artifactRef: "cogni.echo.v0",
+    evaluationRef: "cogni.echo.v0",
     algoRef: "echo-v0",
     inputsHash: hash64,
     payloadHash: hash64,
@@ -70,30 +74,30 @@ describe("validateArtifactEnvelope", () => {
   };
 
   it("accepts valid envelope", () => {
-    expect(() => validateArtifactEnvelope(validParams)).not.toThrow();
+    expect(() => validateEvaluationEnvelope(validParams)).not.toThrow();
   });
 
   it("rejects empty algoRef", () => {
     expect(() =>
-      validateArtifactEnvelope({ ...validParams, algoRef: "" })
+      validateEvaluationEnvelope({ ...validParams, algoRef: "" })
     ).toThrow("Invalid algoRef");
   });
 
   it("rejects whitespace-only algoRef", () => {
     expect(() =>
-      validateArtifactEnvelope({ ...validParams, algoRef: "   " })
+      validateEvaluationEnvelope({ ...validParams, algoRef: "   " })
     ).toThrow("Invalid algoRef");
   });
 
   it("rejects non-hex inputsHash", () => {
     expect(() =>
-      validateArtifactEnvelope({ ...validParams, inputsHash: "not-a-hash" })
+      validateEvaluationEnvelope({ ...validParams, inputsHash: "not-a-hash" })
     ).toThrow("Invalid inputsHash");
   });
 
   it("rejects uppercase hex in payloadHash", () => {
     expect(() =>
-      validateArtifactEnvelope({
+      validateEvaluationEnvelope({
         ...validParams,
         payloadHash: "A".repeat(64),
       })
@@ -102,7 +106,7 @@ describe("validateArtifactEnvelope", () => {
 
   it("rejects null payloadJson", () => {
     expect(() =>
-      validateArtifactEnvelope({
+      validateEvaluationEnvelope({
         ...validParams,
         payloadJson: null as unknown as Record<string, unknown>,
       })
@@ -111,7 +115,7 @@ describe("validateArtifactEnvelope", () => {
 
   it("rejects array payloadJson", () => {
     expect(() =>
-      validateArtifactEnvelope({
+      validateEvaluationEnvelope({
         ...validParams,
         payloadJson: [] as unknown as Record<string, unknown>,
       })
@@ -125,9 +129,9 @@ describe("computeEnricherInputsHash", () => {
   it("produces deterministic hash for same inputs", async () => {
     const params = {
       epochId: 1n,
-      events: [
-        { eventId: "ev1", eventPayloadHash: "hash1" },
-        { eventId: "ev2", eventPayloadHash: "hash2" },
+      receipts: [
+        { receiptId: "ev1", receiptPayloadHash: "hash1" },
+        { receiptId: "ev2", receiptPayloadHash: "hash2" },
       ],
     };
 
@@ -137,32 +141,32 @@ describe("computeEnricherInputsHash", () => {
     expect(hash1).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it("sorts by eventId — different order same hash", async () => {
+  it("sorts by receiptId — different order same hash", async () => {
     const hash1 = await computeEnricherInputsHash({
       epochId: 1n,
-      events: [
-        { eventId: "b", eventPayloadHash: "h2" },
-        { eventId: "a", eventPayloadHash: "h1" },
+      receipts: [
+        { receiptId: "b", receiptPayloadHash: "h2" },
+        { receiptId: "a", receiptPayloadHash: "h1" },
       ],
     });
     const hash2 = await computeEnricherInputsHash({
       epochId: 1n,
-      events: [
-        { eventId: "a", eventPayloadHash: "h1" },
-        { eventId: "b", eventPayloadHash: "h2" },
+      receipts: [
+        { receiptId: "a", receiptPayloadHash: "h1" },
+        { receiptId: "b", receiptPayloadHash: "h2" },
       ],
     });
     expect(hash1).toBe(hash2);
   });
 
-  it("different events produce different hash", async () => {
+  it("different receipts produce different hash", async () => {
     const hash1 = await computeEnricherInputsHash({
       epochId: 1n,
-      events: [{ eventId: "a", eventPayloadHash: "h1" }],
+      receipts: [{ receiptId: "a", receiptPayloadHash: "h1" }],
     });
     const hash2 = await computeEnricherInputsHash({
       epochId: 1n,
-      events: [{ eventId: "a", eventPayloadHash: "h2" }],
+      receipts: [{ receiptId: "a", receiptPayloadHash: "h2" }],
     });
     expect(hash1).not.toBe(hash2);
   });
@@ -170,7 +174,7 @@ describe("computeEnricherInputsHash", () => {
   it("includes extensions in hash", async () => {
     const base = {
       epochId: 1n,
-      events: [{ eventId: "a", eventPayloadHash: "h1" }],
+      receipts: [{ receiptId: "a", receiptPayloadHash: "h1" }],
     };
     const hashWithout = await computeEnricherInputsHash(base);
     const hashWith = await computeEnricherInputsHash({
@@ -180,10 +184,10 @@ describe("computeEnricherInputsHash", () => {
     expect(hashWithout).not.toBe(hashWith);
   });
 
-  it("handles empty events array", async () => {
+  it("handles empty receipts array", async () => {
     const hash = await computeEnricherInputsHash({
       epochId: 1n,
-      events: [],
+      receipts: [],
     });
     expect(hash).toMatch(/^[a-f0-9]{64}$/);
   });
