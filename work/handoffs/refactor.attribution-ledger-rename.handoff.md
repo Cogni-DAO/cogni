@@ -2,11 +2,12 @@
 id: refactor.attribution-ledger-rename.handoff
 type: handoff
 work_item_id: refactor.ledger-renaming
-status: active
+status: needs_merge
+pr: https://github.com/Cogni-DAO/node-template/pull/494
 created: 2026-02-28
 updated: 2026-02-28
 branch: refactor/attribution-ledger
-last_commit: 79028f0d
+last_commit: ea695186
 ---
 
 # Handoff: Rename Epoch Ledger → Attribution Ledger
@@ -21,30 +22,15 @@ last_commit: 79028f0d
 
 ## Current State
 
-**Phases 1–6 are committed** across 3 clean commits. `pnpm check` passes. `pnpm check:docs` passes.
+**All 7 phases complete** across 6 commits. `pnpm check` and `pnpm check:docs` pass. PR #494 open to `staging`.
 
 | Commit     | Phase | Scope                                                                                                          |
 | ---------- | ----- | -------------------------------------------------------------------------------------------------------------- |
 | `56f468e7` | 1-3   | Spec update, package rename (`@cogni/ledger-core` → `@cogni/attribution-ledger`), all type renames (100 files) |
 | `ada73e4b` | 4-5   | File/dir renames (`git mv`), route dirs, test file renames, all import paths (53 files)                        |
 | `79028f0d` | 6     | Additive migration 0018: `ALTER TABLE epoch_statements RENAME COLUMN payouts_json TO statement_items_json`     |
-
-**Phase 7 is NOT done** — AGENTS.md updates and JSDoc `Module:`/`Links:` header cleanup in ~60 source files.
-
-### Phase 7 remaining work
-
-1. **AGENTS.md files** (~9 files) — stale type names and file references:
-   - `packages/attribution-ledger/AGENTS.md` — heavily stale, still says "ledger-core" with old type names throughout
-   - `packages/db-client/AGENTS.md` — references `ActivityLedgerStore` (→ `AttributionStore`)
-   - `services/scheduler-worker/AGENTS.md` — references `createLedgerActivities()` (→ `createAttributionActivities()`)
-   - `src/app/api/v1/attribution/AGENTS.md`, `src/app/api/v1/public/attribution/AGENTS.md`, `src/core/AGENTS.md`, `src/features/governance/AGENTS.md`, `packages/ingestion-core/AGENTS.md`, `packages/db-schema/AGENTS.md`
-
-2. **JSDoc doc headers** (~50 source files) — `Module:` and `Links:` lines reference old paths:
-   - `packages/ledger-core/` → `packages/attribution-ledger/`
-   - `docs/spec/epoch-ledger.md` → `docs/spec/attribution-ledger.md`
-   - `drizzle-ledger.adapter` → `drizzle-attribution.adapter`
-   - `@app/api/v1/ledger/` → `@app/api/v1/attribution/`
-   - `contracts/ledger.` → `contracts/attribution.`
+| `45a8a403` | 7     | JSDoc `Module:`/`Links:` headers + AGENTS.md content updates (76 files)                                        |
+| `ea695186` | 7     | Two missed doc headers (adapter + schema)                                                                      |
 
 ## Decisions Made
 
@@ -57,16 +43,13 @@ last_commit: 79028f0d
 
 ## Next Actions
 
-- [ ] Update ~9 AGENTS.md files with current type/function names
-- [ ] Update ~50 JSDoc `Module:` and `Links:` headers in source files (sed replacements)
-- [ ] Run `pnpm check` and `pnpm check:docs` — must both pass
-- [ ] Create PR to `staging`
+- [x] All phases complete
+- [ ] Merge PR #494 to `staging`
+- [ ] Run `pnpm db:migrate` in deployed environment to apply migration 0018
 
-## Risks / Gotchas
+## Notes
 
-- `packages/attribution-ledger/AGENTS.md` needs a near-complete rewrite — it still describes the pre-rename public surface
-- Archive handoffs and work items in `work/` contain historical `ledger-core` references — leave them as-is
-- The `~/.claude/plans/sunny-singing-balloon.md` plan file has the full type rename map if you need reference
+- Archive handoffs and work items in `work/` contain historical `ledger-core` references — left as-is (historical record)
 - Migration 0017 already contained the 4 DB triggers from the plan's Phase 6 — only the column rename was new in 0018
 
 ## Pointers
