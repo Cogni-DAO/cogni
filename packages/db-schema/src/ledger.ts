@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/db-schema/ledger`
  * Purpose: Three-layer immutable epoch ledger schema for auditable activity-based credit payouts.
- * Scope: Defines all ledger tables (epochs, activity_events, activity_curation, epoch_allocations, source_cursors, epoch_pool_components, payout_statements, statement_signatures). Does not contain queries, business logic, or I/O.
+ * Scope: Defines all ledger tables (epochs, activity_events, activity_curation, epoch_allocations, epoch_artifacts, source_cursors, epoch_pool_components, payout_statements, statement_signatures). Does not contain queries, business logic, or I/O.
  * Invariants:
  * - All credit/unit columns use BIGINT (ALL_MATH_BIGINT).
  * - Layer 1 (activity_events, epoch_pool_components) are append-only (DB triggers in migration).

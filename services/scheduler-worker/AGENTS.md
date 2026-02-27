@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-23
+- **Last reviewed:** 2026-02-27
 - **Status:** draft
 
 ## Purpose
@@ -79,7 +79,7 @@ src/
 
 ## Responsibilities
 
-- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow, execute scheduler activities (validateGrant, executeGraph, updateRun, createRun) and ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertEvents, saveCursor, curateAndResolve, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), handle SIGTERM/SIGINT
+- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow, execute scheduler activities (validateGrant, executeGraph, updateRun, createRun), ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertEvents, saveCursor, curateAndResolve, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), and enrichment activities (enrichEpochDraft, buildFinalArtifacts), handle SIGTERM/SIGINT
 - This directory **does not**: Import from src/, create/modify/delete schedules (CRUD is authority), define port interfaces (those live in packages)
 
 ## Usage

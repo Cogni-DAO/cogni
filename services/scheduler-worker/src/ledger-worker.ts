@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/ledger-worker`
- * Purpose: Temporal Worker for the ledger-tasks queue — epoch collection workflows.
- * Scope: Creates Temporal Worker with ledger activities and CollectEpochWorkflow. Does not contain business logic.
+ * Purpose: Temporal Worker for the ledger-tasks queue — epoch collection and enrichment workflows.
+ * Scope: Creates Temporal Worker with ledger + enrichment activities and CollectEpochWorkflow. Does not contain business logic.
  * Invariants:
  *   - Separate task queue (ledger-tasks) from scheduler-tasks
  *   - All dependencies injected via LedgerContainer from bootstrap/container.ts

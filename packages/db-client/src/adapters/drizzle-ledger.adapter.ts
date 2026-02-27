@@ -15,6 +15,7 @@
  * - ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations updates proposed_units/activity_count only; never touches final_units.
  * - POOL_LOCKED_AT_REVIEW: insertPoolComponent rejects inserts when epoch status != 'open'.
  * - CONFIG_LOCKED_AT_REVIEW: closeIngestion pins allocationAlgoRef + weightConfigHash.
+ * - ARTIFACT_FINAL_ATOMIC: closeIngestionWithArtifacts inserts locked artifacts + sets artifacts_hash + transitions epoch in one transaction.
  * Side-effects: IO (database operations)
  * Links: docs/spec/epoch-ledger.md, packages/ledger-core/src/store.ts
  * @public

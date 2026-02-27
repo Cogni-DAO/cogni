@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-23
+- **Last reviewed:** 2026-02-27
 - **Status:** draft
 
 ## Purpose
 
-Pure domain logic for the epoch ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, payout computation (BIGINT, largest-remainder), hashing (allocation sets, weight configs), versioned allocation algorithm framework, pool estimation, port interface (`ActivityLedgerStore`), and domain error classes.
+Pure domain logic for the epoch ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, payout computation (BIGINT, largest-remainder), hashing (allocation sets, weight configs, artifacts), versioned allocation algorithm framework, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, port interface (`ActivityLedgerStore`), and domain error classes.
 
 ## Pointers
 
@@ -61,6 +61,13 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
   - `validatePoolComponentId()` — V0 allowlist validation
   - `EpochNotOpenError`, `EpochAlreadyFinalizedError`, `PoolComponentMissingError` — Domain errors with type guards
   - `buildCanonicalMessage()`, `computeApproverSetHash()` — EIP-191 signing helpers (pure, zero runtime deps)
+  - `computeArtifactsHash()` — SHA-256 of sorted locked artifact tuples
+  - `validateArtifactRef()`, `validateArtifactEnvelope()` — Artifact metadata/hash validation (pure)
+  - `computeEnricherInputsHash()` — Deterministic inputs hash for enrichers (base shape + extensions)
+  - `createValidatedLedgerStore()` — Wraps `ActivityLedgerStore` with envelope validation on artifact writes
+  - `extractWorkItemIds()` — Regex extraction of work-item IDs from event metadata
+  - `WORK_ITEM_LINKS_ARTIFACT_REF`, `WORK_ITEM_LINKER_ALGO_REF` — Namespaced constants for work-item-linker enricher
+  - `UpsertArtifactParams`, `CuratedEventWithMetadata`, `LedgerEpochArtifact`, `CloseIngestionWithArtifactsParams` — Artifact-related types
 - **CLI:** none
 - **Env/Config keys:** none
 
@@ -68,11 +75,11 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
 
 - **Uses ports:** none
 - **Implements ports:** none
-- **Defines ports:** `ActivityLedgerStore` (implemented by `DrizzleLedgerAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), and atomic finalization (`finalizeEpochAtomic`).
+- **Defines ports:** `ActivityLedgerStore` (implemented by `DrizzleLedgerAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), artifact lifecycle (`upsertDraftArtifact`, `closeIngestionWithArtifacts`, `getArtifactsForEpoch`, `getArtifact`, `getCuratedEventsWithMetadata`), and atomic finalization (`finalizeEpochAtomic`).
 
 ## Responsibilities
 
-- This directory **does**: Define ledger domain types, port interface, compute deterministic payouts, compute allocation set/config hashes, versioned allocation algorithm dispatch, pool estimation, define domain errors
+- This directory **does**: Define ledger domain types, port interface, compute deterministic payouts, compute allocation set/config/artifact hashes, versioned allocation algorithm dispatch, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, define domain errors
 - This directory **does not**: Perform I/O, access databases, import from `src/` or `services/`
 
 ## Usage

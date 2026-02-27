@@ -3,7 +3,13 @@
 
 /**
  * Module: `@cogni/scheduler-worker/tests/enrichment-activities.test`
- * Purpose: Unit tests for enrichment activity functions (echo enricher).
+ * Purpose: Verifies enrichEpochDraft and buildFinalArtifacts activity behavior — payload structure, idempotency, and Temporal wire-format safety.
+ * Scope: Covers echo enricher (cogni.echo.v0) with mocked store. Does NOT cover workflow orchestration or DB integration.
+ * Invariants:
+ * - ENRICHER_IDEMPOTENT: Same events produce same hashes across draft and locked runs.
+ * - BIGINT_WIRE_SAFE: buildFinalArtifacts output survives JSON.stringify (no BigInt in wire format).
+ * Side-effects: none (mocked store)
+ * Links: services/scheduler-worker/src/activities/enrichment.ts
  * @internal
  */
 

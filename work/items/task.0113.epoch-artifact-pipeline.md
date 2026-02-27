@@ -2,7 +2,7 @@
 id: task.0113
 type: task
 title: "Epoch artifact pipeline + hello-world GitHub enricher"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 3

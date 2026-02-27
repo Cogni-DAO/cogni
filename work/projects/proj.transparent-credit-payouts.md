@@ -10,7 +10,7 @@ summary: "Epoch-based ledger where source adapters collect contribution activity
 outcome: "A third party can recompute the payout table exactly from stored activity events + pool components + weight config. All activity is attributed to contributors via identity bindings. Admin finalizes once per epoch."
 assignees: derekg1729
 created: 2026-02-17
-updated: 2026-02-24
+updated: 2026-02-27
 labels: [governance, transparency, payments, web3]
 ---
 
@@ -134,7 +134,7 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 
 | Deliverable                                           | Status      | Est | Work Item             |
 | ----------------------------------------------------- | ----------- | --- | --------------------- |
-| Epoch artifact pipeline + work-item enricher          | Not Started | 3   | task.0113             |
+| Epoch artifact pipeline + echo enricher               | In Review   | 3   | task.0113             |
 | work-item-budget-v0 allocation algorithm              | Not Started | 2   | task.0114             |
 | Retroactive backfill for finalized epochs             | Not Started | 2   | task.0110 (not filed) |
 | Pending credit for unresolved identities              | Not Started | 2   | task.0111 (not filed) |

@@ -14,6 +14,7 @@
  *   - Per IDENTITY_BEST_EFFORT: Unresolved events get userId=null in curation rows, never dropped
  *   - Per ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations never touches admin-set final_units
  *   - Per CONFIG_LOCKED_AT_REVIEW: autoCloseIngestion pins allocationAlgoRef + weightConfigHash
+ *   - Per ARTIFACT_FINAL_ATOMIC: autoCloseIngestion passes artifacts to closeIngestionWithArtifacts for atomic write
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
  * Side-effects: IO (database, GitHub API, viem EIP-191 verification)
  * Links: docs/spec/epoch-ledger.md, docs/spec/temporal-patterns.md
