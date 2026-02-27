@@ -14,12 +14,12 @@
 import type { InsertReceiptParams } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { ActivityEvent } from "@cogni/ingestion-core";
-import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
   TEST_NODE_ID,
   TEST_SCOPE_ID,
   TEST_WEIGHT_CONFIG,
-} from "@tests/_fixtures/ledger/seed-ledger";
+} from "@tests/_fixtures/attribution/seed-attribution";
+import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { seedTestActor } from "@tests/_fixtures/stack/seed";
 import { beforeAll, describe, expect, it } from "vitest";
 import { GitHubSourceAdapter } from "../../../services/scheduler-worker/src/adapters/ingestion/github";

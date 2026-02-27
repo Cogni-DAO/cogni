@@ -41,7 +41,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 async function fetchHistory(): Promise<EpochHistoryData> {
   const { epochs } = await fetchJson<{ epochs: EpochDto[] }>(
-    "/api/v1/ledger/epochs?limit=200"
+    "/api/v1/attribution/epochs?limit=200"
   );
   const finalized = epochs.filter((e) => e.status === "finalized");
 
@@ -50,10 +50,10 @@ async function fetchHistory(): Promise<EpochHistoryData> {
       limit(async () => {
         const [statementRes, activityRes] = await Promise.all([
           fetchJson<{ statement: StatementDto | null }>(
-            `/api/v1/ledger/epochs/${epoch.id}/statement`
+            `/api/v1/attribution/epochs/${epoch.id}/statement`
           ),
           fetchJson<{ events: ApiIngestionReceipt[] }>(
-            `/api/v1/ledger/epochs/${epoch.id}/activity?limit=200`
+            `/api/v1/attribution/epochs/${epoch.id}/activity?limit=200`
           ),
         ]);
 

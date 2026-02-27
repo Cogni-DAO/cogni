@@ -13,12 +13,11 @@
 
 export * from "@cogni/db-schema/ai";
 export * from "@cogni/db-schema/ai-threads";
-
+export * from "@cogni/db-schema/attribution";
 // Domain slices
 export * from "@cogni/db-schema/auth";
 export * from "@cogni/db-schema/billing";
 export * from "@cogni/db-schema/identity";
-export * from "@cogni/db-schema/ledger";
 export * from "@cogni/db-schema/profile";
 // Core FK targets (users, billingAccounts)
 export * from "@cogni/db-schema/refs";

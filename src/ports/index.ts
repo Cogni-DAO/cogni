@@ -79,6 +79,17 @@ export type {
   LangfuseSpanHandle,
   RecordInvocationParams,
 } from "./ai-telemetry.port";
+export type {
+  AttributionAllocation,
+  AttributionEpoch,
+  AttributionPoolComponent,
+  AttributionSelection,
+  AttributionStatement,
+  AttributionStatementSignature,
+  AttributionStore,
+  IngestionCursor,
+  IngestionReceipt,
+} from "./attribution-store.port";
 export type { Clock } from "./clock.port";
 export type {
   GovernanceRun,
@@ -93,17 +104,6 @@ export type {
   GraphRunResult,
   PreflightCreditCheckFn,
 } from "./graph-executor.port";
-export type {
-  AttributionAllocation,
-  AttributionEpoch,
-  AttributionPoolComponent,
-  AttributionSelection,
-  AttributionStatement,
-  AttributionStatementSignature,
-  AttributionStore,
-  IngestionCursor,
-  IngestionReceipt,
-} from "./ledger-store.port";
 // LlmError types re-exported for adapters (adapters can only import from ports)
 // Features should import directly from @/core
 export {

@@ -39,7 +39,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 async function fetchHoldings(): Promise<HoldingsData> {
   const { epochs } = await fetchJson<{ epochs: EpochDto[] }>(
-    "/api/v1/ledger/epochs?limit=200"
+    "/api/v1/attribution/epochs?limit=200"
   );
   const finalized = epochs.filter((e) => e.status === "finalized");
 
@@ -47,7 +47,7 @@ async function fetchHoldings(): Promise<HoldingsData> {
     finalized.map((e) =>
       limit(() =>
         fetchJson<{ statement: StatementDto | null }>(
-          `/api/v1/ledger/epochs/${e.id}/statement`
+          `/api/v1/attribution/epochs/${e.id}/statement`
         ).then((r) => r.statement)
       )
     )

@@ -33,6 +33,27 @@ export {
   ESTIMATED_USD_PER_1K_TOKENS,
   estimateTotalTokens,
 } from "./ai/token-estimation.server";
+// Ledger domain
+export type {
+  EpochStatus,
+  FinalizedAllocation,
+  StatementLineItem,
+} from "./attribution/public";
+export {
+  AllocationNotFoundError,
+  computeAllocationSetHash,
+  computeStatementItems,
+  EPOCH_STATUSES,
+  EpochAlreadyFinalizedError,
+  EpochNotFoundError,
+  EpochNotOpenError,
+  isAllocationNotFoundError,
+  isEpochAlreadyFinalizedError,
+  isEpochNotFoundError,
+  isEpochNotOpenError,
+  isPoolComponentMissingError,
+  PoolComponentMissingError,
+} from "./attribution/public";
 export {
   CREDITS_PER_USD,
   calculateLlmUserCharge,
@@ -57,27 +78,6 @@ export {
   pickDefaultModel,
   trimConversationHistory,
 } from "./chat/rules";
-// Ledger domain
-export type {
-  EpochStatus,
-  FinalizedAllocation,
-  StatementLineItem,
-} from "./ledger/public";
-export {
-  AllocationNotFoundError,
-  computeAllocationSetHash,
-  computeStatementItems,
-  EPOCH_STATUSES,
-  EpochAlreadyFinalizedError,
-  EpochNotFoundError,
-  EpochNotOpenError,
-  isAllocationNotFoundError,
-  isEpochAlreadyFinalizedError,
-  isEpochNotFoundError,
-  isEpochNotOpenError,
-  isPoolComponentMissingError,
-  PoolComponentMissingError,
-} from "./ledger/public";
 export type {
   ClientVisibleStatus,
   PaymentAttempt,

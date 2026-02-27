@@ -37,7 +37,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 async function fetchCurrentEpoch(): Promise<CurrentEpochData> {
   // 1. List all epochs, find the active one (prefer open, fall back to review)
   const { epochs } = await fetchJson<{ epochs: EpochDto[] }>(
-    "/api/v1/ledger/epochs?limit=200"
+    "/api/v1/attribution/epochs?limit=200"
   );
   const current =
     epochs.find((e) => e.status === "open") ??
@@ -47,10 +47,10 @@ async function fetchCurrentEpoch(): Promise<CurrentEpochData> {
   // 2. Fetch allocations + activity for this epoch
   const [allocationsRes, activityRes] = await Promise.all([
     fetchJson<{ allocations: AllocationDto[] }>(
-      `/api/v1/ledger/epochs/${current.id}/allocations`
+      `/api/v1/attribution/epochs/${current.id}/allocations`
     ),
     fetchJson<{ events: ApiIngestionReceipt[] }>(
-      `/api/v1/ledger/epochs/${current.id}/activity?limit=200`
+      `/api/v1/attribution/epochs/${current.id}/activity?limit=200`
     ),
   ]);
 

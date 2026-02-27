@@ -38,9 +38,9 @@
       "types": "./dist/identity.d.ts",
       "import": "./dist/identity.js"
     },
-    "./ledger": {
-      "types": "./dist/ledger.d.ts",
-      "import": "./dist/ledger.js"
+    "./attribution": {
+      "types": "./dist/attribution.d.ts",
+      "import": "./dist/attribution.js"
     },
     "./profile": {
       "types": "./dist/profile.d.ts",
