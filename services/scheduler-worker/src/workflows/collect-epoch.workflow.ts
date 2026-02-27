@@ -26,6 +26,7 @@ import {
   workflowInfo,
 } from "@temporalio/workflow";
 
+import type { EnrichmentActivities } from "../activities/enrichment.js";
 import type { LedgerActivities } from "../activities/ledger.js";
 
 // Proxy ledger activities with reasonable timeouts.
@@ -58,6 +59,17 @@ const { collectFromSource } = proxyActivities<LedgerActivities>({
     maximumAttempts: 3,
   },
 });
+
+const { enrichEpochDraft, buildFinalArtifacts } =
+  proxyActivities<EnrichmentActivities>({
+    startToCloseTimeout: "2 minutes",
+    retry: {
+      initialInterval: "2 seconds",
+      maximumInterval: "1 minute",
+      backoffCoefficient: 2,
+      maximumAttempts: 5,
+    },
+  });
 
 /** Schedule adapter wrapper (infra — extract .input immediately) */
 interface ScheduleActionPayload {
@@ -168,7 +180,10 @@ export async function CollectEpochWorkflow(
   // 5. Curate events and resolve identities (CURATION_AUTO_POPULATE)
   await curateAndResolve({ epochId: epoch.epochId });
 
-  // 6. Compute allocations (periodic — runs every collection pass)
+  // 6. Enrich epoch with draft artifacts (echo enricher)
+  await enrichEpochDraft({ epochId: epoch.epochId });
+
+  // 7. Compute allocations (periodic — runs every collection pass)
   const creditEstimateAlgo =
     Object.values(config.activitySources)[0]?.creditEstimateAlgo ??
     "cogni-v0.0";
@@ -178,7 +193,7 @@ export async function CollectEpochWorkflow(
     weightConfig: epoch.weightConfig,
   });
 
-  // 7. Ensure pool components (base_issuance from config, idempotent)
+  // 8. Ensure pool components (base_issuance from config, idempotent)
   if (config.baseIssuanceCredits) {
     await ensurePoolComponents({
       epochId: epoch.epochId,
@@ -186,9 +201,12 @@ export async function CollectEpochWorkflow(
     });
   }
 
-  // 8. Auto-close check: if now > periodEnd + gracePeriod → closeIngestion
+  // 9. Auto-close check: if now > periodEnd + gracePeriod → closeIngestion with artifacts
   if (config.approvers && config.approvers.length > 0) {
     const gracePeriodMs = config.autoCloseGracePeriodMs ?? 24 * 60 * 60 * 1000; // default 24h
+    const { artifacts, artifactsHash } = await buildFinalArtifacts({
+      epochId: epoch.epochId,
+    });
     await autoCloseIngestion({
       epochId: epoch.epochId,
       periodEnd: periodEndIso,
@@ -196,6 +214,8 @@ export async function CollectEpochWorkflow(
       weightConfig: epoch.weightConfig,
       creditEstimateAlgo,
       approvers: config.approvers,
+      artifacts,
+      artifactsHash,
     });
   }
 }

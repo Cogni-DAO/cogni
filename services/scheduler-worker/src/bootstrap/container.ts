@@ -19,6 +19,7 @@ import {
   DrizzleScheduleRunAdapter,
 } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
+import { createValidatedLedgerStore } from "@cogni/ledger-core";
 
 import {
   GitHubAppTokenProvider,
@@ -100,7 +101,9 @@ export function createLedgerContainer(
   const db = createServiceDbClient(config.DATABASE_URL);
   const ledgerLogger = logger.child?.({ component: "ledger" }) ?? logger;
 
-  const ledgerStore = new DrizzleLedgerAdapter(db, config.SCOPE_ID);
+  const ledgerStore = createValidatedLedgerStore(
+    new DrizzleLedgerAdapter(db, config.SCOPE_ID)
+  );
 
   // Build source adapters
   const adapters = new Map<string, SourceAdapter>();
