@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/public/ledger/epochs/[id]/allocations/route`
+ * Module: `@app/api/v1/public/attribution/epochs/[id]/allocations/route`
  * Purpose: Public HTTP endpoint for epoch allocations (finalized epochs only).
  * Scope: Public route using wrapPublicRoute(); returns proposed and final allocations for finalized epochs. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
- * Links: docs/spec/epoch-ledger.md, contracts/ledger.epoch-allocations.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.epoch-allocations.v1.contract
  * @public
  */
 

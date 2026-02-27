@@ -7,7 +7,7 @@
  * Scope: BigInt/Date → string conversion for JSON serialization. No business logic. Does not perform I/O or validation.
  * Invariants: ALL_MATH_BIGINT — all bigint values serialized as strings.
  * Side-effects: none
- * Links: packages/ledger-core/src/store.ts, contracts/ledger.*.v1.contract
+ * Links: packages/attribution-ledger/src/store.ts, contracts/attribution.*.v1.contract
  * @internal
  */
 

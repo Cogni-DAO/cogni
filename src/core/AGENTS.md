@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Pure domain logic with entities, rules, and business invariants. No I/O, time, or RNG dependencies. Includes account models, credit pricing calculations, chat message validation, AI utilities (system prompt, token estimation), payment attempt state machine for USDC credit top-ups, and epoch ledger domain (re-exported from `@cogni/attribution-ledger`).
+Pure domain logic with entities, rules, and business invariants. No I/O, time, or RNG dependencies. Includes account models, credit pricing calculations, chat message validation, AI utilities (system prompt, token estimation), payment attempt state machine for USDC credit top-ups, and attribution ledger domain (re-exported from `@cogni/attribution-ledger`).
 
 ## Pointers
 
@@ -50,7 +50,7 @@ Pure domain logic with entities, rules, and business invariants. No I/O, time, o
 - **Routes:** none
 - **CLI:** none
 - **Env/Config keys:** none
-- **Files considered API:** public.ts, payments/public.ts, billing/public.ts, chat/public.ts, accounts/public.ts, ledger/public.ts
+- **Files considered API:** public.ts, payments/public.ts, billing/public.ts, chat/public.ts, accounts/public.ts, attribution/public.ts
 
 ## Ports (optional)
 

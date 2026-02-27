@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@contracts/ledger.finalize-epoch.v1.contract`
+ * Module: `@contracts/attribution.finalize-epoch.v1.contract`
  * Purpose: Defines operation contract for the review → finalized epoch transition (sign-at-finalize V0).
  * Scope: Zod schemas and types for finalize-epoch wire format. Does not contain business logic.
  * Invariants:
@@ -11,7 +11,7 @@
  *   - WRITES_VIA_TEMPORAL: returns 202 + workflowId (async)
  *   - Contract remains stable; breaking changes require new version
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

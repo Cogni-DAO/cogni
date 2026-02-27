@@ -7,7 +7,7 @@
  * Scope: Pure types. Does not contain business logic or perform I/O.
  * Invariants: Mirrors epoch-ledger spec schema; all credit/unit fields are bigint (ALL_MATH_BIGINT).
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

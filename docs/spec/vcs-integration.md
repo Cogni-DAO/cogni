@@ -322,7 +322,7 @@ interface ActivityEventEnvelope {
 **Receiving endpoint (future):**
 
 ```
-POST /api/v1/ledger/events/ingest
+POST /api/v1/attribution/events/ingest
 Content-Type: application/json
 Authorization: Bearer <node-api-key>
 

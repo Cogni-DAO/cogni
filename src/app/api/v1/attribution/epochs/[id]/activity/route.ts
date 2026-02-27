@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/ledger/epochs/[id]/activity/route`
+ * Module: `@app/api/v1/attribution/epochs/[id]/activity/route`
  * Purpose: Authenticated HTTP endpoint for epoch ingestion receipts with selection join.
  * Scope: SIWE-protected route; exposes PII fields (platformUserId, platformLogin, etc.). Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, ACTIVITY_AUTHED.
  * Side-effects: IO (HTTP response, database read)
- * Links: docs/spec/epoch-ledger.md, contracts/ledger.epoch-activity.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.epoch-activity.v1.contract
  * @public
  */
 

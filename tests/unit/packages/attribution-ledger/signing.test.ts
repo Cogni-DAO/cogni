@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/packages/ledger-core/signing`
+ * Module: `@tests/unit/packages/attribution-ledger/signing`
  * Purpose: Unit tests for buildCanonicalMessage and computeApproverSetHash.
  * Scope: Asserts exact byte output, version header, newline format, and deterministic hashing. Does not test verification or viem integration.
  * Invariants: SIGNATURE_SCOPE_BOUND, APPROVERS_PINNED_AT_REVIEW.
  * Side-effects: none
- * Links: packages/ledger-core/src/signing.ts
+ * Links: packages/attribution-ledger/src/signing.ts
  * @internal
  */
 

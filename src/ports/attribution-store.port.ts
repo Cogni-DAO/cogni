@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@ports/ledger-store`
+ * Module: `@ports/attribution-store`
  * Purpose: Re-exports AttributionStore port and related types from @cogni/attribution-ledger.
  * Scope: Type re-exports only. Does not contain implementations.
  * Invariants: Named exports only, no runtime coupling.
  * Side-effects: none
- * Links: packages/ledger-core/src/store.ts, docs/spec/epoch-ledger.md
+ * Links: packages/attribution-ledger/src/store.ts, docs/spec/attribution-ledger.md
  * @public
  */
 

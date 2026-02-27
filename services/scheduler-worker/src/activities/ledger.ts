@@ -17,7 +17,7 @@
  *   - Per EVALUATION_FINAL_ATOMIC: autoCloseIngestion passes evaluations to closeIngestionWithEvaluations for atomic write
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
  * Side-effects: IO (database, GitHub API, viem EIP-191 verification)
- * Links: docs/spec/epoch-ledger.md, docs/spec/temporal-patterns.md
+ * Links: docs/spec/attribution-ledger.md, docs/spec/temporal-patterns.md
  * @internal
  */
 

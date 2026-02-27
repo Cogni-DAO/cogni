@@ -7,7 +7,7 @@
  * Scope: Tests canonicalJsonStringify determinism, BigInt handling, and computeArtifactsHash sorting. Does not test store or I/O.
  * Invariants: CANONICAL_JSON — sorted keys, no whitespace, BigInt as string.
  * Side-effects: none
- * Links: packages/ledger-core/src/hashing.ts
+ * Links: packages/attribution-ledger/src/hashing.ts
  * @internal
  */
 

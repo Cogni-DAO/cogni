@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@contracts/ledger.review-epoch.v1.contract`
+ * Module: `@contracts/attribution.review-epoch.v1.contract`
  * Purpose: Defines operation contract for the open → review epoch transition.
  * Scope: Zod schemas and types for review-epoch wire format. Does not contain business logic.
  * Invariants:
@@ -11,7 +11,7 @@
  *   - WRITE_ROUTES_APPROVER_GATED: requires wallet in ledger approvers
  *   - Contract remains stable; breaking changes require new version
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

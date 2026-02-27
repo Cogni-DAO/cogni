@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@contracts/ledger.list-epochs.v1.contract`
+ * Module: `@contracts/attribution.list-epochs.v1.contract`
  * Purpose: Defines operation contract for listing ledger epochs with pagination.
  * Scope: Zod schemas and types for epoch list wire format. Does not contain business logic.
  * Invariants:
@@ -10,7 +10,7 @@
  *   - Contract remains stable; breaking changes require new version
  *   - All consumers use z.infer types
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

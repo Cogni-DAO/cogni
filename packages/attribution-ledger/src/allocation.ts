@@ -10,7 +10,7 @@
  * - ALL_MATH_BIGINT: All weight and unit computation uses BigInt.
  * - WEIGHTS_VALIDATED: rejects floats, NaN, Infinity, unsafe integers.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

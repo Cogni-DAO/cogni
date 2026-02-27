@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@contracts/ledger.record-pool-component.v1.contract`
+ * Module: `@contracts/attribution.record-pool-component.v1.contract`
  * Purpose: Defines operation contract for recording a pool component on an epoch.
  * Scope: Zod schemas and types for pool component wire format. Does not contain business logic.
  * Invariants:
@@ -11,7 +11,7 @@
  *   - Contract remains stable; breaking changes require new version
  *   - All consumers use z.infer types
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

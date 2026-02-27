@@ -10,7 +10,7 @@
  * - Sum of payout amounts === poolTotalCredits (PAYOUT_DETERMINISTIC).
  * - Largest-remainder method distributes rounding residual.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md#payout-computation
+ * Links: docs/spec/attribution-ledger.md#statement-item-computation
  * @public
  */
 

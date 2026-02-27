@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/packages/ledger-core/pool`
+ * Module: `@tests/unit/packages/attribution-ledger/pool`
  * Purpose: Unit tests for estimatePoolComponentsV0 and validatePoolComponentId.
  * Scope: Asserts pool component estimation correctness and component ID validation. Does not test store or I/O.
  * Invariants: POOL_REPRODUCIBLE, ALL_MATH_BIGINT.
  * Side-effects: none
- * Links: packages/ledger-core/src/pool.ts
+ * Links: packages/attribution-ledger/src/pool.ts
  * @internal
  */
 

@@ -16,7 +16,7 @@
  * - EVALUATION_FINAL_ATOMIC: locked evaluation writes + artifacts_hash + epoch open→review in one transaction.
  * - STATEMENT_FROM_FINAL_ONLY: allocation for statements consumes only status='locked' evaluations.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

@@ -10,7 +10,7 @@
  * - APPROVERS_PINNED_AT_REVIEW: computeApproverSetHash produces a deterministic SHA-256 from sorted, lowercased addresses.
  * - Newline separator is always \n (no \r). Tests must assert exact byte output.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

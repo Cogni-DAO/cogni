@@ -14,7 +14,7 @@ Pure domain types, port interface, and helpers for activity ingestion source ada
 
 ## Pointers
 
-- [Epoch Ledger Spec](../../docs/spec/epoch-ledger.md)
+- [Attribution Ledger Spec](../../docs/spec/attribution-ledger.md)
 - [Packages Architecture](../../docs/spec/packages-architecture.md)
 
 ## Boundaries
@@ -81,7 +81,7 @@ pnpm --filter @cogni/ingestion-core build
 ## Change Protocol
 
 - Update this file when public exports change
-- Coordinate with epoch-ledger.md spec invariants
+- Coordinate with attribution-ledger.md spec invariants
 - Adapter implementations in services/scheduler-worker must match port interface
 
 ## Notes

@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/public/ledger/epochs/route`
+ * Module: `@app/api/v1/public/attribution/epochs/route`
  * Purpose: Public HTTP endpoint for listing closed (finalized) ledger epochs.
  * Scope: Public route using wrapPublicRoute(); only returns finalized epochs. Does not expose open/review epoch data.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
- * Links: docs/spec/epoch-ledger.md, contracts/ledger.list-epochs.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.list-epochs.v1.contract
  * @public
  */
 

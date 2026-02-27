@@ -1,4 +1,4 @@
-# ledger-core · AGENTS.md
+# attribution-ledger · AGENTS.md
 
 > Scope: this directory only. Keep ≤150 lines. Do not restate root policies.
 
@@ -10,11 +10,11 @@
 
 ## Purpose
 
-Pure domain logic for the epoch ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, payout computation (BIGINT, largest-remainder), hashing (allocation sets, weight configs, artifacts), versioned allocation algorithm framework, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, port interface (`ActivityLedgerStore`), and domain error classes.
+Pure domain logic for the attribution ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, statement item computation (BIGINT, largest-remainder), hashing (allocation sets, weight configs, artifacts), versioned allocation algorithm framework, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, port interface (`AttributionStore`), and domain error classes.
 
 ## Pointers
 
-- [Epoch Ledger Spec](../../docs/spec/epoch-ledger.md)
+- [Attribution Ledger Spec](../../docs/spec/attribution-ledger.md)
 - [Packages Architecture](../../docs/spec/packages-architecture.md)
 
 ## Boundaries
@@ -42,9 +42,9 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
 - **Exports:**
   - `EPOCH_STATUSES` — Enum array
   - `EpochStatus`, `FinalizedAllocation`, `StatementLineItem` — Domain types
-  - `ActivityLedgerStore` — Port interface for ledger persistence
-  - `AttributionEpoch`, `LedgerActivityEvent`, `LedgerCuration`, `AttributionAllocation`, `LedgerSourceCursor`, `AttributionPoolComponent`, `LedgerPayoutStatement`, `AttributionStatementSignature` — Read-side record types
-  - `InsertActivityEventParams`, `UpsertCurationParams`, `InsertCurationAutoParams`, `InsertAllocationParams`, `InsertPoolComponentParams`, `InsertPayoutStatementParams`, `InsertSignatureParams` — Write-side param types
+  - `AttributionStore` — Port interface for ledger persistence
+  - `AttributionEpoch`, `IngestionReceipt`, `AttributionAllocation`, `IngestionCursor`, `AttributionPoolComponent`, `AttributionStatement`, `AttributionStatementSignature` — Read-side record types
+  - `InsertReceiptParams`, `InsertAllocationParams`, `InsertPoolComponentParams`, `InsertStatementParams`, `InsertSignatureParams` — Write-side param types
   - `UncuratedEvent` — Event + hasExistingCuration flag for delta curation processing
   - `computeEpochWindowV1()` — Pure, deterministic epoch window computation (Monday-aligned UTC). Safe in Temporal workflow code.
   - `EpochWindow`, `EpochWindowParams` — Types for epoch window computation
@@ -64,7 +64,7 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
   - `computeArtifactsHash()` — SHA-256 of sorted locked artifact tuples
   - `validateArtifactRef()`, `validateArtifactEnvelope()` — Artifact metadata/hash validation (pure)
   - `computeEnricherInputsHash()` — Deterministic inputs hash for enrichers (base shape + extensions)
-  - `createValidatedAttributionStore()` — Wraps `ActivityLedgerStore` with envelope validation on artifact writes
+  - `createValidatedAttributionStore()` — Wraps `AttributionStore` with envelope validation on artifact writes
   - `extractWorkItemIds()` — Regex extraction of work-item IDs from event metadata
   - `WORK_ITEM_LINKS_ARTIFACT_REF`, `WORK_ITEM_LINKER_ALGO_REF` — Namespaced constants for work-item-linker enricher
   - `UpsertArtifactParams`, `CuratedEventWithMetadata`, `AttributionEpochArtifact`, `CloseIngestionWithArtifactsParams` — Artifact-related types
@@ -75,11 +75,11 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
 
 - **Uses ports:** none
 - **Implements ports:** none
-- **Defines ports:** `ActivityLedgerStore` (implemented by `DrizzleAttributionAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), artifact lifecycle (`upsertDraftArtifact`, `closeIngestionWithArtifacts`, `getArtifactsForEpoch`, `getArtifact`, `getCuratedEventsWithMetadata`), and atomic finalization (`finalizeEpochAtomic`).
+- **Defines ports:** `AttributionStore` (implemented by `DrizzleAttributionAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), artifact lifecycle (`upsertDraftArtifact`, `closeIngestionWithArtifacts`, `getArtifactsForEpoch`, `getArtifact`, `getCuratedEventsWithMetadata`), and atomic finalization (`finalizeEpochAtomic`).
 
 ## Responsibilities
 
-- This directory **does**: Define ledger domain types, port interface, compute deterministic payouts, compute allocation set/config/artifact hashes, versioned allocation algorithm dispatch, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, define domain errors
+- This directory **does**: Define ledger domain types, port interface, compute deterministic statement items, compute allocation set/config/artifact hashes, versioned allocation algorithm dispatch, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, define domain errors
 - This directory **does not**: Perform I/O, access databases, import from `src/` or `services/`
 
 ## Usage
@@ -93,7 +93,7 @@ pnpm --filter @cogni/attribution-ledger build
 
 - Pure functions and types only — no I/O, no framework deps
 - ALL_MATH_BIGINT: No floating point in credit/unit calculations
-- PAYOUT_DETERMINISTIC: Same inputs → byte-for-byte identical output
+- STATEMENT_DETERMINISTIC: Same inputs → byte-for-byte identical output
 
 ## Dependencies
 
@@ -103,10 +103,10 @@ pnpm --filter @cogni/attribution-ledger build
 ## Change Protocol
 
 - Update this file when public exports change
-- Coordinate with epoch-ledger.md spec invariants
+- Coordinate with attribution-ledger.md spec invariants
 
 ## Notes
 
-- `src/core/ledger/public.ts` re-exports from this package so app code uses `@/core/ledger` unchanged
+- `src/core/attribution/public.ts` re-exports from this package so app code uses `@/core/attribution` unchanged
 - Per PACKAGES_NO_SRC_IMPORTS: This package cannot import from `src/**`
 - Package isolation enables `scheduler-worker` to import domain logic without Next.js deps

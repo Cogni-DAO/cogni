@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@core/ledger/public`
- * Purpose: Re-exports from @cogni/attribution-ledger so app code uses @/core/ledger unchanged.
+ * Module: `@core/attribution/public`
+ * Purpose: Re-exports from @cogni/attribution-ledger so app code uses @/core/attribution unchanged.
  * Scope: Re-exports only. Does not define any logic.
  * Invariants: Only exports stable public interfaces and functions.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md, packages/ledger-core/
+ * Links: docs/spec/attribution-ledger.md, packages/attribution-ledger/
  * @public
  */
 

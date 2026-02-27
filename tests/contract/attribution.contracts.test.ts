@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/contract/ledger.contracts`
+ * Module: `@tests/contract/attribution.contracts`
  * Purpose: Validates ledger Zod schemas parse and reject correctly at the contract boundary.
  * Scope: Tests Zod schema compliance for ledger write contracts. Does not test API endpoint behavior.
  * Invariants: ALL_MATH_BIGINT — bigint input strings are parsed to bigint at the contract boundary.

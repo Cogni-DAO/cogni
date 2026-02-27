@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/core/ledger/rules`
+ * Module: `@tests/unit/core/attribution/rules`
  * Purpose: Unit tests for ledger payout computation with BIGINT arithmetic and largest-remainder rounding.
  * Scope: Pure business logic testing. Does not test external dependencies or I/O.
  * Invariants: ALL_MATH_BIGINT, PAYOUT_DETERMINISTIC — sum of payouts === poolTotalCredits.
  * Side-effects: none
- * Links: src/core/ledger/rules.ts, docs/spec/epoch-ledger.md#payout-computation
+ * Links: src/core/attribution/rules.ts, docs/spec/attribution-ledger.md#statement-item-computation
  * @public
  */
 

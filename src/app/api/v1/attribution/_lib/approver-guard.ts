@@ -7,7 +7,7 @@
  * Scope: Pure check against repo-spec config. No database or side effects. Does not perform database access.
  * Invariants: WRITE_ROUTES_APPROVER_GATED — all ledger write routes must call this before mutations.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md, .cogni/repo-spec.yaml
+ * Links: docs/spec/attribution-ledger.md, .cogni/repo-spec.yaml
  * @internal
  */
 

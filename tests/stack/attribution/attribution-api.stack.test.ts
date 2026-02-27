@@ -2,13 +2,13 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/stack/ledger/ledger-api.stack`
+ * Module: `@tests/stack/attribution/ledger-api.stack`
  * Purpose: Stack-level validation of public ledger API routes against a seeded closed epoch.
  * Scope: Tests 3 public read routes via HTTP fetch. Does not test auth-gated or write routes.
  * Invariants: PUBLIC_READS_CLOSED_ONLY, ALL_MATH_BIGINT, VALIDATE_IO, NODE_SCOPED.
  * Side-effects: IO (HTTP requests, database writes for seeding)
  * Notes: Seeds data using real node_id/scope_id from repo-spec since routes use getNodeId().
- * Links: src/app/api/v1/public/attribution/, src/contracts/ledger.*.v1.contract.ts
+ * Links: src/app/api/v1/public/attribution/, src/contracts/attribution.*.v1.contract.ts
  * @public
  */
 

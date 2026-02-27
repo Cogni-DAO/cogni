@@ -9,7 +9,7 @@
  * - ADAPTERS_NOT_IN_CORE: This file defines the PORT (interface), not implementations.
  * - All adapter deps (octokit, discord.js) live in the adapter, never in this package.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md#source-adapter-interface
+ * Links: docs/spec/attribution-ledger.md#source-adapter-interface
  * @public
  */
 

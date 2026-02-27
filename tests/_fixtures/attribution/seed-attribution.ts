@@ -7,7 +7,7 @@
  * Scope: Factory functions for ledger test data + composite seeders for common test scenarios. Does not contain test logic or assertions.
  * Invariants: All generated IDs are deterministic from inputs where possible.
  * Side-effects: none (pure data factories); composite seeders perform IO via store
- * Links: packages/ledger-core/src/store.ts, tests/component/db/drizzle-ledger.adapter.int.test.ts
+ * Links: packages/attribution-ledger/src/store.ts, tests/component/db/drizzle-attribution.adapter.int.test.ts
  * @internal
  */
 

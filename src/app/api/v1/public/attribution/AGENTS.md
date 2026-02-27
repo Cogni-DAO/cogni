@@ -1,4 +1,4 @@
-# public/ledger · AGENTS.md
+# public/attribution · AGENTS.md
 
 > Scope: this directory only. Keep ≤150 lines. Do not restate root policies.
 
@@ -10,12 +10,12 @@
 
 ## Purpose
 
-Public (unauthenticated) HTTP endpoints for finalized ledger data. Exposes closed-epoch lists, allocations, and payout statements to the community-ledger frontend without requiring a SIWE session.
+Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes closed-epoch lists, allocations, and epoch statements to the community-attribution frontend without requiring a SIWE session.
 
 ## Pointers
 
-- [Epoch Ledger Spec](../../../../../../docs/spec/epoch-ledger.md)
-- [Ledger Contracts](../../../../../contracts/ledger.list-epochs.v1.contract.ts)
+- [Attribution Ledger Spec](../../../../../../docs/spec/attribution-ledger.md)
+- [Attribution Contracts](../../../../../contracts/attribution.list-epochs.v1.contract.ts)
 
 ## Boundaries
 
@@ -31,9 +31,9 @@ Public (unauthenticated) HTTP endpoints for finalized ledger data. Exposes close
 
 - **Exports:** none (route handlers only)
 - **Routes:**
-  - `GET /api/v1/public/ledger/epochs` — list closed epochs (paginated)
-  - `GET /api/v1/public/ledger/epochs/[id]/allocations` — allocations for a closed epoch
-  - `GET /api/v1/public/ledger/epochs/[id]/statement` — payout statement (null if none)
+  - `GET /api/v1/public/attribution/epochs` — list closed epochs (paginated)
+  - `GET /api/v1/public/attribution/epochs/[id]/allocations` — allocations for a closed epoch
+  - `GET /api/v1/public/attribution/epochs/[id]/statement` — payout statement (null if none)
 - **CLI:** none
 - **Env/Config keys:** none
 - **Files considered API:** `epochs/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/statement/route.ts`
@@ -51,9 +51,9 @@ Public (unauthenticated) HTTP endpoints for finalized ledger data. Exposes close
 ## Usage
 
 ```bash
-curl http://localhost:3000/api/v1/public/ledger/epochs
-curl http://localhost:3000/api/v1/public/ledger/epochs/1/allocations
-curl http://localhost:3000/api/v1/public/ledger/epochs/1/statement
+curl http://localhost:3000/api/v1/public/attribution/epochs
+curl http://localhost:3000/api/v1/public/attribution/epochs/1/allocations
+curl http://localhost:3000/api/v1/public/attribution/epochs/1/statement
 ```
 
 ## Standards
@@ -64,7 +64,7 @@ curl http://localhost:3000/api/v1/public/ledger/epochs/1/statement
 
 ## Dependencies
 
-- **Internal:** `@/bootstrap/http` (wrapPublicRoute), `@/bootstrap/container`, `@/contracts/ledger.*.v1.contract`, `@/shared/config`
+- **Internal:** `@/bootstrap/http` (wrapPublicRoute), `@/bootstrap/container`, `@/contracts/attribution.*.v1.contract`, `@/shared/config`
 - **External:** `next/server`
 
 ## Change Protocol
@@ -74,5 +74,5 @@ curl http://localhost:3000/api/v1/public/ledger/epochs/1/statement
 
 ## Notes
 
-- `_lib/ledger-dto.ts` contains shared DTO mappers for BigInt/Date serialization; used by both public and auth routes.
+- `_lib/attribution-dto.ts` contains shared DTO mappers for BigInt/Date serialization; used by both public and auth routes.
 - `wrapPublicRoute` does not propagate TContext to handler — dynamic routes use `context as { params: Promise<{ id: string }> }` cast.

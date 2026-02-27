@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/core/ledger/hashing`
+ * Module: `@tests/unit/core/attribution/hashing`
  * Purpose: Unit tests for allocation set hashing.
  * Scope: Pure function testing. Does not test external dependencies or I/O.
  * Invariants: PAYOUT_DETERMINISTIC — same inputs → identical hash.
  * Side-effects: none
- * Links: packages/ledger-core/src/hashing.ts, docs/spec/epoch-ledger.md
+ * Links: packages/attribution-ledger/src/hashing.ts, docs/spec/attribution-ledger.md
  * @public
  */
 

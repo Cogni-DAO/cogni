@@ -168,7 +168,7 @@
   },
   "bootstrap": {
     "db": "createServiceDbClient(process.env.DATABASE_SERVICE_URL)",
-    "store": "new DrizzleLedgerAdapter(db, scopeId)",
+    "store": "new DrizzleAttributionAdapter(db, scopeId)",
     "nodeId": "getNodeId() from repo-spec.yaml",
     "scopeId": "getScopeId() from repo-spec.yaml",
     "weightConfig": {

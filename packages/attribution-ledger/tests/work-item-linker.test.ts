@@ -7,7 +7,7 @@
  * Scope: Tests extractWorkItemIds regex patterns and deduplication. Does not test I/O or store.
  * Invariants: Pattern matches (task|bug|spike|story).\d{4} with word boundaries.
  * Side-effects: none
- * Links: packages/ledger-core/src/enrichers/work-item-linker.ts
+ * Links: packages/attribution-ledger/src/enrichers/work-item-linker.ts
  * @internal
  */
 

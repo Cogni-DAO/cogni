@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/public/ledger/epochs/[id]/statement/route`
+ * Module: `@app/api/v1/public/attribution/epochs/[id]/statement/route`
  * Purpose: Public HTTP endpoint for epoch statement.
  * Scope: Public route using wrapPublicRoute(); returns epoch statement (null if none exists). Always 200. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
- * Links: docs/spec/epoch-ledger.md, contracts/ledger.epoch-statement.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.epoch-statement.v1.contract
  * @public
  */
 

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/stack/ledger/collect-epoch-workflow-id.stack.test`
+ * Module: `@tests/stack/attribution/collect-epoch-workflow-id.stack.test`
  * Purpose: Prove Temporal workflow-ID semantics for CollectEpochWorkflow allow multiple collection passes per epoch window.
  * Scope: Tests workflow start behavior only (not completion). Does not test workflow execution or activity logic.
  * Invariants:
@@ -10,7 +10,7 @@
  *   - Deterministic workflow IDs must either: (a) include run date, or (b) use ALLOW_DUPLICATE policy
  *   - This test documents the current behavior and will catch regressions on either approach
  * Side-effects: IO (Temporal gRPC)
- * Links: services/scheduler-worker/src/workflows/collect-epoch.workflow.ts, docs/spec/epoch-ledger.md
+ * Links: services/scheduler-worker/src/workflows/collect-epoch.workflow.ts, docs/spec/attribution-ledger.md
  * @internal
  */
 

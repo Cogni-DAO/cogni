@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/ledger/epochs/route`
+ * Module: `@app/api/v1/attribution/epochs/route`
  * Purpose: Authenticated HTTP endpoint for listing all ledger epochs (including open).
  * Scope: SIWE-protected route; returns all epochs for the current node. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, WRITE_ROUTES_AUTHED.
  * Side-effects: IO (HTTP response, database read)
- * Links: docs/spec/epoch-ledger.md, contracts/ledger.list-epochs.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.list-epochs.v1.contract
  * @public
  */
 

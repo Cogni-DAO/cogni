@@ -7,7 +7,7 @@
  * Scope: Proves GraphQL queries parse, all 3 streams produce ActivityEvent[], deterministic IDs, ledger round-trip. Does not test webhook handling.
  * Invariants: Requires GITHUB_REVIEW_APP_ID + GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64 in env. Skips gracefully if missing.
  * Side-effects: IO (GitHub GraphQL, testcontainers PostgreSQL)
- * Links: services/scheduler-worker/src/adapters/ingestion/github.ts, docs/spec/epoch-ledger.md
+ * Links: services/scheduler-worker/src/adapters/ingestion/github.ts, docs/spec/attribution-ledger.md
  * @internal
  */
 

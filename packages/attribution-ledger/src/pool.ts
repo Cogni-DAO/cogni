@@ -9,7 +9,7 @@
  * - POOL_REPRODUCIBLE: Each pool component stores algorithm_version + inputs_json + amount_credits. Pure function.
  * - ALL_MATH_BIGINT: All credit values use BigInt.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 

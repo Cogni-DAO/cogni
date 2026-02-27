@@ -7,7 +7,7 @@
  * Scope: Exercises createAttributionActivities pipeline with real DrizzleAttributionAdapter + GitHubSourceAdapter. Does not test Temporal workflow orchestration.
  * Invariants: Requires GITHUB_REVIEW_APP_ID + GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64 in env. Skips gracefully if missing.
  * Side-effects: IO (GitHub GraphQL, testcontainers PostgreSQL)
- * Links: services/scheduler-worker/src/activities/ledger.ts, docs/spec/epoch-ledger.md
+ * Links: services/scheduler-worker/src/activities/ledger.ts, docs/spec/attribution-ledger.md
  * @internal
  */
 

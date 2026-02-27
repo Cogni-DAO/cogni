@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/contract/app/ledger.epochs.[id].allocations`
+ * Module: `@tests/contract/app/attribution.epochs.[id].allocations`
  * Purpose: Contract test for public ledger epoch allocations endpoint.
  * Scope: Validates Zod output schema against representative data shapes. Does not test runtime behavior.
  * Invariants: ALL_MATH_BIGINT, PUBLIC_READS_CLOSED_ONLY.
  * Side-effects: none
- * Links: contracts/ledger.epoch-allocations.v1.contract
+ * Links: contracts/attribution.epoch-allocations.v1.contract
  * @public
  */
 

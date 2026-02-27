@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/ledger/epochs/[id]/allocations/route`
+ * Module: `@app/api/v1/attribution/epochs/[id]/allocations/route`
  * Purpose: SIWE + approver-gated endpoint for adjusting allocation final_units.
  * Scope: Auth-protected PATCH endpoint. Requires wallet in activity_ledger.approvers. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, WRITE_ROUTES_APPROVER_GATED.
  * Side-effects: IO (HTTP response, database write)
- * Links: docs/spec/epoch-ledger.md, contracts/ledger.update-allocations.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.update-allocations.v1.contract
  * @public
  */
 

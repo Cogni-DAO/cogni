@@ -1,4 +1,4 @@
-# ledger · AGENTS.md
+# attribution · AGENTS.md
 
 > Scope: this directory only. Keep ≤150 lines. Do not restate root policies.
 
@@ -10,12 +10,12 @@
 
 ## Purpose
 
-Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all epochs and PII-containing activity streams, plus approver-gated write mutations for allocation adjustments, pool components, epoch review transitions, and epoch finalization.
+Authenticated HTTP endpoints for attribution operations. SIWE-protected reads for all epochs and PII-containing activity streams, plus approver-gated write mutations for allocation adjustments, pool components, epoch review transitions, and epoch finalization.
 
 ## Pointers
 
-- [Epoch Ledger Spec](../../../../../docs/spec/epoch-ledger.md)
-- [Ledger Contracts](../../../../contracts/ledger.list-epochs.v1.contract.ts)
+- [Attribution Ledger Spec](../../../../../docs/spec/attribution-ledger.md)
+- [Attribution Contracts](../../../../contracts/attribution.list-epochs.v1.contract.ts)
 
 ## Boundaries
 
@@ -31,12 +31,12 @@ Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all
 
 - **Exports:** none (route handlers only)
 - **Routes:**
-  - `GET /api/v1/ledger/epochs` — list all epochs including open (SIWE auth)
-  - `GET /api/v1/ledger/epochs/[id]/activity` — ingestion receipts with selection join (SIWE auth, PII)
-  - `PATCH /api/v1/ledger/epochs/[id]/allocations` — adjust allocation final_units (SIWE + approver)
-  - `POST /api/v1/ledger/epochs/[id]/pool-components` — record pool component (SIWE + approver)
-  - `POST /api/v1/ledger/epochs/[id]/review` — close ingestion, transition open → review (SIWE + approver)
-  - `POST /api/v1/ledger/epochs/[id]/finalize` — sign + finalize epoch, returns 202 + workflowId (SIWE + approver, WRITES_VIA_TEMPORAL)
+  - `GET /api/v1/attribution/epochs` — list all epochs including open (SIWE auth)
+  - `GET /api/v1/attribution/epochs/[id]/activity` — ingestion receipts with selection join (SIWE auth, PII)
+  - `PATCH /api/v1/attribution/epochs/[id]/allocations` — adjust allocation final_units (SIWE + approver)
+  - `POST /api/v1/attribution/epochs/[id]/pool-components` — record pool component (SIWE + approver)
+  - `POST /api/v1/attribution/epochs/[id]/review` — close ingestion, transition open → review (SIWE + approver)
+  - `POST /api/v1/attribution/epochs/[id]/finalize` — sign + finalize epoch, returns 202 + workflowId (SIWE + approver, WRITES_VIA_TEMPORAL)
 - **CLI:** none
 - **Env/Config keys:** none
 - **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/finalize/route.ts`
@@ -55,11 +55,11 @@ Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all
 
 ```bash
 # Authenticated reads (require SIWE session cookie)
-curl -b session http://localhost:3000/api/v1/ledger/epochs
-curl -b session http://localhost:3000/api/v1/ledger/epochs/1/activity
+curl -b session http://localhost:3000/api/v1/attribution/epochs
+curl -b session http://localhost:3000/api/v1/attribution/epochs/1/activity
 
 # Approver-gated writes
-curl -X PATCH -b session http://localhost:3000/api/v1/ledger/epochs/1/allocations \
+curl -X PATCH -b session http://localhost:3000/api/v1/attribution/epochs/1/allocations \
   -d '{"adjustments":[{"userId":"...","finalUnits":"5000"}]}'
 ```
 
@@ -71,7 +71,7 @@ curl -X PATCH -b session http://localhost:3000/api/v1/ledger/epochs/1/allocation
 
 ## Dependencies
 
-- **Internal:** `@/bootstrap/http`, `@/bootstrap/container`, `@/contracts/ledger.*.v1.contract`, `@/shared/config`, `@/app/_lib/auth/session`
+- **Internal:** `@/bootstrap/http`, `@/bootstrap/container`, `@/contracts/attribution.*.v1.contract`, `@/shared/config`, `@/app/_lib/auth/session`
 - **External:** `next/server`
 
 ## Change Protocol
@@ -81,5 +81,5 @@ curl -X PATCH -b session http://localhost:3000/api/v1/ledger/epochs/1/allocation
 
 ## Notes
 
-- `_lib/approver-guard.ts` checks `sessionUser.walletAddress` against `getLedgerApprovers()`. Empty approvers list = all writes rejected.
+- `_lib/approver-guard.ts` checks `sessionUser.walletAddress` against `getAttributionApprovers()`. Empty approvers list = all writes rejected.
 - Approver list is cached at process level; changes require restart.

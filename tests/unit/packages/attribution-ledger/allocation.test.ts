@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/packages/ledger-core/allocation`
+ * Module: `@tests/unit/packages/attribution-ledger/allocation`
  * Purpose: Unit tests for computeProposedAllocations, validateWeightConfig, and deriveAllocationAlgoRef.
  * Scope: Asserts weight-sum-v0 algorithm correctness, deterministic ordering, weight overrides, empty inputs, and weight validation. Does not test store or I/O.
  * Invariants: ALLOCATION_ALGO_VERSIONED, ALL_MATH_BIGINT, WEIGHTS_VALIDATED.
  * Side-effects: none
- * Links: packages/ledger-core/src/allocation.ts
+ * Links: packages/attribution-ledger/src/allocation.ts
  * @internal
  */
 

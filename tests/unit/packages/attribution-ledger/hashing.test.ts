@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/packages/ledger-core/hashing`
+ * Module: `@tests/unit/packages/attribution-ledger/hashing`
  * Purpose: Unit tests for computeAllocationSetHash and computeWeightConfigHash.
  * Scope: Asserts determinism, canonical ordering, and hash stability. Does not test store or I/O.
  * Invariants: PAYOUT_DETERMINISTIC.
  * Side-effects: none
- * Links: packages/ledger-core/src/hashing.ts
+ * Links: packages/attribution-ledger/src/hashing.ts
  * @internal
  */
 

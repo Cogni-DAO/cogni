@@ -14,7 +14,7 @@
  * - Bot authors skipped (no databaseId on Bot/Mannequin actors).
  * - Rate limiting handled by @octokit/plugin-retry + @octokit/plugin-throttling.
  * Side-effects: HTTP (GitHub GraphQL API)
- * Links: docs/spec/epoch-ledger.md, docs/research/epoch-event-ingestion-pipeline.md
+ * Links: docs/spec/attribution-ledger.md, docs/research/epoch-event-ingestion-pipeline.md
  * @internal
  */
 

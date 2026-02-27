@@ -7,7 +7,7 @@
  * Scope: Tests validation rules for evaluation refs and envelopes. Does not test store or I/O.
  * Invariants: EVALUATION_REF_NAMESPACED, CANONICAL_JSON
  * Side-effects: none
- * Links: packages/ledger-core/src/artifact-envelope.ts
+ * Links: packages/attribution-ledger/src/artifact-envelope.ts
  * @internal
  */
 

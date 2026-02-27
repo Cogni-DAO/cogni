@@ -48,7 +48,7 @@ Drizzle ORM table definitions for all database domains. Provides type-safe schem
   - `@cogni/db-schema/ai` - AI-related tables
   - `@cogni/db-schema/ai-threads` - Thread persistence table (UIMessage[] JSONB, RLS, optimistic concurrency)
   - `@cogni/db-schema/identity` - Identity binding tables (`userBindings`, `identityEvents`)
-  - `@cogni/db-schema/ledger` - Three-layer epoch ledger tables (`epochs`, `activityEvents`, `activityCuration`, `epochAllocations`, `sourceCursors`, `epochPoolComponents`, `payoutStatements`, `statementSignatures`)
+  - `@cogni/db-schema/attribution` - Attribution pipeline tables (`epochs`, `ingestionReceipts`, `epochSelections`, `epochAllocations`, `ingestionCursors`, `epochPoolComponents`, `epochStatements`, `statementSignatures`)
 - **CLI:** none
 - **Env/Config keys:** none
 - **Files considered API:** All `src/*.ts` files via package.json exports
