@@ -3,47 +3,47 @@
 
 /**
  * Module: `@cogni/ledger-core/artifact-envelope`
- * Purpose: Metadata and hashing validation for artifact envelopes. Does NOT standardize payload shape — payload is per-plugin and opaque to the pipeline.
+ * Purpose: Metadata and hashing validation for evaluation envelopes. Does NOT standardize payload shape — payload is per-plugin and opaque to the pipeline.
  * Scope: Pure validation functions. Does not perform I/O.
  * Invariants:
- * - ARTIFACT_REF_NAMESPACED: artifactRef must match `namespace.name.vN` pattern.
+ * - EVALUATION_REF_NAMESPACED: evaluationRef must match `namespace.name.vN` pattern.
  * - HASH_HEX_64: inputsHash and payloadHash must be 64-char lowercase hex (SHA-256).
  * Side-effects: none
  * Links: work/items/task.0113.epoch-artifact-pipeline.md
  * @public
  */
 
-const ARTIFACT_REF_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-z0-9_]*\.v\d+$/;
+const EVALUATION_REF_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-z0-9_]*\.v\d+$/;
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 
 /**
- * Validate that an artifactRef matches the required namespaced pattern.
+ * Validate that an evaluationRef matches the required namespaced pattern.
  * Pattern: `namespace.name.vN` (e.g. `cogni.echo.v0`, `cogni.work_item_links.v0`)
  *
- * @throws Error if artifactRef is invalid
+ * @throws Error if evaluationRef is invalid
  */
-export function validateArtifactRef(artifactRef: string): void {
-  if (!artifactRef || !ARTIFACT_REF_PATTERN.test(artifactRef)) {
+export function validateEvaluationRef(evaluationRef: string): void {
+  if (!evaluationRef || !EVALUATION_REF_PATTERN.test(evaluationRef)) {
     throw new Error(
-      `Invalid artifactRef '${artifactRef}': must match pattern 'namespace.name.vN' (e.g. 'cogni.echo.v0')`
+      `Invalid evaluationRef '${evaluationRef}': must match pattern 'namespace.name.vN' (e.g. 'cogni.echo.v0')`
     );
   }
 }
 
 /**
- * Validate an artifact envelope's metadata and hashes.
+ * Validate an evaluation envelope's metadata and hashes.
  * Does NOT validate payload shape — that is per-plugin.
  *
  * @throws Error if any field is invalid
  */
-export function validateArtifactEnvelope(params: {
-  artifactRef: string;
+export function validateEvaluationEnvelope(params: {
+  evaluationRef: string;
   algoRef: string;
   inputsHash: string;
   payloadHash: string;
   payloadJson: Record<string, unknown>;
 }): void {
-  validateArtifactRef(params.artifactRef);
+  validateEvaluationRef(params.evaluationRef);
 
   if (!params.algoRef || params.algoRef.trim().length === 0) {
     throw new Error("Invalid algoRef: must be a non-empty string");

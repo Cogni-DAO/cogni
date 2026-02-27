@@ -13,17 +13,17 @@
 
 // Allocation algorithm framework (pure, deterministic)
 export {
-  type CuratedEventForAllocation,
   computeProposedAllocations,
   deriveAllocationAlgoRef,
   type ProposedAllocation,
+  type SelectedReceiptForAllocation,
   validateWeightConfig,
 } from "./allocation";
 
-// Artifact envelope validation
+// Evaluation envelope validation
 export {
-  validateArtifactEnvelope,
-  validateArtifactRef,
+  validateEvaluationEnvelope,
+  validateEvaluationRef,
 } from "./artifact-envelope";
 
 // Enricher inputs hash
@@ -99,27 +99,27 @@ export {
 
 // Store port interface + types
 export type {
-  ActivityLedgerStore,
-  CloseIngestionWithArtifactsParams,
-  CuratedEventWithMetadata,
-  InsertActivityEventParams,
+  CloseIngestionWithEvaluationsParams,
+  EpochLedgerStore,
   InsertAllocationParams,
-  InsertCurationAutoParams,
-  InsertPayoutStatementParams,
+  InsertEpochPayoutParams,
+  InsertIngestionReceiptParams,
+  InsertPayoutSignatureParams,
   InsertPoolComponentParams,
-  InsertSignatureParams,
-  LedgerActivityEvent,
+  InsertSelectionAutoParams,
   LedgerAllocation,
-  LedgerCuration,
   LedgerEpoch,
-  LedgerEpochArtifact,
-  LedgerPayoutStatement,
+  LedgerEpochEvaluation,
+  LedgerEpochPayout,
+  LedgerIngestionCursor,
+  LedgerIngestionReceipt,
+  LedgerPayoutSignature,
   LedgerPoolComponent,
-  LedgerSourceCursor,
-  LedgerStatementSignature,
-  UncuratedEvent,
-  UpsertArtifactParams,
-  UpsertCurationParams,
+  LedgerSelection,
+  SelectedReceiptWithMetadata,
+  UnselectedReceipt,
+  UpsertEvaluationParams,
+  UpsertSelectionParams,
 } from "./store";
 
 // Validated store wrapper
