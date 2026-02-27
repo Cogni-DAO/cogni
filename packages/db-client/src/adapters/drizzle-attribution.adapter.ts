@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/db-client/adapters/drizzle-ledger`
+ * Module: `@cogni/db-client/adapters/drizzle-attribution`
  * Purpose: Drizzle ORM implementation of AttributionStore port.
  * Scope: Single adapter shared by app (via container.ts) and scheduler-worker. Implements all AttributionStore methods including identity resolution via user_bindings (cross-domain). Does not contain domain logic or define port interfaces.
  * Invariants:
@@ -17,7 +17,7 @@
  * - CONFIG_LOCKED_AT_REVIEW: closeIngestion pins allocationAlgoRef + weightConfigHash.
  * - EVALUATION_FINAL_ATOMIC: closeIngestionWithEvaluations inserts locked evaluations + sets artifacts_hash + transitions epoch in one transaction.
  * Side-effects: IO (database operations)
- * Links: docs/spec/epoch-ledger.md, packages/ledger-core/src/store.ts
+ * Links: docs/spec/attribution-ledger.md, packages/attribution-ledger/src/store.ts
  * @public
  */
 

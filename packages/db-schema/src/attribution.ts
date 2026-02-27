@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/db-schema/ledger`
+ * Module: `@cogni/db-schema/attribution`
  * Purpose: Five-stage epoch ledger schema for auditable activity-based credit distribution.
  * Scope: Defines all ledger tables (epochs, ingestion_receipts, epoch_selection, epoch_allocations, epoch_evaluations, ingestion_cursors, epoch_pool_components, epoch_statements, epoch_statement_signatures). Does not contain queries, business logic, or I/O.
  * Invariants:
@@ -17,7 +17,7 @@
  * - EVALUATION_FINAL_ATOMIC: locked evaluation writes + artifacts_hash + epoch open→review in one transaction (enforced in store).
  * - No RLS in V0 — worker uses service-role connection.
  * Side-effects: none (schema definitions only)
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @public
  */
 
