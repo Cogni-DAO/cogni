@@ -197,14 +197,14 @@ describe("Public ledger API routes", () => {
       }
       expect(parsed.data.statement.epochId).toBe(epochId);
       expect(parsed.data.statement.poolTotalCredits).toBe("10000");
-      expect(parsed.data.statement.payouts).toHaveLength(2);
+      expect(parsed.data.statement.items).toHaveLength(2);
 
-      // Verify payout line structure
-      const payout = parsed.data.statement.payouts[0];
-      expect(payout).toHaveProperty("user_id");
-      expect(payout).toHaveProperty("total_units");
-      expect(payout).toHaveProperty("share");
-      expect(payout).toHaveProperty("amount_credits");
+      // Verify statement line-item structure
+      const item = parsed.data.statement.items[0];
+      expect(item).toHaveProperty("user_id");
+      expect(item).toHaveProperty("total_units");
+      expect(item).toHaveProperty("share");
+      expect(item).toHaveProperty("amount_credits");
     });
 
     it("returns 404 for non-existent epoch", async () => {
