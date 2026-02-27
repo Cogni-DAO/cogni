@@ -58,7 +58,7 @@ export async function sha256OfCanonicalJson(value: unknown): Promise<string> {
 
 /**
  * Compute artifacts_hash for an epoch from locked artifact records.
- * SHA-256 of sorted (artifact_type, algo_ref, inputs_hash, payload_hash) tuples.
+ * SHA-256 of sorted (artifact_ref, algo_ref, inputs_hash, payload_hash) tuples.
  * Only locked artifacts contribute. Deterministic for same inputs.
  *
  * @param artifacts - Array of locked artifact records
@@ -66,17 +66,17 @@ export async function sha256OfCanonicalJson(value: unknown): Promise<string> {
  */
 export async function computeArtifactsHash(
   artifacts: ReadonlyArray<{
-    readonly artifactType: string;
+    readonly artifactRef: string;
     readonly algoRef: string;
     readonly inputsHash: string;
     readonly payloadHash: string;
   }>
 ): Promise<string> {
   const sorted = [...artifacts].sort((a, b) =>
-    a.artifactType.localeCompare(b.artifactType)
+    a.artifactRef.localeCompare(b.artifactRef)
   );
   const canonical = canonicalJsonStringify(
-    sorted.map((a) => [a.artifactType, a.algoRef, a.inputsHash, a.payloadHash])
+    sorted.map((a) => [a.artifactRef, a.algoRef, a.inputsHash, a.payloadHash])
   );
   return sha256Hex(canonical);
 }

@@ -215,7 +215,7 @@ function toEpochArtifact(
     id: row.id,
     nodeId: row.nodeId,
     epochId: row.epochId,
-    artifactType: row.artifactType,
+    artifactRef: row.artifactRef,
     status: row.status as "draft" | "locked",
     algoRef: row.algoRef,
     inputsHash: row.inputsHash,
@@ -448,7 +448,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
           .values({
             nodeId: artifact.nodeId,
             epochId: artifact.epochId,
-            artifactType: artifact.artifactType,
+            artifactRef: artifact.artifactRef,
             status: "locked",
             algoRef: artifact.algoRef,
             inputsHash: artifact.inputsHash,
@@ -458,7 +458,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
           .onConflictDoNothing({
             target: [
               epochArtifacts.epochId,
-              epochArtifacts.artifactType,
+              epochArtifacts.artifactRef,
               epochArtifacts.status,
             ],
           });
@@ -509,7 +509,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       .values({
         nodeId: params.nodeId,
         epochId: params.epochId,
-        artifactType: params.artifactType,
+        artifactRef: params.artifactRef,
         status: "draft",
         algoRef: params.algoRef,
         inputsHash: params.inputsHash,
@@ -519,7 +519,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
       .onConflictDoUpdate({
         target: [
           epochArtifacts.epochId,
-          epochArtifacts.artifactType,
+          epochArtifacts.artifactRef,
           epochArtifacts.status,
         ],
         set: {
@@ -548,13 +548,13 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 
   async getArtifact(
     epochId: bigint,
-    artifactType: string,
+    artifactRef: string,
     status?: "draft" | "locked"
   ): Promise<LedgerEpochArtifact | null> {
     await this.resolveEpochScoped(epochId);
     const conditions = [
       eq(epochArtifacts.epochId, epochId),
-      eq(epochArtifacts.artifactType, artifactType),
+      eq(epochArtifacts.artifactRef, artifactRef),
     ];
     if (status) conditions.push(eq(epochArtifacts.status, status));
     const rows = await this.db

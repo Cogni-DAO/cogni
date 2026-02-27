@@ -139,7 +139,7 @@ export interface LedgerEpochArtifact {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly artifactType: string;
+  readonly artifactRef: string;
   readonly status: "draft" | "locked";
   readonly algoRef: string;
   readonly inputsHash: string;
@@ -231,7 +231,7 @@ export interface InsertSignatureParams {
 export interface UpsertArtifactParams {
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly artifactType: string;
+  readonly artifactRef: string;
   readonly status: "draft" | "locked";
   readonly algoRef: string;
   readonly inputsHash: string;
@@ -316,17 +316,17 @@ export interface ActivityLedgerStore {
   ): Promise<LedgerEpoch>;
 
   // Artifacts
-  /** Upsert draft artifact — overwrites on (epoch_id, artifact_type, status='draft'). */
+  /** Upsert draft artifact — overwrites on (epoch_id, artifact_ref, status='draft'). */
   upsertDraftArtifact(params: UpsertArtifactParams): Promise<void>;
   /** Get all artifacts for an epoch, optionally filtered by status. */
   getArtifactsForEpoch(
     epochId: bigint,
     status?: "draft" | "locked"
   ): Promise<LedgerEpochArtifact[]>;
-  /** Get single artifact by type and optional status. */
+  /** Get single artifact by ref and optional status. */
   getArtifact(
     epochId: bigint,
-    artifactType: string,
+    artifactRef: string,
     status?: "draft" | "locked"
   ): Promise<LedgerEpochArtifact | null>;
   /** Get curated events with raw metadata and payload hash for enricher consumption. */

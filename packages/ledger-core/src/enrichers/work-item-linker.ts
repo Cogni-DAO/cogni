@@ -87,8 +87,8 @@ export function extractWorkItemIds(
   return links;
 }
 
-/** Namespaced artifact type for the work-item linker. */
-export const WORK_ITEM_LINKS_ARTIFACT_TYPE = "cogni.work_item_links.v0";
+/** Namespaced artifact ref for the work-item linker. */
+export const WORK_ITEM_LINKS_ARTIFACT_REF = "cogni.work_item_links.v0";
 
 /** Algorithm ref for the work-item linker enricher. */
 export const WORK_ITEM_LINKER_ALGO_REF = "work-item-linker-v0";

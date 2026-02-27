@@ -1991,8 +1991,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "artifact_type": {
-          "name": "artifact_type",
+        "artifact_ref": {
+          "name": "artifact_ref",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -2043,8 +2043,8 @@
         }
       },
       "indexes": {
-        "epoch_artifacts_type_status_unique": {
-          "name": "epoch_artifacts_type_status_unique",
+        "epoch_artifacts_ref_status_unique": {
+          "name": "epoch_artifacts_ref_status_unique",
           "columns": [
             {
               "expression": "epoch_id",
@@ -2053,7 +2053,7 @@
               "nulls": "last"
             },
             {
-              "expression": "artifact_type",
+              "expression": "artifact_ref",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

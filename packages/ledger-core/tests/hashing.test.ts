@@ -68,16 +68,16 @@ describe("sha256OfCanonicalJson", () => {
 });
 
 describe("computeArtifactsHash", () => {
-  it("produces deterministic hash sorted by artifactType", async () => {
+  it("produces deterministic hash sorted by artifactRef", async () => {
     const artifacts = [
       {
-        artifactType: "cogni.work_item_links.v0",
+        artifactRef: "cogni.work_item_links.v0",
         algoRef: "work-item-linker-v0",
         inputsHash: "hash1",
         payloadHash: "hash2",
       },
       {
-        artifactType: "cogni.ai_scores.v0",
+        artifactRef: "cogni.ai_scores.v0",
         algoRef: "ai-scorer-v0",
         inputsHash: "hash3",
         payloadHash: "hash4",
@@ -93,7 +93,7 @@ describe("computeArtifactsHash", () => {
   it("returns different hash for different inputs", async () => {
     const hash1 = await computeArtifactsHash([
       {
-        artifactType: "a",
+        artifactRef: "a",
         algoRef: "b",
         inputsHash: "c",
         payloadHash: "d",
@@ -101,7 +101,7 @@ describe("computeArtifactsHash", () => {
     ]);
     const hash2 = await computeArtifactsHash([
       {
-        artifactType: "a",
+        artifactRef: "a",
         algoRef: "b",
         inputsHash: "c",
         payloadHash: "e",

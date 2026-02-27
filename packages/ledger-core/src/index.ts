@@ -19,11 +19,21 @@ export {
   type ProposedAllocation,
   validateWeightConfig,
 } from "./allocation";
+
+// Artifact envelope validation
+export {
+  validateArtifactEnvelope,
+  validateArtifactRef,
+} from "./artifact-envelope";
+
+// Enricher inputs hash
+export { computeEnricherInputsHash } from "./enricher-inputs";
+
 // Enrichers (pure functions)
 export {
   extractWorkItemIds,
   WORK_ITEM_LINKER_ALGO_REF,
-  WORK_ITEM_LINKS_ARTIFACT_TYPE,
+  WORK_ITEM_LINKS_ARTIFACT_REF,
   type WorkItemLink,
   type WorkItemLinksPayload,
   type WorkItemSnapshot,
@@ -111,3 +121,6 @@ export type {
   UpsertArtifactParams,
   UpsertCurationParams,
 } from "./store";
+
+// Validated store wrapper
+export { createValidatedLedgerStore } from "./validated-store";

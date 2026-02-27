@@ -12,7 +12,7 @@
  * - ONE_OPEN_EPOCH: partial unique index on epochs WHERE status = 'open', scoped to (node_id, scope_id).
  * - EPOCH_WINDOW_UNIQUE: unique(node_id, scope_id, period_start, period_end).
  * - NODE_SCOPED: all ledger tables include node_id.
- * - ARTIFACT_UNIQUE_PER_TYPE_STATUS: UNIQUE(epoch_id, artifact_type, status) — one draft + one locked per type.
+ * - ARTIFACT_UNIQUE_PER_REF_STATUS: UNIQUE(epoch_id, artifact_ref, status) — one draft + one locked per ref.
  * - ARTIFACT_FINAL_ATOMIC: locked artifact writes + artifacts_hash + epoch open→review in one transaction (enforced in store).
  * - No RLS in V0 — worker uses service-role connection.
  * Side-effects: none (schema definitions only)
@@ -334,7 +334,7 @@ export const payoutStatements = pgTable(
 
 /**
  * Epoch artifacts — typed enrichment outputs for scoring pipeline.
- * ARTIFACT_UNIQUE_PER_TYPE_STATUS: one draft + one locked row per artifact_type per epoch.
+ * ARTIFACT_UNIQUE_PER_REF_STATUS: one draft + one locked row per artifact_ref per epoch.
  * Drafts overwritten via UPSERT each collection pass. Locked artifacts written once at closeIngestion.
  */
 export const epochArtifacts = pgTable(
@@ -345,7 +345,7 @@ export const epochArtifacts = pgTable(
     epochId: bigint("epoch_id", { mode: "bigint" })
       .notNull()
       .references(() => epochs.id),
-    artifactType: text("artifact_type").notNull(),
+    artifactRef: text("artifact_ref").notNull(),
     status: text("status").notNull().default("draft"),
     algoRef: text("algo_ref").notNull(),
     inputsHash: text("inputs_hash").notNull(),
@@ -357,9 +357,9 @@ export const epochArtifacts = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("epoch_artifacts_type_status_unique").on(
+    uniqueIndex("epoch_artifacts_ref_status_unique").on(
       table.epochId,
-      table.artifactType,
+      table.artifactRef,
       table.status
     ),
     check(
