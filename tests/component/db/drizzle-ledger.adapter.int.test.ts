@@ -21,9 +21,12 @@ import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
   epochWindow,
   makeAllocation,
+  makeEvaluation,
   makeIngestionReceipt,
   makePoolComponent,
   makeSelection,
+  makeSelectionAuto,
+  OTHER_SCOPE_ID,
   TEST_NODE_ID,
   TEST_SCOPE_ID,
   TEST_WEIGHT_CONFIG,
@@ -1113,7 +1116,6 @@ describe("DrizzleLedgerAdapter (Component)", () => {
   // ── SCOPE_GATED_QUERIES ─────────────────────────────────────────
 
   describe("SCOPE_GATED_QUERIES", () => {
-    const OTHER_SCOPE_ID = "00000000-0000-4000-8000-000000000099";
     const otherScopeAdapter = new DrizzleLedgerAdapter(db, OTHER_SCOPE_ID);
     let scopeTestEpochId: bigint;
 
@@ -1234,6 +1236,301 @@ describe("DrizzleLedgerAdapter (Component)", () => {
       const result = await adapter.getEpoch(scopeTestEpochId);
       expect(result).not.toBeNull();
       expect(result?.scopeId).toBe(TEST_SCOPE_ID);
+    });
+  });
+
+  // ── Evaluations ───────────────────────────────────────────────
+
+  describe("upsertDraftEvaluation + reads", () => {
+    let evalEpochId: bigint;
+
+    beforeAll(async () => {
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(40),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      evalEpochId = epoch.id;
+    });
+
+    afterAll(async () => {
+      // Transition to review then finalized to free ONE_OPEN_EPOCH slot
+      await adapter.closeIngestion(
+        evalEpochId,
+        "test-approver-set-hash",
+        "weight-sum-v0",
+        "test-weight-config-hash"
+      );
+      await adapter.finalizeEpoch(evalEpochId, 0n);
+    });
+
+    it("upsertDraftEvaluation inserts and getEvaluation retrieves it", async () => {
+      const params = makeEvaluation({ epochId: evalEpochId });
+      await adapter.upsertDraftEvaluation(params);
+
+      const result = await adapter.getEvaluation(
+        evalEpochId,
+        "cogni.echo.v0",
+        "draft"
+      );
+      expect(result).not.toBeNull();
+      expect(result!.evaluationRef).toBe("cogni.echo.v0");
+      expect(result!.algoRef).toBe("echo-enricher-v0");
+      expect(result!.inputsHash).toBe("a".repeat(64));
+      expect(result!.payloadHash).toBe("b".repeat(64));
+      expect(result!.payloadJson).toEqual({ test: true });
+      expect(result!.status).toBe("draft");
+    });
+
+    it("upsertDraftEvaluation overwrites existing draft (same ref)", async () => {
+      const newHash = "c".repeat(64);
+      await adapter.upsertDraftEvaluation(
+        makeEvaluation({
+          epochId: evalEpochId,
+          payloadHash: newHash,
+          payloadJson: { updated: true },
+        })
+      );
+
+      const all = await adapter.getEvaluationsForEpoch(evalEpochId, "draft");
+      expect(all).toHaveLength(1);
+      expect(all[0]!.payloadHash).toBe(newHash);
+      expect(all[0]!.payloadJson).toEqual({ updated: true });
+    });
+
+    it("getEvaluation returns null for nonexistent ref", async () => {
+      const result = await adapter.getEvaluation(
+        evalEpochId,
+        "cogni.nonexistent.v0"
+      );
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("closeIngestionWithEvaluations", () => {
+    let closeEpochId: bigint;
+    const evalRef = "cogni.echo.v0";
+    const testArtifactsHash = "d".repeat(64);
+
+    beforeAll(async () => {
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(41),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      closeEpochId = epoch.id;
+
+      // Seed receipts + selections + allocations + pool (required for close)
+      const { periodStart, periodEnd } = epochWindow(41);
+      const mid = new Date((periodStart.getTime() + periodEnd.getTime()) / 2);
+
+      await adapter.insertIngestionReceipts([
+        makeIngestionReceipt({
+          receiptId: `eval-close-receipt-${closeEpochId}-1`,
+          nodeId: TEST_NODE_ID,
+          platformUserId: "gh-user-101",
+          platformLogin: "alice",
+          eventTime: mid,
+          retrievedAt: mid,
+        }),
+      ]);
+
+      await adapter.insertSelectionDoNothing([
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: closeEpochId,
+          receiptId: `eval-close-receipt-${closeEpochId}-1`,
+          userId: actor.user.id,
+          included: true,
+        }),
+      ]);
+
+      await adapter.insertAllocations([
+        makeAllocation({
+          nodeId: TEST_NODE_ID,
+          epochId: closeEpochId,
+          userId: actor.user.id,
+          proposedUnits: 1000n,
+          activityCount: 1,
+        }),
+      ]);
+
+      await adapter.insertPoolComponent(
+        makePoolComponent({
+          nodeId: TEST_NODE_ID,
+          epochId: closeEpochId,
+        })
+      );
+
+      // Insert a draft evaluation first (to test coexistence with locked)
+      await adapter.upsertDraftEvaluation(
+        makeEvaluation({ epochId: closeEpochId })
+      );
+    });
+
+    it("atomic close: inserts locked evaluations + sets artifactsHash + transitions to review", async () => {
+      const result = await adapter.closeIngestionWithEvaluations({
+        epochId: closeEpochId,
+        approverSetHash: "test-approver-set-hash",
+        allocationAlgoRef: "weight-sum-v0",
+        weightConfigHash: "test-weight-config-hash",
+        evaluations: [
+          makeEvaluation({ epochId: closeEpochId, status: "locked" }),
+        ],
+        artifactsHash: testArtifactsHash,
+      });
+
+      expect(result.status).toBe("review");
+      expect(result.artifactsHash).toBe(testArtifactsHash);
+
+      // Locked evaluation retrievable
+      const locked = await adapter.getEvaluation(
+        closeEpochId,
+        evalRef,
+        "locked"
+      );
+      expect(locked).not.toBeNull();
+      expect(locked!.status).toBe("locked");
+
+      // Draft still exists (coexistence)
+      const draft = await adapter.getEvaluation(closeEpochId, evalRef, "draft");
+      expect(draft).not.toBeNull();
+      expect(draft!.status).toBe("draft");
+
+      // getEvaluationsForEpoch returns both
+      const all = await adapter.getEvaluationsForEpoch(closeEpochId);
+      expect(all).toHaveLength(2);
+      const statuses = all.map((e) => e.status).sort();
+      expect(statuses).toEqual(["draft", "locked"]);
+    });
+
+    it("idempotent on already-reviewed epoch", async () => {
+      const result = await adapter.closeIngestionWithEvaluations({
+        epochId: closeEpochId,
+        approverSetHash: "test-approver-set-hash",
+        allocationAlgoRef: "weight-sum-v0",
+        weightConfigHash: "test-weight-config-hash",
+        evaluations: [
+          makeEvaluation({ epochId: closeEpochId, status: "locked" }),
+        ],
+        artifactsHash: testArtifactsHash,
+      });
+
+      expect(result.status).toBe("review");
+    });
+
+    it("throws EpochNotFoundError for wrong scope", async () => {
+      const wrongScopeAdapter = new DrizzleLedgerAdapter(db, OTHER_SCOPE_ID);
+      await expect(
+        wrongScopeAdapter.closeIngestionWithEvaluations({
+          epochId: closeEpochId,
+          approverSetHash: "test-approver-set-hash",
+          allocationAlgoRef: "weight-sum-v0",
+          weightConfigHash: "test-weight-config-hash",
+          evaluations: [],
+          artifactsHash: testArtifactsHash,
+        })
+      ).rejects.toThrow(EpochNotFoundError);
+    });
+  });
+
+  describe("getSelectedReceiptsWithMetadata", () => {
+    let metaEpochId: bigint;
+    let actorMeta: TestActor;
+
+    beforeAll(async () => {
+      actorMeta = await seedTestActor(db);
+      const epoch = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(42),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      metaEpochId = epoch.id;
+
+      const { periodStart, periodEnd } = epochWindow(42);
+      const mid = new Date((periodStart.getTime() + periodEnd.getTime()) / 2);
+
+      await adapter.insertIngestionReceipts([
+        makeIngestionReceipt({
+          receiptId: `meta-receipt-${metaEpochId}-1`,
+          nodeId: TEST_NODE_ID,
+          platformUserId: "gh-user-301",
+          platformLogin: "charlie",
+          metadata: {
+            body: "fixes task.0102",
+            branch: "feat/foo",
+            labels: ["governance"],
+          },
+          payloadHash: "meta-hash-1",
+          eventTime: mid,
+          retrievedAt: mid,
+        }),
+        makeIngestionReceipt({
+          receiptId: `meta-receipt-${metaEpochId}-2`,
+          nodeId: TEST_NODE_ID,
+          platformUserId: "gh-user-302",
+          platformLogin: "diana",
+          metadata: { body: "no work items here" },
+          payloadHash: "meta-hash-2",
+          eventTime: mid,
+          retrievedAt: mid,
+        }),
+      ]);
+
+      // Select with resolved user IDs
+      await adapter.insertSelectionDoNothing([
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: metaEpochId,
+          receiptId: `meta-receipt-${metaEpochId}-1`,
+          userId: actor.user.id,
+          included: true,
+        }),
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: metaEpochId,
+          receiptId: `meta-receipt-${metaEpochId}-2`,
+          userId: actorMeta.user.id,
+          included: true,
+        }),
+      ]);
+    });
+
+    afterAll(async () => {
+      await adapter.closeIngestion(
+        metaEpochId,
+        "test-approver-set-hash",
+        "weight-sum-v0",
+        "test-weight-config-hash"
+      );
+      await adapter.finalizeEpoch(metaEpochId, 0n);
+    });
+
+    it("returns metadata + payloadHash alongside selection fields", async () => {
+      const results =
+        await adapter.getSelectedReceiptsWithMetadata(metaEpochId);
+
+      expect(results).toHaveLength(2);
+
+      const first = results.find((r) => r.userId === actor.user.id);
+      expect(first).toBeDefined();
+      expect(first!.metadata).toEqual({
+        body: "fixes task.0102",
+        branch: "feat/foo",
+        labels: ["governance"],
+      });
+      expect(first!.payloadHash).toBe("meta-hash-1");
+      expect(first!.source).toBe("github");
+      expect(first!.eventType).toBe("pr_merged");
+      expect(first!.included).toBe(true);
+
+      const second = results.find((r) => r.userId === actorMeta.user.id);
+      expect(second).toBeDefined();
+      expect(second!.metadata).toEqual({ body: "no work items here" });
+      expect(second!.payloadHash).toBe("meta-hash-2");
     });
   });
 });

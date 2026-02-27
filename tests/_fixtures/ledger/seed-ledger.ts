@@ -21,6 +21,7 @@ import type {
   LedgerEpoch,
   LedgerEpochStatement,
   LedgerPoolComponent,
+  UpsertEvaluationParams,
   UpsertSelectionParams,
 } from "@cogni/ledger-core";
 
@@ -29,6 +30,9 @@ export const TEST_NODE_ID = "00000000-0000-4000-8000-000000000001";
 
 /** Stable test scope ID for ledger integration tests */
 export const TEST_SCOPE_ID = "00000000-0000-4000-8000-000000000002";
+
+/** Scope ID guaranteed to differ from TEST_SCOPE_ID, for cross-scope isolation tests */
+export const OTHER_SCOPE_ID = "00000000-0000-4000-8000-000000000099";
 
 /** Non-overlapping epoch window for test isolation. Default length = 7 days (V0 default). */
 export function epochWindow(
@@ -151,6 +155,22 @@ export function makeEpochStatement(
         amount_credits: "2000",
       },
     ],
+    ...overrides,
+  };
+}
+
+/** Build an evaluation upsert param with sensible defaults */
+export function makeEvaluation(
+  overrides: Partial<UpsertEvaluationParams> & { epochId: bigint }
+): UpsertEvaluationParams {
+  return {
+    nodeId: TEST_NODE_ID,
+    evaluationRef: "cogni.echo.v0",
+    status: "draft",
+    algoRef: "echo-enricher-v0",
+    inputsHash: "a".repeat(64),
+    payloadHash: "b".repeat(64),
+    payloadJson: { test: true },
     ...overrides,
   };
 }
