@@ -2,11 +2,12 @@
 id: refactor.ledger-renaming.handoff
 type: handoff
 work_item_id: refactor.ledger-renaming
-status: complete
+status: needs_merge
+pr: https://github.com/Cogni-DAO/node-template/pull/492
 created: 2026-02-27
 updated: 2026-02-27
 branch: refactor/ledger-renaming
-last_commit: d25399f2
+last_commit: ba06552b
 ---
 
 # Handoff: Ledger Pipeline Rename — Complete
