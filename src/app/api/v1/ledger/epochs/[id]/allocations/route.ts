@@ -46,7 +46,7 @@ export const GET = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
     const epoch = await store.getEpoch(epochId);
     if (!epoch) {
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
@@ -114,7 +114,7 @@ export const PATCH = wrapRouteHandlerWithLogging<{
 
       const input = updateAllocationsOperation.input.parse(body);
 
-      const store = getContainer().activityLedgerStore;
+      const store = getContainer().epochLedgerStore;
 
       // Verify epoch exists
       const epoch = await store.getEpoch(epochId);

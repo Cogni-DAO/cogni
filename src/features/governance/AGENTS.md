@@ -40,7 +40,7 @@ Governance feature slice — schedule sync, governance status dashboard, and epo
 - **Exports (hooks):** `useGovernanceStatus()`, `useCurrentEpoch()`, `useEpochHistory()`, `useHoldings()`
 - **Exports (components):** `ContributorCard`, `ContributionRow`, `EpochCard`, `EpochCountdown`, `HoldingCard`, `SourceBadge`
 - **Exports (lib):** `composeEpochView()`, `composeEpochViewFromStatement()`, `composeHoldings()`
-- **Exports (types):** `EpochView`, `EpochContributor`, `ActivityEvent`, `HoldingView`, `CurrentEpochData`, `EpochHistoryData`, `HoldingsData`
+- **Exports (types):** `EpochView`, `EpochContributor`, `IngestionReceipt`, `HoldingView`, `CurrentEpochData`, `EpochHistoryData`, `HoldingsData`
 - **Routes (app pages):** `/gov` (system), `/gov/epoch` (current), `/gov/history` (finalized), `/gov/holdings` (aggregated)
 - **Routes (API — in `src/app/api/v1/ledger/`):** `GET /epochs`, `GET /epochs/:id/allocations`, `GET /epochs/:id/statement`, `GET /epochs/:id/activity`
 - **CLI:** `pnpm governance:schedules:sync`, `pnpm db:seed`, `pnpm dev:setup`

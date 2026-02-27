@@ -8,16 +8,16 @@
  * Invariants:
  *   - ALL_MATH_BIGINT: credit/unit values stay as strings; Number() only for sorting/display derivation
  *   - Avatar/color are static placeholders (no profile system yet)
- *   - Events with curation.userId=null are counted in unresolvedCount/unresolvedActivities, not silently dropped
+ *   - Receipts with selection.userId=null are counted in unresolvedCount/unresolvedActivities, not silently dropped
  * Side-effects: none
  * Links: src/features/governance/types.ts
  * @public
  */
 
 import type {
-  ActivityEvent,
   EpochContributor,
   EpochView,
+  IngestionReceipt,
   UnresolvedActivity,
 } from "@/features/governance/types";
 
@@ -48,15 +48,15 @@ export interface AllocationDto {
   readonly activityCount: number;
 }
 
-/** Minimal activity event shape expected from the epoch-activity API. */
-export interface ApiActivityEvent {
-  readonly id: string;
+/** Minimal ingestion receipt shape expected from the epoch-activity API. */
+export interface ApiIngestionReceipt {
+  readonly receiptId: string;
   readonly source: string;
   readonly eventType: string;
   readonly platformLogin: string | null;
   readonly artifactUrl: string | null;
   readonly eventTime: string;
-  readonly curation: { readonly userId: string | null } | null;
+  readonly selection: { readonly userId: string | null } | null;
 }
 
 /** Minimal payout line shape from the epoch-statement API. */
@@ -74,16 +74,16 @@ export interface StatementDto {
 }
 
 /**
- * Partition events into resolved (grouped by userId) and unresolved (grouped by platformLogin+source).
+ * Partition receipts into resolved (grouped by userId) and unresolved (grouped by platformLogin+source).
  * Pure helper — no IO.
  */
-function partitionEvents(events: readonly ApiActivityEvent[]): {
-  eventsByUser: Map<string, ActivityEvent[]>;
+function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
+  receiptsByUser: Map<string, IngestionReceipt[]>;
   loginByUser: Map<string, string>;
   unresolvedCount: number;
   unresolvedActivities: UnresolvedActivity[];
 } {
-  const eventsByUser = new Map<string, ActivityEvent[]>();
+  const receiptsByUser = new Map<string, IngestionReceipt[]>();
   const loginByUser = new Map<string, string>();
   // Key: "source::platformLogin" → count
   const unresolvedMap = new Map<
@@ -92,39 +92,39 @@ function partitionEvents(events: readonly ApiActivityEvent[]): {
   >();
   let unresolvedCount = 0;
 
-  for (const ev of events) {
-    const resolvedUser = ev.curation?.userId;
+  for (const r of receipts) {
+    const resolvedUser = r.selection?.userId;
     if (!resolvedUser) {
       unresolvedCount++;
-      const key = `${ev.source}::${ev.platformLogin ?? "<unknown>"}`;
+      const key = `${r.source}::${r.platformLogin ?? "<unknown>"}`;
       const existing = unresolvedMap.get(key);
       if (existing) {
         existing.count++;
       } else {
         unresolvedMap.set(key, {
-          login: ev.platformLogin,
-          source: ev.source,
+          login: r.platformLogin,
+          source: r.source,
           count: 1,
         });
       }
       continue;
     }
-    const mapped: ActivityEvent = {
-      id: ev.id,
-      source: ev.source,
-      eventType: ev.eventType,
-      platformLogin: ev.platformLogin,
-      artifactUrl: ev.artifactUrl,
-      eventTime: ev.eventTime,
+    const mapped: IngestionReceipt = {
+      receiptId: r.receiptId,
+      source: r.source,
+      eventType: r.eventType,
+      platformLogin: r.platformLogin,
+      artifactUrl: r.artifactUrl,
+      eventTime: r.eventTime,
     };
-    const list = eventsByUser.get(resolvedUser);
+    const list = receiptsByUser.get(resolvedUser);
     if (list) {
       list.push(mapped);
     } else {
-      eventsByUser.set(resolvedUser, [mapped]);
+      receiptsByUser.set(resolvedUser, [mapped]);
     }
-    if (ev.platformLogin && !loginByUser.has(resolvedUser)) {
-      loginByUser.set(resolvedUser, ev.platformLogin);
+    if (r.platformLogin && !loginByUser.has(resolvedUser)) {
+      loginByUser.set(resolvedUser, r.platformLogin);
     }
   }
 
@@ -136,20 +136,20 @@ function partitionEvents(events: readonly ApiActivityEvent[]): {
     }))
     .sort((a, b) => b.eventCount - a.eventCount);
 
-  return { eventsByUser, loginByUser, unresolvedCount, unresolvedActivities };
+  return { receiptsByUser, loginByUser, unresolvedCount, unresolvedActivities };
 }
 
 /**
- * Compose an EpochView for a current (open/review) epoch from live allocations + activity.
+ * Compose an EpochView for a current (open/review) epoch from live allocations + receipts.
  * Uses mutable allocations as source of truth (appropriate for in-progress data).
  */
 export function composeEpochView(
   epoch: EpochDto,
   allocations: readonly AllocationDto[],
-  events: readonly ApiActivityEvent[]
+  receipts: readonly ApiIngestionReceipt[]
 ): EpochView {
-  const { eventsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
-    partitionEvents(events);
+  const { receiptsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
+    partitionReceipts(receipts);
 
   // Sum all proposed units for share calculation
   const totalProposed = allocations.reduce(
@@ -158,7 +158,7 @@ export function composeEpochView(
   );
 
   const contributors: EpochContributor[] = allocations.map((alloc) => {
-    const userEvents = eventsByUser.get(alloc.userId) ?? [];
+    const userReceipts = receiptsByUser.get(alloc.userId) ?? [];
     const login = loginByUser.get(alloc.userId) ?? null;
     const proposed = Number(alloc.proposedUnits);
     const share =
@@ -175,7 +175,7 @@ export function composeEpochView(
       finalUnits: alloc.finalUnits,
       creditShare: share,
       activityCount: alloc.activityCount,
-      activities: userEvents,
+      receipts: userReceipts,
     };
   });
 
@@ -203,13 +203,13 @@ export function composeEpochView(
 export function composeEpochViewFromStatement(
   epoch: EpochDto,
   statement: StatementDto,
-  events: readonly ApiActivityEvent[]
+  receipts: readonly ApiIngestionReceipt[]
 ): EpochView {
-  const { eventsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
-    partitionEvents(events);
+  const { receiptsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
+    partitionReceipts(receipts);
 
   const contributors: EpochContributor[] = statement.payouts.map((payout) => {
-    const userEvents = eventsByUser.get(payout.user_id) ?? [];
+    const userReceipts = receiptsByUser.get(payout.user_id) ?? [];
     const login = loginByUser.get(payout.user_id) ?? null;
     // share from statement is a decimal string (e.g. "0.35"); convert to percentage
     const share = Math.round(Number(payout.share) * 1000) / 10;
@@ -222,8 +222,8 @@ export function composeEpochViewFromStatement(
       proposedUnits: payout.total_units,
       finalUnits: payout.total_units,
       creditShare: share,
-      activityCount: userEvents.length,
-      activities: userEvents,
+      activityCount: userReceipts.length,
+      receipts: userReceipts,
     };
   });
 

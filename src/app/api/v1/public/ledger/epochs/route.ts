@@ -33,7 +33,7 @@ export const GET = wrapPublicRoute(
       offset: url.searchParams.get("offset") ?? undefined,
     });
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
     const allEpochs = await store.listEpochs(getNodeId());
     // PUBLIC_READS_FINALIZED_ONLY: only expose finalized epochs
     const finalizedEpochs = allEpochs.filter((e) => e.status === "finalized");

@@ -29,7 +29,7 @@ export const StatementSchema = z.object({
   allocationSetHash: z.string(),
   poolTotalCredits: z.string(),
   payouts: z.array(PayoutLineSchema),
-  supersedesStatementId: z.string().nullable(),
+  supersedesPayoutId: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
 

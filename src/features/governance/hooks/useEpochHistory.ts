@@ -16,7 +16,7 @@
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import pLimit from "p-limit";
 import type {
-  ApiActivityEvent,
+  ApiIngestionReceipt,
   EpochDto,
   StatementDto,
 } from "@/features/governance/lib/compose-epoch";
@@ -52,7 +52,7 @@ async function fetchHistory(): Promise<EpochHistoryData> {
           fetchJson<{ statement: StatementDto | null }>(
             `/api/v1/ledger/epochs/${epoch.id}/statement`
           ),
-          fetchJson<{ events: ApiActivityEvent[] }>(
+          fetchJson<{ events: ApiIngestionReceipt[] }>(
             `/api/v1/ledger/epochs/${epoch.id}/activity?limit=200`
           ),
         ]);

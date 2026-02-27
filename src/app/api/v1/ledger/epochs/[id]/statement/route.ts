@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/api/v1/ledger/epochs/[id]/statement/route`
- * Purpose: Authenticated HTTP endpoint for retrieving a payout statement for an epoch.
- * Scope: SIWE-protected GET endpoint. Returns statement or null if none exists. Does not contain business logic.
+ * Purpose: Authenticated HTTP endpoint for retrieving an epoch payout for an epoch.
+ * Scope: SIWE-protected GET endpoint. Returns payout or null if none exists. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO.
  * Side-effects: IO (HTTP response, database read)
  * Links: docs/spec/epoch-ledger.md, contracts/ledger.epoch-statement.v1.contract
@@ -13,7 +13,7 @@
 
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { toStatementDto } from "@/app/api/v1/public/ledger/_lib/ledger-dto";
+import { toPayoutDto } from "@/app/api/v1/public/ledger/_lib/ledger-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { epochStatementOperation } from "@/contracts/ledger.epoch-statement.v1.contract";
@@ -38,17 +38,17 @@ export const GET = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
 
-    const store = getContainer().activityLedgerStore;
+    const store = getContainer().epochLedgerStore;
     const epoch = await store.getEpoch(epochId);
     if (!epoch) {
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
 
-    const statement = await store.getStatementForEpoch(epochId);
+    const payout = await store.getPayoutForEpoch(epochId);
 
     return NextResponse.json(
       epochStatementOperation.output.parse({
-        statement: statement ? toStatementDto(statement) : null,
+        statement: payout ? toPayoutDto(payout) : null,
       })
     );
   }

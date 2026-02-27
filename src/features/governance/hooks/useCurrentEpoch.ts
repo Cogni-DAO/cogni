@@ -14,7 +14,7 @@
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import type {
   AllocationDto,
-  ApiActivityEvent,
+  ApiIngestionReceipt,
   EpochDto,
 } from "@/features/governance/lib/compose-epoch";
 import { composeEpochView } from "@/features/governance/lib/compose-epoch";
@@ -49,7 +49,7 @@ async function fetchCurrentEpoch(): Promise<CurrentEpochData> {
     fetchJson<{ allocations: AllocationDto[] }>(
       `/api/v1/ledger/epochs/${current.id}/allocations`
     ),
-    fetchJson<{ events: ApiActivityEvent[] }>(
+    fetchJson<{ events: ApiIngestionReceipt[] }>(
       `/api/v1/ledger/epochs/${current.id}/activity?limit=200`
     ),
   ]);

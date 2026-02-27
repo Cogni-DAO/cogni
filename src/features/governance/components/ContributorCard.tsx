@@ -62,8 +62,8 @@ export function ContributorCard({
           </div>
         </div>
         <div className="space-y-1.5">
-          {contributor.activities.map((activity) => (
-            <ContributionRow key={activity.id} activity={activity} />
+          {contributor.receipts.map((receipt) => (
+            <ContributionRow key={receipt.receiptId} receipt={receipt} />
           ))}
         </div>
       </CardContent>

@@ -147,10 +147,10 @@ export function EpochCard({
             )}
             {sorted.map((c, i) => {
               const totalScore = Math.round(Number(c.proposedUnits) / 1000);
-              const githubCount = c.activities.filter(
+              const githubCount = c.receipts.filter(
                 (a) => a.source === "github"
               ).length;
-              const discordCount = c.activities.filter(
+              const discordCount = c.receipts.filter(
                 (a) => a.source === "discord"
               ).length;
               const userCredits =

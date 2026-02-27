@@ -30,7 +30,7 @@ describe("ledger.epoch-statement.v1 contract", () => {
             amount_credits: "8000",
           },
         ],
-        supersedesStatementId: null,
+        supersedesPayoutId: null,
         createdAt: "2026-02-08T00:00:00.000Z",
       },
     };
