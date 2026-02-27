@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/model`
+ * Module: `@cogni/attribution-ledger/model`
  * Purpose: Domain types and enums for the epoch ledger.
  * Scope: Pure types. Does not contain business logic or perform I/O.
  * Invariants: Mirrors epoch-ledger spec schema; all credit/unit fields are bigint (ALL_MATH_BIGINT).
@@ -15,8 +15,8 @@
 export const EPOCH_STATUSES = ["open", "review", "finalized"] as const;
 export type EpochStatus = (typeof EPOCH_STATUSES)[number];
 
-/** Payout line item produced by computePayouts */
-export interface PayoutLineItem {
+/** Payout line item produced by computeStatementItems */
+export interface StatementLineItem {
   readonly userId: string;
   readonly totalUnits: bigint;
   /** Proportional share as a string decimal (e.g. "0.333333") */

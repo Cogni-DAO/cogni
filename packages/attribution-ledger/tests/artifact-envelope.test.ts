@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/tests/artifact-envelope`
+ * Module: `@cogni/attribution-ledger/tests/artifact-envelope`
  * Purpose: Unit tests for evaluation envelope validation and enricher inputs hashing.
  * Scope: Tests validation rules for evaluation refs and envelopes. Does not test store or I/O.
  * Invariants: EVALUATION_REF_NAMESPACED, CANONICAL_JSON

@@ -12,7 +12,7 @@
     { "path": "./packages/ids" },
     { "path": "./packages/db-schema" },
     { "path": "./packages/ingestion-core" },
-    { "path": "./packages/ledger-core" },
+    { "path": "./packages/attribution-ledger" },
     { "path": "./packages/scheduler-core" }
   ]
 }

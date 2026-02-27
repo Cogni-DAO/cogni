@@ -12,15 +12,15 @@
  */
 
 import type {
-  LedgerAllocation,
-  LedgerEpoch,
-  LedgerEpochStatement,
-  LedgerIngestionReceipt,
-  LedgerPoolComponent,
-  LedgerSelection,
-} from "@cogni/ledger-core";
+  AttributionAllocation,
+  AttributionEpoch,
+  AttributionPoolComponent,
+  AttributionSelection,
+  AttributionStatement,
+  IngestionReceipt,
+} from "@cogni/attribution-ledger";
 
-export function toEpochDto(e: LedgerEpoch) {
+export function toEpochDto(e: AttributionEpoch) {
   return {
     id: e.id.toString(),
     status: e.status,
@@ -34,7 +34,7 @@ export function toEpochDto(e: LedgerEpoch) {
   };
 }
 
-export function toIngestionReceiptDto(e: LedgerIngestionReceipt) {
+export function toIngestionReceiptDto(e: IngestionReceipt) {
   return {
     receiptId: e.receiptId,
     source: e.source,
@@ -47,7 +47,7 @@ export function toIngestionReceiptDto(e: LedgerIngestionReceipt) {
   };
 }
 
-export function toSelectionDto(c: LedgerSelection) {
+export function toSelectionDto(c: AttributionSelection) {
   return {
     userId: c.userId,
     included: c.included,
@@ -56,7 +56,7 @@ export function toSelectionDto(c: LedgerSelection) {
   };
 }
 
-export function toAllocationDto(a: LedgerAllocation) {
+export function toAllocationDto(a: AttributionAllocation) {
   return {
     id: a.id,
     userId: a.userId,
@@ -69,19 +69,19 @@ export function toAllocationDto(a: LedgerAllocation) {
   };
 }
 
-export function toStatementDto(s: LedgerEpochStatement) {
+export function toStatementDto(s: AttributionStatement) {
   return {
     id: s.id,
     epochId: s.epochId.toString(),
     allocationSetHash: s.allocationSetHash,
     poolTotalCredits: s.poolTotalCredits.toString(),
-    payouts: s.payoutsJson,
+    items: s.statementItems,
     supersedesStatementId: s.supersedesStatementId,
     createdAt: s.createdAt.toISOString(),
   };
 }
 
-export function toPoolComponentDto(c: LedgerPoolComponent) {
+export function toPoolComponentDto(c: AttributionPoolComponent) {
   return {
     id: c.id,
     componentId: c.componentId,

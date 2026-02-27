@@ -43,12 +43,12 @@ Authenticated HTTP endpoints for ledger operations. SIWE-protected reads for all
 
 ## Ports
 
-- **Uses ports:** `EpochLedgerStore` (via container)
+- **Uses ports:** `AttributionStore` (via container)
 - **Implements ports:** none
 
 ## Responsibilities
 
-- This directory **does:** authenticate via SIWE session, check approver allowlist for write routes, validate I/O via Zod contracts, delegate to `EpochLedgerStore`.
+- This directory **does:** authenticate via SIWE session, check approver allowlist for write routes, validate I/O via Zod contracts, delegate to `AttributionStore`.
 - This directory **does not:** contain business logic, expose unauthenticated data, or bypass approver checks.
 
 ## Usage

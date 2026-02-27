@@ -6,7 +6,7 @@ status: done
 priority: 1
 rank: 4
 estimate: 1
-summary: "Retrofit DrizzleLedgerAdapter so every epochId-based read AND write enforces scope_id via a validated epoch lookup. Prevents cross-tenant data access. No port signature changes."
+summary: "Retrofit DrizzleAttributionAdapter so every epochId-based read AND write enforces scope_id via a validated epoch lookup. Prevents cross-tenant data access. No port signature changes."
 outcome: "Every adapter method that accepts epochId verifies the epoch belongs to the expected scope before operating on child data. Callers get EpochNotFoundError for scope mismatches (same as non-existent epoch)."
 spec_refs: epoch-ledger-spec
 assignees: derekg1729
@@ -41,14 +41,14 @@ Every adapter method that takes `epochId` verifies the epoch belongs to the conf
 **Pattern**:
 
 ```typescript
-export class DrizzleLedgerAdapter implements ActivityLedgerStore {
+export class DrizzleAttributionAdapter implements ActivityLedgerStore {
   constructor(
     private readonly db: Database,
     private readonly scopeId: string // NEW: injected at construction
   ) {}
 
   /** Validate epoch belongs to this adapter's scope. */
-  private async resolveEpochScoped(epochId: bigint): Promise<LedgerEpoch> {
+  private async resolveEpochScoped(epochId: bigint): Promise<AttributionEpoch> {
     const rows = await this.db
       .select()
       .from(epochs)
@@ -63,7 +63,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 **Reuses**:
 
 - Existing `EpochNotFoundError` (already in ledger-core)
-- Existing `DrizzleLedgerAdapter` class (no new file)
+- Existing `DrizzleAttributionAdapter` class (no new file)
 - Existing adapter integration test (`tests/component/db/drizzle-ledger.adapter.int.test.ts`)
 
 **Rejected**:
@@ -89,7 +89,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 #### 1. Adapter constructor: add scopeId (`packages/db-client/src/adapters/drizzle-ledger.adapter.ts`)
 
 ```typescript
-export class DrizzleLedgerAdapter implements ActivityLedgerStore {
+export class DrizzleAttributionAdapter implements ActivityLedgerStore {
   constructor(
     private readonly db: Database,
     private readonly scopeId: string,
@@ -99,7 +99,7 @@ export class DrizzleLedgerAdapter implements ActivityLedgerStore {
 Add private helper:
 
 ```typescript
-private async resolveEpochScoped(epochId: bigint): Promise<LedgerEpoch> {
+private async resolveEpochScoped(epochId: bigint): Promise<AttributionEpoch> {
   const rows = await this.db
     .select()
     .from(epochs)
@@ -154,7 +154,7 @@ private async resolveEpochScoped(epochId: bigint): Promise<LedgerEpoch> {
 
 #### 3. Update adapter construction sites
 
-Every place that creates `new DrizzleLedgerAdapter(db)` must pass `scopeId`:
+Every place that creates `new DrizzleAttributionAdapter(db)` must pass `scopeId`:
 
 - `src/adapters/server/container.ts` — app container (get from `getScopeId()` or equivalent config)
 - `services/scheduler-worker/src/activities/ledger-activities.ts` — Temporal worker (get from workflow input or config)

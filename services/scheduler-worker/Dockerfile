@@ -28,7 +28,7 @@ COPY packages/ai-core/package.json packages/ai-core/
 COPY packages/scheduler-core/package.json packages/scheduler-core/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/db-client/package.json packages/db-client/
-COPY packages/ledger-core/package.json packages/ledger-core/
+COPY packages/attribution-ledger/package.json packages/attribution-ledger/
 COPY packages/ingestion-core/package.json packages/ingestion-core/
 COPY services/scheduler-worker/package.json services/scheduler-worker/
 
@@ -41,7 +41,7 @@ COPY packages/ai-core packages/ai-core
 COPY packages/scheduler-core packages/scheduler-core
 COPY packages/db-schema packages/db-schema
 COPY packages/db-client packages/db-client
-COPY packages/ledger-core packages/ledger-core
+COPY packages/attribution-ledger packages/attribution-ledger
 COPY packages/ingestion-core packages/ingestion-core
 COPY services/scheduler-worker services/scheduler-worker
 
@@ -50,7 +50,7 @@ RUN pnpm --filter @cogni/ids build && \
     pnpm --filter @cogni/ai-core build && \
     pnpm --filter @cogni/scheduler-core build && \
     pnpm --filter @cogni/db-schema build && \
-    pnpm --filter @cogni/ledger-core build && \
+    pnpm --filter @cogni/attribution-ledger build && \
     pnpm --filter @cogni/ingestion-core build && \
     pnpm --filter @cogni/db-client build && \
     pnpm --filter @cogni/scheduler-worker-service build
@@ -82,7 +82,7 @@ COPY --from=builder --chown=worker:nodejs /app/packages/ai-core/dist ./packages/
 COPY --from=builder --chown=worker:nodejs /app/packages/scheduler-core/dist ./packages/scheduler-core/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/db-schema/dist ./packages/db-schema/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/db-client/dist ./packages/db-client/dist
-COPY --from=builder --chown=worker:nodejs /app/packages/ledger-core/dist ./packages/ledger-core/dist
+COPY --from=builder --chown=worker:nodejs /app/packages/attribution-ledger/dist ./packages/attribution-ledger/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/ingestion-core/dist ./packages/ingestion-core/dist
 # Copy package.json files for module resolution
 COPY --from=builder --chown=worker:nodejs /app/services/scheduler-worker/package.json ./services/scheduler-worker/
@@ -91,7 +91,7 @@ COPY --from=builder --chown=worker:nodejs /app/packages/ai-core/package.json ./p
 COPY --from=builder --chown=worker:nodejs /app/packages/scheduler-core/package.json ./packages/scheduler-core/
 COPY --from=builder --chown=worker:nodejs /app/packages/db-schema/package.json ./packages/db-schema/
 COPY --from=builder --chown=worker:nodejs /app/packages/db-client/package.json ./packages/db-client/
-COPY --from=builder --chown=worker:nodejs /app/packages/ledger-core/package.json ./packages/ledger-core/
+COPY --from=builder --chown=worker:nodejs /app/packages/attribution-ledger/package.json ./packages/attribution-ledger/
 COPY --from=builder --chown=worker:nodejs /app/packages/ingestion-core/package.json ./packages/ingestion-core/
 
 WORKDIR /app/services/scheduler-worker

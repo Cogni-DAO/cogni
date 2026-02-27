@@ -38,7 +38,7 @@ export const GET = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
 
-    const store = getContainer().epochLedgerStore;
+    const store = getContainer().attributionStore;
     const epoch = await store.getEpoch(epochId);
     if (!epoch) {
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });

@@ -22,7 +22,7 @@ describe("ledger.epoch-statement.v1 contract", () => {
         epochId: "1",
         allocationSetHash: "abc123",
         poolTotalCredits: "10000",
-        payouts: [
+        items: [
           {
             user_id: "user-1",
             total_units: "8000",

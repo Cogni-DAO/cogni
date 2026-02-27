@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/tests/hashing`
+ * Module: `@cogni/attribution-ledger/tests/hashing`
  * Purpose: Unit tests for canonical JSON serialization and evaluation hashing.
  * Scope: Tests canonicalJsonStringify determinism, BigInt handling, and computeArtifactsHash sorting. Does not test store or I/O.
  * Invariants: CANONICAL_JSON — sorted keys, no whitespace, BigInt as string.

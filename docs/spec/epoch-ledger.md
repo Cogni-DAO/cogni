@@ -1,20 +1,20 @@
 ---
-id: epoch-ledger-spec
+id: attribution-ledger-spec
 type: spec
-title: "Epoch Ledger: Weekly Activity Pipeline for Credit Statements"
+title: "Attribution Ledger: Weekly Attribution Pipeline for Credit Statements"
 status: draft
 spec_state: active
 trust: draft
-summary: "Epoch-based ledger pipeline with three plugin surfaces: source adapters ingest contribution activity, epoch enrichers produce typed evaluations from selected receipts, and allocation algorithms distribute credits. Statements are deterministic and recomputable from stored data."
-read_when: Working on credit statements, activity ingestion, epoch enrichers, epoch evaluations, epoch lifecycle, weight policy, source adapters, allocation algorithms, or the ledger API.
+summary: "Epoch-based attribution pipeline with three plugin surfaces: source adapters ingest contribution activity, epoch enrichers produce typed evaluations from selected receipts, and allocation algorithms distribute credits. Statements are deterministic and recomputable from stored data."
+read_when: Working on credit statements, activity ingestion, epoch enrichers, epoch evaluations, epoch lifecycle, weight policy, source adapters, allocation algorithms, or the attribution API.
 implements: proj.transparent-credit-payouts
 owner: derekg1729
 created: 2026-02-20
 verified: 2026-02-27
-tags: [governance, transparency, payments, ledger]
+tags: [governance, transparency, payments, attribution]
 ---
 
-# Epoch Ledger: Weekly Activity Pipeline for Credit Statements
+# Attribution Ledger: Weekly Attribution Pipeline for Credit Statements
 
 > The system is a **transparent activity-to-statement pipeline** with three plugin surfaces. Every week: (1) **source adapters** collect contribution activity from configured sources, (2) **epoch enrichers** produce typed evaluations from selected receipts (e.g., work-item links, quality scores), and (3) **allocation algorithms** distribute credits using weight policy and enricher evaluations. An admin finalizes the result. Statements are deterministic and recomputable from stored data. No server-held signing keys in V0.
 
@@ -33,7 +33,7 @@ tags: [governance, transparency, payments, ledger]
 ## Core Invariants
 
 | Rule                             | Constraint                                                                                                                                                                                                                                                                                                                                                                              |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | RECEIPT_APPEND_ONLY              | DB trigger rejects UPDATE/DELETE on `ingestion_receipts`. Once ingested, receipt records are immutable facts.                                                                                                                                                                                                                                                                           |
 | RECEIPT_IDEMPOTENT               | `ingestion_receipts.id` is deterministic from source data (e.g., `github:pr:owner/repo:42`). Re-ingestion of the same receipt is a no-op (PK conflict → skip).                                                                                                                                                                                                                          |
 | POOL_IMMUTABLE                   | DB trigger rejects UPDATE/DELETE on `epoch_pool_components`. Once recorded, a pool component's algorithm, inputs, and amount cannot be changed.                                                                                                                                                                                                                                         |
@@ -51,24 +51,25 @@ tags: [governance, transparency, payments, ledger]
 | EPOCH_WINDOW_UNIQUE              | `UNIQUE(node_id, scope_id, period_start, period_end)` prevents duplicate epochs for the same time window per scope. Re-collection uses the existing epoch.                                                                                                                                                                                                                              |
 | SELECTION_FREEZE_ON_FINALIZE     | DB trigger rejects INSERT/UPDATE/DELETE on `epoch_selection` when the referenced epoch has `status = 'finalized'`. Selection is mutable during `open` and `review`, immutable only after finalize.                                                                                                                                                                                      |
 | SELECTION_AUTO_POPULATE          | Auto-population inserts selection rows for new receipts and updates `user_id` only on rows where it's NULL. Never overwrites admin-set fields (`included`, `weight_override_milli`, `note`). Delta processing: skip receipts already selected with a resolved `user_id`.                                                                                                                |
-| NODE_SCOPED                      | All ledger tables include `node_id UUID NOT NULL`. Per node-operator-contract spec, prevents collisions in multi-node scenarios.                                                                                                                                                                                                                                                        |
+| NODE_SCOPED                      | All attribution tables include `node_id UUID NOT NULL`. Per node-operator-contract spec, prevents collisions in multi-node scenarios.                                                                                                                                                                                                                                                   |
 | SCOPE_SCOPED                     | All epoch-level tables include `scope_id UUID NOT NULL`. `scope_id` identifies the governance/statement domain (project) within a node. Derived deterministically: `uuidv5(node_id, scope_key)`. See [Project Scoping](#project-scoping).                                                                                                                                               |
-| SCOPE_VALIDATED                  | Every ingestion receipt's `scope_id` must be validated against current project manifests (`.cogni/projects/*.yaml`) or match the node's configured `scope_id` (V0 default scope). Unrecognized scope IDs are rejected at ingestion time.                                                                                                                                                |
+| RECEIPT_SCOPE_AGNOSTIC           | Ingestion receipts carry no `scope_id` — they are global facts. Scope is assigned at the selection layer via epoch membership. One receipt can be selected into multiple scope-specific epochs.                                                                                                                                                                                         |
+| EVALUATION_LOCKED_IMMUTABLE      | DB trigger rejects UPDATE/DELETE on `epoch_evaluations` rows with `status='locked'`. Locked evaluations are immutable facts. INSERT of new locked rows is allowed (during `closeIngestionWithEvaluations`).                                                                                                                                                                             |     |
 | POOL_REPRODUCIBLE                | `pool_total_credits = SUM(epoch_pool_components.amount_credits)`. Each component stores algorithm version + inputs + amount.                                                                                                                                                                                                                                                            |
 | POOL_UNIQUE_PER_TYPE             | `UNIQUE(epoch_id, component_id)` — each component type appears at most once per epoch.                                                                                                                                                                                                                                                                                                  |
 | POOL_REQUIRES_BASE               | At least one `base_issuance` component must exist before epoch finalize is allowed.                                                                                                                                                                                                                                                                                                     |
 | WRITES_VIA_TEMPORAL              | All write operations (collect, finalize) execute in Temporal workflows via the existing `scheduler-worker` service. Next.js routes return 202 + workflow ID.                                                                                                                                                                                                                            |
 | PROVENANCE_REQUIRED              | Every ingestion receipt includes `producer`, `producer_version`, `payload_hash`, `retrieved_at`. Audit trail for reproducibility.                                                                                                                                                                                                                                                       |
-| SCOPE_GATED_QUERIES              | `DrizzleLedgerAdapter` takes `scopeId` at construction. Every epochId-based read/write calls `resolveEpochScoped(epochId)` — `WHERE id = $epochId AND scope_id = $scopeId`. Scope mismatches throw `EpochNotFoundError` (indistinguishable from missing epoch). No port signature changes; scope is an adapter-internal concern.                                                        |
+| SCOPE_GATED_QUERIES              | `DrizzleAttributionAdapter` takes `scopeId` at construction. Every epochId-based read/write calls `resolveEpochScoped(epochId)` — `WHERE id = $epochId AND scope_id = $scopeId`. Scope mismatches throw `EpochNotFoundError` (indistinguishable from missing epoch). No port signature changes; scope is an adapter-internal concern.                                                   |
 | CURSOR_STATE_PERSISTED           | Source adapters use `ingestion_cursors` table for incremental sync. Avoids full-window rescans and handles pagination/rate limits.                                                                                                                                                                                                                                                      |
-| ADAPTERS_NOT_IN_CORE             | Source adapters live in `services/scheduler-worker/` behind a port interface. `packages/ledger-core/` contains only pure domain logic (types, rules, errors).                                                                                                                                                                                                                           |
+| ADAPTERS_NOT_IN_CORE             | Source adapters live in `services/scheduler-worker/` behind a port interface. `packages/attribution-ledger/` contains only pure domain logic (types, rules, errors).                                                                                                                                                                                                                    |
 | EVALUATION_UNIQUE_PER_REF_STATUS | `UNIQUE(epoch_id, evaluation_ref, status)` — one draft + one locked row per evaluation ref per epoch. Drafts overwritten via UPSERT; locked evaluations written once at `closeIngestionWithEvaluations`.                                                                                                                                                                                |
 | EVALUATION_FINAL_ATOMIC          | Locked evaluation writes + `evaluations_hash` computation + epoch `open→review` transition happen in a single DB transaction. No partial finalization. If any step fails, nothing commits.                                                                                                                                                                                              |
 | STATEMENT_FROM_FINAL_ONLY        | `computeProposedAllocations` for statement purposes MUST consume only `status='locked'` evaluations. Draft evaluations are explicitly excluded from any binding computation.                                                                                                                                                                                                            |
-| CANONICAL_JSON                   | All payload and inputs hashing uses `canonicalJsonStringify()` — sorted keys at every depth, no whitespace, BigInt serialized as string. Defined once in `packages/ledger-core/src/hashing.ts`, used everywhere.                                                                                                                                                                        |
+| CANONICAL_JSON                   | All payload and inputs hashing uses `canonicalJsonStringify()` — sorted keys at every depth, no whitespace, BigInt serialized as string. Defined once in `packages/attribution-ledger/src/hashing.ts`, used everywhere.                                                                                                                                                                 |
 | INPUTS_HASH_COMPLETE             | Each enricher defines its own `inputs_hash` covering ALL meaningful dependencies consumed. Canonically serialized before hashing. If any input changes, `inputs_hash` changes, and the system knows the evaluation is stale.                                                                                                                                                            |
 | PAYLOAD_HASH_COVERS_CONTENT      | `payload_hash` = SHA-256 of `canonicalJsonStringify(payload)`. Stored in DB regardless of inline vs. object storage. `evaluations_hash` on the epoch uses `payload_hash`, never re-serializes.                                                                                                                                                                                          |
-| ENRICHER_SNAPSHOT_RULE           | Enrichers may do I/O (read files, call APIs), but anything learned from outside the ledger MUST be snapshotted into the evaluation payload (or referenced by content-hash). If it's not in the evaluation, it doesn't exist for scoring. No live reads during allocation.                                                                                                               |
+| ENRICHER_SNAPSHOT_RULE           | Enrichers may do I/O (read files, call APIs), but anything learned from outside the attribution store MUST be snapshotted into the evaluation payload (or referenced by content-hash). If it's not in the evaluation, it doesn't exist for scoring. No live reads during allocation.                                                                                                    |
 | EVALUATION_REF_NAMESPACED        | Evaluation refs follow `org.type.version` format (e.g., `cogni.work_item_links.v0`, `cogni.echo.v0`). Regex: `/^[a-z][a-z0-9]*\.[a-z][a-z0-9_]*\.v\d+$/`. Prevents cross-team collisions.                                                                                                                                                                                               |
 | WEIGHT_PINNING                   | Weight config is set at epoch creation. Subsequent collection runs use the existing epoch's `weight_config`, not the input-derived config. Config drift logs a warning. `weight_config_hash` (SHA-256 of canonical JSON) is computed and locked at `closeIngestion` as the reproducibility anchor.                                                                                      |
 | CONFIG_LOCKED_AT_REVIEW          | At `closeIngestion` (open→review), the epoch's `weight_config_hash` and `allocation_algo_ref` are computed and locked. These fields are NULL while open and immutable after review. All subsequent verification and statement computation uses these locked snapshots.                                                                                                                  |
@@ -79,7 +80,7 @@ tags: [governance, transparency, payments, ledger]
 
 ## Project Scoping
 
-The ledger uses two orthogonal scoping keys:
+The attribution ledger uses two orthogonal scoping keys:
 
 - **`node_id`** (UUID) — Deployment identity. Identifies the running instance. One node = one database, one set of infrastructure, one `docker compose up`. Never overloaded for governance semantics. See [identity-model spec](./identity-model.md).
 - **`scope_id`** (UUID) — Governance/statement domain. Identifies which **project** an epoch, its activity, and its statements belong to. Derived deterministically as `uuidv5(node_id, scope_key)` where `scope_key` is the human-readable slug (e.g., `'default'`). A project is a human-defined ownership boundary (e.g., "chat service", "shared infrastructure", "code review daemon") with its own DAO, weight policy, and payment rails.
@@ -109,9 +110,9 @@ The ledger uses two orthogonal scoping keys:
 
 **Next.js** handles authentication (SIWE), authorization (admin check), read queries (direct DB), and write request enqueuing (start Temporal workflow, return 202).
 
-**Temporal worker** (`services/scheduler-worker/`) handles all write/compute actions: activity collection via source adapters, identity resolution, allocation computation, epoch finalization. All workflows are idempotent via deterministic workflow IDs. The worker imports pure domain logic from `@cogni/ledger-core` and DB operations from `@cogni/db-client`.
+**Temporal worker** (`services/scheduler-worker/`) handles all write/compute actions: activity collection via source adapters, identity resolution, allocation computation, epoch finalization. All workflows are idempotent via deterministic workflow IDs. The worker imports pure domain logic from `@cogni/attribution-ledger` and DB operations from `@cogni/db-client`.
 
-**`packages/ledger-core/`** contains pure domain logic shared between the app and the worker: model types, `computePayouts()`, `computeProposedAllocations()`, and error classes. `src/core/ledger/public.ts` re-exports from this package so app code uses `@/core/ledger`.
+**`packages/attribution-ledger/`** contains pure domain logic shared between the app and the worker: model types, `computeStatementItems()`, `computeProposedAllocations()`, and error classes. `src/core/attribution/public.ts` re-exports from this package so app code uses `@/core/attribution`.
 
 **Postgres** stores the append-only ingestion receipts with DB-trigger enforcement of immutability.
 
@@ -144,7 +145,7 @@ Public read routes expose closed-epoch data only (epochs list, allocations, stat
 
 ### Pipeline Architecture — Three Plugin Surfaces
 
-The ledger pipeline has three composable extension points. Each surface has a stable contract; new implementations slot in without touching core code.
+The attribution pipeline has three composable extension points. Each surface has a stable contract; new implementations slot in without touching core code.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -198,7 +199,7 @@ At **closeIngestion** (EVALUATION_FINAL_ATOMIC):
 
 All evaluation hashing follows these non-negotiable rules:
 
-- **`canonicalJsonStringify(value)`** — deterministic JSON: sorted keys at every depth, no whitespace, BigInt as string. Defined once in `packages/ledger-core/src/hashing.ts` (CANONICAL_JSON).
+- **`canonicalJsonStringify(value)`** — deterministic JSON: sorted keys at every depth, no whitespace, BigInt as string. Defined once in `packages/attribution-ledger/src/hashing.ts` (CANONICAL_JSON).
 - **`inputs_hash`** — per-enricher composition covering ALL meaningful dependencies. If any input changes, the hash changes. Canonically serialized before SHA-256 (INPUTS_HASH_COMPLETE).
 - **`payload_hash`** — `sha256OfCanonicalJson(payload)`. Stored in DB regardless of inline vs. object storage (PAYLOAD_HASH_COVERS_CONTENT).
 - **`artifacts_hash`** — on `epochs` table. SHA-256 of sorted `(evaluation_ref, algo_ref, inputs_hash, payload_hash)` tuples from locked evaluations only. Computed by `computeArtifactsHash()`. Set atomically at `closeIngestionWithEvaluations` (EVALUATION_FINAL_ATOMIC).
@@ -255,7 +256,7 @@ Epoch status models **governance finality**, not payment execution. Distribution
 3. FINALIZED     Admin triggers finalize (requires signature + base_issuance)
                  → Reads epoch_allocations (final_units, falling back to proposed_units)
                  → Reads pool components → pool_total_credits
-                 → computePayouts(allocations, pool_total) → epoch_statement
+                 → computeStatementItems(allocations, pool_total) → epoch_statement
                  → Stores statement + signature atomically → epoch immutable forever
 ```
 
@@ -289,12 +290,12 @@ Each component stores `algorithm_version`, `inputs_json`, `amount_credits`, and 
 
 ### Verification
 
-`GET /api/v1/ledger/verify/epoch/:id` performs independent verification from **stored data only** (not re-fetching from GitHub/Discord, which may be private or non-deterministic):
+`GET /api/v1/attribution/verify/epoch/:id` performs independent verification from **stored data only** (not re-fetching from GitHub/Discord, which may be private or non-deterministic):
 
 1. Fetch all `ingestion_receipts` for the epoch
 2. Recompute proposed allocations from receipts + stored `weight_config`
 3. Read `epoch_allocations` (final_units)
-4. Recompute payouts from allocations + pool components
+4. Recompute statement items from allocations + pool components
 5. Compare recomputed values against stored statement
 6. Return verification report
 
@@ -438,7 +439,7 @@ Constraint: `UNIQUE(epoch_id, component_id)` (POOL_UNIQUE_PER_TYPE).
 | `epoch_id`                | BIGINT FK→epochs         | UNIQUE(node_id, epoch_id) — one statement per epoch |
 | `allocation_set_hash`     | TEXT                     | SHA-256 of canonical finalized allocations          |
 | `pool_total_credits`      | BIGINT                   | Must match epoch's pool_total_credits               |
-| `payouts_json`            | JSONB                    | `[{user_id, total_units, share, amount_credits}]`   |
+| `statement_items_json`    | JSONB                    | `[{user_id, total_units, share, amount_credits}]`   |
 | `supersedes_statement_id` | UUID FK→epoch_statements | For post-signing corrections (nullable)             |
 | `created_at`              | TIMESTAMPTZ              |                                                     |
 
@@ -544,29 +545,29 @@ Adapters live in `services/scheduler-worker/src/adapters/ingestion/` (ADAPTERS_N
 
 ### Write Routes (SIWE + scope approver check → Temporal workflow → 202)
 
-| Method | Route                                       | Purpose                                                                              |
-| ------ | ------------------------------------------- | ------------------------------------------------------------------------------------ |
-| POST   | `/api/v1/ledger/epochs/collect`             | Trigger activity collection for new/existing epoch                                   |
-| PATCH  | `/api/v1/ledger/epochs/:id/allocations`     | Admin adjusts final_units for users (epoch must be `open` or `review`)               |
-| POST   | `/api/v1/ledger/epochs/:id/pool-components` | Record a pool component (epoch must be `open` — POOL_LOCKED_AT_REVIEW)               |
-| POST   | `/api/v1/ledger/epochs/:id/review`          | Close ingestion, transition `open → review` (or auto via Temporal)                   |
-| POST   | `/api/v1/ledger/epochs/:id/finalize`        | Sign + finalize epoch → compute payouts (requires EIP-191 signature + base_issuance) |
+| Method | Route                                            | Purpose                                                                                |
+| ------ | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/attribution/epochs/collect`             | Trigger activity collection for new/existing epoch                                     |
+| PATCH  | `/api/v1/attribution/epochs/:id/allocations`     | Admin adjusts final_units for users (epoch must be `open` or `review`)                 |
+| POST   | `/api/v1/attribution/epochs/:id/pool-components` | Record a pool component (epoch must be `open` — POOL_LOCKED_AT_REVIEW)                 |
+| POST   | `/api/v1/attribution/epochs/:id/review`          | Close ingestion, transition `open → review` (or auto via Temporal)                     |
+| POST   | `/api/v1/attribution/epochs/:id/finalize`        | Sign + finalize epoch → compute statement (requires EIP-191 signature + base_issuance) |
 
 ### Public Read Routes (no auth, closed-epoch data only)
 
-| Method | Route                                          | Purpose                                    |
-| ------ | ---------------------------------------------- | ------------------------------------------ |
-| GET    | `/api/v1/public/ledger/epochs`                 | List closed epochs (paginated)             |
-| GET    | `/api/v1/public/ledger/epochs/:id/allocations` | Allocations for a closed epoch             |
-| GET    | `/api/v1/public/ledger/epochs/:id/statement`   | Epoch statement (null if none, always 200) |
+| Method | Route                                               | Purpose                                    |
+| ------ | --------------------------------------------------- | ------------------------------------------ |
+| GET    | `/api/v1/public/attribution/epochs`                 | List closed epochs (paginated)             |
+| GET    | `/api/v1/public/attribution/epochs/:id/allocations` | Allocations for a closed epoch             |
+| GET    | `/api/v1/public/attribution/epochs/:id/statement`   | Epoch statement (null if none, always 200) |
 
 ### Authenticated Read Routes (SIWE session required)
 
-| Method | Route                                | Purpose                                      |
-| ------ | ------------------------------------ | -------------------------------------------- |
-| GET    | `/api/v1/ledger/epochs`              | List all epochs including open               |
-| GET    | `/api/v1/ledger/epochs/:id/activity` | Ingestion receipts with PII + selection join |
-| GET    | `/api/v1/ledger/verify/epoch/:id`    | Recompute payouts from stored data + compare |
+| Method | Route                                     | Purpose                                        |
+| ------ | ----------------------------------------- | ---------------------------------------------- |
+| GET    | `/api/v1/attribution/epochs`              | List all epochs including open                 |
+| GET    | `/api/v1/attribution/epochs/:id/activity` | Ingestion receipts with PII + selection join   |
+| GET    | `/api/v1/attribution/verify/epoch/:id`    | Recompute statement from stored data + compare |
 
 ## Temporal Workflows
 
@@ -639,7 +640,7 @@ Input: `{ epochId, signature }` — `signerAddress` derived from SIWE session (n
 6. Build canonical finalize message from epoch data, `ecrecover(message, signature)` — verify recovered address matches `signerAddress`
 7. Read `epoch_allocations` — use `final_units` where set, fall back to `proposed_units`
 8. Read pool components, compute `pool_total_credits = SUM(amount_credits)`
-9. `computePayouts(allocations, pool_total)` — BIGINT, largest-remainder
+9. `computeStatementItems(allocations, pool_total)` — BIGINT, largest-remainder
 10. Compute `allocation_set_hash`
 11. Atomic transaction: set `pool_total_credits` on epoch, update status to `'finalized'`, insert epoch statement + statement signature
 12. Return statement
@@ -653,7 +654,7 @@ Deterministic workflow ID: `ledger-finalize-{scopeId}-{epochId}`
 The signed message binds to node, scope, and allocation data (SIGNATURE_SCOPE_BOUND):
 
 ```
-Cogni Payout Statement v1
+Cogni Attribution Statement v1
 Node: {node_id}
 Scope: {scope_id}
 Epoch: {epoch_id}
@@ -709,13 +710,13 @@ The following are explicitly deferred from V0 and will be designed when needed:
 
 | File                                                                | Purpose                                                                   |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `packages/db-schema/src/ledger.ts`                                  | Drizzle schema: all ledger tables including `epochEvaluations`            |
-| `packages/ledger-core/src/store.ts`                                 | Store port interface with evaluation CRUD methods                         |
-| `packages/ledger-core/src/hashing.ts`                               | `canonicalJsonStringify`, `computeArtifactsHash`, `sha256OfCanonicalJson` |
-| `packages/ledger-core/src/enrichers/work-item-linker.ts`            | `extractWorkItemIds()` pure function + types                              |
-| `packages/ledger-core/src/allocation.ts`                            | Allocation algorithms (`weight-sum-v0`)                                   |
-| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts`         | Drizzle adapter — all store port implementations                          |
-| `services/scheduler-worker/src/activities/ledger.ts`                | Temporal activities (ledger I/O)                                          |
+| `packages/db-schema/src/attribution.ts`                             | Drizzle schema: all attribution tables including `epochEvaluations`       |
+| `packages/attribution-ledger/src/store.ts`                          | Store port interface with evaluation CRUD methods                         |
+| `packages/attribution-ledger/src/hashing.ts`                        | `canonicalJsonStringify`, `computeArtifactsHash`, `sha256OfCanonicalJson` |
+| `packages/attribution-ledger/src/enrichers/work-item-linker.ts`     | `extractWorkItemIds()` pure function + types                              |
+| `packages/attribution-ledger/src/allocation.ts`                     | Allocation algorithms (`weight-sum-v0`)                                   |
+| `packages/db-client/src/adapters/drizzle-attribution.adapter.ts`    | Drizzle adapter — all store port implementations                          |
+| `services/scheduler-worker/src/activities/ledger.ts`                | Temporal activities (attribution I/O)                                     |
 | `services/scheduler-worker/src/workflows/collect-epoch.workflow.ts` | `CollectEpochWorkflow` — pipeline orchestration                           |
 | `services/scheduler-worker/src/adapters/ingestion/github.ts`        | GitHub source adapter (GraphQL, body/branch/labels)                       |
 

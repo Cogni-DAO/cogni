@@ -45,17 +45,17 @@ export function composeHoldings(
     const statement = statements[i];
     if (!epoch || !statement) continue;
 
-    for (const payout of statement.payouts) {
-      const credits = Number(payout.amount_credits);
+    for (const item of statement.items) {
+      const credits = Number(item.amount_credits);
       totalCreditsAll += credits;
 
-      const existing = userMap.get(payout.user_id);
+      const existing = userMap.get(item.user_id);
       if (existing) {
         existing.totalCredits += credits;
         existing.epochs.add(epoch.id);
       } else {
-        userMap.set(payout.user_id, {
-          userId: payout.user_id,
+        userMap.set(item.user_id, {
+          userId: item.user_id,
           totalCredits: credits,
           epochs: new Set([epoch.id]),
         });

@@ -111,10 +111,10 @@ export type EpochStatus = (typeof EPOCH_STATUSES)[number];
 ```typescript
 /** Transition epoch open → review (INGESTION_CLOSED_ON_REVIEW).
  *  Pins approverSetHash — SHA-256 of sorted, lowercased approver addresses. */
-closeIngestion(epochId: bigint, approverSetHash: string): Promise<LedgerEpoch>;
+closeIngestion(epochId: bigint, approverSetHash: string): Promise<AttributionEpoch>;
 
 /** Transition epoch review → finalized (was closeEpoch). */
-finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<LedgerEpoch>;
+finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<AttributionEpoch>;
 ```
 
 Note: `closeIngestion` matches existing `closeEpoch` pattern — epochId only, no nodeId (epoch PK is sufficient). Rename `closeEpoch` → `finalizeEpoch` since it now transitions review→finalized, not open→closed.
@@ -277,7 +277,7 @@ Uses `wrapRouteHandlerWithLogging({ auth: { mode: "required" } })`. Route lives 
     - [x] Edit `0012_add_scope_id.sql` — index matches new status
     - [x] Edit `0011_triggers_and_backfill.sql` — rename trigger to curation_freeze_on_finalize, check 'finalized'
     - [x] Edit `packages/ledger-core/src/model.ts` — EPOCH_STATUSES = ["open", "review", "finalized"]
-    - [x] Edit `packages/ledger-core/src/store.ts` — add closeIngestion, rename closeEpoch→finalizeEpoch, add approverSetHash to LedgerEpoch
+    - [x] Edit `packages/ledger-core/src/store.ts` — add closeIngestion, rename closeEpoch→finalizeEpoch, add approverSetHash to AttributionEpoch
     - [x] Edit `packages/ledger-core/src/errors.ts` — update EpochAlreadyClosedError → EpochAlreadyFinalizedError
   - Validation: `pnpm check` passes (types + lint)
 

@@ -14,7 +14,7 @@
 import {
   estimatePoolComponentsV0,
   validatePoolComponentId,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 
 describe("estimatePoolComponentsV0", () => {

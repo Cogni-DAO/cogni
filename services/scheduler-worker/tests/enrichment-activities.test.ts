@@ -14,9 +14,9 @@
  */
 
 import type {
-  EpochLedgerStore,
+  AttributionStore,
   SelectedReceiptWithMetadata,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -36,8 +36,8 @@ const mockLogger = {
 } as unknown as Parameters<typeof createEnrichmentActivities>[0]["logger"];
 
 function makeMockStore(
-  overrides: Partial<EpochLedgerStore> = {}
-): EpochLedgerStore {
+  overrides: Partial<AttributionStore> = {}
+): AttributionStore {
   return {
     createEpoch: vi.fn(),
     getOpenEpoch: vi.fn().mockResolvedValue(null),
@@ -76,7 +76,7 @@ function makeMockStore(
     getUnselectedReceipts: vi.fn().mockResolvedValue([]),
     updateSelectionUserId: vi.fn(),
     ...overrides,
-  } as EpochLedgerStore;
+  } as AttributionStore;
 }
 
 function makeReceipts(count: number): SelectedReceiptWithMetadata[] {
@@ -102,7 +102,7 @@ describe("evaluateEpochDraft", () => {
     });
 
     const { evaluateEpochDraft } = createEnrichmentActivities({
-      ledgerStore: store,
+      attributionStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
@@ -142,7 +142,7 @@ describe("evaluateEpochDraft", () => {
     });
 
     const { evaluateEpochDraft } = createEnrichmentActivities({
-      ledgerStore: store,
+      attributionStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
@@ -159,7 +159,7 @@ describe("evaluateEpochDraft", () => {
     });
 
     const { evaluateEpochDraft } = createEnrichmentActivities({
-      ledgerStore: store,
+      attributionStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
@@ -185,7 +185,7 @@ describe("buildLockedEvaluations", () => {
     });
 
     const { buildLockedEvaluations } = createEnrichmentActivities({
-      ledgerStore: store,
+      attributionStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
@@ -210,7 +210,7 @@ describe("buildLockedEvaluations", () => {
     });
 
     const { buildLockedEvaluations } = createEnrichmentActivities({
-      ledgerStore: store,
+      attributionStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
@@ -230,7 +230,7 @@ describe("idempotency", () => {
     });
 
     const activities = createEnrichmentActivities({
-      ledgerStore: store,
+      attributionStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });
@@ -260,7 +260,7 @@ describe("idempotency", () => {
     });
 
     const { buildLockedEvaluations } = createEnrichmentActivities({
-      ledgerStore: store,
+      attributionStore: store,
       nodeId: NODE_ID,
       logger: mockLogger,
     });

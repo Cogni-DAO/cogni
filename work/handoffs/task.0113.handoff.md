@@ -29,7 +29,7 @@ last_commit: 71be222b
 - New enrichment activity module: `services/scheduler-worker/src/activities/enrichment.ts`
 - Workflow wired: enrichEpochDraft after curation, buildFinalArtifacts before autoClose
 - `autoCloseIngestion` now always uses `closeIngestionWithArtifacts` (artifacts required)
-- Container wraps drizzle adapter with `createValidatedLedgerStore` for envelope validation
+- Container wraps drizzle adapter with `createValidatedAttributionStore` for envelope validation
 - 2 new test files: `artifact-envelope.test.ts` (14 tests), `enrichment-activities.test.ts` (7 tests)
 - Work item status still says `needs_implement` — needs update to `needs_closeout`
 - **Not done**: GitHub adapter enhancement (body/branch/labels in metadata), work-item-linker enricher activity (filesystem reads), component/stack tests
@@ -67,7 +67,7 @@ last_commit: 71be222b
 | ------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `packages/ledger-core/src/artifact-envelope.ts`                     | NEW — `validateArtifactRef` + `validateArtifactEnvelope`    |
 | `packages/ledger-core/src/enricher-inputs.ts`                       | NEW — `computeEnricherInputsHash` with extensions           |
-| `packages/ledger-core/src/validated-store.ts`                       | NEW — `createValidatedLedgerStore` wrapper                  |
+| `packages/ledger-core/src/validated-store.ts`                       | NEW — `createValidatedAttributionStore` wrapper             |
 | `services/scheduler-worker/src/activities/enrichment.ts`            | NEW — echo enricher activities                              |
 | `services/scheduler-worker/src/workflows/collect-epoch.workflow.ts` | MODIFIED — enrichment wired at steps 6 and 9                |
 | `services/scheduler-worker/src/activities/ledger.ts`                | MODIFIED — `AutoCloseIngestionInput` now requires artifacts |

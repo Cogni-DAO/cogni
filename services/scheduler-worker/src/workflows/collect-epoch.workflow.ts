@@ -19,7 +19,7 @@
 import {
   computeEpochWindowV1,
   deriveAllocationAlgoRef,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 import {
   ApplicationFailure,
   proxyActivities,
@@ -77,11 +77,11 @@ interface ScheduleActionPayload {
   temporalScheduleId?: string;
   graphId?: string;
   executionGrantId?: string;
-  input: LedgerIngestRunV1;
+  input: AttributionIngestRunV1;
 }
 
 /** Versioned domain envelope — sole contract for this workflow. */
-export interface LedgerIngestRunV1 {
+export interface AttributionIngestRunV1 {
   readonly version: 1;
   readonly scopeId: string;
   readonly scopeKey: string;
@@ -119,7 +119,7 @@ export async function CollectEpochWorkflow(
 ): Promise<void> {
   const config = raw.input;
 
-  // 1. Derive epoch window — pure helper from @cogni/ledger-core (safe in workflow code)
+  // 1. Derive epoch window — pure helper from @cogni/attribution-ledger (safe in workflow code)
   const info = workflowInfo();
   const scheduledStartTime = (
     info.searchAttributes?.TemporalScheduledStartTime as Date[] | undefined

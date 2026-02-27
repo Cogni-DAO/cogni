@@ -3,7 +3,7 @@
 
 /**
  * Module: `@tests/component/db/drizzle-ledger.adapter.int`
- * Purpose: Component tests for DrizzleLedgerAdapter against real PostgreSQL via testcontainers.
+ * Purpose: Component tests for DrizzleAttributionAdapter against real PostgreSQL via testcontainers.
  * Scope: Verifies adapter + DB triggers (RECEIPT_APPEND_ONLY, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, RECEIPT_IDEMPOTENT). Does not test domain logic or routes.
  * Invariants: RECEIPT_APPEND_ONLY, RECEIPT_IDEMPOTENT, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, SCOPE_GATED_QUERIES
  * Side-effects: IO (database operations via testcontainers)
@@ -11,12 +11,12 @@
  * @public
  */
 
-import { DrizzleLedgerAdapter } from "@cogni/db-client";
 import {
   AllocationNotFoundError,
   EpochNotFoundError,
   EpochNotOpenError,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
+import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
   epochWindow,
@@ -43,9 +43,9 @@ function drizzleCause(err: unknown): string {
   return String(err);
 }
 
-describe("DrizzleLedgerAdapter (Component)", () => {
+describe("DrizzleAttributionAdapter (Component)", () => {
   const db = getSeedDb();
-  const adapter = new DrizzleLedgerAdapter(db, TEST_SCOPE_ID);
+  const adapter = new DrizzleAttributionAdapter(db, TEST_SCOPE_ID);
 
   let actor: TestActor;
 
@@ -802,7 +802,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         epochId,
         allocationSetHash: "abc123def456",
         poolTotalCredits: 10000n,
-        payoutsJson: [
+        statementItems: [
           {
             user_id: actor.user.id,
             total_units: "8000",
@@ -853,7 +853,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         epochId: epoch.id,
         allocationSetHash: "sig-test-hash",
         poolTotalCredits: 20000n,
-        payoutsJson: [
+        statementItems: [
           {
             user_id: "sig-test-user",
             total_units: "20000",
@@ -926,7 +926,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
           nodeId: TEST_NODE_ID,
           allocationSetHash: HASH,
           poolTotalCredits: 10000n,
-          payoutsJson: PAYOUTS_JSON,
+          statementItems: PAYOUTS_JSON,
         },
         signature: {
           nodeId: TEST_NODE_ID,
@@ -1116,7 +1116,7 @@ describe("DrizzleLedgerAdapter (Component)", () => {
   // ── SCOPE_GATED_QUERIES ─────────────────────────────────────────
 
   describe("SCOPE_GATED_QUERIES", () => {
-    const otherScopeAdapter = new DrizzleLedgerAdapter(db, OTHER_SCOPE_ID);
+    const otherScopeAdapter = new DrizzleAttributionAdapter(db, OTHER_SCOPE_ID);
     let scopeTestEpochId: bigint;
 
     beforeAll(async () => {
@@ -1275,12 +1275,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         "draft"
       );
       expect(result).not.toBeNull();
-      expect(result!.evaluationRef).toBe("cogni.echo.v0");
-      expect(result!.algoRef).toBe("echo-enricher-v0");
-      expect(result!.inputsHash).toBe("a".repeat(64));
-      expect(result!.payloadHash).toBe("b".repeat(64));
-      expect(result!.payloadJson).toEqual({ test: true });
-      expect(result!.status).toBe("draft");
+      expect(result?.evaluationRef).toBe("cogni.echo.v0");
+      expect(result?.algoRef).toBe("echo-enricher-v0");
+      expect(result?.inputsHash).toBe("a".repeat(64));
+      expect(result?.payloadHash).toBe("b".repeat(64));
+      expect(result?.payloadJson).toEqual({ test: true });
+      expect(result?.status).toBe("draft");
     });
 
     it("upsertDraftEvaluation overwrites existing draft (same ref)", async () => {
@@ -1295,8 +1295,8 @@ describe("DrizzleLedgerAdapter (Component)", () => {
 
       const all = await adapter.getEvaluationsForEpoch(evalEpochId, "draft");
       expect(all).toHaveLength(1);
-      expect(all[0]!.payloadHash).toBe(newHash);
-      expect(all[0]!.payloadJson).toEqual({ updated: true });
+      expect(all[0]?.payloadHash).toBe(newHash);
+      expect(all[0]?.payloadJson).toEqual({ updated: true });
     });
 
     it("getEvaluation returns null for nonexistent ref", async () => {
@@ -1392,12 +1392,12 @@ describe("DrizzleLedgerAdapter (Component)", () => {
         "locked"
       );
       expect(locked).not.toBeNull();
-      expect(locked!.status).toBe("locked");
+      expect(locked?.status).toBe("locked");
 
       // Draft still exists (coexistence)
       const draft = await adapter.getEvaluation(closeEpochId, evalRef, "draft");
       expect(draft).not.toBeNull();
-      expect(draft!.status).toBe("draft");
+      expect(draft?.status).toBe("draft");
 
       // getEvaluationsForEpoch returns both
       const all = await adapter.getEvaluationsForEpoch(closeEpochId);
@@ -1422,7 +1422,10 @@ describe("DrizzleLedgerAdapter (Component)", () => {
     });
 
     it("throws EpochNotFoundError for wrong scope", async () => {
-      const wrongScopeAdapter = new DrizzleLedgerAdapter(db, OTHER_SCOPE_ID);
+      const wrongScopeAdapter = new DrizzleAttributionAdapter(
+        db,
+        OTHER_SCOPE_ID
+      );
       await expect(
         wrongScopeAdapter.closeIngestionWithEvaluations({
           epochId: closeEpochId,
@@ -1517,20 +1520,20 @@ describe("DrizzleLedgerAdapter (Component)", () => {
 
       const first = results.find((r) => r.userId === actor.user.id);
       expect(first).toBeDefined();
-      expect(first!.metadata).toEqual({
+      expect(first?.metadata).toEqual({
         body: "fixes task.0102",
         branch: "feat/foo",
         labels: ["governance"],
       });
-      expect(first!.payloadHash).toBe("meta-hash-1");
-      expect(first!.source).toBe("github");
-      expect(first!.eventType).toBe("pr_merged");
-      expect(first!.included).toBe(true);
+      expect(first?.payloadHash).toBe("meta-hash-1");
+      expect(first?.source).toBe("github");
+      expect(first?.eventType).toBe("pr_merged");
+      expect(first?.included).toBe(true);
 
       const second = results.find((r) => r.userId === actorMeta.user.id);
       expect(second).toBeDefined();
-      expect(second!.metadata).toEqual({ body: "no work items here" });
-      expect(second!.payloadHash).toBe("meta-hash-2");
+      expect(second?.metadata).toEqual({ body: "no work items here" });
+      expect(second?.payloadHash).toBe("meta-hash-2");
     });
   });
 });

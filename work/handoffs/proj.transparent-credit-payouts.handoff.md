@@ -23,7 +23,7 @@ last_commit: "cd9fdcbb"
 
 - **Spec revised**: [epoch-ledger.md](../../docs/spec/epoch-ledger.md) — 18 invariants, activity-ingestion model, 2 workflows, 9 routes
 - **Project revised**: [proj.transparent-credit-payouts.md](../projects/proj.transparent-credit-payouts.md) — P0 = activity pipeline, P1 = wallet signing + UI
-- **task.0093 (Done)**: Foundation schema (epochs, pool_components, payout_statements) + `computePayouts()` in `packages/ledger-core/` + 31 unit tests. Needs PR to staging.
+- **task.0093 (Done)**: Foundation schema (epochs, pool_components, payout_statements) + `computeStatementItems()` in `packages/ledger-core/` + 31 unit tests. Needs PR to staging.
 - **task.0089 (Not Started)**: Identity bindings (`user_bindings` table) — **dependency** for activity attribution
 - **task.0094 (Not Started)**: `ActivityLedgerStore` port + Drizzle adapter + schema migration for new tables (`activity_events`, `epoch_allocations`, `source_cursors`) + epochs modifications
 - **task.0097 (Not Started)**: GitHub + Discord source adapters using `@octokit/graphql` and `discord.js`
@@ -66,8 +66,8 @@ last_commit: "cd9fdcbb"
 | `docs/spec/epoch-ledger.md`                        | Authoritative spec — 18 invariants, schema, API, workflows              |
 | `docs/research/epoch-event-ingestion-pipeline.md`  | Research: SourceCred patterns, OSS tooling choices, adapter design      |
 | `work/projects/proj.transparent-credit-payouts.md` | Roadmap, P0/P1/P2 phases, definition of done                            |
-| `packages/ledger-core/src/rules.ts`                | `computePayouts()` — reused unchanged for payout math                   |
-| `packages/ledger-core/src/model.ts`                | `ApprovedReceipt`, `PayoutLineItem` types                               |
+| `packages/ledger-core/src/rules.ts`                | `computeStatementItems()` — reused unchanged for payout math            |
+| `packages/ledger-core/src/model.ts`                | `ApprovedReceipt`, `StatementLineItem` types                            |
 | `packages/db-schema/src/ledger.ts`                 | Existing Drizzle tables (epochs, pool, statements + old receipt tables) |
 | `work/items/task.0089.user-identity-bindings.md`   | Cross-project dependency for identity resolution                        |
 | `work/items/task.0094.ledger-port-adapter.md`      | Next implementation task — port + adapter + migration                   |

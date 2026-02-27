@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import {
   buildCanonicalMessage,
   computeApproverSetHash,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 
 describe("buildCanonicalMessage", () => {

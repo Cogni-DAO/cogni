@@ -49,7 +49,7 @@ export const GET = wrapRouteHandlerWithLogging<{
     });
     const { limit, offset } = parsed;
 
-    const store = getContainer().epochLedgerStore;
+    const store = getContainer().attributionStore;
     const nodeId = getNodeId();
 
     // Load epoch to get window bounds

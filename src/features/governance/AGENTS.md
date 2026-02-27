@@ -85,4 +85,4 @@ pnpm dev:setup                             # db:setup + db:setup:test + gov sche
 
 - Governance schedules are system-ops only; never exposed as tenant-facing API
 - PRUNE_IS_PAUSE: removed charters get paused, never deleted
-- Epoch seed script uses `computeEpochWindowV1()` from `@cogni/ledger-core` for Monday-aligned UTC windows matching the scheduler grid
+- Epoch seed script uses `computeEpochWindowV1()` from `@cogni/attribution-ledger` for Monday-aligned UTC windows matching the scheduler grid

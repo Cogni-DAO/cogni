@@ -16,7 +16,7 @@ import {
   computeProposedAllocations,
   deriveAllocationAlgoRef,
   validateWeightConfig,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 
 const weightConfig: Record<string, number> = {

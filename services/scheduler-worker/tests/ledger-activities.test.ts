@@ -9,20 +9,20 @@
  */
 
 import type {
+  AttributionEpoch,
+  AttributionStore,
+  IngestionCursor,
+  UnselectedReceipt,
+} from "@cogni/attribution-ledger";
+import { computeEpochWindowV1 } from "@cogni/attribution-ledger";
+import type {
   ActivityEvent,
   CollectResult,
   SourceAdapter,
 } from "@cogni/ingestion-core";
-import type {
-  EpochLedgerStore,
-  LedgerEpoch,
-  LedgerIngestionCursor,
-  UnselectedReceipt,
-} from "@cogni/ledger-core";
-import { computeEpochWindowV1 } from "@cogni/ledger-core";
 import { describe, expect, it, vi } from "vitest";
 
-import { createLedgerActivities } from "../src/activities/ledger.js";
+import { createAttributionActivities } from "../src/activities/ledger.js";
 
 const NODE_ID = "aaaaaaaa-0000-0000-0000-000000000001";
 const SCOPE_ID = "bbbbbbbb-0000-0000-0000-000000000001";
@@ -33,11 +33,11 @@ const mockLogger = {
   error: vi.fn(),
   debug: vi.fn(),
   child: () => mockLogger,
-} as unknown as Parameters<typeof createLedgerActivities>[0]["logger"];
+} as unknown as Parameters<typeof createAttributionActivities>[0]["logger"];
 
 function makeMockStore(
-  overrides: Partial<EpochLedgerStore> = {}
-): EpochLedgerStore {
+  overrides: Partial<AttributionStore> = {}
+): AttributionStore {
   return {
     createEpoch: vi.fn(),
     getOpenEpoch: vi.fn().mockResolvedValue(null),
@@ -76,7 +76,7 @@ function makeMockStore(
     getUnselectedReceipts: vi.fn().mockResolvedValue([]),
     updateSelectionUserId: vi.fn(),
     ...overrides,
-  } as EpochLedgerStore;
+  } as AttributionStore;
 }
 
 function makeMockAdapter(events: ActivityEvent[] = []): SourceAdapter {
@@ -102,7 +102,9 @@ function makeMockAdapter(events: ActivityEvent[] = []): SourceAdapter {
   };
 }
 
-function makeEpoch(overrides: Partial<LedgerEpoch> = {}): LedgerEpoch {
+function makeEpoch(
+  overrides: Partial<AttributionEpoch> = {}
+): AttributionEpoch {
   return {
     id: 1n,
     nodeId: NODE_ID,
@@ -238,12 +240,12 @@ describe("computeEpochWindowV1", () => {
   });
 });
 
-// ── createLedgerActivities ──────────────────────────────────────
+// ── createAttributionActivities ──────────────────────────────────────
 
-describe("createLedgerActivities", () => {
+describe("createAttributionActivities", () => {
   it("returns all expected activity functions", () => {
-    const activities = createLedgerActivities({
-      ledgerStore: makeMockStore(),
+    const activities = createAttributionActivities({
+      attributionStore: makeMockStore(),
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -268,8 +270,8 @@ describe("ensureEpochForWindow", () => {
       createEpoch: vi.fn().mockResolvedValue(epoch),
     });
 
-    const { ensureEpochForWindow } = createLedgerActivities({
-      ledgerStore: store,
+    const { ensureEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -294,8 +296,8 @@ describe("ensureEpochForWindow", () => {
       getEpochByWindow: vi.fn().mockResolvedValue(epoch),
     });
 
-    const { ensureEpochForWindow } = createLedgerActivities({
-      ledgerStore: store,
+    const { ensureEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -320,8 +322,8 @@ describe("ensureEpochForWindow", () => {
       getEpochByWindow: vi.fn().mockResolvedValue(epoch),
     });
 
-    const { ensureEpochForWindow } = createLedgerActivities({
-      ledgerStore: store,
+    const { ensureEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -350,10 +352,10 @@ describe("ensureEpochForWindow", () => {
     const logger = {
       ...mockLogger,
       warn: vi.fn(),
-    } as unknown as Parameters<typeof createLedgerActivities>[0]["logger"];
+    } as unknown as Parameters<typeof createAttributionActivities>[0]["logger"];
 
-    const { ensureEpochForWindow } = createLedgerActivities({
-      ledgerStore: store,
+    const { ensureEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -380,8 +382,8 @@ describe("ensureEpochForWindow", () => {
 describe("loadCursor", () => {
   it("returns null when no cursor exists", async () => {
     const store = makeMockStore();
-    const { loadCursor } = createLedgerActivities({
-      ledgerStore: store,
+    const { loadCursor } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -398,7 +400,7 @@ describe("loadCursor", () => {
   });
 
   it("returns cursor value when one exists", async () => {
-    const cursor: LedgerIngestionCursor = {
+    const cursor: IngestionCursor = {
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
       source: "github",
@@ -411,8 +413,8 @@ describe("loadCursor", () => {
       getCursor: vi.fn().mockResolvedValue(cursor),
     });
 
-    const { loadCursor } = createLedgerActivities({
-      ledgerStore: store,
+    const { loadCursor } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -433,8 +435,8 @@ describe("loadCursor", () => {
 
 describe("collectFromSource", () => {
   it("returns empty events when no adapter exists for source", async () => {
-    const { collectFromSource } = createLedgerActivities({
-      ledgerStore: makeMockStore(),
+    const { collectFromSource } = createAttributionActivities({
+      attributionStore: makeMockStore(),
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -458,8 +460,8 @@ describe("collectFromSource", () => {
     const adapter = makeMockAdapter([event]);
     const adapters = new Map<string, SourceAdapter>([["github", adapter]]);
 
-    const { collectFromSource } = createLedgerActivities({
-      ledgerStore: makeMockStore(),
+    const { collectFromSource } = createAttributionActivities({
+      attributionStore: makeMockStore(),
       sourceAdapters: adapters,
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -486,8 +488,8 @@ describe("collectFromSource", () => {
 describe("insertReceipts", () => {
   it("does nothing when events array is empty", async () => {
     const store = makeMockStore();
-    const { insertReceipts } = createLedgerActivities({
-      ledgerStore: store,
+    const { insertReceipts } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -501,8 +503,8 @@ describe("insertReceipts", () => {
 
   it("maps events and uses producerVersion from input", async () => {
     const store = makeMockStore();
-    const { insertReceipts } = createLedgerActivities({
-      ledgerStore: store,
+    const { insertReceipts } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -524,8 +526,8 @@ describe("insertReceipts", () => {
 describe("saveCursor", () => {
   it("saves cursor when no existing cursor", async () => {
     const store = makeMockStore();
-    const { saveCursor } = createLedgerActivities({
-      ledgerStore: store,
+    const { saveCursor } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -550,7 +552,7 @@ describe("saveCursor", () => {
   });
 
   it("enforces monotonic cursor — keeps later value", async () => {
-    const existingCursor: LedgerIngestionCursor = {
+    const existingCursor: IngestionCursor = {
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
       source: "github",
@@ -563,8 +565,8 @@ describe("saveCursor", () => {
       getCursor: vi.fn().mockResolvedValue(existingCursor),
     });
 
-    const { saveCursor } = createLedgerActivities({
-      ledgerStore: store,
+    const { saveCursor } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -590,7 +592,7 @@ describe("saveCursor", () => {
   });
 
   it("advances cursor when new value is later", async () => {
-    const existingCursor: LedgerIngestionCursor = {
+    const existingCursor: IngestionCursor = {
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
       source: "github",
@@ -603,8 +605,8 @@ describe("saveCursor", () => {
       getCursor: vi.fn().mockResolvedValue(existingCursor),
     });
 
-    const { saveCursor } = createLedgerActivities({
-      ledgerStore: store,
+    const { saveCursor } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,
@@ -634,13 +636,13 @@ describe("saveCursor", () => {
 describe("materializeSelection", () => {
   const epoch = makeEpoch({ id: 1n });
 
-  function makeDeps(storeOverrides: Partial<EpochLedgerStore> = {}) {
+  function makeDeps(storeOverrides: Partial<AttributionStore> = {}) {
     const store = makeMockStore({
       getEpoch: vi.fn().mockResolvedValue(epoch),
       ...storeOverrides,
     });
-    const { materializeSelection } = createLedgerActivities({
-      ledgerStore: store,
+    const { materializeSelection } = createAttributionActivities({
+      attributionStore: store,
       sourceAdapters: new Map(),
       nodeId: NODE_ID,
       scopeId: SCOPE_ID,

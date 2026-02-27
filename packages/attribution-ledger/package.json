@@ -1,5 +1,5 @@
 {
-  "name": "@cogni/ledger-core",
+  "name": "@cogni/attribution-ledger",
   "private": true,
   "version": "0.0.0",
   "type": "module",

@@ -69,7 +69,7 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 5. Weight policy computes `proposed_units` per contributor → `epoch_allocations`
 6. Admin reviews allocations, adjusts `final_units` where needed
 7. Admin records pool components (`base_issuance` at minimum)
-8. Admin triggers finalize → `computePayouts(final_units, pool_total)` → `payout_statement`
+8. Admin triggers finalize → `computeStatementItems(final_units, pool_total)` → `payout_statement`
 9. Anyone can recompute payouts from stored `activity_events` + pool + weight config
 
 **E2E pipeline status (gap analysis 2026-02-22):**
@@ -85,13 +85,13 @@ repo-spec.yaml → schedule sync → Temporal schedule → CollectEpochWorkflow 
 - [x] GitHub source adapter (GraphQL, deterministic IDs, provenance, cursor-based)
 - [x] DB schema (epochs, activity_events, activity_curation, epoch_allocations, pool_components, payout_statements, statement_signatures, source_cursors)
 - [x] Store port + Drizzle adapter (all CRUD methods)
-- [x] `computePayouts()` pure function (BIGINT, largest-remainder)
+- [x] `computeStatementItems()` pure function (BIGINT, largest-remainder)
 - [x] Identity bindings schema (user_bindings + identity_events tables) — task.0089 done
 - [x] **Identity resolution activity** — resolve platformUserId → userId via user_bindings (task.0101 in review)
 - [x] **Curation auto-population** — create activity_curation rows from collected events (task.0101 in review)
 - [ ] **`computeProposedAllocations()`** — weight policy → epoch_allocations (task.0102)
 - [ ] **Epoch auto-close** — detect period_end+grace passed, transition open→review/closed (task.0102)
-- [ ] **FinalizeEpochWorkflow** — read allocations+pool, computePayouts, atomic close+statement (task.0102)
+- [ ] **FinalizeEpochWorkflow** — read allocations+pool, computeStatementItems, atomic close+statement (task.0102)
 - [ ] **`computeAllocationSetHash()`** — canonical hash for signing (task.0102)
 - [ ] **3-phase epoch status** — DB migration open/review/finalized + triggers (task.0100)
 - [ ] **EIP-191 signing** — canonical message, verify, store signatures (task.0100)
@@ -212,7 +212,7 @@ If the weight policy becomes a black box (complex formulas, hidden multipliers, 
 
 **From spike.0082:** spike.0082 designed a "deterministic distribution engine" with algorithmic valuation. This project corrects the model: weights propose, humans finalize.
 
-**From receipt-signing model:** The original P0 designed per-receipt wallet-signed receipts with SIWE-gated multi-role authorization. This revision moves wallet signing to P1 and replaces manual receipt creation with automated activity ingestion. The core payout math (`computePayouts`, BIGINT, largest-remainder) is unchanged.
+**From receipt-signing model:** The original P0 designed per-receipt wallet-signed receipts with SIWE-gated multi-role authorization. This revision moves wallet signing to P1 and replaces manual receipt creation with automated activity ingestion. The core payout math (`computeStatementItems`, BIGINT, largest-remainder) is unchanged.
 
 ### Technical decisions
 

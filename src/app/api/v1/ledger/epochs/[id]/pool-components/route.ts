@@ -80,7 +80,7 @@ export const POST = wrapRouteHandlerWithLogging<{
 
       const input = recordPoolComponentOperation.input.parse(body);
 
-      const store = getContainer().epochLedgerStore;
+      const store = getContainer().attributionStore;
       const nodeId = getNodeId();
 
       // input.amountCredits is already bigint (zBigint transform)

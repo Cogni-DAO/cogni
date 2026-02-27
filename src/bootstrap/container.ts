@@ -18,10 +18,10 @@ import type {
   RepoCapability,
   WebSearchCapability,
 } from "@cogni/ai-tools";
-import { DrizzleLedgerAdapter } from "@cogni/db-client";
+import type { AttributionStore } from "@cogni/attribution-ledger";
+import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
-import type { EpochLedgerStore } from "@cogni/ledger-core";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { Logger } from "pino";
 import {
@@ -138,7 +138,7 @@ export interface Container {
   /** Governance status queries (system tenant scope) */
   governanceStatus: GovernanceStatusPort;
   /** Epoch ledger store — shared by app and scheduler-worker */
-  epochLedgerStore: EpochLedgerStore;
+  attributionStore: AttributionStore;
 }
 
 // Feature-specific dependency types
@@ -387,7 +387,7 @@ function createContainer(): Container {
       db,
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
     ),
-    epochLedgerStore: new DrizzleLedgerAdapter(serviceDb, getScopeId()),
+    attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
   };
 }
 

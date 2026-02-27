@@ -12,18 +12,18 @@
  */
 
 import type {
-  EpochLedgerStore,
+  AttributionEpoch,
+  AttributionPoolComponent,
+  AttributionStatement,
+  AttributionStore,
   InsertAllocationParams,
-  InsertEpochStatementParams,
-  InsertIngestionReceiptParams,
   InsertPoolComponentParams,
+  InsertReceiptParams,
   InsertSelectionAutoParams,
-  LedgerEpoch,
-  LedgerEpochStatement,
-  LedgerPoolComponent,
+  InsertStatementParams,
   UpsertEvaluationParams,
   UpsertSelectionParams,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 
 /** Stable test node ID for ledger integration tests */
 export const TEST_NODE_ID = "00000000-0000-4000-8000-000000000001";
@@ -59,8 +59,8 @@ export const TEST_WEIGHT_CONFIG: Record<string, number> = {
 
 /** Build an ingestion receipt insert param with sensible defaults */
 export function makeIngestionReceipt(
-  overrides: Partial<InsertIngestionReceiptParams> & { receiptId: string }
-): InsertIngestionReceiptParams {
+  overrides: Partial<InsertReceiptParams> & { receiptId: string }
+): InsertReceiptParams {
   return {
     nodeId: TEST_NODE_ID,
     source: "github",
@@ -135,13 +135,13 @@ export function makePoolComponent(
 
 /** Build an epoch statement insert param with sensible defaults */
 export function makeEpochStatement(
-  overrides: Partial<InsertEpochStatementParams> & { epochId: bigint }
-): InsertEpochStatementParams {
+  overrides: Partial<InsertStatementParams> & { epochId: bigint }
+): InsertStatementParams {
   return {
     nodeId: TEST_NODE_ID,
     allocationSetHash: "test-hash-abc123",
     poolTotalCredits: 10000n,
-    payoutsJson: [
+    statementItems: [
       {
         user_id: "user-1",
         total_units: "8000",
@@ -181,22 +181,22 @@ export function makeEvaluation(
 
 /** Result of seeding a closed epoch with all related data */
 export interface SeededClosedEpoch {
-  epoch: LedgerEpoch;
-  poolComponent: LedgerPoolComponent;
-  statement: LedgerEpochStatement;
+  epoch: AttributionEpoch;
+  poolComponent: AttributionPoolComponent;
+  statement: AttributionStatement;
 }
 
 /**
  * Seeds a complete closed epoch with receipts, selections, allocations,
  * a pool component, and a statement. Suitable for testing read routes.
  *
- * @param store - The EpochLedgerStore to seed into
+ * @param store - The AttributionStore to seed into
  * @param opts.nodeId - Node ID (defaults to TEST_NODE_ID)
  * @param opts.scopeId - Scope ID (defaults to TEST_SCOPE_ID)
  * @param opts.epochOffset - Epoch window offset for test isolation (defaults to 0)
  */
 export async function seedClosedEpoch(
-  store: EpochLedgerStore,
+  store: AttributionStore,
   opts: {
     nodeId?: string;
     scopeId?: string;

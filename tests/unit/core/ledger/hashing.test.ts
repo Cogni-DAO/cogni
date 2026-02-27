@@ -11,7 +11,7 @@
  * @public
  */
 
-import { computeAllocationSetHash } from "@cogni/ledger-core";
+import { computeAllocationSetHash } from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 
 describe("core/ledger/hashing", () => {

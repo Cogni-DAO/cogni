@@ -28,7 +28,7 @@ external_refs:
 
 ## Requirements
 
-- `upsertAllocations` in `DrizzleLedgerAdapter` batches inserts instead of one-at-a-time loop (N sequential round-trips → single batch or chunked batch)
+- `upsertAllocations` in `DrizzleAttributionAdapter` batches inserts instead of one-at-a-time loop (N sequential round-trips → single batch or chunked batch)
 - Finalize API route (`src/app/api/v1/ledger/epochs/[id]/finalize/route.ts`) uses a pooled/shared Temporal `Connection` + `Client` instead of creating + closing per request
 - Activity-level unit tests for `computeAllocations`, `ensurePoolComponents`, `autoCloseIngestion`, and `finalizeEpoch` covering key code paths (empty inputs, idempotency, error cases)
 - Extract duplicated `zBigint` Zod helper from two contract files into a shared utility

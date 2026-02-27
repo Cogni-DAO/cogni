@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/hashing`
+ * Module: `@cogni/attribution-ledger/hashing`
  * Purpose: Deterministic SHA-256 hashing for allocation sets and epoch evaluations.
  * Scope: Pure functions. Does not perform network I/O or hold secrets.
  * Invariants:

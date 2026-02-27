@@ -65,6 +65,6 @@ last_commit: e4b9d37d
 | `src/app/api/v1/ledger/epochs/[id]/statement/route.ts`      | GET handler for epoch payout statements                           |
 | `src/features/governance/hooks/useCurrentEpoch.ts`          | Hook showing exact API endpoints the UI fetches                   |
 | `src/features/governance/lib/compose-epoch.ts`              | Composition functions joining API data into view models           |
-| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` | `DrizzleLedgerAdapter` — the store used by seed + routes          |
+| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` | `DrizzleAttributionAdapter` — the store used by seed + routes     |
 | `services/scheduler-worker/src/activities/ledger.ts`        | `ensureEpochForWindow()` — how Temporal coexists with seeded data |
 | `work/items/task.0106.ledger-dev-seed.md`                   | Full requirements and data shape reference                        |

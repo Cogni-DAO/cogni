@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/enrichers/work-item-linker`
+ * Module: `@cogni/attribution-ledger/enrichers/work-item-linker`
  * Purpose: Pure functions for extracting work-item IDs from GitHub event metadata and building artifact payloads.
  * Scope: Link extraction regex, artifact payload construction. Does not perform I/O or hold state.
  * Invariants:

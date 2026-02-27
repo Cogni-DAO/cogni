@@ -8,7 +8,7 @@
  * Invariants:
  * - ENRICHER_IDEMPOTENT: Same receipts → same hashes → same evaluation.
  * - ENRICHER_DRAFT_ONLY: evaluateEpochDraft writes status='draft' only; buildLockedEvaluations returns data without writing.
- * Side-effects: IO (database via ledgerStore)
+ * Side-effects: IO (database via attributionStore)
  * Links: work/items/task.0113.epoch-artifact-pipeline.md
  * @internal
  */
@@ -17,10 +17,10 @@ import {
   computeArtifactsHash,
   computeEnricherInputsHash,
   sha256OfCanonicalJson,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 
 import type { Logger } from "../observability/logger.js";
-import type { EpochLedgerStore } from "../ports/index.js";
+import type { AttributionStore } from "../ports/index.js";
 
 /** Namespaced evaluation ref for the echo enricher. */
 export const ECHO_EVALUATION_REF = "cogni.echo.v0";
@@ -32,7 +32,7 @@ export const ECHO_ALGO_REF = "echo-v0";
  * Dependencies injected into enrichment activities.
  */
 export interface EnrichmentActivityDeps {
-  readonly ledgerStore: EpochLedgerStore;
+  readonly attributionStore: AttributionStore;
   readonly nodeId: string;
   readonly logger: Logger;
 }
@@ -88,7 +88,7 @@ export interface BuildLockedEvaluationsOutput {
  * Creates enrichment activity functions with injected dependencies.
  */
 export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
-  const { ledgerStore, nodeId, logger } = deps;
+  const { attributionStore, nodeId, logger } = deps;
 
   /**
    * Build the echo payload from selected receipts.
@@ -127,7 +127,8 @@ export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
 
     logger.info({ epochId: input.epochId }, "Evaluating epoch draft (echo)");
 
-    const receipts = await ledgerStore.getSelectedReceiptsWithMetadata(epochId);
+    const receipts =
+      await attributionStore.getSelectedReceiptsWithMetadata(epochId);
 
     const payload = buildEchoPayload(receipts);
     const payloadHash = await sha256OfCanonicalJson(payload);
@@ -139,7 +140,7 @@ export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
       })),
     });
 
-    await ledgerStore.upsertDraftEvaluation({
+    await attributionStore.upsertDraftEvaluation({
       nodeId,
       epochId,
       evaluationRef: ECHO_EVALUATION_REF,
@@ -177,7 +178,8 @@ export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
 
     logger.info({ epochId: input.epochId }, "Building locked evaluations");
 
-    const receipts = await ledgerStore.getSelectedReceiptsWithMetadata(epochId);
+    const receipts =
+      await attributionStore.getSelectedReceiptsWithMetadata(epochId);
 
     const payload = buildEchoPayload(receipts);
     const payloadHash = await sha256OfCanonicalJson(payload);

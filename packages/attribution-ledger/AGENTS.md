@@ -41,14 +41,14 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
 
 - **Exports:**
   - `EPOCH_STATUSES` — Enum array
-  - `EpochStatus`, `FinalizedAllocation`, `PayoutLineItem` — Domain types
+  - `EpochStatus`, `FinalizedAllocation`, `StatementLineItem` — Domain types
   - `ActivityLedgerStore` — Port interface for ledger persistence
-  - `LedgerEpoch`, `LedgerActivityEvent`, `LedgerCuration`, `LedgerAllocation`, `LedgerSourceCursor`, `LedgerPoolComponent`, `LedgerPayoutStatement`, `LedgerStatementSignature` — Read-side record types
+  - `AttributionEpoch`, `LedgerActivityEvent`, `LedgerCuration`, `AttributionAllocation`, `LedgerSourceCursor`, `AttributionPoolComponent`, `LedgerPayoutStatement`, `AttributionStatementSignature` — Read-side record types
   - `InsertActivityEventParams`, `UpsertCurationParams`, `InsertCurationAutoParams`, `InsertAllocationParams`, `InsertPoolComponentParams`, `InsertPayoutStatementParams`, `InsertSignatureParams` — Write-side param types
   - `UncuratedEvent` — Event + hasExistingCuration flag for delta curation processing
   - `computeEpochWindowV1()` — Pure, deterministic epoch window computation (Monday-aligned UTC). Safe in Temporal workflow code.
   - `EpochWindow`, `EpochWindowParams` — Types for epoch window computation
-  - `computePayouts()` — BIGINT proportional distribution with largest-remainder rounding
+  - `computeStatementItems()` — BIGINT proportional distribution with largest-remainder rounding
   - `computeAllocationSetHash()` — SHA-256 of canonical sorted allocation data
   - `computeWeightConfigHash()` — SHA-256 of canonical weight config JSON (key-sorted)
   - `computeProposedAllocations()` — Versioned allocation dispatch (V0: `weight-sum-v0`)
@@ -64,10 +64,10 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
   - `computeArtifactsHash()` — SHA-256 of sorted locked artifact tuples
   - `validateArtifactRef()`, `validateArtifactEnvelope()` — Artifact metadata/hash validation (pure)
   - `computeEnricherInputsHash()` — Deterministic inputs hash for enrichers (base shape + extensions)
-  - `createValidatedLedgerStore()` — Wraps `ActivityLedgerStore` with envelope validation on artifact writes
+  - `createValidatedAttributionStore()` — Wraps `ActivityLedgerStore` with envelope validation on artifact writes
   - `extractWorkItemIds()` — Regex extraction of work-item IDs from event metadata
   - `WORK_ITEM_LINKS_ARTIFACT_REF`, `WORK_ITEM_LINKER_ALGO_REF` — Namespaced constants for work-item-linker enricher
-  - `UpsertArtifactParams`, `CuratedEventWithMetadata`, `LedgerEpochArtifact`, `CloseIngestionWithArtifactsParams` — Artifact-related types
+  - `UpsertArtifactParams`, `CuratedEventWithMetadata`, `AttributionEpochArtifact`, `CloseIngestionWithArtifactsParams` — Artifact-related types
 - **CLI:** none
 - **Env/Config keys:** none
 
@@ -75,7 +75,7 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
 
 - **Uses ports:** none
 - **Implements ports:** none
-- **Defines ports:** `ActivityLedgerStore` (implemented by `DrizzleLedgerAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), artifact lifecycle (`upsertDraftArtifact`, `closeIngestionWithArtifacts`, `getArtifactsForEpoch`, `getArtifact`, `getCuratedEventsWithMetadata`), and atomic finalization (`finalizeEpochAtomic`).
+- **Defines ports:** `ActivityLedgerStore` (implemented by `DrizzleAttributionAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), artifact lifecycle (`upsertDraftArtifact`, `closeIngestionWithArtifacts`, `getArtifactsForEpoch`, `getArtifact`, `getCuratedEventsWithMetadata`), and atomic finalization (`finalizeEpochAtomic`).
 
 ## Responsibilities
 
@@ -85,8 +85,8 @@ Pure domain logic for the epoch ledger — shared between the Next.js app (`src/
 ## Usage
 
 ```bash
-pnpm --filter @cogni/ledger-core typecheck
-pnpm --filter @cogni/ledger-core build
+pnpm --filter @cogni/attribution-ledger typecheck
+pnpm --filter @cogni/attribution-ledger build
 ```
 
 ## Standards

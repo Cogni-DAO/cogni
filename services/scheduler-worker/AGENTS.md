@@ -101,7 +101,7 @@ docker build -f services/scheduler-worker/Dockerfile -t scheduler-worker .
 
 ## Dependencies
 
-- **Internal:** `@cogni/scheduler-core` (ports), `@cogni/ingestion-core` (ports), `@cogni/ledger-core` (domain logic + epoch window), `@cogni/db-client` (adapters, bootstrap only), `@cogni/ids`
+- **Internal:** `@cogni/scheduler-core` (ports), `@cogni/ingestion-core` (ports), `@cogni/attribution-ledger` (domain logic + epoch window), `@cogni/db-client` (adapters, bootstrap only), `@cogni/ids`
 - **External:** `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/activity`, `pino`, `viem` (EIP-191 verification), `zod`
 
 ## Change Protocol

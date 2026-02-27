@@ -52,7 +52,7 @@ This is the single biggest operational blindspot for onboarding new contributors
 
 ## Root Cause
 
-`getCuratedEventsForAllocation()` in `DrizzleLedgerAdapter` filters to `user_id IS NOT NULL`. This is correct for allocation math but the system has no compensating visibility mechanism.
+`getCuratedEventsForAllocation()` in `DrizzleAttributionAdapter` filters to `user_id IS NOT NULL`. This is correct for allocation math but the system has no compensating visibility mechanism.
 
 ## Scope
 

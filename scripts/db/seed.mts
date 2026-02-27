@@ -14,10 +14,10 @@
  */
 
 import { createHash } from "node:crypto";
-import { DrizzleLedgerAdapter } from "@cogni/db-client";
+import { computeEpochWindowV1 } from "@cogni/attribution-ledger";
+import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
 import { users } from "@cogni/db-schema/refs";
-import { computeEpochWindowV1 } from "@cogni/ledger-core";
 
 // ── Configuration ───────────────────────────────────────────────
 // From .cogni/repo-spec.yaml
@@ -283,7 +283,7 @@ function computeAllocations(
   }));
 }
 
-function computePayouts(
+function computeStatementItems(
   allocations: {
     userId: string;
     proposedUnits: bigint;
@@ -313,7 +313,7 @@ function computePayouts(
 // ── Main ────────────────────────────────────────────────────────
 
 async function seedFinalizedEpoch(
-  store: DrizzleLedgerAdapter,
+  store: DrizzleAttributionAdapter,
   epochDef: typeof EPOCH_1
 ): Promise<void> {
   // 1. Create epoch
@@ -402,7 +402,7 @@ async function seedFinalizedEpoch(
   console.log("  Finalized epoch (review → finalized)");
 
   // 8. Insert epoch statement
-  const payouts = computePayouts(allocs, POOL_CREDITS);
+  const payouts = computeStatementItems(allocs, POOL_CREDITS);
   await store.insertEpochStatement({
     nodeId: NODE_ID,
     epochId: epoch.id,
@@ -415,13 +415,13 @@ async function seedFinalizedEpoch(
       )
     ),
     poolTotalCredits: POOL_CREDITS,
-    payoutsJson: payouts,
+    statementItems: payouts,
   });
   console.log("  Inserted epoch statement");
 }
 
 async function seedOpenEpoch(
-  store: DrizzleLedgerAdapter,
+  store: DrizzleAttributionAdapter,
   epochDef: typeof EPOCH_3
 ): Promise<void> {
   // 1. Create epoch (stays open)
@@ -511,7 +511,7 @@ async function main(): Promise<void> {
   console.log();
 
   const db = createServiceDbClient(dbUrl);
-  const store = new DrizzleLedgerAdapter(db, SCOPE_ID);
+  const store = new DrizzleAttributionAdapter(db, SCOPE_ID);
 
   // Check for existing open epoch — avoid ONE_OPEN_EPOCH violation
   const existingOpen = await store.getOpenEpoch(NODE_ID, SCOPE_ID);

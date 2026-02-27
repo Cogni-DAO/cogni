@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/pool`
+ * Module: `@cogni/attribution-ledger/pool`
  * Purpose: Pool estimation framework — pure functions for computing pool component estimates from config.
  * Scope: Pure functions. Does not perform I/O or hold state. V0: returns only base_issuance from config.
  * Invariants:

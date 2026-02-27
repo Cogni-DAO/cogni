@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/tests/work-item-linker`
+ * Module: `@cogni/attribution-ledger/tests/work-item-linker`
  * Purpose: Unit tests for work-item ID extraction from event metadata.
  * Scope: Tests extractWorkItemIds regex patterns and deduplication. Does not test I/O or store.
  * Invariants: Pattern matches (task|bug|spike|story).\d{4} with word boundaries.

@@ -94,15 +94,15 @@ export type {
   PreflightCreditCheckFn,
 } from "./graph-executor.port";
 export type {
-  EpochLedgerStore,
-  LedgerAllocation,
-  LedgerEpoch,
-  LedgerEpochStatement,
-  LedgerIngestionCursor,
-  LedgerIngestionReceipt,
-  LedgerPoolComponent,
-  LedgerSelection,
-  LedgerStatementSignature,
+  AttributionAllocation,
+  AttributionEpoch,
+  AttributionPoolComponent,
+  AttributionSelection,
+  AttributionStatement,
+  AttributionStatementSignature,
+  AttributionStore,
+  IngestionCursor,
+  IngestionReceipt,
 } from "./ledger-store.port";
 // LlmError types re-exported for adapters (adapters can only import from ports)
 // Features should import directly from @/core

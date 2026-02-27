@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/tsup.config`
+ * Module: `@cogni/attribution-ledger/tsup.config`
  * Purpose: Build configuration for ledger-core package.
  * Scope: Build tooling only. Does not contain runtime code.
  * Invariants: Output must be ESM with type declarations.

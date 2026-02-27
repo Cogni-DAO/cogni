@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/rules`
+ * Module: `@cogni/attribution-ledger/rules`
  * Purpose: Payout computation with BIGINT arithmetic and largest-remainder rounding (ALL_MATH_BIGINT).
  * Scope: Pure function. Does not perform I/O or mutate external state.
  * Invariants:
@@ -14,7 +14,7 @@
  * @public
  */
 
-import type { FinalizedAllocation, PayoutLineItem } from "./model";
+import type { FinalizedAllocation, StatementLineItem } from "./model";
 
 /**
  * Compute proportional payouts from finalized allocations and a pool total.
@@ -28,10 +28,10 @@ import type { FinalizedAllocation, PayoutLineItem } from "./model";
  * @param poolTotalCredits - Total credit pool to distribute
  * @returns Sorted payout line items (deterministic order by userId)
  */
-export function computePayouts(
+export function computeStatementItems(
   allocations: readonly FinalizedAllocation[],
   poolTotalCredits: bigint
-): PayoutLineItem[] {
+): StatementLineItem[] {
   if (allocations.length === 0) {
     return [];
   }

@@ -4,14 +4,14 @@
 /**
  * Module: `@cogni/tests/external/ingestion/ledger-collection.external.test`
  * Purpose: Validate ledger activity functions end-to-end against real GitHub API + Postgres.
- * Scope: Exercises createLedgerActivities pipeline with real DrizzleLedgerAdapter + GitHubSourceAdapter. Does not test Temporal workflow orchestration.
+ * Scope: Exercises createAttributionActivities pipeline with real DrizzleAttributionAdapter + GitHubSourceAdapter. Does not test Temporal workflow orchestration.
  * Invariants: Requires GITHUB_REVIEW_APP_ID + GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64 in env. Skips gracefully if missing.
  * Side-effects: IO (GitHub GraphQL, testcontainers PostgreSQL)
  * Links: services/scheduler-worker/src/activities/ledger.ts, docs/spec/epoch-ledger.md
  * @internal
  */
 
-import { DrizzleLedgerAdapter } from "@cogni/db-client";
+import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { SourceAdapter } from "@cogni/ingestion-core";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
@@ -22,7 +22,7 @@ import {
 import { seedTestActor } from "@tests/_fixtures/stack/seed";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  createLedgerActivities,
+  createAttributionActivities,
   type LedgerActivityDeps,
 } from "../../../services/scheduler-worker/src/activities/ledger";
 import { GitHubSourceAdapter } from "../../../services/scheduler-worker/src/adapters/ingestion/github";
@@ -74,7 +74,7 @@ const mockLogger = {
 
 describeWithAuth("Ledger Collection Pipeline (external)", () => {
   const db = getSeedDb();
-  const ledger = new DrizzleLedgerAdapter(db, TEST_SCOPE_ID);
+  const ledger = new DrizzleAttributionAdapter(db, TEST_SCOPE_ID);
 
   const tokenProvider = new GitHubAppTokenProvider({
     appId: GITHUB_REVIEW_APP_ID,
@@ -92,7 +92,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
 
   const adapters = new Map<string, SourceAdapter>([["github", githubAdapter]]);
 
-  const activities = createLedgerActivities({
+  const activities = createAttributionActivities({
     ledgerStore: ledger,
     sourceAdapters: adapters,
     nodeId: TEST_NODE_ID,

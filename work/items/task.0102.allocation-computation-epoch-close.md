@@ -39,7 +39,7 @@ The pipeline goes from raw events to payout statements. Three frameworks ship: (
 
 **Reuses**:
 
-- Existing `computePayouts()` in `ledger-core/rules.ts` — unchanged
+- Existing `computeStatementItems()` in `ledger-core/rules.ts` — unchanged
 - Existing `insertAllocations` store method — changed to upsert (ON CONFLICT UPDATE proposed_units, activity_count; never touch final_units)
 - Existing `insertPoolComponent` store method — idempotent via POOL_UNIQUE_PER_TYPE
 - Existing `closeIngestion` store method (task.0100) — status transition
@@ -191,12 +191,12 @@ closeIngestion(
   approverSetHash: string,
   allocationAlgoRef: string,
   weightConfigHash: string
-): Promise<LedgerEpoch>;
+): Promise<AttributionEpoch>;
 ```
 
 Sets `approver_set_hash` (task.0100), `allocation_algo_ref`, and `weight_config_hash` on the epoch row atomically. All three are NULL while open, immutable after review.
 
-5. **`insertPoolComponent` enforcement** — port signature unchanged. Adapter (`DrizzleLedgerAdapter`) checks epoch status internally via `resolveEpochScoped` and rejects if `status != 'open'` (POOL_LOCKED_AT_REVIEW). Consistent with existing scope-gating pattern.
+5. **`insertPoolComponent` enforcement** — port signature unchanged. Adapter (`DrizzleAttributionAdapter`) checks epoch status internally via `resolveEpochScoped` and rejects if `status != 'open'` (POOL_LOCKED_AT_REVIEW). Consistent with existing scope-gating pattern.
 
 **`computeAllocations` activity:**
 
@@ -303,7 +303,7 @@ Deterministic ID: ledger-finalize-{scopeId}-{epochId}
    → Read epoch_allocations — use final_units where set, fall back to proposed_units.
    → Read pool components → pool_total = SUM(amount_credits).
    → Verify ≥1 base_issuance component (POOL_REQUIRES_BASE).
-   → computePayouts(allocations, pool_total) — BIGINT, largest-remainder.
+   → computeStatementItems(allocations, pool_total) — BIGINT, largest-remainder.
    → computeAllocationSetHash(allocations).
    → Atomic transaction:
      - finalizeEpoch(epochId, pool_total)
@@ -334,7 +334,7 @@ Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_F
 - [ ] POOL_AUTO_POPULATED: `ensurePoolComponents` activity inserts `base_issuance` from config. Idempotent via POOL_UNIQUE_PER_TYPE. Admin can add additional components via API while epoch is open. (spec: epoch-ledger POOL_REQUIRES_BASE)
 - [ ] POOL_LOCKED_AT_REVIEW: No pool component inserts after `closeIngestion`. `insertPoolComponent` rejects if epoch status != 'open'. `component_id` validated against V0 allowlist (`base_issuance`, `kpi_bonus_v0`, `top_up`). (spec: epoch-ledger)
 - [ ] POOL_REPRODUCIBLE: Each pool component stores `algorithm_version + inputs_json + amount_credits`. `estimatePoolComponentsV0` is a pure function. (spec: epoch-ledger)
-- [ ] PAYOUT_DETERMINISTIC: `computePayouts` + `computeAllocationSetHash` are pure functions. Same allocations + pool → identical statement + hash. (spec: epoch-ledger)
+- [ ] PAYOUT_DETERMINISTIC: `computeStatementItems` + `computeAllocationSetHash` are pure functions. Same allocations + pool → identical statement + hash. (spec: epoch-ledger)
 - [ ] ALL_MATH_BIGINT: All weight, unit, credit, and pool values use BigInt. No floating point. (spec: epoch-ledger)
 - [ ] IDENTITY_BEST_EFFORT: `getCuratedEventsForAllocation` returns only resolved events (`userId IS NOT NULL`). Unresolved events excluded from allocation, not silently dropped. (spec: epoch-ledger)
 - [ ] EPOCH_FINALIZE_IDEMPOTENT: FinalizeEpochWorkflow returns existing statement if epoch already finalized. No error, no mutation. (spec: epoch-ledger)

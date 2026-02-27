@@ -148,7 +148,7 @@ export function getNodeId(): string {
 let cachedScopeId: string | null = null;
 
 /**
- * Scope identity from repo-spec. Used by DrizzleLedgerAdapter for SCOPE_GATED_QUERIES.
+ * Scope identity from repo-spec. Used by DrizzleAttributionAdapter for SCOPE_GATED_QUERIES.
  * Fails fast if repo-spec is missing scope_id.
  */
 export function getScopeId(): string {

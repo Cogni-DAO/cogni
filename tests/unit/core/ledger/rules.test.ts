@@ -11,14 +11,14 @@
  * @public
  */
 
-import type { FinalizedAllocation } from "@cogni/ledger-core";
-import { computePayouts } from "@cogni/ledger-core";
+import type { FinalizedAllocation } from "@cogni/attribution-ledger";
+import { computeStatementItems } from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 
 describe("core/ledger/rules", () => {
-  describe("computePayouts", () => {
+  describe("computeStatementItems", () => {
     it("returns empty array for no receipts", () => {
-      const result = computePayouts([], 1000n);
+      const result = computeStatementItems([], 1000n);
       expect(result).toEqual([]);
     });
 
@@ -26,7 +26,7 @@ describe("core/ledger/rules", () => {
       const receipts: FinalizedAllocation[] = [
         { userId: "user-a", valuationUnits: 100n },
       ];
-      const result = computePayouts(receipts, 0n);
+      const result = computeStatementItems(receipts, 0n);
       expect(result).toEqual([]);
     });
 
@@ -35,7 +35,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 0n },
         { userId: "user-b", valuationUnits: 0n },
       ];
-      const result = computePayouts(receipts, 1000n);
+      const result = computeStatementItems(receipts, 1000n);
       expect(result).toEqual([]);
     });
 
@@ -43,7 +43,7 @@ describe("core/ledger/rules", () => {
       const receipts: FinalizedAllocation[] = [
         { userId: "user-a", valuationUnits: 50n },
       ];
-      const result = computePayouts(receipts, 1000n);
+      const result = computeStatementItems(receipts, 1000n);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.userId).toBe("user-a");
@@ -57,7 +57,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 50n },
         { userId: "user-b", valuationUnits: 50n },
       ];
-      const result = computePayouts(receipts, 1000n);
+      const result = computeStatementItems(receipts, 1000n);
 
       expect(result).toHaveLength(2);
       expect(result[0]?.amountCredits).toBe(500n);
@@ -76,7 +76,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-b", valuationUnits: 1n },
         { userId: "user-c", valuationUnits: 1n },
       ];
-      const result = computePayouts(receipts, 100n);
+      const result = computeStatementItems(receipts, 100n);
 
       expect(result).toHaveLength(3);
       const total = result.reduce((s, r) => s + r.amountCredits, 0n);
@@ -95,7 +95,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 20n },
         { userId: "user-b", valuationUnits: 50n },
       ];
-      const result = computePayouts(receipts, 1000n);
+      const result = computeStatementItems(receipts, 1000n);
 
       expect(result).toHaveLength(2);
       // user-a: 50 units, user-b: 50 units → 500 each
@@ -113,7 +113,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 7500n },
         { userId: "user-b", valuationUnits: 2500n },
       ];
-      const result = computePayouts(receipts, pool);
+      const result = computeStatementItems(receipts, pool);
 
       expect(result[0]?.amountCredits).toBe(7_500_000_000_000n);
       expect(result[1]?.amountCredits).toBe(2_500_000_000_000n);
@@ -130,8 +130,8 @@ describe("core/ledger/rules", () => {
       ];
       const pool = 997n;
 
-      const run1 = computePayouts(receipts, pool);
-      const run2 = computePayouts(receipts, pool);
+      const run1 = computeStatementItems(receipts, pool);
+      const run2 = computeStatementItems(receipts, pool);
 
       expect(run1).toEqual(run2);
     });
@@ -142,7 +142,7 @@ describe("core/ledger/rules", () => {
         { userId: "alpha", valuationUnits: 1n },
         { userId: "mu", valuationUnits: 1n },
       ];
-      const result = computePayouts(receipts, 100n);
+      const result = computeStatementItems(receipts, 100n);
 
       expect(result.map((r) => r.userId)).toEqual(["alpha", "mu", "zeta"]);
     });
@@ -158,7 +158,7 @@ describe("core/ledger/rules", () => {
       );
       const pool = 9973n; // prime number
 
-      const result = computePayouts(receipts, pool);
+      const result = computeStatementItems(receipts, pool);
       const total = result.reduce((s, r) => s + r.amountCredits, 0n);
       expect(total).toBe(pool);
     });
@@ -168,7 +168,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 1n },
         { userId: "user-b", valuationUnits: 2n },
       ];
-      const result = computePayouts(receipts, 300n);
+      const result = computeStatementItems(receipts, 300n);
 
       // user-a: 1/3 → 0.333333, user-b: 2/3 → 0.666666
       expect(result[0]?.share).toBe("0.333333");
@@ -180,7 +180,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 75n },
         { userId: "user-b", valuationUnits: 25n },
       ];
-      const result = computePayouts(receipts, 1000n);
+      const result = computeStatementItems(receipts, 1000n);
 
       expect(result[0]?.share).toBe("0.750000");
       expect(result[1]?.share).toBe("0.250000");
@@ -195,7 +195,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 1n },
         { userId: "user-b", valuationUnits: 2n },
       ];
-      const result = computePayouts(receipts, 10n);
+      const result = computeStatementItems(receipts, 10n);
 
       expect(result[0]?.userId).toBe("user-a");
       expect(result[0]?.amountCredits).toBe(3n);
@@ -208,7 +208,7 @@ describe("core/ledger/rules", () => {
         { userId: "user-a", valuationUnits: 10n },
         { userId: "user-b", valuationUnits: -5n },
       ];
-      expect(() => computePayouts(receipts, 100n)).toThrow(RangeError);
+      expect(() => computeStatementItems(receipts, 100n)).toThrow(RangeError);
     });
   });
 });

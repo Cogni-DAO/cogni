@@ -59,8 +59,8 @@ export interface ApiIngestionReceipt {
   readonly selection: { readonly userId: string | null } | null;
 }
 
-/** Minimal payout line shape from the epoch-statement API. */
-export interface PayoutLineDto {
+/** Minimal statement line item shape from the epoch-statement API. */
+export interface StatementLineItemDto {
   readonly user_id: string;
   readonly total_units: string;
   readonly share: string;
@@ -70,7 +70,7 @@ export interface PayoutLineDto {
 /** Minimal statement shape from the epoch-statement API. */
 export interface StatementDto {
   readonly poolTotalCredits: string;
-  readonly payouts: readonly PayoutLineDto[];
+  readonly items: readonly StatementLineItemDto[];
 }
 
 /**
@@ -198,7 +198,7 @@ export function composeEpochView(
 
 /**
  * Compose an EpochView for a finalized epoch from its frozen statement.
- * Uses statement.payouts as source of truth (immutable, deterministic).
+ * Uses statement.items as source of truth (immutable, deterministic).
  */
 export function composeEpochViewFromStatement(
   epoch: EpochDto,
@@ -208,19 +208,19 @@ export function composeEpochViewFromStatement(
   const { receiptsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
     partitionReceipts(receipts);
 
-  const contributors: EpochContributor[] = statement.payouts.map((payout) => {
-    const userReceipts = receiptsByUser.get(payout.user_id) ?? [];
-    const login = loginByUser.get(payout.user_id) ?? null;
+  const contributors: EpochContributor[] = statement.items.map((item) => {
+    const userReceipts = receiptsByUser.get(item.user_id) ?? [];
+    const login = loginByUser.get(item.user_id) ?? null;
     // share from statement is a decimal string (e.g. "0.35"); convert to percentage
-    const share = Math.round(Number(payout.share) * 1000) / 10;
+    const share = Math.round(Number(item.share) * 1000) / 10;
 
     return {
-      userId: payout.user_id,
-      displayName: getDisplayName(login, payout.user_id),
+      userId: item.user_id,
+      displayName: getDisplayName(login, item.user_id),
       avatar: DEFAULT_AVATAR,
       color: DEFAULT_COLOR,
-      proposedUnits: payout.total_units,
-      finalUnits: payout.total_units,
+      proposedUnits: item.total_units,
+      finalUnits: item.total_units,
       creditShare: share,
       activityCount: userReceipts.length,
       receipts: userReceipts,

@@ -346,7 +346,7 @@ export const epochStatements = pgTable(
     poolTotalCredits: bigint("pool_total_credits", {
       mode: "bigint",
     }).notNull(),
-    payoutsJson: jsonb("payouts_json")
+    statementItemsJson: jsonb("statement_items_json")
       .$type<
         Array<{
           user_id: string;

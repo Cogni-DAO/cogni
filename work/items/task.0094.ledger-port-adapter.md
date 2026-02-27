@@ -6,8 +6,8 @@ status: done
 priority: 1
 rank: 2
 estimate: 2
-summary: "Define ActivityLedgerStore port in @cogni/ledger-core, implement DrizzleLedgerAdapter in @cogni/db-client, add three-layer schema migration (activity_events/activity_curation/epoch_allocations/source_cursors/statement_signatures + epochs/epoch_pool_components/payout_statements modifications), wire into bootstrap container."
-outcome: "ActivityLedgerStore port with CRUD for activity events, curation, allocations, cursors, epochs, pool, statements, and signatures. Single DrizzleLedgerAdapter shared by app + worker. Container exposes activityLedgerStore. All node_id scoped."
+summary: "Define ActivityLedgerStore port in @cogni/attribution-ledger, implement DrizzleAttributionAdapter in @cogni/db-client, add three-layer schema migration (activity_events/activity_curation/epoch_allocations/source_cursors/statement_signatures + epochs/epoch_pool_components/payout_statements modifications), wire into bootstrap container."
+outcome: "ActivityLedgerStore port with CRUD for activity events, curation, allocations, cursors, epochs, pool, statements, and signatures. Single DrizzleAttributionAdapter shared by app + worker. Container exposes activityLedgerStore. All node_id scoped."
 spec_refs: epoch-ledger-spec
 assignees: derekg1729
 credit:
@@ -37,8 +37,8 @@ external_refs:
 ### Key Decisions
 
 - `node_id UUID` on all ledger tables (NODE_SCOPED)
-- Port interface in `@cogni/ledger-core` (shared by app + worker)
-- Single `DrizzleLedgerAdapter` in `@cogni/db-client` (no duplication)
+- Port interface in `@cogni/attribution-ledger` (shared by app + worker)
+- Single `DrizzleAttributionAdapter` in `@cogni/db-client` (no duplication)
 - Old migrations 0010 + 0011 deleted (never shipped), replaced with 0014 (DDL) + 0015 (triggers)
 
 ## Implementation Summary
@@ -55,7 +55,7 @@ external_refs:
 - [x] `migrations/0014_supreme_captain_marvel.sql` — DDL for all new tables
 - [x] `migrations/0015_ledger_triggers.sql` — append-only + freeze-on-close triggers
 - [x] `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — single shared adapter
-- [x] `packages/db-client/package.json` — added `@cogni/ledger-core` dependency
+- [x] `packages/db-client/package.json` — added `@cogni/attribution-ledger` dependency
 - [x] `packages/db-client/tsconfig.json` — added ledger-core reference
 - [x] `src/ports/ledger-store.port.ts` — port re-export
 - [x] `src/ports/index.ts` — added ledger exports

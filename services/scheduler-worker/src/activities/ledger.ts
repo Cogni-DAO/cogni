@@ -21,30 +21,30 @@
  * @internal
  */
 
-import type { ActivityEvent } from "@cogni/ingestion-core";
-import type { UnselectedReceipt } from "@cogni/ledger-core";
+import type { UnselectedReceipt } from "@cogni/attribution-ledger";
 import {
   buildCanonicalMessage,
   computeAllocationSetHash,
   computeApproverSetHash,
-  computePayouts,
   computeProposedAllocations,
+  computeStatementItems,
   computeWeightConfigHash,
   deriveAllocationAlgoRef,
   estimatePoolComponentsV0,
   validateWeightConfig,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
+import type { ActivityEvent } from "@cogni/ingestion-core";
 
 import { verifyMessage } from "viem";
 
 import type { Logger } from "../observability/logger.js";
-import type { EpochLedgerStore, SourceAdapter } from "../ports/index.js";
+import type { AttributionStore, SourceAdapter } from "../ports/index.js";
 
 /**
  * Dependencies injected into ledger activities at worker creation.
  */
-export interface LedgerActivityDeps {
-  readonly ledgerStore: EpochLedgerStore;
+export interface AttributionActivityDeps {
+  readonly attributionStore: AttributionStore;
   readonly sourceAdapters: ReadonlyMap<string, SourceAdapter>;
   readonly nodeId: string;
   readonly scopeId: string;
@@ -217,15 +217,15 @@ export interface FinalizeEpochOutput {
   readonly statementId: string;
   readonly poolTotalCredits: string; // bigint serialized
   readonly allocationSetHash: string;
-  readonly payoutCount: number;
+  readonly statementItemCount: number;
 }
 
 /**
  * Creates ledger activity functions with injected dependencies.
  * Follows the same DI pattern as createActivities() in activities/index.ts.
  */
-export function createLedgerActivities(deps: LedgerActivityDeps) {
-  const { ledgerStore, sourceAdapters, nodeId, scopeId, logger } = deps;
+export function createAttributionActivities(deps: AttributionActivityDeps) {
+  const { attributionStore, sourceAdapters, nodeId, scopeId, logger } = deps;
 
   /**
    * Creates or returns an existing epoch for the given time window.
@@ -242,7 +242,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     );
 
     // Check if an epoch already exists for this window (any status)
-    const existing = await ledgerStore.getEpochByWindow(
+    const existing = await attributionStore.getEpochByWindow(
       nodeId,
       scopeId,
       new Date(periodStart),
@@ -279,7 +279,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     // Race: another worker may create the same epoch between our read and write.
     // On unique constraint violation, re-query and return the existing epoch.
     try {
-      const epoch = await ledgerStore.createEpoch({
+      const epoch = await attributionStore.createEpoch({
         nodeId,
         scopeId,
         periodStart: new Date(periodStart),
@@ -300,7 +300,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       };
     } catch (err) {
       // Unique constraint violation — another worker created the epoch concurrently
-      const raceEpoch = await ledgerStore.getEpochByWindow(
+      const raceEpoch = await attributionStore.getEpochByWindow(
         nodeId,
         scopeId,
         new Date(periodStart),
@@ -331,7 +331,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     const { source, stream, sourceRef } = input;
     logger.info({ source, stream, sourceRef }, "Loading cursor");
 
-    const cursor = await ledgerStore.getCursor(
+    const cursor = await attributionStore.getCursor(
       nodeId,
       scopeId,
       source,
@@ -405,7 +405,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
   }
 
   /**
-   * Stores receipts via ledgerStore. Idempotent via onConflictDoNothing on PK.
+   * Stores receipts via attributionStore. Idempotent via onConflictDoNothing on PK.
    */
   async function insertReceipts(input: InsertReceiptsInput): Promise<void> {
     const { events, producerVersion } = input;
@@ -413,7 +413,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
 
     logger.info({ count: events.length }, "Inserting ingestion receipts");
 
-    await ledgerStore.insertIngestionReceipts(
+    await attributionStore.insertIngestionReceipts(
       events.map((e) => ({
         receiptId: e.id,
         nodeId,
@@ -443,7 +443,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     logger.info({ source, stream, cursorValue }, "Saving cursor");
 
     // Load existing to enforce monotonic advancement
-    const existing = await ledgerStore.getCursor(
+    const existing = await attributionStore.getCursor(
       nodeId,
       scopeId,
       source,
@@ -458,7 +458,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         ? existing.cursorValue
         : cursorValue;
 
-    await ledgerStore.upsertCursor(
+    await attributionStore.upsertCursor(
       nodeId,
       scopeId,
       source,
@@ -485,14 +485,14 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     const epochId = BigInt(input.epochId);
 
     // 1. Load epoch → get period dates
-    const epoch = await ledgerStore.getEpoch(epochId);
+    const epoch = await attributionStore.getEpoch(epochId);
     if (!epoch) {
       throw new Error(`materializeSelection: epoch ${input.epochId} not found`);
     }
 
     // 2. Get unselected receipts (delta: only receipts needing work)
     const unselected: UnselectedReceipt[] =
-      await ledgerStore.getUnselectedReceipts(
+      await attributionStore.getUnselectedReceipts(
         nodeId,
         epochId,
         epoch.periodStart,
@@ -520,7 +520,9 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     const resolvedMap = new Map<string, string>();
     for (const [source, ids] of idsBySource) {
       if (source === "github") {
-        const result = await ledgerStore.resolveIdentities("github", [...ids]);
+        const result = await attributionStore.resolveIdentities("github", [
+          ...ids,
+        ]);
         for (const [extId, userId] of result) {
           resolvedMap.set(extId, userId);
         }
@@ -539,7 +541,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       if (!hasExistingSelection) {
         // Phase 1: INSERT new selection row (ON CONFLICT DO NOTHING for race safety)
         // Uses insertSelectionDoNothing — NOT upsertSelection which overwrites all fields
-        await ledgerStore.insertSelectionDoNothing([
+        await attributionStore.insertSelectionDoNothing([
           {
             nodeId,
             epochId,
@@ -551,7 +553,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         newSelections++;
       } else if (resolvedUserId) {
         // Phase 2: UPDATE userId on existing unresolved row
-        await ledgerStore.updateSelectionUserId(
+        await attributionStore.updateSelectionUserId(
           epochId,
           receipt.receiptId,
           resolvedUserId
@@ -601,7 +603,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
 
     // 1. Load selected receipts (resolved users only)
     const receipts =
-      await ledgerStore.getSelectedReceiptsForAllocation(epochId);
+      await attributionStore.getSelectedReceiptsForAllocation(epochId);
 
     if (receipts.length === 0) {
       logger.info(
@@ -619,7 +621,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     );
 
     // 3. Upsert allocations (preserves admin final_units)
-    await ledgerStore.upsertAllocations(
+    await attributionStore.upsertAllocations(
       proposed.map((p) => ({
         nodeId,
         epochId,
@@ -632,7 +634,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     // 4. Remove stale allocations (guard: skip if proposed is empty)
     if (proposed.length > 0) {
       const activeUserIds = proposed.map((p) => p.userId);
-      await ledgerStore.deleteStaleAllocations(epochId, activeUserIds);
+      await attributionStore.deleteStaleAllocations(epochId, activeUserIds);
     }
 
     const totalProposedUnits = proposed.reduce(
@@ -674,7 +676,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     );
 
     // Check epoch is open before attempting inserts
-    const epoch = await ledgerStore.getEpoch(epochId);
+    const epoch = await attributionStore.getEpoch(epochId);
     if (!epoch) {
       throw new Error(`ensurePoolComponents: epoch ${input.epochId} not found`);
     }
@@ -691,7 +693,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
 
     for (const estimate of estimates) {
       try {
-        await ledgerStore.insertPoolComponent({
+        await attributionStore.insertPoolComponent({
           nodeId,
           epochId,
           componentId: estimate.componentId,
@@ -773,7 +775,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       epochId: BigInt(e.epochId),
     }));
 
-    const epoch = await ledgerStore.closeIngestionWithEvaluations({
+    const epoch = await attributionStore.closeIngestionWithEvaluations({
       epochId,
       approverSetHash,
       allocationAlgoRef,
@@ -806,7 +808,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     );
 
     // 1. Load epoch — verify exists and is review (or finalized for idempotency)
-    const epoch = await ledgerStore.getEpoch(epochId);
+    const epoch = await attributionStore.getEpoch(epochId);
     if (!epoch) {
       throw new Error(`finalizeEpoch: epoch ${input.epochId} not found`);
     }
@@ -817,7 +819,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         { epochId: input.epochId },
         "Epoch already finalized — repairing via finalizeEpochAtomic"
       );
-      const existing = await ledgerStore.getStatementForEpoch(epochId);
+      const existing = await attributionStore.getStatementForEpoch(epochId);
       if (!existing) {
         throw new Error(
           `finalizeEpoch: epoch ${input.epochId} is finalized but no statement found`
@@ -825,14 +827,14 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       }
 
       // Repair: ensure this signer's signature exists via atomic method
-      await ledgerStore.finalizeEpochAtomic({
+      await attributionStore.finalizeEpochAtomic({
         epochId,
         poolTotal: existing.poolTotalCredits,
         statement: {
           nodeId,
           allocationSetHash: existing.allocationSetHash,
           poolTotalCredits: existing.poolTotalCredits,
-          payoutsJson: existing.payoutsJson,
+          statementItems: existing.statementItems,
         },
         signature: {
           nodeId,
@@ -847,7 +849,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         statementId: existing.id,
         poolTotalCredits: existing.poolTotalCredits.toString(),
         allocationSetHash: existing.allocationSetHash,
-        payoutCount: existing.payoutsJson.length,
+        statementItemCount: existing.statementItems.length,
       };
     }
 
@@ -880,7 +882,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     }
 
     // 4. Load allocations — use final_units where set, fall back to proposed_units
-    const allocations = await ledgerStore.getAllocationsForEpoch(epochId);
+    const allocations = await attributionStore.getAllocationsForEpoch(epochId);
     if (allocations.length === 0) {
       throw new Error(
         `finalizeEpoch: epoch ${input.epochId} has no allocations`
@@ -893,7 +895,8 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     }));
 
     // 5. Load pool components → pool_total = SUM(amount_credits)
-    const poolComponents = await ledgerStore.getPoolComponentsForEpoch(epochId);
+    const poolComponents =
+      await attributionStore.getPoolComponentsForEpoch(epochId);
     if (poolComponents.length === 0) {
       throw new Error(
         `finalizeEpoch: epoch ${input.epochId} has no pool components (POOL_REQUIRES_BASE)`
@@ -913,8 +916,8 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       0n
     );
 
-    // 6. Compute payouts (pure, deterministic)
-    const payouts = computePayouts(finalizedAllocations, poolTotal);
+    // 6. Compute statement items (pure, deterministic)
+    const items = computeStatementItems(finalizedAllocations, poolTotal);
 
     // 7. Compute allocation set hash (deterministic)
     const allocationSetHash =
@@ -942,18 +945,18 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
 
     // 9. Atomic finalize — epoch transition + statement + signature in one transaction
     const { epoch: finalizedEpoch, statement } =
-      await ledgerStore.finalizeEpochAtomic({
+      await attributionStore.finalizeEpochAtomic({
         epochId,
         poolTotal,
         statement: {
           nodeId,
           allocationSetHash,
           poolTotalCredits: poolTotal,
-          payoutsJson: payouts.map((p) => ({
-            user_id: p.userId,
-            total_units: p.totalUnits.toString(),
-            share: p.share,
-            amount_credits: p.amountCredits.toString(),
+          statementItems: items.map((li) => ({
+            user_id: li.userId,
+            total_units: li.totalUnits.toString(),
+            share: li.share,
+            amount_credits: li.amountCredits.toString(),
           })),
         },
         signature: {
@@ -971,7 +974,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         statementId: statement.id,
         poolTotalCredits: poolTotal.toString(),
         allocationSetHash: `${allocationSetHash.slice(0, 12)}...`,
-        payoutCount: payouts.length,
+        statementItemCount: items.length,
         status: finalizedEpoch.status,
       },
       "Epoch finalized"
@@ -981,7 +984,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       statementId: statement.id,
       poolTotalCredits: poolTotal.toString(),
       allocationSetHash,
-      payoutCount: payouts.length,
+      statementItemCount: items.length,
     };
   }
 
@@ -1000,4 +1003,4 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
 }
 
 /** Type alias for workflow proxy usage */
-export type LedgerActivities = ReturnType<typeof createLedgerActivities>;
+export type LedgerActivities = ReturnType<typeof createAttributionActivities>;

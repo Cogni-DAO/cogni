@@ -37,7 +37,7 @@ Database client factory and Drizzle adapter implementations for scheduling and l
 }
 ```
 
-**External deps:** `drizzle-orm`, `postgres`, `type-fest`. Internal deps: `@cogni/db-schema` (ledger + identity tables), `@cogni/ledger-core`, `@cogni/scheduler-core`, `@cogni/ai-core`, `@cogni/ids`.
+**External deps:** `drizzle-orm`, `postgres`, `type-fest`. Internal deps: `@cogni/db-schema` (ledger + identity tables), `@cogni/attribution-ledger`, `@cogni/scheduler-core`, `@cogni/ai-core`, `@cogni/ids`.
 
 ## Public Surface
 
@@ -49,7 +49,7 @@ Database client factory and Drizzle adapter implementations for scheduling and l
   - `DrizzleScheduleUserAdapter`, `DrizzleScheduleWorkerAdapter` — schedule adapters (split by trust boundary)
   - `DrizzleExecutionGrantUserAdapter`, `DrizzleExecutionGrantWorkerAdapter` — grant adapters (split by trust boundary)
   - `DrizzleExecutionRequestAdapter`, `DrizzleScheduleRunAdapter`
-  - `DrizzleLedgerAdapter` — ledger adapter (shared by app + worker, uses serviceDb/BYPASSRLS). Constructor takes `scopeId`; all epochId-based methods enforce scope via `resolveEpochScoped()` (SCOPE_GATED_QUERIES).
+  - `DrizzleAttributionAdapter` — ledger adapter (shared by app + worker, uses serviceDb/BYPASSRLS). Constructor takes `scopeId`; all epochId-based methods enforce scope via `resolveEpochScoped()` (SCOPE_GATED_QUERIES).
   - Re-exports from `@cogni/db-schema` (tables, types)
 - **Exports (sub-path `@cogni/db-client/service`):**
   - `createServiceDbClient(url)` — client factory for `app_service` role (BYPASSRLS)
@@ -79,11 +79,11 @@ pnpm --filter @cogni/db-client build
 
 - Per FORBIDDEN: No `@/`, `src/`, `process.env`, or Next.js imports
 - Per ALLOWED: Pure database operations via Drizzle ORM
-- Adapters implement port interfaces from `@cogni/scheduler-core` and `@cogni/ledger-core`
+- Adapters implement port interfaces from `@cogni/scheduler-core` and `@cogni/attribution-ledger`
 
 ## Dependencies
 
-- **Internal:** `@cogni/db-schema`, `@cogni/ledger-core`, `@cogni/scheduler-core`, `@cogni/ai-core`, `@cogni/ids`
+- **Internal:** `@cogni/db-schema`, `@cogni/attribution-ledger`, `@cogni/scheduler-core`, `@cogni/ai-core`, `@cogni/ids`
 - **External:** `drizzle-orm`, `postgres`, `type-fest`
 
 ## Change Protocol

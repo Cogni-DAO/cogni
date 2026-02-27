@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/db-client/adapters/drizzle-ledger`
- * Purpose: Drizzle ORM implementation of EpochLedgerStore port.
- * Scope: Single adapter shared by app (via container.ts) and scheduler-worker. Implements all EpochLedgerStore methods including identity resolution via user_bindings (cross-domain). Does not contain domain logic or define port interfaces.
+ * Purpose: Drizzle ORM implementation of AttributionStore port.
+ * Scope: Single adapter shared by app (via container.ts) and scheduler-worker. Implements all AttributionStore methods including identity resolution via user_bindings (cross-domain). Does not contain domain logic or define port interfaces.
  * Invariants:
  * - Uses serviceDb (BYPASSRLS) — no RLS in V0.
  * - SCOPE_GATED_QUERIES: Every epochId-based method enforces scope_id = this.scopeId. Scope mismatches throw EpochNotFoundError.
@@ -21,6 +21,36 @@
  * @public
  */
 
+import type {
+  AttributionAllocation,
+  AttributionEpoch,
+  AttributionEvaluation,
+  AttributionPoolComponent,
+  AttributionSelection,
+  AttributionStatement,
+  AttributionStatementSignature,
+  AttributionStore,
+  CloseIngestionWithEvaluationsParams,
+  IngestionCursor,
+  IngestionReceipt,
+  InsertAllocationParams,
+  InsertPoolComponentParams,
+  InsertReceiptParams,
+  InsertSelectionAutoParams,
+  InsertSignatureParams,
+  InsertStatementParams,
+  SelectedReceiptForAllocation,
+  SelectedReceiptWithMetadata,
+  UnselectedReceipt,
+  UpsertEvaluationParams,
+  UpsertSelectionParams,
+} from "@cogni/attribution-ledger";
+import {
+  AllocationNotFoundError,
+  EpochNotFoundError,
+  EpochNotOpenError,
+  type EpochStatus,
+} from "@cogni/attribution-ledger";
 import { userBindings } from "@cogni/db-schema/identity";
 import {
   epochAllocations,
@@ -33,36 +63,6 @@ import {
   ingestionCursors,
   ingestionReceipts,
 } from "@cogni/db-schema/ledger";
-import type {
-  CloseIngestionWithEvaluationsParams,
-  EpochLedgerStore,
-  InsertAllocationParams,
-  InsertEpochStatementParams,
-  InsertIngestionReceiptParams,
-  InsertPoolComponentParams,
-  InsertSelectionAutoParams,
-  InsertStatementSignatureParams,
-  LedgerAllocation,
-  LedgerEpoch,
-  LedgerEpochEvaluation,
-  LedgerEpochStatement,
-  LedgerIngestionCursor,
-  LedgerIngestionReceipt,
-  LedgerPoolComponent,
-  LedgerSelection,
-  LedgerStatementSignature,
-  SelectedReceiptForAllocation,
-  SelectedReceiptWithMetadata,
-  UnselectedReceipt,
-  UpsertEvaluationParams,
-  UpsertSelectionParams,
-} from "@cogni/ledger-core";
-import {
-  AllocationNotFoundError,
-  EpochNotFoundError,
-  EpochNotOpenError,
-  type EpochStatus,
-} from "@cogni/ledger-core";
 import {
   and,
   eq,
@@ -79,7 +79,7 @@ import type { Database } from "../client";
 
 // ── Row mappers ─────────────────────────────────────────────────
 
-function toEpoch(row: typeof epochs.$inferSelect): LedgerEpoch {
+function toEpoch(row: typeof epochs.$inferSelect): AttributionEpoch {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -101,7 +101,7 @@ function toEpoch(row: typeof epochs.$inferSelect): LedgerEpoch {
 
 function toIngestionReceipt(
   row: typeof ingestionReceipts.$inferSelect
-): LedgerIngestionReceipt {
+): IngestionReceipt {
   return {
     receiptId: row.receiptId,
     nodeId: row.nodeId,
@@ -120,7 +120,9 @@ function toIngestionReceipt(
   };
 }
 
-function toSelection(row: typeof epochSelection.$inferSelect): LedgerSelection {
+function toSelection(
+  row: typeof epochSelection.$inferSelect
+): AttributionSelection {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -137,7 +139,7 @@ function toSelection(row: typeof epochSelection.$inferSelect): LedgerSelection {
 
 function toAllocation(
   row: typeof epochAllocations.$inferSelect
-): LedgerAllocation {
+): AttributionAllocation {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -152,9 +154,7 @@ function toAllocation(
   };
 }
 
-function toCursor(
-  row: typeof ingestionCursors.$inferSelect
-): LedgerIngestionCursor {
+function toCursor(row: typeof ingestionCursors.$inferSelect): IngestionCursor {
   return {
     nodeId: row.nodeId,
     scopeId: row.scopeId,
@@ -168,7 +168,7 @@ function toCursor(
 
 function toPoolComponent(
   row: typeof epochPoolComponents.$inferSelect
-): LedgerPoolComponent {
+): AttributionPoolComponent {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -184,14 +184,14 @@ function toPoolComponent(
 
 function toStatement(
   row: typeof epochStatements.$inferSelect
-): LedgerEpochStatement {
+): AttributionStatement {
   return {
     id: row.id,
     nodeId: row.nodeId,
     epochId: row.epochId,
     allocationSetHash: row.allocationSetHash,
     poolTotalCredits: row.poolTotalCredits,
-    payoutsJson: row.payoutsJson,
+    statementItems: row.statementItemsJson,
     supersedesStatementId: row.supersedesStatementId,
     createdAt: row.createdAt,
   };
@@ -199,7 +199,7 @@ function toStatement(
 
 function toStatementSignature(
   row: typeof epochStatementSignatures.$inferSelect
-): LedgerStatementSignature {
+): AttributionStatementSignature {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -212,7 +212,7 @@ function toStatementSignature(
 
 function toEvaluation(
   row: typeof epochEvaluations.$inferSelect
-): LedgerEpochEvaluation {
+): AttributionEvaluation {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -230,7 +230,7 @@ function toEvaluation(
 
 // ── Adapter ─────────────────────────────────────────────────────
 
-export class DrizzleLedgerAdapter implements EpochLedgerStore {
+export class DrizzleAttributionAdapter implements AttributionStore {
   constructor(
     private readonly db: Database,
     private readonly scopeId: string
@@ -243,7 +243,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
    * SCOPE_GATED_QUERIES: scope mismatches throw EpochNotFoundError
    * (indistinguishable from a genuinely missing epoch).
    */
-  private async resolveEpochScoped(epochId: bigint): Promise<LedgerEpoch> {
+  private async resolveEpochScoped(epochId: bigint): Promise<AttributionEpoch> {
     const rows = await this.db
       .select()
       .from(epochs)
@@ -272,7 +272,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     periodStart: Date;
     periodEnd: Date;
     weightConfig: Record<string, number>;
-  }): Promise<LedgerEpoch> {
+  }): Promise<AttributionEpoch> {
     const [row] = await this.db
       .insert(epochs)
       .values({
@@ -290,7 +290,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
   async getOpenEpoch(
     nodeId: string,
     scopeId: string
-  ): Promise<LedgerEpoch | null> {
+  ): Promise<AttributionEpoch | null> {
     const rows = await this.db
       .select()
       .from(epochs)
@@ -310,7 +310,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     scopeId: string,
     periodStart: Date,
     periodEnd: Date
-  ): Promise<LedgerEpoch | null> {
+  ): Promise<AttributionEpoch | null> {
     const rows = await this.db
       .select()
       .from(epochs)
@@ -326,7 +326,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     return rows[0] ? toEpoch(rows[0]) : null;
   }
 
-  async getEpoch(id: bigint): Promise<LedgerEpoch | null> {
+  async getEpoch(id: bigint): Promise<AttributionEpoch | null> {
     const rows = await this.db
       .select()
       .from(epochs)
@@ -335,7 +335,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     return rows[0] ? toEpoch(rows[0]) : null;
   }
 
-  async listEpochs(nodeId: string): Promise<LedgerEpoch[]> {
+  async listEpochs(nodeId: string): Promise<AttributionEpoch[]> {
     const rows = await this.db
       .select()
       .from(epochs)
@@ -349,7 +349,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     approverSetHash: string,
     allocationAlgoRef: string,
     weightConfigHash: string
-  ): Promise<LedgerEpoch> {
+  ): Promise<AttributionEpoch> {
     const [row] = await this.db
       .update(epochs)
       .set({
@@ -384,7 +384,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
   async finalizeEpoch(
     epochId: bigint,
     poolTotal: bigint
-  ): Promise<LedgerEpoch> {
+  ): Promise<AttributionEpoch> {
     const [row] = await this.db
       .update(epochs)
       .set({
@@ -419,7 +419,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
 
   async closeIngestionWithEvaluations(
     params: CloseIngestionWithEvaluationsParams
-  ): Promise<LedgerEpoch> {
+  ): Promise<AttributionEpoch> {
     return await this.db.transaction(async (tx) => {
       // 1. Scope gate + status check (inline)
       const epochRows = await tx
@@ -537,7 +537,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
   async getEvaluationsForEpoch(
     epochId: bigint,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochEvaluation[]> {
+  ): Promise<AttributionEvaluation[]> {
     await this.resolveEpochScoped(epochId);
     const conditions = [eq(epochEvaluations.epochId, epochId)];
     if (status) conditions.push(eq(epochEvaluations.status, status));
@@ -552,7 +552,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     epochId: bigint,
     evaluationRef: string,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochEvaluation | null> {
+  ): Promise<AttributionEvaluation | null> {
     await this.resolveEpochScoped(epochId);
     const conditions = [
       eq(epochEvaluations.epochId, epochId),
@@ -651,7 +651,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
   // ── Ingestion receipts ─────────────────────────────────────
 
   async insertIngestionReceipts(
-    receipts: InsertIngestionReceiptParams[]
+    receipts: InsertReceiptParams[]
   ): Promise<void> {
     if (receipts.length === 0) return;
     await this.db
@@ -680,7 +680,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     nodeId: string,
     since: Date,
     until: Date
-  ): Promise<LedgerIngestionReceipt[]> {
+  ): Promise<IngestionReceipt[]> {
     // RECEIPT_SCOPE_AGNOSTIC: no scope filter — returns all receipts for node in window
     const rows = await this.db
       .select()
@@ -747,7 +747,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     }
   }
 
-  async getSelectionForEpoch(epochId: bigint): Promise<LedgerSelection[]> {
+  async getSelectionForEpoch(epochId: bigint): Promise<AttributionSelection[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
@@ -756,7 +756,9 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     return rows.map(toSelection);
   }
 
-  async getUnresolvedSelection(epochId: bigint): Promise<LedgerSelection[]> {
+  async getUnresolvedSelection(
+    epochId: bigint
+  ): Promise<AttributionSelection[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
@@ -854,7 +856,9 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     }
   }
 
-  async getAllocationsForEpoch(epochId: bigint): Promise<LedgerAllocation[]> {
+  async getAllocationsForEpoch(
+    epochId: bigint
+  ): Promise<AttributionAllocation[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
@@ -905,7 +909,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
     source: string,
     stream: string,
     sourceRef: string
-  ): Promise<LedgerIngestionCursor | null> {
+  ): Promise<IngestionCursor | null> {
     const rows = await this.db
       .select()
       .from(ingestionCursors)
@@ -926,7 +930,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
 
   async insertPoolComponent(
     params: InsertPoolComponentParams
-  ): Promise<LedgerPoolComponent> {
+  ): Promise<AttributionPoolComponent> {
     const epoch = await this.resolveEpochScoped(params.epochId);
     // POOL_LOCKED_AT_REVIEW: reject pool component inserts after closeIngestion
     if (epoch.status !== "open") {
@@ -950,7 +954,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
 
   async getPoolComponentsForEpoch(
     epochId: bigint
-  ): Promise<LedgerPoolComponent[]> {
+  ): Promise<AttributionPoolComponent[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
@@ -962,8 +966,8 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
   // ── Epoch statements ──────────────────────────────────────
 
   async insertEpochStatement(
-    params: InsertEpochStatementParams
-  ): Promise<LedgerEpochStatement> {
+    params: InsertStatementParams
+  ): Promise<AttributionStatement> {
     await this.resolveEpochScoped(params.epochId);
     const [row] = await this.db
       .insert(epochStatements)
@@ -972,7 +976,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
         epochId: params.epochId,
         allocationSetHash: params.allocationSetHash,
         poolTotalCredits: params.poolTotalCredits,
-        payoutsJson: params.payoutsJson,
+        statementItemsJson: params.statementItems,
         supersedesStatementId: params.supersedesStatementId ?? null,
       })
       .returning();
@@ -982,7 +986,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
 
   async getStatementForEpoch(
     epochId: bigint
-  ): Promise<LedgerEpochStatement | null> {
+  ): Promise<AttributionStatement | null> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
@@ -997,10 +1001,10 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
   async finalizeEpochAtomic(params: {
     epochId: bigint;
     poolTotal: bigint;
-    statement: Omit<InsertEpochStatementParams, "epochId">;
-    signature: Omit<InsertStatementSignatureParams, "statementId">;
+    statement: Omit<InsertStatementParams, "epochId">;
+    signature: Omit<InsertSignatureParams, "statementId">;
     expectedAllocationSetHash: string;
-  }): Promise<{ epoch: LedgerEpoch; statement: LedgerEpochStatement }> {
+  }): Promise<{ epoch: AttributionEpoch; statement: AttributionStatement }> {
     return await this.db.transaction(async (tx) => {
       // 1. Load epoch with scope gate (inline — avoid separate connection)
       const epochRows = await tx
@@ -1078,7 +1082,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
           epochId: params.epochId,
           allocationSetHash: params.statement.allocationSetHash,
           poolTotalCredits: params.statement.poolTotalCredits,
-          payoutsJson: params.statement.payoutsJson,
+          statementItemsJson: params.statement.statementItems,
           supersedesStatementId: params.statement.supersedesStatementId ?? null,
         })
         .onConflictDoNothing({
@@ -1157,9 +1161,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
 
   // ── Statement signatures ───────────────────────────────────
 
-  async insertStatementSignature(
-    params: InsertStatementSignatureParams
-  ): Promise<void> {
+  async insertStatementSignature(params: InsertSignatureParams): Promise<void> {
     await this.db
       .insert(epochStatementSignatures)
       .values({
@@ -1179,7 +1181,7 @@ export class DrizzleLedgerAdapter implements EpochLedgerStore {
 
   async getSignaturesForStatement(
     statementId: string
-  ): Promise<LedgerStatementSignature[]> {
+  ): Promise<AttributionStatementSignature[]> {
     const rows = await this.db
       .select()
       .from(epochStatementSignatures)

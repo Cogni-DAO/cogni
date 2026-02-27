@@ -12,7 +12,7 @@
  * @public
  */
 
-import { DrizzleLedgerAdapter } from "@cogni/db-client";
+import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import type { SeededClosedEpoch } from "@tests/_fixtures/ledger/seed-ledger";
@@ -62,7 +62,7 @@ beforeAll(async () => {
     ])
     .onConflictDoNothing();
 
-  const store = new DrizzleLedgerAdapter(db, REPO_SCOPE_ID);
+  const store = new DrizzleAttributionAdapter(db, REPO_SCOPE_ID);
   seeded = await seedClosedEpoch(store, {
     nodeId: REPO_NODE_ID,
     scopeId: REPO_SCOPE_ID,

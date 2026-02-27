@@ -60,7 +60,7 @@ Public visitors can see finalized epoch results (closed epochs, allocations, sta
 
 **Reuses**:
 
-- Existing `ActivityLedgerStore` port — all read methods already implemented in `DrizzleLedgerAdapter`
+- Existing `ActivityLedgerStore` port — all read methods already implemented in `DrizzleAttributionAdapter`
 - Existing `getContainer().activityLedgerStore` — wired in bootstrap
 - Existing `getNodeId()` from `@/shared/config` — provides node_id for all queries
 - Existing `wrapRouteHandlerWithLogging` — auth + logging + error handling
@@ -178,7 +178,7 @@ const AllocationSchema = z.object({
 
 ```typescript
 // ledger.epoch-statement.v1.contract.ts
-const PayoutLineSchema = z.object({
+const StatementLineItemSchema = z.object({
   user_id: z.string(),
   total_units: z.string(),
   share: z.string(),
@@ -189,7 +189,7 @@ const StatementSchema = z.object({
   epochId: z.string(),
   allocationSetHash: z.string(),
   poolTotalCredits: z.string(),
-  payouts: z.array(PayoutLineSchema),
+  payouts: z.array(StatementLineItemSchema),
   supersedesStatementId: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
@@ -333,7 +333,7 @@ export const GET = wrapPublicRoute(
 BigInt/Date → string conversion in a shared mapper (inline in route file or a small `_lib/ledger-dto.ts`):
 
 ```typescript
-function toEpochDto(e: LedgerEpoch) {
+function toEpochDto(e: AttributionEpoch) {
   return {
     id: e.id.toString(),
     status: e.status,

@@ -3,7 +3,7 @@
 
 /**
  * Module: `@core/ledger/public`
- * Purpose: Re-exports from @cogni/ledger-core so app code uses @/core/ledger unchanged.
+ * Purpose: Re-exports from @cogni/attribution-ledger so app code uses @/core/ledger unchanged.
  * Scope: Re-exports only. Does not define any logic.
  * Invariants: Only exports stable public interfaces and functions.
  * Side-effects: none
@@ -13,29 +13,29 @@
 
 // Store port re-exports
 export type {
-  EpochLedgerStore,
+  AttributionAllocation,
+  AttributionEpoch,
+  AttributionPoolComponent,
+  AttributionSelection,
+  AttributionStatement,
+  AttributionStatementSignature,
+  AttributionStore,
   EpochStatus,
   FinalizedAllocation,
+  IngestionCursor,
+  IngestionReceipt,
   InsertAllocationParams,
-  InsertEpochStatementParams,
-  InsertIngestionReceiptParams,
   InsertPoolComponentParams,
-  InsertStatementSignatureParams,
-  LedgerAllocation,
-  LedgerEpoch,
-  LedgerEpochStatement,
-  LedgerIngestionCursor,
-  LedgerIngestionReceipt,
-  LedgerPoolComponent,
-  LedgerSelection,
-  LedgerStatementSignature,
-  PayoutLineItem,
+  InsertReceiptParams,
+  InsertSignatureParams,
+  InsertStatementParams,
+  StatementLineItem,
   UpsertSelectionParams,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 export {
   AllocationNotFoundError,
   computeAllocationSetHash,
-  computePayouts,
+  computeStatementItems,
   EPOCH_STATUSES,
   EpochAlreadyFinalizedError,
   EpochNotFoundError,
@@ -46,4 +46,4 @@ export {
   isEpochNotOpenError,
   isPoolComponentMissingError,
   PoolComponentMissingError,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";

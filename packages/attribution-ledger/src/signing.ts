@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/signing`
+ * Module: `@cogni/attribution-ledger/signing`
  * Purpose: EIP-191 canonical message builder and approver set hashing for payout statement signing.
  * Scope: Pure functions. Does not perform network I/O or hold secrets.
  * Invariants:

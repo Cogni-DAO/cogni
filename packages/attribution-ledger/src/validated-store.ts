@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/validated-store`
- * Purpose: Thin wrapper around EpochLedgerStore that enforces validateEvaluationEnvelope at write time.
+ * Module: `@cogni/attribution-ledger/validated-store`
+ * Purpose: Thin wrapper around AttributionStore that enforces validateEvaluationEnvelope at write time.
  * Scope: Wraps store methods. Does not contain business logic beyond validation.
  * Invariants:
  * - ENVELOPE_VALIDATED_ON_WRITE: All evaluation writes pass through validateEvaluationEnvelope.
@@ -13,15 +13,15 @@
  */
 
 import { validateEvaluationEnvelope } from "./artifact-envelope";
-import type { EpochLedgerStore } from "./store";
+import type { AttributionStore } from "./store";
 
 /**
- * Wrap an EpochLedgerStore with envelope validation on evaluation writes.
+ * Wrap an AttributionStore with envelope validation on evaluation writes.
  * Plugins cannot bypass validation by swapping adapters.
  */
-export function createValidatedLedgerStore(
-  inner: EpochLedgerStore
-): EpochLedgerStore {
+export function createValidatedAttributionStore(
+  inner: AttributionStore
+): AttributionStore {
   return {
     ...inner,
     upsertDraftEvaluation: async (params) => {

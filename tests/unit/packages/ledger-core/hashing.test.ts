@@ -14,7 +14,7 @@
 import {
   computeAllocationSetHash,
   computeWeightConfigHash,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 
 describe("computeAllocationSetHash", () => {

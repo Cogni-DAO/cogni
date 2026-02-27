@@ -103,7 +103,7 @@ Artifacts are an opaque map. Each algorithm picks what it needs. `weight-sum-v0`
 
 **All math is BIGINT.** Deterministic: same events + same artifacts -> identical output.
 
-**Unit semantics**: `proposedUnits` are **milli-units** — same unit as `budgetMilli` and `weightOverrideMilli`. Both linked (budget-split) and unlinked (flat-weight) paths produce milli-units, so they're additive. `computePayouts()` treats them as proportional weights: `payout = (userUnits / totalUnits) * poolTotalCredits`.
+**Unit semantics**: `proposedUnits` are **milli-units** — same unit as `budgetMilli` and `weightOverrideMilli`. Both linked (budget-split) and unlinked (flat-weight) paths produce milli-units, so they're additive. `computeStatementItems()` treats them as proportional weights: `payout = (userUnits / totalUnits) * poolTotalCredits`.
 
 **Known limitation (v0)**: Unlinked events produce uncapped flat-weight sums identical to `weight-sum-v0`. If most events are unlinked, the algorithm degrades to the old behavior. Acceptable for v0 — the `unlinkedEventIds` array in the artifact enables monitoring the unlinked ratio.
 

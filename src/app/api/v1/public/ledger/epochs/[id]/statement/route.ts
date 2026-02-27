@@ -35,7 +35,7 @@ export const GET = wrapPublicRoute(
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
 
-    const store = getContainer().epochLedgerStore;
+    const store = getContainer().attributionStore;
 
     // PUBLIC_READS_FINALIZED_ONLY: verify epoch is finalized
     const epoch = await store.getEpoch(epochId);

@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Pure domain logic with entities, rules, and business invariants. No I/O, time, or RNG dependencies. Includes account models, credit pricing calculations, chat message validation, AI utilities (system prompt, token estimation), payment attempt state machine for USDC credit top-ups, and epoch ledger domain (re-exported from `@cogni/ledger-core`).
+Pure domain logic with entities, rules, and business invariants. No I/O, time, or RNG dependencies. Includes account models, credit pricing calculations, chat message validation, AI utilities (system prompt, token estimation), payment attempt state machine for USDC credit top-ups, and epoch ledger domain (re-exported from `@cogni/attribution-ledger`).
 
 ## Pointers
 
@@ -46,7 +46,7 @@ Pure domain logic with entities, rules, and business invariants. No I/O, time, o
   - Domain errors (InsufficientCreditsError, PaymentIntentExpiredError, PaymentVerificationError, etc.)
   - Utilities (USDC conversion, message builders, payment state checkers)
   - AI utilities (system prompt application, token estimation)
-  - Ledger domain (re-exported from `@cogni/ledger-core`): model types, `computePayouts()`, `buildReceiptMessage()`, error classes
+  - Ledger domain (re-exported from `@cogni/attribution-ledger`): model types, `computeStatementItems()`, `buildReceiptMessage()`, error classes
 - **Routes:** none
 - **CLI:** none
 - **Env/Config keys:** none

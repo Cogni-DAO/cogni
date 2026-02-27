@@ -16,7 +16,7 @@ import {
   computeWeightConfigHash,
   deriveAllocationAlgoRef,
   validateWeightConfig,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/ledger/_lib/approver-guard";
@@ -53,7 +53,7 @@ export const POST = wrapRouteHandlerWithLogging<{
     // APPROVERS_PINNED_AT_REVIEW: pin current approver set on the epoch
     const approverSetHash = computeApproverSetHash(getLedgerApprovers());
 
-    const store = getContainer().epochLedgerStore;
+    const store = getContainer().attributionStore;
 
     // Load epoch to get weightConfig for CONFIG_LOCKED_AT_REVIEW
     const existing = await store.getEpoch(epochId);

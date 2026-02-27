@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core`
+ * Module: `@cogni/attribution-ledger`
  * Purpose: Pure domain logic for the epoch ledger — shared between app and scheduler-worker.
  * Scope: Re-exports model types, payout computation, hashing, store port, and errors. Does not contain I/O or infrastructure code.
  * Invariants: No imports from src/ or services/. Pure domain logic only.
@@ -74,7 +74,7 @@ export type {
   AllocationAlgoRef,
   EpochStatus,
   FinalizedAllocation,
-  PayoutLineItem,
+  StatementLineItem,
 } from "./model";
 export { EPOCH_STATUSES } from "./model";
 
@@ -88,7 +88,7 @@ export {
 } from "./pool";
 
 // Rules
-export { computePayouts } from "./rules";
+export { computeStatementItems } from "./rules";
 
 // Signing
 export {
@@ -99,23 +99,23 @@ export {
 
 // Store port interface + types
 export type {
+  AttributionAllocation,
+  AttributionEpoch,
+  AttributionEvaluation,
+  AttributionPoolComponent,
+  AttributionSelection,
+  AttributionStatement,
+  AttributionStatementSignature,
+  AttributionStore,
   CloseIngestionWithEvaluationsParams,
-  EpochLedgerStore,
+  IngestionCursor,
+  IngestionReceipt,
   InsertAllocationParams,
-  InsertEpochStatementParams,
-  InsertIngestionReceiptParams,
   InsertPoolComponentParams,
+  InsertReceiptParams,
   InsertSelectionAutoParams,
-  InsertStatementSignatureParams,
-  LedgerAllocation,
-  LedgerEpoch,
-  LedgerEpochEvaluation,
-  LedgerEpochStatement,
-  LedgerIngestionCursor,
-  LedgerIngestionReceipt,
-  LedgerPoolComponent,
-  LedgerSelection,
-  LedgerStatementSignature,
+  InsertSignatureParams,
+  InsertStatementParams,
   SelectedReceiptWithMetadata,
   UnselectedReceipt,
   UpsertEvaluationParams,
@@ -123,4 +123,4 @@ export type {
 } from "./store";
 
 // Validated store wrapper
-export { createValidatedLedgerStore } from "./validated-store";
+export { createValidatedAttributionStore } from "./validated-store";

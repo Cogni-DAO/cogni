@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/epoch-window`
+ * Module: `@cogni/attribution-ledger/epoch-window`
  * Purpose: Pure, deterministic epoch window computation. Safe in Temporal workflow code (no I/O).
  * Scope: Computes epoch period boundaries from a reference timestamp, aligned to Monday 00:00 UTC. Does not perform I/O or depend on Temporal runtime.
  * Invariants: Deterministic, timezone-anchored, versioned. No I/O or side-effects.

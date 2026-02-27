@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/store`
+ * Module: `@cogni/attribution-ledger/store`
  * Purpose: Port interface for the epoch ledger store. Shared by app and scheduler-worker.
  * Scope: Type definitions only. Does not contain implementations or I/O.
  * Invariants:
@@ -27,7 +27,7 @@ import type { EpochStatus } from "./model";
 // Domain record types (read-side)
 // ---------------------------------------------------------------------------
 
-export interface LedgerEpoch {
+export interface AttributionEpoch {
   readonly id: bigint;
   readonly nodeId: string;
   readonly scopeId: string;
@@ -45,7 +45,7 @@ export interface LedgerEpoch {
   readonly createdAt: Date;
 }
 
-export interface LedgerIngestionReceipt {
+export interface IngestionReceipt {
   readonly receiptId: string;
   readonly nodeId: string;
   readonly source: string;
@@ -62,7 +62,7 @@ export interface LedgerIngestionReceipt {
   readonly ingestedAt: Date;
 }
 
-export interface LedgerSelection {
+export interface AttributionSelection {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
@@ -75,7 +75,7 @@ export interface LedgerSelection {
   readonly updatedAt: Date;
 }
 
-export interface LedgerAllocation {
+export interface AttributionAllocation {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
@@ -88,7 +88,7 @@ export interface LedgerAllocation {
   readonly updatedAt: Date;
 }
 
-export interface LedgerIngestionCursor {
+export interface IngestionCursor {
   readonly nodeId: string;
   readonly scopeId: string;
   readonly source: string;
@@ -98,7 +98,7 @@ export interface LedgerIngestionCursor {
   readonly retrievedAt: Date;
 }
 
-export interface LedgerPoolComponent {
+export interface AttributionPoolComponent {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
@@ -110,13 +110,13 @@ export interface LedgerPoolComponent {
   readonly computedAt: Date;
 }
 
-export interface LedgerEpochStatement {
+export interface AttributionStatement {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
   readonly allocationSetHash: string;
   readonly poolTotalCredits: bigint;
-  readonly payoutsJson: Array<{
+  readonly statementItems: Array<{
     user_id: string;
     total_units: string;
     share: string;
@@ -126,7 +126,7 @@ export interface LedgerEpochStatement {
   readonly createdAt: Date;
 }
 
-export interface LedgerStatementSignature {
+export interface AttributionStatementSignature {
   readonly id: string;
   readonly nodeId: string;
   readonly statementId: string;
@@ -135,7 +135,7 @@ export interface LedgerStatementSignature {
   readonly signedAt: Date;
 }
 
-export interface LedgerEpochEvaluation {
+export interface AttributionEvaluation {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
@@ -160,7 +160,7 @@ export interface SelectedReceiptWithMetadata
 // Write-side parameter types
 // ---------------------------------------------------------------------------
 
-export interface InsertIngestionReceiptParams {
+export interface InsertReceiptParams {
   readonly receiptId: string;
   readonly nodeId: string;
   readonly source: string;
@@ -206,12 +206,12 @@ export interface InsertPoolComponentParams {
   readonly evidenceRef?: string | null;
 }
 
-export interface InsertEpochStatementParams {
+export interface InsertStatementParams {
   readonly nodeId: string;
   readonly epochId: bigint;
   readonly allocationSetHash: string;
   readonly poolTotalCredits: bigint;
-  readonly payoutsJson: Array<{
+  readonly statementItems: Array<{
     user_id: string;
     total_units: string;
     share: string;
@@ -220,7 +220,7 @@ export interface InsertEpochStatementParams {
   readonly supersedesStatementId?: string | null;
 }
 
-export interface InsertStatementSignatureParams {
+export interface InsertSignatureParams {
   readonly nodeId: string;
   readonly statementId: string;
   readonly signerWallet: string;
@@ -269,7 +269,7 @@ export interface InsertSelectionAutoParams {
  * or the selection row has user_id IS NULL (unresolved).
  */
 export interface UnselectedReceipt {
-  readonly receipt: LedgerIngestionReceipt;
+  readonly receipt: IngestionReceipt;
   /** true = selection row exists with userId=NULL; false = no selection row */
   readonly hasExistingSelection: boolean;
 }
@@ -278,7 +278,7 @@ export interface UnselectedReceipt {
 // Port interface
 // ---------------------------------------------------------------------------
 
-export interface EpochLedgerStore {
+export interface AttributionStore {
   // Epochs
   createEpoch(params: {
     nodeId: string;
@@ -286,16 +286,19 @@ export interface EpochLedgerStore {
     periodStart: Date;
     periodEnd: Date;
     weightConfig: Record<string, number>;
-  }): Promise<LedgerEpoch>;
-  getOpenEpoch(nodeId: string, scopeId: string): Promise<LedgerEpoch | null>;
+  }): Promise<AttributionEpoch>;
+  getOpenEpoch(
+    nodeId: string,
+    scopeId: string
+  ): Promise<AttributionEpoch | null>;
   getEpochByWindow(
     nodeId: string,
     scopeId: string,
     periodStart: Date,
     periodEnd: Date
-  ): Promise<LedgerEpoch | null>;
-  getEpoch(id: bigint): Promise<LedgerEpoch | null>;
-  listEpochs(nodeId: string): Promise<LedgerEpoch[]>;
+  ): Promise<AttributionEpoch | null>;
+  getEpoch(id: bigint): Promise<AttributionEpoch | null>;
+  listEpochs(nodeId: string): Promise<AttributionEpoch[]>;
   /** Transition epoch open → review (INGESTION_STOPS_AT_REVIEW).
    *  Pins approverSetHash, allocationAlgoRef, and weightConfigHash. */
   closeIngestion(
@@ -303,17 +306,17 @@ export interface EpochLedgerStore {
     approverSetHash: string,
     allocationAlgoRef: string,
     weightConfigHash: string
-  ): Promise<LedgerEpoch>;
+  ): Promise<AttributionEpoch>;
 
   /** Transition epoch review → finalized. Sets poolTotalCredits and closedAt. */
-  finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<LedgerEpoch>;
+  finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<AttributionEpoch>;
 
   /** Transition epoch open → review with locked evaluations in a single transaction (EVALUATION_FINAL_ATOMIC).
    *  Inserts locked evaluations + sets artifacts_hash + pins approverSetHash, allocationAlgoRef, weightConfigHash.
    *  Rejects if epoch is not open. */
   closeIngestionWithEvaluations(
     params: CloseIngestionWithEvaluationsParams
-  ): Promise<LedgerEpoch>;
+  ): Promise<AttributionEpoch>;
 
   // Evaluations
   /** Upsert draft evaluation — overwrites on (epoch_id, evaluation_ref, status='draft'). */
@@ -322,27 +325,25 @@ export interface EpochLedgerStore {
   getEvaluationsForEpoch(
     epochId: bigint,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochEvaluation[]>;
+  ): Promise<AttributionEvaluation[]>;
   /** Get single evaluation by ref and optional status. */
   getEvaluation(
     epochId: bigint,
     evaluationRef: string,
     status?: "draft" | "locked"
-  ): Promise<LedgerEpochEvaluation | null>;
+  ): Promise<AttributionEvaluation | null>;
   /** Get selected receipts with raw metadata and payload hash for enricher consumption. */
   getSelectedReceiptsWithMetadata(
     epochId: bigint
   ): Promise<SelectedReceiptWithMetadata[]>;
 
   // Ingestion receipts (append-only, epoch-agnostic raw log)
-  insertIngestionReceipts(
-    receipts: InsertIngestionReceiptParams[]
-  ): Promise<void>;
+  insertIngestionReceipts(receipts: InsertReceiptParams[]): Promise<void>;
   getReceiptsForWindow(
     nodeId: string,
     since: Date,
     until: Date
-  ): Promise<LedgerIngestionReceipt[]>;
+  ): Promise<IngestionReceipt[]>;
 
   // Allocation computation (joined query)
   /**
@@ -361,8 +362,8 @@ export interface EpochLedgerStore {
    * admin-set fields if a row is created between getUnselectedReceipts and insert.
    */
   insertSelectionDoNothing(params: InsertSelectionAutoParams[]): Promise<void>;
-  getSelectionForEpoch(epochId: bigint): Promise<LedgerSelection[]>;
-  getUnresolvedSelection(epochId: bigint): Promise<LedgerSelection[]>;
+  getSelectionForEpoch(epochId: bigint): Promise<AttributionSelection[]>;
+  getUnresolvedSelection(epochId: bigint): Promise<AttributionSelection[]>;
 
   // Allocations
   insertAllocations(allocations: InsertAllocationParams[]): Promise<void>;
@@ -385,7 +386,7 @@ export interface EpochLedgerStore {
     finalUnits: bigint,
     overrideReason?: string
   ): Promise<void>;
-  getAllocationsForEpoch(epochId: bigint): Promise<LedgerAllocation[]>;
+  getAllocationsForEpoch(epochId: bigint): Promise<AttributionAllocation[]>;
 
   // Ingestion cursors (one stream per call)
   upsertCursor(
@@ -402,19 +403,21 @@ export interface EpochLedgerStore {
     source: string,
     stream: string,
     sourceRef: string
-  ): Promise<LedgerIngestionCursor | null>;
+  ): Promise<IngestionCursor | null>;
 
   // Pool components
   insertPoolComponent(
     params: InsertPoolComponentParams
-  ): Promise<LedgerPoolComponent>;
-  getPoolComponentsForEpoch(epochId: bigint): Promise<LedgerPoolComponent[]>;
+  ): Promise<AttributionPoolComponent>;
+  getPoolComponentsForEpoch(
+    epochId: bigint
+  ): Promise<AttributionPoolComponent[]>;
 
   // Epoch statements
   insertEpochStatement(
-    params: InsertEpochStatementParams
-  ): Promise<LedgerEpochStatement>;
-  getStatementForEpoch(epochId: bigint): Promise<LedgerEpochStatement | null>;
+    params: InsertStatementParams
+  ): Promise<AttributionStatement>;
+  getStatementForEpoch(epochId: bigint): Promise<AttributionStatement | null>;
 
   /**
    * Atomic finalize: epoch transition + statement upsert + signature upsert in one DB transaction.
@@ -427,18 +430,16 @@ export interface EpochLedgerStore {
   finalizeEpochAtomic(params: {
     epochId: bigint;
     poolTotal: bigint;
-    statement: Omit<InsertEpochStatementParams, "epochId">;
-    signature: Omit<InsertStatementSignatureParams, "statementId">;
+    statement: Omit<InsertStatementParams, "epochId">;
+    signature: Omit<InsertSignatureParams, "statementId">;
     expectedAllocationSetHash: string;
-  }): Promise<{ epoch: LedgerEpoch; statement: LedgerEpochStatement }>;
+  }): Promise<{ epoch: AttributionEpoch; statement: AttributionStatement }>;
 
   // Statement signatures
-  insertStatementSignature(
-    params: InsertStatementSignatureParams
-  ): Promise<void>;
+  insertStatementSignature(params: InsertSignatureParams): Promise<void>;
   getSignaturesForStatement(
     statementId: string
-  ): Promise<LedgerStatementSignature[]>;
+  ): Promise<AttributionStatementSignature[]>;
 
   // Identity resolution (cross-domain convenience — V0 on ledger port)
   /**

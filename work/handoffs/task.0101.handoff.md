@@ -48,7 +48,7 @@ These four rules are non-negotiable — the design review specifically required 
 ### Store Port + Adapter
 
 - `packages/ledger-core/src/store.ts` — `ActivityLedgerStore` interface
-- `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — `DrizzleLedgerAdapter`
+- `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — `DrizzleAttributionAdapter`
 - Currently does NOT import identity tables — you add `import { userBindings } from "@cogni/db-schema/identity"`
 
 ### Existing Curation Methods (DO NOT use for auto-population)
@@ -93,7 +93,7 @@ Add `curateAndResolve` to the existing default `proxyActivities` call (2-minute 
 
 ## Gotchas
 
-- `DrizzleLedgerAdapter` currently imports only from `@cogni/db-schema/ledger`. You add `import { userBindings } from "@cogni/db-schema/identity"` — run `pnpm check` to verify dep-cruiser allows it
+- `DrizzleAttributionAdapter` currently imports only from `@cogni/db-schema/ledger`. You add `import { userBindings } from "@cogni/db-schema/identity"` — run `pnpm check` to verify dep-cruiser allows it
 - `epochId` is serialized as string in Temporal (bigint doesn't serialize). Parse back with `BigInt(input.epochId)`
 - The LEFT JOIN in `getUncuratedEvents` needs to distinguish "no curation row" from "curation with null userId" — use `isNull(activityCuration.id)` for the former
 - `getActivityForWindow` queries by `(nodeId, eventTime)` without scopeId. V0: single scope, not an issue. Add a `// TODO: scopeId filter for multi-scope` comment

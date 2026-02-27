@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/allocation`
+ * Module: `@cogni/attribution-ledger/allocation`
  * Purpose: Versioned allocation algorithm framework — pure function dispatch for computing proposed allocations from selected receipts.
  * Scope: Pure functions. Does not perform I/O or hold state. Deterministic output for same inputs.
  * Invariants:

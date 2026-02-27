@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/artifact-envelope`
+ * Module: `@cogni/attribution-ledger/artifact-envelope`
  * Purpose: Metadata and hashing validation for evaluation envelopes. Does NOT standardize payload shape — payload is per-plugin and opaque to the pipeline.
  * Scope: Pure validation functions. Does not perform I/O.
  * Invariants:

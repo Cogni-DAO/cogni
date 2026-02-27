@@ -13,13 +13,13 @@
  * @internal
  */
 
+import { createValidatedAttributionStore } from "@cogni/attribution-ledger";
 import {
+  DrizzleAttributionAdapter,
   DrizzleExecutionGrantWorkerAdapter,
-  DrizzleLedgerAdapter,
   DrizzleScheduleRunAdapter,
 } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
-import { createValidatedLedgerStore } from "@cogni/ledger-core";
 
 import {
   GitHubAppTokenProvider,
@@ -28,7 +28,7 @@ import {
 import type { Logger } from "../observability/logger.js";
 
 import type {
-  EpochLedgerStore,
+  AttributionStore,
   ExecutionGrantWorkerPort,
   ScheduleRunRepository,
   SourceAdapter,
@@ -53,8 +53,8 @@ export interface ServiceContainer {
  * Ledger container — deps for ledger activities.
  * Created separately because ledger env vars (NODE_ID, SCOPE_ID) are optional.
  */
-export interface LedgerContainer {
-  ledgerStore: EpochLedgerStore;
+export interface AttributionContainer {
+  attributionStore: AttributionStore;
   sourceAdapters: ReadonlyMap<string, SourceAdapter>;
   nodeId: string;
   scopeId: string;
@@ -89,20 +89,20 @@ export function createContainer(config: Env, logger: Logger): ServiceContainer {
  * Build ledger container. Requires NODE_ID and SCOPE_ID in env.
  * Returns null if ledger env vars are not configured.
  */
-export function createLedgerContainer(
+export function createAttributionContainer(
   config: Env,
   logger: Logger
-): LedgerContainer | null {
+): AttributionContainer | null {
   if (!config.NODE_ID || !config.SCOPE_ID) {
     logger.info("NODE_ID or SCOPE_ID not set — ledger worker disabled");
     return null;
   }
 
   const db = createServiceDbClient(config.DATABASE_URL);
-  const ledgerLogger = logger.child?.({ component: "ledger" }) ?? logger;
+  const attributionLogger = logger.child?.({ component: "ledger" }) ?? logger;
 
-  const ledgerStore = createValidatedLedgerStore(
-    new DrizzleLedgerAdapter(db, config.SCOPE_ID)
+  const attributionStore = createValidatedAttributionStore(
+    new DrizzleAttributionAdapter(db, config.SCOPE_ID)
   );
 
   // Build source adapters
@@ -131,7 +131,7 @@ export function createLedgerContainer(
     if (repos.length > 0) {
       adapters.set(
         "github",
-        new GitHubSourceAdapter({ tokenProvider, repos }, ledgerLogger)
+        new GitHubSourceAdapter({ tokenProvider, repos }, attributionLogger)
       );
     } else {
       logger.warn(
@@ -141,10 +141,10 @@ export function createLedgerContainer(
   }
 
   return {
-    ledgerStore,
+    attributionStore,
     sourceAdapters: adapters,
     nodeId: config.NODE_ID,
     scopeId: config.SCOPE_ID,
-    logger: ledgerLogger,
+    logger: attributionLogger,
   };
 }

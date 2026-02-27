@@ -41,11 +41,11 @@ external_refs:
 - Custom SQL migration with DB triggers rejecting UPDATE/DELETE on `work_receipts` (RECEIPTS_IMMUTABLE), `receipt_events` (EVENTS_APPEND_ONLY), and `epoch_pool_components` (POOL_IMMUTABLE)
 - Pure domain logic in `packages/ledger-core/src/` (shared between app and `scheduler-worker` — worker cannot import from `src/`):
   - `model.ts` — receipt, epoch, pool component, payout statement types; role/event enums
-  - `rules.ts` — `computePayouts(receipts, poolTotal)` with BIGINT arithmetic + largest-remainder rounding (ALL_MATH_BIGINT)
+  - `rules.ts` — `computeStatementItems(receipts, poolTotal)` with BIGINT arithmetic + largest-remainder rounding (ALL_MATH_BIGINT)
   - `signing.ts` — `buildReceiptMessage(fields)` returns the canonical domain-bound string per SIGNATURE_DOMAIN_BOUND; `hashReceiptMessage(msg)` returns SHA-256; `computeReceiptSetHash(receipts)` for epoch close
   - `errors.ts` — domain error classes (EpochNotOpenError, ReceiptSignatureInvalidError, IssuerNotAuthorizedError, EpochAlreadyClosedError, PoolComponentMissingError)
   - `index.ts` — barrel export
-- `src/core/ledger/public.ts` — re-exports from `@cogni/ledger-core` so app code uses `@/core/ledger` unchanged
+- `src/core/ledger/public.ts` — re-exports from `@cogni/attribution-ledger` so app code uses `@/core/ledger` unchanged
 - All Ethereum addresses normalized to lowercase hex on write (ADDRESS_NORMALIZED) — EIP-55 checksum is UX-layer only
 - UNIQUE(epoch_id, component_id) on `epoch_pool_components` (POOL_UNIQUE_PER_TYPE)
 - Unit tests for payout math: edge cases (1 recipient, many recipients, zero units, exact division, remainder distribution)
@@ -57,9 +57,9 @@ external_refs:
 - `packages/db-schema/src/index.ts` (add barrel export)
 - `packages/db-schema/drizzle/migrations/` (new migration)
 - `packages/ledger-core/` (new package: model.ts, rules.ts, signing.ts, errors.ts, index.ts, package.json, tsconfig.json)
-- `src/core/ledger/public.ts` (re-export from `@cogni/ledger-core`)
+- `src/core/ledger/public.ts` (re-export from `@cogni/attribution-ledger`)
 - `src/core/public.ts` (add ledger re-export)
-- `tests/unit/core/ledger/` (new test files — tests import from `@cogni/ledger-core`)
+- `tests/unit/core/ledger/` (new test files — tests import from `@cogni/attribution-ledger`)
 
 ## Plan
 
@@ -71,10 +71,10 @@ external_refs:
 - [x] Create `packages/ledger-core/` package with `package.json`, `tsconfig.json`, `tsup.config.ts`
 - [x] Create `packages/ledger-core/src/model.ts` — types and enums
 - [x] Create `packages/ledger-core/src/errors.ts` — domain errors with type guards
-- [x] Create `packages/ledger-core/src/rules.ts` — `computePayouts()` with BIGINT largest-remainder
+- [x] Create `packages/ledger-core/src/rules.ts` — `computeStatementItems()` with BIGINT largest-remainder
 - [x] Create `packages/ledger-core/src/signing.ts` — canonical message builder + SHA-256 hashing
 - [x] Create `packages/ledger-core/src/index.ts` barrel export
-- [x] Create `src/core/ledger/public.ts` re-exporting from `@cogni/ledger-core`, update `src/core/public.ts`
+- [x] Create `src/core/ledger/public.ts` re-exporting from `@cogni/attribution-ledger`, update `src/core/public.ts`
 - [x] Write unit tests for payout math and signing in `tests/unit/core/ledger/`
 
 ## Validation
@@ -99,7 +99,7 @@ pnpm test tests/unit/core/ledger/
 
 ### Revision 1 — Blocking Issues
 
-1. **Domain code in wrong location** — Must be in `packages/ledger-core/` (not `src/core/ledger/`) per design review. `services/scheduler-worker/` cannot import from `src/`. Create the package, move `model.ts`, `rules.ts`, `signing.ts`, `errors.ts` there, update `src/core/ledger/public.ts` to re-export from `@cogni/ledger-core`.
+1. **Domain code in wrong location** — Must be in `packages/ledger-core/` (not `src/core/ledger/`) per design review. `services/scheduler-worker/` cannot import from `src/`. Create the package, move `model.ts`, `rules.ts`, `signing.ts`, `errors.ts` there, update `src/core/ledger/public.ts` to re-export from `@cogni/attribution-ledger`.
 
 2. **`receipt_events` index missing DESC** — `ledger.ts:154-157` and migration line 85 create ASC index on `(receipt_id, created_at)`. Spec requires `(receipt_id, created_at DESC)` for LATEST_EVENT_WINS queries.
 
@@ -113,8 +113,8 @@ pnpm test tests/unit/core/ledger/
 
 **Reused unchanged:**
 
-- `computePayouts()` in `rules.ts` — exact same BIGINT largest-remainder math
-- `ApprovedReceipt` type — used to feed `computePayouts()` from `epoch_allocations`
+- `computeStatementItems()` in `rules.ts` — exact same BIGINT largest-remainder math
+- `ApprovedReceipt` type — used to feed `computeStatementItems()` from `epoch_allocations`
 - `epoch_pool_components` table — defines credit budget (unchanged)
 - `payout_statements` table — deterministic output (unchanged)
 - `errors.ts` — `EpochNotOpenError`, `EpochAlreadyClosedError`, `PoolComponentMissingError` still relevant

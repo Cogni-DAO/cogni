@@ -23,7 +23,7 @@ export {
   DrizzleExecutionGrantUserAdapter,
   DrizzleExecutionGrantWorkerAdapter,
 } from "./adapters/drizzle-grant.adapter";
-export { DrizzleLedgerAdapter } from "./adapters/drizzle-ledger.adapter";
+export { DrizzleAttributionAdapter } from "./adapters/drizzle-ledger.adapter";
 export { DrizzleScheduleRunAdapter } from "./adapters/drizzle-run.adapter";
 export {
   DrizzleScheduleUserAdapter,

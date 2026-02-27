@@ -16,7 +16,7 @@
 
 import { z } from "zod";
 
-export const PayoutLineSchema = z.object({
+export const StatementLineItemSchema = z.object({
   user_id: z.string(),
   total_units: z.string(),
   share: z.string(),
@@ -28,7 +28,7 @@ export const StatementSchema = z.object({
   epochId: z.string(),
   allocationSetHash: z.string(),
   poolTotalCredits: z.string(),
-  payouts: z.array(PayoutLineSchema),
+  items: z.array(StatementLineItemSchema),
   supersedesStatementId: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
@@ -46,5 +46,5 @@ export const epochStatementOperation = {
   output: EpochStatementOutputSchema,
 } as const;
 
-export type PayoutLineDto = z.infer<typeof PayoutLineSchema>;
+export type StatementLineItemDto = z.infer<typeof StatementLineItemSchema>;
 export type StatementDto = z.infer<typeof StatementSchema>;

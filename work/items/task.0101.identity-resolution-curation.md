@@ -6,7 +6,7 @@ status: done
 priority: 1
 rank: 7
 estimate: 2
-summary: "Implement curateAndResolve activity (auto-create curation rows from events, resolve GitHub platform_user_id → user_id via user_bindings), add resolveIdentities to store port + DrizzleLedgerAdapter, wire into CollectEpochWorkflow."
+summary: "Implement curateAndResolve activity (auto-create curation rows from events, resolve GitHub platform_user_id → user_id via user_bindings), add resolveIdentities to store port + DrizzleAttributionAdapter, wire into CollectEpochWorkflow."
 outcome: "After each collection run, curation rows exist for every activity event. GitHub platformUserId resolved to user_id via user_bindings (best-effort — unresolved events flagged with user_id=NULL). Allocation computation can read curated events."
 spec_refs: epoch-ledger-spec
 assignees: derekg1729

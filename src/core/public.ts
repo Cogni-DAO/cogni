@@ -61,12 +61,12 @@ export {
 export type {
   EpochStatus,
   FinalizedAllocation,
-  PayoutLineItem,
+  StatementLineItem,
 } from "./ledger/public";
 export {
   AllocationNotFoundError,
   computeAllocationSetHash,
-  computePayouts,
+  computeStatementItems,
   EPOCH_STATUSES,
   EpochAlreadyFinalizedError,
   EpochNotFoundError,

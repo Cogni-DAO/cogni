@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/ledger-core/enricher-inputs`
+ * Module: `@cogni/attribution-ledger/enricher-inputs`
  * Purpose: Shared inputsHash computation for enrichers. Base shape is frozen; enrichers extend via `extensions`.
  * Scope: Pure function. Does not perform I/O.
  * Invariants:
