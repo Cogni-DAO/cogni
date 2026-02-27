@@ -6,59 +6,67 @@ status: active
 created: 2026-02-27
 updated: 2026-02-27
 branch: refactor/ledger-renaming
-last_commit: 10d0242c
+last_commit: 4ac95ece
 ---
 
-# Handoff: Ledger Pipeline Rename + Spec Cleanup
+# Handoff: Ledger Pipeline Rename (Phases 5–8 Remaining)
 
 ## Context
 
-- The epoch ledger pipeline had inconsistent naming across tables, types, and docs — "activity events," "curation," "artifacts," and "payout statements" didn't map to clear pipeline stages.
-- The spec (`docs/spec/epoch-ledger.md`) had a hard PK contradiction: `activity_events` PK was `(node_id, id)` but the spec claimed events could exist in multiple scopes. Scope must be assigned at selection, not ingestion.
-- Nothing is shipped (no production DB, no users), making this the ideal time to do a clean rename across ~38 files.
-- The rename aligns the entire codebase to five pipeline stages: **Ingestion → Selection → Evaluation → Allocation → Finalization**.
-- A new DB trigger is needed: `EVALUATION_LOCKED_IMMUTABLE` — `epoch_evaluations` with `status='locked'` must be immutable (UPDATE/DELETE blocked by trigger, like `activity_events` and `epoch_pool_components` already have).
+- The epoch ledger pipeline had inconsistent naming — "activity events," "curation," "artifacts," "payout statements" didn't map to clear pipeline stages.
+- The rename aligns the entire codebase to five stages: **Ingestion → Selection → Evaluation → Allocation → Finalization**.
+- Nothing is shipped (no production DB, no users), so this is a clean rename across ~38 files with no migration risk.
+- A new DB trigger is needed: `EVALUATION_LOCKED_IMMUTABLE` — `epoch_evaluations` with `status='locked'` must be immutable.
+- `RECEIPT_SCOPE_AGNOSTIC`: `ingestion_receipts` has no `scope_id` column. Scope is assigned at selection via epoch membership.
 
 ## Current State
 
-- **Phases 1–2 are committed** on `refactor/ledger-renaming` (commit `10d0242c`): Drizzle schema (`db-schema/ledger.ts`) and all domain types/port interface (`ledger-core/src/`) are fully renamed.
-- `pnpm --filter @cogni/ledger-core build` passes.
-- **Phases 3–8 are NOT started**: drizzle adapter, app layer, scheduler-worker, tests, migrations, and spec still reference old names. `pnpm check` will fail with type errors until these phases complete.
-- The approved plan with complete rename maps lives at `.claude/plans/golden-shimmying-spindle.md`.
+- **Phases 1–2 committed** (`10d0242c`): Drizzle schema (`db-schema/ledger.ts`) and domain types/port interface (`ledger-core/src/`) fully renamed.
+- **Phase 3 committed** (`36b44331`): Drizzle adapter (`db-client/drizzle-ledger.adapter.ts`, 1265 lines) fully renamed — all methods, row mappers, JOIN conditions updated.
+- **Phase 4 committed** (`4ac95ece`): App layer — ports, container, DTOs, contracts, routes, governance UI types/components. 27 files.
+- **Phases 5–8 NOT started**: scheduler-worker, tests, migrations, spec doc. `pnpm check` will have test failures in `packages/ledger-core/tests/` (Phase 6 scope) and scheduler-worker won't compile until Phase 5.
 
 ## Decisions Made
 
-- **Receipts are scope-agnostic** (`RECEIPT_SCOPE_AGNOSTIC`): `ingestion_receipts` has no `scope_id` column. PK = `(node_id, receipt_id)`. Scope is assigned at the selection layer via epoch membership. This resolves the multi-scope PK contradiction.
-- **Ingestion cursors stay scoped**: `ingestion_cursors` keeps `scope_id` in its PK because scoped collection is fine — receipt inserts are idempotent.
-- **Port interface renamed**: `ActivityLedgerStore` → `EpochLedgerStore`.
-- **Activity function renames**: `curateAndResolve` → `materializeSelection`, `enrichEpochDraft` → `evaluateEpochDraft`, `buildFinalArtifacts` → `buildLockedEvaluations`, etc. Full map in the plan file.
-- **Invariant consolidation**: `WEIGHTS_INTEGER_ONLY` merges into `ALL_MATH_BIGINT`. New: `RECEIPT_SCOPE_AGNOSTIC`, `EVALUATION_LOCKED_IMMUTABLE`.
+- **Receipts are scope-agnostic**: `ingestion_receipts` PK = `(node_id, receipt_id)`. No `scope_id`. JOINs to `epochSelection` use `(node_id, receipt_id)` only.
+- **Port interface**: `ActivityLedgerStore` → `EpochLedgerStore`. Container property: `epochLedgerStore`.
+- **Wire format renamed**: API contracts updated — `receiptId` (not `id`), `selection` (not `curation`), `supersedesPayoutId` (not `supersedesStatementId`).
+- **UI types renamed**: `ActivityEvent` → `IngestionReceipt`, `ApiActivityEvent` → `ApiIngestionReceipt`, `activities` field → `receipts`.
+- **Ingestion-core `ActivityEvent` left as-is**: This is a different domain concept (raw source adapter output), not part of the ledger rename.
 
 ## Next Actions
 
-- [ ] **Phase 3**: Rename drizzle adapter (`packages/db-client/src/adapters/drizzle-ledger.adapter.ts`, 1265 lines) — imports, row mappers, 51 methods, JOIN conditions. Critical: audit all joins now that receipts have no `scope_id`.
-- [ ] **Phase 4**: Rename app layer (~12 files) — ports, DTOs, API routes, contracts
-- [ ] **Phase 5**: Rename scheduler-worker (~6 files) — activities, workflows, container bootstrap. Rename activity functions per plan map.
-- [ ] **Phase 6**: Rename tests + fixtures + seed (~7 files)
-- [ ] **Phase 7**: Delete all 17 migrations + meta, run `pnpm db:generate`, add 4 triggers to generated SQL (including new `epoch_evaluations_locked_immutable`)
-- [ ] **Phase 8**: Update `docs/spec/epoch-ledger.md` — rename tables/columns/invariants, fix scope docs, rename pipeline stages
-- [ ] Run `pnpm check && pnpm test && pnpm test:component && pnpm check:docs`
+- [ ] **Phase 5**: Rename scheduler-worker (4 files — see rename map below)
+  - `services/scheduler-worker/src/ports/index.ts` — `ActivityLedgerStore` → `EpochLedgerStore`
+  - `services/scheduler-worker/src/bootstrap/container.ts` — same type rename in `LedgerContainer`
+  - `services/scheduler-worker/src/activities/ledger.ts` — `insertActivityEvents` → `insertIngestionReceipts`, `getUncuratedEvents` → `getUnselectedReceipts`, `insertCurationDoNothing` → `insertSelectionDoNothing`, `updateCurationUserId` → `updateSelectionUserId`, `getCuratedEventsForAllocation` → `getSelectedReceiptsForAllocation`, `getStatementForEpoch` → `getPayoutForEpoch`, `closeIngestionWithArtifacts` → `closeIngestionWithEvaluations`, `hasExistingCuration` → `hasExistingSelection`, `event.id` → `receipt.receiptId`, `scopeId` removed from `insertIngestionReceipts` params, `statement:` → `payout:` in `finalizeEpochAtomic`, `statementId` → `payoutId` in `FinalizeEpochOutput`, `artifacts` → `evaluations` in `AutoCloseIngestionInput`, `artifactRef` → `evaluationRef`
+  - `services/scheduler-worker/src/activities/enrichment.ts` — `ActivityLedgerStore` → `EpochLedgerStore`, `getCuratedEventsWithMetadata` → `getSelectedReceiptsWithMetadata`, `upsertDraftArtifact` → `upsertDraftEvaluation`, `ECHO_ARTIFACT_REF` → `ECHO_EVALUATION_REF`, `UpsertArtifactParamsWire` → `UpsertEvaluationParamsWire`, `artifactRef` → `evaluationRef`, `eventId` → `receiptId` in enricher inputs
+- [ ] **Phase 6**: Rename tests + fixtures (~5 files)
+  - `packages/ledger-core/tests/artifact-envelope.test.ts` — field renames
+  - `packages/ledger-core/tests/hashing.test.ts` — `artifactRef` → `evaluationRef`
+  - `tests/_fixtures/ledger/seed-ledger.ts` — type/field renames
+  - `services/scheduler-worker/tests/ledger-activities.test.ts` — mirror Phase 5 renames
+  - `services/scheduler-worker/tests/enrichment-activities.test.ts` — mirror Phase 5 renames
+- [ ] **Phase 7**: Delete all 17 migrations in `src/adapters/server/db/migrations/`, run `pnpm db:generate`, add 4 triggers including new `epoch_evaluations_locked_immutable`
+- [ ] **Phase 8**: Update `docs/spec/epoch-ledger.md` (750 lines) — rename tables/columns/invariants, fix scope docs
+- [ ] Run `pnpm check` — must be fully clean
 
 ## Risks / Gotchas
 
-- **Adapter JOIN audit is critical**: With `scope_id` gone from receipts, JOINs between `ingestionReceipts` and `epochSelection` use `(node_id, receipt_id)` only. Any join referencing `ingestionReceipts.scopeId` will be a compile error (column doesn't exist). Methods to audit: `getSelectedReceiptsForAllocation`, `getSelectedReceiptsWithMetadata`, `getUnselectedReceipts`.
-- **Scope removal from receipt insertion**: `insertIngestionReceipts` and `InsertIngestionReceiptParams` no longer include `scope_id`. The GitHub adapter and `ingestFromSource` activity must stop passing it. The `getReceiptsForWindow` query also loses its scope filter — it now returns all receipts for a node in the time window.
-- **Locked evaluation trigger**: Must allow INSERT during the atomic `closeIngestionWithEvaluations` transaction (epoch is still `'open'` at that point in the transaction) but block INSERT of locked evaluations otherwise.
-- **Hash shape changed**: `eventId`→`receiptId` in `enricher-inputs.ts` changes hash outputs. Safe (no production data) but dev draft evaluations will have stale hashes after migration reset.
+- **`insertIngestionReceipts` must NOT pass `scopeId`**: The column doesn't exist on `ingestion_receipts`. The `ledger.ts` activities file currently passes `scopeId` — remove it.
+- **`UncuratedEvent` → `UnselectedReceipt`**: Import from `@cogni/ledger-core`, field `event.id` → `receipt.receiptId`, `hasExistingCuration` → `hasExistingSelection`.
+- **`finalizeEpochAtomic` params changed**: `statement:` key → `payout:`, `supersedesStatementId` → `supersedesPayoutId`.
+- **Hash shape changed**: `eventId` → `receiptId` in `computeEnricherInputsHash` inputs changes hash outputs. Safe (no production data) but existing draft evaluations will have stale hashes.
+- **Locked evaluation trigger**: Must allow INSERT during atomic `closeIngestionWithEvaluations` transaction but block mutations on locked evaluations otherwise.
 
 ## Pointers
 
-| File / Resource                                             | Why it matters                                                                 |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `.claude/plans/golden-shimmying-spindle.md`                 | Complete rename maps (tables, columns, types, methods, activities, invariants) |
-| `packages/db-schema/src/ledger.ts`                          | Source of truth for all table definitions (DONE)                               |
-| `packages/ledger-core/src/store.ts`                         | Port interface with all 35+ methods (DONE)                                     |
-| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` | 1265-line adapter — biggest remaining file                                     |
-| `services/scheduler-worker/src/activities/ledger.ts`        | 996-line activities file — second biggest                                      |
-| `docs/spec/epoch-ledger.md`                                 | 750-line spec needing full rename + scope fix                                  |
-| `src/adapters/server/db/migrations/`                        | 17 migrations to nuke + regenerate                                             |
+| File / Resource                                             | Why it matters                                                          |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `packages/ledger-core/src/store.ts`                         | Source of truth for all new method/type names (already renamed)         |
+| `packages/db-schema/src/ledger.ts`                          | Source of truth for all new table/column names (already renamed)        |
+| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` | Reference implementation — shows correct JOIN patterns with no scope_id |
+| `services/scheduler-worker/src/activities/ledger.ts`        | 996-line file — largest remaining rename target                         |
+| `services/scheduler-worker/src/activities/enrichment.ts`    | 230-line file — enricher activities with artifact → evaluation renames  |
+| `docs/spec/epoch-ledger.md`                                 | 750-line spec needing full terminology update                           |
+| `src/adapters/server/db/migrations/`                        | 17 migrations to delete + regenerate                                    |
