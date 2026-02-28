@@ -35,7 +35,7 @@ export const GET = wrapRouteHandlerWithLogging(
     auth: { mode: "required", getSessionUser: getServerSessionUser },
   },
   async (_ctx, _request, sessionUser) => {
-    const data = await readProfile(sessionUser!);
+    const data = await readProfile(sessionUser);
     const output = profileReadOperation.output.parse(data);
     return NextResponse.json(output);
   }
@@ -56,7 +56,7 @@ export const PATCH = wrapRouteHandlerWithLogging(
       );
     }
 
-    const data = await updateProfile(sessionUser!, inputResult.data);
+    const data = await updateProfile(sessionUser, inputResult.data);
     const output = profileUpdateOperation.output.parse(data);
     return NextResponse.json(output);
   }

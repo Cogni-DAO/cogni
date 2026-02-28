@@ -349,6 +349,31 @@ describe("OAuth signIn callback — DB paths", () => {
     expect(binding).toBeUndefined();
   });
 
+  it("rejects when link transaction provider mismatches callback (cross-provider replay)", async () => {
+    const userId = newTestUserId();
+    await seedUser(db, { id: userId });
+
+    // Seed a valid transaction for "github"
+    const txId = await seedLinkTransaction(db, {
+      userId,
+      provider: "github",
+    });
+
+    // Attempt consume via "discord" callback — must reject
+    mockGetStore.mockReturnValue({ txId, userId });
+    const { result } = await callSignInWithUser({
+      account: makeOAuthAccount("discord", "dc-cross-provider"),
+    });
+
+    expect(result).toBe("/profile?error=link_failed");
+
+    // No binding created
+    const binding = await db.query.userBindings.findFirst({
+      where: eq(userBindings.externalId, "dc-cross-provider"),
+    });
+    expect(binding).toBeUndefined();
+  });
+
   it("rejects when link transaction is already consumed (double-consume)", async () => {
     const userId = newTestUserId();
     const providerAccountId = "gh-double-consume";

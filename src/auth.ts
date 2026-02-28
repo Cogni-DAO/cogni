@@ -88,6 +88,7 @@ async function consumeLinkTransaction(
       and(
         eq(linkTransactions.id, txId),
         eq(linkTransactions.userId, userId),
+        eq(linkTransactions.provider, provider),
         isNull(linkTransactions.consumedAt),
         gt(linkTransactions.expiresAt, new Date())
       )
