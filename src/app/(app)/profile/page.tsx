@@ -4,79 +4,45 @@
 /**
  * Module: `@app/(app)/profile/page`
  * Purpose: User profile settings page — display name, avatar color, and linked accounts.
- * Scope: Client component that reads/updates user profile via /api/v1/users/me. Does not handle OAuth linking flows or session management.
+ * Scope: Client component that reads/updates user profile via /api/v1/users/me; does not handle OAuth flow directly or manage session persistence.
  * Invariants: Requires authenticated session (enforced by parent layout); avatar color updates reflected in session via update().
- * Side-effects: IO (fetch API, session update)
+ * Side-effects: IO (fetch API, session update, navigation for OAuth linking)
  * Links: src/contracts/users.profile.v1.contract.ts, src/app/api/v1/users/me/route.ts
  * @public
  */
 
 "use client";
 
+import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Check } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Avatar, AvatarFallback, Button, PageContainer } from "@/components";
 
-/* ─── Brand SVG icons ─────────────────────────────────────────────── */
+import {
+  Avatar,
+  AvatarFallback,
+  Button,
+  DiscordIcon,
+  EthereumIcon,
+  GitHubIcon,
+  GoogleIcon,
+  PageContainer,
+} from "@/components";
 
-function EthereumIcon({ className }: { className?: string }): ReactElement {
-  return (
-    <svg
-      viewBox="0 0 320 512"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M311.9 260.8L160 353.6 8 260.8 160 0l151.9 260.8zM160 383.4L8 290.6 160 512l152-221.4-152 92.8z" />
-    </svg>
-  );
+/* ─── Types ────────────────────────────────────────────────────────── */
+
+interface LinkedProvider {
+  provider: "wallet" | "discord" | "github" | "google";
+  providerLogin: string | null;
 }
 
-function GitHubIcon({ className }: { className?: string }): ReactElement {
-  return (
-    <svg
-      viewBox="0 0 98 96"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.015 7.822 5.015 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.481 3.316 9.126 0 6.6-.08 11.897-.08 13.526 0 1.304.89 2.853 3.316 2.364 19.412-6.52 33.405-24.935 33.405-46.691C97.707 22 75.788 0 48.854 0z"
-      />
-    </svg>
-  );
-}
-
-function DiscordIcon({ className }: { className?: string }): ReactElement {
-  return (
-    <svg
-      viewBox="0 0 127.14 96.36"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z" />
-    </svg>
-  );
-}
-
-function GoogleIcon({ className }: { className?: string }): ReactElement {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
-      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-    </svg>
-  );
+interface ProfileData {
+  displayName: string | null;
+  avatarColor: string | null;
+  resolvedDisplayName: string;
+  linkedProviders: LinkedProvider[];
 }
 
 /* ─── Preset avatar color palette ─────────────────────────────────── */
@@ -95,6 +61,29 @@ const AVATAR_COLORS = [
   "#3b82f6", // blue
   "#6b7280", // gray
 ] as const;
+
+/* ─── OAuth provider config for linked accounts ───────────────────── */
+
+const OAUTH_PROVIDERS = [
+  {
+    id: "github" as const,
+    label: "GitHub",
+    description: "Link your GitHub account.",
+    Icon: GitHubIcon,
+  },
+  {
+    id: "discord" as const,
+    label: "Discord",
+    description: "Link your Discord account.",
+    Icon: DiscordIcon,
+  },
+  {
+    id: "google" as const,
+    label: "Google",
+    description: "Link your Google account.",
+    Icon: GoogleIcon,
+  },
+];
 
 /* ─── Layout primitives ───────────────────────────────────────────── */
 
@@ -150,6 +139,49 @@ function ConnectedBadge({ login }: { login: string }): ReactElement {
       </span>
     </div>
   );
+}
+
+/* ─── Feedback banner ──────────────────────────────────────────────── */
+
+const FEEDBACK_MESSAGES: Record<
+  string,
+  { text: string; variant: "success" | "error" }
+> = {
+  already_linked: {
+    text: "That account is already linked to a different user.",
+    variant: "error",
+  },
+  link_failed: {
+    text: "Account linking failed. Please try again.",
+    variant: "error",
+  },
+};
+
+function FeedbackBanner({
+  linkedProvider,
+  error,
+}: {
+  linkedProvider: string | null;
+  error: string | null;
+}): ReactElement | null {
+  if (linkedProvider) {
+    return (
+      <div className="rounded-md border border-primary/30 bg-primary/5 px-4 py-3 text-foreground text-sm">
+        Successfully linked your {linkedProvider} account.
+      </div>
+    );
+  }
+  if (error) {
+    const msg = FEEDBACK_MESSAGES[error];
+    if (msg) {
+      return (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3 text-foreground text-sm">
+          {msg.text}
+        </div>
+      );
+    }
+  }
+  return null;
 }
 
 /* ─── Color picker swatch ─────────────────────────────────────────── */
@@ -219,13 +251,78 @@ function ColorPickerSwatch({
 /* ─── Page ─────────────────────────────────────────────────────────── */
 
 export default function ProfilePage(): ReactElement {
+  const { data: session } = useSession();
+  const { openConnectModal } = useConnectModal();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [selectedColor, setSelectedColor] = useState("#6366f1");
+  const [configuredProviders, setConfiguredProviders] = useState<Set<string>>(
+    new Set()
+  );
+
+  // Read feedback query params and strip them to prevent re-display on refresh
+  const linkedProvider = searchParams.get("linked");
+  const error = searchParams.get("error");
+
+  useEffect(() => {
+    if (linkedProvider || error) {
+      // Strip query params after reading — prevents re-display on refresh/back
+      router.replace("/profile");
+    }
+  }, [linkedProvider, error, router]);
+
+  // Fetch profile data + configured providers in parallel
+  useEffect(() => {
+    fetch("/api/v1/users/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: ProfileData | null) => {
+        if (data) {
+          setProfile(data);
+          setSelectedColor(data.avatarColor ?? "#6366f1");
+        }
+      })
+      .catch(() => {
+        // Profile fetch failed — page still renders with session data
+      });
+
+    fetch("/api/auth/providers")
+      .then((res) => res.json())
+      .then((providers: Record<string, { id: string }>) => {
+        const ids = new Set(
+          Object.keys(providers).filter((id) => id !== "credentials")
+        );
+        setConfiguredProviders(ids);
+      })
+      .catch(() => {
+        // Provider fetch failed — show nothing rather than broken links
+      });
+  }, []);
+
+  const walletAddress = session?.user?.walletAddress ?? null;
+  const displayName =
+    profile?.resolvedDisplayName ?? session?.user?.displayName ?? "User";
+  const avatarLetter = displayName.charAt(0).toUpperCase();
+
+  // Build set of linked provider IDs for quick lookup
+  const linkedProviderIds = new Set(
+    profile?.linkedProviders.map((p) => p.provider) ?? []
+  );
+
+  // Get provider login by provider ID
+  const getProviderLogin = (providerId: string): string | null =>
+    profile?.linkedProviders.find((p) => p.provider === providerId)
+      ?.providerLogin ?? null;
 
   return (
     <PageContainer maxWidth="2xl">
       {/* Page heading */}
       <h1 className="font-semibold text-2xl text-foreground">Profile</h1>
       <div className="border-border border-b" />
+
+      {/* Feedback banner for linking results */}
+      <FeedbackBanner linkedProvider={linkedProvider} error={error} />
 
       {/* ── Profile section (display name + avatar color, no divider between) ── */}
 
@@ -240,11 +337,11 @@ export default function ProfilePage(): ReactElement {
               style={{ "--avatar-bg": selectedColor } as React.CSSProperties}
             >
               <AvatarFallback className="bg-[var(--avatar-bg)] font-semibold text-primary-foreground text-sm">
-                D
+                {avatarLetter}
               </AvatarFallback>
             </Avatar>
             <span className="rounded-md border border-input bg-background px-3 py-1.5 text-foreground text-sm">
-              derekg
+              {displayName}
             </span>
           </div>
         </div>
@@ -268,44 +365,56 @@ export default function ProfilePage(): ReactElement {
       <SettingRow
         icon={<EthereumIcon className="size-5" />}
         label="Ethereum"
-        description="Link your Ethereum wallet for on-chain identity."
+        {...(walletAddress
+          ? {}
+          : { description: "Connect wallet to enable payments." })}
       >
-        <Button variant="outline" size="sm">
-          Connect
-        </Button>
+        {walletAddress ? (
+          <ConnectedBadge
+            login={`${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`}
+          />
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openConnectModal?.()}
+          >
+            Connect
+          </Button>
+        )}
       </SettingRow>
 
-      {/* ── Connected Accounts section ── */}
+      {/* ── Connected Accounts section (only if any OAuth providers configured or linked) ── */}
 
-      <SectionHeading>Connected Accounts</SectionHeading>
+      {OAUTH_PROVIDERS.some(
+        ({ id }) => configuredProviders.has(id) || linkedProviderIds.has(id)
+      ) && <SectionHeading>Connected Accounts</SectionHeading>}
 
-      <SettingRow
-        icon={<GitHubIcon className="size-5" />}
-        label="GitHub"
-        description="Link your GitHub account."
-      >
-        <ConnectedBadge login="derekg1729" />
-      </SettingRow>
+      {OAUTH_PROVIDERS.filter(
+        ({ id }) => configuredProviders.has(id) || linkedProviderIds.has(id)
+      ).map(({ id, label, description, Icon }) => {
+        const isLinked = linkedProviderIds.has(id);
+        const login = getProviderLogin(id);
 
-      <SettingRow
-        icon={<DiscordIcon className="size-5" />}
-        label="Discord"
-        description="Link your Discord account."
-      >
-        <Button variant="outline" size="sm">
-          Link
-        </Button>
-      </SettingRow>
-
-      <SettingRow
-        icon={<GoogleIcon className="size-5" />}
-        label="Google"
-        description="Link your Google account."
-      >
-        <Button variant="outline" size="sm">
-          Link
-        </Button>
-      </SettingRow>
+        return (
+          <SettingRow
+            key={id}
+            icon={<Icon className="size-5" />}
+            label={label}
+            description={description}
+          >
+            {isLinked && login ? (
+              <ConnectedBadge login={login} />
+            ) : isLinked ? (
+              <ConnectedBadge login="Connected" />
+            ) : (
+              <Button variant="outline" size="sm" asChild>
+                <a href={`/api/auth/link/${id}`}>Link</a>
+              </Button>
+            )}
+          </SettingRow>
+        );
+      })}
     </PageContainer>
   );
 }

@@ -22,24 +22,8 @@ import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/kit/data-display/Avatar";
+import { EthereumIcon } from "@/components/kit/data-display/ProviderIcons";
 import { cn } from "@/shared/util";
-
-/** Ethereum diamond icon — simplified from ethereum-eth-logo.svg, uses currentColor */
-function EthIcon({ className }: { className?: string }): ReactElement {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 784 1278"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M392 0L784 651 392 882 0 651z" opacity={0.6} />
-      <path d="M392 472L784 651 392 882 0 651z" opacity={0.8} />
-      <path d="M392 957L784 725 392 1277 0 725z" opacity={0.6} />
-    </svg>
-  );
-}
 
 /** Default avatar color when none is set */
 const DEFAULT_AVATAR_COLOR = "hsl(var(--primary))";
@@ -103,7 +87,7 @@ export function UserAvatarMenu(): ReactElement | null {
           {/* Wallet / identifier row */}
           {displayName && (
             <DropdownMenuPrimitive.Item className={MENU_ITEM_CLASSES} disabled>
-              <EthIcon className="size-4 shrink-0 text-muted-foreground" />
+              <EthereumIcon className="size-4 shrink-0 text-muted-foreground" />
               <span className="truncate">{displayName}</span>
             </DropdownMenuPrimitive.Item>
           )}

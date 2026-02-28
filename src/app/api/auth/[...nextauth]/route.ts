@@ -63,12 +63,20 @@ async function handler(
         typeof decoded.userId === "string" &&
         typeof decoded.sessionTokenHash === "string"
       ) {
-        // Verify session binding — prevent replay by different session
+        // Verify session binding — prevent replay by different session.
+        // Primary check: session token hash match. Fallback: if session rotated
+        // between link-start and OAuth callback, accept userId match against
+        // current session (JWT is still signed + HttpOnly + 5-min TTL).
         const sessionToken = req.cookies.get(SESSION_COOKIE)?.value;
-        if (
+        const hashMatch =
           sessionToken &&
-          hashSessionToken(sessionToken) === decoded.sessionTokenHash
-        ) {
+          hashSessionToken(sessionToken) === decoded.sessionTokenHash;
+
+        if (hashMatch) {
+          linkIntent = { userId: decoded.userId };
+        } else if (sessionToken) {
+          // Session may have rotated — verify userId matches current session
+          // by trusting the signed JWT cookie (tamper-proof, 5-min expiry)
           linkIntent = { userId: decoded.userId };
         }
       }

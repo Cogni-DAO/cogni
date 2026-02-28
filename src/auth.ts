@@ -200,27 +200,30 @@ export const authOptions: NextAuthOptions = {
       },
     }),
     // Only register OAuth providers when credentials are configured
-    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+    ...(process.env.GITHUB_OAUTH_CLIENT_ID &&
+    process.env.GITHUB_OAUTH_CLIENT_SECRET
       ? [
           GitHub({
-            clientId: process.env.GITHUB_CLIENT_ID,
-            clientSecret: process.env.GITHUB_CLIENT_SECRET,
+            clientId: process.env.GITHUB_OAUTH_CLIENT_ID,
+            clientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
           }),
         ]
       : []),
-    ...(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET
+    ...(process.env.DISCORD_OAUTH_CLIENT_ID &&
+    process.env.DISCORD_OAUTH_CLIENT_SECRET
       ? [
           Discord({
-            clientId: process.env.DISCORD_CLIENT_ID,
-            clientSecret: process.env.DISCORD_CLIENT_SECRET,
+            clientId: process.env.DISCORD_OAUTH_CLIENT_ID,
+            clientSecret: process.env.DISCORD_OAUTH_CLIENT_SECRET,
           }),
         ]
       : []),
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(process.env.GOOGLE_OAUTH_CLIENT_ID &&
+    process.env.GOOGLE_OAUTH_CLIENT_SECRET
       ? [
           Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
           }),
         ]
       : []),
@@ -283,7 +286,7 @@ export const authOptions: NextAuthOptions = {
             { provider, externalId },
             "[OAuth] Link rejected — binding owned by different user"
           );
-          return false;
+          return "/profile?error=already_linked";
         }
         // Returning user (no link intent) — set user.id so jwt callback picks it up
         user.id = existing.userId;

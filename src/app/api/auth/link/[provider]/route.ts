@@ -82,9 +82,13 @@ export async function GET(
     maxAge: LINK_INTENT_TTL,
   });
 
-  // Redirect to NextAuth's standard OAuth flow
+  // Redirect to NextAuth's standard OAuth flow with callbackUrl back to profile
   // biome-ignore lint/style/noProcessEnv: auth infra runs before serverEnv() is available
   const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
   const redirectUrl = new URL(`/api/auth/signin/${provider}`, baseUrl);
+  redirectUrl.searchParams.set(
+    "callbackUrl",
+    `/profile?linked=${encodeURIComponent(provider)}`
+  );
   return NextResponse.redirect(redirectUrl);
 }
