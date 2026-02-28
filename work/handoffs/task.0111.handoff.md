@@ -4,63 +4,78 @@ type: handoff
 work_item_id: task.0111
 status: active
 created: 2026-02-28
-updated: 2026-02-28
+updated: 2026-03-01
 branch: feat/oauth-signin
-last_commit: 05d50728
+last_commit: d64e96ff
 ---
 
-# Handoff: Auth UX — OAuth Sign-In, Route Protection, Account Linking
+# Handoff: Auth UX — SignInDialog, Account Linking, Profile
 
 ## Context
 
-- Cogni supports SIWE (wallet) + OAuth (GitHub, Discord, Google) sign-in via NextAuth v4.
-- Before this branch, two client components (`AuthRedirect.tsx` and `(app)/layout.tsx`) competed for auth routing with `useSession()` — causing redirect loops during session transitions.
-- Account linking relied on a JWT cookie alone. If the cookie was lost/expired, the signIn callback silently fell through to **create a new user** instead of linking — an identity-integrity failure.
-- This branch adds OAuth sign-in UI, moves route protection server-side, and makes account linking fail-closed via DB-backed transactions.
+- Users sign in via a **SignInDialog** modal (wallet SIWE + OAuth) triggered from the header Connect button — not a standalone page.
+- Account linking lets an authenticated user bind additional OAuth providers (GitHub/Discord/Google) to their existing identity.
+- Linking uses a **DB-backed fail-closed** flow: `link_transactions` table is the authority, consumed atomically in the signIn callback.
+- Server-side auth routing lives in `src/proxy.ts` (single routing authority). Client-side redirects were removed from `(app)/layout.tsx`.
+- PR: https://github.com/Cogni-DAO/node-template/pull/496
 
 ## Current State
 
-- **Done — OAuth sign-in UI:** `SignInDialog` component with WalletConnect + OAuth buttons, `ProviderIcons` shared SVG components, profile page link buttons.
-- **Done — Server-side route protection:** `proxy.ts` is the single authority for auth routing. `AuthRedirect.tsx` deleted. `(app)/layout.tsx` is a pure UI shell (no `useSession`).
-- **Done — Fail-closed account linking:** `link_transactions` DB table, `PendingLinkIntent`/`FailedLinkIntent` discriminated union, atomic consume via `UPDATE...WHERE...RETURNING`. Failed verification → `/profile?error=link_failed`.
-- **Done — Tests:** Layout shell test rewritten, stack tests updated for new `PendingLinkIntent` shape with `seedLinkTransaction` fixture.
-- **Not done — Lint cleanup:** `consumeLinkTransaction` in `auth.ts` has an unused `provider` parameter (biome warning). The parameter exists in the WHERE clause design but the Drizzle query currently matches on `id + userId` only — decide whether to add provider matching or underscore-prefix.
-- **Not done — Closeout:** File headers, AGENTS.md, spec updates, work item status, and PR creation are pending.
+- **Working:** SignInDialog, OAuth sign-in, SIWE sign-in, proxy routing, profile page UI, ProviderIcons, all `pnpm check` passes.
+- **Broken: Account linking from profile page.** Two bugs in `src/app/api/auth/[...nextauth]/route.ts`:
+
+### Bug 1: Handler crashes on non-callback routes
+
+The `[...nextauth]/route.ts` handler wraps **every** NextAuth route (`/providers`, `/session`, `/signout`, `/callback/*`, `/_log`) with link-intent logic. When a `link_intent` cookie is present, the handler tries `response.cookies.set(...)` to clear it — but routes like `/providers`, `/signout`, and `/_log` return objects **without a `.cookies` accessor**. This crashes with `TypeError: Cannot read properties of undefined (reading 'set')`.
+
+The crash cascades: after one failed link attempt, the cookie persists (`path: "/"`, 5-min TTL) and **every subsequent NextAuth request crashes** — including `/providers`, `/signout`, and `/session`. This puts the app in a broken state where the user appears both signed-in and signed-out simultaneously.
+
+### Bug 2: Link endpoint was using GET redirect (fixed, committed)
+
+The original link endpoint redirected to `GET /api/auth/signin/{provider}`. But `pages.signIn: "/"` in auth config causes NextAuth to redirect that GET to `/` instead of starting OAuth. Fixed in commit `382a98cb`: endpoint is now POST-only, returns JSON, and the profile page calls `signIn()` from `next-auth/react` client-side.
+
+### Uncommitted fix on disk
+
+An **untested** fix exists in the working tree for Bug 1: scopes link-intent logic to callback routes only via `isCallbackRoute()`. The committed code is still the broken version. **Review this fix carefully before committing** — verify that NextAuth's callback route actually returns a NextResponse with `.cookies`.
 
 ## Decisions Made
 
-- **Proxy over middleware:** Next.js 16 uses `proxy.ts` (not `middleware.ts`). The existing proxy already handled `/api/v1/*` auth; page routes were added to the same file. See `src/proxy.ts`.
-- **No dedicated /sign-in page:** Auth UI is a dialog on the landing page rather than a separate route group. The original work item spec called for `/sign-in` but the prior developer implemented it as a dialog.
-- **DB tx over session-token-hash:** The old approach hashed the session token into the link cookie for replay prevention. The new approach uses a `link_transactions` table row as the single source of truth — atomically consumed, never trusted from cookie alone.
-- **getServiceDb stays in auth.ts:** The dep-cruiser arch rules restrict `getServiceDb` imports to `auth.ts` and a few other files. Both `createLinkTransaction` and `consumeLinkTransaction` live in `auth.ts` to satisfy this constraint.
+- [auth spec](../../docs/spec/authentication.md): LINK_IS_FAIL_CLOSED, SINGLE_ROUTING_AUTHORITY invariants
+- [identity spec](../../docs/spec/decentralized-user-identity.md): linkTransactions schema, linking flow
+- Link endpoint is POST-only. Client calls `fetch(POST /api/auth/link/{provider})` then `signIn(provider)` — same pattern as SignInDialog.
+- `pages.signIn: "/"` means all OAuth initiation must go through `signIn()` from `next-auth/react`. Server-side redirects to `/api/auth/signin/*` do not work.
+- DB tx over session-token-hash: `link_transactions` table is single source of truth, atomically consumed.
+- `getServiceDb` stays in `auth.ts` (dep-cruiser constraint).
 
 ## Next Actions
 
-- [ ] Fix biome warning: unused `provider` param in `consumeLinkTransaction` (either add to WHERE clause or prefix with `_`)
-- [ ] Run `pnpm format` to fix any formatting drift
-- [ ] Update file headers for changed files (`/closeout` Phase 2)
-- [ ] Update AGENTS.md if public surface changed (`/closeout` Phase 3)
-- [ ] Update specs referenced in work item (`/closeout` Phase 4)
-- [ ] Set work item status to `needs_merge`, create PR (`/closeout` Phase 5-6)
-- [ ] Manual smoke tests: SIWE sign-in, OAuth sign-in, link from profile, expired link cookie rejection
+- [ ] Fix Bug 1: make `[...nextauth]/route.ts` only run link-intent logic on callback routes
+- [ ] Verify fix: clear cookies → sign in → link GitHub → should land on `/profile?linked=github`
+- [ ] Verify sign-out works cleanly with no stale cookie crash
+- [ ] Consider narrowing cookie `path` from `/` to `/api/auth/callback` to limit blast radius
+- [ ] Run `pnpm check` after fix
+- [ ] Clean up messy revert history (squash before merge)
+- [ ] Commit, push, update PR
 
 ## Risks / Gotchas
 
-- **Migration 0019 includes hand-written RLS:** The `FORCE ROW LEVEL SECURITY` and `tenant_isolation` policy were appended manually to the Drizzle-generated migration. Re-running `pnpm db:generate` will NOT regenerate these — they live outside Drizzle's DDL scope.
-- **Stack test assertion fix:** The NO_AUTO_MERGE test previously expected `false` but `auth.ts` returns the string `"/profile?error=already_linked"`. This was a pre-existing bug fixed in this branch.
-- **Proxy matcher must stay in sync with APP_ROUTES:** If new app routes are added (e.g., `/settings`), both `APP_ROUTES` array and `config.matcher` in `proxy.ts` must be updated.
+- **NextAuth v4 response types are not uniform.** `/callback/*` returns NextResponse (redirect). `/providers`, `/session`, `/_log` return plain objects. Do not assume `.cookies` exists on all.
+- **`pages.signIn: "/"` is the root cause of the GET redirect failure.** Do not attempt server-side redirects to `/api/auth/signin/*`.
+- **Migration 0019** creates `link_transactions` table. Must run `pnpm db:setup` or `pnpm db:migrate` before linking works.
+- **Revert commit history is messy** — multiple reverts from debugging. Squash before merge.
+- **Stale dev server cache**: Next.js dev server may serve old compiled code. Restart `next dev` if error line numbers don't match the file on disk.
 
 ## Pointers
 
-| File / Resource                                                 | Why it matters                                                                            |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `src/proxy.ts`                                                  | Single authority for auth routing (page + API)                                            |
-| `src/auth.ts`                                                   | `createLinkTransaction`, `consumeLinkTransaction`, signIn callback with fail-closed logic |
-| `src/shared/auth/link-intent-store.ts`                          | `PendingLinkIntent` / `FailedLinkIntent` discriminated union + type guards                |
-| `packages/db-schema/src/identity.ts`                            | `linkTransactions` table definition                                                       |
-| `src/adapters/server/db/migrations/0019_supreme_black_bolt.sql` | Migration with RLS policy                                                                 |
-| `src/app/api/auth/[...nextauth]/route.ts`                       | JWT decode → AsyncLocalStorage propagation                                                |
-| `src/app/api/auth/link/[provider]/route.ts`                     | Link initiation — DB insert + cookie                                                      |
-| `tests/stack/auth/oauth-signin.stack.test.ts`                   | Stack tests for signIn callback DB paths                                                  |
-| `tests/_fixtures/stack/seed.ts`                                 | `seedLinkTransaction` shared fixture                                                      |
-| `docs/guides/oauth-app-setup.md`                                | OAuth provider configuration guide                                                        |
+| File / Resource                                                 | Why it matters                                                                       |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `src/app/api/auth/[...nextauth]/route.ts`                       | **THE BROKEN FILE** — crashes on non-callback routes when link_intent cookie present |
+| `src/app/api/auth/link/[provider]/route.ts`                     | Link setup endpoint (POST). Creates DB row, sets cookie, returns JSON                |
+| `src/app/(app)/profile/page.tsx`                                | Link button calls `fetch(POST)` then `signIn()` from next-auth/react                 |
+| `src/auth.ts`                                                   | NextAuth config, signIn callback, `createLinkTransaction`, `consumeLinkTransaction`  |
+| `src/shared/auth/link-intent-store.ts`                          | AsyncLocalStorage + discriminated union types for link intent                        |
+| `src/components/kit/auth/SignInDialog.tsx`                      | Working sign-in modal — reference for correct `signIn()` usage                       |
+| `docs/spec/authentication.md`                                   | Auth spec with invariants and flow diagrams                                          |
+| `docs/spec/decentralized-user-identity.md`                      | Identity spec with linkTransactions schema                                           |
+| `src/adapters/server/db/migrations/0019_supreme_black_bolt.sql` | Migration for link_transactions table with RLS                                       |
+| `tests/stack/auth/oauth-signin.stack.test.ts`                   | Stack tests for signIn callback DB paths                                             |
