@@ -77,8 +77,15 @@ async function handler(
     nextAuthHandler(req, context)
   );
 
-  // Clear link_intent cookie after processing (success or failure)
-  if (linkIntentCookie && response) {
+  // Clear link_intent cookie after processing (success or failure).
+  // NextAuth returns different response types per route — some lack a cookies
+  // accessor (e.g. /providers returns plain JSON). Guard before calling .set().
+  if (
+    linkIntentCookie &&
+    response &&
+    "cookies" in response &&
+    response.cookies
+  ) {
     response.cookies.set(LINK_INTENT_COOKIE, "", {
       ...LINK_COOKIE_ATTRS,
       maxAge: 0,
