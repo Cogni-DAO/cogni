@@ -18,7 +18,12 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import type { Database } from "@/adapters/server/db/client";
 import type { SessionUser } from "@/shared/auth";
-import { billingAccounts, users, virtualKeys } from "@/shared/db";
+import {
+  billingAccounts,
+  linkTransactions,
+  users,
+  virtualKeys,
+} from "@/shared/db";
 
 /**
  * Test actor with user credentials and billing account.
@@ -101,6 +106,30 @@ export async function seedVirtualKey(
     .onConflictDoNothing({ target: virtualKeys.id });
 
   return { virtualKeyId: params.virtualKeyId };
+}
+
+/**
+ * Seeds a link transaction row for fail-closed account linking tests.
+ * Returns the txId for use in PendingLinkIntent mock values.
+ * Requires user to exist first (FK constraint).
+ */
+export async function seedLinkTransaction(
+  db: Database,
+  params: {
+    userId: string;
+    provider: string;
+    txId?: string;
+    expiresAt?: Date;
+  }
+): Promise<string> {
+  const txId = params.txId ?? randomUUID();
+  await db.insert(linkTransactions).values({
+    id: txId,
+    userId: params.userId,
+    provider: params.provider,
+    expiresAt: params.expiresAt ?? new Date(Date.now() + 5 * 60 * 1000),
+  });
+  return txId;
 }
 
 /**
