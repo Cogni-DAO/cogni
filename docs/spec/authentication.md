@@ -177,3 +177,4 @@ Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECR
 - [Decentralized User Identity](./decentralized-user-identity.md) — user_bindings schema, binding invariants
 - [Security Auth](./security-auth.md) — auth surface identity resolution
 - [DAO Enforcement](./dao-enforcement.md)
+- [Thirdweb Auth Migration Audit](../research/thirdweb-auth-migration-audit.md) — feature comparison, migration viability assessment (2026-02-28: stay on current stack)
