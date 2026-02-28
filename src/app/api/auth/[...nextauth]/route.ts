@@ -4,35 +4,31 @@
 /**
  * Module: `@app/api/auth/[...nextauth]`
  * Purpose: Expose NextAuth handlers for signin/session routes. Wraps handler with
- *   AsyncLocalStorage to propagate link_intent cookie to signIn callback.
- * Scope: Reads link_intent cookie on OAuth callbacks, populates linkIntentStore, delegates to NextAuth, and clears cookie. Does not implement auth logic or perform binding directly.
+ *   AsyncLocalStorage to propagate link intent to signIn callback.
+ * Scope: Reads link_intent cookie on OAuth callbacks, decodes JWT, populates linkIntentStore with pending or failed intent, delegates to NextAuth, and clears cookie. Does not perform DB verification or binding.
  * Invariants: Public infrastructure endpoint; session cookies managed by NextAuth.
- *   Link intent is session-bound (sessionTokenHash verified) and time-limited (5min TTL).
+ *   Link intent is fail-closed: if JWT decode fails, the intent is rejected (never ignored).
  * Side-effects: IO (NextAuth DB operations via Drizzle client, cookie read/clear)
  * Links: src/auth.ts, src/shared/auth/link-intent-store.ts
  * @public
  */
-
-import { createHash } from "node:crypto";
 
 import type { NextRequest } from "next/server";
 import NextAuth from "next-auth";
 import { decode } from "next-auth/jwt";
 
 import { authOptions, authSecret } from "@/auth";
-import { linkIntentStore } from "@/shared/auth/link-intent-store";
+import {
+  type LinkIntent,
+  linkIntentStore,
+} from "@/shared/auth/link-intent-store";
 
 export const runtime = "nodejs";
 
 const LINK_INTENT_COOKIE = "link_intent";
-const SESSION_COOKIE = "next-auth.session-token";
 const LINK_INTENT_SALT = "link-intent";
 
 const nextAuthHandler = NextAuth(authOptions);
-
-function hashSessionToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex").slice(0, 16);
-}
 
 /** Cookie attributes must match exactly when clearing (browser ignores mismatched clears). */
 const LINK_COOKIE_ATTRS = {
@@ -49,7 +45,7 @@ async function handler(
 ) {
   // Check for link_intent cookie on OAuth callback requests
   const linkIntentCookie = req.cookies.get(LINK_INTENT_COOKIE)?.value;
-  let linkIntent: { userId: string } | null = null;
+  let linkIntent: LinkIntent | null = null;
 
   if (linkIntentCookie) {
     try {
@@ -58,30 +54,21 @@ async function handler(
         secret: authSecret,
         salt: LINK_INTENT_SALT,
       });
+
       if (
         decoded?.purpose === "link_intent" &&
-        typeof decoded.userId === "string" &&
-        typeof decoded.sessionTokenHash === "string"
+        typeof decoded.txId === "string" &&
+        typeof decoded.userId === "string"
       ) {
-        // Verify session binding — prevent replay by different session.
-        // Primary check: session token hash match. Fallback: if session rotated
-        // between link-start and OAuth callback, accept userId match against
-        // current session (JWT is still signed + HttpOnly + 5-min TTL).
-        const sessionToken = req.cookies.get(SESSION_COOKIE)?.value;
-        const hashMatch =
-          sessionToken &&
-          hashSessionToken(sessionToken) === decoded.sessionTokenHash;
-
-        if (hashMatch) {
-          linkIntent = { userId: decoded.userId };
-        } else if (sessionToken) {
-          // Session may have rotated — verify userId matches current session
-          // by trusting the signed JWT cookie (tamper-proof, 5-min expiry)
-          linkIntent = { userId: decoded.userId };
-        }
+        // Pass raw decoded data — auth.ts signIn callback will do the
+        // atomic DB consume (it has getServiceDb access).
+        linkIntent = { txId: decoded.txId, userId: decoded.userId };
+      } else {
+        linkIntent = { failed: true, reason: "invalid_jwt_payload" };
       }
     } catch {
-      // Invalid/expired token — ignore, proceed as normal login
+      // Invalid/expired JWT token → fail closed
+      linkIntent = { failed: true, reason: "invalid_jwt" };
     }
   }
 

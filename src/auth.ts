@@ -16,7 +16,7 @@
 
 import nodeCrypto, { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt, isNull } from "drizzle-orm";
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Discord from "next-auth/providers/discord";
@@ -27,9 +27,14 @@ import { SiweMessage } from "siwe";
 
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { createBinding } from "@/adapters/server/identity/create-binding";
-import { linkIntentStore } from "@/shared/auth/link-intent-store";
+import {
+  isFailedIntent,
+  isPendingIntent,
+  linkIntentStore,
+} from "@/shared/auth/link-intent-store";
 import {
   identityEvents,
+  linkTransactions,
   userBindings,
   userProfiles,
   users,
@@ -41,6 +46,55 @@ export const authSecret =
 
 // Lazy logger initialization to avoid module-level env validation
 const getLog = () => makeLogger({ module: "auth" });
+
+const LINK_INTENT_TTL = 5 * 60; // 5 minutes — must match route.ts
+
+/**
+ * Create a link transaction row in the DB. Called by the link initiation route
+ * to establish DB-backed authority for the linking flow.
+ * Returns the transaction ID for inclusion in the JWT cookie.
+ */
+export async function createLinkTransaction(
+  userId: string,
+  provider: string
+): Promise<string> {
+  const db = getServiceDb();
+  const txId = randomUUID();
+  const expiresAt = new Date(Date.now() + LINK_INTENT_TTL * 1000);
+  await db.insert(linkTransactions).values({
+    id: txId,
+    userId,
+    provider,
+    expiresAt,
+  });
+  return txId;
+}
+
+/**
+ * Atomically consume a link transaction. Returns the userId if the transaction
+ * is valid (exists, not consumed, not expired, matches provider), or null if not.
+ * Single UPDATE with all conditions — no separate SELECT needed.
+ */
+async function consumeLinkTransaction(
+  txId: string,
+  userId: string,
+  provider: string
+): Promise<string | null> {
+  const db = getServiceDb();
+  const [consumed] = await db
+    .update(linkTransactions)
+    .set({ consumedAt: new Date() })
+    .where(
+      and(
+        eq(linkTransactions.id, txId),
+        eq(linkTransactions.userId, userId),
+        isNull(linkTransactions.consumedAt),
+        gt(linkTransactions.expiresAt, new Date())
+      )
+    )
+    .returning();
+  return consumed?.userId ?? null;
+}
 
 /**
  * NextAuth configuration.
@@ -255,6 +309,35 @@ export const authOptions: NextAuthOptions = {
       // the binding owner if it's a different user.
       const linkIntent = linkIntentStore.getStore();
 
+      // Fail-closed: if the link transaction could not be verified, reject immediately.
+      // This prevents silent fall-through to new-user creation when the cookie was
+      // lost, expired, tampered, or already consumed.
+      if (isFailedIntent(linkIntent)) {
+        getLog().warn(
+          { provider, reason: linkIntent.reason },
+          "[OAuth] Link intent rejected — fail-closed"
+        );
+        return "/profile?error=link_failed";
+      }
+
+      // Pending intent: atomically consume the DB transaction to verify it.
+      // If consumption fails, reject — never fall through to new-user creation.
+      let verifiedUserId: string | null = null;
+      if (isPendingIntent(linkIntent)) {
+        verifiedUserId = await consumeLinkTransaction(
+          linkIntent.txId,
+          linkIntent.userId,
+          provider
+        );
+        if (!verifiedUserId) {
+          getLog().warn(
+            { provider, txId: linkIntent.txId },
+            "[OAuth] Link tx consume failed — expired/consumed/mismatched"
+          );
+          return "/profile?error=link_failed";
+        }
+      }
+
       // Extract provider login from OAuth profile
       const profileData = profile as Record<string, unknown> | undefined;
       const oauthLogin =
@@ -275,10 +358,10 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        if (linkIntent) {
-          if (existing.userId === linkIntent.userId) {
+        if (verifiedUserId) {
+          if (existing.userId === verifiedUserId) {
             // Idempotent — already linked to this user
-            user.id = linkIntent.userId;
+            user.id = verifiedUserId;
             return true;
           }
           // Different user owns this binding — NO_AUTO_MERGE
@@ -293,22 +376,22 @@ export const authOptions: NextAuthOptions = {
         return true;
       }
 
-      if (linkIntent) {
-        await createBinding(db, linkIntent.userId, provider, externalId, {
+      if (verifiedUserId) {
+        await createBinding(db, verifiedUserId, provider, externalId, {
           method: "oauth_link",
           login: profileData?.login ?? profileData?.username ?? null,
           name: profileData?.name ?? null,
         });
 
-        user.id = linkIntent.userId;
+        user.id = verifiedUserId;
         // Preserve walletAddress in the session
         const existingUser = await db.query.users.findFirst({
-          where: eq(users.id, linkIntent.userId),
+          where: eq(users.id, verifiedUserId),
         });
         (user as { walletAddress?: string | null }).walletAddress =
           existingUser?.walletAddress ?? null;
         getLog().info(
-          { provider, userId: linkIntent.userId },
+          { provider, userId: verifiedUserId },
           "[OAuth] Account linked"
         );
         return true;
