@@ -16,7 +16,7 @@
 import { useConnectModal } from "@rainbow-me/rainbowkit";
 import { Check } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import type { ReactElement, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -408,8 +408,20 @@ export default function ProfilePage(): ReactElement {
             ) : isLinked ? (
               <ConnectedBadge login="Connected" />
             ) : (
-              <Button variant="outline" size="sm" asChild>
-                <a href={`/api/auth/link/${id}`}>Link</a>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  const res = await fetch(`/api/auth/link/${id}`, {
+                    method: "POST",
+                  });
+                  if (!res.ok) return;
+                  signIn(id, {
+                    callbackUrl: `/profile?linked=${id}`,
+                  });
+                }}
+              >
+                Link
               </Button>
             )}
           </SettingRow>

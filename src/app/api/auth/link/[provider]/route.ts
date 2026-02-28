@@ -3,12 +3,12 @@
 
 /**
  * Module: `@app/api/auth/link/[provider]`
- * Purpose: Account linking initiation endpoint. Creates a DB-backed link transaction,
- *   sets a signed link_intent cookie containing the txId, then redirects to OAuth flow.
- * Scope: Requires existing session. Delegates DB insert to auth module. Sets HttpOnly cookie. Does not perform binding itself.
+ * Purpose: Account linking setup endpoint. Creates a DB-backed link transaction and
+ *   sets a signed link_intent cookie. The client then calls signIn() to start OAuth.
+ * Scope: POST-only. Requires existing session. Does not initiate OAuth, perform binding, or redirect — only sets the link_intent cookie.
  * Invariants: LINKING_IS_EXPLICIT — only authenticated users can initiate linking.
  *   Cookie is time-limited (5min), HttpOnly, Secure, SameSite=Lax. DB transaction is the authority.
- * Side-effects: IO (DB insert via auth helper, cookie set, redirect)
+ * Side-effects: IO (DB insert via auth helper, cookie set)
  * Links: src/app/api/auth/[...nextauth]/route.ts, src/shared/auth/link-intent-store.ts
  * @public
  */
@@ -27,7 +27,7 @@ const LINK_INTENT_COOKIE = "link_intent";
 const LINK_INTENT_SALT = "link-intent";
 const LINK_INTENT_TTL = 5 * 60; // 5 minutes
 
-export async function GET(
+export async function POST(
   _request: Request,
   { params }: { params: Promise<{ provider: string }> }
 ) {
@@ -69,13 +69,5 @@ export async function GET(
     maxAge: LINK_INTENT_TTL,
   });
 
-  // Redirect to NextAuth's standard OAuth flow with callbackUrl back to profile
-  // biome-ignore lint/style/noProcessEnv: auth infra runs before serverEnv() is available
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-  const redirectUrl = new URL(`/api/auth/signin/${provider}`, baseUrl);
-  redirectUrl.searchParams.set(
-    "callbackUrl",
-    `/profile?linked=${encodeURIComponent(provider)}`
-  );
-  return NextResponse.redirect(redirectUrl);
+  return NextResponse.json({ ok: true });
 }
