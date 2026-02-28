@@ -48,7 +48,7 @@ Provide multi-provider authentication on NextAuth v4 with JWT strategy. SIWE wal
 
 7. **LINK_IS_FAIL_CLOSED**: If a link flow was initiated (link_intent cookie present) but cannot be verified (expired, consumed, invalid JWT, DB transaction missing), the signIn callback rejects with `/profile?error=link_failed`. Never falls through to new-user creation.
 
-8. **SINGLE_ROUTING_AUTHORITY**: Auth routing (redirect unauthed from app routes, redirect authed from landing) is enforced server-side in `src/proxy.ts`. No client-side redirect logic for auth routing.
+8. **SINGLE_ROUTING_AUTHORITY**: Server (`src/proxy.ts` + RSC redirects) is the routing authority for access control. Client may initiate navigation after client-side auth completion (SIWE) to trigger server routing — see `AuthRedirect` on public pages.
 
 ## Design
 
