@@ -3,9 +3,10 @@
 
 /**
  * Module: `@app/api/auth/[...nextauth]`
- * Purpose: Expose NextAuth handlers for signin/session routes. Wraps handler with
- *   AsyncLocalStorage to propagate link intent to signIn callback.
- * Scope: Reads link_intent cookie on OAuth callbacks, decodes JWT, populates linkIntentStore with pending or failed intent, delegates to NextAuth, and clears cookie. Does not perform DB verification or binding.
+ * Purpose: Expose NextAuth handlers for signin/session routes. On OAuth callback
+ *   routes, reads link_intent cookie and propagates intent via AsyncLocalStorage.
+ * Scope: Link-intent logic runs only on callback routes. Does not perform DB
+ *   verification or binding — delegates to signIn callback in auth.ts.
  * Invariants: Public infrastructure endpoint; session cookies managed by NextAuth.
  *   Link intent is fail-closed: if JWT decode fails, the intent is rejected (never ignored).
  * Side-effects: IO (NextAuth DB operations via Drizzle client, cookie read/clear)
@@ -30,24 +31,23 @@ const LINK_INTENT_SALT = "link-intent";
 
 const nextAuthHandler = NextAuth(authOptions);
 
-/** Cookie attributes must match exactly when clearing (browser ignores mismatched clears). */
-const LINK_COOKIE_ATTRS = {
-  httpOnly: true,
-  // biome-ignore lint/style/noProcessEnv: auth infra runs before serverEnv() is available
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  path: "/",
-};
+/** True when the request path is an OAuth callback (the only route needing link intent). */
+function isCallbackRoute(segments: string[]): boolean {
+  return segments[0] === "callback";
+}
 
 async function handler(
   req: NextRequest,
   context: { params: Promise<{ nextauth: string[] }> }
 ) {
-  // Check for link_intent cookie on OAuth callback requests
+  const segments = await context.params.then((p) => p.nextauth);
+  const isCallback = isCallbackRoute(segments);
   const linkIntentCookie = req.cookies.get(LINK_INTENT_COOKIE)?.value;
-  let linkIntent: LinkIntent | null = null;
 
-  if (linkIntentCookie) {
+  // Only decode link_intent on callback routes — other routes (providers,
+  // session, csrf) don't invoke signIn and may return non-NextResponse objects.
+  let linkIntent: LinkIntent | null = null;
+  if (linkIntentCookie && isCallback) {
     try {
       const decoded = await decode({
         token: linkIntentCookie,
@@ -60,27 +60,29 @@ async function handler(
         typeof decoded.txId === "string" &&
         typeof decoded.userId === "string"
       ) {
-        // Pass raw decoded data — auth.ts signIn callback will do the
-        // atomic DB consume (it has getServiceDb access).
         linkIntent = { txId: decoded.txId, userId: decoded.userId };
       } else {
         linkIntent = { failed: true, reason: "invalid_jwt_payload" };
       }
     } catch {
-      // Invalid/expired JWT token → fail closed
       linkIntent = { failed: true, reason: "invalid_jwt" };
     }
   }
 
-  // Run NextAuth within AsyncLocalStorage context
   const response = await linkIntentStore.run(linkIntent, () =>
     nextAuthHandler(req, context)
   );
 
-  // Clear link_intent cookie after processing (success or failure)
-  if (linkIntentCookie && response) {
+  // Clear link_intent cookie after callback processing. Callback routes return
+  // a NextResponse (redirect), which supports .cookies. Non-callback routes
+  // (providers, session) may return plain objects — we skip those entirely.
+  if (linkIntentCookie && isCallback && response?.cookies) {
     response.cookies.set(LINK_INTENT_COOKIE, "", {
-      ...LINK_COOKIE_ATTRS,
+      httpOnly: true,
+      // biome-ignore lint/style/noProcessEnv: auth infra runs before serverEnv() is available
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
       maxAge: 0,
     });
   }
