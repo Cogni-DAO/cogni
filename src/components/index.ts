@@ -66,6 +66,7 @@ export {
 } from "./kit/layout/Card";
 export { Container } from "./kit/layout/Container";
 export { PageContainer } from "./kit/layout/PageContainer";
+export { PageSkeleton } from "./kit/layout/PageSkeleton";
 export { SectionCard } from "./kit/layout/SectionCard";
 export { MobileNav } from "./kit/navigation/MobileNav";
 export { NavigationLink } from "./kit/navigation/NavigationLink";
