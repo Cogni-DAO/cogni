@@ -107,6 +107,7 @@ Three layers, kept strictly separate:
 
 | Deliverable                                                                       | Status      | Est | Work Item  |
 | --------------------------------------------------------------------------------- | ----------- | --- | ---------- |
+| Unified repo-spec reader package (`@cogni/repo-spec`)                             | Not Started | 3   | task.0120  |
 | Gateway proxy route (OpenAI-compatible, billing middleware)                       | Not Started | 3   | story.0116 |
 | API key management (generation, hashed storage, gateway auth)                     | Not Started | 2   | story.0116 |
 | `charge_receipts.external_agent_ref` column (nullable TEXT, freeform from header) | Not Started | 1   | story.0116 |
