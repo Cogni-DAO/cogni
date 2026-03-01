@@ -8,7 +8,7 @@ summary: "Design reasoning for the attribution scoring model: thin receipt inges
 read_when: Designing evaluation enrichers, planning rebalancing mechanisms, reasoning about attribution algorithm versioning, or understanding why SourceCred failed and how this system improves on it.
 owner: cogni-dev
 created: 2026-02-28
-verified: null
+verified: 2026-03-01
 tags: [governance, attribution, scoring, design]
 ---
 
@@ -20,7 +20,7 @@ tags: [governance, attribution, scoring, design]
 
 SourceCred is being superseded ([sourcecred.md](../spec/sourcecred.md),
 [sourcecred-config-rationale.md](../spec/sourcecred-config-rationale.md)). Understanding
-*why* it failed is essential to not repeating the same mistakes.
+_why_ it failed is essential to not repeating the same mistakes.
 
 **SourceCred's failure was content-blindness.** PageRank sees graph structure — nodes,
 edges, weights — but cannot look inside a PR and assess its actual value. A typo fix
@@ -182,11 +182,11 @@ payload_json:    {
   auditability — humans reviewing the epoch can read the reasoning and override
   via the selection layer (`weight_override_milli`) if they disagree.
 - **LLM non-determinism vs ENRICHER_IDEMPOTENT.** The attribution-ledger spec
-  establishes ENRICHER_IDEMPOTENT: "same receipts → same payload." LLMs are
+  establishes ENRICHER*IDEMPOTENT: "same receipts → same payload." LLMs are
   non-deterministic — even with `temperature=0`, outputs vary across calls.
   This enricher relies on the draft→locked lifecycle for consistency: a draft
   evaluation may be overwritten, but once locked it is immutable. The invariant
-  should be relaxed to "same receipts → same payload *within a single evaluation
+  should be relaxed to "same receipts → same payload \_within a single evaluation
   run*" or `cogni.ai_scores.*` enrichers should be explicitly exempted. To be
   resolved in the spec phase.
 
@@ -239,7 +239,7 @@ interface AllocationContext {
 function computeProposedAllocations(
   algoRef: string,
   ctx: AllocationContext
-): ProposedAllocation[]
+): ProposedAllocation[];
 ```
 
 This is a minor refactor to the existing function signature. The `weight-sum-v0` path
@@ -340,6 +340,7 @@ the auth refactor that enabled 3 major features. Her aggregate impact this quart
 high."
 
 This maps to the existing architecture:
+
 - Weekly = activity epochs (existing, with better enrichers)
 - Quarterly = rebalance epochs (new, people-centric evaluation payload)
 
@@ -369,7 +370,7 @@ body of work → assess aggregate impact → allocate bonuses per contributor.
    assessment can credit these. Event-centric can't unless there's an event for it.
 
 4. **Natural for governance.** Quarterly review by humans is "who contributed the most
-   this quarter?" That's inherently a people question. Events serve as *evidence* for
+   this quarter?" That's inherently a people question. Events serve as _evidence_ for
    the assessment, not as the scoring unit.
 
 5. **Receipts become evidence, not scoring targets.** In a people-centric review, the
@@ -517,6 +518,7 @@ Epoch 15 (rebalance, <reassessment-algo-TBD>):
 ```
 
 Anyone reading the ledger can see:
+
 - What algorithm scored each epoch
 - When the DAO switched algorithms
 - What corrections were issued and why
@@ -528,6 +530,7 @@ Anyone reading the ledger can see:
 
 `computeStatementItems` rejects negative `valuationUnits` (line 46 of `rules.ts`).
 This is correct for V0 — negative allocations imply clawbacks, which require:
+
 - Settlement layer integration (can you take back tokens already distributed?)
 - Governance authorization (who approves clawbacks?)
 - Legal/regulatory consideration
@@ -540,6 +543,7 @@ governance underfunds the pool, correction is partial.
 #### Why not re-evaluate old epochs?
 
 Three reasons:
+
 1. **Signed statements are commitments.** Re-evaluating would invalidate signatures.
    The signer attested to specific allocation data — changing that data is forgery.
 2. **Determinism requires pinned inputs.** An evaluation is reproducible because it
@@ -579,18 +583,18 @@ addressed in the spec — either make `events` optional or specify that
 
 ## Schema Impact Summary
 
-| Change | Type | Detail |
-| ------ | ---- | ------ |
-| `epochs.epoch_kind` | Add column | `TEXT NOT NULL DEFAULT 'activity'`, CHECK IN ('activity', 'rebalance') |
-| `epochs_window_unique` index | Modify | Add `epoch_kind` to prevent rebalance/activity collisions |
-| `epochs_one_open_per_node` index | Modify | Add `epoch_kind` or document serialization as intentional |
-| `computeProposedAllocations` signature | Refactor | `(algoRef, events, weightConfig)` → `(algoRef, ctx: AllocationContext)` |
-| `pool_component_allowlist` | Extend | Add `'retroactive_adjustment'` |
-| New enricher: `cogni.ai_scores.v0` | Additive | New `evaluation_ref`, existing table |
-| New enricher: `cogni.rebalance_review.v0` | Additive | New `evaluation_ref`, existing table |
-| New algo: `eval-scored-v0` | Additive | New case in allocation dispatch |
-| Reassessment algo | TBD | Depends on outcome of retrospective value spike |
-| New workflow: `RebalanceEpochWorkflow` | Additive | Temporal workflow, similar lifecycle to CollectEpoch |
+| Change                                    | Type       | Detail                                                                  |
+| ----------------------------------------- | ---------- | ----------------------------------------------------------------------- |
+| `epochs.epoch_kind`                       | Add column | `TEXT NOT NULL DEFAULT 'activity'`, CHECK IN ('activity', 'rebalance')  |
+| `epochs_window_unique` index              | Modify     | Add `epoch_kind` to prevent rebalance/activity collisions               |
+| `epochs_one_open_per_node` index          | Modify     | Add `epoch_kind` or document serialization as intentional               |
+| `computeProposedAllocations` signature    | Refactor   | `(algoRef, events, weightConfig)` → `(algoRef, ctx: AllocationContext)` |
+| `pool_component_allowlist`                | Extend     | Add `'retroactive_adjustment'`                                          |
+| New enricher: `cogni.ai_scores.v0`        | Additive   | New `evaluation_ref`, existing table                                    |
+| New enricher: `cogni.rebalance_review.v0` | Additive   | New `evaluation_ref`, existing table                                    |
+| New algo: `eval-scored-v0`                | Additive   | New case in allocation dispatch                                         |
+| Reassessment algo                         | TBD        | Depends on outcome of retrospective value spike                         |
+| New workflow: `RebalanceEpochWorkflow`    | Additive   | Temporal workflow, similar lifecycle to CollectEpoch                    |
 
 No new tables. No removed columns. The core pipeline
 (ingestion → selection → evaluation → allocation → finalization) is unchanged.
@@ -656,6 +660,7 @@ For clarity — these parts of the design are well-grounded and should carry for
 ## Open Questions
 
 ### Weekly Evaluation (Layer 2)
+
 - [ ] Should the evaluator score all receipts in a single LLM call, or chunk them?
       Single call enables relative scoring; chunking handles scale.
 - [ ] How do we handle evaluation cost? LLM calls per receipt add up. Should there be
@@ -663,6 +668,7 @@ For clarity — these parts of the design are well-grounded and should carry for
 - [ ] How should ENRICHER_IDEMPOTENT be relaxed for non-deterministic enrichers?
 
 ### People-Centric Quarterly Review (requires spike)
+
 - [ ] What does the quarterly evaluation payload look like? Per-actor assessment with
       cited receipts? Relative ranking with reasoning?
 - [ ] How does the LLM aggregate a contributor's quarter — chronological narrative,
@@ -674,6 +680,7 @@ For clarity — these parts of the design are well-grounded and should carry for
 - [ ] What's the right pool split between weekly base and quarterly retro?
 
 ### Continuous Signal Collection
+
 - [ ] Which cheap signals correlate with retrospective value? Code survival, revert
       rate, dependency fan-out, issue cross-references?
 - [ ] Should signals be collected as enricher data on existing receipts, or as new
@@ -682,6 +689,7 @@ For clarity — these parts of the design are well-grounded and should carry for
       Separate linkage table? Edge annotations?
 
 ### Rebalance Mechanism
+
 - [ ] Should the rebalance evaluation reference specific historical epoch IDs, or a
       time range? Epoch IDs are more precise; time ranges are simpler for governance.
 - [ ] Should rebalance epochs be constrained to reviewing epochs scored by older

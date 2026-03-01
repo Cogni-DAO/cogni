@@ -9,7 +9,7 @@ estimate: 3
 summary: "Design the people-centric quarterly retro review mechanism: what does the LLM assessment of a contributor's quarter look like, what governance input drives it, what signals feed it, and how does it produce correction allocations via rebalance epochs."
 outcome: "A research document with a concrete evaluation payload schema, governance input format, signal collection strategy, and worked example showing how a quarterly retro produces rebalance epoch allocations. Ready for spec and implementation."
 spec_refs: attribution-ledger-spec
-assignees:
+assignees: unassigned
 credit:
 project: proj.transparent-credit-payouts
 branch:
