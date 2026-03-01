@@ -32,32 +32,42 @@ import {
   statusBucket,
 } from "@/shared/observability";
 
-type RouteHandler<TContext = unknown> = (
+type AuthRequiredHandler<TContext = unknown> = (
+  ctx: RequestContext,
+  request: NextRequest,
+  sessionUser: SessionUser,
+  context?: TContext
+) => Promise<NextResponse>;
+
+type AuthOptionalHandler<TContext = unknown> = (
   ctx: RequestContext,
   request: NextRequest,
   sessionUser: SessionUser | null,
   context?: TContext
 ) => Promise<NextResponse>;
 
-type WrapOptions =
-  | {
-      routeId: string;
-      auth: {
-        mode: "required";
-        getSessionUser: () => Promise<SessionUser | null>;
-      };
-    }
-  | {
-      routeId: string;
-      auth: {
-        mode: "optional";
-        getSessionUser: () => Promise<SessionUser | null>;
-      };
-    }
-  | {
-      routeId: string;
-      auth?: { mode: "none" };
-    };
+type AuthRequiredOptions = {
+  routeId: string;
+  auth: {
+    mode: "required";
+    getSessionUser: () => Promise<SessionUser | null>;
+  };
+};
+
+type AuthOptionalOptions = {
+  routeId: string;
+  auth: {
+    mode: "optional";
+    getSessionUser: () => Promise<SessionUser | null>;
+  };
+};
+
+type AuthNoneOptions = {
+  routeId: string;
+  auth?: { mode: "none" };
+};
+
+type WrapOptions = AuthRequiredOptions | AuthOptionalOptions | AuthNoneOptions;
 
 /**
  * Wraps a route handler with consistent request logging envelope.
@@ -70,13 +80,13 @@ type WrapOptions =
  * @returns Next.js route handler function (supports both static and dynamic routes)
  *
  * @example
- * // Static route with required session
+ * // Static route with required session — sessionUser is guaranteed non-null
  * export const POST = wrapRouteHandlerWithLogging(
  *   { routeId: "payments.intents", auth: { mode: "required", getSessionUser } },
  *   async (ctx, request, sessionUser) => {
  *     const body = await request.json();
  *     const input = paymentIntentOperation.input.parse(body);
- *     const result = await createPaymentIntentFacade({ sessionUser: sessionUser!, ...input }, ctx);
+ *     const result = await createPaymentIntentFacade({ sessionUser, ...input }, ctx);
  *     return NextResponse.json(paymentIntentOperation.output.parse(result));
  *   }
  * );
@@ -88,14 +98,25 @@ type WrapOptions =
  *   async (ctx, request, sessionUser, context) => {
  *     if (!context) throw new Error("context required for dynamic routes");
  *     const { id } = await context.params;
- *     const result = await getPaymentStatusFacade({ sessionUser: sessionUser!, attemptId: id }, ctx);
+ *     const result = await getPaymentStatusFacade({ sessionUser, attemptId: id }, ctx);
  *     return NextResponse.json(paymentStatusOperation.output.parse(result));
  *   }
  * );
  */
+// Overload: mode "required" → handler receives SessionUser (non-null)
+export function wrapRouteHandlerWithLogging<TContext = unknown>(
+  options: AuthRequiredOptions,
+  handler: AuthRequiredHandler<TContext>
+): (request: NextRequest, context?: TContext) => Promise<NextResponse>;
+// Overload: mode "optional" or "none" → handler receives SessionUser | null
+export function wrapRouteHandlerWithLogging<TContext = unknown>(
+  options: AuthOptionalOptions | AuthNoneOptions,
+  handler: AuthOptionalHandler<TContext>
+): (request: NextRequest, context?: TContext) => Promise<NextResponse>;
+// Implementation
 export function wrapRouteHandlerWithLogging<TContext = unknown>(
   options: WrapOptions,
-  handler: RouteHandler<TContext>
+  handler: AuthRequiredHandler<TContext> | AuthOptionalHandler<TContext>
 ): (request: NextRequest, context?: TContext) => Promise<NextResponse> {
   return async (
     request: NextRequest,
@@ -149,7 +170,14 @@ export function wrapRouteHandlerWithLogging<TContext = unknown>(
             return response;
           }
 
-          response = await handler(ctx, request, sessionUser, context);
+          // Safe cast: for mode "required", the guard above returns 401 if null.
+          // For mode "optional"/"none", handlers accept null. Either way, this is sound.
+          response = await (handler as AuthOptionalHandler<TContext>)(
+            ctx,
+            request,
+            sessionUser,
+            context
+          );
           responseStatus = response.status;
           return response;
         } catch (error) {

@@ -4,8 +4,9 @@
 /**
  * Module: `@/proxy`
  * Purpose: Next.js 16 proxy (formerly middleware) for route protection.
- * Scope: Root-level proxy. Enforces session auth on /api/v1/* routes (except /api/v1/public/*) via NextAuth JWT token inspection. Does not handle public infrastructure endpoints (e.g., /api/metrics, /api/health).
- * Invariants: /api/v1/public/* accessible without auth; other /api/v1/* routes require session; public infra endpoints live outside /api/v1/.
+ * Scope: Root-level proxy. Enforces session auth on /api/v1/* routes and page-level routing (redirect unauthenticated users away from app routes, redirect authenticated users from landing to /chat). Does not handle public infrastructure endpoints (e.g., /api/metrics, /api/health).
+ * Invariants: /api/v1/public/* accessible without auth; other /api/v1/* require session.
+ *   Single authority for auth routing — no client-side redirect logic.
  * Side-effects: none
  * Links: docs/spec/security-auth.md
  * @public
@@ -18,6 +19,24 @@ import { getToken } from "next-auth/jwt";
 
 import { authOptions, authSecret } from "@/auth";
 
+/** App routes that require authentication — unauthenticated visitors are redirected to /. */
+const APP_ROUTES = [
+  "/chat",
+  "/profile",
+  "/credits",
+  "/gov",
+  "/schedules",
+  "/setup",
+  "/work",
+  "/activity",
+];
+
+function isAppRoute(pathname: string): boolean {
+  return APP_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
+}
+
 export async function proxy(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
 
@@ -26,6 +45,10 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
     return NextResponse.next();
   }
 
+  // Resolve token once — reused for both page and API checks.
+  // Only call getToken when the route actually needs auth checking.
+  const needsAuth =
+    pathname === "/" || isAppRoute(pathname) || pathname.startsWith("/api/v1/");
   const tokenSecret = authSecret || authOptions.secret;
 
   if (!tokenSecret && pathname.startsWith("/api/v1/")) {
@@ -33,14 +56,25 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
   }
 
   const token =
-    tokenSecret && pathname.startsWith("/api/v1/")
-      ? await getToken({
-          req,
-          secret: tokenSecret,
-        })
+    tokenSecret && needsAuth
+      ? await getToken({ req, secret: tokenSecret })
       : null;
 
   const isLoggedIn = !!token;
+
+  // --- Page-level routing (single authority, replaces client-side redirects) ---
+
+  // Authenticated on landing page → redirect to /chat
+  if (pathname === "/" && isLoggedIn) {
+    return NextResponse.redirect(new URL("/chat", req.url));
+  }
+
+  // Unauthenticated on app routes → redirect to /
+  if (isAppRoute(pathname) && !isLoggedIn) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
+
+  // --- API route protection ---
 
   // Protect /api/v1/* routes (except /api/v1/public/* which was early-returned above)
   // IMPORTANT: All route handlers under /api/v1 must still call getServerSession() server-side.
@@ -57,6 +91,17 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  // Run middleware on ALL /api/v1/* routes for uniform auth perimeter
-  matcher: ["/api/v1/:path*"],
+  // Run proxy on page routes (landing + app) and API routes for uniform auth perimeter
+  matcher: [
+    "/",
+    "/chat/:path*",
+    "/profile/:path*",
+    "/credits/:path*",
+    "/gov/:path*",
+    "/schedules/:path*",
+    "/setup/:path*",
+    "/work/:path*",
+    "/activity/:path*",
+    "/api/v1/:path*",
+  ],
 };

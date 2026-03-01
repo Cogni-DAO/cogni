@@ -5,13 +5,13 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-02-17
+- **Last reviewed:** 2026-02-28
 - **Status:** stable
 - **Parent:** [components/kit](../AGENTS.md)
 
 ## Purpose
 
-Reusable kit components for displaying data including badges, avatars, scroll areas, terminal frames, and activity charts.
+Reusable kit components for displaying data including badges, avatars, scroll areas, terminal frames, activity charts, and shared provider brand icons.
 
 ## Pointers
 
@@ -38,7 +38,7 @@ Reusable kit components for displaying data including badges, avatars, scroll ar
 
 ## Public Surface
 
-- **Exports (via ../index.ts):** ActivityChart, Avatar, Badge, GithubButton, ScrollArea, TerminalFrame
+- **Exports (via ../index.ts):** ActivityChart, Avatar, Badge, DiscordIcon, EthereumIcon, GitHubIcon, GoogleIcon, GithubButton, ProviderIconProps, ScrollArea, TerminalFrame
 - **Routes:** none
 - **Env/Config keys:** none
 - **Files considered API:** All \*.tsx files in this directory

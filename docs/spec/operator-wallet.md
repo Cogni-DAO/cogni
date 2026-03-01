@@ -302,3 +302,4 @@ DAO treasury share is handled on-chain by the Split contract — no `outbound_tr
 - [Payments Design](./payments-design.md) — Inbound USDC payment flow
 - [DAO Enforcement](./dao-enforcement.md) — Governance-in-git rails
 - [proj.ai-operator-wallet](../../work/projects/proj.ai-operator-wallet.md) — Project roadmap
+- [Thirdweb Auth Migration Audit](../research/thirdweb-auth-migration-audit.md) — thirdweb Engine Server Wallets as Privy alternative (2026-02-28: proceed with Privy for P0, evaluate Engine at PR 1)

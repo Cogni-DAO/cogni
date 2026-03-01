@@ -123,6 +123,11 @@ pnpm setup github --env production
      - `OPENCLAW_GATEWAY_TOKEN` (generated random, ≥32 chars — gateway WS auth)
      - `OPENCLAW_GITHUB_RW_TOKEN` (GitHub PAT with Contents:Write + Pull requests:Write — host-side git relay)
      - `DISCORD_BOT_TOKEN` (Discord bot token — from discord.com/developers/applications → Bot → Reset Token)
+     - **OAuth providers (optional — provider silently skipped if missing):**
+       - `GITHUB_OAUTH_CLIENT_ID` + `GITHUB_OAUTH_CLIENT_SECRET` (from github.com/settings/developers → OAuth Apps)
+       - `DISCORD_OAUTH_CLIENT_ID` + `DISCORD_OAUTH_CLIENT_SECRET` (from discord.com/developers/applications → OAuth2)
+       - `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` (from console.cloud.google.com/apis/credentials)
+       - See [OAuth App Setup Guide](../../docs/guides/oauth-app-setup.md) for step-by-step
      - `BILLING_INGEST_TOKEN` (generated random, ≥32 chars — LiteLLM callback → billing ingest bearer auth)
      - `INTERNAL_OPS_TOKEN` (generated random, ≥32 chars — deploy-time bearer auth for `/api/internal/ops/governance/schedules/sync`)
    - **Deployment secrets:** From previous steps

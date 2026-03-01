@@ -9,7 +9,7 @@ summary: Multi-provider auth (SIWE wallet + GitHub/Discord/Google OAuth) on Next
 read_when: Working on login flow, wallet connection, OAuth providers, account linking, or session management.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-26
+verified: 2026-02-28
 tags: [auth]
 ---
 
@@ -46,6 +46,10 @@ Provide multi-provider authentication on NextAuth v4 with JWT strategy. SIWE wal
 
 6. **WALLET_GATED_OPS**: Payment creation and ledger approval require `walletAddress`. OAuth-only users (`walletAddress: null`) receive clean 403 responses.
 
+7. **LINK_IS_FAIL_CLOSED**: If a link flow was initiated (link_intent cookie present) but cannot be verified (expired, consumed, invalid JWT, DB transaction missing), the signIn callback rejects with `/profile?error=link_failed`. Never falls through to new-user creation.
+
+8. **SINGLE_ROUTING_AUTHORITY**: Server (`src/proxy.ts` + RSC redirects) is the routing authority for access control. Client may initiate navigation after client-side auth completion (SIWE) to trigger server routing — see `AuthRedirect` on public pages.
+
 ## Design
 
 ### Auth Flows
@@ -68,12 +72,15 @@ graph TD
         O5 --> O6
     end
 
-    subgraph "Account Linking"
-        L1[Authenticated user] --> L2["GET /api/auth/link/{provider}"]
-        L2 --> L3[Set signed link_intent cookie]
-        L3 --> L4[Redirect to OAuth flow]
-        L4 --> L5[signIn reads linkIntentStore]
-        L5 --> L6["createBinding(provider, externalId) for existing user"]
+    subgraph "Account Linking (DB-backed, fail-closed)"
+        L1[Authenticated user] --> L2["POST /api/auth/link/{provider}"]
+        L2 --> L3[Insert linkTransactions row]
+        L3 --> L4[Set signed JWT cookie with txId]
+        L4 --> L5["Client calls signIn(provider)"]
+        L5 --> L6[Decode JWT → pending or failed intent]
+        L6 --> L7{Atomic consume: UPDATE WHERE unconsumed + unexpired}
+        L7 -->|row returned| L8["createBinding for existing user"]
+        L7 -->|no row| L9["Reject → /profile?error=link_failed"]
     end
 ```
 
@@ -81,7 +88,7 @@ graph TD
 
 **OAuth login** resolves users via `user_bindings(provider, external_id)`. Returning users get their existing `user_id`. New users get an atomic transaction creating `users` + `user_bindings` + `identity_events` rows. Race-safe: concurrent first-logins for the same external_id roll back the losing transaction and re-fetch the winner.
 
-**Account linking** uses `AsyncLocalStorage` to propagate a signed `link_intent` cookie from the route handler to the `signIn` callback (NextAuth v4 callbacks have no access to `req`/cookies). The cookie is a JWT containing `{ userId, sessionTokenHash, purpose: "link_intent" }` with 5-minute TTL. Session binding prevents replay by different sessions.
+**Account linking** uses a DB-backed `linkTransactions` table for fail-closed verification. The link endpoint inserts a transaction row, then sets a signed JWT cookie containing `{ txId, userId, purpose: "link_intent" }` with 5-minute TTL, scoped to `Path=/api/auth/callback`. On OAuth callback routes only, the `[...nextauth]` handler decodes the JWT and passes a pending or failed intent via `AsyncLocalStorage` to the `signIn` callback. Non-callback NextAuth routes (`/providers`, `/session`, `/signout`) ignore the cookie entirely. The callback atomically consumes the transaction (`UPDATE ... WHERE id = $txId AND user_id = $userId AND provider = $provider AND consumedAt IS NULL AND expiresAt > now() RETURNING *`). The `provider` match prevents cross-provider replay (a transaction created for GitHub cannot be consumed by a Discord callback). If consumption fails (expired, already consumed, wrong provider, tampered), the link is rejected — never falls through to new-user creation. The `linkTransactions` table uses `getServiceDb()` (BYPASSRLS) because the session is not settled during the OAuth callback.
 
 ### SessionUser Type
 
@@ -109,11 +116,15 @@ For SIWE, RainbowKit uses `signIn("credentials", { redirect: false })`, so this 
 
 ### Sign-In Routing
 
-NextAuth `pages.signIn` points to `/sign-in` (custom page). Unauthenticated users are redirected to `/sign-in` via Next.js middleware. Authenticated users are redirected off `/sign-in` to `/chat`.
+NextAuth `pages.signIn` points to `/` (landing page). Sign-in is a modal dialog (`SignInDialog`) triggered from the header's `WalletConnectButton`, not a standalone page. Auth routing is enforced server-side in `src/proxy.ts`:
+
+- Authenticated users on `/` → redirect to `/chat`
+- Unauthenticated users on app routes (`/chat`, `/profile`, etc.) → redirect to `/`
+- `getToken()` (Edge-compatible JWT check) called once per request
 
 ### OAuth Provider Registration
 
-Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECRET` env vars are non-empty. Missing credentials = provider not shown on sign-in page.
+Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECRET` env vars are non-empty. Missing credentials = provider not shown in SignInDialog or on profile page. Both `SignInDialog` and the profile page fetch `/api/auth/providers` at runtime to discover configured providers.
 
 ### Known UX Limitations (MVP-Tolerated)
 
@@ -123,18 +134,21 @@ Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECR
 
 ### File Pointers
 
-| File                                        | Purpose                                                        |
-| ------------------------------------------- | -------------------------------------------------------------- |
-| `src/auth.ts`                               | NextAuth config: providers, signIn/jwt/session callbacks       |
-| `src/app/api/auth/[...nextauth]/route.ts`   | Route handler with AsyncLocalStorage wrapper for link_intent   |
-| `src/app/api/auth/link/[provider]/route.ts` | Account linking initiation (signed cookie + redirect)          |
-| `src/shared/auth/link-intent-store.ts`      | AsyncLocalStorage primitive for link_intent propagation        |
-| `src/shared/auth/session.ts`                | SessionUser type (id, walletAddress, displayName, avatarColor) |
-| `src/app/(auth)/sign-in/page.tsx`           | Custom sign-in page (WalletConnect + OAuth buttons)            |
-| `src/middleware.ts`                         | Auth route guards (redirect unauthed → /sign-in)               |
-| `src/lib/auth/server.ts`                    | `getServerSessionUser()` — requires only `id`                  |
-| `src/app/providers/wallet.client.tsx`       | RainbowKit + SIWE provider wiring                              |
-| `src/features/payments/errors.ts`           | `WalletRequiredError` for null-wallet payment guard            |
+| File                                                | Purpose                                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------------- |
+| `src/auth.ts`                                       | NextAuth config: providers, signIn/jwt/session callbacks, link tx helpers  |
+| `src/proxy.ts`                                      | Server-side auth routing (single authority for redirects)                  |
+| `src/app/api/auth/[...nextauth]/route.ts`           | Route handler: JWT decode → pending/failed intent via AsyncLocalStorage    |
+| `src/app/api/auth/link/[provider]/route.ts`         | Link initiation: DB insert + signed JWT cookie + redirect                  |
+| `src/shared/auth/link-intent-store.ts`              | Discriminated union types + AsyncLocalStorage for link intent propagation  |
+| `src/shared/auth/session.ts`                        | SessionUser type (id, walletAddress, displayName, avatarColor)             |
+| `packages/db-schema/src/identity.ts`                | `linkTransactions` table schema (alongside user_bindings, identity_events) |
+| `src/components/kit/auth/SignInDialog.tsx`          | Modal dialog: wallet + OAuth sign-in options                               |
+| `src/components/kit/auth/WalletConnectButton.tsx`   | Opens SignInDialog; SIWE fallback state                                    |
+| `src/components/kit/data-display/ProviderIcons.tsx` | Shared SVG icons (Ethereum, GitHub, Discord, Google)                       |
+| `src/lib/auth/server.ts`                            | `getServerSessionUser()` — requires only `id`                              |
+| `src/app/providers/wallet.client.tsx`               | RainbowKit + SIWE provider wiring                                          |
+| `src/features/payments/errors.ts`                   | `WalletRequiredError` for null-wallet payment guard                        |
 
 ## Acceptance Checks
 
@@ -145,10 +159,14 @@ Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECR
 3. Disconnect wallet → session destroyed
 4. GitHub/Discord/Google OAuth login → new user, session has `id`, `walletAddress` is null
 5. Same OAuth login again → same user returned (idempotent via user_bindings)
-6. Logged in with wallet → "Link GitHub" → OAuth → binding created for existing user
-7. Attempt to link account already bound to different user → rejected (NO_AUTO_MERGE)
-8. OAuth-only user hits payment endpoint → clean 403
-9. `identity_events` has `bind` event for each provider link
+6. Logged in with wallet → "Link GitHub" → OAuth → `/profile?linked=github`, binding created
+7. Attempt to link account already bound to different user → `/profile?error=already_linked` (NO_AUTO_MERGE)
+8. Link with expired/consumed transaction → `/profile?error=link_failed` (LINK_IS_FAIL_CLOSED)
+9. OAuth-only user hits payment endpoint → clean 403
+10. `identity_events` has `bind` event for each provider link
+11. Unauthenticated user on `/chat` → redirected to `/` (proxy)
+12. Authenticated user on `/` → redirected to `/chat` (proxy)
+13. SignInDialog shows only configured providers (fetches `/api/auth/providers`)
 
 ## Open Questions
 
@@ -159,3 +177,4 @@ Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECR
 - [Decentralized User Identity](./decentralized-user-identity.md) — user_bindings schema, binding invariants
 - [Security Auth](./security-auth.md) — auth surface identity resolution
 - [DAO Enforcement](./dao-enforcement.md)
+- [Thirdweb Auth Migration Audit](../research/thirdweb-auth-migration-audit.md) — feature comparison, migration viability assessment (2026-02-28: stay on current stack)

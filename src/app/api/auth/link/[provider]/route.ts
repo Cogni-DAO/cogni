@@ -3,34 +3,31 @@
 
 /**
  * Module: `@app/api/auth/link/[provider]`
- * Purpose: Account linking initiation endpoint. Sets a signed link_intent cookie
- *   then redirects to NextAuth's standard OAuth flow.
- * Scope: Requires existing session. Sets HttpOnly cookie. Does not perform binding itself.
+ * Purpose: Account linking setup endpoint. Creates a DB-backed link transaction and
+ *   sets a signed link_intent cookie. The client then calls signIn() to start OAuth.
+ * Scope: POST-only. Requires existing session. Does not initiate OAuth, perform binding, or redirect — only sets the link_intent cookie (path=/api/auth/callback, 5-min TTL).
  * Invariants: LINKING_IS_EXPLICIT — only authenticated users can initiate linking.
- *   Cookie is session-bound (sessionTokenHash), time-limited (5min), HttpOnly, Secure, SameSite=Lax.
- * Side-effects: IO (cookie set, redirect)
+ *   Cookie is time-limited (5min), HttpOnly, Secure, SameSite=Lax. DB transaction is the authority.
+ * Side-effects: IO (DB insert via auth helper, cookie set)
  * Links: src/app/api/auth/[...nextauth]/route.ts, src/shared/auth/link-intent-store.ts
  * @public
  */
-
-import { createHash } from "node:crypto";
 
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { encode } from "next-auth/jwt";
 
-import { authSecret } from "@/auth";
+import { authSecret, createLinkTransaction } from "@/auth";
 import { getServerSessionUser } from "@/lib/auth/server";
 
 export const runtime = "nodejs";
 
 const ALLOWED_PROVIDERS = new Set(["github", "discord", "google"]);
-const SESSION_COOKIE = "next-auth.session-token";
 const LINK_INTENT_COOKIE = "link_intent";
 const LINK_INTENT_SALT = "link-intent";
 const LINK_INTENT_TTL = 5 * 60; // 5 minutes
 
-export async function GET(
+export async function POST(
   _request: Request,
   { params }: { params: Promise<{ provider: string }> }
 ) {
@@ -46,25 +43,14 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Session binding: hash current session token for replay prevention
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!sessionToken) {
-    return NextResponse.json(
-      { error: "Session cookie missing" },
-      { status: 401 }
-    );
-  }
-  const sessionTokenHash = createHash("sha256")
-    .update(sessionToken)
-    .digest("hex")
-    .slice(0, 16);
+  // Create DB-backed link transaction (the authority for fail-closed verification)
+  const txId = await createLinkTransaction(session.id, provider);
 
-  // Create a signed JWT containing the user ID + session hash (tamper-proof)
+  // Create a signed JWT containing txId + userId (tamper-proof transport)
   const linkToken = await encode({
     token: {
+      txId,
       userId: session.id,
-      sessionTokenHash,
       purpose: "link_intent",
     },
     secret: authSecret,
@@ -73,18 +59,15 @@ export async function GET(
   });
 
   // Set HttpOnly cookie — SameSite=Lax allows top-level navigation (OAuth redirect)
+  const cookieStore = await cookies();
   cookieStore.set(LINK_INTENT_COOKIE, linkToken, {
     httpOnly: true,
     // biome-ignore lint/style/noProcessEnv: auth infra runs before serverEnv() is available
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/",
+    path: "/api/auth/callback",
     maxAge: LINK_INTENT_TTL,
   });
 
-  // Redirect to NextAuth's standard OAuth flow
-  // biome-ignore lint/style/noProcessEnv: auth infra runs before serverEnv() is available
-  const baseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-  const redirectUrl = new URL(`/api/auth/signin/${provider}`, baseUrl);
-  return NextResponse.redirect(redirectUrl);
+  return NextResponse.json({ ok: true });
 }

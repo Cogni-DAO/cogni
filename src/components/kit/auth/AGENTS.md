@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @derek
-- **Last reviewed:** 2025-12-02
+- **Last reviewed:** 2026-02-28
 - **Status:** stable
 
 ## Purpose
 
-Authentication UI components. Provides the wallet connection button using RainbowKit.
+Authentication UI components. Provides the wallet connection button (RainbowKit) and sign-in dialog (wallet + OAuth options).
 
 ## Pointers
 
@@ -30,15 +30,16 @@ Authentication UI components. Provides the wallet connection button using Rainbo
 ## Public Surface
 
 - **Exports:**
-  - `WalletConnectButton` - Prop-driven RainbowKit ConnectButton with variants: compact (mobile, avatar) and default (desktop, address)
+  - `WalletConnectButton` - RainbowKit ConnectButton with treasury badge styling; opens SignInDialog when not connected
+  - `SignInDialog` - Modal dialog presenting sign-in options (Ethereum wallet, GitHub, Google); fetches available providers from `/api/auth/providers`
 - **Routes (if any):** none
 - **CLI (if any):** none
 - **Env/Config keys:** none
-- **Files considered API:** `WalletConnectButton.tsx`
+- **Files considered API:** `WalletConnectButton.tsx`, `SignInDialog.tsx`
 
 ## Responsibilities
 
-- This directory **does**: Provide UI for wallet connection via RainbowKit with prop-driven variant selection and hydration stability (fixed dimensions, skeleton overlay)
+- This directory **does**: Provide UI for wallet connection via RainbowKit, sign-in dialog with wallet + OAuth options, and SIWE fallback state ("Sign message" CTA)
 - This directory **does not**: Implement auth providers; handle server-side sessions; auto sign-out; perform wagmi SSR hydration
 
 ## Usage
@@ -61,8 +62,8 @@ import { WalletConnectButton } from "@/components";
 
 ## Dependencies
 
-- **Internal:** none
-- **External:** `@rainbow-me/rainbowkit`
+- **Internal:** `@/components/kit/data-display/ProviderIcons` (SVG icons), `@/components/kit/inputs/Button`, `@/components/vendor/shadcn/dialog`
+- **External:** `@rainbow-me/rainbowkit`, `next-auth/react`
 
 ## Change Protocol
 

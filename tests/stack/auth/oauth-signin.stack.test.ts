@@ -13,6 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import {
+  newTestUserId,
   TEST_USER_ID_1,
   TEST_USER_ID_2,
   TEST_USER_ID_3,
@@ -21,7 +22,7 @@ import {
   TEST_WALLET_2,
 } from "@tests/_fakes/ids";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
-import { seedUser } from "@tests/_fixtures/stack/seed";
+import { seedLinkTransaction, seedUser } from "@tests/_fixtures/stack/seed";
 import { and, eq } from "drizzle-orm";
 import type { Account, Profile, User } from "next-auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +36,8 @@ const { mockGetStore } = vi.hoisted(() => ({
   mockGetStore: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock("@/shared/auth/link-intent-store", () => ({
+vi.mock(import("@/shared/auth/link-intent-store"), async (importOriginal) => ({
+  ...(await importOriginal()),
   linkIntentStore: { getStore: mockGetStore },
 }));
 
@@ -199,8 +201,12 @@ describe("OAuth signIn callback — DB paths", () => {
       walletAddress: TEST_WALLET_2,
     });
 
-    // Mock link intent
-    mockGetStore.mockReturnValue({ userId: TEST_USER_ID_2 });
+    // Seed link transaction + mock pending intent
+    const txId = await seedLinkTransaction(db, {
+      userId: TEST_USER_ID_2,
+      provider: "github",
+    });
+    mockGetStore.mockReturnValue({ txId, userId: TEST_USER_ID_2 });
 
     const { result, userId } = await callSignInWithUser({
       account: makeOAuthAccount("github", providerAccountId),
@@ -233,8 +239,12 @@ describe("OAuth signIn callback — DB paths", () => {
       externalId: providerAccountId,
     });
 
-    // Mock link intent pointing to same user
-    mockGetStore.mockReturnValue({ userId: TEST_USER_ID_3 });
+    // Seed link transaction + mock pending intent pointing to same user
+    const txId = await seedLinkTransaction(db, {
+      userId: TEST_USER_ID_3,
+      provider: "github",
+    });
+    mockGetStore.mockReturnValue({ txId, userId: TEST_USER_ID_3 });
 
     // Count bindings before
     const bindingsBefore = await db.query.userBindings.findMany({
@@ -270,15 +280,19 @@ describe("OAuth signIn callback — DB paths", () => {
     // Seed user B
     await seedUser(db, { id: TEST_USER_ID_5 });
 
-    // Mock link intent pointing to user B (different user)
-    mockGetStore.mockReturnValue({ userId: TEST_USER_ID_5 });
+    // Seed link transaction for user B + mock pending intent
+    const txId = await seedLinkTransaction(db, {
+      userId: TEST_USER_ID_5,
+      provider: "github",
+    });
+    mockGetStore.mockReturnValue({ txId, userId: TEST_USER_ID_5 });
 
     const { result } = await callSignInWithUser({
       account: makeOAuthAccount("github", providerAccountId),
     });
 
     // Must reject — user B cannot claim user A's binding
-    expect(result).toBe(false);
+    expect(result).toBe("/profile?error=already_linked");
 
     // Binding still owned by user A
     const binding = await db.query.userBindings.findFirst({
@@ -288,5 +302,103 @@ describe("OAuth signIn callback — DB paths", () => {
       ),
     });
     expect(binding?.userId).toBe(TEST_USER_ID_4);
+  });
+
+  // --- Fail-closed link transaction tests ---
+
+  it("rejects when link intent has failed status", async () => {
+    // Simulate a failed intent (e.g., JWT decode error in [...nextauth] route)
+    mockGetStore.mockReturnValue({ failed: true, reason: "invalid_jwt" });
+
+    const { result } = await callSignInWithUser({
+      account: makeOAuthAccount("github", "gh-failed-intent"),
+    });
+
+    expect(result).toBe("/profile?error=link_failed");
+
+    // No user or binding created
+    const binding = await db.query.userBindings.findFirst({
+      where: eq(userBindings.externalId, "gh-failed-intent"),
+    });
+    expect(binding).toBeUndefined();
+  });
+
+  it("rejects when link transaction is expired", async () => {
+    const userId = newTestUserId();
+    await seedUser(db, { id: userId });
+
+    // Seed an already-expired transaction
+    const txId = await seedLinkTransaction(db, {
+      userId,
+      provider: "github",
+      expiresAt: new Date(Date.now() - 60_000), // expired 1 minute ago
+    });
+    mockGetStore.mockReturnValue({ txId, userId });
+
+    const { result } = await callSignInWithUser({
+      account: makeOAuthAccount("github", "gh-expired-tx"),
+    });
+
+    // Atomic consume returns no rows for expired tx → fail-closed
+    expect(result).toBe("/profile?error=link_failed");
+
+    // No binding created
+    const binding = await db.query.userBindings.findFirst({
+      where: eq(userBindings.externalId, "gh-expired-tx"),
+    });
+    expect(binding).toBeUndefined();
+  });
+
+  it("rejects when link transaction provider mismatches callback (cross-provider replay)", async () => {
+    const userId = newTestUserId();
+    await seedUser(db, { id: userId });
+
+    // Seed a valid transaction for "github"
+    const txId = await seedLinkTransaction(db, {
+      userId,
+      provider: "github",
+    });
+
+    // Attempt consume via "discord" callback — must reject
+    mockGetStore.mockReturnValue({ txId, userId });
+    const { result } = await callSignInWithUser({
+      account: makeOAuthAccount("discord", "dc-cross-provider"),
+    });
+
+    expect(result).toBe("/profile?error=link_failed");
+
+    // No binding created
+    const binding = await db.query.userBindings.findFirst({
+      where: eq(userBindings.externalId, "dc-cross-provider"),
+    });
+    expect(binding).toBeUndefined();
+  });
+
+  it("rejects when link transaction is already consumed (double-consume)", async () => {
+    const userId = newTestUserId();
+    const providerAccountId = "gh-double-consume";
+    await seedUser(db, { id: userId });
+
+    // Seed a valid transaction
+    const txId = await seedLinkTransaction(db, {
+      userId,
+      provider: "github",
+    });
+
+    // First consume — should succeed
+    mockGetStore.mockReturnValue({ txId, userId });
+    const first = await callSignInWithUser({
+      account: makeOAuthAccount("github", providerAccountId),
+      profile: makeOAuthProfile("first-link"),
+    });
+    expect(first.result).toBe(true);
+
+    // Second consume with same txId — must reject
+    // Need a different externalId so it's not found via binding lookup
+    mockGetStore.mockReturnValue({ txId, userId });
+    const second = await callSignInWithUser({
+      account: makeOAuthAccount("github", "gh-double-consume-2"),
+    });
+    expect(second.result).toBe("/profile?error=link_failed");
   });
 });

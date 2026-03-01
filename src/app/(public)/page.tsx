@@ -4,11 +4,9 @@
 /**
  * Module: `@app/(public)/page`
  * Purpose: Homepage with hero section and feature showcase. Redirects signed-in users to /chat.
- * Scope: Server component that checks session and either redirects or renders landing page. Does not handle authentication logic.
- *        AuthRedirect client component handles post-sign-in redirect when session changes client-side.
+ * Scope: Server component that checks session and redirects or renders landing page. Does not handle authentication logic — proxy.ts handles primary auth routing; server-side check here is defense-in-depth.
  * Invariants: Responsive design; uses Hero layout component.
  * Side-effects: IO (session check, redirect)
- * Notes: Two redirect paths: (1) server-side on page load, (2) client-side after SIWE sign-in completes.
  * Links: src/components/kit/sections/Hero.tsx, src/features/home/components/*
  * @public
  */

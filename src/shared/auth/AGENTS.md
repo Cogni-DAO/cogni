@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-24
+- **Last reviewed:** 2026-02-28
 - **Status:** stable
 
 ## Purpose
 
-Shared authentication types used across app layer and adapters. Provides TypeScript types for NextAuth session data including wallet address extensions. Pure auth types; no DB, no React, no Next APIs.
+Shared authentication types and primitives used across app layer and adapters. Provides TypeScript types for NextAuth session data, and the AsyncLocalStorage primitive for link-intent propagation with discriminated union (pending vs failed intents). Pure types + AsyncLocalStorage; no DB, no React, no Next APIs.
 
 ## Pointers
 
@@ -41,7 +41,11 @@ Shared authentication types used across app layer and adapters. Provides TypeScr
 
 - **Exports:**
   - `SessionUser` - User identity type with id (DB UUID) and walletAddress (`string | null` — null for OAuth-only users)
-  - `LinkIntent` - Link intent type for account linking via AsyncLocalStorage
+  - `LinkIntent` - Discriminated union: `PendingLinkIntent` (txId + userId) or `FailedLinkIntent` (reason)
+  - `PendingLinkIntent` - Raw decoded intent from JWT cookie, needs DB verification
+  - `FailedLinkIntent` - Link flow initiated but verification failed, must reject
+  - `isPendingIntent()` - Type guard for valid pending intent
+  - `isFailedIntent()` - Type guard for failed intent (fail-closed rejection)
   - `linkIntentStore` - AsyncLocalStorage instance for request-scoped link intent propagation
   - Re-exports all from `./session.ts`
 - **Routes (if any):** none
@@ -57,7 +61,7 @@ Shared authentication types used across app layer and adapters. Provides TypeScr
 
 ## Responsibilities
 
-- This directory **does**: Define shared TypeScript types for NextAuth session data, and provide the AsyncLocalStorage primitive for link-intent propagation
+- This directory **does**: Define shared TypeScript types for NextAuth session data, provide discriminated union types for link intent states, and provide the AsyncLocalStorage primitive for link-intent propagation
 - This directory **does not**: Implement runtime authentication logic, handle session management, perform database I/O, or interact with React/Next.js APIs
 
 ## Usage

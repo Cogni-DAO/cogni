@@ -3,29 +3,37 @@
 
 /**
  * Module: `@app/(public)/AuthRedirect`
- * Purpose: Client-side redirect to /chat when session becomes authenticated (e.g., after SIWE sign-in).
- * Scope: Watches NextAuth session status and navigates on change. Renders nothing. Does not handle sign-out or session management.
- * Invariants: Only redirects on "authenticated" status; no render output.
- * Side-effects: IO (Next.js navigation)
- * Links: src/app/(public)/page.tsx
+ * Purpose: Client-side auth transition gate for SIWE sign-in on public pages.
+ * Scope: Watches NextAuth session status; does not enforce auth policy or access control.
+ *   When authenticated, renders a full-screen overlay and hard-navigates to /chat
+ *   so middleware/RSC run on the new request. Server remains the routing authority.
+ * Invariants: No-op when session is loading or unauthenticated; overlay prevents flash.
+ * Side-effects: IO (hard navigation via window.location.replace)
+ * Links: src/proxy.ts (server-side authority), src/app/(public)/page.tsx
  * @public
  */
 
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-export function AuthRedirect(): null {
+export function AuthRedirect(): React.JSX.Element | null {
   const { status } = useSession();
-  const router = useRouter();
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/chat");
+      setRedirecting(true);
+      window.location.replace("/chat");
     }
-  }, [status, router]);
+  }, [status]);
 
-  return null;
+  if (!redirecting) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
+      <p className="text-muted-foreground text-sm">Redirecting…</p>
+    </div>
+  );
 }

@@ -2,24 +2,24 @@
 id: task.0111
 type: task
 title: "Auth UX: /sign-in page, middleware guards, account linking buttons, profile polish"
-status: needs_implement
+status: done
 priority: 0
 rank: 11
 estimate: 3
-summary: Custom /sign-in page with WalletConnect + OAuth buttons, Next.js middleware for auth routing, "Link Provider" buttons on profile page, SVG provider icons, kit component polish.
-outcome: Users sign in via /sign-in (not NextAuth defaults); middleware redirects authed users off /sign-in and unauthed off (app) routes; profile shows linked accounts with link buttons for unlinked providers.
+summary: SignInDialog modal (wallet + OAuth), server-side proxy auth routing, DB-backed fail-closed account linking, shared ProviderIcons, profile page wiring.
+outcome: Users sign in via SignInDialog modal; proxy.ts redirects authed users from / to /chat and unauthed from app routes to /; profile shows linked accounts with link buttons; link failures are fail-closed via linkTransactions table.
 spec_refs: authentication-spec, decentralized-user-identity
 assignees: unassigned
 credit:
 project: proj.decentralized-identity
-branch:
-pr:
+branch: feat/oauth-signin
+pr: https://github.com/Cogni-DAO/node-template/pull/496
 reviewer:
-revision: 0
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-02-26
-updated: 2026-02-26
+updated: 2026-02-28
 labels: [identity, auth, frontend]
 external_refs:
 ---
@@ -128,7 +128,7 @@ pnpm check:docs       # docs metadata valid
 
 ## PR / Links
 
--
+- Handoff: [handoff](../handoffs/task.0111.handoff.md)
 
 ## Attribution
 

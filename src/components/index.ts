@@ -26,11 +26,19 @@ export {
   section,
 } from "@/styles/ui";
 export { Reveal } from "./kit/animation/Reveal";
+export { SignInDialog } from "./kit/auth/SignInDialog";
 export { WalletConnectButton } from "./kit/auth/WalletConnectButton";
 export * from "./kit/chat";
 export { Avatar, AvatarFallback, AvatarImage } from "./kit/data-display/Avatar";
 export { Badge } from "./kit/data-display/Badge";
 export { GithubButton } from "./kit/data-display/GithubButton";
+export type { ProviderIconProps } from "./kit/data-display/ProviderIcons";
+export {
+  DiscordIcon,
+  EthereumIcon,
+  GitHubIcon,
+  GoogleIcon,
+} from "./kit/data-display/ProviderIcons";
 export { TerminalFrame } from "./kit/data-display/TerminalFrame";
 export { Alert, AlertDescription, AlertTitle } from "./kit/feedback/Alert";
 export {
@@ -58,6 +66,7 @@ export {
 } from "./kit/layout/Card";
 export { Container } from "./kit/layout/Container";
 export { PageContainer } from "./kit/layout/PageContainer";
+export { PageSkeleton } from "./kit/layout/PageSkeleton";
 export { SectionCard } from "./kit/layout/SectionCard";
 export { MobileNav } from "./kit/navigation/MobileNav";
 export { NavigationLink } from "./kit/navigation/NavigationLink";
@@ -71,6 +80,18 @@ export {
 } from "./kit/typography/CodeHero";
 export { HeroActionWords } from "./kit/typography/HeroActionWords";
 export { Prompt } from "./kit/typography/Prompt";
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "./vendor/shadcn/dialog";
 export {
   Select,
   SelectContent,

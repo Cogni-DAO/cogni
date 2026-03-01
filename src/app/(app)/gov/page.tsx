@@ -12,9 +12,16 @@
  */
 
 import type { ReactElement } from "react";
+import { Suspense } from "react";
+
+import { PageSkeleton } from "@/components";
 
 import { GovernanceView } from "./view";
 
 export default function GovernancePage(): ReactElement {
-  return <GovernanceView />;
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <GovernanceView />
+    </Suspense>
+  );
 }

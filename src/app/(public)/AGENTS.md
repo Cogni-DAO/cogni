@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-25
+- **Last reviewed:** 2026-02-28
 - **Status:** draft
 
 ## Purpose
 
-Public (unauthenticated) pages wrapped in `AppHeader` + `AppFooter` shell. Handles server-side and client-side redirects for signed-in users.
+Public (unauthenticated) pages wrapped in `AppHeader` + `AppFooter` shell. Server-side session check redirects signed-in users to `/chat`. Primary auth routing enforced at proxy level (`src/proxy.ts`).
 
 ## Pointers
 
@@ -33,11 +33,12 @@ Public (unauthenticated) pages wrapped in `AppHeader` + `AppFooter` shell. Handl
 - **Routes:** `/` (homepage — redirects signed-in users to `/chat`)
 - **Env/Config keys:** none
 - **Files considered API:** `layout.tsx`, `page.tsx`
+- **Deleted:** `AuthRedirect.tsx` — replaced by server-side proxy routing
 
 ## Responsibilities
 
-- This directory **does**: Render the public page shell (header + footer), redirect authenticated users to `/chat` via server-side check and client-side `AuthRedirect` fallback.
-- This directory **does not**: Handle authentication, render protected content, manage session state.
+- This directory **does**: Render the public page shell (header + footer), redirect authenticated users to `/chat` via server-side session check (defense-in-depth; proxy.ts is the primary authority).
+- This directory **does not**: Handle authentication, render protected content, manage session state, perform client-side redirects.
 
 ## Usage
 
@@ -48,14 +49,14 @@ pnpm build   # build for production
 
 ## Standards
 
-- Server-side redirect (`getServerSessionUser` + `redirect()`) catches initial page loads.
-- Client-side `AuthRedirect` catches post-sign-in session changes (e.g., SIWE completion).
+- Server-side redirect (`getServerSessionUser` + `redirect()`) is defense-in-depth; `proxy.ts` handles primary auth routing.
+- No client-side auth redirects — proxy.ts is the single authority for auth routing.
 - No auth guard — pages render for unauthenticated visitors.
 
 ## Dependencies
 
 - **Internal:** `@/features/layout` (AppHeader, AppFooter), `@/features/home` (HomeStats, NewHomeHero), `@/lib/auth/server` (getServerSessionUser)
-- **External:** next, next-auth/react, react
+- **External:** next, react
 
 ## Change Protocol
 
@@ -64,4 +65,4 @@ pnpm build   # build for production
 
 ## Notes
 
-- `AuthRedirect` renders nothing (`null`); it exists only to watch `useSession` and redirect on authentication.
+- `AuthRedirect` was deleted in task.0111 — its client-side `useSession()` redirect caused loops with `(app)/layout.tsx`'s guard. Proxy.ts now handles all auth routing server-side.

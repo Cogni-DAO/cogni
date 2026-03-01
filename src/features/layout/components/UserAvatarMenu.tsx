@@ -20,26 +20,11 @@ import { signOut, useSession } from "next-auth/react";
 import { useTheme } from "next-themes";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
+import { useDisconnect } from "wagmi";
 
 import { Avatar, AvatarFallback } from "@/components/kit/data-display/Avatar";
+import { EthereumIcon } from "@/components/kit/data-display/ProviderIcons";
 import { cn } from "@/shared/util";
-
-/** Ethereum diamond icon — simplified from ethereum-eth-logo.svg, uses currentColor */
-function EthIcon({ className }: { className?: string }): ReactElement {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 784 1278"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M392 0L784 651 392 882 0 651z" opacity={0.6} />
-      <path d="M392 472L784 651 392 882 0 651z" opacity={0.8} />
-      <path d="M392 957L784 725 392 1277 0 725z" opacity={0.6} />
-    </svg>
-  );
-}
 
 /** Default avatar color when none is set */
 const DEFAULT_AVATAR_COLOR = "hsl(var(--primary))";
@@ -58,6 +43,7 @@ function truncateWallet(address: string): string {
 
 export function UserAvatarMenu(): ReactElement | null {
   const { data: session } = useSession();
+  const { disconnect } = useDisconnect();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -103,7 +89,7 @@ export function UserAvatarMenu(): ReactElement | null {
           {/* Wallet / identifier row */}
           {displayName && (
             <DropdownMenuPrimitive.Item className={MENU_ITEM_CLASSES} disabled>
-              <EthIcon className="size-4 shrink-0 text-muted-foreground" />
+              <EthereumIcon className="size-4 shrink-0 text-muted-foreground" />
               <span className="truncate">{displayName}</span>
             </DropdownMenuPrimitive.Item>
           )}
@@ -121,7 +107,10 @@ export function UserAvatarMenu(): ReactElement | null {
           {/* Sign out */}
           <DropdownMenuPrimitive.Item
             className={MENU_ITEM_CLASSES}
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => {
+              disconnect();
+              signOut({ callbackUrl: "/" });
+            }}
           >
             <LogOut className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
             <span>Sign Out</span>
