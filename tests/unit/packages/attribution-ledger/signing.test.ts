@@ -3,9 +3,9 @@
 
 /**
  * Module: `@tests/unit/packages/attribution-ledger/signing`
- * Purpose: Unit tests for buildCanonicalMessage and computeApproverSetHash.
- * Scope: Asserts exact byte output, version header, newline format, and deterministic hashing. Does not test verification or viem integration.
- * Invariants: SIGNATURE_SCOPE_BOUND, APPROVERS_PINNED_AT_REVIEW.
+ * Purpose: Unit tests for buildCanonicalMessage (deprecated), buildEIP712TypedData, and computeApproverSetHash.
+ * Scope: Asserts exact byte output, deterministic hashing, and EIP-712 typed data structure. Does not test on-chain verification.
+ * Invariants: SIGNATURE_SCOPE_BOUND, APPROVERS_PINNED_AT_REVIEW, EIP712_DETERMINISTIC.
  * Side-effects: none
  * Links: packages/attribution-ledger/src/signing.ts
  * @internal
@@ -14,7 +14,11 @@
 import { createHash } from "node:crypto";
 import {
   buildCanonicalMessage,
+  buildEIP712TypedData,
   computeApproverSetHash,
+  EIP712_DOMAIN_NAME,
+  EIP712_DOMAIN_VERSION,
+  PAYOUT_STATEMENT_TYPES,
 } from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 
@@ -115,5 +119,77 @@ describe("computeApproverSetHash", () => {
     const a = computeApproverSetHash(["0xaaa"]);
     const b = computeApproverSetHash(["0xbbb"]);
     expect(a).not.toBe(b);
+  });
+});
+
+describe("buildEIP712TypedData", () => {
+  const params = {
+    nodeId: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d",
+    scopeId: "a28a8b1e-1f9d-5cd5-9329-569e4819feda",
+    epochId: "42",
+    allocationSetHash: "abc123def456",
+    poolTotalCredits: "10000",
+    chainId: 8453,
+  };
+
+  it("returns correct domain with name, version, and chainId", () => {
+    const data = buildEIP712TypedData(params);
+    expect(data.domain).toEqual({
+      name: EIP712_DOMAIN_NAME,
+      version: EIP712_DOMAIN_VERSION,
+      chainId: 8453,
+    });
+  });
+
+  it("returns PayoutStatement as primaryType", () => {
+    const data = buildEIP712TypedData(params);
+    expect(data.primaryType).toBe("PayoutStatement");
+  });
+
+  it("includes all SIGNATURE_SCOPE_BOUND fields in message", () => {
+    const data = buildEIP712TypedData(params);
+    expect(data.message).toEqual({
+      nodeId: params.nodeId,
+      scopeId: params.scopeId,
+      epochId: params.epochId,
+      allocationSetHash: params.allocationSetHash,
+      poolTotalCredits: params.poolTotalCredits,
+    });
+  });
+
+  it("exports correct type definitions matching viem expectations", () => {
+    const data = buildEIP712TypedData(params);
+    expect(data.types).toBe(PAYOUT_STATEMENT_TYPES);
+    expect(data.types.PayoutStatement).toHaveLength(5);
+    const fieldNames = data.types.PayoutStatement.map((f) => f.name);
+    expect(fieldNames).toEqual([
+      "nodeId",
+      "scopeId",
+      "epochId",
+      "allocationSetHash",
+      "poolTotalCredits",
+    ]);
+  });
+
+  it("is deterministic — same input produces identical output", () => {
+    const a = buildEIP712TypedData(params);
+    const b = buildEIP712TypedData(params);
+    expect(a).toEqual(b);
+  });
+
+  it("different chainId produces different domain", () => {
+    const a = buildEIP712TypedData({ ...params, chainId: 8453 });
+    const b = buildEIP712TypedData({ ...params, chainId: 11155111 });
+    expect(a.domain.chainId).not.toBe(b.domain.chainId);
+    // message is same — only domain differs
+    expect(a.message).toEqual(b.message);
+  });
+
+  it("different epochId produces different message", () => {
+    const a = buildEIP712TypedData({ ...params, epochId: "42" });
+    const b = buildEIP712TypedData({ ...params, epochId: "43" });
+    expect(a.message.epochId).not.toBe(b.message.epochId);
+    // domain is same — only message differs
+    expect(a.domain).toEqual(b.domain);
   });
 });

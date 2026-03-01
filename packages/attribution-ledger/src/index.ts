@@ -103,8 +103,14 @@ export { computeStatementItems } from "./rules";
 // Signing
 export {
   buildCanonicalMessage,
+  buildEIP712TypedData,
   type CanonicalMessageParams,
   computeApproverSetHash,
+  EIP712_DOMAIN_NAME,
+  EIP712_DOMAIN_VERSION,
+  type EIP712TypedData,
+  type EIP712TypedDataParams,
+  PAYOUT_STATEMENT_TYPES,
 } from "./signing";
 
 // Store port interface + types
