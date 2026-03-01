@@ -31,7 +31,12 @@ export { WalletConnectButton } from "./kit/auth/WalletConnectButton";
 export * from "./kit/chat";
 export { Avatar, AvatarFallback, AvatarImage } from "./kit/data-display/Avatar";
 export { Badge } from "./kit/data-display/Badge";
+export { ExpandableTableRow } from "./kit/data-display/ExpandableTableRow";
 export { GithubButton } from "./kit/data-display/GithubButton";
+export {
+  PieChart,
+  type PieChartDatum,
+} from "./kit/data-display/PieChart";
 export type { ProviderIconProps } from "./kit/data-display/ProviderIcons";
 export {
   DiscordIcon,
