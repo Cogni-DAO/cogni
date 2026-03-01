@@ -2,7 +2,7 @@
 id: task.0119
 type: task
 title: "Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel"
-status: needs_merge
+status: needs_implement
 priority: 1
 rank: 1
 estimate: 4
@@ -15,11 +15,11 @@ project: proj.transparent-credit-payouts
 branch: feat/epoch-signing-ui
 pr: https://github.com/Cogni-DAO/node-template/pull/502
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-01
-updated: 2026-03-02
+updated: 2026-03-01
 labels: [governance, ui, web3, signing]
 external_refs:
 ---
@@ -153,6 +153,28 @@ The app already has a complete wallet stack — no new providers or dependencies
 2. Add owners + bump threshold
 3. Safe Transaction Service handles off-chain signature collection
 4. UI adds "pending signatures" view
+
+## Review Feedback (revision 1)
+
+### Blocking Issues
+
+1. **B1 — Transaction wrapping for subject-override writes** (`drizzle-attribution.adapter.ts:1341-1396`): `upsertSubjectOverride` and `deleteSubjectOverride` acquire `SELECT ... FOR UPDATE` lock but the subsequent write is not in the same `db.transaction()`. Lock is released before the INSERT/DELETE, so the PATCH↔finalize race is not actually prevented. **Fix:** Wrap lock + write in `this.db.transaction()`.
+
+2. **B2 — Non-atomic batch upsert** (`subject-overrides/route.ts:245-257`): Overrides upserted one-by-one in a loop without transaction wrapping. Partial failure leaves inconsistent state. **Fix:** Wrap in a transaction.
+
+3. **B3 — Negative `overrideUnits` accepted** (`attribution.subject-overrides.v1.contract.ts:23`): `zBigint` regex `/^-?\d+$/` allows negative values. `expandClaimantUnits` silently excludes units <= 0. **Fix:** Change to `/^\d+$/`.
+
+4. **B4 — Missing EIP-712 round-trip test** (`signing.test.ts`): No test signs typed data with a private key and verifies with `verifyTypedData`. The finalize test mocks verification as always-true. Use `viem/accounts` `privateKeyToAccount` + `signTypedData` for a pure-crypto round-trip test.
+
+5. **B5 — Zero adapter integration tests for subject-override methods** (`drizzle-attribution.adapter.int.test.ts`): `upsertSubjectOverride`, `deleteSubjectOverride`, `getSubjectOverridesForEpoch` have no adapter-level tests. Status-gate, upsert conflict, scope isolation, and JSONB round-trip are untested.
+
+### Non-blocking (address if time permits)
+
+- `useSubjectOverrides.ts:68-73`: `overridesByRef` Map created outside `useMemo` — cascading re-renders.
+- `view.tsx:252-260`: Unhandled promise rejection in `handleSave`/`handleRemove`.
+- `view.tsx:276`: `colSpan={6}` should be `colSpan={7}` to match parent table.
+- `sign-data/route.ts:70-104`: Logic duplicated from `finalizeEpoch` — consider shared helper.
+- `ExpandableTableRow.tsx:51-57`: Missing keyboard accessibility (`tabIndex`, `role`, `onKeyDown`, `aria-expanded`).
 
 ## Review Checklist
 
