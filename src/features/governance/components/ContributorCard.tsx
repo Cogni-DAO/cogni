@@ -47,7 +47,10 @@ export function ContributorCard({
             <div>
               <span className="text-muted-foreground text-sm">#{rank}</span>
               <div className="font-medium text-sm">
-                {contributor.creditShare}% share
+                {contributor.displayName ?? contributor.claimantLabel}
+              </div>
+              <div className="text-muted-foreground text-xs">
+                {contributor.claimantLabel} · {contributor.creditShare}% share
               </div>
             </div>
           </div>

@@ -128,7 +128,7 @@ export function CurrentEpochView(): ReactElement {
         <h2 className="mb-4 font-semibold text-lg">Contributions & Scoring</h2>
         <div className="space-y-3">
           {sorted.map((c, i) => (
-            <ContributorCard key={c.userId} contributor={c} rank={i + 1} />
+            <ContributorCard key={c.claimantKey} contributor={c} rank={i + 1} />
           ))}
         </div>
       </div>

@@ -160,7 +160,7 @@ export function EpochCard({
 
               return (
                 <div
-                  key={c.userId}
+                  key={c.claimantKey}
                   className="flex items-center justify-between rounded-lg bg-secondary/30 p-3"
                 >
                   <div className="flex items-center gap-3">
@@ -174,9 +174,15 @@ export function EpochCard({
                     </div>
                     <div>
                       <div className="font-medium text-sm">
-                        #{i + 1} · {c.creditShare}% share
+                        #{i + 1} · {c.displayName ?? c.claimantLabel}
+                        {c.claimantKind === "identity" && (
+                          <span className="ml-2 text-warning text-xs uppercase tracking-wide">
+                            pending
+                          </span>
+                        )}
                       </div>
                       <div className="text-muted-foreground text-xs">
+                        {c.claimantLabel} · {c.creditShare}% share ·{" "}
                         {c.activityCount} contributions · {githubCount} GitHub ·{" "}
                         {discordCount} Discord
                       </div>

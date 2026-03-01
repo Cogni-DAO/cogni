@@ -15,8 +15,8 @@ import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import pLimit from "p-limit";
 
 import type {
+  EpochClaimantsDto,
   EpochDto,
-  StatementDto,
 } from "@/features/governance/lib/compose-epoch";
 import { composeHoldings } from "@/features/governance/lib/compose-holdings";
 import type { HoldingsData } from "@/features/governance/types";
@@ -43,17 +43,17 @@ async function fetchHoldings(): Promise<HoldingsData> {
   );
   const finalized = epochs.filter((e) => e.status === "finalized");
 
-  const statements = await Promise.all(
+  const claimants = await Promise.all(
     finalized.map((e) =>
       limit(() =>
-        fetchJson<{ statement: StatementDto | null }>(
-          `/api/v1/attribution/epochs/${e.id}/statement`
-        ).then((r) => r.statement)
+        fetchJson<EpochClaimantsDto>(
+          `/api/v1/attribution/epochs/${e.id}/claimants`
+        )
       )
     )
   );
 
-  return composeHoldings(finalized, statements);
+  return composeHoldings(finalized, claimants);
 }
 
 export function useHoldings(): UseQueryResult<HoldingsData, Error> {

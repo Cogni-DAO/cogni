@@ -31,6 +31,36 @@ function getDisplayName(
   return platformLogin ?? userId.slice(0, 8);
 }
 
+function describeClaimant(params: {
+  claimant: EpochClaimantDto;
+  receipts: readonly IngestionReceipt[];
+}): {
+  claimantKind: "user" | "identity";
+  displayName: string | null;
+  claimantLabel: string;
+} {
+  if (params.claimant.kind === "user") {
+    const receiptLogin =
+      params.receipts.find((receipt) => receipt.platformLogin)?.platformLogin ??
+      null;
+    return {
+      claimantKind: "user",
+      displayName: getDisplayName(receiptLogin, params.claimant.userId),
+      claimantLabel: params.claimant.userId.slice(0, 8),
+    };
+  }
+
+  const fallback =
+    params.claimant.providerLogin ??
+    `${params.claimant.provider}:${params.claimant.externalId.slice(0, 8)}`;
+
+  return {
+    claimantKind: "identity",
+    displayName: fallback,
+    claimantLabel: `Unclaimed ${params.claimant.provider} identity`,
+  };
+}
+
 /** Minimal epoch shape expected from the list-epochs API. */
 export interface EpochDto {
   readonly id: string;
@@ -59,18 +89,34 @@ export interface ApiIngestionReceipt {
   readonly selection: { readonly userId: string | null } | null;
 }
 
-/** Minimal statement line item shape from the epoch-statement API. */
-export interface StatementLineItemDto {
-  readonly user_id: string;
-  readonly total_units: string;
+/** Minimal claimant shape expected from the epoch-claimants API. */
+export type EpochClaimantDto =
+  | {
+      readonly kind: "user";
+      readonly userId: string;
+    }
+  | {
+      readonly kind: "identity";
+      readonly provider: string;
+      readonly externalId: string;
+      readonly providerLogin: string | null;
+    };
+
+/** Minimal claimant line item shape from the epoch-claimants API. */
+export interface EpochClaimantLineItemDto {
+  readonly claimantKey: string;
+  readonly claimant: EpochClaimantDto;
+  readonly totalUnits: string;
   readonly share: string;
-  readonly amount_credits: string;
+  readonly amountCredits: string;
+  readonly receiptIds: readonly string[];
 }
 
-/** Minimal statement shape from the epoch-statement API. */
-export interface StatementDto {
+/** Minimal claimant-attribution response shape from the epoch-claimants API. */
+export interface EpochClaimantsDto {
+  readonly epochId: string;
   readonly poolTotalCredits: string;
-  readonly items: readonly StatementLineItemDto[];
+  readonly items: readonly EpochClaimantLineItemDto[];
 }
 
 /**
@@ -80,11 +126,13 @@ export interface StatementDto {
 function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
   receiptsByUser: Map<string, IngestionReceipt[]>;
   loginByUser: Map<string, string>;
+  receiptsById: Map<string, IngestionReceipt>;
   unresolvedCount: number;
   unresolvedActivities: UnresolvedActivity[];
 } {
   const receiptsByUser = new Map<string, IngestionReceipt[]>();
   const loginByUser = new Map<string, string>();
+  const receiptsById = new Map<string, IngestionReceipt>();
   // Key: "source::platformLogin" → count
   const unresolvedMap = new Map<
     string,
@@ -93,6 +141,16 @@ function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
   let unresolvedCount = 0;
 
   for (const r of receipts) {
+    const mapped: IngestionReceipt = {
+      receiptId: r.receiptId,
+      source: r.source,
+      eventType: r.eventType,
+      platformLogin: r.platformLogin,
+      artifactUrl: r.artifactUrl,
+      eventTime: r.eventTime,
+    };
+    receiptsById.set(r.receiptId, mapped);
+
     const resolvedUser = r.selection?.userId;
     if (!resolvedUser) {
       unresolvedCount++;
@@ -109,14 +167,6 @@ function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
       }
       continue;
     }
-    const mapped: IngestionReceipt = {
-      receiptId: r.receiptId,
-      source: r.source,
-      eventType: r.eventType,
-      platformLogin: r.platformLogin,
-      artifactUrl: r.artifactUrl,
-      eventTime: r.eventTime,
-    };
     const list = receiptsByUser.get(resolvedUser);
     if (list) {
       list.push(mapped);
@@ -136,7 +186,13 @@ function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
     }))
     .sort((a, b) => b.eventCount - a.eventCount);
 
-  return { receiptsByUser, loginByUser, unresolvedCount, unresolvedActivities };
+  return {
+    receiptsByUser,
+    loginByUser,
+    receiptsById,
+    unresolvedCount,
+    unresolvedActivities,
+  };
 }
 
 /**
@@ -167,8 +223,10 @@ export function composeEpochView(
         : 0;
 
     return {
-      userId: alloc.userId,
+      claimantKey: `user:${alloc.userId}`,
+      claimantKind: "user",
       displayName: getDisplayName(login, alloc.userId),
+      claimantLabel: alloc.userId.slice(0, 8),
       avatar: DEFAULT_AVATAR,
       color: DEFAULT_COLOR,
       proposedUnits: alloc.proposedUnits,
@@ -197,33 +255,38 @@ export function composeEpochView(
 }
 
 /**
- * Compose an EpochView for a finalized epoch from its frozen statement.
- * Uses statement.items as source of truth (immutable, deterministic).
+ * Compose an EpochView for a finalized epoch from claimant-based finalized attribution.
  */
-export function composeEpochViewFromStatement(
+export function composeEpochViewFromClaimants(
   epoch: EpochDto,
-  statement: StatementDto,
+  claimants: Pick<EpochClaimantsDto, "poolTotalCredits" | "items">,
   receipts: readonly ApiIngestionReceipt[]
 ): EpochView {
-  const { receiptsByUser, loginByUser, unresolvedCount, unresolvedActivities } =
+  const { receiptsById, unresolvedCount, unresolvedActivities } =
     partitionReceipts(receipts);
 
-  const contributors: EpochContributor[] = statement.items.map((item) => {
-    const userReceipts = receiptsByUser.get(item.user_id) ?? [];
-    const login = loginByUser.get(item.user_id) ?? null;
-    // share from statement is a decimal string (e.g. "0.35"); convert to percentage
+  const contributors: EpochContributor[] = claimants.items.map((item) => {
+    const claimantReceipts = item.receiptIds
+      .map((receiptId) => receiptsById.get(receiptId) ?? null)
+      .filter((receipt): receipt is IngestionReceipt => receipt !== null);
+    const descriptor = describeClaimant({
+      claimant: item.claimant,
+      receipts: claimantReceipts,
+    });
     const share = Math.round(Number(item.share) * 1000) / 10;
 
     return {
-      userId: item.user_id,
-      displayName: getDisplayName(login, item.user_id),
+      claimantKey: item.claimantKey,
+      claimantKind: descriptor.claimantKind,
+      displayName: descriptor.displayName,
+      claimantLabel: descriptor.claimantLabel,
       avatar: DEFAULT_AVATAR,
       color: DEFAULT_COLOR,
-      proposedUnits: item.total_units,
-      finalUnits: item.total_units,
+      proposedUnits: item.totalUnits,
+      finalUnits: item.totalUnits,
       creditShare: share,
-      activityCount: userReceipts.length,
-      receipts: userReceipts,
+      activityCount: claimantReceipts.length,
+      receipts: claimantReceipts,
     };
   });
 
@@ -237,7 +300,7 @@ export function composeEpochViewFromStatement(
     status: epoch.status,
     periodStart: epoch.periodStart,
     periodEnd: epoch.periodEnd,
-    poolTotalCredits: statement.poolTotalCredits,
+    poolTotalCredits: claimants.poolTotalCredits,
     contributors,
     unresolvedCount,
     unresolvedActivities,

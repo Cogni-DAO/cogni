@@ -40,9 +40,11 @@ export function HoldingCard({ holding, rank }: HoldingCardProps): ReactElement {
               {holding.avatar}
             </div>
             <div>
-              <div className="font-medium text-sm">#{rank}</div>
+              <div className="font-medium text-sm">
+                #{rank} · {holding.displayName ?? holding.claimantLabel}
+              </div>
               <div className="text-muted-foreground text-xs">
-                {holding.epochsContributed} epochs
+                {holding.claimantLabel} · {holding.epochsContributed} epochs
               </div>
             </div>
           </div>

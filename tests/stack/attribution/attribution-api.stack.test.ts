@@ -19,6 +19,7 @@ import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import { beforeAll, describe, expect, it } from "vitest";
 import { EpochAllocationsOutputSchema } from "@/contracts/attribution.epoch-allocations.v1.contract";
+import { EpochClaimantsOutputSchema } from "@/contracts/attribution.epoch-claimants.v1.contract";
 import { EpochStatementOutputSchema } from "@/contracts/attribution.epoch-statement.v1.contract";
 import { ListEpochsOutputSchema } from "@/contracts/attribution.list-epochs.v1.contract";
 import { users } from "@/shared/db/schema";
@@ -217,6 +218,49 @@ describe("Public ledger API routes", () => {
     it("returns 400 for invalid epoch ID", async () => {
       const response = await fetchStackTest(
         baseUrl("/api/v1/public/attribution/epochs/not-a-number/statement")
+      );
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe("GET /api/v1/public/attribution/epochs/{id}/claimants", () => {
+    it("returns claimant-based attribution for a finalized epoch", async () => {
+      const epochId = String(seeded.epoch.id);
+      const response = await fetchStackTest(
+        baseUrl(`/api/v1/public/attribution/epochs/${epochId}/claimants`)
+      );
+      expect(response.status).toBe(200);
+
+      const body = await response.json();
+      const parsed = EpochClaimantsOutputSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new Error(
+          `Response does not match EpochClaimantsOutputSchema: ${parsed.error.message}`
+        );
+      }
+
+      expect(parsed.data.epochId).toBe(epochId);
+      expect(parsed.data.poolTotalCredits).toBe("10000");
+      expect(parsed.data.items).toHaveLength(2);
+
+      const item = parsed.data.items[0];
+      expect(item).toHaveProperty("claimantKey");
+      expect(item).toHaveProperty("claimant");
+      expect(item).toHaveProperty("totalUnits");
+      expect(item).toHaveProperty("amountCredits");
+      expect(item).toHaveProperty("receiptIds");
+    });
+
+    it("returns 404 for non-existent epoch", async () => {
+      const response = await fetchStackTest(
+        baseUrl("/api/v1/public/attribution/epochs/999999/claimants")
+      );
+      expect(response.status).toBe(404);
+    });
+
+    it("returns 400 for invalid epoch ID", async () => {
+      const response = await fetchStackTest(
+        baseUrl("/api/v1/public/attribution/epochs/not-a-number/claimants")
       );
       expect(response.status).toBe(400);
     });

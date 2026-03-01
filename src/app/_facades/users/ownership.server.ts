@@ -19,16 +19,14 @@ import {
   type AttributionClaimant,
   type AttributionEpoch,
   type AttributionStore,
-  buildDefaultReceiptClaimantSharesPayload,
-  CLAIMANT_SHARES_EVALUATION_REF,
   type ClaimantSharesSubject,
   expandClaimantUnits,
-  parseClaimantSharesPayload,
 } from "@cogni/attribution-ledger";
 import { withTenantScope } from "@cogni/db-client";
 import { type UserId, userActor } from "@cogni/ids";
 import { eq } from "drizzle-orm";
 
+import { loadClaimantShareSubjectsForEpoch } from "@/app/_facades/attribution/claimants.server";
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import type { OwnershipSummaryOutput } from "@/contracts/users.ownership.v1.contract";
 import type { SessionUser } from "@/shared/auth";
@@ -80,20 +78,7 @@ async function loadClaimSubjectsForEpoch(
   store: AttributionStore,
   epoch: AttributionEpoch
 ): Promise<readonly ClaimantSharesSubject[]> {
-  const evaluationStatus = epoch.status === "finalized" ? "locked" : "draft";
-  const evaluation = await store.getEvaluation(
-    epoch.id,
-    CLAIMANT_SHARES_EVALUATION_REF,
-    evaluationStatus
-  );
-  const parsed = parseClaimantSharesPayload(evaluation?.payloadJson ?? null);
-  if (parsed) return parsed.subjects;
-
-  const receipts = await store.getSelectedReceiptsForAttribution(epoch.id);
-  return buildDefaultReceiptClaimantSharesPayload({
-    receipts,
-    weightConfig: epoch.weightConfig,
-  }).subjects;
+  return loadClaimantShareSubjectsForEpoch(store, epoch);
 }
 
 export async function readOwnershipSummary(

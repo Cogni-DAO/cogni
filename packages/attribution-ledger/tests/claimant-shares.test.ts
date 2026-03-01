@@ -15,8 +15,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
+  computeClaimantCreditLineItems,
   expandClaimantUnits,
   parseClaimantSharesPayload,
 } from "../src/claimant-shares";
@@ -187,5 +189,133 @@ describe("expandClaimantUnits", () => {
     expect(expanded[0]?.claimant).toEqual({ kind: "user", userId: "user-a" });
     expect(expanded[1]?.units).toBe(2n);
     expect(expanded.reduce((sum, item) => sum + item.units, 0n)).toBe(5n);
+  });
+});
+
+describe("computeClaimantCreditLineItems", () => {
+  it("aggregates credits by claimant and preserves receipt ids", () => {
+    const items = computeClaimantCreditLineItems(
+      [
+        {
+          claimant: { kind: "user", userId: "user-1" },
+          valuationUnits: 3n,
+          receiptIds: ["r2", "r1"],
+        },
+        {
+          claimant: { kind: "user", userId: "user-1" },
+          valuationUnits: 2n,
+          receiptIds: ["r3"],
+        },
+        {
+          claimant: {
+            kind: "identity",
+            provider: "github",
+            externalId: "42",
+            providerLogin: "alice",
+          },
+          valuationUnits: 5n,
+          receiptIds: ["r4"],
+        },
+      ],
+      1000n
+    );
+
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual({
+      claimant: {
+        kind: "identity",
+        provider: "github",
+        externalId: "42",
+        providerLogin: "alice",
+      },
+      totalUnits: 5n,
+      share: "0.500000",
+      amountCredits: 500n,
+      receiptIds: ["r4"],
+    });
+    expect(items[1]).toEqual({
+      claimant: { kind: "user", userId: "user-1" },
+      totalUnits: 5n,
+      share: "0.500000",
+      amountCredits: 500n,
+      receiptIds: ["r1", "r2", "r3"],
+    });
+  });
+
+  it("throws on negative valuation units", () => {
+    expect(() =>
+      computeClaimantCreditLineItems(
+        [
+          {
+            claimant: { kind: "user", userId: "user-1" },
+            valuationUnits: -1n,
+          },
+        ],
+        100n
+      )
+    ).toThrow(RangeError);
+  });
+});
+
+describe("buildClaimantAllocations", () => {
+  it("groups expanded claimant units and applies resolved-user overrides", () => {
+    const allocations = buildClaimantAllocations(
+      [
+        {
+          subjectRef: "receipt-1",
+          subjectKind: "receipt",
+          units: "10",
+          source: "github",
+          eventType: "pr_merged",
+          receiptIds: ["r1"],
+          claimantShares: [
+            {
+              claimant: { kind: "user", userId: "user-1" },
+              sharePpm: 1_000_000,
+            },
+          ],
+          metadata: null,
+        },
+        {
+          subjectRef: "receipt-2",
+          subjectKind: "receipt",
+          units: "6",
+          source: "github",
+          eventType: "pr_merged",
+          receiptIds: ["r2"],
+          claimantShares: [
+            {
+              claimant: {
+                kind: "identity",
+                provider: "github",
+                externalId: "42",
+                providerLogin: "alice",
+              },
+              sharePpm: 1_000_000,
+            },
+          ],
+          metadata: null,
+        },
+      ],
+      new Map([["user-1", 25n]])
+    );
+
+    expect(allocations).toEqual([
+      {
+        claimant: {
+          kind: "identity",
+          provider: "github",
+          externalId: "42",
+          providerLogin: "alice",
+        },
+        valuationUnits: 6n,
+        receiptIds: ["r2"],
+      },
+      {
+        claimant: { kind: "user", userId: "user-1" },
+        valuationUnits: 25n,
+        receiptIds: ["r1"],
+      },
+    ]);
   });
 });

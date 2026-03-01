@@ -21,7 +21,10 @@
  */
 
 import type { SelectedReceiptForAllocation } from "./allocation";
-import type { SelectedReceiptForAttribution } from "./claimant-shares";
+import type {
+  AttributionClaimant,
+  SelectedReceiptForAttribution,
+} from "./claimant-shares";
 import type { EpochStatus } from "./model";
 
 // ---------------------------------------------------------------------------
@@ -117,14 +120,19 @@ export interface AttributionStatement {
   readonly epochId: bigint;
   readonly allocationSetHash: string;
   readonly poolTotalCredits: bigint;
-  readonly statementItems: Array<{
-    user_id: string;
-    total_units: string;
-    share: string;
-    amount_credits: string;
-  }>;
+  readonly statementItems: AttributionStatementItem[];
   readonly supersedesStatementId: string | null;
   readonly createdAt: Date;
+}
+
+export interface AttributionStatementItem {
+  readonly user_id: string;
+  readonly total_units: string;
+  readonly share: string;
+  readonly amount_credits: string;
+  readonly claimant_key?: string;
+  readonly claimant?: AttributionClaimant;
+  readonly receipt_ids?: readonly string[];
 }
 
 export interface AttributionStatementSignature {
@@ -212,12 +220,7 @@ export interface InsertStatementParams {
   readonly epochId: bigint;
   readonly allocationSetHash: string;
   readonly poolTotalCredits: bigint;
-  readonly statementItems: Array<{
-    user_id: string;
-    total_units: string;
-    share: string;
-    amount_credits: string;
-  }>;
+  readonly statementItems: AttributionStatementItem[];
   readonly supersedesStatementId?: string | null;
 }
 

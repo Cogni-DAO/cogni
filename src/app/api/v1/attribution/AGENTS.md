@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-23
+- **Last reviewed:** 2026-03-01
 - **Status:** draft
 
 ## Purpose
@@ -33,13 +33,14 @@ Authenticated HTTP endpoints for attribution operations. SIWE-protected reads fo
 - **Routes:**
   - `GET /api/v1/attribution/epochs` — list all epochs including open (SIWE auth)
   - `GET /api/v1/attribution/epochs/[id]/activity` — ingestion receipts with selection join (SIWE auth, PII)
+  - `GET /api/v1/attribution/epochs/[id]/claimants` — claimant-aware finalized attribution (SIWE auth)
   - `PATCH /api/v1/attribution/epochs/[id]/allocations` — adjust allocation final_units (SIWE + approver)
   - `POST /api/v1/attribution/epochs/[id]/pool-components` — record pool component (SIWE + approver)
   - `POST /api/v1/attribution/epochs/[id]/review` — close ingestion, transition open → review (SIWE + approver)
   - `POST /api/v1/attribution/epochs/[id]/finalize` — sign + finalize epoch, returns 202 + workflowId (SIWE + approver, WRITES_VIA_TEMPORAL)
 - **CLI:** none
 - **Env/Config keys:** none
-- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/finalize/route.ts`
+- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/finalize/route.ts`
 
 ## Ports
 

@@ -17,10 +17,10 @@ import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import pLimit from "p-limit";
 import type {
   ApiIngestionReceipt,
+  EpochClaimantsDto,
   EpochDto,
-  StatementDto,
 } from "@/features/governance/lib/compose-epoch";
-import { composeEpochViewFromStatement } from "@/features/governance/lib/compose-epoch";
+import { composeEpochViewFromClaimants } from "@/features/governance/lib/compose-epoch";
 import type { EpochHistoryData, EpochView } from "@/features/governance/types";
 
 const limit = pLimit(3);
@@ -49,23 +49,17 @@ async function fetchHistory(): Promise<EpochHistoryData> {
     finalized.map((epoch) =>
       limit(async () => {
         const [statementRes, activityRes] = await Promise.all([
-          fetchJson<{ statement: StatementDto | null }>(
-            `/api/v1/attribution/epochs/${epoch.id}/statement`
+          fetchJson<EpochClaimantsDto>(
+            `/api/v1/attribution/epochs/${epoch.id}/claimants`
           ),
           fetchJson<{ events: ApiIngestionReceipt[] }>(
             `/api/v1/attribution/epochs/${epoch.id}/activity?limit=200`
           ),
         ]);
 
-        if (!statementRes.statement) {
-          throw new Error(
-            `Epoch ${epoch.id} is finalized but has no statement — data integrity issue`
-          );
-        }
-
-        return composeEpochViewFromStatement(
+        return composeEpochViewFromClaimants(
           epoch,
-          statementRes.statement,
+          statementRes,
           activityRes.events
         );
       })

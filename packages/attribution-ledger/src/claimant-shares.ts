@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/attribution-ledger/claimant-shares`
- * Purpose: Defines the canonical claimant-share attribution shape and deterministic unit expansion helpers.
- * Scope: Defines claimant-share payloads, a default receipt-backed builder, and deterministic unit splitting. Does not perform I/O or plugin-specific enrichment.
+ * Purpose: Defines the canonical claimant-share attribution shape and deterministic expansion/computation helpers.
+ * Scope: Defines claimant-share payloads, a default receipt-backed builder, deterministic unit splitting, and claimant-aware proportional credit computation. Does not perform I/O or plugin-specific enrichment.
  * Invariants:
  * - CLAIMANTS_ARE_PLURAL: every attribution subject carries `claimantShares[]`, even when only one claimant is present.
  * - CLAIMANTS_CAN_BE_UNRESOLVED: identity claimants may reference provider + external_id without a resolved user_id.
@@ -78,6 +78,20 @@ export interface ExpandedClaimantUnit {
   readonly claimant: AttributionClaimant;
   readonly units: bigint;
   readonly metadata: Record<string, unknown> | null;
+}
+
+export interface FinalizedClaimantAllocation {
+  readonly claimant: AttributionClaimant;
+  readonly valuationUnits: bigint;
+  readonly receiptIds?: readonly string[];
+}
+
+export interface ClaimantCreditLineItem {
+  readonly claimant: AttributionClaimant;
+  readonly totalUnits: bigint;
+  readonly share: string;
+  readonly amountCredits: bigint;
+  readonly receiptIds: readonly string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -303,4 +317,185 @@ export function expandClaimantUnits(
     if (subjectCompare !== 0) return subjectCompare;
     return claimantKey(a.claimant).localeCompare(claimantKey(b.claimant));
   });
+}
+
+export function computeClaimantCreditLineItems(
+  allocations: readonly FinalizedClaimantAllocation[],
+  poolTotalCredits: bigint
+): ClaimantCreditLineItem[] {
+  if (allocations.length === 0) {
+    return [];
+  }
+
+  if (poolTotalCredits <= 0n) {
+    return [];
+  }
+
+  const claimantUnits = new Map<
+    string,
+    {
+      claimant: AttributionClaimant;
+      totalUnits: bigint;
+      receiptIds: Set<string>;
+    }
+  >();
+
+  for (const allocation of allocations) {
+    if (allocation.valuationUnits < 0n) {
+      throw new RangeError(
+        `Negative valuationUnits for claimant ${claimantKey(allocation.claimant)}: ${allocation.valuationUnits}`
+      );
+    }
+
+    const key = claimantKey(allocation.claimant);
+    const existing = claimantUnits.get(key);
+    if (existing) {
+      existing.totalUnits += allocation.valuationUnits;
+      for (const receiptId of allocation.receiptIds ?? []) {
+        existing.receiptIds.add(receiptId);
+      }
+      continue;
+    }
+
+    claimantUnits.set(key, {
+      claimant: allocation.claimant,
+      totalUnits: allocation.valuationUnits,
+      receiptIds: new Set(allocation.receiptIds ?? []),
+    });
+  }
+
+  let totalUnits = 0n;
+  for (const entry of claimantUnits.values()) {
+    totalUnits += entry.totalUnits;
+  }
+
+  if (totalUnits === 0n) {
+    return [];
+  }
+
+  const sortedClaimants = [...claimantUnits.entries()].sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
+
+  const floorAllocations: Array<{
+    claimantKey: string;
+    claimant: AttributionClaimant;
+    totalUnits: bigint;
+    receiptIds: readonly string[];
+    floor: bigint;
+    remainder: bigint;
+  }> = [];
+
+  let floorSum = 0n;
+
+  for (const [key, entry] of sortedClaimants) {
+    const floor = (entry.totalUnits * poolTotalCredits) / totalUnits;
+    const remainder = (entry.totalUnits * poolTotalCredits) % totalUnits;
+
+    floorAllocations.push({
+      claimantKey: key,
+      claimant: entry.claimant,
+      totalUnits: entry.totalUnits,
+      receiptIds: [...entry.receiptIds].sort(),
+      floor,
+      remainder,
+    });
+    floorSum += floor;
+  }
+
+  let residual = poolTotalCredits - floorSum;
+
+  const byRemainder = [...floorAllocations].sort((a, b) => {
+    if (b.remainder !== a.remainder) {
+      return b.remainder > a.remainder ? 1 : -1;
+    }
+    return a.claimantKey.localeCompare(b.claimantKey);
+  });
+
+  const bonuses = new Map<string, bigint>();
+  for (const allocation of byRemainder) {
+    if (residual <= 0n) break;
+    bonuses.set(allocation.claimantKey, 1n);
+    residual -= 1n;
+  }
+
+  return floorAllocations.map(
+    ({ claimantKey: key, claimant, totalUnits: units, receiptIds, floor }) => {
+      const bonus = bonuses.get(key) ?? 0n;
+      const amountCredits = floor + bonus;
+
+      const shareScale = 10n ** 6n;
+      const scaledShare = (units * shareScale) / totalUnits;
+      const wholePart = scaledShare / shareScale;
+      const fracPart = scaledShare % shareScale;
+      const share = `${wholePart}.${fracPart.toString().padStart(6, "0")}`;
+
+      return {
+        claimant,
+        totalUnits: units,
+        share,
+        amountCredits,
+        receiptIds,
+      };
+    }
+  );
+}
+
+export function buildClaimantAllocations(
+  subjects: readonly ClaimantSharesSubject[],
+  userUnitOverrides: ReadonlyMap<string, bigint> = new Map()
+): FinalizedClaimantAllocation[] {
+  const grouped = new Map<
+    string,
+    {
+      claimant: AttributionClaimant;
+      valuationUnits: bigint;
+      receiptIds: Set<string>;
+    }
+  >();
+
+  for (const item of expandClaimantUnits({ version: 1, subjects })) {
+    const key = claimantKey(item.claimant);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.valuationUnits += item.units;
+      for (const receiptId of item.receiptIds) {
+        existing.receiptIds.add(receiptId);
+      }
+      continue;
+    }
+
+    grouped.set(key, {
+      claimant: item.claimant,
+      valuationUnits: item.units,
+      receiptIds: new Set(item.receiptIds),
+    });
+  }
+
+  for (const [userId, units] of userUnitOverrides.entries()) {
+    const claimant: AttributionClaimant = {
+      kind: "user",
+      userId,
+    };
+    const key = claimantKey(claimant);
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.valuationUnits = units;
+      continue;
+    }
+
+    grouped.set(key, {
+      claimant,
+      valuationUnits: units,
+      receiptIds: new Set(),
+    });
+  }
+
+  return [...grouped.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, entry]) => ({
+      claimant: entry.claimant,
+      valuationUnits: entry.valuationUnits,
+      receiptIds: [...entry.receiptIds].sort(),
+    }));
 }

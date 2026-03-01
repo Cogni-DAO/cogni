@@ -124,7 +124,7 @@ export function HoldingsView(): ReactElement {
         ) : (
           <div className="space-y-3">
             {data.holdings.map((h, i) => (
-              <HoldingCard key={h.userId} holding={h} rank={i + 1} />
+              <HoldingCard key={h.claimantKey} holding={h} rank={i + 1} />
             ))}
           </div>
         )}

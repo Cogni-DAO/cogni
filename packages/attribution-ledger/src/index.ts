@@ -28,16 +28,20 @@ export {
 // Canonical claimant-share attribution shape
 export {
   type AttributionClaimant,
+  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
   CLAIMANT_SHARES_ALGO_REF,
   CLAIMANT_SHARES_EVALUATION_REF,
+  type ClaimantCreditLineItem,
   type ClaimantShare,
   type ClaimantSharesPayload,
   type ClaimantSharesSubject,
   claimantKey,
+  computeClaimantCreditLineItems,
   type ExpandedClaimantUnit,
   expandClaimantUnits,
+  type FinalizedClaimantAllocation,
   parseClaimantSharesPayload,
   type SelectedReceiptForAttribution,
 } from "./claimant-shares";
@@ -70,6 +74,7 @@ export {
   canonicalJsonStringify,
   computeAllocationSetHash,
   computeArtifactsHash,
+  computeClaimantAllocationSetHash,
   computeWeightConfigHash,
   sha256OfCanonicalJson,
 } from "./hashing";
@@ -110,6 +115,7 @@ export type {
   AttributionPoolComponent,
   AttributionSelection,
   AttributionStatement,
+  AttributionStatementItem,
   AttributionStatementSignature,
   AttributionStore,
   CloseIngestionWithEvaluationsParams,
