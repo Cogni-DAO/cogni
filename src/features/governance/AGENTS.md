@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-03-01
+- **Last reviewed:** 2026-03-02
 - **Status:** draft
 
 ## Purpose
 
-Governance feature slice — schedule sync, governance status dashboard, and claimant-aware epoch contribution UI (current epoch, history, holdings).
+Governance feature slice — schedule sync, governance status dashboard, claimant-aware epoch contribution UI (current epoch, history, holdings), and approver review page with subject-level override editing and EIP-712 signing.
 
 ## Pointers
 
@@ -37,12 +37,12 @@ Governance feature slice — schedule sync, governance status dashboard, and cla
 ## Public Surface
 
 - **Exports (services):** `syncGovernanceSchedules()`, `GovernanceScheduleSyncDeps`, `GovernanceScheduleSyncResult`, `governanceScheduleId()`, `getGovernanceStatus()`, `GovernanceStatusResult`
-- **Exports (hooks):** `useGovernanceStatus()`, `useCurrentEpoch()`, `useEpochHistory()`, `useHoldings()`, `useReviewEpochs()`, `useSignEpoch()`
-- **Exports (components):** `ContributorCard`, `ContributionRow`, `EpochCard`, `EpochCountdown`, `HoldingCard`, `SourceBadge`, `OnSaveAdjustment`
+- **Exports (hooks):** `useGovernanceStatus()`, `useCurrentEpoch()`, `useEpochHistory()`, `useHoldings()`, `useReviewEpochs()`, `useSignEpoch()`, `useSubjectOverrides()`
+- **Exports (components):** `ContributorCard`, `ContributionRow`, `EpochCard`, `EpochCountdown`, `EpochDetail`, `HoldingCard`, `SourceBadge`
 - **Exports (lib):** `composeEpochView()`, `composeEpochViewFromClaimants()`, `composeHoldings()`
-- **Exports (types):** `EpochView`, `EpochContributor`, `IngestionReceipt`, `HoldingView`, `CurrentEpochData`, `EpochHistoryData`, `HoldingsData`, `SignEpochState`, `SignEpochPhase`
-- **Routes (app pages):** `/gov` (system), `/gov/epoch` (current), `/gov/history` (finalized), `/gov/holdings` (aggregated), `/gov/review` (approver admin)
-- **Routes (API — in `src/app/api/v1/attribution/`):** `GET /epochs`, `GET /epochs/:id/allocations`, `GET /epochs/:id/statement`, `GET /epochs/:id/claimants`, `GET /epochs/:id/activity`
+- **Exports (types):** `EpochView`, `EpochContributor`, `IngestionReceipt`, `HoldingView`, `CurrentEpochData`, `EpochHistoryData`, `HoldingsData`, `SignEpochState`, `SignEpochPhase`, `SubjectOverrideView`, `EpochDetailProps`
+- **Routes (app pages):** `/gov` (system), `/gov/epoch` (current), `/gov/history` (finalized), `/gov/holdings` (aggregated), `/gov/review` (approver admin — inline editing + EIP-712 sign & finalize)
+- **Routes (API — in `src/app/api/v1/attribution/`):** `GET /epochs`, `GET /epochs/:id/allocations`, `GET /epochs/:id/statement`, `GET /epochs/:id/claimants`, `GET /epochs/:id/activity`, `GET /epochs/:id/sign-data`, `GET|PATCH|DELETE /epochs/:id/subject-overrides`
 - **CLI:** `pnpm governance:schedules:sync`, `pnpm db:seed`, `pnpm dev:setup`
 - **Env/Config keys:** `.cogni/repo-spec.yaml` → `governance.schedules`
 

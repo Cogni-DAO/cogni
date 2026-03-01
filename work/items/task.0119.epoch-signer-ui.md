@@ -2,7 +2,7 @@
 id: task.0119
 type: task
 title: "Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel"
-status: blocked
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 4
@@ -16,7 +16,7 @@ branch: feat/epoch-signing-ui
 pr:
 reviewer:
 revision: 0
-blocked_by: bug.0121
+blocked_by:
 deploy_verified: false
 created: 2026-03-01
 updated: 2026-03-02

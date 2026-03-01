@@ -2,7 +2,7 @@
 id: bug.0121
 type: bug
 title: "Allocation adjustment API only supports per-user granularity — must support per-claimant/line-item editing for ledger review"
-status: needs_triage
+status: done
 priority: 1
 rank: 1
 estimate: 5
