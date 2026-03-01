@@ -26,6 +26,7 @@ import type {
   ClaimantShare,
   ReviewOverrideSnapshot,
   SelectedReceiptForAttribution,
+  SubjectOverride,
 } from "./claimant-shares";
 import type { EpochStatus } from "./model";
 
@@ -291,6 +292,21 @@ export interface UpsertSubjectOverrideParams {
   readonly overrideUnits?: bigint | null;
   readonly overrideSharesJson?: ClaimantShare[] | null;
   readonly overrideReason?: string | null;
+}
+
+/**
+ * Convert store records to pure domain SubjectOverride[].
+ * Use this instead of inline .map() — keeps the mapping in one place.
+ */
+export function toSubjectOverrides(
+  records: readonly SubjectOverrideRecord[]
+): SubjectOverride[] {
+  return records.map((r) => ({
+    subjectRef: r.subjectRef,
+    overrideUnits: r.overrideUnits,
+    overrideShares: r.overrideSharesJson,
+    overrideReason: r.overrideReason,
+  }));
 }
 
 // ---------------------------------------------------------------------------

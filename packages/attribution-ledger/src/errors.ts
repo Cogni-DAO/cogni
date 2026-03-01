@@ -27,6 +27,17 @@ export class EpochAlreadyFinalizedError extends Error {
   }
 }
 
+export class EpochNotInReviewError extends Error {
+  public readonly code = "EPOCH_NOT_IN_REVIEW" as const;
+  constructor(
+    public readonly epochId: string,
+    public readonly actualStatus: string
+  ) {
+    super(`Epoch ${epochId} is not in review (status: ${actualStatus})`);
+    this.name = "EpochNotInReviewError";
+  }
+}
+
 export class PoolComponentMissingError extends Error {
   public readonly code = "POOL_COMPONENT_MISSING" as const;
   constructor(
@@ -71,6 +82,12 @@ export function isEpochAlreadyFinalizedError(
   error: unknown
 ): error is EpochAlreadyFinalizedError {
   return error instanceof Error && error.name === "EpochAlreadyFinalizedError";
+}
+
+export function isEpochNotInReviewError(
+  error: unknown
+): error is EpochNotInReviewError {
+  return error instanceof Error && error.name === "EpochNotInReviewError";
 }
 
 export function isPoolComponentMissingError(

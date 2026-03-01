@@ -52,6 +52,7 @@ import type {
 } from "@cogni/attribution-ledger";
 import {
   EpochNotFoundError,
+  EpochNotInReviewError,
   EpochNotOpenError,
   type EpochStatus,
 } from "@cogni/attribution-ledger";
@@ -352,6 +353,23 @@ export class DrizzleAttributionAdapter implements AttributionStore {
       .from(epochs)
       .where(and(eq(epochs.id, epochId), eq(epochs.scopeId, this.scopeId)))
       .limit(1);
+    if (!rows[0]) throw new EpochNotFoundError(epochId.toString());
+    return toEpoch(rows[0]);
+  }
+
+  /**
+   * Like resolveEpochScoped but acquires a row-level lock (SELECT ... FOR UPDATE).
+   * Use for write operations that must serialize against concurrent finalization.
+   */
+  private async resolveEpochScopedForUpdate(
+    epochId: bigint
+  ): Promise<AttributionEpoch> {
+    const rows = await this.db
+      .select()
+      .from(epochs)
+      .where(and(eq(epochs.id, epochId), eq(epochs.scopeId, this.scopeId)))
+      .limit(1)
+      .for("update");
     if (!rows[0]) throw new EpochNotFoundError(epochId.toString());
     return toEpoch(rows[0]);
   }
@@ -1129,14 +1147,15 @@ export class DrizzleAttributionAdapter implements AttributionStore {
     expectedAllocationSetHash: string;
   }): Promise<{ epoch: AttributionEpoch; statement: AttributionStatement }> {
     return await this.db.transaction(async (tx) => {
-      // 1. Load epoch with scope gate (inline — avoid separate connection)
+      // 1. Load epoch with scope gate + row lock (prevents concurrent override writes)
       const epochRows = await tx
         .select()
         .from(epochs)
         .where(
           and(eq(epochs.id, params.epochId), eq(epochs.scopeId, this.scopeId))
         )
-        .limit(1);
+        .limit(1)
+        .for("update");
       if (!epochRows[0]) {
         throw new EpochNotFoundError(params.epochId.toString());
       }
@@ -1322,9 +1341,9 @@ export class DrizzleAttributionAdapter implements AttributionStore {
   async upsertSubjectOverride(
     params: UpsertSubjectOverrideParams
   ): Promise<SubjectOverrideRecord> {
-    const epoch = await this.resolveEpochScoped(params.epochId);
+    const epoch = await this.resolveEpochScopedForUpdate(params.epochId);
     if (epoch.status !== "review") {
-      throw new EpochNotOpenError(params.epochId.toString());
+      throw new EpochNotInReviewError(params.epochId.toString(), epoch.status);
     }
 
     const now = new Date();
@@ -1362,7 +1381,10 @@ export class DrizzleAttributionAdapter implements AttributionStore {
     epochId: bigint,
     subjectRef: string
   ): Promise<void> {
-    await this.resolveEpochScoped(epochId);
+    const epoch = await this.resolveEpochScopedForUpdate(epochId);
+    if (epoch.status !== "review") {
+      throw new EpochNotInReviewError(epochId.toString(), epoch.status);
+    }
     await this.db
       .delete(epochSubjectOverrides)
       .where(
