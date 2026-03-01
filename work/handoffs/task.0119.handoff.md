@@ -6,68 +6,74 @@ status: active
 created: 2026-03-01
 updated: 2026-03-02
 branch: feat/epoch-signing-ui
-last_commit: 2e74fd67
+last_commit: 54825d6f
 ---
 
-# Handoff: Epoch Approver UI — Subject-Level Review Overrides (bug.0121 unblock)
+# Handoff: Epoch Approver UI — Review Page Editing + Final Lint Fix
 
 ## Context
 
-- task.0119 is blocked by bug.0121: the old `PATCH /epochs/[id]/allocations` only supports per-user overrides, which can't reach unresolved identity claimants or adjust individual contribution weights
-- Solution: new subject-level override system — two knobs per contribution: `overrideUnits` (change weight) and `overrideShares` (re-split among existing claimants only)
-- Overrides are mutable during review, snapshotted into the statement at finalization for transparency
-- The old PATCH allocations endpoint is deprecated (410 Gone); editing happens via new `PATCH /epochs/[id]/subject-overrides`
-- Prior work (steps 1-3 of task.0119): EIP-712 migration, sign-data endpoint, review page scaffolding — done by previous devs
+- task.0119 builds `/gov/review` — an approver-gated admin page for reviewing, editing, and finalizing attribution epochs via EIP-712 signing
+- bug.0121 blocked this work: the old per-user `PATCH /epochs/[id]/allocations` couldn't reach unresolved identity claimants or adjust individual contributions. Now resolved with subject-level overrides
+- The backend subject-override system is **complete and committed** (4 commits on branch): DB schema, pure functions, store port/adapter, API routes, finalization flow, sign-data mirroring, old path pruned
+- The review page UI editing is **in progress (uncommitted)** — inline override controls are wired but have 8 ESLint violations (raw Tailwind colors + arbitrary value) that need design-token substitution
+- `pnpm check` passes on committed code; only the uncommitted `view.tsx` changes cause lint failures
 
 ## Current State
 
-- **Done (uncommitted)**: DB schema + migration, pure functions, store port+adapter, API contract+route, finalization flow update, sign-data update, allocations PATCH deprecation, unit tests for pure functions
-- **Not committed**: All bug.0121 changes are unstaged working tree modifications — nothing committed yet
-- **`pnpm packages:build` passes**, `npx tsc --noEmit` passes at root
-- **`pnpm check` has failures**: typecheck/lint/format/check:docs — some may be pre-existing on this branch (view.tsx broken import from prior dev), some may need file header fixes on new files
-- **Migration generated** via `pnpm db:generate` — `0020_omniscient_blackheart.sql`
-- **Not done**: integration/contract tests, stack-level e2e verification, review page UI wiring to new endpoints
+- **Committed — backend complete**: `8e3c5298` through `54825d6f` (4 commits)
+  - `epoch_subject_overrides` table + migration `0020_omniscient_blackheart.sql`
+  - `applySubjectOverrides()`, `buildReviewOverrideSnapshots()` pure functions with unit tests
+  - Store port: `upsertSubjectOverride`, `deleteSubjectOverride`, `getSubjectOverridesForEpoch`
+  - API: `GET/PATCH/DELETE /epochs/[id]/subject-overrides` with full validation
+  - Finalization + sign-data updated to use subject overrides
+  - Old `updateAllocationFinalUnits` removed from port/adapter, PATCH allocations returns 410 Gone
+  - Old `attribution.update-allocations.v1.contract.ts` deleted
+- **Uncommitted — UI in progress** (3 files):
+  - `src/features/governance/hooks/useSubjectOverrides.ts` — new CRUD hook (React Query + fetch)
+  - `src/features/governance/components/EpochDetail.tsx` — added `renderExpandedContent` prop for custom expanded row rendering
+  - `src/app/(app)/gov/review/view.tsx` — `ReviewReceiptRow` with inline editing (pencil → input → save/cancel), override indicator badge, reset button
+- **`pnpm check` on committed code**: all pass (typecheck, lint, format, check:docs, arch:check, test:services)
+- **`pnpm lint` on uncommitted view.tsx**: 8 errors — raw amber colors (`border-amber-500/30`, `bg-amber-500/5`, etc.) and `flex-[2]` arbitrary value violate `ui-governance/no-raw-colors` and `ui-governance/no-arbitrary-non-token-values` ESLint rules
 
 ## Decisions Made
 
-- **Subject-ref as canonical key**: overrides reference `subjectRef` from locked `ClaimantSharesPayload.subjects[]`, validated at write time
-- **Shares validation**: must sum to `1_000_000` PPM, claimant keys lexicographically sorted, only existing claimants allowed
-- **`buildClaimantAllocations` simplified**: old `userUnitOverrides` 2nd param removed — overrides pre-applied via `applySubjectOverrides()` before calling it
-- **Editing gated to review status**: both new and old endpoints check `epoch.status === "review"`
-- **Audit trail**: `epoch_statements.review_overrides_json` stores override snapshot at finalize time, pairing original + overridden values
+- **Subject-ref = receiptId**: overrides use `subjectRef` from locked evaluation's `ClaimantSharesPayload.subjects[]`, which equals the receipt ID from `buildDefaultReceiptClaimantSharesPayload`
+- **Two knobs per subject**: `overrideUnits` (change weight) and `overrideShares` (re-split among existing claimants only) — the UI currently only exposes `overrideUnits`
+- **EpochDetail extensibility**: added optional `renderExpandedContent` prop instead of forking the component — keeps it reusable for read-only views while allowing the review page to inject editing controls
+- **Inline editing UX**: each receipt in expanded contributor row shows a pencil icon → inline form with units input + reason + save/cancel. Active overrides show amber highlight + badge + reset button
+- **`buildClaimantAllocations` simplified**: removed old `userUnitOverrides` parameter — overrides pre-applied via `applySubjectOverrides()` before calling it
+- **Audit trail**: `epoch_statements.review_overrides_json` stores snapshot at finalize, pairing original + overridden values
 
 ## Next Actions
 
-- [ ] Fix `pnpm check` failures — file headers on new files, possibly pre-existing view.tsx broken import
-- [ ] Run `pnpm test` and fix any broken tests
-- [ ] Verify `claimants.server.ts` facade works (replaced old `allocations.finalUnits` path with subject override loading)
-- [ ] Wire review page UI (`src/app/(app)/gov/review/view.tsx`) to use new subject-overrides endpoints
+- [ ] Fix 8 lint errors in `view.tsx` — replace raw amber colors with design tokens from `src/styles/tailwind.css` (e.g., `border-warning`, `bg-warning/5`, `text-warning`), replace `flex-[2]` with `flex-2` or a CSS variable
+- [ ] Commit the 3 uncommitted UI files (`useSubjectOverrides.ts`, `EpochDetail.tsx`, `view.tsx`)
+- [ ] Run `pnpm test` — verify all unit tests pass (especially `claimant-shares.test.ts`)
 - [ ] Add integration tests for subject-overrides route (GET/PATCH/DELETE + status gates + validation)
-- [ ] Test full sign+finalize flow: override → sign-data → finalize → verify `review_overrides_json` in statement
-- [ ] Consider adding `SELECT ... FOR UPDATE` row locking in `upsertSubjectOverride` for race safety with finalize
-- [ ] Commit, update bug.0121 and task.0119 statuses, closeout
+- [ ] Test full sign+finalize flow end-to-end: set override → GET sign-data → sign → finalize → verify `review_overrides_json` in statement
+- [ ] Consider `SELECT ... FOR UPDATE` row locking in `upsertSubjectOverride` for race safety with concurrent finalize
+- [ ] Run `/closeout` — update bug.0121 and task.0119 statuses
 
 ## Risks / Gotchas
 
-- `sign-data` and `finalizeEpoch` must produce identical `allocationSetHash` — both now use the same override chain, but needs stack verification
-- `claimants.server.ts` previously used `allocations.finalUnits` for preview — now uses subject overrides instead; preview path needs testing
-- `upsertSubjectOverride` adapter checks epoch status but doesn't use `SELECT ... FOR UPDATE` — simpler but has a theoretical race with finalize
-- `view.tsx` has a pre-existing broken import (`onSaveAdjustment`) from prior dev work — needs removal before check passes
+- **Lint rule `ui-governance/no-raw-colors`**: project forbids raw Tailwind colors — must use design tokens. Check `src/styles/tailwind.css` for available tokens (e.g., `--warning`, `--destructive`, `--accent`). The override highlight uses amber which may need a `--warning` token mapping.
+- **`sign-data` and `finalizeEpoch` hash parity**: both must produce identical `allocationSetHash` — they use the same override chain but this needs stack-level verification
+- **`upsertSubjectOverride` race**: adapter checks `epoch.status === "review"` but doesn't use `SELECT ... FOR UPDATE` — theoretical race with concurrent finalize
+- **`overrideShares` UI not built**: the shares knob (re-splitting among claimants) has backend support but no UI — only `overrideUnits` is exposed in the current review page
 - The `scripts/db/seed.mts` was modified by another dev (adds review epoch) — avoid touching it
 
 ## Pointers
 
-| File / Resource                                                     | Why it matters                                                                                       |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `packages/db-schema/src/attribution.ts`                             | New `epochSubjectOverrides` table + `reviewOverridesJson` column on `epochStatements`                |
-| `packages/attribution-ledger/src/claimant-shares.ts`                | `applySubjectOverrides()`, `buildReviewOverrideSnapshots()`, simplified `buildClaimantAllocations()` |
-| `packages/attribution-ledger/src/store.ts`                          | New port methods + `SubjectOverrideRecord`/`UpsertSubjectOverrideParams` types                       |
-| `packages/db-client/src/adapters/drizzle-attribution.adapter.ts`    | Adapter impl + `toReviewOverridesJson` boundary converter                                            |
-| `src/contracts/attribution.subject-overrides.v1.contract.ts`        | New Zod contract (PATCH/GET/DELETE)                                                                  |
-| `src/app/api/v1/attribution/epochs/[id]/subject-overrides/route.ts` | New API route with subject-ref + claimant validation                                                 |
-| `services/scheduler-worker/src/activities/ledger.ts`                | Updated `finalizeEpoch` — loads overrides, applies, snapshots into statement                         |
-| `src/app/api/v1/attribution/epochs/[id]/sign-data/route.ts`         | Updated to mirror finalization with subject overrides                                                |
-| `src/app/api/v1/attribution/epochs/[id]/allocations/route.ts`       | PATCH deprecated (410 Gone), GET unchanged                                                           |
-| `src/app/_facades/attribution/claimants.server.ts`                  | Read-side preview updated to use subject overrides                                                   |
-| `packages/attribution-ledger/tests/claimant-shares.test.ts`         | Unit tests for new pure functions                                                                    |
-| `work/items/bug.0121.allocation-edit-granularity.md`                | The bug this work resolves                                                                           |
+| File / Resource                                                     | Why it matters                                                       |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `src/app/(app)/gov/review/view.tsx`                                 | **Active work** — `ReviewReceiptRow` has 8 lint errors to fix        |
+| `src/features/governance/hooks/useSubjectOverrides.ts`              | **New (uncommitted)** — CRUD hook for subject overrides API          |
+| `src/features/governance/components/EpochDetail.tsx`                | **Modified (uncommitted)** — added `renderExpandedContent` prop      |
+| `src/styles/tailwind.css`                                           | Design tokens — find the right replacements for amber colors         |
+| `src/app/api/v1/attribution/epochs/[id]/subject-overrides/route.ts` | API route with subject-ref + claimant validation                     |
+| `src/contracts/attribution.subject-overrides.v1.contract.ts`        | Zod contract (PATCH/GET/DELETE)                                      |
+| `packages/attribution-ledger/src/claimant-shares.ts`                | `applySubjectOverrides()`, `buildReviewOverrideSnapshots()`          |
+| `packages/attribution-ledger/tests/claimant-shares.test.ts`         | Unit tests for pure functions                                        |
+| `services/scheduler-worker/src/activities/ledger.ts`                | `finalizeEpoch` — loads overrides, applies, snapshots into statement |
+| `work/items/bug.0121.allocation-edit-granularity.md`                | The bug this work resolves                                           |
