@@ -7,10 +7,10 @@
  * Module: `@scripts/db/seed`
  * Purpose: Dev seed script for governance and profile UI — populates attribution
  * ledger data with claimant-aware, linked/unlinked GitHub contributors.
- * Scope: Seeds linked users + GitHub bindings, epochs, ingestion receipts,
- * selections, allocations, claimant evaluations, pool components, and finalized
- * claimant-aware statements for local dev. Does not modify production databases
- * or run in CI.
+ * Scope: Seeds linked users + GitHub bindings, epochs (2 finalized, 1 review,
+ * 1 open), ingestion receipts, selections, allocations, claimant evaluations,
+ * pool components, and finalized claimant-aware statements for local dev.
+ * Does not modify production databases or run in CI.
  * Invariants:
  * - ONE_OPEN_EPOCH: only one open epoch per node/scope
  * - LINKED_USERS_HAVE_BINDINGS: linked humans are seeded in users +
@@ -97,7 +97,7 @@ function unlinkedContributor(params: {
   };
 }
 
-const DEREK = linkedContributor({
+const DEREK = unlinkedContributor({
   platformUserId: "58641509",
   login: "derekg1729",
   name: "Derek G",
@@ -127,7 +127,7 @@ const COGNI = unlinkedContributor({
   name: "Cogni (AI Agent)",
 });
 
-const LINKED_CONTRIBUTORS = [DEREK, ALICE, BEN] as const;
+const LINKED_CONTRIBUTORS = [ALICE, BEN] as const;
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -230,9 +230,10 @@ function reviewEvent(params: {
   };
 }
 
-const WINDOW_1 = epochWindowWeeksAgo(3);
-const WINDOW_2 = epochWindowWeeksAgo(2);
-const WINDOW_3 = epochWindowWeeksAgo(0);
+const WINDOW_1 = epochWindowWeeksAgo(4);
+const WINDOW_2 = epochWindowWeeksAgo(3);
+const WINDOW_3 = epochWindowWeeksAgo(1);
+const WINDOW_4 = epochWindowWeeksAgo(0);
 
 const EPOCH_1: SeedEpochDef = {
   periodStart: WINDOW_1.periodStart,
@@ -366,7 +367,7 @@ const EPOCH_2: SeedEpochDef = {
 const EPOCH_3: SeedEpochDef = {
   periodStart: WINDOW_3.periodStart,
   periodEnd: WINDOW_3.periodEnd,
-  poolCredits: 14000n,
+  poolCredits: 15000n,
   events: [
     prEvent({
       number: 496,
@@ -423,6 +424,70 @@ const EPOCH_3: SeedEpochDef = {
       title: "Review: approve PR #435",
       contributor: DEREK,
       eventTime: daysBefore(WINDOW_3.periodEnd, 1),
+    }),
+  ],
+};
+
+const EPOCH_4: SeedEpochDef = {
+  periodStart: WINDOW_4.periodStart,
+  periodEnd: WINDOW_4.periodEnd,
+  poolCredits: 14000n,
+  events: [
+    prEvent({
+      number: 500,
+      title:
+        "feat(attribution): migrate signature verification from EIP-191 to EIP-712",
+      contributor: DEREK,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 5),
+    }),
+    prEvent({
+      number: 498,
+      title: "feat(attribution): add GET /epochs/[id]/sign-data endpoint",
+      contributor: ALICE,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 4),
+      reassignedFrom: "derekg1729",
+    }),
+    prEvent({
+      number: 497,
+      title: "docs(work): add task.0119 — epoch approver UI",
+      contributor: COGNI,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 3),
+    }),
+    reviewEvent({
+      prNumber: 497,
+      reviewDatabaseId: 3830201455,
+      title: "Review: approve PR #497",
+      contributor: DEREK,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 3),
+    }),
+    prEvent({
+      number: 495,
+      title:
+        "fix(governance): epoch history pagination and empty state handling",
+      contributor: BEN,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 2),
+      reassignedFrom: "derekg1729",
+    }),
+    prEvent({
+      number: 493,
+      title:
+        "feat(profile): wallet connection status indicator and balance display",
+      contributor: MIRA,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 2),
+      reassignedFrom: "derekg1729",
+    }),
+    prEvent({
+      number: 491,
+      title: "docs(spec): update attribution ledger spec with EIP-712 signing",
+      contributor: DEREK,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 1),
+    }),
+    reviewEvent({
+      prNumber: 491,
+      reviewDatabaseId: 3832405617,
+      title: "Review: approve PR #491",
+      contributor: ALICE,
+      eventTime: daysBefore(WINDOW_4.periodEnd, 1),
     }),
   ],
 };
@@ -734,6 +799,104 @@ async function seedFinalizedEpoch(
   console.log("  Inserted claimant-aware epoch statement");
 }
 
+async function seedReviewEpoch(
+  store: DrizzleAttributionAdapter,
+  epochDef: SeedEpochDef
+): Promise<void> {
+  const epoch = await store.createEpoch({
+    nodeId: NODE_ID,
+    scopeId: SCOPE_ID,
+    periodStart: epochDef.periodStart,
+    periodEnd: epochDef.periodEnd,
+    weightConfig: WEIGHT_CONFIG,
+  });
+  console.log(
+    `  Created epoch ${epoch.id} (${epochDef.periodStart.toISOString().slice(0, 10)} -> ${epochDef.periodEnd.toISOString().slice(0, 10)}) [REVIEW]`
+  );
+
+  const attributionReceipts = buildAttributionReceipts(epochDef.events);
+
+  await store.insertIngestionReceipts(
+    epochDef.events.map((event, index) => ({
+      receiptId: event.id,
+      nodeId: NODE_ID,
+      source: event.source,
+      eventType: event.eventType,
+      platformUserId: event.contributor.platformUserId,
+      platformLogin: event.contributor.login,
+      artifactUrl: event.artifactUrl,
+      metadata: {
+        title: event.title,
+        ...event.metadata,
+      },
+      payloadHash:
+        attributionReceipts[index]?.payloadHash ?? eventPayloadHash(event),
+      producer: PRODUCER,
+      producerVersion: PRODUCER_VERSION,
+      eventTime: event.eventTime,
+      retrievedAt: event.eventTime,
+    }))
+  );
+  console.log(`  Inserted ${epochDef.events.length} ingestion receipts`);
+
+  await store.insertSelectionDoNothing(
+    attributionReceipts.map((receipt) => ({
+      nodeId: NODE_ID,
+      epochId: epoch.id,
+      receiptId: receipt.receiptId,
+      userId: receipt.userId,
+      included: true,
+    }))
+  );
+  console.log(`  Inserted ${epochDef.events.length} selections`);
+
+  const allocations = computeResolvedAllocations(
+    attributionReceipts,
+    WEIGHT_CONFIG
+  );
+  if (allocations.length > 0) {
+    await store.insertAllocations(
+      allocations.map((allocation) => ({
+        nodeId: NODE_ID,
+        epochId: epoch.id,
+        userId: allocation.userId,
+        proposedUnits: allocation.proposedUnits,
+        activityCount: allocation.activityCount,
+      }))
+    );
+  }
+  console.log(`  Inserted ${allocations.length} resolved-user allocations`);
+
+  await store.insertPoolComponent({
+    nodeId: NODE_ID,
+    epochId: epoch.id,
+    componentId: "base_issuance",
+    algorithmVersion: "v1.0.0",
+    inputsJson: { base_amount: Number(epochDef.poolCredits) },
+    amountCredits: epochDef.poolCredits,
+  });
+  console.log("  Inserted pool component");
+
+  const { evaluation } = await buildClaimantSharesEvaluation({
+    epochId: epoch.id,
+    status: "locked",
+    receipts: attributionReceipts,
+    weightConfig: WEIGHT_CONFIG,
+  });
+  const weightConfigHash = await computeWeightConfigHash(WEIGHT_CONFIG);
+  const artifactsHash = await computeArtifactsHash([evaluation]);
+
+  await store.closeIngestionWithEvaluations({
+    epochId: epoch.id,
+    approverSetHash: sha256("dev-seed-approver-set"),
+    allocationAlgoRef: ALLOCATION_ALGO_REF,
+    weightConfigHash,
+    evaluations: [evaluation],
+    artifactsHash,
+  });
+  console.log("  Closed ingestion (open -> review)");
+}
+
 async function seedOpenEpoch(
   store: DrizzleAttributionAdapter,
   epochDef: SeedEpochDef
@@ -863,7 +1026,7 @@ async function main(): Promise<void> {
       `  Inserted ${LINKED_CONTRIBUTORS.length} linked users with GitHub bindings`
     );
     console.log(
-      `  Unlinked GitHub identities remain receipt-only: ${COGNI.login}, ${MIRA.login}`
+      `  Unlinked GitHub identities remain receipt-only: ${DEREK.login}, ${COGNI.login}, ${MIRA.login}`
     );
     console.log();
 
@@ -875,8 +1038,12 @@ async function main(): Promise<void> {
     await seedFinalizedEpoch(store, EPOCH_2);
     console.log();
 
-    console.log("📦 Epoch 3 (open):");
-    await seedOpenEpoch(store, EPOCH_3);
+    console.log("📦 Epoch 3 (review):");
+    await seedReviewEpoch(store, EPOCH_3);
+    console.log();
+
+    console.log("📦 Epoch 4 (open):");
+    await seedOpenEpoch(store, EPOCH_4);
     console.log();
 
     console.log(
@@ -892,7 +1059,10 @@ async function main(): Promise<void> {
       "   /gov/holdings -> cumulative holdings including unresolved claimant sets"
     );
     console.log(
-      "   /profile      -> derekg1729 resolves as a linked GitHub human; Cogni + Mira stay unclaimed"
+      "   /gov/review   -> epoch in review status ready for sign & finalize workflow"
+    );
+    console.log(
+      "   /profile      -> derekg1729 stays unlinked (link via OAuth); Alice + Ben are pre-linked; Cogni + Mira unclaimed"
     );
   } finally {
     await db.$client.end();
