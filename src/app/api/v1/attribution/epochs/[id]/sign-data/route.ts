@@ -19,7 +19,7 @@ import {
   CLAIMANT_SHARES_EVALUATION_REF,
   computeClaimantAllocationSetHash,
   parseClaimantSharesPayload,
-  type SubjectOverride,
+  toSubjectOverrides,
 } from "@cogni/attribution-ledger";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -92,12 +92,7 @@ export const GET = wrapRouteHandlerWithLogging<{
 
     // Load and apply subject overrides
     const overrideRecords = await store.getSubjectOverridesForEpoch(epochId);
-    const subjectOverrides: SubjectOverride[] = overrideRecords.map((r) => ({
-      subjectRef: r.subjectRef,
-      overrideUnits: r.overrideUnits,
-      overrideShares: r.overrideSharesJson,
-      overrideReason: r.overrideReason,
-    }));
+    const subjectOverrides = toSubjectOverrides(overrideRecords);
 
     const modifiedSubjects = applySubjectOverrides(
       claimantSubjects,

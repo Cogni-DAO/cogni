@@ -25,7 +25,6 @@
 import type {
   AttributionClaimant,
   ClaimantSharesSubject,
-  SubjectOverride,
   UnselectedReceipt,
 } from "@cogni/attribution-ledger";
 import {
@@ -44,6 +43,7 @@ import {
   deriveAllocationAlgoRef,
   estimatePoolComponentsV0,
   parseClaimantSharesPayload,
+  toSubjectOverrides,
   validateWeightConfig,
 } from "@cogni/attribution-ledger";
 import type { ActivityEvent } from "@cogni/ingestion-core";
@@ -954,12 +954,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
 
     const overrideRecords =
       await attributionStore.getSubjectOverridesForEpoch(epochId);
-    const subjectOverrides: SubjectOverride[] = overrideRecords.map((r) => ({
-      subjectRef: r.subjectRef,
-      overrideUnits: r.overrideUnits,
-      overrideShares: r.overrideSharesJson,
-      overrideReason: r.overrideReason,
-    }));
+    const subjectOverrides = toSubjectOverrides(overrideRecords);
 
     // 6. Apply subject overrides + build review snapshot for audit trail
     const modifiedSubjects = applySubjectOverrides(

@@ -64,10 +64,12 @@ export {
   AllocationNotFoundError,
   EpochAlreadyFinalizedError,
   EpochNotFoundError,
+  EpochNotInReviewError,
   EpochNotOpenError,
   isAllocationNotFoundError,
   isEpochAlreadyFinalizedError,
   isEpochNotFoundError,
+  isEpochNotInReviewError,
   isEpochNotOpenError,
   isPoolComponentMissingError,
   PoolComponentMissingError,
@@ -144,6 +146,7 @@ export type {
   UpsertSelectionParams,
   UpsertSubjectOverrideParams,
 } from "./store";
+export { toSubjectOverrides } from "./store";
 
 // Validated store wrapper
 export { createValidatedAttributionStore } from "./validated-store";
