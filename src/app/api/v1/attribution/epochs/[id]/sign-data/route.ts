@@ -12,12 +12,14 @@
  */
 
 import {
+  applySubjectOverrides,
   buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   buildEIP712TypedData,
   CLAIMANT_SHARES_EVALUATION_REF,
   computeClaimantAllocationSetHash,
   parseClaimantSharesPayload,
+  type SubjectOverride,
 } from "@cogni/attribution-ledger";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -74,9 +76,6 @@ export const GET = wrapRouteHandlerWithLogging<{
       0n
     );
 
-    // Load allocations (for finalUnits overrides)
-    const allocations = await store.getAllocationsForEpoch(epochId);
-
     // Load claimant subjects (same as loadFinalizedClaimantSubjects in worker)
     const evaluation = await store.getEvaluation(
       epochId,
@@ -91,15 +90,20 @@ export const GET = wrapRouteHandlerWithLogging<{
           weightConfig: epoch.weightConfig,
         }).subjects;
 
-    // Build claimant allocations with finalUnits overrides
-    const claimantAllocations = buildClaimantAllocations(
+    // Load and apply subject overrides
+    const overrideRecords = await store.getSubjectOverridesForEpoch(epochId);
+    const subjectOverrides: SubjectOverride[] = overrideRecords.map((r) => ({
+      subjectRef: r.subjectRef,
+      overrideUnits: r.overrideUnits,
+      overrideShares: r.overrideSharesJson,
+      overrideReason: r.overrideReason,
+    }));
+
+    const modifiedSubjects = applySubjectOverrides(
       claimantSubjects,
-      new Map(
-        allocations
-          .filter((a) => a.finalUnits !== null)
-          .map((a) => [a.userId, a.finalUnits as bigint])
-      )
+      subjectOverrides
     );
+    const claimantAllocations = buildClaimantAllocations(modifiedSubjects);
 
     const allocationSetHash =
       await computeClaimantAllocationSetHash(claimantAllocations);

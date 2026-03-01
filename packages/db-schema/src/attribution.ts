@@ -326,6 +326,55 @@ export const epochEvaluations = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Subject Overrides: Review-phase per-subject adjustments (mutable until finalize)
+// ---------------------------------------------------------------------------
+
+/**
+ * Epoch subject overrides — per-subject weight/share adjustments during review.
+ * Mutable while epoch is in review status. Snapshot into statement at finalization.
+ * UNIQUE(epoch_id, subject_ref) — one override per subject per epoch.
+ */
+export const epochSubjectOverrides = pgTable(
+  "epoch_subject_overrides",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    nodeId: uuid("node_id").notNull(),
+    epochId: bigint("epoch_id", { mode: "bigint" })
+      .notNull()
+      .references(() => epochs.id),
+    subjectRef: text("subject_ref").notNull(),
+    overrideUnits: bigint("override_units", { mode: "bigint" }),
+    overrideSharesJson: jsonb("override_shares_json").$type<
+      Array<{
+        claimant:
+          | { kind: "user"; userId: string }
+          | {
+              kind: "identity";
+              provider: string;
+              externalId: string;
+              providerLogin: string | null;
+            };
+        sharePpm: number;
+      }>
+    >(),
+    overrideReason: text("override_reason"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("epoch_subject_overrides_epoch_ref_unique").on(
+      table.epochId,
+      table.subjectRef
+    ),
+    index("epoch_subject_overrides_epoch_idx").on(table.epochId),
+  ]
+);
+
+// ---------------------------------------------------------------------------
 // Finalization Layer: Statements + Signatures (immutable once signed)
 // ---------------------------------------------------------------------------
 
@@ -366,6 +415,36 @@ export const epochStatements = pgTable(
         }>
       >()
       .notNull(),
+    reviewOverridesJson: jsonb("review_overrides_json").$type<
+      Array<{
+        subject_ref: string;
+        original_units: string;
+        override_units: string | null;
+        original_shares: Array<{
+          claimant:
+            | { kind: "user"; userId: string }
+            | {
+                kind: "identity";
+                provider: string;
+                externalId: string;
+                providerLogin: string | null;
+              };
+          sharePpm: number;
+        }>;
+        override_shares: Array<{
+          claimant:
+            | { kind: "user"; userId: string }
+            | {
+                kind: "identity";
+                provider: string;
+                externalId: string;
+                providerLogin: string | null;
+              };
+          sharePpm: number;
+        }> | null;
+        reason: string | null;
+      }>
+    >(),
     supersedesStatementId: uuid("supersedes_statement_id").references(
       // biome-ignore lint/suspicious/noExplicitAny: Drizzle self-referencing FK requires explicit type to break circular inference
       (): any => epochStatements.id

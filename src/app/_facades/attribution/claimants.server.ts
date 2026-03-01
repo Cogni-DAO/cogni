@@ -18,6 +18,7 @@ import {
   type AttributionClaimant,
   type AttributionEpoch,
   type AttributionStore,
+  applySubjectOverrides,
   buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   CLAIMANT_SHARES_EVALUATION_REF,
@@ -25,6 +26,7 @@ import {
   claimantKey,
   computeClaimantCreditLineItems,
   parseClaimantSharesPayload,
+  type SubjectOverride,
 } from "@cogni/attribution-ledger";
 
 import { getContainer } from "@/bootstrap/container";
@@ -245,22 +247,20 @@ export async function readFinalizedEpochClaimants(
     };
   }
 
-  const [subjects, allocations] = await Promise.all([
+  const [subjects, overrideRecords] = await Promise.all([
     loadClaimantShareSubjectsForEpoch(store, epoch),
-    store.getAllocationsForEpoch(epoch.id),
+    store.getSubjectOverridesForEpoch(epoch.id),
   ]);
 
-  const claimantAllocations = buildClaimantAllocations(
-    subjects,
-    new Map(
-      allocations
-        .filter((allocation) => allocation.finalUnits !== null)
-        .map((allocation) => [
-          allocation.userId,
-          allocation.finalUnits as bigint,
-        ])
-    )
-  );
+  const subjectOverrides: SubjectOverride[] = overrideRecords.map((r) => ({
+    subjectRef: r.subjectRef,
+    overrideUnits: r.overrideUnits,
+    overrideShares: r.overrideSharesJson,
+    overrideReason: r.overrideReason,
+  }));
+
+  const modifiedSubjects = applySubjectOverrides(subjects, subjectOverrides);
+  const claimantAllocations = buildClaimantAllocations(modifiedSubjects);
 
   const items = computeClaimantCreditLineItems(
     claimantAllocations,

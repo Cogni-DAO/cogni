@@ -15,8 +15,10 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  applySubjectOverrides,
   buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
+  buildReviewOverrideSnapshots,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
   computeClaimantCreditLineItems,
   expandClaimantUnits,
@@ -258,47 +260,44 @@ describe("computeClaimantCreditLineItems", () => {
 });
 
 describe("buildClaimantAllocations", () => {
-  it("groups expanded claimant units and applies resolved-user overrides", () => {
-    const allocations = buildClaimantAllocations(
-      [
-        {
-          subjectRef: "receipt-1",
-          subjectKind: "receipt",
-          units: "10",
-          source: "github",
-          eventType: "pr_merged",
-          receiptIds: ["r1"],
-          claimantShares: [
-            {
-              claimant: { kind: "user", userId: "user-1" },
-              sharePpm: 1_000_000,
+  it("groups expanded claimant units across subjects", () => {
+    const allocations = buildClaimantAllocations([
+      {
+        subjectRef: "receipt-1",
+        subjectKind: "receipt",
+        units: "10",
+        source: "github",
+        eventType: "pr_merged",
+        receiptIds: ["r1"],
+        claimantShares: [
+          {
+            claimant: { kind: "user", userId: "user-1" },
+            sharePpm: 1_000_000,
+          },
+        ],
+        metadata: null,
+      },
+      {
+        subjectRef: "receipt-2",
+        subjectKind: "receipt",
+        units: "6",
+        source: "github",
+        eventType: "pr_merged",
+        receiptIds: ["r2"],
+        claimantShares: [
+          {
+            claimant: {
+              kind: "identity",
+              provider: "github",
+              externalId: "42",
+              providerLogin: "alice",
             },
-          ],
-          metadata: null,
-        },
-        {
-          subjectRef: "receipt-2",
-          subjectKind: "receipt",
-          units: "6",
-          source: "github",
-          eventType: "pr_merged",
-          receiptIds: ["r2"],
-          claimantShares: [
-            {
-              claimant: {
-                kind: "identity",
-                provider: "github",
-                externalId: "42",
-                providerLogin: "alice",
-              },
-              sharePpm: 1_000_000,
-            },
-          ],
-          metadata: null,
-        },
-      ],
-      new Map([["user-1", 25n]])
-    );
+            sharePpm: 1_000_000,
+          },
+        ],
+        metadata: null,
+      },
+    ]);
 
     expect(allocations).toEqual([
       {
@@ -313,9 +312,216 @@ describe("buildClaimantAllocations", () => {
       },
       {
         claimant: { kind: "user", userId: "user-1" },
-        valuationUnits: 25n,
+        valuationUnits: 10n,
         receiptIds: ["r1"],
       },
     ]);
+  });
+});
+
+describe("applySubjectOverrides", () => {
+  const baseSubjects = [
+    {
+      subjectRef: "receipt-1",
+      subjectKind: "receipt",
+      units: "1000",
+      source: "github",
+      eventType: "pr_merged",
+      receiptIds: ["r1"],
+      claimantShares: [
+        {
+          claimant: { kind: "user" as const, userId: "user-1" },
+          sharePpm: 600_000,
+        },
+        {
+          claimant: { kind: "user" as const, userId: "user-2" },
+          sharePpm: 400_000,
+        },
+      ],
+      metadata: null,
+    },
+    {
+      subjectRef: "receipt-2",
+      subjectKind: "receipt",
+      units: "500",
+      source: "github",
+      eventType: "pr_merged",
+      receiptIds: ["r2"],
+      claimantShares: [
+        {
+          claimant: { kind: "user" as const, userId: "user-1" },
+          sharePpm: 1_000_000,
+        },
+      ],
+      metadata: null,
+    },
+  ];
+
+  it("overrides units for a subject", () => {
+    const result = applySubjectOverrides(baseSubjects, [
+      {
+        subjectRef: "receipt-1",
+        overrideUnits: 500n,
+        overrideShares: null,
+        overrideReason: "halved",
+      },
+    ]);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]?.units).toBe("500");
+    expect(result[0]?.claimantShares).toEqual(baseSubjects[0]?.claimantShares);
+    expect(result[1]?.units).toBe("500"); // unchanged
+  });
+
+  it("overrides shares for a subject", () => {
+    const newShares = [
+      {
+        claimant: { kind: "user" as const, userId: "user-1" },
+        sharePpm: 300_000,
+      },
+      {
+        claimant: { kind: "user" as const, userId: "user-2" },
+        sharePpm: 700_000,
+      },
+    ];
+    const result = applySubjectOverrides(baseSubjects, [
+      {
+        subjectRef: "receipt-1",
+        overrideUnits: null,
+        overrideShares: newShares,
+        overrideReason: "rebalanced",
+      },
+    ]);
+
+    expect(result[0]?.units).toBe("1000"); // unchanged
+    expect(result[0]?.claimantShares).toEqual(newShares);
+  });
+
+  it("overrides both units and shares", () => {
+    const newShares = [
+      {
+        claimant: { kind: "user" as const, userId: "user-1" },
+        sharePpm: 500_000,
+      },
+      {
+        claimant: { kind: "user" as const, userId: "user-2" },
+        sharePpm: 500_000,
+      },
+    ];
+    const result = applySubjectOverrides(baseSubjects, [
+      {
+        subjectRef: "receipt-1",
+        overrideUnits: 200n,
+        overrideShares: newShares,
+        overrideReason: "adjusted",
+      },
+    ]);
+
+    expect(result[0]?.units).toBe("200");
+    expect(result[0]?.claimantShares).toEqual(newShares);
+  });
+
+  it("skips overrides for nonexistent subjects", () => {
+    const result = applySubjectOverrides(baseSubjects, [
+      {
+        subjectRef: "nonexistent",
+        overrideUnits: 100n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+    ]);
+
+    expect(result).toEqual(baseSubjects);
+  });
+
+  it("returns unmodified copy when no overrides", () => {
+    const result = applySubjectOverrides(baseSubjects, []);
+    expect(result).toEqual(baseSubjects);
+    expect(result).not.toBe(baseSubjects);
+  });
+});
+
+describe("buildReviewOverrideSnapshots", () => {
+  const baseSubjects = [
+    {
+      subjectRef: "receipt-1",
+      subjectKind: "receipt",
+      units: "1000",
+      source: "github",
+      eventType: "pr_merged",
+      receiptIds: ["r1"],
+      claimantShares: [
+        {
+          claimant: { kind: "user" as const, userId: "user-1" },
+          sharePpm: 1_000_000,
+        },
+      ],
+      metadata: null,
+    },
+  ];
+
+  it("pairs overrides with original values", () => {
+    const snapshots = buildReviewOverrideSnapshots(baseSubjects, [
+      {
+        subjectRef: "receipt-1",
+        overrideUnits: 500n,
+        overrideShares: null,
+        overrideReason: "halved weight",
+      },
+    ]);
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toEqual({
+      subject_ref: "receipt-1",
+      original_units: "1000",
+      override_units: "500",
+      original_shares: baseSubjects[0]?.claimantShares,
+      override_shares: null,
+      reason: "halved weight",
+    });
+  });
+
+  it("excludes overrides for nonexistent subjects", () => {
+    const snapshots = buildReviewOverrideSnapshots(baseSubjects, [
+      {
+        subjectRef: "nonexistent",
+        overrideUnits: 100n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+    ]);
+
+    expect(snapshots).toHaveLength(0);
+  });
+
+  it("returns empty array when no overrides", () => {
+    const snapshots = buildReviewOverrideSnapshots(baseSubjects, []);
+    expect(snapshots).toHaveLength(0);
+  });
+
+  it("sorts snapshots by subject_ref", () => {
+    const base = baseSubjects[0];
+    if (!base) throw new Error("test setup: missing base subject");
+    const subjects = [
+      { ...base, subjectRef: "z-receipt" },
+      { ...base, subjectRef: "a-receipt" },
+    ];
+    const snapshots = buildReviewOverrideSnapshots(subjects, [
+      {
+        subjectRef: "z-receipt",
+        overrideUnits: 1n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+      {
+        subjectRef: "a-receipt",
+        overrideUnits: 2n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+    ]);
+
+    expect(snapshots[0]?.subject_ref).toBe("a-receipt");
+    expect(snapshots[1]?.subject_ref).toBe("z-receipt");
   });
 });

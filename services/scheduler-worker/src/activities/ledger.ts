@@ -25,12 +25,15 @@
 import type {
   AttributionClaimant,
   ClaimantSharesSubject,
+  SubjectOverride,
   UnselectedReceipt,
 } from "@cogni/attribution-ledger";
 import {
+  applySubjectOverrides,
   buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   buildEIP712TypedData,
+  buildReviewOverrideSnapshots,
   CLAIMANT_SHARES_EVALUATION_REF,
   claimantKey,
   computeApproverSetHash,
@@ -921,15 +924,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       );
     }
 
-    // 4. Load allocations — final_units remain the override surface for resolved users
-    const allocations = await attributionStore.getAllocationsForEpoch(epochId);
-    if (allocations.length === 0) {
-      throw new Error(
-        `finalizeEpoch: epoch ${input.epochId} has no allocations`
-      );
-    }
-
-    // 5. Load pool components → pool_total = SUM(amount_credits)
+    // 4. Load pool components → pool_total = SUM(amount_credits)
     const poolComponents =
       await attributionStore.getPoolComponentsForEpoch(epochId);
     if (poolComponents.length === 0) {
@@ -951,22 +946,32 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       0n
     );
 
-    // 6. Build claimant allocations from locked claimant shares + resolved-user overrides
+    // 5. Load claimant subjects + subject overrides
     const claimantSubjects = await loadFinalizedClaimantSubjects(
       attributionStore,
       epoch
     );
-    const claimantAllocations = buildClaimantAllocations(
+
+    const overrideRecords =
+      await attributionStore.getSubjectOverridesForEpoch(epochId);
+    const subjectOverrides: SubjectOverride[] = overrideRecords.map((r) => ({
+      subjectRef: r.subjectRef,
+      overrideUnits: r.overrideUnits,
+      overrideShares: r.overrideSharesJson,
+      overrideReason: r.overrideReason,
+    }));
+
+    // 6. Apply subject overrides + build review snapshot for audit trail
+    const modifiedSubjects = applySubjectOverrides(
       claimantSubjects,
-      new Map(
-        allocations
-          .filter((allocation) => allocation.finalUnits !== null)
-          .map((allocation) => [
-            allocation.userId,
-            allocation.finalUnits as bigint,
-          ])
-      )
+      subjectOverrides
     );
+    const reviewOverridesSnapshot = buildReviewOverrideSnapshots(
+      claimantSubjects,
+      subjectOverrides
+    );
+
+    const claimantAllocations = buildClaimantAllocations(modifiedSubjects);
     if (claimantAllocations.length === 0) {
       throw new Error(
         `finalizeEpoch: epoch ${input.epochId} has no claimant allocations`
@@ -1024,6 +1029,8 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
             claimant: li.claimant,
             receipt_ids: [...li.receiptIds],
           })),
+          reviewOverridesJson:
+            reviewOverridesSnapshot.length > 0 ? reviewOverridesSnapshot : null,
         },
         signature: {
           nodeId,

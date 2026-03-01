@@ -441,9 +441,101 @@ export function computeClaimantCreditLineItems(
   );
 }
 
-export function buildClaimantAllocations(
+// ---------------------------------------------------------------------------
+// Subject override types + pure functions
+// ---------------------------------------------------------------------------
+
+export interface SubjectOverride {
+  readonly subjectRef: string;
+  readonly overrideUnits: bigint | null;
+  readonly overrideShares: readonly ClaimantShare[] | null;
+  readonly overrideReason: string | null;
+}
+
+export interface ReviewOverrideSnapshot {
+  readonly subject_ref: string;
+  readonly original_units: string;
+  readonly override_units: string | null;
+  readonly original_shares: readonly ClaimantShare[];
+  readonly override_shares: readonly ClaimantShare[] | null;
+  readonly reason: string | null;
+}
+
+/**
+ * Apply subject-level overrides to claimant subjects. Pure, deterministic.
+ * Replaces `units` and/or `claimantShares` per override.
+ * Skips overrides referencing nonexistent subjects (caller pre-validates).
+ */
+export function applySubjectOverrides(
   subjects: readonly ClaimantSharesSubject[],
-  userUnitOverrides: ReadonlyMap<string, bigint> = new Map()
+  overrides: readonly SubjectOverride[]
+): ClaimantSharesSubject[] {
+  if (overrides.length === 0) return [...subjects];
+
+  const overrideMap = new Map<string, SubjectOverride>();
+  for (const o of overrides) {
+    overrideMap.set(o.subjectRef, o);
+  }
+
+  return subjects.map((subject) => {
+    const override = overrideMap.get(subject.subjectRef);
+    if (!override) return subject;
+
+    return {
+      ...subject,
+      units:
+        override.overrideUnits !== null
+          ? override.overrideUnits.toString()
+          : subject.units,
+      claimantShares: override.overrideShares ?? subject.claimantShares,
+    };
+  });
+}
+
+/**
+ * Build audit trail snapshots pairing each override with original subject values.
+ * Only includes subjects that actually had overrides.
+ */
+export function buildReviewOverrideSnapshots(
+  originalSubjects: readonly ClaimantSharesSubject[],
+  overrides: readonly SubjectOverride[]
+): ReviewOverrideSnapshot[] {
+  if (overrides.length === 0) return [];
+
+  const subjectMap = new Map<string, ClaimantSharesSubject>();
+  for (const s of originalSubjects) {
+    subjectMap.set(s.subjectRef, s);
+  }
+
+  const snapshots: ReviewOverrideSnapshot[] = [];
+  for (const override of overrides) {
+    const original = subjectMap.get(override.subjectRef);
+    if (!original) continue;
+
+    snapshots.push({
+      subject_ref: override.subjectRef,
+      original_units: original.units,
+      override_units:
+        override.overrideUnits !== null
+          ? override.overrideUnits.toString()
+          : null,
+      original_shares: [...original.claimantShares],
+      override_shares: override.overrideShares
+        ? [...override.overrideShares]
+        : null,
+      reason: override.overrideReason,
+    });
+  }
+
+  return snapshots.sort((a, b) => a.subject_ref.localeCompare(b.subject_ref));
+}
+
+// ---------------------------------------------------------------------------
+// Claimant allocation builder
+// ---------------------------------------------------------------------------
+
+export function buildClaimantAllocations(
+  subjects: readonly ClaimantSharesSubject[]
 ): FinalizedClaimantAllocation[] {
   const grouped = new Map<
     string,
@@ -469,25 +561,6 @@ export function buildClaimantAllocations(
       claimant: item.claimant,
       valuationUnits: item.units,
       receiptIds: new Set(item.receiptIds),
-    });
-  }
-
-  for (const [userId, units] of userUnitOverrides.entries()) {
-    const claimant: AttributionClaimant = {
-      kind: "user",
-      userId,
-    };
-    const key = claimantKey(claimant);
-    const existing = grouped.get(key);
-    if (existing) {
-      existing.valuationUnits = units;
-      continue;
-    }
-
-    grouped.set(key, {
-      claimant,
-      valuationUnits: units,
-      receiptIds: new Set(),
     });
   }
 

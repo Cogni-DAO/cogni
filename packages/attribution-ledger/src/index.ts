@@ -28,8 +28,10 @@ export {
 // Canonical claimant-share attribution shape
 export {
   type AttributionClaimant,
+  applySubjectOverrides,
   buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
+  buildReviewOverrideSnapshots,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
   CLAIMANT_SHARES_ALGO_REF,
   CLAIMANT_SHARES_EVALUATION_REF,
@@ -43,7 +45,9 @@ export {
   expandClaimantUnits,
   type FinalizedClaimantAllocation,
   parseClaimantSharesPayload,
+  type ReviewOverrideSnapshot,
   type SelectedReceiptForAttribution,
+  type SubjectOverride,
 } from "./claimant-shares";
 // Enricher inputs hash
 export { computeEnricherInputsHash } from "./enricher-inputs";
@@ -134,9 +138,11 @@ export type {
   InsertSignatureParams,
   InsertStatementParams,
   SelectedReceiptWithMetadata,
+  SubjectOverrideRecord,
   UnselectedReceipt,
   UpsertEvaluationParams,
   UpsertSelectionParams,
+  UpsertSubjectOverrideParams,
 } from "./store";
 
 // Validated store wrapper
