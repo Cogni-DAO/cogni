@@ -55,6 +55,7 @@ The system makes **what happened** (activity), **how it was valued** (weights), 
 | Zod contracts + API routes + stack tests                                                                        | Done         | 2   | task.0096       |
 | Scope-gate all epochId-based adapter methods                                                                    | Done         | 1   | task.0103       |
 | Dev seed script for governance UI visual testing                                                                | needs_merge  | 2   | task.0106       |
+| Epoch approver UI — EIP-712 signing + review/edit/finalize admin panel                                          | Not Started  | 4   | task.0119       |
 | **Collection pipeline hardening (from [gap analysis](../../docs/research/ledger-collection-gap-analysis.md)):** |              |     |                 |
 | Fix: unresolved contributors silently excluded                                                                  | Done         | 2   | bug.0092        |
 | Collection completeness verification                                                                            | needs_triage | 2   | task.0108       |
@@ -132,21 +133,21 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 
 **Goal:** Shift credit allocation from flat event weights to work-item-based budgets. Generic enrichment pipeline for future plugins (AI scoring, etc.). Per-receipt wallet signatures. UI surfaces.
 
-| Deliverable                                           | Status      | Est | Work Item             |
-| ----------------------------------------------------- | ----------- | --- | --------------------- |
-| Epoch artifact pipeline + echo enricher               | In Review   | 3   | task.0113             |
-| work-item-budget-v0 allocation algorithm              | Not Started | 2   | task.0114             |
-| Retroactive backfill for finalized epochs             | Not Started | 2   | task.0110 (not filed) |
-| Pending credit for unresolved identities              | Not Started | 2   | task.0111 (not filed) |
-| Webhook-first GitHub collection                       | Not Started | 3   | task.0112 (not filed) |
-| Per-receipt EIP-191 wallet signing                    | Not Started | 2   | (create at P1 start)  |
-| `ledger_issuers` role system (can_issue, can_approve) | Not Started | 2   | (create at P1 start)  |
-| Statement signing (DAO multisig / key store)          | Not Started | 2   | (create at P1 start)  |
-| UI: `/epochs/:id`, `/contributors/:id` pages          | Not Started | 3   | (create at P1 start)  |
-| X/Twitter activity adapter                            | Not Started | 2   | (create at P1 start)  |
-| Funding activity adapter                              | Not Started | 2   | (create at P1 start)  |
-| Merkle tree per epoch + inclusion proofs              | Not Started | 2   | (create at P1 start)  |
-| SourceCred grain → activity migration strategy        | Not Started | 2   | (create at P1 start)  |
+| Deliverable                                           | Status      | Est | Work Item                                              |
+| ----------------------------------------------------- | ----------- | --- | ------------------------------------------------------ |
+| Epoch artifact pipeline + echo enricher               | In Review   | 3   | task.0113                                              |
+| work-item-budget-v0 allocation algorithm              | Not Started | 2   | task.0114                                              |
+| Retroactive backfill for finalized epochs             | Not Started | 2   | task.0110 (not filed)                                  |
+| Pending credit for unresolved identities              | Not Started | 2   | task.0111 (not filed)                                  |
+| Webhook-first GitHub collection                       | Not Started | 3   | task.0112 (not filed)                                  |
+| Per-receipt EIP-191 wallet signing                    | Not Started | 2   | (create at P1 start — EIP-712 foundation in task.0119) |
+| `ledger_issuers` role system (can_issue, can_approve) | Not Started | 2   | (create at P1 start)                                   |
+| Statement signing (DAO multisig / key store)          | Not Started | 2   | (create at P1 start)                                   |
+| UI: `/epochs/:id`, `/contributors/:id` pages          | Not Started | 3   | (create at P1 start)                                   |
+| X/Twitter activity adapter                            | Not Started | 2   | (create at P1 start)                                   |
+| Funding activity adapter                              | Not Started | 2   | (create at P1 start)                                   |
+| Merkle tree per epoch + inclusion proofs              | Not Started | 2   | (create at P1 start)                                   |
+| SourceCred grain → activity migration strategy        | Not Started | 2   | (create at P1 start)                                   |
 
 ### Run (P2+) — Federation + SourceCred Removal
 
