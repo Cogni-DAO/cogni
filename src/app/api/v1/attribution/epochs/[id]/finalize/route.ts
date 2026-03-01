@@ -6,7 +6,7 @@
  * Purpose: SIWE + approver-gated endpoint for finalizing an epoch (review → finalized) with EIP-712 signature.
  * Scope: Auth-protected POST endpoint. Starts FinalizeEpochWorkflow via Temporal. Returns 202 + workflowId (WRITES_VIA_TEMPORAL). Does not perform finalization logic directly — delegates to workflow.
  * Invariants: WRITE_ROUTES_APPROVER_GATED, WRITES_VIA_TEMPORAL, EPOCH_FINALIZE_IDEMPOTENT.
- * Side-effects: IO (HTTP response, Temporal workflow start)
+ * Side-effects: IO (HTTP response, Temporal workflow start, Temporal task queue describe)
  * Links: docs/spec/attribution-ledger.md, contracts/attribution.finalize-epoch.v1.contract
  * @public
  */
@@ -32,6 +32,12 @@ export const runtime = "nodejs";
 
 /** Task queue for ledger workflows — must match ledger-worker.ts */
 const LEDGER_TASK_QUEUE = "ledger-tasks";
+
+/**
+ * temporal.api.enums.v1.TaskQueueType.TASK_QUEUE_TYPE_WORKFLOW = 1
+ * From @temporalio/proto (transitive dep, not re-exported by @temporalio/client).
+ */
+const TASK_QUEUE_TYPE_WORKFLOW = 1;
 
 export const POST = wrapRouteHandlerWithLogging<{
   params: Promise<{ id: string }>;
@@ -91,36 +97,72 @@ export const POST = wrapRouteHandlerWithLogging<{
     });
 
     try {
-      await client.workflow.start("FinalizeEpochWorkflow", {
-        taskQueue: LEDGER_TASK_QUEUE,
-        workflowId,
-        args: [
-          {
-            epochId: epochId.toString(),
-            signature,
-            signerAddress,
-            approvers,
-          },
-        ],
+      // Defense-in-depth: verify ledger-tasks queue has active pollers before submitting
+      const taskQueueDesc = await connection.workflowService.describeTaskQueue({
+        namespace: env.TEMPORAL_NAMESPACE,
+        taskQueue: { name: LEDGER_TASK_QUEUE },
+        taskQueueType: TASK_QUEUE_TYPE_WORKFLOW,
       });
-    } catch (err) {
-      // WorkflowExecutionAlreadyStartedError → idempotent (already running or completed)
-      if (!(err instanceof WorkflowExecutionAlreadyStartedError)) {
-        throw err;
+      const pollersCount = taskQueueDesc.pollers?.length ?? 0;
+
+      if (pollersCount === 0) {
+        ctx.log.warn(
+          { workflowId, taskQueue: LEDGER_TASK_QUEUE, pollersCount: 0 },
+          "ledger.finalize_no_pollers"
+        );
+        return NextResponse.json(
+          {
+            error:
+              "No workers polling ledger-tasks queue. Finalize worker may be down.",
+          },
+          { status: 503 }
+        );
       }
+
+      let created = true;
+
+      try {
+        await client.workflow.start("FinalizeEpochWorkflow", {
+          taskQueue: LEDGER_TASK_QUEUE,
+          workflowId,
+          args: [
+            {
+              epochId: epochId.toString(),
+              signature,
+              signerAddress,
+              approvers,
+            },
+          ],
+        });
+      } catch (err) {
+        // EPOCH_FINALIZE_IDEMPOTENT: already running or completed → return same workflowId
+        if (!(err instanceof WorkflowExecutionAlreadyStartedError)) {
+          throw err;
+        }
+        created = false;
+        ctx.log.info(
+          { workflowId },
+          "Finalize workflow already running — returning existing ID"
+        );
+      }
+
       ctx.log.info(
-        { workflowId },
-        "Finalize workflow already running — returning existing ID"
+        {
+          epochId: id,
+          workflowId,
+          taskQueue: LEDGER_TASK_QUEUE,
+          pollersCount,
+          created,
+        },
+        "ledger.finalize_submitted"
+      );
+
+      return NextResponse.json(
+        finalizeEpochOperation.output.parse({ workflowId, created }),
+        { status: 202 }
       );
     } finally {
       await connection.close();
     }
-
-    ctx.log.info({ epochId: id, workflowId }, "ledger.finalize-epoch_accepted");
-
-    return NextResponse.json(
-      finalizeEpochOperation.output.parse({ workflowId }),
-      { status: 202 }
-    );
   }
 );

@@ -75,6 +75,14 @@ async function main(): Promise<void> {
     namespace: config.TEMPORAL_NAMESPACE,
     taskQueue: config.TEMPORAL_TASK_QUEUE,
     ledgerEnabled: !!ledgerContainer,
+    ...(ledgerContainer
+      ? {
+          ledgerTaskQueue: "ledger-tasks",
+          nodeId: ledgerContainer.nodeId,
+          scopeId: ledgerContainer.scopeId,
+          chainId: ledgerContainer.chainId,
+        }
+      : {}),
   });
 
   // Graceful shutdown

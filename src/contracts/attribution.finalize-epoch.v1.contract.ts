@@ -27,6 +27,8 @@ export const FinalizeEpochInputSchema = z.object({
 export const FinalizeEpochOutputSchema = z.object({
   /** Temporal workflow ID for tracking finalization progress */
   workflowId: z.string(),
+  /** Whether a new workflow was started (true) or an existing one was found (false) */
+  created: z.boolean(),
 });
 
 export const finalizeEpochOperation = {

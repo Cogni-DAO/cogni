@@ -477,6 +477,11 @@ services:
       # Override: http://host.docker.internal:3000 for test:stack:dev (app on host)
       - APP_BASE_URL=${SCHEDULER_APP_BASE_URL:-http://app:3000}
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN?SCHEDULER_API_TOKEN is required}
+      # Ledger identity (optional — required for ledger-tasks queue polling)
+      # Bare passthrough: Zod in scheduler-worker enforces presence when needed.
+      - NODE_ID
+      - SCOPE_ID
+      - CHAIN_ID
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.
       # Zod schema coerces "" → undefined so both cases are safe.

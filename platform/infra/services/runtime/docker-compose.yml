@@ -376,6 +376,11 @@ services:
       # Internal API (scheduler-worker → app)
       - APP_BASE_URL=http://app:3000
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
+      # Ledger identity (optional — required for ledger-tasks queue polling)
+      # Bare passthrough: Zod in scheduler-worker enforces presence when needed.
+      - NODE_ID
+      - SCOPE_ID
+      - CHAIN_ID
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.
       # Zod schema coerces "" → undefined so both cases are safe.

@@ -25,6 +25,7 @@ import {
   GitHubAppTokenProvider,
   GitHubSourceAdapter,
 } from "../adapters/ingestion/index.js";
+import { logWorkerEvent, WORKER_EVENT_NAMES } from "../observability/index.js";
 import type { Logger } from "../observability/logger.js";
 
 import type {
@@ -95,11 +96,25 @@ export function createAttributionContainer(
   logger: Logger
 ): AttributionContainer | null {
   if (!config.NODE_ID || !config.SCOPE_ID || !config.CHAIN_ID) {
-    logger.info(
-      "NODE_ID, SCOPE_ID, or CHAIN_ID not set — ledger worker disabled"
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.CONFIG_LEDGER_DISABLED, {
+      reason: "NODE_ID, SCOPE_ID, or CHAIN_ID not set",
+      nodeId: config.NODE_ID ?? "unset",
+      scopeId: config.SCOPE_ID ?? "unset",
+      chainId: config.CHAIN_ID ?? "unset",
+    });
+    logger.warn(
+      "NODE_ID, SCOPE_ID, or CHAIN_ID not set — ledger worker disabled. " +
+        "Epoch finalize workflows will not be processed."
     );
     return null;
   }
+
+  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+    phase: "ledger_container",
+    nodeId: config.NODE_ID,
+    scopeId: config.SCOPE_ID,
+    chainId: config.CHAIN_ID,
+  });
 
   const db = createServiceDbClient(config.DATABASE_URL);
   const attributionLogger = logger.child?.({ component: "ledger" }) ?? logger;
