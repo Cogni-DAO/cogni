@@ -3,9 +3,9 @@
 
 /**
  * Module: `@features/governance/components/HoldingCard`
- * Purpose: Contributor row in the holdings view — avatar, credits, ownership bar.
- * Scope: Governance feature component. Shows credit balance and ownership percentage. Does not perform data fetching or server-side logic.
- * Invariants: BigInt credits displayed via Number() for presentation only. Progress bar maps to ownership%.
+ * Purpose: Table row for a single holder in the holdings view — rank, avatar, credits, ownership%.
+ * Scope: Governance feature component. Renders as TableRow for use inside shadcn Table. Does not perform data fetching or server-side logic.
+ * Invariants: BigInt credits displayed via Number() for presentation only.
  * Side-effects: none
  * Links: src/features/governance/types.ts
  * @public
@@ -15,63 +15,46 @@
 
 import type { ReactElement } from "react";
 
-import { Badge, Card, CardContent, Progress } from "@/components";
+import { Badge, TableCell, TableRow } from "@/components";
 import type { HoldingView } from "@/features/governance/types";
 
-interface HoldingCardProps {
+interface HoldingRowProps {
   readonly holding: HoldingView;
   readonly rank: number;
 }
 
-export function HoldingCard({ holding, rank }: HoldingCardProps): ReactElement {
+export function HoldingRow({ holding, rank }: HoldingRowProps): ReactElement {
   const credits = Number(holding.totalCredits);
 
   return (
-    <Card className="border-border/50 bg-card/50">
-      <CardContent className="p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-full text-lg"
-              style={{
-                backgroundColor: `hsl(${holding.color} / 0.15)`,
-              }}
-            >
-              {holding.avatar}
-            </div>
-            <div>
-              <div className="flex items-center gap-2 font-medium text-sm">
-                <span>
-                  #{rank} · {holding.displayName ?? "Contributor"}
-                </span>
-                {!holding.isLinked && (
-                  <Badge intent="outline" size="sm" className="h-5 px-1.5">
-                    Unlinked
-                  </Badge>
-                )}
-              </div>
-              <div className="text-muted-foreground text-xs">
-                {holding.epochsContributed} epochs
-              </div>
-            </div>
+    <TableRow>
+      <TableCell className="w-10 text-center text-muted-foreground text-xs">
+        {rank}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-sm">
+            {holding.avatar}
           </div>
-          <div className="text-right">
-            <div
-              className="font-bold"
-              style={{ color: `hsl(${holding.color})` }}
-            >
-              {credits.toLocaleString()} credits
-            </div>
-            <div className="font-mono text-accent text-sm">
-              {holding.ownershipPercent}%
-            </div>
-          </div>
+          <span className="font-medium text-sm">
+            {holding.displayName ?? "Contributor"}
+          </span>
+          {!holding.isLinked && (
+            <Badge intent="outline" size="sm" className="h-5 px-1.5">
+              Unlinked
+            </Badge>
+          )}
         </div>
-        <Progress
-          value={holding.ownershipPercent}
-          className="h-1.5 bg-secondary"
-        />
-      </CardContent>
-    </Card>
+      </TableCell>
+      <TableCell className="text-right font-mono text-xs">
+        {credits.toLocaleString()}
+      </TableCell>
+      <TableCell className="text-right font-medium text-sm">
+        {holding.ownershipPercent}%
+      </TableCell>
+      <TableCell className="text-right text-muted-foreground text-xs">
+        {holding.epochsContributed}
+      </TableCell>
+    </TableRow>
   );
 }

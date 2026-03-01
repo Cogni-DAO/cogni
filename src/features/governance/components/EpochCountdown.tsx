@@ -90,8 +90,8 @@ export function EpochCountdown({
 
   return (
     <Card className="border-border/50 bg-card/50">
-      <CardContent className="p-6">
-        <div className="mb-4 flex items-center justify-between">
+      <CardContent className="p-4">
+        <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-4 w-4" />
             <span className="text-sm">
@@ -100,11 +100,11 @@ export function EpochCountdown({
           </div>
           <StatusBadge status={status} />
         </div>
-        <div className="mb-3 font-bold font-mono text-4xl text-foreground">
+        <div className="mb-2 font-bold font-mono text-2xl text-foreground">
           {timeLeft}
         </div>
-        <Progress value={progress} className="h-2 bg-secondary" />
-        <div className="mt-3 flex justify-between text-muted-foreground text-xs">
+        <Progress value={progress} className="h-1.5 bg-secondary" />
+        <div className="mt-2 flex justify-between text-muted-foreground text-xs">
           <span>{contributorCount} contributors</span>
           <span>{totalPoints} total points</span>
         </div>
