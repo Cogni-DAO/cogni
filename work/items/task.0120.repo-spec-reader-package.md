@@ -57,8 +57,12 @@ Per **REPO_SPEC_AUTHORITY** (node-operator-contract spec): "Node authors `.cogni
 ### Scheduler-worker migration
 
 - [ ] `services/scheduler-worker/` adds `@cogni/repo-spec` as a workspace dependency
-- [ ] Worker bootstrap can optionally parse a repo-spec directly (for future use) rather than relying solely on env vars
-- [ ] Existing env-var-based config (`NODE_ID`, `SCOPE_ID`, `CHAIN_ID`) remains as the primary config source for the worker — the package extraction enables but does not require changing the worker's config strategy in this task
+- [ ] Worker bootstrap reads `.cogni/repo-spec.yaml` via the package (baked into Docker image) instead of relying on `NODE_ID`/`SCOPE_ID`/`CHAIN_ID` env vars
+- [ ] Remove `NODE_ID`, `SCOPE_ID`, `CHAIN_ID` from `env.ts` Zod schema (or demote to optional overrides)
+- [ ] Remove bare passthrough lines from both docker-compose files
+- [ ] Remove from `.env.local.example` and `.env.test.example`
+- [ ] Update `container.ts` to source identity from parsed repo-spec
+- [ ] Bake `.cogni/repo-spec.yaml` into scheduler-worker Dockerfile
 
 ### Tests
 
@@ -73,6 +77,13 @@ Per **REPO_SPEC_AUTHORITY** (node-operator-contract spec): "Node authors `.cogni
 - `src/shared/config/repoSpec.server.ts` — slim down to I/O + caching wrapper
 - `src/shared/config/index.ts` — update re-exports if needed
 - `services/scheduler-worker/package.json` — add workspace dep
+- `services/scheduler-worker/src/bootstrap/env.ts` — remove or demote `NODE_ID`/`SCOPE_ID`/`CHAIN_ID`
+- `services/scheduler-worker/src/bootstrap/container.ts` — source identity from repo-spec package
+- `services/scheduler-worker/Dockerfile` — bake `.cogni/repo-spec.yaml`
+- `platform/infra/services/runtime/docker-compose.dev.yml` — remove `NODE_ID`/`SCOPE_ID`/`CHAIN_ID` passthrough
+- `platform/infra/services/runtime/docker-compose.yml` — same
+- `.env.local.example` — remove `NODE_ID`/`SCOPE_ID`/`CHAIN_ID`
+- `.env.test.example` — same
 - `tests/unit/shared/config/repoSpec.server.test.ts` — update imports if needed
 - `tests/unit/packages/repo-spec/` — **new** test directory
 - `pnpm-workspace.yaml` — add `packages/repo-spec` if not auto-discovered
@@ -86,8 +97,9 @@ Per **REPO_SPEC_AUTHORITY** (node-operator-contract spec): "Node authors `.cogni
 - [ ] Step 4: Write unit tests in `tests/unit/packages/repo-spec/` — parse happy/sad paths, accessor edge cases.
 - [ ] Step 5: Migrate `src/shared/config/repoSpec.server.ts` to delegate to package — keep file I/O, caching, and `CHAIN_ID` validation here. Update `repoSpec.schema.ts` to re-export from package.
 - [ ] Step 6: Verify all existing consumers compile and existing tests pass. `pnpm check`.
-- [ ] Step 7: Add `@cogni/repo-spec` to scheduler-worker's `package.json`. No behavioral change yet — just making it available.
-- [ ] Step 8: Cleanup — file headers, `pnpm check`, update work item status.
+- [ ] Step 7: Wire scheduler-worker to `@cogni/repo-spec` — add workspace dep, bake `.cogni/repo-spec.yaml` into Dockerfile, update `container.ts` to read identity from parsed repo-spec.
+- [ ] Step 8: Remove env var hack — drop `NODE_ID`/`SCOPE_ID`/`CHAIN_ID` from `env.ts`, docker-compose files, `.env.*.example`. Verify worker still boots correctly.
+- [ ] Step 9: Cleanup — file headers, `pnpm check`, update work item status.
 
 ## Design Notes
 
@@ -103,10 +115,21 @@ The package owns **schema + validation + typed extraction**. The app server wrap
 - A string fetched from GitHub API — future multi-tenant gateway
 - A test fixture — unit tests, no disk needed
 
+### Cleanup: env var hack for NODE_ID / SCOPE_ID / CHAIN_ID
+
+A quick fix added `NODE_ID`, `SCOPE_ID`, and `CHAIN_ID` as env vars passed through docker-compose to the scheduler-worker (bare passthrough, Zod-validated in `env.ts`). This is a hack — these values are deterministic from `.cogni/repo-spec.yaml` which is already committed to the repo. Propagating them through `.env` files, docker-compose, deploy workflows, and `deploy.sh` is fragile and redundant.
+
+**This task should eliminate the env var duplication.** Once the scheduler-worker can import `@cogni/repo-spec` and call `parseRepoSpec()` on the baked-in `.cogni/repo-spec.yaml`, the `NODE_ID`/`SCOPE_ID`/`CHAIN_ID` env vars become unnecessary for the worker. The cleanup includes:
+
+- Remove `NODE_ID`, `SCOPE_ID`, `CHAIN_ID` from `services/scheduler-worker/src/bootstrap/env.ts` (or make them pure overrides)
+- Remove the bare passthrough lines from both docker-compose files
+- Remove from `.env.local.example` and `.env.test.example`
+- Update `container.ts` to source identity from the package instead of env vars
+- Bake `.cogni/repo-spec.yaml` into the scheduler-worker Docker image (COPY in Dockerfile)
+
 ### What this does NOT do
 
-- Does NOT change the scheduler-worker's config strategy (env vars → package). That's a follow-up.
-- Does NOT add GitHub API fetching for external repo-specs. That's story.0116 scope.
+- Does NOT add GitHub API fetching for external repo-specs. That's task.0122 / story.0116 scope.
 - Does NOT modify the repo-spec YAML format or add new fields.
 
 ## Validation
