@@ -29,6 +29,7 @@ export interface IngestionReceipt {
 export interface EpochContributor {
   readonly claimantKey: string;
   readonly claimantKind: "user" | "identity";
+  readonly isLinked: boolean;
   readonly displayName: string | null;
   readonly claimantLabel: string;
   readonly avatar: string;
@@ -75,6 +76,7 @@ export interface EpochHistoryData {
 export interface HoldingView {
   readonly claimantKey: string;
   readonly claimantKind: "user" | "identity";
+  readonly isLinked: boolean;
   readonly displayName: string | null;
   readonly claimantLabel: string;
   readonly avatar: string;

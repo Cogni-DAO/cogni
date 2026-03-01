@@ -460,6 +460,12 @@ export interface AttributionStore {
   ): Promise<Map<string, string>>;
 
   /**
+   * Resolves current public-facing display names for linked users.
+   * Fallback policy is implementation-defined, but must never expose raw user IDs.
+   */
+  getUserDisplayNames(userIds: string[]): Promise<Map<string, string>>;
+
+  /**
    * Returns receipts in the epoch window that need selection work:
    * - No selection row exists (new receipts)
    * - Selection row exists but user_id IS NULL (unresolved)

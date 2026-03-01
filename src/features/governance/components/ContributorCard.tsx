@@ -15,7 +15,7 @@
 
 import type { ReactElement } from "react";
 
-import { Card, CardContent } from "@/components";
+import { Badge, Card, CardContent } from "@/components";
 import type { EpochContributor } from "@/features/governance/types";
 
 import { ContributionRow } from "./ContributionRow";
@@ -46,11 +46,17 @@ export function ContributorCard({
             </div>
             <div>
               <span className="text-muted-foreground text-sm">#{rank}</span>
-              <div className="font-medium text-sm">
-                {contributor.displayName ?? contributor.claimantLabel}
+              <div className="flex items-center gap-2 font-medium text-sm">
+                <span>{contributor.displayName ?? "Contributor"}</span>
+                {!contributor.isLinked && (
+                  <Badge intent="outline" size="sm" className="h-5 px-1.5">
+                    Unlinked
+                  </Badge>
+                )}
               </div>
               <div className="text-muted-foreground text-xs">
-                {contributor.claimantLabel} · {contributor.creditShare}% share
+                {contributor.creditShare}% share · {contributor.activityCount}{" "}
+                contributions
               </div>
             </div>
           </div>

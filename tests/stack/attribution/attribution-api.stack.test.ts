@@ -246,6 +246,8 @@ describe("Public ledger API routes", () => {
       const item = parsed.data.items[0];
       expect(item).toHaveProperty("claimantKey");
       expect(item).toHaveProperty("claimant");
+      expect(item).toHaveProperty("displayName");
+      expect(item).toHaveProperty("isLinked");
       expect(item).toHaveProperty("totalUnits");
       expect(item).toHaveProperty("amountCredits");
       expect(item).toHaveProperty("receiptIds");

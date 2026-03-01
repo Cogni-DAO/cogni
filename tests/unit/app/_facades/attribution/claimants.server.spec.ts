@@ -104,6 +104,7 @@ function makeStore(
     getSignaturesForStatement: vi.fn(),
     insertSelectionDoNothing: vi.fn(),
     resolveIdentities: vi.fn(),
+    getUserDisplayNames: vi.fn().mockResolvedValue(new Map()),
     finalizeEpochAtomic: vi.fn(),
     getUnselectedReceipts: vi.fn(),
     updateSelectionUserId: vi.fn(),

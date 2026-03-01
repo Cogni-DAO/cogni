@@ -55,6 +55,8 @@ export async function loadClaimantShareSubjectsForEpoch(
 
 function toLineItemDto(params: {
   claimant: AttributionClaimant;
+  displayName: string | null;
+  isLinked: boolean;
   totalUnits: bigint;
   share: string;
   amountCredits: bigint;
@@ -63,6 +65,8 @@ function toLineItemDto(params: {
   return {
     claimantKey: claimantKey(params.claimant),
     claimant: params.claimant,
+    displayName: params.displayName,
+    isLinked: params.isLinked,
     totalUnits: params.totalUnits.toString(),
     share: params.share,
     amountCredits: params.amountCredits.toString(),
@@ -97,18 +101,115 @@ function parseClaimantItemsFromStatement(
       return null;
     }
 
-    parsedItems.push(
-      toLineItemDto({
-        claimant: item.claimant,
-        totalUnits,
-        share: item.share,
-        amountCredits,
-        receiptIds: item.receipt_ids ?? [],
-      })
-    );
+    parsedItems.push({
+      claimantKey: claimantKey(item.claimant),
+      claimant: item.claimant,
+      displayName: null,
+      isLinked: item.claimant.kind === "user",
+      totalUnits: totalUnits.toString(),
+      share: item.share,
+      amountCredits: amountCredits.toString(),
+      receiptIds: [...(item.receipt_ids ?? [])],
+    });
   }
 
   return parsedItems;
+}
+
+async function enrichClaimantPresentation(
+  store: AttributionStore,
+  epoch: AttributionEpoch,
+  items: readonly EpochClaimantLineItemDto[]
+): Promise<EpochClaimantLineItemDto[]> {
+  const receipts = await store.getReceiptsForWindow(
+    epoch.nodeId,
+    epoch.periodStart,
+    epoch.periodEnd
+  );
+  const receiptsById = new Map(
+    receipts.map((receipt) => [receipt.receiptId, receipt])
+  );
+
+  const githubIdentityIds = items
+    .filter(
+      (
+        item
+      ): item is EpochClaimantLineItemDto & {
+        claimant: {
+          kind: "identity";
+          provider: "github";
+          externalId: string;
+          providerLogin: string | null;
+        };
+      } =>
+        item.claimant.kind === "identity" && item.claimant.provider === "github"
+    )
+    .map((item) => item.claimant.externalId);
+
+  const resolvedIdentities = await store.resolveIdentities(
+    "github",
+    githubIdentityIds
+  );
+  const userIds = new Set<string>();
+  for (const item of items) {
+    if (item.claimant.kind === "user") {
+      userIds.add(item.claimant.userId);
+      continue;
+    }
+    if (item.claimant.provider !== "github") continue;
+    const resolvedUserId = resolvedIdentities.get(item.claimant.externalId);
+    if (resolvedUserId) {
+      userIds.add(resolvedUserId);
+    }
+  }
+
+  const userDisplayNames = await store.getUserDisplayNames([...userIds]);
+
+  return items.map((item) => {
+    const receiptLogin =
+      item.receiptIds
+        .map(
+          (receiptId) =>
+            receiptsById.get(receiptId)?.platformLogin?.trim() ?? null
+        )
+        .find((login) => login && login.length > 0) ?? null;
+
+    if (item.claimant.kind === "user") {
+      return {
+        ...item,
+        displayName:
+          userDisplayNames.get(item.claimant.userId) ?? receiptLogin ?? null,
+        isLinked: true,
+      };
+    }
+
+    if (item.claimant.provider !== "github") {
+      return {
+        ...item,
+        displayName: item.claimant.providerLogin ?? receiptLogin ?? null,
+        isLinked: false,
+      };
+    }
+
+    const resolvedUserId = resolvedIdentities.get(item.claimant.externalId);
+    if (!resolvedUserId) {
+      return {
+        ...item,
+        displayName: item.claimant.providerLogin ?? receiptLogin ?? null,
+        isLinked: false,
+      };
+    }
+
+    return {
+      ...item,
+      displayName:
+        userDisplayNames.get(resolvedUserId) ??
+        item.claimant.providerLogin ??
+        receiptLogin ??
+        null,
+      isLinked: true,
+    };
+  });
 }
 
 export async function readFinalizedEpochClaimants(
@@ -140,7 +241,7 @@ export async function readFinalizedEpochClaimants(
     return {
       epochId: epoch.id.toString(),
       poolTotalCredits: statement.poolTotalCredits.toString(),
-      items: statementItems,
+      items: await enrichClaimantPresentation(store, epoch, statementItems),
     };
   }
 
@@ -164,11 +265,21 @@ export async function readFinalizedEpochClaimants(
   const items = computeClaimantCreditLineItems(
     claimantAllocations,
     epoch.poolTotalCredits
-  ).map(toLineItemDto);
+  ).map((item) =>
+    toLineItemDto({
+      claimant: item.claimant,
+      displayName: null,
+      isLinked: item.claimant.kind === "user",
+      totalUnits: item.totalUnits,
+      share: item.share,
+      amountCredits: item.amountCredits,
+      receiptIds: item.receiptIds,
+    })
+  );
 
   return {
     epochId: epoch.id.toString(),
     poolTotalCredits: epoch.poolTotalCredits.toString(),
-    items,
+    items: await enrichClaimantPresentation(store, epoch, items),
   };
 }

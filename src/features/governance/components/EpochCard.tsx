@@ -4,7 +4,7 @@
 /**
  * Module: `@features/governance/components/EpochCard`
  * Purpose: Collapsible card for an epoch in the history view.
- * Scope: Governance feature component. Shows epoch summary with unresolved-contributor warning, expandable to contributor breakdown with per-login detail. Does not perform data fetching or server-side logic.
+ * Scope: Governance feature component. Shows epoch summary with contributor breakdown. Does not perform data fetching or server-side logic.
  * Invariants: BigInt credits displayed via Number() for presentation only. No credit math in UI.
  * Side-effects: none
  * Links: src/features/governance/types.ts
@@ -13,7 +13,7 @@
 
 "use client";
 
-import { AlertTriangle, CheckCircle, Clock, Eye } from "lucide-react";
+import { CheckCircle, Clock, Eye } from "lucide-react";
 import type { ReactElement } from "react";
 import { Badge, Card, CardContent } from "@/components";
 import type { EpochView } from "@/features/governance/types";
@@ -92,11 +92,6 @@ export function EpochCard({
               </div>
               <div className="mt-0.5 text-muted-foreground text-xs">
                 {epoch.contributors.length} contributors
-                {epoch.unresolvedCount > 0 && (
-                  <span className="ml-1 text-warning">
-                    ({epoch.unresolvedCount} unlinked)
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -117,42 +112,8 @@ export function EpochCard({
 
         {expanded && (
           <div className="mt-4 space-y-3">
-            {epoch.unresolvedCount > 0 && (
-              <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                <div className="text-sm">
-                  <span className="font-medium text-warning">
-                    {epoch.unresolvedCount} activity event
-                    {epoch.unresolvedCount === 1 ? "" : "s"} from unlinked
-                    accounts
-                  </span>
-                  <span className="text-muted-foreground">
-                    {" — "}these contributors need to link their GitHub account
-                    to receive credit.
-                  </span>
-                  {epoch.unresolvedActivities.length > 0 && (
-                    <div className="mt-1 text-muted-foreground text-xs">
-                      {epoch.unresolvedActivities.map((u) => (
-                        <span
-                          key={`${u.source}::${u.platformLogin}`}
-                          className="mr-2"
-                        >
-                          {u.platformLogin ?? "unknown"} ({u.eventCount})
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
             {sorted.map((c, i) => {
               const totalScore = Math.round(Number(c.proposedUnits) / 1000);
-              const githubCount = c.receipts.filter(
-                (a) => a.source === "github"
-              ).length;
-              const discordCount = c.receipts.filter(
-                (a) => a.source === "discord"
-              ).length;
               const userCredits =
                 credits != null
                   ? Math.round((credits * c.creditShare) / 100)
@@ -173,18 +134,22 @@ export function EpochCard({
                       {c.avatar}
                     </div>
                     <div>
-                      <div className="font-medium text-sm">
-                        #{i + 1} · {c.displayName ?? c.claimantLabel}
-                        {c.claimantKind === "identity" && (
-                          <span className="ml-2 text-warning text-xs uppercase tracking-wide">
-                            pending
-                          </span>
+                      <div className="flex items-center gap-2 font-medium text-sm">
+                        <span>
+                          #{i + 1} · {c.displayName ?? "Contributor"}
+                        </span>
+                        {!c.isLinked && (
+                          <Badge
+                            intent="outline"
+                            size="sm"
+                            className="h-5 px-1.5"
+                          >
+                            Unlinked
+                          </Badge>
                         )}
                       </div>
                       <div className="text-muted-foreground text-xs">
-                        {c.claimantLabel} · {c.creditShare}% share ·{" "}
-                        {c.activityCount} contributions · {githubCount} GitHub ·{" "}
-                        {discordCount} Discord
+                        {c.creditShare}% share · {c.activityCount} contributions
                       </div>
                     </div>
                   </div>

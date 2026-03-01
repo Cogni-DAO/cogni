@@ -66,6 +66,7 @@ import {
   ingestionReceipts,
 } from "@cogni/db-schema/attribution";
 import { userBindings } from "@cogni/db-schema/identity";
+import { userProfiles } from "@cogni/db-schema/profile";
 import {
   and,
   eq,
@@ -1293,6 +1294,52 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         )
       );
     return new Map(rows.map((r) => [r.externalId, r.userId]));
+  }
+
+  async getUserDisplayNames(userIds: string[]): Promise<Map<string, string>> {
+    if (userIds.length === 0) return new Map();
+    const uniqueIds = [...new Set(userIds)];
+
+    const [profiles, bindings] = await Promise.all([
+      this.db
+        .select({
+          userId: userProfiles.userId,
+          displayName: userProfiles.displayName,
+        })
+        .from(userProfiles)
+        .where(
+          and(
+            inArray(userProfiles.userId, uniqueIds),
+            isNotNull(userProfiles.displayName)
+          )
+        ),
+      this.db
+        .select({
+          userId: userBindings.userId,
+          providerLogin: userBindings.providerLogin,
+        })
+        .from(userBindings)
+        .where(
+          and(
+            inArray(userBindings.userId, uniqueIds),
+            isNotNull(userBindings.providerLogin)
+          )
+        ),
+    ]);
+
+    const names = new Map<string, string>();
+    for (const row of profiles) {
+      if (row.displayName) {
+        names.set(row.userId, row.displayName);
+      }
+    }
+    for (const row of bindings) {
+      if (!names.has(row.userId) && row.providerLogin) {
+        names.set(row.userId, row.providerLogin);
+      }
+    }
+
+    return names;
   }
 
   async getUnselectedReceipts(

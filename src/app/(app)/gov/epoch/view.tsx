@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/(app)/gov/epoch/view`
- * Purpose: Client component displaying the current open epoch — countdown, contributors, scoring, and unresolved-contributor warnings.
- * Scope: Renders epoch data fetched via useCurrentEpoch hook. Shows warning banner when unresolved activity exists. Does not perform server-side logic.
+ * Purpose: Client component displaying the current open epoch — countdown, contributors, and scoring.
+ * Scope: Renders epoch data fetched via useCurrentEpoch hook. Does not perform server-side logic.
  * Invariants: BigInt units displayed via Number() for presentation only. No credit math in UI.
  * Side-effects: IO (via useCurrentEpoch hook)
  * Links: docs/spec/epoch-ledger.md, src/features/governance/types.ts
@@ -13,7 +13,6 @@
 
 "use client";
 
-import { AlertTriangle } from "lucide-react";
 import type { ReactElement } from "react";
 import { ContributorCard } from "@/features/governance/components/ContributorCard";
 import { EpochCountdown } from "@/features/governance/components/EpochCountdown";
@@ -95,34 +94,6 @@ export function CurrentEpochView(): ReactElement {
         contributorCount={sorted.length}
         totalPoints={totalPoints}
       />
-
-      {epoch.unresolvedCount > 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-4">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-          <div className="text-sm">
-            <span className="font-medium text-warning">
-              {epoch.unresolvedCount} activity event
-              {epoch.unresolvedCount === 1 ? "" : "s"} from unlinked accounts
-            </span>
-            <span className="text-muted-foreground">
-              {" — "}these contributors need to link their GitHub account to
-              receive credit.
-            </span>
-            {epoch.unresolvedActivities.length > 0 && (
-              <div className="mt-1 text-muted-foreground text-xs">
-                {epoch.unresolvedActivities.map((u) => (
-                  <span
-                    key={`${u.source}::${u.platformLogin}`}
-                    className="mr-2"
-                  >
-                    {u.platformLogin ?? "unknown"} ({u.eventCount})
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       <div>
         <h2 className="mb-4 font-semibold text-lg">Contributions & Scoring</h2>

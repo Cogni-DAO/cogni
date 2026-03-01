@@ -36,6 +36,8 @@ export const EpochClaimantSchema = z.discriminatedUnion("kind", [
 export const EpochClaimantLineItemSchema = z.object({
   claimantKey: z.string(),
   claimant: EpochClaimantSchema,
+  displayName: z.string().nullable(),
+  isLinked: z.boolean(),
   totalUnits: z.string(),
   share: z.string(),
   amountCredits: z.string(),
