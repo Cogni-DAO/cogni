@@ -318,7 +318,7 @@ function ReviewReceiptRow({
                   className="h-7 text-xs"
                 />
               </div>
-              <div className="flex-[2]">
+              <div className="flex-2">
                 <label
                   htmlFor={`override-reason-${receipt.receiptId}`}
                   className="mb-1 block text-muted-foreground text-xs"
