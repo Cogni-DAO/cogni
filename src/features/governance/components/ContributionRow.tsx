@@ -53,6 +53,7 @@ export function ContributionRow({
   receipt: IngestionReceipt;
 }): ReactElement {
   const Icon = TYPE_ICONS[receipt.eventType] ?? Pin;
+  const score = receipt.units ? Math.round(Number(receipt.units) / 1000) : null;
 
   return (
     <div className="flex items-center justify-between rounded bg-secondary/30 px-2 py-1 text-sm">
@@ -63,6 +64,9 @@ export function ContributionRow({
           {TYPE_LABELS[receipt.eventType] ?? receipt.eventType}
         </span>
       </div>
+      {score != null && (
+        <span className="font-mono text-muted-foreground text-xs">{score}</span>
+      )}
     </div>
   );
 }

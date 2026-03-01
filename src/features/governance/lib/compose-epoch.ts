@@ -167,6 +167,7 @@ function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
       platformLogin: r.platformLogin,
       artifactUrl: r.artifactUrl,
       eventTime: r.eventTime,
+      units: null,
     };
     receiptsById.set(r.receiptId, mapped);
 
@@ -238,8 +239,8 @@ export function composeEpochView(
       continue;
     }
 
-    const mappedReceipt = receiptsById.get(receipt.receiptId);
-    if (!mappedReceipt) {
+    const baseReceipt = receiptsById.get(receipt.receiptId);
+    if (!baseReceipt) {
       continue;
     }
 
@@ -254,6 +255,11 @@ export function composeEpochView(
     if (weight <= 0n) {
       continue;
     }
+
+    const mappedReceipt: IngestionReceipt = {
+      ...baseReceipt,
+      units: weight.toString(),
+    };
 
     const userId = receipt.selection?.userId ?? null;
     if (userId) {

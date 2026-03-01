@@ -23,6 +23,8 @@ export interface IngestionReceipt {
   readonly platformLogin: string | null;
   readonly artifactUrl: string | null;
   readonly eventTime: string;
+  /** Per-receipt weight (milli-units). Available for open/review epochs; null for finalized. */
+  readonly units: string | null;
 }
 
 /** A contributor row within an epoch view. */
