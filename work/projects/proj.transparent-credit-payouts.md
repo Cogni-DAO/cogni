@@ -157,9 +157,9 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 
 | Deliverable                                          | Status      | Est | Work Item            |
 | ---------------------------------------------------- | ----------- | --- | -------------------- |
-| Rebalance epoch infrastructure (`epoch_kind` column) | Not Started | 2   | (create after spike)  |
-| Quarterly retro review workflow                      | Not Started | 3   | (create after spike)  |
-| Signal collection enrichers (code survival, reverts) | Not Started | 2   | (create after spike)  |
+| Rebalance epoch infrastructure (`epoch_kind` column) | Not Started | 2   | (create after spike) |
+| Quarterly retro review workflow                      | Not Started | 3   | (create after spike) |
+| Signal collection enrichers (code survival, reverts) | Not Started | 2   | (create after spike) |
 | Receipt schema → VC data model (JWT VC, DID subject) | Not Started | 2   | (create at P2 start) |
 | Multi-issuer trust policy                            | Not Started | 3   | (create at P2 start) |
 | SourceCred removal from stack                        | Not Started | 2   | (create at P2 start) |
