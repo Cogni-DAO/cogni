@@ -404,7 +404,7 @@ export interface OverrideEntry {
 /**
  * Recompute contributor sums after applying subject overrides client-side.
  * Override units are in display scale (e.g. "2"); receipt.units are milli-units (e.g. "8000").
- * Converts override to milli (* 1000) before replacing the receipt weight.
+ * Receipts are never mutated — only contributor-level proposedUnits and shares are recomputed.
  */
 export function applyOverridesToEpochView(
   epoch: EpochView,
@@ -415,23 +415,15 @@ export function applyOverridesToEpochView(
   const updatedContributors: EpochContributor[] = epoch.contributors.map(
     (contributor) => {
       let totalUnits = 0n;
-      const updatedReceipts: IngestionReceipt[] = contributor.receipts.map(
-        (receipt) => {
-          const override = overrides.get(receipt.receiptId);
-          if (override?.overrideUnits != null) {
-            const overrideMilli = BigInt(override.overrideUnits) * 1000n;
-            totalUnits += overrideMilli;
-            return { ...receipt, units: overrideMilli.toString() };
-          }
+      for (const receipt of contributor.receipts) {
+        const override = overrides.get(receipt.receiptId);
+        if (override?.overrideUnits != null) {
+          totalUnits += BigInt(override.overrideUnits) * 1000n;
+        } else {
           totalUnits += BigInt(receipt.units ?? "0");
-          return receipt;
         }
-      );
-      return {
-        ...contributor,
-        proposedUnits: totalUnits.toString(),
-        receipts: updatedReceipts,
-      };
+      }
+      return { ...contributor, proposedUnits: totalUnits.toString() };
     }
   );
 

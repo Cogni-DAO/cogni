@@ -172,9 +172,10 @@ describe("applyOverridesToEpochView", () => {
     ]);
     const result = applyOverridesToEpochView(epoch, overrides);
 
-    // "2" display → 2000 milli-units
+    // "2" display → 2000 milli-units at contributor level
     expect(result.contributors[0].proposedUnits).toBe("2000");
-    expect(result.contributors[0].receipts[0].units).toBe("2000");
+    // Receipt units are never mutated — UI reads original for strikethrough display
+    expect(result.contributors[0].receipts[0].units).toBe("8000");
   });
 
   it("applies partial overrides — only overridden receipts change", () => {
@@ -194,8 +195,9 @@ describe("applyOverridesToEpochView", () => {
 
     // r1: 3 * 1000 = 3000, r2: unchanged 2000, total = 5000
     expect(result.contributors[0].proposedUnits).toBe("5000");
-    expect(result.contributors[0].receipts[0].units).toBe("3000"); // overridden
-    expect(result.contributors[0].receipts[1].units).toBe("2000"); // unchanged
+    // Receipts preserve original units — never mutated by overrides
+    expect(result.contributors[0].receipts[0].units).toBe("8000");
+    expect(result.contributors[0].receipts[1].units).toBe("2000");
   });
 
   it("recalculates share percentages across all contributors", () => {
