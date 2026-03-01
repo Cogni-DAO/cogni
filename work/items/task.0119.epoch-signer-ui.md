@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
 branch: feat/epoch-signing-ui
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/502
 reviewer:
 revision: 0
 blocked_by:
