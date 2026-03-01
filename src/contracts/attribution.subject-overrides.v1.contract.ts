@@ -20,7 +20,7 @@ import { z } from "zod";
 
 const zBigint = z
   .string()
-  .regex(/^-?\d+$/, "Must be a valid integer string")
+  .regex(/^\d+$/, "Must be a non-negative integer string")
   .transform(BigInt);
 
 const ClaimantSchema = z.discriminatedUnion("kind", [
