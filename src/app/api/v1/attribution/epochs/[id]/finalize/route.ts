@@ -3,7 +3,7 @@
 
 /**
  * Module: `@app/api/v1/attribution/epochs/[id]/finalize/route`
- * Purpose: SIWE + approver-gated endpoint for finalizing an epoch (review → finalized) with EIP-191 signature.
+ * Purpose: SIWE + approver-gated endpoint for finalizing an epoch (review → finalized) with EIP-712 signature.
  * Scope: Auth-protected POST endpoint. Starts FinalizeEpochWorkflow via Temporal. Returns 202 + workflowId (WRITES_VIA_TEMPORAL). Does not perform finalization logic directly — delegates to workflow.
  * Invariants: WRITE_ROUTES_APPROVER_GATED, WRITES_VIA_TEMPORAL, EPOCH_FINALIZE_IDEMPOTENT.
  * Side-effects: IO (HTTP response, Temporal workflow start)

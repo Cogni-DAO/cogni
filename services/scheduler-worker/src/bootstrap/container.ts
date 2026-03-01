@@ -58,6 +58,7 @@ export interface AttributionContainer {
   sourceAdapters: ReadonlyMap<string, SourceAdapter>;
   nodeId: string;
   scopeId: string;
+  chainId: number;
   logger: Logger;
 }
 
@@ -93,8 +94,10 @@ export function createAttributionContainer(
   config: Env,
   logger: Logger
 ): AttributionContainer | null {
-  if (!config.NODE_ID || !config.SCOPE_ID) {
-    logger.info("NODE_ID or SCOPE_ID not set — ledger worker disabled");
+  if (!config.NODE_ID || !config.SCOPE_ID || !config.CHAIN_ID) {
+    logger.info(
+      "NODE_ID, SCOPE_ID, or CHAIN_ID not set — ledger worker disabled"
+    );
     return null;
   }
 
@@ -145,6 +148,7 @@ export function createAttributionContainer(
     sourceAdapters: adapters,
     nodeId: config.NODE_ID,
     scopeId: config.SCOPE_ID,
+    chainId: config.CHAIN_ID,
     logger: attributionLogger,
   };
 }

@@ -39,6 +39,9 @@ const EnvSchema = z.object({
   /** Human-friendly scope slug — for display, logs, schedule IDs */
   SCOPE_KEY: z.string().min(1).default("default"),
 
+  /** EVM chain ID — must match app's CHAIN_ID for EIP-712 domain binding */
+  CHAIN_ID: z.coerce.number().int().positive().optional(),
+
   /** Scheduler API token for internal API calls (required, treat as secret - never log) */
   SCHEDULER_API_TOKEN: z
     .string()

@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/scheduler-worker-service/activities/ledger`
  * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, auto-close, and finalization.
- * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-191 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
+ * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-712 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
  * Invariants:
  *   - Per RECEIPT_IDEMPOTENT: All activities idempotent via PK constraints or upsert
  *   - Per CURSOR_STATE_PERSISTED: Cursors saved after each collect() call
@@ -17,7 +17,7 @@
  *   - Per EVALUATION_FINAL_ATOMIC: autoCloseIngestion passes evaluations to closeIngestionWithEvaluations for atomic write
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
  *   - Per FINALIZE_CLAIMANT_AWARE: finalizeEpoch loads locked claimant-share evaluations, builds claimant allocations with resolved-user overrides, and stores claimant metadata in statement items
- * Side-effects: IO (database, GitHub API, viem EIP-191 verification)
+ * Side-effects: IO (database, GitHub API, viem EIP-712 verification)
  * Links: docs/spec/attribution-ledger.md, docs/spec/temporal-patterns.md
  * @internal
  */
@@ -28,9 +28,9 @@ import type {
   UnselectedReceipt,
 } from "@cogni/attribution-ledger";
 import {
-  buildCanonicalMessage,
   buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
+  buildEIP712TypedData,
   CLAIMANT_SHARES_EVALUATION_REF,
   claimantKey,
   computeApproverSetHash,
@@ -45,7 +45,7 @@ import {
 } from "@cogni/attribution-ledger";
 import type { ActivityEvent } from "@cogni/ingestion-core";
 
-import { verifyMessage } from "viem";
+import { verifyTypedData } from "viem";
 
 import type { Logger } from "../observability/logger.js";
 import type { AttributionStore, SourceAdapter } from "../ports/index.js";
@@ -58,6 +58,7 @@ export interface AttributionActivityDeps {
   readonly sourceAdapters: ReadonlyMap<string, SourceAdapter>;
   readonly nodeId: string;
   readonly scopeId: string;
+  readonly chainId: number;
   readonly logger: Logger;
 }
 
@@ -215,7 +216,7 @@ export interface AutoCloseIngestionOutput {
  */
 export interface FinalizeEpochInput {
   readonly epochId: string; // bigint serialized
-  readonly signature: string; // EIP-191 hex
+  readonly signature: string; // EIP-712 hex
   readonly signerAddress: string; // from SIWE session
   readonly approvers: string[]; // EVM addresses (lowercased)
 }
@@ -263,7 +264,8 @@ async function loadFinalizedClaimantSubjects(
  * Follows the same DI pattern as createActivities() in activities/index.ts.
  */
 export function createAttributionActivities(deps: AttributionActivityDeps) {
-  const { attributionStore, sourceAdapters, nodeId, scopeId, logger } = deps;
+  const { attributionStore, sourceAdapters, nodeId, scopeId, chainId, logger } =
+    deps;
 
   /**
    * Creates or returns an existing epoch for the given time window.
@@ -980,18 +982,22 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     const allocationSetHash =
       await computeClaimantAllocationSetHash(claimantAllocations);
 
-    // 8. Build canonical message and verify signature
-    const canonicalMessage = buildCanonicalMessage({
+    // 8. Build EIP-712 typed data and verify signature
+    const typedData = buildEIP712TypedData({
       nodeId,
       scopeId,
       epochId: input.epochId,
       allocationSetHash,
       poolTotalCredits: poolTotal.toString(),
+      chainId,
     });
 
-    const isValid = await verifyMessage({
+    const isValid = await verifyTypedData({
       address: input.signerAddress as `0x${string}`,
-      message: canonicalMessage,
+      domain: typedData.domain,
+      types: typedData.types,
+      primaryType: typedData.primaryType,
+      message: typedData.message,
       signature: input.signature as `0x${string}`,
     });
     if (!isValid) {

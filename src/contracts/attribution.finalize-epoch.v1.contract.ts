@@ -18,7 +18,7 @@
 import { z } from "zod";
 
 export const FinalizeEpochInputSchema = z.object({
-  /** EIP-191 hex signature of the canonical finalize message */
+  /** EIP-712 hex signature of the typed payout statement */
   signature: z
     .string()
     .regex(/^0x[0-9a-fA-F]+$/, "Signature must be hex-encoded with 0x prefix"),

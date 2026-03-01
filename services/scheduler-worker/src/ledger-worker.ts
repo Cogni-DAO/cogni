@@ -60,6 +60,7 @@ export async function startAttributionWorker(
     sourceAdapters: container.sourceAdapters,
     nodeId: container.nodeId,
     scopeId: container.scopeId,
+    chainId: container.chainId,
     logger: container.logger,
   });
 
