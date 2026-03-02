@@ -43,7 +43,9 @@ export function checkApprover(
 
   const approvers = epoch?.approvers ?? getLedgerApprovers();
 
-  if (!approvers.includes(walletAddress.toLowerCase())) {
+  const normalizedApprovers = approvers.map((a) => a.toLowerCase());
+
+  if (!normalizedApprovers.includes(walletAddress.toLowerCase())) {
     logRequestWarn(
       ctx.log,
       { walletAddress: `${walletAddress.slice(0, 10)}...` },

@@ -27,6 +27,7 @@
 import { createHash } from "node:crypto";
 import {
   type AttributionStatementLineRecord,
+  computeApproverSetHash,
   computeArtifactsHash,
   computeAttributionStatementLines,
   computeEpochWindowV1,
@@ -54,6 +55,7 @@ const WEIGHT_CONFIG: Record<string, number> = {
   "github:review_submitted": 2000,
   "discord:message_sent": 500,
 };
+const SEED_APPROVERS = ["0x070075F1389Ae1182aBac722B36CA12285d0c949"];
 const ALLOCATION_ALGO_REF = deriveAllocationAlgoRef("cogni-v0.0");
 const CLAIMANT_RESOLVER_REF = "cogni.default-author.v0";
 const CLAIMANT_ALGO_REF = "default-author-v0";
@@ -756,7 +758,8 @@ async function seedFinalizedEpoch(
 
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
-    approverSetHash: sha256("dev-seed-approver-set"),
+    approvers: SEED_APPROVERS,
+    approverSetHash: computeApproverSetHash(SEED_APPROVERS),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
     evaluations: [],
@@ -875,7 +878,8 @@ async function seedReviewEpoch(
 
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
-    approverSetHash: sha256("dev-seed-approver-set"),
+    approvers: SEED_APPROVERS,
+    approverSetHash: computeApproverSetHash(SEED_APPROVERS),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
     evaluations: [],

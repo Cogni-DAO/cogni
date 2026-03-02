@@ -498,7 +498,7 @@ export class DrizzleAttributionAdapter implements AttributionStore {
       .update(epochs)
       .set({
         status: "review",
-        approvers,
+        approvers: approvers.map((a) => a.toLowerCase()),
         approverSetHash,
         allocationAlgoRef,
         weightConfigHash,
@@ -616,7 +616,7 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         .update(epochs)
         .set({
           status: "review",
-          approvers: params.approvers,
+          approvers: params.approvers.map((a) => a.toLowerCase()),
           approverSetHash: params.approverSetHash,
           allocationAlgoRef: params.allocationAlgoRef,
           weightConfigHash: params.weightConfigHash,
