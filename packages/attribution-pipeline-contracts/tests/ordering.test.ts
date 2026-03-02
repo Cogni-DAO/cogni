@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/tests/ordering`
+ * Module: `@cogni/attribution-pipeline-contracts/tests/ordering`
  * Purpose: Unit tests for validateEnricherOrder — cycle detection, missing refs, topological order.
  * Scope: Tests DAG validation for enricher dependency ordering. Does not test I/O.
  * Invariants: ENRICHER_ORDER_EXPLICIT.

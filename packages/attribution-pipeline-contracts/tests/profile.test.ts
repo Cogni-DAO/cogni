@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/tests/profile`
+ * Module: `@cogni/attribution-pipeline-contracts/tests/profile`
  * Purpose: Unit tests for resolveProfile and PipelineProfile type contracts.
  * Scope: Tests profile resolution, error messages, PROFILE_IS_DATA invariant. Does not test I/O.
  * Invariants: PROFILE_IS_DATA, PROFILE_SELECTS_ENRICHERS, PROFILE_SELECTS_ALLOCATOR.

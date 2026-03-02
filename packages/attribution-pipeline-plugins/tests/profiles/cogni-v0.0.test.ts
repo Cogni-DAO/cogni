@@ -11,7 +11,7 @@
  * @internal
  */
 
-import { validateEnricherOrder } from "@cogni/attribution-pipeline";
+import { validateEnricherOrder } from "@cogni/attribution-pipeline-contracts";
 import { describe, expect, it } from "vitest";
 
 import { COGNI_V0_PROFILE } from "../../src/profiles/cogni-v0.0";

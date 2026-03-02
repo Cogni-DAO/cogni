@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@cogni/attribution-ledger": "workspace:*",
-    "@cogni/attribution-pipeline": "workspace:*"
+    "@cogni/attribution-pipeline-contracts": "workspace:*"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/allocator`
+ * Module: `@cogni/attribution-pipeline-contracts/allocator`
  * Purpose: Allocator plugin contracts and dispatch logic.
  * Scope: Types and pure dispatch function. Does not perform I/O or hold state.
  * Invariants:

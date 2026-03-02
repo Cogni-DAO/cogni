@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/vitest.config`
- * Purpose: Test configuration for attribution-pipeline framework package.
+ * Module: `@cogni/attribution-pipeline-contracts/vitest.config`
+ * Purpose: Test configuration for attribution-pipeline-contracts package.
  * Scope: Test tooling only. Does not contain runtime code.
  * Invariants: none
  * Side-effects: IO
@@ -25,7 +25,7 @@ export default defineProject({
     }),
   ],
   test: {
-    name: "attribution-pipeline",
+    name: "attribution-pipeline-contracts",
     globals: true,
     environment: "node",
     include: ["tests/**/*.{test,spec}.{ts,tsx}"],

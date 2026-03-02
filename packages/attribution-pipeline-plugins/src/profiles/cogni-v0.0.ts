@@ -15,7 +15,7 @@
  * @public
  */
 
-import type { PipelineProfile } from "@cogni/attribution-pipeline";
+import type { PipelineProfile } from "@cogni/attribution-pipeline-contracts";
 
 /**
  * cogni-v0.0 profile — weekly activity attribution.

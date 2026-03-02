@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/validation`
+ * Module: `@cogni/attribution-pipeline-contracts/validation`
  * Purpose: Evaluation write validation — asserts all required fields are present.
  * Scope: Pure functions. Does not perform I/O or hold state.
  * Invariants:

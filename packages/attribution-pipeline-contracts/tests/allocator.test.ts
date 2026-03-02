@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/tests/allocator`
+ * Module: `@cogni/attribution-pipeline-contracts/tests/allocator`
  * Purpose: Unit tests for dispatchAllocator — registry lookup, dependency validation, context passing.
  * Scope: Tests allocator dispatch logic. Does not test I/O.
  * Invariants: ALLOCATOR_NEEDS_DECLARED, PROFILE_SELECTS_ALLOCATOR.

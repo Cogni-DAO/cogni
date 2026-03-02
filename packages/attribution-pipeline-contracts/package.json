@@ -1,5 +1,5 @@
 {
-  "name": "@cogni/attribution-pipeline",
+  "name": "@cogni/attribution-pipeline-contracts",
   "private": true,
   "version": "0.0.0",
   "type": "module",

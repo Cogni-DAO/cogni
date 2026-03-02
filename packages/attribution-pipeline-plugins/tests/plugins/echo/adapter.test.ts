@@ -12,7 +12,7 @@
  */
 
 import type { AttributionStore } from "@cogni/attribution-ledger";
-import type { EnricherContext } from "@cogni/attribution-pipeline";
+import type { EnricherContext } from "@cogni/attribution-pipeline-contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { createEchoAdapter } from "../../../src/plugins/echo/adapter";

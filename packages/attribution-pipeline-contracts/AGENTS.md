@@ -1,4 +1,4 @@
-# attribution-pipeline · AGENTS.md
+# attribution-pipeline-contracts · AGENTS.md
 
 > Scope: this directory only. Keep ≤150 lines. Do not restate root policies.
 
@@ -73,8 +73,8 @@ Stable framework package for the attribution pipeline plugin architecture. Defin
 ## Usage
 
 ```bash
-pnpm --filter @cogni/attribution-pipeline typecheck
-pnpm --filter @cogni/attribution-pipeline build
+pnpm --filter @cogni/attribution-pipeline-contracts typecheck
+pnpm --filter @cogni/attribution-pipeline-contracts build
 ```
 
 ## Standards
@@ -97,5 +97,5 @@ pnpm --filter @cogni/attribution-pipeline build
 
 ## Notes
 
-- Dependency direction: `attribution-pipeline-plugins → attribution-pipeline → attribution-ledger`
+- Dependency direction: `attribution-pipeline-plugins → attribution-pipeline-contracts → attribution-ledger`
 - Never imports from `@cogni/attribution-pipeline-plugins` (FRAMEWORK_STABLE_PLUGINS_CHURN)

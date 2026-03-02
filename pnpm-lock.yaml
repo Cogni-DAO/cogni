@@ -498,7 +498,7 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  packages/attribution-pipeline:
+  packages/attribution-pipeline-contracts:
     dependencies:
       '@cogni/attribution-ledger':
         specifier: workspace:*
@@ -522,9 +522,9 @@ importers:
       '@cogni/attribution-ledger':
         specifier: workspace:*
         version: link:../attribution-ledger
-      '@cogni/attribution-pipeline':
+      '@cogni/attribution-pipeline-contracts':
         specifier: workspace:*
-        version: link:../attribution-pipeline
+        version: link:../attribution-pipeline-contracts
     devDependencies:
       tsup:
         specifier: ^8.5.1

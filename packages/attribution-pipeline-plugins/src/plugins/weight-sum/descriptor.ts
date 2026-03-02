@@ -14,7 +14,7 @@
  */
 
 import { computeProposedAllocations } from "@cogni/attribution-ledger";
-import type { AllocatorDescriptor } from "@cogni/attribution-pipeline";
+import type { AllocatorDescriptor } from "@cogni/attribution-pipeline-contracts";
 
 /** Algorithm ref for the weight-sum allocator. */
 export const WEIGHT_SUM_ALGO_REF = "weight-sum-v0";

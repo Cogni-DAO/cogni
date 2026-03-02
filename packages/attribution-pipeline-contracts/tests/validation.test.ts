@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/tests/validation`
+ * Module: `@cogni/attribution-pipeline-contracts/tests/validation`
  * Purpose: Unit tests for validateEvaluationWrite — required field checks, status validation.
  * Scope: Tests evaluation write validation logic. Does not test I/O.
  * Invariants: EVALUATION_WRITE_VALIDATED.

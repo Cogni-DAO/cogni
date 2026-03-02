@@ -17,7 +17,7 @@ import type {
   AllocatorRegistry,
   EnricherAdapterRegistry,
   ProfileRegistry,
-} from "@cogni/attribution-pipeline";
+} from "@cogni/attribution-pipeline-contracts";
 
 import { createClaimantSharesAdapter } from "./plugins/claimant-shares/adapter";
 import { createEchoAdapter } from "./plugins/echo/adapter";

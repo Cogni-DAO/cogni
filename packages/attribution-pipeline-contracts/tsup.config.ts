@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/tsup.config`
- * Purpose: Build configuration for attribution-pipeline framework package.
+ * Module: `@cogni/attribution-pipeline-contracts/tsup.config`
+ * Purpose: Build configuration for attribution-pipeline-contracts package.
  * Scope: Build tooling only. Does not contain runtime code.
  * Invariants: Output must be ESM with type declarations.
  * Side-effects: IO

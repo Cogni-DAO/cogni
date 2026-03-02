@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/enricher`
+ * Module: `@cogni/attribution-pipeline-contracts/enricher`
  * Purpose: Enricher plugin contracts — descriptor (pure data) and adapter (port interface).
  * Scope: Types and interfaces only. Does not perform I/O or contain side effects.
  * Invariants:

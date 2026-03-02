@@ -16,7 +16,7 @@ import {
   CLAIMANT_SHARES_ALGO_REF,
   CLAIMANT_SHARES_EVALUATION_REF,
 } from "@cogni/attribution-ledger";
-import type { EnricherDescriptor } from "@cogni/attribution-pipeline";
+import type { EnricherDescriptor } from "@cogni/attribution-pipeline-contracts";
 
 export { CLAIMANT_SHARES_ALGO_REF, CLAIMANT_SHARES_EVALUATION_REF };
 

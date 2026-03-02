@@ -21,7 +21,7 @@ import type {
   EnricherAdapter,
   EnricherContext,
   EnricherEvaluationResult,
-} from "@cogni/attribution-pipeline";
+} from "@cogni/attribution-pipeline-contracts";
 
 import {
   CLAIMANT_SHARES_ALGO_REF,

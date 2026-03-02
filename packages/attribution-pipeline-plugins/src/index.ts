@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/attribution-pipeline-plugins`
  * Purpose: Built-in enricher/allocator implementations, profiles, and registry construction for the attribution pipeline.
- * Scope: Plugin implementations and profile data. Does not define framework contracts (those live in @cogni/attribution-pipeline).
+ * Scope: Plugin implementations and profile data. Does not define contracts (those live in @cogni/attribution-pipeline-contracts).
  * Invariants:
  * - ENRICHER_DESCRIPTOR_PURE: descriptors are constants + pure functions.
  * - PROFILE_IS_DATA: profiles are plain readonly objects.

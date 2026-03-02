@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/profile`
+ * Module: `@cogni/attribution-pipeline-contracts/profile`
  * Purpose: PipelineProfile type, registry, and resolution.
  * Scope: Types and pure functions. Does not perform I/O or hold state.
  * Invariants:

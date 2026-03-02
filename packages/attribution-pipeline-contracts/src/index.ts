@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline`
- * Purpose: Stable framework for the attribution pipeline plugin architecture — contracts, registries, dispatch, ordering, validation.
+ * Module: `@cogni/attribution-pipeline-contracts`
+ * Purpose: Stable contracts for the attribution pipeline plugin architecture — interfaces, registries, dispatch, ordering, validation.
  * Scope: Types and pure functions only. Does not perform I/O or contain side effects (FRAMEWORK_NO_IO).
  * Invariants:
  * - FRAMEWORK_NO_IO: this package contains zero I/O, zero side effects, zero env reads.

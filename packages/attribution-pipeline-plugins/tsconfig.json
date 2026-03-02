@@ -19,6 +19,6 @@
   "exclude": ["node_modules", "dist", "tests"],
   "references": [
     { "path": "../attribution-ledger" },
-    { "path": "../attribution-pipeline" }
+    { "path": "../attribution-pipeline-contracts" }
   ]
 }

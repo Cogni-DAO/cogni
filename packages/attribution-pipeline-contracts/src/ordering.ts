@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/attribution-pipeline/ordering`
+ * Module: `@cogni/attribution-pipeline-contracts/ordering`
  * Purpose: Enricher dependency DAG validation — cycle detection, missing ref detection, topological order verification.
  * Scope: Pure functions. Does not perform I/O or hold state.
  * Invariants:

@@ -12,7 +12,7 @@
  * @public
  */
 
-import type { EnricherDescriptor } from "@cogni/attribution-pipeline";
+import type { EnricherDescriptor } from "@cogni/attribution-pipeline-contracts";
 
 /** Namespaced evaluation ref for the echo enricher. */
 export const ECHO_EVALUATION_REF = "cogni.echo.v0";
