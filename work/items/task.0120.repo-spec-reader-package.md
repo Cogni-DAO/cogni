@@ -2,7 +2,7 @@
 id: task.0120
 type: task
 title: "Extract unified repo-spec reader package (`@cogni/repo-spec`)"
-status: needs_closeout
+status: needs_implement
 priority: 1
 rank: 1
 estimate: 3
@@ -15,11 +15,11 @@ project: proj.operator-plane
 branch: task/0120-repo-spec-reader
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-01
-updated: 2026-03-01
+updated: 2026-03-02
 labels: [config, packages, multi-tenant]
 external_refs:
 ---
@@ -156,3 +156,22 @@ pnpm check && pnpm test tests/unit/packages/repo-spec/ && pnpm test tests/unit/s
 ## Attribution
 
 -
+
+## Review Feedback
+
+### Revision 1 — STATELESS_CONTAINERS violation (2026-03-02)
+
+**Blocking:** The Dockerfile bakes `.cogni/repo-spec.yaml` into the runner image at build time (`COPY --chown=worker:nodejs .cogni/repo-spec.yaml ./.cogni/repo-spec.yaml`). This violates **STATELESS_CONTAINERS** from node-operator-contract spec: "Same images across all environments; config via env vars."
+
+Baking deployment-specific config (node_id, scope_id, chain_id, receiving_address) into the image makes it environment-specific and requires a full rebuild for config changes.
+
+**Required fix:** Replace the COPY with a docker-compose volume mount:
+
+- Remove `COPY .cogni/repo-spec.yaml` from the Dockerfile runner stage
+- Add volume mount in `docker-compose.dev.yml` and `docker-compose.yml`: `./.cogni/repo-spec.yaml:/app/.cogni/repo-spec.yaml:ro`
+- The `loadRepoSpecIdentity()` candidate paths in `container.ts` already handle `/app/.cogni/` — no code changes needed
+
+**Non-blocking suggestions:**
+
+- `accessors.ts:50,52`: Mark `baseIssuanceCredits` and `approvers` as required (not `?`) since `extractLedgerConfig` always populates them
+- Consider caching `loadRepoSpecIdentity()` result at module level in `container.ts`
