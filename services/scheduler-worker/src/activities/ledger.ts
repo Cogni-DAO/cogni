@@ -24,7 +24,9 @@
 
 import type { UnselectedReceipt } from "@cogni/attribution-ledger";
 import {
+  applyReceiptWeightOverrides,
   buildEIP712TypedData,
+  buildReceiptWeightOverrideSnapshots,
   claimantKey,
   computeApproverSetHash,
   computeAttributionStatementLines,
@@ -35,6 +37,7 @@ import {
   estimatePoolComponentsV0,
   explodeToClaimants,
   sha256OfCanonicalJson,
+  toReviewSubjectOverrides,
   validateWeightConfig,
 } from "@cogni/attribution-ledger";
 import type { ActivityEvent } from "@cogni/ingestion-core";
@@ -968,7 +971,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       0n
     );
 
-    // 5. Load locked claimants + compute receipt weights → explode to claimant allocations
+    // 5. Load locked claimants + receipt weights + overrides → explode to claimant allocations
     const lockedClaimants = await attributionStore.loadLockedClaimants(epochId);
     if (lockedClaimants.length === 0) {
       throw new Error(
@@ -976,13 +979,17 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       );
     }
 
-    const selections =
-      await attributionStore.getSelectedReceiptsForAllocation(epochId);
-    const receiptWeights = computeReceiptWeights(
+    const [selections, overrideRecords] = await Promise.all([
+      attributionStore.getSelectedReceiptsForAllocation(epochId),
+      attributionStore.getReviewSubjectOverridesForEpoch(epochId),
+    ]);
+    const rawWeights = computeReceiptWeights(
       epoch.allocationAlgoRef,
       selections,
       epoch.weightConfig
     );
+    const overrides = toReviewSubjectOverrides(overrideRecords);
+    const receiptWeights = applyReceiptWeightOverrides(rawWeights, overrides);
 
     const finalClaimantAllocations = explodeToClaimants(
       receiptWeights,
@@ -993,6 +1000,12 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
         `finalizeEpoch: epoch ${input.epochId} has no claimant allocations`
       );
     }
+
+    // Build override audit trail for statement persistence
+    const reviewOverrideSnapshots = buildReceiptWeightOverrideSnapshots(
+      rawWeights,
+      overrides
+    );
 
     // 6. Compute statement lines from final allocations
     const statementLines = computeAttributionStatementLines(
@@ -1056,7 +1069,8 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
             credit_amount: line.creditAmount.toString(),
             receipt_ids: [...line.receiptIds],
           })),
-          reviewOverrides: null,
+          reviewOverrides:
+            reviewOverrideSnapshots.length > 0 ? reviewOverrideSnapshots : null,
         },
         signature: {
           nodeId,

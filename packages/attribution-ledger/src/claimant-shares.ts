@@ -639,6 +639,74 @@ export function buildReviewOverrideSnapshots(
   return snapshots.sort((a, b) => a.subject_ref.localeCompare(b.subject_ref));
 }
 
+/**
+ * Apply overrideUnits from subject overrides to receipt weights.
+ * Pure, deterministic. Overrides match by subjectRef === receiptId.
+ * Returns a new sorted array — does not mutate inputs.
+ */
+export function applyReceiptWeightOverrides(
+  weights: readonly ReceiptUnitWeight[],
+  overrides: readonly SubjectOverride[]
+): ReceiptUnitWeight[] {
+  if (overrides.length === 0) return [...weights];
+
+  const overrideMap = new Map<string, bigint>();
+  for (const o of overrides) {
+    if (o.overrideUnits !== null) {
+      overrideMap.set(o.subjectRef, o.overrideUnits);
+    }
+  }
+
+  if (overrideMap.size === 0) return [...weights];
+
+  return weights
+    .map((w) => {
+      const override = overrideMap.get(w.receiptId);
+      if (override === undefined) return w;
+      return { receiptId: w.receiptId, units: override };
+    })
+    .sort((a, b) => a.receiptId.localeCompare(b.receiptId));
+}
+
+/**
+ * Build review override snapshots from receipt weights and subject overrides.
+ * Uses receipt weights as the source of original_units (no ClaimantSharesSubject needed).
+ * Only includes receipts that had overrides with non-null overrideUnits.
+ */
+export function buildReceiptWeightOverrideSnapshots(
+  originalWeights: readonly ReceiptUnitWeight[],
+  overrides: readonly SubjectOverride[]
+): ReviewOverrideSnapshot[] {
+  if (overrides.length === 0) return [];
+
+  const weightMap = new Map<string, bigint>();
+  for (const w of originalWeights) {
+    weightMap.set(w.receiptId, w.units);
+  }
+
+  const snapshots: ReviewOverrideSnapshot[] = [];
+  for (const override of overrides) {
+    const originalUnits = weightMap.get(override.subjectRef);
+    if (originalUnits === undefined) continue;
+
+    snapshots.push({
+      subject_ref: override.subjectRef,
+      original_units: originalUnits.toString(),
+      override_units:
+        override.overrideUnits !== null
+          ? override.overrideUnits.toString()
+          : null,
+      original_shares: [],
+      override_shares: override.overrideShares
+        ? [...override.overrideShares]
+        : null,
+      reason: override.overrideReason,
+    });
+  }
+
+  return snapshots.sort((a, b) => a.subject_ref.localeCompare(b.subject_ref));
+}
+
 // ---------------------------------------------------------------------------
 // Claimant allocation builder
 // ---------------------------------------------------------------------------

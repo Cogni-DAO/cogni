@@ -21,8 +21,10 @@ import {
 } from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
 import {
+  applyReceiptWeightOverrides,
   applySubjectOverrides,
   buildDefaultReceiptClaimantSharesPayload,
+  buildReceiptWeightOverrideSnapshots,
   buildReviewOverrideSnapshots,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
   computeAttributionStatementLines,
@@ -718,5 +720,200 @@ describe("explodeToClaimants", () => {
     // Sorted by claimant key
     expect(result[0]?.claimant).toEqual({ kind: "user", userId: "alice" });
     expect(result[1]?.claimant).toEqual({ kind: "user", userId: "zara" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyReceiptWeightOverrides
+// ---------------------------------------------------------------------------
+
+describe("applyReceiptWeightOverrides", () => {
+  const baseWeights: ReceiptUnitWeight[] = [
+    { receiptId: "r1", units: 1000n },
+    { receiptId: "r2", units: 500n },
+    { receiptId: "r3", units: 2000n },
+  ];
+
+  it("replaces units for overridden receipts", () => {
+    const result = applyReceiptWeightOverrides(baseWeights, [
+      {
+        subjectRef: "r1",
+        overrideUnits: 0n,
+        overrideShares: null,
+        overrideReason: "zeroed out",
+      },
+    ]);
+
+    expect(result.find((w) => w.receiptId === "r1")?.units).toBe(0n);
+    expect(result.find((w) => w.receiptId === "r2")?.units).toBe(500n);
+    expect(result.find((w) => w.receiptId === "r3")?.units).toBe(2000n);
+  });
+
+  it("ignores overrides with null overrideUnits", () => {
+    const result = applyReceiptWeightOverrides(baseWeights, [
+      {
+        subjectRef: "r1",
+        overrideUnits: null,
+        overrideShares: null,
+        overrideReason: "shares only",
+      },
+    ]);
+
+    expect(result.find((w) => w.receiptId === "r1")?.units).toBe(1000n);
+  });
+
+  it("ignores overrides for nonexistent receipts", () => {
+    const result = applyReceiptWeightOverrides(baseWeights, [
+      {
+        subjectRef: "nonexistent",
+        overrideUnits: 999n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+    ]);
+
+    expect(result).toEqual(baseWeights);
+  });
+
+  it("returns unmodified copy when no overrides", () => {
+    const result = applyReceiptWeightOverrides(baseWeights, []);
+    expect(result).toEqual(baseWeights);
+    expect(result).not.toBe(baseWeights);
+  });
+
+  it("returns sorted by receiptId", () => {
+    const unsorted: ReceiptUnitWeight[] = [
+      { receiptId: "r3", units: 300n },
+      { receiptId: "r1", units: 100n },
+    ];
+    const result = applyReceiptWeightOverrides(unsorted, [
+      {
+        subjectRef: "r1",
+        overrideUnits: 50n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+    ]);
+
+    expect(result[0]?.receiptId).toBe("r1");
+    expect(result[1]?.receiptId).toBe("r3");
+  });
+
+  it("changes finalAllocationSetHash when override is applied", () => {
+    // This is the key invariant: overrides must change the downstream hash
+    const makeClaimant = (
+      receiptId: string,
+      keys: string[]
+    ): ReceiptClaimantsRecord => ({
+      id: `c-${receiptId}`,
+      nodeId: "node-1",
+      epochId: 1n,
+      receiptId,
+      status: "locked",
+      resolverRef: "default",
+      algoRef: "v0",
+      inputsHash: "hash",
+      claimantKeys: keys,
+      createdAt: new Date(),
+      createdBy: null,
+    });
+
+    const claimants = [
+      makeClaimant("r1", ["user:alice"]),
+      makeClaimant("r2", ["user:bob"]),
+      makeClaimant("r3", ["user:alice"]),
+    ];
+
+    const withoutOverride = explodeToClaimants(baseWeights, claimants);
+    const withOverride = explodeToClaimants(
+      applyReceiptWeightOverrides(baseWeights, [
+        {
+          subjectRef: "r1",
+          overrideUnits: 0n,
+          overrideShares: null,
+          overrideReason: "zeroed",
+        },
+      ]),
+      claimants
+    );
+
+    // Alice's total should differ: 1000+2000=3000 vs 0+2000=2000
+    const aliceWithout = withoutOverride.find(
+      (a) => a.claimant.kind === "user" && a.claimant.userId === "alice"
+    );
+    const aliceWith = withOverride.find(
+      (a) => a.claimant.kind === "user" && a.claimant.userId === "alice"
+    );
+    expect(aliceWithout?.finalUnits).toBe(3000n);
+    expect(aliceWith?.finalUnits).toBe(2000n);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildReceiptWeightOverrideSnapshots
+// ---------------------------------------------------------------------------
+
+describe("buildReceiptWeightOverrideSnapshots", () => {
+  const baseWeights: ReceiptUnitWeight[] = [
+    { receiptId: "r1", units: 1000n },
+    { receiptId: "r2", units: 500n },
+  ];
+
+  it("captures original and override units", () => {
+    const snapshots = buildReceiptWeightOverrideSnapshots(baseWeights, [
+      {
+        subjectRef: "r1",
+        overrideUnits: 200n,
+        overrideShares: null,
+        overrideReason: "reduced",
+      },
+    ]);
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toEqual({
+      subject_ref: "r1",
+      original_units: "1000",
+      override_units: "200",
+      original_shares: [],
+      override_shares: null,
+      reason: "reduced",
+    });
+  });
+
+  it("excludes overrides for nonexistent receipts", () => {
+    const snapshots = buildReceiptWeightOverrideSnapshots(baseWeights, [
+      {
+        subjectRef: "nonexistent",
+        overrideUnits: 100n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+    ]);
+
+    expect(snapshots).toHaveLength(0);
+  });
+
+  it("returns empty when no overrides", () => {
+    expect(buildReceiptWeightOverrideSnapshots(baseWeights, [])).toEqual([]);
+  });
+
+  it("sorts by subject_ref", () => {
+    const snapshots = buildReceiptWeightOverrideSnapshots(baseWeights, [
+      {
+        subjectRef: "r2",
+        overrideUnits: 0n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+      {
+        subjectRef: "r1",
+        overrideUnits: 0n,
+        overrideShares: null,
+        overrideReason: null,
+      },
+    ]);
+
+    expect(snapshots[0]?.subject_ref).toBe("r1");
+    expect(snapshots[1]?.subject_ref).toBe("r2");
   });
 });

@@ -13,26 +13,37 @@
  */
 
 import { validateEvaluationEnvelope } from "./artifact-envelope";
-import type { AttributionStore } from "./store";
+import type {
+  AttributionStore,
+  CloseIngestionWithEvaluationsParams,
+  UpsertEvaluationParams,
+} from "./store";
 
 /**
  * Wrap an AttributionStore with envelope validation on evaluation writes.
- * Plugins cannot bypass validation by swapping adapters.
+ * Uses Proxy to properly delegate all method calls — object spread drops
+ * prototype methods on class instances (e.g. DrizzleAttributionAdapter).
  */
 export function createValidatedAttributionStore(
   inner: AttributionStore
 ): AttributionStore {
-  return {
-    ...inner,
-    upsertDraftEvaluation: async (params) => {
-      validateEvaluationEnvelope(params);
-      return inner.upsertDraftEvaluation(params);
-    },
-    closeIngestionWithEvaluations: async (params) => {
-      for (const e of params.evaluations) {
-        validateEvaluationEnvelope(e);
+  return new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop === "upsertDraftEvaluation") {
+        return async (params: UpsertEvaluationParams) => {
+          validateEvaluationEnvelope(params);
+          return target.upsertDraftEvaluation(params);
+        };
       }
-      return inner.closeIngestionWithEvaluations(params);
+      if (prop === "closeIngestionWithEvaluations") {
+        return async (params: CloseIngestionWithEvaluationsParams) => {
+          for (const e of params.evaluations) {
+            validateEvaluationEnvelope(e);
+          }
+          return target.closeIngestionWithEvaluations(params);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
     },
-  };
+  });
 }

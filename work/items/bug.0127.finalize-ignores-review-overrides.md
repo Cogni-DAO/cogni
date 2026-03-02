@@ -2,7 +2,7 @@
 id: bug.0127
 type: bug
 title: Finalization pipeline ignores review-subject overrides — signed statement reflects unadjusted allocations
-status: needs_triage
+status: needs_review
 priority: 0
 rank: 1
 estimate: 3
@@ -13,7 +13,7 @@ spec_refs:
 assignees: []
 credit:
 project:
-branch:
+branch: fix/epochs-v0
 pr:
 reviewer:
 revision: 0
@@ -100,7 +100,7 @@ The `createValidatedAttributionStore` function in `packages/attribution-ledger/s
 ## Plan
 
 - [ ] Fix `validated-store.ts` spread bug (Proxy approach) — unblocks all ledger activities
-- [ ] Determine integration point: `applySubjectOverrides` operates on `ClaimantSharesSubject[]` (post-explode), but the pipeline is `computeReceiptWeights → explodeToClaimants`. Overrides with `overrideUnits` modify per-receipt weights *before* exploding. Overrides with `overrideShares` modify claimant splits *after* exploding. May need two-phase apply.
+- [ ] Determine integration point: `applySubjectOverrides` operates on `ClaimantSharesSubject[]` (post-explode), but the pipeline is `computeReceiptWeights → explodeToClaimants`. Overrides with `overrideUnits` modify per-receipt weights _before_ exploding. Overrides with `overrideShares` modify claimant splits _after_ exploding. May need two-phase apply.
 - [ ] Wire overrides into `sign-data` route (load → apply → hash)
 - [ ] Wire overrides into `finalizeEpoch` activity (load → apply → hash → snapshot → persist)
 - [ ] Add integration test: override present → hash differs from no-override case

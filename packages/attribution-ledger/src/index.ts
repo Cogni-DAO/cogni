@@ -32,8 +32,10 @@ export {
 export {
   type AttributionClaimant,
   type AttributionStatementLine,
+  applyReceiptWeightOverrides,
   applySubjectOverrides,
   buildDefaultReceiptClaimantSharesPayload,
+  buildReceiptWeightOverrideSnapshots,
   buildReviewOverrideSnapshots,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
   CLAIMANT_SHARES_ALGO_REF,

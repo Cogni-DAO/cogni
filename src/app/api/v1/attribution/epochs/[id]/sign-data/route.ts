@@ -12,10 +12,12 @@
  */
 
 import {
+  applyReceiptWeightOverrides,
   buildEIP712TypedData,
   computeFinalClaimantAllocationSetHash,
   computeReceiptWeights,
   explodeToClaimants,
+  toReviewSubjectOverrides,
 } from "@cogni/attribution-ledger";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -79,17 +81,21 @@ export const GET = wrapRouteHandlerWithLogging<{
       0n
     );
 
-    // Load locked claimants + receipt weights → explode to final allocations
-    const [lockedClaimants, selections] = await Promise.all([
+    // Load locked claimants + receipt weights + overrides → explode to final allocations
+    const [lockedClaimants, selections, overrideRecords] = await Promise.all([
       store.loadLockedClaimants(epochId),
       store.getSelectedReceiptsForAllocation(epochId),
+      store.getReviewSubjectOverridesForEpoch(epochId),
     ]);
 
-    const receiptWeights = computeReceiptWeights(
+    const rawWeights = computeReceiptWeights(
       epoch.allocationAlgoRef,
       selections,
       epoch.weightConfig
     );
+    const overrides = toReviewSubjectOverrides(overrideRecords);
+    const receiptWeights = applyReceiptWeightOverrides(rawWeights, overrides);
+
     const claimantAllocations = explodeToClaimants(
       receiptWeights,
       lockedClaimants
