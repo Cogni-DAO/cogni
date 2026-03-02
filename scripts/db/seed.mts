@@ -41,7 +41,6 @@ import {
 } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
-import { epochReceiptClaimants } from "@cogni/db-schema/attribution";
 import { identityEvents, userBindings } from "@cogni/db-schema/identity";
 import { users } from "@cogni/db-schema/refs";
 
@@ -552,48 +551,6 @@ function buildReceiptClaimantParams(
   }));
 }
 
-/**
- * Seed-only: insert claimants directly as locked, bypassing the adapter's
- * broken draft→lock flow (inputs_uniq conflict). Returns ReceiptClaimantsRecord[]
- * for downstream statement generation.
- */
-async function seedLockedClaimants(
-  db: ReturnType<typeof createServiceDbClient>,
-  params: InsertReceiptClaimantsParams[]
-): Promise<ReceiptClaimantsRecord[]> {
-  const results: ReceiptClaimantsRecord[] = [];
-  for (const p of params) {
-    const [row] = await db
-      .insert(epochReceiptClaimants)
-      .values({
-        nodeId: p.nodeId,
-        epochId: p.epochId,
-        receiptId: p.receiptId,
-        status: "locked",
-        resolverRef: p.resolverRef,
-        algoRef: p.algoRef,
-        inputsHash: p.inputsHash,
-        claimantsJson: [...p.claimantKeys],
-        createdBy: p.createdBy,
-      })
-      .returning();
-    results.push({
-      id: row.id,
-      nodeId: row.nodeId,
-      epochId: row.epochId,
-      receiptId: row.receiptId,
-      status: "locked",
-      resolverRef: row.resolverRef,
-      algoRef: row.algoRef,
-      inputsHash: row.inputsHash,
-      claimantKeys: row.claimantsJson ?? [],
-      createdAt: row.createdAt,
-      createdBy: row.createdBy,
-    });
-  }
-  return results;
-}
-
 function computeUserProjections(
   receipts: readonly SelectedReceiptForAttribution[],
   weightConfig: Record<string, number>
@@ -709,7 +666,6 @@ async function seedLinkedUsersAndBindings(
 // ── Main ────────────────────────────────────────────────────────
 
 async function seedFinalizedEpoch(
-  db: ReturnType<typeof createServiceDbClient>,
   store: DrizzleAttributionAdapter,
   epochDef: SeedEpochDef
 ): Promise<void> {
@@ -787,10 +743,13 @@ async function seedFinalizedEpoch(
   });
   console.log("  Inserted pool component");
 
-  // Insert receipt claimants directly as locked (bypasses broken draft→lock adapter flow)
+  // Insert receipt claimants (draft then lock)
   const claimantParams = buildReceiptClaimantParams(epoch.id, epochDef.events);
-  const lockedClaimants = await seedLockedClaimants(db, claimantParams);
-  console.log(`  Inserted ${lockedClaimants.length} locked receipt claimants`);
+  for (const params of claimantParams) {
+    await store.upsertDraftClaimants(params);
+  }
+  const lockedCount = await store.lockClaimantsForEpoch(epoch.id);
+  console.log(`  Inserted ${lockedCount} locked receipt claimants`);
 
   const weightConfigHash = await computeWeightConfigHash(WEIGHT_CONFIG);
   const artifactsHash = await computeArtifactsHash([]);
@@ -807,6 +766,9 @@ async function seedFinalizedEpoch(
 
   await store.finalizeEpoch(epoch.id, epochDef.poolCredits);
   console.log("  Finalized epoch (review -> finalized)");
+
+  // Load the locked claimants back for statement generation
+  const lockedClaimants = await store.loadLockedClaimants(epoch.id);
   const statement = await buildClaimantAwareStatement({
     receipts: attributionReceipts,
     claimants: lockedClaimants,
@@ -823,7 +785,6 @@ async function seedFinalizedEpoch(
 }
 
 async function seedReviewEpoch(
-  db: ReturnType<typeof createServiceDbClient>,
   store: DrizzleAttributionAdapter,
   epochDef: SeedEpochDef
 ): Promise<void> {
@@ -901,10 +862,13 @@ async function seedReviewEpoch(
   });
   console.log("  Inserted pool component");
 
-  // Insert receipt claimants directly as locked (bypasses broken draft→lock adapter flow)
+  // Insert receipt claimants (draft then lock)
   const claimantParams = buildReceiptClaimantParams(epoch.id, epochDef.events);
-  await seedLockedClaimants(db, claimantParams);
-  console.log(`  Inserted ${claimantParams.length} locked receipt claimants`);
+  for (const params of claimantParams) {
+    await store.upsertDraftClaimants(params);
+  }
+  const lockedCount = await store.lockClaimantsForEpoch(epoch.id);
+  console.log(`  Inserted ${lockedCount} locked receipt claimants`);
 
   const weightConfigHash = await computeWeightConfigHash(WEIGHT_CONFIG);
   const artifactsHash = await computeArtifactsHash([]);
@@ -1052,15 +1016,15 @@ async function main(): Promise<void> {
     console.log();
 
     console.log("📦 Epoch 1 (finalized):");
-    await seedFinalizedEpoch(db, store, EPOCH_1);
+    await seedFinalizedEpoch(store, EPOCH_1);
     console.log();
 
     console.log("📦 Epoch 2 (finalized):");
-    await seedFinalizedEpoch(db, store, EPOCH_2);
+    await seedFinalizedEpoch(store, EPOCH_2);
     console.log();
 
     console.log("📦 Epoch 3 (review):");
-    await seedReviewEpoch(db, store, EPOCH_3);
+    await seedReviewEpoch(store, EPOCH_3);
     console.log();
 
     console.log("📦 Epoch 4 (open):");
