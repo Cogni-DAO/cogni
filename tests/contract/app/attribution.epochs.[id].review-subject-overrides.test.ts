@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/contract/app/attribution.epochs.[id].subject-overrides`
- * Purpose: Contract tests for subject-overrides endpoint schemas.
+ * Module: `@tests/contract/app/attribution.epochs.[id].review-subject-overrides`
+ * Purpose: Contract tests for review-subject-overrides endpoint schemas.
  * Scope: Validates Zod input/output schemas against representative data shapes. Does not test runtime behavior.
  * Invariants: WRITE_ROUTES_APPROVER_GATED, shares sum to 1_000_000 PPM.
  * Side-effects: none
- * Links: contracts/attribution.subject-overrides.v1.contract, app/api/v1/attribution/epochs/[id]/subject-overrides/route
+ * Links: contracts/attribution.review-subject-overrides.v1.contract, app/api/v1/attribution/epochs/[id]/review-subject-overrides/route
  * @public
  */
 
@@ -16,9 +16,9 @@ import {
   DeleteSubjectOverrideInputSchema,
   GetSubjectOverridesOutputSchema,
   PatchSubjectOverridesInputSchema,
-} from "@/contracts/attribution.subject-overrides.v1.contract";
+} from "@/contracts/attribution.review-subject-overrides.v1.contract";
 
-describe("ledger.get-subject-overrides.v1 contract", () => {
+describe("ledger.get-review-subject-overrides.v1 contract", () => {
   it("validates a well-formed GET response with overrides", () => {
     const data = {
       overrides: [
@@ -73,7 +73,7 @@ describe("ledger.get-subject-overrides.v1 contract", () => {
   });
 });
 
-describe("ledger.patch-subject-overrides.v1 contract", () => {
+describe("ledger.patch-review-subject-overrides.v1 contract", () => {
   it("validates a well-formed PATCH input with unit override", () => {
     const data = {
       overrides: [
@@ -116,7 +116,7 @@ describe("ledger.patch-subject-overrides.v1 contract", () => {
   });
 });
 
-describe("ledger.delete-subject-override.v1 contract", () => {
+describe("ledger.delete-review-subject-override.v1 contract", () => {
   it("validates a well-formed DELETE input", () => {
     const data = { subjectRef: "receipt-abc" };
     expect(() => DeleteSubjectOverrideInputSchema.parse(data)).not.toThrow();

@@ -22,14 +22,14 @@ import { useSignTypedData } from "wagmi";
 interface SignDataResponse {
   readonly domain: { name: string; version: string; chainId: number };
   readonly types: {
-    PayoutStatement: readonly { name: string; type: string }[];
+    AttributionStatement: readonly { name: string; type: string }[];
   };
-  readonly primaryType: "PayoutStatement";
+  readonly primaryType: "AttributionStatement";
   readonly message: {
     nodeId: string;
     scopeId: string;
     epochId: string;
-    allocationSetHash: string;
+    finalAllocationSetHash: string;
     poolTotalCredits: string;
   };
 }

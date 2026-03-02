@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/governance/hooks/useSubjectOverrides`
- * Purpose: CRUD hook for subject-level review overrides during epoch review.
- * Scope: Client-side data fetching and mutation for subject overrides. Does not perform server-side logic.
+ * Module: `@features/governance/hooks/useReviewSubjectOverrides`
+ * Purpose: CRUD hook for review-subject overrides during epoch review.
+ * Scope: Client-side data fetching and mutation for review-subject overrides. Does not perform server-side logic.
  * Invariants: WRITE_ROUTES_APPROVER_GATED (server enforces). BigInt overrideUnits serialized as strings.
- * Side-effects: IO (HTTP fetches to subject-overrides API)
- * Links: src/contracts/attribution.subject-overrides.v1.contract.ts
+ * Side-effects: IO (HTTP fetches to review-subject-overrides API)
+ * Links: src/contracts/attribution.review-subject-overrides.v1.contract.ts
  * @public
  */
 
@@ -17,16 +17,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
 /** Shape of a single override as returned by the GET endpoint. */
-export interface SubjectOverrideView {
+export interface ReviewSubjectOverrideView {
   readonly id: string;
   readonly subjectRef: string;
   readonly overrideUnits: string | null;
   readonly overrideReason: string | null;
 }
 
-interface UseSubjectOverridesReturn {
+interface UseReviewSubjectOverridesReturn {
   /** Map of subjectRef → override for O(1) lookup. */
-  readonly overridesByRef: ReadonlyMap<string, SubjectOverrideView>;
+  readonly overridesByRef: ReadonlyMap<string, ReviewSubjectOverrideView>;
   readonly isLoading: boolean;
   /** Save (upsert) an override for a subject. */
   readonly saveOverride: (
@@ -40,25 +40,25 @@ interface UseSubjectOverridesReturn {
 }
 
 function overridesQueryKey(epochId: string): readonly string[] {
-  return ["governance", "epochs", epochId, "subject-overrides"] as const;
+  return ["governance", "epochs", epochId, "review-subject-overrides"] as const;
 }
 
-export function useSubjectOverrides(
+export function useReviewSubjectOverrides(
   epochId: string
-): UseSubjectOverridesReturn {
+): UseReviewSubjectOverridesReturn {
   const queryClient = useQueryClient();
   const qk = overridesQueryKey(epochId);
 
   const { data, isLoading } = useQuery({
     queryKey: qk,
-    queryFn: async (): Promise<SubjectOverrideView[]> => {
+    queryFn: async (): Promise<ReviewSubjectOverrideView[]> => {
       const res = await fetch(
-        `/api/v1/attribution/epochs/${epochId}/subject-overrides`,
+        `/api/v1/attribution/epochs/${epochId}/review-subject-overrides`,
         { credentials: "same-origin" }
       );
       if (!res.ok) throw new Error("Failed to fetch overrides");
       const json = (await res.json()) as {
-        overrides: SubjectOverrideView[];
+        overrides: ReviewSubjectOverrideView[];
       };
       return json.overrides;
     },
@@ -66,7 +66,7 @@ export function useSubjectOverrides(
   });
 
   const overridesByRef = useMemo(() => {
-    const m = new Map<string, SubjectOverrideView>();
+    const m = new Map<string, ReviewSubjectOverrideView>();
     if (data) {
       for (const o of data) {
         m.set(o.subjectRef, o);
@@ -82,7 +82,7 @@ export function useSubjectOverrides(
       reason?: string | undefined;
     }) => {
       const res = await fetch(
-        `/api/v1/attribution/epochs/${epochId}/subject-overrides`,
+        `/api/v1/attribution/epochs/${epochId}/review-subject-overrides`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -115,7 +115,7 @@ export function useSubjectOverrides(
   const deleteMutation = useMutation({
     mutationFn: async (subjectRef: string) => {
       const res = await fetch(
-        `/api/v1/attribution/epochs/${epochId}/subject-overrides`,
+        `/api/v1/attribution/epochs/${epochId}/review-subject-overrides`,
         {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },

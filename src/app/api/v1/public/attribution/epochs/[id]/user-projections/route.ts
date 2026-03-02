@@ -2,26 +2,26 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/public/attribution/epochs/[id]/allocations/route`
- * Purpose: Public HTTP endpoint for epoch allocations (finalized epochs only).
- * Scope: Public route using wrapPublicRoute(); returns proposed and final allocations for finalized epochs. Does not contain business logic.
+ * Module: `@app/api/v1/public/attribution/epochs/[id]/user-projections/route`
+ * Purpose: Public HTTP endpoint for epoch user projections (finalized epochs only).
+ * Scope: Public route using wrapPublicRoute(); returns unsigned per-user projections for finalized epochs. Does not contain business logic.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: IO (HTTP response, database read)
- * Links: docs/spec/attribution-ledger.md, contracts/attribution.epoch-allocations.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.epoch-user-projections.v1.contract
  * @public
  */
 
 import { NextResponse } from "next/server";
-import { toAllocationDto } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
+import { toUserProjectionDto } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapPublicRoute } from "@/bootstrap/http";
-import { epochAllocationsOperation } from "@/contracts/attribution.epoch-allocations.v1.contract";
+import { epochUserProjectionsOperation } from "@/contracts/attribution.epoch-user-projections.v1.contract";
 
 export const dynamic = "force-dynamic";
 
 export const GET = wrapPublicRoute(
   {
-    routeId: "ledger.epoch-allocations.public",
+    routeId: "ledger.epoch-user-projections.public",
     cacheTtlSeconds: 60,
     staleWhileRevalidateSeconds: 300,
   },
@@ -43,11 +43,11 @@ export const GET = wrapPublicRoute(
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
 
-    const allocations = await store.getAllocationsForEpoch(epochId);
+    const userProjections = await store.getUserProjectionsForEpoch(epochId);
 
     return NextResponse.json(
-      epochAllocationsOperation.output.parse({
-        allocations: allocations.map(toAllocationDto),
+      epochUserProjectionsOperation.output.parse({
+        userProjections: userProjections.map(toUserProjectionDto),
         epochId: id,
       })
     );

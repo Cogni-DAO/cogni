@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@contracts/attribution.subject-overrides.v1.contract`
+ * Module: `@contracts/attribution.review-subject-overrides.v1.contract`
  * Purpose: Defines operation contracts for subject-level review overrides during epoch review.
  * Scope: Zod schemas and types for subject override wire format. Does not contain business logic.
  * Invariants:
@@ -71,8 +71,8 @@ export const DeleteSubjectOverrideInputSchema = z.object({
   subjectRef: z.string().min(1),
 });
 
-export const patchSubjectOverridesOperation = {
-  id: "ledger.patch-subject-overrides.v1",
+export const patchReviewSubjectOverridesOperation = {
+  id: "ledger.patch-review-subject-overrides.v1",
   summary: "Upsert subject-level review overrides",
   description:
     "Upserts subject-level weight/share overrides during epoch review. SIWE-protected, approver-gated.",
@@ -80,16 +80,16 @@ export const patchSubjectOverridesOperation = {
   output: PatchSubjectOverridesOutputSchema,
 } as const;
 
-export const getSubjectOverridesOperation = {
-  id: "ledger.get-subject-overrides.v1",
+export const getReviewSubjectOverridesOperation = {
+  id: "ledger.get-review-subject-overrides.v1",
   summary: "Get subject-level review overrides for an epoch",
   description:
     "Returns all subject-level overrides for the specified epoch. SIWE-protected.",
   output: GetSubjectOverridesOutputSchema,
 } as const;
 
-export const deleteSubjectOverrideOperation = {
-  id: "ledger.delete-subject-override.v1",
+export const deleteReviewSubjectOverrideOperation = {
+  id: "ledger.delete-review-subject-override.v1",
   summary: "Delete a subject-level review override",
   description:
     "Removes a subject-level override for a given subject reference during epoch review. SIWE-protected, approver-gated.",

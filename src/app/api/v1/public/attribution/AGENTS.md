@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-03-01
+- **Last reviewed:** 2026-03-02
 - **Status:** draft
 
 ## Purpose
 
-Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes closed-epoch lists, allocations, epoch statements, and claimant-aware finalized attribution to the community-attribution frontend without requiring a SIWE session.
+Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes closed-epoch lists, user projections, epoch statements, and claimant-aware finalized attribution to the community-attribution frontend without requiring a SIWE session.
 
 ## Pointers
 
@@ -32,12 +32,12 @@ Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes 
 - **Exports:** none (route handlers only)
 - **Routes:**
   - `GET /api/v1/public/attribution/epochs` — list closed epochs (paginated)
-  - `GET /api/v1/public/attribution/epochs/[id]/allocations` — allocations for a closed epoch
+  - `GET /api/v1/public/attribution/epochs/[id]/user-projections` — user projections for a closed epoch
   - `GET /api/v1/public/attribution/epochs/[id]/claimants` — claimant-aware finalized attribution for a closed epoch
   - `GET /api/v1/public/attribution/epochs/[id]/statement` — payout statement (null if none)
 - **CLI:** none
 - **Env/Config keys:** none
-- **Files considered API:** `epochs/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/statement/route.ts`
+- **Files considered API:** `epochs/route.ts`, `epochs/[id]/user-projections/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/statement/route.ts`
 
 ## Ports
 
@@ -53,7 +53,7 @@ Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes 
 
 ```bash
 curl http://localhost:3000/api/v1/public/attribution/epochs
-curl http://localhost:3000/api/v1/public/attribution/epochs/1/allocations
+curl http://localhost:3000/api/v1/public/attribution/epochs/1/user-projections
 curl http://localhost:3000/api/v1/public/attribution/epochs/1/claimants
 curl http://localhost:3000/api/v1/public/attribution/epochs/1/statement
 ```

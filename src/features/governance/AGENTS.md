@@ -37,12 +37,12 @@ Governance feature slice — schedule sync, governance status dashboard, claiman
 ## Public Surface
 
 - **Exports (services):** `syncGovernanceSchedules()`, `GovernanceScheduleSyncDeps`, `GovernanceScheduleSyncResult`, `governanceScheduleId()`, `getGovernanceStatus()`, `GovernanceStatusResult`
-- **Exports (hooks):** `useGovernanceStatus()`, `useCurrentEpoch()`, `useEpochHistory()`, `useHoldings()`, `useReviewEpochs()`, `useSignEpoch()`, `useSubjectOverrides()`
+- **Exports (hooks):** `useGovernanceStatus()`, `useCurrentEpoch()`, `useEpochHistory()`, `useHoldings()`, `useReviewEpochs()`, `useSignEpoch()`, `useReviewSubjectOverrides()`
 - **Exports (components):** `ContributorCard`, `ContributionRow`, `EpochCard`, `EpochCountdown`, `EpochDetail`, `HoldingCard`, `SourceBadge`
 - **Exports (lib):** `composeEpochView()`, `composeEpochViewFromClaimants()`, `composeHoldings()`
-- **Exports (types):** `EpochView`, `EpochContributor`, `IngestionReceipt`, `HoldingView`, `CurrentEpochData`, `EpochHistoryData`, `HoldingsData`, `SignEpochState`, `SignEpochPhase`, `SubjectOverrideView`, `EpochDetailProps`
+- **Exports (types):** `EpochView`, `EpochContributor`, `IngestionReceipt`, `HoldingView`, `CurrentEpochData`, `EpochHistoryData`, `HoldingsData`, `SignEpochState`, `SignEpochPhase`, `ReviewSubjectOverrideView`, `EpochDetailProps`
 - **Routes (app pages):** `/gov` (system), `/gov/epoch` (current), `/gov/history` (finalized), `/gov/holdings` (aggregated), `/gov/review` (approver admin — inline editing + EIP-712 sign & finalize)
-- **Routes (API — in `src/app/api/v1/attribution/`):** `GET /epochs`, `GET /epochs/:id/allocations`, `GET /epochs/:id/statement`, `GET /epochs/:id/claimants`, `GET /epochs/:id/activity`, `GET /epochs/:id/sign-data`, `GET|PATCH|DELETE /epochs/:id/subject-overrides`
+- **Routes (API — in `src/app/api/v1/attribution/`):** `GET /epochs`, `GET /epochs/:id/user-projections`, `GET /epochs/:id/statement`, `GET /epochs/:id/claimants`, `GET /epochs/:id/activity`, `GET /epochs/:id/sign-data`, `GET|PATCH|DELETE /epochs/:id/review-subject-overrides`
 - **CLI:** `pnpm governance:schedules:sync`, `pnpm db:seed`, `pnpm dev:setup`
 - **Env/Config keys:** `.cogni/repo-spec.yaml` → `governance.schedules`
 

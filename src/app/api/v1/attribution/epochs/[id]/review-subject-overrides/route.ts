@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/attribution/epochs/[id]/subject-overrides/route`
+ * Module: `@app/api/v1/attribution/epochs/[id]/review-subject-overrides/route`
  * Purpose: SIWE + approver-gated endpoint for subject-level review overrides.
  * Scope: Auth-protected GET/PATCH/DELETE endpoints. Requires wallet in activity_ledger.approvers for writes. Does not perform finalization or statement generation.
  * Invariants: NODE_SCOPED, WRITE_ROUTES_APPROVER_GATED, VALIDATE_IO.
  * Side-effects: IO (HTTP response, database write)
- * Links: docs/spec/attribution-ledger.md, contracts/attribution.subject-overrides.v1.contract
+ * Links: docs/spec/attribution-ledger.md, contracts/attribution.review-subject-overrides.v1.contract
  * @public
  */
 
@@ -24,10 +24,10 @@ import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
-  deleteSubjectOverrideOperation,
-  getSubjectOverridesOperation,
-  patchSubjectOverridesOperation,
-} from "@/contracts/attribution.subject-overrides.v1.contract";
+  deleteReviewSubjectOverrideOperation,
+  getReviewSubjectOverridesOperation,
+  patchReviewSubjectOverridesOperation,
+} from "@/contracts/attribution.review-subject-overrides.v1.contract";
 import { getNodeId } from "@/shared/config";
 import {
   EVENT_NAMES,
@@ -67,7 +67,7 @@ export const GET = wrapRouteHandlerWithLogging<{
   params: Promise<{ id: string }>;
 }>(
   {
-    routeId: "ledger.get-subject-overrides",
+    routeId: "ledger.get-review-subject-overrides",
     auth: { mode: "required", getSessionUser },
   },
   async (_ctx, _request, _sessionUser, context) => {
@@ -84,10 +84,10 @@ export const GET = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
 
-    const overrides = await store.getSubjectOverridesForEpoch(epochId);
+    const overrides = await store.getReviewSubjectOverridesForEpoch(epochId);
 
     return NextResponse.json(
-      getSubjectOverridesOperation.output.parse({
+      getReviewSubjectOverridesOperation.output.parse({
         overrides: overrides.map((o) => ({
           id: o.id,
           subjectRef: o.subjectRef,
@@ -108,7 +108,7 @@ export const PATCH = wrapRouteHandlerWithLogging<{
   params: Promise<{ id: string }>;
 }>(
   {
-    routeId: "ledger.patch-subject-overrides",
+    routeId: "ledger.patch-review-subject-overrides",
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, request, sessionUser, context) => {
@@ -136,7 +136,7 @@ export const PATCH = wrapRouteHandlerWithLogging<{
         );
       }
 
-      const input = patchSubjectOverridesOperation.input.parse(body);
+      const input = patchReviewSubjectOverridesOperation.input.parse(body);
 
       const store = getContainer().attributionStore;
       const epoch = await store.getEpoch(epochId);
@@ -243,7 +243,7 @@ export const PATCH = wrapRouteHandlerWithLogging<{
 
       // Upsert all overrides atomically in a single transaction
       const nodeId = getNodeId();
-      const results = await store.batchUpsertSubjectOverrides(
+      const results = await store.batchUpsertReviewSubjectOverrides(
         input.overrides.map((override) => ({
           nodeId,
           epochId,
@@ -259,13 +259,13 @@ export const PATCH = wrapRouteHandlerWithLogging<{
 
       logEvent(ctx.log, EVENT_NAMES.LEDGER_ALLOCATIONS_UPDATED, {
         reqId: ctx.reqId,
-        routeId: "ledger.patch-subject-overrides",
+        routeId: "ledger.patch-review-subject-overrides",
         epochId: id,
         upserted,
       });
 
       return NextResponse.json(
-        patchSubjectOverridesOperation.output.parse({ upserted })
+        patchReviewSubjectOverridesOperation.output.parse({ upserted })
       );
     } catch (error) {
       const errorResponse = handleRouteError(ctx, error);
@@ -281,7 +281,7 @@ export const DELETE = wrapRouteHandlerWithLogging<{
   params: Promise<{ id: string }>;
 }>(
   {
-    routeId: "ledger.delete-subject-override",
+    routeId: "ledger.delete-review-subject-override",
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, request, sessionUser, context) => {
@@ -309,7 +309,7 @@ export const DELETE = wrapRouteHandlerWithLogging<{
         );
       }
 
-      const input = deleteSubjectOverrideOperation.input.parse(body);
+      const input = deleteReviewSubjectOverrideOperation.input.parse(body);
 
       const store = getContainer().attributionStore;
       const epoch = await store.getEpoch(epochId);
@@ -324,7 +324,7 @@ export const DELETE = wrapRouteHandlerWithLogging<{
         );
       }
 
-      await store.deleteSubjectOverride(epochId, input.subjectRef);
+      await store.deleteReviewSubjectOverride(epochId, input.subjectRef);
 
       logEvent(ctx.log, EVENT_NAMES.LEDGER_ALLOCATIONS_UPDATED, {
         reqId: ctx.reqId,
