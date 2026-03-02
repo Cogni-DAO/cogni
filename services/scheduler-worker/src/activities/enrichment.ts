@@ -40,6 +40,20 @@ export interface EnrichmentActivityDeps {
 }
 
 /**
+ * Input for deriveWeightConfig activity.
+ */
+export interface DeriveWeightConfigInput {
+  readonly attributionPipeline: string;
+}
+
+/**
+ * Output from deriveWeightConfig activity.
+ */
+export interface DeriveWeightConfigOutput {
+  readonly weightConfig: Record<string, number>;
+}
+
+/**
  * Input for evaluateEpochDraft activity.
  */
 export interface EvaluateEpochDraftInput {
@@ -94,6 +108,27 @@ export interface BuildLockedEvaluationsOutput {
  */
 export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
   const { attributionStore, nodeId, logger, registries } = deps;
+
+  /**
+   * Derive weight config from the pipeline profile.
+   * Returns the profile's defaultWeightConfig, or empty map if not set.
+   */
+  async function deriveWeightConfig(
+    input: DeriveWeightConfigInput
+  ): Promise<DeriveWeightConfigOutput> {
+    const profile = resolveProfile(
+      registries.profiles,
+      input.attributionPipeline
+    );
+    const weightConfig = profile.defaultWeightConfig
+      ? { ...profile.defaultWeightConfig }
+      : {};
+    logger.info(
+      { profileId: profile.profileId, weightKeys: Object.keys(weightConfig) },
+      "Derived weight config from profile"
+    );
+    return { weightConfig };
+  }
 
   /**
    * Evaluate epoch with draft evaluations for all enrichers in the profile.
@@ -279,6 +314,7 @@ export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
   }
 
   return {
+    deriveWeightConfig,
     evaluateEpochDraft,
     buildLockedEvaluations,
   };

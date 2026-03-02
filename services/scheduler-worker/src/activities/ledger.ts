@@ -178,6 +178,20 @@ export interface EnsurePoolComponentsOutput {
 }
 
 /**
+ * Input for resolveStreams activity.
+ */
+export interface ResolveStreamsInput {
+  readonly source: string;
+}
+
+/**
+ * Output from resolveStreams activity.
+ */
+export interface ResolveStreamsOutput {
+  readonly streams: string[];
+}
+
+/**
  * Input for autoCloseIngestion activity.
  */
 export interface AutoCloseIngestionInput {
@@ -1148,6 +1162,28 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     };
   }
 
+  /**
+   * Resolve stream IDs for a source by querying the adapter's self-declared streams.
+   */
+  async function resolveStreams(
+    input: ResolveStreamsInput
+  ): Promise<ResolveStreamsOutput> {
+    const adapter = sourceAdapters.get(input.source);
+    if (!adapter) {
+      logger.warn(
+        { source: input.source },
+        "No adapter found for source — returning empty streams"
+      );
+      return { streams: [] };
+    }
+    const streams = adapter.streams().map((s) => s.id);
+    logger.info(
+      { source: input.source, streams },
+      "Resolved streams from adapter"
+    );
+    return { streams };
+  }
+
   return {
     ensureEpochForWindow,
     loadCursor,
@@ -1159,6 +1195,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     ensurePoolComponents,
     autoCloseIngestion,
     finalizeEpoch,
+    resolveStreams,
   };
 }
 

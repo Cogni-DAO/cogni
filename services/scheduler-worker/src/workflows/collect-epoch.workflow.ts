@@ -38,6 +38,7 @@ const {
   computeAllocations,
   ensurePoolComponents,
   autoCloseIngestion,
+  resolveStreams,
 } = proxyActivities<LedgerActivities>({
   startToCloseTimeout: "2 minutes",
   retry: {
@@ -58,7 +59,7 @@ const { collectFromSource } = proxyActivities<LedgerActivities>({
   },
 });
 
-const { evaluateEpochDraft, buildLockedEvaluations } =
+const { deriveWeightConfig, evaluateEpochDraft, buildLockedEvaluations } =
   proxyActivities<EnrichmentActivities>({
     startToCloseTimeout: "2 minutes",
     retry: {
@@ -84,13 +85,12 @@ export interface AttributionIngestRunV1 {
   readonly scopeId: string;
   readonly scopeKey: string;
   readonly epochLengthDays: number;
-  /** Map of source → { attributionPipeline, sourceRefs, streams } */
+  /** Map of source → { attributionPipeline, sourceRefs } */
   readonly activitySources: Record<
     string,
     {
       attributionPipeline: string;
       sourceRefs: string[];
-      streams: string[];
     }
   >;
   /** Pool budget config — base_issuance_credits as string (bigint serialized). Optional for backward compat. */
@@ -105,8 +105,9 @@ export interface AttributionIngestRunV1 {
  * CollectEpochWorkflow — orchestrates one epoch collection pass.
  *
  * 1. Compute epoch window from TemporalScheduledStartTime
- * 2. Ensure epoch exists (any status) — pin weights on first create
- * 3. For each source, sourceRef, stream: load cursor → collect → insert → save cursor
+ * 2. Derive weight config from pipeline profile
+ * 3. Ensure epoch exists (any status) — pin weights on first create
+ * 4. For each source, resolve streams from adapter, then per sourceRef/stream: collect → insert → save cursor
  *
  * Receives ScheduleActionPayload from the schedule adapter; extracts .input immediately.
  * Deterministic workflow ID: ledger-collect-{scopeKey}-{periodStart}-{periodEnd}
@@ -134,10 +135,19 @@ export async function CollectEpochWorkflow(
     weekStart: "monday",
   });
 
-  // 2. Derive weight config from activitySources (V0: hardcoded mapping)
-  const weightConfig = deriveWeightConfigV0(config.activitySources);
+  // 2. Extract attributionPipeline from activity sources (required — no fallback)
+  const firstSource = Object.values(config.activitySources)[0];
+  if (!firstSource?.attributionPipeline) {
+    throw ApplicationFailure.nonRetryable(
+      "attributionPipeline missing from activitySources — check repo-spec.yaml"
+    );
+  }
+  const attributionPipeline = firstSource.attributionPipeline;
 
-  // 3. Ensure epoch (any status — pin weights on first create)
+  // 3. Derive weight config from the pipeline profile (profile owns weights)
+  const { weightConfig } = await deriveWeightConfig({ attributionPipeline });
+
+  // 4. Ensure epoch (any status — pin weights on first create)
   const epoch = await ensureEpochForWindow({
     periodStart: periodStartIso,
     periodEnd: periodEndIso,
@@ -147,10 +157,11 @@ export async function CollectEpochWorkflow(
   // If epoch already closed/finalized, skip collection
   if (epoch.status !== "open") return;
 
-  // 4. Collect from each source, each sourceRef (external namespace), each stream
+  // 5. Collect from each source, each sourceRef — streams resolved from adapter
   for (const [source, sourceConfig] of Object.entries(config.activitySources)) {
+    const { streams } = await resolveStreams({ source });
     for (const sourceRef of sourceConfig.sourceRefs) {
-      for (const stream of sourceConfig.streams) {
+      for (const stream of streams) {
         const cursorValue = await loadCursor({ source, stream, sourceRef });
         const result = await collectFromSource({
           source,
@@ -175,22 +186,13 @@ export async function CollectEpochWorkflow(
     }
   }
 
-  // 5. Extract attributionPipeline from activity sources (required — no fallback)
-  const firstSource = Object.values(config.activitySources)[0];
-  if (!firstSource?.attributionPipeline) {
-    throw ApplicationFailure.nonRetryable(
-      "attributionPipeline missing from activitySources — check repo-spec.yaml"
-    );
-  }
-  const attributionPipeline = firstSource.attributionPipeline;
-
   // 6. Materialize selection and resolve identities (SELECTION_AUTO_POPULATE)
   await materializeSelection({ epochId: epoch.epochId });
 
   // 7. Evaluate epoch with draft evaluations (profile-driven enricher dispatch)
   await evaluateEpochDraft({ epochId: epoch.epochId, attributionPipeline });
 
-  // 8. Compute allocations (periodic — runs every collection pass)
+  // 8. Compute allocations
   await computeAllocations({
     epochId: epoch.epochId,
     algorithmId: deriveAllocationAlgoRef(attributionPipeline),
@@ -223,19 +225,4 @@ export async function CollectEpochWorkflow(
       artifactsHash,
     });
   }
-}
-
-/** V0 weight config derivation — pure, deterministic. */
-function deriveWeightConfigV0(
-  sources: Record<string, { attributionPipeline: string }>
-): Record<string, number> {
-  const weights: Record<string, number> = {};
-  for (const source of Object.keys(sources)) {
-    if (source === "github") {
-      weights["github:pr_merged"] = 1000;
-      weights["github:review_submitted"] = 500;
-      weights["github:issue_closed"] = 300;
-    }
-  }
-  return weights;
 }
