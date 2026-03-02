@@ -736,15 +736,10 @@ export class DrizzleAttributionAdapter implements AttributionStore {
           eq(ingestionReceipts.nodeId, epochSelection.nodeId)
         )
       )
-      .where(
-        and(
-          eq(epochSelection.epochId, epochId),
-          isNotNull(epochSelection.userId)
-        )
-      );
+      .where(eq(epochSelection.epochId, epochId));
     return rows.map((r) => ({
       receiptId: r.receiptId,
-      userId: r.userId as string,
+      userId: r.userId,
       source: r.source,
       eventType: r.eventType,
       included: r.included,
@@ -820,16 +815,10 @@ export class DrizzleAttributionAdapter implements AttributionStore {
           eq(ingestionReceipts.nodeId, epochSelection.nodeId)
         )
       )
-      .where(
-        and(
-          eq(epochSelection.epochId, epochId),
-          isNotNull(epochSelection.userId)
-        )
-      );
+      .where(eq(epochSelection.epochId, epochId));
     return rows.map((r) => ({
       receiptId: r.receiptId,
-      // Safe: WHERE clause filters to userId IS NOT NULL
-      userId: r.userId as string,
+      userId: r.userId,
       source: r.source,
       eventType: r.eventType,
       included: r.included,

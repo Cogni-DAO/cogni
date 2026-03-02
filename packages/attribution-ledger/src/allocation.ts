@@ -14,10 +14,10 @@
  * @public
  */
 
-/** Input: joined selection + ingestion_receipts data (only resolved, included receipts) */
+/** Input: joined selection + ingestion_receipts data for allocation pipeline. */
 export interface SelectedReceiptForAllocation {
   readonly receiptId: string;
-  readonly userId: string;
+  readonly userId: string | null;
   readonly source: string;
   readonly eventType: string;
   readonly included: boolean;
@@ -128,7 +128,7 @@ function weightSumV0(
   const userCounts = new Map<string, number>();
 
   for (const event of events) {
-    if (!event.included) continue;
+    if (!event.included || !event.userId) continue;
 
     const configKey = `${event.source}:${event.eventType}`;
     const weight =

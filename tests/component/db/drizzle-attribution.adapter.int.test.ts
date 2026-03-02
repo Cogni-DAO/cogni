@@ -492,16 +492,21 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       await adapter.finalizeEpoch(epochId, 0n);
     });
 
-    it("returns only selections with non-null userId", async () => {
+    it("returns all selections including unresolved (null userId)", async () => {
       const events = await adapter.getSelectedReceiptsForAllocation(epochId);
 
       // "resolved" has userId set → included
-      // "unresolved" has userId=null → excluded by join filter
+      // "unresolved" has userId=null → included (identity claimants need weights too)
       // "excluded" has userId set but included=false → still returned (filtering is domain logic)
       const receiptIds = events.map((e) => e.receiptId);
       expect(receiptIds).toContain("join-test:resolved");
       expect(receiptIds).toContain("join-test:excluded");
-      expect(receiptIds).not.toContain("join-test:unresolved");
+      expect(receiptIds).toContain("join-test:unresolved");
+
+      const unresolved = events.find(
+        (e) => e.receiptId === "join-test:unresolved"
+      );
+      expect(unresolved?.userId).toBeNull();
     });
 
     it("join populates source and eventType from ingestion_receipts", async () => {
