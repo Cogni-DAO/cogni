@@ -53,7 +53,7 @@ describe("validateEnricherOrder", () => {
       { evaluationRef: "cogni.echo.v0", dependsOn: ["nonexistent"] },
     ];
     expect(() => validateEnricherOrder(refs)).toThrow(
-      /depends on "nonexistent" which is not in the profile/
+      /depends on "nonexistent" which is not in the effective enricher refs/
     );
   });
 
