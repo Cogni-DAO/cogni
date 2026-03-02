@@ -12,6 +12,7 @@
  * @public
  */
 
+import type { SelectedReceiptWithMetadata } from "@cogni/attribution-ledger";
 import type { EnricherDescriptor } from "@cogni/attribution-pipeline-contracts";
 
 /** Namespaced evaluation ref for the echo enricher. */
@@ -35,18 +36,16 @@ export const ECHO_DESCRIPTOR: EnricherDescriptor = {
  * Pure computation — same receipts always produce same payload.
  */
 export function buildEchoPayload(
-  receipts: ReadonlyArray<{
-    receiptId: string;
-    eventType: string;
-    userId: string;
-  }>
+  receipts: readonly SelectedReceiptWithMetadata[]
 ): Record<string, unknown> {
   const byEventType: Record<string, number> = {};
   const byUserId: Record<string, number> = {};
 
   for (const r of receipts) {
     byEventType[r.eventType] = (byEventType[r.eventType] ?? 0) + 1;
-    byUserId[r.userId] = (byUserId[r.userId] ?? 0) + 1;
+    if (r.userId) {
+      byUserId[r.userId] = (byUserId[r.userId] ?? 0) + 1;
+    }
   }
 
   return {

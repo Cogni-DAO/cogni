@@ -25,7 +25,7 @@ import {
 function makeMockContext(
   receipts: Array<{
     receiptId: string;
-    userId: string;
+    userId: string | null;
     source: string;
     eventType: string;
     included: boolean;
@@ -145,6 +145,32 @@ describe("echo adapter", () => {
     expect(result1.inputsHash).toBe(result2.inputsHash);
     expect(result1.payloadHash).toBe(result2.payloadHash);
     expect(result1.payloadJson).toEqual(result2.payloadJson);
+  });
+
+  it("counts unresolved receipts separately (IDENTITY_BEST_EFFORT)", async () => {
+    const adapter = createEchoAdapter();
+    const receiptsWithUnresolved = [
+      ...testReceipts,
+      {
+        receiptId: "r4",
+        userId: null,
+        source: "github",
+        eventType: "pull_request",
+        included: true,
+        weightOverrideMilli: null,
+        metadata: null,
+        payloadHash: "sha256:jkl",
+      },
+    ];
+    const ctx = makeMockContext(receiptsWithUnresolved);
+
+    const result = await adapter.evaluateDraft(ctx);
+
+    expect(result.payloadJson).toEqual({
+      totalEvents: 4,
+      byEventType: { pull_request: 3, issue_comment: 1 },
+      byUserId: { "user-1": 2, "user-2": 1 },
+    });
   });
 
   it("handles empty receipts", async () => {
