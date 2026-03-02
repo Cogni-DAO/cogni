@@ -39,10 +39,6 @@ export const GET = wrapRouteHandlerWithLogging<{
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, _request, sessionUser, context) => {
-    // WRITE_ROUTES_APPROVER_GATED
-    const denied = checkApprover(ctx, sessionUser?.walletAddress);
-    if (denied) return denied;
-
     if (!context) throw new Error("context required for dynamic routes");
     const { id } = await context.params;
     let epochId: bigint;
@@ -57,6 +53,10 @@ export const GET = wrapRouteHandlerWithLogging<{
     if (!epoch) {
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
+
+    // WRITE_ROUTES_APPROVER_GATED — check against epoch's pinned approvers
+    const denied = checkApprover(ctx, sessionUser?.walletAddress, epoch);
+    if (denied) return denied;
 
     if (epoch.status !== "review") {
       return NextResponse.json(
