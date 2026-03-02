@@ -66,6 +66,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       if (open) {
         await adapter.closeIngestion(
           open.id,
+          [],
           "cleanup-hash",
           "weight-sum-v0",
           "cleanup-wch"
@@ -121,6 +122,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Finalize the open epoch so we can test the window constraint in isolation
       await adapter.closeIngestion(
         createdEpochId,
+        [],
         "test-hash",
         "weight-sum-v0",
         "test-wch"
@@ -137,7 +139,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       ).rejects.toThrow();
     });
 
-    it("closeIngestion transitions open → review with approverSetHash", async () => {
+    it("closeIngestion transitions open → review with approvers + approverSetHash", async () => {
       const epoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
@@ -145,14 +147,17 @@ describe("DrizzleAttributionAdapter (Component)", () => {
         weightConfig: TEST_WEIGHT_CONFIG,
       });
 
+      const testApprovers = ["0xaaaa", "0xbbbb"];
       const reviewed = await adapter.closeIngestion(
         epoch.id,
+        testApprovers,
         "abc123hash",
         "weight-sum-v0",
         "test-wch"
       );
       expect(reviewed.status).toBe("review");
       expect(reviewed.approverSetHash).toBe("abc123hash");
+      expect(reviewed.approvers).toEqual(testApprovers);
     });
 
     it("finalizeEpoch transitions review → finalized with poolTotal and closedAt", async () => {
@@ -204,6 +209,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Cleanup: transition to finalized so ONE_OPEN_EPOCH doesn't block later tests
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "cleanup-hash",
         "weight-sum-v0",
         "cleanup-wch"
@@ -219,6 +225,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
 
       const result = await adapter.closeIngestion(
         finalized.id,
+        [],
         "should-be-ignored",
         "weight-sum-v0",
         "ignored-wch"
@@ -321,6 +328,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       if (open) {
         await adapter.closeIngestion(
           open.id,
+          [],
           "cleanup-hash",
           "weight-sum-v0",
           "cleanup-wch"
@@ -369,6 +377,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     it("SELECTION_FREEZE_ON_FINALIZE: selection is mutable during review", async () => {
       await adapter.closeIngestion(
         epochId,
+        [],
         "review-curation-test",
         "weight-sum-v0",
         "review-wch"
@@ -475,6 +484,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     afterAll(async () => {
       await adapter.closeIngestion(
         epochId,
+        [],
         "cleanup-hash",
         "weight-sum-v0",
         "cleanup-wch"
@@ -539,6 +549,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     afterAll(async () => {
       await adapter.closeIngestion(
         epochId,
+        [],
         "cleanup-hash",
         "weight-sum-v0",
         "cleanup-wch"
@@ -684,6 +695,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     afterAll(async () => {
       await adapter.closeIngestion(
         epochId,
+        [],
         "cleanup-hash",
         "weight-sum-v0",
         "cleanup-wch"
@@ -723,6 +735,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Close the describe-level epoch so ONE_OPEN_EPOCH allows a new one
       await adapter.closeIngestion(
         epochId,
+        [],
         "pre-review-hash",
         "weight-sum-v0",
         "pre-review-wch"
@@ -737,6 +750,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         reviewEpoch.id,
+        [],
         "pool-lock-hash",
         "weight-sum-v0",
         "pool-lock-wch"
@@ -772,6 +786,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "stmt-test-hash",
         "weight-sum-v0",
         "stmt-wch"
@@ -828,6 +843,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "sig-test-hash",
         "weight-sum-v0",
         "sig-wch"
@@ -963,6 +979,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "atomic-approver-hash",
         "weight-sum-v0",
         "atomic-wch"
@@ -993,6 +1010,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "retry-hash",
         "weight-sum-v0",
         "retry-wch"
@@ -1015,6 +1033,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "repair-hash",
         "weight-sum-v0",
         "repair-wch"
@@ -1051,6 +1070,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "hash-mismatch-approver",
         "weight-sum-v0",
         "hash-wch"
@@ -1079,6 +1099,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "diverge-approver",
         "weight-sum-v0",
         "diverge-wch"
@@ -1115,6 +1136,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Cleanup
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "cleanup",
         "weight-sum-v0",
         "cleanup"
@@ -1151,6 +1173,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       if (open) {
         await adapter.closeIngestion(
           open.id,
+          [],
           "cleanup-hash",
           "weight-sum-v0",
           "cleanup-wch"
@@ -1168,6 +1191,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       await expect(
         otherScopeAdapter.closeIngestion(
           scopeTestEpochId,
+          [],
           "test-hash",
           "weight-sum-v0",
           "test-wch"
@@ -1264,6 +1288,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Transition to review then finalized to free ONE_OPEN_EPOCH slot
       await adapter.closeIngestion(
         evalEpochId,
+        [],
         "test-approver-set-hash",
         "weight-sum-v0",
         "test-weight-config-hash"
@@ -1379,6 +1404,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     it("atomic close: inserts locked evaluations + sets artifactsHash + transitions to review", async () => {
       const result = await adapter.closeIngestionWithEvaluations({
         epochId: closeEpochId,
+        approvers: [],
         approverSetHash: "test-approver-set-hash",
         allocationAlgoRef: "weight-sum-v0",
         weightConfigHash: "test-weight-config-hash",
@@ -1415,6 +1441,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     it("idempotent on already-reviewed epoch", async () => {
       const result = await adapter.closeIngestionWithEvaluations({
         epochId: closeEpochId,
+        approvers: [],
         approverSetHash: "test-approver-set-hash",
         allocationAlgoRef: "weight-sum-v0",
         weightConfigHash: "test-weight-config-hash",
@@ -1435,6 +1462,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       await expect(
         wrongScopeAdapter.closeIngestionWithEvaluations({
           epochId: closeEpochId,
+          approvers: [],
           approverSetHash: "test-approver-set-hash",
           allocationAlgoRef: "weight-sum-v0",
           weightConfigHash: "test-weight-config-hash",
@@ -1511,6 +1539,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     afterAll(async () => {
       await adapter.closeIngestion(
         metaEpochId,
+        [],
         "test-approver-set-hash",
         "weight-sum-v0",
         "test-weight-config-hash"
@@ -1559,6 +1588,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Transition to review so overrides are allowed
       await adapter.closeIngestion(
         epoch.id,
+        [],
         "override-test-hash",
         "weight-sum-v0",
         "override-wch"
@@ -1717,6 +1747,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Clean up
       await adapter.closeIngestion(
         openEpoch.id,
+        [],
         "cleanup",
         "weight-sum-v0",
         "cleanup-wch"
@@ -1780,6 +1811,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       if (open) {
         await adapter.closeIngestion(
           open.id,
+          [],
           "cleanup",
           "weight-sum-v0",
           "cleanup-wch"
@@ -1840,14 +1872,14 @@ describe("DrizzleAttributionAdapter (Component)", () => {
 
       const r1 = locked.find((r) => r.receiptId === "claimant-r1");
       expect(r1).toBeDefined();
-      expect(r1!.status).toBe("locked");
-      expect(r1!.claimantKeys).toEqual(["user:u1-resolved"]); // overwritten value
-      expect(r1!.inputsHash).toBe("hash-bbb"); // overwritten hash
+      expect(r1?.status).toBe("locked");
+      expect(r1?.claimantKeys).toEqual(["user:u1-resolved"]); // overwritten value
+      expect(r1?.inputsHash).toBe("hash-bbb"); // overwritten hash
 
       const r2 = locked.find((r) => r.receiptId === "claimant-r2");
       expect(r2).toBeDefined();
-      expect(r2!.status).toBe("locked");
-      expect(r2!.claimantKeys).toEqual(["user:u2"]);
+      expect(r2?.status).toBe("locked");
+      expect(r2?.claimantKeys).toEqual(["user:u2"]);
     });
 
     it("lockClaimantsForEpoch returns 0 when no drafts remain", async () => {

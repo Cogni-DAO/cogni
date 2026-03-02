@@ -133,6 +133,7 @@ function makeEpoch(
     weightConfig: { "github:pr_merged": 1000 },
     poolTotalCredits: null,
     approverSetHash: null,
+    approvers: null,
     allocationAlgoRef: null,
     weightConfigHash: null,
     artifactsHash: null,
@@ -891,6 +892,7 @@ describe("finalizeEpoch", () => {
       status: "review",
       allocationAlgoRef: "weight-sum-v0",
       weightConfigHash: "weight-hash",
+      approvers: [signer],
       approverSetHash: computeApproverSetHash([signer]),
     });
 
@@ -990,7 +992,6 @@ describe("finalizeEpoch", () => {
       epochId: reviewEpoch.id.toString(),
       signature: "0xdeadbeef",
       signerAddress: signer,
-      approvers: [signer],
     });
 
     expect(result.statementLineCount).toBe(2);

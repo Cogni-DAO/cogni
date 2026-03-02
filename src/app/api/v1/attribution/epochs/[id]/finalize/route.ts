@@ -19,12 +19,13 @@ import {
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
+import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   FinalizeEpochInputSchema,
   finalizeEpochOperation,
 } from "@/contracts/attribution.finalize-epoch.v1.contract";
-import { getLedgerApprovers, getScopeId } from "@/shared/config";
+import { getScopeId } from "@/shared/config";
 import { serverEnv } from "@/shared/env/server-env";
 
 export const dynamic = "force-dynamic";
@@ -47,10 +48,6 @@ export const POST = wrapRouteHandlerWithLogging<{
     auth: { mode: "required", getSessionUser },
   },
   async (ctx, request, sessionUser, context) => {
-    // WRITE_ROUTES_APPROVER_GATED
-    const denied = checkApprover(ctx, sessionUser?.walletAddress);
-    if (denied) return denied;
-
     if (!context) throw new Error("context required for dynamic routes");
     const { id } = await context.params;
     let epochId: bigint;
@@ -59,6 +56,17 @@ export const POST = wrapRouteHandlerWithLogging<{
     } catch {
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
+
+    // Load epoch so we can check against pinned approvers (APPROVERS_PINNED_AT_REVIEW)
+    const store = getContainer().attributionStore;
+    const epoch = await store.getEpoch(epochId);
+    if (!epoch) {
+      return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
+    }
+
+    // WRITE_ROUTES_APPROVER_GATED — checks against epoch's pinned approvers
+    const denied = checkApprover(ctx, sessionUser?.walletAddress, epoch);
+    if (denied) return denied;
 
     // Parse and validate request body
     const body = await request.json();
@@ -82,7 +90,6 @@ export const POST = wrapRouteHandlerWithLogging<{
     // Start FinalizeEpochWorkflow via Temporal
     const env = serverEnv();
     const scopeId = getScopeId();
-    const approvers = getLedgerApprovers();
 
     const workflowId = `ledger-finalize-${scopeId}-${epochId.toString()}`;
 
@@ -130,7 +137,6 @@ export const POST = wrapRouteHandlerWithLogging<{
               epochId: epochId.toString(),
               signature,
               signerAddress,
-              approvers,
             },
           ],
         });

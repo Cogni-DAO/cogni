@@ -140,6 +140,7 @@ function makeEpoch() {
     },
     poolTotalCredits: null,
     approverSetHash: null,
+    approvers: null,
     allocationAlgoRef: null,
     weightConfigHash: null,
     artifactsHash: null,

@@ -134,6 +134,13 @@
       "when": 1772448132340,
       "tag": "0018_many_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1772471667315,
+      "tag": "0019_wet_calypso",
+      "breakpoints": true
     }
   ]
 }

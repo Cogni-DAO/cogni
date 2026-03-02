@@ -34,7 +34,6 @@ export interface FinalizeEpochWorkflowInput {
   readonly epochId: string; // bigint serialized
   readonly signature: string; // EIP-712 hex
   readonly signerAddress: string; // from SIWE session
-  readonly approvers: string[]; // EVM addresses (from repo-spec, lowercased)
 }
 
 /**
@@ -53,7 +52,6 @@ export async function FinalizeEpochWorkflow(
     epochId: input.epochId,
     signature: input.signature,
     signerAddress: input.signerAddress,
-    approvers: input.approvers,
   });
 
   return { statementId: result.statementId };

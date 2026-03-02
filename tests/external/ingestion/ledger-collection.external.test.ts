@@ -150,6 +150,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
       // Close the epoch via the store directly
       await ledger.closeIngestion(
         BigInt(created.epochId),
+        [],
         "test-hash",
         "weight-sum-v0",
         "test-wch"

@@ -215,7 +215,6 @@ export interface FinalizeEpochInput {
   readonly epochId: string; // bigint serialized
   readonly signature: string; // EIP-712 hex
   readonly signerAddress: string; // from SIWE session
-  readonly approvers: string[]; // EVM addresses (lowercased)
 }
 
 /**
@@ -872,6 +871,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
 
     const epoch = await attributionStore.closeIngestionWithEvaluations({
       epochId,
+      approvers: input.approvers,
       approverSetHash,
       allocationAlgoRef,
       weightConfigHash,
@@ -973,18 +973,24 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       );
     }
 
-    // 3. Verify signer is in approvers and matches pinned approverSetHash
+    // 3. Verify signer is in pinned approvers (APPROVERS_PINNED_AT_REVIEW)
+    if (!epoch.approvers || epoch.approvers.length === 0) {
+      throw new Error(
+        `finalizeEpoch: epoch ${input.epochId} has no pinned approvers (APPROVERS_PINNED_AT_REVIEW violated)`
+      );
+    }
     const signerLower = input.signerAddress.toLowerCase();
-    const approversLower = input.approvers.map((a) => a.toLowerCase());
+    const approversLower = epoch.approvers.map((a) => a.toLowerCase());
     if (!approversLower.includes(signerLower)) {
       throw new Error(
         `finalizeEpoch: signer ${input.signerAddress} not in approvers`
       );
     }
-    const currentApproverSetHash = computeApproverSetHash(input.approvers);
-    if (epoch.approverSetHash !== currentApproverSetHash) {
+    // Self-consistent integrity check: recompute hash from pinned list
+    const pinnedApproverSetHash = computeApproverSetHash(epoch.approvers);
+    if (epoch.approverSetHash !== pinnedApproverSetHash) {
       throw new Error(
-        `finalizeEpoch: approver set hash mismatch — epoch has ${epoch.approverSetHash}, current is ${currentApproverSetHash}`
+        `finalizeEpoch: approver set hash integrity failure — stored hash ${epoch.approverSetHash} does not match recomputed ${pinnedApproverSetHash}`
       );
     }
 

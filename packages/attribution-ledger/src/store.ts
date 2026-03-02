@@ -45,6 +45,7 @@ export interface AttributionEpoch {
   readonly weightConfig: Record<string, number>;
   readonly poolTotalCredits: bigint | null;
   readonly approverSetHash: string | null;
+  readonly approvers: readonly string[] | null;
   readonly allocationAlgoRef: string | null;
   readonly weightConfigHash: string | null;
   readonly artifactsHash: string | null;
@@ -267,6 +268,7 @@ export interface UpsertEvaluationParams {
 
 export interface CloseIngestionWithEvaluationsParams {
   readonly epochId: bigint;
+  readonly approvers: string[];
   readonly approverSetHash: string;
   readonly allocationAlgoRef: string;
   readonly weightConfigHash: string;
@@ -395,9 +397,10 @@ export interface AttributionStore {
   getEpoch(id: bigint): Promise<AttributionEpoch | null>;
   listEpochs(nodeId: string): Promise<AttributionEpoch[]>;
   /** Transition epoch open → review (INGESTION_STOPS_AT_REVIEW).
-   *  Pins approverSetHash, allocationAlgoRef, and weightConfigHash. */
+   *  Pins approvers, approverSetHash, allocationAlgoRef, and weightConfigHash. */
   closeIngestion(
     epochId: bigint,
+    approvers: string[],
     approverSetHash: string,
     allocationAlgoRef: string,
     weightConfigHash: string

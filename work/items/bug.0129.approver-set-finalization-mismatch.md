@@ -15,7 +15,7 @@ assignees:
   - derekg1729
 credit:
 project: proj.transparent-credit-payouts
-branch:
+branch: fix/epochs-v0
 pr:
 reviewer:
 revision: 0
@@ -159,7 +159,7 @@ pnpm check
 
 ## PR / Links
 
--
+- Handoff: [handoff](../handoffs/bug.0129.handoff.md)
 
 ## Attribution
 

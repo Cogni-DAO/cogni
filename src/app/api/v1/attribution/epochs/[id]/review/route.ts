@@ -50,8 +50,9 @@ export const POST = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Invalid epoch ID" }, { status: 400 });
     }
 
-    // APPROVERS_PINNED_AT_REVIEW: pin current approver set on the epoch
-    const approverSetHash = computeApproverSetHash(getLedgerApprovers());
+    // APPROVERS_PINNED_AT_REVIEW: pin current approver set + hash on the epoch
+    const approvers = getLedgerApprovers();
+    const approverSetHash = computeApproverSetHash(approvers);
 
     const store = getContainer().attributionStore;
 
@@ -71,6 +72,7 @@ export const POST = wrapRouteHandlerWithLogging<{
 
     const epoch = await store.closeIngestion(
       epochId,
+      approvers,
       approverSetHash,
       allocationAlgoRef,
       weightConfigHash

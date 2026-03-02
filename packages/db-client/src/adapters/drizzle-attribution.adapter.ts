@@ -103,6 +103,7 @@ function toEpoch(row: typeof epochs.$inferSelect): AttributionEpoch {
     weightConfig: row.weightConfig,
     poolTotalCredits: row.poolTotalCredits,
     approverSetHash: row.approverSetHash,
+    approvers: row.approvers ?? null,
     allocationAlgoRef: row.allocationAlgoRef,
     weightConfigHash: row.weightConfigHash,
     artifactsHash: row.artifactsHash,
@@ -488,6 +489,7 @@ export class DrizzleAttributionAdapter implements AttributionStore {
 
   async closeIngestion(
     epochId: bigint,
+    approvers: string[],
     approverSetHash: string,
     allocationAlgoRef: string,
     weightConfigHash: string
@@ -496,6 +498,7 @@ export class DrizzleAttributionAdapter implements AttributionStore {
       .update(epochs)
       .set({
         status: "review",
+        approvers,
         approverSetHash,
         allocationAlgoRef,
         weightConfigHash,
@@ -613,6 +616,7 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         .update(epochs)
         .set({
           status: "review",
+          approvers: params.approvers,
           approverSetHash: params.approverSetHash,
           allocationAlgoRef: params.allocationAlgoRef,
           weightConfigHash: params.weightConfigHash,

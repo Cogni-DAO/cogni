@@ -62,6 +62,7 @@ export const epochs = pgTable(
       .notNull(),
     poolTotalCredits: bigint("pool_total_credits", { mode: "bigint" }),
     approverSetHash: text("approver_set_hash"),
+    approvers: jsonb("approvers").$type<string[]>(),
     allocationAlgoRef: text("allocation_algo_ref"),
     weightConfigHash: text("weight_config_hash"),
     openedAt: timestamp("opened_at", { withTimezone: true })
