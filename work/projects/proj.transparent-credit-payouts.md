@@ -158,6 +158,7 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 | Scope-aware epoch API routing (blocks multi-scope)    | Not Started | 3   | task.0123                                              |
 | Epoch artifact pipeline + echo enricher               | In Review   | 3   | task.0113                                              |
 | Plugin pipeline framework + built-in plugins packages | In Review   | 3   | task.0124                                              |
+| Store ISP + Zod enricher/allocator output schemas     | Not Started | 3   | task.0133                                              |
 | work-item-budget-v0 allocation algorithm              | Not Started | 2   | task.0114                                              |
 | Per-receipt EIP-191 wallet signing                    | Not Started | 2   | (create at P1 start — EIP-712 foundation in task.0119) |
 | `ledger_issuers` role system (can_issue, can_approve) | Not Started | 2   | (create at P1 start)                                   |
