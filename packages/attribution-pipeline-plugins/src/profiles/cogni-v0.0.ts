@@ -27,4 +27,9 @@ export const COGNI_V0_PROFILE: PipelineProfile = {
   enricherRefs: [{ enricherRef: "cogni.echo.v0", dependsOnEvaluations: [] }],
   allocatorRef: "weight-sum-v0",
   epochKind: "activity",
+  defaultWeightConfig: {
+    "github:pr_merged": 1000,
+    "github:review_submitted": 500,
+    "github:issue_closed": 300,
+  },
 };

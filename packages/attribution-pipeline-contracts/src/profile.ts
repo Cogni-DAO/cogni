@@ -57,6 +57,13 @@ export interface PipelineProfile {
    * Default: "activity". Quarterly review: "quarterly_review".
    */
   readonly epochKind: string;
+
+  /**
+   * Default weight config for this profile's allocator.
+   * Keyed by "{source}:{eventType}" (e.g., "github:pr_merged").
+   * Pinned on epoch creation via ensureEpochForWindow.
+   */
+  readonly defaultWeightConfig?: Readonly<Record<string, number>>;
 }
 
 /** Registry mapping profileId → PipelineProfile. */

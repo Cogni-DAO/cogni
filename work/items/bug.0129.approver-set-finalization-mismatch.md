@@ -2,7 +2,7 @@
 id: bug.0129
 type: bug
 title: "Finalization fails on approver set hash mismatch — approver check is scattered and fragile"
-status: needs_implement
+status: needs_merge
 priority: 0
 rank: 10
 estimate: 3
@@ -15,14 +15,14 @@ assignees:
   - derekg1729
 credit:
 project: proj.transparent-credit-payouts
-branch: fix/epochs-v0
+branch: fix/epoch-finalization
 pr:
 reviewer:
 revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-03-02
-updated: 2026-03-02
+updated: 2026-03-03
 labels: [governance, attribution, finalization]
 external_refs:
 ---

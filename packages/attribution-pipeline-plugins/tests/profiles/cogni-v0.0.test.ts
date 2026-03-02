@@ -34,6 +34,14 @@ describe("cogni-v0.0 profile", () => {
     expect(COGNI_V0_PROFILE.epochKind).toBe("activity");
   });
 
+  it("provides defaultWeightConfig with GitHub event weights", () => {
+    expect(COGNI_V0_PROFILE.defaultWeightConfig).toEqual({
+      "github:pr_merged": 1000,
+      "github:review_submitted": 500,
+      "github:issue_closed": 300,
+    });
+  });
+
   it("is a plain readonly object (PROFILE_IS_DATA)", () => {
     expect(COGNI_V0_PROFILE.constructor).toBe(Object);
     expect(typeof COGNI_V0_PROFILE.profileId).toBe("string");
