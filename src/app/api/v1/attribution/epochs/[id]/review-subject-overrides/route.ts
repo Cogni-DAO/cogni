@@ -13,10 +13,8 @@
 
 import {
   CLAIMANT_SHARE_DENOMINATOR_PPM,
-  CLAIMANT_SHARES_EVALUATION_REF,
   type ClaimantShare,
   claimantKey,
-  parseClaimantSharesPayload,
 } from "@cogni/attribution-ledger";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -151,37 +149,27 @@ export const PATCH = wrapRouteHandlerWithLogging<{
         );
       }
 
-      // Load locked evaluation to validate subject refs and claimant keys
-      const evaluation = await store.getEvaluation(
-        epochId,
-        CLAIMANT_SHARES_EVALUATION_REF,
-        "locked"
-      );
-      if (!evaluation) {
+      // Load locked claimants to validate subject refs and claimant keys
+      const lockedClaimants = await store.loadLockedClaimants(epochId);
+      if (lockedClaimants.length === 0) {
         return NextResponse.json(
           {
             error:
-              "No locked evaluation found — epoch must have a locked evaluation before overrides",
+              "No locked claimants found — epoch must have locked claimants before overrides",
           },
           { status: 409 }
         );
       }
 
-      const parsed = parseClaimantSharesPayload(evaluation.payloadJson);
-      if (!parsed) {
-        return NextResponse.json(
-          { error: "Failed to parse locked evaluation payload" },
-          { status: 500 }
-        );
-      }
-
-      // Build lookup maps for validation
-      const subjectMap = new Map(parsed.subjects.map((s) => [s.subjectRef, s]));
+      // Build lookup: receiptId → claimantKeys
+      const receiptClaimantMap = new Map(
+        lockedClaimants.map((c) => [c.receiptId, c.claimantKeys])
+      );
 
       // Validate each override
       for (const override of input.overrides) {
-        const subject = subjectMap.get(override.subjectRef);
-        if (!subject) {
+        const claimantKeys = receiptClaimantMap.get(override.subjectRef);
+        if (!claimantKeys) {
           return NextResponse.json(
             {
               error: `Unknown subject_ref: ${override.subjectRef}`,
@@ -206,9 +194,7 @@ export const PATCH = wrapRouteHandlerWithLogging<{
           }
 
           // Validate only existing claimants
-          const existingClaimantKeys = new Set(
-            subject.claimantShares.map((cs) => claimantKey(cs.claimant))
-          );
+          const existingClaimantKeys = new Set(claimantKeys);
           for (const share of override.overrideShares) {
             const key = claimantKey(share.claimant);
             if (!existingClaimantKeys.has(key)) {

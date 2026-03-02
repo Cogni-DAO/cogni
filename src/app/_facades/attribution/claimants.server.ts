@@ -4,11 +4,11 @@
 /**
  * Module: `@app/_facades/attribution/claimants.server`
  * Purpose: Server-only facade helpers for claimant-aware attribution reads.
- * Scope: Loads canonical claimant-share evaluations, applies resolved-user overrides, and maps results to contract output. Does not handle HTTP transport.
+ * Scope: Loads claimant allocations from finalized epoch data (statement lines, final allocations, or locked claimants + receipt weights) and maps to contract output. Does not handle HTTP transport.
  * Invariants:
- * - EVALUATION_STATUS_BY_EPOCH: open epochs read draft evaluations; review and finalized epochs read locked evaluations
- * - FALLBACK_SAFE: missing/invalid evaluation payloads fall back to deterministic receipt-backed claimant shares
- * - ALLOCATION_OVERRIDES_OPTIONAL: final_units only override resolved user claimants, leaving unresolved identities intact
+ * - FINALIZED_ONLY: readFinalizedEpochClaimants requires epoch status='finalized'
+ * - THREE_TIER_FALLBACK: statement lines → final claimant allocations → locked claimants + receipt weights
+ * - NO_LEGACY_SHIM: old ClaimantSharesSubject model fully pruned (bug.0125)
  * Side-effects: IO (database reads)
  * Links: src/contracts/attribution.epoch-claimants.v1.contract.ts
  * @public
@@ -18,15 +18,10 @@ import {
   type AttributionClaimant,
   type AttributionEpoch,
   type AttributionStore,
-  applySubjectOverrides,
-  buildDefaultReceiptClaimantSharesPayload,
-  CLAIMANT_SHARES_EVALUATION_REF,
-  type ClaimantSharesSubject,
   claimantKey,
   computeAttributionStatementLines,
-  computeFinalClaimantAllocations,
-  parseClaimantSharesPayload,
-  toReviewSubjectOverrides,
+  computeReceiptWeights,
+  explodeToClaimants,
 } from "@cogni/attribution-ledger";
 
 import { getContainer } from "@/bootstrap/container";
@@ -34,26 +29,6 @@ import type {
   EpochClaimantLineItemDto,
   EpochClaimantsOutput,
 } from "@/contracts/attribution.epoch-claimants.v1.contract";
-
-export async function loadClaimantShareSubjectsForEpoch(
-  store: AttributionStore,
-  epoch: AttributionEpoch
-): Promise<readonly ClaimantSharesSubject[]> {
-  const evaluationStatus = epoch.status === "open" ? "draft" : "locked";
-  const evaluation = await store.getEvaluation(
-    epoch.id,
-    CLAIMANT_SHARES_EVALUATION_REF,
-    evaluationStatus
-  );
-  const parsed = parseClaimantSharesPayload(evaluation?.payloadJson ?? null);
-  if (parsed) return parsed.subjects;
-
-  const receipts = await store.getSelectedReceiptsForAttribution(epoch.id);
-  return buildDefaultReceiptClaimantSharesPayload({
-    receipts,
-    weightConfig: epoch.weightConfig,
-  }).subjects;
-}
 
 function toLineItemDto(params: {
   claimant: AttributionClaimant;
@@ -271,15 +246,27 @@ export async function readFinalizedEpochClaimants(
     };
   }
 
-  const [subjects, overrideRecords] = await Promise.all([
-    loadClaimantShareSubjectsForEpoch(store, epoch),
-    store.getReviewSubjectOverridesForEpoch(epoch.id),
+  // Fallback: recompute from locked claimants + receipt weights
+  const [lockedClaimants, receipts] = await Promise.all([
+    store.loadLockedClaimants(epoch.id),
+    store.getSelectedReceiptsForAllocation(epoch.id),
   ]);
 
-  const subjectOverrides = toReviewSubjectOverrides(overrideRecords);
+  if (!epoch.allocationAlgoRef) {
+    throw new Error(
+      `readFinalizedEpochClaimants: epoch ${epochId.toString()} missing allocationAlgoRef`
+    );
+  }
 
-  const modifiedSubjects = applySubjectOverrides(subjects, subjectOverrides);
-  const claimantAllocations = computeFinalClaimantAllocations(modifiedSubjects);
+  const receiptWeights = computeReceiptWeights(
+    epoch.allocationAlgoRef,
+    receipts,
+    epoch.weightConfig
+  );
+  const claimantAllocations = explodeToClaimants(
+    receiptWeights,
+    lockedClaimants
+  );
 
   const items = computeAttributionStatementLines(
     claimantAllocations,

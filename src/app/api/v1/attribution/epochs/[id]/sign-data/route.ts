@@ -12,14 +12,10 @@
  */
 
 import {
-  applySubjectOverrides,
-  buildDefaultReceiptClaimantSharesPayload,
   buildEIP712TypedData,
-  CLAIMANT_SHARES_EVALUATION_REF,
   computeFinalClaimantAllocationSetHash,
-  computeFinalClaimantAllocations,
-  parseClaimantSharesPayload,
-  toReviewSubjectOverrides,
+  computeReceiptWeights,
+  explodeToClaimants,
 } from "@cogni/attribution-ledger";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -67,6 +63,13 @@ export const GET = wrapRouteHandlerWithLogging<{
       );
     }
 
+    if (!epoch.allocationAlgoRef) {
+      return NextResponse.json(
+        { error: "Epoch missing allocationAlgoRef" },
+        { status: 409 }
+      );
+    }
+
     // Mirror finalizeEpoch activity logic to produce identical finalAllocationSetHash
 
     // Pool total
@@ -76,31 +79,21 @@ export const GET = wrapRouteHandlerWithLogging<{
       0n
     );
 
-    // Load claimant subjects (same as loadFinalizedClaimantSubjects in worker)
-    const evaluation = await store.getEvaluation(
-      epochId,
-      CLAIMANT_SHARES_EVALUATION_REF,
-      "locked"
-    );
-    const parsed = parseClaimantSharesPayload(evaluation?.payloadJson ?? null);
-    const claimantSubjects = parsed
-      ? parsed.subjects
-      : buildDefaultReceiptClaimantSharesPayload({
-          receipts: await store.getSelectedReceiptsForAttribution(epochId),
-          weightConfig: epoch.weightConfig,
-        }).subjects;
+    // Load locked claimants + receipt weights → explode to final allocations
+    const [lockedClaimants, selections] = await Promise.all([
+      store.loadLockedClaimants(epochId),
+      store.getSelectedReceiptsForAllocation(epochId),
+    ]);
 
-    // Load and apply subject overrides
-    const overrideRecords =
-      await store.getReviewSubjectOverridesForEpoch(epochId);
-    const subjectOverrides = toReviewSubjectOverrides(overrideRecords);
-
-    const modifiedSubjects = applySubjectOverrides(
-      claimantSubjects,
-      subjectOverrides
+    const receiptWeights = computeReceiptWeights(
+      epoch.allocationAlgoRef,
+      selections,
+      epoch.weightConfig
     );
-    const claimantAllocations =
-      computeFinalClaimantAllocations(modifiedSubjects);
+    const claimantAllocations = explodeToClaimants(
+      receiptWeights,
+      lockedClaimants
+    );
 
     const finalAllocationSetHash =
       await computeFinalClaimantAllocationSetHash(claimantAllocations);

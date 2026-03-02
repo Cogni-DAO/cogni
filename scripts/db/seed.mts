@@ -8,15 +8,15 @@
  * Purpose: Dev seed script for governance and profile UI — populates attribution
  * ledger data with claimant-aware, linked/unlinked GitHub contributors.
  * Scope: Seeds linked users + GitHub bindings, epochs (2 finalized, 1 review,
- * 1 open), ingestion receipts, selections, allocations, claimant evaluations,
+ * 1 open), ingestion receipts, selections, receipt claimants,
  * pool components, and finalized claimant-aware statements for local dev.
  * Does not modify production databases or run in CI.
  * Invariants:
  * - ONE_OPEN_EPOCH: only one open epoch per node/scope
  * - LINKED_USERS_HAVE_BINDINGS: linked humans are seeded in users +
  *   user_bindings, not just via resolved selections
- * - FINALIZED_EPOCHS_HAVE_LOCKED_CLAIMANT_EVALUATIONS: finalized seed data uses
- *   the claimant-share pipeline shape, not legacy user-only statements
+ * - FINALIZED_EPOCHS_HAVE_LOCKED_CLAIMANTS: finalized seed data uses
+ *   the receipt-claimant model, not legacy evaluation-based statements
  * - UNCLAIMED_IDENTITIES_VISIBLE: some GitHub contributors stay unresolved and
  *   never get a local user row
  * Side-effects: IO (database writes, console output)
@@ -27,19 +27,17 @@
 import { createHash } from "node:crypto";
 import {
   type AttributionStatementLineRecord,
-  buildDefaultReceiptClaimantSharesPayload,
-  CLAIMANT_SHARES_ALGO_REF,
-  CLAIMANT_SHARES_EVALUATION_REF,
   computeArtifactsHash,
   computeAttributionStatementLines,
   computeEpochWindowV1,
   computeFinalClaimantAllocationSetHash,
-  computeFinalClaimantAllocations,
+  computeReceiptWeights,
   computeWeightConfigHash,
   deriveAllocationAlgoRef,
+  explodeToClaimants,
+  type InsertReceiptClaimantsParams,
+  type ReceiptClaimantsRecord,
   type SelectedReceiptForAttribution,
-  sha256OfCanonicalJson,
-  type UpsertEvaluationParams,
 } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
@@ -57,6 +55,8 @@ const WEIGHT_CONFIG: Record<string, number> = {
   "discord:message_sent": 500,
 };
 const ALLOCATION_ALGO_REF = deriveAllocationAlgoRef("cogni-v0.0");
+const CLAIMANT_RESOLVER_REF = "cogni.default-author.v0";
+const CLAIMANT_ALGO_REF = "default-author-v0";
 const PRODUCER = "dev-seed";
 const PRODUCER_VERSION = "0.1.0-seed";
 
@@ -157,6 +157,12 @@ function epochWindowWeeksAgo(weeksAgo: number): {
 
 function daysBefore(ref: Date, days: number): Date {
   return new Date(ref.getTime() - days * 86_400_000);
+}
+
+/** Build the claimant key for a contributor (matches claimantKey() in attribution-ledger). */
+function contributorClaimantKey(contributor: SeedContributor): string {
+  if (contributor.userId) return `user:${contributor.userId}`;
+  return `identity:github:${contributor.platformUserId}`;
 }
 
 // ── Seed Data ───────────────────────────────────────────────────
@@ -490,7 +496,7 @@ const EPOCH_4: SeedEpochDef = {
   ],
 };
 
-// ── Receipt + evaluation helpers ────────────────────────────────
+// ── Receipt + claimant helpers ──────────────────────────────────
 
 function eventPayloadHash(event: EventDef): string {
   const authorId = event.contributor.platformUserId;
@@ -529,6 +535,22 @@ function buildAttributionReceipts(
   }));
 }
 
+function buildReceiptClaimantParams(
+  epochId: bigint,
+  events: readonly EventDef[]
+): InsertReceiptClaimantsParams[] {
+  return events.map((event) => ({
+    nodeId: NODE_ID,
+    epochId,
+    receiptId: event.id,
+    resolverRef: CLAIMANT_RESOLVER_REF,
+    algoRef: CLAIMANT_ALGO_REF,
+    inputsHash: sha256(`${event.id}:${event.contributor.platformUserId}`),
+    claimantKeys: [contributorClaimantKey(event.contributor)],
+    createdBy: PRODUCER,
+  }));
+}
+
 function computeUserProjections(
   receipts: readonly SelectedReceiptForAttribution[],
   weightConfig: Record<string, number>
@@ -557,59 +579,22 @@ function computeUserProjections(
     .sort((a, b) => a.userId.localeCompare(b.userId));
 }
 
-async function buildClaimantSharesEvaluation(params: {
-  epochId: bigint;
-  status: "draft" | "locked";
-  receipts: readonly SelectedReceiptForAttribution[];
-  weightConfig: Record<string, number>;
-}): Promise<{
-  evaluation: UpsertEvaluationParams;
-  payload: ReturnType<typeof buildDefaultReceiptClaimantSharesPayload>;
-}> {
-  const payload = buildDefaultReceiptClaimantSharesPayload({
-    receipts: params.receipts,
-    weightConfig: params.weightConfig,
-  });
-  const payloadHashValue = await sha256OfCanonicalJson(payload);
-  const inputsHash = await sha256OfCanonicalJson({
-    epochId: params.epochId.toString(),
-    weightConfig: params.weightConfig,
-    receipts: params.receipts.map((receipt) => ({
-      receiptId: receipt.receiptId,
-      userId: receipt.userId,
-      source: receipt.source,
-      eventType: receipt.eventType,
-      included: receipt.included,
-      weightOverrideMilli: receipt.weightOverrideMilli?.toString() ?? null,
-      platformUserId: receipt.platformUserId,
-      payloadHash: receipt.payloadHash,
-    })),
-  });
-
-  return {
-    evaluation: {
-      nodeId: NODE_ID,
-      epochId: params.epochId,
-      evaluationRef: CLAIMANT_SHARES_EVALUATION_REF,
-      status: params.status,
-      algoRef: CLAIMANT_SHARES_ALGO_REF,
-      inputsHash,
-      payloadHash: payloadHashValue,
-      payloadJson: payload,
-    },
-    payload,
-  };
-}
-
 async function buildClaimantAwareStatement(params: {
-  payload: ReturnType<typeof buildDefaultReceiptClaimantSharesPayload>;
+  receipts: readonly SelectedReceiptForAttribution[];
+  claimants: readonly ReceiptClaimantsRecord[];
   poolCredits: bigint;
 }): Promise<{
   finalAllocationSetHash: string;
   statementLines: AttributionStatementLineRecord[];
 }> {
-  const claimantAllocations = computeFinalClaimantAllocations(
-    params.payload.subjects
+  const receiptWeights = computeReceiptWeights(
+    ALLOCATION_ALGO_REF,
+    params.receipts,
+    WEIGHT_CONFIG
+  );
+  const claimantAllocations = explodeToClaimants(
+    receiptWeights,
+    params.claimants
   );
   const finalAllocationSetHash =
     await computeFinalClaimantAllocationSetHash(claimantAllocations);
@@ -758,30 +743,35 @@ async function seedFinalizedEpoch(
   });
   console.log("  Inserted pool component");
 
-  const { evaluation, payload } = await buildClaimantSharesEvaluation({
-    epochId: epoch.id,
-    status: "locked",
-    receipts: attributionReceipts,
-    weightConfig: WEIGHT_CONFIG,
-  });
+  // Insert receipt claimants (draft then lock)
+  const claimantParams = buildReceiptClaimantParams(epoch.id, epochDef.events);
+  for (const params of claimantParams) {
+    await store.upsertDraftClaimants(params);
+  }
+  const lockedCount = await store.lockClaimantsForEpoch(epoch.id);
+  console.log(`  Inserted ${lockedCount} locked receipt claimants`);
+
   const weightConfigHash = await computeWeightConfigHash(WEIGHT_CONFIG);
-  const artifactsHash = await computeArtifactsHash([evaluation]);
+  const artifactsHash = await computeArtifactsHash([]);
 
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
     approverSetHash: sha256("dev-seed-approver-set"),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
-    evaluations: [evaluation],
+    evaluations: [],
     artifactsHash,
   });
-  console.log("  Inserted locked claimant evaluation and closed ingestion");
+  console.log("  Closed ingestion (open -> review)");
 
   await store.finalizeEpoch(epoch.id, epochDef.poolCredits);
   console.log("  Finalized epoch (review -> finalized)");
 
+  // Load the locked claimants back for statement generation
+  const lockedClaimants = await store.loadLockedClaimants(epoch.id);
   const statement = await buildClaimantAwareStatement({
-    payload,
+    receipts: attributionReceipts,
+    claimants: lockedClaimants,
     poolCredits: epochDef.poolCredits,
   });
   await store.insertEpochStatement({
@@ -872,21 +862,23 @@ async function seedReviewEpoch(
   });
   console.log("  Inserted pool component");
 
-  const { evaluation } = await buildClaimantSharesEvaluation({
-    epochId: epoch.id,
-    status: "locked",
-    receipts: attributionReceipts,
-    weightConfig: WEIGHT_CONFIG,
-  });
+  // Insert receipt claimants (draft then lock)
+  const claimantParams = buildReceiptClaimantParams(epoch.id, epochDef.events);
+  for (const params of claimantParams) {
+    await store.upsertDraftClaimants(params);
+  }
+  const lockedCount = await store.lockClaimantsForEpoch(epoch.id);
+  console.log(`  Inserted ${lockedCount} locked receipt claimants`);
+
   const weightConfigHash = await computeWeightConfigHash(WEIGHT_CONFIG);
-  const artifactsHash = await computeArtifactsHash([evaluation]);
+  const artifactsHash = await computeArtifactsHash([]);
 
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
     approverSetHash: sha256("dev-seed-approver-set"),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
-    evaluations: [evaluation],
+    evaluations: [],
     artifactsHash,
   });
   console.log("  Closed ingestion (open -> review)");
@@ -970,14 +962,12 @@ async function seedOpenEpoch(
   });
   console.log("  Inserted pool component");
 
-  const { evaluation } = await buildClaimantSharesEvaluation({
-    epochId: epoch.id,
-    status: "draft",
-    receipts: attributionReceipts,
-    weightConfig: WEIGHT_CONFIG,
-  });
-  await store.upsertDraftEvaluation(evaluation);
-  console.log("  Inserted draft claimant-share evaluation");
+  // Insert draft receipt claimants (not locked — epoch is open)
+  const claimantParams = buildReceiptClaimantParams(epoch.id, epochDef.events);
+  for (const params of claimantParams) {
+    await store.upsertDraftClaimants(params);
+  }
+  console.log(`  Inserted ${claimantParams.length} draft receipt claimants`);
 }
 
 async function main(): Promise<void> {

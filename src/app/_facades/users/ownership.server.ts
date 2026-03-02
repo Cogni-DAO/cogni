@@ -3,13 +3,14 @@
 
 /**
  * Module: `@app/_facades/users/ownership.server`
- * Purpose: Computes an ownership summary for the authenticated user from canonical claimant-share attribution and linked identities.
- * Scope: Reads current user's bindings plus epoch claim/evaluation data. Does not handle HTTP transport or persistence writes.
+ * Purpose: Computes an ownership summary for the authenticated user from receipt-claimant attribution and linked identities.
+ * Scope: Reads current user's bindings plus epoch locked claimants + receipt weights. Does not handle HTTP transport or persistence writes.
  * Invariants:
- * - CLAIMANTS_ARE_PLURAL: multi-claimant subjects are treated as first-class
+ * - CLAIMANTS_ARE_PLURAL: multi-claimant receipts are treated as first-class
  * - OWNERSHIP_MATCHES_LINKED_IDENTITIES: identity claimants resolve through the
  *   user's current bindings at read time
  * - ALL_MATH_BIGINT: ownership totals stay bigint until final JSON conversion
+ * - OPEN_EPOCHS_SKIPPED: open epochs have no locked claimants — omitted from computation (bug.0125)
  * Side-effects: IO (database reads)
  * Links: src/contracts/users.ownership.v1.contract.ts
  * @public
@@ -19,14 +20,15 @@ import {
   type AttributionClaimant,
   type AttributionEpoch,
   type AttributionStore,
-  type ClaimantSharesSubject,
-  expandClaimantUnits,
+  claimantKey,
+  computeReceiptWeights,
+  explodeToClaimants,
+  type FinalClaimantAllocation,
 } from "@cogni/attribution-ledger";
 import { withTenantScope } from "@cogni/db-client";
 import { type UserId, userActor } from "@cogni/ids";
 import { eq } from "drizzle-orm";
 
-import { loadClaimantShareSubjectsForEpoch } from "@/app/_facades/attribution/claimants.server";
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import type { OwnershipSummaryOutput } from "@/contracts/users.ownership.v1.contract";
 import type { SessionUser } from "@/shared/auth";
@@ -66,19 +68,26 @@ function computeFinalizedSharePercent(
   return basisPoints / 100;
 }
 
-function metadataString(
-  metadata: Record<string, unknown> | null,
-  key: string
-): string | null {
-  const value = metadata?.[key];
-  return typeof value === "string" ? value : null;
-}
-
-async function loadClaimSubjectsForEpoch(
+async function loadAllocationsForEpoch(
   store: AttributionStore,
   epoch: AttributionEpoch
-): Promise<readonly ClaimantSharesSubject[]> {
-  return loadClaimantShareSubjectsForEpoch(store, epoch);
+): Promise<FinalClaimantAllocation[] | null> {
+  // Open epochs have no locked claimants or allocationAlgoRef — skip
+  if (!epoch.allocationAlgoRef) return null;
+
+  const [lockedClaimants, receipts] = await Promise.all([
+    store.loadLockedClaimants(epoch.id),
+    store.getSelectedReceiptsForAllocation(epoch.id),
+  ]);
+
+  if (lockedClaimants.length === 0) return null;
+
+  const receiptWeights = computeReceiptWeights(
+    epoch.allocationAlgoRef,
+    receipts,
+    epoch.weightConfig
+  );
+  return explodeToClaimants(receiptWeights, lockedClaimants);
 }
 
 export async function readOwnershipSummary(
@@ -115,19 +124,19 @@ export async function readOwnershipSummary(
   const recentAttributions: AttributionMatch[] = [];
 
   for (const epoch of epochsDesc) {
-    const subjects = await loadClaimSubjectsForEpoch(store, epoch);
-    const expanded = expandClaimantUnits({ version: 1, subjects });
+    const allocations = await loadAllocationsForEpoch(store, epoch);
+    if (!allocations) continue;
 
     if (epoch.status === "finalized") {
-      finalizedUniverseUnits += expanded.reduce(
-        (sum, claim) => sum + claim.units,
+      finalizedUniverseUnits += allocations.reduce(
+        (sum, a) => sum + a.finalUnits,
         0n
       );
     }
 
-    for (const claim of expanded) {
+    for (const allocation of allocations) {
       const matchedBy = matchClaimantToUser(
-        claim.claimant,
+        allocation.claimant,
         sessionUser.id,
         bindingKeys
       );
@@ -137,22 +146,22 @@ export async function readOwnershipSummary(
       matchedEpochs.add(epoch.id.toString());
 
       if (epoch.status === "finalized") {
-        finalizedUnits += claim.units;
+        finalizedUnits += allocation.finalUnits;
       } else {
-        pendingUnits += claim.units;
+        pendingUnits += allocation.finalUnits;
       }
 
       if (recentAttributions.length < MAX_RECENT_ATTRIBUTIONS) {
         recentAttributions.push({
           epochId: epoch.id.toString(),
           epochStatus: epoch.status,
-          subjectRef: claim.subjectRef,
-          source: claim.source,
-          eventType: claim.eventType,
-          units: claim.units.toString(),
+          subjectRef: claimantKey(allocation.claimant),
+          source: null,
+          eventType: null,
+          units: allocation.finalUnits.toString(),
           matchedBy,
-          eventTime: metadataString(claim.metadata, "eventTime"),
-          artifactUrl: metadataString(claim.metadata, "artifactUrl"),
+          eventTime: null,
+          artifactUrl: null,
         });
       }
     }
