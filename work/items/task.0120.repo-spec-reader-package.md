@@ -2,7 +2,7 @@
 id: task.0120
 type: task
 title: "Extract unified repo-spec reader package (`@cogni/repo-spec`)"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 1
 estimate: 3
