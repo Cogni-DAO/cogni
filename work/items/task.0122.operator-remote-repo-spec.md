@@ -121,6 +121,7 @@ Per **REPO_SPEC_AUTHORITY**: "Node authors `.cogni/repo-spec.yml`; Operator cons
 ### Why core types are VCS-agnostic
 
 The `NodeRegistryPort` and `RemoteRepoSpecFetcher` interfaces have no GitHub/Octokit types. GitHub is one adapter. Future adapters:
+
 - **GitLab:** OAuth token + `RepositoryFiles.show()` API
 - **Manual:** `POST /api/v1/operator/nodes/register` with YAML body
 - **On-chain:** DAO formation event triggers discovery via event listener
