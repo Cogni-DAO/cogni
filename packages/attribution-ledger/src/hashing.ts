@@ -133,10 +133,10 @@ export async function computeAllocationSetHash(
  * compatibility with legacy allocation hashes. Non-user claimants use their
  * full claimant key (for example `identity:github:12345`).
  */
-export async function computeClaimantAllocationSetHash(
+export async function computeFinalClaimantAllocationSetHash(
   allocations: ReadonlyArray<{
     readonly claimant: AttributionClaimant;
-    readonly valuationUnits: bigint;
+    readonly finalUnits: bigint;
   }>
 ): Promise<string> {
   const sorted = [...allocations].sort((a, b) => {
@@ -152,7 +152,7 @@ export async function computeClaimantAllocationSetHash(
         allocation.claimant.kind === "user"
           ? allocation.claimant.userId
           : claimantKey(allocation.claimant);
-      return `${key}:${allocation.valuationUnits.toString()}`;
+      return `${key}:${allocation.finalUnits.toString()}`;
     })
     .join("\n");
   return sha256Hex(canonical);

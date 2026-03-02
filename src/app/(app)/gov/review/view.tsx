@@ -3,10 +3,10 @@
 
 /**
  * Module: `@app/(app)/gov/review/view`
- * Purpose: Client component for epoch review admin page — review contributions, adjust weights via subject overrides, sign & finalize.
- * Scope: Composition of EpochDetail + useSignEpoch + useReviewEpochs + useSubjectOverrides. Does not perform server-side logic or direct DB access.
+ * Purpose: Client component for epoch review admin page — review contributions, adjust weights via review-subject overrides, sign & finalize.
+ * Scope: Composition of EpochDetail + useSignEpoch + useReviewEpochs + useReviewSubjectOverrides. Does not perform server-side logic or direct DB access.
  * Invariants: WRITE_ROUTES_APPROVER_GATED (UI gate via isApprover prop, server enforces). BigInt units displayed via Number() for presentation only.
- * Side-effects: IO (via hooks — subject-overrides CRUD, sign-data, finalize)
+ * Side-effects: IO (via hooks — review-subject-overrides CRUD, sign-data, finalize)
  * Links: src/features/governance/types.ts, work/items/task.0119.epoch-signer-ui.md
  * @public
  */
@@ -36,11 +36,11 @@ import {
 import { EpochDetail } from "@/features/governance/components/EpochDetail";
 import { SourceBadge } from "@/features/governance/components/SourceBadge";
 import { useReviewEpochs } from "@/features/governance/hooks/useReviewEpochs";
-import { useSignEpoch } from "@/features/governance/hooks/useSignEpoch";
 import {
-  type SubjectOverrideView,
-  useSubjectOverrides,
-} from "@/features/governance/hooks/useSubjectOverrides";
+  type ReviewSubjectOverrideView,
+  useReviewSubjectOverrides,
+} from "@/features/governance/hooks/useReviewSubjectOverrides";
+import { useSignEpoch } from "@/features/governance/hooks/useSignEpoch";
 import { applyOverridesToEpochView } from "@/features/governance/lib/compose-epoch";
 import type {
   EpochContributor,
@@ -127,7 +127,7 @@ function ReviewEpochSection({
   readonly epoch: EpochView;
 }): ReactElement {
   const { state, sign, reset } = useSignEpoch(epoch.id);
-  const overrides = useSubjectOverrides(epoch.id);
+  const overrides = useReviewSubjectOverrides(epoch.id);
 
   // Recompute contributor sums with overrides applied
   const adjustedEpoch = useMemo(
@@ -226,7 +226,7 @@ function ReviewReceiptRow({
   isSaving,
 }: {
   readonly receipt: IngestionReceipt;
-  readonly override: SubjectOverrideView | null;
+  readonly override: ReviewSubjectOverrideView | null;
   readonly onSave: (
     subjectRef: string,
     overrideUnits: string,
@@ -259,7 +259,7 @@ function ReviewReceiptRow({
       );
       setIsEditing(false);
     } catch {
-      // Mutation error is surfaced via useSubjectOverrides hook state
+      // Mutation error is surfaced via useReviewSubjectOverrides hook state
     }
   }, [receipt.receiptId, editUnits, editReason, onSave]);
 
@@ -267,7 +267,7 @@ function ReviewReceiptRow({
     try {
       await onRemove(receipt.receiptId);
     } catch {
-      // Mutation error is surfaced via useSubjectOverrides hook state
+      // Mutation error is surfaced via useReviewSubjectOverrides hook state
     }
   }, [receipt.receiptId, onRemove]);
 

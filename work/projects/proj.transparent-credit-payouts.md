@@ -137,7 +137,7 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 | ----------------------------------------------------- | ----------- | --- | ------------------------------------------------------ |
 | Scope-aware epoch API routing (blocks multi-scope)    | Not Started | 3   | task.0123                                              |
 | Epoch artifact pipeline + echo enricher               | In Review   | 3   | task.0113                                              |
-| Plugin pipeline framework + built-in plugins packages | Not Started | 3   | task.0124                                              |
+| Plugin pipeline framework + built-in plugins packages | In Review   | 3   | task.0124                                              |
 | work-item-budget-v0 allocation algorithm              | Not Started | 2   | task.0114                                              |
 | Retroactive backfill for finalized epochs             | Not Started | 2   | task.0110 (not filed)                                  |
 | Pending credit for unresolved identities              | Not Started | 2   | task.0111 (not filed)                                  |

@@ -13,9 +13,9 @@
 
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import type {
-  AllocationDto,
   ApiIngestionReceipt,
   EpochDto,
+  UserProjectionDto,
 } from "@/features/governance/lib/compose-epoch";
 import { composeEpochView } from "@/features/governance/lib/compose-epoch";
 import type { EpochView } from "@/features/governance/types";
@@ -41,12 +41,12 @@ async function fetchReviewEpochs(): Promise<readonly EpochView[]> {
   const reviewRaw = epochs.filter((e) => e.status === "review");
   if (reviewRaw.length === 0) return [];
 
-  // Fetch allocations + activity for each review epoch (same as useCurrentEpoch)
+  // Fetch user projections + activity for each review epoch (same as useCurrentEpoch)
   return Promise.all(
     reviewRaw.map(async (epoch) => {
-      const [allocationsRes, activityRes] = await Promise.all([
-        fetchJson<{ allocations: AllocationDto[] }>(
-          `/api/v1/attribution/epochs/${epoch.id}/allocations`
+      const [userProjectionsRes, activityRes] = await Promise.all([
+        fetchJson<{ userProjections: UserProjectionDto[] }>(
+          `/api/v1/attribution/epochs/${epoch.id}/user-projections`
         ),
         fetchJson<{ events: ApiIngestionReceipt[] }>(
           `/api/v1/attribution/epochs/${epoch.id}/activity?limit=200`
@@ -54,7 +54,7 @@ async function fetchReviewEpochs(): Promise<readonly EpochView[]> {
       ]);
       return composeEpochView(
         epoch,
-        allocationsRes.allocations,
+        userProjectionsRes.userProjections,
         activityRes.events
       );
     })

@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-03-01
+- **Last reviewed:** 2026-03-02
 - **Status:** draft
 
 ## Purpose
 
-Pure domain logic for the attribution ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, statement item computation (BIGINT, largest-remainder), hashing (allocation sets, weight configs, artifacts), versioned allocation algorithm framework, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, port interface (`AttributionStore`), and domain error classes.
+Pure domain logic for the attribution ledger — shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains model types, attribution statement line computation (BIGINT, largest-remainder), hashing (allocation sets, weight configs, artifacts), versioned allocation algorithm framework, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, port interface (`AttributionStore`), and domain error classes.
 
 ## Pointers
 
@@ -41,34 +41,38 @@ Pure domain logic for the attribution ledger — shared between the Next.js app 
 
 - **Exports:**
   - `EPOCH_STATUSES` — Enum array
-  - `EpochStatus`, `FinalizedAllocation`, `StatementLineItem` — Domain types
+  - `EpochStatus` — Canonical epoch status type
+  - `FinalizedAllocation`, `StatementLineItem` — Legacy user-only compatibility types retained while app/core barrels still re-export them
   - `AttributionStore` — Port interface for ledger persistence
-  - `AttributionEpoch`, `IngestionReceipt`, `AttributionAllocation`, `IngestionCursor`, `AttributionPoolComponent`, `AttributionStatement`, `AttributionStatementSignature` — Read-side record types
-  - `InsertReceiptParams`, `InsertAllocationParams`, `InsertPoolComponentParams`, `InsertStatementParams`, `InsertSignatureParams` — Write-side param types
-  - `UncuratedEvent` — Event + hasExistingCuration flag for delta curation processing
+  - `AttributionEpoch`, `IngestionReceipt`, `EpochUserProjection`, `FinalClaimantAllocationRecord`, `IngestionCursor`, `AttributionPoolComponent`, `AttributionStatement`, `AttributionStatementSignature`, `AttributionEvaluation`, `ReviewSubjectOverrideRecord` — Read-side record types
+  - `InsertReceiptParams`, `InsertUserProjectionParams`, `InsertFinalClaimantAllocationParams`, `InsertPoolComponentParams`, `InsertStatementParams`, `InsertSignatureParams`, `UpsertReviewSubjectOverrideParams`, `UpsertEvaluationParams`, `CloseIngestionWithEvaluationsParams` — Write-side param types
   - `computeEpochWindowV1()` — Pure, deterministic epoch window computation (Monday-aligned UTC). Safe in Temporal workflow code.
   - `EpochWindow`, `EpochWindowParams` — Types for epoch window computation
-  - `computeStatementItems()` — BIGINT proportional distribution with largest-remainder rounding
-  - `computeAllocationSetHash()`, `computeClaimantAllocationSetHash()` — SHA-256 of canonical sorted allocation data for user-only and claimant-aware finalization
+  - `computeStatementItems()` — Legacy user-only statement helper retained for compatibility
+  - `computeAttributionStatementLines()` — Canonical claimant-aware statement line computation
+  - `computeAllocationSetHash()` — Legacy user-only allocation-set hash retained for compatibility
+  - claimant-aware allocation-set hash helper — canonical hash for claimant-scoped signed units
   - `computeWeightConfigHash()` — SHA-256 of canonical weight config JSON (key-sorted)
   - `computeProposedAllocations()` — Versioned allocation dispatch (V0: `weight-sum-v0`)
   - `validateWeightConfig()` — Rejects floats, NaN, Infinity, unsafe integers
   - `deriveAllocationAlgoRef()` — Maps `credit_estimate_algo` to internal algorithm ref
-  - `CuratedEventForAllocation`, `ProposedAllocation` — Allocation input/output types
+  - `SelectedReceiptForAllocation`, `ProposedAllocation` — Allocation input/output types
   - `AllocationAlgoRef` — Type alias for algorithm version string
   - `estimatePoolComponentsV0()` — Pool component estimation from config (V0: base_issuance only)
   - `PoolComponentEstimate`, `PoolComponentId`, `POOL_COMPONENT_ALLOWLIST` — Pool types and validation
   - `validatePoolComponentId()` — V0 allowlist validation
   - `EpochNotOpenError`, `EpochAlreadyFinalizedError`, `PoolComponentMissingError` — Domain errors with type guards
-  - `buildCanonicalMessage()`, `computeApproverSetHash()` — EIP-191 signing helpers (pure, zero runtime deps)
+  - `buildEIP712TypedData()` — Canonical EIP-712 typed-data builder for statement signing
+  - `buildCanonicalMessage()` — Deprecated EIP-191 compatibility helper retained for one release cycle
+  - `computeApproverSetHash()` — Deterministic approver-set hash pinned at review
   - `computeArtifactsHash()` — SHA-256 of sorted locked artifact tuples
   - `validateArtifactRef()`, `validateArtifactEnvelope()` — Artifact metadata/hash validation (pure)
   - `computeEnricherInputsHash()` — Deterministic inputs hash for enrichers (base shape + extensions)
   - `createValidatedAttributionStore()` — Wraps `AttributionStore` with envelope validation on artifact writes
-  - `buildDefaultReceiptClaimantSharesPayload()`, `parseClaimantSharesPayload()`, `expandClaimantUnits()`, `buildClaimantAllocations()`, `computeClaimantCreditLineItems()` — Canonical claimant-share helpers for multi-actor attribution and claimant-aware credit views
+  - `buildDefaultReceiptClaimantSharesPayload()`, `parseClaimantSharesPayload()`, `expandClaimantUnits()`, `computeFinalClaimantAllocations()`, `computeAttributionStatementLines()`, `applySubjectOverrides()`, `buildReviewOverrideSnapshots()` — Canonical claimant-share helpers for multi-actor attribution and claimant-aware credit views
   - `CLAIMANT_SHARES_EVALUATION_REF`, `CLAIMANT_SHARES_ALGO_REF`, `CLAIMANT_SHARE_DENOMINATOR_PPM` — Claimant-share evaluation constants
-  - `AttributionClaimant`, `ClaimantShare`, `ClaimantSharesSubject`, `ClaimantSharesPayload`, `ExpandedClaimantUnit`, `FinalizedClaimantAllocation`, `ClaimantCreditLineItem`, `SelectedReceiptForAttribution` — Claimant-share domain types
-  - `UpsertArtifactParams`, `CuratedEventWithMetadata`, `AttributionEpochArtifact`, `CloseIngestionWithArtifactsParams` — Artifact-related types
+  - `AttributionClaimant`, `ClaimantShare`, `ClaimantSharesSubject`, `ClaimantSharesPayload`, `ExpandedClaimantUnit`, `FinalClaimantAllocation`, `AttributionStatementLine`, `SelectedReceiptForAttribution`, `ReviewOverrideSnapshot`, `SubjectOverride` — Claimant-share domain types
+  - `SelectedReceiptWithMetadata` — Receipt-with-metadata type for evaluation inputs
 - **CLI:** none
 - **Env/Config keys:** none
 
@@ -76,11 +80,11 @@ Pure domain logic for the attribution ledger — shared between the Next.js app 
 
 - **Uses ports:** none
 - **Implements ports:** none
-- **Defines ports:** `AttributionStore` (implemented by `DrizzleAttributionAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUncuratedEvents`, `updateCurationUserId`, `insertCurationDoNothing`), allocation computation (`getCuratedEventsForAllocation`, `upsertAllocations`, `deleteStaleAllocations`), canonical attribution reads (`getSelectedReceiptsForAttribution`, `getUserDisplayNames`, `getEvaluation`), artifact lifecycle (`upsertDraftArtifact`, `closeIngestionWithArtifacts`, `getArtifactsForEpoch`, `getArtifact`, `getCuratedEventsWithMetadata`), and atomic finalization (`finalizeEpochAtomic`).
+- **Defines ports:** `AttributionStore` (implemented by `DrizzleAttributionAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUnselectedReceipts`, `updateSelectionUserId`, `insertSelectionDoNothing`), projection computation (`getSelectedReceiptsForAllocation`, `insertUserProjections`, `deleteStaleUserProjections`), canonical attribution reads (`getSelectedReceiptsForAttribution`, `getUserDisplayNames`, `getEvaluation`, `getReviewSubjectOverridesForEpoch`, `getFinalClaimantAllocationsForEpoch`), evaluation lifecycle (`upsertDraftEvaluation`, `closeIngestionWithEvaluations`, `getEvaluationsForEpoch`, `getSelectedReceiptsWithMetadata`), and atomic epoch sealing (`finalizeEpochAtomic`).
 
 ## Responsibilities
 
-- This directory **does**: Define ledger domain types, port interface, compute deterministic statement items, compute allocation set/config/artifact hashes, versioned allocation algorithm dispatch, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, define domain errors
+- This directory **does**: Define ledger domain types, port interface, compute deterministic attribution statement lines, compute allocation set/config/artifact hashes, versioned allocation algorithm dispatch, pool estimation, artifact envelope validation, enricher inputs hashing, validated store wrapper, define domain errors
 - This directory **does not**: Perform I/O, access databases, import from `src/` or `services/`, or ship concrete enricher plugin implementations
 
 ## Usage

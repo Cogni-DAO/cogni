@@ -22,6 +22,7 @@ import {
   check,
   index,
   jsonb,
+  pgPolicy,
   pgTable,
   text,
   timestamp,
@@ -88,6 +89,10 @@ export const linkTransactions = pgTable(
       sql`${table.provider} IN ('github', 'discord', 'google')`
     ),
     index("link_transactions_user_id_idx").on(table.userId),
+    pgPolicy("tenant_isolation", {
+      using: sql`${table.userId} = current_setting('app.current_user_id', true)`,
+      withCheck: sql`${table.userId} = current_setting('app.current_user_id', true)`,
+    }),
   ]
 ).enableRLS();
 

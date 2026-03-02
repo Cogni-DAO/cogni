@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-03-01
+- **Last reviewed:** 2026-03-02
 - **Status:** draft
 
 ## Purpose
 
-Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes closed-epoch lists, allocations, epoch statements, and claimant-aware finalized attribution to the community-attribution frontend without requiring a SIWE session.
+Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes finalized-epoch lists, user projections, epoch statements, and claimant-aware finalized attribution to the community-attribution frontend without requiring a SIWE session.
 
 ## Pointers
 
@@ -31,13 +31,13 @@ Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes 
 
 - **Exports:** none (route handlers only)
 - **Routes:**
-  - `GET /api/v1/public/attribution/epochs` — list closed epochs (paginated)
-  - `GET /api/v1/public/attribution/epochs/[id]/allocations` — allocations for a closed epoch
-  - `GET /api/v1/public/attribution/epochs/[id]/claimants` — claimant-aware finalized attribution for a closed epoch
+  - `GET /api/v1/public/attribution/epochs` — list finalized epochs (paginated)
+  - `GET /api/v1/public/attribution/epochs/[id]/user-projections` — user projections for a finalized epoch
+  - `GET /api/v1/public/attribution/epochs/[id]/claimants` — claimant-aware finalized attribution for a finalized epoch
   - `GET /api/v1/public/attribution/epochs/[id]/statement` — payout statement (null if none)
 - **CLI:** none
 - **Env/Config keys:** none
-- **Files considered API:** `epochs/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/statement/route.ts`
+- **Files considered API:** `epochs/route.ts`, `epochs/[id]/user-projections/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/statement/route.ts`
 
 ## Ports
 
@@ -46,14 +46,14 @@ Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes 
 
 ## Responsibilities
 
-- This directory **does:** serve finalized epoch data via `wrapPublicRoute()`, validate output via Zod contracts, enforce PUBLIC_READS_CLOSED_ONLY invariant.
+- This directory **does:** serve finalized epoch data via `wrapPublicRoute()`, validate output via Zod contracts, enforce PUBLIC_READS_FINALIZED_ONLY invariant.
 - This directory **does not:** expose open/current epoch data, raw activity streams, PII fields, or write mutations.
 
 ## Usage
 
 ```bash
 curl http://localhost:3000/api/v1/public/attribution/epochs
-curl http://localhost:3000/api/v1/public/attribution/epochs/1/allocations
+curl http://localhost:3000/api/v1/public/attribution/epochs/1/user-projections
 curl http://localhost:3000/api/v1/public/attribution/epochs/1/claimants
 curl http://localhost:3000/api/v1/public/attribution/epochs/1/statement
 ```
@@ -62,7 +62,7 @@ curl http://localhost:3000/api/v1/public/attribution/epochs/1/statement
 
 - All routes use `wrapPublicRoute()` with cache headers
 - Output validated via contract schemas before responding
-- Only closed epochs exposed (PUBLIC_READS_CLOSED_ONLY)
+- Only finalized epochs exposed (PUBLIC_READS_FINALIZED_ONLY)
 
 ## Dependencies
 

@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/db-schema/attribution`
  * Purpose: Five-stage epoch ledger schema for auditable activity-based credit distribution.
- * Scope: Defines all ledger tables (epochs, ingestion_receipts, epoch_selection, epoch_allocations, epoch_evaluations, ingestion_cursors, epoch_pool_components, epoch_statements, epoch_statement_signatures). Does not contain queries, business logic, or I/O.
+ * Scope: Defines all ledger tables (epochs, ingestion_receipts, epoch_selection, epoch_user_projections, epoch_evaluations, ingestion_cursors, epoch_pool_components, epoch_review_subject_overrides, epoch_final_claimant_allocations, epoch_statements, epoch_statement_signatures). Does not contain queries, business logic, or I/O.
  * Invariants:
  * - All credit/unit columns use BIGINT (ALL_MATH_BIGINT).
  * - Ingestion layer (ingestion_receipts, epoch_pool_components) are append-only (DB triggers in migration).
@@ -174,14 +174,15 @@ export const epochSelection = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// Epoch allocations (computed from selection)
+// User projections (computed from selection)
 // ---------------------------------------------------------------------------
 
 /**
- * Epoch allocations — per-user credit allocation for an epoch.
+ * Epoch user projections — per-user tentative units for an epoch.
+ * Projection only: canonical signed units live in epoch_final_claimant_allocations.
  */
-export const epochAllocations = pgTable(
-  "epoch_allocations",
+export const epochUserProjections = pgTable(
+  "epoch_user_projections",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     nodeId: uuid("node_id").notNull(),
@@ -191,10 +192,8 @@ export const epochAllocations = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
-    proposedUnits: bigint("proposed_units", { mode: "bigint" }).notNull(),
-    finalUnits: bigint("final_units", { mode: "bigint" }),
-    overrideReason: text("override_reason"),
-    activityCount: integer("activity_count").notNull(),
+    projectedUnits: bigint("projected_units", { mode: "bigint" }).notNull(),
+    receiptCount: integer("receipt_count").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -203,11 +202,11 @@ export const epochAllocations = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("epoch_allocations_epoch_user_unique").on(
+    uniqueIndex("epoch_user_projections_epoch_user_unique").on(
       table.epochId,
       table.userId
     ),
-    index("epoch_allocations_epoch_idx").on(table.epochId),
+    index("epoch_user_projections_epoch_idx").on(table.epochId),
   ]
 );
 
@@ -330,12 +329,12 @@ export const epochEvaluations = pgTable(
 // ---------------------------------------------------------------------------
 
 /**
- * Epoch subject overrides — per-subject weight/share adjustments during review.
+ * Epoch review subject overrides — per-subject absolute review overrides.
  * Mutable while epoch is in review status. Snapshot into statement at finalization.
  * UNIQUE(epoch_id, subject_ref) — one override per subject per epoch.
  */
-export const epochSubjectOverrides = pgTable(
-  "epoch_subject_overrides",
+export const epochReviewSubjectOverrides = pgTable(
+  "epoch_review_subject_overrides",
   {
     id: uuid("id").defaultRandom().primaryKey(),
     nodeId: uuid("node_id").notNull(),
@@ -366,11 +365,57 @@ export const epochSubjectOverrides = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("epoch_subject_overrides_epoch_ref_unique").on(
+    uniqueIndex("epoch_review_subject_overrides_epoch_ref_unique").on(
       table.epochId,
       table.subjectRef
     ),
-    index("epoch_subject_overrides_epoch_idx").on(table.epochId),
+    index("epoch_review_subject_overrides_epoch_idx").on(table.epochId),
+  ]
+);
+
+// ---------------------------------------------------------------------------
+// Finalization Layer: Final claimant allocations + statements + signatures
+// ---------------------------------------------------------------------------
+
+/**
+ * Epoch final claimant allocations — canonical signed units per claimant.
+ * Materialized atomically with statement/signature on finalization.
+ */
+export const epochFinalClaimantAllocations = pgTable(
+  "epoch_final_claimant_allocations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    nodeId: uuid("node_id").notNull(),
+    epochId: bigint("epoch_id", { mode: "bigint" })
+      .notNull()
+      .references(() => epochs.id),
+    claimantKey: text("claimant_key").notNull(),
+    claimantJson: jsonb("claimant_json")
+      .$type<
+        | { kind: "user"; userId: string }
+        | {
+            kind: "identity";
+            provider: string;
+            externalId: string;
+            providerLogin: string | null;
+          }
+      >()
+      .notNull(),
+    finalUnits: bigint("final_units", { mode: "bigint" }).notNull(),
+    receiptIdsJson: jsonb("receipt_ids_json").$type<string[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("epoch_final_claimant_allocations_epoch_claimant_unique").on(
+      table.epochId,
+      table.claimantKey
+    ),
+    index("epoch_final_claimant_allocations_epoch_idx").on(table.epochId),
   ]
 );
 
@@ -391,19 +436,15 @@ export const epochStatements = pgTable(
     epochId: bigint("epoch_id", { mode: "bigint" })
       .notNull()
       .references(() => epochs.id),
-    allocationSetHash: text("allocation_set_hash").notNull(),
+    finalAllocationSetHash: text("final_allocation_set_hash").notNull(),
     poolTotalCredits: bigint("pool_total_credits", {
       mode: "bigint",
     }).notNull(),
-    statementItemsJson: jsonb("statement_items_json")
+    statementLinesJson: jsonb("statement_lines_json")
       .$type<
         Array<{
-          user_id: string;
-          total_units: string;
-          share: string;
-          amount_credits: string;
-          claimant_key?: string;
-          claimant?:
+          claimant_key: string;
+          claimant:
             | { kind: "user"; userId: string }
             | {
                 kind: "identity";
@@ -411,7 +452,10 @@ export const epochStatements = pgTable(
                 externalId: string;
                 providerLogin: string | null;
               };
-          receipt_ids?: string[];
+          final_units: string;
+          pool_share: string;
+          credit_amount: string;
+          receipt_ids: string[];
         }>
       >()
       .notNull(),

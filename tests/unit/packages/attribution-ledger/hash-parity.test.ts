@@ -3,10 +3,10 @@
 
 /**
  * Module: `@tests/unit/packages/attribution-ledger/hash-parity`
- * Purpose: Verifies that the sign-data and finalizeEpoch code paths produce identical allocationSetHash.
+ * Purpose: Verifies that the sign-data and finalizeEpoch code paths produce identical finalAllocationSetHash.
  * Scope: Pure unit test exercising the same function pipeline used by both endpoints. Does not test HTTP routes or database queries.
  * Invariants:
- *   - HASH_PARITY: sign-data and finalizeEpoch must produce identical allocationSetHash for the same inputs
+ *   - HASH_PARITY: sign-data and finalizeEpoch must produce identical finalAllocationSetHash for the same inputs
  *   - OVERRIDE_DETERMINISTIC: applying overrides then hashing is deterministic
  * Side-effects: none
  * Links: src/app/api/v1/attribution/epochs/[id]/sign-data/route.ts,
@@ -18,11 +18,11 @@
 
 import {
   applySubjectOverrides,
-  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
   type ClaimantSharesSubject,
-  computeClaimantAllocationSetHash,
+  computeFinalClaimantAllocationSetHash,
+  computeFinalClaimantAllocations,
   type SelectedReceiptForAttribution,
   type SubjectOverride,
 } from "@cogni/attribution-ledger";
@@ -70,8 +70,8 @@ const TEST_RECEIPTS: SelectedReceiptForAttribution[] = [
  * Simulate the exact pipeline used by both sign-data route and finalizeEpoch activity:
  *   1. Build default claimant shares from receipts + weights
  *   2. Apply subject overrides
- *   3. Build claimant allocations
- *   4. Compute allocation set hash
+ *   3. Build final claimant allocations
+ *   4. Compute final allocation set hash
  */
 async function computeHash(
   receipts: readonly SelectedReceiptForAttribution[],
@@ -83,12 +83,12 @@ async function computeHash(
     weightConfig,
   });
   const modified = applySubjectOverrides(payload.subjects, overrides);
-  const allocations = buildClaimantAllocations(modified);
-  const hash = await computeClaimantAllocationSetHash(allocations);
+  const allocations = computeFinalClaimantAllocations(modified);
+  const hash = await computeFinalClaimantAllocationSetHash(allocations);
   return { hash, subjects: modified };
 }
 
-describe("allocationSetHash parity (sign-data ↔ finalizeEpoch)", () => {
+describe("finalAllocationSetHash parity (sign-data ↔ finalizeEpoch)", () => {
   it("produces identical hash when called twice with same inputs (deterministic)", async () => {
     const result1 = await computeHash(TEST_RECEIPTS, WEIGHT_CONFIG, []);
     const result2 = await computeHash(TEST_RECEIPTS, WEIGHT_CONFIG, []);

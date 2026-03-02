@@ -11,7 +11,7 @@
  *   - avatar/color are placeholder defaults until a profile system exists
  *   - EpochView.unresolvedCount reflects events with no resolved user_id (IDENTITY_BEST_EFFORT)
  * Side-effects: none
- * Links: src/contracts/attribution.list-epochs.v1.contract.ts, src/contracts/attribution.epoch-allocations.v1.contract.ts
+ * Links: src/contracts/attribution.list-epochs.v1.contract.ts, src/contracts/attribution.epoch-user-projections.v1.contract.ts
  * @public
  */
 
@@ -38,10 +38,9 @@ export interface EpochContributor {
   readonly claimantLabel: string;
   readonly avatar: string;
   readonly color: string;
-  readonly proposedUnits: string;
-  readonly finalUnits: string | null;
+  readonly units: string;
   readonly creditShare: number;
-  readonly activityCount: number;
+  readonly receiptCount: number;
   readonly receipts: readonly IngestionReceipt[];
 }
 

@@ -28,22 +28,22 @@ export {
 // Canonical claimant-share attribution shape
 export {
   type AttributionClaimant,
+  type AttributionStatementLine,
   applySubjectOverrides,
-  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   buildReviewOverrideSnapshots,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
   CLAIMANT_SHARES_ALGO_REF,
   CLAIMANT_SHARES_EVALUATION_REF,
-  type ClaimantCreditLineItem,
   type ClaimantShare,
   type ClaimantSharesPayload,
   type ClaimantSharesSubject,
   claimantKey,
-  computeClaimantCreditLineItems,
+  computeAttributionStatementLines,
+  computeFinalClaimantAllocations,
   type ExpandedClaimantUnit,
   expandClaimantUnits,
-  type FinalizedClaimantAllocation,
+  type FinalClaimantAllocation,
   parseClaimantSharesPayload,
   type ReviewOverrideSnapshot,
   type SelectedReceiptForAttribution,
@@ -80,7 +80,7 @@ export {
   canonicalJsonStringify,
   computeAllocationSetHash,
   computeArtifactsHash,
-  computeClaimantAllocationSetHash,
+  computeFinalClaimantAllocationSetHash,
   computeWeightConfigHash,
   sha256OfCanonicalJson,
 } from "./hashing";
@@ -108,6 +108,7 @@ export { computeStatementItems } from "./rules";
 
 // Signing
 export {
+  ATTRIBUTION_STATEMENT_TYPES,
   buildCanonicalMessage,
   buildEIP712TypedData,
   type CanonicalMessageParams,
@@ -116,37 +117,38 @@ export {
   EIP712_DOMAIN_VERSION,
   type EIP712TypedData,
   type EIP712TypedDataParams,
-  PAYOUT_STATEMENT_TYPES,
 } from "./signing";
 
 // Store port interface + types
 export type {
-  AttributionAllocation,
   AttributionEpoch,
   AttributionEvaluation,
   AttributionPoolComponent,
   AttributionSelection,
   AttributionStatement,
-  AttributionStatementItem,
+  AttributionStatementLineRecord,
   AttributionStatementSignature,
   AttributionStore,
   CloseIngestionWithEvaluationsParams,
+  EpochUserProjection,
+  FinalClaimantAllocationRecord,
   IngestionCursor,
   IngestionReceipt,
-  InsertAllocationParams,
+  InsertFinalClaimantAllocationParams,
   InsertPoolComponentParams,
   InsertReceiptParams,
   InsertSelectionAutoParams,
   InsertSignatureParams,
   InsertStatementParams,
+  InsertUserProjectionParams,
+  ReviewSubjectOverrideRecord,
   SelectedReceiptWithMetadata,
-  SubjectOverrideRecord,
   UnselectedReceipt,
   UpsertEvaluationParams,
+  UpsertReviewSubjectOverrideParams,
   UpsertSelectionParams,
-  UpsertSubjectOverrideParams,
 } from "./store";
-export { toSubjectOverrides } from "./store";
+export { toReviewSubjectOverrides } from "./store";
 
 // Validated store wrapper
 export { createValidatedAttributionStore } from "./validated-store";

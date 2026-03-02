@@ -10,7 +10,7 @@
 
 ## Purpose
 
-Authenticated HTTP endpoints for attribution operations. SIWE-protected reads for all epochs and PII-containing activity streams, plus approver-gated write mutations for allocation adjustments, pool components, epoch review transitions, and epoch finalization.
+Authenticated HTTP endpoints for attribution operations. SIWE-protected reads for all epochs and PII-containing activity streams, plus approver-gated write mutations for review-subject overrides, pool components, epoch review transitions, and epoch finalization.
 
 ## Pointers
 
@@ -34,15 +34,15 @@ Authenticated HTTP endpoints for attribution operations. SIWE-protected reads fo
   - `GET /api/v1/attribution/epochs` — list all epochs including open (SIWE auth)
   - `GET /api/v1/attribution/epochs/[id]/activity` — ingestion receipts with selection join (SIWE auth, PII)
   - `GET /api/v1/attribution/epochs/[id]/claimants` — claimant-aware finalized attribution (SIWE auth)
-  - `PATCH /api/v1/attribution/epochs/[id]/allocations` — adjust allocation final_units (SIWE + approver)
+  - `GET /api/v1/attribution/epochs/[id]/user-projections` — read unsigned per-user projections (SIWE auth)
   - `POST /api/v1/attribution/epochs/[id]/pool-components` — record pool component (SIWE + approver)
   - `POST /api/v1/attribution/epochs/[id]/review` — close ingestion, transition open → review (SIWE + approver)
   - `GET /api/v1/attribution/epochs/[id]/sign-data` — EIP-712 typed data for epoch signing (SIWE + approver)
-  - `GET|PATCH|DELETE /api/v1/attribution/epochs/[id]/subject-overrides` — manage subject identity overrides for epoch review (SIWE + approver)
+  - `GET|PATCH|DELETE /api/v1/attribution/epochs/[id]/review-subject-overrides` — manage subject identity overrides for epoch review (SIWE + approver)
   - `POST /api/v1/attribution/epochs/[id]/finalize` — sign + finalize epoch, returns 202 + {workflowId, created} (SIWE + approver, WRITES_VIA_TEMPORAL). Returns 503 if no ledger-tasks pollers.
 - **CLI:** none
 - **Env/Config keys:** none
-- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/allocations/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/sign-data/route.ts`, `epochs/[id]/subject-overrides/route.ts`, `epochs/[id]/finalize/route.ts`
+- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/user-projections/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/sign-data/route.ts`, `epochs/[id]/review-subject-overrides/route.ts`, `epochs/[id]/finalize/route.ts`
 
 ## Ports
 
@@ -61,9 +61,13 @@ Authenticated HTTP endpoints for attribution operations. SIWE-protected reads fo
 curl -b session http://localhost:3000/api/v1/attribution/epochs
 curl -b session http://localhost:3000/api/v1/attribution/epochs/1/activity
 
-# Approver-gated writes
-curl -X PATCH -b session http://localhost:3000/api/v1/attribution/epochs/1/allocations \
-  -d '{"adjustments":[{"userId":"...","finalUnits":"5000"}]}'
+# Authenticated projection read
+curl -b session http://localhost:3000/api/v1/attribution/epochs/1/user-projections
+
+# Approver-gated override write
+curl -X PATCH -b session http://localhost:3000/api/v1/attribution/epochs/1/review-subject-overrides \
+  -H 'Content-Type: application/json' \
+  -d '{"overrides":[{"subjectRef":"receipt-1","overrideUnits":"5000"}]}'
 ```
 
 ## Standards

@@ -12,19 +12,19 @@
  */
 
 export type {
-  AttributionAllocation,
   AttributionEpoch,
   AttributionPoolComponent,
   AttributionSelection,
   AttributionStatement,
   AttributionStatementSignature,
   AttributionStore,
+  EpochUserProjection,
   IngestionCursor,
   IngestionReceipt,
-  InsertAllocationParams,
   InsertPoolComponentParams,
   InsertReceiptParams,
   InsertSignatureParams,
   InsertStatementParams,
+  InsertUserProjectionParams,
   UpsertSelectionParams,
 } from "@cogni/attribution-ledger";

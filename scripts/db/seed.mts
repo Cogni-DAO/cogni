@@ -26,17 +26,15 @@
 
 import { createHash } from "node:crypto";
 import {
-  type AttributionClaimant,
-  type AttributionStatementItem,
-  buildClaimantAllocations,
+  type AttributionStatementLineRecord,
   buildDefaultReceiptClaimantSharesPayload,
   CLAIMANT_SHARES_ALGO_REF,
   CLAIMANT_SHARES_EVALUATION_REF,
-  claimantKey,
   computeArtifactsHash,
-  computeClaimantAllocationSetHash,
-  computeClaimantCreditLineItems,
+  computeAttributionStatementLines,
   computeEpochWindowV1,
+  computeFinalClaimantAllocationSetHash,
+  computeFinalClaimantAllocations,
   computeWeightConfigHash,
   deriveAllocationAlgoRef,
   type SelectedReceiptForAttribution,
@@ -531,10 +529,10 @@ function buildAttributionReceipts(
   }));
 }
 
-function computeResolvedAllocations(
+function computeUserProjections(
   receipts: readonly SelectedReceiptForAttribution[],
   weightConfig: Record<string, number>
-): { userId: string; proposedUnits: bigint; activityCount: number }[] {
+): { userId: string; projectedUnits: bigint; receiptCount: number }[] {
   const byUser = new Map<string, { units: bigint; count: number }>();
 
   for (const receipt of receipts) {
@@ -553,8 +551,8 @@ function computeResolvedAllocations(
   return [...byUser.entries()]
     .map(([userId, { units, count }]) => ({
       userId,
-      proposedUnits: units,
-      activityCount: count,
+      projectedUnits: units,
+      receiptCount: count,
     }))
     .sort((a, b) => a.userId.localeCompare(b.userId));
 }
@@ -603,35 +601,32 @@ async function buildClaimantSharesEvaluation(params: {
   };
 }
 
-function statementUserId(claimant: AttributionClaimant): string {
-  return claimant.kind === "user" ? claimant.userId : claimantKey(claimant);
-}
-
 async function buildClaimantAwareStatement(params: {
   payload: ReturnType<typeof buildDefaultReceiptClaimantSharesPayload>;
   poolCredits: bigint;
 }): Promise<{
-  allocationSetHash: string;
-  statementItems: AttributionStatementItem[];
+  finalAllocationSetHash: string;
+  statementLines: AttributionStatementLineRecord[];
 }> {
-  const claimantAllocations = buildClaimantAllocations(params.payload.subjects);
-  const allocationSetHash =
-    await computeClaimantAllocationSetHash(claimantAllocations);
-  const lineItems = computeClaimantCreditLineItems(
+  const claimantAllocations = computeFinalClaimantAllocations(
+    params.payload.subjects
+  );
+  const finalAllocationSetHash =
+    await computeFinalClaimantAllocationSetHash(claimantAllocations);
+  const statementLines = computeAttributionStatementLines(
     claimantAllocations,
     params.poolCredits
   );
 
   return {
-    allocationSetHash,
-    statementItems: lineItems.map((lineItem) => ({
-      user_id: statementUserId(lineItem.claimant),
-      total_units: lineItem.totalUnits.toString(),
-      share: lineItem.share,
-      amount_credits: lineItem.amountCredits.toString(),
-      claimant_key: claimantKey(lineItem.claimant),
-      claimant: lineItem.claimant,
-      receipt_ids: [...lineItem.receiptIds],
+    finalAllocationSetHash,
+    statementLines: statementLines.map((line) => ({
+      claimant_key: line.claimantKey,
+      claimant: line.claimant,
+      final_units: line.finalUnits.toString(),
+      pool_share: line.poolShare,
+      credit_amount: line.creditAmount.toString(),
+      receipt_ids: [...line.receiptIds],
     })),
   };
 }
@@ -736,22 +731,22 @@ async function seedFinalizedEpoch(
   );
   console.log(`  Inserted ${epochDef.events.length} selections`);
 
-  const allocations = computeResolvedAllocations(
+  const userProjections = computeUserProjections(
     attributionReceipts,
     WEIGHT_CONFIG
   );
-  if (allocations.length > 0) {
-    await store.insertAllocations(
-      allocations.map((allocation) => ({
+  if (userProjections.length > 0) {
+    await store.insertUserProjections(
+      userProjections.map((projection) => ({
         nodeId: NODE_ID,
         epochId: epoch.id,
-        userId: allocation.userId,
-        proposedUnits: allocation.proposedUnits,
-        activityCount: allocation.activityCount,
+        userId: projection.userId,
+        projectedUnits: projection.projectedUnits,
+        receiptCount: projection.receiptCount,
       }))
     );
   }
-  console.log(`  Inserted ${allocations.length} resolved-user allocations`);
+  console.log(`  Inserted ${userProjections.length} resolved-user projections`);
 
   await store.insertPoolComponent({
     nodeId: NODE_ID,
@@ -792,9 +787,9 @@ async function seedFinalizedEpoch(
   await store.insertEpochStatement({
     nodeId: NODE_ID,
     epochId: epoch.id,
-    allocationSetHash: statement.allocationSetHash,
+    finalAllocationSetHash: statement.finalAllocationSetHash,
     poolTotalCredits: epochDef.poolCredits,
-    statementItems: statement.statementItems,
+    statementLines: statement.statementLines,
   });
   console.log("  Inserted claimant-aware epoch statement");
 }
@@ -850,22 +845,22 @@ async function seedReviewEpoch(
   );
   console.log(`  Inserted ${epochDef.events.length} selections`);
 
-  const allocations = computeResolvedAllocations(
+  const userProjections = computeUserProjections(
     attributionReceipts,
     WEIGHT_CONFIG
   );
-  if (allocations.length > 0) {
-    await store.insertAllocations(
-      allocations.map((allocation) => ({
+  if (userProjections.length > 0) {
+    await store.insertUserProjections(
+      userProjections.map((projection) => ({
         nodeId: NODE_ID,
         epochId: epoch.id,
-        userId: allocation.userId,
-        proposedUnits: allocation.proposedUnits,
-        activityCount: allocation.activityCount,
+        userId: projection.userId,
+        projectedUnits: projection.projectedUnits,
+        receiptCount: projection.receiptCount,
       }))
     );
   }
-  console.log(`  Inserted ${allocations.length} resolved-user allocations`);
+  console.log(`  Inserted ${userProjections.length} resolved-user projections`);
 
   await store.insertPoolComponent({
     nodeId: NODE_ID,
@@ -948,22 +943,22 @@ async function seedOpenEpoch(
   );
   console.log(`  Inserted ${epochDef.events.length} selections`);
 
-  const allocations = computeResolvedAllocations(
+  const userProjections = computeUserProjections(
     attributionReceipts,
     WEIGHT_CONFIG
   );
-  if (allocations.length > 0) {
-    await store.insertAllocations(
-      allocations.map((allocation) => ({
+  if (userProjections.length > 0) {
+    await store.insertUserProjections(
+      userProjections.map((projection) => ({
         nodeId: NODE_ID,
         epochId: epoch.id,
-        userId: allocation.userId,
-        proposedUnits: allocation.proposedUnits,
-        activityCount: allocation.activityCount,
+        userId: projection.userId,
+        projectedUnits: projection.projectedUnits,
+        receiptCount: projection.receiptCount,
       }))
     );
   }
-  console.log(`  Inserted ${allocations.length} resolved-user allocations`);
+  console.log(`  Inserted ${userProjections.length} resolved-user projections`);
 
   await store.insertPoolComponent({
     nodeId: NODE_ID,

@@ -13,12 +13,12 @@
 
 import { createHash } from "node:crypto";
 import {
+  ATTRIBUTION_STATEMENT_TYPES,
   buildCanonicalMessage,
   buildEIP712TypedData,
   computeApproverSetHash,
   EIP712_DOMAIN_NAME,
   EIP712_DOMAIN_VERSION,
-  PAYOUT_STATEMENT_TYPES,
 } from "@cogni/attribution-ledger";
 import { verifyTypedData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -29,13 +29,13 @@ describe("buildCanonicalMessage", () => {
     nodeId: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d",
     scopeId: "a28a8b1e-1f9d-5cd5-9329-569e4819feda",
     epochId: "42",
-    allocationSetHash: "abc123def456",
+    finalAllocationSetHash: "abc123def456",
     poolTotalCredits: "10000",
   };
 
   it("starts with version header", () => {
     const msg = buildCanonicalMessage(params);
-    expect(msg.startsWith("Cogni Payout Statement v1\n")).toBe(true);
+    expect(msg.startsWith("Cogni Attribution Statement v1\n")).toBe(true);
   });
 
   it("uses \\n only (no \\r)", () => {
@@ -48,18 +48,20 @@ describe("buildCanonicalMessage", () => {
     expect(msg).toContain(`Node: ${params.nodeId}`);
     expect(msg).toContain(`Scope: ${params.scopeId}`);
     expect(msg).toContain(`Epoch: ${params.epochId}`);
-    expect(msg).toContain(`Allocation Hash: ${params.allocationSetHash}`);
+    expect(msg).toContain(
+      `Final Allocation Hash: ${params.finalAllocationSetHash}`
+    );
     expect(msg).toContain(`Pool Total: ${params.poolTotalCredits}`);
   });
 
   it("produces exact expected output", () => {
     const msg = buildCanonicalMessage(params);
     const expected = [
-      "Cogni Payout Statement v1",
+      "Cogni Attribution Statement v1",
       "Node: 4ff8eac1-4eba-4ed0-931b-b1fe4f64713d",
       "Scope: a28a8b1e-1f9d-5cd5-9329-569e4819feda",
       "Epoch: 42",
-      "Allocation Hash: abc123def456",
+      "Final Allocation Hash: abc123def456",
       "Pool Total: 10000",
     ].join("\n");
     expect(msg).toBe(expected);
@@ -129,7 +131,7 @@ describe("buildEIP712TypedData", () => {
     nodeId: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d",
     scopeId: "a28a8b1e-1f9d-5cd5-9329-569e4819feda",
     epochId: "42",
-    allocationSetHash: "abc123def456",
+    finalAllocationSetHash: "abc123def456",
     poolTotalCredits: "10000",
     chainId: 8453,
   };
@@ -143,9 +145,9 @@ describe("buildEIP712TypedData", () => {
     });
   });
 
-  it("returns PayoutStatement as primaryType", () => {
+  it("returns AttributionStatement as primaryType", () => {
     const data = buildEIP712TypedData(params);
-    expect(data.primaryType).toBe("PayoutStatement");
+    expect(data.primaryType).toBe("AttributionStatement");
   });
 
   it("includes all SIGNATURE_SCOPE_BOUND fields in message", () => {
@@ -154,21 +156,21 @@ describe("buildEIP712TypedData", () => {
       nodeId: params.nodeId,
       scopeId: params.scopeId,
       epochId: params.epochId,
-      allocationSetHash: params.allocationSetHash,
+      finalAllocationSetHash: params.finalAllocationSetHash,
       poolTotalCredits: params.poolTotalCredits,
     });
   });
 
   it("exports correct type definitions matching viem expectations", () => {
     const data = buildEIP712TypedData(params);
-    expect(data.types).toBe(PAYOUT_STATEMENT_TYPES);
-    expect(data.types.PayoutStatement).toHaveLength(5);
-    const fieldNames = data.types.PayoutStatement.map((f) => f.name);
+    expect(data.types).toBe(ATTRIBUTION_STATEMENT_TYPES);
+    expect(data.types.AttributionStatement).toHaveLength(5);
+    const fieldNames = data.types.AttributionStatement.map((f) => f.name);
     expect(fieldNames).toEqual([
       "nodeId",
       "scopeId",
       "epochId",
-      "allocationSetHash",
+      "finalAllocationSetHash",
       "poolTotalCredits",
     ]);
   });
@@ -206,7 +208,7 @@ describe("EIP-712 sign/verify round-trip", () => {
     nodeId: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d",
     scopeId: "a28a8b1e-1f9d-5cd5-9329-569e4819feda",
     epochId: "42",
-    allocationSetHash: "abc123def456",
+    finalAllocationSetHash: "abc123def456",
     poolTotalCredits: "10000",
     chainId: 8453,
   });

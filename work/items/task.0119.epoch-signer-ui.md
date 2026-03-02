@@ -7,7 +7,7 @@ priority: 1
 rank: 1
 estimate: 4
 summary: "Build a dedicated approver-gated admin page (`/gov/review`) for reviewing, editing, and signing epochs in review status. Migrate signing from EIP-191 to EIP-712 typed data for wallet UX and multi-sig forward-compatibility."
-outcome: "An authorized approver can navigate to `/gov/review`, see epochs in review status, adjust final_units, sign with EIP-712, and finalize. The existing `/gov/epoch` page remains a read-only transparency view. Backend verifies EIP-712 typed data signatures."
+outcome: "An authorized approver can navigate to `/gov/review`, see epochs in review status, inspect user projections, author review subject overrides, sign with EIP-712, and finalize. The existing `/gov/epoch` page remains a read-only transparency view. Backend verifies EIP-712 typed data signatures."
 spec_refs:
 assignees: derekg1729
 credit:
@@ -28,7 +28,7 @@ external_refs:
 
 ## Context
 
-The backend for epoch lifecycle (open → review → finalized) is complete (task.0100, task.0102). API routes exist for review, update-allocations, and finalize — all approver-gated via `checkApprover()`. The governance UI (`/gov/epoch`, `/gov/history`, `/gov/holdings`) exists as **read-only transparency views**.
+The backend for epoch lifecycle (open → review → finalized) is complete (task.0100, task.0102). API routes exist for review, review-subject-overrides, and finalize — all approver-gated via `checkApprover()`. The governance UI (`/gov/epoch`, `/gov/history`, `/gov/holdings`) exists as **read-only transparency views**.
 
 The existing wallet infrastructure is mature: wagmi `2.19.5`, RainbowKit `2.2.9`, SIWE + NextAuth are all installed and wired into the provider tree at `src/app/providers/wallet.client.tsx`. Signing patterns exist in `usePaymentFlow.ts` and `useDAOFormation.ts`. No new providers or dependencies are needed.
 
@@ -51,9 +51,9 @@ The `/gov/epoch` page remains a **read-only transparency view** showing the curr
 
 ### Backend: EIP-712 migration
 
-- [ ] Define EIP-712 domain separator and `PayoutStatement` type in `packages/attribution-ledger/src/signing.ts`
+- [ ] Define EIP-712 domain separator and `AttributionStatement` type in `packages/attribution-ledger/src/signing.ts`
 - [ ] Domain: `{ name: "Cogni Attribution", version: "1", chainId }` — use `CHAIN_ID` from `src/shared/web3/chain.ts`
-- [ ] Type: `PayoutStatement { nodeId, scopeId, epochId, allocationSetHash, poolTotalCredits }`
+- [ ] Type: `AttributionStatement { nodeId, scopeId, epochId, finalAllocationSetHash, poolTotalCredits }`
 - [ ] New `buildEIP712TypedData(params)` pure function returning `{ domain, types, primaryType, message }` (viem `SignTypedDataParameters` shape)
 - [ ] Update `FinalizeEpochWorkflow` activity to verify via `viem.verifyTypedData()` instead of `verifyMessage()`
 - [ ] Keep `buildCanonicalMessage()` as deprecated export for one release cycle (backward compat)
@@ -71,11 +71,11 @@ The `/gov/epoch` page remains a **read-only transparency view** showing the curr
 - [ ] Nav link in `/gov/layout.tsx` (visible to all, access-gated at page level)
 - [ ] **Epoch list**: show epochs in `review` status (and recently `finalized` for reference)
 - [ ] **Review detail** (epoch status === "review"):
-  - Allocation table with `proposedUnits` and editable `finalUnits` column
-  - "Adjust" action per row — calls `PATCH /epochs/[id]/allocations` (existing route)
+  - User projection table with `projectedUnits` / `receiptCount`
+  - Review subject override controls — call `PATCH /epochs/[id]/review-subject-overrides`
   - Unresolved activity warning banner (count + platform logins) from existing `unresolvedCount` data
   - Pre-sign checklist: pool components recorded, no unresolved activity (warnings, not blockers)
-  - Summary card: epoch ID, period, allocation hash, pool total, approver set hash
+  - Summary card: epoch ID, period, final allocation hash, pool total, approver set hash
   - "Sign & Finalize" button:
     1. Fetches EIP-712 typed data from `/epochs/[id]/sign-data`
     2. Triggers wallet popup via wagmi `useSignTypedData`
@@ -158,19 +158,19 @@ The app already has a complete wallet stack — no new providers or dependencies
 
 ### Blocking Issues
 
-1. **B1 — Transaction wrapping for subject-override writes** (`drizzle-attribution.adapter.ts:1341-1396`): `upsertSubjectOverride` and `deleteSubjectOverride` acquire `SELECT ... FOR UPDATE` lock but the subsequent write is not in the same `db.transaction()`. Lock is released before the INSERT/DELETE, so the PATCH↔finalize race is not actually prevented. **Fix:** Wrap lock + write in `this.db.transaction()`.
+1. **B1 — Transaction wrapping for review-subject-override writes** (`drizzle-attribution.adapter.ts:1425-1547`): `upsertReviewSubjectOverride` and `deleteReviewSubjectOverride` acquire `SELECT ... FOR UPDATE` lock but the subsequent write is not in the same `db.transaction()`. Lock is released before the INSERT/DELETE, so the PATCH↔finalize race is not actually prevented. **Fix:** Wrap lock + write in `this.db.transaction()`.
 
-2. **B2 — Non-atomic batch upsert** (`subject-overrides/route.ts:245-257`): Overrides upserted one-by-one in a loop without transaction wrapping. Partial failure leaves inconsistent state. **Fix:** Wrap in a transaction.
+2. **B2 — Non-atomic batch upsert** (`review-subject-overrides/route.ts`): Overrides upserted one-by-one in a loop without transaction wrapping. Partial failure leaves inconsistent state. **Fix:** Wrap in a transaction.
 
-3. **B3 — Negative `overrideUnits` accepted** (`attribution.subject-overrides.v1.contract.ts:23`): `zBigint` regex `/^-?\d+$/` allows negative values. `expandClaimantUnits` silently excludes units <= 0. **Fix:** Change to `/^\d+$/`.
+3. **B3 — Negative `overrideUnits` accepted** (`attribution.review-subject-overrides.v1.contract.ts`): `zBigint` regex `/^-?\d+$/` allows negative values. `expandClaimantUnits` silently excludes units <= 0. **Fix:** Change to `/^\d+$/`.
 
 4. **B4 — Missing EIP-712 round-trip test** (`signing.test.ts`): No test signs typed data with a private key and verifies with `verifyTypedData`. The finalize test mocks verification as always-true. Use `viem/accounts` `privateKeyToAccount` + `signTypedData` for a pure-crypto round-trip test.
 
-5. **B5 — Zero adapter integration tests for subject-override methods** (`drizzle-attribution.adapter.int.test.ts`): `upsertSubjectOverride`, `deleteSubjectOverride`, `getSubjectOverridesForEpoch` have no adapter-level tests. Status-gate, upsert conflict, scope isolation, and JSONB round-trip are untested.
+5. **B5 — Zero adapter integration tests for review-subject-override methods** (`drizzle-attribution.adapter.int.test.ts`): `upsertReviewSubjectOverride`, `deleteReviewSubjectOverride`, `getReviewSubjectOverridesForEpoch` have no adapter-level tests. Status-gate, upsert conflict, scope isolation, and JSONB round-trip are untested.
 
 ### Non-blocking (address if time permits)
 
-- `useSubjectOverrides.ts:68-73`: `overridesByRef` Map created outside `useMemo` — cascading re-renders.
+- `useReviewSubjectOverrides.ts`: ensure `overridesByRef` Map is memoized to avoid cascading re-renders.
 - `view.tsx:252-260`: Unhandled promise rejection in `handleSave`/`handleRemove`.
 - `view.tsx:276`: `colSpan={6}` should be `colSpan={7}` to match parent table.
 - `sign-data/route.ts:70-104`: Logic duplicated from `finalizeEpoch` — consider shared helper.

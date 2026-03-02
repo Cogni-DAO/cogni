@@ -5,7 +5,7 @@
  * Module: `@tests/contract/app/attribution.epochs`
  * Purpose: Contract test for public ledger epochs list endpoint.
  * Scope: Validates Zod output schema against representative data shapes. Does not test runtime behavior.
- * Invariants: ALL_MATH_BIGINT, PUBLIC_READS_CLOSED_ONLY.
+ * Invariants: ALL_MATH_BIGINT, PUBLIC_READS_FINALIZED_ONLY.
  * Side-effects: none
  * Links: contracts/attribution.list-epochs.v1.contract, app/api/v1/public/attribution/epochs/route
  * @public

@@ -75,6 +75,8 @@ export const EVENT_NAMES = {
 
   // Ledger Domain
   LEDGER_ALLOCATIONS_UPDATED: "ledger.allocations_updated",
+  LEDGER_REVIEW_SUBJECT_OVERRIDES_UPDATED:
+    "ledger.review_subject_overrides_updated",
   LEDGER_POOL_COMPONENT_RECORDED: "ledger.pool_component_recorded",
   LEDGER_IDENTITY_RESOLVED_AT_READ: "ledger.identity_resolved_at_read",
   LEDGER_FINALIZE_SUBMITTED: "ledger.finalize_submitted",

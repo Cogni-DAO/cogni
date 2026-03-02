@@ -30,18 +30,14 @@ export function CurrentEpochView(): ReactElement {
     () =>
       epoch
         ? [...epoch.contributors].sort(
-            (a, b) => Number(b.proposedUnits) - Number(a.proposedUnits)
+            (a, b) => Number(b.units) - Number(a.units)
           )
         : [],
     [epoch]
   );
 
   const totalPoints = useMemo(
-    () =>
-      sorted.reduce(
-        (s, c) => s + Math.round(Number(c.proposedUnits) / 1000),
-        0
-      ),
+    () => sorted.reduce((s, c) => s + Math.round(Number(c.units) / 1000), 0),
     [sorted]
   );
 

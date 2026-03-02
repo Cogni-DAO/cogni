@@ -16,11 +16,11 @@
 import { describe, expect, it } from "vitest";
 import {
   applySubjectOverrides,
-  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   buildReviewOverrideSnapshots,
   CLAIMANT_SHARE_DENOMINATOR_PPM,
-  computeClaimantCreditLineItems,
+  computeAttributionStatementLines,
+  computeFinalClaimantAllocations,
   expandClaimantUnits,
   parseClaimantSharesPayload,
 } from "../src/claimant-shares";
@@ -194,18 +194,18 @@ describe("expandClaimantUnits", () => {
   });
 });
 
-describe("computeClaimantCreditLineItems", () => {
+describe("computeAttributionStatementLines", () => {
   it("aggregates credits by claimant and preserves receipt ids", () => {
-    const items = computeClaimantCreditLineItems(
+    const items = computeAttributionStatementLines(
       [
         {
           claimant: { kind: "user", userId: "user-1" },
-          valuationUnits: 3n,
+          finalUnits: 3n,
           receiptIds: ["r2", "r1"],
         },
         {
           claimant: { kind: "user", userId: "user-1" },
-          valuationUnits: 2n,
+          finalUnits: 2n,
           receiptIds: ["r3"],
         },
         {
@@ -215,7 +215,7 @@ describe("computeClaimantCreditLineItems", () => {
             externalId: "42",
             providerLogin: "alice",
           },
-          valuationUnits: 5n,
+          finalUnits: 5n,
           receiptIds: ["r4"],
         },
       ],
@@ -224,33 +224,35 @@ describe("computeClaimantCreditLineItems", () => {
 
     expect(items).toHaveLength(2);
     expect(items[0]).toEqual({
+      claimantKey: "identity:github:42",
       claimant: {
         kind: "identity",
         provider: "github",
         externalId: "42",
         providerLogin: "alice",
       },
-      totalUnits: 5n,
-      share: "0.500000",
-      amountCredits: 500n,
+      finalUnits: 5n,
+      poolShare: "0.500000",
+      creditAmount: 500n,
       receiptIds: ["r4"],
     });
     expect(items[1]).toEqual({
+      claimantKey: "user:user-1",
       claimant: { kind: "user", userId: "user-1" },
-      totalUnits: 5n,
-      share: "0.500000",
-      amountCredits: 500n,
+      finalUnits: 5n,
+      poolShare: "0.500000",
+      creditAmount: 500n,
       receiptIds: ["r1", "r2", "r3"],
     });
   });
 
-  it("throws on negative valuation units", () => {
+  it("throws on negative final units", () => {
     expect(() =>
-      computeClaimantCreditLineItems(
+      computeAttributionStatementLines(
         [
           {
             claimant: { kind: "user", userId: "user-1" },
-            valuationUnits: -1n,
+            finalUnits: -1n,
           },
         ],
         100n
@@ -259,9 +261,9 @@ describe("computeClaimantCreditLineItems", () => {
   });
 });
 
-describe("buildClaimantAllocations", () => {
+describe("computeFinalClaimantAllocations", () => {
   it("groups expanded claimant units across subjects", () => {
-    const allocations = buildClaimantAllocations([
+    const allocations = computeFinalClaimantAllocations([
       {
         subjectRef: "receipt-1",
         subjectKind: "receipt",
@@ -307,12 +309,12 @@ describe("buildClaimantAllocations", () => {
           externalId: "42",
           providerLogin: "alice",
         },
-        valuationUnits: 6n,
+        finalUnits: 6n,
         receiptIds: ["r2"],
       },
       {
         claimant: { kind: "user", userId: "user-1" },
-        valuationUnits: 10n,
+        finalUnits: 10n,
         receiptIds: ["r1"],
       },
     ]);

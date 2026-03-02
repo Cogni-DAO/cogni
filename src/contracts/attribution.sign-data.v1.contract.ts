@@ -24,19 +24,19 @@ export const SignDataOutputSchema = z.object({
     chainId: z.number(),
   }),
   types: z.object({
-    PayoutStatement: z.array(
+    AttributionStatement: z.array(
       z.object({
         name: z.string(),
         type: z.string(),
       })
     ),
   }),
-  primaryType: z.literal("PayoutStatement"),
+  primaryType: z.literal("AttributionStatement"),
   message: z.object({
     nodeId: z.string(),
     scopeId: z.string(),
     epochId: z.string(),
-    allocationSetHash: z.string(),
+    finalAllocationSetHash: z.string(),
     poolTotalCredits: z.string(),
   }),
 });

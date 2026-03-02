@@ -2,7 +2,7 @@
 id: task.0124
 type: task
 title: "Scaffold @cogni/attribution-pipeline (framework) + @cogni/attribution-pipeline-plugins (built-ins)"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 3
@@ -12,8 +12,8 @@ spec_refs: plugin-attribution-pipeline-spec
 assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
-branch:
-pr:
+branch: task/0124-attribution-pipeline-packages
+pr: https://github.com/Cogni-DAO/node-template/pull/506
 reviewer:
 revision: 0
 blocked_by: [task.0113]

@@ -12,43 +12,45 @@
  * - SELECTION_AUTO_POPULATE: insertSelectionDoNothing uses onConflictDoNothing; updateSelectionUserId only sets userId where NULL.
  * - SELECTION_FREEZE_ON_FINALIZE: DB trigger enforces; adapter does not duplicate check.
  * - ONE_OPEN_EPOCH: DB constraint enforces; adapter lets DB error propagate.
- * - ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations updates proposed_units/activity_count only; never touches final_units.
+ * - USER_PROJECTIONS_RECOMPUTABLE: upsertUserProjections updates projected_units/receipt_count and never stores signed final units.
  * - POOL_LOCKED_AT_REVIEW: insertPoolComponent rejects inserts when epoch status != 'open'.
  * - CONFIG_LOCKED_AT_REVIEW: closeIngestion pins allocationAlgoRef + weightConfigHash.
  * - EVALUATION_FINAL_ATOMIC: closeIngestionWithEvaluations inserts locked evaluations + sets artifacts_hash + transitions epoch in one transaction.
- * - STATEMENT_ITEMS_BOUNDARY_CLONE: toStatementItemsJson converts readonly AttributionStatementItem[] to mutable Drizzle-compatible JSONB at the adapter boundary.
+ * - STATEMENT_LINES_BOUNDARY_CLONE: toStatementLinesJson converts readonly statement lines to mutable Drizzle-compatible JSONB at the adapter boundary.
  * Side-effects: IO (database operations)
  * Links: docs/spec/attribution-ledger.md, packages/attribution-ledger/src/store.ts
  * @public
  */
 
 import type {
-  AttributionAllocation,
   AttributionEpoch,
   AttributionEvaluation,
   AttributionPoolComponent,
   AttributionSelection,
   AttributionStatement,
-  AttributionStatementItem,
+  AttributionStatementLineRecord,
   AttributionStatementSignature,
   AttributionStore,
   CloseIngestionWithEvaluationsParams,
+  EpochUserProjection,
+  FinalClaimantAllocationRecord,
   IngestionCursor,
   IngestionReceipt,
-  InsertAllocationParams,
+  InsertFinalClaimantAllocationParams,
   InsertPoolComponentParams,
   InsertReceiptParams,
   InsertSelectionAutoParams,
   InsertSignatureParams,
   InsertStatementParams,
+  InsertUserProjectionParams,
+  ReviewSubjectOverrideRecord,
   SelectedReceiptForAllocation,
   SelectedReceiptForAttribution,
   SelectedReceiptWithMetadata,
-  SubjectOverrideRecord,
   UnselectedReceipt,
   UpsertEvaluationParams,
+  UpsertReviewSubjectOverrideParams,
   UpsertSelectionParams,
-  UpsertSubjectOverrideParams,
 } from "@cogni/attribution-ledger";
 import {
   EpochNotFoundError,
@@ -57,14 +59,15 @@ import {
   type EpochStatus,
 } from "@cogni/attribution-ledger";
 import {
-  epochAllocations,
   epochEvaluations,
+  epochFinalClaimantAllocations,
   epochPoolComponents,
+  epochReviewSubjectOverrides,
   epochSelection,
   epochStatementSignatures,
   epochStatements,
-  epochSubjectOverrides,
   epochs,
+  epochUserProjections,
   ingestionCursors,
   ingestionReceipts,
 } from "@cogni/db-schema/attribution";
@@ -144,18 +147,32 @@ function toSelection(
   };
 }
 
-function toAllocation(
-  row: typeof epochAllocations.$inferSelect
-): AttributionAllocation {
+function toUserProjection(
+  row: typeof epochUserProjections.$inferSelect
+): EpochUserProjection {
   return {
     id: row.id,
     nodeId: row.nodeId,
     epochId: row.epochId,
     userId: row.userId,
-    proposedUnits: row.proposedUnits,
+    projectedUnits: row.projectedUnits,
+    receiptCount: row.receiptCount,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function toFinalClaimantAllocation(
+  row: typeof epochFinalClaimantAllocations.$inferSelect
+): FinalClaimantAllocationRecord {
+  return {
+    id: row.id,
+    nodeId: row.nodeId,
+    epochId: row.epochId,
+    claimantKey: row.claimantKey,
+    claimant: row.claimantJson,
     finalUnits: row.finalUnits,
-    overrideReason: row.overrideReason,
-    activityCount: row.activityCount,
+    receiptIds: row.receiptIdsJson,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -196,18 +213,18 @@ function toStatement(
     id: row.id,
     nodeId: row.nodeId,
     epochId: row.epochId,
-    allocationSetHash: row.allocationSetHash,
+    finalAllocationSetHash: row.finalAllocationSetHash,
     poolTotalCredits: row.poolTotalCredits,
-    statementItems: row.statementItemsJson,
-    reviewOverridesJson: row.reviewOverridesJson ?? null,
+    statementLines: row.statementLinesJson,
+    reviewOverrides: row.reviewOverridesJson ?? null,
     supersedesStatementId: row.supersedesStatementId,
     createdAt: row.createdAt,
   };
 }
 
-function toSubjectOverride(
-  row: typeof epochSubjectOverrides.$inferSelect
-): SubjectOverrideRecord {
+function toReviewSubjectOverride(
+  row: typeof epochReviewSubjectOverrides.$inferSelect
+): ReviewSubjectOverrideRecord {
   return {
     id: row.id,
     nodeId: row.nodeId,
@@ -221,23 +238,19 @@ function toSubjectOverride(
   };
 }
 
-type EpochStatementItemsJson = NonNullable<
-  typeof epochStatements.$inferInsert.statementItemsJson
+type EpochStatementLinesJson = NonNullable<
+  typeof epochStatements.$inferInsert.statementLinesJson
 >;
-type EpochStatementItemJson = EpochStatementItemsJson[number];
+type EpochStatementLineJson = EpochStatementLinesJson[number];
 
-function toStatementItemsJson(
-  items: readonly AttributionStatementItem[]
-): EpochStatementItemsJson {
+function toStatementLinesJson(
+  items: readonly AttributionStatementLineRecord[]
+): EpochStatementLinesJson {
   return items.map(
-    (item): EpochStatementItemJson => ({
-      user_id: item.user_id,
-      total_units: item.total_units,
-      share: item.share,
-      amount_credits: item.amount_credits,
+    (item): EpochStatementLineJson => ({
       claimant_key: item.claimant_key,
-      claimant: item.claimant
-        ? item.claimant.kind === "user"
+      claimant:
+        item.claimant.kind === "user"
           ? {
               kind: "user",
               userId: item.claimant.userId,
@@ -247,11 +260,13 @@ function toStatementItemsJson(
               provider: item.claimant.provider,
               externalId: item.claimant.externalId,
               providerLogin: item.claimant.providerLogin,
-            }
-        : undefined,
+            },
+      final_units: item.final_units,
+      pool_share: item.pool_share,
+      credit_amount: item.credit_amount,
       // Clone nested arrays at the adapter boundary so core statement items stay
       // readonly while Drizzle receives mutable JSON-compatible values.
-      receipt_ids: item.receipt_ids ? [...item.receipt_ids] : undefined,
+      receipt_ids: [...item.receipt_ids],
     })
   );
 }
@@ -261,7 +276,7 @@ type EpochReviewOverridesJson = NonNullable<
 >;
 
 /**
- * STATEMENT_ITEMS_BOUNDARY_CLONE: strips readonly from ReviewOverrideSnapshot[]
+ * REVIEW_OVERRIDES_BOUNDARY_CLONE: strips readonly from ReviewOverrideSnapshot[]
  * so Drizzle's mutable JSONB types are satisfied.
  */
 function toReviewOverridesJson(
@@ -936,76 +951,112 @@ export class DrizzleAttributionAdapter implements AttributionStore {
     return rows.map(toSelection);
   }
 
-  // ── Allocations ─────────────────────────────────────────────
+  // ── User projections ────────────────────────────────────────
 
-  async insertAllocations(params: InsertAllocationParams[]): Promise<void> {
+  async insertUserProjections(
+    params: InsertUserProjectionParams[]
+  ): Promise<void> {
     if (params.length === 0) return;
     await this.validateEpochIds(params.map((a) => a.epochId));
-    await this.db.insert(epochAllocations).values(
+    await this.db.insert(epochUserProjections).values(
       params.map((a) => ({
         nodeId: a.nodeId,
         epochId: a.epochId,
         userId: a.userId,
-        proposedUnits: a.proposedUnits,
-        finalUnits: a.finalUnits ?? null,
-        overrideReason: a.overrideReason ?? null,
-        activityCount: a.activityCount,
+        projectedUnits: a.projectedUnits,
+        receiptCount: a.receiptCount,
       }))
     );
   }
 
-  async upsertAllocations(params: InsertAllocationParams[]): Promise<void> {
+  async upsertUserProjections(
+    params: InsertUserProjectionParams[]
+  ): Promise<void> {
     if (params.length === 0) return;
     await this.validateEpochIds(params.map((a) => a.epochId));
     for (const a of params) {
       await this.db
-        .insert(epochAllocations)
+        .insert(epochUserProjections)
         .values({
           nodeId: a.nodeId,
           epochId: a.epochId,
           userId: a.userId,
-          proposedUnits: a.proposedUnits,
-          finalUnits: a.finalUnits ?? null,
-          overrideReason: a.overrideReason ?? null,
-          activityCount: a.activityCount,
+          projectedUnits: a.projectedUnits,
+          receiptCount: a.receiptCount,
         })
         .onConflictDoUpdate({
-          target: [epochAllocations.epochId, epochAllocations.userId],
+          target: [epochUserProjections.epochId, epochUserProjections.userId],
           set: {
-            proposedUnits: sql`EXCLUDED.proposed_units`,
-            activityCount: sql`EXCLUDED.activity_count`,
+            projectedUnits: sql`EXCLUDED.projected_units`,
+            receiptCount: sql`EXCLUDED.receipt_count`,
             updatedAt: new Date(),
           },
         });
     }
   }
 
-  async deleteStaleAllocations(
+  async deleteStaleUserProjections(
     epochId: bigint,
     activeUserIds: string[]
   ): Promise<void> {
     await this.resolveEpochScoped(epochId);
     if (activeUserIds.length === 0) return;
     await this.db
-      .delete(epochAllocations)
+      .delete(epochUserProjections)
       .where(
         and(
-          eq(epochAllocations.epochId, epochId),
-          notInArray(epochAllocations.userId, activeUserIds),
-          isNull(epochAllocations.finalUnits)
+          eq(epochUserProjections.epochId, epochId),
+          notInArray(epochUserProjections.userId, activeUserIds)
         )
       );
   }
 
-  async getAllocationsForEpoch(
+  async getUserProjectionsForEpoch(
     epochId: bigint
-  ): Promise<AttributionAllocation[]> {
+  ): Promise<EpochUserProjection[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
-      .from(epochAllocations)
-      .where(eq(epochAllocations.epochId, epochId));
-    return rows.map(toAllocation);
+      .from(epochUserProjections)
+      .where(eq(epochUserProjections.epochId, epochId));
+    return rows.map(toUserProjection);
+  }
+
+  async replaceFinalClaimantAllocations(
+    epochId: bigint,
+    allocations: readonly InsertFinalClaimantAllocationParams[]
+  ): Promise<void> {
+    await this.resolveEpochScoped(epochId);
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(epochFinalClaimantAllocations)
+        .where(eq(epochFinalClaimantAllocations.epochId, epochId));
+
+      if (allocations.length === 0) return;
+
+      await tx.insert(epochFinalClaimantAllocations).values(
+        allocations.map((allocation) => ({
+          nodeId: allocation.nodeId,
+          epochId: allocation.epochId,
+          claimantKey: allocation.claimantKey,
+          claimantJson: allocation.claimant,
+          finalUnits: allocation.finalUnits,
+          receiptIdsJson: [...allocation.receiptIds],
+        }))
+      );
+    });
+  }
+
+  async getFinalClaimantAllocationsForEpoch(
+    epochId: bigint
+  ): Promise<FinalClaimantAllocationRecord[]> {
+    await this.resolveEpochScoped(epochId);
+    const rows = await this.db
+      .select()
+      .from(epochFinalClaimantAllocations)
+      .where(eq(epochFinalClaimantAllocations.epochId, epochId))
+      .orderBy(epochFinalClaimantAllocations.claimantKey);
+    return rows.map(toFinalClaimantAllocation);
   }
 
   // ── Cursors ─────────────────────────────────────────────────
@@ -1115,11 +1166,11 @@ export class DrizzleAttributionAdapter implements AttributionStore {
       .values({
         nodeId: params.nodeId,
         epochId: params.epochId,
-        allocationSetHash: params.allocationSetHash,
+        finalAllocationSetHash: params.finalAllocationSetHash,
         poolTotalCredits: params.poolTotalCredits,
-        statementItemsJson: toStatementItemsJson(params.statementItems),
-        reviewOverridesJson: params.reviewOverridesJson
-          ? toReviewOverridesJson(params.reviewOverridesJson)
+        statementLinesJson: toStatementLinesJson(params.statementLines),
+        reviewOverridesJson: params.reviewOverrides
+          ? toReviewOverridesJson(params.reviewOverrides)
           : null,
         supersedesStatementId: params.supersedesStatementId ?? null,
       })
@@ -1145,9 +1196,10 @@ export class DrizzleAttributionAdapter implements AttributionStore {
   async finalizeEpochAtomic(params: {
     epochId: bigint;
     poolTotal: bigint;
+    finalClaimantAllocations: readonly InsertFinalClaimantAllocationParams[];
     statement: Omit<InsertStatementParams, "epochId">;
     signature: Omit<InsertSignatureParams, "statementId">;
-    expectedAllocationSetHash: string;
+    expectedFinalAllocationSetHash: string;
   }): Promise<{ epoch: AttributionEpoch; statement: AttributionStatement }> {
     return await this.db.transaction(async (tx) => {
       // 1. Load epoch with scope gate + row lock (prevents concurrent override writes)
@@ -1225,13 +1277,13 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         .values({
           nodeId: params.statement.nodeId,
           epochId: params.epochId,
-          allocationSetHash: params.statement.allocationSetHash,
+          finalAllocationSetHash: params.statement.finalAllocationSetHash,
           poolTotalCredits: params.statement.poolTotalCredits,
-          statementItemsJson: toStatementItemsJson(
-            params.statement.statementItems
+          statementLinesJson: toStatementLinesJson(
+            params.statement.statementLines
           ),
-          reviewOverridesJson: params.statement.reviewOverridesJson
-            ? toReviewOverridesJson(params.statement.reviewOverridesJson)
+          reviewOverridesJson: params.statement.reviewOverrides
+            ? toReviewOverridesJson(params.statement.reviewOverrides)
             : null,
           supersedesStatementId: params.statement.supersedesStatementId ?? null,
         })
@@ -1258,10 +1310,39 @@ export class DrizzleAttributionAdapter implements AttributionStore {
       }
 
       // Hash assertion — if statement pre-existed, verify hash matches
-      if (statementRow.allocationSetHash !== params.expectedAllocationSetHash) {
+      if (
+        statementRow.finalAllocationSetHash !==
+        params.expectedFinalAllocationSetHash
+      ) {
         throw new Error(
-          `finalizeEpochAtomic: allocationSetHash mismatch — expected ${params.expectedAllocationSetHash}, found ${statementRow.allocationSetHash}`
+          `finalizeEpochAtomic: finalAllocationSetHash mismatch — expected ${params.expectedFinalAllocationSetHash}, found ${statementRow.finalAllocationSetHash}`
         );
+      }
+
+      for (const allocation of params.finalClaimantAllocations) {
+        await tx
+          .insert(epochFinalClaimantAllocations)
+          .values({
+            nodeId: allocation.nodeId,
+            epochId: allocation.epochId,
+            claimantKey: allocation.claimantKey,
+            claimantJson: allocation.claimant,
+            finalUnits: allocation.finalUnits,
+            receiptIdsJson: [...allocation.receiptIds],
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [
+              epochFinalClaimantAllocations.epochId,
+              epochFinalClaimantAllocations.claimantKey,
+            ],
+            set: {
+              claimantJson: allocation.claimant,
+              finalUnits: allocation.finalUnits,
+              receiptIdsJson: [...allocation.receiptIds],
+              updatedAt: new Date(),
+            },
+          });
       }
 
       // 2d/3b. Upsert signature — ON CONFLICT (statement_id, signer_wallet) DO NOTHING
@@ -1341,9 +1422,9 @@ export class DrizzleAttributionAdapter implements AttributionStore {
 
   // ── Subject overrides ────────────────────────────────────────
 
-  async upsertSubjectOverride(
-    params: UpsertSubjectOverrideParams
-  ): Promise<SubjectOverrideRecord> {
+  async upsertReviewSubjectOverride(
+    params: UpsertReviewSubjectOverrideParams
+  ): Promise<ReviewSubjectOverrideRecord> {
     return await this.db.transaction(async (tx) => {
       const epoch = await this.resolveEpochScopedForUpdate(params.epochId, tx);
       if (epoch.status !== "review") {
@@ -1355,7 +1436,7 @@ export class DrizzleAttributionAdapter implements AttributionStore {
 
       const now = new Date();
       const [row] = await tx
-        .insert(epochSubjectOverrides)
+        .insert(epochReviewSubjectOverrides)
         .values({
           nodeId: params.nodeId,
           epochId: params.epochId,
@@ -1368,8 +1449,8 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         })
         .onConflictDoUpdate({
           target: [
-            epochSubjectOverrides.epochId,
-            epochSubjectOverrides.subjectRef,
+            epochReviewSubjectOverrides.epochId,
+            epochReviewSubjectOverrides.subjectRef,
           ],
           set: {
             overrideUnits: params.overrideUnits ?? null,
@@ -1381,15 +1462,15 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         .returning();
       if (!row)
         throw new Error(
-          "upsertSubjectOverride: INSERT/UPDATE returned no rows"
+          "upsertReviewSubjectOverride: INSERT/UPDATE returned no rows"
         );
-      return toSubjectOverride(row);
+      return toReviewSubjectOverride(row);
     });
   }
 
-  async batchUpsertSubjectOverrides(
-    paramsList: readonly UpsertSubjectOverrideParams[]
-  ): Promise<SubjectOverrideRecord[]> {
+  async batchUpsertReviewSubjectOverrides(
+    paramsList: readonly UpsertReviewSubjectOverrideParams[]
+  ): Promise<ReviewSubjectOverrideRecord[]> {
     const firstParams = paramsList[0];
     if (!firstParams) return [];
     return await this.db.transaction(async (tx) => {
@@ -1405,11 +1486,11 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         );
       }
 
-      const results: SubjectOverrideRecord[] = [];
+      const results: ReviewSubjectOverrideRecord[] = [];
       const now = new Date();
       for (const params of paramsList) {
         const [row] = await tx
-          .insert(epochSubjectOverrides)
+          .insert(epochReviewSubjectOverrides)
           .values({
             nodeId: params.nodeId,
             epochId: params.epochId,
@@ -1422,8 +1503,8 @@ export class DrizzleAttributionAdapter implements AttributionStore {
           })
           .onConflictDoUpdate({
             target: [
-              epochSubjectOverrides.epochId,
-              epochSubjectOverrides.subjectRef,
+              epochReviewSubjectOverrides.epochId,
+              epochReviewSubjectOverrides.subjectRef,
             ],
             set: {
               overrideUnits: params.overrideUnits ?? null,
@@ -1435,15 +1516,15 @@ export class DrizzleAttributionAdapter implements AttributionStore {
           .returning();
         if (!row)
           throw new Error(
-            "batchUpsertSubjectOverrides: INSERT/UPDATE returned no rows"
+            "batchUpsertReviewSubjectOverrides: INSERT/UPDATE returned no rows"
           );
-        results.push(toSubjectOverride(row));
+        results.push(toReviewSubjectOverride(row));
       }
       return results;
     });
   }
 
-  async deleteSubjectOverride(
+  async deleteReviewSubjectOverride(
     epochId: bigint,
     subjectRef: string
   ): Promise<void> {
@@ -1453,26 +1534,26 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         throw new EpochNotInReviewError(epochId.toString(), epoch.status);
       }
       await tx
-        .delete(epochSubjectOverrides)
+        .delete(epochReviewSubjectOverrides)
         .where(
           and(
-            eq(epochSubjectOverrides.epochId, epochId),
-            eq(epochSubjectOverrides.subjectRef, subjectRef)
+            eq(epochReviewSubjectOverrides.epochId, epochId),
+            eq(epochReviewSubjectOverrides.subjectRef, subjectRef)
           )
         );
     });
   }
 
-  async getSubjectOverridesForEpoch(
+  async getReviewSubjectOverridesForEpoch(
     epochId: bigint
-  ): Promise<SubjectOverrideRecord[]> {
+  ): Promise<ReviewSubjectOverrideRecord[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
       .select()
-      .from(epochSubjectOverrides)
-      .where(eq(epochSubjectOverrides.epochId, epochId))
-      .orderBy(epochSubjectOverrides.subjectRef);
-    return rows.map(toSubjectOverride);
+      .from(epochReviewSubjectOverrides)
+      .where(eq(epochReviewSubjectOverrides.epochId, epochId))
+      .orderBy(epochReviewSubjectOverrides.subjectRef);
+    return rows.map(toReviewSubjectOverride);
   }
 
   // ── Identity resolution ───────────────────────────────────────

@@ -3,14 +3,14 @@
 
 /**
  * Module: `@tests/stack/attribution/epoch-review-signing.stack`
- * Purpose: Stack-level validation of epoch signing and subject-override API routes.
- * Scope: Tests auth gating, status gates, and schema compliance for sign-data and subject-overrides endpoints. Does not test approver happy paths (requires repo-spec wallet).
+ * Purpose: Stack-level validation of epoch signing and review-subject-override API routes.
+ * Scope: Tests auth gating, status gates, and schema compliance for sign-data and review-subject-overrides endpoints. Does not test approver happy paths (requires repo-spec wallet).
  * Invariants: WRITE_ROUTES_AUTHED, WRITE_ROUTES_APPROVER_GATED, SIGNATURE_SCOPE_BOUND.
  * Side-effects: IO (HTTP requests, database writes for seeding)
  * Notes: Approver-gated happy paths require the repo-spec approver wallet. Tests here cover auth/status gates
  *   and schema compliance. Hash parity is tested as a pure unit test in signing.test.ts.
  * Links: src/app/api/v1/attribution/epochs/[id]/sign-data/route.ts,
- *         src/app/api/v1/attribution/epochs/[id]/subject-overrides/route.ts
+ *         src/app/api/v1/attribution/epochs/[id]/review-subject-overrides/route.ts
  * @public
  */
 
@@ -137,9 +137,9 @@ describe("Epoch sign-data API", () => {
   });
 });
 
-describe("Epoch subject-overrides API", () => {
+describe("Epoch review-subject-overrides API", () => {
   const overridesPath = () =>
-    `/api/v1/attribution/epochs/${reviewEpoch.epoch.id}/subject-overrides`;
+    `/api/v1/attribution/epochs/${reviewEpoch.epoch.id}/review-subject-overrides`;
 
   describe("GET (list overrides)", () => {
     it("returns 401 when unauthenticated", async () => {

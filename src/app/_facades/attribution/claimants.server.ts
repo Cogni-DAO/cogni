@@ -19,14 +19,14 @@ import {
   type AttributionEpoch,
   type AttributionStore,
   applySubjectOverrides,
-  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   CLAIMANT_SHARES_EVALUATION_REF,
   type ClaimantSharesSubject,
   claimantKey,
-  computeClaimantCreditLineItems,
+  computeAttributionStatementLines,
+  computeFinalClaimantAllocations,
   parseClaimantSharesPayload,
-  toSubjectOverrides,
+  toReviewSubjectOverrides,
 } from "@cogni/attribution-ledger";
 
 import { getContainer } from "@/bootstrap/container";
@@ -77,28 +77,23 @@ function toLineItemDto(params: {
 }
 
 function parseClaimantItemsFromStatement(
-  statementItems: ReadonlyArray<{
-    user_id: string;
-    total_units: string;
-    share: string;
-    amount_credits: string;
-    claimant_key?: string;
-    claimant?: AttributionClaimant;
-    receipt_ids?: readonly string[];
+  statementLines: ReadonlyArray<{
+    claimant_key: string;
+    claimant: AttributionClaimant;
+    final_units: string;
+    pool_share: string;
+    credit_amount: string;
+    receipt_ids: readonly string[];
   }>
 ): EpochClaimantLineItemDto[] | null {
   const parsedItems: EpochClaimantLineItemDto[] = [];
 
-  for (const item of statementItems) {
-    if (!item.claimant_key || !item.claimant) {
-      return null;
-    }
-
+  for (const item of statementLines) {
     let totalUnits: bigint;
     let amountCredits: bigint;
     try {
-      totalUnits = BigInt(item.total_units);
-      amountCredits = BigInt(item.amount_credits);
+      totalUnits = BigInt(item.final_units);
+      amountCredits = BigInt(item.credit_amount);
     } catch {
       return null;
     }
@@ -109,9 +104,9 @@ function parseClaimantItemsFromStatement(
       displayName: null,
       isLinked: item.claimant.kind === "user",
       totalUnits: totalUnits.toString(),
-      share: item.share,
+      share: item.pool_share,
       amountCredits: amountCredits.toString(),
-      receiptIds: [...(item.receipt_ids ?? [])],
+      receiptIds: [...item.receipt_ids],
     });
   }
 
@@ -236,28 +231,57 @@ export async function readFinalizedEpochClaimants(
   }
 
   const statement = await store.getStatementForEpoch(epoch.id);
-  const statementItems = statement
-    ? parseClaimantItemsFromStatement(statement.statementItems)
+  const statementLines = statement
+    ? parseClaimantItemsFromStatement(statement.statementLines)
     : null;
-  if (statement && statementItems) {
+  if (statement && statementLines) {
     return {
       epochId: epoch.id.toString(),
       poolTotalCredits: statement.poolTotalCredits.toString(),
-      items: await enrichClaimantPresentation(store, epoch, statementItems),
+      items: await enrichClaimantPresentation(store, epoch, statementLines),
+    };
+  }
+
+  const finalClaimantAllocations =
+    await store.getFinalClaimantAllocationsForEpoch(epoch.id);
+  if (finalClaimantAllocations.length > 0) {
+    const items = computeAttributionStatementLines(
+      finalClaimantAllocations.map((allocation) => ({
+        claimant: allocation.claimant,
+        finalUnits: allocation.finalUnits,
+        receiptIds: allocation.receiptIds,
+      })),
+      epoch.poolTotalCredits
+    ).map((item) =>
+      toLineItemDto({
+        claimant: item.claimant,
+        displayName: null,
+        isLinked: item.claimant.kind === "user",
+        totalUnits: item.finalUnits,
+        share: item.poolShare,
+        amountCredits: item.creditAmount,
+        receiptIds: item.receiptIds,
+      })
+    );
+
+    return {
+      epochId: epoch.id.toString(),
+      poolTotalCredits: epoch.poolTotalCredits.toString(),
+      items: await enrichClaimantPresentation(store, epoch, items),
     };
   }
 
   const [subjects, overrideRecords] = await Promise.all([
     loadClaimantShareSubjectsForEpoch(store, epoch),
-    store.getSubjectOverridesForEpoch(epoch.id),
+    store.getReviewSubjectOverridesForEpoch(epoch.id),
   ]);
 
-  const subjectOverrides = toSubjectOverrides(overrideRecords);
+  const subjectOverrides = toReviewSubjectOverrides(overrideRecords);
 
   const modifiedSubjects = applySubjectOverrides(subjects, subjectOverrides);
-  const claimantAllocations = buildClaimantAllocations(modifiedSubjects);
+  const claimantAllocations = computeFinalClaimantAllocations(modifiedSubjects);
 
-  const items = computeClaimantCreditLineItems(
+  const items = computeAttributionStatementLines(
     claimantAllocations,
     epoch.poolTotalCredits
   ).map((item) =>
@@ -265,9 +289,9 @@ export async function readFinalizedEpochClaimants(
       claimant: item.claimant,
       displayName: null,
       isLinked: item.claimant.kind === "user",
-      totalUnits: item.totalUnits,
-      share: item.share,
-      amountCredits: item.amountCredits,
+      totalUnits: item.finalUnits,
+      share: item.poolShare,
+      amountCredits: item.creditAmount,
       receiptIds: item.receiptIds,
     })
   );

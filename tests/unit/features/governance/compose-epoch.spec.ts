@@ -39,9 +39,8 @@ describe("composeEpochView", () => {
       [
         {
           userId: "d0000000-0000-4000-a000-000058641509",
-          proposedUnits: "8000",
-          finalUnits: null,
-          activityCount: 1,
+          projectedUnits: "8000",
+          receiptCount: 1,
         },
       ],
       [
@@ -118,14 +117,12 @@ function makeEpochView(
     unresolvedCount: 0,
     unresolvedActivities: [],
     contributors: contributors.map((c) => {
-      const proposedUnits = c.receipts
+      const units = c.receipts
         .reduce((s, r) => s + BigInt(r.units ?? "0"), 0n)
         .toString();
       const share =
         totalUnits > 0n
-          ? Math.round(
-              (Number(BigInt(proposedUnits)) / Number(totalUnits)) * 1000
-            ) / 10
+          ? Math.round((Number(BigInt(units)) / Number(totalUnits)) * 1000) / 10
           : 0;
       return {
         claimantKey: c.claimantKey,
@@ -135,10 +132,9 @@ function makeEpochView(
         claimantLabel: "Linked account",
         avatar: "👤",
         color: "220 15% 50%",
-        proposedUnits,
-        finalUnits: null,
+        units,
         creditShare: share,
-        activityCount: c.receipts.length,
+        receiptCount: c.receipts.length,
         receipts: c.receipts.map((r) => ({
           receiptId: r.receiptId,
           source: "github",
@@ -173,7 +169,7 @@ describe("applyOverridesToEpochView", () => {
     const result = applyOverridesToEpochView(epoch, overrides);
 
     // "2" display → 2000 milli-units at contributor level
-    expect(result.contributors[0].proposedUnits).toBe("2000");
+    expect(result.contributors[0].units).toBe("2000");
     // Receipt units are never mutated — UI reads original for strikethrough display
     expect(result.contributors[0].receipts[0].units).toBe("8000");
   });
@@ -194,7 +190,7 @@ describe("applyOverridesToEpochView", () => {
     const result = applyOverridesToEpochView(epoch, overrides);
 
     // r1: 3 * 1000 = 3000, r2: unchanged 2000, total = 5000
-    expect(result.contributors[0].proposedUnits).toBe("5000");
+    expect(result.contributors[0].units).toBe("5000");
     // Receipts preserve original units — never mutated by overrides
     expect(result.contributors[0].receipts[0].units).toBe("8000");
     expect(result.contributors[0].receipts[1].units).toBe("2000");
@@ -258,7 +254,7 @@ describe("applyOverridesToEpochView", () => {
     ]);
     const result = applyOverridesToEpochView(withNullUnits, overrides);
 
-    expect(result.contributors[0].proposedUnits).toBe("5000");
+    expect(result.contributors[0].units).toBe("5000");
   });
 
   it("ignores overrides with null overrideUnits — keeps original receipt weight", () => {
@@ -270,6 +266,6 @@ describe("applyOverridesToEpochView", () => {
     ]);
     const result = applyOverridesToEpochView(epoch, overrides);
 
-    expect(result.contributors[0].proposedUnits).toBe("8000");
+    expect(result.contributors[0].units).toBe("8000");
   });
 });

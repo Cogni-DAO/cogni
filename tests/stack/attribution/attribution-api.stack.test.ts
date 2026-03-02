@@ -3,9 +3,9 @@
 
 /**
  * Module: `@tests/stack/attribution/ledger-api.stack`
- * Purpose: Stack-level validation of public ledger API routes against a seeded closed epoch.
- * Scope: Tests 3 public read routes via HTTP fetch. Does not test auth-gated or write routes.
- * Invariants: PUBLIC_READS_CLOSED_ONLY, ALL_MATH_BIGINT, VALIDATE_IO, NODE_SCOPED.
+ * Purpose: Stack-level validation of public ledger API routes against a seeded finalized epoch.
+ * Scope: Tests 4 public read routes via HTTP fetch. Does not test auth-gated or write routes.
+ * Invariants: PUBLIC_READS_FINALIZED_ONLY, ALL_MATH_BIGINT, VALIDATE_IO, NODE_SCOPED.
  * Side-effects: IO (HTTP requests, database writes for seeding)
  * Notes: Seeds data using real node_id/scope_id from repo-spec since routes use getNodeId().
  * Links: src/app/api/v1/public/attribution/, src/contracts/attribution.*.v1.contract.ts
@@ -18,9 +18,9 @@ import { seedClosedEpoch } from "@tests/_fixtures/attribution/seed-attribution";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { EpochAllocationsOutputSchema } from "@/contracts/attribution.epoch-allocations.v1.contract";
 import { EpochClaimantsOutputSchema } from "@/contracts/attribution.epoch-claimants.v1.contract";
 import { EpochStatementOutputSchema } from "@/contracts/attribution.epoch-statement.v1.contract";
+import { EpochUserProjectionsOutputSchema } from "@/contracts/attribution.epoch-user-projections.v1.contract";
 import { ListEpochsOutputSchema } from "@/contracts/attribution.list-epochs.v1.contract";
 import { users } from "@/shared/db/schema";
 
@@ -38,7 +38,7 @@ function baseUrl(path: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Setup: seed a closed epoch with the real node_id
+// Setup: seed a finalized epoch with the real node_id
 // ---------------------------------------------------------------------------
 
 let seeded: SeededClosedEpoch;
@@ -46,7 +46,7 @@ let seeded: SeededClosedEpoch;
 beforeAll(async () => {
   const db = getSeedDb();
 
-  // Seed users required by activity_curation + allocations FK constraints
+  // Seed users required by selection + user-projection FK constraints
   await db
     .insert(users)
     .values([
@@ -77,7 +77,7 @@ beforeAll(async () => {
 
 describe("Public ledger API routes", () => {
   describe("GET /api/v1/public/attribution/epochs", () => {
-    it("returns closed epochs matching ListEpochsOutputSchema", async () => {
+    it("returns finalized epochs matching ListEpochsOutputSchema", async () => {
       const response = await fetchStackTest(
         baseUrl("/api/v1/public/attribution/epochs?limit=100&offset=0")
       );
@@ -133,43 +133,45 @@ describe("Public ledger API routes", () => {
     });
   });
 
-  describe("GET /api/v1/public/attribution/epochs/{id}/allocations", () => {
-    it("returns allocations for a closed epoch", async () => {
+  describe("GET /api/v1/public/attribution/epochs/{id}/user-projections", () => {
+    it("returns user projections for a closed epoch", async () => {
       const epochId = String(seeded.epoch.id);
       const response = await fetchStackTest(
-        baseUrl(`/api/v1/public/attribution/epochs/${epochId}/allocations`)
+        baseUrl(`/api/v1/public/attribution/epochs/${epochId}/user-projections`)
       );
       expect(response.status).toBe(200);
 
       const body = await response.json();
-      const parsed = EpochAllocationsOutputSchema.safeParse(body);
+      const parsed = EpochUserProjectionsOutputSchema.safeParse(body);
       if (!parsed.success) {
         throw new Error(
-          `Response does not match EpochAllocationsOutputSchema: ${parsed.error.message}`
+          `Response does not match EpochUserProjectionsOutputSchema: ${parsed.error.message}`
         );
       }
       expect(parsed.success).toBe(true);
 
       expect(parsed.data.epochId).toBe(epochId);
-      expect(parsed.data.allocations.length).toBe(2);
+      expect(parsed.data.userProjections.length).toBe(2);
 
       // Verify BigInt serialization (ALL_MATH_BIGINT)
-      for (const alloc of parsed.data.allocations) {
-        expect(typeof alloc.proposedUnits).toBe("string");
-        expect(typeof alloc.id).toBe("string");
+      for (const projection of parsed.data.userProjections) {
+        expect(typeof projection.projectedUnits).toBe("string");
+        expect(typeof projection.id).toBe("string");
       }
     });
 
     it("returns 404 for non-existent epoch", async () => {
       const response = await fetchStackTest(
-        baseUrl("/api/v1/public/attribution/epochs/999999/allocations")
+        baseUrl("/api/v1/public/attribution/epochs/999999/user-projections")
       );
       expect(response.status).toBe(404);
     });
 
     it("returns 400 for invalid epoch ID", async () => {
       const response = await fetchStackTest(
-        baseUrl("/api/v1/public/attribution/epochs/not-a-number/allocations")
+        baseUrl(
+          "/api/v1/public/attribution/epochs/not-a-number/user-projections"
+        )
       );
       expect(response.status).toBe(400);
     });
@@ -198,14 +200,16 @@ describe("Public ledger API routes", () => {
       }
       expect(parsed.data.statement.epochId).toBe(epochId);
       expect(parsed.data.statement.poolTotalCredits).toBe("10000");
-      expect(parsed.data.statement.items).toHaveLength(2);
+      expect(parsed.data.statement.statementLines).toHaveLength(2);
 
       // Verify statement line item structure
-      const item = parsed.data.statement.items[0];
-      expect(item).toHaveProperty("user_id");
-      expect(item).toHaveProperty("total_units");
-      expect(item).toHaveProperty("share");
-      expect(item).toHaveProperty("amount_credits");
+      const item = parsed.data.statement.statementLines[0];
+      expect(item).toHaveProperty("claimant_key");
+      expect(item).toHaveProperty("claimant");
+      expect(item).toHaveProperty("final_units");
+      expect(item).toHaveProperty("pool_share");
+      expect(item).toHaveProperty("credit_amount");
+      expect(item).toHaveProperty("receipt_ids");
     });
 
     it("returns 404 for non-existent epoch", async () => {

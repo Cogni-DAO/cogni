@@ -86,7 +86,7 @@ function makeMockStore(
     upsertSubjectOverride: vi.fn(),
     batchUpsertSubjectOverrides: vi.fn().mockResolvedValue([]),
     deleteSubjectOverride: vi.fn(),
-    getSubjectOverridesForEpoch: vi.fn().mockResolvedValue([]),
+    getReviewSubjectOverridesForEpoch: vi.fn().mockResolvedValue([]),
     ...overrides,
   } as AttributionStore;
 }
@@ -899,9 +899,9 @@ describe("finalizeEpoch", () => {
         id: "stmt-1",
         nodeId: NODE_ID,
         epochId: reviewEpoch.id,
-        allocationSetHash: params.statement.allocationSetHash,
+        finalAllocationSetHash: params.statement.finalAllocationSetHash,
         poolTotalCredits: params.statement.poolTotalCredits,
-        statementItems: params.statement.statementItems,
+        statementLines: params.statement.statementLines,
         supersedesStatementId: null,
         createdAt: new Date(),
       },
@@ -1023,22 +1023,20 @@ describe("finalizeEpoch", () => {
       approvers: [signer],
     });
 
-    expect(result.statementItemCount).toBe(2);
+    expect(result.statementLineCount).toBe(2);
     expect(finalizeEpochAtomic).toHaveBeenCalledTimes(1);
 
     const finalizeParams = finalizeEpochAtomic.mock.calls[0]?.[0];
-    expect(finalizeParams.statement.statementItems).toEqual([
+    expect(finalizeParams.statement.statementLines).toEqual([
       expect.objectContaining({
-        user_id: "identity:github:42",
         claimant_key: "identity:github:42",
-        total_units: "500",
-        amount_credits: "2500",
+        final_units: "500",
+        credit_amount: "3333",
       }),
       expect.objectContaining({
-        user_id: "user-1",
         claimant_key: "user:user-1",
-        total_units: "1500",
-        amount_credits: "7500",
+        final_units: "1000",
+        credit_amount: "6667",
       }),
     ]);
   });

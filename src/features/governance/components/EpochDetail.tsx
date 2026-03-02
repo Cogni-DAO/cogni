@@ -47,9 +47,7 @@ export function EpochDetail({
 }: EpochDetailProps): ReactElement {
   const sorted = useMemo(
     () =>
-      [...epoch.contributors].sort(
-        (a, b) => Number(b.proposedUnits) - Number(a.proposedUnits)
-      ),
+      [...epoch.contributors].sort((a, b) => Number(b.units) - Number(a.units)),
     [epoch.contributors]
   );
 
@@ -137,7 +135,7 @@ export function EpochDetail({
           </TableHeader>
           <TableBody>
             {sorted.map((c, i) => {
-              const totalScore = Math.round(Number(c.proposedUnits) / 1000);
+              const totalScore = Math.round(Number(c.units) / 1000);
               return (
                 <ExpandableTableRow
                   key={c.claimantKey}
@@ -187,7 +185,7 @@ export function EpochDetail({
                       key="activity"
                       className="text-muted-foreground text-xs"
                     >
-                      {c.activityCount}
+                      {c.receiptCount}
                     </span>,
                   ]}
                 />

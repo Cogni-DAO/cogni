@@ -13,7 +13,7 @@
 
 import {
   computeAllocationSetHash,
-  computeClaimantAllocationSetHash,
+  computeFinalClaimantAllocationSetHash,
   computeWeightConfigHash,
 } from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
@@ -90,23 +90,23 @@ describe("computeWeightConfigHash", () => {
   });
 });
 
-describe("computeClaimantAllocationSetHash", () => {
+describe("computeFinalClaimantAllocationSetHash", () => {
   it("matches legacy allocation hashes for resolved-user-only inputs", async () => {
     const legacy = await computeAllocationSetHash([
       { userId: "alice", valuationUnits: 1000n },
       { userId: "bob", valuationUnits: 2000n },
     ]);
 
-    const claimant = await computeClaimantAllocationSetHash([
-      { claimant: { kind: "user", userId: "alice" }, valuationUnits: 1000n },
-      { claimant: { kind: "user", userId: "bob" }, valuationUnits: 2000n },
+    const claimant = await computeFinalClaimantAllocationSetHash([
+      { claimant: { kind: "user", userId: "alice" }, finalUnits: 1000n },
+      { claimant: { kind: "user", userId: "bob" }, finalUnits: 2000n },
     ]);
 
     expect(claimant).toBe(legacy);
   });
 
   it("includes identity claimants in canonical order", async () => {
-    const a = await computeClaimantAllocationSetHash([
+    const a = await computeFinalClaimantAllocationSetHash([
       {
         claimant: {
           kind: "identity",
@@ -114,13 +114,13 @@ describe("computeClaimantAllocationSetHash", () => {
           externalId: "42",
           providerLogin: "alice",
         },
-        valuationUnits: 1000n,
+        finalUnits: 1000n,
       },
-      { claimant: { kind: "user", userId: "bob" }, valuationUnits: 500n },
+      { claimant: { kind: "user", userId: "bob" }, finalUnits: 500n },
     ]);
 
-    const b = await computeClaimantAllocationSetHash([
-      { claimant: { kind: "user", userId: "bob" }, valuationUnits: 500n },
+    const b = await computeFinalClaimantAllocationSetHash([
+      { claimant: { kind: "user", userId: "bob" }, finalUnits: 500n },
       {
         claimant: {
           kind: "identity",
@@ -128,7 +128,7 @@ describe("computeClaimantAllocationSetHash", () => {
           externalId: "42",
           providerLogin: "alice",
         },
-        valuationUnits: 1000n,
+        finalUnits: 1000n,
       },
     ]);
 

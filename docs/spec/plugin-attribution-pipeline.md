@@ -3,20 +3,20 @@ id: plugin-attribution-pipeline-spec
 type: spec
 title: "Plugin Attribution Pipeline: Profile-Based Enricher and Allocator Dispatch"
 status: draft
-spec_state: draft
+spec_state: proposed
 trust: draft
-summary: "Two-package plugin architecture for the attribution pipeline. @cogni/attribution-pipeline is the stable framework (contracts, registries, dispatch, ordering). @cogni/attribution-pipeline-plugins houses built-in implementations and profiles. The executor (scheduler-worker) is a generic shell — zero plugin-specific code."
+summary: "Two-package plugin architecture for the attribution pipeline. @cogni/attribution-pipeline-contracts is the stable framework (contracts, registries, dispatch, ordering). @cogni/attribution-pipeline-plugins houses built-in implementations and profiles. The executor (scheduler-worker) is a generic shell — zero plugin-specific code."
 read_when: Adding a new enricher plugin, adding a new allocation algorithm, understanding how credit_estimate_algo drives the pipeline, working on quarterly review epochs, or implementing a custom attribution pipeline for a new repository.
 implements: proj.transparent-credit-payouts
 owner: derekg1729
 created: 2026-03-01
-verified: 2026-03-01
+verified: 2026-03-02
 tags: [governance, attribution, plugins, architecture]
 ---
 
 # Plugin Attribution Pipeline: Profile-Based Enricher and Allocator Dispatch
 
-> A **pipeline profile** selects which enricher plugins run and which allocation algorithm computes credit. Profiles are plain data keyed by `credit_estimate_algo` from `repo-spec.yaml`. Adding a new enricher or allocator means writing a descriptor + adapter in the plugins package and registering it in a profile — no switch/case editing, no hardcoded wiring, no touching the framework. The framework package (`@cogni/attribution-pipeline`) is boring and stable; the plugins package (`@cogni/attribution-pipeline-plugins`) is where iteration happens.
+> A **pipeline profile** selects which enricher plugins run and which allocation algorithm computes credit. Profiles are plain data keyed by `credit_estimate_algo` from `repo-spec.yaml`. Adding a new enricher or allocator means writing a descriptor + adapter in the plugins package and registering it in a profile — no switch/case editing, no hardcoded wiring, no touching the framework. The framework package (`@cogni/attribution-pipeline-contracts`) is boring and stable; the plugins package (`@cogni/attribution-pipeline-plugins`) is where iteration happens.
 
 ### Key References
 
@@ -54,7 +54,7 @@ graph TD
 
     WS --> PA["ProposedAllocation[]"]
 
-    subgraph "@cogni/attribution-pipeline (framework)"
+    subgraph "@cogni/attribution-pipeline-contracts (framework)"
         P
         EL
         AD
@@ -72,16 +72,16 @@ graph TD
 
 The plugin system is split into two packages with a clear stability boundary:
 
-**`@cogni/attribution-pipeline`** — Framework. Boring, stable, no I/O. Defines contracts (port interfaces), registries, dispatch logic, ordering/dependency validation, and canonical hashing helpers. A customer implementing a custom plugin depends _only_ on this package. Changes here are rare and require careful versioning.
+**`@cogni/attribution-pipeline-contracts`** — Framework. Boring, stable, no I/O. Defines contracts (port interfaces), registries, dispatch logic, ordering/dependency validation, and canonical hashing helpers. A customer implementing a custom plugin depends _only_ on this package. Changes here are rare and require careful versioning.
 
 **`@cogni/attribution-pipeline-plugins`** — Implementations. This is where churn happens. Houses all built-in plugin implementations (descriptor + adapter per plugin) and built-in profile definitions. New enrichers, new allocators, new profiles — all land here. Depends on the framework package for contracts.
 
-**Dependency direction:** `attribution-pipeline-plugins → attribution-pipeline → attribution-ledger`. Never reverse.
+**Dependency direction:** `attribution-pipeline-plugins → attribution-pipeline-contracts → attribution-ledger`. Never reverse.
 
 ```
-packages/attribution-pipeline/              # framework — stable contracts
+packages/attribution-pipeline-contracts/    # framework — stable contracts
 ├── AGENTS.md
-├── package.json            # @cogni/attribution-pipeline
+├── package.json            # @cogni/attribution-pipeline-contracts
 ├── tsconfig.json           # composite, references @cogni/attribution-ledger
 ├── tsup.config.ts
 ├── src/
@@ -90,16 +90,18 @@ packages/attribution-pipeline/              # framework — stable contracts
 │   ├── allocator.ts        # AllocatorDescriptor, AllocationContext, dispatchAllocator()
 │   ├── profile.ts          # PipelineProfile, ProfileRegistry, resolveProfile()
 │   ├── ordering.ts         # enricher dependency validation, cycle detection
-│   └── validation.ts       # evaluation write validation (evaluationRef, algoRef, inputsHash, schemaRef)
+│   ├── validation.ts       # evaluation write validation (evaluationRef, algoRef, inputsHash, schemaRef)
+│   └── core-evaluations.ts # claimant-shares core evaluation constants + effective enricher merging
 └── tests/
     ├── profile.test.ts
+    ├── allocator.test.ts
     ├── ordering.test.ts
     └── validation.test.ts
 
 packages/attribution-pipeline-plugins/      # built-in implementations — churn lives here
 ├── AGENTS.md
 ├── package.json            # @cogni/attribution-pipeline-plugins
-├── tsconfig.json           # composite, references @cogni/attribution-pipeline
+├── tsconfig.json           # composite, references @cogni/attribution-pipeline-contracts
 ├── tsup.config.ts
 ├── src/
 │   ├── index.ts            # public barrel (re-exports all plugin registrations)
@@ -107,12 +109,6 @@ packages/attribution-pipeline-plugins/      # built-in implementations — churn
 │   │   ├── echo/
 │   │   │   ├── descriptor.ts       # EchoPayload type, buildEchoPayload(), constants
 │   │   │   └── adapter.ts          # EnricherAdapter impl (I/O via injected EnricherContext)
-│   │   ├── claimant-shares/
-│   │   │   ├── descriptor.ts       # re-exports ledger domain types, descriptor constant
-│   │   │   └── adapter.ts          # EnricherAdapter impl
-│   │   ├── work-item-links/
-│   │   │   ├── descriptor.ts       # WorkItemLinksPayload, extractWorkItemIds(), constants
-│   │   │   └── adapter.ts          # EnricherAdapter impl
 │   │   └── weight-sum/
 │   │       └── descriptor.ts       # AllocatorDescriptor wrapping attribution-ledger's weightSumV0
 │   ├── profiles/
@@ -122,7 +118,8 @@ packages/attribution-pipeline-plugins/      # built-in implementations — churn
     ├── plugins/
     │   ├── echo/adapter.test.ts
     │   └── weight-sum/descriptor.test.ts
-    └── profiles/cogni-v0.0.test.ts
+    ├── profiles/cogni-v0.0.test.ts
+    └── registry.test.ts
 ```
 
 ### Profile Type
@@ -205,7 +202,7 @@ Future profiles add enricher refs (e.g., `cogni.work_item_links.v0`, `cogni.ai_s
 
 ### Enricher Plugin Interface
 
-Defined in `@cogni/attribution-pipeline` (framework). Implemented in `@cogni/attribution-pipeline-plugins` (built-ins) or in customer code.
+Defined in `@cogni/attribution-pipeline-contracts` (framework). Implemented in `@cogni/attribution-pipeline-plugins` (built-ins) or in customer code.
 
 **`EnricherDescriptor`** — Pure data. Constants, payload types, and optional pure builder functions. No I/O.
 
@@ -273,7 +270,7 @@ The executor iterates `profile.enricherRefs` in declared order (respecting `depe
 
 ### Allocator Interface
 
-Defined in `@cogni/attribution-pipeline` (framework). Implemented in `@cogni/attribution-pipeline-plugins` (built-ins).
+Defined in `@cogni/attribution-pipeline-contracts` (framework). Implemented in `@cogni/attribution-pipeline-plugins` (built-ins).
 
 ```typescript
 interface AllocatorDescriptor {
@@ -323,7 +320,7 @@ The `weight-sum-v0` descriptor (in the plugins package) wraps the existing `comp
 
 ### Enricher Ordering and Dependency Validation
 
-Defined in `@cogni/attribution-pipeline/src/ordering.ts` (framework).
+Defined in `@cogni/attribution-pipeline-contracts/src/ordering.ts` (framework).
 
 Enricher execution order is **explicit**, not implicit. Each `EnricherRef` in a profile declares its `dependsOn[]` — the evaluation refs that must complete before it runs. The framework validates the dependency graph at profile registration time:
 
@@ -359,7 +356,7 @@ The workflow passes `profile.epochKind` when creating the epoch. No branching in
 ### Boundary Summary
 
 - **`packages/attribution-ledger/`** — Pure domain. Owns `AttributionStore`, hashing, statement math, `claimant-shares.ts`, `allocation.ts` (existing implementations). Never imports from either pipeline package (PLUGIN_NO_LEDGER_CORE_LEAK).
-- **`packages/attribution-pipeline/`** — **Framework.** Boring, stable, no I/O. Owns all plugin contracts (`EnricherAdapter`, `AllocatorDescriptor`, `PipelineProfile`), registries, dispatch logic, ordering/dependency validation, and evaluation write validation. Customers depend on this package to write custom plugins. Changes here are rare and versioned carefully.
+- **`packages/attribution-pipeline-contracts/`** — **Framework.** Boring, stable, no I/O. Owns all plugin contracts (`EnricherAdapter`, `AllocatorDescriptor`, `PipelineProfile`), registries, dispatch logic, ordering/dependency validation, and evaluation write validation. Customers depend on this package to write custom plugins. Changes here are rare and versioned carefully.
 - **`packages/attribution-pipeline-plugins/`** — **Built-in implementations.** This is where churn happens. Owns all built-in plugin implementations (descriptor + adapter per plugin), built-in profile definitions, and `createDefaultRegistries()`. Depends on the framework package for contracts. New enrichers, allocators, and profiles land here.
 - **Executor (`services/scheduler-worker/`)** — Runtime shell. Imports registries from the plugins package (or builds custom ones). Wires `EnricherContext` with live dependencies (store, logger, nodeId). Executes the profile's enricher loop and allocator dispatch. Persists results. Contains **zero plugin-specific code** (EXECUTOR_IS_GENERIC).
 
@@ -368,7 +365,7 @@ The workflow passes `profile.epochKind` when creating the epoch. No branching in
 Provide a plugin architecture for the attribution pipeline that supports three use cases:
 
 1. **Internal iteration** — Cogni developers rapidly add new enrichers, allocation algorithms, and pipeline versions by writing a descriptor + adapter in the plugins package and publishing a new profile. No switch/case editing, no touching the framework, no modifying the epoch lifecycle.
-2. **Customer extensibility** — A customer installs the Cogni review app, creates a `repo-spec.yaml`, and either chooses a built-in profile or implements a custom enricher/allocator against the stable interfaces from `@cogni/attribution-pipeline` (the framework — not the plugins package).
+2. **Customer extensibility** — A customer installs the Cogni review app, creates a `repo-spec.yaml`, and either chooses a built-in profile or implements a custom enricher/allocator against the stable interfaces from `@cogni/attribution-pipeline-contracts` (the framework — not the plugins package).
 3. **Many pipelines, safe evolution** — Multiple profiles can coexist (weekly activity, quarterly review, custom). Epochs pin exact plugin refs at close. New profile versions don't retroactively change closed epochs. Determinism is enforced by hashing inputs + plugin version.
 
 ## Non-Goals
@@ -380,7 +377,7 @@ Provide a plugin architecture for the attribution pipeline that supports three u
 
 ## Invariants
 
-### Framework Invariants (enforced by `@cogni/attribution-pipeline`)
+### Framework Invariants (enforced by `@cogni/attribution-pipeline-contracts`)
 
 | Rule                          | Constraint                                                                                                                                                                                                                                                                                                             |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -393,15 +390,15 @@ Provide a plugin architecture for the attribution pipeline that supports three u
 | ENRICHER_DETERMINISTIC        | Given the same `(inputs + plugin version)`, an enricher must produce the same `(inputsHash, payloadHash, payloadJson)`. Determinism is enforced by including all relevant inputs in `inputsHash` computation. The `algoRef` + `schemaRef` on the evaluation record identify the exact plugin version that produced it. |
 | ALLOCATOR_NEEDS_DECLARED      | Each `AllocatorDescriptor` declares `requiredEvaluationRefs[]`. `dispatchAllocator()` validates that all required evaluation refs are present in `AllocationContext.evaluations` before calling `compute()`. Missing evaluations throw, not silently degrade.                                                          |
 | ALLOCATION_CONTEXT_EXTENSIBLE | `AllocationContext` is the single input type for all allocators. New allocators access enricher outputs via `context.evaluations` (a `Map<evaluationRef, payload>`). Context grows by adding optional fields, never by changing the `compute()` signature.                                                             |
-| FRAMEWORK_NO_IO               | The framework package (`@cogni/attribution-pipeline`) contains zero I/O, zero side effects, zero env reads. It is pure types, pure functions, and validation logic. All I/O lives in adapter implementations (plugins package) or the executor (scheduler-worker).                                                     |
+| FRAMEWORK_NO_IO               | The framework package (`@cogni/attribution-pipeline-contracts`) contains zero I/O, zero side effects, zero env reads. It is pure types, pure functions, and validation logic. All I/O lives in adapter implementations (plugins package) or the executor (scheduler-worker).                                           |
 
 ### Boundary Invariants (enforced by package dependencies and dep-cruiser)
 
-| Rule                           | Constraint                                                                                                                                                                                                                                                                                                              |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PLUGIN_NO_LEDGER_CORE_LEAK     | `packages/attribution-ledger/` must never import from either pipeline package. Dependency direction: `attribution-pipeline-plugins → attribution-pipeline → attribution-ledger`. Plugin-specific types (e.g., `WorkItemLinksPayload`, `EchoPayload`) are defined in the plugins package, not in the ledger.             |
-| FRAMEWORK_STABLE_PLUGINS_CHURN | The framework package (`@cogni/attribution-pipeline`) changes rarely — it defines contracts. The plugins package (`@cogni/attribution-pipeline-plugins`) changes often — it houses implementations. A customer depends on the framework to write a plugin; they never need to import from the built-in plugins package. |
-| EXECUTOR_IS_GENERIC            | The executor (`services/scheduler-worker/`) contains no plugin-specific logic. It resolves profiles, iterates enricher refs, dispatches to the adapter registry, and calls `dispatchAllocator()`. Adding a new plugin requires zero changes to the executor — only changes to the plugins package.                      |
+| Rule                           | Constraint                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PLUGIN_NO_LEDGER_CORE_LEAK     | `packages/attribution-ledger/` must never import from either pipeline package. Dependency direction: `attribution-pipeline-plugins → attribution-pipeline-contracts → attribution-ledger`. Plugin-specific types (e.g., `WorkItemLinksPayload`, `EchoPayload`) are defined in the plugins package, not in the ledger.             |
+| FRAMEWORK_STABLE_PLUGINS_CHURN | The framework package (`@cogni/attribution-pipeline-contracts`) changes rarely — it defines contracts. The plugins package (`@cogni/attribution-pipeline-plugins`) changes often — it houses implementations. A customer depends on the framework to write a plugin; they never need to import from the built-in plugins package. |
+| EXECUTOR_IS_GENERIC            | The executor (`services/scheduler-worker/`) contains no plugin-specific logic. It resolves profiles, iterates enricher refs, dispatches to the adapter registry, and calls `dispatchAllocator()`. Adding a new plugin requires zero changes to the executor — only changes to the plugins package.                                |
 
 ### Epoch Provenance Invariants (enforced by the executor at write time)
 
@@ -437,11 +434,12 @@ Provide a plugin architecture for the attribution pipeline that supports three u
 
 | File                                                                | Purpose                                                               |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `packages/attribution-pipeline/src/profile.ts`                      | PipelineProfile type, ProfileRegistry, resolveProfile()               |
-| `packages/attribution-pipeline/src/enricher.ts`                     | EnricherDescriptor + EnricherAdapter port interface + EnricherContext |
-| `packages/attribution-pipeline/src/allocator.ts`                    | AllocatorDescriptor, AllocationContext, dispatchAllocator()           |
-| `packages/attribution-pipeline/src/ordering.ts`                     | Enricher dependency DAG validation, cycle detection                   |
-| `packages/attribution-pipeline/src/validation.ts`                   | Evaluation write validation (all required fields present)             |
+| `packages/attribution-pipeline-contracts/src/profile.ts`            | PipelineProfile type, ProfileRegistry, resolveProfile()               |
+| `packages/attribution-pipeline-contracts/src/enricher.ts`           | EnricherDescriptor + EnricherAdapter port interface + EnricherContext |
+| `packages/attribution-pipeline-contracts/src/allocator.ts`          | AllocatorDescriptor, AllocationContext, dispatchAllocator()           |
+| `packages/attribution-pipeline-contracts/src/ordering.ts`           | Enricher dependency DAG validation, cycle detection                   |
+| `packages/attribution-pipeline-contracts/src/validation.ts`         | Evaluation write validation (all required fields present)             |
+| `packages/attribution-pipeline-contracts/src/core-evaluations.ts`   | Claimant-shares core evaluation constants + effective enricher refs   |
 | `packages/attribution-pipeline-plugins/src/plugins/*/descriptor.ts` | Per-plugin pure constants, types, builder functions                   |
 | `packages/attribution-pipeline-plugins/src/plugins/*/adapter.ts`    | Per-plugin EnricherAdapter implementations (I/O via injected deps)    |
 | `packages/attribution-pipeline-plugins/src/profiles/*.ts`           | Built-in profile definitions                                          |

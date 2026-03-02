@@ -13,13 +13,13 @@
 
 import {
   applySubjectOverrides,
-  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   buildEIP712TypedData,
   CLAIMANT_SHARES_EVALUATION_REF,
-  computeClaimantAllocationSetHash,
+  computeFinalClaimantAllocationSetHash,
+  computeFinalClaimantAllocations,
   parseClaimantSharesPayload,
-  toSubjectOverrides,
+  toReviewSubjectOverrides,
 } from "@cogni/attribution-ledger";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -67,7 +67,7 @@ export const GET = wrapRouteHandlerWithLogging<{
       );
     }
 
-    // Mirror finalizeEpoch activity logic to produce identical allocationSetHash
+    // Mirror finalizeEpoch activity logic to produce identical finalAllocationSetHash
 
     // Pool total
     const poolComponents = await store.getPoolComponentsForEpoch(epochId);
@@ -91,23 +91,25 @@ export const GET = wrapRouteHandlerWithLogging<{
         }).subjects;
 
     // Load and apply subject overrides
-    const overrideRecords = await store.getSubjectOverridesForEpoch(epochId);
-    const subjectOverrides = toSubjectOverrides(overrideRecords);
+    const overrideRecords =
+      await store.getReviewSubjectOverridesForEpoch(epochId);
+    const subjectOverrides = toReviewSubjectOverrides(overrideRecords);
 
     const modifiedSubjects = applySubjectOverrides(
       claimantSubjects,
       subjectOverrides
     );
-    const claimantAllocations = buildClaimantAllocations(modifiedSubjects);
+    const claimantAllocations =
+      computeFinalClaimantAllocations(modifiedSubjects);
 
-    const allocationSetHash =
-      await computeClaimantAllocationSetHash(claimantAllocations);
+    const finalAllocationSetHash =
+      await computeFinalClaimantAllocationSetHash(claimantAllocations);
 
     const typedData = buildEIP712TypedData({
       nodeId: getNodeId(),
       scopeId: getScopeId(),
       epochId: id,
-      allocationSetHash,
+      finalAllocationSetHash,
       poolTotalCredits: poolTotal.toString(),
       chainId: CHAIN_ID,
     });
@@ -115,7 +117,7 @@ export const GET = wrapRouteHandlerWithLogging<{
     ctx.log.info(
       {
         epochId: id,
-        allocationSetHash: `${allocationSetHash.slice(0, 12)}...`,
+        finalAllocationSetHash: `${finalAllocationSetHash.slice(0, 12)}...`,
       },
       "ledger.sign-data_success"
     );

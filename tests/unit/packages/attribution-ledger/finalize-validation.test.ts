@@ -37,7 +37,7 @@ const TYPED_DATA_PARAMS = {
   nodeId: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d",
   scopeId: "a28a8b1e-1f9d-5cd5-9329-569e4819feda",
   epochId: "42",
-  allocationSetHash: "abc123def456",
+  finalAllocationSetHash: "abc123def456",
   poolTotalCredits: "10000",
   chainId: 8453,
 };
@@ -121,7 +121,7 @@ describe("finalizeEpoch validation: EIP-712 signature", () => {
     expect(isValid).toBe(false);
   });
 
-  it("signature over different allocationSetHash fails verification", async () => {
+  it("signature over different finalAllocationSetHash fails verification", async () => {
     // Sign with correct hash
     const typedData = buildEIP712TypedData(TYPED_DATA_PARAMS);
     const signature = await approverAccount.signTypedData({
@@ -134,7 +134,7 @@ describe("finalizeEpoch validation: EIP-712 signature", () => {
     // Verify against different hash — simulates hash mismatch
     const tamperedTypedData = buildEIP712TypedData({
       ...TYPED_DATA_PARAMS,
-      allocationSetHash: "tampered-hash",
+      finalAllocationSetHash: "tampered-hash",
     });
     const isValid = await verifyTypedData({
       address: approverAccount.address,

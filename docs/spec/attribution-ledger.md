@@ -10,7 +10,7 @@ read_when: Working on credit statements, activity ingestion, epoch enrichers, ep
 implements: proj.transparent-credit-payouts
 owner: derekg1729
 created: 2026-02-20
-verified: 2026-03-01
+verified: 2026-03-02
 tags: [governance, transparency, payments, attribution]
 ---
 
@@ -38,9 +38,9 @@ tags: [governance, transparency, payments, attribution]
 | RECEIPT_IDEMPOTENT               | `ingestion_receipts.id` is deterministic from source data (e.g., `github:pr:owner/repo:42`). Re-ingestion of the same receipt is a no-op (PK conflict → skip).                                                                                                                                                                                                                          |
 | POOL_IMMUTABLE                   | DB trigger rejects UPDATE/DELETE on `epoch_pool_components`. Once recorded, a pool component's algorithm, inputs, and amount cannot be changed.                                                                                                                                                                                                                                         |
 | IDENTITY_BEST_EFFORT             | Ingestion receipts carry `platform_user_id` and optional `platform_login`. Resolution to `user_id` via `user_bindings` is best-effort. Unresolved receipts keep `user_id = NULL` in selection, but claimant-share evaluations preserve them as identity claimants so attribution remains visible and can resolve later when bindings appear.                                            |
-| ADMIN_FINALIZES_ONCE             | An admin reviews proposed allocations, optionally adjusts `final_units`, then triggers finalize. Single action closes the epoch — no per-event approval workflow.                                                                                                                                                                                                                       |
-| APPROVERS_PER_SCOPE              | Each scope declares its own `approvers[]` list. Epoch finalize requires 1-of-N EIP-191 signature from the scope's approvers. V0: single scope, single approver in repo-spec. Multi-scope: each `.cogni/projects/*.yaml` carries its own list.                                                                                                                                           |
-| SIGNATURE_SCOPE_BOUND            | Signed message must include `node_id + scope_id + allocation_set_hash`. Prevents cross-scope and cross-node signature replay.                                                                                                                                                                                                                                                           |
+| ADMIN_FINALIZES_ONCE             | An admin reviews recomputable user projections, optionally records per-subject review overrides, then triggers finalize. Finalization materializes canonical claimant-scoped final allocations before signing. Single action closes the epoch — no per-event approval workflow.                                                                                                         |
+| APPROVERS_PER_SCOPE              | Each scope declares its own `approvers[]` list. Epoch finalize requires 1-of-N EIP-712 signature from the scope's approvers. V0: single scope, single approver in repo-spec. Multi-scope: each `.cogni/projects/*.yaml` carries its own list.                                                                                                                                           |
+| SIGNATURE_SCOPE_BOUND            | Signed typed data must include `node_id + scope_id + final_allocation_set_hash`. Prevents cross-scope and cross-node signature replay.                                                                                                                                                                                                                                                  |
 | EPOCH_THREE_PHASE                | Epochs progress through `open → review → finalized`. No backward transitions. `open`: ingest + select. `review`: ingestion closed, selection still allowed. `finalized`: immutable forever.                                                                                                                                                                                             |
 | INGESTION_CLOSED_ON_REVIEW       | App-level enforcement — `CollectEpochWorkflow` exits when `epoch.status != 'open'`. No DB trigger on `ingestion_receipts` (V0) because `ingestion_receipts` has no `epoch_id` column; epoch membership is determined at the selection layer. Raw facts locked once review begins; late arrivals rejected. Selection (inclusion, weight overrides, identity resolution) remains mutable. |
 | WEIGHTS_INTEGER_ONLY             | All weight values are integer milli-units (e.g., 8000 for PR merged, 500 for Discord message). No floating point anywhere (ALL_MATH_BIGINT).                                                                                                                                                                                                                                            |
@@ -74,7 +74,7 @@ tags: [governance, transparency, payments, attribution]
 | WEIGHT_PINNING                   | Weight config is set at epoch creation. Subsequent collection runs use the existing epoch's `weight_config`, not the input-derived config. Config drift logs a warning. `weight_config_hash` (SHA-256 of canonical JSON) is computed and locked at `closeIngestion` as the reproducibility anchor.                                                                                      |
 | CONFIG_LOCKED_AT_REVIEW          | At `closeIngestion` (open→review), the epoch's `weight_config_hash` and `allocation_algo_ref` are computed and locked. These fields are NULL while open and immutable after review. All subsequent verification and statement computation uses these locked snapshots.                                                                                                                  |
 | ALLOCATION_ALGO_PINNED           | `allocation_algo_ref` is NULL while epoch is open, set at `closeIngestion`. `computeProposedAllocations(algoRef, events, weightConfig)` dispatches to the correct versioned algorithm. Same inputs + same algoRef → identical output. V0: `weight-sum-v0` (simple per-event-type weight sum). Future: content-addressable ref.                                                          |
-| ALLOCATION_PRESERVES_OVERRIDES   | Periodic recomputation (upsert) updates only `proposed_units` and `activity_count`. Never touches admin-set `final_units` or `override_reason`. Stale allocations (user no longer in proposed set) are auto-removed only if `final_units IS NULL` — admin overrides are never auto-deleted.                                                                                             |
+| ALLOCATION_PRESERVES_OVERRIDES   | Periodic recomputation updates only `epoch_user_projections.projected_units` and `receipt_count`. Review overrides live separately in `epoch_review_subject_overrides`, and signed canonical units live in `epoch_final_claimant_allocations`. Recomputing projections never mutates review overrides or finalized claimant allocations.                                                |
 | POOL_LOCKED_AT_REVIEW            | No new pool component inserts after `closeIngestion` (open→review). `component_id` validated against V0 allowlist: `base_issuance`, `kpi_bonus_v0`, `top_up`. Application-level enforcement.                                                                                                                                                                                            |
 | EPOCH_WINDOW_DETERMINISTIC       | Epoch boundaries computed by `computeEpochWindowV1()` — pure function, Monday-aligned UTC, anchored to 2026-01-05. Same `(asOf, epochLengthDays)` always yields the same window.                                                                                                                                                                                                        |
 
@@ -136,12 +136,12 @@ Loaded via `getLedgerConfig()` in `repoSpec.server.ts`, validated by Zod schema 
 Admin capability (wallet must be in scope's `approvers[]`) required for:
 
 - Triggering activity collection (or let Temporal cron handle it)
-- Adjusting allocation `final_units`
+- Editing review subject overrides
 - Triggering epoch finalize
 - Recording pool components
-- Signing epoch statements (EIP-191, required before finalize)
+- Signing epoch statements (EIP-712 typed data, required before finalize)
 
-Public read routes expose closed-epoch data only (epochs list, allocations, statements). Ingestion receipts (PII fields: platformUserId, platformLogin, artifactUrl) require SIWE authentication. Open/current epoch data requires SIWE authentication.
+Public read routes expose closed-epoch data only (epochs list, user projections, claimant attribution, statements). Ingestion receipts (PII fields: platformUserId, platformLogin, artifactUrl) require SIWE authentication. Open/current epoch data requires SIWE authentication.
 
 ### Pipeline Architecture — Three Plugin Surfaces
 
@@ -242,7 +242,7 @@ Epoch status models **governance finality**, not payment execution. Distribution
                  → Resolves identities → updates user_id on selection rows
                  → Runs enrichers → epoch_evaluations (draft, overwritten each pass)
                  → `cogni.claimant_shares.v0` emits claimant-share subjects from selected receipts
-                 → Computes proposed allocations → epoch_allocations (resolved-user override surface)
+                 → Computes recomputable per-user rollups → epoch_user_projections
                  → Admin selects: adjust inclusion, resolve identities, record pool components
 
 2. REVIEW        closeIngestionWithEvaluations locks config + evaluations (CONFIG_LOCKED_AT_REVIEW, EVALUATION_FINAL_ATOMIC)
@@ -251,36 +251,37 @@ Epoch status models **governance finality**, not payment execution. Distribution
                  → No new ingestion_receipts (INGESTION_CLOSED_ON_REVIEW)
                  → No new pool components (POOL_LOCKED_AT_REVIEW)
                  → Selection still mutable: adjust inclusion, weight overrides, identity resolution
-                 → Admin reviews + tweaks proposed allocations (not blindly trusting the algo)
-                 → Allocations recomputed on demand from selected receipts + locked evaluations + locked weight_config
+                 → Admin reviews + records `epoch_review_subject_overrides` (absolute override values, not deltas)
+                 → User projections recomputed on demand from selected receipts + locked evaluations + locked weight_config
                  → Read models resolve current display names and linked/unlinked state at read time
 
 3. FINALIZED     Admin triggers finalize (requires signature + base_issuance)
-                 → Reads epoch_allocations (final_units, falling back to proposed_units for resolved users)
-                 → Reads locked claimant shares, applies resolved-user overrides, preserves unresolved identity claimants
+                 → Reads locked claimant-share subjects + review overrides
+                 → Materializes `epoch_final_claimant_allocations` (canonical signed claimant units)
                  → Reads pool components → pool_total_credits
-                 → computeClaimantCreditLineItems(claimant_allocations, pool_total) → epoch_statement
+                 → computeAttributionStatementLines(final_claimant_allocations, pool_total) → epoch_statement
                  → Stores statement + signature atomically → epoch immutable forever
 ```
 
 **Transitions:**
 
 - `open → review`: Auto via Temporal at `period_end + grace_period` (configurable, default 24h), **or** admin triggers early via API route. Same state, different trigger.
-- `review → finalized`: Admin action. Requires 1-of-N EIP-191 signature from scope's `approvers[]` + at least one `base_issuance` pool component.
+- `review → finalized`: Admin action. Requires 1-of-N EIP-712 signature from scope's `approvers[]` + at least one `base_issuance` pool component.
 - No backward transitions. Corrections use `supersedes_statement_id` on a new epoch statement.
 
 ### Statement Computation
 
-Finalization is claimant-aware. Given locked claimant-share subjects, resolved-user overrides, and a total pool:
+Finalization is claimant-aware. Given locked claimant-share subjects, review subject overrides, and a total pool:
 
 1. Load claimant-share subjects from the locked `cogni.claimant_shares.v0` evaluation (fallback: rebuild deterministically from selected receipts)
-2. Apply `final_units` overrides from `epoch_allocations` to resolved `user` claimants only; unresolved identity claimants remain unchanged
-3. Compute each claimant's share: `claimant_units / total_units`
-4. Distribute `pool_total_credits` proportionally using BIGINT arithmetic
-5. Apply largest-remainder rounding to ensure exact sum equals pool total
-6. Output statement items shaped like `[{ user_id, total_units, share, amount_credits, claimant_key, claimant, receipt_ids }]`
+2. Apply `epoch_review_subject_overrides` to subject units and/or claimant share splits
+3. Expand subjects into canonical claimant-scoped unit rows and persist them in `epoch_final_claimant_allocations`
+4. Compute each claimant's share: `final_units / total_units`
+5. Distribute `pool_total_credits` proportionally using BIGINT arithmetic
+6. Apply largest-remainder rounding to ensure exact sum equals pool total
+7. Output statement lines shaped like `[{ claimant_key, claimant, final_units, pool_share, credit_amount, receipt_ids }]`
 
-The allocation set hash (SHA-256 of canonical claimant allocation data, sorted by claimant key) pins the exact finalized input set. Combined with `pool_total_credits`, locked evaluations, and `weight_config`, the statement is fully deterministic and reproducible.
+The final allocation set hash (SHA-256 of canonical claimant allocation data, sorted by claimant key) pins the exact finalized input set. Combined with `pool_total_credits`, locked evaluations, review overrides, and `weight_config`, the statement is fully deterministic and reproducible.
 
 ### Pool Model
 
@@ -297,11 +298,12 @@ Each component stores `algorithm_version`, `inputs_json`, `amount_credits`, and 
 `GET /api/v1/attribution/verify/epoch/:id` performs independent verification from **stored data only** (not re-fetching from GitHub/Discord, which may be private or non-deterministic):
 
 1. Fetch all `ingestion_receipts` for the epoch
-2. Recompute proposed allocations from receipts + stored `weight_config`
-3. Read `epoch_allocations` (final_units)
-4. Recompute statement items from allocations + pool components
-5. Compare recomputed values against stored statement
-6. Return verification report
+2. Recompute user projections from receipts + stored `weight_config`
+3. Read locked claimant-share evaluation + `epoch_review_subject_overrides`
+4. Recompute final claimant allocations and compare them against `epoch_final_claimant_allocations`
+5. Recompute statement lines from final claimant allocations + pool components
+6. Compare recomputed values against stored statement
+7. Return verification report
 
 ## Schema
 
@@ -382,24 +384,54 @@ After each collection run, the `materializeSelection` activity creates selection
 3. **Query by epochId**: The activity queries receipts by epoch membership (via the epoch's `period_start`/`period_end`), using `epochId` as the authoritative scope. The epoch row is loaded first; period dates serve as a guard assertion.
 4. **Provider-scoped resolution**: Identity resolution queries `user_bindings` filtered by `provider` (e.g., `'github'`). No cross-provider resolution. The `platformUserId` stored in `ingestion_receipts` must match the `external_id` format in `user_bindings` (GitHub: numeric `databaseId` as string).
 
-### `epoch_allocations` — per-user override surface
+### `epoch_user_projections` — recomputable per-user rollups
 
-| Column            | Type             | Notes                                              |
-| ----------------- | ---------------- | -------------------------------------------------- |
-| `id`              | UUID PK          |                                                    |
-| `node_id`         | UUID             | NOT NULL (NODE_SCOPED)                             |
-| `epoch_id`        | BIGINT FK→epochs |                                                    |
-| `user_id`         | TEXT FK→users    | NOT NULL — resolved human override subject         |
-| `proposed_units`  | BIGINT NOT NULL  | Computed from weight policy                        |
-| `final_units`     | BIGINT           | Admin-set (NULL = not yet finalized, use proposed) |
-| `override_reason` | TEXT             | Why admin changed it                               |
-| `activity_count`  | INT NOT NULL     | Number of events attributed to this user           |
-| `created_at`      | TIMESTAMPTZ      |                                                    |
-| `updated_at`      | TIMESTAMPTZ      |                                                    |
+| Column            | Type             | Notes                                      |
+| ----------------- | ---------------- | ------------------------------------------ |
+| `id`              | UUID PK          |                                            |
+| `node_id`         | UUID             | NOT NULL (NODE_SCOPED)                     |
+| `epoch_id`        | BIGINT FK→epochs |                                            |
+| `user_id`         | TEXT FK→users    | NOT NULL — resolved human rollup subject   |
+| `projected_units` | BIGINT NOT NULL  | Computed from weight policy                |
+| `receipt_count`   | INT NOT NULL     | Number of receipts attributed to this user |
+| `created_at`      | TIMESTAMPTZ      |                                            |
+| `updated_at`      | TIMESTAMPTZ      |                                            |
 
 Constraint: `UNIQUE(epoch_id, user_id)`
 
-Note: finalized statement math is claimant-aware. `epoch_allocations` remains the admin override surface for resolved human users (`final_units`, `override_reason`, `activity_count`). Unresolved identity claimants are preserved in claimant-share evaluations and finalized statement items even when they have no `epoch_allocations` row.
+Note: `epoch_user_projections` is a read model only. It is unsigned, recomputable, and not used as the canonical settlement surface.
+
+### `epoch_review_subject_overrides` — review-time absolute overrides
+
+| Column                 | Type             | Notes                                                  |
+| ---------------------- | ---------------- | ------------------------------------------------------ |
+| `id`                   | UUID PK          |                                                        |
+| `node_id`              | UUID             | NOT NULL (NODE_SCOPED)                                 |
+| `epoch_id`             | BIGINT FK→epochs |                                                        |
+| `subject_ref`          | TEXT             | Canonical claimant-share subject key                   |
+| `override_units`       | BIGINT           | Absolute replacement units for this subject (nullable) |
+| `override_shares_json` | JSONB            | Absolute claimant share replacement for this subject   |
+| `override_reason`      | TEXT             | Reviewer-supplied rationale                            |
+| `created_at`           | TIMESTAMPTZ      |                                                        |
+| `updated_at`           | TIMESTAMPTZ      |                                                        |
+
+Constraint: `UNIQUE(epoch_id, subject_ref)`
+
+### `epoch_final_claimant_allocations` — canonical signed claimant units
+
+| Column             | Type             | Notes                                                 |
+| ------------------ | ---------------- | ----------------------------------------------------- |
+| `id`               | UUID PK          |                                                       |
+| `node_id`          | UUID             | NOT NULL (NODE_SCOPED)                                |
+| `epoch_id`         | BIGINT FK→epochs |                                                       |
+| `claimant_key`     | TEXT             | Canonical claimant identity key                       |
+| `claimant_json`    | JSONB            | Canonical claimant payload (`user` or unresolved id)  |
+| `final_units`      | BIGINT NOT NULL  | Canonical signed units used for statement computation |
+| `receipt_ids_json` | JSONB NOT NULL   | Audit trail back to contributing receipts             |
+| `created_at`       | TIMESTAMPTZ      |                                                       |
+| `updated_at`       | TIMESTAMPTZ      |                                                       |
+
+Constraint: `UNIQUE(epoch_id, claimant_key)`
 
 ### `ingestion_cursors` — adapter sync state
 
@@ -438,20 +470,21 @@ Constraint: `UNIQUE(epoch_id, component_id)` (POOL_UNIQUE_PER_TYPE).
 
 ### `epoch_statements` — one per closed epoch, deterministic distribution plan (Layer 3)
 
-| Column                    | Type                     | Notes                                                                                     |
-| ------------------------- | ------------------------ | ----------------------------------------------------------------------------------------- |
-| `id`                      | UUID PK                  |                                                                                           |
-| `node_id`                 | UUID                     | NOT NULL (NODE_SCOPED)                                                                    |
-| `epoch_id`                | BIGINT FK→epochs         | UNIQUE(node_id, epoch_id) — one statement per epoch                                       |
-| `allocation_set_hash`     | TEXT                     | SHA-256 of canonical finalized allocations                                                |
-| `pool_total_credits`      | BIGINT                   | Must match epoch's pool_total_credits                                                     |
-| `statement_items_json`    | JSONB                    | `[{user_id, total_units, share, amount_credits, claimant_key?, claimant?, receipt_ids?}]` |
-| `supersedes_statement_id` | UUID FK→epoch_statements | For post-signing corrections (nullable)                                                   |
-| `created_at`              | TIMESTAMPTZ              |                                                                                           |
+| Column                      | Type                     | Notes                                                                             |
+| --------------------------- | ------------------------ | --------------------------------------------------------------------------------- |
+| `id`                        | UUID PK                  |                                                                                   |
+| `node_id`                   | UUID                     | NOT NULL (NODE_SCOPED)                                                            |
+| `epoch_id`                  | BIGINT FK→epochs         | UNIQUE(node_id, epoch_id) — one statement per epoch                               |
+| `final_allocation_set_hash` | TEXT                     | SHA-256 of canonical finalized claimant allocations                               |
+| `pool_total_credits`        | BIGINT                   | Must match epoch's pool_total_credits                                             |
+| `statement_lines_json`      | JSONB                    | `[{claimant_key, claimant, final_units, pool_share, credit_amount, receipt_ids}]` |
+| `review_overrides_json`     | JSONB                    | Snapshot of review overrides applied at finalize time (nullable)                  |
+| `supersedes_statement_id`   | UUID FK→epoch_statements | For post-signing corrections (nullable)                                           |
+| `created_at`                | TIMESTAMPTZ              |                                                                                   |
 
 Post-signing corrections use amendment statements (`supersedes_statement_id`), never reopen-and-edit.
 
-### `epoch_statement_signatures` — client-side EIP-191 signatures (schema only)
+### `epoch_statement_signatures` — client-side EIP-712 signatures (schema only)
 
 | Column          | Type                     | Notes                        |
 | --------------- | ------------------------ | ---------------------------- |
@@ -459,12 +492,12 @@ Post-signing corrections use amendment statements (`supersedes_statement_id`), n
 | `node_id`       | UUID                     | NOT NULL (NODE_SCOPED)       |
 | `statement_id`  | UUID FK→epoch_statements |                              |
 | `signer_wallet` | TEXT                     | NOT NULL                     |
-| `signature`     | TEXT                     | NOT NULL — EIP-191 signature |
+| `signature`     | TEXT                     | NOT NULL — EIP-712 signature |
 | `signed_at`     | TIMESTAMPTZ              | NOT NULL                     |
 
 Constraint: `UNIQUE(statement_id, signer_wallet)`
 
-Signer wallet is the `ecrecover`-derived address, not client-supplied. Signature message must include `node_id + scope_id + allocation_set_hash` (SIGNATURE_SCOPE_BOUND). See [Signing Workflow](#signing-workflow).
+Signer wallet is the recovered address, not client-supplied. Signature payload must include `node_id + scope_id + final_allocation_set_hash` (SIGNATURE_SCOPE_BOUND). See [Signing Workflow](#signing-workflow).
 
 ### `epoch_evaluations` — enrichment outputs (draft/locked lifecycle)
 
@@ -551,21 +584,23 @@ Adapters live in `services/scheduler-worker/src/adapters/ingestion/` (ADAPTERS_N
 
 ### Write Routes (SIWE + scope approver check → Temporal workflow → 202)
 
-| Method | Route                                            | Purpose                                                                                |
-| ------ | ------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| POST   | `/api/v1/attribution/epochs/collect`             | Trigger activity collection for new/existing epoch                                     |
-| PATCH  | `/api/v1/attribution/epochs/:id/allocations`     | Admin adjusts final_units for users (epoch must be `open` or `review`)                 |
-| POST   | `/api/v1/attribution/epochs/:id/pool-components` | Record a pool component (epoch must be `open` — POOL_LOCKED_AT_REVIEW)                 |
-| POST   | `/api/v1/attribution/epochs/:id/review`          | Close ingestion, transition `open → review` (or auto via Temporal)                     |
-| POST   | `/api/v1/attribution/epochs/:id/finalize`        | Sign + finalize epoch → compute statement (requires EIP-191 signature + base_issuance) |
+| Method | Route                                                     | Purpose                                                                                |
+| ------ | --------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/attribution/epochs/collect`                      | Trigger activity collection for new/existing epoch                                     |
+| GET    | `/api/v1/attribution/epochs/:id/user-projections`         | Read recomputable per-user projections for the epoch                                   |
+| PATCH  | `/api/v1/attribution/epochs/:id/review-subject-overrides` | Admin records review-time subject overrides (epoch must be `review`)                   |
+| POST   | `/api/v1/attribution/epochs/:id/pool-components`          | Record a pool component (epoch must be `open` — POOL_LOCKED_AT_REVIEW)                 |
+| POST   | `/api/v1/attribution/epochs/:id/review`                   | Close ingestion, transition `open → review` (or auto via Temporal)                     |
+| POST   | `/api/v1/attribution/epochs/:id/finalize`                 | Sign + finalize epoch → compute statement (requires EIP-712 signature + base_issuance) |
 
 ### Public Read Routes (no auth, closed-epoch data only)
 
-| Method | Route                                               | Purpose                                    |
-| ------ | --------------------------------------------------- | ------------------------------------------ |
-| GET    | `/api/v1/public/attribution/epochs`                 | List closed epochs (paginated)             |
-| GET    | `/api/v1/public/attribution/epochs/:id/allocations` | Allocations for a closed epoch             |
-| GET    | `/api/v1/public/attribution/epochs/:id/statement`   | Epoch statement (null if none, always 200) |
+| Method | Route                                                    | Purpose                                           |
+| ------ | -------------------------------------------------------- | ------------------------------------------------- |
+| GET    | `/api/v1/public/attribution/epochs`                      | List closed epochs (paginated)                    |
+| GET    | `/api/v1/public/attribution/epochs/:id/user-projections` | User projections for a closed epoch               |
+| GET    | `/api/v1/public/attribution/epochs/:id/claimants`        | Finalized claimant attribution for a closed epoch |
+| GET    | `/api/v1/public/attribution/epochs/:id/statement`        | Epoch statement (null if none, always 200)        |
 
 ### Authenticated Read Routes (SIWE session required)
 
@@ -644,12 +679,12 @@ Input: `{ epochId, signature }` — `signerAddress` derived from SIWE session (n
 4. Verify at least one `base_issuance` pool component exists (POOL_REQUIRES_BASE)
 5. Verify signer is in scope's `approvers[]` AND matches pinned `approverSetHash` (APPROVERS_PER_SCOPE)
 6. Build canonical finalize message from epoch data, `ecrecover(message, signature)` — verify recovered address matches `signerAddress`
-7. Read `epoch_allocations` — use `final_units` where set as resolved-user overrides
-8. Read locked claimant-share evaluation (fallback: rebuild from selected receipts)
+7. Read locked claimant-share evaluation (fallback: rebuild from selected receipts)
+8. Read `epoch_review_subject_overrides` and compute canonical `epoch_final_claimant_allocations`
 9. Read pool components, compute `pool_total_credits = SUM(amount_credits)`
-10. `computeClaimantCreditLineItems(claimant_allocations, pool_total)` — BIGINT, largest-remainder
-11. Compute claimant-aware `allocation_set_hash`
-12. Atomic transaction: set `pool_total_credits` on epoch, update status to `'finalized'`, insert epoch statement + statement signature
+10. `computeAttributionStatementLines(final_claimant_allocations, pool_total)` — BIGINT, largest-remainder
+11. Compute claimant-aware `final_allocation_set_hash`
+12. Atomic transaction: set `pool_total_credits` on epoch, update status to `'finalized'`, upsert final claimant allocations, insert epoch statement + statement signature
 13. Return statement
 
 Deterministic workflow ID: `ledger-finalize-{scopeId}-{epochId}`
@@ -665,27 +700,27 @@ Cogni Attribution Statement v1
 Node: {node_id}
 Scope: {scope_id}
 Epoch: {epoch_id}
-Allocation Hash: {allocation_set_hash}
+Final Allocation Hash: {final_allocation_set_hash}
 Pool Total: {pool_total_credits}
 ```
 
-Frontend constructs this message from epoch data, calls `walletClient.signMessage()` (EIP-191 `personal_sign`), and POSTs the signature to the finalize route. V0: single API call signs and finalizes atomically.
+Frontend constructs EIP-712 typed data from epoch data, calls `walletClient.signTypedData()`, and POSTs the signature to the finalize route. `buildCanonicalMessage()` is retained only as a deprecated compatibility helper.
 
 ### Verification
 
-Backend recovers the signer address via `ecrecover(message, signature)` and checks:
+Backend verifies the typed-data signature and checks:
 
 1. Recovered address is in the scope's `approvers[]` (from repo-spec or project manifest)
 2. Message fields match the epoch's actual data (prevents signing stale/wrong data)
 
 ### Storage
 
-Signatures stored in `statement_signatures` table (schema unchanged). The `signer_wallet` is the recovered address, not client-supplied.
+Signatures are stored in `epoch_statement_signatures`. The `signer_wallet` is the recovered address, not client-supplied.
 
 ### Future Path
 
 ```
-V0 (now):    Single EIP-191 sig passed at finalize time, 1-of-N from scope approvers
+V0 (now):    Single EIP-712 sig passed at finalize time, 1-of-N from scope approvers
 V1:          Separate /sign route for collecting signatures over time, multi-sig thresholds (close_epoch_threshold: 2)
 V1:          Role separation (selection_admins vs statement_approvers)
 V1:          Post sig hash to IPFS/Arweave → content hash on-chain
@@ -701,7 +736,7 @@ The following are explicitly deferred from V0 and will be designed when needed:
 - **Multi-sig thresholds** (`close_epoch_threshold: N`) — V1: require N-of-M approver signatures
 - **Role separation** (`selection_admins` vs `statement_approvers`) — V1: separate who selects from who signs
 - **`ledger_issuers` role system** (can_issue, can_approve, can_close_epoch) — V1: multi-role authorization
-- **Per-receipt wallet signing** (EIP-191, SIGNATURE_DOMAIN_BOUND) — V1: receipts as signed attestations
+- **Per-receipt wallet signing** (EIP-712 or attestation-compatible equivalent) — V1: receipts as signed attestations
 - **Receipt approval lifecycle** (proposed → approved → revoked, LATEST_EVENT_WINS) — V1: per-receipt workflows
 - **On-chain attestation** — V0 verifies by recomputing from stored data; V1+ adds on-chain signature registry
 - **Merkle trees / inclusion proofs** — V1+

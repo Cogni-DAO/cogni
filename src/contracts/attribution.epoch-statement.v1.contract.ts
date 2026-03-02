@@ -16,19 +16,31 @@
 
 import { z } from "zod";
 
-export const StatementLineItemSchema = z.object({
-  user_id: z.string(),
-  total_units: z.string(),
-  share: z.string(),
-  amount_credits: z.string(),
+const ClaimantSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("user"), userId: z.string() }),
+  z.object({
+    kind: z.literal("identity"),
+    provider: z.string(),
+    externalId: z.string(),
+    providerLogin: z.string().nullable(),
+  }),
+]);
+
+export const AttributionStatementLineSchema = z.object({
+  claimant_key: z.string(),
+  claimant: ClaimantSchema,
+  final_units: z.string(),
+  pool_share: z.string(),
+  credit_amount: z.string(),
+  receipt_ids: z.array(z.string()),
 });
 
 export const StatementSchema = z.object({
   id: z.string(),
   epochId: z.string(),
-  allocationSetHash: z.string(),
+  finalAllocationSetHash: z.string(),
   poolTotalCredits: z.string(),
-  items: z.array(StatementLineItemSchema),
+  statementLines: z.array(AttributionStatementLineSchema),
   supersedesStatementId: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
@@ -46,5 +58,7 @@ export const epochStatementOperation = {
   output: EpochStatementOutputSchema,
 } as const;
 
-export type StatementLineItemDto = z.infer<typeof StatementLineItemSchema>;
+export type AttributionStatementLineDto = z.infer<
+  typeof AttributionStatementLineSchema
+>;
 export type StatementDto = z.infer<typeof StatementSchema>;

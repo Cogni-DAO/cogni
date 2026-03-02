@@ -13,7 +13,6 @@
 
 // Store port re-exports
 export type {
-  AttributionAllocation,
   AttributionEpoch,
   AttributionPoolComponent,
   AttributionSelection,
@@ -21,19 +20,24 @@ export type {
   AttributionStatementSignature,
   AttributionStore,
   EpochStatus,
+  EpochUserProjection,
   FinalizedAllocation,
   IngestionCursor,
   IngestionReceipt,
-  InsertAllocationParams,
   InsertPoolComponentParams,
   InsertReceiptParams,
   InsertSignatureParams,
   InsertStatementParams,
+  InsertUserProjectionParams,
   StatementLineItem,
   UpsertSelectionParams,
 } from "@cogni/attribution-ledger";
 export {
   AllocationNotFoundError,
+  ATTRIBUTION_STATEMENT_TYPES,
+  // Legacy user-only helpers remain exported here for compatibility with older
+  // core consumers. New claimant-aware flows should use
+  // computeFinalClaimantAllocationSetHash() and computeAttributionStatementLines().
   computeAllocationSetHash,
   computeStatementItems,
   EPOCH_STATUSES,

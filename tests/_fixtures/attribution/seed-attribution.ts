@@ -16,11 +16,11 @@ import type {
   AttributionPoolComponent,
   AttributionStatement,
   AttributionStore,
-  InsertAllocationParams,
   InsertPoolComponentParams,
   InsertReceiptParams,
   InsertSelectionAutoParams,
   InsertStatementParams,
+  InsertUserProjectionParams,
   UpsertEvaluationParams,
   UpsertSelectionParams,
 } from "@cogni/attribution-ledger";
@@ -104,17 +104,17 @@ export function makeSelectionAuto(
   };
 }
 
-/** Build an allocation insert param with sensible defaults */
-export function makeAllocation(
-  overrides: Partial<InsertAllocationParams> & {
+/** Build a user projection insert param with sensible defaults */
+export function makeUserProjection(
+  overrides: Partial<InsertUserProjectionParams> & {
     epochId: bigint;
     userId: string;
   }
-): InsertAllocationParams {
+): InsertUserProjectionParams {
   return {
     nodeId: TEST_NODE_ID,
-    proposedUnits: 1000n,
-    activityCount: 1,
+    projectedUnits: 1000n,
+    receiptCount: 1,
     ...overrides,
   };
 }
@@ -139,20 +139,24 @@ export function makeEpochStatement(
 ): InsertStatementParams {
   return {
     nodeId: TEST_NODE_ID,
-    allocationSetHash: "test-hash-abc123",
+    finalAllocationSetHash: "test-hash-abc123",
     poolTotalCredits: 10000n,
-    statementItems: [
+    statementLines: [
       {
-        user_id: "user-1",
-        total_units: "8000",
-        share: "0.800000",
-        amount_credits: "8000",
+        claimant_key: "user:user-1",
+        claimant: { kind: "user", userId: "user-1" },
+        final_units: "8000",
+        pool_share: "0.800000",
+        credit_amount: "8000",
+        receipt_ids: ["test-receipt-1"],
       },
       {
-        user_id: "user-2",
-        total_units: "2000",
-        share: "0.200000",
-        amount_credits: "2000",
+        claimant_key: "user:user-2",
+        claimant: { kind: "user", userId: "user-2" },
+        final_units: "2000",
+        pool_share: "0.200000",
+        credit_amount: "2000",
+        receipt_ids: ["test-receipt-2"],
       },
     ],
     ...overrides,
@@ -187,7 +191,7 @@ export interface SeededClosedEpoch {
 }
 
 /**
- * Seeds a complete closed epoch with receipts, selections, allocations,
+ * Seeds a complete closed epoch with receipts, selections, user projections,
  * a pool component, and a statement. Suitable for testing read routes.
  *
  * @param store - The AttributionStore to seed into
@@ -261,21 +265,21 @@ export async function seedClosedEpoch(
     }),
   ]);
 
-  // 4. Insert allocations
-  await store.insertAllocations([
-    makeAllocation({
+  // 4. Insert user projections
+  await store.insertUserProjections([
+    makeUserProjection({
       nodeId,
       epochId: epoch.id,
       userId: "user-1",
-      proposedUnits: 8000n,
-      activityCount: 1,
+      projectedUnits: 8000n,
+      receiptCount: 1,
     }),
-    makeAllocation({
+    makeUserProjection({
       nodeId,
       epochId: epoch.id,
       userId: "user-2",
-      proposedUnits: 2000n,
-      activityCount: 1,
+      projectedUnits: 2000n,
+      receiptCount: 1,
     }),
   ]);
 
@@ -316,7 +320,7 @@ export interface SeededReviewEpoch {
 }
 
 /**
- * Seeds a complete epoch in review status with receipts, selections, allocations,
+ * Seeds a complete epoch in review status with receipts, selections, user projections,
  * and a pool component. Suitable for testing sign-data and subject-override routes.
  */
 export async function seedReviewEpoch(
@@ -387,20 +391,20 @@ export async function seedReviewEpoch(
     }),
   ]);
 
-  await store.insertAllocations([
-    makeAllocation({
+  await store.insertUserProjections([
+    makeUserProjection({
       nodeId,
       epochId: epoch.id,
       userId: "user-1",
-      proposedUnits: 8000n,
-      activityCount: 1,
+      projectedUnits: 8000n,
+      receiptCount: 1,
     }),
-    makeAllocation({
+    makeUserProjection({
       nodeId,
       epochId: epoch.id,
       userId: "user-2",
-      proposedUnits: 2000n,
-      activityCount: 1,
+      projectedUnits: 2000n,
+      receiptCount: 1,
     }),
   ]);
 

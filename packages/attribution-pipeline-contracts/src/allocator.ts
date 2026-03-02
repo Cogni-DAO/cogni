@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/attribution-pipeline-contracts/allocator`
+ * Purpose: Allocator plugin contracts and dispatch logic.
+ * Scope: Types and pure dispatch function. Does not perform I/O or hold state.
+ * Invariants:
+ * - ALLOCATOR_NEEDS_DECLARED: requiredEvaluationRefs validated before compute().
+ * - ALLOCATION_CONTEXT_EXTENSIBLE: context grows by adding optional fields, never by changing compute() signature.
+ * - FRAMEWORK_NO_IO: this module contains zero I/O.
+ * Side-effects: none
+ * Links: docs/spec/plugin-attribution-pipeline.md
+ * @public
+ */
+
+import type {
+  ProposedAllocation,
+  SelectedReceiptForAllocation,
+} from "@cogni/attribution-ledger";
+
+import type { PipelineProfile } from "./profile";
+
+/**
+ * Descriptor for an allocation algorithm plugin.
+ */
+export interface AllocatorDescriptor {
+  /** Algorithm ref (matches what gets pinned on epoch at closeIngestion). */
+  readonly algoRef: string;
+
+  /**
+   * Evaluation refs this allocator requires. Empty = no evaluations needed.
+   * dispatchAllocator() validates all required refs are present before calling compute().
+   */
+  readonly requiredEvaluationRefs: readonly string[];
+
+  /**
+   * Compute proposed allocations.
+   * Async to support future allocators that may need I/O (e.g., LLM-scored).
+   * Deterministic allocators simply return a resolved promise.
+   */
+  readonly compute: (
+    context: AllocationContext
+  ) => Promise<ProposedAllocation[]>;
+}
+
+/**
+ * Context passed to allocator compute().
+ * Extends the current (events, weightConfig) with optional evaluations map.
+ */
+export interface AllocationContext {
+  readonly events: readonly SelectedReceiptForAllocation[];
+  readonly weightConfig: Record<string, number>;
+  /**
+   * Locked evaluation payloads keyed by evaluationRef.
+   * weight-sum-v0 ignores this; future allocators consume it.
+   */
+  readonly evaluations: ReadonlyMap<string, Record<string, unknown>>;
+  /** User-provided config, or null if profile has no configSchema. */
+  readonly profileConfig: Record<string, unknown> | null;
+}
+
+/** Registry mapping algoRef → AllocatorDescriptor. */
+export type AllocatorRegistry = ReadonlyMap<string, AllocatorDescriptor>;
+
+/**
+ * Dispatch to the profile's allocator, validating required evaluations first.
+ * Throws if allocator is unknown or required evaluations are missing.
+ */
+export async function dispatchAllocator(
+  registry: AllocatorRegistry,
+  profile: PipelineProfile,
+  context: AllocationContext
+): Promise<ProposedAllocation[]> {
+  const descriptor = registry.get(profile.allocatorRef);
+  if (!descriptor) {
+    const available = [...registry.keys()].join(", ");
+    throw new Error(
+      `Unknown allocator: "${profile.allocatorRef}". Available: [${available}]`
+    );
+  }
+
+  // ALLOCATOR_NEEDS_DECLARED: validate required evaluations are present
+  const missing = descriptor.requiredEvaluationRefs.filter(
+    (ref) => !context.evaluations.has(ref)
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Allocator "${profile.allocatorRef}" requires evaluations [${missing.join(", ")}] but they are missing from context`
+    );
+  }
+
+  return descriptor.compute(context);
+}

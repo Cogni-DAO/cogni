@@ -86,12 +86,11 @@ export interface EpochDto {
   readonly poolTotalCredits: string | null;
 }
 
-/** Minimal allocation shape expected from the epoch-allocations API. */
-export interface AllocationDto {
+/** Minimal projection shape expected from the epoch-user-projections API. */
+export interface UserProjectionDto {
   readonly userId: string;
-  readonly proposedUnits: string;
-  readonly finalUnits: string | null;
-  readonly activityCount: number;
+  readonly projectedUnits: string;
+  readonly receiptCount: number;
 }
 
 /** Minimal ingestion receipt shape expected from the epoch-activity API. */
@@ -215,13 +214,13 @@ function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
  */
 export function composeEpochView(
   epoch: EpochDto,
-  allocations: readonly AllocationDto[],
+  userProjections: readonly UserProjectionDto[],
   receipts: readonly ApiIngestionReceipt[]
 ): EpochView {
   const { receiptsById, unresolvedCount, unresolvedActivities } =
     partitionReceipts(receipts);
-  const allocationByUser = new Map(
-    allocations.map((alloc) => [alloc.userId, alloc])
+  const projectionByUser = new Map(
+    userProjections.map((projection) => [projection.userId, projection])
   );
   const contributorMap = new Map<
     string,
@@ -230,8 +229,8 @@ export function composeEpochView(
       claimantKind: "user" | "identity";
       displayName: string | null;
       claimantLabel: string;
-      proposedUnits: bigint;
-      finalUnits: string | null;
+      units: bigint;
+      receiptCount: number;
       receipts: IngestionReceipt[];
     }
   >();
@@ -268,16 +267,18 @@ export function composeEpochView(
       const key = `user:${userId}`;
       const existing = contributorMap.get(key);
       if (existing) {
-        existing.proposedUnits += weight;
+        existing.units += weight;
+        existing.receiptCount += 1;
         existing.receipts.push(mappedReceipt);
       } else {
+        const projection = projectionByUser.get(userId);
         contributorMap.set(key, {
           claimantKey: key,
           claimantKind: "user",
           displayName: resolveDisplayName(receipt.platformLogin),
           claimantLabel: "Linked account",
-          proposedUnits: weight,
-          finalUnits: allocationByUser.get(userId)?.finalUnits ?? null,
+          units: BigInt(projection?.projectedUnits ?? weight),
+          receiptCount: projection?.receiptCount ?? 1,
           receipts: [mappedReceipt],
         });
       }
@@ -287,7 +288,8 @@ export function composeEpochView(
     const key = `identity:${receipt.source}:${receipt.platformUserId}`;
     const existing = contributorMap.get(key);
     if (existing) {
-      existing.proposedUnits += weight;
+      existing.units += weight;
+      existing.receiptCount += 1;
       existing.receipts.push(mappedReceipt);
     } else {
       contributorMap.set(key, {
@@ -295,15 +297,15 @@ export function composeEpochView(
         claimantKind: "identity",
         displayName: resolveDisplayName(receipt.platformLogin),
         claimantLabel: `${formatSourceName(receipt.source)} account`,
-        proposedUnits: weight,
-        finalUnits: null,
+        units: weight,
+        receiptCount: 1,
         receipts: [mappedReceipt],
       });
     }
   }
 
-  const totalProposed = [...contributorMap.values()].reduce(
-    (sum, contributor) => sum + contributor.proposedUnits,
+  const totalUnits = [...contributorMap.values()].reduce(
+    (sum, contributor) => sum + contributor.units,
     0n
   );
 
@@ -316,18 +318,15 @@ export function composeEpochView(
       claimantLabel: contributor.claimantLabel,
       avatar: DEFAULT_AVATAR,
       color: DEFAULT_COLOR,
-      proposedUnits: contributor.proposedUnits.toString(),
-      finalUnits: contributor.finalUnits,
-      creditShare: roundSharePercent(contributor.proposedUnits, totalProposed),
-      activityCount: contributor.receipts.length,
+      units: contributor.units.toString(),
+      creditShare: roundSharePercent(contributor.units, totalUnits),
+      receiptCount: contributor.receiptCount,
       receipts: contributor.receipts,
     })
   );
 
-  // Sort by proposedUnits DESC
-  contributors.sort(
-    (a, b) => Number(b.proposedUnits) - Number(a.proposedUnits)
-  );
+  // Sort by units DESC
+  contributors.sort((a, b) => Number(b.units) - Number(a.units));
 
   return {
     id: epoch.id,
@@ -370,18 +369,15 @@ export function composeEpochViewFromClaimants(
       claimantLabel: descriptor.claimantLabel,
       avatar: DEFAULT_AVATAR,
       color: DEFAULT_COLOR,
-      proposedUnits: item.totalUnits,
-      finalUnits: item.totalUnits,
+      units: item.totalUnits,
       creditShare: share,
-      activityCount: claimantReceipts.length,
+      receiptCount: claimantReceipts.length,
       receipts: claimantReceipts,
     };
   });
 
   // Sort by amount_credits DESC
-  contributors.sort(
-    (a, b) => Number(b.proposedUnits) - Number(a.proposedUnits)
-  );
+  contributors.sort((a, b) => Number(b.units) - Number(a.units));
 
   return {
     id: epoch.id,
@@ -395,7 +391,7 @@ export function composeEpochViewFromClaimants(
   };
 }
 
-/** Override entry shape matching useSubjectOverrides output. */
+/** Override entry shape matching useReviewSubjectOverrides output. */
 export interface OverrideEntry {
   readonly subjectRef: string;
   readonly overrideUnits: string | null;
@@ -404,7 +400,7 @@ export interface OverrideEntry {
 /**
  * Recompute contributor sums after applying subject overrides client-side.
  * Override units are in display scale (e.g. "2"); receipt.units are milli-units (e.g. "8000").
- * Receipts are never mutated — only contributor-level proposedUnits and shares are recomputed.
+ * Receipts are never mutated — only contributor-level units and shares are recomputed.
  */
 export function applyOverridesToEpochView(
   epoch: EpochView,
@@ -423,22 +419,22 @@ export function applyOverridesToEpochView(
           totalUnits += BigInt(receipt.units ?? "0");
         }
       }
-      return { ...contributor, proposedUnits: totalUnits.toString() };
+      return { ...contributor, units: totalUnits.toString() };
     }
   );
 
   // Recompute shares
   const grandTotal = updatedContributors.reduce(
-    (sum, c) => sum + BigInt(c.proposedUnits),
+    (sum, c) => sum + BigInt(c.units),
     0n
   );
   const withShares: EpochContributor[] = updatedContributors.map((c) => ({
     ...c,
-    creditShare: roundSharePercent(BigInt(c.proposedUnits), grandTotal),
+    creditShare: roundSharePercent(BigInt(c.units), grandTotal),
   }));
 
-  // Re-sort by proposedUnits DESC
-  withShares.sort((a, b) => Number(b.proposedUnits) - Number(a.proposedUnits));
+  // Re-sort by units DESC
+  withShares.sort((a, b) => Number(b.units) - Number(a.units));
 
   return { ...epoch, contributors: withShares };
 }
