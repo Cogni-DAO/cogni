@@ -27,7 +27,6 @@ activity_ledger:
     github:
       attribution_pipeline: cogni-v0.0
       source_refs: ["Cogni-DAO/node-template"]
-      streams: ["pull_requests", "reviews", "issues"]
 
 intent:
   name: cogni-template

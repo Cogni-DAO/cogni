@@ -146,7 +146,6 @@ describe("parseRepoSpec", () => {
         "    github:",
         "      attribution_pipeline: cogni-v0.0",
         '      source_refs: ["cogni-dao/cogni-template"]',
-        '      streams: ["pull_requests", "reviews", "issues"]',
         "cogni_dao:",
         '  chain_id: "8453"',
         "payments_in:",

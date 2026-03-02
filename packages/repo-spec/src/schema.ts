@@ -5,7 +5,7 @@
  * Module: `@cogni/repo-spec/schema`
  * Purpose: Zod schemas and derived types for .cogni/repo-spec.yaml validation.
  * Scope: Validates governance-managed payment, governance schedule, and activity ledger configuration structures. Does not enforce chain/token values (chain validation happens in accessor layer via chainId parameter).
- * Invariants: EVM address format required; activity sources require source_refs + streams. REPO_SPEC_AUTHORITY — single canonical schema definition.
+ * Invariants: EVM address format required; activity sources require source_refs. REPO_SPEC_AUTHORITY — single canonical schema definition.
  * Side-effects: none
  * Links: .cogni/repo-spec.yaml, docs/spec/node-operator-contract.md
  * @public
@@ -88,8 +88,6 @@ export const activitySourceSpecSchema = z.object({
   attribution_pipeline: z.string().min(1),
   /** External namespaces for cursor scoping (e.g., repo slugs) */
   source_refs: z.array(z.string().min(1)).min(1),
-  /** Stream IDs to collect (e.g., ["pull_requests", "reviews", "issues"]) */
-  streams: z.array(z.string().min(1)).min(1),
 });
 
 export type ActivitySourceSpec = z.infer<typeof activitySourceSpecSchema>;

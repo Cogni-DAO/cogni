@@ -44,7 +44,6 @@ const WORKFLOW_INPUT = {
       github: {
         attributionPipeline: "cogni-v0.0",
         sourceRefs: ["Cogni-DAO/test-repo"],
-        streams: ["pull_requests", "reviews", "issues"],
       },
     },
   },

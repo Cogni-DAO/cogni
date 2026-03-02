@@ -65,7 +65,6 @@ export interface LedgerScheduleConfig {
     {
       attributionPipeline: string;
       sourceRefs: string[];
-      streams: string[];
     }
   >;
   /** Pool budget: base_issuance_credits as string (bigint serialized). */

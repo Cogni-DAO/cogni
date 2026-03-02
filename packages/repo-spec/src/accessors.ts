@@ -34,7 +34,7 @@ export interface LedgerConfig {
   epochLengthDays: number;
   activitySources: Record<
     string,
-    { attributionPipeline: string; sourceRefs: string[]; streams: string[] }
+    { attributionPipeline: string; sourceRefs: string[] }
   >;
   poolConfig: LedgerPoolConfig;
   /** base_issuance_credits as string (bigint serialized) for schedule payload. */
@@ -155,7 +155,6 @@ export function extractLedgerConfig(spec: RepoSpec): LedgerConfig | null {
     sources[name] = {
       attributionPipeline: src.attribution_pipeline,
       sourceRefs: src.source_refs,
-      streams: src.streams,
     };
   }
 
