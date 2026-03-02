@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
 branch: task/0124-attribution-pipeline-packages
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/506
 reviewer:
 revision: 0
 blocked_by: [task.0113]
