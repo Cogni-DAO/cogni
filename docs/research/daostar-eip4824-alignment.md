@@ -144,6 +144,10 @@ The [Financial Ledger project](../../work/projects/proj.financial-ledger.md) pla
 
 The key insight: **EIP-4824 and the Financial Ledger solve different problems.** EIP-4824 is metadata/discoverability ("what is this DAO?"). The Financial Ledger is settlement infrastructure ("where did the money go?"). They're complementary, not competing.
 
+> **Cogni's attribution pipeline is the novel part.** Activity-based allocation with EIP-712 signed statements, LLM-powered enrichment, human review, and Merkle claim trees — no existing standard or OSS tool does this. The standards (EIP-4824) are just the wrapping paper for discoverability. Don't let standards alignment delay the actual product.
+>
+> Note: The pipeline has deterministic aspects (integer math, canonical hashing, largest-remainder rounding) but also includes LLM-powered enrichment and human review phases — it is NOT fully deterministic end-to-end. The determinism guarantees apply specifically to the allocation-through-statement path.
+
 ### What to adopt now:
 
 1. **EIP-4824 daoURI** — Single `GET /api/v1/public/dao/metadata` endpoint returning JSON-LD. Sources from repo-spec.yaml + DB queries. ~1 day of work.
@@ -194,7 +198,7 @@ EIP-4824 adoption is a **task within `proj.financial-ledger`** (Crawl phase), no
 
 | Task                                    | Scope                                                                                                                                                                            | Est |
 | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| `task.XXXX.eip4824-daouri-endpoint`     | `GET /api/v1/public/dao/metadata` — JSON-LD from repo-spec + DB. Includes `membersURI`, `proposalsURI` (epochs), `activityLogURI` (attribution), `contractsURI`, `governanceURI` | 1   |
+| `task.0134.eip4824-daouri-endpoint`     | `GET /api/v1/public/dao/metadata` — JSON-LD from repo-spec + DB. Includes `membersURI`, `proposalsURI` (epochs), `activityLogURI` (attribution), `contractsURI`, `governanceURI` | 1   |
 | `task.XXXX.eip4824-registration`        | Register daoURI on-chain (factory or ENS) + verify on DAOstar explorer                                                                                                           | 1   |
 | `task.XXXX.merkle-distributor-evaluate` | Evaluate bgd-labs/merkle-distributor-v2 vs custom ReusableMerkleDistributor. Audit contract, test on Base testnet                                                                | 1   |
 | `task.XXXX.beancount-bridge-spike`      | Research Beancount v3 ↔ TypeScript integration (subprocess vs microservice vs WASM)                                                                                             | 1   |
