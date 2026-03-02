@@ -30,6 +30,7 @@ COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/db-client/package.json packages/db-client/
 COPY packages/attribution-ledger/package.json packages/attribution-ledger/
 COPY packages/ingestion-core/package.json packages/ingestion-core/
+COPY packages/repo-spec/package.json packages/repo-spec/
 COPY services/scheduler-worker/package.json services/scheduler-worker/
 
 # Install all dependencies (dev + prod) for build
@@ -43,6 +44,7 @@ COPY packages/db-schema packages/db-schema
 COPY packages/db-client packages/db-client
 COPY packages/attribution-ledger packages/attribution-ledger
 COPY packages/ingestion-core packages/ingestion-core
+COPY packages/repo-spec packages/repo-spec
 COPY services/scheduler-worker services/scheduler-worker
 
 # Build packages in dependency order (transpile-only for service)
@@ -52,6 +54,7 @@ RUN pnpm --filter @cogni/ids build && \
     pnpm --filter @cogni/db-schema build && \
     pnpm --filter @cogni/attribution-ledger build && \
     pnpm --filter @cogni/ingestion-core build && \
+    pnpm --filter @cogni/repo-spec build && \
     pnpm --filter @cogni/db-client build && \
     pnpm --filter @cogni/scheduler-worker-service build
 
@@ -84,6 +87,7 @@ COPY --from=builder --chown=worker:nodejs /app/packages/db-schema/dist ./package
 COPY --from=builder --chown=worker:nodejs /app/packages/db-client/dist ./packages/db-client/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/attribution-ledger/dist ./packages/attribution-ledger/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/ingestion-core/dist ./packages/ingestion-core/dist
+COPY --from=builder --chown=worker:nodejs /app/packages/repo-spec/dist ./packages/repo-spec/dist
 # Copy package.json files for module resolution
 COPY --from=builder --chown=worker:nodejs /app/services/scheduler-worker/package.json ./services/scheduler-worker/
 COPY --from=builder --chown=worker:nodejs /app/packages/ids/package.json ./packages/ids/
@@ -93,6 +97,10 @@ COPY --from=builder --chown=worker:nodejs /app/packages/db-schema/package.json .
 COPY --from=builder --chown=worker:nodejs /app/packages/db-client/package.json ./packages/db-client/
 COPY --from=builder --chown=worker:nodejs /app/packages/attribution-ledger/package.json ./packages/attribution-ledger/
 COPY --from=builder --chown=worker:nodejs /app/packages/ingestion-core/package.json ./packages/ingestion-core/
+COPY --from=builder --chown=worker:nodejs /app/packages/repo-spec/package.json ./packages/repo-spec/
+
+# Bake governance config for identity resolution (node_id, scope_id, chain_id)
+COPY --chown=worker:nodejs .cogni/repo-spec.yaml ./.cogni/repo-spec.yaml
 
 WORKDIR /app/services/scheduler-worker
 

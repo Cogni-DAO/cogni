@@ -4,14 +4,18 @@
 /**
  * Module: `@cogni/scheduler-worker-service/bootstrap/container`
  * Purpose: Composition root — wires concrete adapters to port interfaces.
- * Scope: All adapter construction lives here. Returns typed container against port interfaces.
+ * Scope: All adapter construction lives here. Returns typed container against port interfaces. Does not export identity constants.
  * Invariants:
- * - Only file that imports concrete adapter packages (@cogni/db-client)
+ * - Only file that imports concrete adapter packages (@cogni/db-client, @cogni/repo-spec)
  * - activities/ and workflows/ import ports only, never this module
- * Side-effects: Creates DB connection pool
- * Links: services/scheduler-worker/src/ports/index.ts
+ * - REPO_SPEC_AUTHORITY: identity (node_id, scope_id, chain_id) read from @cogni/repo-spec at bootstrap
+ * Side-effects: Creates DB connection pool; reads .cogni/repo-spec.yaml from disk
+ * Links: services/scheduler-worker/src/ports/index.ts, packages/repo-spec/
  * @internal
  */
+
+import fs from "node:fs";
+import path from "node:path";
 
 import { createValidatedAttributionStore } from "@cogni/attribution-ledger";
 import {
@@ -20,6 +24,12 @@ import {
   DrizzleScheduleRunAdapter,
 } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
+import {
+  extractChainId,
+  extractNodeId,
+  extractScopeId,
+  parseRepoSpec,
+} from "@cogni/repo-spec";
 
 import {
   GitHubAppTokenProvider,
@@ -51,17 +61,46 @@ export interface ServiceContainer {
 }
 
 /**
- * Hardcoded identity from .cogni/repo-spec.yaml.
- * HACK: Temporary constants until task.0120 (@cogni/repo-spec package) replaces
- * this with proper parsed repo-spec reading.
+ * Read and parse .cogni/repo-spec.yaml from the baked-in location.
+ * In Docker: /app/.cogni/repo-spec.yaml (COPY'd in Dockerfile).
+ * In dev: resolved relative to process.cwd() (repo root).
  */
-const REPO_SPEC_NODE_ID = "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d";
-const REPO_SPEC_SCOPE_ID = "a28a8b1e-1f9d-5cd5-9329-569e4819feda";
-const REPO_SPEC_CHAIN_ID = 8453;
+function loadRepoSpecIdentity(): {
+  nodeId: string;
+  scopeId: string;
+  chainId: number;
+} {
+  // Try /app/.cogni first (Docker), then cwd (dev)
+  const candidates = [
+    path.join("/app", ".cogni", "repo-spec.yaml"),
+    path.join(process.cwd(), ".cogni", "repo-spec.yaml"),
+  ];
+
+  let content: string | undefined;
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      content = fs.readFileSync(candidate, "utf8");
+      break;
+    }
+  }
+
+  if (!content) {
+    throw new Error(
+      `[repo-spec] Missing .cogni/repo-spec.yaml — searched: ${candidates.join(", ")}`
+    );
+  }
+
+  const spec = parseRepoSpec(content);
+  return {
+    nodeId: extractNodeId(spec),
+    scopeId: extractScopeId(spec),
+    chainId: extractChainId(spec),
+  };
+}
 
 /**
  * Ledger container — deps for ledger activities.
- * Created separately because ledger env vars (NODE_ID, SCOPE_ID) are optional.
+ * Created separately because ledger identity comes from repo-spec.
  */
 export interface AttributionContainer {
   attributionStore: AttributionStore;
@@ -97,18 +136,14 @@ export function createContainer(config: Env, logger: Logger): ServiceContainer {
 }
 
 /**
- * Build ledger container. Requires NODE_ID and SCOPE_ID in env.
- * Returns null if ledger env vars are not configured.
+ * Build ledger container. Reads identity from .cogni/repo-spec.yaml.
+ * Returns null if repo-spec is missing scope_id (ledger requires scope identity).
  */
 export function createAttributionContainer(
   config: Env,
   logger: Logger
 ): AttributionContainer | null {
-  // HACK: Hardcoded from .cogni/repo-spec.yaml until task.0120
-  // (@cogni/repo-spec package) replaces this with proper parsing.
-  const nodeId = REPO_SPEC_NODE_ID;
-  const scopeId = REPO_SPEC_SCOPE_ID;
-  const chainId = REPO_SPEC_CHAIN_ID;
+  const { nodeId, scopeId, chainId } = loadRepoSpecIdentity();
 
   logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
     phase: "ledger_container",

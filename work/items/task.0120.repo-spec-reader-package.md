@@ -2,7 +2,7 @@
 id: task.0120
 type: task
 title: "Extract unified repo-spec reader package (`@cogni/repo-spec`)"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 3
@@ -12,14 +12,14 @@ spec_refs: node-operator-contract-spec
 assignees: derekg1729
 credit:
 project: proj.operator-plane
-branch:
-pr:
+branch: task/0120-repo-spec-reader
+pr: https://github.com/Cogni-DAO/node-template/pull/504
 reviewer:
 revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-03-01
-updated: 2026-03-01
+updated: 2026-03-02
 labels: [config, packages, multi-tenant]
 external_refs:
 ---
@@ -156,3 +156,11 @@ pnpm check && pnpm test tests/unit/packages/repo-spec/ && pnpm test tests/unit/s
 ## Attribution
 
 -
+
+## Review Feedback
+
+### Revision 1 — STATELESS_CONTAINERS concern (2026-03-02) — WITHDRAWN
+
+Initially flagged Dockerfile `COPY .cogni/repo-spec.yaml` as a STATELESS_CONTAINERS violation. After analysis: the app already bakes repo-spec at build time via Next.js standalone file tracing. Both app and services follow the same model — config baked at build, picked up on each deploy. This is correct for single-node deployments where config changes should go through the build/deploy pipeline.
+
+**Added:** `docs/guides/create-service.md` Step 3b documenting the pattern for future services.

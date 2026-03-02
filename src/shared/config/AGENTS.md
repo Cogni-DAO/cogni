@@ -5,12 +5,12 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-23
-- **Status:** draft
+- **Last reviewed:** 2026-03-02
+- **Status:** stable
 
 ## Purpose
 
-Server-only configuration helpers sourced from versioned repo metadata (`.cogni/repo-spec.yaml`). Provides typed accessors for node identity, inbound payment configuration (USDC credits top-up), and governance schedule configuration. Canonical source for node_id (ledger scoping), chainId + receiving_address (payments), and charter schedule definitions (governance). These settings must not rely on environment variables.
+Server-only thin wrapper over `@cogni/repo-spec`. Handles file I/O, caching, and CHAIN_ID validation. All schema logic and typed extraction lives in the `@cogni/repo-spec` package; this directory re-exports types and provides cached server-only accessors. These settings must not rely on environment variables.
 
 ## Pointers
 
@@ -39,16 +39,16 @@ Server-only configuration helpers sourced from versioned repo metadata (`.cogni/
 ## Public Surface
 
 - **Exports:** `getNodeId()`, `getScopeId()`, `getPaymentConfig()`, `InboundPaymentConfig`, `getGovernanceConfig()`, `GovernanceConfig`, `GovernanceSchedule`, `getLedgerApprovers()` - server-only helpers reading repo-spec metadata
-- **Exports (schema):** `repoSpecSchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, `governanceSpecSchema`, `activityLedgerSpecSchema`, `poolConfigSpecSchema` - Zod schemas and derived types
-- **Exports (types):** `LedgerPoolConfig`, `LedgerConfig` (includes `poolConfig`, `baseIssuanceCredits`, `approvers`)
+- **Exports (schema):** Re-exported from `@cogni/repo-spec`: `repoSpecSchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, `governanceSpecSchema`, `activityLedgerSpecSchema`, `poolConfigSpecSchema`
+- **Exports (types):** Re-exported from `@cogni/repo-spec`: `LedgerPoolConfig`, `LedgerConfig`, `GovernanceSchedule`, `InboundPaymentConfig`, `GovernanceConfig`
 - **Routes/CLI:** none
 - **Env/Config keys:** none (reads versioned files only)
 - **Files considered API:** index.ts, repoSpec.server.ts, repoSpec.schema.ts
 
 ## Responsibilities
 
-- This directory **does**: read repo-spec `node_id`, `payments_in.credits_topup.*`, and `governance.schedules` paths; validate node identity (UUID), payment config (chainId, receivingAddress, provider), and governance schedule config (charter, cron, entrypoint); expose typed helpers for server callers.
-- This directory **does not**: access browser APIs, depend on frameworks, expose env overrides, or support legacy widget paths.
+- This directory **does**: read `.cogni/repo-spec.yaml` from disk, cache parsed results, pass CHAIN_ID to `@cogni/repo-spec` accessors, and re-export schemas/types for app consumers.
+- This directory **does not**: define schemas, validate YAML structure, access browser APIs, or expose env overrides. Schema logic lives in `@cogni/repo-spec`.
 
 ## Usage
 
@@ -64,8 +64,8 @@ Server-only configuration helpers sourced from versioned repo metadata (`.cogni/
 
 ## Dependencies
 
-- **Internal:** `@/shared/web3` (chain constants)
-- **External:** Zod (schema validation), yaml parser, Node fs/path
+- **Internal:** `@cogni/repo-spec` (schema, parse, accessors), `@/shared/web3` (chain constants)
+- **External:** Node fs/path
 
 ## Change Protocol
 
@@ -75,9 +75,6 @@ Server-only configuration helpers sourced from versioned repo metadata (`.cogni/
 
 ## Notes
 
-- Repo-spec changes require a server restart to refresh cached payment config.
-- Reads from `payments_in.credits_topup.*` and `governance.schedules` paths — no fallback to legacy widget paths.
-- Schema validates structure: EVM address format, non-empty provider; `allowed_chains`/`allowed_tokens` are informational metadata (not enforced).
-- Chain alignment: `cogni_dao.chain_id` must match `CHAIN_ID` from `@/shared/web3/chain` or startup fails. See [Chain Config](../../../docs/spec/chain-config.md).
-- Use `getPaymentConfig()` for DAO wallet only; use `CHAIN_ID`/`USDC_TOKEN_ADDRESS` from `@/shared/web3/chain` for network constants.
-- Governance config defaults to empty schedules array if not present in repo-spec.
+- Repo-spec changes require an image rebuild + deploy to take effect (baked at build time).
+- Chain alignment: `cogni_dao.chain_id` must match `CHAIN_ID` from `@/shared/web3/chain` or startup fails.
+- Schema and type definitions live in `@cogni/repo-spec`; this directory re-exports for stable `@/shared/config` import paths.

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cogni/db-client": "workspace:*",
+    "@cogni/repo-spec": "workspace:*",
     "@cogni/ingestion-core": "workspace:*",
     "@cogni/scheduler-core": "workspace:*",
     "@octokit/auth-app": "^7.1.4",

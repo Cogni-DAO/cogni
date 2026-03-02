@@ -3,63 +3,46 @@
 
 /**
  * Module: `@shared/config/repoSpec.server`
- * Purpose: Server-only accessors for governance-managed configuration from .cogni/repo-spec.yaml (node identity + payments + governance schedules + ledger config).
- * Scope: Reads and caches repo-spec on first access; validates node_id UUID, chain alignment, and receiver address shape; exposes getNodeId(), getPaymentConfig(), and getGovernanceConfig(). Maps activity_ledger config to LedgerConfig when scope identity is present. Does not run in client bundles or accept env overrides.
+ * Purpose: Server-only thin wrapper — file I/O, caching, and CHAIN_ID validation. All schema logic delegated to @cogni/repo-spec.
+ * Scope: Reads and caches repo-spec on first access; passes CHAIN_ID to package accessors. Does not define schemas or validation logic.
  * Invariants: Chain ID must match CHAIN_ID; ledger config requires scope_id + scope_key.
  * Side-effects: IO (reads repo-spec from disk) on first call only.
- * Links: .cogni/repo-spec.yaml, docs/spec/payments-design.md
+ * Links: packages/repo-spec/src/index.ts, .cogni/repo-spec.yaml
  * @public
  */
 
 import fs from "node:fs";
 import path from "node:path";
 
-import { parse } from "yaml";
+import {
+  extractGovernanceConfig,
+  extractLedgerApprovers,
+  extractPaymentConfig,
+  type GovernanceConfig,
+  type InboundPaymentConfig,
+  parseRepoSpec,
+  type RepoSpec,
+} from "@cogni/repo-spec";
 
 import { CHAIN_ID } from "@/shared/web3/chain";
 
-import { type RepoSpec, repoSpecSchema } from "./repoSpec.schema";
+export type {
+  GovernanceConfig,
+  GovernanceSchedule,
+  InboundPaymentConfig,
+  LedgerConfig,
+  LedgerPoolConfig,
+} from "@cogni/repo-spec";
 
-export interface GovernanceSchedule {
-  charter: string;
-  cron: string;
-  timezone: string;
-  entrypoint: string;
-}
+// ---------------------------------------------------------------------------
+// File I/O + caching (server-only concerns)
+// ---------------------------------------------------------------------------
 
-export interface LedgerPoolConfig {
-  baseIssuanceCredits: bigint;
-}
-
-export interface LedgerConfig {
-  scopeId: string;
-  scopeKey: string;
-  epochLengthDays: number;
-  activitySources: Record<
-    string,
-    { creditEstimateAlgo: string; sourceRefs: string[]; streams: string[] }
-  >;
-  poolConfig: LedgerPoolConfig;
-  /** base_issuance_credits as string (bigint serialized) for schedule payload. */
-  baseIssuanceCredits?: string;
-  /** EVM approver addresses from repo-spec. */
-  approvers?: string[];
-}
-
-export interface GovernanceConfig {
-  schedules: GovernanceSchedule[];
-  ledger?: LedgerConfig;
-}
-
-export interface InboundPaymentConfig {
-  chainId: number;
-  receivingAddress: string;
-  provider: string;
-}
-
-let cachedPaymentConfig: InboundPaymentConfig | null = null;
+let cachedSpec: RepoSpec | null = null;
 
 function loadRepoSpec(): RepoSpec {
+  if (cachedSpec) return cachedSpec;
+
   const repoSpecPath = path.join(process.cwd(), ".cogni", "repo-spec.yaml");
 
   if (!fs.existsSync(repoSpecPath)) {
@@ -69,63 +52,21 @@ function loadRepoSpec(): RepoSpec {
   }
 
   const content = fs.readFileSync(repoSpecPath, "utf8");
-
-  let parsed: unknown;
-  try {
-    parsed = parse(content);
-  } catch (error) {
-    throw new Error(
-      `[repo-spec] Failed to parse .cogni/repo-spec.yaml; ensure valid YAML: ${error instanceof Error ? error.message : String(error)}`
-    );
-  }
-
-  const result = repoSpecSchema.safeParse(parsed);
-  if (!result.success) {
-    throw new Error(
-      `[repo-spec] Invalid repo-spec.yaml structure: ${result.error.message}`
-    );
-  }
-
-  return result.data;
+  cachedSpec = parseRepoSpec(content);
+  return cachedSpec;
 }
 
-function validateAndMap(spec: RepoSpec): InboundPaymentConfig {
-  // Convert chain_id to number (supports both string and number from YAML)
-  const chainId =
-    typeof spec.cogni_dao.chain_id === "string"
-      ? Number(spec.cogni_dao.chain_id)
-      : spec.cogni_dao.chain_id;
+// ---------------------------------------------------------------------------
+// Cached accessors (delegate to @cogni/repo-spec pure functions)
+// ---------------------------------------------------------------------------
 
-  if (!Number.isFinite(chainId)) {
-    throw new Error(
-      "[repo-spec] Invalid cogni_dao.chain_id; expected numeric chain ID"
-    );
-  }
-
-  // TODO: Remove Sepolia (11155111) support from RepoSpecChainName enum once DAO is deployed on Base mainnet
-  if (chainId !== CHAIN_ID) {
-    throw new Error(
-      `[repo-spec] Chain mismatch: repo-spec declares ${chainId}, app requires ${CHAIN_ID}`
-    );
-  }
-
-  const topup = spec.payments_in.credits_topup;
-
-  return {
-    chainId,
-    receivingAddress: topup.receiving_address.trim(),
-    provider: topup.provider.trim(),
-  };
-}
+let cachedPaymentConfig: InboundPaymentConfig | null = null;
 
 export function getPaymentConfig(): InboundPaymentConfig {
-  if (cachedPaymentConfig) {
-    return cachedPaymentConfig;
-  }
+  if (cachedPaymentConfig) return cachedPaymentConfig;
 
   const spec = loadRepoSpec();
-  cachedPaymentConfig = validateAndMap(spec);
-
+  cachedPaymentConfig = extractPaymentConfig(spec, CHAIN_ID);
   return cachedPaymentConfig;
 }
 
@@ -136,9 +77,7 @@ let cachedNodeId: string | null = null;
  * Fails fast if repo-spec is missing or node_id is invalid.
  */
 export function getNodeId(): string {
-  if (cachedNodeId) {
-    return cachedNodeId;
-  }
+  if (cachedNodeId) return cachedNodeId;
 
   const spec = loadRepoSpec();
   cachedNodeId = spec.node_id;
@@ -152,9 +91,7 @@ let cachedScopeId: string | null = null;
  * Fails fast if repo-spec is missing scope_id.
  */
 export function getScopeId(): string {
-  if (cachedScopeId) {
-    return cachedScopeId;
-  }
+  if (cachedScopeId) return cachedScopeId;
 
   const spec = loadRepoSpec();
   if (!spec.scope_id) {
@@ -168,51 +105,11 @@ export function getScopeId(): string {
 
 let cachedGovernanceConfig: GovernanceConfig | null = null;
 
-function mapGovernanceConfig(spec: RepoSpec): GovernanceConfig {
-  const config: GovernanceConfig = {
-    schedules: spec.governance?.schedules ?? [],
-  };
-
-  // Wire ledger config if activity_ledger + scope identity are present
-  if (spec.activity_ledger && spec.scope_id && spec.scope_key) {
-    const sources: LedgerConfig["activitySources"] = {};
-    for (const [name, src] of Object.entries(
-      spec.activity_ledger.activity_sources
-    )) {
-      sources[name] = {
-        creditEstimateAlgo: src.credit_estimate_algo,
-        sourceRefs: src.source_refs,
-        streams: src.streams,
-      };
-    }
-    const poolCfg = spec.activity_ledger.pool_config;
-    const baseIssuanceCredits = poolCfg
-      ? BigInt(poolCfg.base_issuance_credits)
-      : 0n;
-    config.ledger = {
-      scopeId: spec.scope_id,
-      scopeKey: spec.scope_key,
-      epochLengthDays: spec.activity_ledger.epoch_length_days,
-      activitySources: sources,
-      poolConfig: {
-        baseIssuanceCredits,
-      },
-      baseIssuanceCredits: baseIssuanceCredits.toString(),
-      approvers: spec.activity_ledger.approvers,
-    };
-  }
-
-  return config;
-}
-
 export function getGovernanceConfig(): GovernanceConfig {
-  if (cachedGovernanceConfig) {
-    return cachedGovernanceConfig;
-  }
+  if (cachedGovernanceConfig) return cachedGovernanceConfig;
 
   const spec = loadRepoSpec();
-  cachedGovernanceConfig = mapGovernanceConfig(spec);
-
+  cachedGovernanceConfig = extractGovernanceConfig(spec);
   return cachedGovernanceConfig;
 }
 
@@ -224,13 +121,9 @@ let cachedLedgerApprovers: string[] | null = null;
  * Returns empty array if ledger config not present (write routes will reject all).
  */
 export function getLedgerApprovers(): string[] {
-  if (cachedLedgerApprovers) {
-    return cachedLedgerApprovers;
-  }
+  if (cachedLedgerApprovers) return cachedLedgerApprovers;
 
   const spec = loadRepoSpec();
-  cachedLedgerApprovers = (spec.activity_ledger?.approvers ?? []).map((a) =>
-    a.toLowerCase()
-  );
+  cachedLedgerApprovers = extractLedgerApprovers(spec);
   return cachedLedgerApprovers;
 }

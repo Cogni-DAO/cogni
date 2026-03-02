@@ -203,7 +203,7 @@ describe("getPaymentConfig (repo-spec)", () => {
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
-      expect(() => getPaymentConfig()).toThrow(/repo-spec\.yaml structure/i);
+      expect(() => getPaymentConfig()).toThrow(/Invalid repo-spec structure/i);
     } finally {
       cleanup(tmpDir);
     }
@@ -250,7 +250,7 @@ describe("getPaymentConfig (repo-spec)", () => {
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
-      expect(() => getPaymentConfig()).toThrow(/repo-spec\.yaml structure/i);
+      expect(() => getPaymentConfig()).toThrow(/Invalid repo-spec structure/i);
     } finally {
       cleanup(tmpDir);
     }
@@ -366,7 +366,9 @@ describe("getGovernanceConfig (repo-spec)", () => {
 
     try {
       const { getGovernanceConfig } = await loadRepoSpecModule();
-      expect(() => getGovernanceConfig()).toThrow(/repo-spec\.yaml structure/i);
+      expect(() => getGovernanceConfig()).toThrow(
+        /Invalid repo-spec structure/i
+      );
     } finally {
       cleanup(tmpDir);
     }
@@ -387,7 +389,9 @@ describe("getGovernanceConfig (repo-spec)", () => {
 
     try {
       const { getGovernanceConfig } = await loadRepoSpecModule();
-      expect(() => getGovernanceConfig()).toThrow(/repo-spec\.yaml structure/i);
+      expect(() => getGovernanceConfig()).toThrow(
+        /Invalid repo-spec structure/i
+      );
     } finally {
       cleanup(tmpDir);
     }

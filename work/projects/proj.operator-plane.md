@@ -107,7 +107,7 @@ Three layers, kept strictly separate:
 
 | Deliverable                                                                       | Status      | Est | Work Item  |
 | --------------------------------------------------------------------------------- | ----------- | --- | ---------- |
-| Unified repo-spec reader package (`@cogni/repo-spec`)                             | Not Started | 3   | task.0120  |
+| Unified repo-spec reader package (`@cogni/repo-spec`)                             | In Review   | 3   | task.0120  |
 | Fetch repo-spec from installed Node repos via GitHub API                          | Not Started | 2   | task.0122  |
 | Gateway proxy route (OpenAI-compatible, billing middleware)                       | Not Started | 3   | story.0116 |
 | API key management (generation, hashed storage, gateway auth)                     | Not Started | 2   | story.0116 |
