@@ -21,20 +21,20 @@ const VALID_SIGN_DATA = {
     chainId: 8453,
   },
   types: {
-    PayoutStatement: [
+    AttributionStatement: [
       { name: "nodeId", type: "string" },
       { name: "scopeId", type: "string" },
       { name: "epochId", type: "string" },
-      { name: "allocationSetHash", type: "string" },
+      { name: "finalAllocationSetHash", type: "string" },
       { name: "poolTotalCredits", type: "string" },
     ],
   },
-  primaryType: "PayoutStatement",
+  primaryType: "AttributionStatement",
   message: {
     nodeId: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d",
     scopeId: "a28a8b1e-1f9d-5cd5-9329-569e4819feda",
     epochId: "42",
-    allocationSetHash: "abc123def456",
+    finalAllocationSetHash: "abc123def456",
     poolTotalCredits: "10000",
   },
 };
@@ -49,11 +49,11 @@ describe("ledger.sign-data.v1 contract", () => {
     expect(parsed.message).toHaveProperty("nodeId");
     expect(parsed.message).toHaveProperty("scopeId");
     expect(parsed.message).toHaveProperty("epochId");
-    expect(parsed.message).toHaveProperty("allocationSetHash");
+    expect(parsed.message).toHaveProperty("finalAllocationSetHash");
     expect(parsed.message).toHaveProperty("poolTotalCredits");
   });
 
-  it("requires primaryType to be PayoutStatement", () => {
+  it("requires primaryType to be AttributionStatement", () => {
     const invalid = { ...VALID_SIGN_DATA, primaryType: "WrongType" };
     const result = signDataOperation.output.safeParse(invalid);
     expect(result.success).toBe(false);

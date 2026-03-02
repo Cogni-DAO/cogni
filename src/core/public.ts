@@ -41,6 +41,7 @@ export type {
 } from "./attribution/public";
 export {
   AllocationNotFoundError,
+  ATTRIBUTION_STATEMENT_TYPES,
   computeAllocationSetHash,
   computeStatementItems,
   EPOCH_STATUSES,

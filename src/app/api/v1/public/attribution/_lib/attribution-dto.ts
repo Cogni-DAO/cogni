@@ -12,11 +12,11 @@
  */
 
 import type {
-  AttributionAllocation,
   AttributionEpoch,
   AttributionPoolComponent,
   AttributionSelection,
   AttributionStatement,
+  EpochUserProjection,
   IngestionReceipt,
 } from "@cogni/attribution-ledger";
 
@@ -56,14 +56,12 @@ export function toSelectionDto(c: AttributionSelection) {
   };
 }
 
-export function toAllocationDto(a: AttributionAllocation) {
+export function toUserProjectionDto(a: EpochUserProjection) {
   return {
     id: a.id,
     userId: a.userId,
-    proposedUnits: a.proposedUnits.toString(),
-    finalUnits: a.finalUnits?.toString() ?? null,
-    overrideReason: a.overrideReason,
-    activityCount: a.activityCount,
+    projectedUnits: a.projectedUnits.toString(),
+    receiptCount: a.receiptCount,
     createdAt: a.createdAt.toISOString(),
     updatedAt: a.updatedAt.toISOString(),
   };
@@ -73,9 +71,9 @@ export function toStatementDto(s: AttributionStatement) {
   return {
     id: s.id,
     epochId: s.epochId.toString(),
-    allocationSetHash: s.allocationSetHash,
+    finalAllocationSetHash: s.finalAllocationSetHash,
     poolTotalCredits: s.poolTotalCredits.toString(),
-    items: s.statementItems,
+    statementLines: s.statementLines,
     supersedesStatementId: s.supersedesStatementId,
     createdAt: s.createdAt.toISOString(),
   };

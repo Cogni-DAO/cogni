@@ -21,7 +21,7 @@ export interface CanonicalMessageParams {
   readonly scopeId: string;
   /** Epoch ID as string (bigint serialized) */
   readonly epochId: string;
-  readonly allocationSetHash: string;
+  readonly finalAllocationSetHash: string;
   /** Pool total credits as string (bigint serialized) */
   readonly poolTotalCredits: string;
 }
@@ -33,11 +33,11 @@ export interface CanonicalMessageParams {
  */
 export function buildCanonicalMessage(params: CanonicalMessageParams): string {
   return [
-    "Cogni Payout Statement v1",
+    "Cogni Attribution Statement v1",
     `Node: ${params.nodeId}`,
     `Scope: ${params.scopeId}`,
     `Epoch: ${params.epochId}`,
-    `Allocation Hash: ${params.allocationSetHash}`,
+    `Final Allocation Hash: ${params.finalAllocationSetHash}`,
     `Pool Total: ${params.poolTotalCredits}`,
   ].join("\n");
 }
@@ -51,13 +51,13 @@ export function buildCanonicalMessage(params: CanonicalMessageParams): string {
 export const EIP712_DOMAIN_NAME = "Cogni Attribution" as const;
 export const EIP712_DOMAIN_VERSION = "1" as const;
 
-/** EIP-712 types for the PayoutStatement primary type. */
-export const PAYOUT_STATEMENT_TYPES = {
-  PayoutStatement: [
+/** EIP-712 types for the AttributionStatement primary type. */
+export const ATTRIBUTION_STATEMENT_TYPES = {
+  AttributionStatement: [
     { name: "nodeId", type: "string" },
     { name: "scopeId", type: "string" },
     { name: "epochId", type: "string" },
-    { name: "allocationSetHash", type: "string" },
+    { name: "finalAllocationSetHash", type: "string" },
     { name: "poolTotalCredits", type: "string" },
   ],
 } as const;
@@ -68,13 +68,13 @@ export interface EIP712TypedData {
     readonly version: string;
     readonly chainId: number;
   };
-  readonly types: typeof PAYOUT_STATEMENT_TYPES;
-  readonly primaryType: "PayoutStatement";
+  readonly types: typeof ATTRIBUTION_STATEMENT_TYPES;
+  readonly primaryType: "AttributionStatement";
   readonly message: {
     readonly nodeId: string;
     readonly scopeId: string;
     readonly epochId: string;
-    readonly allocationSetHash: string;
+    readonly finalAllocationSetHash: string;
     readonly poolTotalCredits: string;
   };
 }
@@ -86,7 +86,7 @@ export interface EIP712TypedDataParams extends CanonicalMessageParams {
 /**
  * Build EIP-712 typed data for payout statement signing.
  * Returns a plain object matching viem's `SignTypedDataParameters` shape.
- * SIGNATURE_SCOPE_BOUND: includes nodeId, scopeId, epochId, allocationSetHash, poolTotalCredits, chainId.
+ * SIGNATURE_SCOPE_BOUND: includes nodeId, scopeId, epochId, finalAllocationSetHash, poolTotalCredits, chainId.
  * EIP712_DETERMINISTIC: same inputs → identical output.
  */
 export function buildEIP712TypedData(
@@ -98,13 +98,13 @@ export function buildEIP712TypedData(
       version: EIP712_DOMAIN_VERSION,
       chainId: params.chainId,
     },
-    types: PAYOUT_STATEMENT_TYPES,
-    primaryType: "PayoutStatement",
+    types: ATTRIBUTION_STATEMENT_TYPES,
+    primaryType: "AttributionStatement",
     message: {
       nodeId: params.nodeId,
       scopeId: params.scopeId,
       epochId: params.epochId,
-      allocationSetHash: params.allocationSetHash,
+      finalAllocationSetHash: params.finalAllocationSetHash,
       poolTotalCredits: params.poolTotalCredits,
     },
   };

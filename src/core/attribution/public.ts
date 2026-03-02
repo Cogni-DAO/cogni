@@ -13,7 +13,6 @@
 
 // Store port re-exports
 export type {
-  AttributionAllocation,
   AttributionEpoch,
   AttributionPoolComponent,
   AttributionSelection,
@@ -21,19 +20,21 @@ export type {
   AttributionStatementSignature,
   AttributionStore,
   EpochStatus,
+  EpochUserProjection,
   FinalizedAllocation,
   IngestionCursor,
   IngestionReceipt,
-  InsertAllocationParams,
   InsertPoolComponentParams,
   InsertReceiptParams,
   InsertSignatureParams,
   InsertStatementParams,
+  InsertUserProjectionParams,
   StatementLineItem,
   UpsertSelectionParams,
 } from "@cogni/attribution-ledger";
 export {
   AllocationNotFoundError,
+  ATTRIBUTION_STATEMENT_TYPES,
   computeAllocationSetHash,
   computeStatementItems,
   EPOCH_STATUSES,

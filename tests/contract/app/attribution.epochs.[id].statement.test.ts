@@ -20,14 +20,16 @@ describe("ledger.epoch-statement.v1 contract", () => {
       statement: {
         id: "stmt-1",
         epochId: "1",
-        allocationSetHash: "abc123",
+        finalAllocationSetHash: "abc123",
         poolTotalCredits: "10000",
-        items: [
+        statementLines: [
           {
-            user_id: "user-1",
-            total_units: "8000",
-            share: "0.800000",
-            amount_credits: "8000",
+            claimant_key: "user:user-1",
+            claimant: { kind: "user", userId: "user-1" },
+            final_units: "8000",
+            pool_share: "0.800000",
+            credit_amount: "8000",
+            receipt_ids: ["receipt-1"],
           },
         ],
         supersedesStatementId: null,

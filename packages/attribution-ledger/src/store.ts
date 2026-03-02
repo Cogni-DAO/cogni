@@ -82,15 +82,25 @@ export interface AttributionSelection {
   readonly updatedAt: Date;
 }
 
-export interface AttributionAllocation {
+export interface EpochUserProjection {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
   readonly userId: string;
-  readonly proposedUnits: bigint;
-  readonly finalUnits: bigint | null;
-  readonly overrideReason: string | null;
-  readonly activityCount: number;
+  readonly projectedUnits: bigint;
+  readonly receiptCount: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+}
+
+export interface FinalClaimantAllocationRecord {
+  readonly id: string;
+  readonly nodeId: string;
+  readonly epochId: bigint;
+  readonly claimantKey: string;
+  readonly claimant: AttributionClaimant;
+  readonly finalUnits: bigint;
+  readonly receiptIds: readonly string[];
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -121,22 +131,21 @@ export interface AttributionStatement {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly allocationSetHash: string;
+  readonly finalAllocationSetHash: string;
   readonly poolTotalCredits: bigint;
-  readonly statementItems: AttributionStatementItem[];
-  readonly reviewOverridesJson: ReviewOverrideSnapshot[] | null;
+  readonly statementLines: AttributionStatementLineRecord[];
+  readonly reviewOverrides: ReviewOverrideSnapshot[] | null;
   readonly supersedesStatementId: string | null;
   readonly createdAt: Date;
 }
 
-export interface AttributionStatementItem {
-  readonly user_id: string;
-  readonly total_units: string;
-  readonly share: string;
-  readonly amount_credits: string;
-  readonly claimant_key?: string;
-  readonly claimant?: AttributionClaimant;
-  readonly receipt_ids?: readonly string[];
+export interface AttributionStatementLineRecord {
+  readonly claimant_key: string;
+  readonly claimant: AttributionClaimant;
+  readonly final_units: string;
+  readonly pool_share: string;
+  readonly credit_amount: string;
+  readonly receipt_ids: readonly string[];
 }
 
 export interface AttributionStatementSignature {
@@ -199,14 +208,21 @@ export interface UpsertSelectionParams {
   readonly note?: string | null;
 }
 
-export interface InsertAllocationParams {
+export interface InsertUserProjectionParams {
   readonly nodeId: string;
   readonly epochId: bigint;
   readonly userId: string;
-  readonly proposedUnits: bigint;
-  readonly finalUnits?: bigint | null;
-  readonly overrideReason?: string | null;
-  readonly activityCount: number;
+  readonly projectedUnits: bigint;
+  readonly receiptCount: number;
+}
+
+export interface InsertFinalClaimantAllocationParams {
+  readonly nodeId: string;
+  readonly epochId: bigint;
+  readonly claimantKey: string;
+  readonly claimant: AttributionClaimant;
+  readonly finalUnits: bigint;
+  readonly receiptIds: readonly string[];
 }
 
 export interface InsertPoolComponentParams {
@@ -222,10 +238,10 @@ export interface InsertPoolComponentParams {
 export interface InsertStatementParams {
   readonly nodeId: string;
   readonly epochId: bigint;
-  readonly allocationSetHash: string;
+  readonly finalAllocationSetHash: string;
   readonly poolTotalCredits: bigint;
-  readonly statementItems: AttributionStatementItem[];
-  readonly reviewOverridesJson?: ReviewOverrideSnapshot[] | null;
+  readonly statementLines: AttributionStatementLineRecord[];
+  readonly reviewOverrides?: ReviewOverrideSnapshot[] | null;
   readonly supersedesStatementId?: string | null;
 }
 
@@ -273,7 +289,7 @@ export interface InsertSelectionAutoParams {
 // Subject override types
 // ---------------------------------------------------------------------------
 
-export interface SubjectOverrideRecord {
+export interface ReviewSubjectOverrideRecord {
   readonly id: string;
   readonly nodeId: string;
   readonly epochId: bigint;
@@ -285,7 +301,7 @@ export interface SubjectOverrideRecord {
   readonly updatedAt: Date;
 }
 
-export interface UpsertSubjectOverrideParams {
+export interface UpsertReviewSubjectOverrideParams {
   readonly nodeId: string;
   readonly epochId: bigint;
   readonly subjectRef: string;
@@ -298,8 +314,8 @@ export interface UpsertSubjectOverrideParams {
  * Convert store records to pure domain SubjectOverride[].
  * Use this instead of inline .map() — keeps the mapping in one place.
  */
-export function toSubjectOverrides(
-  records: readonly SubjectOverrideRecord[]
+export function toReviewSubjectOverrides(
+  records: readonly ReviewSubjectOverrideRecord[]
 ): SubjectOverride[] {
   return records.map((r) => ({
     subjectRef: r.subjectRef,
@@ -419,21 +435,32 @@ export interface AttributionStore {
   getUnresolvedSelection(epochId: bigint): Promise<AttributionSelection[]>;
 
   // Allocations
-  insertAllocations(allocations: InsertAllocationParams[]): Promise<void>;
+  insertUserProjections(
+    projections: InsertUserProjectionParams[]
+  ): Promise<void>;
   /**
-   * Upsert allocations — ON CONFLICT (epoch_id, user_id) UPDATE proposed_units and activity_count.
-   * Never touches final_units or override_reason (ALLOCATION_PRESERVES_OVERRIDES).
+   * Upsert user projections — ON CONFLICT (epoch_id, user_id) UPDATE projected_units and receipt_count.
    */
-  upsertAllocations(allocations: InsertAllocationParams[]): Promise<void>;
+  upsertUserProjections(
+    projections: InsertUserProjectionParams[]
+  ): Promise<void>;
   /**
-   * Delete allocation rows where user_id NOT IN activeUserIds AND final_units IS NULL.
-   * Admin-overridden allocations (final_units set) are never auto-deleted.
+   * Delete projection rows where user_id NOT IN activeUserIds.
    */
-  deleteStaleAllocations(
+  deleteStaleUserProjections(
     epochId: bigint,
     activeUserIds: string[]
   ): Promise<void>;
-  getAllocationsForEpoch(epochId: bigint): Promise<AttributionAllocation[]>;
+  getUserProjectionsForEpoch(epochId: bigint): Promise<EpochUserProjection[]>;
+
+  // Final claimant allocations (canonical signed units)
+  replaceFinalClaimantAllocations(
+    epochId: bigint,
+    allocations: readonly InsertFinalClaimantAllocationParams[]
+  ): Promise<void>;
+  getFinalClaimantAllocationsForEpoch(
+    epochId: bigint
+  ): Promise<FinalClaimantAllocationRecord[]>;
 
   // Ingestion cursors (one stream per call)
   upsertCursor(
@@ -477,9 +504,10 @@ export interface AttributionStore {
   finalizeEpochAtomic(params: {
     epochId: bigint;
     poolTotal: bigint;
+    finalClaimantAllocations: readonly InsertFinalClaimantAllocationParams[];
     statement: Omit<InsertStatementParams, "epochId">;
     signature: Omit<InsertSignatureParams, "statementId">;
-    expectedAllocationSetHash: string;
+    expectedFinalAllocationSetHash: string;
   }): Promise<{ epoch: AttributionEpoch; statement: AttributionStatement }>;
 
   // Statement signatures
@@ -490,19 +518,22 @@ export interface AttributionStore {
 
   // Subject overrides (review-phase per-subject adjustments)
   /** Upsert a subject override. Acquires epoch row lock and verifies status='review'. */
-  upsertSubjectOverride(
-    params: UpsertSubjectOverrideParams
-  ): Promise<SubjectOverrideRecord>;
+  upsertReviewSubjectOverride(
+    params: UpsertReviewSubjectOverrideParams
+  ): Promise<ReviewSubjectOverrideRecord>;
   /** Atomically upsert multiple subject overrides in a single transaction. */
-  batchUpsertSubjectOverrides(
-    paramsList: readonly UpsertSubjectOverrideParams[]
-  ): Promise<SubjectOverrideRecord[]>;
+  batchUpsertReviewSubjectOverrides(
+    paramsList: readonly UpsertReviewSubjectOverrideParams[]
+  ): Promise<ReviewSubjectOverrideRecord[]>;
   /** Delete a subject override by epoch + subjectRef. */
-  deleteSubjectOverride(epochId: bigint, subjectRef: string): Promise<void>;
+  deleteReviewSubjectOverride(
+    epochId: bigint,
+    subjectRef: string
+  ): Promise<void>;
   /** Get all subject overrides for an epoch. */
-  getSubjectOverridesForEpoch(
+  getReviewSubjectOverridesForEpoch(
     epochId: bigint
-  ): Promise<SubjectOverrideRecord[]>;
+  ): Promise<ReviewSubjectOverrideRecord[]>;
 
   // Identity resolution (cross-domain convenience — V0 on ledger port)
   /**

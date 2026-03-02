@@ -80,13 +80,13 @@ export type {
   RecordInvocationParams,
 } from "./ai-telemetry.port";
 export type {
-  AttributionAllocation,
   AttributionEpoch,
   AttributionPoolComponent,
   AttributionSelection,
   AttributionStatement,
   AttributionStatementSignature,
   AttributionStore,
+  EpochUserProjection,
   IngestionCursor,
   IngestionReceipt,
 } from "./attribution-store.port";

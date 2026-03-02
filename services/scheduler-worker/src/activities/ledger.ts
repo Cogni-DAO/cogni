@@ -12,38 +12,37 @@
  *   - Per TEMPORAL_DETERMINISM: Activities contain all I/O; workflows call only these proxies
  *   - Per SELECTION_AUTO_POPULATE: materializeSelection inserts new selections (DO NOTHING on conflict), updates only userId on unresolved rows
  *   - Per IDENTITY_BEST_EFFORT: Unresolved receipts get userId=null in selection rows, never dropped
- *   - Per ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations never touches admin-set final_units
+ *   - Per USER_PROJECTIONS_RECOMPUTABLE: upsertUserProjections persists recomputable user projections only
  *   - Per CONFIG_LOCKED_AT_REVIEW: autoCloseIngestion pins allocationAlgoRef + weightConfigHash
  *   - Per EVALUATION_FINAL_ATOMIC: autoCloseIngestion passes evaluations to closeIngestionWithEvaluations for atomic write
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
- *   - Per FINALIZE_CLAIMANT_AWARE: finalizeEpoch loads locked claimant-share evaluations, builds claimant allocations with resolved-user overrides, and stores claimant metadata in statement items
+ *   - Per FINALIZE_CLAIMANT_AWARE: finalizeEpoch loads locked claimant-share evaluations, computes final claimant allocations with review overrides, and stores claimant metadata in attribution statement lines
  * Side-effects: IO (database, GitHub API, viem EIP-712 verification)
  * Links: docs/spec/attribution-ledger.md, docs/spec/temporal-patterns.md
  * @internal
  */
 
 import type {
-  AttributionClaimant,
   ClaimantSharesSubject,
   UnselectedReceipt,
 } from "@cogni/attribution-ledger";
 import {
   applySubjectOverrides,
-  buildClaimantAllocations,
   buildDefaultReceiptClaimantSharesPayload,
   buildEIP712TypedData,
   buildReviewOverrideSnapshots,
   CLAIMANT_SHARES_EVALUATION_REF,
   claimantKey,
   computeApproverSetHash,
-  computeClaimantAllocationSetHash,
-  computeClaimantCreditLineItems,
+  computeAttributionStatementLines,
+  computeFinalClaimantAllocationSetHash,
+  computeFinalClaimantAllocations,
   computeProposedAllocations,
   computeWeightConfigHash,
   deriveAllocationAlgoRef,
   estimatePoolComponentsV0,
   parseClaimantSharesPayload,
-  toSubjectOverrides,
+  toReviewSubjectOverrides,
   validateWeightConfig,
 } from "@cogni/attribution-ledger";
 import type { ActivityEvent } from "@cogni/ingestion-core";
@@ -230,15 +229,11 @@ export interface FinalizeEpochInput {
 export interface FinalizeEpochOutput {
   readonly statementId: string;
   readonly poolTotalCredits: string; // bigint serialized
-  readonly allocationSetHash: string;
-  readonly statementItemCount: number;
+  readonly finalAllocationSetHash: string;
+  readonly statementLineCount: number;
 }
 
-function statementUserId(claimant: AttributionClaimant): string {
-  return claimant.kind === "user" ? claimant.userId : claimantKey(claimant);
-}
-
-async function loadFinalizedClaimantSubjects(
+async function loadLockedClaimantSubjects(
   attributionStore: AttributionStore,
   epoch: {
     readonly id: bigint;
@@ -663,21 +658,21 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       weightConfig
     );
 
-    // 3. Upsert allocations (preserves admin final_units)
-    await attributionStore.upsertAllocations(
+    // 3. Upsert user projections (recomputable, unsigned)
+    await attributionStore.upsertUserProjections(
       proposed.map((p) => ({
         nodeId,
         epochId,
         userId: p.userId,
-        proposedUnits: p.proposedUnits,
-        activityCount: p.activityCount,
+        projectedUnits: p.proposedUnits,
+        receiptCount: p.activityCount,
       }))
     );
 
-    // 4. Remove stale allocations (guard: skip if proposed is empty)
+    // 4. Remove stale user projections (guard: skip if proposed is empty)
     if (proposed.length > 0) {
       const activeUserIds = proposed.map((p) => p.userId);
-      await attributionStore.deleteStaleAllocations(epochId, activeUserIds);
+      await attributionStore.deleteStaleUserProjections(epochId, activeUserIds);
     }
 
     const totalProposedUnits = proposed.reduce(
@@ -873,11 +868,23 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       await attributionStore.finalizeEpochAtomic({
         epochId,
         poolTotal: existing.poolTotalCredits,
+        finalClaimantAllocations: await attributionStore
+          .getFinalClaimantAllocationsForEpoch(epochId)
+          .then((allocations) =>
+            allocations.map((allocation) => ({
+              nodeId: allocation.nodeId,
+              epochId: allocation.epochId,
+              claimantKey: allocation.claimantKey,
+              claimant: allocation.claimant,
+              finalUnits: allocation.finalUnits,
+              receiptIds: allocation.receiptIds,
+            }))
+          ),
         statement: {
           nodeId,
-          allocationSetHash: existing.allocationSetHash,
+          finalAllocationSetHash: existing.finalAllocationSetHash,
           poolTotalCredits: existing.poolTotalCredits,
-          statementItems: existing.statementItems,
+          statementLines: existing.statementLines,
         },
         signature: {
           nodeId,
@@ -885,14 +892,14 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
           signature: input.signature,
           signedAt: new Date(),
         },
-        expectedAllocationSetHash: existing.allocationSetHash,
+        expectedFinalAllocationSetHash: existing.finalAllocationSetHash,
       });
 
       return {
         statementId: existing.id,
         poolTotalCredits: existing.poolTotalCredits.toString(),
-        allocationSetHash: existing.allocationSetHash,
-        statementItemCount: existing.statementItems.length,
+        finalAllocationSetHash: existing.finalAllocationSetHash,
+        statementLineCount: existing.statementLines.length,
       };
     }
 
@@ -947,14 +954,14 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     );
 
     // 5. Load claimant subjects + subject overrides
-    const claimantSubjects = await loadFinalizedClaimantSubjects(
+    const claimantSubjects = await loadLockedClaimantSubjects(
       attributionStore,
       epoch
     );
 
     const overrideRecords =
-      await attributionStore.getSubjectOverridesForEpoch(epochId);
-    const subjectOverrides = toSubjectOverrides(overrideRecords);
+      await attributionStore.getReviewSubjectOverridesForEpoch(epochId);
+    const subjectOverrides = toReviewSubjectOverrides(overrideRecords);
 
     // 6. Apply subject overrides + build review snapshot for audit trail
     const modifiedSubjects = applySubjectOverrides(
@@ -966,28 +973,30 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       subjectOverrides
     );
 
-    const claimantAllocations = buildClaimantAllocations(modifiedSubjects);
-    if (claimantAllocations.length === 0) {
+    const finalClaimantAllocations =
+      computeFinalClaimantAllocations(modifiedSubjects);
+    if (finalClaimantAllocations.length === 0) {
       throw new Error(
         `finalizeEpoch: epoch ${input.epochId} has no claimant allocations`
       );
     }
 
-    const items = computeClaimantCreditLineItems(
-      claimantAllocations,
+    const statementLines = computeAttributionStatementLines(
+      finalClaimantAllocations,
       poolTotal
     );
 
     // 7. Compute allocation set hash (deterministic)
-    const allocationSetHash =
-      await computeClaimantAllocationSetHash(claimantAllocations);
+    const finalAllocationSetHash = await computeFinalClaimantAllocationSetHash(
+      finalClaimantAllocations
+    );
 
     // 8. Build EIP-712 typed data and verify signature
     const typedData = buildEIP712TypedData({
       nodeId,
       scopeId,
       epochId: input.epochId,
-      allocationSetHash,
+      finalAllocationSetHash,
       poolTotalCredits: poolTotal.toString(),
       chainId,
     });
@@ -1011,20 +1020,29 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       await attributionStore.finalizeEpochAtomic({
         epochId,
         poolTotal,
+        finalClaimantAllocations: finalClaimantAllocations.map(
+          (allocation) => ({
+            nodeId,
+            epochId,
+            claimantKey: claimantKey(allocation.claimant),
+            claimant: allocation.claimant,
+            finalUnits: allocation.finalUnits,
+            receiptIds: [...(allocation.receiptIds ?? [])],
+          })
+        ),
         statement: {
           nodeId,
-          allocationSetHash,
+          finalAllocationSetHash,
           poolTotalCredits: poolTotal,
-          statementItems: items.map((li) => ({
-            user_id: statementUserId(li.claimant),
-            total_units: li.totalUnits.toString(),
-            share: li.share,
-            amount_credits: li.amountCredits.toString(),
-            claimant_key: claimantKey(li.claimant),
-            claimant: li.claimant,
-            receipt_ids: [...li.receiptIds],
+          statementLines: statementLines.map((line) => ({
+            claimant_key: line.claimantKey,
+            claimant: line.claimant,
+            final_units: line.finalUnits.toString(),
+            pool_share: line.poolShare,
+            credit_amount: line.creditAmount.toString(),
+            receipt_ids: [...line.receiptIds],
           })),
-          reviewOverridesJson:
+          reviewOverrides:
             reviewOverridesSnapshot.length > 0 ? reviewOverridesSnapshot : null,
         },
         signature: {
@@ -1033,7 +1051,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
           signature: input.signature,
           signedAt: new Date(),
         },
-        expectedAllocationSetHash: allocationSetHash,
+        expectedFinalAllocationSetHash: finalAllocationSetHash,
       });
 
     logger.info(
@@ -1041,8 +1059,8 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
         epochId: input.epochId,
         statementId: statement.id,
         poolTotalCredits: poolTotal.toString(),
-        allocationSetHash: `${allocationSetHash.slice(0, 12)}...`,
-        statementItemCount: items.length,
+        finalAllocationSetHash: `${finalAllocationSetHash.slice(0, 12)}...`,
+        statementLineCount: statementLines.length,
         status: finalizedEpoch.status,
       },
       "Epoch finalized"
@@ -1051,8 +1069,8 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     return {
       statementId: statement.id,
       poolTotalCredits: poolTotal.toString(),
-      allocationSetHash,
-      statementItemCount: items.length,
+      finalAllocationSetHash,
+      statementLineCount: statementLines.length,
     };
   }
 

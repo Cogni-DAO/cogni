@@ -80,17 +80,18 @@ export interface ExpandedClaimantUnit {
   readonly metadata: Record<string, unknown> | null;
 }
 
-export interface FinalizedClaimantAllocation {
+export interface FinalClaimantAllocation {
   readonly claimant: AttributionClaimant;
-  readonly valuationUnits: bigint;
+  readonly finalUnits: bigint;
   readonly receiptIds?: readonly string[];
 }
 
-export interface ClaimantCreditLineItem {
+export interface AttributionStatementLine {
+  readonly claimantKey: string;
   readonly claimant: AttributionClaimant;
-  readonly totalUnits: bigint;
-  readonly share: string;
-  readonly amountCredits: bigint;
+  readonly finalUnits: bigint;
+  readonly poolShare: string;
+  readonly creditAmount: bigint;
   readonly receiptIds: readonly string[];
 }
 
@@ -319,10 +320,10 @@ export function expandClaimantUnits(
   });
 }
 
-export function computeClaimantCreditLineItems(
-  allocations: readonly FinalizedClaimantAllocation[],
+export function computeAttributionStatementLines(
+  allocations: readonly FinalClaimantAllocation[],
   poolTotalCredits: bigint
-): ClaimantCreditLineItem[] {
+): AttributionStatementLine[] {
   if (allocations.length === 0) {
     return [];
   }
@@ -341,16 +342,16 @@ export function computeClaimantCreditLineItems(
   >();
 
   for (const allocation of allocations) {
-    if (allocation.valuationUnits < 0n) {
+    if (allocation.finalUnits < 0n) {
       throw new RangeError(
-        `Negative valuationUnits for claimant ${claimantKey(allocation.claimant)}: ${allocation.valuationUnits}`
+        `Negative finalUnits for claimant ${claimantKey(allocation.claimant)}: ${allocation.finalUnits}`
       );
     }
 
     const key = claimantKey(allocation.claimant);
     const existing = claimantUnits.get(key);
     if (existing) {
-      existing.totalUnits += allocation.valuationUnits;
+      existing.totalUnits += allocation.finalUnits;
       for (const receiptId of allocation.receiptIds ?? []) {
         existing.receiptIds.add(receiptId);
       }
@@ -359,7 +360,7 @@ export function computeClaimantCreditLineItems(
 
     claimantUnits.set(key, {
       claimant: allocation.claimant,
-      totalUnits: allocation.valuationUnits,
+      totalUnits: allocation.finalUnits,
       receiptIds: new Set(allocation.receiptIds ?? []),
     });
   }
@@ -431,10 +432,11 @@ export function computeClaimantCreditLineItems(
       const share = `${wholePart}.${fracPart.toString().padStart(6, "0")}`;
 
       return {
+        claimantKey: key,
         claimant,
-        totalUnits: units,
-        share,
-        amountCredits,
+        finalUnits: units,
+        poolShare: share,
+        creditAmount: amountCredits,
         receiptIds,
       };
     }
@@ -534,14 +536,14 @@ export function buildReviewOverrideSnapshots(
 // Claimant allocation builder
 // ---------------------------------------------------------------------------
 
-export function buildClaimantAllocations(
+export function computeFinalClaimantAllocations(
   subjects: readonly ClaimantSharesSubject[]
-): FinalizedClaimantAllocation[] {
+): FinalClaimantAllocation[] {
   const grouped = new Map<
     string,
     {
       claimant: AttributionClaimant;
-      valuationUnits: bigint;
+      finalUnits: bigint;
       receiptIds: Set<string>;
     }
   >();
@@ -550,7 +552,7 @@ export function buildClaimantAllocations(
     const key = claimantKey(item.claimant);
     const existing = grouped.get(key);
     if (existing) {
-      existing.valuationUnits += item.units;
+      existing.finalUnits += item.units;
       for (const receiptId of item.receiptIds) {
         existing.receiptIds.add(receiptId);
       }
@@ -559,7 +561,7 @@ export function buildClaimantAllocations(
 
     grouped.set(key, {
       claimant: item.claimant,
-      valuationUnits: item.units,
+      finalUnits: item.units,
       receiptIds: new Set(item.receiptIds),
     });
   }
@@ -568,7 +570,7 @@ export function buildClaimantAllocations(
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, entry]) => ({
       claimant: entry.claimant,
-      valuationUnits: entry.valuationUnits,
+      finalUnits: entry.finalUnits,
       receiptIds: [...entry.receiptIds].sort(),
     }));
 }
