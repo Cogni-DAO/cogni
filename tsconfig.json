@@ -13,6 +13,7 @@
     { "path": "./packages/db-schema" },
     { "path": "./packages/ingestion-core" },
     { "path": "./packages/attribution-ledger" },
-    { "path": "./packages/scheduler-core" }
+    { "path": "./packages/scheduler-core" },
+    { "path": "./packages/repo-spec" }
   ]
 }

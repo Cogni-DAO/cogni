@@ -12,7 +12,7 @@ spec_refs: node-operator-contract-spec
 assignees: derekg1729
 credit:
 project: proj.operator-plane
-branch:
+branch: task/0120-repo-spec-reader
 pr:
 reviewer:
 revision: 0
