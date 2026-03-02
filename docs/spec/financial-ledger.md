@@ -29,26 +29,44 @@ All money I/O in one place. Inbound USDC → treasury postings. Attribution stat
 | FUNDING_IS_FINANCIAL      | Treasury → MerkleDistributor contract funding IS a financial event. Entry: Dr Liability:UnclaimedRewards / Cr Assets:Treasury:USDC.                                                                                                     |
 | CLAIM_IS_FINANCIAL        | User on-chain claim from the distributor IS a financial event (liability reduction).                                                                                                                                                    |
 | ROTKI_ENRICHMENT_ONLY     | Rotki for crypto transaction enrichment and tax lot validation. NOT the canonical ledger.                                                                                                                                               |
-| MERKLE_CLAIMS             | MerkleDistributor (Uniswap pattern, Base mainnet) for on-chain distribution. User-initiated claims with inclusion proofs. Not Splits push distribution.                                                                                 |
+| EQUITY_PRIMARY            | Equity tokens (ERC-20) are the primary automated distribution instrument. USDC distributions are governance-voted, not automated.                                                                                                       |
+| MERKLE_CLAIMS             | MerkleDistributor (Uniswap pattern, Base mainnet) for on-chain distribution. User-initiated claims with inclusion proofs. Not Splits push distribution. Supports both equity tokens and USDC (separate roots or instances).             |
+| MULTI_INSTRUMENT          | Beancount hierarchy tracks all instrument types (equity tokens, USDC, future). Financial events are instrument-typed. Settlement policy determines which instruments are active.                                                        |
 | OPERATOR_PORT_REQUIRED    | Treasury actions (fund distributor, rotate Merkle roots, contract management, batch operations) require an Operator Port — a signing + policy boundary with rate limits, approvals, allowlists, and audit logs. NOT a custodial wallet. |
 | ALL_MATH_BIGINT           | No floating point in monetary calculations. Inherited from attribution-ledger.                                                                                                                                                          |
 
 ## Accounts Hierarchy (Beancount)
 
 ```
-Assets:Treasury:USDC              ; DAO treasury wallet
-Assets:Distributor:USDC           ; Funds locked in MerkleDistributor contract
-Liability:UnclaimedRewards        ; Committed but unclaimed distributions
-Expense:ContributorRewards        ; Recognized contributor compensation
+; --- Equity Token (primary distribution instrument) ---
+Assets:EmissionsVault:COGNI       ; Pre-minted equity tokens awaiting release
+Assets:Distributor:COGNI          ; Tokens locked in MerkleDistributor per epoch
+Liability:UnclaimedEquity         ; Committed but unclaimed equity token distributions
+
+; --- USDC (revenue + governance-voted distributions) ---
+Assets:Treasury:USDC              ; DAO treasury wallet (inbound revenue)
+Assets:Distributor:USDC           ; Funds locked in MerkleDistributor (governance-voted payouts)
+Liability:UnclaimedUSDC           ; Committed but unclaimed USDC distributions (future)
+
+; --- P&L ---
+Expense:ContributorRewards:Equity ; Equity token distributions (automated per epoch)
+Expense:ContributorRewards:USDC   ; USDC distributions (governance-voted, future)
 Income:ServiceRevenue             ; Inbound payments for AI services
 Income:x402Settlements            ; x402 per-request settlement revenue
 ```
 
-## Three Financial Events
+## Financial Events
 
-1. **Epoch signed (optional accrual)**: Dr Expense:ContributorRewards / Cr Liability:UnclaimedRewards. Only if running accrual accounting. No money moves.
-2. **Treasury funds distributor**: Dr Liability:UnclaimedRewards / Cr Assets:Treasury:USDC. Money moves on-chain via Operator Port.
-3. **User claims on-chain**: Liability reduction (if tracked per-claim), or no-op if full liability moved at funding time.
+**Automated (per epoch):**
+
+1. **Epoch signed (optional accrual)**: Dr Expense:ContributorRewards:Equity / Cr Liability:UnclaimedEquity. No tokens move.
+2. **EmissionsVault funds distributor**: Dr Liability:UnclaimedEquity / Cr Assets:EmissionsVault:COGNI. Equity tokens move on-chain via Operator Port.
+3. **User claims equity tokens on-chain**: Liability reduction via MerkleDistributor claim.
+
+**Governance-voted (future, not automated):**
+
+4. **USDC distribution approved**: Governance vote passes → Dr Expense:ContributorRewards:USDC / Cr Assets:Treasury:USDC. Operator Port funds a separate USDC MerkleDistributor (or same contract, different token).
+5. **User claims USDC on-chain**: Same MerkleDistributor claim pattern, different token.
 
 ## Design
 
