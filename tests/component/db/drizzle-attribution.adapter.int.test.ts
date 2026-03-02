@@ -19,12 +19,12 @@ import {
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import {
   epochWindow,
-  makeAllocation,
   makeEvaluation,
   makeIngestionReceipt,
   makePoolComponent,
   makeSelection,
   makeSelectionAuto,
+  makeUserProjection,
   OTHER_SCOPE_ID,
   TEST_NODE_ID,
   TEST_SCOPE_ID,
@@ -521,9 +521,9 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     });
   });
 
-  // ── Allocations ───────────────────────────────────────────────
+  // ── User Projections ──────────────────────────────────────────
 
-  describe("allocations", () => {
+  describe("user projections", () => {
     let epochId: bigint;
 
     beforeAll(async () => {
@@ -546,78 +546,67 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       await adapter.finalizeEpoch(epochId, 0n);
     });
 
-    it("inserts allocations and retrieves them", async () => {
-      await adapter.insertAllocations([
-        makeAllocation({
+    it("inserts user projections and retrieves them", async () => {
+      await adapter.insertUserProjections([
+        makeUserProjection({
           epochId,
           userId: actor.user.id,
-          proposedUnits: 8000n,
-          activityCount: 3,
+          projectedUnits: 8000n,
+          receiptCount: 3,
         }),
       ]);
 
-      const allocs = await adapter.getAllocationsForEpoch(epochId);
-      expect(allocs).toHaveLength(1);
-      expect(allocs[0]?.proposedUnits).toBe(8000n);
-      expect(allocs[0]?.finalUnits).toBeNull();
+      const projections = await adapter.getUserProjectionsForEpoch(epochId);
+      expect(projections).toHaveLength(1);
+      expect(projections[0]?.projectedUnits).toBe(8000n);
+      expect(projections[0]?.receiptCount).toBe(3);
     });
 
-    it("ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations does not overwrite final_units", async () => {
-      // Set final_units directly (actor.user allocation already exists from prior test)
-      await db.execute(
-        sql`UPDATE epoch_allocations SET final_units = 10000, override_reason = 'bonus for extra work' WHERE epoch_id = ${epochId} AND user_id = ${actor.user.id}`
-      );
-      // actor.user now has final_units=10000n
-      await adapter.upsertAllocations([
-        makeAllocation({
+    it("upsertUserProjections updates projected units on conflict", async () => {
+      await adapter.upsertUserProjections([
+        makeUserProjection({
           epochId,
           userId: actor.user.id,
-          proposedUnits: 99999n,
-          activityCount: 10,
+          projectedUnits: 99999n,
+          receiptCount: 10,
         }),
       ]);
 
-      const allocs = await adapter.getAllocationsForEpoch(epochId);
-      const alloc = allocs.find((a) => a.userId === actor.user.id);
-      expect(alloc).toBeDefined();
-      expect(alloc?.proposedUnits).toBe(99999n); // updated
-      expect(alloc?.activityCount).toBe(10); // updated
-      expect(alloc?.finalUnits).toBe(10000n); // preserved
-      expect(alloc?.overrideReason).toBe("bonus for extra work"); // preserved
+      const projections = await adapter.getUserProjectionsForEpoch(epochId);
+      const projection = projections.find((p) => p.userId === actor.user.id);
+      expect(projection).toBeDefined();
+      expect(projection?.projectedUnits).toBe(99999n);
+      expect(projection?.receiptCount).toBe(10);
     });
 
-    it("deleteStaleAllocations does not remove rows with final_units set", async () => {
+    it("deleteStaleUserProjections removes rows not in the active set", async () => {
       // Seed two more users
       const actorB = await seedTestActor(db);
       const actorC = await seedTestActor(db);
 
-      await adapter.insertAllocations([
-        makeAllocation({
+      await adapter.insertUserProjections([
+        makeUserProjection({
           epochId,
           userId: actorB.user.id,
-          proposedUnits: 2000n,
-          finalUnits: 5000n,
-          overrideReason: "admin override",
-          activityCount: 1,
+          projectedUnits: 2000n,
+          receiptCount: 1,
         }),
-        makeAllocation({
+        makeUserProjection({
           epochId,
           userId: actorC.user.id,
-          proposedUnits: 3000n,
-          activityCount: 1,
+          projectedUnits: 3000n,
+          receiptCount: 1,
         }),
       ]);
 
-      // Delete stale: only actor.user is "active" — actorB and actorC are "stale"
-      // But actorB has final_units → should be kept
-      await adapter.deleteStaleAllocations(epochId, [actor.user.id]);
+      await adapter.deleteStaleUserProjections(epochId, [actor.user.id]);
 
-      const allocs = await adapter.getAllocationsForEpoch(epochId);
-      const userIds = allocs.map((a) => a.userId);
+      const projections = await adapter.getUserProjectionsForEpoch(epochId);
+      const userIds = projections.map((p) => p.userId);
 
-      expect(userIds).toContain(actor.user.id); // active
-      expect(userIds).toContain(actorB.user.id); // stale but has final_units → kept
-      expect(userIds).not.toContain(actorC.user.id); // stale, no final_units → deleted
+      expect(userIds).toContain(actor.user.id);
+      expect(userIds).not.toContain(actorB.user.id);
+      expect(userIds).not.toContain(actorC.user.id);
     });
   });
 
@@ -795,14 +784,16 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       const stmt = await adapter.insertEpochStatement({
         nodeId: TEST_NODE_ID,
         epochId,
-        allocationSetHash: "abc123def456",
+        finalAllocationSetHash: "abc123def456",
         poolTotalCredits: 10000n,
-        statementItems: [
+        statementLines: [
           {
-            user_id: actor.user.id,
-            total_units: "8000",
-            share: "1.000000",
-            amount_credits: "10000",
+            claimant_key: `user:${actor.user.id}`,
+            claimant: { kind: "user", userId: actor.user.id },
+            final_units: "8000",
+            pool_share: "1.000000",
+            credit_amount: "10000",
+            receipt_ids: ["github:pr:test/repo:1"],
           },
         ],
       });
@@ -846,14 +837,16 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       const stmt = await adapter.insertEpochStatement({
         nodeId: TEST_NODE_ID,
         epochId: epoch.id,
-        allocationSetHash: "sig-test-hash",
+        finalAllocationSetHash: "sig-test-hash",
         poolTotalCredits: 20000n,
-        statementItems: [
+        statementLines: [
           {
-            user_id: "sig-test-user",
-            total_units: "20000",
-            share: "1.0",
-            amount_credits: "20000",
+            claimant_key: "user:sig-test-user",
+            claimant: { kind: "user", userId: "sig-test-user" },
+            final_units: "20000",
+            pool_share: "1.0",
+            credit_amount: "20000",
+            receipt_ids: ["sig-test-receipt"],
           },
         ],
       });
@@ -898,18 +891,40 @@ describe("DrizzleAttributionAdapter (Component)", () => {
   describe("finalizeEpochAtomic", () => {
     const SIGNER_WALLET = "0xaaaa000000000000000000000000000000000001";
     const HASH = "atomic-test-hash-abc123";
-    const PAYOUTS_JSON = [
+    const FINAL_CLAIMANT_ALLOCATIONS = [
       {
-        user_id: "user-1",
-        total_units: "8000",
-        share: "0.800000",
-        amount_credits: "8000",
+        nodeId: TEST_NODE_ID,
+        epochId: 0n,
+        claimantKey: "user:user-1",
+        claimant: { kind: "user" as const, userId: "user-1" },
+        finalUnits: 8000n,
+        receiptIds: ["receipt-1"],
       },
       {
-        user_id: "user-2",
-        total_units: "2000",
-        share: "0.200000",
-        amount_credits: "2000",
+        nodeId: TEST_NODE_ID,
+        epochId: 0n,
+        claimantKey: "user:user-2",
+        claimant: { kind: "user" as const, userId: "user-2" },
+        finalUnits: 2000n,
+        receiptIds: ["receipt-2"],
+      },
+    ];
+    const STATEMENT_LINES = [
+      {
+        claimant_key: "user:user-1",
+        claimant: { kind: "user" as const, userId: "user-1" },
+        final_units: "8000",
+        pool_share: "0.800000",
+        credit_amount: "8000",
+        receipt_ids: ["receipt-1"],
+      },
+      {
+        claimant_key: "user:user-2",
+        claimant: { kind: "user" as const, userId: "user-2" },
+        final_units: "2000",
+        pool_share: "0.200000",
+        credit_amount: "2000",
+        receipt_ids: ["receipt-2"],
       },
     ];
 
@@ -917,11 +932,17 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       return {
         epochId,
         poolTotal: 10000n,
+        finalClaimantAllocations: FINAL_CLAIMANT_ALLOCATIONS.map(
+          (allocation) => ({
+            ...allocation,
+            epochId,
+          })
+        ),
         statement: {
           nodeId: TEST_NODE_ID,
-          allocationSetHash: HASH,
+          finalAllocationSetHash: HASH,
           poolTotalCredits: 10000n,
-          statementItems: PAYOUTS_JSON,
+          statementLines: STATEMENT_LINES,
         },
         signature: {
           nodeId: TEST_NODE_ID,
@@ -929,7 +950,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
           signature: "0xsig_aaa",
           signedAt: new Date(),
         },
-        expectedAllocationSetHash: HASH,
+        expectedFinalAllocationSetHash: HASH,
       };
     }
 
@@ -954,7 +975,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       expect(fin.status).toBe("finalized");
       expect(fin.poolTotalCredits).toBe(10000n);
       expect(fin.closedAt).not.toBeNull();
-      expect(statement.allocationSetHash).toBe(HASH);
+      expect(statement.finalAllocationSetHash).toBe(HASH);
       expect(statement.poolTotalCredits).toBe(10000n);
 
       // Signature was created
@@ -1042,10 +1063,10 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       // Second call with different expected hash
       const badParams = {
         ...params,
-        expectedAllocationSetHash: "different-hash-xyz",
+        expectedFinalAllocationSetHash: "different-hash-xyz",
       };
       await expect(adapter.finalizeEpochAtomic(badParams)).rejects.toThrow(
-        /allocationSetHash mismatch/
+        /finalAllocationSetHash mismatch/
       );
     });
 
@@ -1172,9 +1193,9 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       ).rejects.toThrow(EpochNotFoundError);
     });
 
-    it("getAllocationsForEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
+    it("getUserProjectionsForEpoch throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.getAllocationsForEpoch(scopeTestEpochId)
+        otherScopeAdapter.getUserProjectionsForEpoch(scopeTestEpochId)
       ).rejects.toThrow(EpochNotFoundError);
     });
 
@@ -1307,7 +1328,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
       closeEpochId = epoch.id;
 
-      // Seed receipts + selections + allocations + pool (required for close)
+      // Seed receipts + selections + user projections + pool (required for close)
       const { periodStart, periodEnd } = epochWindow(41);
       const mid = new Date((periodStart.getTime() + periodEnd.getTime()) / 2);
 
@@ -1332,13 +1353,13 @@ describe("DrizzleAttributionAdapter (Component)", () => {
         }),
       ]);
 
-      await adapter.insertAllocations([
-        makeAllocation({
+      await adapter.insertUserProjections([
+        makeUserProjection({
           nodeId: TEST_NODE_ID,
           epochId: closeEpochId,
           userId: actor.user.id,
-          proposedUnits: 1000n,
-          activityCount: 1,
+          projectedUnits: 1000n,
+          receiptCount: 1,
         }),
       ]);
 
@@ -1524,7 +1545,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
 
   // ── Subject Overrides ──────────────────────────────────────────
 
-  describe("subject overrides", () => {
+  describe("review subject overrides", () => {
     let reviewEpochId: bigint;
     let finalized = false;
 
@@ -1552,8 +1573,8 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       }
     });
 
-    it("upsertSubjectOverride inserts a new override", async () => {
-      const result = await adapter.upsertSubjectOverride({
+    it("upsertReviewSubjectOverride inserts a new override", async () => {
+      const result = await adapter.upsertReviewSubjectOverride({
         nodeId: TEST_NODE_ID,
         epochId: reviewEpochId,
         subjectRef: "github:pr:test/repo:100",
@@ -1568,8 +1589,8 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       expect(result.overrideReason).toBe("test override");
     });
 
-    it("upsertSubjectOverride updates on conflict (same epoch + subjectRef)", async () => {
-      const updated = await adapter.upsertSubjectOverride({
+    it("upsertReviewSubjectOverride updates on conflict (same epoch + subjectRef)", async () => {
+      const updated = await adapter.upsertReviewSubjectOverride({
         nodeId: TEST_NODE_ID,
         epochId: reviewEpochId,
         subjectRef: "github:pr:test/repo:100",
@@ -1582,14 +1603,15 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       expect(updated.overrideReason).toBe("updated reason");
 
       // Only one override should exist for this subjectRef
-      const all = await adapter.getSubjectOverridesForEpoch(reviewEpochId);
+      const all =
+        await adapter.getReviewSubjectOverridesForEpoch(reviewEpochId);
       const matching = all.filter(
         (o) => o.subjectRef === "github:pr:test/repo:100"
       );
       expect(matching).toHaveLength(1);
     });
 
-    it("upsertSubjectOverride with overrideSharesJson round-trips JSONB correctly", async () => {
+    it("upsertReviewSubjectOverride with overrideSharesJson round-trips JSONB correctly", async () => {
       const shares = [
         {
           claimant: { kind: "user" as const, userId: "user-1" },
@@ -1606,7 +1628,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
         },
       ];
 
-      const result = await adapter.upsertSubjectOverride({
+      const result = await adapter.upsertReviewSubjectOverride({
         nodeId: TEST_NODE_ID,
         epochId: reviewEpochId,
         subjectRef: "github:pr:test/repo:200",
@@ -1618,8 +1640,9 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       expect(result.overrideSharesJson).toEqual(shares);
     });
 
-    it("getSubjectOverridesForEpoch returns overrides ordered by subjectRef", async () => {
-      const all = await adapter.getSubjectOverridesForEpoch(reviewEpochId);
+    it("getReviewSubjectOverridesForEpoch returns overrides ordered by subjectRef", async () => {
+      const all =
+        await adapter.getReviewSubjectOverridesForEpoch(reviewEpochId);
       expect(all.length).toBeGreaterThanOrEqual(2);
 
       const refs = all.map((o) => o.subjectRef);
@@ -1627,8 +1650,8 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       expect(refs).toEqual(sorted);
     });
 
-    it("batchUpsertSubjectOverrides inserts multiple atomically", async () => {
-      const results = await adapter.batchUpsertSubjectOverrides([
+    it("batchUpsertReviewSubjectOverrides inserts multiple atomically", async () => {
+      const results = await adapter.batchUpsertReviewSubjectOverrides([
         {
           nodeId: TEST_NODE_ID,
           epochId: reviewEpochId,
@@ -1652,26 +1675,27 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       expect(results[1]?.subjectRef).toBe("github:pr:test/repo:302");
     });
 
-    it("deleteSubjectOverride removes an override", async () => {
-      await adapter.deleteSubjectOverride(
+    it("deleteReviewSubjectOverride removes an override", async () => {
+      await adapter.deleteReviewSubjectOverride(
         reviewEpochId,
         "github:pr:test/repo:301"
       );
 
-      const all = await adapter.getSubjectOverridesForEpoch(reviewEpochId);
+      const all =
+        await adapter.getReviewSubjectOverridesForEpoch(reviewEpochId);
       const deleted = all.find(
         (o) => o.subjectRef === "github:pr:test/repo:301"
       );
       expect(deleted).toBeUndefined();
     });
 
-    it("deleteSubjectOverride is a no-op for nonexistent subjectRef", async () => {
+    it("deleteReviewSubjectOverride is a no-op for nonexistent subjectRef", async () => {
       await expect(
-        adapter.deleteSubjectOverride(reviewEpochId, "nonexistent:ref")
+        adapter.deleteReviewSubjectOverride(reviewEpochId, "nonexistent:ref")
       ).resolves.not.toThrow();
     });
 
-    it("upsertSubjectOverride throws EpochNotInReviewError for open epoch", async () => {
+    it("upsertReviewSubjectOverride throws EpochNotInReviewError for open epoch", async () => {
       const openEpoch = await adapter.createEpoch({
         nodeId: TEST_NODE_ID,
         scopeId: TEST_SCOPE_ID,
@@ -1680,7 +1704,7 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       });
 
       await expect(
-        adapter.upsertSubjectOverride({
+        adapter.upsertReviewSubjectOverride({
           nodeId: TEST_NODE_ID,
           epochId: openEpoch.id,
           subjectRef: "github:pr:test/repo:999",
@@ -1700,13 +1724,16 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       await adapter.finalizeEpoch(openEpoch.id, 0n);
     });
 
-    it("deleteSubjectOverride throws EpochNotInReviewError for finalized epoch", async () => {
+    it("deleteReviewSubjectOverride throws EpochNotInReviewError for finalized epoch", async () => {
       // Finalize the review epoch
       await adapter.finalizeEpoch(reviewEpochId, 0n);
       finalized = true;
 
       await expect(
-        adapter.deleteSubjectOverride(reviewEpochId, "github:pr:test/repo:100")
+        adapter.deleteReviewSubjectOverride(
+          reviewEpochId,
+          "github:pr:test/repo:100"
+        )
       ).rejects.toThrow(EpochNotInReviewError);
     });
   });
