@@ -23,7 +23,7 @@ assignees: []
 credit:
 project: proj.transparent-credit-payouts
 branch: fix/bug0125-claimants
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/507
 reviewer:
 revision: 0
 blocked_by:
