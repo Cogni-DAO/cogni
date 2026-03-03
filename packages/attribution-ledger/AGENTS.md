@@ -44,7 +44,7 @@ Pure domain logic for the attribution ledger — shared between the Next.js app 
   - `EpochStatus` — Canonical epoch status type
   - `FinalizedAllocation`, `StatementLineItem` — Legacy user-only compatibility types retained while app/core barrels still re-export them
   - `AttributionStore` — Composed port interface for ledger persistence
-  - `EpochReader`, `EpochWriter`, `ReceiptStore`, `SelectionStore`, `EvaluationStore`, `ProjectionStore`, `ClaimantStore`, `CursorStore`, `PoolStore`, `StatementStore`, `OverrideStore`, `FinalAllocationStore`, `IdentityResolver` — Narrow ledger store sub-interfaces for scoped consumers
+  - `EpochReader`, `EpochWriter`, `ReceiptStore`, `SelectionReader`, `SelectionWriter`, `SelectionStore`, `EvaluationStore`, `ProjectionStore`, `ClaimantStore`, `CursorStore`, `PoolStore`, `StatementStore`, `OverrideStore`, `FinalAllocationStore`, `IdentityResolver` — Narrow ledger store sub-interfaces for scoped consumers
   - `AttributionEpoch`, `IngestionReceipt`, `EpochUserProjection`, `FinalClaimantAllocationRecord`, `IngestionCursor`, `AttributionPoolComponent`, `AttributionStatement`, `AttributionStatementSignature`, `AttributionEvaluation`, `ReviewSubjectOverrideRecord` — Read-side record types
   - `InsertReceiptParams`, `InsertUserProjectionParams`, `InsertFinalClaimantAllocationParams`, `InsertPoolComponentParams`, `InsertStatementParams`, `InsertSignatureParams`, `UpsertReviewSubjectOverrideParams`, `UpsertEvaluationParams`, `CloseIngestionWithEvaluationsParams` — Write-side param types
   - `computeEpochWindowV1()` — Pure, deterministic epoch window computation (Monday-aligned UTC). Safe in Temporal workflow code.

@@ -13,7 +13,7 @@
 
 import type {
   EvaluationStore,
-  SelectionStore,
+  SelectionReader,
 } from "@cogni/attribution-ledger";
 import type { EnricherContext } from "@cogni/attribution-pipeline-contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -43,7 +43,7 @@ function makeMockContext(
     getEvaluationsForEpoch: vi.fn().mockResolvedValue([]),
     getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue(receipts),
     upsertDraftEvaluation: vi.fn(),
-  } as unknown as EvaluationStore & SelectionStore;
+  } as unknown as EvaluationStore & SelectionReader;
 
   return {
     epochId: 1n,

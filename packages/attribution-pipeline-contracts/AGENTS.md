@@ -42,7 +42,7 @@ Stable framework package for the attribution pipeline plugin architecture. Defin
 - **Exports:**
   - `EnricherDescriptor` — Pure data: evaluationRef, algoRef, schemaRef, outputSchema
   - `EnricherAdapter` — Port interface: descriptor, evaluateDraft(ctx), buildLocked(ctx)
-  - `EnricherContext` — Dependency injection context for adapters with scoped `EvaluationStore & SelectionStore`
+  - `EnricherContext` — Dependency injection context for adapters with scoped `EvaluationStore & SelectionReader`
   - `EnricherEvaluationResult` — Return type from adapter methods
   - `EnricherLogger` — Minimal logger interface (Pino-compatible)
   - `EnricherAdapterRegistry` — ReadonlyMap<evaluationRef, EnricherAdapter>
@@ -86,7 +86,7 @@ pnpm --filter @cogni/attribution-pipeline-contracts build
 
 ## Dependencies
 
-- **Internal:** `@cogni/attribution-ledger` (domain types only: EvaluationStore, SelectionStore, ReceiptForWeighting, ReceiptUnitWeight)
+- **Internal:** `@cogni/attribution-ledger` (domain types only: EvaluationStore, SelectionReader, ReceiptForWeighting, ReceiptUnitWeight)
 - **External:** `zod`
 
 ## Change Protocol
