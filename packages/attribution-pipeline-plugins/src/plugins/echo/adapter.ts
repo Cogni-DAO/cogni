@@ -23,12 +23,7 @@ import type {
   EnricherEvaluationResult,
 } from "@cogni/attribution-pipeline-contracts";
 
-import {
-  buildEchoPayload,
-  ECHO_ALGO_REF,
-  ECHO_EVALUATION_REF,
-  ECHO_SCHEMA_REF,
-} from "./descriptor";
+import { buildEchoPayload, ECHO_DESCRIPTOR } from "./descriptor";
 
 async function evaluate(
   ctx: EnricherContext,
@@ -51,10 +46,10 @@ async function evaluate(
   return {
     nodeId: ctx.nodeId,
     epochId: ctx.epochId,
-    evaluationRef: ECHO_EVALUATION_REF,
+    evaluationRef: ECHO_DESCRIPTOR.evaluationRef,
     status,
-    algoRef: ECHO_ALGO_REF,
-    schemaRef: ECHO_SCHEMA_REF,
+    algoRef: ECHO_DESCRIPTOR.algoRef,
+    schemaRef: ECHO_DESCRIPTOR.schemaRef,
     inputsHash,
     payloadHash,
     payloadJson: payload,
@@ -67,7 +62,7 @@ async function evaluate(
  */
 export function createEchoAdapter(): EnricherAdapter {
   return {
-    evaluationRef: ECHO_EVALUATION_REF,
+    descriptor: ECHO_DESCRIPTOR,
     evaluateDraft: (ctx) => evaluate(ctx, "draft"),
     buildLocked: (ctx) => evaluate(ctx, "locked"),
   };

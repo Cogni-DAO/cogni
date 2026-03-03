@@ -178,19 +178,19 @@ export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
       // Check if existing draft evaluation already matches current inputs.
       const existing = await attributionStore.getEvaluation(
         epochId,
-        adapter.evaluationRef,
+        adapter.descriptor.evaluationRef,
         "draft"
       );
       if (existing && existing.inputsHash === candidateInputsHash) {
         logger.info(
           {
             epochId: input.epochId,
-            evaluationRef: adapter.evaluationRef,
+            evaluationRef: adapter.descriptor.evaluationRef,
             inputsHash: `${candidateInputsHash.slice(0, 12)}...`,
           },
           "Draft evaluation unchanged — skipping enricher"
         );
-        evaluationRefs.push(adapter.evaluationRef);
+        evaluationRefs.push(adapter.descriptor.evaluationRef);
         skippedCount++;
         continue;
       }
@@ -204,7 +204,7 @@ export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
       };
 
       const result = await adapter.evaluateDraft(ctx);
-      validateEvaluationWrite(result);
+      validateEvaluationWrite(adapter.descriptor, result);
 
       await attributionStore.upsertDraftEvaluation({
         nodeId: result.nodeId,
@@ -281,7 +281,7 @@ export function createEnrichmentActivities(deps: EnrichmentActivityDeps) {
       };
 
       const result = await adapter.buildLocked(ctx);
-      validateEvaluationWrite(result);
+      validateEvaluationWrite(adapter.descriptor, result);
 
       evaluations.push({
         nodeId: result.nodeId,

@@ -372,18 +372,10 @@ export interface UnselectedReceipt {
 }
 
 // ---------------------------------------------------------------------------
-// Port interface
+// Port sub-interfaces
 // ---------------------------------------------------------------------------
 
-export interface AttributionStore {
-  // Epochs
-  createEpoch(params: {
-    nodeId: string;
-    scopeId: string;
-    periodStart: Date;
-    periodEnd: Date;
-    weightConfig: Record<string, number>;
-  }): Promise<AttributionEpoch>;
+export interface EpochReader {
   getOpenEpoch(
     nodeId: string,
     scopeId: string
@@ -396,6 +388,17 @@ export interface AttributionStore {
   ): Promise<AttributionEpoch | null>;
   getEpoch(id: bigint): Promise<AttributionEpoch | null>;
   listEpochs(nodeId: string): Promise<AttributionEpoch[]>;
+}
+
+export interface EpochWriter {
+  createEpoch(params: {
+    nodeId: string;
+    scopeId: string;
+    periodStart: Date;
+    periodEnd: Date;
+    weightConfig: Record<string, number>;
+  }): Promise<AttributionEpoch>;
+
   /** Transition epoch open → review (INGESTION_STOPS_AT_REVIEW).
    *  Pins approvers, approverSetHash, allocationAlgoRef, and weightConfigHash. */
   closeIngestion(
@@ -416,116 +419,6 @@ export interface AttributionStore {
     params: CloseIngestionWithEvaluationsParams
   ): Promise<AttributionEpoch>;
 
-  // Evaluations
-  /** Upsert draft evaluation — overwrites on (epoch_id, evaluation_ref, status='draft'). */
-  upsertDraftEvaluation(params: UpsertEvaluationParams): Promise<void>;
-  /** Get all evaluations for an epoch, optionally filtered by status. */
-  getEvaluationsForEpoch(
-    epochId: bigint,
-    status?: "draft" | "locked"
-  ): Promise<AttributionEvaluation[]>;
-  /** Get single evaluation by ref and optional status. */
-  getEvaluation(
-    epochId: bigint,
-    evaluationRef: string,
-    status?: "draft" | "locked"
-  ): Promise<AttributionEvaluation | null>;
-  /** Get selected receipts with raw metadata and payload hash for enricher consumption. */
-  getSelectedReceiptsWithMetadata(
-    epochId: bigint
-  ): Promise<SelectedReceiptWithMetadata[]>;
-  /** Get selected receipts including unresolved platform identities for canonical attribution construction. */
-  getSelectedReceiptsForAttribution(
-    epochId: bigint
-  ): Promise<SelectedReceiptForAttribution[]>;
-
-  // Ingestion receipts (append-only, epoch-agnostic raw log)
-  insertIngestionReceipts(receipts: InsertReceiptParams[]): Promise<void>;
-  getReceiptsForWindow(
-    nodeId: string,
-    since: Date,
-    until: Date
-  ): Promise<IngestionReceipt[]>;
-
-  // Allocation computation (joined query)
-  /**
-   * Returns selected receipts with resolved user IDs for allocation computation.
-   * Joined query: epoch_selection JOIN ingestion_receipts, filtered to userId IS NOT NULL.
-   */
-  getSelectedReceiptsForAllocation(
-    epochId: bigint
-  ): Promise<SelectedReceiptForAllocation[]>;
-
-  // Selection (mutable while epoch open)
-  upsertSelection(params: UpsertSelectionParams[]): Promise<void>;
-  /**
-   * Insert selection rows with ON CONFLICT DO NOTHING semantics.
-   * Used by auto-population (SELECTION_AUTO_POPULATE) to avoid overwriting
-   * admin-set fields if a row is created between getUnselectedReceipts and insert.
-   */
-  insertSelectionDoNothing(params: InsertSelectionAutoParams[]): Promise<void>;
-  getSelectionForEpoch(epochId: bigint): Promise<AttributionSelection[]>;
-  getUnresolvedSelection(epochId: bigint): Promise<AttributionSelection[]>;
-
-  // Allocations
-  insertUserProjections(
-    projections: InsertUserProjectionParams[]
-  ): Promise<void>;
-  /**
-   * Upsert user projections — ON CONFLICT (epoch_id, user_id) UPDATE projected_units and receipt_count.
-   */
-  upsertUserProjections(
-    projections: InsertUserProjectionParams[]
-  ): Promise<void>;
-  /**
-   * Delete projection rows where user_id NOT IN activeUserIds.
-   */
-  deleteStaleUserProjections(
-    epochId: bigint,
-    activeUserIds: string[]
-  ): Promise<void>;
-  getUserProjectionsForEpoch(epochId: bigint): Promise<EpochUserProjection[]>;
-
-  // Final claimant allocations (canonical signed units)
-  replaceFinalClaimantAllocations(
-    epochId: bigint,
-    allocations: readonly InsertFinalClaimantAllocationParams[]
-  ): Promise<void>;
-  getFinalClaimantAllocationsForEpoch(
-    epochId: bigint
-  ): Promise<FinalClaimantAllocationRecord[]>;
-
-  // Ingestion cursors (one stream per call)
-  upsertCursor(
-    nodeId: string,
-    scopeId: string,
-    source: string,
-    stream: string,
-    sourceRef: string,
-    cursorValue: string
-  ): Promise<void>;
-  getCursor(
-    nodeId: string,
-    scopeId: string,
-    source: string,
-    stream: string,
-    sourceRef: string
-  ): Promise<IngestionCursor | null>;
-
-  // Pool components
-  insertPoolComponent(
-    params: InsertPoolComponentParams
-  ): Promise<AttributionPoolComponent>;
-  getPoolComponentsForEpoch(
-    epochId: bigint
-  ): Promise<AttributionPoolComponent[]>;
-
-  // Epoch statements
-  insertEpochStatement(
-    params: InsertStatementParams
-  ): Promise<AttributionStatement>;
-  getStatementForEpoch(epochId: bigint): Promise<AttributionStatement | null>;
-
   /**
    * Atomic finalize: epoch transition + statement upsert + signature upsert in one DB transaction.
    * Handles all states:
@@ -542,55 +435,46 @@ export interface AttributionStore {
     signature: Omit<InsertSignatureParams, "statementId">;
     expectedFinalAllocationSetHash: string;
   }): Promise<{ epoch: AttributionEpoch; statement: AttributionStatement }>;
+}
 
-  // Statement signatures
-  insertStatementSignature(params: InsertSignatureParams): Promise<void>;
-  getSignaturesForStatement(
-    statementId: string
-  ): Promise<AttributionStatementSignature[]>;
+export interface ReceiptStore {
+  insertIngestionReceipts(receipts: InsertReceiptParams[]): Promise<void>;
+  getReceiptsForWindow(
+    nodeId: string,
+    since: Date,
+    until: Date
+  ): Promise<IngestionReceipt[]>;
+}
 
-  // Subject overrides (review-phase per-subject adjustments)
-  /** Upsert a subject override. Acquires epoch row lock and verifies status='review'. */
-  upsertReviewSubjectOverride(
-    params: UpsertReviewSubjectOverrideParams
-  ): Promise<ReviewSubjectOverrideRecord>;
-  /** Atomically upsert multiple subject overrides in a single transaction. */
-  batchUpsertReviewSubjectOverrides(
-    paramsList: readonly UpsertReviewSubjectOverrideParams[]
-  ): Promise<ReviewSubjectOverrideRecord[]>;
-  /** Delete a subject override by epoch + subjectRef. */
-  deleteReviewSubjectOverride(
-    epochId: bigint,
-    subjectRef: string
-  ): Promise<void>;
-  /** Get all subject overrides for an epoch. */
-  getReviewSubjectOverridesForEpoch(
+export interface SelectionStore {
+  /**
+   * Returns selected receipts with resolved user IDs for allocation computation.
+   * Joined query: epoch_selection JOIN ingestion_receipts, filtered to userId IS NOT NULL.
+   */
+  getSelectedReceiptsForAllocation(
     epochId: bigint
-  ): Promise<ReviewSubjectOverrideRecord[]>;
+  ): Promise<SelectedReceiptForAllocation[]>;
 
-  // Receipt claimants (per-receipt ownership resolution)
-  /** Upsert a draft claimant row. ON CONFLICT (draft_uniq) → UPDATE. */
-  upsertDraftClaimants(params: InsertReceiptClaimantsParams): Promise<void>;
-  /** Lock all draft claimant rows for an epoch. Returns count locked. */
-  lockClaimantsForEpoch(epochId: bigint): Promise<number>;
-  /** Load all locked claimant rows for an epoch. */
-  loadLockedClaimants(epochId: bigint): Promise<ReceiptClaimantsRecord[]>;
+  /** Get selected receipts with raw metadata and payload hash for enricher consumption. */
+  getSelectedReceiptsWithMetadata(
+    epochId: bigint
+  ): Promise<SelectedReceiptWithMetadata[]>;
 
-  // Identity resolution (cross-domain convenience — V0 on ledger port)
-  /**
-   * Resolves platform IDs to user UUIDs via user_bindings.
-   * V0: GitHub only. Extend provider union for discord etc.
-   */
-  resolveIdentities(
-    provider: "github",
-    externalIds: string[]
-  ): Promise<Map<string, string>>;
+  /** Get selected receipts including unresolved platform identities for canonical attribution construction. */
+  getSelectedReceiptsForAttribution(
+    epochId: bigint
+  ): Promise<SelectedReceiptForAttribution[]>;
+
+  upsertSelection(params: UpsertSelectionParams[]): Promise<void>;
 
   /**
-   * Resolves current public-facing display names for linked users.
-   * Fallback policy is implementation-defined, but must never expose raw user IDs.
+   * Insert selection rows with ON CONFLICT DO NOTHING semantics.
+   * Used by auto-population (SELECTION_AUTO_POPULATE) to avoid overwriting
+   * admin-set fields if a row is created between getUnselectedReceipts and insert.
    */
-  getUserDisplayNames(userIds: string[]): Promise<Map<string, string>>;
+  insertSelectionDoNothing(params: InsertSelectionAutoParams[]): Promise<void>;
+  getSelectionForEpoch(epochId: bigint): Promise<AttributionSelection[]>;
+  getUnresolvedSelection(epochId: bigint): Promise<AttributionSelection[]>;
 
   /**
    * Returns receipts in the epoch window that need selection work:
@@ -614,3 +498,161 @@ export interface AttributionStore {
     userId: string
   ): Promise<void>;
 }
+
+export interface EvaluationStore {
+  /** Upsert draft evaluation — overwrites on (epoch_id, evaluation_ref, status='draft'). */
+  upsertDraftEvaluation(params: UpsertEvaluationParams): Promise<void>;
+
+  /** Get all evaluations for an epoch, optionally filtered by status. */
+  getEvaluationsForEpoch(
+    epochId: bigint,
+    status?: "draft" | "locked"
+  ): Promise<AttributionEvaluation[]>;
+
+  /** Get single evaluation by ref and optional status. */
+  getEvaluation(
+    epochId: bigint,
+    evaluationRef: string,
+    status?: "draft" | "locked"
+  ): Promise<AttributionEvaluation | null>;
+}
+
+export interface ProjectionStore {
+  insertUserProjections(
+    projections: InsertUserProjectionParams[]
+  ): Promise<void>;
+
+  /**
+   * Upsert user projections — ON CONFLICT (epoch_id, user_id) UPDATE projected_units and receipt_count.
+   */
+  upsertUserProjections(
+    projections: InsertUserProjectionParams[]
+  ): Promise<void>;
+
+  /**
+   * Delete projection rows where user_id NOT IN activeUserIds.
+   */
+  deleteStaleUserProjections(
+    epochId: bigint,
+    activeUserIds: string[]
+  ): Promise<void>;
+  getUserProjectionsForEpoch(epochId: bigint): Promise<EpochUserProjection[]>;
+}
+
+export interface ClaimantStore {
+  /** Upsert a draft claimant row. ON CONFLICT (draft_uniq) → UPDATE. */
+  upsertDraftClaimants(params: InsertReceiptClaimantsParams): Promise<void>;
+
+  /** Lock all draft claimant rows for an epoch. Returns count locked. */
+  lockClaimantsForEpoch(epochId: bigint): Promise<number>;
+
+  /** Load all locked claimant rows for an epoch. */
+  loadLockedClaimants(epochId: bigint): Promise<ReceiptClaimantsRecord[]>;
+}
+
+export interface CursorStore {
+  upsertCursor(
+    nodeId: string,
+    scopeId: string,
+    source: string,
+    stream: string,
+    sourceRef: string,
+    cursorValue: string
+  ): Promise<void>;
+  getCursor(
+    nodeId: string,
+    scopeId: string,
+    source: string,
+    stream: string,
+    sourceRef: string
+  ): Promise<IngestionCursor | null>;
+}
+
+export interface PoolStore {
+  insertPoolComponent(
+    params: InsertPoolComponentParams
+  ): Promise<AttributionPoolComponent>;
+  getPoolComponentsForEpoch(
+    epochId: bigint
+  ): Promise<AttributionPoolComponent[]>;
+}
+
+export interface StatementStore {
+  insertEpochStatement(
+    params: InsertStatementParams
+  ): Promise<AttributionStatement>;
+  getStatementForEpoch(epochId: bigint): Promise<AttributionStatement | null>;
+  insertStatementSignature(params: InsertSignatureParams): Promise<void>;
+  getSignaturesForStatement(
+    statementId: string
+  ): Promise<AttributionStatementSignature[]>;
+}
+
+export interface OverrideStore {
+  /** Upsert a subject override. Acquires epoch row lock and verifies status='review'. */
+  upsertReviewSubjectOverride(
+    params: UpsertReviewSubjectOverrideParams
+  ): Promise<ReviewSubjectOverrideRecord>;
+
+  /** Atomically upsert multiple subject overrides in a single transaction. */
+  batchUpsertReviewSubjectOverrides(
+    paramsList: readonly UpsertReviewSubjectOverrideParams[]
+  ): Promise<ReviewSubjectOverrideRecord[]>;
+
+  /** Delete a subject override by epoch + subjectRef. */
+  deleteReviewSubjectOverride(
+    epochId: bigint,
+    subjectRef: string
+  ): Promise<void>;
+
+  /** Get all subject overrides for an epoch. */
+  getReviewSubjectOverridesForEpoch(
+    epochId: bigint
+  ): Promise<ReviewSubjectOverrideRecord[]>;
+}
+
+export interface FinalAllocationStore {
+  replaceFinalClaimantAllocations(
+    epochId: bigint,
+    allocations: readonly InsertFinalClaimantAllocationParams[]
+  ): Promise<void>;
+  getFinalClaimantAllocationsForEpoch(
+    epochId: bigint
+  ): Promise<FinalClaimantAllocationRecord[]>;
+}
+
+export interface IdentityResolver {
+  /**
+   * Resolves platform IDs to user UUIDs via user_bindings.
+   * V0: GitHub only. Extend provider union for discord etc.
+   */
+  resolveIdentities(
+    provider: "github",
+    externalIds: string[]
+  ): Promise<Map<string, string>>;
+
+  /**
+   * Resolves current public-facing display names for linked users.
+   * Fallback policy is implementation-defined, but must never expose raw user IDs.
+   */
+  getUserDisplayNames(userIds: string[]): Promise<Map<string, string>>;
+}
+
+// ---------------------------------------------------------------------------
+// Composed port interface
+// ---------------------------------------------------------------------------
+
+export interface AttributionStore
+  extends EpochReader,
+    EpochWriter,
+    ReceiptStore,
+    SelectionStore,
+    EvaluationStore,
+    ProjectionStore,
+    ClaimantStore,
+    CursorStore,
+    PoolStore,
+    StatementStore,
+    OverrideStore,
+    FinalAllocationStore,
+    IdentityResolver {}

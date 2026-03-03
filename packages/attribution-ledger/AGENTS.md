@@ -43,7 +43,8 @@ Pure domain logic for the attribution ledger — shared between the Next.js app 
   - `EPOCH_STATUSES` — Enum array
   - `EpochStatus` — Canonical epoch status type
   - `FinalizedAllocation`, `StatementLineItem` — Legacy user-only compatibility types retained while app/core barrels still re-export them
-  - `AttributionStore` — Port interface for ledger persistence
+  - `AttributionStore` — Composed port interface for ledger persistence
+  - `EpochReader`, `EpochWriter`, `ReceiptStore`, `SelectionStore`, `EvaluationStore`, `ProjectionStore`, `ClaimantStore`, `CursorStore`, `PoolStore`, `StatementStore`, `OverrideStore`, `FinalAllocationStore`, `IdentityResolver` — Narrow ledger store sub-interfaces for scoped consumers
   - `AttributionEpoch`, `IngestionReceipt`, `EpochUserProjection`, `FinalClaimantAllocationRecord`, `IngestionCursor`, `AttributionPoolComponent`, `AttributionStatement`, `AttributionStatementSignature`, `AttributionEvaluation`, `ReviewSubjectOverrideRecord` — Read-side record types
   - `InsertReceiptParams`, `InsertUserProjectionParams`, `InsertFinalClaimantAllocationParams`, `InsertPoolComponentParams`, `InsertStatementParams`, `InsertSignatureParams`, `UpsertReviewSubjectOverrideParams`, `UpsertEvaluationParams`, `CloseIngestionWithEvaluationsParams` — Write-side param types
   - `computeEpochWindowV1()` — Pure, deterministic epoch window computation (Monday-aligned UTC). Safe in Temporal workflow code.
@@ -84,7 +85,7 @@ Pure domain logic for the attribution ledger — shared between the Next.js app 
 
 - **Uses ports:** none
 - **Implements ports:** none
-- **Defines ports:** `AttributionStore` (implemented by `DrizzleAttributionAdapter` in `@cogni/db-client`). Includes identity resolution (`resolveIdentities`, `getUnselectedReceipts`, `updateSelectionUserId`, `insertSelectionDoNothing`), claimant lifecycle (`upsertDraftClaimants`, `lockClaimantsForEpoch`, `loadLockedClaimants`), projection computation (`getSelectedReceiptsForAllocation`, `insertUserProjections`, `deleteStaleUserProjections`), canonical attribution reads (`getSelectedReceiptsForAttribution`, `getUserDisplayNames`, `getEvaluation`, `getReviewSubjectOverridesForEpoch`, `getFinalClaimantAllocationsForEpoch`), evaluation lifecycle (`upsertDraftEvaluation`, `closeIngestionWithEvaluations`, `getEvaluationsForEpoch`, `getSelectedReceiptsWithMetadata`), and atomic epoch sealing (`finalizeEpochAtomic`).
+- **Defines ports:** `AttributionStore` (implemented by `DrizzleAttributionAdapter` in `@cogni/db-client`) plus narrow sub-interfaces for scoped consumers. Includes identity resolution (`resolveIdentities`, `getUnselectedReceipts`, `updateSelectionUserId`, `insertSelectionDoNothing`), claimant lifecycle (`upsertDraftClaimants`, `lockClaimantsForEpoch`, `loadLockedClaimants`), projection computation (`getSelectedReceiptsForAllocation`, `insertUserProjections`, `deleteStaleUserProjections`), canonical attribution reads (`getSelectedReceiptsForAttribution`, `getUserDisplayNames`, `getEvaluation`, `getReviewSubjectOverridesForEpoch`, `getFinalClaimantAllocationsForEpoch`), evaluation lifecycle (`upsertDraftEvaluation`, `closeIngestionWithEvaluations`, `getEvaluationsForEpoch`, `getSelectedReceiptsWithMetadata`), and atomic epoch sealing (`finalizeEpochAtomic`).
 
 ## Responsibilities
 

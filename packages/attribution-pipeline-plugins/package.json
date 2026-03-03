@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@cogni/attribution-ledger": "workspace:*",
-    "@cogni/attribution-pipeline-contracts": "workspace:*"
+    "@cogni/attribution-pipeline-contracts": "workspace:*",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

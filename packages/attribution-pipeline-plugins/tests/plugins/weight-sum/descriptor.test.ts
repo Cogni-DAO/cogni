@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import {
   WEIGHT_SUM_ALGO_REF,
   WEIGHT_SUM_ALLOCATOR,
+  WeightSumOutputSchema,
 } from "../../../src/plugins/weight-sum/descriptor";
 
 describe("weight-sum allocator descriptor", () => {
@@ -29,6 +30,10 @@ describe("weight-sum allocator descriptor", () => {
     expect(WEIGHT_SUM_ALLOCATOR.requiredEvaluationRefs).toContain(
       "cogni.echo.v0"
     );
+  });
+
+  it("exports the runtime output schema", () => {
+    expect(WEIGHT_SUM_ALLOCATOR.outputSchema).toBe(WeightSumOutputSchema);
   });
 
   it("delegates to computeReceiptWeights and returns per-receipt results", async () => {
@@ -92,5 +97,11 @@ describe("weight-sum allocator descriptor", () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.receiptId).toBe("r1");
+  });
+
+  it("output schema accepts valid allocator results", () => {
+    expect(() =>
+      WeightSumOutputSchema.parse([{ receiptId: "r1", units: 1000n }])
+    ).not.toThrow();
   });
 });

@@ -13,7 +13,7 @@
  * @public
  */
 
-import type { EnricherEvaluationResult } from "./enricher";
+import type { EnricherDescriptor, EnricherEvaluationResult } from "./enricher";
 
 /**
  * Validate that an evaluation result has all required fields populated.
@@ -23,6 +23,7 @@ import type { EnricherEvaluationResult } from "./enricher";
  * evaluationRef, algoRef, inputsHash, schemaRef, payloadHash.
  */
 export function validateEvaluationWrite(
+  descriptor: EnricherDescriptor,
   result: EnricherEvaluationResult
 ): void {
   const requiredStringFields: ReadonlyArray<
@@ -58,4 +59,24 @@ export function validateEvaluationWrite(
       `Evaluation write validation failed: "status" must be "draft" or "locked", got "${String(result.status)}"`
     );
   }
+
+  if (result.evaluationRef !== descriptor.evaluationRef) {
+    throw new Error(
+      `Evaluation write validation failed: evaluationRef "${result.evaluationRef}" does not match descriptor "${descriptor.evaluationRef}"`
+    );
+  }
+
+  if (result.algoRef !== descriptor.algoRef) {
+    throw new Error(
+      `Evaluation write validation failed: algoRef "${result.algoRef}" does not match descriptor "${descriptor.algoRef}"`
+    );
+  }
+
+  if (result.schemaRef !== descriptor.schemaRef) {
+    throw new Error(
+      `Evaluation write validation failed: schemaRef "${result.schemaRef}" does not match descriptor "${descriptor.schemaRef}"`
+    );
+  }
+
+  descriptor.outputSchema.parse(result.payloadJson);
 }

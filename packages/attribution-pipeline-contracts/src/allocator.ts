@@ -18,8 +18,7 @@ import type {
   ReceiptForWeighting,
   ReceiptUnitWeight,
 } from "@cogni/attribution-ledger";
-
-import type { PipelineProfile } from "./profile";
+import type { ZodType } from "zod";
 
 /**
  * Descriptor for an allocation algorithm plugin.
@@ -42,6 +41,9 @@ export interface AllocatorDescriptor {
   readonly compute: (
     context: AllocationContext
   ) => Promise<ReceiptUnitWeight[]>;
+
+  /** Runtime schema for allocator output. */
+  readonly outputSchema: ZodType<ReceiptUnitWeight[]>;
 }
 
 /**
@@ -64,19 +66,20 @@ export interface AllocationContext {
 export type AllocatorRegistry = ReadonlyMap<string, AllocatorDescriptor>;
 
 /**
- * Dispatch to the profile's allocator, validating required evaluations first.
- * Throws if allocator is unknown or required evaluations are missing.
+ * Dispatch to an allocator by ref, validating required evaluations first.
+ * Throws if allocator is unknown, required evaluations are missing,
+ * or the allocator returns output that does not match its declared schema.
  */
 export async function dispatchAllocator(
   registry: AllocatorRegistry,
-  profile: PipelineProfile,
+  allocatorRef: string,
   context: AllocationContext
 ): Promise<ReceiptUnitWeight[]> {
-  const descriptor = registry.get(profile.allocatorRef);
+  const descriptor = registry.get(allocatorRef);
   if (!descriptor) {
     const available = [...registry.keys()].join(", ");
     throw new Error(
-      `Unknown allocator: "${profile.allocatorRef}". Available: [${available}]`
+      `Unknown allocator: "${allocatorRef}". Available: [${available}]`
     );
   }
 
@@ -86,9 +89,9 @@ export async function dispatchAllocator(
   );
   if (missing.length > 0) {
     throw new Error(
-      `Allocator "${profile.allocatorRef}" requires evaluations [${missing.join(", ")}] but they are missing from context`
+      `Allocator "${allocatorRef}" requires evaluations [${missing.join(", ")}] but they are missing from context`
     );
   }
 
-  return descriptor.compute(context);
+  return descriptor.outputSchema.parse(await descriptor.compute(context));
 }

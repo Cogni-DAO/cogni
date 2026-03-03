@@ -13,24 +13,23 @@
 
 import type { ReceiptUnitWeight } from "@cogni/attribution-ledger";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import type { AllocationContext, AllocatorDescriptor } from "../src/allocator";
 import { dispatchAllocator } from "../src/allocator";
-import type { PipelineProfile } from "../src/profile";
-
-const mockProfile: PipelineProfile = {
-  profileId: "test-v0.0",
-  label: "Test",
-  enricherRefs: [],
-  allocatorRef: "test-algo-v0",
-  epochKind: "activity",
-};
 
 const mockResult: ReceiptUnitWeight[] = [{ receiptId: "r1", units: 1000n }];
+const outputSchema = z.array(
+  z.object({
+    receiptId: z.string(),
+    units: z.bigint(),
+  })
+);
 
 const mockAllocator: AllocatorDescriptor = {
   algoRef: "test-algo-v0",
   requiredEvaluationRefs: [],
+  outputSchema,
   compute: async () => mockResult,
 };
 
@@ -51,7 +50,7 @@ describe("dispatchAllocator", () => {
     const registry = new Map([["test-algo-v0", mockAllocator]]);
     const result = await dispatchAllocator(
       registry,
-      mockProfile,
+      "test-algo-v0",
       makeContext()
     );
     expect(result).toEqual(mockResult);
@@ -60,7 +59,7 @@ describe("dispatchAllocator", () => {
   it("throws for unknown allocator", async () => {
     const registry = new Map<string, AllocatorDescriptor>();
     await expect(
-      dispatchAllocator(registry, mockProfile, makeContext())
+      dispatchAllocator(registry, "test-algo-v0", makeContext())
     ).rejects.toThrow(/Unknown allocator: "test-algo-v0"/);
   });
 
@@ -68,12 +67,13 @@ describe("dispatchAllocator", () => {
     const allocatorWithDeps: AllocatorDescriptor = {
       algoRef: "test-algo-v0",
       requiredEvaluationRefs: ["cogni.echo.v0", "cogni.claimant_shares.v0"],
+      outputSchema,
       compute: async () => [],
     };
     const registry = new Map([["test-algo-v0", allocatorWithDeps]]);
 
     await expect(
-      dispatchAllocator(registry, mockProfile, makeContext())
+      dispatchAllocator(registry, "test-algo-v0", makeContext())
     ).rejects.toThrow(
       /requires evaluations \[cogni\.echo\.v0, cogni\.claimant_shares\.v0\]/
     );
@@ -83,6 +83,7 @@ describe("dispatchAllocator", () => {
     const allocatorWithDeps: AllocatorDescriptor = {
       algoRef: "test-algo-v0",
       requiredEvaluationRefs: ["cogni.echo.v0"],
+      outputSchema,
       compute: async () => mockResult,
     };
     const registry = new Map([["test-algo-v0", allocatorWithDeps]]);
@@ -90,7 +91,7 @@ describe("dispatchAllocator", () => {
 
     const result = await dispatchAllocator(
       registry,
-      mockProfile,
+      "test-algo-v0",
       makeContext({ evaluations })
     );
     expect(result).toEqual(mockResult);
@@ -101,6 +102,7 @@ describe("dispatchAllocator", () => {
     const capturingAllocator: AllocatorDescriptor = {
       algoRef: "test-algo-v0",
       requiredEvaluationRefs: [],
+      outputSchema,
       compute: async (ctx) => {
         capturedContext = ctx;
         return [];
@@ -109,7 +111,26 @@ describe("dispatchAllocator", () => {
     const registry = new Map([["test-algo-v0", capturingAllocator]]);
     const ctx = makeContext({ profileConfig: { key: "value" } });
 
-    await dispatchAllocator(registry, mockProfile, ctx);
+    await dispatchAllocator(registry, "test-algo-v0", ctx);
     expect(capturedContext).toBe(ctx);
+  });
+
+  it("throws when allocator output does not match outputSchema", async () => {
+    const invalidAllocator: AllocatorDescriptor = {
+      algoRef: "test-algo-v0",
+      requiredEvaluationRefs: [],
+      outputSchema,
+      compute: async () => [
+        { receiptId: "r1", units: "1000" as unknown as bigint },
+      ],
+    };
+
+    await expect(
+      dispatchAllocator(
+        new Map([["test-algo-v0", invalidAllocator]]),
+        "test-algo-v0",
+        makeContext()
+      )
+    ).rejects.toThrow();
   });
 });

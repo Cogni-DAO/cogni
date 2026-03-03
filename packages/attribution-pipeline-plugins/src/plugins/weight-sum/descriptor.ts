@@ -15,11 +15,20 @@
 
 import { computeReceiptWeights } from "@cogni/attribution-ledger";
 import type { AllocatorDescriptor } from "@cogni/attribution-pipeline-contracts";
+import { z } from "zod";
 
 import { ECHO_EVALUATION_REF } from "../echo/descriptor";
 
 /** Algorithm ref for the weight-sum allocator. */
 export const WEIGHT_SUM_ALGO_REF = "weight-sum-v0";
+
+/** Runtime schema for per-receipt allocator output. */
+export const WeightSumOutputSchema = z.array(
+  z.object({
+    receiptId: z.string(),
+    units: z.bigint(),
+  })
+);
 
 /**
  * Weight-sum allocator descriptor.
@@ -30,6 +39,7 @@ export const WEIGHT_SUM_ALGO_REF = "weight-sum-v0";
 export const WEIGHT_SUM_ALLOCATOR: AllocatorDescriptor = {
   algoRef: WEIGHT_SUM_ALGO_REF,
   requiredEvaluationRefs: [ECHO_EVALUATION_REF],
+  outputSchema: WeightSumOutputSchema,
   compute: async (context) => {
     return computeReceiptWeights(
       WEIGHT_SUM_ALGO_REF,

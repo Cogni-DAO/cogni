@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@cogni/attribution-ledger": "workspace:*"
+    "@cogni/attribution-ledger": "workspace:*",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

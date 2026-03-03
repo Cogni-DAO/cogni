@@ -14,7 +14,11 @@
  * @public
  */
 
-import type { AttributionStore } from "@cogni/attribution-ledger";
+import type {
+  EvaluationStore,
+  SelectionStore,
+} from "@cogni/attribution-ledger";
+import type { ZodType } from "zod";
 
 /**
  * Pure data describing an enricher plugin.
@@ -34,6 +38,9 @@ export interface EnricherDescriptor {
    * Format: "<evaluationRef>/<semver>" (e.g., "cogni.echo.v0/1.0.0").
    */
   readonly schemaRef: string;
+
+  /** Runtime schema for payloadJson emitted by this enricher. */
+  readonly outputSchema: ZodType<Record<string, unknown>>;
 }
 
 /**
@@ -53,7 +60,8 @@ export interface EnricherLogger {
 export interface EnricherContext {
   readonly epochId: bigint;
   readonly nodeId: string;
-  readonly attributionStore: AttributionStore;
+  /** Scoped store view for enrichers: evaluation reads/writes + selection reads. */
+  readonly attributionStore: EvaluationStore & SelectionStore;
   readonly logger: EnricherLogger;
   /** User-provided config parsed from .cogni/attribution/<profileId>.yaml, or null. */
   readonly profileConfig: Record<string, unknown> | null;
@@ -80,13 +88,13 @@ export interface EnricherEvaluationResult {
  * Defined in the framework package; implemented in the plugins package.
  */
 export interface EnricherAdapter {
-  /** Must match the descriptor's evaluationRef. */
-  readonly evaluationRef: string;
+  /** Descriptor and schema for this enricher. */
+  readonly descriptor: EnricherDescriptor;
 
   /**
    * Produce a draft evaluation for the given epoch.
    * Called during the enrichment phase (epoch is open).
-   * May perform I/O: read from store, call external APIs, invoke LLMs.
+   * May perform I/O: read from the scoped store view, call external APIs, invoke LLMs.
    */
   evaluateDraft(ctx: EnricherContext): Promise<EnricherEvaluationResult>;
 

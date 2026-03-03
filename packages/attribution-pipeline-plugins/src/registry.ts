@@ -44,7 +44,7 @@ export function createDefaultRegistries(): DefaultRegistries {
   ]);
 
   const enrichers: EnricherAdapterRegistry = new Map([
-    [echoAdapter.evaluationRef, echoAdapter],
+    [echoAdapter.descriptor.evaluationRef, echoAdapter],
   ]);
 
   const allocators: AllocatorRegistry = new Map([

@@ -25,12 +25,18 @@ describe("createDefaultRegistries", () => {
     expect(registries.profiles.get(COGNI_V0_PROFILE.profileId)).toBe(
       COGNI_V0_PROFILE
     );
-    expect(registries.enrichers.get(ECHO_EVALUATION_REF)?.evaluationRef).toBe(
-      ECHO_EVALUATION_REF
-    );
+    expect(
+      registries.enrichers.get(ECHO_EVALUATION_REF)?.descriptor.evaluationRef
+    ).toBe(ECHO_EVALUATION_REF);
+    expect(
+      registries.enrichers.get(ECHO_EVALUATION_REF)?.descriptor.outputSchema
+    ).toBeDefined();
     expect(registries.allocators.get(WEIGHT_SUM_ALGO_REF)?.algoRef).toBe(
       WEIGHT_SUM_ALGO_REF
     );
+    expect(
+      registries.allocators.get(WEIGHT_SUM_ALGO_REF)?.outputSchema
+    ).toBeDefined();
   });
 
   it("returns fresh registry maps on each call", () => {

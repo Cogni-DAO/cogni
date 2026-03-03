@@ -23,12 +23,14 @@ export {
   ECHO_DESCRIPTOR,
   ECHO_EVALUATION_REF,
   ECHO_SCHEMA_REF,
+  EchoPayloadSchema,
 } from "./plugins/echo/descriptor";
 
 // Weight-sum allocator
 export {
   WEIGHT_SUM_ALGO_REF,
   WEIGHT_SUM_ALLOCATOR,
+  WeightSumOutputSchema,
 } from "./plugins/weight-sum/descriptor";
 
 // Profiles

@@ -11,13 +11,17 @@
  * @internal
  */
 
-import type { AttributionStore } from "@cogni/attribution-ledger";
+import type {
+  EvaluationStore,
+  SelectionStore,
+} from "@cogni/attribution-ledger";
 import type { EnricherContext } from "@cogni/attribution-pipeline-contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { createEchoAdapter } from "../../../src/plugins/echo/adapter";
 import {
   ECHO_ALGO_REF,
+  ECHO_DESCRIPTOR,
   ECHO_EVALUATION_REF,
   ECHO_SCHEMA_REF,
 } from "../../../src/plugins/echo/descriptor";
@@ -35,8 +39,11 @@ function makeMockContext(
   }>
 ): EnricherContext {
   const store = {
+    getEvaluation: vi.fn().mockResolvedValue(null),
+    getEvaluationsForEpoch: vi.fn().mockResolvedValue([]),
     getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue(receipts),
-  } as unknown as AttributionStore;
+    upsertDraftEvaluation: vi.fn(),
+  } as unknown as EvaluationStore & SelectionStore;
 
   return {
     epochId: 1n,
@@ -91,6 +98,7 @@ describe("echo adapter", () => {
 
     const result = await adapter.evaluateDraft(ctx);
 
+    expect(adapter.descriptor).toBe(ECHO_DESCRIPTOR);
     expect(result.evaluationRef).toBe(ECHO_EVALUATION_REF);
     expect(result.algoRef).toBe(ECHO_ALGO_REF);
     expect(result.schemaRef).toBe(ECHO_SCHEMA_REF);

@@ -14,6 +14,7 @@
 
 import type { SelectedReceiptWithMetadata } from "@cogni/attribution-ledger";
 import type { EnricherDescriptor } from "@cogni/attribution-pipeline-contracts";
+import { z } from "zod";
 
 /** Namespaced evaluation ref for the echo enricher. */
 export const ECHO_EVALUATION_REF = "cogni.echo.v0";
@@ -24,11 +25,19 @@ export const ECHO_ALGO_REF = "echo-v0";
 /** Schema ref for the echo enricher payload shape. */
 export const ECHO_SCHEMA_REF = "cogni.echo.v0/1.0.0";
 
+/** Runtime schema for the echo enricher payload. */
+export const EchoPayloadSchema = z.object({
+  totalEvents: z.number().int().nonnegative(),
+  byEventType: z.record(z.string(), z.number().int().nonnegative()),
+  byUserId: z.record(z.string(), z.number().int().nonnegative()),
+});
+
 /** Echo enricher descriptor — pure data. */
 export const ECHO_DESCRIPTOR: EnricherDescriptor = {
   evaluationRef: ECHO_EVALUATION_REF,
   algoRef: ECHO_ALGO_REF,
   schemaRef: ECHO_SCHEMA_REF,
+  outputSchema: EchoPayloadSchema,
 };
 
 /**

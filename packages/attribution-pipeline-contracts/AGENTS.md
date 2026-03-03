@@ -35,27 +35,27 @@ Stable framework package for the attribution pipeline plugin architecture. Defin
 }
 ```
 
-**External deps:** none (pure TypeScript types and functions).
+**External deps:** `zod` (runtime schema objects only; still no I/O).
 
 ## Public Surface
 
 - **Exports:**
-  - `EnricherDescriptor` — Pure data: evaluationRef, algoRef, schemaRef
-  - `EnricherAdapter` — Port interface: evaluateDraft(ctx), buildLocked(ctx)
-  - `EnricherContext` — Dependency injection context for adapters
+  - `EnricherDescriptor` — Pure data: evaluationRef, algoRef, schemaRef, outputSchema
+  - `EnricherAdapter` — Port interface: descriptor, evaluateDraft(ctx), buildLocked(ctx)
+  - `EnricherContext` — Dependency injection context for adapters with scoped `EvaluationStore & SelectionStore`
   - `EnricherEvaluationResult` — Return type from adapter methods
   - `EnricherLogger` — Minimal logger interface (Pino-compatible)
   - `EnricherAdapterRegistry` — ReadonlyMap<evaluationRef, EnricherAdapter>
-  - `AllocatorDescriptor` — algoRef, requiredEvaluationRefs[], compute()
+  - `AllocatorDescriptor` — algoRef, requiredEvaluationRefs[], outputSchema, compute()
   - `AllocationContext` — receipts (ReceiptForWeighting[]), weightConfig, evaluations map, profileConfig
   - `AllocatorRegistry` — ReadonlyMap<algoRef, AllocatorDescriptor>
-  - `dispatchAllocator()` — Validate required evaluations, call compute() → ReceiptUnitWeight[]
+  - `dispatchAllocator()` — Validate required evaluations, parse allocator output schema, return ReceiptUnitWeight[]
   - `PipelineProfile` — enricherRefs[], allocatorRef, epochKind
   - `EnricherRef` — enricherRef + dependsOnEvaluations[]
   - `ProfileRegistry` — ReadonlyMap<profileId, PipelineProfile>
   - `resolveProfile()` — Lookup profile by attribution_pipeline or throw
   - `validateEnricherOrder()` — Topological sort, cycle/missing-ref detection
-  - `validateEvaluationWrite()` — Assert all required evaluation fields present
+  - `validateEvaluationWrite()` — Assert required fields, descriptor ref parity, and payload schema validity
 - **CLI:** none
 - **Env/Config keys:** none
 
@@ -86,8 +86,8 @@ pnpm --filter @cogni/attribution-pipeline-contracts build
 
 ## Dependencies
 
-- **Internal:** `@cogni/attribution-ledger` (domain types only: AttributionStore, ReceiptForWeighting, ReceiptUnitWeight)
-- **External:** none
+- **Internal:** `@cogni/attribution-ledger` (domain types only: EvaluationStore, SelectionStore, ReceiptForWeighting, ReceiptUnitWeight)
+- **External:** `zod`
 
 ## Change Protocol
 
