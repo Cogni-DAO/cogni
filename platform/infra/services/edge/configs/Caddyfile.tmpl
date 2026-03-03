@@ -35,12 +35,6 @@ www.{$DOMAIN} {
     }
   }
 
-  # SourceCred public UI
-  redir /sourcecred /sourcecred/
-  handle_path /sourcecred/* {
-    reverse_proxy sourcecred:6006
-  }
-
   # All other requests (including /api/* non-public routes)
   reverse_proxy app:3000
 

@@ -27,7 +27,6 @@ export default [
       "**/.env*",
       "**/*.yaml",
       "**/*.yml",
-      "platform/infra/services/sourcecred/instance/**",
     ],
   },
   // Parser config for UI files ONLY - no rules, just enables TS/JSX parsing

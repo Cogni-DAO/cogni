@@ -46,7 +46,6 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
   {
     title: "About",
     links: [
-      { label: "SourceCred", href: "/sourcecred/", external: false },
       {
         label: "Documentation",
         href: "https://github.com/cogni-DAO/cogni-template",

@@ -65,13 +65,6 @@ on_fail() {
     echo "=== logs: scheduler-worker ==="
     ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs --tail 80 scheduler-worker 2>&1 || true" || true
 
-    echo ""
-    echo "=== sourcecred compose ps ==="
-    ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml ps 2>&1 || true" || true
-
-    echo ""
-    echo "=== logs: sourcecred ==="
-    ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml logs --tail 200 sourcecred 2>&1 || true" || true
   fi
 
   exit "$code"
@@ -215,7 +208,6 @@ REQUIRED_SECRETS=(
     "APP_DB_SERVICE_USER"
     "APP_DB_SERVICE_PASSWORD"
     "APP_DB_NAME"
-    "SOURCECRED_GITHUB_TOKEN"
     "EVM_RPC_URL"
     # Temporal DB credentials (self-hosted Temporal)
     "TEMPORAL_DB_USER"
@@ -396,7 +388,6 @@ echo -e "\033[0;32m[INFO]\033[0m Docker prerequisites verified"
 # Compose shortcuts (explicit project names, no global export)
 EDGE_COMPOSE="docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml"
 RUNTIME_COMPOSE="docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml"
-SOURCECRED_COMPOSE="docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml"
 
 log_info() {
     echo -e "\033[0;32m[INFO]\033[0m $1"
@@ -581,11 +572,6 @@ append_env_if_set "$RUNTIME_ENV" GH_REVIEW_APP_ID "${GH_REVIEW_APP_ID-}"
 append_env_if_set "$RUNTIME_ENV" GH_REVIEW_APP_PRIVATE_KEY_BASE64 "${GH_REVIEW_APP_PRIVATE_KEY_BASE64-}"
 append_env_if_set "$RUNTIME_ENV" GH_REPOS "${GH_REPOS-}"
 
-# SourceCred env
-cat > /opt/cogni-template-sourcecred/.env << ENV_EOF
-SOURCECRED_GITHUB_TOKEN=${SOURCECRED_GITHUB_TOKEN}
-ENV_EOF
-
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 2: Start edge stack (idempotent - only starts if not running)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -641,32 +627,6 @@ fi
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Logging into GHCR for private image pulls..."
 echo "${GHCR_DEPLOY_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 4: Deploy SourceCred (After cleanup, before app pull)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-log_info "Deploying SourceCred stack..."
-
-# Pre-flight: Check Token
-token=$(sed -n 's/^SOURCECRED_GITHUB_TOKEN=//p' /opt/cogni-template-sourcecred/.env | head -n1)
-if [[ -z "${token:-}" ]]; then
-   log_error "SOURCECRED_GITHUB_TOKEN empty in /opt/cogni-template-sourcecred/.env"
-   exit 1
-fi
-
-# Pre-flight: Inspect Config (fail fast if config is obviously wrong)
-log_info "SourceCred Configuration:"
-grep -C 2 "repositories" /opt/cogni-template-sourcecred/instance/config/plugins/sourcecred/github/config.json || log_warn "Could not read GitHub config"
-
-# 3. Start service (image uses pinned tag — Docker cache handles it.
-#    First deploy or post-prune: compose up -d pulls automatically.
-#    Subsequent deploys: no-op if image already cached.)
-log_info "Starting SourceCred container..."
-$SOURCECRED_COMPOSE up -d
-
-# 4. Verify readiness (fail-fast, check config availability - SC-3)
-log_info "Waiting for SourceCred readiness..."
-bash /tmp/healthcheck-sourcecred.sh "$SOURCECRED_COMPOSE"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 5.9: Assert profile services exist (guard against silent compose drift)
@@ -845,9 +805,6 @@ echo "=== Edge stack ==="
 $EDGE_COMPOSE ps
 echo "=== Runtime stack ==="
 $RUNTIME_COMPOSE ps
-echo "=== SourceCred stack ==="
-$SOURCECRED_COMPOSE ps
-
 emit_deployment_event "deployment.complete" "success" "Deployment completed successfully"
 log_info "✅ Deployment complete!"
 EOF
@@ -866,7 +823,7 @@ log_info "deploy-remote.sh ready: ${LOCAL_SIZE} bytes, sha256=${LOCAL_SHA}"
 
 # Deploy bundles to VM via rsync
 log_info "Deploying edge and runtime bundles to VM..."
-ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime /opt/cogni-template-sourcecred"
+ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime"
 
 # Upload edge bundle (rarely changes - Caddy config only)
 rsync -av -e "ssh $SSH_OPTS" \
@@ -877,11 +834,6 @@ rsync -av -e "ssh $SSH_OPTS" \
 rsync -av -e "ssh $SSH_OPTS" \
   "$REPO_ROOT/platform/infra/services/runtime/" \
   root@"$VM_HOST":/opt/cogni-template-runtime/
-
-# Upload sourcecred bundle
-rsync -av -e "ssh $SSH_OPTS" \
-  "$REPO_ROOT/platform/infra/services/sourcecred/" \
-  root@"$VM_HOST":/opt/cogni-template-sourcecred/
 
 # Upload sandbox-proxy config (OpenClaw nginx)
 rsync -av -e "ssh $SSH_OPTS" \
@@ -904,7 +856,6 @@ scp $SSH_OPTS "$ARTIFACT_DIR/deploy-remote.sh" root@"$VM_HOST":/tmp/deploy-remot
 
 # Upload healthcheck scripts (called from deploy-remote.sh)
 scp $SSH_OPTS \
-  "$REPO_ROOT/platform/ci/scripts/healthcheck-sourcecred.sh" \
   "$REPO_ROOT/platform/ci/scripts/healthcheck-openclaw.sh" \
   "$REPO_ROOT/platform/ci/scripts/seed-pnpm-store.sh" \
   root@"$VM_HOST":/tmp/
@@ -996,5 +947,4 @@ log_info ""
 log_info "🔧 Deployment management:"
 log_info "  - SSH access: ssh root@$VM_HOST"
 log_info "  - Edge logs: docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml logs"
-log_info "  - Runtime logs: docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs
-  - SourceCred logs: docker compose --project-name cogni-sourcecred -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml logs"
+log_info "  - Runtime logs: docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs"

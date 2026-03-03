@@ -25,7 +25,6 @@ If the variable is needed by the main application container:
 
 If the variable is needed by other services:
 
-- [ ] **`platform/infra/services/sourcecred/docker-compose.sourcecred.yml`**: For SourceCred service variables.
 - [ ] **`platform/infra/services/edge/docker-compose.yml`**: For Caddy/Edge variables (rare).
 
 ## 4. CI Pipeline (Tests)
@@ -52,14 +51,13 @@ To get the variable from GitHub Secrets into the VM:
 
 - [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add the variable to the relevant secrets list so future fresh-clone setups know to provision it (e.g. under `production` or `staging` GitHub secrets).
 
-## 7. Special Cases: Isolated Services (e.g., SourceCred)
+## 7. Special Cases: Isolated Services
 
-If the variable is for a standalone service running in its own Docker Compose project (like SourceCred):
+If the variable is for a standalone service running in its own Docker Compose project:
 
-- [ ] **Docker Compose**: Update the service's compose file (e.g., `platform/infra/services/sourcecred/docker-compose.sourcecred.yml`).
-- [ ] **`deploy.sh` (Step 1)**: Add the variable to the _specific_ `.env` file generation block for that service (e.g., `/opt/cogni-template-sourcecred/.env`).
+- [ ] **Docker Compose**: Update the service's compose file.
+- [ ] **`deploy.sh` (Step 1)**: Add the variable to the _specific_ `.env` file generation block for that service.
 - [ ] **`deploy.sh` (Compose Command)**: **CRITICAL**: Ensure the `docker compose` command for that service explicitly uses `--env-file /path/to/service/.env`.
-  - _Example_: `docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f ...`
   - _Reason_: Isolated services often run from a shared script context and won't automatically find their `.env` file unless explicitly told.
 
 ## See Also

@@ -218,7 +218,6 @@ gh secret set DOMAIN --env $ENV --body "preview.cognidao.org"  # or "cognidao.or
 # API keys (same value can be shared across environments, or use separate keys)
 gh secret set OPENROUTER_API_KEY --env $ENV --body "<your-openrouter-key>"
 gh secret set EVM_RPC_URL --env $ENV --body "<your-rpc-url>"
-gh secret set SOURCECRED_GITHUB_TOKEN --env $ENV --body "<github-pat-for-sourcecred>"
 ```
 
 > **Note**: `SSH_DEPLOY_KEY` was already set in Step 1.
@@ -393,7 +392,6 @@ sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
 | `METRICS_TOKEN`           | Metrics auth token             | `openssl rand -base64 32`                                                 |
 | `OPENROUTER_API_KEY`      | OpenRouter API key             | From openrouter.ai                                                        |
 | `EVM_RPC_URL`             | Ethereum RPC URL               | From Alchemy/Infura                                                       |
-| `SOURCECRED_GITHUB_TOKEN` | GitHub PAT for SourceCred      | GitHub PAT with repo read                                                 |
 
 > **Two Config Surfaces (P0):**
 >
