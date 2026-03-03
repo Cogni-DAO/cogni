@@ -388,6 +388,7 @@ echo -e "\033[0;32m[INFO]\033[0m Docker prerequisites verified"
 # Compose shortcuts (explicit project names, no global export)
 EDGE_COMPOSE="docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml"
 RUNTIME_COMPOSE="docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml"
+
 log_info() {
     echo -e "\033[0;32m[INFO]\033[0m $1"
 }

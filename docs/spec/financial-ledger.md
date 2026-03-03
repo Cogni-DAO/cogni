@@ -29,11 +29,13 @@ All money I/O in one place. Inbound USDC → treasury postings. Attribution stat
 | FUNDING_IS_FINANCIAL      | Emissions funding of the MerkleDistributor IS a financial event. Entry: Dr Liability:UnclaimedEquity / Cr Assets:EmissionsVault:COGNI.                                                                                                  |
 | CLAIM_IS_FINANCIAL        | User on-chain claim from the distributor IS a financial event (liability reduction).                                                                                                                                                    |
 | ROTKI_ENRICHMENT_ONLY     | Rotki for crypto transaction enrichment and tax lot validation. NOT the canonical ledger.                                                                                                                                               |
-| EQUITY_PRIMARY            | Equity tokens (ERC-20) are the primary automated distribution instrument. USDC distributions are governance-voted, not automated.                                                                                                       |
-| MERKLE_CLAIMS             | MerkleDistributor (Uniswap pattern, Base mainnet) for on-chain distribution. User-initiated claims with inclusion proofs. Not Splits push distribution. Supports both equity tokens and USDC (separate roots or instances).             |
+| EQUITY_PRIMARY            | Governance/rewards token distributions are the primary token distribution instrument. USDC distributions are governance-voted, not automated.                                                                                              |
+| MERKLE_CLAIMS             | Stock per-epoch MerkleDistributor (Uniswap pattern, Base mainnet) is the preferred MVP on-chain distribution rail. User-initiated claims with inclusion proofs. Not Splits push distribution.                                            |
 | MULTI_INSTRUMENT          | Beancount hierarchy tracks all instrument types (equity tokens, USDC, future). Financial events are instrument-typed. Settlement policy determines which instruments are active.                                                        |
 | OPERATOR_PORT_REQUIRED    | Treasury actions (fund distributor, rotate Merkle roots, contract management, batch operations) require an Operator Port — a signing + policy boundary with rate limits, approvals, allowlists, and audit logs. NOT a custodial wallet. |
 | ALL_MATH_BIGINT           | No floating point in monetary calculations. Inherited from attribution-ledger.                                                                                                                                                          |
+| TRUSTED_MVP_EXPLICIT      | MVP claim publication/funding is trusted governance execution (Safe/manual or equivalent), NOT on-chain emissions enforcement. The trust model must be stated explicitly in product and operator docs.                                   |
+| SETTLEMENT_MANIFEST_REQUIRED | Every published distribution records a settlement manifest containing `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, and `publishedAt`.                                                       |
 
 ## Accounts Hierarchy (Beancount)
 
@@ -74,15 +76,37 @@ MVP settlement path:
 
 1. Attribution finalization produces a signed `AttributionStatement`.
 2. Settlement resolves each finalized claimant to a wallet address. Epochs with unresolved claimants remain governance-finalized but are not settlement-eligible.
-3. `computeMerkleTree()` derives leaves from statement-line `credit_amount` entitlements and maps them into `GovernanceERC20` token amounts.
+3. `computeMerkleTree()` derives leaves from statement-line `credit_amount` entitlements and maps them into `GovernanceERC20` token amounts under the active settlement policy.
 4. The settlement token is the Aragon `GovernanceERC20` minted at node formation to a DAO-controlled emissions holder.
-5. Operator execution publishes the Merkle root and funds the distributor. No second statement-signing step is introduced at settlement time.
+5. DAO-controlled trusted execution (Safe/manual or equivalent) publishes a per-epoch Merkle root and funds the distributor. No second statement-signing step is introduced at settlement time.
+6. Settlement publication stores a signed settlement manifest linking `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, and `publishedAt`.
+
+Lifecycle:
+
+```
+node formation
+  -> fixed GovernanceERC20 supply minted to emissions holder
+  -> epoch finalized as signed AttributionStatement
+  -> settlement manifest + Merkle root derived from signed `credit_amount`
+  -> DAO-controlled publish + fund
+  -> contributor claims tokens on-chain
+```
 
 See [proj.financial-ledger](../../work/projects/proj.financial-ledger.md) for the implementation roadmap.
 
+## Threat Model
+
+| Threat | MVP controls |
+| ------ | ------------ |
+| Malicious maintainer changes settlement code or publication inputs before release | Branch protection, required review, signed releases or build attestations, and reproducible settlement artifacts. |
+| Compromised operator publishes a root early or funds a distributor with the wrong amount | Safe/manual publish-and-fund policy, limited publisher set, and manifest review before execution. |
+| Statement/root mismatch: a valid signed statement exists, but a different root is published | Settlement manifest stores `statementHash`, and the published root is derived from the signed statement rather than ad hoc balances. |
+| Replay or duplicate publication for an epoch | One settlement publication record per epoch plus explicit operator review before any replacement action. |
+| Overfunding distributor beyond the intended epoch amount | Funding amount must equal manifest `totalAmount`, with reconciliation against the stored settlement record and journal entry. |
+
 ## Non-Goals
 
-- Custom smart contracts (use battle-tested MerkleDistributor)
+- Bespoke emissions enforcement in MVP
 - Speculative token economics (co-op patronage, not governance tokens)
 - Postgres as financial ledger (Postgres is operational state; Beancount is canonical)
 - Raw private key env vars (Operator Port uses keystore/Vault/CDP, never raw keys)
