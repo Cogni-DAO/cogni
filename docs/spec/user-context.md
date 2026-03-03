@@ -123,7 +123,7 @@ Enable agents to adapt their behavior based on who they're talking to — commun
 
 ## Non-Goals
 
-- SourceCred or external reputation system integration (future cred score replaces the heuristic)
+- External reputation system integration (future cred score replaces the heuristic)
 - Agent-side user profile editing (agents read context, they don't write preferences)
 - Authorization decisions based on trust tier (that's RBAC — see [rbac.md](rbac.md))
 - OpenClaw upstream `sessionContext` protocol patch (deferred until messenger channels need it)

@@ -70,7 +70,6 @@ This is a master index of all specs, updated as specs are migrated.
 | temporal-patterns-spec           | Temporal Patterns                         | draft    | ai-graphs  | [temporal-patterns.md](./temporal-patterns.md)                     |
 | security-auth-spec               | Security & Authentication                 | draft    | auth       | [security-auth.md](./security-auth.md)                             |
 | services-architecture-spec       | Services Architecture                     | draft    | deployment | [services-architecture.md](./services-architecture.md)             |
-| spec.sourcecred                  | SourceCred Implementation                 | draft    | community  | [sourcecred.md](./sourcecred.md)                                   |
 | sourcecred-config-rationale-spec | SourceCred Configuration Rationale        | draft    | community  | [sourcecred-config-rationale.md](./sourcecred-config-rationale.md) |
 | spec.tool-use                    | Tool Use Specification                    | draft    | ai-graphs  | [tool-use.md](./tool-use.md)                                       |
 | spec.unified-graph-launch        | Unified Graph Launch Design               | draft    | ai-graphs  | [unified-graph-launch.md](./unified-graph-launch.md)               |
@@ -97,7 +96,7 @@ This is a master index of all specs, updated as specs are migrated.
 | `ai-graphs`  | AI execution, LangGraph, prompts, tools     |
 | `auth`       | Authentication, authorization, RBAC         |
 | `billing`    | Credits, payments, metering                 |
-| `community`  | SourceCred, contributions                   |
+| `community`  | Attribution, contributions                  |
 | `data`       | Observability, logging, metrics, tracing    |
 | `deployment` | CI/CD, environments, containers             |
 | `infra`      | Databases, caching, docs system             |

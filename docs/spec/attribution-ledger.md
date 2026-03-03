@@ -813,7 +813,7 @@ Finalized statements now preserve claimant identity explicitly (`claimant_key`, 
 
 ## Non-Goals
 
-- Algorithmic valuation (SourceCred-style scoring) — weights are transparent, admin adjustable
+- Algorithmic valuation (automated scoring) — weights are transparent, admin adjustable
 - Server-held signing keys
 - Full RBAC system (V0 uses per-scope approver allowlist)
 - Real-time streaming (poll-based collection sufficient for weekly epochs)
@@ -835,7 +835,6 @@ Optional accrual at epoch sign (Dr Expense:ContributorRewards / Cr Liability:Unc
 - [billing-evolution](./billing-evolution.md) — Existing credit/billing system
 - [billing-ingest](./billing-ingest.md) — Callback-driven billing pipeline
 - [architecture](./architecture.md) — System architecture
-- [sourcecred](./sourcecred.md) — SourceCred as-built (being superseded)
 - [decentralized-user-identity](./decentralized-user-identity.md) — User identity bindings (`user_id` is canonical)
 - [identity-model](./identity-model.md) — All identity primitives (`node_id`, `scope_id`, `user_id`, `actor_id`, `billing_account_id`, `dao_address`)
 - [ai-governance-data](./ai-governance-data.md) — Autonomous governance agents (separate concern)
