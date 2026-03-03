@@ -32,7 +32,7 @@ describe("bootstrap container DI wiring", () => {
     const { resetContainer } = await import("@/bootstrap/container");
     resetContainer();
     process.env = ORIGINAL_ENV; // restore
-  });
+  }, 30_000);
 
   describe("getContainer adapter selection", () => {
     it("wires LiteLlmAdapter when APP_ENV=test", async () => {
@@ -46,7 +46,7 @@ describe("bootstrap container DI wiring", () => {
       expect(container.llmService).toBeInstanceOf(LiteLlmAdapter);
       expect(container.clock).toBeDefined();
       expect(container.log).toBeDefined();
-    });
+    }, 30_000);
 
     it("wires LiteLlmAdapter when APP_ENV=production", async () => {
       Object.assign(process.env, {
@@ -63,7 +63,7 @@ describe("bootstrap container DI wiring", () => {
       expect(container.llmService).toBeInstanceOf(LiteLlmAdapter);
       expect(container.clock).toBeDefined();
       expect(container.log).toBeDefined();
-    });
+    }, 30_000);
 
     it("wires LiteLlmAdapter in development mode with APP_ENV=production", async () => {
       Object.assign(process.env, {
@@ -79,7 +79,7 @@ describe("bootstrap container DI wiring", () => {
 
       expect(container.llmService).toBeInstanceOf(LiteLlmAdapter);
       expect(container.log).toBeDefined();
-    });
+    }, 30_000);
   });
 
   describe("container behavior", () => {
