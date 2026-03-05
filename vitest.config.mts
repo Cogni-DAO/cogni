@@ -59,6 +59,10 @@ export default defineConfig({
         "**/index.ts",
       ],
     },
+    // Limit worker concurrency to avoid vitest forks runner startup timeout
+    // in resource-constrained environments (sandboxed CI, codespaces).
+    maxWorkers: 2,
+    minWorkers: 1,
     testTimeout: 10_000,
     hookTimeout: 10_000,
   },
