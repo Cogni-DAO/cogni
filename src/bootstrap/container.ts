@@ -184,23 +184,27 @@ export function getContainer(): Container {
  */
 export function resetContainer(): void {
   _container = null;
+  _webhookRegistrations = null;
 }
 
-/**
- * Build webhook normalizer registrations (webhook-only capabilities).
- * Separate from scheduler-worker registrations which have poll capabilities.
- */
-function buildWebhookRegistrations(): ReadonlyMap<
+/** Lazy singleton for webhook registrations (avoids import cost at container init). */
+let _webhookRegistrations: ReadonlyMap<string, DataSourceRegistration> | null =
+  null;
+
+function getWebhookRegistrations(): ReadonlyMap<
   string,
   DataSourceRegistration
 > {
-  const registrations = new Map<string, DataSourceRegistration>();
-  registrations.set("github", {
-    source: "github",
-    version: "0.3.0",
-    webhook: new GitHubWebhookNormalizer(),
-  });
-  return registrations;
+  if (!_webhookRegistrations) {
+    const registrations = new Map<string, DataSourceRegistration>();
+    registrations.set("github", {
+      source: "github",
+      version: "0.3.0",
+      webhook: new GitHubWebhookNormalizer(),
+    });
+    _webhookRegistrations = registrations;
+  }
+  return _webhookRegistrations;
 }
 
 function createContainer(): Container {
@@ -409,7 +413,9 @@ function createContainer(): Container {
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
     ),
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
-    webhookRegistrations: buildWebhookRegistrations(),
+    get webhookRegistrations() {
+      return getWebhookRegistrations();
+    },
   };
 }
 
