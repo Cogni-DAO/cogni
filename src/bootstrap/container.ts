@@ -35,6 +35,7 @@ import {
   DrizzleScheduleUserAdapter,
   DrizzleThreadPersistenceAdapter,
   EvmRpcOnChainVerifierAdapter,
+  GITHUB_ADAPTER_VERSION,
   GitHubWebhookNormalizer,
   getAppDb,
   LangfuseAdapter,
@@ -199,7 +200,7 @@ function getWebhookRegistrations(): ReadonlyMap<
     const registrations = new Map<string, DataSourceRegistration>();
     registrations.set("github", {
       source: "github",
-      version: "0.3.0",
+      version: GITHUB_ADAPTER_VERSION,
       webhook: new GitHubWebhookNormalizer(),
     });
     _webhookRegistrations = registrations;

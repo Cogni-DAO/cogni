@@ -201,6 +201,15 @@ export function createAttributionContainer(
     }
   }
 
+  // CAPABILITY_REQUIRED: validate every registration has at least one capability
+  for (const [name, reg] of registrations) {
+    if (!reg.poll && !reg.webhook) {
+      throw new Error(
+        `[CAPABILITY_REQUIRED] DataSourceRegistration "${name}" has neither poll nor webhook capability`
+      );
+    }
+  }
+
   return {
     attributionStore,
     sourceRegistrations: registrations,

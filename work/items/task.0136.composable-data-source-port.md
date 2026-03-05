@@ -2,7 +2,7 @@
 id: task.0136
 type: task
 title: "Composable DataSource registration: unified poll + webhook ingestion"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 10
 estimate: 3
@@ -16,7 +16,7 @@ project: proj.transparent-credit-payouts
 branch: claude/review-github-ingestion-Kwjtl
 pr: "pending — gh CLI not available, create manually: claude/review-github-ingestion-Kwjtl → staging"
 reviewer:
-revision: 3
+revision: 4
 blocked_by:
 deploy_verified: false
 created: 2026-03-05

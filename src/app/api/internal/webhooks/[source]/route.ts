@@ -18,11 +18,15 @@ import { NextResponse } from "next/server";
 import { getContainer } from "@/bootstrap/container";
 import {
   receiveWebhook,
+  WebhookPayloadParseError,
   WebhookSourceNotFoundError,
   WebhookVerificationError,
 } from "@/features/ingestion/services/webhook-receiver";
 import { getNodeId } from "@/shared/config";
 import { serverEnv } from "@/shared/env";
+import { makeLogger } from "@/shared/observability";
+
+const log = makeLogger().child({ component: "webhook-route" });
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -73,7 +77,13 @@ export async function POST(
     );
   }
 
-  // 2. Read raw body (needed for signature verification)
+  // 2. Fast-path reject oversized payloads before reading body into memory
+  const contentLength = request.headers.get("content-length");
+  if (contentLength && Number(contentLength) > MAX_BODY_SIZE) {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+
+  // Read raw body (needed for signature verification)
   const bodyBuffer = Buffer.from(await request.arrayBuffer());
   if (bodyBuffer.length > MAX_BODY_SIZE) {
     return NextResponse.json({ error: "Payload too large" }, { status: 413 });
@@ -89,6 +99,8 @@ export async function POST(
   try {
     const container = getContainer();
 
+    const eventType = headers["x-github-event"] ?? "unknown";
+
     const result = await receiveWebhook(
       {
         attributionStore: container.attributionStore,
@@ -98,16 +110,27 @@ export async function POST(
       { source, headers, body: bodyBuffer, secret }
     );
 
+    log.info(
+      { source, eventType, eventCount: result.eventCount },
+      "webhook processed"
+    );
+
     return NextResponse.json(
       { ok: true, eventCount: result.eventCount },
       { status: 200 }
     );
   } catch (error) {
     if (error instanceof WebhookSourceNotFoundError) {
+      log.warn({ source }, "webhook source not found");
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
     if (error instanceof WebhookVerificationError) {
+      log.warn({ source }, "webhook verification failed");
       return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    if (error instanceof WebhookPayloadParseError) {
+      log.warn({ source }, "webhook payload parse error");
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     throw error;
   }

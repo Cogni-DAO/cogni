@@ -2,19 +2,19 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `scheduler-worker/adapters/ingestion/github-webhook`
+ * Module: `@tests/unit/adapters/server/ingestion/github-webhook-normalizer`
  * Purpose: Unit tests for GitHubWebhookNormalizer — verify() signature validation and normalize() payload parsing.
  * Scope: Covers pull_request (merged, non-closed, unmerged, bot), issues (closed, non-closed, bot), unsupported events, supportedEvents list. Does NOT test HTTP transport or feature service integration.
  * Invariants: WEBHOOK_VERIFY_VIA_OSS (uses @octokit/webhooks-methods for real HMAC-SHA256 signing in fixtures)
  * Side-effects: none
- * Links: services/scheduler-worker/src/adapters/ingestion/github-webhook.ts
+ * Links: src/adapters/server/ingestion/github-webhook.ts
  * @public
  */
 
 import { sign } from "@octokit/webhooks-methods";
 import { describe, expect, it } from "vitest";
 
-import { GitHubWebhookNormalizer } from "../src/adapters/ingestion/github-webhook";
+import { GitHubWebhookNormalizer } from "@/adapters/server/ingestion/github-webhook";
 
 // ---------------------------------------------------------------------------
 // Helpers

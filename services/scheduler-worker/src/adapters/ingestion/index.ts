@@ -4,7 +4,7 @@
 /**
  * Module: `scheduler-worker/adapters/ingestion`
  * Purpose: Barrel export for activity ingestion adapters — poll and webhook implementations.
- * Scope: Re-exports adapter implementations (GitHubSourceAdapter, GitHubWebhookNormalizer, auth, client). New adapters added here.
+ * Scope: Re-exports adapter implementations (GitHubSourceAdapter, auth, client). New adapters added here.
  * Side-effects: none
  * @internal
  */
@@ -18,7 +18,5 @@ export {
   type GitHubAppConfig,
   GitHubAppTokenProvider,
 } from "./github-auth.js";
-
-export { GitHubWebhookNormalizer } from "./github-webhook.js";
 
 export { createGitHubClient, type GitHubClient } from "./octokit-client.js";

@@ -65,7 +65,12 @@ export async function receiveWebhook(
   }
 
   // 3. Normalize payload to ActivityEvent[]
-  const parsed = JSON.parse(body.toString("utf-8")) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body.toString("utf-8"));
+  } catch {
+    throw new WebhookPayloadParseError(source);
+  }
   const events = await registration.webhook.normalize(headers, parsed);
 
   if (events.length === 0) {
@@ -111,5 +116,15 @@ export class WebhookVerificationError extends Error {
   constructor(source: string) {
     super(`Webhook signature verification failed for source: ${source}`);
     this.name = "WebhookVerificationError";
+  }
+}
+
+/**
+ * Error thrown when webhook body cannot be parsed as JSON.
+ */
+export class WebhookPayloadParseError extends Error {
+  constructor(source: string) {
+    super(`Malformed webhook payload for source: ${source}`);
+    this.name = "WebhookPayloadParseError";
   }
 }

@@ -18,6 +18,9 @@ import type { ActivityEvent, WebhookNormalizer } from "@cogni/ingestion-core";
 import { buildEventId, hashCanonicalPayload } from "@cogni/ingestion-core";
 import { verify } from "@octokit/webhooks-methods";
 
+/** Shared version for all GitHub data source registrations (poll + webhook). */
+export const GITHUB_ADAPTER_VERSION = "0.3.0" as const;
+
 /**
  * GitHub webhook normalizer.
  * Handles pull_request (merged) and issues (closed) webhook events.
