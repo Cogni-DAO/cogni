@@ -9,6 +9,8 @@
  * - Only file that imports concrete adapter packages (@cogni/db-client, @cogni/repo-spec, @cogni/attribution-pipeline-plugins)
  * - activities/ and workflows/ import ports only, never this module
  * - REPO_SPEC_AUTHORITY: identity (node_id, scope_id, chain_id) read from @cogni/repo-spec at bootstrap
+ * - SOURCE_ADAPTER_COVERAGE: cross-checks repo-spec activity_sources against registered adapters; logs CONFIG_SOURCE_NO_ADAPTER at error level for each configured source missing an adapter
+ * - CAPABILITY_REQUIRED: every DataSourceRegistration must have at least one of poll or webhook (throws at bootstrap)
  * Side-effects: Creates DB connection pool; reads .cogni/repo-spec.yaml from disk
  * Links: services/scheduler-worker/src/ports/index.ts, packages/repo-spec/
  * @internal
