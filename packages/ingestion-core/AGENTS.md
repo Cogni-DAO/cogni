@@ -5,8 +5,8 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-21
-- **Status:** draft
+- **Last reviewed:** 2026-03-05
+- **Status:** stable
 
 ## Purpose
 
@@ -40,9 +40,12 @@ Pure domain types, port interface, and helpers for activity ingestion source ada
 ## Public Surface
 
 - **Exports:**
+  - `DataSourceRegistration` — Capability manifest binding optional `PollAdapter` + `WebhookNormalizer` per source
+  - `PollAdapter` — Port for Temporal activity-based cursor sync (replaces direct SourceAdapter usage)
+  - `WebhookNormalizer` — Port for HTTP webhook verify + normalize to `ActivityEvent[]`
+  - `SourceAdapter` — Deprecated type alias for backward compatibility
   - `ActivityEvent` — Purpose-neutral raw activity event (no epoch/user/node fields)
   - `StreamDefinition`, `StreamCursor`, `CollectParams`, `CollectResult` — Adapter I/O types
-  - `SourceAdapter` — Port interface for source adapters (implementations in services/)
   - `buildEventId()` — Deterministic event ID construction
   - `canonicalJson()` — Sorted-key JSON for deterministic serialization
   - `hashCanonicalPayload()` — SHA-256 via Web Crypto
@@ -52,7 +55,7 @@ Pure domain types, port interface, and helpers for activity ingestion source ada
 ## Ports
 
 - **Uses ports:** none
-- **Implements ports:** none (defines SourceAdapter port — implementations in services/scheduler-worker)
+- **Implements ports:** none (defines DataSourceRegistration, PollAdapter, WebhookNormalizer ports — implementations in services/scheduler-worker and src/adapters/server)
 
 ## Responsibilities
 
@@ -88,4 +91,4 @@ pnpm --filter @cogni/ingestion-core build
 
 - `src/ports/source-adapter.port.ts` re-exports from this package for app-layer consumers
 - Per PACKAGES_NO_SRC_IMPORTS: This package cannot import from `src/**`
-- Per ADAPTERS_NOT_IN_CORE: Only types + pure helpers here; adapter implementations in services/
+- Per ADAPTERS_NOT_IN_CORE: Only types + pure helpers here; poll adapters in services/scheduler-worker, webhook normalizers in services/scheduler-worker + src/adapters/server

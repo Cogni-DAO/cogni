@@ -2,7 +2,7 @@
 id: task.0136
 type: task
 title: "Composable DataSource registration: unified poll + webhook ingestion"
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 10
 estimate: 3

@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/bootstrap/container`
- * Purpose: Composition root — wires concrete adapters to port interfaces.
+ * Purpose: Composition root — wires concrete adapters to port interfaces via DataSourceRegistration.
  * Scope: All adapter construction lives here. Returns typed container against port interfaces. Does not export identity constants.
  * Invariants:
  * - Only file that imports concrete adapter packages (@cogni/db-client, @cogni/repo-spec, @cogni/attribution-pipeline-plugins)

@@ -3,8 +3,8 @@
 
 /**
  * Module: `scheduler-worker/adapters/ingestion`
- * Purpose: Barrel export for activity source adapters.
- * Scope: Re-exports adapter implementations. New adapters (Discord, etc.) added here.
+ * Purpose: Barrel export for activity ingestion adapters — poll and webhook implementations.
+ * Scope: Re-exports adapter implementations (GitHubSourceAdapter, GitHubWebhookNormalizer, auth, client). New adapters added here.
  * Side-effects: none
  * @internal
  */

@@ -4,8 +4,8 @@
 /**
  * Module: `@bootstrap/container`
  * Purpose: Dependency injection container for application composition root with environment-based adapter selection.
- * Scope: Wire adapters to ports for runtime dependency injection. Does not handle request-scoped lifecycle.
- * Invariants: All ports wired; single container instance per process; config.unhandledErrorPolicy set by env.
+ * Scope: Wire adapters to ports for runtime dependency injection. Provides webhookRegistrations for ingestion route. Does not handle request-scoped lifecycle.
+ * Invariants: All ports wired; single container instance per process; config.unhandledErrorPolicy set by env; webhookRegistrations lazy-initialized.
  * Side-effects: IO (initializes logger and emits startup log on first access)
  * Notes: LLM always uses LiteLlmAdapter; stack tests route to mock-openai-api. ContainerConfig controls wrapper behavior.
  * Links: Used by API routes and other entry points; configure adapters here for DI.

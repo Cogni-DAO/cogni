@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-03-03
+- **Last reviewed:** 2026-03-05
 - **Status:** draft
 
 ## Purpose
@@ -30,7 +30,7 @@ src/
 ├── activities/      # Temporal activities (I/O via injected ports)
 ├── workflows/       # Temporal workflows (deterministic, no I/O)
 ├── adapters/        # Concrete implementations (Octokit, GitHub App auth)
-│   └── ingestion/   # GitHub source adapter + token provider
+│   └── ingestion/   # GitHub poll adapter + webhook normalizer + token provider
 ├── observability/   # Logger factory (sole pino importer), redaction
 ├── main.ts          # Entry point: env() → makeLogger() → startSchedulerWorker() + startLedgerWorker()
 ├── worker.ts        # Temporal Worker lifecycle: createContainer() → createActivities()
@@ -103,7 +103,7 @@ docker build -f services/scheduler-worker/Dockerfile -t scheduler-worker .
 ## Dependencies
 
 - **Internal:** `@cogni/scheduler-core` (ports), `@cogni/ingestion-core` (ports), `@cogni/attribution-ledger` (domain logic + epoch window), `@cogni/attribution-pipeline-contracts` (enricher validation, profile resolution, allocator dispatch), `@cogni/attribution-pipeline-plugins` (built-in registries), `@cogni/db-client` (adapters, bootstrap only), `@cogni/repo-spec` (identity from `.cogni/repo-spec.yaml`), `@cogni/ids`
-- **External:** `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/activity`, `pino`, `viem` (EIP-712 verification), `zod`
+- **External:** `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/activity`, `@octokit/webhooks-methods` (GitHub webhook HMAC-SHA256 verification), `pino`, `viem` (EIP-712 verification), `zod`
 
 ## Change Protocol
 

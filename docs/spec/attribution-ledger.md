@@ -10,7 +10,7 @@ read_when: Working on credit statements, activity ingestion, epoch enrichers, ep
 implements: proj.transparent-credit-payouts
 owner: derekg1729
 created: 2026-02-20
-verified: 2026-03-03
+verified: 2026-03-05
 tags: [governance, transparency, payments, attribution]
 ---
 
@@ -775,7 +775,7 @@ The following are explicitly deferred from V0 and will be designed when needed:
 - **Settlement distribution state machine** (`epoch_statements.status`: draft → signed → submitted → settled/failed) — V1+
 - **UI pages** — V1+
 - **DID/VC alignment** — V2+
-- **Automated webhook fast-path** (GitHub `handleWebhook`) — V1: real-time ingestion
+- ~~**Automated webhook fast-path**~~ — Implemented via `WebhookNormalizer` port + `GitHubWebhookNormalizer`. See [Source Adapter Interface](#source-adapter-interface).
 - **Formal `EpochEnricher` port** — V1: full executor dispatch via `resolveProfile()` + `dispatchAllocator()`. V0 calls enricher activities directly; plugin contracts scaffolded but executor not yet wired through them.
 - **Object storage for large evaluations** (`payload_ref`) — V1: when an evaluation exceeds 256KB inline threshold. V0: all payloads inline.
 - **AI quality scoring enricher** (`cogni.ai_scores.v0`) — future enricher, same `epoch_evaluations` table, different `evaluation_ref`
