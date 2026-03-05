@@ -162,7 +162,7 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 | ---------------------------------------------- | ----------- | --- | --------------------- |
 | Retroactive backfill for finalized epochs      | Not Started | 2   | task.0110 (not filed) |
 | Pending credit for unresolved identities       | Not Started | 2   | task.0111 (not filed) |
-| Webhook-first GitHub collection                | In Review   | 3   | task.0136             |
+| Webhook-first GitHub collection                | Done        | 3   | task.0136             |
 | X/Twitter activity adapter                     | Not Started | 2   | (create at P1 start)  |
 | Funding activity adapter                       | Not Started | 2   | (create at P1 start)  |
 | SourceCred grain → activity migration strategy | Not Started | 2   | (create at P1 start)  |
