@@ -14,7 +14,7 @@ assignees: []
 credit:
 project: proj.transparent-credit-payouts
 branch: claude/review-github-ingestion-Kwjtl
-pr: "pending — gh CLI not available, create manually: claude/review-github-ingestion-Kwjtl → staging"
+pr: "pending — create manually: claude/review-github-ingestion-Kwjtl → staging"
 reviewer:
 revision: 4
 blocked_by:
