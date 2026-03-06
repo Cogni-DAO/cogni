@@ -234,6 +234,14 @@ const ChunkChoiceSchema = z.object({
   logprobs: z.unknown().nullable().optional(),
 });
 
+/** Extension: agent activity status indicator (per STATUS_IS_EPHEMERAL). */
+const CogniStatusSchema = z
+  .object({
+    phase: z.enum(["thinking", "tool_use", "compacting"]),
+    label: z.string().optional(),
+  })
+  .optional();
+
 const ChatCompletionChunkSchema = z.object({
   id: z.string(),
   object: z.literal("chat.completion.chunk"),
@@ -243,6 +251,8 @@ const ChatCompletionChunkSchema = z.object({
   usage: UsageSchema.nullable().optional(),
   system_fingerprint: z.string().nullable().optional(),
   service_tier: z.string().nullable().optional(),
+  /** Extension: agent activity phase (additive, never breaks OpenAI compat). */
+  cogni_status: CogniStatusSchema,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -278,6 +288,7 @@ export const chatCompletionsContract = {
 export type ChatCompletionInput = z.infer<typeof ChatCompletionInputSchema>;
 export type ChatCompletionOutput = z.infer<typeof ChatCompletionOutputSchema>;
 export type ChatCompletionChunk = z.infer<typeof ChatCompletionChunkSchema>;
+export type CogniStatus = z.infer<typeof CogniStatusSchema>;
 export type ChatCompletionError = z.infer<typeof ErrorResponseSchema>;
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 export type ToolCall = z.infer<typeof ToolCallSchema>;

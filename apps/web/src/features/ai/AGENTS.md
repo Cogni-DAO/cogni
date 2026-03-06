@@ -49,7 +49,7 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
   - `uiMessagesToMessageDtos` (UIMessage[] → MessageDto[] bridge for thread persistence pipeline)
   - `redactSecretsInMessages` (best-effort credential redaction before persistence)
 - **Routes:**
-  - `/api/v1/chat/completions` (POST) - OpenAI-compatible chat completions (streaming + non-streaming)
+  - `/api/v1/chat/completions` (POST) - OpenAI-compatible chat completions (streaming + non-streaming, `cogni_status` extension)
   - `/api/v1/ai/chat` (POST) - chat endpoint (AI SDK Data Stream Protocol, server-authoritative thread persistence)
   - `/api/v1/ai/threads` (GET) - list threads for authenticated user (paginated, recency-ordered)
   - `/api/v1/ai/threads/[stateKey]` (GET) - load thread messages
