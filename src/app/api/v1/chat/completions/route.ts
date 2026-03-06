@@ -251,6 +251,21 @@ function createOpenAiSseStream(
             controller.enqueue(
               encoder.encode(sseEncode(JSON.stringify(chunk)))
             );
+          } else if (event.type === "status") {
+            const chunk: ChatCompletionChunk = {
+              id: completionId,
+              object: "chat.completion.chunk",
+              created,
+              model,
+              choices: [{ index: 0, delta: {}, finish_reason: null }],
+              cogni_status: {
+                phase: event.phase,
+                ...(event.label ? { label: event.label } : {}),
+              },
+            };
+            controller.enqueue(
+              encoder.encode(sseEncode(JSON.stringify(chunk)))
+            );
           }
           // done/error/tool_call_result events are terminal or internal — handled via final promise below
         }

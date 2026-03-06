@@ -87,6 +87,10 @@ function setupMocks(
       toolName: string;
       args: Record<string, unknown>;
     }>;
+    statusEvents?: Array<{
+      phase: "thinking" | "tool_use" | "compacting";
+      label?: string;
+    }>;
     finishReason?: string;
   } = {}
 ) {
@@ -124,6 +128,15 @@ function setupMocks(
   const executor: GraphExecutorPort = {
     runGraph(req: GraphRunRequest): GraphRunResult {
       async function* createStream(): AsyncIterable<AiEvent> {
+        if (options.statusEvents) {
+          for (const se of options.statusEvents) {
+            yield {
+              type: "status" as const,
+              phase: se.phase,
+              ...(se.label ? { label: se.label } : {}),
+            };
+          }
+        }
         if (options.toolCalls) {
           for (const tc of options.toolCalls) {
             yield {
@@ -600,6 +613,126 @@ describe("OpenAI Endpoint Parity (POST /v1/chat/completions)", () => {
 
       const response = await POST(req);
       expect(response.status).toBe(401);
+    });
+  });
+
+  describe("cogni_status streaming", () => {
+    it("emits cogni_status chunks for StatusEvents during streaming", async () => {
+      setupMocks({
+        statusEvents: [
+          { phase: "thinking" },
+          { phase: "tool_use", label: "search" },
+        ],
+      });
+
+      const { POST } = await import("@/app/api/v1/chat/completions/route");
+
+      const req = new NextRequest(
+        "http://localhost:3000/api/v1/chat/completions",
+        {
+          method: "POST",
+          body: JSON.stringify(createCompletionRequest({ stream: true })),
+        }
+      );
+
+      const response = await POST(req);
+      const { chunks } = await parseSSE(response);
+
+      const statusChunks = chunks.filter(
+        (c) => (c as Record<string, unknown>).cogni_status !== undefined
+      );
+      expect(statusChunks).toHaveLength(2);
+
+      const s0 = (statusChunks[0] as Record<string, unknown>).cogni_status as {
+        phase: string;
+        label?: string;
+      };
+      expect(s0.phase).toBe("thinking");
+      expect(s0.label).toBeUndefined();
+
+      const s1 = (statusChunks[1] as Record<string, unknown>).cogni_status as {
+        phase: string;
+        label?: string;
+      };
+      expect(s1.phase).toBe("tool_use");
+      expect(s1.label).toBe("search");
+    });
+
+    it("preserves standard OpenAI fields on status chunks", async () => {
+      setupMocks({ statusEvents: [{ phase: "compacting" }] });
+
+      const { POST } = await import("@/app/api/v1/chat/completions/route");
+
+      const req = new NextRequest(
+        "http://localhost:3000/api/v1/chat/completions",
+        {
+          method: "POST",
+          body: JSON.stringify(createCompletionRequest({ stream: true })),
+        }
+      );
+
+      const response = await POST(req);
+      const { chunks } = await parseSSE(response);
+
+      const statusChunk = chunks.find(
+        (c) => (c as Record<string, unknown>).cogni_status !== undefined
+      ) as Record<string, unknown>;
+      expect(statusChunk).toBeDefined();
+
+      // Must still be a valid ChatCompletionChunk
+      expect(() =>
+        chatCompletionsContract.chunk.parse(statusChunk)
+      ).not.toThrow();
+      expect(statusChunk.id).toMatch(/^chatcmpl-/);
+      expect(statusChunk.object).toBe("chat.completion.chunk");
+      expect(statusChunk.model).toBe(TEST_MODEL_ID);
+
+      const choices = statusChunk.choices as Array<{
+        delta: Record<string, unknown>;
+        finish_reason: string | null;
+      }>;
+      expect(choices[0]?.delta).toEqual({});
+      expect(choices[0]?.finish_reason).toBeNull();
+    });
+
+    it("does not emit cogni_status when no StatusEvents are present", async () => {
+      setupMocks();
+
+      const { POST } = await import("@/app/api/v1/chat/completions/route");
+
+      const req = new NextRequest(
+        "http://localhost:3000/api/v1/chat/completions",
+        {
+          method: "POST",
+          body: JSON.stringify(createCompletionRequest({ stream: true })),
+        }
+      );
+
+      const response = await POST(req);
+      const { chunks } = await parseSSE(response);
+
+      const statusChunks = chunks.filter(
+        (c) => (c as Record<string, unknown>).cogni_status !== undefined
+      );
+      expect(statusChunks).toHaveLength(0);
+    });
+
+    it("does not include cogni_status in non-streaming responses", async () => {
+      setupMocks({ statusEvents: [{ phase: "thinking" }] });
+
+      const { POST } = await import("@/app/api/v1/chat/completions/route");
+
+      const req = new NextRequest(
+        "http://localhost:3000/api/v1/chat/completions",
+        {
+          method: "POST",
+          body: JSON.stringify(createCompletionRequest()),
+        }
+      );
+
+      const response = await POST(req);
+      const json = await response.json();
+      expect(json.cogni_status).toBeUndefined();
     });
   });
 
