@@ -2,7 +2,7 @@
 id: bug.0136
 type: bug
 title: "Claude Code remote environment ships empty pnpm store — pnpm install and pnpm check fail out-of-the-box"
-status: needs_merge
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 2
@@ -15,13 +15,13 @@ project:
 branch: claude/fix-pnpm-environment-jPDbs
 pr: pending — branch pushed, no gh CLI auth available to create PR
 reviewer:
-revision: 1
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-05
 updated: 2026-03-06
 labels: [dx, ci, environment, p0]
-last_command: /closeout
+last_command: /design
 external_refs:
 ---
 
@@ -94,48 +94,77 @@ external_refs:
 
 ### Outcome
 
-Remote Claude Code agent sessions boot into a working state: `pnpm install` completes automatically and `pnpm check` passes without vitest forks-runner timeout errors.
+Remote Claude Code agent sessions boot into a working state: `pnpm install` completes automatically and `pnpm check` passes — same tests, same config, every environment. No ad-hoc exclude lists.
+
+### Problem Summary
+
+Two independent problems:
+
+1. **Empty pnpm store** — Claude Code remote image has skeleton `node_modules` but no store. `pnpm install --offline` fails.
+2. **Vitest forks hang** — `ulimit -i 0` in Claude Code remote kills the `forks` pool (IPC signals can't be delivered).
+
+The rev 1 implementation fixed (2) by switching to `vmThreads` in constrained envs, then built a hand-maintained exclude list in `check-fast.sh` to shuttle DOM tests and `vi.hoisted`-dependent tests back to `forks`. This is fragile: every new DOM test or mock-hoisting test must be manually added to the exclude list, the list drifts, tests run twice or not at all, and the shell script becomes the source of truth for test routing instead of vitest config.
 
 ### Approach
 
-**Solution**: Three targeted, low-risk changes — no new code, no new dependencies.
+**Principle: one config, zero shell-level test routing.** Vitest 4's `test.projects` lets us define two projects in `vitest.config.mts` with different pools. The split is declarative, vitest handles it, and `check-fast.sh` just calls `pnpm test:unit` — no excludes, no hardcoded file lists.
 
-**Fix A — SessionStart hook** (`.claude/settings.json`): Add a project-level Claude Code settings file with a SessionStart hook. The hook runs a conditional install script: if `node_modules/.modules.yaml` is missing (the signal that pnpm linking didn't complete), run `pnpm install --frozen-lockfile`. If already linked, skip (zero cost on subsequent sessions or if the image is ever fixed). This is the Claude Code standard mechanism — hooks in `.claude/settings.json` are loaded automatically for every session.
+**Fix A — SessionStart hook** (`.claude/settings.json`): Unchanged from rev 1. Conditional `pnpm install --frozen-lockfile` if `node_modules/.modules.yaml` is missing.
 
-**Fix B — Vitest pool: `singleFork` mode** (`vitest.config.mts`): Set `poolOptions.forks.singleFork: true`. This reuses a single child process for all test files instead of spawning 16 concurrent forks. Eliminates the stampede that overwhelms the 5s hardcoded `WORKER_START_TIMEOUT` in vitest. Trade-off: tests run sequentially in one worker → ~10-15% slower on beefy machines, but **eliminates the 5 unhandled forks-runner timeout errors** that cause exit code 1 in constrained containers. CI machines are not affected (they have normal ulimits).
+**Fix B — Vitest projects** (`vitest.config.mts`): Replace the single-config-with-conditional-pool with two vitest projects:
 
-**Fix C — Bump `testTimeout` to 30s** (`vitest.config.mts`): The first dynamic import of `@/bootstrap/container` takes ~10.7s in the remote environment (cold module graph with 50+ adapter imports). Current 10s timeout clips it. 30s provides headroom without masking real hangs. CI remains fast — the timeout only matters when a test actually hangs.
+1. **`unit`** — All `tests/unit/**` and `tests/ports/**` files. Uses `forks` normally, `vmThreads` when constrained. Excludes nothing — `vi.mock`, `vi.hoisted`, all patterns work identically in both pools for Node-environment tests.
+2. **`unit:dom`** — Only files with `@vitest-environment happy-dom` or `@vitest-environment jsdom` annotation. Uses `forks` always (DOM environments need process-level isolation). In constrained envs: `singleFork: true`, `maxWorkers: 1`.
 
-**Fix D — AGENTS.md update**: Change `pnpm install --offline --frozen-lockfile` → `pnpm install --frozen-lockfile` since the pnpm store is not pre-populated in the Claude Code image.
+Wait — **`vi.mock`/`vi.hoisted` breaks in vmThreads too** (see `metrics.test.ts` in rev 1 review). So the `unit` project using vmThreads in constrained envs will still fail for any test using `vi.hoisted`. That's 4+ files today and growing.
 
-**Reuses**: Claude Code's built-in SessionStart hooks system (`.claude/settings.json`), vitest's existing `poolOptions.forks.singleFork` config.
+**Revised approach — just use `forks` with `singleFork` everywhere:**
+
+The real question: can `forks` with `singleFork: true` + `maxWorkers: 1` survive `ulimit -i 0`? With only ONE child process and no concurrent signal delivery, the IPC bottleneck that caused the original hang (spawning 16 workers simultaneously) is eliminated. The single fork communicates via stdin/stdout pipes, not signals. **This needs validation**, but if it works, it's the simplest possible fix: no pool switching, no projects split, no exclude lists. Same pool, same behavior, everywhere.
+
+**Solution (rev 2):**
+
+1. **`.claude/settings.json`** — SessionStart hook (unchanged from rev 1)
+2. **`vitest.config.mts`** — Keep `pool: 'forks'` always. In constrained envs: `singleFork: true`, `maxWorkers: 1`. Remove vmThreads entirely.
+3. **`scripts/check-fast.sh`** — Delete the entire constrained-env branch (lines 79-99). Replace with a single `run_check "test:unit" "pnpm test:unit"` and `run_check "test:contract" "pnpm test:contract"` — same as the non-constrained path. The shell script stops caring about environments.
+4. **`AGENTS.md:29`** — Drop `--offline`
+5. **Bump `testTimeout`/`hookTimeout` to 30s** — Unchanged from rev 1 (cold container import is slow)
+
+**If `singleFork` hangs under `ulimit -i 0`:** Fall back to vitest projects split. But try the simple thing first.
+
+**Reuses**: Vitest's built-in `singleFork` option, Claude Code SessionStart hooks.
 
 **Rejected alternatives**:
 
-- **Switch to `threads` pool**: Tested — same runner-startup timeout at scale (threads share the same signal constraints). Also breaks tests using `process.chdir()` or process-level env manipulation (container.spec.ts does both).
-- **`vmForks`/`vmThreads`**: More complex, less stable with ESM, can leak memory. Overkill.
-- **Patch vitest's `WORKER_START_TIMEOUT`**: Fragile — gets overwritten on every `pnpm install`. Not portable.
-- **Run `pnpm install` on every SessionStart unconditionally**: Wastes 2 min if already installed. The conditional check (`test -f node_modules/.modules.yaml`) is a one-liner guard.
+- **vmThreads + shell exclude lists** (rev 1): Fragile. Every new DOM test or `vi.hoisted` test breaks silently. Shell becomes test router. Rejected by review.
+- **vitest `test.projects` split (Node vs DOM)**: Viable fallback, but adds config complexity. Only needed if `singleFork` can't survive `ulimit -i 0`.
+- **`threads` pool**: Breaks `process.chdir()` and process-level env manipulation used by container.spec.ts.
+- **Patch ulimit in container**: Not under our control (Claude Code image).
 
 ### Invariants
 
-- [ ] SIMPLE_SOLUTION: Only modifies config files — zero new runtime code
-- [ ] ARCHITECTURE_ALIGNMENT: SessionStart hook follows Claude Code's standard hook pattern
-- [ ] CI_PARITY: `singleFork` + 30s timeout does not regress CI (CI has normal ulimits; `singleFork` just serializes within one worker)
-- [ ] NO_OFFLINE_ASSUMPTION: `AGENTS.md` no longer assumes pnpm store is pre-populated
+- [ ] SAME_TESTS_EVERYWHERE: Every test file runs in every environment. No excludes, no conditional routing.
+- [ ] SINGLE_CONFIG: `vitest.config.mts` is the sole source of truth for pool selection. `check-fast.sh` does not participate in test routing.
+- [ ] CI_PARITY: Constrained env uses same pool (`forks`) as CI, just with `singleFork: true` + `maxWorkers: 1`. No behavioral divergence.
+- [ ] SIMPLE_SOLUTION: Config-only changes. Zero new runtime code.
+- [ ] NO_OFFLINE_ASSUMPTION: `AGENTS.md` no longer assumes pnpm store is pre-populated.
 
 ### Files
 
-- Create: `.claude/settings.json` — SessionStart hook for conditional `pnpm install`
-- Modify: `vitest.config.mts` — add `poolOptions.forks.singleFork: true`, bump `testTimeout` to 30000
-- Modify: `AGENTS.md:29` — drop `--offline` from install instruction
+- Keep: `.claude/settings.json` — SessionStart hook (already created in rev 1)
+- Modify: `vitest.config.mts` — Remove vmThreads. Use `forks` always. Constrained: `singleFork: true`, `maxWorkers: 1`.
+- Modify: `scripts/check-fast.sh` — Delete constrained-env branch (lines 79-99). Single code path for all envs.
+- Modify: `AGENTS.md:29` — Drop `--offline`
+- Revert: `tests/unit/app/*.spec.tsx`, `tests/unit/features/**/*.test.ts` — Undo any JSDoc changes from rev 1 that were only needed for vmThreads compatibility
 
 ## Plan
 
-- [ ] Create `.claude/settings.json` with SessionStart hook that conditionally runs `pnpm install --frozen-lockfile`
-- [ ] Update `vitest.config.mts`: add `pool: 'forks'` (explicit), `poolOptions.forks.singleFork: true`, `testTimeout: 30_000`, `hookTimeout: 30_000`
-- [ ] Update `AGENTS.md:29`: change `pnpm install --offline --frozen-lockfile` to `pnpm install --frozen-lockfile`
-- [ ] Run `pnpm check:docs` to validate
+- [ ] Validate: run `pnpm vitest run --pool=forks --poolOptions.forks.singleFork=true tests/unit tests/ports` in this constrained env to confirm singleFork survives `ulimit -i 0`
+- [ ] Update `vitest.config.mts`: remove vmThreads, use `forks` always, constrained → `singleFork: true` + `maxWorkers: 1`
+- [ ] Simplify `scripts/check-fast.sh`: delete constrained-env branch, single code path
+- [ ] Revert unnecessary test file changes from rev 1
+- [ ] Update `AGENTS.md:29`: drop `--offline`
+- [ ] Run `pnpm check` end-to-end to validate
 - [ ] Commit and push
 
 ## Validation
@@ -143,26 +172,25 @@ Remote Claude Code agent sessions boot into a working state: `pnpm install` comp
 **Command:**
 
 ```bash
-# After fixes, a fresh session should pass:
-pnpm install --frozen-lockfile && pnpm check
+# In constrained env (this session):
+pnpm check
 ```
 
-**Expected:** Both commands succeed with exit code 0. `pnpm check` reports all checks passed.
+**Expected:** All checks pass. Same tests run as CI. No exclude lists in shell script. No vmThreads anywhere.
+
+**Fallback:** If `singleFork` hangs under `ulimit -i 0`, implement the vitest `test.projects` split (unit vs unit:dom) instead. This is the backup plan, not the primary design.
 
 ## Review Feedback
 
-### Revision 1 — Blocking Issues
+### Revision 1 — Blocking Issues (addressed by rev 2 redesign)
 
-1. **`metrics.test.ts` fails in vmThreads pool** (`scripts/check-fast.sh:91`): The `vi.mock` + `vi.hoisted` pattern in `tests/unit/features/ai/services/metrics.test.ts` breaks under vmThreads — hoisted mock factory doesn't intercept imports in the shared VM context. Test passes in isolation (forks) but fails in the full vmThreads suite. **Fix:** Add `--exclude '**/metrics.test.ts'` to the vmThreads exclude list in `check-fast.sh:91` and include `tests/unit/features/ai/services/metrics.test.ts` in the forks run on line 92.
+1. **`metrics.test.ts` fails in vmThreads pool**: `vi.hoisted` pattern breaks in shared VM context. **Rev 2 fix:** Eliminate vmThreads entirely.
 
-2. **`app-layout-auth-guard.test.tsx` runs twice** (`scripts/check-fast.sh:91-92`): This `.test.tsx` file uses `@vitest-environment happy-dom` but is NOT excluded by `--exclude '**/*.spec.tsx'` (it's `.test.tsx`). Runs in vmThreads (line 91) AND forks (line 92). **Fix:** Add `--exclude '**/app-layout-auth-guard*'` to line 91.
+2. **`app-layout-auth-guard.test.tsx` runs twice**: Shell exclude list doesn't match `.test.tsx` suffix. **Rev 2 fix:** Eliminate shell-level test routing entirely.
 
-3. **Dead config** (`vitest.config.mts:52-54`): `poolOptions.forks.singleFork: constrained` is inert when `constrained=true` because pool is `vmThreads`. Remove or guard.
+3. **Dead config**: `poolOptions.forks.singleFork` inert when pool is vmThreads. **Rev 2 fix:** Pool is always forks, so singleFork is always active in constrained envs.
 
-### Suggestions (non-blocking)
-
-- Hardcoded file list on `check-fast.sh:92` is fragile — add a sync comment warning.
-- Design doc says "singleFork" but implementation uses "vmThreads" — update doc to match.
+4. **Fragile hardcoded file list**: Every new DOM test must be manually added. **Rev 2 fix:** No file lists. Vitest handles everything.
 
 ## Review Checklist
 
