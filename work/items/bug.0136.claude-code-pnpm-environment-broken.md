@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project:
 branch: claude/fix-pnpm-environment-jPDbs
-pr:
+pr: pending — branch pushed, no gh CLI auth available to create PR
 reviewer:
 revision: 1
 blocked_by:
