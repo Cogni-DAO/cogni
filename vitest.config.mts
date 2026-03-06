@@ -5,7 +5,7 @@
  * Module: `vitest.config`
  * Purpose: Vitest test runner configuration for unit tests, contract tests, and lint tests (no infrastructure required).
  * Scope: Configures test environment for fast tests only. Excludes component tests requiring DB/Docker/binaries.
- * Invariants: Coverage disabled by default; fast execution; v8 provider for Node.js compatibility; constrained envs use forks pool with singleFork to avoid signal-dependent multi-fork hangs.
+ * Invariants: Coverage disabled by default; fast execution; v8 provider for Node.js compatibility; constrained envs use threads pool (MessagePort IPC, no signals) to avoid ulimit -i 0 hangs.
  * Side-effects: file system (coverage reports written to ./coverage/)
  * Notes: Uses vite-tsconfig-paths for module resolution; excludes tests/component/** from main test run.
  * Links: SonarCloud integration workflow
@@ -21,10 +21,9 @@ import { defineConfig } from "vitest/config";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Detect constrained containers (e.g. Claude Code remote) where pending signals
-// ulimit is 0, causing the multi-fork pool to hang. With ulimit -i 0, spawning
-// multiple forks causes IPC signal delivery failures. Fix: use singleFork with
-// maxWorkers 1 so only one child process communicates via stdin/stdout pipes.
-// CI and local dev are unaffected.
+// ulimit is 0, causing the multi-fork pool to hang. Fix: use threads pool with
+// maxWorkers 2. Threads use MessagePort IPC (no signals), so ulimit -i 0 doesn't
+// affect them. CI and local dev are unaffected (use default forks pool).
 // Note: `ulimit -i` is Linux-only; on macOS the catch returns false (unconstrained).
 function isConstrainedEnvironment(): boolean {
   try {
@@ -47,13 +46,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: constrained,
-      },
-    },
-    ...(constrained ? { maxWorkers: 1 } : {}),
+    pool: constrained ? "threads" : "forks",
+    ...(constrained ? { maxWorkers: 2 } : {}),
     setupFiles: ["./tests/setup.ts"],
     include: [
       "tests/**/*.{test,spec}.{ts,tsx}",
