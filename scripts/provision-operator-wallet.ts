@@ -11,7 +11,7 @@
  * @public
  */
 
-import { PrivyClient } from "@privy-io/server-auth";
+import { PrivyClient } from "@privy-io/node";
 
 async function main(): Promise<void> {
   const appId = process.env.PRIVY_APP_ID;
@@ -26,16 +26,15 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const client = new PrivyClient(appId, appSecret, {
-    walletApi: {
-      authorizationPrivateKey: signingKey,
-    },
+  const client = new PrivyClient({
+    appId,
+    appSecret,
   });
 
   console.log("Creating operator wallet via Privy API...");
 
-  const wallet = await client.walletApi.createWallet({
-    chainType: "ethereum",
+  const wallet = await client.wallets().create({
+    chain_type: "ethereum",
   });
 
   console.log(`Operator wallet created successfully.`);

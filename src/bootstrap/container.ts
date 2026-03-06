@@ -386,7 +386,7 @@ function createContainer(): Container {
 
   // OperatorWallet: test uses fake, production uses Privy (optional — only when configured)
   // NOTE: PrivyOperatorWalletAdapter imported directly (not from barrel) to avoid
-  // pulling @privy-io/server-auth into the test bundle. Same pattern as SandboxGraphProvider.
+  // pulling @privy-io/node into the test bundle. Same pattern as SandboxGraphProvider.
   const operatorWalletConfig = getOperatorWalletConfig();
   const operatorWallet: OperatorWalletPort | undefined = env.isTestMode
     ? getTestOperatorWallet()
@@ -404,7 +404,7 @@ function createContainer(): Container {
           );
           return undefined;
         }
-        // Lazy import: @privy-io/server-auth takes ~4s to load.
+        // Lazy import: @privy-io/node can be slow to load.
         // Only loaded when Privy env vars are configured (production).
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { PrivyOperatorWalletAdapter } =
@@ -416,6 +416,9 @@ function createContainer(): Container {
           signingKey: env.PRIVY_SIGNING_KEY,
           expectedAddress: operatorWalletConfig.address,
           splitAddress: operatorWalletConfig.split_address,
+          ...(env.OPERATOR_MAX_TOPUP_USD
+            ? { maxTopUpUsd: env.OPERATOR_MAX_TOPUP_USD }
+            : {}),
         });
       })();
 

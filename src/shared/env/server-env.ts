@@ -206,6 +206,8 @@ export const serverSchema = z.object({
   PRIVY_APP_ID: optionalString,
   PRIVY_APP_SECRET: optionalString,
   PRIVY_SIGNING_KEY: optionalString,
+  // Per-tx cap for OpenRouter top-ups in USD (default: 500). Spec: OPERATOR_MAX_TOPUP_USD.
+  OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().optional(),
 });
 
 type ServerEnv = z.infer<typeof serverSchema> & {
