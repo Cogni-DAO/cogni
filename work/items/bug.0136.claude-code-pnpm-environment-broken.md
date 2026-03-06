@@ -2,7 +2,7 @@
 id: bug.0136
 type: bug
 title: "Claude Code remote environment ships empty pnpm store — pnpm install and pnpm check fail out-of-the-box"
-status: done
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 2
@@ -15,7 +15,7 @@ project:
 branch: claude/fix-pnpm-environment-jPDbs
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-05
@@ -148,6 +148,21 @@ pnpm install --frozen-lockfile && pnpm check
 ```
 
 **Expected:** Both commands succeed with exit code 0. `pnpm check` reports all checks passed.
+
+## Review Feedback
+
+### Revision 1 — Blocking Issues
+
+1. **`metrics.test.ts` fails in vmThreads pool** (`scripts/check-fast.sh:91`): The `vi.mock` + `vi.hoisted` pattern in `tests/unit/features/ai/services/metrics.test.ts` breaks under vmThreads — hoisted mock factory doesn't intercept imports in the shared VM context. Test passes in isolation (forks) but fails in the full vmThreads suite. **Fix:** Add `--exclude '**/metrics.test.ts'` to the vmThreads exclude list in `check-fast.sh:91` and include `tests/unit/features/ai/services/metrics.test.ts` in the forks run on line 92.
+
+2. **`app-layout-auth-guard.test.tsx` runs twice** (`scripts/check-fast.sh:91-92`): This `.test.tsx` file uses `@vitest-environment happy-dom` but is NOT excluded by `--exclude '**/*.spec.tsx'` (it's `.test.tsx`). Runs in vmThreads (line 91) AND forks (line 92). **Fix:** Add `--exclude '**/app-layout-auth-guard*'` to line 91.
+
+3. **Dead config** (`vitest.config.mts:52-54`): `poolOptions.forks.singleFork: constrained` is inert when `constrained=true` because pool is `vmThreads`. Remove or guard.
+
+### Suggestions (non-blocking)
+
+- Hardcoded file list on `check-fast.sh:92` is fragile — add a sync comment warning.
+- Design doc says "singleFork" but implementation uses "vmThreads" — update doc to match.
 
 ## Review Checklist
 
