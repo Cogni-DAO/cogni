@@ -178,11 +178,11 @@ describeWithAuth("GitHubSourceAdapter (external)", () => {
 
     expect(pr1).toBeDefined();
     expect(pr2).toBeDefined();
-    expect(pr1!.id).toBe(pr2!.id);
-    expect(pr1!.payloadHash).toBe(pr2!.payloadHash);
-    expect(pr1!.eventType).toBe(pr2!.eventType);
-    expect(pr1!.platformUserId).toBe(pr2!.platformUserId);
-    expect(pr1!.eventTime.toISOString()).toBe(pr2!.eventTime.toISOString());
+    expect(pr1?.id).toBe(pr2?.id);
+    expect(pr1?.payloadHash).toBe(pr2?.payloadHash);
+    expect(pr1?.eventType).toBe(pr2?.eventType);
+    expect(pr1?.platformUserId).toBe(pr2?.platformUserId);
+    expect(pr1?.eventTime.toISOString()).toBe(pr2?.eventTime.toISOString());
   });
 
   // ── Ledger round-trip ───────────────────────────────────────────

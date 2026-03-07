@@ -6,7 +6,7 @@
  * Purpose: Built-in enricher/allocator implementations, profiles, and registry construction for the attribution pipeline.
  * Scope: Plugin implementations and profile data. Does not define contracts (those live in @cogni/attribution-pipeline-contracts).
  * Invariants:
- * - PLUGINS_OWN_ALL_IMPLEMENTATIONS: all pipeline logic lives here, not in framework or worker.
+ * - PLUGINS_OWN_ALL_IMPLEMENTATIONS: selection policies, enrichers, allocators, profiles live here — never in scheduler-worker or contracts.
  * - ENRICHER_DESCRIPTOR_PURE: descriptors are constants + pure functions.
  * - PROFILE_IS_DATA: profiles are plain readonly objects.
  * - FRAMEWORK_STABLE_PLUGINS_CHURN: this package churns; framework stays stable.

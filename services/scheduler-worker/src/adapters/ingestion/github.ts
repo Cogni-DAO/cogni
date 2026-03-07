@@ -10,6 +10,8 @@
  * - PROVENANCE_REQUIRED: payloadHash (SHA-256), producer, version on every event.
  * - Uses repo-scoped GraphQL connections (authoritative), NOT search() (best-effort index).
  * - Client-side time-window filtering with updatedAt early-stop optimization.
+ * - PR metadata includes baseBranch, mergeCommitSha, and commitShas for production-promotion selection.
+ * - Review metadata includes prBaseBranch and prMergeCommitSha for cross-referencing.
  * - platformUserId = GitHub numeric databaseId (stable), not login (mutable).
  * - Bot authors skipped (no databaseId on Bot/Mannequin actors).
  * - Rate limiting handled by @octokit/plugin-retry + @octokit/plugin-throttling.
