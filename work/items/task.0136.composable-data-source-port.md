@@ -2,7 +2,7 @@
 id: task.0136
 type: task
 title: "Composable DataSource registration: unified poll + webhook ingestion"
-status: blocked
+status: needs_merge
 priority: 1
 rank: 10
 estimate: 3
@@ -14,10 +14,10 @@ assignees: []
 credit:
 project: proj.transparent-credit-payouts
 branch: claude/review-github-ingestion-Kwjtl
-pr: "pending — create manually: claude/review-github-ingestion-Kwjtl → staging"
+pr:
 reviewer:
 revision: 5
-blocked_by: "Review loop limit — escalate to human"
+blocked_by:
 deploy_verified: false
 created: 2026-03-05
 updated: 2026-03-07

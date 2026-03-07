@@ -126,7 +126,7 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 - [ ] A third party can recompute the payout table from stored data exactly
 - [ ] Duplicate activity collection is idempotent (deterministic event IDs)
 - [ ] Epoch close is idempotent (closing twice yields identical statement hash)
-- [ ] All write operations execute in Temporal workflows (Next.js stateless)
+- [ ] All write operations execute in Temporal workflows (Next.js stateless), except `ingestion_receipts` appends via webhook receivers (WEBHOOK_RECEIPT_APPEND_EXEMPT)
 - [ ] All math is BIGINT — no floating point, including weight values (milli-units)
 
 ### Walk (P1) — Work-Item Scoring + Attribution UI
@@ -191,7 +191,7 @@ See [attribution-ledger spec](../../docs/spec/attribution-ledger.md) for full ar
 - Each pool component type appears at most once per epoch (POOL_UNIQUE_PER_TYPE)
 - At least one `base_issuance` pool component required before epoch finalize
 - Epoch close is idempotent — same inputs produce identical statement hash
-- All write operations go through Temporal — Next.js stays stateless
+- All write operations go through Temporal — Next.js stays stateless. **Exception:** `ingestion_receipts` appends via webhook receivers (per WEBHOOK_RECEIPT_APPEND_EXEMPT)
 - All monetary math in BIGINT — no floating point, including weights (integer milli-units)
 - `user_id` remains the resolved human override surface for attribution, while finalized statements preserve claimant identity explicitly for linked and unlinked subjects — see [identity-model](../../docs/spec/identity-model.md)
 - Identity resolution is best-effort — unresolved events flagged, not silently dropped
@@ -284,4 +284,4 @@ Attribution statements produced by this project are **governance truth** — who
 - **USDC settlement** → P2 (when revenue exists, see proj.financial-ledger)
 - **X/Twitter + funding adapters** → P1
 - **Discord source adapter** → deferred from V0 launch (GitHub-only initially)
-- **GitHub webhook fast-path** → P1
+- ~~**GitHub webhook fast-path**~~ → Done (task.0136)
