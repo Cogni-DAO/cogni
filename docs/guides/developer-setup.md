@@ -93,6 +93,20 @@ pnpm check          # lint + type + format validation
 pnpm test           # run unit tests (no infra required)
 ```
 
+## Claude Code Remote Sessions
+
+If you use [Claude Code on the web](https://claude.ai/code) (remote sessions), you **must** configure git authorship in your environment. Without this, the SessionStart hook will fail and block the session — this is intentional to prevent commits attributed to "Claude".
+
+1. Go to [claude.ai/code](https://claude.ai/code) → click your environment → edit (or create one)
+2. Add these environment variables:
+   ```
+   GIT_AUTHOR_NAME=<your git username>
+   GIT_AUTHOR_EMAIL=<your git email>
+   ```
+3. Set **Network access** to "Full" if you need `gh` CLI access for PR operations
+
+The repo's `.claude/settings.json` SessionStart hook reads these vars and configures `git config` automatically.
+
 ## Troubleshooting
 
 ### Problem: `pnpm db:setup` fails with connection error
