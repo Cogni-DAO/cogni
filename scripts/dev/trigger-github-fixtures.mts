@@ -105,17 +105,21 @@ function main(): void {
     );
     const issueNumber = issueUrl.match(/(\d+)$/)?.[1] ?? "0";
     exec(`gh issue close ${issueNumber} -R ${TEST_REPO}`);
-    log(
-      `Issue #${issueNumber} created + closed (webhook: issues.closed)`
-    );
+    log(`Issue #${issueNumber} created + closed (webhook: issues.closed)`);
 
     // 5. Summary
     console.log();
     console.log("Done! If dev:smee is running, these webhooks should fire:");
-    console.log(`  - pull_request (closed/merged) -> receipt: github:pr:${TEST_REPO}:${prNumber}`);
-    console.log(`  - issues (closed)              -> receipt: github:issue:${TEST_REPO}:${issueNumber}`);
+    console.log(
+      `  - pull_request (closed/merged) -> receipt: github:pr:${TEST_REPO}:${prNumber}`
+    );
+    console.log(
+      `  - issues (closed)              -> receipt: github:issue:${TEST_REPO}:${issueNumber}`
+    );
     console.log();
-    console.log("Check /gov/epoch in the UI to see new receipts in the current epoch.");
+    console.log(
+      "Check /gov/epoch in the UI to see new receipts in the current epoch."
+    );
   } finally {
     // Cleanup temp dir
     try {

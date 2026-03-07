@@ -149,11 +149,38 @@ gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni-template --env preview --
 gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni-template --env production --body "$GH_WEBHOOK_SECRET"
 ```
 
+## Triggering test events
+
+Full flow from a fresh setup to seeing real GitHub events in the UI:
+
+```bash
+# 1. Start infrastructure (postgres, temporal, scheduler-worker, etc.)
+pnpm dev:infra
+
+# 2. Provision + migrate + seed the database
+#    Seeds 4 epochs including an open epoch for the current week
+pnpm db:setup
+
+# 3. Start the Next.js app (Terminal 1)
+pnpm dev
+
+# 4. Start the smee webhook proxy (Terminal 2)
+pnpm dev:smee
+
+# 5. Create real GitHub fixtures (Terminal 3)
+#    Creates a merged PR + closed issue on the test repo
+pnpm dev:trigger-github
+```
+
+The script targets `derekg1729/test-repo` by default. Override with `E2E_GITHUB_REPO` in `.env.local`.
+
+GitHub fires webhooks → smee forwards → app inserts receipts → visible in `/gov/epoch` within seconds (the seeded open epoch covers the current week).
+
 ## Verifying it works
 
 ### Check webhook delivery
 
-1. Push a commit to your test repo
+1. Run `pnpm dev:trigger-github` (or push a commit to your test repo)
 2. Check the GitHub App's **Advanced -> Recent Deliveries** for green checkmarks
 3. Check smee.io dashboard (local dev) for forwarded payloads
 4. Check app logs for `webhook received` / `receipts inserted` messages

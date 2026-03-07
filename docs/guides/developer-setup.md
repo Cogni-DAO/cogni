@@ -76,6 +76,29 @@ pnpm test:stack:docker          # Run tests against containerized app
 pnpm docker:test:stack:reset    # Nuclear reset for containerized test database
 ```
 
+## GitHub Webhook Testing (optional)
+
+Test real GitHub event ingestion end-to-end. Requires a GitHub App configured for webhooks — see [GitHub App + Webhook Setup](./github-app-webhook-setup.md) for first-time setup.
+
+```bash
+# 1. Start infrastructure (postgres, temporal, scheduler-worker, etc.)
+pnpm dev:infra
+
+# 2. Provision + migrate + seed the database (creates open epoch for current week)
+pnpm db:setup
+
+# 3. Start the Next.js app (Terminal 1)
+pnpm dev
+
+# 4. Start the smee webhook proxy (Terminal 2)
+pnpm dev:smee
+
+# 5. Trigger real GitHub events — creates a merged PR + closed issue (Terminal 3)
+pnpm dev:trigger-github
+```
+
+Receipts appear in `/gov/epoch` within seconds. The seeded open epoch covers the current week, so new webhook receipts show up immediately.
+
 ## Available Modes
 
 - `pnpm dev:stack` - Host app + containerized postgres/litellm
