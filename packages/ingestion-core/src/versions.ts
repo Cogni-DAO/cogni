@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/ingestion-core/versions`
  * Purpose: Source adapter version constants — single source of truth for poll + webhook adapter versioning.
- * Scope: Registration metadata only. Bump when schema changes affect payloadHash or receipt_id format.
+ * Scope: Registration metadata only. Bump when schema changes affect payloadHash or receipt_id format. Does not contain adapter implementations or platform-specific deps.
  * Invariants: Both poll and webhook adapters for a source MUST use the same version constant.
  * Side-effects: none
  * Links: docs/spec/attribution-ledger.md
