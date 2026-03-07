@@ -31,6 +31,10 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
     globalSetup: ["./tests/component/setup/testcontainers-postgres.global.ts"],
+    // External tests mutate shared state (GitHub repo main branch, testcontainers DB).
+    // Run one file at a time to avoid merge races and epoch collisions.
+    pool: "forks",
+    poolOptions: { forks: { singleFork: true } },
     sequence: { concurrent: false },
     testTimeout: 30_000,
     hookTimeout: 30_000,

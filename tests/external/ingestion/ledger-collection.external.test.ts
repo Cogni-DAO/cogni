@@ -4,15 +4,18 @@
 /**
  * Module: `@cogni/tests/external/ingestion/ledger-collection.external.test`
  * Purpose: Validate ledger activity functions end-to-end against real GitHub API + Postgres.
- * Scope: Exercises createAttributionActivities pipeline with real DrizzleAttributionAdapter + GitHubSourceAdapter. Does not test Temporal workflow orchestration.
+ * Scope: Creates its own fixtures, exercises createAttributionActivities pipeline. Cleans up after. Does not run in CI.
  * Invariants: Requires GH_REVIEW_APP_ID + GH_REVIEW_APP_PRIVATE_KEY_BASE64 in env. Skips gracefully if missing.
- * Side-effects: IO (GitHub GraphQL, testcontainers PostgreSQL)
+ * Side-effects: IO (GitHub GraphQL, git push, testcontainers PostgreSQL)
  * Links: services/scheduler-worker/src/activities/ledger.ts, docs/spec/attribution-ledger.md
  * @internal
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { DataSourceRegistration } from "@cogni/ingestion-core";
+import { extractChainId, parseRepoSpec } from "@cogni/repo-spec";
 import {
   TEST_NODE_ID,
   TEST_SCOPE_ID,
@@ -20,13 +23,18 @@ import {
 } from "@tests/_fixtures/attribution/seed-attribution";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { seedTestActor } from "@tests/_fixtures/stack/seed";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   type AttributionActivityDeps,
   createAttributionActivities,
 } from "../../../services/scheduler-worker/src/activities/ledger";
 import { GitHubSourceAdapter } from "../../../services/scheduler-worker/src/adapters/ingestion/github";
 import { GitHubAppTokenProvider } from "../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
+import {
+  cleanupFixtures,
+  createFixtures,
+  type GitHubFixtures,
+} from "./_github-fixture-helper";
 
 // ---------------------------------------------------------------------------
 // Auth resolution — skip entire suite if no GitHub App credentials available
@@ -35,22 +43,10 @@ import { GitHubAppTokenProvider } from "../../../services/scheduler-worker/src/a
 const GH_REVIEW_APP_ID = process.env.GH_REVIEW_APP_ID ?? "";
 const GH_REVIEW_APP_PRIVATE_KEY_BASE64 =
   process.env.GH_REVIEW_APP_PRIVATE_KEY_BASE64 ?? "";
+const TEST_REPO = process.env.E2E_GITHUB_REPO ?? "derekg1729/test-repo";
 
 const hasAppCreds = GH_REVIEW_APP_ID && GH_REVIEW_APP_PRIVATE_KEY_BASE64;
 const describeWithAuth = hasAppCreds ? describe : describe.skip;
-
-// ---------------------------------------------------------------------------
-// Test-repo known data
-// ---------------------------------------------------------------------------
-
-const TEST_REPO = "Cogni-DAO/test-repo";
-const SOURCE_REF = "Cogni-DAO/test-repo";
-
-/** Window capturing PR #52 + review + issue #51 from Feb 2026 */
-const FIXTURE_WINDOW = {
-  since: new Date("2026-02-20T00:00:00Z"),
-  until: new Date("2026-02-23T00:00:00Z"),
-};
 
 // ---------------------------------------------------------------------------
 // Logger stub
@@ -96,16 +92,30 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
     ],
   ]);
 
+  const repoSpec = parseRepoSpec(
+    readFileSync(join(process.cwd(), ".cogni", "repo-spec.yaml"), "utf-8")
+  );
+
   const activities = createAttributionActivities({
     attributionStore: ledger,
     sourceRegistrations: registrations,
     nodeId: TEST_NODE_ID,
     scopeId: TEST_SCOPE_ID,
+    chainId: extractChainId(repoSpec),
+    // Only collect/insert/cursor/epoch activities used; registries unused.
+    registries: {} as never,
     logger: mockLogger,
   });
 
+  let fixtures: GitHubFixtures;
+
   beforeAll(async () => {
+    fixtures = createFixtures(TEST_REPO);
     await seedTestActor(db);
+  }, 60_000);
+
+  afterAll(() => {
+    if (fixtures) cleanupFixtures(fixtures);
   });
 
   // ── Epoch lifecycle ───────────────────────────────────────────
@@ -113,9 +123,8 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
   describe("ensureEpochForWindow", () => {
     it("creates epoch and returns isNew=true on first call", async () => {
       const result = await activities.ensureEpochForWindow({
-        periodStart: FIXTURE_WINDOW.since.toISOString(),
-        periodEnd: FIXTURE_WINDOW.until.toISOString(),
-        scopeId: TEST_SCOPE_ID,
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
 
@@ -126,9 +135,8 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
 
     it("returns existing epoch on second call (idempotent)", async () => {
       const result = await activities.ensureEpochForWindow({
-        periodStart: FIXTURE_WINDOW.since.toISOString(),
-        periodEnd: FIXTURE_WINDOW.until.toISOString(),
-        scopeId: TEST_SCOPE_ID,
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
 
@@ -137,89 +145,66 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
     });
 
     it("handles closed epoch for same window without throwing", async () => {
-      // Create a separate epoch window, then close it
-      const closedWindow = {
-        since: new Date("2026-01-01T00:00:00Z"),
-        until: new Date("2026-01-08T00:00:00Z"),
-      };
-
-      const created = await activities.ensureEpochForWindow({
-        periodStart: closedWindow.since.toISOString(),
-        periodEnd: closedWindow.until.toISOString(),
-        scopeId: TEST_SCOPE_ID,
+      // Close + finalize the epoch created by the first test (same window)
+      const existing = await activities.ensureEpochForWindow({
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
         weightConfig: TEST_WEIGHT_CONFIG,
       });
-      expect(created.isNew).toBe(true);
+      expect(existing.isNew).toBe(false);
 
-      // Close the epoch via the store directly
       await ledger.closeIngestion(
-        BigInt(created.epochId),
+        BigInt(existing.epochId),
         [],
         "test-hash",
         "weight-sum-v0",
         "test-wch"
       );
-      await ledger.finalizeEpoch(BigInt(created.epochId), 0n);
+      await ledger.finalizeEpoch(BigInt(existing.epochId), 0n);
 
-      // Now ensureEpochForWindow should handle the closed epoch gracefully.
-      // Current code: getOpenEpoch returns null (epoch is closed), createEpoch
-      // throws EPOCH_WINDOW_UNIQUE constraint. This test documents the bug
-      // from review feedback #2 — it should either:
-      // (a) query by window regardless of status, or
-      // (b) catch the constraint error and re-fetch.
-      //
-      // If this test throws, it proves the bug exists and needs fixing.
-      // If it passes, the fix was already applied.
-      try {
-        const result = await activities.ensureEpochForWindow({
-          periodStart: closedWindow.since.toISOString(),
-          periodEnd: closedWindow.until.toISOString(),
-          scopeId: TEST_SCOPE_ID,
-          weightConfig: TEST_WEIGHT_CONFIG,
-        });
-        // If we get here, the activity handled it correctly
-        expect(result.epochId).toBe(created.epochId);
-        expect(result.status).toBe("finalized");
-      } catch (err) {
-        // Expected until feedback #2 is fixed — document the failure mode
-        expect(String(err)).toMatch(/unique|constraint|duplicate/i);
-      }
+      // Re-calling ensureEpochForWindow should return the finalized epoch
+      const result = await activities.ensureEpochForWindow({
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      expect(result.epochId).toBe(existing.epochId);
+      expect(result.status).toBe("finalized");
     });
   });
 
-  // ── Multi-pass collection (the real product requirement) ──────
+  // ── Multi-pass collection ──────────────────────────────────────
 
   describe("multi-pass collection per epoch", () => {
     let firstPassCursorValue: string;
 
     it("pass 1: collects events and saves cursor", async () => {
-      // Load cursor (should be null — first run)
       const cursor = await activities.loadCursor({
         source: "github",
         stream: "pull_requests",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
       });
       expect(cursor).toBeNull();
 
-      // Collect from GitHub
       const result = await activities.collectFromSource({
         source: "github",
         streams: ["pull_requests"],
         cursorValue: cursor,
-        periodStart: FIXTURE_WINDOW.since.toISOString(),
-        periodEnd: FIXTURE_WINDOW.until.toISOString(),
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
       });
 
       expect(result.events.length).toBeGreaterThan(0);
 
-      // Insert events
-      await activities.insertReceipts({ events: result.events });
+      await activities.insertReceipts({
+        events: result.events,
+        producerVersion: githubAdapter.version,
+      });
 
-      // Save cursor
       await activities.saveCursor({
         source: "github",
         stream: "pull_requests",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
         cursorValue: result.nextCursorValue,
       });
 
@@ -227,126 +212,115 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
     });
 
     it("pass 2: re-insert is idempotent (no duplicate rows)", async () => {
-      // Count events before
-      const before = await ledger.getActivityForWindow(
+      const before = await ledger.getReceiptsForWindow(
         TEST_NODE_ID,
-        FIXTURE_WINDOW.since,
-        FIXTURE_WINDOW.until
+        fixtures.createdAfter,
+        fixtures.createdBefore
       );
 
-      // Collect same window again (simulating second daily run)
       const result = await activities.collectFromSource({
         source: "github",
         streams: ["pull_requests"],
-        cursorValue: null, // intentionally null to re-collect same events
-        periodStart: FIXTURE_WINDOW.since.toISOString(),
-        periodEnd: FIXTURE_WINDOW.until.toISOString(),
+        cursorValue: null,
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
       });
 
-      // Re-insert — onConflictDoNothing means no error
-      await activities.insertReceipts({ events: result.events });
+      await activities.insertReceipts({
+        events: result.events,
+        producerVersion: githubAdapter.version,
+      });
 
-      // Count events after — should be same (no duplicates)
-      const after = await ledger.getActivityForWindow(
+      const after = await ledger.getReceiptsForWindow(
         TEST_NODE_ID,
-        FIXTURE_WINDOW.since,
-        FIXTURE_WINDOW.until
+        fixtures.createdAfter,
+        fixtures.createdBefore
       );
 
       expect(after.length).toBe(before.length);
     });
 
     it("pass 2: cursor loads correctly and stays stable", async () => {
-      // Load cursor from pass 1
       const cursor = await activities.loadCursor({
         source: "github",
         stream: "pull_requests",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
       });
 
       expect(cursor).toBe(firstPassCursorValue);
 
-      // Collect with cursor — GitHub returns 0 new events for the same window
-      // (cursor is at or past the latest event time)
       const result = await activities.collectFromSource({
         source: "github",
         streams: ["pull_requests"],
         cursorValue: cursor,
-        periodStart: FIXTURE_WINDOW.since.toISOString(),
-        periodEnd: FIXTURE_WINDOW.until.toISOString(),
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
       });
 
-      // Save cursor again — should stay stable (monotonic)
       await activities.saveCursor({
         source: "github",
         stream: "pull_requests",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
         cursorValue: result.nextCursorValue,
       });
 
       const updatedCursor = await activities.loadCursor({
         source: "github",
         stream: "pull_requests",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
       });
 
-      // Cursor should be >= the first pass cursor (monotonic)
       expect(updatedCursor).toBeTruthy();
       expect((updatedCursor as string) >= firstPassCursorValue).toBe(true);
     });
   });
 
-  // ── Cursor monotonicity with real Postgres ─────────────────────
+  // ── Cursor monotonicity ────────────────────────────────────────
 
   describe("cursor monotonicity", () => {
     it("refuses to go backwards — earlier cursor is ignored", async () => {
-      // Save a cursor with a known late value
       await activities.saveCursor({
         source: "github",
         stream: "issues",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
         cursorValue: "2026-12-31T23:59:59Z",
       });
 
-      // Try to save an earlier cursor
       await activities.saveCursor({
         source: "github",
         stream: "issues",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
         cursorValue: "2026-01-01T00:00:00Z",
       });
 
-      // Verify the later value persisted
       const cursor = await activities.loadCursor({
         source: "github",
         stream: "issues",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
       });
 
       expect(cursor).toBe("2026-12-31T23:59:59Z");
     });
 
     it("advances forward when new cursor is later", async () => {
-      // Save initial cursor
       await activities.saveCursor({
         source: "github",
         stream: "reviews",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
         cursorValue: "2026-01-01T00:00:00Z",
       });
 
-      // Save later cursor
       await activities.saveCursor({
         source: "github",
         stream: "reviews",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
         cursorValue: "2026-06-15T12:00:00Z",
       });
 
       const cursor = await activities.loadCursor({
         source: "github",
         stream: "reviews",
-        sourceRef: SOURCE_REF,
+        sourceRef: TEST_REPO,
       });
 
       expect(cursor).toBe("2026-06-15T12:00:00Z");
@@ -357,8 +331,6 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
 
   describe("cursor type correctness", () => {
     it("all GitHub streams use timestamp cursors (ISO format)", () => {
-      // The monotonic comparison (string >) is only valid for ISO timestamps.
-      // This test enforces that the GitHub adapter declares timestamp cursors.
       const streams = githubAdapter.streams();
       for (const stream of streams) {
         expect(stream.cursorType).toBe("timestamp");
@@ -370,11 +342,10 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
         source: "github",
         streams: ["pull_requests"],
         cursorValue: null,
-        periodStart: FIXTURE_WINDOW.since.toISOString(),
-        periodEnd: FIXTURE_WINDOW.until.toISOString(),
+        periodStart: fixtures.createdAfter.toISOString(),
+        periodEnd: fixtures.createdBefore.toISOString(),
       });
 
-      // nextCursorValue should parse as a valid ISO date
       const parsed = new Date(result.nextCursorValue);
       expect(parsed.toISOString()).toBe(result.nextCursorValue);
     });
