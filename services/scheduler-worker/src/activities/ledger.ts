@@ -6,12 +6,14 @@
  * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, auto-close, and finalization.
  * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-712 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
  * Invariants:
+ *   - ACTIVITIES_PIPELINE_AGNOSTIC: activities orchestrate steps (load, dispatch, write) but contain zero source-specific or workflow-specific logic. All domain decisions are delegated to contracts/plugins.
  *   - Per RECEIPT_IDEMPOTENT: All activities idempotent via PK constraints or upsert
  *   - Per CURSOR_STATE_PERSISTED: Cursors saved after each collect() call
  *   - Per NODE_SCOPED: All operations pass nodeId + scopeId from deps
  *   - Per TEMPORAL_DETERMINISM: Activities contain all I/O; workflows call only these proxies
  *   - Per SOURCE_NO_ADAPTER: collectFromSource and resolveStreams throw if no poll adapter registered for a configured source (fail loud, not silent skip)
  *   - Per SELECTION_AUTO_POPULATE: materializeSelection inserts new selections (DO NOTHING on conflict), updates only userId on unresolved rows
+ *   - Per SELECTION_POLICY_DELEGATED: materializeSelection resolves selection policy from the pipeline profile and dispatches via dispatchSelectionPolicy — zero hardcoded inclusion logic
  *   - Per IDENTITY_BEST_EFFORT: Unresolved receipts get userId=null in selection rows, never dropped
  *   - Per USER_PROJECTIONS_RECOMPUTABLE: upsertUserProjections persists recomputable user projections only
  *   - Per CONFIG_LOCKED_AT_REVIEW: autoCloseIngestion pins allocationAlgoRef + weightConfigHash
@@ -41,6 +43,7 @@ import {
 } from "@cogni/attribution-ledger";
 import {
   dispatchAllocator,
+  dispatchSelectionPolicy,
   resolveProfile,
 } from "@cogni/attribution-pipeline-contracts";
 import type { DefaultRegistries } from "@cogni/attribution-pipeline-plugins";
@@ -137,10 +140,12 @@ export interface SaveCursorInput {
 
 /**
  * Input for materializeSelection activity.
- * epochId is the sole input — activity loads epoch row for period dates.
+ * epochId + attributionPipeline — activity loads epoch row for period dates,
+ * then resolves the selection policy from the pipeline profile.
  */
 export interface MaterializeSelectionInput {
   readonly epochId: string; // bigint serialized as string for Temporal
+  readonly attributionPipeline: string;
 }
 
 /**
@@ -524,13 +529,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
   /**
    * Materializes selection rows and resolves platform identities for an epoch.
    *
-   * Selection policy (PRODUCTION_PROMOTION):
-   * - PR receipts merged to staging are included ONLY if their mergeCommitSha
-   *   appears in a release PR merged to main (i.e., the code reached production).
-   * - Review receipts on promoted staging PRs are included (weight=0 for visibility).
-   * - Release PRs (baseBranch=main) are NOT included — they're reference data.
-   * - All other receipts get included=false.
-   *
+   * Delegates inclusion decisions to the selection policy from the pipeline profile.
    * Two-phase writes: INSERT new selection rows, UPDATE userId on existing unresolved rows.
    * SELECTION_AUTO_POPULATE: never overwrites admin-set included/weight_override_milli/note.
    * IDENTITY_BEST_EFFORT: unresolved receipts get userId=null, never dropped.
@@ -540,13 +539,19 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
   ): Promise<MaterializeSelectionOutput> {
     const epochId = BigInt(input.epochId);
 
-    // 1. Load epoch → get period dates
+    // 1. Resolve selection policy from the pipeline profile
+    const profile = resolveProfile(
+      registries.profiles,
+      input.attributionPipeline
+    );
+
+    // 2. Load epoch → get period dates
     const epoch = await attributionStore.getEpoch(epochId);
     if (!epoch) {
       throw new Error(`materializeSelection: epoch ${input.epochId} not found`);
     }
 
-    // 2. Get unselected receipts (delta: only receipts needing work)
+    // 3. Get unselected receipts (delta: only receipts needing work)
     const unselected: UnselectedReceipt[] =
       await attributionStore.getUnselectedReceipts(
         nodeId,
@@ -563,62 +568,33 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       return { totalReceipts: 0, newSelections: 0, resolved: 0, unresolved: 0 };
     }
 
-    // 3. Build promoted commit SHA set from release PRs merged to main.
-    //    A release PR (baseBranch=main) contains staging squash commits in its commitShas.
-    //    Also check already-ingested receipts beyond the unselected set.
+    // 4. Load all receipts for cross-referencing, then dispatch selection policy
     const allReceipts = await attributionStore.getReceiptsForWindow(
       nodeId,
       epoch.periodStart,
       epoch.periodEnd
     );
-    const promotedShas = new Set<string>();
-    const promotedPrNumbers = new Set<string>(); // "repo:prNumber" keys for review matching
-    for (const receipt of allReceipts) {
-      if (
-        receipt.eventType === "pr_merged" &&
-        receipt.metadata &&
-        (receipt.metadata as Record<string, unknown>).baseBranch === "main"
-      ) {
-        const commitShas = (receipt.metadata as Record<string, unknown>)
-          .commitShas as string[] | undefined;
-        if (commitShas) {
-          for (const sha of commitShas) {
-            promotedShas.add(sha);
-          }
-        }
-      }
-    }
-
-    // 4. Identify which staging PRs are promoted, and collect their PR numbers for review matching
-    for (const receipt of allReceipts) {
-      if (receipt.eventType === "pr_merged" && receipt.metadata) {
-        const meta = receipt.metadata as Record<string, unknown>;
-        if (
-          meta.baseBranch !== "main" &&
-          meta.mergeCommitSha &&
-          promotedShas.has(meta.mergeCommitSha as string)
-        ) {
-          const repo = meta.repo as string;
-          // Extract PR number from receiptId: "github:pr:owner/repo:42"
-          const parts = receipt.receiptId.split(":");
-          const prNum = parts[parts.length - 1];
-          if (repo && prNum) {
-            promotedPrNumbers.add(`${repo}:${prNum}`);
-          }
-        }
-      }
-    }
+    const receiptsToSelect = unselected.map((u) => u.receipt);
+    const decisions = dispatchSelectionPolicy(
+      registries.selectionPolicies,
+      profile.selectionPolicyRef,
+      { receiptsToSelect, allReceipts }
+    );
+    const inclusionMap = new Map(
+      decisions.map((d) => [d.receiptId, d.included])
+    );
 
     logger.info(
       {
         epochId: input.epochId,
-        promotedShaCount: promotedShas.size,
-        promotedPrCount: promotedPrNumbers.size,
+        policyRef: profile.selectionPolicyRef,
+        included: decisions.filter((d) => d.included).length,
+        excluded: decisions.filter((d) => !d.included).length,
       },
-      "Built promotion set from release PRs"
+      "Selection policy applied"
     );
 
-    // 5. Collect unique platformUserIds by source (only for included receipts)
+    // 5. Collect unique platformUserIds by source for identity resolution
     const idsBySource = new Map<string, Set<string>>();
     for (const { receipt } of unselected) {
       const ids = idsBySource.get(receipt.source) ?? new Set();
@@ -629,47 +605,20 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     // 6. Batch resolve identities per source
     const resolvedMap = new Map<string, string>();
     for (const [source, ids] of idsBySource) {
-      if (source === "github") {
-        const result = await attributionStore.resolveIdentities("github", [
-          ...ids,
-        ]);
-        for (const [extId, userId] of result) {
-          resolvedMap.set(extId, userId);
-        }
+      const result = await attributionStore.resolveIdentities(source, [...ids]);
+      for (const [extId, userId] of result) {
+        resolvedMap.set(extId, userId);
       }
     }
 
-    // 7. Determine inclusion and write selection rows
+    // 7. Write selection rows and claimants
     let newSelections = 0;
     let resolved = 0;
     let unresolved = 0;
 
     for (const { receipt, hasExistingSelection } of unselected) {
       const resolvedUserId = resolvedMap.get(receipt.platformUserId) ?? null;
-      const meta = (receipt.metadata ?? {}) as Record<string, unknown>;
-
-      // Determine inclusion based on production promotion policy
-      let included = false;
-      if (receipt.eventType === "pr_merged") {
-        if (meta.baseBranch === "main") {
-          // Release PR itself — not included (reference data only)
-          included = false;
-        } else if (
-          meta.mergeCommitSha &&
-          promotedShas.has(meta.mergeCommitSha as string)
-        ) {
-          // Staging PR whose merge commit appears in a release PR → promoted
-          included = true;
-        }
-      } else if (receipt.eventType === "review_submitted") {
-        // Include reviews on promoted staging PRs (for visibility, weight=0)
-        const repo = meta.repo as string | undefined;
-        const prNum = meta.prNumber as number | undefined;
-        if (repo && prNum && promotedPrNumbers.has(`${repo}:${prNum}`)) {
-          included = true;
-        }
-      }
-      // All other event types: included=false
+      const included = inclusionMap.get(receipt.receiptId) ?? false;
 
       if (!hasExistingSelection) {
         await attributionStore.insertSelectionDoNothing([
@@ -726,8 +675,6 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
         newSelections,
         resolved,
         unresolved,
-        promotedShaCount: promotedShas.size,
-        promotedPrCount: promotedPrNumbers.size,
       },
       "Selection materialization and identity resolution complete"
     );

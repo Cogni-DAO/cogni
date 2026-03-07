@@ -17,15 +17,19 @@
 
 import type { PipelineProfile } from "@cogni/attribution-pipeline-contracts";
 
+import { PROMOTION_SELECTION_POLICY_REF } from "../plugins/promotion-selection/descriptor";
+
 /**
  * cogni-v0.0 profile — weekly activity attribution.
  * Runs echo as the only enricher.
+ * Uses promotion-based selection: only staging PRs promoted to main are included.
  */
 export const COGNI_V0_PROFILE: PipelineProfile = {
   profileId: "cogni-v0.0",
   label: "Cogni Weekly Activity v0.0",
   enricherRefs: [{ enricherRef: "cogni.echo.v0", dependsOnEvaluations: [] }],
   allocatorRef: "weight-sum-v0",
+  selectionPolicyRef: PROMOTION_SELECTION_POLICY_REF,
   epochKind: "activity",
   defaultWeightConfig: {
     "github:pr_merged": 1000,

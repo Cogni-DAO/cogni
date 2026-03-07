@@ -64,6 +64,13 @@ export interface PipelineProfile {
    * Pinned on epoch creation via ensureEpochForWindow.
    */
   readonly defaultWeightConfig?: Readonly<Record<string, number>>;
+
+  /**
+   * Selection policy ref for this profile.
+   * Determines which receipts are included in the epoch (e.g., promotion-based, include-all).
+   * Dispatched via SelectionPolicyRegistry during materializeSelection.
+   */
+  readonly selectionPolicyRef: string;
 }
 
 /** Registry mapping profileId → PipelineProfile. */

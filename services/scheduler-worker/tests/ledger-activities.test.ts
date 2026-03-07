@@ -776,7 +776,10 @@ describe("materializeSelection", () => {
       getUnselectedReceipts: vi.fn().mockResolvedValue([]),
     });
 
-    const result = await materializeSelection({ epochId: "1" });
+    const result = await materializeSelection({
+      epochId: "1",
+      attributionPipeline: "cogni-v0.0",
+    });
 
     expect(result).toEqual({
       totalReceipts: 0,
@@ -791,9 +794,12 @@ describe("materializeSelection", () => {
       getEpoch: vi.fn().mockResolvedValue(null),
     });
 
-    await expect(materializeSelection({ epochId: "999" })).rejects.toThrow(
-      "epoch 999 not found"
-    );
+    await expect(
+      materializeSelection({
+        epochId: "999",
+        attributionPipeline: "cogni-v0.0",
+      })
+    ).rejects.toThrow("epoch 999 not found");
   });
 
   it("creates new selection rows with resolved userId", async () => {
@@ -807,7 +813,10 @@ describe("materializeSelection", () => {
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
     });
 
-    const result = await materializeSelection({ epochId: "1" });
+    const result = await materializeSelection({
+      epochId: "1",
+      attributionPipeline: "cogni-v0.0",
+    });
 
     expect(result.totalReceipts).toBe(2);
     expect(result.newSelections).toBe(2);
@@ -855,7 +864,10 @@ describe("materializeSelection", () => {
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
     });
 
-    const result = await materializeSelection({ epochId: "1" });
+    const result = await materializeSelection({
+      epochId: "1",
+      attributionPipeline: "cogni-v0.0",
+    });
 
     expect(result.totalReceipts).toBe(1);
     expect(result.newSelections).toBe(0);
@@ -883,7 +895,10 @@ describe("materializeSelection", () => {
       resolveIdentities: vi.fn().mockResolvedValue(new Map()),
     });
 
-    const result = await materializeSelection({ epochId: "1" });
+    const result = await materializeSelection({
+      epochId: "1",
+      attributionPipeline: "cogni-v0.0",
+    });
 
     expect(result.totalReceipts).toBe(1);
     expect(result.newSelections).toBe(0);
@@ -916,7 +931,10 @@ describe("materializeSelection", () => {
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
     });
 
-    await materializeSelection({ epochId: "1" });
+    await materializeSelection({
+      epochId: "1",
+      attributionPipeline: "cogni-v0.0",
+    });
 
     // updateSelectionUserId called — but the adapter's WHERE clause
     // ensures it only updates when user_id IS NULL
@@ -965,7 +983,10 @@ describe("materializeSelection", () => {
       getReceiptsForWindow: vi.fn().mockResolvedValue([releasePr]),
     });
 
-    const result = await materializeSelection({ epochId: "1" });
+    const result = await materializeSelection({
+      epochId: "1",
+      attributionPipeline: "cogni-v0.0",
+    });
 
     expect(result.totalReceipts).toBe(2);
     expect(result.newSelections).toBe(1);

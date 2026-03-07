@@ -40,11 +40,12 @@ src/
 
 ### Hard rules (enforced by dep-cruiser)
 
+- **WORKER_IS_DUMB**: scheduler-worker is a thin orchestration layer. It loads data, dispatches to contracts/plugins, and writes results. It contains zero domain-specific logic (no selection policies, no allocation formulas, no enrichment logic). All pipeline intelligence lives in `@cogni/attribution-pipeline-plugins`.
 - **activities/ and workflows/ import ports only** — never adapters/, bootstrap/, or @cogni/db-client
 - **bootstrap/container.ts is the only place** that instantiates concrete adapters
 - **observability/logger.ts is the only file** that imports pino directly
 - **ports/ contains no implementations** — pure type re-exports from packages
-- **worker allocation stays generic** — activities/workflows dispatch allocators through `@cogni/attribution-pipeline-contracts`, never direct ledger allocation helpers
+- **worker allocation stays generic** — activities/workflows dispatch allocators and selection policies through `@cogni/attribution-pipeline-contracts`, never hardcoded domain logic
 
 ## Boundaries
 

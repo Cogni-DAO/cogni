@@ -186,7 +186,7 @@ export async function CollectEpochWorkflow(
   }
 
   // 6. Materialize selection and resolve identities (SELECTION_AUTO_POPULATE)
-  await materializeSelection({ epochId: epoch.epochId });
+  await materializeSelection({ epochId: epoch.epochId, attributionPipeline });
 
   // 7. Evaluate epoch with draft evaluations (profile-driven enricher dispatch)
   await evaluateEpochDraft({ epochId: epoch.epochId, attributionPipeline });

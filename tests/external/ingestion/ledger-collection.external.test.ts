@@ -430,6 +430,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
       // Run selection
       const selectionResult = await promoActivities.materializeSelection({
         epochId: promoEpoch.epochId,
+        attributionPipeline: "cogni-v0.0",
       });
 
       expect(selectionResult.totalReceipts).toBeGreaterThan(0);

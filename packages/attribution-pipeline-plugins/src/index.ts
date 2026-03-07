@@ -6,6 +6,7 @@
  * Purpose: Built-in enricher/allocator implementations, profiles, and registry construction for the attribution pipeline.
  * Scope: Plugin implementations and profile data. Does not define contracts (those live in @cogni/attribution-pipeline-contracts).
  * Invariants:
+ * - PLUGINS_OWN_ALL_IMPLEMENTATIONS: all pipeline logic lives here, not in framework or worker.
  * - ENRICHER_DESCRIPTOR_PURE: descriptors are constants + pure functions.
  * - PROFILE_IS_DATA: profiles are plain readonly objects.
  * - FRAMEWORK_STABLE_PLUGINS_CHURN: this package churns; framework stays stable.
@@ -25,7 +26,16 @@ export {
   ECHO_SCHEMA_REF,
   EchoPayloadSchema,
 } from "./plugins/echo/descriptor";
-
+// Include-all selection policy
+export {
+  INCLUDE_ALL_SELECTION_POLICY,
+  INCLUDE_ALL_SELECTION_POLICY_REF,
+} from "./plugins/include-all-selection/descriptor";
+// Promotion selection policy
+export {
+  PROMOTION_SELECTION_POLICY,
+  PROMOTION_SELECTION_POLICY_REF,
+} from "./plugins/promotion-selection/descriptor";
 // Weight-sum allocator
 export {
   WEIGHT_SUM_ALGO_REF,

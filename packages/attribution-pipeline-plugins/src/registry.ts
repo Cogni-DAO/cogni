@@ -17,9 +17,12 @@ import type {
   AllocatorRegistry,
   EnricherAdapterRegistry,
   ProfileRegistry,
+  SelectionPolicyRegistry,
 } from "@cogni/attribution-pipeline-contracts";
 
 import { createEchoAdapter } from "./plugins/echo/adapter";
+import { INCLUDE_ALL_SELECTION_POLICY } from "./plugins/include-all-selection/descriptor";
+import { PROMOTION_SELECTION_POLICY } from "./plugins/promotion-selection/descriptor";
 import { WEIGHT_SUM_ALLOCATOR } from "./plugins/weight-sum/descriptor";
 import { COGNI_V0_PROFILE } from "./profiles/cogni-v0.0";
 
@@ -30,6 +33,7 @@ export interface DefaultRegistries {
   readonly profiles: ProfileRegistry;
   readonly enrichers: EnricherAdapterRegistry;
   readonly allocators: AllocatorRegistry;
+  readonly selectionPolicies: SelectionPolicyRegistry;
 }
 
 /**
@@ -51,5 +55,10 @@ export function createDefaultRegistries(): DefaultRegistries {
     [WEIGHT_SUM_ALLOCATOR.algoRef, WEIGHT_SUM_ALLOCATOR],
   ]);
 
-  return { profiles, enrichers, allocators };
+  const selectionPolicies: SelectionPolicyRegistry = new Map([
+    [PROMOTION_SELECTION_POLICY.policyRef, PROMOTION_SELECTION_POLICY],
+    [INCLUDE_ALL_SELECTION_POLICY.policyRef, INCLUDE_ALL_SELECTION_POLICY],
+  ]);
+
+  return { profiles, enrichers, allocators, selectionPolicies };
 }
