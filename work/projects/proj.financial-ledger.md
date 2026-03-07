@@ -127,6 +127,8 @@ Beancount is the canonical ledger and must be capable of tracking ALL instrument
 
 - [x] proj.transparent-credit-payouts P0 — finalized attribution statements exist
 - [ ] task.0130 (tokenomics Crawl) — budget policy replaces magic pool_config
+- [ ] task.0142 (epoch pool value stabilization) — minimum activity threshold + carry-over prevents quiet-week windfalls before credits map to tokens
+- [ ] spike.0140 (multi-source category pool design) — informs credit:token ratio and settlement policy shape
 - [ ] Operator Port operational (signing + policy boundary for treasury actions)
 - [ ] `task.0135` — rewards-ready token formation decisions and implementation completed
 - [ ] Stock per-epoch MerkleDistributor path selected and deployed on Base

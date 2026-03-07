@@ -87,6 +87,15 @@ How does the quarterly retro feed into it?
 - Pool sizing: how much goes to weekly base vs quarterly retro?
 - Schema constraints: EPOCH_WINDOW_UNIQUE and ONE_OPEN_EPOCH need `epoch_kind`
 
+### 6. Category pool interaction (added via spike.0140)
+
+With category pools (spike.0140, task.0141), the quarterly retro has a new question:
+
+- Does the retro pool also split by category, or is it a cross-category assessment?
+- If cross-category: quarterly retro becomes the mechanism for correcting the category split itself ("engineering got 60% but community drove more value this quarter"). This is powerful but politically sensitive.
+- If per-category: can only correct within-category imbalances. Simpler governance but can't fix macro allocation mistakes.
+- If the retro pool is a separate budget line (not drawn from category pools), it sidesteps the split question entirely — but adds a third allocation tier.
+
 ### 6. Worked example
 
 Produce a concrete example: given N contributors and M receipts across one quarter,
@@ -108,4 +117,5 @@ Research spike is complete when:
 - [ ] Signal collection strategy is chosen (which signals, how collected, where stored)
 - [ ] People-centric vs event-centric trade-offs are quantified for our scale
 - [ ] Rebalance epoch integration path is concrete (including schema constraint fixes)
+- [ ] Category pool interaction addressed: retro pool per-category vs cross-category vs separate budget line
 - [ ] Document is written in `docs/research/` and linked from project roadmap

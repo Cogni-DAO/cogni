@@ -156,6 +156,14 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 | Per-receipt EIP-191 wallet signing                    | Not Started | 2   | (create at P1 start — EIP-712 foundation in task.0119) |
 | `ledger_issuers` role system (can_issue, can_approve) | Not Started | 2   | (create at P1 start)                                   |
 
+**Multi-source economics + pool stabilization:**
+
+| Deliverable                                                                                      | Status      | Est | Work Item  |
+| ------------------------------------------------------------------------------------------------ | ----------- | --- | ---------- |
+| Research spike: multi-source category pool design (repo-spec schema, cross-category governance)  | Not Started | 3   | spike.0140 |
+| Category pool allocation — split epoch budget across source categories before per-source scoring | Not Started | 3   | task.0141  |
+| Epoch pool value stabilization — minimum activity threshold + bounded carry-over                 | Not Started | 2   | task.0142  |
+
 **Collection hardening:**
 
 | Deliverable                                    | Status      | Est | Work Item             |
@@ -198,9 +206,13 @@ See [attribution-ledger spec](../../docs/spec/attribution-ledger.md) for full ar
 - Source adapters use cursor-based incremental sync — no full-window rescans
 - Verification = recompute from stored data — not re-fetch from external sources
 
-## Biggest Risk
+## Biggest Risks
 
-If the weight policy becomes a black box (complex formulas, hidden multipliers, auto-adjusted weights), you recreate SourceCred's core problem with nicer plumbing. Weights should be simple, explicit, and governable. Admin override exists precisely because no formula perfectly captures contribution value.
+1. **Weight policy as black box.** If weights become complex formulas with hidden multipliers, you recreate SourceCred's core problem with nicer plumbing. Weights should be simple, explicit, and governable. Admin override exists precisely because no formula perfectly captures contribution value.
+
+2. **Multi-source dilution.** The current single-pool model dumps all receipts from all sources into one weight config. Adding source #2 (Discord, X/Twitter) silently dilutes existing contributors because cross-domain weight ratios (`discord:message_sent: 50` vs `github:pr_merged: 1000`) are ungovernable. Governance needs to control macro allocation (category shares) separately from micro allocation (within-category weights). → spike.0140, task.0141
+
+3. **Per-event value instability.** Fixed pool + variable activity = random per-event value. One PR in a quiet week earns the full 10K pool; 20 PRs in a busy week split it at ~500 each. Once credits map to tokens, this creates permanent governance-power windfalls that positive-only rebalancing can't correct. Minimum activity thresholds + bounded carry-over are the V1 fix. → task.0142
 
 ## Dependencies
 
@@ -226,6 +238,8 @@ If the weight policy becomes a black box (complex formulas, hidden multipliers, 
 
 - [ledger-collection-gap-analysis](../../docs/research/ledger-collection-gap-analysis.md) — Critical comparison vs. SourceCred's full-history model; collection blindspots + P0/P1 remediation plan
 - [epoch-event-ingestion-pipeline](../../docs/research/epoch-event-ingestion-pipeline.md) — Original adapter design spike, SourceCred plugin analysis, OSS tooling survey
+- [attribution-scoring-design](../../docs/research/attribution-scoring-design.md) — LLM evaluation design, retrospective value, weekly base + quarterly retro cadence
+- spike.0140 — Multi-source category pool design (pending research)
 
 ## Design Notes
 
@@ -284,4 +298,6 @@ Attribution statements produced by this project are **governance truth** — who
 - **USDC settlement** → P2 (when revenue exists, see proj.financial-ledger)
 - **X/Twitter + funding adapters** → P1
 - **Discord source adapter** → deferred from V0 launch (GitHub-only initially)
+- **Category pool splitting** → P1 (single source = single pool is fine; required before source #2 ships — spike.0140, task.0141)
+- **Epoch pool value stabilization** → P1 (minimum activity threshold + carry-over — task.0142)
 - ~~**GitHub webhook fast-path**~~ → Done (task.0136)
