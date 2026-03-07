@@ -40,9 +40,10 @@ Authenticated HTTP endpoints for attribution operations. SIWE-protected reads fo
   - `GET /api/v1/attribution/epochs/[id]/sign-data` — EIP-712 typed data for epoch signing (SIWE + approver)
   - `GET|PATCH|DELETE /api/v1/attribution/epochs/[id]/review-subject-overrides` — manage subject identity overrides for epoch review (SIWE + approver)
   - `POST /api/v1/attribution/epochs/[id]/finalize` — sign + finalize epoch, returns 202 + {workflowId, created} (SIWE + approver, WRITES_VIA_TEMPORAL). Returns 503 if no ledger-tasks pollers.
+  - `POST /api/v1/attribution/epochs/collect` — trigger epoch collection on demand (SIWE session, any user, 5min cooldown). Triggers LEDGER_INGEST schedule via ScheduleHandle.trigger().
 - **CLI:** none
 - **Env/Config keys:** none
-- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/user-projections/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/sign-data/route.ts`, `epochs/[id]/review-subject-overrides/route.ts`, `epochs/[id]/finalize/route.ts`
+- **Files considered API:** `epochs/route.ts`, `epochs/[id]/activity/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/user-projections/route.ts`, `epochs/[id]/pool-components/route.ts`, `epochs/[id]/review/route.ts`, `epochs/[id]/sign-data/route.ts`, `epochs/[id]/review-subject-overrides/route.ts`, `epochs/[id]/finalize/route.ts`, `epochs/collect/route.ts`
 
 ## Ports
 

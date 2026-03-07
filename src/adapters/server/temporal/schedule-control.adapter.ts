@@ -320,6 +320,23 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
     }
   }
 
+  async triggerSchedule(scheduleId: string): Promise<void> {
+    const client = await this.getClient();
+
+    try {
+      const handle = client.schedule.getHandle(scheduleId);
+      await handle.trigger();
+    } catch (error) {
+      if (error instanceof TemporalScheduleNotFoundError) {
+        throw new ScheduleControlNotFoundError(scheduleId);
+      }
+      throw new ScheduleControlUnavailableError(
+        "triggerSchedule",
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
   async listScheduleIds(prefix: string): Promise<string[]> {
     const client = await this.getClient();
 

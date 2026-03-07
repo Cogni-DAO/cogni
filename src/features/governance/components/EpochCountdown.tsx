@@ -13,10 +13,11 @@
 
 "use client";
 
-import { Clock } from "lucide-react";
+import { Clock, RefreshCw } from "lucide-react";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { Badge, Card, CardContent, Progress } from "@/components";
+import { useCollectEpoch } from "@/features/governance/hooks/useCollectEpoch";
 import type { EpochView } from "@/features/governance/types";
 
 interface EpochCountdownProps {
@@ -79,6 +80,22 @@ function StatusBadge({
   }
 }
 
+function CollectIcon(): ReactElement {
+  const { loading, cooldownSeconds, trigger } = useCollectEpoch();
+
+  return (
+    <button
+      type="button"
+      onClick={() => void trigger()}
+      disabled={loading || cooldownSeconds != null}
+      className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+      title="Refresh epoch data"
+    >
+      <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+    </button>
+  );
+}
+
 export function EpochCountdown({
   periodStart,
   periodEnd,
@@ -98,7 +115,10 @@ export function EpochCountdown({
               {status === "open" ? "Time remaining" : "Epoch ended"}
             </span>
           </div>
-          <StatusBadge status={status} />
+          <div className="flex items-center gap-2">
+            <StatusBadge status={status} />
+            <CollectIcon />
+          </div>
         </div>
         <div className="mb-2 font-bold font-mono text-2xl text-foreground">
           {timeLeft}

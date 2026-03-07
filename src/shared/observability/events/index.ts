@@ -81,6 +81,7 @@ export const EVENT_NAMES = {
   LEDGER_IDENTITY_RESOLVED_AT_READ: "ledger.identity_resolved_at_read",
   LEDGER_FINALIZE_SUBMITTED: "ledger.finalize_submitted",
   LEDGER_FINALIZE_NO_POLLERS: "ledger.finalize_no_pollers",
+  LEDGER_COLLECT_TRIGGERED: "ledger.collect_triggered",
 
   // Scheduling Domain
   SCHEDULE_CREDIT_GATE_REJECTED: "schedules.credit_gate_rejected",
