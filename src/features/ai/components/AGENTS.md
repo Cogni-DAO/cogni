@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-12-03
 - **Status:** stable
 - **Parent:** [features/ai](../AGENTS.md)
 
@@ -32,8 +31,6 @@ Feature-specific UI components for AI model selection and chat composer extensio
 ## Public Surface
 
 - **Exports (via ../public.ts):** ModelPicker, ChatComposerExtras
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** ModelPicker.tsx, ChatComposerExtras.tsx
 
 ## Responsibilities

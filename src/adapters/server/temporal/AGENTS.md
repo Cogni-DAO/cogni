@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-16
 - **Status:** stable
 
 ## Purpose
@@ -33,8 +32,6 @@ Temporal schedule control adapter implementing `ScheduleControlPort` for schedul
 ## Public Surface
 
 - **Exports:** `TemporalScheduleControlAdapter`, `TemporalScheduleControlConfig`
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE` (all required)
 - **Files considered API:** `index.ts`
 

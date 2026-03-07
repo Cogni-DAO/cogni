@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-14
 - **Status:** draft
 
 ## Purpose
@@ -50,8 +49,6 @@ Feature layer for USDC payment attempts with backend verification. Handles payme
   - Types: `PaymentsFeatureError`
   - Guards: `isPaymentsFeatureError`, `mapPaymentPortErrorToFeature`
 - **Routes:** none (used by app layer routes)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** services/_, hooks/_, api/\*, utils/mapBackendStatus.ts, errors.ts, public.ts
 
 ## Ports

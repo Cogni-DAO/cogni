@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-22
 - **Status:** stable
 
 ## Purpose
@@ -38,10 +37,8 @@ Tests that hit real internet services or 3rd-party APIs. These require secrets a
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm test:external`
 - **Env/Config keys:** `GITHUB_TOKEN` or `GH_TOKEN` (GitHub API access)
-- **Files considered API:** none
 
 ## Responsibilities
 

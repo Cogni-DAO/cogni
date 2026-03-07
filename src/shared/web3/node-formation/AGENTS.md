@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2025-12-16
 - **Status:** draft
 
 ## Purpose
@@ -35,8 +34,6 @@ Node Formation P0 web3 primitives: Aragon OSx ABIs and chain address constants. 
   - `GOVERNANCE_ERC20_ABI` - GovernanceERC20.balanceOf
   - `ARAGON_OSX_ADDRESSES` - Per-chain OSx deployment addresses
   - `TOKEN_VOTING_VERSION_TAG` - Plugin version (v1.4.0)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`, all exported constants
 
 ## Responsibilities

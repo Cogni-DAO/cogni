@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-05
 - **Status:** stable
 
 ## Purpose
@@ -31,8 +30,6 @@ Database fixture helpers for component tests. Provides a service-role (BYPASSRLS
 
 - **Exports:**
   - `getSeedDb()` — lazy service-role database singleton (BYPASSRLS) for test INSERT/DELETE
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `DATABASE_SERVICE_URL` (set by testcontainers global setup)
 - **Files considered API:** `seed-client.ts`
 

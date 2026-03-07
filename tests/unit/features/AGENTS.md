@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-07
 - **Status:** draft
 
 ## Purpose
@@ -30,10 +29,7 @@ Unit tests for use cases that orchestrate business logic via mocked ports.
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm test tests/unit/features`
-- **Env/Config keys:** none
-- **Files considered API:** none
 
 ## Responsibilities
 

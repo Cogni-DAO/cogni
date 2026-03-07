@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-15
 - **Status:** draft
 
 ## Purpose
@@ -30,9 +29,7 @@ Job modules that wire business logic to the application container for ops-trigge
 ## Public Surface
 
 - **Exports:** `runGovernanceSchedulesSyncJob()`
-- **Routes (if any):** none
 - **CLI (if any):** `pnpm governance:schedules:sync` (calls internal ops route)
-- **Env/Config keys:** none
 - **Files considered API:** `syncGovernanceSchedules.job.ts`
 
 ## Ports (optional)

@@ -5,8 +5,7 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-03-05
-- **Status:** stable
+- **Status:** draft
 
 ## Purpose
 
@@ -49,8 +48,6 @@ Pure domain types, port interface, and helpers for activity ingestion source ada
   - `buildEventId()` — Deterministic event ID construction
   - `canonicalJson()` — Sorted-key JSON for deterministic serialization
   - `hashCanonicalPayload()` — SHA-256 via Web Crypto
-- **CLI:** none
-- **Env/Config keys:** none
 
 ## Ports
 

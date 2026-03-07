@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2025-12-04
 - **Status:** stable
 
 ## Purpose
@@ -43,8 +42,6 @@ Cross-cutting observability concerns: structured logging, request context, and e
   - `logRequestStart/End/Error/Warn(log, ...)` - Request lifecycle helpers
   - `Logger`, `RequestContext`, `Clock` - Types
   - `AiLlmCallEvent`, `PaymentsConfirmedEvent`, etc. - Strict payload types (optional)
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `PINO_LOG_LEVEL`, `NODE_ENV`, `SERVICE_NAME`, `VITEST`
 - **Files considered API:** `index.ts`, `events/index.ts`, `server/index.ts`, `client/index.ts`
 

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-03-02
 - **Status:** stable
 
 ## Purpose
@@ -50,8 +49,6 @@ Pure parsing and typed extraction for `.cogni/repo-spec.yaml` — the governance
   - `extractChainId(spec)` — Numeric chain ID from cogni_dao section
   - Zod schemas: `repoSpecSchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, etc.
   - Types: `RepoSpec`, `InboundPaymentConfig`, `GovernanceConfig`, `GovernanceSchedule`, `LedgerConfig`, `LedgerPoolConfig`
-- **CLI:** none
-- **Env/Config keys:** none
 
 ## Ports
 

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-16
 - **Status:** stable
 
 ## Purpose
@@ -55,8 +54,6 @@ Pure TypeScript types, port interfaces, and orchestration services for the sched
   - Error classes: `ScheduleControlUnavailableError`, `ScheduleControlConflictError`, `ScheduleControlNotFoundError`, grant errors, validation errors
   - Type guards: `isScheduleControl*Error`, `isGrant*Error`, `isSchedule*Error`
   - Payload schemas: `ExecuteScheduledRunPayloadSchema`, `ReconcileSchedulesPayloadSchema`
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`
 
 ## Ports

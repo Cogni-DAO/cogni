@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-15
 - **Status:** draft
 
 ## Purpose
@@ -31,10 +30,7 @@ Note: This directory currently has no governance sync entrypoint file; sync is t
 ## Public Surface
 
 - **Exports:** none (entry points only)
-- **Routes (if any):** none
 - **CLI (if any):** `pnpm governance:schedules:sync` (curl to internal ops endpoint)
-- **Env/Config keys:** none
-- **Files considered API:** none
 
 ## Responsibilities
 

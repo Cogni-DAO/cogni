@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-08
 - **Status:** draft
 
 ## Purpose
@@ -30,8 +29,6 @@ PostgreSQL implementations of account service ports for credit accounting and ch
 ## Public Surface
 
 - **Exports:** UserDrizzleAccountService (RLS-enforced, user-scoped), ServiceDrizzleAccountService (BYPASSRLS, service-role)
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** DATABASE_URL
 - **Files considered API:** drizzle.adapter.ts
 

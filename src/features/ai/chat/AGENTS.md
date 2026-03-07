@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-02-14
 - **Status:** draft
 - **Parent:** [features/ai](../AGENTS.md)
 
@@ -46,7 +45,6 @@ Chat subfeature of AI — provides assistant-ui + AI SDK streaming integration f
   - `/api/v1/ai/chat` (POST) - chat with server-authoritative thread persistence
   - `/api/v1/ai/threads` (GET) - list threads
   - `/api/v1/ai/threads/[stateKey]` (GET, DELETE) - load/delete thread
-- **Env/Config keys:** none
 - **Files considered API:** providers/ChatRuntimeProvider.client.tsx, hooks/useThreads.ts, components/ChatCreditsHint.tsx, utils/mapHttpError.ts, utils/toErrorAlertProps.ts
 
 ## Ports

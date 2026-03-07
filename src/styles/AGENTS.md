@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek
-- **Last reviewed:** 2025-12-03
 - **Status:** stable
 
 ## Purpose
@@ -39,16 +38,7 @@ Design system with single token pipeline: colors in CSS vars, spacing/sizing in 
 ## Public Surface
 
 - **Exports:** Design token name arrays, TypeScript types, CVA styling factories
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** ui.ts, ui/index.ts, theme.ts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

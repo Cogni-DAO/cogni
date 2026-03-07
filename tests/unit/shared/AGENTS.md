@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-26
 - **Status:** draft
 
 ## Purpose
@@ -31,10 +30,7 @@ Unit tests for shared layer modules, ensuring validation and type safety across 
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm test tests/unit/shared`
-- **Env/Config keys:** none
-- **Files considered API:** none
 
 ## Responsibilities
 

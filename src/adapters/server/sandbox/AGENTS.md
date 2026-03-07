@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-17
 - **Status:** draft
 
 ## Purpose
@@ -39,8 +38,6 @@ Sandbox adapter for AI agent execution — two modes: **ephemeral** containers (
 ## Public Surface
 
 - **Exports:** `SandboxRunnerAdapter`, `SandboxRunnerAdapterOptions`, `LlmProxyManager`, `LlmProxyConfig`, `LlmProxyHandle`, `ProxyStopResult`, `SandboxGraphProvider`, `SANDBOX_PROVIDER_ID`, `SandboxAgentCatalogProvider`, `OpenClawGatewayClient`, `GatewayAgentEvent`, `RunAgentOptions`
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `OPENCLAW_GATEWAY_URL`, `OPENCLAW_GATEWAY_TOKEN` (gateway mode); litellmMasterKey via constructor; image per-run via SandboxRunSpec
 - **Files considered API:** index.ts barrel export (not re-exported from parent server barrel — consumers use subpath imports to avoid Turbopack bundling dockerode native addon chain)
 

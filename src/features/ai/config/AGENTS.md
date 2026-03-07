@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-12-03
 - **Status:** stable
 - **Parent:** [features/ai](../AGENTS.md)
 
@@ -31,8 +30,6 @@ Configuration and static data for AI feature including provider icon registry fo
 ## Public Surface
 
 - **Exports (via ../public.ts):** none (internal to feature)
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** provider-icons.ts (internal only)
 
 ## Responsibilities

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-07
 - **Status:** draft
 
 ## Purpose
@@ -36,10 +35,7 @@ Unit tests for pure domain logic with no external dependencies.
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm test tests/unit/core`
-- **Env/Config keys:** none
-- **Files considered API:** none
 
 ## Responsibilities
 

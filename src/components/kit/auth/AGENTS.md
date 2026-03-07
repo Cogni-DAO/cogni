@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek
-- **Last reviewed:** 2026-02-28
 - **Status:** stable
 
 ## Purpose
@@ -32,9 +31,6 @@ Authentication UI components. Provides the wallet connection button (RainbowKit)
 - **Exports:**
   - `WalletConnectButton` - RainbowKit ConnectButton with treasury badge styling; opens SignInDialog when not connected
   - `SignInDialog` - Modal dialog presenting sign-in options (Ethereum wallet, GitHub, Google); fetches available providers from `/api/auth/providers`
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** `WalletConnectButton.tsx`, `SignInDialog.tsx`
 
 ## Responsibilities

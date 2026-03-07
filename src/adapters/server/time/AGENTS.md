@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-17
 - **Status:** stable
 
 ## Purpose
@@ -30,9 +29,6 @@ System clock implementations for timestamp generation in production environments
 ## Public Surface
 
 - **Exports:** SystemClock implementation
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** system.adapter.ts
 
 ## Ports (optional)

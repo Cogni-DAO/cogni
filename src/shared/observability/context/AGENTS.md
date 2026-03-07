@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2025-12-05
 - **Status:** stable
 
 ## Purpose
@@ -40,9 +39,6 @@ Request-scoped context with child logger, reqId, routeId, and structural Clock i
   - `RequestContext` - type with log, reqId, routeId, session
   - `Clock` - structural interface `{ now(): string }`
   - `createRequestContext(deps, request, opts)` - factory with reqId validation
-- **Routes:** none
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`, `types.ts`, `factory.ts`
 
 ## Ports

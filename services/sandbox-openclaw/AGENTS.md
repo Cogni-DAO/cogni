@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-13
 - **Status:** draft
 
 ## Purpose
@@ -35,7 +34,6 @@ Multi-stage devtools image for running OpenClaw in Cogni. One image for both gat
 ## Public Surface
 
 - **Exports:** Docker image `cogni-sandbox-openclaw:latest` (`ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest`)
-- **Routes:** none
 - **CLI:** `pnpm sandbox:openclaw:docker:build`, `pnpm sandbox:pnpm-store:build`, `pnpm sandbox:pnpm-store:seed`, `pnpm sandbox:pnpm-store:seed:from-ghcr`
 - **Env/Config keys (runtime):** `npm_config_store_dir`, `HOME`, `COREPACK_HOME`, `LLM_PROXY_SOCKET`, `LLM_PROXY_PORT`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_STATE_DIR`, `OPENCLAW_LOAD_SHELL_ENV`
 - **Files considered API:** Dockerfile, Dockerfile.pnpm-store, entrypoint.sh, seed-pnpm-store.sh, openclaw-gateway.json, gateway-workspace/SOUL.md, gateway-workspace/GOVERN.md, gateway-workspace/AGENTS.md, gateway-workspace/TOOLS.md, gateway-workspace/MEMORY.md

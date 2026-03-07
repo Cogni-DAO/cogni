@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-25
 - **Status:** draft
 
 ## Purpose
@@ -32,7 +31,6 @@ Protected (authenticated) pages wrapped in `SidebarProvider` + `AppSidebar` + `A
 
 - **Exports:** none
 - **Routes:** `/chat`, `/work`, `/activity`, `/gov`, `/credits`, `/schedules`, `/setup`
-- **Env/Config keys:** none
 - **Files considered API:** `layout.tsx`
 
 ## Responsibilities

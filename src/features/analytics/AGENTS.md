@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-07
 - **Status:** draft
 
 ## Purpose
@@ -32,7 +31,6 @@ Public analytics backend service providing privacy-preserving aggregated platfor
 
 - **Exports:** `getAnalyticsSummary` service function
 - **Routes (if any):** none (used by `/api/v1/public/analytics/summary` via facade)
-- **CLI (if any):** none
 - **Env/Config keys:**
   - `ANALYTICS_K_THRESHOLD` (default: 50)
   - `ANALYTICS_QUERY_TIMEOUT_MS` (default: 5000)

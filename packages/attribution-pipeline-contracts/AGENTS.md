@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-03-03
 - **Status:** draft
 
 ## Purpose
@@ -56,8 +55,6 @@ Stable framework package for the attribution pipeline plugin architecture. Defin
   - `resolveProfile()` — Lookup profile by attribution_pipeline or throw
   - `validateEnricherOrder()` — Topological sort, cycle/missing-ref detection
   - `validateEvaluationWrite()` — Assert required fields, descriptor ref parity, and payload schema validity
-- **CLI:** none
-- **Env/Config keys:** none
 
 ## Ports
 

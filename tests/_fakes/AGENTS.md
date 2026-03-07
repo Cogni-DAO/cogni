@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-07
 - **Status:** stable
 
 ## Purpose
@@ -49,9 +48,6 @@ Deterministic test doubles for unit tests with no I/O dependencies.
   - Request builders (createCompletionRequest, createChatRequest)
   - UsageFact builders (buildInprocUsageFact, buildSandboxUsageFact, buildExternalUsageFact)
   - TEST_GRAPH_NAME constant ("langgraph:poet")
-- **Routes:** none
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** index.ts, ids.ts, payments/fakes.ts, ai/fakes.ts, ai/tool-builders.ts, ai/graph-executor-fakes.ts, ai/request-builders.ts, ai/usage-fact-builders.ts, test-context.ts
 
 ## Responsibilities
@@ -72,11 +68,6 @@ import { createPaymentAttempt, createIntentAttempt } from "@tests/_fakes"
 
 - No I/O, no time, no RNG - all controllable
 - Minimal and deterministic behavior only
-
-## Dependencies
-
-- **Internal:** none
-- **External:** none
 
 ## Change Protocol
 

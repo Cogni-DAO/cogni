@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-23
 - **Status:** stable
 
 ## Purpose
@@ -53,7 +52,6 @@ Database client factory and Drizzle adapter implementations for scheduling and l
   - Re-exports from `@cogni/db-schema` (tables, types)
 - **Exports (sub-path `@cogni/db-client/service`):**
   - `createServiceDbClient(url)` — client factory for `app_service` role (BYPASSRLS)
-- **CLI:** none
 - **Env/Config keys:** none (accepts DATABASE_URL via factory parameter)
 - **Files considered API:** `index.ts` (root), `service.ts` (sub-path)
 

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-12
 - **Status:** draft
 
 ## Purpose
@@ -31,10 +30,8 @@ Component tests for sandbox container execution via Docker. Proves network isola
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm test tests/component/docker`
 - **Env/Config keys:** `CI` (controls hard failure vs skip on missing image)
-- **Files considered API:** none
 
 ## Responsibilities
 

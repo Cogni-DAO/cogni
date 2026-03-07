@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-25
 - **Status:** draft
 - **Parent:** [features](../AGENTS.md)
 
@@ -32,8 +31,6 @@ App-shell layout components: header, footer, sidebar, and top bar. Composes kit/
 ## Public Surface
 
 - **Exports:** `AppHeader`, `AppFooter`, `AppSidebar`, `AppTopBar` via `index.ts`
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`
 
 ## Responsibilities

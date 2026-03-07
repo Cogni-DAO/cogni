@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-05
 - **Status:** draft
 
 ## Purpose
@@ -33,16 +32,9 @@ Service-specific configurations for supporting infrastructure like LLM routing, 
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
 - **CLI (if any):** docker-compose commands
 - **Env/Config keys:** `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_NAME`, `DOMAIN`, service-specific environment variables
 - **Files considered API:** `edge/docker-compose.yml`, `runtime/docker-compose.yml`, `runtime/docker-compose.dev.yml`, `*/config.yaml`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

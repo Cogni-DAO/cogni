@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-11-11
 - **Status:** draft
 
 ## Purpose
@@ -39,15 +38,7 @@ HTTP-specific contract layer using ts-rest. Generates OpenAPI specs and HTTP rou
 
 - **Exports:** ApiContractV1 (ts-rest router), OpenAPIV1 (OpenAPI spec)
 - **Routes (if any):** none (defines route contracts)
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** router.v1.ts, openapi.v1.ts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 

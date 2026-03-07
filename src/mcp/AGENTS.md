@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-11-07
 - **Status:** draft
 
 ## Purpose
@@ -31,7 +30,6 @@ MCP host entrypoint. Registers tools that mirror src/contracts/\*\* operations a
 ## Public Surface
 
 - **Exports:** server.ts (bootstrap for MCP), minimal helpers
-- **Routes (if any):** none
 - **CLI (if any):** pnpm mcp:serve (future)
 - **Env/Config keys:** none now
 - **Files considered API:** server.ts

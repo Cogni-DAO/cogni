@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-02-03
 - **Status:** stable
 
 ## Purpose
@@ -36,8 +35,6 @@ Shared AI utilities for prompt hashing, model catalog, and tool execution. Pure 
 ## Public Surface
 
 - **Exports:** `computePromptHash`, `PROMPT_HASH_VERSION`, `isModelAllowed`, `getDefaults`, `createToolRunner`, `ToolRunner`, `EmitAiEvent`, `scrubTraceInput`, `scrubTraceOutput`, `scrubToolInput`, `scrubToolOutput`, `applyUserMaskingPreference`, `applyToolMaskingPreference`, `isValidOtelTraceId`, `truncateSessionId`, `PAYLOAD_LIMITS`, `needsCitationRetry`, `parseCitation`, `validateSources`, `INSUFFICIENT_CITATION_MESSAGE`
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `LITELLM_BASE_URL` (model-catalog.server.ts)
 - **Files considered API:** prompt-hash.ts, model-catalog.server.ts, tool-runner.ts, content-scrubbing.ts, tool-policy.ts, guards/citation.guard.ts
 

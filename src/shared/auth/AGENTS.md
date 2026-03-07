@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-28
 - **Status:** stable
 
 ## Purpose
@@ -48,16 +47,7 @@ Shared authentication types and primitives used across app layer and adapters. P
   - `isFailedIntent()` - Type guard for failed intent (fail-closed rejection)
   - `linkIntentStore` - AsyncLocalStorage instance for request-scoped link intent propagation
   - Re-exports all from `./session.ts`
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`, `session.ts`, `link-intent-store.ts`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

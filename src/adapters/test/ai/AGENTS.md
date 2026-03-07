@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-07
 - **Status:** stable
 
 ## Purpose
@@ -30,9 +29,6 @@ Test double implementations of AI service ports for deterministic testing.
 ## Public Surface
 
 - **Exports:** FakeWebSearchAdapter implementation
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** fake-web-search.adapter.ts
 
 ## Responsibilities

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-01-02
 - **Status:** draft
 
 ## Purpose
@@ -30,16 +29,8 @@ Development environment setup installers for one-time machine and repository con
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
 - **CLI (if any):** `setup.sh`, `simple-local-env-setup.sh`, `install/*.sh` scripts
-- **Env/Config keys:** none
 - **Files considered API:** `setup.sh`, `simple-local-env-setup.sh`, `install/*.sh`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

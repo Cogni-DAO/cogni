@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-12
 - **Status:** draft
 
 ## Purpose
@@ -36,10 +35,8 @@ Component tests using isolated docker testcontainers. Tests adapter implementati
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** pnpm test:component or vitest run tests/component
 - **Env/Config keys:** .env.test only (e.g., TEST_DB_URL, TEST_LITELLM_URL)
-- **Files considered API:** none
 
 ## Responsibilities
 

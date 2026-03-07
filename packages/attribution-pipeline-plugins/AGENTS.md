@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-03-03
 - **Status:** draft
 
 ## Purpose
@@ -49,8 +48,6 @@ Built-in enricher and allocator plugin implementations for the attribution pipel
   - `WEIGHT_SUM_ALLOCATOR` — `AllocatorDescriptor` wrapping `computeReceiptWeights()`
   - `COGNI_V0_PROFILE` — built-in `PipelineProfile` for weekly activity attribution
   - `createDefaultRegistries()` — constructs default `{profiles, enrichers, allocators}` registries
-- **CLI:** none
-- **Env/Config keys:** none
 
 ## Ports
 

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-13
 - **Status:** draft
 
 ## Purpose
@@ -32,8 +31,6 @@ Nginx config templates for sandbox LLM proxy containers — **ephemeral** (`ngin
 ## Public Surface
 
 - **Exports:** `nginx.conf.template` (consumed by `LlmProxyManager.generateConfig()`), `nginx-gateway.conf.template` (consumed by compose `envsubst`)
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys (template vars):** `SOCKET_PATH`, `LITELLM_MASTER_KEY`, `BILLING_ACCOUNT_ID`, `LITELLM_METADATA_JSON`, `RUN_ID`, `ATTEMPT`, `LITELLM_HOST`, `ACCESS_LOG_PATH`
 - **Files considered API:** nginx.conf.template, nginx-gateway.conf.template
 

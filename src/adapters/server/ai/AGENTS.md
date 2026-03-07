@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-11
 - **Status:** stable
 
 ## Purpose
@@ -38,8 +37,6 @@ AI service adapters including LiteLLM completion/streaming, usage telemetry, age
 ## Public Surface
 
 - **Exports:** LiteLlmAdapter (LlmService), LiteLlmActivityUsageAdapter (ActivityUsagePort), LiteLlmUsageServiceAdapter (UsageService), InProcCompletionUnitAdapter (completion unit execution; requires graphId in CompletionUnitParams.runContext), AgentCatalogProvider (discovery interface), AggregatingAgentCatalog (implements AgentCatalogPort), LangGraphInProcAgentCatalogProvider (discovery provider), AggregatingGraphExecutor (execution routing), GraphProvider (execution interface), LangGraphInProcProvider (implements GraphProvider), ObservabilityGraphExecutorDecorator (wraps GraphExecutorPort with Langfuse traces), BillingGraphExecutorDecorator (intercepts usage_report events, calls injected BillingCommitFn; uses DI, never imports features), PreflightCreditCheckDecorator (rejects runs when credits insufficient; receives injected PreflightCreditCheckFn, never imports features), TavilyWebSearchAdapter (WebSearchCapability with hard caps), DrizzleThreadPersistenceAdapter (ThreadPersistencePort; optimistic concurrency via jsonb_array_length check, tenant-scoped RLS)
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** LITELLM_BASE_URL, LITELLM_MASTER_KEY (model param required - no env fallback), TAVILY_API_KEY (for web search)
 - **Files considered API:** litellm.adapter.ts, litellm.activity-usage.adapter.ts, litellm.usage-service.adapter.ts, inproc-completion-unit.adapter.ts, agent-catalog.provider.ts, aggregating-agent-catalog.ts, aggregating-executor.ts, graph-provider.ts, langgraph/inproc-agent-catalog.provider.ts, langgraph/inproc.provider.ts, observability-executor.decorator.ts, billing-executor.decorator.ts, preflight-credit-check.decorator.ts, tavily-web-search.adapter.ts, thread-persistence.adapter.ts
 - **Streaming:** completionStream() supports SSE streaming via eventsource-parser with robustness against malformed chunks

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-04
 - **Status:** stable
 
 ## Purpose
@@ -31,16 +30,8 @@ Database client singletons and tenant-scoping helpers for PostgreSQL access. App
 
 - **Exports (via `client.ts` barrel):** `Database` type, `getAppDb()`, `setTenantContext`, `withTenantScope`
 - **Exports (via `drizzle.service-client.ts`, NOT in barrel):** `getServiceDb()` (service-role singleton, BYPASSRLS). Only `src/auth.ts` and `src/bootstrap/container.ts` may import this (enforced by depcruiser `no-service-db-adapter-import` rule).
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** `DATABASE_URL`, `DATABASE_SERVICE_URL`
 - **Files considered API:** `client.ts` (safe barrel), `drizzle.service-client.ts` (restricted)
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none (infrastructure utility)
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

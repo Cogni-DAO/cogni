@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-03-03
 - **Status:** draft
 
 ## Purpose
@@ -78,8 +77,6 @@ Pure domain logic for the attribution ledger — shared between the Next.js app 
   - `AttributionClaimant`, `ClaimantShare`, `FinalClaimantAllocation`, `AttributionStatementLine` — Claimant domain types
   - `SelectedReceiptForAttribution` — Receipt type for attribution reads (includes platform identity fields)
   - `SelectedReceiptWithMetadata` — Receipt-with-metadata type for evaluation inputs
-- **CLI:** none
-- **Env/Config keys:** none
 
 ## Ports
 

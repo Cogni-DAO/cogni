@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-03-02
 - **Status:** draft
 
 ## Purpose
@@ -35,8 +34,6 @@ Public (unauthenticated) HTTP endpoints for finalized attribution data. Exposes 
   - `GET /api/v1/public/attribution/epochs/[id]/user-projections` — user projections for a finalized epoch
   - `GET /api/v1/public/attribution/epochs/[id]/claimants` — claimant-aware finalized attribution for a finalized epoch
   - `GET /api/v1/public/attribution/epochs/[id]/statement` — payout statement (null if none)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `epochs/route.ts`, `epochs/[id]/user-projections/route.ts`, `epochs/[id]/claimants/route.ts`, `epochs/[id]/statement/route.ts`
 
 ## Ports

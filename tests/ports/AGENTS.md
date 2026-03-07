@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-11
 - **Status:** draft
 
 ## Purpose
@@ -30,9 +29,7 @@ Port behavior tests that verify implementations are swappable and conform to exp
 ## Public Surface
 
 - **Exports:** test functions for port validation
-- **Routes:** none
 - **CLI:** imported by component tests
-- **Env/Config keys:** none
 - **Files considered API:** `harness/*.port.harness.ts`, `*.adapter.spec.ts`
 
 ## Responsibilities

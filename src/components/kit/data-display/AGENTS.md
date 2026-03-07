@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-03-02
 - **Status:** stable
 - **Parent:** [components/kit](../AGENTS.md)
 
@@ -39,8 +38,6 @@ Reusable kit components for displaying data including badges, avatars, scroll ar
 ## Public Surface
 
 - **Exports (via ../index.ts):** ActivityChart, Avatar, Badge, DiscordIcon, EthereumIcon, ExpandableTableRow, GitHubIcon, GoogleIcon, GithubButton, ProviderIconProps, ScrollArea, TerminalFrame
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** All \*.tsx files in this directory
 
 ## Responsibilities

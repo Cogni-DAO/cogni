@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-12-03
 - **Status:** stable
 - **Parent:** [components/kit](../AGENTS.md)
 
@@ -39,8 +38,6 @@ Reusable kit components for overlay UI patterns including dialogs, modals, sheet
 ## Public Surface
 
 - **Exports (via ../index.ts):** Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter, DialogClose
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** Dialog.tsx
 
 ## Responsibilities

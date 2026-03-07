@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-04
 - **Status:** stable
 
 ## Purpose
@@ -48,8 +47,6 @@ Branded ID types for compile-time RLS enforcement across the monorepo. Provides 
   - `UUID_RE: RegExp` — UUID v4 validation regex
 - **Exports (sub-path `@cogni/ids/system`):**
   - `SYSTEM_ACTOR: ActorId` — deterministic UUID for system/worker operations (import-gated)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts` (root), `system.ts` (sub-path)
 
 ## Ports

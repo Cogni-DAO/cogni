@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-17
 - **Status:** draft
 
 ## Purpose
@@ -38,8 +37,6 @@ Account error translation and billing safety helpers that map port-level errors 
 
 - **Exports:** AccountsFeatureError types and mapping helpers
 - **Routes (if any):** none (consumed by app layer)
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** errors.ts
 
 ## Ports (optional)

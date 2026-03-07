@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-21
 - **Status:** draft
 
 ## Purpose
@@ -37,9 +36,6 @@ Thin app-layer wrappers that resolve dependencies, bind request context, map DTO
 ## Public Surface
 
 - **Exports:** Feature facade functions for use-case coordination
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** \*_/_.server.ts
 
 ## Ports (optional)

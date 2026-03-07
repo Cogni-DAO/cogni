@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-02-10
 - **Status:** stable
 
 ## Purpose
@@ -47,9 +46,6 @@ Bottom-of-tree type definitions. TS utility types, branded types, ambient global
   - `ai-span.ts` - AiSpanPort, AiSpanHandle (provider-agnostic span interface for tool instrumentation)
   - `run-context.ts` - Re-exports RunContext from @cogni/ai-core
   - `next-auth.d.ts` - NextAuth session extensions
-- **Routes:** none
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** **/\*.ts, **/\*.d.ts
 
 ## Ports (optional)

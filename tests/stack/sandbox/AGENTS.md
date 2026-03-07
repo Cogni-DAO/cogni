@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-14
 - **Status:** draft
 
 ## Purpose
@@ -31,10 +30,8 @@ Stack tests for sandbox P0.5, P0.5a, and OpenClaw gateway. Proves socket bridge,
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm test:stack:dev -- sandbox-llm`, `pnpm test:stack:dev -- sandbox-repo-volume`, `pnpm test:stack:docker -- sandbox-openclaw`
 - **Env/Config keys:** `LITELLM_MASTER_KEY` (required; tests skip if absent)
-- **Files considered API:** none
 
 ## Responsibilities
 

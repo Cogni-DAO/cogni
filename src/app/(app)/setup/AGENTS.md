@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao/core
-- **Last reviewed:** 2025-12-13
 - **Status:** stable
 
 ## Purpose
@@ -32,8 +31,6 @@ Web pages for DAO formation and node configuration workflows. Protected route gr
 - **Routes:**
   - `/setup/dao` [GET] - DAO formation wizard (wallet-signed transactions)
 - **Exports:** none (page components only)
-- **Env/Config keys:** none
-- **Files considered API:** none
 
 ## Responsibilities
 

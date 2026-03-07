@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-07
 - **Status:** draft
 
 ## Purpose
@@ -31,7 +30,6 @@ Docker image definition for network-isolated sandbox containers. Provides minima
 ## Public Surface
 
 - **Exports:** Docker image `cogni-sandbox-runtime:latest`
-- **Routes:** none
 - **CLI:** `pnpm sandbox:docker:build`
 - **Env/Config keys (runtime):** `LLM_PROXY_SOCKET` (default `/llm-sock/llm.sock`), `LLM_PROXY_PORT` (default `8080`), `OPENAI_API_BASE`, `RUN_ID`, `COGNI_MODEL` (agent/run.mjs)
 - **Files considered API:** Dockerfile, entrypoint.sh, agent/run.mjs

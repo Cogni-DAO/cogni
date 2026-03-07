@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao/core
-- **Last reviewed:** 2025-12-16
 - **Status:** stable
 
 ## Purpose
@@ -34,7 +33,6 @@ DAO formation feature slice. Pure state machines, transaction builders, server v
   - `FormationFlowDialog` - Progress dialog component
   - Types: `DAOFormationConfig`, `FormationState`, `VerifiedAddresses`
 - **API Routes:** none (uses `/api/setup/verify`)
-- **Env/Config keys:** none
 - **Files considered API:** `public.ts`, `hooks/useDAOFormation.ts`, `components/FormationFlowDialog.tsx`
 
 ## Ports

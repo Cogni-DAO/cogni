@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-10
 - **Status:** draft
 
 ## Purpose
@@ -31,9 +30,6 @@ Shared test fixtures for sandbox container tests (P0, P0.5, P0.5a) and gateway a
 ## Public Surface
 
 - **Exports:** `SANDBOX_IMAGE`, `DEFAULT_LIMITS`, `LLM_ROUNDTRIP_LIMITS`, `SANDBOX_TEST_MODELS`, `SandboxTestContext`, `SandboxTestContextWithProxy`, `uniqueRunId()`, `assertSandboxImageExists()`, `assertInternalNetworkExists()`, `ensureProxyImage()`, `assertLitellmReachable()`, `createWorkspace()`, `cleanupWorkspace()`, `cleanupOrphanedProxies()`, `execInContainer()`, `runWithProxy()`, `runIsolated()`, `runOnInternalNetwork()`, `runAgentWithLlm()`, `TEST_BILLING_ACCOUNT_ID`
-- **Routes:** none
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** fixtures.ts
 
 ## Responsibilities

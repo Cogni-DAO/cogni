@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-02
 - **Status:** draft
 
 ## Purpose
@@ -68,11 +67,6 @@ const display = formatCentsToDollars(1050); // → "10.50"
 - No floating-point arithmetic for money operations
 - String-based parsing with explicit range validation
 - Utilities must be framework-agnostic (usable in Node, browser, tests)
-
-## Dependencies
-
-- **Internal:** none
-- **External:** none
 
 ## Change Protocol
 

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-17
 - **Status:** draft
 
 ## Purpose
@@ -30,8 +29,6 @@ Drizzle implementation of GovernanceStatusPort for system tenant governance visi
 ## Public Surface
 
 - **Exports:** DrizzleGovernanceStatusAdapter
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** DATABASE_URL
 - **Files considered API:** drizzle-governance-status.adapter.ts
 

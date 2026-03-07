@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-27
 - **Status:** draft
 
 ## Purpose
@@ -30,16 +29,8 @@ Immutable VM provisioning with SSH deploy key management, Docker/Docker Compose 
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** `CHERRY_AUTH_TOKEN`, SSH key paths
 - **Files considered API:** `variables.tf`, `terraform.tfvars.example`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

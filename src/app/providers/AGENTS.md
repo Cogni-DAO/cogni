@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-12-12
 - **Status:** stable
 
 ## Purpose
@@ -37,16 +36,8 @@ Client-side provider composition for the web UI shell. Configures React context 
   - `WalletProvider` - wagmi + RainbowKit provider with static config
   - `createAppLightTheme` - RainbowKit light theme matching design system (--muted colors)
   - `createAppDarkTheme` - RainbowKit dark theme matching design system (--accent colors)
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** Reads `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (optional)
 - **Files considered API:** app-providers.client.tsx, auth.client.tsx, query.client.tsx, wallet.client.tsx, rainbowkit-theme.ts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 

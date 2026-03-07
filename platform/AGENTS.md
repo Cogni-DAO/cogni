@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao/platform
-- **Last reviewed:** 2025-11-12
 - **Status:** draft
 
 ## Purpose
@@ -29,16 +28,9 @@ Platform-level tooling for infrastructure, CI/CD, development environment setup,
 ## Public Surface
 
 - **Exports:** Infrastructure configurations, CI scripts, bootstrap installers
-- **Routes (if any):** none
 - **CLI (if any):** Bootstrap scripts in `bootstrap/install/`
 - **Env/Config keys:** `CHERRY_AUTH_TOKEN`, `GHCR_DEPLOY_TOKEN`, `SONAR_TOKEN`, deployment vars
 - **Files considered API:** `infra/providers/*/variables.tf`, CI scripts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

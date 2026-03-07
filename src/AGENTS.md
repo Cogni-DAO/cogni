@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-23
 - **Status:** draft
 
 ## Purpose
@@ -39,7 +38,6 @@ Next.js application source implementing hexagonal architecture for a fully web3-
 
 - **Exports:** Next.js application
 - **Routes (if any):** All app routes via app/
-- **CLI (if any):** none
 - **Env/Config keys:** Via shared/env/ schemas
 - **Files considered API:** app/ routes, features/ exports, components/ exports
 

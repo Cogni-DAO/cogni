@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-14
 - **Status:** stable
 
 ## Purpose
@@ -74,8 +73,6 @@ Ports describe _what_ the domain needs from external services, not _how_ they wo
   - ThreadSummary (listing DTO: stateKey, updatedAt, messageCount)
   - Grant errors (GrantNotFoundError, GrantExpiredError, GrantRevokedError, GrantScopeMismatchError)
   - Schedule errors (ScheduleNotFoundError, ScheduleAccessDeniedError, InvalidCronExpressionError, InvalidTimezoneError)
-- **Routes:** none
-- **CLI:** none
 - **Env/Config:** none
 - **Files considered API:** all \*.port.ts files
 

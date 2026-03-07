@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-06
 - **Status:** stable
 - **Parent:** [components/kit](../AGENTS.md)
 
@@ -39,8 +38,6 @@ Provides reusable feedback UI components for error states, loading indicators, a
 ## Public Surface
 
 - **Exports (via index.ts and ../index.ts):** ErrorAlert
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** ErrorAlert.tsx, index.ts
 
 ## Responsibilities

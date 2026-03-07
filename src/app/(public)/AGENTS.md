@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-28
 - **Status:** draft
 
 ## Purpose
@@ -31,7 +30,6 @@ Public (unauthenticated) pages wrapped in `AppHeader` + `AppFooter` shell. Serve
 
 - **Exports:** none
 - **Routes:** `/` (homepage — redirects signed-in users to `/chat`)
-- **Env/Config keys:** none
 - **Files considered API:** `layout.tsx`, `page.tsx`
 - **Deleted:** `AuthRedirect.tsx` — replaced by server-side proxy routing
 

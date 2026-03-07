@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-08
 - **Status:** draft
 
 ## Purpose
@@ -42,9 +41,6 @@ Domain-split CVA styling factories organized by component type for maintainable 
 ## Public Surface
 
 - **Exports:** CVA factories via index.ts barrel, variant types
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** index.ts (barrel), all domain .ts files
 
 ## Responsibilities

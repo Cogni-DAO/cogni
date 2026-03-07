@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-13
 - **Status:** stable
 
 ## Purpose
@@ -50,16 +49,8 @@ Shared blockchain configuration for web3 integrations. Provides Base mainnet cha
   - `EvmOnchainClient` - Infrastructure interface for EVM RPC operations
   - `getAddressExplorerUrl()`, `getTransactionExplorerUrl()` - Block explorer URLs
   - `node-formation/*` - Node Formation ABIs, bytecode, OSx addresses (see node-formation/AGENTS.md)
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** none (chain hardcoded)
 - **Files considered API:** chain.ts, evm-wagmi.ts, erc20-abi.ts, block-explorer.ts, wagmi.config.ts, onchain/, node-formation/, index.ts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 

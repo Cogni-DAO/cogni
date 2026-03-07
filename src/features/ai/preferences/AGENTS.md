@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-12-03
 - **Status:** stable
 - **Parent:** [features/ai](../AGENTS.md)
 
@@ -31,8 +30,6 @@ Client-side user preferences persistence for AI feature using localStorage with 
 ## Public Surface
 
 - **Exports (via ../public.ts):** getPreferredModelId, setPreferredModelId, clearPreferredModelId, validatePreferredModel
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** model-preference.ts
 
 ## Responsibilities
