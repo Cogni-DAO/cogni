@@ -115,25 +115,21 @@ export const GET = wrapRouteHandlerWithLogging<{
       const resolvedUserId = needsResolution
         ? (resolvedIdentities.get(r.platformUserId) ?? null)
         : null;
-      const patchedSelection = resolvedUserId
+      const selectionDto = resolvedUserId
         ? selection
-          ? { ...selection, userId: resolvedUserId }
+          ? toSelectionDto({ ...selection, userId: resolvedUserId })
           : {
-              id: "",
-              nodeId: "",
-              epochId: 0n,
-              receiptId: r.receiptId,
               userId: resolvedUserId,
               included: true,
               weightOverrideMilli: null,
               note: null,
-              createdAt: new Date(),
-              updatedAt: new Date(),
             }
-        : selection;
+        : selection
+          ? toSelectionDto(selection)
+          : null;
       return {
         ...toIngestionReceiptDto(r),
-        selection: patchedSelection ? toSelectionDto(patchedSelection) : null,
+        selection: selectionDto,
       };
     });
 
