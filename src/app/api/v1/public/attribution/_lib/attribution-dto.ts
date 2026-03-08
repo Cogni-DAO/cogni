@@ -56,6 +56,20 @@ export function toSelectionDto(c: AttributionSelection) {
   };
 }
 
+/**
+ * Read-time placeholder for receipts with a resolved identity but no persisted
+ * selection row yet.  `included: null` signals "pending curation" — the
+ * scheduler's enrichment pipeline will set the real value on next run.
+ */
+export function pendingSelectionDto(userId: string) {
+  return {
+    userId,
+    included: true,
+    weightOverrideMilli: null,
+    note: null,
+  };
+}
+
 export function toUserProjectionDto(a: EpochUserProjection) {
   return {
     id: a.id,

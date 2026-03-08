@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {
+  pendingSelectionDto,
   toIngestionReceiptDto,
   toSelectionDto,
 } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
@@ -118,12 +119,7 @@ export const GET = wrapRouteHandlerWithLogging<{
       const selectionDto = resolvedUserId
         ? selection
           ? toSelectionDto({ ...selection, userId: resolvedUserId })
-          : {
-              userId: resolvedUserId,
-              included: true,
-              weightOverrideMilli: null,
-              note: null,
-            }
+          : pendingSelectionDto(resolvedUserId)
         : selection
           ? toSelectionDto(selection)
           : null;
