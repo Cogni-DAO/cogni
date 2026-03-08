@@ -110,14 +110,27 @@ export const GET = wrapRouteHandlerWithLogging<{
 
     const enriched = receipts.map((r) => {
       const selection = selectionMap.get(r.receiptId);
-      const resolvedUserId =
-        selection?.userId === null && r.source === "github"
-          ? (resolvedIdentities.get(r.platformUserId) ?? null)
-          : null;
-      const patchedSelection =
-        selection && resolvedUserId
+      const needsResolution =
+        r.source === "github" && (!selection || selection.userId === null);
+      const resolvedUserId = needsResolution
+        ? (resolvedIdentities.get(r.platformUserId) ?? null)
+        : null;
+      const patchedSelection = resolvedUserId
+        ? selection
           ? { ...selection, userId: resolvedUserId }
-          : selection;
+          : {
+              id: "",
+              nodeId: "",
+              epochId: 0n,
+              receiptId: r.receiptId,
+              userId: resolvedUserId,
+              included: true,
+              weightOverrideMilli: null,
+              note: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+        : selection;
       return {
         ...toIngestionReceiptDto(r),
         selection: patchedSelection ? toSelectionDto(patchedSelection) : null,
