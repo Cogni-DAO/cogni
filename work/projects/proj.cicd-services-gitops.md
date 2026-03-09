@@ -106,21 +106,23 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 
 **Goal:** Decouple deploy from app repo. Manifest-driven promotion.
 
-| Deliverable                                                                    | Status      | Est | Work Item |
-| ------------------------------------------------------------------------------ | ----------- | --- | --------- |
-| Extend digest-driven deploy to app+migrator                                    | Not Started | 1   | —         |
-| Create `cogni-deployments` repo (or `deployments/` monorepo dir)               | Not Started | 2   | —         |
-| Write Kustomize base for scheduler-worker (`base/scheduler-worker/`)           | Not Started | 1   | —         |
-| Create overlays: `overlays/staging/`, `overlays/production/`                   | Not Started | 1   | —         |
-| OpenTofu: Provision k3s cluster (single node MVP)                              | Not Started | 2   | —         |
-| Install Argo CD on k3s                                                         | Not Started | 1   | —         |
-| Argo app-of-apps or ApplicationSet pattern for multi-service management        | Not Started | 2   | —         |
-| Promotion flow: PR to change image digest in overlay → Argo syncs              | Not Started | 1   | —         |
-| Kustomize images use `@sha256:` digests                                        | Not Started | 1   | —         |
-| Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Not Started | 2   | —         |
-| Storage plan: PVCs for stateful deps (postgres data), backup strategy          | Not Started | 2   | —         |
-| ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | 1   | —         |
-| Retire SSH deploy for services (keep for app until P2)                         | Not Started | 1   | —         |
+| Deliverable                                                                    | Status      | Est | Work Item  |
+| ------------------------------------------------------------------------------ | ----------- | --- | ---------- |
+| Extend digest-driven deploy to app+migrator                                    | Not Started | 1   | —          |
+| Create `deployments/` monorepo dir with Kustomize bases+overlays               | Not Started | 3   | task.0148  |
+| Write Kustomize base for scheduler-worker (`base/scheduler-worker/`)           | Not Started | ↑   | task.0148  |
+| Create overlays: `overlays/staging/`, `overlays/production/`                   | Not Started | ↑   | task.0148  |
+| Argo app-of-apps pattern for multi-service management                          | Not Started | ↑   | task.0148  |
+| Kustomize images use `@sha256:` digests                                        | Not Started | ↑   | task.0148  |
+| Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Not Started | ↑   | task.0148  |
+| OpenTofu: k3s module extending Cherry Servers provider                         | Not Started | ↑   | task.0148  |
+| OpenTofu: Provision k3s cluster (single node MVP)                              | Not Started | 3   | task.0149  |
+| Install Argo CD on k3s                                                         | Not Started | ↑   | task.0149  |
+| Migrate scheduler-worker from Compose to k3s                                   | Not Started | ↑   | task.0149  |
+| Promotion flow: PR to change image digest in overlay → Argo syncs              | Not Started | ↑   | task.0149  |
+| Storage plan: PVCs for stateful deps (postgres data), backup strategy          | Not Started | 2   | —          |
+| ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | ↑   | task.0149  |
+| Retire SSH deploy for services (keep for app until P2)                         | Not Started | ↑   | task.0149  |
 
 #### P2: Supply Chain + Progressive Delivery
 
