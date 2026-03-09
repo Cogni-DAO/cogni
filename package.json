@@ -10,6 +10,7 @@
   "scripts": {
     "start:stack": "pnpm dev:infra && pnpm start",
     "check": "bash scripts/check-fast.sh",
+    "check:verbose": "bash scripts/check-fast.sh --verbose",
     "check:fix": "bash scripts/check-fast.sh --fix",
     "check:full": "bash scripts/check-full.sh",
     "check:full:fast": "bash scripts/check-full.sh --skip-build",
