@@ -58,8 +58,8 @@ export function toSelectionDto(c: AttributionSelection) {
 
 /**
  * Read-time placeholder for receipts with a resolved identity but no persisted
- * selection row yet.  `included: null` signals "pending curation" — the
- * scheduler's enrichment pipeline will set the real value on next run.
+ * selection row yet.  Defaults to `included: true` (auto-included); the
+ * scheduler's enrichment pipeline will persist the real selection row on next run.
  */
 export function pendingSelectionDto(userId: string) {
   return {

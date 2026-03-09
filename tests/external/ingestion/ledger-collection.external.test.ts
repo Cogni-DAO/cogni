@@ -13,6 +13,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createDefaultRegistries } from "@cogni/attribution-pipeline-plugins";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { DataSourceRegistration } from "@cogni/ingestion-core";
 import { extractChainId, parseRepoSpec } from "@cogni/repo-spec";
@@ -103,8 +104,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
     nodeId: TEST_NODE_ID,
     scopeId: TEST_SCOPE_ID,
     chainId: extractChainId(repoSpec),
-    // Only collect/insert/cursor/epoch activities used; registries unused.
-    registries: {} as never,
+    registries: createDefaultRegistries(),
     logger: mockLogger,
   });
 
@@ -363,7 +363,7 @@ describeWithAuth("Ledger Collection Pipeline (external)", () => {
       nodeId: TEST_NODE_ID,
       scopeId: PROMO_SCOPE_ID,
       chainId: extractChainId(repoSpec),
-      registries: {} as never,
+      registries: createDefaultRegistries(),
       logger: mockLogger,
     });
 
