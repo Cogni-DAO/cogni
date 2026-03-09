@@ -1082,12 +1082,12 @@ describe("findStaleOpenEpoch", () => {
     });
 
     expect(result.staleEpoch).not.toBeNull();
-    expect(result.staleEpoch!.epochId).toBe("5");
-    expect(result.staleEpoch!.weightConfig).toEqual({
+    expect(result.staleEpoch?.epochId).toBe("5");
+    expect(result.staleEpoch?.weightConfig).toEqual({
       "github:pr_merged": 500,
     });
-    expect(result.staleEpoch!.periodStart).toBe("2026-02-16T00:00:00.000Z");
-    expect(result.staleEpoch!.periodEnd).toBe("2026-02-23T00:00:00.000Z");
+    expect(result.staleEpoch?.periodStart).toBe("2026-02-16T00:00:00.000Z");
+    expect(result.staleEpoch?.periodEnd).toBe("2026-02-23T00:00:00.000Z");
   });
 });
 
