@@ -117,7 +117,8 @@ During the transition period (scheduler-worker in k3s, everything else in Compos
 - Create: `deployments/base/scheduler-worker/deployment.yaml` — K8s Deployment (replicas, probes, env, resources)
 - Create: `deployments/base/scheduler-worker/service.yaml` — ClusterIP Service for health probes
 - Create: `deployments/base/scheduler-worker/configmap.yaml` — Non-secret env vars (TEMPORAL_ADDRESS, etc.)
-- Create: `deployments/overlays/staging/kustomization.yaml` — Staging overlay (image digest, namespace, replicas)
+- Create: `deployments/base/scheduler-worker/external-services.yaml` — ExternalName services for Compose VM connectivity (temporal, postgres, app)
+- Create: `deployments/overlays/staging/kustomization.yaml` — Staging overlay (image digest, namespace, replicas, ExternalName IPs)
 - Create: `deployments/overlays/production/kustomization.yaml` — Production overlay (image digest, namespace, replicas)
 - Create: `deployments/overlays/staging/namespace.yaml` — Namespace definition
 - Create: `deployments/overlays/production/namespace.yaml` — Namespace definition
@@ -148,10 +149,43 @@ During the transition period (scheduler-worker in k3s, everything else in Compos
 
 ### Kustomize Base Design (scheduler-worker)
 
-Derived from current `docker-compose.yml` scheduler-worker definition:
+Derived from current `docker-compose.yml` + `services/scheduler-worker/src/bootstrap/env.ts` Zod schema:
+
+**ConfigMap** (non-secret, env-specific values in overlays):
+
+| Key | Base Value | Overlay Override |
+|-----|-----------|-----------------|
+| `TEMPORAL_ADDRESS` | — | `temporal-host:7233` (ExternalName, see below) |
+| `TEMPORAL_NAMESPACE` | — | `cogni-production` / `cogni-staging` |
+| `TEMPORAL_TASK_QUEUE` | `scheduler-tasks` | — |
+| `APP_BASE_URL` | — | `http://app-host:3000` (ExternalName) |
+| `LOG_LEVEL` | `info` | — |
+| `SERVICE_NAME` | `scheduler-worker` | — |
+| `HEALTH_PORT` | `9000` | — |
+
+**Secret** (SOPS-encrypted in repo, decrypted at apply time):
+
+| Key | Source |
+|-----|--------|
+| `DATABASE_URL` | Postgres DSN (service role, BYPASSRLS) |
+| `SCHEDULER_API_TOKEN` | min 32 chars, internal API auth |
+| `GH_REVIEW_APP_ID` | Optional — GitHub App ID |
+| `GH_REVIEW_APP_PRIVATE_KEY_BASE64` | Optional — GitHub App private key |
+| `GH_REPOS` | Optional — comma-separated repos |
+
+**ExternalName Services** (transition period — scheduler-worker in k3s, deps in Compose):
+
+| K8s Service Name | Type | Target | Purpose |
+|------------------|------|--------|---------|
+| `temporal` | ExternalName | `<compose-vm-ip>` | gRPC 7233 connectivity |
+| `postgres` | ExternalName | `<compose-vm-ip>` | Port 5432 connectivity |
+| `app` | ExternalName | `<compose-vm-ip>` | HTTP 3000 connectivity |
+
+These ExternalName services let the scheduler-worker pod use the same hostnames (`temporal`, `app`) that it uses in Compose, but resolved to the other VM's IP. Replaced with real K8s Services when those workloads migrate to k3s.
+
+**Deployment manifest:**
 
 ```yaml
-# deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -256,22 +290,17 @@ CI pushes image → CI creates PR updating overlay digest →
 
 This task creates the manifests. CI integration (auto-PR on image push) is a follow-up.
 
-### Validation
-
-- `kubectl kustomize deployments/overlays/staging/` produces valid YAML
-- `kubectl kustomize deployments/overlays/production/` produces valid YAML
-- `tofu plan` in `platform/infra/providers/cherry/k3s/` succeeds (with mock vars)
-- Argo CD Application manifests are valid YAML
-
 ## Validation
 
 **Automated:**
 - `kubectl kustomize deployments/overlays/staging/` exits 0
 - `kubectl kustomize deployments/overlays/production/` exits 0
+- `tofu plan` in `platform/infra/providers/cherry/k3s/` succeeds (with mock vars)
 - All YAML files are valid
 
 **Manual:**
-1. Review Kustomize output matches current docker-compose scheduler-worker config
+1. Review Kustomize output matches current docker-compose scheduler-worker env config
 2. Review OpenTofu module extends cherry/base pattern correctly
 3. Review Argo CD Applications point at correct paths
 4. Review SOPS config has correct path rules
+5. Review ExternalName services point at placeholder IPs (replaced during task.0149)
