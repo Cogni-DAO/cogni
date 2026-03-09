@@ -14,6 +14,7 @@
  * - NODE_SCOPED: all operations are scoped to a node_id.
  * - RECEIPT_SCOPE_AGNOSTIC: receipts carry no scope_id; scope assigned at selection via epoch membership.
  * - EVALUATION_FINAL_ATOMIC: locked evaluation writes + artifacts_hash + epoch open→review in one transaction.
+ * - EPOCH_CLOSE_ON_TRANSITION: transitionEpochForWindow closes stale open epoch + creates new epoch atomically. No grace period.
  * - STATEMENT_FROM_FINAL_ONLY: allocation for statements consumes only status='locked' evaluations and claimant records.
  * - CLAIMANT_RESOLUTION_REQUIRED: upsertDraftClaimants, lockClaimantsForEpoch, loadLockedClaimants manage the epoch_receipt_claimants lifecycle.
  * Side-effects: none
@@ -276,23 +277,23 @@ export interface CloseIngestionWithEvaluationsParams {
   readonly artifactsHash: string;
 }
 
-/** Params for the atomic epoch transition primitive (close stale + get-or-create current). */
+/** Params for the atomic epoch transition: close stale open epoch + create epoch for a new window. */
 export interface TransitionEpochForWindowParams {
   readonly nodeId: string;
   readonly scopeId: string;
   readonly periodStart: Date;
   readonly periodEnd: Date;
   readonly weightConfig: Record<string, number>;
-  /** Close params for the stale epoch. Required when a stale open epoch exists for a different window. */
-  readonly closeParams?: CloseIngestionWithEvaluationsParams;
+  /** Close payload for the stale epoch. Always required — this method is only called when a stale epoch exists. */
+  readonly closeParams: CloseIngestionWithEvaluationsParams;
 }
 
 /** Result from transitionEpochForWindow. */
 export interface TransitionEpochForWindowResult {
   readonly epoch: AttributionEpoch;
   readonly isNew: boolean;
-  /** If a stale epoch was closed during this transition, its ID. */
-  readonly closedStaleEpochId: bigint | null;
+  /** ID of the stale epoch that was closed during this transition. */
+  readonly closedStaleEpochId: bigint;
 }
 
 /**
@@ -439,16 +440,15 @@ export interface EpochWriter {
   ): Promise<AttributionEpoch>;
 
   /**
-   * Atomic epoch transition: close stale open epoch (if any) + get-or-create epoch for the given window.
+   * Atomic epoch transition: close stale open epoch + create epoch for a new window.
    * Single DB transaction eliminates race window between close and create.
+   * Only called when findStaleOpenEpoch detected a stale epoch blocking the new window.
    *
    * Behavior:
-   * - If an epoch already exists for this window → return it (any status).
-   * - If an open epoch exists for a DIFFERENT window AND closeParams provided → close it, then create new.
-   * - If an open epoch exists for a DIFFERENT window AND no closeParams → throws (caller must build evaluations first).
-   * - If no open epoch exists → create new epoch for this window.
+   * - If an epoch already exists for this window → return it (idempotent rerun).
+   * - Otherwise → close stale epoch (open → review) + create new epoch, atomically.
    *
-   * Invariants: ONE_OPEN_EPOCH, EPOCH_WINDOW_UNIQUE, EVALUATION_FINAL_ATOMIC (when closing stale).
+   * Invariants: ONE_OPEN_EPOCH, EPOCH_WINDOW_UNIQUE, EVALUATION_FINAL_ATOMIC.
    */
   transitionEpochForWindow(
     params: TransitionEpochForWindowParams

@@ -16,6 +16,7 @@
  * - POOL_LOCKED_AT_REVIEW: insertPoolComponent rejects inserts when epoch status != 'open'.
  * - CONFIG_LOCKED_AT_REVIEW: closeIngestion pins allocationAlgoRef + weightConfigHash.
  * - EVALUATION_FINAL_ATOMIC: closeIngestionWithEvaluations inserts locked evaluations + sets artifacts_hash + transitions epoch in one transaction.
+ * - EPOCH_CLOSE_ON_TRANSITION: transitionEpochForWindow closes stale open epoch + creates new epoch in one DB transaction.
  * - STATEMENT_LINES_BOUNDARY_CLONE: toStatementLinesJson converts readonly statement lines to mutable Drizzle-compatible JSONB at the adapter boundary.
  * Side-effects: IO (database operations)
  * Links: docs/spec/attribution-ledger.md, packages/attribution-ledger/src/store.ts
@@ -32,8 +33,6 @@ import type {
   AttributionStatementSignature,
   AttributionStore,
   CloseIngestionWithEvaluationsParams,
-  TransitionEpochForWindowParams,
-  TransitionEpochForWindowResult,
   EpochUserProjection,
   FinalClaimantAllocationRecord,
   IngestionCursor,
@@ -51,6 +50,8 @@ import type {
   SelectedReceiptForAllocation,
   SelectedReceiptForAttribution,
   SelectedReceiptWithMetadata,
+  TransitionEpochForWindowParams,
+  TransitionEpochForWindowResult,
   UnselectedReceipt,
   UpsertEvaluationParams,
   UpsertReviewSubjectOverrideParams,
@@ -670,87 +671,61 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         )
         .limit(1);
       if (existing) {
+        // Idempotent rerun — previous call already closed stale + created this epoch
         return {
           epoch: toEpoch(existing),
           isNew: false,
-          closedStaleEpochId: null,
+          closedStaleEpochId: params.closeParams.epochId,
         };
       }
 
-      // 2. Check for stale open epoch (different window, since step 1 didn't match)
-      const [stale] = await tx
-        .select()
-        .from(epochs)
-        .where(
-          and(
-            eq(epochs.nodeId, params.nodeId),
-            eq(epochs.scopeId, params.scopeId),
-            eq(epochs.status, "open")
-          )
-        )
-        .limit(1);
-
-      let closedStaleEpochId: bigint | null = null;
-
-      if (stale) {
-        if (!params.closeParams) {
-          throw new Error(
-            `Stale open epoch ${stale.id} blocks creation of new epoch. ` +
-              `Caller must provide closeParams (build evaluations first).`
-          );
-        }
-
-        // 3a. Insert locked evaluations for the stale epoch
-        for (const evaluation of params.closeParams.evaluations) {
-          await tx
-            .insert(epochEvaluations)
-            .values({
-              nodeId: evaluation.nodeId,
-              epochId: evaluation.epochId,
-              evaluationRef: evaluation.evaluationRef,
-              status: "locked",
-              algoRef: evaluation.algoRef,
-              inputsHash: evaluation.inputsHash,
-              payloadHash: evaluation.payloadHash,
-              payloadJson: evaluation.payloadJson,
-            })
-            .onConflictDoNothing({
-              target: [
-                epochEvaluations.epochId,
-                epochEvaluations.evaluationRef,
-                epochEvaluations.status,
-              ],
-            });
-        }
-
-        // 3b. Transition stale epoch open → review
-        const [closed] = await tx
-          .update(epochs)
-          .set({
-            status: "review",
-            approvers: params.closeParams.approvers.map((a) => a.toLowerCase()),
-            approverSetHash: params.closeParams.approverSetHash,
-            allocationAlgoRef: params.closeParams.allocationAlgoRef,
-            weightConfigHash: params.closeParams.weightConfigHash,
-            artifactsHash: params.closeParams.artifactsHash,
+      // 2. Close the stale open epoch (different window, since step 1 didn't match)
+      // Insert locked evaluations for the stale epoch
+      for (const evaluation of params.closeParams.evaluations) {
+        await tx
+          .insert(epochEvaluations)
+          .values({
+            nodeId: evaluation.nodeId,
+            epochId: evaluation.epochId,
+            evaluationRef: evaluation.evaluationRef,
+            status: "locked",
+            algoRef: evaluation.algoRef,
+            inputsHash: evaluation.inputsHash,
+            payloadHash: evaluation.payloadHash,
+            payloadJson: evaluation.payloadJson,
           })
-          .where(
-            and(
-              eq(epochs.id, stale.id),
-              eq(epochs.scopeId, this.scopeId),
-              eq(epochs.status, "open")
-            )
-          )
-          .returning();
-
-        // Idempotent: concurrent close won — that's fine, epoch is no longer open
-        closedStaleEpochId = stale.id;
-        if (closed) {
-          closedStaleEpochId = closed.id;
-        }
+          .onConflictDoNothing({
+            target: [
+              epochEvaluations.epochId,
+              epochEvaluations.evaluationRef,
+              epochEvaluations.status,
+            ],
+          });
       }
 
-      // 4. Create the new epoch for the requested window
+      // Transition stale epoch open → review
+      // WHERE status='open' makes this idempotent — concurrent close returns 0 rows
+      await tx
+        .update(epochs)
+        .set({
+          status: "review",
+          approvers: params.closeParams.approvers.map((a: string) =>
+            a.toLowerCase()
+          ),
+          approverSetHash: params.closeParams.approverSetHash,
+          allocationAlgoRef: params.closeParams.allocationAlgoRef,
+          weightConfigHash: params.closeParams.weightConfigHash,
+          artifactsHash: params.closeParams.artifactsHash,
+        })
+        .where(
+          and(
+            eq(epochs.id, params.closeParams.epochId),
+            eq(epochs.scopeId, this.scopeId),
+            eq(epochs.status, "open")
+          )
+        );
+
+      // 3. Create the new epoch for the requested window
       const [created] = await tx
         .insert(epochs)
         .values({
@@ -769,7 +744,7 @@ export class DrizzleAttributionAdapter implements AttributionStore {
       return {
         epoch: toEpoch(created),
         isNew: true,
-        closedStaleEpochId,
+        closedStaleEpochId: params.closeParams.epochId,
       };
     });
   }

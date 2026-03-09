@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/activities/ledger`
- * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, auto-close, and finalization.
+ * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, epoch transition, and finalization.
  * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-712 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
  * Invariants:
  *   - NO_DOMAIN_LOGIC_HERE: this file must never contain selection policies, allocation formulas, enrichment logic, or source-specific branching (e.g. `if eventType === "pr_merged"`). It loads data, dispatches to contracts/plugins, and writes results.
@@ -25,7 +25,10 @@
  * @internal
  */
 
-import type { UnselectedReceipt } from "@cogni/attribution-ledger";
+import type {
+  CloseIngestionWithEvaluationsParams,
+  UnselectedReceipt,
+} from "@cogni/attribution-ledger";
 import {
   applyReceiptWeightOverrides,
   buildEIP712TypedData,
@@ -228,15 +231,16 @@ export interface FindStaleOpenEpochOutput {
 
 /**
  * Input for transitionEpochForWindow activity.
- * Atomically closes stale open epoch (if any) + creates/returns epoch for the given window.
+ * Atomically closes stale open epoch + creates epoch for a new window.
+ * Only called when findStaleOpenEpoch detected a stale epoch.
  * Hash computation happens inside the activity (not safe in Temporal workflow code).
  */
 export interface TransitionEpochForWindowInput {
   readonly periodStart: string; // ISO date
   readonly periodEnd: string; // ISO date
   readonly weightConfig: Record<string, number>;
-  /** Close params for the stale epoch. Required when findStaleOpenEpoch found a stale epoch. */
-  readonly closeParams?: {
+  /** Close payload for the stale epoch — always required. */
+  readonly closeParams: {
     readonly staleEpochId: string; // bigint serialized
     readonly staleWeightConfig: Record<string, number>; // pinned config from stale epoch
     readonly approvers: string[];
@@ -263,7 +267,7 @@ export interface TransitionEpochForWindowOutput {
   readonly status: string;
   readonly isNew: boolean;
   readonly weightConfig: Record<string, number>;
-  readonly closedStaleEpochId: string | null;
+  readonly closedStaleEpochId: string; // always set — this method only called for stale transitions
 }
 
 /**
@@ -978,60 +982,54 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
   async function transitionEpochForWindow(
     input: TransitionEpochForWindowInput
   ): Promise<TransitionEpochForWindowOutput> {
+    const { closeParams: inputClose } = input;
+
     // Lock claimants for stale epoch before the atomic transition
-    if (input.closeParams) {
-      const staleEpochId = BigInt(input.closeParams.staleEpochId);
-      const lockedCount =
-        await attributionStore.lockClaimantsForEpoch(staleEpochId);
-      logger.info(
-        {
-          staleEpochId: input.closeParams.staleEpochId,
-          lockedClaimants: lockedCount,
-        },
-        "Claimant rows locked for stale epoch"
-      );
-    }
+    const staleEpochId = BigInt(inputClose.staleEpochId);
+    const lockedCount =
+      await attributionStore.lockClaimantsForEpoch(staleEpochId);
+    logger.info(
+      {
+        staleEpochId: inputClose.staleEpochId,
+        lockedClaimants: lockedCount,
+      },
+      "Claimant rows locked for stale epoch"
+    );
 
-    // Build close params with hash computation and bigint reconstruction
-    let closeParams;
-    if (input.closeParams) {
-      // Compute hashes from raw values (crypto happens here, not in workflow)
-      validateWeightConfig(input.closeParams.staleWeightConfig);
-      const weightConfigHash = await computeWeightConfigHash(
-        input.closeParams.staleWeightConfig
-      );
-      const approverSetHash = computeApproverSetHash(
-        input.closeParams.approvers
-      );
-      const profile = resolveProfile(
-        registries.profiles,
-        input.closeParams.attributionPipeline
-      );
-      const allocationAlgoRef = profile.allocatorRef;
+    // Compute hashes from raw values (crypto happens here, not in workflow)
+    validateWeightConfig(inputClose.staleWeightConfig);
+    const weightConfigHash = await computeWeightConfigHash(
+      inputClose.staleWeightConfig
+    );
+    const approverSetHash = computeApproverSetHash(inputClose.approvers);
+    const profile = resolveProfile(
+      registries.profiles,
+      inputClose.attributionPipeline
+    );
+    const allocationAlgoRef = profile.allocatorRef;
 
-      logger.info(
-        {
-          staleEpochId: input.closeParams.staleEpochId,
-          allocationAlgoRef,
-          weightConfigHash: `${weightConfigHash.slice(0, 12)}...`,
-          evaluationCount: input.closeParams.evaluations.length,
-        },
-        "Closing stale epoch during transition"
-      );
-
-      closeParams = {
-        epochId: BigInt(input.closeParams.staleEpochId),
-        approvers: input.closeParams.approvers,
-        approverSetHash,
+    logger.info(
+      {
+        staleEpochId: inputClose.staleEpochId,
         allocationAlgoRef,
-        weightConfigHash,
-        evaluations: input.closeParams.evaluations.map((e) => ({
-          ...e,
-          epochId: BigInt(e.epochId),
-        })),
-        artifactsHash: input.closeParams.artifactsHash,
-      };
-    }
+        weightConfigHash: `${weightConfigHash.slice(0, 12)}...`,
+        evaluationCount: inputClose.evaluations.length,
+      },
+      "Closing stale epoch during transition"
+    );
+
+    const closeParams: CloseIngestionWithEvaluationsParams = {
+      epochId: staleEpochId,
+      approvers: inputClose.approvers,
+      approverSetHash,
+      allocationAlgoRef,
+      weightConfigHash,
+      evaluations: inputClose.evaluations.map((e) => ({
+        ...e,
+        epochId: BigInt(e.epochId),
+      })),
+      artifactsHash: inputClose.artifactsHash,
+    };
 
     const result = await attributionStore.transitionEpochForWindow({
       nodeId,
@@ -1042,22 +1040,20 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       closeParams,
     });
 
-    if (result.closedStaleEpochId) {
-      logger.info(
-        {
-          closedStaleEpochId: result.closedStaleEpochId.toString(),
-          newEpochId: result.epoch.id.toString(),
-        },
-        "Epoch transition complete — stale epoch closed, new epoch created"
-      );
-    }
+    logger.info(
+      {
+        closedStaleEpochId: result.closedStaleEpochId.toString(),
+        newEpochId: result.epoch.id.toString(),
+      },
+      "Epoch transition complete — stale epoch closed, new epoch created"
+    );
 
     return {
       epochId: result.epoch.id.toString(),
       status: result.epoch.status,
       isNew: result.isNew,
       weightConfig: result.epoch.weightConfig,
-      closedStaleEpochId: result.closedStaleEpochId?.toString() ?? null,
+      closedStaleEpochId: result.closedStaleEpochId.toString(),
     };
   }
 

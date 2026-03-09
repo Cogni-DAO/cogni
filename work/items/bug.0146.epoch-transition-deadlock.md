@@ -2,7 +2,7 @@
 id: bug.0146
 type: bug
 title: "Epoch transition deadlock: grace period prevents new epoch creation, halting all collection"
-status: needs_triage
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 2
@@ -13,14 +13,14 @@ spec_refs:
 assignees: []
 credit:
 project:
-branch:
+branch: fix/bug-0146-epoch-transition-deadlock
 pr:
 reviewer:
-revision: 0
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-09
-updated: 2026-03-09
+updated: 2026-03-10
 labels: [attribution, scheduler, p0-outage]
 external_refs:
 ---
@@ -109,6 +109,33 @@ pnpm test services/scheduler-worker
 
 - Related: `bug.0139` (schedule coupling — separate issue, same workflow)
 - Loki query: `{app="cogni-template", env="preview", service="scheduler-worker"} |~ "epochs_one_open_per_node"`
+
+## Review Feedback
+
+### R1 — REQUEST CHANGES (2026-03-09)
+
+**Blocking:**
+
+1. **Lint failures (3 errors)**:
+   - `drizzle-attribution.adapter.ts:25` — import sorting (Biome `organizeImports`)
+   - `ledger.ts:996` — `let closeParams;` implicit any → add type annotation
+   - `collect-epoch.workflow.ts:159` — `let epoch;` implicit any → add type annotation
+
+2. **Missing tests**: No coverage for `findStaleOpenEpoch` or `transitionEpochForWindow` activities. Required tests:
+   - Stale epoch detection (different window → stale; same window → not stale; no open epoch → null)
+   - Atomic transition (close stale + create new; returns closedStaleEpochId)
+   - No-approvers path (empty approvers array)
+   - Idempotent rerun (epoch already exists for window → returns existing)
+
+3. **Dead code**: `activity-profiles.ts`, `stages/collect-sources.workflow.ts`, `stages/enrich-and-allocate.workflow.ts` are orphaned by revert to inline activities. Delete or retain child workflow pattern.
+
+4. **Spec not updated**: `docs/spec/attribution-ledger.md` still documents 24h grace period. Must reflect close-on-transition semantics.
+
+**Non-blocking suggestions:**
+
+- Move `lockClaimantsForEpoch` into adapter's `transitionEpochForWindow` transaction for full `EVALUATION_FINAL_ATOMIC` atomicity
+- Add `FOR UPDATE` on stale epoch SELECT or catch-and-re-query on INSERT for race safety
+- Simplify `closedStaleEpochId` assignment (L746-750) — redundant conditional
 
 ## Attribution
 
