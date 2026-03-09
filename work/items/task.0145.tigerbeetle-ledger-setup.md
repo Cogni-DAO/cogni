@@ -60,20 +60,19 @@ Every credit deposit and AI spend has a corresponding double-entry transfer in T
 
 ### Files
 
-- Create: `packages/financial-ledger/` — new `@cogni/financial-ledger` package (port + domain constants). Follow [New Package Checklist](../../docs/guides/new-packages.md).
-  - `src/port.ts` — FinancialLedgerPort interface
-  - `src/accounts.ts` — Account ID constants, ledger ID mappings, clearing account IDs, USDC-to-credit conversion
-  - `src/index.ts` — barrel export
-- Create: `src/adapters/server/ledger/tigerbeetle.adapter.ts` — TigerBeetle implementation (NOT re-exported from barrel — N-API native addon, same pattern as Privy/Sandbox)
-- Modify: `src/bootstrap/container.ts` — Wire TigerBeetleAdapter via lazy `require()` (same pattern as PrivyOperatorWalletAdapter)
+- Create: `packages/financial-ledger/` — new `@cogni/financial-ledger` capability package. Follow [New Package Checklist](../../docs/guides/new-packages.md) and [Capability Package Shape](../../docs/spec/packages-architecture.md#capability-package-shape).
+  - `src/port/` — FinancialLedgerPort interface + domain error types
+  - `src/domain/` — Account ID constants, ledger ID mappings, clearing account IDs, USDC-to-credit conversion
+  - `src/adapters/tigerbeetle.adapter.ts` — TigerBeetle implementation (takes client as constructor arg, no env loading)
+  - `src/index.ts` — barrel export (port + domain only; adapter via subpath `@cogni/financial-ledger/adapters` to avoid pulling N-API into all importers)
+  - `tests/` — account mapping, conversion math, adapter integration tests
+- Modify: `src/bootstrap/container.ts` — lazy `require("@cogni/financial-ledger/adapters")`, create TB client, pass to adapter constructor
 - Modify: `src/adapters/server/accounts/drizzle.adapter.ts` — Co-write to FinancialLedgerPort in creditAccount/recordChargeReceipt
 - Modify: `platform/infra/services/runtime/docker-compose.dev.yml` — Add TigerBeetle container
-- Create: `tests/component/ledger/tigerbeetle.adapter.int.test.ts` — Integration tests against real TigerBeetle
-- Create: `packages/financial-ledger/tests/accounts.test.ts` — Account mapping + conversion math tests
 
 ### N-API Bundler Handling
 
-`tigerbeetle-node` is a native N-API addon. Same issue as `dockerode` (ssh2→cpu-features) and `@privy-io/node` — breaks Turbopack bundling. The adapter MUST NOT be re-exported from `src/adapters/server/index.ts`. Use lazy `require()` in `container.ts` with a comment explaining why. Same pattern as `container.ts:407-412` (Privy).
+`tigerbeetle-node` is a native N-API addon. Same issue as `dockerode` (ssh2→cpu-features) and `@privy-io/node` — breaks Turbopack bundling. The adapter lives in the package at `src/adapters/` but is exported via a **subpath** (`@cogni/financial-ledger/adapters`) so importing the main barrel (`@cogni/financial-ledger`) does NOT pull in the native addon. `container.ts` uses lazy `require("@cogni/financial-ledger/adapters")` — same pattern as Privy (`container.ts:407-412`).
 
 ### Co-Write Failure Semantics (Crawl)
 
@@ -99,13 +98,11 @@ This is explicitly a Crawl limitation. Walk phase adds transactional guarantees.
 
 ## Allowed Changes
 
-- `packages/financial-ledger/` — new `@cogni/financial-ledger` package (port interface + account constants)
-- `src/adapters/server/ledger/` — new TigerBeetle adapter (NOT in barrel)
+- `packages/financial-ledger/` — new `@cogni/financial-ledger` capability package (port + domain + adapter)
 - `src/bootstrap/container.ts` — wire FinancialLedgerPort
 - `src/adapters/server/accounts/drizzle.adapter.ts` — co-write integration
 - `platform/infra/services/runtime/` — docker-compose TigerBeetle service
-- `tests/component/ledger/` — integration tests against real TigerBeetle
-- `package.json` — add `tigerbeetle-node` + `@cogni/financial-ledger` dependencies
+- `package.json` (root) — add `@cogni/financial-ledger` workspace dependency
 - `src/shared/env/server-env.ts` — add `TIGERBEETLE_ADDRESS` env var
 - Root config files per [New Package Checklist](../../docs/guides/new-packages.md) — tsconfig.json, biome/base.json
 
@@ -118,17 +115,17 @@ This is explicitly a Crawl limitation. Walk phase adds transactional guarantees.
 
 ### Step 2: `@cogni/financial-ledger` Package
 
-- [ ] Create `packages/financial-ledger/` per [New Package Checklist](../../docs/guides/new-packages.md)
-- [ ] `src/accounts.ts` — ledger ID constants (USDC=2, CREDIT=200, COGNI=100, EUR=3), well-known account ID mappings, clearing account IDs, USDC-to-credit conversion (`credits = micro_usdc * 10`)
-- [ ] `src/port.ts` — FinancialLedgerPort interface: `transfer`, `linkedTransfers`, `lookupAccounts`, `getAccountBalance`
-- [ ] `tests/accounts.test.ts` — account ID mappings, conversion math
+- [ ] Create `packages/financial-ledger/` per [New Package Checklist](../../docs/guides/new-packages.md) + [Capability Package Shape](../../docs/spec/packages-architecture.md#capability-package-shape)
+- [ ] `src/port/` — FinancialLedgerPort interface: `transfer`, `linkedTransfers`, `lookupAccounts`, `getAccountBalance`
+- [ ] `src/domain/` — ledger ID constants (USDC=2, CREDIT=200, COGNI=100, EUR=3), well-known account ID mappings, clearing account IDs, USDC-to-credit conversion (`credits = micro_usdc * 10`)
+- [ ] `src/adapters/tigerbeetle.adapter.ts` — implements FinancialLedgerPort, takes TB client as constructor arg, idempotent account creation on init. Handle `exists_with_different_fields` explicitly (log error + fail startup).
+- [ ] `src/index.ts` — barrel (port + domain). Adapter via subpath export to isolate N-API.
+- [ ] `tigerbeetle-node` as package dependency (not root)
+- [ ] `tests/` — account ID mappings, conversion math
 
-### Step 3: Adapter + Wiring
+### Step 3: Wiring
 
-- [ ] Add `tigerbeetle-node` to package.json dependencies
-- [ ] Create `src/adapters/server/ledger/tigerbeetle.adapter.ts` — implements FinancialLedgerPort, idempotent account creation on init. Handle `exists_with_different_fields` explicitly (log error + fail startup).
-- [ ] Wire in `src/bootstrap/container.ts` — lazy `require()`, optional (undefined when `TIGERBEETLE_ADDRESS` not set), add `financialLedger: FinancialLedgerPort | undefined` to Container interface
-- [ ] Add NOTE comment in `src/adapters/server/index.ts` explaining why TigerBeetleAdapter is not re-exported (N-API native addon)
+- [ ] Wire in `src/bootstrap/container.ts` — lazy `require("@cogni/financial-ledger/adapters")`, optional (undefined when `TIGERBEETLE_ADDRESS` not set), add `financialLedger: FinancialLedgerPort | undefined` to Container interface
 
 ### Step 4: Credit Deposit Co-Write
 
@@ -147,7 +144,7 @@ This is explicitly a Crawl limitation. Walk phase adds transactional guarantees.
 
 ### Step 6: Integration Tests
 
-- [ ] Create `tests/component/ledger/tigerbeetle.adapter.int.test.ts` — integration tests against real TigerBeetle in Docker: single-ledger transfer, linked cross-ledger transfer, idempotent account creation, account balance queries
+- [ ] Create `packages/financial-ledger/tests/tigerbeetle.adapter.int.test.ts` — integration tests against real TigerBeetle in Docker: single-ledger transfer, linked cross-ledger transfer, idempotent account creation, account balance queries
 
 ## Out of Scope (separate tasks)
 
@@ -160,21 +157,13 @@ This is explicitly a Crawl limitation. Walk phase adds transactional guarantees.
 
 ## Validation
 
-**Integration tests (requires dev stack with TigerBeetle):**
-
-```bash
-pnpm dotenv -e .env.test -- vitest run --config vitest.component.config.mts tests/component/ledger/
-```
-
-**Expected:** TigerBeetle adapter creates accounts, executes single-ledger and cross-ledger transfers.
-
-**Package tests:**
+**Package tests (unit + integration):**
 
 ```bash
 pnpm test packages/financial-ledger/tests/
 ```
 
-**Expected:** Account mapping, ledger ID constants, USDC-to-credit conversion verified.
+**Expected:** Account mapping, conversion math, TigerBeetle adapter creates accounts, executes transfers.
 
 **Lint/type:**
 
@@ -190,7 +179,7 @@ pnpm check
 - [ ] **Spec:** DOUBLE_ENTRY_CANONICAL, LEDGER_PORT_IS_WRITE_PATH, POSTGRES_IS_METADATA, POST_CALL_NEVER_BLOCKS invariants upheld
 - [ ] **Tests:** integration tests against real TigerBeetle for each co-write path
 - [ ] **Cross-ledger:** clearing accounts net to zero after deposit + spend cycle
-- [ ] **N-API:** TigerBeetleAdapter NOT in server barrel, lazy require in container.ts
+- [ ] **N-API:** Adapter via subpath export, lazy require in container.ts
 - [ ] **Non-blocking:** All co-writes fire-and-forget, log critical on failure
 
 ## PR / Links
