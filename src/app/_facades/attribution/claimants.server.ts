@@ -214,6 +214,13 @@ export async function readFinalizedEpochClaimants(
       epochId: epoch.id.toString(),
       poolTotalCredits: statement.poolTotalCredits.toString(),
       items: await enrichClaimantPresentation(store, epoch, statementLines),
+      reviewOverrides:
+        statement.reviewOverrides?.map((o) => ({
+          subject_ref: o.subject_ref,
+          original_units: o.original_units,
+          override_units: o.override_units ?? null,
+          reason: o.reason ?? null,
+        })) ?? null,
     };
   }
 

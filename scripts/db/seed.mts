@@ -31,6 +31,7 @@ import {
   computeApproverSetHash,
   computeArtifactsHash,
   computeAttributionStatementLines,
+  computeEnricherInputsHash,
   computeEpochWindowV1,
   computeFinalClaimantAllocationSetHash,
   computeReceiptWeights,
@@ -40,6 +41,7 @@ import {
   type InsertReceiptClaimantsParams,
   type ReceiptClaimantsRecord,
   type SelectedReceiptForAttribution,
+  type UpsertEvaluationParams,
 } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
@@ -61,6 +63,8 @@ const SEED_APPROVERS = ["0x070075F1389Ae1182aBac722B36CA12285d0c949"];
 const ALLOCATION_ALGO_REF = deriveAllocationAlgoRef("cogni-v0.0");
 const CLAIMANT_RESOLVER_REF = "cogni.default-author.v0";
 const CLAIMANT_ALGO_REF = "default-author-v0";
+const ECHO_EVALUATION_REF = "cogni.echo.v0";
+const ECHO_ALGO_REF = "echo-v0";
 const PRODUCER = "dev-seed";
 const PRODUCER_VERSION = "0.1.0-seed";
 
@@ -620,6 +624,49 @@ async function buildClaimantAwareStatement(params: {
   };
 }
 
+async function buildEchoEvaluation(
+  epochId: bigint,
+  events: readonly EventDef[]
+): Promise<UpsertEvaluationParams> {
+  const byEventType: Record<string, number> = {};
+  const byUserId: Record<string, number> = {};
+  for (const event of events) {
+    byEventType[`${event.source}:${event.eventType}`] =
+      (byEventType[`${event.source}:${event.eventType}`] ?? 0) + 1;
+    if (event.contributor.userId) {
+      byUserId[event.contributor.userId] =
+        (byUserId[event.contributor.userId] ?? 0) + 1;
+    }
+  }
+  const payloadJson: Record<string, unknown> = {
+    totalEvents: events.length,
+    byEventType,
+    byUserId,
+  };
+  const canonical = JSON.stringify(
+    payloadJson,
+    Object.keys(payloadJson).sort()
+  );
+  const evalPayloadHash = sha256(canonical);
+  const inputsHash = await computeEnricherInputsHash({
+    epochId,
+    receipts: events.map((e) => ({
+      receiptId: e.id,
+      receiptPayloadHash: eventPayloadHash(e),
+    })),
+  });
+  return {
+    nodeId: NODE_ID,
+    epochId,
+    evaluationRef: ECHO_EVALUATION_REF,
+    status: "locked" as const,
+    algoRef: ECHO_ALGO_REF,
+    inputsHash,
+    payloadHash: evalPayloadHash,
+    payloadJson,
+  };
+}
+
 async function seedLinkedUsersAndBindings(
   db: ReturnType<typeof createServiceDbClient>
 ): Promise<void> {
@@ -756,7 +803,9 @@ async function seedFinalizedEpoch(
   console.log(`  Inserted ${lockedCount} locked receipt claimants`);
 
   const weightConfigHash = await computeWeightConfigHash(WEIGHT_CONFIG);
-  const artifactsHash = await computeArtifactsHash([]);
+  const echoEval = await buildEchoEvaluation(epoch.id, epochDef.events);
+  const evaluations = [echoEval];
+  const artifactsHash = await computeArtifactsHash(evaluations);
 
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
@@ -764,7 +813,7 @@ async function seedFinalizedEpoch(
     approverSetHash: computeApproverSetHash(SEED_APPROVERS),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
-    evaluations: [],
+    evaluations,
     artifactsHash,
   });
   console.log("  Closed ingestion (open -> review)");
@@ -876,7 +925,9 @@ async function seedReviewEpoch(
   console.log(`  Inserted ${lockedCount} locked receipt claimants`);
 
   const weightConfigHash = await computeWeightConfigHash(WEIGHT_CONFIG);
-  const artifactsHash = await computeArtifactsHash([]);
+  const echoEval = await buildEchoEvaluation(epoch.id, epochDef.events);
+  const evaluations = [echoEval];
+  const artifactsHash = await computeArtifactsHash(evaluations);
 
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
@@ -884,7 +935,7 @@ async function seedReviewEpoch(
     approverSetHash: computeApproverSetHash(SEED_APPROVERS),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
-    evaluations: [],
+    evaluations,
     artifactsHash,
   });
   console.log("  Closed ingestion (open -> review)");

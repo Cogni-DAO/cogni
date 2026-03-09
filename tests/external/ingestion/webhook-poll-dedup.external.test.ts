@@ -16,7 +16,11 @@ import { join } from "node:path";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
 import type { DataSourceRegistration } from "@cogni/ingestion-core";
-import { extractChainId, parseRepoSpec } from "@cogni/repo-spec";
+import {
+  extractChainId,
+  extractScopeId,
+  parseRepoSpec,
+} from "@cogni/repo-spec";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAttributionActivities } from "../../../services/scheduler-worker/src/activities/ledger";
@@ -130,7 +134,7 @@ describeIfReady("Webhook + Poll Dedup (external)", () => {
       );
       const repoSpec = parseRepoSpec(repoSpecYaml);
       const LIVE_NODE_ID = repoSpec.node_id;
-      const LIVE_SCOPE_ID = repoSpec.scope_id!;
+      const LIVE_SCOPE_ID = extractScopeId(repoSpec);
       const ledger = new DrizzleAttributionAdapter(db, LIVE_SCOPE_ID);
 
       const registrations = new Map<string, DataSourceRegistration>([

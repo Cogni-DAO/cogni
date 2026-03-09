@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {
+  pendingSelectionDto,
   toIngestionReceiptDto,
   toSelectionDto,
 } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
@@ -110,17 +111,21 @@ export const GET = wrapRouteHandlerWithLogging<{
 
     const enriched = receipts.map((r) => {
       const selection = selectionMap.get(r.receiptId);
-      const resolvedUserId =
-        selection?.userId === null && r.source === "github"
-          ? (resolvedIdentities.get(r.platformUserId) ?? null)
+      const needsResolution =
+        r.source === "github" && (!selection || selection.userId === null);
+      const resolvedUserId = needsResolution
+        ? (resolvedIdentities.get(r.platformUserId) ?? null)
+        : null;
+      const selectionDto = resolvedUserId
+        ? selection
+          ? toSelectionDto({ ...selection, userId: resolvedUserId })
+          : pendingSelectionDto(resolvedUserId)
+        : selection
+          ? toSelectionDto(selection)
           : null;
-      const patchedSelection =
-        selection && resolvedUserId
-          ? { ...selection, userId: resolvedUserId }
-          : selection;
       return {
         ...toIngestionReceiptDto(r),
-        selection: patchedSelection ? toSelectionDto(patchedSelection) : null,
+        selection: selectionDto,
       };
     });
 

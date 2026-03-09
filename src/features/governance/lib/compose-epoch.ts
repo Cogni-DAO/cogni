@@ -7,8 +7,10 @@
  * Scope: Pure functions. Accepts typed API response fragments. Does not perform IO or access external services.
  * Invariants:
  *   - ALL_MATH_BIGINT: credit/unit values stay as strings; Number() only for sorting/display derivation
+ *   - UNIFIED_SCALE: all units (receipt weights, overrides, contributor totals) are in the same scale — no milli-unit conversion
  *   - Avatar/color are static placeholders (no profile system yet)
  *   - Receipts with selection.userId=null are counted in unresolvedCount/unresolvedActivities, not silently dropped
+ *   - Finalized epoch receipts get per-receipt units computed from epoch.weightConfig
  * Side-effects: none
  * Links: src/features/governance/types.ts
  * @public
@@ -135,11 +137,20 @@ export interface EpochClaimantLineItemDto {
   readonly receiptIds: readonly string[];
 }
 
+/** Snapshot of a review override applied before finalization. */
+export interface ReviewOverrideSnapshotDto {
+  readonly subject_ref: string;
+  readonly original_units: string;
+  readonly override_units: string | null;
+  readonly reason: string | null;
+}
+
 /** Minimal claimant-attribution response shape from the epoch-claimants API. */
 export interface EpochClaimantsDto {
   readonly epochId: string;
   readonly poolTotalCredits: string;
   readonly items: readonly EpochClaimantLineItemDto[];
+  readonly reviewOverrides?: readonly ReviewOverrideSnapshotDto[] | null;
 }
 
 /**
@@ -169,6 +180,7 @@ function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
       eventTime: r.eventTime,
       units: null,
       metadata: r.metadata ?? null,
+      override: null,
     };
     receiptsById.set(r.receiptId, mapped);
 
@@ -260,6 +272,7 @@ export function composeEpochView(
     const mappedReceipt: IngestionReceipt = {
       ...baseReceipt,
       units: weight.toString(),
+      override: null,
     };
 
     const userId = receipt.selection?.userId ?? null;
@@ -345,15 +358,43 @@ export function composeEpochView(
  */
 export function composeEpochViewFromClaimants(
   epoch: EpochDto,
-  claimants: Pick<EpochClaimantsDto, "poolTotalCredits" | "items">,
+  claimants: Pick<
+    EpochClaimantsDto,
+    "poolTotalCredits" | "items" | "reviewOverrides"
+  >,
   receipts: readonly ApiIngestionReceipt[]
 ): EpochView {
   const { receiptsById, unresolvedCount, unresolvedActivities } =
     partitionReceipts(receipts);
 
+  // Build override lookup: subjectRef (receiptId) → override snapshot
+  const overridesByRef = new Map(
+    (claimants.reviewOverrides ?? []).map((o) => [o.subject_ref, o])
+  );
+
   const contributors: EpochContributor[] = claimants.items.map((item) => {
     const claimantReceipts = item.receiptIds
-      .map((receiptId) => receiptsById.get(receiptId) ?? null)
+      .map((receiptId) => {
+        const receipt = receiptsById.get(receiptId) ?? null;
+        if (!receipt) return null;
+        // Compute per-receipt weight from weight config (same as open/review path)
+        const weightKey = `${receipt.source}:${receipt.eventType}`;
+        const weight = epoch.weightConfig[weightKey] ?? 0;
+        const withUnits: IngestionReceipt = {
+          ...receipt,
+          units: weight > 0 ? weight.toString() : null,
+        };
+        const ov = overridesByRef.get(receiptId);
+        if (!ov || ov.override_units == null) return withUnits;
+        return {
+          ...withUnits,
+          override: {
+            originalUnits: ov.original_units,
+            overrideUnits: ov.override_units,
+            reason: ov.reason,
+          },
+        };
+      })
       .filter((receipt): receipt is IngestionReceipt => receipt !== null);
     const descriptor = describeClaimant({
       claimant: item.claimant,
@@ -399,7 +440,7 @@ export interface OverrideEntry {
 
 /**
  * Recompute contributor sums after applying subject overrides client-side.
- * Override units are in display scale (e.g. "2"); receipt.units are milli-units (e.g. "8000").
+ * All units (receipt.units and override.overrideUnits) are in milli-units.
  * Receipts are never mutated — only contributor-level units and shares are recomputed.
  */
 export function applyOverridesToEpochView(
@@ -414,7 +455,7 @@ export function applyOverridesToEpochView(
       for (const receipt of contributor.receipts) {
         const override = overrides.get(receipt.receiptId);
         if (override?.overrideUnits != null) {
-          totalUnits += BigInt(override.overrideUnits) * 1000n;
+          totalUnits += BigInt(override.overrideUnits);
         } else {
           totalUnits += BigInt(receipt.units ?? "0");
         }

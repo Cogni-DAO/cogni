@@ -249,6 +249,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.3.7
         version: 2.3.7
+      '@cogni/attribution-pipeline-plugins':
+        specifier: workspace:*
+        version: link:packages/attribution-pipeline-plugins
       '@commitlint/cli':
         specifier: ^19.8.1
         version: 19.8.1(@types/node@22.19.7)(typescript@5.9.3)
@@ -270,6 +273,9 @@ importers:
       '@tailwindcss/postcss':
         specifier: ^4.1.16
         version: 4.1.16
+      '@temporalio/worker':
+        specifier: ^1.11.7
+        version: 1.14.1(esbuild@0.27.1)(tslib@2.8.1)
       '@testcontainers/postgresql':
         specifier: ^11.8.1
         version: 11.8.1

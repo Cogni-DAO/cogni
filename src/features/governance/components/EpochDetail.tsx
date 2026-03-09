@@ -130,20 +130,18 @@ export function EpochDetail({
               <TableHead>Contributor</TableHead>
               <TableHead className="text-right">Share</TableHead>
               <TableHead className="text-right">Score</TableHead>
-              <TableHead className="text-right">Activity</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sorted.map((c, i) => {
-              const totalScore = Math.round(Number(c.units) / 1000);
+              const totalScore = c.units;
               return (
                 <ExpandableTableRow
                   key={c.claimantKey}
-                  colSpan={7}
+                  colSpan={6}
                   cellClassNames={[
                     "w-10 text-center",
                     undefined,
-                    "text-right",
                     "text-right",
                     "text-right",
                   ]}
@@ -180,12 +178,6 @@ export function EpochDetail({
                     </span>,
                     <span key="score" className="font-mono text-xs">
                       {totalScore}
-                    </span>,
-                    <span
-                      key="activity"
-                      className="text-muted-foreground text-xs"
-                    >
-                      {c.receiptCount}
                     </span>,
                   ]}
                 />

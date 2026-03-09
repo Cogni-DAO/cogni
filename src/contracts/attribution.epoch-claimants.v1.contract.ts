@@ -44,10 +44,18 @@ export const EpochClaimantLineItemSchema = z.object({
   receiptIds: z.array(z.string()),
 });
 
+export const ReviewOverrideSnapshotSchema = z.object({
+  subject_ref: z.string(),
+  original_units: z.string(),
+  override_units: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+
 export const EpochClaimantsOutputSchema = z.object({
   epochId: z.string(),
   poolTotalCredits: z.string(),
   items: z.array(EpochClaimantLineItemSchema),
+  reviewOverrides: z.array(ReviewOverrideSnapshotSchema).nullable().optional(),
 });
 
 export const epochClaimantsOperation = {

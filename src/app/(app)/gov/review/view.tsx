@@ -274,14 +274,13 @@ function ReviewReceiptRow({
   const hasOverride = override !== null;
   const Icon = TYPE_ICONS[receipt.eventType] ?? Pin;
   const title = receiptTitle(receipt);
-  const score =
-    receipt.units != null ? Math.round(Number(receipt.units) / 1000) : null;
+  const score = receipt.units;
 
   // Editing mode: use a colSpan row for the inline form
   if (isEditing) {
     return (
       <TableRow className="bg-primary/5 hover:bg-primary/5">
-        <TableCell colSpan={7} className="p-2">
+        <TableCell colSpan={6} className="p-2">
           <div className="space-y-2">
             <div className="flex min-w-0 items-center gap-2 text-sm">
               <Icon className="h-3.5 w-3.5 text-muted-foreground" />
@@ -420,52 +419,51 @@ function ReviewReceiptRow({
       </TableCell>
       {/* Share column — empty */}
       <TableCell className="text-right" />
-      {/* Score column */}
+      {/* Score column — includes edit/reset buttons */}
       <TableCell className="text-right">
-        {score != null && hasOverride ? (
-          <span className="font-mono text-xs">
-            <span className="text-muted-foreground/50 line-through">
+        <div className="flex items-center justify-end gap-2">
+          {score != null && hasOverride ? (
+            <span className="font-mono text-xs">
+              <span className="text-muted-foreground/50 line-through">
+                {score}
+              </span>
+              <span className="text-muted-foreground/40">{" → "}</span>
+              <span className="text-warning">{override.overrideUnits}</span>
+            </span>
+          ) : score != null ? (
+            <span className="font-mono text-muted-foreground text-xs">
               {score}
             </span>
-            <span className="text-muted-foreground/40">{" → "}</span>
-            <span className="text-warning">{override.overrideUnits}</span>
-          </span>
-        ) : score != null ? (
-          <span className="font-mono text-muted-foreground text-xs">
-            {score}
-          </span>
-        ) : null}
-      </TableCell>
-      {/* Activity column — edit/reset buttons */}
-      <TableCell className="text-right">
-        <div className="flex shrink-0 items-center justify-end gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 px-1.5"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleStartEdit();
-            }}
-            title="Adjust weight"
-          >
-            <Pencil className="h-3 w-3" />
-          </Button>
-          {hasOverride && (
+          ) : null}
+          <div className="flex shrink-0 items-center gap-1">
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 px-1.5 text-muted-foreground hover:text-destructive"
+              className="h-6 px-1.5"
               onClick={(e) => {
                 e.stopPropagation();
-                void handleRemove();
+                handleStartEdit();
               }}
-              disabled={isSaving}
-              title="Reset to original"
+              title="Adjust weight"
             >
-              <RotateCcw className="h-3 w-3" />
+              <Pencil className="h-3 w-3" />
             </Button>
-          )}
+            {hasOverride && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-1.5 text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleRemove();
+                }}
+                disabled={isSaving}
+                title="Reset to original"
+              >
+                <RotateCcw className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
         </div>
       </TableCell>
     </TableRow>

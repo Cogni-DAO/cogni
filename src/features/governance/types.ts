@@ -8,6 +8,7 @@
  * composed from multiple ledger endpoints by hooks.
  * Invariants:
  *   - ALL_MATH_BIGINT: credit/unit values are strings (BigInt serialized)
+ *   - UNIFIED_SCALE: units and override values share the same scale — no milli-unit conversion
  *   - avatar/color are placeholder defaults until a profile system exists
  *   - EpochView.unresolvedCount reflects events with no resolved user_id (IDENTITY_BEST_EFFORT)
  * Side-effects: none
@@ -27,6 +28,12 @@ export interface IngestionReceipt {
   readonly units: string | null;
   /** Raw metadata from ingestion (includes title, repo, etc.). */
   readonly metadata: Record<string, unknown> | null;
+  /** Override applied during review (finalized epochs only). */
+  readonly override: {
+    readonly originalUnits: string;
+    readonly overrideUnits: string;
+    readonly reason: string | null;
+  } | null;
 }
 
 /** A contributor row within an epoch view. */

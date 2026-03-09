@@ -3,13 +3,15 @@
 
 /**
  * Module: `@tests/_fixtures/attribution/seed-attribution`
- * Purpose: Reusable ledger test fixtures for seeding epochs, ingestion receipts, and related data.
+ * Purpose: Reusable ledger test fixtures for seeding epochs, ingestion receipts, user bindings, and related data.
  * Scope: Factory functions for ledger test data + composite seeders for common test scenarios. Does not contain test logic or assertions.
  * Invariants: All generated IDs are deterministic from inputs where possible.
- * Side-effects: none (pure data factories); composite seeders perform IO via store
+ * Side-effects: none (pure data factories); composite seeders and identity seeders perform IO via store/db
  * Links: packages/attribution-ledger/src/store.ts, tests/component/db/drizzle-attribution.adapter.int.test.ts
  * @internal
  */
+
+import { randomUUID } from "node:crypto";
 
 import type {
   AttributionEpoch,
@@ -24,6 +26,8 @@ import type {
   UpsertEvaluationParams,
   UpsertSelectionParams,
 } from "@cogni/attribution-ledger";
+import type { Database } from "@cogni/db-client";
+import { userBindings, users } from "@cogni/db-schema";
 
 /** Stable test node ID for ledger integration tests */
 export const TEST_NODE_ID = "00000000-0000-4000-8000-000000000001";
@@ -180,6 +184,43 @@ export function makeEvaluation(
     payloadJson: { test: true },
     ...overrides,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Identity seeding — users + bindings for identity resolution tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Seeds a user row and a GitHub user_binding in one call.
+ * Idempotent via onConflictDoNothing on both tables.
+ *
+ * @returns The userId used (generated if not provided)
+ */
+export async function seedUserBinding(
+  db: Database,
+  params: {
+    userId?: string;
+    provider?: string;
+    externalId: string;
+    providerLogin?: string;
+  }
+): Promise<string> {
+  const userId = params.userId ?? randomUUID();
+  await db
+    .insert(users)
+    .values({ id: userId, name: `Test User ${params.externalId}` })
+    .onConflictDoNothing({ target: users.id });
+  await db
+    .insert(userBindings)
+    .values({
+      id: randomUUID(),
+      userId,
+      provider: params.provider ?? "github",
+      externalId: params.externalId,
+      providerLogin: params.providerLogin,
+    })
+    .onConflictDoNothing();
+  return userId;
 }
 
 // ---------------------------------------------------------------------------
