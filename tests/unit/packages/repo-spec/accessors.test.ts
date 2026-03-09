@@ -300,13 +300,11 @@ describe("extractOperatorWalletConfig", () => {
     const spec = buildSpec({
       operator_wallet: {
         address: "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        split_address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
       },
     });
     const config = extractOperatorWalletConfig(spec);
     expect(config).toEqual({
       address: "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-      split_address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
     });
   });
 
@@ -315,7 +313,6 @@ describe("extractOperatorWalletConfig", () => {
       buildSpec({
         operator_wallet: {
           address: "not-an-address",
-          split_address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         },
       })
     ).toThrow(/valid EVM address/);

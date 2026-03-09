@@ -116,6 +116,5 @@ export {
   type TemporalScheduleControlConfig,
 } from "./temporal";
 export { SystemClock } from "./time/system.adapter";
-// NOTE: PrivyOperatorWalletAdapter is NOT re-exported here.
-// @privy-io/node is heavy and breaks test bundle timing.
-// Import directly: import { PrivyOperatorWalletAdapter } from "@/adapters/server/wallet/privy-operator-wallet.adapter"
+// NOTE: PrivyOperatorWalletAdapter lives in @cogni/operator-wallet/adapters/privy.
+// @privy-io/node is heavy — lazy-import in container.ts only.

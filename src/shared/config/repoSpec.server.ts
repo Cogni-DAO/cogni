@@ -15,6 +15,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  extractDaoTreasuryAddress,
   extractGovernanceConfig,
   extractLedgerApprovers,
   extractOperatorWalletConfig,
@@ -142,4 +143,18 @@ export function getOperatorWalletConfig(): OperatorWalletSpec | undefined {
   const spec = loadRepoSpec();
   cachedOperatorWalletConfig = extractOperatorWalletConfig(spec);
   return cachedOperatorWalletConfig;
+}
+
+let cachedDaoTreasuryAddress: string | undefined | null = null;
+
+/**
+ * DAO treasury address from repo-spec (cogni_dao.dao_contract).
+ * Returns undefined if not present.
+ */
+export function getDaoTreasuryAddress(): string | undefined {
+  if (cachedDaoTreasuryAddress !== null) return cachedDaoTreasuryAddress;
+
+  const spec = loadRepoSpec();
+  cachedDaoTreasuryAddress = extractDaoTreasuryAddress(spec);
+  return cachedDaoTreasuryAddress;
 }

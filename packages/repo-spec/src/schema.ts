@@ -128,7 +128,9 @@ export type ActivityLedgerSpec = z.infer<typeof activityLedgerSpecSchema>;
 
 /**
  * Schema for operator_wallet configuration.
- * Privy-managed operator wallet addresses — governance-in-git.
+ * Privy-managed operator wallet address — governance-in-git.
+ * The Split contract address lives in payments_in.credits_topup.receiving_address
+ * (single source of truth for where user payments land).
  */
 export const operatorWalletSpecSchema = z.object({
   /** Checksummed EVM address of the Privy-managed operator wallet */
@@ -137,14 +139,6 @@ export const operatorWalletSpecSchema = z.object({
     .regex(
       /^0x[a-fA-F0-9]{40}$/,
       "Operator wallet address must be a valid EVM address (0x + 40 hex chars)"
-    ),
-
-  /** Splits contract address that receives user payments and distributes to operator + DAO */
-  split_address: z
-    .string()
-    .regex(
-      /^0x[a-fA-F0-9]{40}$/,
-      "Split address must be a valid EVM address (0x + 40 hex chars)"
     ),
 });
 
@@ -182,6 +176,11 @@ export const repoSpecSchema = z.object({
 
   /** DAO governance configuration */
   cogni_dao: z.object({
+    /** DAO treasury contract address (EVM) */
+    dao_contract: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/, "dao_contract must be a valid EVM address")
+      .optional(),
     /**
      * Chain ID as string or number (YAML flexibility).
      * Validated against expected chain ID at extraction time.

@@ -89,7 +89,12 @@ import type {
   ThreadPersistencePort,
   TreasuryReadPort,
 } from "@/ports";
-import { getOperatorWalletConfig, getScopeId } from "@/shared/config";
+import {
+  getDaoTreasuryAddress,
+  getOperatorWalletConfig,
+  getPaymentConfig,
+  getScopeId,
+} from "@/shared/config";
 import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
@@ -409,13 +414,24 @@ function createContainer(): Container {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { PrivyOperatorWalletAdapter } =
           // eslint-disable-next-line unicorn/prefer-module
-          require("../adapters/server/wallet/privy-operator-wallet.adapter") as typeof import("@/adapters/server/wallet/privy-operator-wallet.adapter");
+          require("@cogni/operator-wallet/adapters/privy") as typeof import("@cogni/operator-wallet/adapters/privy");
+        const treasuryAddress = getDaoTreasuryAddress();
+        if (!treasuryAddress) {
+          log.warn(
+            "operator_wallet configured but cogni_dao.dao_contract missing — skipping operator wallet"
+          );
+          return undefined;
+        }
+        const paymentConfig = getPaymentConfig();
         return new PrivyOperatorWalletAdapter({
           appId: env.PRIVY_APP_ID,
           appSecret: env.PRIVY_APP_SECRET,
           signingKey: env.PRIVY_SIGNING_KEY,
           expectedAddress: operatorWalletConfig.address,
-          splitAddress: operatorWalletConfig.split_address,
+          splitAddress: paymentConfig.receivingAddress,
+          treasuryAddress,
+          markupFactor: env.USER_PRICE_MARKUP_FACTOR,
+          revenueShare: env.SYSTEM_TENANT_REVENUE_SHARE,
         });
       })();
 

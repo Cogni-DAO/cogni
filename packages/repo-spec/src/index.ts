@@ -13,6 +13,7 @@
 
 export {
   extractChainId,
+  extractDaoTreasuryAddress,
   extractGovernanceConfig,
   extractLedgerApprovers,
   extractLedgerConfig,

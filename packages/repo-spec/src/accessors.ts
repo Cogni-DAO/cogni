@@ -194,3 +194,11 @@ export function extractOperatorWalletConfig(
 ): OperatorWalletSpec | undefined {
   return spec.operator_wallet;
 }
+
+/**
+ * Extract DAO treasury address from repo-spec.
+ * Returns undefined if cogni_dao.dao_contract is not present.
+ */
+export function extractDaoTreasuryAddress(spec: RepoSpec): string | undefined {
+  return spec.cogni_dao.dao_contract;
+}
