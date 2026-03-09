@@ -117,8 +117,8 @@ During the transition period (scheduler-worker in k3s, everything else in Compos
 - Create: `deployments/base/scheduler-worker/deployment.yaml` — K8s Deployment (replicas, probes, env, resources)
 - Create: `deployments/base/scheduler-worker/service.yaml` — ClusterIP Service for health probes
 - Create: `deployments/base/scheduler-worker/configmap.yaml` — Non-secret env vars (TEMPORAL_ADDRESS, etc.)
-- Create: `deployments/base/scheduler-worker/external-services.yaml` — ExternalName services for Compose VM connectivity (temporal, postgres, app)
-- Create: `deployments/overlays/staging/kustomization.yaml` — Staging overlay (image digest, namespace, replicas, ExternalName IPs)
+- Create: `deployments/base/scheduler-worker/external-services.yaml` — Headless Service + Endpoints for Compose VM connectivity (temporal, postgres, app) — NOT ExternalName (see R1 below)
+- Create: `deployments/overlays/staging/kustomization.yaml` — Staging overlay (image digest, namespace, replicas, Endpoints IP patches)
 - Create: `deployments/overlays/production/kustomization.yaml` — Production overlay (image digest, namespace, replicas)
 - Create: `deployments/overlays/staging/namespace.yaml` — Namespace definition
 - Create: `deployments/overlays/production/namespace.yaml` — Namespace definition
@@ -141,7 +141,7 @@ During the transition period (scheduler-worker in k3s, everything else in Compos
 - Create: `platform/infra/providers/cherry/k3s/main.tf` — VM resource + k3s cloud-init
 - Create: `platform/infra/providers/cherry/k3s/variables.tf` — Input variables (extends base pattern)
 - Create: `platform/infra/providers/cherry/k3s/outputs.tf` — VM IP + kubeconfig path
-- Create: `platform/infra/providers/cherry/k3s/bootstrap-k3s.yaml` — Cloud-init: k3s install + Argo CD bootstrap
+- Create: `platform/infra/providers/cherry/k3s/bootstrap-k3s.yaml` — Cloud-init: k3s install (Argo CD install step included in file but exercised in task.0149)
 
 **Documentation**:
 
@@ -162,6 +162,9 @@ Derived from current `docker-compose.yml` + `services/scheduler-worker/src/boots
 | `LOG_LEVEL` | `info` | — |
 | `SERVICE_NAME` | `scheduler-worker` | — |
 | `HEALTH_PORT` | `9000` | — |
+| `IMAGE_DIGEST` | — | Set to image digest from overlay (used by `/version` endpoint) |
+| `GH_REVIEW_APP_ID` | — | Optional — GitHub App ID (not secret, public identifier) |
+| `GH_REPOS` | — | Optional — comma-separated repos (not secret) |
 
 **Secret** (SOPS-encrypted in repo, decrypted at apply time):
 
@@ -169,19 +172,41 @@ Derived from current `docker-compose.yml` + `services/scheduler-worker/src/boots
 |-----|--------|
 | `DATABASE_URL` | Postgres DSN (service role, BYPASSRLS) |
 | `SCHEDULER_API_TOKEN` | min 32 chars, internal API auth |
-| `GH_REVIEW_APP_ID` | Optional — GitHub App ID |
-| `GH_REVIEW_APP_PRIVATE_KEY_BASE64` | Optional — GitHub App private key |
-| `GH_REPOS` | Optional — comma-separated repos |
+| `GH_REVIEW_APP_PRIVATE_KEY_BASE64` | Optional — GitHub App private key (only truly secret GitHub var) |
 
-**ExternalName Services** (transition period — scheduler-worker in k3s, deps in Compose):
+**Headless Service + Endpoints** (transition period — scheduler-worker in k3s, deps in Compose):
 
-| K8s Service Name | Type | Target | Purpose |
+| K8s Service Name | Port | Target | Purpose |
 |------------------|------|--------|---------|
-| `temporal` | ExternalName | `<compose-vm-ip>` | gRPC 7233 connectivity |
-| `postgres` | ExternalName | `<compose-vm-ip>` | Port 5432 connectivity |
-| `app` | ExternalName | `<compose-vm-ip>` | HTTP 3000 connectivity |
+| `temporal` | 7233 | `<compose-vm-ip>:7233` | gRPC connectivity |
+| `postgres` | 5432 | `<compose-vm-ip>:5432` | DB connectivity |
+| `app` | 3000 | `<compose-vm-ip>:3000` | HTTP connectivity |
 
-These ExternalName services let the scheduler-worker pod use the same hostnames (`temporal`, `app`) that it uses in Compose, but resolved to the other VM's IP. Replaced with real K8s Services when those workloads migrate to k3s.
+> **R1: Why headless + Endpoints, not ExternalName.** ExternalName services return a CNAME — they do DNS-only resolution and cannot remap ports. Compose services may bind to `127.0.0.1` internally, not the VM's external interface. Headless Service + explicit Endpoints handles port mapping correctly and works regardless of how Compose binds. Overlay patches the IP per environment.
+
+```yaml
+# Example: external-services.yaml (base)
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+spec:
+  clusterIP: None
+  ports:
+    - port: 7233
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: temporal
+subsets:
+  - addresses:
+      - ip: 10.0.0.1  # placeholder — patched by overlay
+    ports:
+      - port: 7233
+```
+
+These let the scheduler-worker pod use the same hostnames (`temporal`, `app`) as in Compose. Replaced with real K8s Services when those workloads migrate to k3s.
 
 **Deployment manifest:**
 
@@ -278,8 +303,9 @@ spec:
 - Generate one age keypair per environment (staging, production)
 - Public key committed in `.sops.yaml` (safe — encryption only)
 - Private key stored as K8s Secret in the cluster (manual, one-time)
-- `ksops` Kustomize plugin OR Argo CD SOPS plugin for automatic decryption
+- **ksops** as the Argo CD plugin (installed via `configManagementPlugins` in Argo CD ConfigMap — simplest for single-node k3s, no custom image needed)
 - Secrets encrypted at rest in git, decrypted at apply time
+- `deployments/secrets/README.md` documents the full setup: key generation, cluster secret creation, ksops plugin config
 
 ### Promotion Flow (CI Integration — future, not this task)
 
@@ -289,6 +315,16 @@ CI pushes image → CI creates PR updating overlay digest →
 ```
 
 This task creates the manifests. CI integration (auto-PR on image push) is a follow-up.
+
+### Design Review Notes (R1 review)
+
+Findings from `/review-design` applied to this design:
+
+1. **R1 — Headless + Endpoints, not ExternalName**: ExternalName does DNS-only (CNAME), can't remap ports. Compose services may bind `127.0.0.1` internally. Headless Service + Endpoints with explicit IP:port works correctly. Overlay patches the IP. _(Applied above.)_
+2. **R2 — ksops chosen over ambiguous "OR"**: Picked ksops via `configManagementPlugins` — simplest for single-node k3s, no custom Argo CD image. _(Applied above.)_
+3. **R3 — Non-secret env vars moved to ConfigMap**: `GH_REVIEW_APP_ID` and `GH_REPOS` are not sensitive. Moved to ConfigMap. Only `GH_REVIEW_APP_PRIVATE_KEY_BASE64` stays in Secret. _(Applied above.)_
+4. **R4 — IMAGE_DIGEST added to ConfigMap**: Missing from original design. Used by `/version` endpoint. Set in overlay to match the image digest. _(Applied above.)_
+5. **R5 — Cloud-init scope clarified**: `bootstrap-k3s.yaml` includes Argo CD install commands but they're exercised in task.0149, not this task. _(Applied above.)_
 
 ## Validation
 
