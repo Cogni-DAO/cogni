@@ -17,6 +17,7 @@ import {
   extractLedgerApprovers,
   extractLedgerConfig,
   extractNodeId,
+  extractOperatorWalletConfig,
   extractPaymentConfig,
   extractScopeId,
   parseRepoSpec,
@@ -286,5 +287,37 @@ describe("extractLedgerApprovers", () => {
       },
     });
     expect(extractLedgerApprovers(spec)).toEqual([]);
+  });
+});
+
+describe("extractOperatorWalletConfig", () => {
+  it("returns undefined when operator_wallet is not set", () => {
+    const spec = buildSpec();
+    expect(extractOperatorWalletConfig(spec)).toBeUndefined();
+  });
+
+  it("returns operator wallet config when set", () => {
+    const spec = buildSpec({
+      operator_wallet: {
+        address: "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        split_address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      },
+    });
+    const config = extractOperatorWalletConfig(spec);
+    expect(config).toEqual({
+      address: "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      split_address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    });
+  });
+
+  it("rejects invalid EVM address", () => {
+    expect(() =>
+      buildSpec({
+        operator_wallet: {
+          address: "not-an-address",
+          split_address: "0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        },
+      })
+    ).toThrow(/valid EVM address/);
   });
 });

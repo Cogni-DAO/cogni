@@ -126,6 +126,30 @@ export const activityLedgerSpecSchema = z.object({
 
 export type ActivityLedgerSpec = z.infer<typeof activityLedgerSpecSchema>;
 
+/**
+ * Schema for operator_wallet configuration.
+ * Privy-managed operator wallet addresses — governance-in-git.
+ */
+export const operatorWalletSpecSchema = z.object({
+  /** Checksummed EVM address of the Privy-managed operator wallet */
+  address: z
+    .string()
+    .regex(
+      /^0x[a-fA-F0-9]{40}$/,
+      "Operator wallet address must be a valid EVM address (0x + 40 hex chars)"
+    ),
+
+  /** Splits contract address that receives user payments and distributes to operator + DAO */
+  split_address: z
+    .string()
+    .regex(
+      /^0x[a-fA-F0-9]{40}$/,
+      "Split address must be a valid EVM address (0x + 40 hex chars)"
+    ),
+});
+
+export type OperatorWalletSpec = z.infer<typeof operatorWalletSpecSchema>;
+
 // ---------------------------------------------------------------------------
 // Scope identity primitives
 // ---------------------------------------------------------------------------
@@ -152,6 +176,9 @@ export const repoSpecSchema = z.object({
 
   /** Activity ledger configuration (optional — needed only when LEDGER_INGEST is enabled) */
   activity_ledger: activityLedgerSpecSchema.optional(),
+
+  /** Operator wallet configuration (optional — needed only when operator wallet is enabled) */
+  operator_wallet: operatorWalletSpecSchema.optional(),
 
   /** DAO governance configuration */
   cogni_dao: z.object({

@@ -17,6 +17,7 @@ export {
   getGovernanceConfig,
   getLedgerApprovers,
   getNodeId,
+  getOperatorWalletConfig,
   getPaymentConfig,
   getScopeId,
   type InboundPaymentConfig,

@@ -11,7 +11,7 @@
  * @public
  */
 
-import type { RepoSpec } from "./schema.js";
+import type { OperatorWalletSpec, RepoSpec } from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // Accessor result types
@@ -183,4 +183,14 @@ export function extractLedgerConfig(spec: RepoSpec): LedgerConfig | null {
  */
 export function extractLedgerApprovers(spec: RepoSpec): string[] {
   return (spec.activity_ledger?.approvers ?? []).map((a) => a.toLowerCase());
+}
+
+/**
+ * Extract operator wallet config from repo-spec.
+ * Returns undefined if operator_wallet section is not present.
+ */
+export function extractOperatorWalletConfig(
+  spec: RepoSpec
+): OperatorWalletSpec | undefined {
+  return spec.operator_wallet;
 }
