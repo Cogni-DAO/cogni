@@ -25,10 +25,9 @@ const FAKE_INTENT: TransferIntent = {
     sender: "0x1111111111111111111111111111111111111111",
     contract_address: "0x3333333333333333333333333333333333333333",
     chain_id: 8453,
-    function_name: "transferTokenPreApproved",
   },
-  call_value: "0x0",
-  calldata: "0xdeadbeef",
+  call_value: "0",
+  call_data: { recipient_amount: "1000000", deadline: "1700000000" },
 };
 
 describe("OperatorWalletPort contract", () => {

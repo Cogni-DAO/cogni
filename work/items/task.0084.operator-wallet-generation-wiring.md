@@ -2,7 +2,7 @@
 id: task.0084
 type: task
 title: Operator wallet provisioning + wiring into existing payment flow
-status: needs_implement
+status: needs_review
 priority: 0
 estimate: 2
 summary: Provision operator wallet via Privy API, create OperatorWalletPort, wire operator wallet as receiving address — existing payment flow works unchanged.
@@ -11,14 +11,14 @@ spec_refs: operator-wallet
 assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
-branch: claude/wallet-operator-privy-adapter-xDfVo
+branch: feat/operator-wallet-v0
 pr:
 reviewer:
 created: 2026-02-17
 updated: 2026-03-09
 labels: [wallet, web3, billing]
 external_refs:
-revision: 3
+revision: 4
 blocked_by:
 deploy_verified: false
 rank: 19
@@ -268,6 +268,37 @@ pnpm test tests/unit/adapters/test/fake-operator-wallet.test.ts
 - ✅ Promise-based lock added to `verify()`
 - ✅ `DESTINATION_ALLOWLIST` validation added to `fundOpenRouterTopUp` (but method should be a stub)
 - ✅ `OPERATOR_MAX_TOPUP_USD` cap validation added (but method should be a stub)
+
+### Review 4 (2026-03-09) — R3 fixes applied
+
+**Blocking fixes (all resolved):**
+
+1. ✅ `distributeSplit()` and `fundOpenRouterTopUp()` reverted to stubs (`throw new Error("not implemented — see task.0085/task.0086")`)
+2. ✅ `encodeSplitDistribute()` helper removed
+3. ✅ TODO comment added to `TransferIntent` type documenting spike.0090 findings — `function_name` removed from type, `calldata` replaced with `call_data: Record<string, unknown>`
+4. ✅ Removed unused config/fields: `COINBASE_TRANSFERS_BASE`, `DEFAULT_MAX_TOPUP_USD`, `BASE_CHAIN_ID`/`BASE_CAIP2`, `maxTopUpUsd`, `allowedTopUpContracts`, `getWalletId()`, `authContext`
+5. ✅ `OPERATOR_MAX_TOPUP_USD` env var removed (task.0086 will re-add when needed)
+6. ✅ Container wiring simplified (no longer passes `maxTopUpUsd`)
+
+**Non-blocking fixes (resolved):**
+
+- ✅ Stale comment in `src/adapters/server/index.ts:120` fixed (`@privy-io/server-auth` → `@privy-io/node`)
+
+**Deferred (task.0085/0086 will handle):**
+
+- `signingKey` accepted in config but `AuthorizationContext` not constructed until methods are implemented
+- Contract test uses placeholder `TransferIntent` shape — task.0086 will update to match real OpenRouter response
+
+**Pre-existing issues (not task.0084):**
+
+- `src/app/(app)/profile/view.tsx` has unresolved merge conflict markers — causes typecheck + biome failures
+- `tests/unit/bootstrap/container.spec.ts` — `extractOperatorWalletConfig` not resolvable via `vi.resetModules()` dynamic import (stale package build cache)
+
+**Validation:**
+
+- ✅ `pnpm vitest run tests/contract/operator-wallet.contract.test.ts` — 7/7 tests pass
+- ✅ `pnpm biome check src/adapters/server/wallet/privy-operator-wallet.adapter.ts` — no issues
+- ⚠️ `pnpm check` blocked by pre-existing merge conflict in `view.tsx`
 
 ## PR / Links
 

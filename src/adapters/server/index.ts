@@ -117,5 +117,5 @@ export {
 } from "./temporal";
 export { SystemClock } from "./time/system.adapter";
 // NOTE: PrivyOperatorWalletAdapter is NOT re-exported here.
-// @privy-io/server-auth is heavy and breaks test bundle timing.
+// @privy-io/node is heavy and breaks test bundle timing.
 // Import directly: import { PrivyOperatorWalletAdapter } from "@/adapters/server/wallet/privy-operator-wallet.adapter"

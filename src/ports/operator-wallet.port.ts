@@ -14,6 +14,14 @@
 /**
  * TransferIntent from OpenRouter's /api/v1/credits/coinbase endpoint.
  * Describes the on-chain action needed to fund OpenRouter credits.
+ *
+ * // TODO(task.0086): Update to match actual OpenRouter transfer_intent shape.
+ * // spike.0090 proved OpenRouter does NOT return function_name — the correct
+ * // function is transferTokenPreApproved (USDC via direct ERC-20 transferFrom).
+ * // The adapter should encode calldata internally. Actual call_data fields:
+ * // { recipient_amount, deadline, recipient, recipient_currency,
+ * //   refund_destination, fee_amount, id, operator, signature, prefix }
+ * // See: scripts/experiments/full-chain.ts:58-69
  */
 export interface TransferIntent {
   metadata: {
@@ -23,13 +31,11 @@ export interface TransferIntent {
     contract_address: string;
     /** Chain ID for the transaction */
     chain_id: number;
-    /** Solidity function to call on the Transfers contract */
-    function_name: string;
   };
   /** Call value in wei (for native ETH functions) */
   call_value: string;
-  /** ABI-encoded calldata for the function */
-  calldata: string;
+  /** Opaque call_data from OpenRouter — adapter encodes actual calldata */
+  call_data: Record<string, unknown>;
 }
 
 /**

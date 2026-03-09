@@ -416,9 +416,6 @@ function createContainer(): Container {
           signingKey: env.PRIVY_SIGNING_KEY,
           expectedAddress: operatorWalletConfig.address,
           splitAddress: operatorWalletConfig.split_address,
-          ...(env.OPERATOR_MAX_TOPUP_USD
-            ? { maxTopUpUsd: env.OPERATOR_MAX_TOPUP_USD }
-            : {}),
         });
       })();
 
