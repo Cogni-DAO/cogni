@@ -43,7 +43,7 @@ Provide a shared-library layer (`@cogni/*` workspace packages) with strict isola
 
 6. **DIST_EXPORTS**: Package `exports` field points to `dist/` for runtime resolution. App resolves `@cogni/*` via `package.json` exports, not tsconfig path aliases.
 
-7. **PURE_LIBRARY**: A package has no process lifecycle — no listening network ports, no worker loops, no Docker images, no env vars, no health checks. If it needs any of these, it's a service. (Note: port *interfaces* like `OperatorWalletPort` belong in packages — this rule is about network ports.)
+7. **PURE_LIBRARY**: A package has no process lifecycle — no listening network ports, no worker loops, no Docker images, no env vars, no health checks. If it needs any of these, it's a service. (Note: port _interfaces_ like `OperatorWalletPort` belong in packages — this rule is about network ports.)
 
 ## Design
 

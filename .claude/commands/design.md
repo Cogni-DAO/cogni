@@ -72,11 +72,11 @@ For every port, type, or domain logic file, ask:
 
 See [Packages Architecture](docs/spec/packages-architecture.md) for the full spec and capability package shape.
 
-| Shared package (`packages/`)                              | App/service runtime code                                 |
-| --------------------------------------------------------- | -------------------------------------------------------- |
-| Port interfaces for business capabilities                 | Runtime wiring (container, env loading, config)          |
-| Domain types (intents, entries, decisions, error taxonomy) | Next.js routes, server actions, session/request context  |
-| Pure policy/validation/math logic                         | Orchestration depending on runtime-specific context      |
+| Shared package (`packages/`)                               | App/service runtime code                                  |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| Port interfaces for business capabilities                  | Runtime wiring (container, env loading, config)           |
+| Domain types (intents, entries, decisions, error taxonomy) | Next.js routes, server actions, session/request context   |
+| Pure policy/validation/math logic                          | Orchestration depending on runtime-specific context       |
 | Domain adapters (deps via constructor, no env/lifecycle)   | Client creation, credential loading, lifecycle management |
 
 ---
