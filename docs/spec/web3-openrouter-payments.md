@@ -109,34 +109,33 @@ sequenceDiagram
 
 ### OpenRouter Charge → On-Chain Transaction
 
-OpenRouter's `/api/v1/credits/coinbase` does **not** return ready-to-sign calldata. It returns a `transfer_intent` for the [Coinbase Commerce Onchain Payment Protocol](https://github.com/coinbase/commerce-onchain-payment-protocol). The Transfers contract on Base is `0xeADE6bE02d043b3550bE19E960504dbA14A14971`. The workflow must:
+OpenRouter's `/api/v1/credits/coinbase` does **not** return ready-to-sign calldata. It returns a `transfer_intent` for the [Coinbase Commerce Onchain Payment Protocol](https://github.com/coinbase/commerce-onchain-payment-protocol). The API does **not** return a `function_name` field — the caller determines the function from the intent shape.
 
-1. **Create charge** → receives `transfer_intent` with `metadata.contract_address`, `metadata.function_name`, `call_data` (recipient, amounts, deadline, signature, etc.)
-2. **Encode the contract call** → use `metadata.function_name` to determine which Transfers function to call:
-   - `swapAndTransferUniswapV3Native(intent, poolFeesTier)` — input is ETH via `msg.value`
-   - `transferTokenPreApproved(intent)` — input is ERC-20 (USDC), pre-approved to Transfers contract
-   - `swapAndTransferUniswapV3TokenPreApproved(intent, tokenIn, maxWillingToPay, poolFeesTier)` — input is any ERC-20, swaps to recipient currency
-3. **Set tx value / approval** — if Native: ETH covering `recipient_amount + fee_amount` + slippage buffer. If Token: ERC-20 approval to Transfers contract, no ETH beyond gas.
+> **Resolved by spike.0090 (2026-03-09):** The correct function is `transferTokenPreApproved` (USDC input via direct ERC-20 `transferFrom`). The contract address returned by OpenRouter is `0x03059433BCdB6144624cC2443159D9445C32b7a8` — a newer Coinbase Commerce Transfers contract, NOT the original `0xeADE6...` from the protocol repo. ERC-20 approval must go to the **Transfers contract itself** — the contract calls `erc20.allowance(msg.sender, address(this))` then `safeTransferFrom`. Permit2 is NOT involved. The operator wallet needs only USDC (from Split distribution) + trace ETH for gas. No ETH funding strategy required. Full chain validated end-to-end: USDC → Split → operator wallet → OpenRouter credits (23.6s, 247k total gas).
+
+The workflow:
+
+1. **Create charge** → `POST /api/v1/credits/coinbase` with `{ amount, sender, chain_id: 8453 }` (`chain_id` must be a number, not string). Receives `transfer_intent` with `metadata.contract_address`, `call_data` (recipient, amounts, deadline, signature, etc.)
+2. **Approve USDC to Transfers contract** → ERC-20 `approve(TRANSFERS_CONTRACT, recipientAmount + feeAmount)`. The contract uses direct `safeTransferFrom`, not Permit2.
+3. **Encode the contract call** → `transferTokenPreApproved(intent)` on `metadata.contract_address`. Note: `call_data.deadline` is an ISO 8601 string (e.g. `"2026-03-11T08:30:49Z"`), must be converted to unix timestamp for the contract.
 4. **Simulate** → `publicClient.simulateContract()` before broadcast to prevent reverts
 5. **Sign + broadcast** → via `OperatorWalletPort.fundOpenRouterTopUp(intent)`
 
-> **Open**: Which `function_name` does OpenRouter return? spike.0090 resolves this. If `Native`, operator wallet needs an ETH funding strategy. If `TokenPreApproved`, operator can pay directly with USDC from Split distribution.
-
 ```typescript
-// Transfer intent shape from OpenRouter
+// Transfer intent shape from OpenRouter (spike.0090 verified 2026-03-09)
 interface TransferIntent {
   metadata: {
     chain_id: number;
-    contract_address: string; // Coinbase Transfers contract
+    contract_address: string; // Coinbase Transfers contract (see below)
     sender: string; // must === operator wallet address
   };
   call_data: {
-    recipient_amount: string; // wei
-    deadline: string; // unix timestamp
+    recipient_amount: string; // USDC atomic units (6 decimals), e.g. "1039500" = 1.0395 USDC
+    deadline: string; // ISO 8601 string (e.g. "2026-03-11T08:30:49Z") — convert to unix timestamp for contract
     recipient: string; // OpenRouter's receiving address
-    recipient_currency: string; // token address (or 0x0 for native)
+    recipient_currency: string; // 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 (Base USDC)
     refund_destination: string;
-    fee_amount: string; // wei — OpenRouter's 5% fee
+    fee_amount: string; // USDC atomic units — OpenRouter's 5% fee (e.g. "10500" = 0.0105 USDC)
     id: string; // bytes16 charge identifier
     operator: string;
     signature: string; // OpenRouter's authorization signature
@@ -144,10 +143,13 @@ interface TransferIntent {
   };
 }
 
-// Coinbase Transfers contract on Base mainnet (confirmed from protocol repo)
-const TRANSFERS_CONTRACT = "0xeADE6bE02d043b3550bE19E960504dbA14A14971";
-// Note: metadata.contract_address from OpenRouter API should match this.
-// If it returns a different address, validate against allowlist before proceeding.
+// Coinbase Transfers contract on Base mainnet
+// spike.0090: OpenRouter returns 0x0305..., NOT the old 0xeADE6... from the protocol repo.
+// The allowlist MUST include the address OpenRouter returns in metadata.contract_address.
+const TRANSFERS_CONTRACT = "0x03059433BCdB6144624cC2443159D9445C32b7a8";
+
+// ERC-20 approval target: the Transfers contract itself (NOT Permit2).
+// Source: Transfers.sol checks erc20.allowance(msg.sender, address(this)) then safeTransferFrom.
 ```
 
 ### Top-Up Amount Calculation
@@ -183,7 +185,7 @@ Top-up-specific signing constraints (wallet lifecycle and custody are in [operat
 | Gate                     | Enforcement                                                                                                                                              |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Chain lock**           | Only `chain_id` from `.cogni/repo-spec.yaml` (Base 8453). Enforced by existing DAO enforcement rails — see [dao-enforcement spec](./dao-enforcement.md). |
-| **Contract allowlist**   | `to` MUST equal `TRANSFERS_CONTRACT` (Coinbase Commerce on Base). Reject any other destination.                                                          |
+| **Contract allowlist**   | `to` MUST equal `TRANSFERS_CONTRACT` (`0x0305...` — Coinbase Commerce on Base). Reject any other destination. ERC-20 approval also targets the Transfers contract (direct `transferFrom`, not Permit2). |
 | **Sender match**         | `transfer_intent.metadata.sender` MUST equal the operator wallet address.                                                                                |
 | **Simulate before send** | `publicClient.simulateContract()` MUST succeed before signing. Reverted simulations abort the top-up.                                                    |
 | **Max value per tx**     | `OPERATOR_MAX_TOPUP_USD` env cap (e.g. $500). Reject charges exceeding this.                                                                             |
@@ -298,10 +300,10 @@ With defaults: `2.0 × 0.95 = 1.9 > 1.75` — DAO margin is 7.9% per dollar. The
 
 ## Open Questions
 
-- [x] What is the minimum top-up amount? **$5 minimum, $100K maximum** (confirmed from OpenRouter API docs). Small payments below $5 should be batched.
-- [x] ~~Should the two outbound transactions (treasury forward + top-up) be dispatched sequentially or in parallel?~~ Treasury forward is now handled by Splits `distributeERC20()` — only one app-initiated outbound tx (the top-up).
-- [ ] Which `metadata.function_name` does OpenRouter return? `swapAndTransferUniswapV3Native` (needs ETH) vs `transferTokenPreApproved` (pays with USDC). **spike.0090 resolves this.**
-- [ ] Does `metadata.contract_address` match the confirmed Coinbase Transfers address (`0xeADE6...`)? **spike.0090 resolves this.**
+- [x] What is the minimum top-up amount? **$1 minimum, $100K maximum** (spike.0090 confirmed $1 works; API error says "between 1 and 100000"). Small payments below $1 should be batched.
+- [x] ~~Should the two outbound transactions (treasury forward + top-up) be dispatched sequentially or in parallel?~~ Treasury forward is now handled by Splits `distribute()` — only one app-initiated outbound tx (the top-up).
+- [x] ~~Which `metadata.function_name` does OpenRouter return?~~ **API does not return `function_name`.** Correct function is `transferTokenPreApproved` (USDC input via direct ERC-20 `transferFrom` — NOT Permit2). Contract source: `erc20.allowance(msg.sender, address(this))` then `safeTransferFrom`. No ETH swap needed. (spike.0090, 2026-03-09)
+- [x] ~~Does `metadata.contract_address` match the confirmed Coinbase Transfers address (`0xeADE6...`)?~~ **No.** OpenRouter returns `0x03059433BCdB6144624cC2443159D9445C32b7a8` — a newer contract. The old `0xeADE6...` from the protocol repo is stale. Allowlist updated. (spike.0090, 2026-03-09)
 
 ## Related
 
