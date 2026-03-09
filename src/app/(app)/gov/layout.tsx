@@ -38,7 +38,7 @@ const GOV_TABS = [
   },
   {
     href: "/gov/holdings",
-    label: "Holdings",
+    label: "Ownership",
     icon: PieChart,
     match: "prefix" as const,
   },

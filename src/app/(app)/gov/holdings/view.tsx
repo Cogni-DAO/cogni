@@ -81,11 +81,9 @@ export function HoldingsView(): ReactElement {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="mb-1 font-bold text-3xl tracking-tight">
-          Holdings & Ownership
-        </h1>
+        <h1 className="mb-1 font-bold text-3xl tracking-tight">Ownership</h1>
         <p className="text-muted-foreground">
-          Current credit and ownership distribution
+          Credit attribution and ownership distribution
         </p>
       </div>
 

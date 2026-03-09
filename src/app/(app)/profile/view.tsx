@@ -164,16 +164,10 @@ function ConnectedBadge({ login }: { login: string }): ReactElement {
   );
 }
 
-function formatOwnershipUnits(units: string): string {
+function formatUnits(units: string): string {
   const value = Number(units);
   if (!Number.isFinite(value)) return units;
-
-  const points = value / 1000;
-  const hasFraction = Math.abs(points % 1) > Number.EPSILON;
-  return points.toLocaleString(undefined, {
-    minimumFractionDigits: hasFraction ? 1 : 0,
-    maximumFractionDigits: 1,
-  });
+  return value.toLocaleString();
 }
 
 /* ─── Feedback banner ──────────────────────────────────────────────── */
@@ -286,7 +280,7 @@ function ColorPickerSwatch({
 /* ─── View ─────────────────────────────────────────────────────────── */
 
 export function ProfileView(): ReactElement {
-  const { data: session } = useSession();
+  const { data: session, update: updateSession } = useSession();
   const { openConnectModal } = useConnectModal();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -304,10 +298,14 @@ export function ProfileView(): ReactElement {
 
   useEffect(() => {
     if (linkedProvider || error) {
+      if (linkedProvider) {
+        // Re-validate session so RainbowKit picks up the still-valid SIWE auth
+        void updateSession();
+      }
       // Strip query params after reading — prevents re-display on refresh/back
       router.replace("/profile");
     }
-  }, [linkedProvider, error, router]);
+  }, [linkedProvider, error, router, updateSession]);
 
   // Fetch profile data + configured providers in parallel
   useEffect(() => {
@@ -403,54 +401,9 @@ export function ProfileView(): ReactElement {
       </div>
       <div className="border-border border-b" />
 
-      {/* ── Wallet section ── */}
+      {/* ── Wallet & Connected Accounts ── */}
 
-      <SectionHeading>Ownership</SectionHeading>
-
-      <div className="grid gap-3 py-5 md:grid-cols-3">
-        <div className="rounded-lg border border-border bg-card/50 p-4">
-          <div className="text-muted-foreground text-xs uppercase tracking-wide">
-            Total Ownership
-          </div>
-          <div className="mt-2 font-semibold text-2xl text-foreground">
-            {formatOwnershipUnits(ownership?.totalUnits ?? "0")} pts
-          </div>
-          <div className="mt-1 text-muted-foreground text-sm">
-            Across {ownership?.epochsMatched ?? 0} matched epoch
-            {(ownership?.epochsMatched ?? 0) === 1 ? "" : "s"}
-          </div>
-        </div>
-        <div className="rounded-lg border border-border bg-card/50 p-4">
-          <div className="text-muted-foreground text-xs uppercase tracking-wide">
-            Finalized
-          </div>
-          <div className="mt-2 font-semibold text-2xl text-foreground">
-            {formatOwnershipUnits(ownership?.finalizedUnits ?? "0")} pts
-          </div>
-          <div className="mt-1 text-muted-foreground text-sm">
-            {ownership?.finalizedSharePercent?.toFixed(2) ?? "0.00"}% finalized
-            share
-          </div>
-        </div>
-        <div className="rounded-lg border border-border bg-card/50 p-4">
-          <div className="text-muted-foreground text-xs uppercase tracking-wide">
-            Pending
-          </div>
-          <div className="mt-2 font-semibold text-2xl text-foreground">
-            {formatOwnershipUnits(ownership?.pendingUnits ?? "0")} pts
-          </div>
-          <div className="mt-1 text-muted-foreground text-sm">
-            {ownership?.matchedAttributionCount ?? 0} matched attribution
-            {(ownership?.matchedAttributionCount ?? 0) === 1 ? "" : "s"} by{" "}
-            {ownership?.linkedIdentityCount ?? 0} linked identit
-            {(ownership?.linkedIdentityCount ?? 0) === 1 ? "y" : "ies"}
-          </div>
-        </div>
-      </div>
-
-      <div className="border-border border-b" />
-
-      <SectionHeading>Wallet</SectionHeading>
+      <SectionHeading>Wallet &amp; Connected Accounts</SectionHeading>
 
       <SettingRow
         icon={<EthereumIcon className="size-5" />}
@@ -473,12 +426,6 @@ export function ProfileView(): ReactElement {
           </Button>
         )}
       </SettingRow>
-
-      {/* ── Connected Accounts section (only if any OAuth providers configured or linked) ── */}
-
-      {OAUTH_PROVIDERS.some(
-        ({ id }) => configuredProviders.has(id) || linkedProviderIds.has(id)
-      ) && <SectionHeading>Connected Accounts</SectionHeading>}
 
       {OAUTH_PROVIDERS.filter(
         ({ id }) => configuredProviders.has(id) || linkedProviderIds.has(id)
@@ -517,6 +464,55 @@ export function ProfileView(): ReactElement {
           </SettingRow>
         );
       })}
+
+      {/* ── Ownership ── */}
+
+      <SectionHeading>Ownership</SectionHeading>
+
+      <div className="space-y-4 py-5">
+        {/* Attribution summary */}
+        <div>
+          <h3 className="mb-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            Attribution
+          </h3>
+          <div className="rounded-lg border border-border p-4">
+            <div className="flex items-baseline justify-between gap-4">
+              <div>
+                <div className="font-semibold text-2xl text-foreground tabular-nums">
+                  {ownership?.finalizedSharePercent?.toFixed(2) ?? "0.00"}%
+                </div>
+                <div className="mt-1 text-muted-foreground text-sm">
+                  Ownership across {ownership?.epochsMatched ?? 0} epoch
+                  {(ownership?.epochsMatched ?? 0) === 1 ? "" : "s"}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-medium text-foreground text-sm tabular-nums">
+                  {formatUnits(ownership?.finalizedUnits ?? "0")} finalized
+                </div>
+                {Number(ownership?.pendingUnits ?? "0") > 0 && (
+                  <div className="text-muted-foreground text-xs tabular-nums">
+                    +{formatUnits(ownership?.pendingUnits ?? "0")} pending
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* On-chain distributions placeholder */}
+        <div>
+          <h3 className="mb-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            On-Chain Distributions
+          </h3>
+          <div className="rounded-lg border border-border p-6 text-center">
+            <p className="text-muted-foreground text-sm">
+              No on-chain distributions yet. Token distributions will appear
+              here once enabled.
+            </p>
+          </div>
+        </div>
+      </div>
     </PageContainer>
   );
 }
