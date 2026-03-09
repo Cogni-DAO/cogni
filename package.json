@@ -279,6 +279,8 @@
     "prettier-plugin-tailwindcss": "^0.7.1",
     "shadcn": "^3.5.0",
     "smee-client": "^5.0.0",
+    "@temporalio/worker": "^1.11.7",
+    "@cogni/attribution-pipeline-plugins": "workspace:*",
     "tailwindcss": "^4.1.16",
     "tsup": "^8.5.1",
     "tsx": "^4.20.6",
