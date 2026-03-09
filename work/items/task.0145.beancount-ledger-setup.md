@@ -6,8 +6,8 @@ status: needs_implement
 priority: 1
 rank: 1
 estimate: 3
-summary: "Stand up TigerBeetle as the double-entry transaction engine. Create LedgerPort interface and TigerBeetleAdapter. Wire into the 3 existing money-movement paths: AI spend (charge_receipts), credit deposits (USDC payments), and hosting expenses (Cherry Servers). Postgres keeps metadata; TigerBeetle enforces balanced transfers."
-outcome: "TigerBeetle running as a container in dev stack. LedgerPort wired into recordChargeReceipt and creditAccount. Every AI spend and credit deposit has a corresponding double-entry transfer. Account balances queryable from TigerBeetle."
+summary: "Stand up TigerBeetle as the double-entry transaction engine. Create LedgerPort interface and TigerBeetleAdapter. Wire into existing money-movement paths: credit deposits (USDC payments), AI spend (charge_receipts), and operator wallet outflows. Postgres keeps metadata; TigerBeetle enforces balanced transfers."
+outcome: "TigerBeetle running as a container in dev stack. LedgerPort wired into creditAccount, recordChargeReceipt, and operator wallet flows. Every credit deposit and AI spend has a corresponding double-entry transfer. Account balances queryable from TigerBeetle."
 spec_refs: financial-ledger-spec, billing-evolution-spec
 assignees: derekg1729
 credit:
@@ -44,6 +44,7 @@ Every money-movement operation in the system has a corresponding double-entry tr
 - **Postgres-only double-entry**: Would work but reinvents what TigerBeetle does structurally — balanced transfers, overdraft protection, two-phase commits. Why build when battle-tested OSS exists?
 - **Formance Ledger**: Good but adds a Go microservice + REST overhead. TigerBeetle's N-API client is zero-serialization.
 - **Medici**: Requires MongoDB. We're Postgres.
+- **Fake ledger adapter**: Reimplements balanced transfers and two-phase commits in a Map — the exact bespoke accounting code we chose TigerBeetle to avoid. Tests against the real engine in Docker (fast, local, deterministic) — same pattern as `drizzle-payment-attempt.adapter.int.test.ts` against real Postgres. Mock the port at call sites for unit tests.
 
 ### Invariants
 
@@ -60,85 +61,118 @@ Every money-movement operation in the system has a corresponding double-entry tr
 
 - Create: `src/ports/ledger.port.ts` — LedgerPort interface
 - Create: `src/adapters/server/ledger/tigerbeetle.adapter.ts` — TigerBeetle implementation
-- Create: `src/adapters/test/ledger/fake-ledger.adapter.ts` — In-memory fake for tests
-- Create: `src/core/ledger/accounts.ts` — Account ID constants and ledger ID mappings
+- Create: `src/core/ledger/accounts.ts` — Account ID constants, ledger ID mappings, clearing account for cross-ledger
 - Modify: `src/bootstrap/container.ts` — Wire TigerBeetleAdapter
-- Modify: `src/adapters/server/accounts/drizzle.adapter.ts` — Co-write to LedgerPort in recordChargeReceipt/creditAccount
+- Modify: `src/adapters/server/accounts/drizzle.adapter.ts` — Co-write to LedgerPort in creditAccount/recordChargeReceipt
 - Modify: `infra/services/runtime/docker-compose.yml` — Add TigerBeetle container
-- Create: `tests/contract/ledger.contract.ts` — Port contract tests
+- Create: `tests/component/ledger/tigerbeetle.adapter.int.test.ts` — Integration tests against real TigerBeetle
 - Create: `tests/unit/core/ledger/accounts.test.ts` — Account mapping tests
+
+### Cross-Ledger Transfer Design (USDC -> CREDIT)
+
+TigerBeetle transfers operate within a single ledger. A USDC deposit that mints credits requires **two linked transfers** executed atomically:
+
+```
+Transfer 1 (ledger 2 / USDC, scale=6):
+  debit:  Assets:OnChain:USDC
+  credit: Clearing:USDCtoCredit:USDC
+  amount: deposit_amount_micro_usdc
+
+Transfer 2 (ledger 200 / CREDIT, scale=0):
+  debit:  Clearing:USDCtoCredit:CREDIT
+  credit: Liability:UserCredits:CREDIT
+  amount: deposit_amount_micro_usdc * CREDITS_PER_USD / 1_000_000
+```
+
+Both transfers use TigerBeetle's `linked` flag — if either fails, both fail. The clearing accounts (`Clearing:USDCtoCredit:USDC` and `Clearing:USDCtoCredit:CREDIT`) exist solely to bridge ledgers. Their balances should net to zero over time (reconciliation check).
+
+The conversion ratio uses the existing protocol constant: `CREDITS_PER_USD = 10_000_000`. Since USDC scale=6 (micro-USDC), the math is: `credits = micro_usdc * 10` (integer, no floats).
 
 ## Requirements
 
 - **R1**: TigerBeetle running as a container in `docker-compose.yml` (dev + test stacks)
-- **R2**: `LedgerPort` interface with `transfer`, `pendingTransfer`, `postTransfer`, `voidTransfer`, `lookupAccounts`, `getAccountBalance`
+- **R2**: `LedgerPort` interface with `transfer`, `linkedTransfers`, `pendingTransfer`, `postTransfer`, `voidTransfer`, `lookupAccounts`, `getAccountBalance`
 - **R3**: `TigerBeetleAdapter` implementing LedgerPort via `tigerbeetle-node`
-- **R4**: Accounts hierarchy created on startup: one TigerBeetle account per logical account (UserCredits, Revenue:AIUsage, Assets:Treasury, etc.) with correct ledger IDs per asset type
-- **R5**: `recordChargeReceipt()` co-writes a TigerBeetle transfer (Liability:UserCredits → Revenue:AIUsage) alongside existing Postgres writes
-- **R6**: `creditAccount()` for deposits co-writes a TigerBeetle transfer (Assets:OnChain:USDC → Liability:UserCredits)
-- **R7**: `user_data_128` on TigerBeetle transfers links back to Postgres `charge_receipts.id` or `credit_ledger.id` for metadata joins
-- **R8**: Fake adapter for unit/contract tests (in-memory, no TigerBeetle dependency)
-- **R9**: Port contract tests verifying double-entry invariants pass for both real and fake adapters
-- **R10**: LedgerPort failure is non-blocking for AI responses (log critical, don't throw to user) — matches POST_CALL_NEVER_BLOCKS
+- **R4**: Accounts hierarchy created on startup (idempotent — handle "already exists with same params" on container restart). One TigerBeetle account per logical account with correct ledger IDs per asset type.
+- **R5**: `creditAccount()` for deposits co-writes linked TigerBeetle transfers (USDC -> clearing -> CREDIT) alongside existing Postgres writes
+- **R6**: `recordChargeReceipt()` co-writes a TigerBeetle transfer (Liability:UserCredits -> Revenue:AIUsage) alongside existing Postgres writes
+- **R7**: `user_data_128` on TigerBeetle transfers links back to Postgres `credit_ledger.id` or `charge_receipts.id` for metadata joins
+- **R8**: Integration tests against real TigerBeetle in Docker (same pattern as drizzle adapter int tests against real Postgres). No fake adapter — mock the port at call sites for unit tests.
+- **R9**: LedgerPort failure is non-blocking for AI responses (log critical, don't throw to user) — matches POST_CALL_NEVER_BLOCKS
+- **R10**: Operator wallet outflows (Splits distribution, OpenRouter top-up) call LedgerPort from day one — wire during proj.ai-operator-wallet implementation, not as a backfill
 
 ## Allowed Changes
 
 - `src/ports/` — new `ledger.port.ts`
 - `src/adapters/server/ledger/` — new TigerBeetle adapter
-- `src/adapters/test/ledger/` — new fake adapter
-- `src/core/ledger/` — account constants, ledger ID mappings
+- `src/core/ledger/` — account constants, ledger ID mappings, clearing account definitions
 - `src/bootstrap/container.ts` — wire LedgerPort
 - `src/adapters/server/accounts/drizzle.adapter.ts` — co-write integration
 - `infra/services/runtime/` — docker-compose TigerBeetle service
-- `tests/contract/` — port contract tests
+- `tests/component/ledger/` — integration tests against real TigerBeetle
 - `tests/unit/core/ledger/` — unit tests
 - `package.json` — add `tigerbeetle-node` dependency
 
 ## Plan
 
-### Phase 1: TigerBeetle Infrastructure
+### Phase 1: TigerBeetle Infrastructure + LedgerPort
 
-- [ ] Add TigerBeetle to `docker-compose.yml` (dev + test) — `ghcr.io/tigerbeetle/tigerbeetle`, needs `IPC_LOCK` capability, data volume
+- [ ] Add TigerBeetle to `docker-compose.yml` (dev + test) — `ghcr.io/tigerbeetle/tigerbeetle`, `IPC_LOCK` capability, data volume
 - [ ] Add `tigerbeetle-node` to package.json dependencies
-- [ ] Create `src/core/ledger/accounts.ts` — ledger ID constants (USDC=2, CREDIT=200, COGNI=100, EUR=3), well-known account ID mappings
+- [ ] Create `src/core/ledger/accounts.ts` — ledger ID constants (USDC=2, CREDIT=200, COGNI=100, EUR=3), well-known account ID mappings, clearing account IDs for cross-ledger bridges
 - [ ] Create `src/ports/ledger.port.ts` — LedgerPort interface
-- [ ] Create `src/adapters/server/ledger/tigerbeetle.adapter.ts` — implements LedgerPort, creates accounts on init
-- [ ] Create `src/adapters/test/ledger/fake-ledger.adapter.ts` — in-memory Map-based fake
+- [ ] Create `src/adapters/server/ledger/tigerbeetle.adapter.ts` — implements LedgerPort, idempotent account creation on init
 - [ ] Wire in `src/bootstrap/container.ts`
-- [ ] Create `tests/contract/ledger.contract.ts` — port contract tests (both adapters must pass)
+- [ ] Create `tests/component/ledger/tigerbeetle.adapter.int.test.ts` — integration tests against real TigerBeetle in Docker: single-ledger transfer, linked cross-ledger transfer, pending/post/void, idempotent account creation on restart
+- [ ] Create `tests/unit/core/ledger/accounts.test.ts` — account ID mappings, USDC-to-credit conversion math
 
-### Phase 2: AI Spend Integration (charge_receipts co-write)
+### Phase 2: Credit Deposit Co-Write (simplest path, proves the pattern)
+
+- [ ] Modify `DrizzleAccountService.creditAccount()` to call `ledgerPort.linkedTransfers()` for deposit reason
+- [ ] Linked transfers: Assets:OnChain:USDC -> Clearing:USDCtoCredit -> Liability:UserCredits:CREDIT (see cross-ledger design above)
+- [ ] Conversion: `credits = micro_usdc * 10` (integer math, CREDITS_PER_USD / USDC_SCALE)
+- [ ] Set `user_data_128` = credit_ledger entry UUID for metadata linkage
+- [ ] Integration test: creditAccount -> verify both TigerBeetle transfers exist, balances correct, clearing accounts net to zero
+
+### Phase 3: AI Spend Co-Write (hot path, non-blocking)
 
 - [ ] Modify `DrizzleAccountService.recordChargeReceipt()` to call `ledgerPort.transfer()` after Postgres write
 - [ ] Transfer: debit Liability:UserCredits:CREDIT, credit Revenue:AIUsage:CREDIT, amount = chargedCredits
 - [ ] Set `user_data_128` = charge_receipt UUID for metadata linkage
-- [ ] Non-blocking: wrap in try/catch, log critical on failure, never throw to caller
-- [ ] Integration test: recordChargeReceipt → verify TigerBeetle transfer exists + balances correct
+- [ ] Non-blocking: wrap in try/catch, log critical on failure, never throw to caller (POST_CALL_NEVER_BLOCKS)
+- [ ] Integration test: recordChargeReceipt -> verify TigerBeetle transfer exists + balances correct
 
-### Phase 3: Credit Deposit Integration (USDC payments co-write)
+### Phase 4: Operator Wallet Outflows (wire from day one)
 
-- [ ] Modify `DrizzleAccountService.creditAccount()` to call `ledgerPort.transfer()` for deposit reason
-- [ ] Transfer: debit Assets:OnChain:USDC (ledger 2), credit Liability:UserCredits:CREDIT (ledger 200) — cross-ledger via linked transfers
-- [ ] Set `user_data_128` = credit_ledger entry UUID
-- [ ] Integration test: creditAccount → verify TigerBeetle transfer + balances
+- [ ] When operator wallet Splits distribution is confirmed, call `ledgerPort.transfer()`: debit Assets:Treasury:USDC, credit Assets:OperatorFloat:USDC
+- [ ] When OpenRouter top-up tx is confirmed, call `ledgerPort.transfer()`: debit Assets:OperatorFloat:USDC, credit Expense:AI:OpenRouter:USDC
+- [ ] Both wired during proj.ai-operator-wallet implementation — this phase is a coordination note, not a backfill
+- [ ] Integration test: operator wallet lifecycle -> verify TigerBeetle balances reflect treasury -> float -> expense flow
 
-### Phase 4: Cherry Servers Expense (new cron adapter)
+## Out of Scope (separate tasks)
 
-- [ ] Create Cherry Servers billing API client (verify endpoint from CHERRY_REFERENCE.md)
-- [ ] Temporal activity: poll Cherry API, call `ledgerPort.transfer()` for hosting expense
-- [ ] Transfer: debit Expense:Infrastructure:Hosting:EUR, credit Assets:Treasury:EUR
-- [ ] Dedup: billing period as idempotency key in `user_data_64`
-- [ ] Integration test with mock API
+- **Cherry Servers expense polling** — new external API client + Temporal activity + dedup. Different concern, separate PR.
+- **Attribution epoch accruals** — pending transfer on epoch finalization. Wired when settlement pipeline is built.
+- **On-chain claim settlement** — post transfer on MerkleDistributor claim. Walk phase.
+- **Reconciliation cron** — TigerBeetle vs Postgres balance comparison + alerting. After co-writes are stable.
 
 ## Validation
 
-**Port contract tests:**
+**Integration tests (requires dev stack with TigerBeetle):**
 
 ```bash
-pnpm test tests/contract/ledger.contract.ts
+pnpm dotenv -e .env.test -- vitest run --config vitest.component.config.mts tests/component/ledger/
 ```
 
-**Expected:** Both TigerBeetleAdapter and FakeLedgerAdapter pass identical contract tests.
+**Expected:** TigerBeetle adapter creates accounts, executes single-ledger and cross-ledger transfers, handles pending/post/void.
+
+**Stack tests (requires full stack):**
+
+```bash
+pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/stack/ledger/
+```
+
+**Expected:** creditAccount -> TigerBeetle linked transfers, recordChargeReceipt -> TigerBeetle transfer, balances match Postgres state.
 
 **Unit tests:**
 
@@ -146,15 +180,7 @@ pnpm test tests/contract/ledger.contract.ts
 pnpm test tests/unit/core/ledger/
 ```
 
-**Expected:** Account mapping, ledger ID constants verified.
-
-**Integration tests (requires dev stack):**
-
-```bash
-pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/stack/ledger/
-```
-
-**Expected:** charge_receipts → TigerBeetle transfer, credit deposit → TigerBeetle transfer, balances match.
+**Expected:** Account mapping, ledger ID constants, USDC-to-credit conversion verified.
 
 **Lint/type:**
 
@@ -168,7 +194,8 @@ pnpm check
 
 - [ ] **Work Item:** `task.0145` linked in PR body
 - [ ] **Spec:** DOUBLE_ENTRY_CANONICAL, LEDGER_PORT_IS_WRITE_PATH, POSTGRES_IS_METADATA, POST_CALL_NEVER_BLOCKS invariants upheld
-- [ ] **Tests:** port contract tests + integration tests for each co-write path
+- [ ] **Tests:** integration tests against real TigerBeetle for each co-write path
+- [ ] **Cross-ledger:** clearing accounts net to zero after deposit + spend cycle
 - [ ] **Reviewer:** assigned and approved
 - [ ] **TigerBeetle balances**: match expected state after test scenarios
 
