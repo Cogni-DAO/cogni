@@ -16,7 +16,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { forwardRef } from "react";
 
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 
 const alertVariants = cva(
   "relative w-full rounded-lg border px-[var(--spacing-md)] py-[var(--spacing-sm)] text-[var(--text-sm)] [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:top-4 [&>svg]:left-4 [&>svg]:text-foreground [&>svg~*]:pl-7",

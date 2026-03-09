@@ -23,7 +23,7 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/kit/inputs/Button";
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 import { Alert, AlertDescription, AlertTitle } from "./Alert";
 
 export interface ErrorAlertProps {

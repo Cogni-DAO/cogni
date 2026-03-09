@@ -71,9 +71,6 @@ import type {
   AiTelemetryPort,
   Clock,
   DataSourceRegistration,
-  ExecutionGrantUserPort,
-  ExecutionGrantWorkerPort,
-  ExecutionRequestPort,
   GovernanceStatusPort,
   LangfusePort,
   LlmService,
@@ -81,12 +78,17 @@ import type {
   OnChainVerifier,
   PaymentAttemptServiceRepository,
   PaymentAttemptUserRepository,
-  ScheduleRunRepository,
-  ScheduleUserPort,
   ServiceAccountService,
   ThreadPersistencePort,
   TreasuryReadPort,
 } from "@/ports";
+import type {
+  ExecutionGrantUserPort,
+  ExecutionGrantWorkerPort,
+  ExecutionRequestPort,
+  ScheduleRunRepository,
+  ScheduleUserPort,
+} from "@/ports/server";
 import { getScopeId } from "@/shared/config";
 import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { serverEnv } from "@/shared/env/server-env";

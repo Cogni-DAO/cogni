@@ -810,7 +810,7 @@ async function seedFinalizedEpoch(
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
     approvers: SEED_APPROVERS,
-    approverSetHash: computeApproverSetHash(SEED_APPROVERS),
+    approverSetHash: await computeApproverSetHash(SEED_APPROVERS),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
     evaluations,
@@ -932,7 +932,7 @@ async function seedReviewEpoch(
   await store.closeIngestionWithEvaluations({
     epochId: epoch.id,
     approvers: SEED_APPROVERS,
-    approverSetHash: computeApproverSetHash(SEED_APPROVERS),
+    approverSetHash: await computeApproverSetHash(SEED_APPROVERS),
     allocationAlgoRef: ALLOCATION_ALGO_REF,
     weightConfigHash,
     evaluations,

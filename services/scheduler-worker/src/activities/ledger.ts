@@ -1001,7 +1001,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     const weightConfigHash = await computeWeightConfigHash(
       inputClose.staleWeightConfig
     );
-    const approverSetHash = computeApproverSetHash(inputClose.approvers);
+    const approverSetHash = await computeApproverSetHash(inputClose.approvers);
     const profile = resolveProfile(
       registries.profiles,
       inputClose.attributionPipeline
@@ -1157,7 +1157,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       );
     }
     // Self-consistent integrity check: recompute hash from pinned list
-    const pinnedApproverSetHash = computeApproverSetHash(epoch.approvers);
+    const pinnedApproverSetHash = await computeApproverSetHash(epoch.approvers);
     if (epoch.approverSetHash !== pinnedApproverSetHash) {
       throw new Error(
         `finalizeEpoch: approver set hash integrity failure — stored hash ${epoch.approverSetHash} does not match recomputed ${pinnedApproverSetHash}`

@@ -14,9 +14,9 @@
 
 "use client";
 
+import type { GraphId } from "@cogni/ai-core";
 import { Bot, Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
-
 import {
   Dialog,
   DialogContent,
@@ -24,7 +24,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/kit/overlays/Dialog";
-import type { GraphId } from "@/ports";
 import { cn } from "@/shared/util/cn";
 
 /**

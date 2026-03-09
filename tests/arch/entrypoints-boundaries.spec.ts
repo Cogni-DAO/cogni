@@ -80,6 +80,16 @@ describe("Entry point enforcement", () => {
       expect(exitCode).toBe(0);
     });
 
+    it("allows importing from ports server (scheduler-core)", () => {
+      const { exitCode, stderr } = runDepCruise([
+        "src/ports/__arch_probes__/pass_entrypoint_imports_server.ts",
+      ]);
+      if (exitCode !== 0) {
+        console.error("STDERR:", stderr);
+      }
+      expect(exitCode).toBe(0);
+    });
+
     it("allows importing from core public", () => {
       const { exitCode, stderr } = runDepCruise([
         "src/core/__arch_probes__/pass_entrypoint_imports_public.ts",

@@ -25,7 +25,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/vendor/shadcn/sheet";
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 
 interface MobileNavProps {
   readonly className?: string;

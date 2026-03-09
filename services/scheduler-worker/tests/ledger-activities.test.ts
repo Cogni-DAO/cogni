@@ -1387,7 +1387,7 @@ describe("finalizeEpoch", () => {
       allocationAlgoRef: "weight-sum-v0",
       weightConfigHash: "weight-hash",
       approvers: [signer],
-      approverSetHash: computeApproverSetHash([signer]),
+      approverSetHash: await computeApproverSetHash([signer]),
     });
 
     const finalizeEpochAtomic = vi.fn().mockImplementation(async (params) => ({

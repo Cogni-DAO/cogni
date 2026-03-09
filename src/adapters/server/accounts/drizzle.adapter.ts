@@ -45,7 +45,7 @@ import {
 } from "@/shared/db";
 import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
-import { isValidUuid } from "@/shared/util";
+import { isValidUuid } from "@/shared/util/uuid";
 import type { SourceSystem } from "@/types/billing";
 
 const logger = makeLogger({ component: "DrizzleAccountService" });

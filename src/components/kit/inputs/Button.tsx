@@ -17,7 +17,7 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { cloneElement, forwardRef, isValidElement } from "react";
 
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 import { button, icon } from "@/styles/ui";
 
 type ButtonBaseProps = ComponentProps<"button">;
