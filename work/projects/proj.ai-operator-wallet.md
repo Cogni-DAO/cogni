@@ -10,7 +10,7 @@ summary: App-controlled operator wallet (Privy-managed) receives user USDC payme
 outcome: Users pay USDC to Split contract → on-chain split routes DAO share to treasury + operator share to wallet → app tops up OpenRouter → credits backed by real LLM spend. Zero manual transfers.
 assignees: derekg1729
 created: 2026-02-11
-updated: 2026-02-20
+updated: 2026-03-09
 labels: [wallet, billing, web3]
 ---
 
@@ -32,25 +32,25 @@ Spike + 3 atomic PRs, each shippable:
 
 | #   | Deliverable                                   | Status      | Est | Work Item  |
 | --- | --------------------------------------------- | ----------- | --- | ---------- |
-| 0   | Experimental spike: validate payment chain    | Not Started | 1   | spike.0090 |
-| 1   | Operator wallet provisioning + wiring         | Not Started | 2   | task.0084  |
+| 0   | Experimental spike: validate payment chain    | Done        | 1   | spike.0090 |
+| 1   | Operator wallet provisioning + wiring         | In Review   | 2   | task.0084  |
 | 2   | Splits contract deployment + payment re-route | Not Started | 1   | task.0085  |
 | 3   | OpenRouter top-up integration                 | Not Started | 3   | task.0086  |
 
-**Spike 0 — Validate payment chain (hands-on, before building abstractions):**
+**Spike 0 — Validate payment chain (DONE — spike.0090):**
 
-Three sub-experiments, run manually from scripts with a real wallet on Base:
+All three sub-experiments validated on Base mainnet. Key findings:
 
-1. **OpenRouter crypto top-up** — `POST /api/v1/credits/coinbase` with `{amount: 5, sender, chain_id: "8453"}`. Record exactly what `metadata.function_name` comes back. If `swapAndTransferUniswapV3Native` → operator needs ETH. If `transferTokenPreApproved` or `swapAndTransferUniswapV3TokenPreApproved` → operator can pay with USDC directly. Execute the tx. Confirm credits appear via `GET /api/v1/credits`.
-2. **0xSplits deployment** — Deploy a mutable Split on Base via `@0xsplits/splits-sdk`. Two recipients (test wallets). Send USDC to the Split address. Call `distributeERC20()`. Verify both recipients received correct shares.
-3. **End-to-end chain** — Send USDC to the Split. Distribute. From the operator-share recipient, execute the OpenRouter top-up from step 1. Prove the full flow: USDC → Split → operator wallet → OpenRouter credits.
+1. **OpenRouter crypto top-up** — API does NOT return `function_name`. Correct function: `transferTokenPreApproved` (USDC via direct ERC-20 `transferFrom`, NOT Permit2). No ETH swap needed. Minimum charge: $1 (not $5). 5% fee applies.
+2. **0xSplits deployment** — Push Split V2o2 via `splitV2ABI` (not `pushSplitAbi`). `distribute()` sends USDC directly via ERC-20 transfers to recipients (no warehouse withdrawal). Deploy: ~166k gas, distribute: ~81k gas. Factory: `0x8E8eB0cC6AE34A38B67D5Cf91ACa38f60bc3Ecf4`.
+3. **End-to-end chain** — Full chain proven in 23.6s, 247k total gas (~$0.001). USDC → Split → distribute (92.1% to operator) → ERC-20 approve to Transfers contract → `transferTokenPreApproved` → OpenRouter credits +$1.00.
 
-**Key unknowns this spike resolves:**
+**Resolved unknowns:**
 
-- Does OpenRouter return `Native` or `Token`/`TokenPreApproved` as function_name? (determines ETH vs USDC funding)
-- What is `metadata.contract_address`? Is it `0xeADE6...` (Coinbase Transfers) or something else?
-- Does Splits `distributeERC20()` work with Base USDC? Gas cost?
-- Can the full chain complete in < 2 minutes (user experience)?
+- ~~Does OpenRouter return `Native` or `Token`/`TokenPreApproved`?~~ → API doesn't return function_name. Use `transferTokenPreApproved` (USDC input, direct ERC-20 approval to Transfers contract).
+- ~~What is `metadata.contract_address`?~~ → `0x03059433BCdB6144624cC2443159D9445C32b7a8` (NOT old `0xeADE6...`).
+- ~~Does Splits work with Base USDC?~~ → Yes. ~81k gas per distribute, ~0.000002 USDC dust remains.
+- ~~Can the full chain complete in < 2 minutes?~~ → 23.6 seconds end-to-end.
 
 **PR 1 — Operator wallet provisioning + wiring:**
 
@@ -67,7 +67,7 @@ Three sub-experiments, run manually from scripts with a real wallet on Base:
 - Controller: Privy operator wallet (can update percentages if pricing constants change)
 - Add `operator_wallet.split_address` to `.cogni/repo-spec.yaml`
 - Update `payments_in.credits_topup.receiving_address` → Split contract address
-- After credit mint, app calls `SplitMain.distributeERC20()` to trigger USDC distribution
+- After credit mint, app calls `distribute()` on the Split contract to trigger USDC distribution
 - Existing payment flow works unchanged — users now send USDC to Split instead of DAO wallet
 - DAO treasury receives its share trustlessly on-chain — no app-level sweep needed
 - No `outbound_transfers` table, no `sweepUsdcToTreasury()`, no `calculateDaoShare()`
@@ -77,8 +77,8 @@ Three sub-experiments, run manually from scripts with a real wallet on Base:
 - `OperatorWalletPort.fundOpenRouterTopUp(intent)` — typed intent for Coinbase Commerce protocol
 - `calculateOpenRouterTopUp()` in `src/core/billing/pricing.ts`
 - OpenRouter charge creation → Coinbase Commerce transfer function → submit via Privy
-- Function determined by spike: `swapAndTransferUniswapV3Native` (ETH input) or `transferTokenPreApproved` / `swapAndTransferUniswapV3TokenPreApproved` (USDC input)
-- Coinbase Transfers contract: `0xeADE6bE02d043b3550bE19E960504dbA14A14971` on Base (confirmed)
+- Function: `transferTokenPreApproved` (USDC input, direct ERC-20 approval — NOT Permit2). Resolved by spike.0090.
+- Coinbase Transfers contract: `0x03059433BCdB6144624cC2443159D9445C32b7a8` on Base (validated by spike.0090; old `0xeADE6...` is stale)
 - `outbound_topups` table + state machine (CHARGE_PENDING → CHARGE_CREATED → TX_BROADCAST → CONFIRMED)
 - Charge receipt logging with `openrouter_topup` reason
 - New env vars: `OPENROUTER_CRYPTO_FEE`, `OPERATOR_MAX_TOPUP_USD`
@@ -124,7 +124,7 @@ Three sub-experiments, run manually from scripts with a real wallet on Base:
 - [x] Existing USDC payment flow works end-to-end
 - [ ] `EVM_RPC_URL` configured for Base mainnet
 - [ ] Privy app created with wallet policies configured
-- [ ] Splits protocol verified on Base (chain 8453) — deploy Split contract with correct percentages
+- [x] Splits protocol verified on Base (chain 8453) — Push Split V2o2 validated in spike.0090
 
 ## As-Built Specs
 
@@ -160,13 +160,9 @@ This project covers **operator revenue routing** (user pays → Split → operat
 
 ### OpenRouter top-up is the Coinbase Commerce protocol
 
-OpenRouter returns a `transfer_intent` (not raw calldata) for the [Coinbase Commerce Onchain Payment Protocol](https://github.com/coinbase/commerce-onchain-payment-protocol). The Transfers contract (`0xeADE6bE02d043b3550bE19E960504dbA14A14971` on Base) supports 16 transfer functions including:
+OpenRouter returns a `transfer_intent` (not raw calldata) for the [Coinbase Commerce Onchain Payment Protocol](https://github.com/coinbase/commerce-onchain-payment-protocol). The Transfers contract (`0x03059433BCdB6144624cC2443159D9445C32b7a8` on Base) supports multiple transfer functions.
 
-- `swapAndTransferUniswapV3Native(intent, poolFeesTier)` — pays with ETH, swaps to recipient currency
-- `transferTokenPreApproved(intent)` — pays with ERC-20 directly (no swap if same token)
-- `swapAndTransferUniswapV3TokenPreApproved(intent, tokenIn, maxWillingToPay, poolFeesTier)` — pays with any ERC-20, swaps to recipient currency
-
-Which function OpenRouter's API returns in `metadata.function_name` determines whether the operator wallet needs ETH or can pay with USDC directly. **Spike 0 resolves this.** See [web3-openrouter-payments spec](../../docs/spec/web3-openrouter-payments.md) for full flow.
+**Resolved by spike.0090:** The API does NOT return `metadata.function_name`. The correct function is `transferTokenPreApproved(intent)` — pays with USDC directly via ERC-20 `transferFrom` (NOT Permit2). The operator wallet approves USDC to the Transfers contract, then calls `transferTokenPreApproved`. No ETH swap needed. See [web3-openrouter-payments spec](../../docs/spec/web3-openrouter-payments.md) for full flow.
 
 ### Coinbase CDP Wallets / Agentic Wallets as Privy alternative
 

@@ -15,10 +15,10 @@ branch: claude/wallet-operator-privy-adapter-xDfVo
 pr:
 reviewer:
 created: 2026-02-17
-updated: 2026-03-06
+updated: 2026-03-09
 labels: [wallet, web3, billing]
 external_refs:
-revision: 2
+revision: 3
 blocked_by:
 deploy_verified: false
 rank: 19
@@ -248,6 +248,26 @@ pnpm test tests/unit/adapters/test/fake-operator-wallet.test.ts
 - Add missing `tests/unit/adapters/test/fake-operator-wallet.test.ts`
 - Paginate `getWallets()` or use targeted wallet lookup
 - Add promise-based lock to `verify()` to prevent redundant concurrent API calls
+
+### Review 3 (2026-03-09) — REQUEST CHANGES
+
+**Blocking issues:**
+
+1. **`distributeSplit` and `fundOpenRouterTopUp` are still implemented, not stubs.** Review 2 explicitly required reverting to stubs. The design section says "PR 2/3 implement distributeSplit/fundOpenRouterTopUp; this PR defines the interface + stubs". The `distributeSplit` implementation encodes `distributeERC20(address,address)` but spike.0090 proved the correct method is `distribute()` on Push Split V2o2 — the encoded selector would revert on-chain. The `COINBASE_TRANSFERS_BASE` constant is the zero address (`0x000...`), and container wiring doesn't pass `allowedTopUpContracts`, so `fundOpenRouterTopUp` would always fail with DESTINATION_ALLOWLIST error in production. **Fix: Revert both methods to `throw new Error("not implemented — see task.0085/task.0086")`. Remove `encodeSplitDistribute()` helper.**
+2. **`TransferIntent` type doesn't match validated reality.** Type has `function_name: string` and `calldata: string`, but spike.0090 proved OpenRouter does NOT return `function_name`, and the spec says the adapter should encode calldata internally (caller cannot control calldata). **Fix: Add a `// TODO(task.0086): Update to match actual OpenRouter transfer_intent shape` comment on the type, noting it will be corrected when fundOpenRouterTopUp is implemented in PR 3.**
+
+**Non-blocking suggestions:**
+
+- Stale comment in `src/adapters/server/index.ts:120` — says `@privy-io/server-auth` but dependency is `@privy-io/node`
+- Provisioning script reads `PRIVY_SIGNING_KEY` but doesn't pass it to PrivyClient (per PRIVY_SIGNED_REQUESTS invariant)
+- Lint failures in `scripts/experiments/*.ts` — pre-existing from spike.0090, not task.0084, but present on branch
+
+**Review 2 fixes confirmed:**
+
+- ✅ `@privy-io/server-auth` → `@privy-io/node` migration done
+- ✅ Promise-based lock added to `verify()`
+- ✅ `DESTINATION_ALLOWLIST` validation added to `fundOpenRouterTopUp` (but method should be a stub)
+- ✅ `OPERATOR_MAX_TOPUP_USD` cap validation added (but method should be a stub)
 
 ## PR / Links
 
