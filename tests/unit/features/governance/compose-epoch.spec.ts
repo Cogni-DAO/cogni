@@ -159,16 +159,15 @@ describe("applyOverridesToEpochView", () => {
     expect(result).toBe(epoch); // same reference — early return
   });
 
-  it("converts override display-scale units to milli (* 1000)", () => {
+  it("applies override units directly — same scale as receipt units", () => {
     const epoch = makeEpochView([
       { claimantKey: "alice", receipts: [{ receiptId: "r1", units: "8000" }] },
     ]);
     const overrides = new Map<string, OverrideEntry>([
-      ["r1", { subjectRef: "r1", overrideUnits: "2" }],
+      ["r1", { subjectRef: "r1", overrideUnits: "2000" }],
     ]);
     const result = applyOverridesToEpochView(epoch, overrides);
 
-    // "2" display → 2000 milli-units at contributor level
     expect(result.contributors[0].units).toBe("2000");
     // Receipt units are never mutated — UI reads original for strikethrough display
     expect(result.contributors[0].receipts[0].units).toBe("8000");
@@ -185,11 +184,11 @@ describe("applyOverridesToEpochView", () => {
       },
     ]);
     const overrides = new Map<string, OverrideEntry>([
-      ["r1", { subjectRef: "r1", overrideUnits: "3" }],
+      ["r1", { subjectRef: "r1", overrideUnits: "3000" }],
     ]);
     const result = applyOverridesToEpochView(epoch, overrides);
 
-    // r1: 3 * 1000 = 3000, r2: unchanged 2000, total = 5000
+    // r1: 3000 (overridden), r2: unchanged 2000, total = 5000
     expect(result.contributors[0].units).toBe("5000");
     // Receipts preserve original units — never mutated by overrides
     expect(result.contributors[0].receipts[0].units).toBe("8000");
@@ -204,7 +203,7 @@ describe("applyOverridesToEpochView", () => {
     // Before: alice=80%, bob=20%
 
     const overrides = new Map<string, OverrideEntry>([
-      ["r1", { subjectRef: "r1", overrideUnits: "2" }], // 2000 milli
+      ["r1", { subjectRef: "r1", overrideUnits: "2000" }],
     ]);
     const result = applyOverridesToEpochView(epoch, overrides);
 
@@ -222,7 +221,7 @@ describe("applyOverridesToEpochView", () => {
     expect(epoch.contributors[0].claimantKey).toBe("alice");
 
     const overrides = new Map<string, OverrideEntry>([
-      ["r1", { subjectRef: "r1", overrideUnits: "1" }], // 1000 milli < 2000
+      ["r1", { subjectRef: "r1", overrideUnits: "1000" }], // 1000 < 2000
     ]);
     const result = applyOverridesToEpochView(epoch, overrides);
 
@@ -250,7 +249,7 @@ describe("applyOverridesToEpochView", () => {
     };
 
     const overrides = new Map<string, OverrideEntry>([
-      ["r1", { subjectRef: "r1", overrideUnits: "5" }],
+      ["r1", { subjectRef: "r1", overrideUnits: "5000" }],
     ]);
     const result = applyOverridesToEpochView(withNullUnits, overrides);
 

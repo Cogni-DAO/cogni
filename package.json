@@ -103,6 +103,7 @@
     "test:external": "vitest run --config vitest.external.config.mts",
     "test:contract": "vitest run tests/contract",
     "test:meta": "vitest run tests/meta",
+    "test:core": "vitest run tests/unit tests/ports tests/contract tests/meta tests/packages",
     "test:packages:local": "vitest run packages/*/tests",
     "test:packages:integration": "vitest run tests/packages",
     "test:packages": "pnpm -s test:packages:local && pnpm -s test:packages:integration",
