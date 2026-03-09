@@ -4,8 +4,8 @@
 /**
  * Module: `@tests/stack/setup/reset-db`
  * Purpose: Vitest global setup for stack tests to reset test database tables between runs.
- * Scope: Truncates all tables in stack test database to ensure clean state. Does not handle migrations.
- * Invariants: Only operates on stack test database; preserves schema structure; cleans all data.
+ * Scope: Truncates all tables in stack test database, then re-seeds system tenant (required by verifySystemTenant healthcheck + revenue share). Does not handle migrations.
+ * Invariants: Only operates on stack test database; preserves schema structure; system tenant re-seeded after truncation.
  * TODO: Consider also wiping Temporal schedules (temporal-postgres) for fully clean state.
  * Side-effects: IO (database truncation)
  * Notes: Assumes app has already run migrations; used by vitest.stack.config.mts as globalSetup.
@@ -90,8 +90,30 @@ export async function setup() {
     // TRUNCATE with CASCADE handles foreign key constraints automatically
     await sql.unsafe(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE`);
 
+    // Re-seed system tenant data (wiped by truncation, required by verifySystemTenant healthcheck + revenue share).
+    // Mirrors 0008_seed_system_tenant.sql. Wrapped in a transaction so set_config (transaction-local) persists
+    // across all inserts — required because we connect as app_user (RLS enforced).
+    await sql.begin(async (tx) => {
+      await tx`SELECT set_config('app.current_user_id', '00000000-0000-4000-a000-000000000001', true)`;
+      await tx`
+        INSERT INTO "users" ("id", "wallet_address")
+        VALUES ('00000000-0000-4000-a000-000000000001', NULL)
+        ON CONFLICT ("id") DO NOTHING
+      `;
+      await tx`
+        INSERT INTO "billing_accounts" ("id", "owner_user_id", "is_system_tenant", "slug", "balance_credits", "created_at")
+        VALUES ('00000000-0000-4000-b000-000000000000', '00000000-0000-4000-a000-000000000001', true, 'cogni_system', 0, now())
+        ON CONFLICT ("id") DO NOTHING
+      `;
+      await tx`
+        INSERT INTO "virtual_keys" ("billing_account_id", "label", "is_default", "active")
+        VALUES ('00000000-0000-4000-b000-000000000000', 'System Default', true, true)
+        ON CONFLICT DO NOTHING
+      `;
+    });
+
     console.log(
-      `✅ Stack test database reset complete (${tables.length} tables truncated)`
+      `✅ Stack test database reset complete (${tables.length} tables truncated, system tenant re-seeded)`
     );
   } catch (error) {
     console.error("❌ Failed to reset stack test database:", error);

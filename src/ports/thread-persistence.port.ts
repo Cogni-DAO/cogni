@@ -4,7 +4,7 @@
 /**
  * Module: `@ports/thread-persistence.port`
  * Purpose: Port interface for server-authoritative thread persistence.
- * Scope: Defines ThreadPersistencePort, ThreadSummary, and ThreadConflictError. Does not contain implementations.
+ * Scope: Defines ThreadPersistencePort, ThreadSummary (with title + metadata), and ThreadConflictError. Does not contain implementations.
  * Invariants:
  *   - OPTIMISTIC_APPEND: saveThread() verifies stored message count matches expectedMessageCount before writing
  *   - MAX_THREAD_MESSAGES: saveThread() rejects if messages.length > 200
@@ -29,6 +29,8 @@ export class ThreadConflictError extends Error {
 /** Summary of a thread for listing (no full message content). */
 export interface ThreadSummary {
   stateKey: string;
+  /** Auto-derived from first user text part, or metadata.title if set. */
+  title?: string | undefined;
   updatedAt: Date;
   messageCount: number;
   metadata?: Record<string, unknown> | undefined;
@@ -43,12 +45,14 @@ export interface ThreadPersistencePort {
    * OPTIMISTIC_APPEND: verifies stored message count matches expectedMessageCount.
    * Throws ThreadConflictError on mismatch — caller should reload and retry once.
    * MAX_THREAD_MESSAGES: rejects if messages.length > 200.
+   * metadata is set on INSERT only (first save); subsequent saves ignore it.
    */
   saveThread(
     ownerUserId: string,
     stateKey: string,
     messages: UIMessage[],
-    expectedMessageCount: number
+    expectedMessageCount: number,
+    metadata?: Record<string, unknown>
   ): Promise<void>;
 
   /** Soft delete thread. Sets deleted_at, messages still in DB for retention. */

@@ -2,7 +2,7 @@
 id: bug.0009
 type: bug
 title: "Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads"
-status: In Progress
+status: needs_design
 priority: 1
 estimate: 1
 summary: Mock-LLM's SSE streaming format causes pi-ai's for-await loop to produce zero iterations inside OpenClaw's embedded agent runtime. Real models (nemotron-nano-30b via OpenRouter) work perfectly. Blocks stack tests that depend on mock-llm.
@@ -20,6 +20,10 @@ external_refs:
   - "OpenClaw image: openclaw-outbound-headers:latest (v2026.2.6-3)"
 assignees: derekg1729
 credit:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 4
 ---
 
 # Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser

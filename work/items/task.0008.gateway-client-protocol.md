@@ -2,7 +2,7 @@
 id: task.0008
 type: task
 title: "Gateway client: correct protocol lifecycle for OpenClaw chat E2E"
-status: In Progress
+status: done
 priority: 0
 estimate: 3
 summary: Fix OpenClawGatewayClient to implement the full gateway protocol state machine — ACK res, chat deltas, chat final signal (non-terminal), and authoritative final "ok" res with result.payloads
@@ -18,6 +18,10 @@ created: 2026-02-09
 updated: 2026-02-09
 labels: [openclaw, gateway, p0]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 18
 ---
 
 # Gateway client: correct protocol lifecycle for OpenClaw chat E2E

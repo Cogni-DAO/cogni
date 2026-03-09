@@ -10,6 +10,7 @@
  *   - Only app layer imports this; routes call this, not features/* directly
  *   - Must import features via public.ts ONLY (never import from services subdirectories)
  *   - NEVER import adapters (use bootstrap factories instead)
+ *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: preflight credit check handled by decorator (no facade-level call)
  *   - Validates billing account before delegation; propagates feature errors
  * Side-effects: IO (via resolved dependencies)
  * Notes: completion() delegates to completionStream() and collects response server-side
@@ -28,7 +29,6 @@ import { mapAccountsPortErrorToFeature } from "@/features/accounts/public";
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 // Import from public.server.ts - never from services/* directly (dep-cruiser enforced)
 import {
-  commitUsageFact,
   createAiRuntime,
   executeStream,
   type MessageDto,
@@ -36,7 +36,7 @@ import {
   toCoreMessages,
 } from "@/features/ai/public.server";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { LlmCaller } from "@/ports";
+import type { LlmCaller, PreflightCreditCheckFn } from "@/ports";
 import {
   isBillingAccountNotFoundPortError,
   isInsufficientCreditsPortError,
@@ -44,7 +44,6 @@ import {
 } from "@/ports";
 import type { SessionUser } from "@/shared/auth";
 import type { RequestContext } from "@/shared/observability";
-import type { BillingCommitFn } from "@/types/billing";
 
 interface CompletionInput {
   messages: MessageDto[];
@@ -130,8 +129,9 @@ export async function completion(
       },
     };
   } catch (error) {
-    // Map port-level errors to feature errors for route handler
-    // Route layer handles AccountsFeatureError via isAccountsFeatureError() → 402/403
+    // Map port-level errors to feature errors for route handler.
+    // Port errors arrive lazily from the decorator via stream iteration.
+    // Route layer handles AccountsFeatureError via isAccountsFeatureError() → 402/403.
     if (
       isInsufficientCreditsPortError(error) ||
       isBillingAccountNotFoundPortError(error) ||
@@ -139,7 +139,7 @@ export async function completion(
     ) {
       throw mapAccountsPortErrorToFeature(error);
     }
-    throw error; // Re-throw unknown errors
+    throw error;
   }
 }
 
@@ -163,16 +163,26 @@ export async function completionStream(
   // Per PROVIDER_AGGREGATION: AggregatingGraphExecutor routes by graphId to providers
   const { accountService, clock } = resolveAiAdapterDeps(userId);
 
-  // Create billing commit closure (app layer CAN import features — DI boundary)
-  const billingCommitFn: BillingCommitFn = (fact, context) =>
-    commitUsageFact(fact, context, accountService, ctx.log);
+  // Create preflight credit check closure (app layer → features DI boundary)
+  // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: decorator handles all execution paths
+  const preflightCheckFn: PreflightCreditCheckFn = (
+    billingAccountId,
+    model,
+    messages
+  ) =>
+    preflightCreditCheck({
+      billingAccountId,
+      messages: [...messages],
+      model,
+      accountService,
+    });
 
   // Create graph executor via bootstrap factory
   // Routing is handled by AggregatingGraphExecutor - facade is graph-agnostic
   const graphExecutor = createGraphExecutor(
     executeStream,
     userId,
-    billingCommitFn
+    preflightCheckFn
   );
 
   const billingAccount = await getOrCreateBillingAccountForUser(
@@ -209,42 +219,24 @@ export async function completionStream(
   const timestamp = clock.now();
   const coreMessages = toCoreMessages(input.messages, timestamp);
 
-  try {
-    // PREFLIGHT: Check credits BEFORE graph execution starts.
-    // This ensures InsufficientCreditsPortError propagates to facade's try/catch
-    // instead of getting normalized to "internal" inside the graph execution chain.
-    await preflightCreditCheck({
-      billingAccountId: billingAccount.id,
+  // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: preflight credit check is handled
+  // by PreflightCreditCheckDecorator inside the graph executor stack.
+  // No facade-level preflightCreditCheck() call needed.
+
+  const aiRuntime = createAiRuntime({ graphExecutor });
+
+  // runChatStream is now synchronous (returns immediately with stream handle)
+  const { stream, final } = aiRuntime.runChatStream(
+    {
       messages: coreMessages,
       model: input.model,
-      accountService,
-    });
+      caller,
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+      graphName: input.graphName,
+      ...(input.stateKey ? { stateKey: input.stateKey } : {}),
+    },
+    enrichedCtx
+  );
 
-    const aiRuntime = createAiRuntime({ graphExecutor });
-
-    // runChatStream is now synchronous (returns immediately with stream handle)
-    const { stream, final } = aiRuntime.runChatStream(
-      {
-        messages: coreMessages,
-        model: input.model,
-        caller,
-        ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
-        graphName: input.graphName,
-        ...(input.stateKey ? { stateKey: input.stateKey } : {}),
-      },
-      enrichedCtx
-    );
-
-    return { stream, final };
-  } catch (error) {
-    if (
-      isInsufficientCreditsPortError(error) ||
-      isBillingAccountNotFoundPortError(error) ||
-      isVirtualKeyNotFoundPortError(error) ||
-      mapAccountsPortErrorToFeature(error).kind !== "GENERIC"
-    ) {
-      throw mapAccountsPortErrorToFeature(error);
-    }
-    throw error;
-  }
+  return { stream, final };
 }

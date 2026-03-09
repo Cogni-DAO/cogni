@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-06
 - **Status:** stable
 - **Parent:** [features/ai/chat](../AGENTS.md)
 
@@ -32,8 +31,6 @@ Utilities for chat error mapping and UI presentation logic.
 ## Public Surface
 
 - **Exports (via ../public.ts):** mapHttpError, toErrorAlertProps
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** mapHttpError.ts, toErrorAlertProps.ts
 
 ## Responsibilities

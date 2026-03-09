@@ -55,6 +55,8 @@ Authorization operates across three distinct layers with different purposes:
 | Agent   | `agent:{agentId}`       | Autonomous agent (graph instance)    |
 | Service | `service:{serviceName}` | Internal service (scheduler, worker) |
 
+> **Migration pending:** User actor format will change from `user:{walletAddress}` to `user:{userId}` once [User Identity Bindings](./decentralized-user-identity.md) ships. `user_id` (UUID) is the canonical identifier; wallet address is a binding, not identity.
+
 **Actor** = who is making the request.
 **Subject** = on whose behalf (always a user; only present for delegated execution).
 

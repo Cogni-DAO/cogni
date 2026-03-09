@@ -103,6 +103,7 @@ Evidence is stored in the S3 bucket under `/restore-tests/YYYY-MM-DD/`.
 
 | Deliverable                                    | Status      | Est | Work Item            |
 | ---------------------------------------------- | ----------- | --- | -------------------- |
+| Dedicated `app_migrator` role (DDL separated)  | Not Started | 2   | task.0055            |
 | `provision.sh` gains `ALTER ROLE ... PASSWORD` | Not Started | 2   | (create at P1 start) |
 | Credential rotation evidence in deploy logs    | Not Started | 1   | (create at P1 start) |
 

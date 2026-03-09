@@ -3,14 +3,16 @@
 
 /**
  * Module: `@ports/schedule-control`
- * Purpose: Vendor-agnostic port for schedule lifecycle control (create/pause/resume/delete).
+ * Purpose: Vendor-agnostic port for schedule lifecycle control (create/update/pause/resume/delete/list).
  * Scope: Defines contract for schedule orchestration. Does not contain implementations or vendor imports.
  * Invariants:
  *   - Per CRUD_IS_TEMPORAL_AUTHORITY: CRUD endpoints control schedule lifecycle, worker never modifies schedules
  *   - Per WORKER_NEVER_CONTROLS_SCHEDULES: Worker must not depend on this port
  *   - createSchedule throws on conflict (caller-supplied scheduleId)
+ *   - updateSchedule replaces schedule config in-place; throws NotFound if missing
  *   - deleteSchedule is idempotent (no-op if not found)
  *   - pause/resume are idempotent (no-op if already in target state)
+ *   - describeSchedule returns config fields (cron, timezone, input) for drift detection
  * Side-effects: none (interface definition only)
  * Links: docs/spec/scheduler.md, docs/spec/temporal-patterns.md
  * @public
@@ -22,9 +24,20 @@ import type { JsonValue } from "type-fest";
  * Parameters for creating a schedule.
  * The scheduleId is caller-supplied (matches DB UUID).
  */
+/**
+ * Overlap policy for scheduled workflows.
+ * Maps 1:1 to Temporal ScheduleOverlapPolicy values.
+ */
+export type ScheduleOverlapPolicyHint = "skip" | "buffer_one" | "allow_all";
+
 export interface CreateScheduleParams {
-  /** Schedule ID (caller-supplied, matches DB UUID) */
+  /** Temporal schedule ID (caller-supplied) */
   readonly scheduleId: string;
+  /**
+   * DB schedule UUID for schedules that have a row in `schedules`.
+   * Set null/undefined only for legacy Temporal-only schedules.
+   */
+  readonly dbScheduleId?: string | null;
   /** Cron expression (5-field) */
   readonly cron: string;
   /** IANA timezone */
@@ -35,6 +48,14 @@ export interface CreateScheduleParams {
   readonly executionGrantId: string;
   /** Graph input payload (JSON-serializable) */
   readonly input: JsonValue;
+  /** Overlap policy hint. Default: "buffer_one" for tenant schedules. Governance sync passes "skip". */
+  readonly overlapPolicy?: ScheduleOverlapPolicyHint;
+  /** Catchup window in milliseconds. Default: 60_000 (1m). Governance passes 0. */
+  readonly catchupWindowMs?: number;
+  /** Workflow type to start (default: GovernanceScheduledRunWorkflow) */
+  readonly workflowType?: string;
+  /** Task queue override (default: uses adapter's configured queue) */
+  readonly taskQueueOverride?: string;
 }
 
 /**
@@ -50,6 +71,14 @@ export interface ScheduleDescription {
   readonly lastRunAtIso: string | null;
   /** Whether schedule is paused */
   readonly isPaused: boolean;
+  /** Current cron expression, null if unavailable */
+  readonly cron: string | null;
+  /** Current IANA timezone, null if unavailable */
+  readonly timezone: string | null;
+  /** Current graph input payload, null if unavailable */
+  readonly input: JsonValue | null;
+  /** DB schedule UUID from workflow args, null if Temporal-only (legacy) */
+  readonly dbScheduleId: string | null;
 }
 
 /**
@@ -125,9 +154,11 @@ export function isScheduleControlNotFoundError(
  * | Method           | Idempotent? | On Not Found                    | On Already Exists              |
  * |------------------|-------------|---------------------------------|--------------------------------|
  * | createSchedule   | No          | N/A                             | Throw ScheduleControlConflict  |
+ * | updateSchedule   | Yes         | Throw ScheduleControlNotFound   | N/A (updates in place)         |
  * | pauseSchedule    | Yes         | Throw ScheduleControlNotFound   | No-op if already paused        |
  * | resumeSchedule   | Yes         | Throw ScheduleControlNotFound   | No-op if already running       |
  * | deleteSchedule   | Yes         | No-op (success)                 | N/A                            |
+ * | triggerSchedule  | Yes         | Throw ScheduleControlNotFound   | N/A (triggers immediately)     |
  * | describeSchedule | Yes         | Return null                     | N/A                            |
  */
 export interface ScheduleControlPort {
@@ -139,6 +170,20 @@ export interface ScheduleControlPort {
    * @throws ScheduleControlUnavailableError if backend unavailable
    */
   createSchedule(params: CreateScheduleParams): Promise<void>;
+
+  /**
+   * Updates an existing schedule's configuration (spec, action, policies).
+   * Used by governance sync to apply config changes without delete+recreate.
+   *
+   * @param scheduleId - Schedule to update
+   * @param params - New schedule configuration
+   * @throws ScheduleControlNotFoundError if schedule doesn't exist
+   * @throws ScheduleControlUnavailableError if backend unavailable
+   */
+  updateSchedule(
+    scheduleId: string,
+    params: CreateScheduleParams
+  ): Promise<void>;
 
   /**
    * Pauses a schedule (stops future runs).
@@ -177,4 +222,24 @@ export interface ScheduleControlPort {
    * @throws ScheduleControlUnavailableError if backend unavailable
    */
   describeSchedule(scheduleId: string): Promise<ScheduleDescription | null>;
+
+  /**
+   * Triggers an immediate run of a schedule.
+   * Uses the schedule's existing config (workflow type, input, task queue).
+   *
+   * @param scheduleId - Schedule to trigger
+   * @throws ScheduleControlNotFoundError if schedule doesn't exist
+   * @throws ScheduleControlUnavailableError if backend unavailable
+   */
+  triggerSchedule(scheduleId: string): Promise<void>;
+
+  /**
+   * Lists schedule IDs matching a prefix.
+   * Used by governance sync to discover existing governance: schedules.
+   *
+   * @param prefix - Prefix to filter by (e.g., "governance:")
+   * @returns Array of matching schedule IDs
+   * @throws ScheduleControlUnavailableError if backend unavailable
+   */
+  listScheduleIds(prefix: string): Promise<string[]>;
 }

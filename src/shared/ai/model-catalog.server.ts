@@ -326,6 +326,18 @@ export async function isModelFree(modelId: string): Promise<boolean> {
 }
 
 /**
+ * Fast, non-blocking "is free?" check for hot paths.
+ *
+ * - Returns `null` if the catalog cache is not initialized yet (no I/O).
+ * - Returns `false` for unknown models when cache exists (treat as paid).
+ */
+export function isModelFreeFromCache(modelId: string): boolean | null {
+  if (!cache) return null;
+  const model = cache.data.models.find((m) => m.id === modelId);
+  return model?.isFree ?? false;
+}
+
+/**
  * Get computed default model IDs from catalog (fast, cached).
  * Returns null values if catalog unavailable.
  */

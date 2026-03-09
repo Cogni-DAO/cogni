@@ -2,7 +2,7 @@
 id: bug.0033
 type: bug
 title: "Transient RPC errors permanently reject payments — funds taken, no credits"
-status: Done
+status: done
 priority: 0
 estimate: 2
 summary: "A transient RPC failure during on-chain verification causes the payment to be permanently REJECTED. The user's on-chain transfer succeeds (treasury receives funds) but credits are never granted. No retry, no recovery, no logging of the actual error."
@@ -19,6 +19,10 @@ created: 2026-02-11
 updated: 2026-02-11
 labels: [payments, observability, data-loss]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 # Transient RPC errors permanently reject payments — funds taken, no credits

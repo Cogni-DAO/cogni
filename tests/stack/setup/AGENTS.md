@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-08
 - **Status:** stable
 
 ## Purpose
@@ -30,10 +29,7 @@ Vitest `globalSetup` scripts that run before any stack test. Each script validat
 ## Public Surface
 
 - **Exports:** each file exports a default `async function` consumed by vitest globalSetup
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `TEST_BASE_URL`, `DATABASE_SERVICE_URL`, `LITELLM_BASE_URL`, `LITELLM_MASTER_KEY`
-- **Files considered API:** none
 
 ## Responsibilities
 

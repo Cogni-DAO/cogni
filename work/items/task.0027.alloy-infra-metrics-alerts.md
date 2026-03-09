@@ -2,7 +2,7 @@
 id: task.0027
 type: task
 title: "Alloy infra metrics + log noise suppression + Grafana P0 alerts"
-status: Done
+status: done
 priority: 0
 estimate: 3
 summary: Add cAdvisor + node exporter to Alloy (no new containers), suppress health-check log noise at pipeline level, create P0 Grafana alert rules for OOM/memory-pressure/deadman
@@ -18,6 +18,10 @@ created: 2026-02-11
 updated: 2026-02-11
 labels: [infra, observability, reliability, P0]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 # Alloy infra metrics + log noise suppression + Grafana P0 alerts

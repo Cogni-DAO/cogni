@@ -3,7 +3,7 @@ id: architecture-spec
 type: spec
 title: Cogni-Template Architecture
 status: active
-trust: draft
+trust: reviewed
 summary: Clean hex-inspired layering model with crypto-metered AI backend and DAO-governed infrastructure
 read_when: Understanding codebase structure, dependency rules, or layer boundaries
 owner: derekg1729
@@ -44,7 +44,6 @@ Every dependency points inward.
 
 - Hexagonal: `app → features → ports → core` and `adapters → ports → core`. Dependencies point inward.
 - 100% OSS stack. Strict lint/type/style. Env validated at boot. Contract tests required for every adapter.
-- **Proof-of-Concept Scope** — implement minimal working integrations only; no product logic.
 
 **References:**
 
@@ -139,7 +138,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] SECURITY.md # disclosure policy
 [x] CONTRIBUTING.md # contribution standards
 [x] README.md # overview
-[ ] CHANGELOG.md # releases
 [x] src/proxy.ts # Auth proxy for /api/v1/* (except /api/v1/public/\_)
 [x] vitest.config.mts # unit/integration
 [x] vitest.api.config.mts # API integration tests
@@ -168,14 +166,10 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ ├── providers/
 [x] │ │ ├── cherry/ # Cherry Servers provider
 [x] │ │ │ ├── base/ # VM + static bootstrap (immutable)
-[ ] │ │ │ └── app/ # SSH deploy + health gate (mutable)
 [x] │ │ └── akash/ # Akash provider configs
 [x] │ ├── services/
 [x] │ │ ├── runtime/ # Docker Compose for local dev (postgres, litellm)
-[x] │ │ ├── sourcecred/ # SourceCred instance (cred analysis)
 [x] │ │ └── loki-promtail/ # Log aggregation stack
-[ ] │ ├── stacks/
-[ ] │ │ └── local-compose/ # Local development stack
 [x] │ └── files/ # Shared templates and utility scripts
 [x] ├── ci/ # CI/CD automation
 [x] ├── bootstrap/ # One-time dev machine setup installers
@@ -183,21 +177,12 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ └── README.md # Installation instructions
 [x] └── runbooks/ # Deploy, rollback, incident docs
 
-[ ] public/
-[ ] ├── robots.txt
-[ ] ├── sitemap.xml
-[ ] ├── manifest.json
-[ ] ├── fonts/
-[ ] └── images/
-
 [x] src/
 [x] ├── auth.ts # Auth.js configuration (SIWE credentials provider)
 [x] ├── proxy.ts # Auth proxy for /api/v1/_ (except /api/v1/public/_)
 [x] ├── bootstrap/ # composition root (DI)
 [x] │ ├── container.ts # wires adapters → ports
 [x] │ ├── graph-executor.factory.ts # GraphExecutorPort factory
-[ ] │ └── config.ts # Zod-validated env
-[ ] │
 [x] ├── contracts/ # operation contracts (edge IO)
 [x] │ ├── AGENTS.md
 [x] │ ├── http/ # HTTP route contracts (openapi.v1.ts)
@@ -208,11 +193,9 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ ├── payments.status.v1.contract.ts # payment status
 [x] │ ├── payments.credits.\_.v1.contract.ts # credits summary/confirm
 [x] │ └── meta.\*.v1.contract.ts # health, route-manifest
-[ ] │
 [x] ├── mcp/ # MCP host (future)
 [x] │ ├── AGENTS.md
 [x] │ └── server.stub.ts
-[ ] │
 [x] ├── app/ # delivery (Next UI + routes)
 [x] │ ├── layout.tsx
 [x] │ ├── page.tsx
@@ -236,7 +219,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ ├── ai/completion/ # AI completion (credit-metered)
 [x] │ ├── ai/chat/ # streaming chat (credit-metered)
 [x] │ └── payments/ # payment endpoints (intents, attempts, credits)
-[ ] │
 [x] ├── features/ # application services
 [x] │ ├── home/ # home page data
 [x] │ ├── ai/ # AI services
@@ -263,9 +245,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ │ ├── hooks/
 [x] │ │ ├── api/
 [x] │ │ └── utils/
-[ ] │ ├── auth/ # (not implemented)
-[ ] │ └── proposals/ # (not implemented)
-[ ] │
 [x] ├── core/ # domain: entities, rules, invariants
 [x] │ ├── chat/ # chat domain model
 [x] │ │ ├── model.ts
@@ -283,16 +262,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ │ ├── errors.ts # PaymentErrorCode enum
 [x] │ │ └── public.ts
 [x] │ └── public.ts # core exports
-[ ] │ ├── auth/
-[ ] │ │ ├── session.ts
-[ ] │ │ └── rules.ts
-[ ] │ ├── credits/
-[ ] │ │ ├── ledger.ts # credit/debit invariants
-[ ] │ │ └── rules.ts
-[ ] │ └── proposal/
-[ ] │ ├── model.ts
-[ ] │ └── rules.ts
-[ ] │
 [x] ├── ports/ # contracts (minimal interfaces)
 [x] │ ├── llm.port.ts # LLM service interface (LlmCaller)
 [x] │ ├── graph-executor.port.ts # GraphExecutorPort (unified graph execution)
@@ -302,14 +271,7 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ ├── payment-attempt.port.ts # PaymentAttemptRepository interface
 [x] │ ├── onchain-verifier.port.ts # OnChainVerifier interface (real EVM RPC verification)
 [x] │ └── index.ts # port exports
-[ ] │ ├── wallet.port.ts # WalletService { verifySignature(...) }
-[ ] │ ├── auth.port.ts # AuthService { issueNonce, verifySiwe, session }
-[ ] │ ├── apikey.port.ts # ApiKeyRepo { create, revoke, findByHash }
 [x] │ ├── usage.port.ts # UsageService, ActivityUsagePort (Activity dashboard)
-[ ] │ ├── telemetry.port.ts # Telemetry { trace, event, span }
-[ ] │ ├── ratelimit.port.ts # RateLimiter { take(key, points) }
-[ ] │ └── rng.port.ts # Rng { uuid(): string }
-[ ] │
 [x] ├── adapters/ # infrastructure implementations (no UI)
 [x] │ ├── server/
 [x] │ │ ├── ai/litellm.adapter.ts # LLM completion service
@@ -333,16 +295,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ ├── ai/fake-llm.adapter.ts
 [x] │ ├── payments/fake-onchain-verifier.adapter.ts
 [x] │ └── index.ts
-[ ] │ ├── auth/siwe.adapter.ts # nonce + session store
-[ ] │ ├── wallet/verify.adapter.ts # viem-based signature checks
-[ ] │ ├── apikey/drizzle.repo.ts # API keys persistence
-[ ] │ ├── telemetry/langfuse.adapter.ts # traces + spans
-[ ] │ ├── logging/pino.adapter.ts # log transport
-[ ] │ ├── ratelimit/db-bucket.adapter.ts # simple token-bucket
-[ ] │ └── rng/uuid.adapter.ts # uuid generator
-[ ] │ ├── worker/ # background jobs (future)
-[ ] │ └── cli/ # command-line adapters (future)
-[ ] │
 [x] ├── shared/ # small, pure, framework-agnostic
 [x] │ ├── auth/ # shared types and pure helpers for auth
 [x] │ │ ├── AGENTS.md
@@ -374,8 +326,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ └── index.ts
 [x] │ ├── schemas/
 [x] │ │ └── litellm.spend-logs.schema.ts # Zod schemas for LiteLLM /spend/logs API
-[ ] │ └── crypto.ts
-[ ] │
 [x] ├── components/ # shared presentational UI
 [x] │ ├── kit/
 [x] │ │ ├── layout/
@@ -394,22 +344,12 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] │ │ ├── shadcn/ # shadcn/ui primitives
 [x] │ │ └── assistant-ui/ # assistant-ui components
 [x] │ └── index.ts
-[ ] │
 [x] ├── styles/
 [x] │ ├── tailwind.css # v4 CSS-first config (@theme/@utility)
 [x] │ ├── theme.ts # token key types
 [x] │ └── ui/ # CVA styling factories
-[ ] │
 [x] ├── lib/ # additional library helpers
 [x] │ └── auth/ # auth mapping and server helpers
-[ ] │
-[ ] ├── types/
-[ ] │ ├── index.d.ts
-[ ] │ └── global.d.ts
-[ ] │
-[ ] └── assets/
-[ ] ├── icons/
-[ ] └── images/
 
 [x] tests/
 [x] ├── \_fakes/ # deterministic test doubles
@@ -424,8 +364,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] └── setup.ts
 
 [x] e2e/
-[ ] ├── auth.spec.ts
-[ ] └── ai.spec.ts
 
 [x] scripts/
 [x] ├── validate-agents-md.mjs # validates AGENTS.md files
@@ -435,10 +373,6 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] ├── setup/ # setup scripts
 [x] ├── eslint/ # custom ESLint plugins
 [x] │ └── plugins/ui-governance.cjs
-[ ] ├── db/ # database scripts
-[ ] │ ├── seed.ts
-[ ] │ └── migrate.ts
-[ ] └── generate-types.ts
 
 ---
 
@@ -559,3 +493,4 @@ Agentic graphs (P1), Loki/Grafana, Akash/IaC planned. See [Graph Execution](grap
 - [Deployment Architecture](../platform/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
 - [Build Architecture](build-architecture.md) - Monorepo build order, Docker strategy, and workspace package handling
 - [Route Runtime Policy](runtime-policy.md) - When to use Node.js vs Edge runtime in API routes
+- [Decentralized Identity](decentralized-user-identity.md) - Subject DID (did:key), linked DIDs (did:pkh), auth-method-agnostic identity

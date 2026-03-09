@@ -3,13 +3,13 @@ id: authentication-spec
 type: spec
 title: Authentication
 status: active
-spec_state: draft
-trust: draft
-summary: SIWE-based wallet authentication with RainbowKit, enforcing wallet-session coherence.
-read_when: Working on login flow, wallet connection, or session management.
+spec_state: active
+trust: reviewed
+summary: Multi-provider auth (SIWE wallet + GitHub/Discord/Google OAuth) on NextAuth v4. All providers resolve to canonical user_id via user_bindings. Wallet-session coherence preserved for SIWE users.
+read_when: Working on login flow, wallet connection, OAuth providers, account linking, or session management.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-06
+verified: 2026-02-28
 tags: [auth]
 ---
 
@@ -17,85 +17,164 @@ tags: [auth]
 
 ## Context
 
-The platform uses crypto wallets as the canonical identity for billing and credits. Authentication must enforce strict coherence between the connected wallet and the active session to prevent billing confusion (e.g., user thinks they are paying with Wallet A but are actually signed in as Wallet B).
+The platform supports multiple authentication methods: SIWE wallet login (via RainbowKit) and OAuth providers (GitHub, Discord, Google). All providers resolve to a canonical `user_id` (UUID) via the `user_bindings` table. Wallet-session coherence is enforced for SIWE users. OAuth-only users have `walletAddress: null` and cannot access wallet-gated operations (payments, ledger approval).
 
 ## Goal
 
-Provide SIWE-based (Sign-In with Ethereum) authentication via RainbowKit that ties wallet identity to NextAuth sessions, with strict disconnect-on-switch behavior.
+Provide multi-provider authentication on NextAuth v4 with JWT strategy. SIWE wallet users retain strict disconnect-on-switch behavior. OAuth users get clean onboarding. Account linking allows authenticated users to bind additional providers to their existing identity.
 
 ## Non-Goals
 
 - Email/password authentication
-- Social login providers
+- Apple OAuth (P2 — requires team ID, key ID, private key file)
 - Custom SIWE message creation (uses RainbowKit SIWE adapter)
+- Auth.js v5 migration (RainbowKit SIWE incompatible — defer until supported)
+- DrizzleAdapter (JWT strategy + user_bindings is sufficient)
+- Merge/conflict resolution for duplicate identities (P1)
 
 ## Core Invariants
 
-1. **WALLET_SESSION_COHERENCE**: Disconnecting or switching the wallet invalidates the SIWE session. If the wallet disconnects, the session is signed out. If the wallet switches to a different address, the session is signed out.
+1. **WALLET_SESSION_COHERENCE**: Disconnecting or switching the wallet invalidates the SIWE session. If the wallet disconnects, the session is signed out. If the wallet switches to a different address, the session is signed out. (SIWE users only.)
 
-2. **SIWE_CANONICAL_IDENTITY**: The wallet address from the SIWE signature is the canonical user identity for billing, credits, and all account operations.
+2. **CANONICAL_IS_USER_ID**: `user_id` (UUID) is the canonical identity for all attribution, billing, and session operations. `walletAddress` is an optional attribute (`string | null`), not the identity.
 
-3. **RAINBOWKIT_ADAPTER_ONLY**: Authentication uses the stock RainbowKit SIWE adapter. No bespoke SIWE message creation or custom signature flows.
+3. **RAINBOWKIT_ADAPTER_ONLY**: SIWE authentication uses the stock RainbowKit SIWE adapter. No bespoke SIWE message creation or custom signature flows.
+
+4. **IDENTITIES_ARE_BINDINGS**: Every login method resolves via `user_bindings(provider, external_id)`. SIWE = `provider="wallet"`, GitHub = `provider="github"`, Discord = `provider="discord"`, Google = `provider="google"`.
+
+5. **LINKING_IS_EXPLICIT**: Account linking requires an active session. New OAuth login with unknown `external_id` creates a new user. `UNIQUE(provider, external_id)` prevents same account bound to two users (NO_AUTO_MERGE).
+
+6. **WALLET_GATED_OPS**: Payment creation and ledger approval require `walletAddress`. OAuth-only users (`walletAddress: null`) receive clean 403 responses.
+
+7. **LINK_IS_FAIL_CLOSED**: If a link flow was initiated (link_intent cookie present) but cannot be verified (expired, consumed, invalid JWT, DB transaction missing), the signIn callback rejects with `/profile?error=link_failed`. Never falls through to new-user creation.
+
+8. **SINGLE_ROUTING_AUTHORITY**: Server (`src/proxy.ts` + RSC redirects) is the routing authority for access control. Client may initiate navigation after client-side auth completion (SIWE) to trigger server routing — see `AuthRedirect` on public pages.
 
 ## Design
 
-### Current UX (MVP): Connect vs Verify vs Session
+### Auth Flows
 
-The current authentication flow involves a 2-step sequence after a true disconnect or permission revocation:
+```mermaid
+graph TD
+    subgraph "SIWE Wallet Login (unchanged)"
+        W1[RainbowKit Connect] --> W2[SIWE Verify]
+        W2 --> W3[users lookup by wallet_address]
+        W3 --> W4[createBinding 'wallet', address]
+        W4 --> W5["JWT { id, walletAddress }"]
+    end
 
-1.  **Wallet Connection**: The user approves the site in their wallet (e.g., MetaMask "Connect this website").
-2.  **Session Verification**: The user is presented with the "Verify your account" modal (RainbowKit's built-in SIWE UI) and must click "Sign message" to trigger the wallet signature prompt.
+    subgraph "OAuth Login (GitHub/Discord/Google)"
+        O1[NextAuth OAuth redirect] --> O2[signIn callback]
+        O2 --> O3{user_bindings lookup}
+        O3 -->|binding exists| O4[Return existing user.id]
+        O3 -->|no binding| O5[Atomic tx: user + binding + event]
+        O4 --> O6["JWT { id, walletAddress: null }"]
+        O5 --> O6
+    end
 
-This "Verify your account" modal appears when the wallet is **connected** but the NextAuth session is **unauthenticated**. It is a standard part of the [RainbowKit Authentication](https://rainbowkit.com/docs/authentication) flow and ensures the user explicitly consents to signing in.
+    subgraph "Account Linking (DB-backed, fail-closed)"
+        L1[Authenticated user] --> L2["POST /api/auth/link/{provider}"]
+        L2 --> L3[Insert linkTransactions row]
+        L3 --> L4[Set signed JWT cookie with txId]
+        L4 --> L5["Client calls signIn(provider)"]
+        L5 --> L6[Decode JWT → pending or failed intent]
+        L6 --> L7{Atomic consume: UPDATE WHERE unconsumed + unexpired}
+        L7 -->|row returned| L8["createBinding for existing user"]
+        L7 -->|no row| L9["Reject → /profile?error=link_failed"]
+    end
+```
 
-We use the stock [RainbowKit ConnectButton](https://rainbowkit.com/docs/connect-button) for the MVP, which enforces this behavior.
+**SIWE login** uses the stock RainbowKit SIWE adapter with 2-step UX (wallet connect + SIWE signature). Unchanged from pre-OAuth.
 
-### Known UX Limitations (Intentional, MVP-Tolerated)
+**OAuth login** resolves users via `user_bindings(provider, external_id)`. Returning users get their existing `user_id`. New users get an atomic transaction creating `users` + `user_bindings` + `identity_events` rows. Race-safe: concurrent first-logins for the same external_id roll back the losing transaction and re-fetch the winner.
 
-#### Problem A — Sign-in has two steps
+**Account linking** uses a DB-backed `linkTransactions` table for fail-closed verification. The link endpoint inserts a transaction row, then sets a signed JWT cookie containing `{ txId, userId, purpose: "link_intent" }` with 5-minute TTL, scoped to `Path=/api/auth/callback`. On OAuth callback routes only, the `[...nextauth]` handler decodes the JWT and passes a pending or failed intent via `AsyncLocalStorage` to the `signIn` callback. Non-callback NextAuth routes (`/providers`, `/session`, `/signout`) ignore the cookie entirely. The callback atomically consumes the transaction (`UPDATE ... WHERE id = $txId AND user_id = $userId AND provider = $provider AND consumedAt IS NULL AND expiresAt > now() RETURNING *`). The `provider` match prevents cross-provider replay (a transaction created for GitHub cannot be consumed by a Discord callback). If consumption fails (expired, already consumed, wrong provider, tampered), the link is rejected — never falls through to new-user creation. The `linkTransactions` table uses `getServiceDb()` (BYPASSRLS) because the session is not settled during the OAuth callback.
 
-- **Section 1**: MetaMask "Connect this website" (wallet permission).
-- **Section 2**: RainbowKit "Verify your account" modal + MetaMask SIWE "Sign-in request" (signature).
-- **Issue**: This feels disjoint because the intermediate step is a separate in-app modal requiring another click ("Sign message").
+### SessionUser Type
 
-#### Problem B — Only Disconnect exists (no session-only Sign Out)
+```typescript
+interface SessionUser {
+  id: string; // users.id (UUID) — canonical identity
+  walletAddress: string | null; // null for OAuth-only users
+  displayName: string | null; // from user_profiles (loaded into JWT on sign-in)
+  avatarColor: string | null; // from user_profiles (loaded into JWT on sign-in)
+}
+```
 
-- We currently rely on RainbowKit "Disconnect", which removes the wallet connection/permission.
-- **Result**: Next time, the user must do both steps again (connect approval + SIWE signature).
-- **Desired future**: Add a session-only "Sign out" that clears the NextAuth session but leaves the wallet connected, so re-login is typically just one SIWE signature prompt.
+`displayName` and `avatarColor` are loaded from `user_profiles` into the JWT on initial sign-in and on explicit `session.update()` calls. They are not re-fetched on every request.
 
-### Planned Evolution (Post-MVP)
+### Post-Auth Redirect
 
-To remove the extra click and disjoint flow:
+The `redirect` callback in `src/auth.ts` routes authenticated users:
 
-1.  Adopt [RainbowKit Custom ConnectButton](https://rainbowkit.com/docs/custom-connect-button) (`ConnectButton.Custom`) to gain full control over the UI.
-2.  Automatically trigger the SIWE signature prompt immediately after wallet connection, bypassing the "Verify your account" modal step.
-3.  Add two explicit actions in the UI:
-    - **Sign out**: Clears the NextAuth session (using [NextAuth client API](https://next-auth.js.org/getting-started/client)).
-    - **Disconnect wallet**: Fully disconnects the wallet.
+- Default post-sign-in (`/`) → `/chat`
+- Relative URLs → allowed (prefixed with `baseUrl`)
+- Same-origin URLs → allowed
+- Cross-origin URLs → blocked (returns `baseUrl`)
 
-This evolution is UI-level only; it will **not** introduce bespoke SIWE message creation or bypass the RainbowKit SIWE adapter.
+For SIWE, RainbowKit uses `signIn("credentials", { redirect: false })`, so this callback does not fire. SIWE post-auth redirect is handled client-side (see task.0112).
+
+### Sign-In Routing
+
+NextAuth `pages.signIn` points to `/` (landing page). Sign-in is a modal dialog (`SignInDialog`) triggered from the header's `WalletConnectButton`, not a standalone page. Auth routing is enforced server-side in `src/proxy.ts`:
+
+- Authenticated users on `/` → redirect to `/chat`
+- Unauthenticated users on app routes (`/chat`, `/profile`, etc.) → redirect to `/`
+- `getToken()` (Edge-compatible JWT check) called once per request
+
+### OAuth Provider Registration
+
+Providers register conditionally — only when both `CLIENT_ID` and `CLIENT_SECRET` env vars are non-empty. Missing credentials = provider not shown in SignInDialog or on profile page. Both `SignInDialog` and the profile page fetch `/api/auth/providers` at runtime to discover configured providers.
+
+### Known UX Limitations (MVP-Tolerated)
+
+**SIWE sign-in has two steps:** MetaMask "Connect this website" + RainbowKit "Verify your account" modal. Planned fix: Custom ConnectButton that auto-triggers SIWE after connection.
+
+**No session-only sign-out:** "Disconnect" removes wallet permission entirely. Planned fix: Separate "Sign out" (clears NextAuth session) and "Disconnect wallet" actions.
 
 ### File Pointers
 
-| File                              | Purpose                           |
-| --------------------------------- | --------------------------------- |
-| `src/app/_providers/`             | RainbowKit + SIWE provider wiring |
-| `src/app/api/auth/[...nextauth]/` | NextAuth route with SIWE adapter  |
+| File                                                | Purpose                                                                    |
+| --------------------------------------------------- | -------------------------------------------------------------------------- |
+| `src/auth.ts`                                       | NextAuth config: providers, signIn/jwt/session callbacks, link tx helpers  |
+| `src/proxy.ts`                                      | Server-side auth routing (single authority for redirects)                  |
+| `src/app/api/auth/[...nextauth]/route.ts`           | Route handler: JWT decode → pending/failed intent via AsyncLocalStorage    |
+| `src/app/api/auth/link/[provider]/route.ts`         | Link initiation: DB insert + signed JWT cookie + redirect                  |
+| `src/shared/auth/link-intent-store.ts`              | Discriminated union types + AsyncLocalStorage for link intent propagation  |
+| `src/shared/auth/session.ts`                        | SessionUser type (id, walletAddress, displayName, avatarColor)             |
+| `packages/db-schema/src/identity.ts`                | `linkTransactions` table schema (alongside user_bindings, identity_events) |
+| `src/components/kit/auth/SignInDialog.tsx`          | Modal dialog: wallet + OAuth sign-in options                               |
+| `src/components/kit/auth/WalletConnectButton.tsx`   | Opens SignInDialog; SIWE fallback state                                    |
+| `src/components/kit/data-display/ProviderIcons.tsx` | Shared SVG icons (Ethereum, GitHub, Discord, Google)                       |
+| `src/lib/auth/server.ts`                            | `getServerSessionUser()` — requires only `id`                              |
+| `src/app/providers/wallet.client.tsx`               | RainbowKit + SIWE provider wiring                                          |
+| `src/features/payments/errors.ts`                   | `WalletRequiredError` for null-wallet payment guard                        |
 
 ## Acceptance Checks
 
 **Manual:**
 
-1. Connect wallet → verify session is created with correct address
-2. Switch wallet address → verify session is invalidated
-3. Disconnect wallet → verify session is destroyed
+1. SIWE wallet login → session has `id` + `walletAddress` (unchanged)
+2. Switch wallet address → session invalidated (WALLET_SESSION_COHERENCE)
+3. Disconnect wallet → session destroyed
+4. GitHub/Discord/Google OAuth login → new user, session has `id`, `walletAddress` is null
+5. Same OAuth login again → same user returned (idempotent via user_bindings)
+6. Logged in with wallet → "Link GitHub" → OAuth → `/profile?linked=github`, binding created
+7. Attempt to link account already bound to different user → `/profile?error=already_linked` (NO_AUTO_MERGE)
+8. Link with expired/consumed transaction → `/profile?error=link_failed` (LINK_IS_FAIL_CLOSED)
+9. OAuth-only user hits payment endpoint → clean 403
+10. `identity_events` has `bind` event for each provider link
+11. Unauthenticated user on `/chat` → redirected to `/` (proxy)
+12. Authenticated user on `/` → redirected to `/chat` (proxy)
+13. SignInDialog shows only configured providers (fetches `/api/auth/providers`)
 
 ## Open Questions
 
-_(none)_
+- [ ] When RBAC actor type migrates from `user:{walletAddress}` to `user:{userId}`, does it happen here or as an RBAC spec update?
 
 ## Related
 
-- [Security Auth](./security-auth.md)
+- [Decentralized User Identity](./decentralized-user-identity.md) — user_bindings schema, binding invariants
+- [Security Auth](./security-auth.md) — auth surface identity resolution
 - [DAO Enforcement](./dao-enforcement.md)
+- [Thirdweb Auth Migration Audit](../research/thirdweb-auth-migration-audit.md) — feature comparison, migration viability assessment (2026-02-28: stay on current stack)

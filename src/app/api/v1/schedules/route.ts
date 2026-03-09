@@ -7,6 +7,7 @@
  * Scope: Auth-protected POST/GET endpoints for schedule management. Does not contain business logic.
  * Invariants:
  *   - Schedule ownership scoped to caller's billing account
+ *   - SCHEDULE_CREATION_REJECTS_IF_CURRENTLY_UNPAYABLE: paid model + balance <= 0 → 402
  *   - createSchedule is atomic (grant + schedule + job enqueue)
  * Side-effects: IO (HTTP request/response, database, job queue)
  * Links: docs/spec/scheduler.md, schedules.*.v1.contract
@@ -25,7 +26,12 @@ import {
 } from "@/contracts/schedules.create.v1.contract";
 import { schedulesListOperation } from "@/contracts/schedules.list.v1.contract";
 import { InvalidCronExpressionError, InvalidTimezoneError } from "@/ports";
-import { logRequestWarn, type RequestContext } from "@/shared/observability";
+import { isModelFree } from "@/shared/ai/model-catalog.server";
+import {
+  EVENT_NAMES,
+  logRequestWarn,
+  type RequestContext,
+} from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -128,6 +134,29 @@ export const POST = wrapRouteHandlerWithLogging(
       const account = await accountService.getOrCreateBillingAccountForUser({
         userId: sessionUser.id,
       });
+
+      // Per SCHEDULE_CREATION_REJECTS_IF_CURRENTLY_UNPAYABLE:
+      // Coarse credit gate — paid model + balance <= 0 → 402
+      const model =
+        typeof input.input?.model === "string" ? input.input.model : undefined;
+      if (model && !(await isModelFree(model))) {
+        const balance = await accountService.getBalance(account.id);
+        if (balance <= 0) {
+          ctx.log.info(
+            {
+              reqId: ctx.reqId,
+              routeId: "schedules.create",
+              model,
+              errorCode: "insufficient_credits",
+            },
+            EVENT_NAMES.SCHEDULE_CREDIT_GATE_REJECTED
+          );
+          return NextResponse.json(
+            { error: "Insufficient credits for paid model schedule" },
+            { status: 402 }
+          );
+        }
+      }
 
       // Create schedule
       const schedule = await container.scheduleManager.createSchedule(

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao/core
-- **Last reviewed:** 2025-12-13
 - **Status:** stable
 
 ## Purpose

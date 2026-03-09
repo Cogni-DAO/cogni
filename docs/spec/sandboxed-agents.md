@@ -257,10 +257,12 @@ HOST: repoPort.pushBranchFromPatches()
 **Decision**: Sandbox containers mount the `repo_data` named Docker volume read-only at `/repo`, the same volume populated by git-sync for the app container.
 
 ```
-git-sync → repo_data volume (/repo/<sha> + /repo/current symlink)
-  ├─ app container    → repo_data:/repo:ro  (existing)
+git-sync → repo_data volume (/repo/.git + /repo/.worktrees/<sha>/ + /repo/current → worktree symlink)
+  ├─ app container     → repo_data:/repo:ro  (existing)
   └─ sandbox container → repo_data:/repo:ro  (via SandboxVolumeMount)
 ```
+
+> **Note:** git-sync uses worktrees. `/repo/current/.git` is a **file** (worktree pointer), not a directory. Use `git rev-parse --git-dir` (not `test -d .git`) to detect a valid repo.
 
 **Port type** (`SandboxVolumeMount` in `sandbox-runner.port.ts`):
 

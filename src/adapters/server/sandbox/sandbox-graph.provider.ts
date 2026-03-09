@@ -9,8 +9,9 @@
  *   - Per SANDBOXED_AGENTS.md P0.75: Agent runs in sandbox via graph execution pipeline
  *   - Per UNIFIED_GRAPH_EXECUTOR: Registered in AggregatingGraphExecutor like any provider
  *   - Per SECRETS_HOST_ONLY: Only messages + model passed to sandbox, never credentials
- *   - Per BILLING_INDEPENDENT_OF_CLIENT: usage_report emitted for RunEventRelay billing
+ *   - Per BILLING_INDEPENDENT_OF_CLIENT: ephemeral emits usage_report for RunEventRelay billing; gateway relies on LiteLLM callback (COST_AUTHORITY_IS_LITELLM)
  *   - Per SESSION_MODEL_OVERRIDE: Gateway mode calls configureSession() before runAgent() so GraphRunRequest.model reaches LiteLLM via OpenClaw sessions.patch
+ *   - Per STATUS_BEST_EFFORT: StatusEvent pass-through from gateway — never blocks stream or billing
  * Side-effects: IO (creates tmp workspace, runs Docker containers via SandboxRunnerPort, HTTP to gateway)
  * Links: docs/spec/sandboxed-agents.md, graph-provider.ts, sandbox-runner.adapter.ts, openclaw-gateway-client.ts
  * @internal
@@ -42,7 +43,6 @@ import { EVENT_NAMES, makeLogger } from "@/shared/observability";
 
 import type { GraphProvider } from "../ai/graph-provider";
 import type { OpenClawGatewayClient } from "./openclaw-gateway-client";
-import type { ProxyBillingReader } from "./proxy-billing-reader";
 
 /** Provider ID for sandbox agent execution */
 export const SANDBOX_PROVIDER_ID = "sandbox" as const;
@@ -136,8 +136,7 @@ export class SandboxGraphProvider implements GraphProvider {
 
   constructor(
     private readonly runner: SandboxRunnerPort,
-    private readonly gatewayClient?: OpenClawGatewayClient,
-    private readonly billingReader?: ProxyBillingReader
+    private readonly gatewayClient?: OpenClawGatewayClient
   ) {
     this.log = makeLogger({ component: "SandboxGraphProvider" });
     this.log.debug(
@@ -406,7 +405,7 @@ export class SandboxGraphProvider implements GraphProvider {
 
   /**
    * Create the async stream + final promise for a gateway execution.
-   * Uses OpenClawGatewayClient for HTTP chat + ProxyBillingReader for billing.
+   * Uses OpenClawGatewayClient for HTTP chat. Billing via LiteLLM callback.
    */
   private createGatewayExecution(
     req: GraphRunRequest,
@@ -431,7 +430,6 @@ export class SandboxGraphProvider implements GraphProvider {
         graphId,
         stateKey,
       } = req;
-      const attempt = 0; // P0_ATTEMPT_FREEZE
       const execStartTime = Date.now();
       const callLog = self.log.child({
         runId,
@@ -506,7 +504,6 @@ export class SandboxGraphProvider implements GraphProvider {
 
         // Run agent via gateway WS — yields typed events (per OpenClaw gateway protocol)
         let content = "";
-        let billingEntryCount = 0;
         for await (const event of self.gatewayClient.runAgent({
           message: lastUserMsg?.content ?? "",
           sessionKey,
@@ -523,48 +520,19 @@ export class SandboxGraphProvider implements GraphProvider {
               break;
             case "chat_error":
               throw new Error(`Gateway agent error: ${event.message}`);
-          }
-        }
-
-        // Read billing entries from proxy audit log
-        const proxyContainer = agent.gatewayProxyContainer;
-        if (self.billingReader && proxyContainer) {
-          // Small delay for audit log flush
-          await new Promise((r) => setTimeout(r, 500));
-
-          const billingEntries = await self.billingReader.readEntries(runId);
-          billingEntryCount = billingEntries.length;
-          if (billingEntries.length > 0) {
-            for (const entry of billingEntries) {
-              const usageFact: UsageFact = {
-                runId,
-                attempt,
-                source: "litellm",
-                executorType: "sandbox",
-                billingAccountId: caller.billingAccountId,
-                virtualKeyId: caller.virtualKeyId,
-                graphId,
-                model,
-                usageUnitId: entry.litellmCallId,
-                ...(entry.costUsd !== undefined && { costUsd: entry.costUsd }),
+            case "status":
+              // STATUS_BEST_EFFORT: pass through as AiEvent, never blocks stream
+              yield {
+                type: "status",
+                phase: event.phase,
+                ...(event.label ? { label: event.label } : {}),
               };
-              yield { type: "usage_report", fact: usageFact };
-            }
-          } else {
-            callLog.error(
-              { model },
-              "CRITICAL: No billing entries from gateway proxy audit log"
-            );
-            throw new Error(
-              "Billing failed: no proxy billing entries from gateway"
-            );
+              break;
           }
-        } else {
-          // Gateway mode MUST have billing — missing reader/container is a config error
-          throw new Error(
-            "Gateway billing misconfigured: billingReader or gatewayProxyContainer missing"
-          );
         }
+
+        // Billing: handled by LiteLLM generic_api callback → /api/internal/billing/ingest.
+        // Per RECEIPT_WRITES_REQUIRE_CALL_ID_AND_COST: no synchronous receipt written here.
 
         // Emit assistant_final for history persistence
         yield { type: "assistant_final", content: content || "" };
@@ -575,7 +543,6 @@ export class SandboxGraphProvider implements GraphProvider {
             executionMode: "gateway",
             outcome: "success",
             durationMs: Date.now() - execStartTime,
-            billingEntryCount,
             model,
           },
           EVENT_NAMES.SANDBOX_EXECUTION_COMPLETE

@@ -75,9 +75,9 @@ describe("Activity Facade", () => {
     }
 
     // Server derives optimal step for 1-day range (24 hours)
-    // At 15m step: 24h / 15m = 96 buckets (fits in ~240 max)
-    expect(result.effectiveStep).toBe("15m");
-    expect(result.chartSeries).toHaveLength(96); // Zero-filled buckets
+    // deriveStep picks finest step with ≤48 buckets: 24h / 1h = 24 buckets
+    expect(result.effectiveStep).toBe("1h");
+    expect(result.chartSeries).toHaveLength(24); // Zero-filled buckets
 
     // Spend computed from charge receipts (primary source)
     // Mock receipt has responseCostUsd: "0.05" → total = 0.050000

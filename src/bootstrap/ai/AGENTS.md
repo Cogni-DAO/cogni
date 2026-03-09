@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-03
 - **Status:** stable
 
 ## Purpose
@@ -30,15 +29,7 @@ AI tool bindings and tool source factory. Wires tool implementations with inject
 ## Public Surface
 
 - **Exports:** `createToolBindings()`, `createBoundToolSource()`, `ToolBindings`, `ToolBindingDeps`
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** `tool-bindings.ts`, `tool-source.factory.ts`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
 
 ## Responsibilities
 

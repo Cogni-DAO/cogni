@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-12-03
 - **Status:** stable
 - **Parent:** [components/kit](../AGENTS.md)
 
@@ -40,8 +39,6 @@ Reusable kit wrappers for chat UI components with vendor isolation and compositi
 ## Public Surface
 
 - **Exports (via index.ts and ../index.ts):** Thread, ComposerAddAttachment
-- **Routes:** none
-- **Env/Config keys:** none
 - **Files considered API:** Thread.tsx, ComposerAddAttachment.tsx, index.ts
 
 ## Responsibilities

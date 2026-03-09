@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekbar90
-- **Last reviewed:** 2025-01-11
 - **Status:** stable
 
 ## Purpose
@@ -35,8 +34,6 @@ Client-side treasury balance display feature. Fetches DAO treasury USDC balance 
   - `useTreasurySnapshot` (React Query hook)
   - `UseTreasurySnapshotResult` (TypeScript interface)
 - **Routes:** none (consumes `/api/v1/public/treasury/snapshot`)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `components/TreasuryBadge.tsx`, `hooks/useTreasurySnapshot.ts`
 
 ## Ports

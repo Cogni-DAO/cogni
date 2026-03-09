@@ -7,7 +7,7 @@
  * Scope: Provides HTML structure and font loading for entire application. Does not handle routing or content.
  * Invariants: Renders valid HTML5 structure; applies consistent font variables; includes global CSS.
  * Side-effects: none
- * Notes: Geist fonts loaded with CSS variables for theme consistency.
+ * Notes: Manrope font loaded with CSS variables for theme consistency.
  * Links: Next.js App Router layout specification
  * @public
  */
@@ -20,8 +20,6 @@ import { Manrope } from "next/font/google";
 import Script from "next/script";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
-
-import { AppHeader } from "@/features/layout";
 
 import { AppProviders } from "./providers/app-providers.client";
 
@@ -52,8 +50,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AppProviders>
-            <AppHeader />
-            <main id="main">{children}</main>
+            <div id="main">{children}</div>
           </AppProviders>
         </ThemeProvider>
       </body>

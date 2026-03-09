@@ -2,7 +2,7 @@
 id: bug.0034
 type: bug
 title: "Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields"
-status: Backlog
+status: needs_triage
 priority: 3
 estimate: 2
 summary: "Current secrets-redaction.ts applies regex patterns to JSON.stringify'd tool args/results. This is fragile — it can corrupt JSON structure, miss nested secrets, or false-positive on non-secret content. Adopt fast-redact (path-based redaction) for structured tool-call args, results, and metadata."
@@ -16,6 +16,10 @@ branch:
 pr:
 created: 2026-02-11
 updated: 2026-02-11
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 7
 ---
 
 # Adopt fast-redact for structured secrets redaction

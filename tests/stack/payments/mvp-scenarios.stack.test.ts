@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { makeTestCtx } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getTestOnChainVerifier,
@@ -34,6 +34,7 @@ import { CHAIN_ID } from "@/shared/web3/chain";
 describe("MVP Payment Scenarios (9 critical flows)", () => {
   let testUserId: string;
   let testUser2Id: string;
+  let testBillingAccountId: string;
   let sessionUser: SessionUser;
   let sessionUser2: SessionUser;
   const db = getSeedDb();
@@ -50,6 +51,7 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
     });
 
     testUserId = seeded1.user.id;
+    testBillingAccountId = seeded1.billingAccount.id;
     if (!seeded1.user.walletAddress) {
       throw new Error("Test user 1 missing wallet address");
     }
@@ -129,9 +131,12 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
       expect(result.errorCode).toBe("SENDER_MISMATCH");
       expect(result.txHash).toBe("0xabc123");
 
-      // Assert no credit_ledger entry
+      // Assert no credit_ledger entry for test user
       const ledger = await db.query.creditLedger.findFirst({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0xabc123`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0xabc123`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
       expect(ledger).toBeUndefined();
 
@@ -173,9 +178,12 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
       expect(result.status).toBe("REJECTED");
       expect(result.errorCode).toBe("INSUFFICIENT_AMOUNT");
 
-      // Assert no credit_ledger entry
+      // Assert no credit_ledger entry for test user
       const ledger = await db.query.creditLedger.findFirst({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0xdef456`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0xdef456`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
       expect(ledger).toBeUndefined();
     });
@@ -349,9 +357,12 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
 
       expect(result2.status).toBe("CONFIRMED"); // Client-visible status for CREDITED
 
-      // Verify ledger entry exists
+      // Verify user's ledger entry exists (scoped to test user's billing account)
       const ledger = await db.query.creditLedger.findFirst({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0xconfirm123`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0xconfirm123`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
       expect(ledger).toBeTruthy();
       expect(Number(ledger?.amount)).toBe(50_000_000); // $5 * 10,000,000 credits/USD
@@ -400,9 +411,12 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
       expect(result2.status).toBe(result1.status);
       expect(result2.txHash).toBe(result1.txHash);
 
-      // Verify only one ledger entry exists (idempotency)
+      // Verify only one user ledger entry exists (idempotency; exclude system tenant revenue share)
       const ledgerEntries = await db.query.creditLedger.findMany({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0xidempotent123`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0xidempotent123`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
       expect(ledgerEntries).toHaveLength(1);
     });
@@ -458,9 +472,12 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
         )
       ).rejects.toThrow();
 
-      // Verify only one ledger entry exists (first attempt only)
+      // Verify only one user ledger entry exists (first attempt only; exclude system tenant revenue share)
       const ledgerEntries = await db.query.creditLedger.findMany({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0xduplicate123`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0xduplicate123`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
       expect(ledgerEntries).toHaveLength(1);
     });
@@ -494,9 +511,12 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
         ctx
       );
 
-      // Bidirectional invariant: CREDITED ↔ ledger entry
+      // Bidirectional invariant: CREDITED ↔ user ledger entry (scoped to test user's billing account)
       const ledger = await db.query.creditLedger.findFirst({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0xatomic123`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0xatomic123`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
 
       const attempt = await db.query.paymentAttempts.findFirst({
@@ -547,7 +567,10 @@ describe("MVP Payment Scenarios (9 critical flows)", () => {
 
       // No ledger entry for rejected payment
       const ledger = await db.query.creditLedger.findFirst({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0xrejected456`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0xrejected456`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
       expect(ledger).toBeUndefined();
 

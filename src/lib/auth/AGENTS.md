@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-05
 - **Status:** stable
 
 ## Purpose
@@ -32,9 +31,6 @@ Server-side authentication helpers: session retrieval and billing account mappin
 - **Exports:**
   - `getServerSessionUser()` — server-side session retrieval (NextAuth wrapper)
   - `getOrCreateBillingAccountForUser()` — maps session user to billing account via AccountService
-- **Routes:** none
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `server.ts`, `mapping.ts`
 
 ## Ports

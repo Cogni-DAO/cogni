@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-12
 - **Status:** draft
 
 ## Purpose
@@ -29,16 +28,6 @@ Future Akash Network deployment configurations for decentralized cloud infrastru
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
-- **Files considered API:** none
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

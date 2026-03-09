@@ -17,22 +17,46 @@ Read these before starting:
    - If no project fits but the work is multi-PR or novel → recommend creating one with `/project`.
    - If the work is self-contained (single PR, clear scope) → leave `project:` empty. Standalone is fine.
 
-3. **Update the item**:
+3. **Update the item** (type-dependent routing):
+
+   **Stories** (`type: story`):
+   - Stories are intake records. Set `status: done` — triage completes their lifecycle.
+   - If the story warrants implementation, create new `task.*` or `bug.*` items at appropriate status.
+   - Update `updated:` date.
+
+   **Spikes** (`type: spike`):
+   - Set `status: needs_research`.
+   - Set `project: proj.*` if applicable.
+   - Update `updated:` date.
+
+   **Tasks** (`type: task`):
    - Set `project: proj.*` (or leave empty if standalone).
-   - Promote `status: Todo` (from Backlog) if the work is ready to act on.
+   - Route to status based on complexity:
+     - Clear scope, no design needed → `needs_implement`. Set `branch:` field.
+     - Needs spec/design work → `needs_design`
+     - Unknown approach, needs investigation → `needs_research`
+   - Update `updated:` date.
+
+   **Bugs** (`type: bug`):
+   - Set `project: proj.*` (or leave empty if standalone).
+   - Route to status based on complexity:
+     - Simple fix, clear scope → `needs_implement`. Set `branch:` field.
+     - Needs design/investigation → `needs_design`
+     - Unknown root cause, needs investigation → `needs_research`
    - Update `updated:` date.
 
 4. **Update `_index.md`**: Reflect new project linkage and status.
 
-5. **Validate**: Run `pnpm check:docs`.
+5. **Finalize**:
+   - Run `pnpm check:docs` and fix any errors until clean.
+   - Commit all changes (work item file(s), `_index.md`) on the work item's branch (or current branch if no branch yet).
+   - Push to remote.
 
-6. **Recommend next step** based on routing:
-   - Standalone, ready → `/task`
-   - Needs new project → `/project`
-   - Attached to project, needs contract change → `/spec` then `/task`
-   - Attached to project, ready to execute → `/task`
-   - Unknown design space, has a linked `spike.*` → `/research spike.<num>`
-   - Unknown design space, no spike yet → suggest creating one via `/idea` first
+6. **Report**: State what was routed and to which status. The next command is determined by the status:
+   - `needs_research` → `/research`
+   - `needs_design` → `/design`
+   - `needs_implement` → `/implement`
+   - `done` → no further action (stories)
 
 ## Rules
 

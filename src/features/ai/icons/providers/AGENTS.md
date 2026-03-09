@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-04
 - **Status:** draft
 
 ## Purpose
@@ -30,16 +29,7 @@ Inline React SVG icon components for AI model providers. Enables theme-safe rend
 ## Public Surface
 
 - **Exports:** OpenAIIcon, AnthropicIcon, QwenIcon, XAIIcon (React components)
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** All .tsx files
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 

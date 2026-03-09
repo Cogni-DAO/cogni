@@ -168,7 +168,7 @@ export type ChargeReceiptParams = {
 
 /**
  * Strict subset of AccountService for service-role (BYPASSRLS) callers.
- * Only exposes methods needed by auth mapping and internal routes.
+ * Exposes methods needed by auth mapping, internal routes, and system tenant operations.
  */
 export interface ServiceAccountService {
   getBillingAccountById(
@@ -180,6 +180,29 @@ export interface ServiceAccountService {
     walletAddress?: string;
     displayName?: string;
   }): Promise<BillingAccount>;
+
+  /**
+   * Credit billing account for system-level operations (e.g., revenue share bonus).
+   * Uses BYPASSRLS — not scoped to a user's RLS context.
+   */
+  creditAccount(params: {
+    billingAccountId: string;
+    amount: number;
+    reason: string;
+    reference?: string;
+    virtualKeyId?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ newBalance: number }>;
+
+  /**
+   * Lookup a credit ledger entry by reference and reason for idempotency checks.
+   * Uses BYPASSRLS — not scoped to a user's RLS context.
+   */
+  findCreditLedgerEntryByReference(params: {
+    billingAccountId: string;
+    reason: string;
+    reference: string;
+  }): Promise<CreditLedgerEntry | null>;
 }
 
 export interface AccountService {

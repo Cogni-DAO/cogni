@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-03
 - **Status:** draft
 
 ## Purpose
@@ -31,16 +30,7 @@ Private app-layer helpers for route handlers. Provides server-side utilities lik
 ## Public Surface
 
 - **Exports:** models-cache (getCachedModels, isModelAllowed, getDefaultModelId), auth/session helpers
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** models-cache.ts, auth/session.ts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 

@@ -3,11 +3,10 @@
 
 /**
  * Module: `@tests/stack/internal/internal-runs-billing.stack`
- * Purpose: Verify that internal/scheduled graph runs produce charge_receipts via BillingGraphExecutorDecorator.
+ * Purpose: Verify that internal/scheduled graph runs produce charge_receipts.
  * Scope: Integration test hitting POST /api/internal/graphs/{graphId}/runs and asserting billing DB rows. Does not test UI chat path or idempotency (see graphs-run.stack.test.ts).
  * Invariants:
- *   - BILLING_VIA_DECORATOR: Internal runs get billing from decorator, not RunEventRelay
- *   - ONE_LEDGER_WRITER: charge_receipt written via commitUsageFact → recordChargeReceipt
+ *   - CALLBACK_IS_SOLE_WRITER: Receipts arrive via async LiteLLM callback, not in-process decorator
  * Side-effects: IO (database writes, graph execution via mock-openai-api in test mode)
  * Notes: Regression test for bug.0005 (scheduled runs bypass billing). Requires dev stack with DB + LiteLLM running.
  * Links: task.0007, bug.0005, graphs-run.stack.test.ts, completion-billing.stack.test.ts
@@ -18,16 +17,12 @@ import { randomUUID } from "node:crypto";
 import { TEST_MODEL_ID } from "@tests/_fakes/ai/test-constants";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { seedTestActor, type TestActor } from "@tests/_fixtures/stack/seed";
+import { waitForReceipts } from "@tests/helpers/poll-db";
 import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { POST } from "@/app/api/internal/graphs/[graphId]/runs/route";
-import {
-  chargeReceipts,
-  executionGrants,
-  llmChargeDetails,
-  users,
-} from "@/shared/db/schema";
+import { executionGrants, llmChargeDetails, users } from "@/shared/db/schema";
 
 const SCHEDULER_TOKEN = process.env.SCHEDULER_API_TOKEN ?? "";
 const TEST_GRAPH_ID = "langgraph:poet";
@@ -90,12 +85,9 @@ describe("[internal] billing via BillingGraphExecutorDecorator (bug.0005 regress
     expect(body.ok).toBe(true);
     expect(body.runId).toBeDefined();
 
-    // Assert — charge_receipt row exists for this billing account
+    // Assert — charge_receipt row exists (arrives via async LiteLLM callback)
     const db = getSeedDb();
-    const receiptRows = await db
-      .select()
-      .from(chargeReceipts)
-      .where(eq(chargeReceipts.billingAccountId, testActor.billingAccountId));
+    const receiptRows = await waitForReceipts(db, testActor.billingAccountId);
 
     expect(receiptRows.length).toBeGreaterThanOrEqual(1);
     const receipt = receiptRows[0] as (typeof receiptRows)[number];

@@ -5,12 +5,11 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-04
 - **Status:** stable
 
 ## Purpose
 
-Pure TypeScript types and port interfaces for the scheduling domain. Defines contracts for schedule lifecycle, execution grants, execution requests, and schedule runs. Contains no implementations or I/O.
+Pure TypeScript types, port interfaces, and orchestration services for the scheduling domain. Defines contracts for schedule lifecycle, execution grants, execution requests, and schedule runs. Services depend only on ports/types (no adapters, no I/O).
 
 ## Pointers
 
@@ -40,21 +39,21 @@ Pure TypeScript types and port interfaces for the scheduling domain. Defines con
 ## Public Surface
 
 - **Exports:**
-  - `ScheduleControlPort` - Vendor-agnostic schedule lifecycle control (create/pause/resume/delete)
+  - `ScheduleControlPort` - Vendor-agnostic schedule lifecycle control (create/update/pause/resume/delete/list/describe)
   - `ScheduleUserPort` - User-facing schedule CRUD (callerUserId: UserId)
+  - `ExecutionGrantUserPort.ensureGrant` - Idempotent find-or-create grant
+  - `syncGovernanceSchedules()` - Pure orchestration service for governance schedule sync
   - `ScheduleWorkerPort` - Worker-only schedule reads/updates (actorId: ActorId)
   - `ExecutionGrantUserPort` - User-facing grant create/revoke/delete (callerUserId: UserId)
   - `ExecutionGrantWorkerPort` - Worker-only grant validation (actorId: ActorId)
   - `ExecutionRequestPort` - Idempotency layer for execution requests
   - `ScheduleRunRepository` - Schedule run persistence
   - `ScheduleSpec`, `ScheduleRun`, `ExecutionGrant`, `ExecutionRequest` - Domain types
-  - `ScheduleDescription`, `CreateScheduleParams` - Schedule control types
+  - `ScheduleDescription` (includes cron/timezone/input for drift detection), `CreateScheduleParams` - Schedule control types
   - `IdempotencyCheckResult`, `ExecutionOutcome` - Execution request types
   - Error classes: `ScheduleControlUnavailableError`, `ScheduleControlConflictError`, `ScheduleControlNotFoundError`, grant errors, validation errors
   - Type guards: `isScheduleControl*Error`, `isGrant*Error`, `isSchedule*Error`
   - Payload schemas: `ExecuteScheduledRunPayloadSchema`, `ReconcileSchedulesPayloadSchema`
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`
 
 ## Ports
@@ -64,8 +63,8 @@ Pure TypeScript types and port interfaces for the scheduling domain. Defines con
 
 ## Responsibilities
 
-- This directory **does**: Define port interfaces, domain types, error classes, and Zod payload schemas
-- This directory **does not**: Contain implementations, make I/O calls, or depend on any adapter code
+- This directory **does**: Define port interfaces, domain types, error classes, Zod payload schemas, and pure orchestration services
+- This directory **does not**: Make I/O calls directly or depend on any adapter code
 
 ## Usage
 
@@ -94,5 +93,6 @@ pnpm --filter @cogni/scheduler-core build
 ## Notes
 
 - `ScheduleControlPort` replaces the deprecated `JobQueuePort` (Graphile Worker)
-- Per CRUD_IS_TEMPORAL_AUTHORITY: Only CRUD endpoints use ScheduleControlPort
+- Per CRUD_IS_TEMPORAL_AUTHORITY: Only CRUD endpoints and governance sync use ScheduleControlPort
 - Per WORKER_NEVER_CONTROLS_SCHEDULES: Worker service must not depend on ScheduleControlPort
+- `services/syncGovernanceSchedules.ts` is pure orchestration — depends only on ports/types within this package

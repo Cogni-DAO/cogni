@@ -1,77 +1,93 @@
 ---
 id: task.0022
 type: task
-title: "Git relay MVP: host-side clone → agent commit → host push + PR"
-status: Todo
+title: "Git publish relay: credential isolation + agent-triggered host push"
+status: needs_design
 priority: 0
-estimate: 3
-summary: End-to-end git relay for sandbox coder agent — host clones repo into per-run workspace, agent modifies + commits locally, host detects commits and pushes branch + creates PR via GITHUB_TOKEN
-outcome: User sends a coding task to sandbox:openclaw-coder, agent edits files and commits, host pushes sandbox/${runId} branch and creates a PR, PR URL returned in GraphFinal.content
-spec_refs: openclaw-sandbox-controls-spec, openclaw-sandbox-spec, git-sync-repo-mount-spec
+estimate: 2
+summary: Remove GITHUB_TOKEN from gateway container, add host-side HTTP publish endpoint that agent curls when ready. Agent reads from file:///repo, commits locally, host extracts patches via docker exec and pushes with GIT_ASKPASS.
+outcome: Agent can commit and publish code changes without ever seeing git credentials. Credentials stay host-only per inv. 4 (SECRETS_HOST_ONLY) and inv. 20 (HOST_SIDE_GIT_RELAY).
+spec_refs: openclaw-sandbox-controls-spec, openclaw-sandbox-spec
 assignees: derekg1729
 credit:
 project: proj.openclaw-capabilities
-branch:
+branch: feat/task-0022-git-relay-mvp
 pr:
 reviewer:
 created: 2026-02-11
-updated: 2026-02-11
-labels: [openclaw, sandbox, git-relay, p1]
+updated: 2026-02-13
+labels: [openclaw, sandbox, git-relay, security]
 external_refs:
   - docs/research/sandbox-git-write-permissions.md
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 15
 ---
 
-# Git relay MVP: host-side clone → agent commit → host push + PR
+# Git publish relay: credential isolation + agent-triggered host push
+
+## Context
+
+The gateway container currently has `GITHUB_TOKEN` in its env and AGENTS.md tells the agent to echo it via a credential helper. This means the agent can leak the token via `echo $GITHUB_TOKEN`, `env`, `printenv`, or prompt injection. It also pushes arbitrary commits with no host-side review or branch allowlist. This violates inv. 4 (SECRETS_HOST_ONLY) and inv. 20 (HOST_SIDE_GIT_RELAY).
+
+The previous git relay (deleted in ec9311af) used docker exec + git bundle — correct principle but overly complex. This task restores credential isolation with a simpler architecture: the agent curls a host-side publish endpoint when ready.
 
 ## Requirements
 
-- Host clones target repo into per-run workspace with unique `sandbox/${runId}` branch — agent gets a RW copy
-- Agent modifies files and `git add`/`git commit` locally (no credentials needed)
-- After container exits, host detects new commits (`git log baseBranch..HEAD`)
-- If commits found: host pushes branch, creates PR (via `gh` CLI or GitHub REST API), returns PR URL in `GraphFinal.content`
-- If no commits: skip push, clean up normally
-- Workspace cleanup deferred until push completes (WORKSPACE_SURVIVES_FOR_PUSH)
-- `GITHUB_TOKEN` env var on host only — never in container env
-- Concurrent runs safe: unique workspace dir + unique branch name per runId
+- `GITHUB_TOKEN` is NOT in the gateway container's environment — `docker exec openclaw-gateway env` must not show it
+- Credential helper removed from AGENTS.md — no `echo "password=$GITHUB_TOKEN"` pattern
+- Agent reads repo content via `file:///repo` git remote (the existing `repo_data:/repo:ro` volume)
+- Agent commits locally (git is already installed, git author/committer env vars stay)
+- Agent triggers publish explicitly: `curl -s -X POST "$PUBLISH_URL"`
+- Host-side publish endpoint extracts patches via `docker exec git format-patch --stdout`, applies in temp clone, pushes with `GIT_ASKPASS` (token never in URL, logs, or process list)
+- Pushed branches must match `sandbox/*` prefix
+- Endpoint returns `{ ok, branch, commitCount }` or `{ ok: false, error }`
+- No PR creation (deferred)
+- No pre-run workspace setup (agent uses existing workspace)
+- No post-run lifecycle hooks — publish is agent-initiated only
 
 ## Allowed Changes
 
-- `src/adapters/server/sandbox/sandbox-graph.provider.ts` — new `openclaw-coder` agent entry + git relay orchestration in ephemeral execution path
-- `src/adapters/server/sandbox/git-relay.ts` (new) — extracted helper: `cloneForRun()`, `pushIfChanged()`, `createPr()`
-- `services/sandbox-openclaw/Dockerfile` — ensure `git` is installed (may already be in `openclaw:local` base)
-- `src/shared/env/server.ts` — optional: add `GITHUB_TOKEN` to env schema (or read directly from `process.env`)
+- `src/adapters/server/sandbox/git-relay.ts` (new) — GitRelay class with `publish()` method
+- `src/adapters/server/sandbox/index.ts` — re-export GitRelay
+- `src/app/api/internal/sandbox/publish/route.ts` (new) — HTTP endpoint
+- `platform/infra/services/runtime/docker-compose.dev.yml` — gateway env changes
+- `AGENTS.md` — replace credential helper section
+- `docs/spec/openclaw-sandbox-controls.md` — update credential strategy / inv. 20
 
 ## Plan
 
-- [ ] Verify `openclaw:local` base image has `git` installed; if not, add `git` to `services/sandbox-openclaw/Dockerfile` apt-get
-- [ ] Create `src/adapters/server/sandbox/git-relay.ts` with:
-  - `cloneForRun({ repoUrl, baseBranch, runId, workspaceDir })` — `git clone --depth=1 --branch=${baseBranch}`, then `git checkout -b sandbox/${runId}`
-  - `pushIfChanged({ workspaceDir, baseBranch, runId, token })` — `git log ${baseBranch}..HEAD` to detect commits, `git push origin sandbox/${runId}` if found
-  - `createPr({ owner, repo, head, base, title, body, token })` — GitHub REST API `POST /repos/{owner}/{repo}/pulls` with fetch (zero deps), or `gh pr create` if available
-  - All use `child_process.execSync` (host-side, not in container)
-- [ ] Add `openclaw-coder` entry to `SANDBOX_AGENTS` registry:
-  - `executionMode: "ephemeral"`, image `cogni-sandbox-openclaw:latest`
-  - `setupWorkspace` calls `cloneForRun()` then writes `.openclaw/openclaw.json` + `AGENTS.md` (instructs agent to commit changes before exit)
-  - `extraEnv` same as existing OpenClaw (HOME, OPENCLAW_CONFIG_PATH, etc.)
-  - `argv`: `node /app/dist/index.js agent --local --agent main --session-id ${runId} --message "$(cat /workspace/.cogni/prompt.txt)" --json --timeout 540`
-- [ ] Wire post-run git relay into `createContainerExecution()`:
-  - After successful `runner.runOnce()` and billing, call `pushIfChanged()`
-  - If PR created, append PR URL to content in `GraphFinal`
-  - Move `rmSync` out of `finally` — only cleanup after push completes (or if no push needed)
-- [ ] Add `sandbox:openclaw-coder` to `SandboxAgentCatalogProvider` descriptors so it appears in agent list
-- [ ] Manual smoke test: send coding task → verify branch pushed + PR created
+- [ ] Create `src/adapters/server/sandbox/git-relay.ts`:
+  - `publish({ containerName, workspacePath, baseRef, repoUrl, token })` → `{ branch, commitCount } | null`
+  - `docker exec git log --oneline <baseRef>..HEAD` — check for commits, return null if none
+  - `docker exec git rev-parse --abbrev-ref HEAD` — get branch, validate `sandbox/*` prefix
+  - `docker exec git format-patch --stdout <baseRef>..HEAD` — extract patches to stdout
+  - `mkdtemp` → `git clone --depth=1` → `git checkout -b <branch>` → `git am` → push via `GIT_ASKPASS`
+  - `rmSync` cleanup of temp dir
+- [ ] Create `src/app/api/internal/sandbox/publish/route.ts`:
+  - POST handler, follows existing pattern in `src/app/api/internal/graphs/[graphId]/runs/route.ts`
+  - No auth for MVP (network-level isolation, only pushes to `sandbox/*`)
+  - Creates Dockerode + GitRelay, reads `GITHUB_TOKEN` + `COGNI_REPO_URL` from `serverEnv()`
+  - Container name: `openclaw-gateway`, workspace: `/workspace/current`
+- [ ] Update `src/adapters/server/sandbox/index.ts` — export GitRelay
+- [ ] Update `docker-compose.dev.yml`:
+  - Remove `GITHUB_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN...}` from gateway env
+  - Add `PUBLISH_URL=http://host.docker.internal:3000/api/internal/sandbox/publish`
+- [ ] Update `AGENTS.md` lines 130-142:
+  - Remove credential helper, add: `git remote set-url origin file:///repo`, commit locally, `curl -s -X POST "$PUBLISH_URL"` when ready
+- [ ] Update `docs/spec/openclaw-sandbox-controls.md` — restore inv. 20 narrative
 
-## Non-Goals (deferred to robustness phase)
+## Non-Goals (deferred)
 
-- Stack tests with mock GH (separate task)
-- Bare-mirror cache / git worktree optimization
-- Max-parallel runs / disk threshold / queue
-- `.cogni/pr.md` PR body file convention
-- Docker-mode support (app image with git) — MVP targets `pnpm dev:stack` (host-mode)
+- PR creation via GitHub API
+- Auth on publish endpoint (add when moving to production)
+- Pre-run workspace bootstrap / branch reset
+- `gh` CLI in container
+- Branch cleanup after publish
+- Concurrent run isolation (gateway is single-instance for now)
 
 ## Validation
-
-**Preconditions:** `GITHUB_TOKEN` set in host env, `cogni-sandbox-openclaw:latest` built locally, dev stack running.
 
 **Command:**
 
@@ -79,25 +95,31 @@ external_refs:
 pnpm check
 ```
 
-**Expected:** Lint + type + format clean.
+**Expected:** Lint + type + format clean, all tests pass.
 
 **Manual smoke test:**
 
-1. Start `pnpm dev:stack`
-2. Select `sandbox:openclaw-coder` in chat UI
-3. Send: "Add a comment to the top of README.md saying 'Updated by sandbox agent'"
-4. Verify: branch `sandbox/${runId}` pushed to remote, PR created, PR URL in chat response
+1. Start `pnpm dev:stack` with sandbox profile
+2. Verify: `docker exec openclaw-gateway env | grep GITHUB` returns nothing
+3. Talk to agent, ask it to create a file, commit, and publish
+4. Agent runs `curl -s -X POST "$PUBLISH_URL"`
+5. Verify: branch `sandbox/*` pushed to GitHub, endpoint returns `{ ok: true, branch, commitCount }`
+
+**Negative test:**
+
+- Agent tries `git push` directly → fails (no credentials)
+- Agent tries `echo $GITHUB_TOKEN` → empty
 
 ## Review Checklist
 
 - [ ] **Work Item:** task.0022 linked in PR body
-- [ ] **Spec:** HOST_SIDE_GIT_RELAY, SECRETS_HOST_ONLY, WORKSPACE_SURVIVES_FOR_PUSH upheld
-- [ ] **Tests:** `pnpm check` passes (automated tests deferred to robustness task)
+- [ ] **Spec:** SECRETS_HOST_ONLY (inv. 4), HOST_SIDE_GIT_RELAY (inv. 20) upheld
+- [ ] **Tests:** `pnpm check` passes
 - [ ] **Reviewer:** assigned and approved
 
 ## PR / Links
 
--
+- Handoff: [handoff](../handoffs/task.0022.handoff.md)
 
 ## Attribution
 

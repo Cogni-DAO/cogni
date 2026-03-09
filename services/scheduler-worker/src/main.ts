@@ -3,79 +3,125 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/main`
- * Purpose: Service entry point with graceful shutdown.
- * Scope: Composition root that wires config and starts Temporal worker. Does not contain business logic.
+ * Purpose: Service entry point with graceful shutdown. Starts scheduler + optional ledger worker.
+ * Scope: Entry point that calls env() and starts Temporal workers. Does not contain business logic.
  * Invariants:
  *   - Reads config from env (no hardcoded values)
  *   - Handles SIGTERM/SIGINT for graceful shutdown
  *   - Per READINESS_GATES_LOCALLY: ready=false stops work intake immediately
+ *   - Both workers must start before ready=true
  * Side-effects: IO (Temporal connection, process signals)
  * Links: docs/spec/scheduler.md, docs/spec/services-architecture.md
  * @public
  */
 
-import { loadConfig } from "./config.js";
+import { createAttributionContainer } from "./bootstrap/container.js";
+import { env } from "./bootstrap/env.js";
 import { type HealthState, startHealthServer } from "./health.js";
-import { flushLogger, makeLogger } from "./observability/logger.js";
+import { startAttributionWorker } from "./ledger-worker.js";
+import {
+  flushLogger,
+  logWorkerEvent,
+  makeLogger,
+  WORKER_EVENT_NAMES,
+  workerInfo,
+} from "./observability/index.js";
 import { startSchedulerWorker } from "./worker.js";
 
 async function main(): Promise<void> {
-  // Load and validate config
-  const config = loadConfig();
+  // Load and validate env
+  const config = env();
 
   // Create logger (composition root owns logger creation)
   const logger = makeLogger();
 
-  logger.info(
-    { logLevel: config.LOG_LEVEL },
-    "Starting Temporal scheduler worker"
-  );
+  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+    logLevel: config.LOG_LEVEL,
+  });
 
   // Health state for readiness probes
   const healthState: HealthState = { ready: false };
   startHealthServer(healthState, config.HEALTH_PORT);
-  logger.info({ port: config.HEALTH_PORT }, "Health server started");
-
-  // Start Temporal worker
-  const worker = await startSchedulerWorker({
-    temporalAddress: config.TEMPORAL_ADDRESS,
-    namespace: config.TEMPORAL_NAMESPACE,
-    taskQueue: config.TEMPORAL_TASK_QUEUE,
-    databaseUrl: config.DATABASE_URL,
-    appBaseUrl: config.APP_BASE_URL,
-    schedulerApiToken: config.SCHEDULER_API_TOKEN,
-    logger,
+  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+    port: config.HEALTH_PORT,
+    phase: "health_server",
   });
 
-  // Mark ready after worker starts
+  // Shutdown handles for all workers
+  const shutdownHandles: Array<{ shutdown: () => Promise<void> }> = [];
+
+  // Start scheduler worker (always)
+  const schedulerWorker = await startSchedulerWorker({ env: config, logger });
+  shutdownHandles.push(schedulerWorker);
+
+  // Start ledger worker (optional — requires NODE_ID + SCOPE_ID)
+  const ledgerContainer = createAttributionContainer(config, logger);
+  if (ledgerContainer) {
+    const ledgerWorker = await startAttributionWorker({
+      env: config,
+      logger,
+      container: ledgerContainer,
+    });
+    shutdownHandles.push(ledgerWorker);
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+      phase: "ledger_worker",
+    });
+  }
+
+  // Mark ready after all workers start
   healthState.ready = true;
-  logger.info(
-    {
+  workerInfo.set({ task_queue: config.TEMPORAL_TASK_QUEUE }, 1);
+  // Log adapter coverage for diagnostics (P0 visibility)
+  if (ledgerContainer) {
+    const registeredSources = [...ledgerContainer.sourceRegistrations.keys()];
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_READY, {
       namespace: config.TEMPORAL_NAMESPACE,
       taskQueue: config.TEMPORAL_TASK_QUEUE,
-    },
-    "Scheduler worker started, ready for traffic"
-  );
+      ledgerEnabled: true,
+      ledgerTaskQueue: "ledger-tasks",
+      nodeId: ledgerContainer.nodeId,
+      scopeId: ledgerContainer.scopeId,
+      chainId: ledgerContainer.chainId,
+      registeredSources,
+      registeredSourceCount: registeredSources.length,
+    });
+  } else {
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_READY, {
+      namespace: config.TEMPORAL_NAMESPACE,
+      taskQueue: config.TEMPORAL_TASK_QUEUE,
+      ledgerEnabled: false,
+    });
+  }
 
   // Graceful shutdown
   let shuttingDown = false;
 
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) {
-      logger.warn({ signal }, "Shutdown already in progress");
+      logger.warn(
+        { event: WORKER_EVENT_NAMES.LIFECYCLE_SHUTDOWN, signal },
+        "Shutdown already in progress"
+      );
       return;
     }
     shuttingDown = true;
     healthState.ready = false; // Stop accepting new work
-    logger.info({ signal }, "Received signal, shutting down");
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_SHUTDOWN, { signal });
 
     try {
-      await worker.shutdown();
-      logger.info("Scheduler worker stopped");
+      await Promise.all(shutdownHandles.map((h) => h.shutdown()));
+      logWorkerEvent(
+        logger,
+        WORKER_EVENT_NAMES.LIFECYCLE_SHUTDOWN_COMPLETE,
+        {}
+      );
       flushLogger();
       process.exit(0);
     } catch (err) {
-      logger.error({ err }, "Error during shutdown");
+      logger.error(
+        { event: WORKER_EVENT_NAMES.LIFECYCLE_FATAL, err },
+        WORKER_EVENT_NAMES.LIFECYCLE_FATAL
+      );
       flushLogger();
       process.exit(1);
     }
@@ -88,7 +134,10 @@ async function main(): Promise<void> {
 const bootLogger = makeLogger({ phase: "boot" });
 
 main().catch((err) => {
-  bootLogger.fatal({ err }, "Fatal error during startup");
+  bootLogger.fatal(
+    { event: WORKER_EVENT_NAMES.LIFECYCLE_FATAL, err },
+    WORKER_EVENT_NAMES.LIFECYCLE_FATAL
+  );
   flushLogger();
   process.exit(1);
 });

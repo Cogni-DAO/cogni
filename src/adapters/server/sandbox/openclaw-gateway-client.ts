@@ -4,7 +4,7 @@
 /**
  * Module: `@adapters/server/sandbox/openclaw-gateway-client`
  * Purpose: WebSocket client for OpenClaw gateway protocol (custom frame format, not JSON-RPC).
- * Scope: Connects to gateway, sends agent calls with outboundHeaders for billing. Does not manage containers.
+ * Scope: Connects to gateway, sends agent calls with outboundHeaders for billing, consumes agent events (lifecycle, tool, compaction) as StatusEvent. Does not manage containers.
  * Invariants:
  *   - Per BILLING_INDEPENDENT_OF_CLIENT: billing headers passed as outboundHeaders per agent call
  *   - Per SECRETS_HOST_ONLY: no LiteLLM keys ever sent to gateway
@@ -60,7 +60,12 @@ export type GatewayAgentEvent =
   | { type: "accepted"; runId: string }
   | { type: "text_delta"; text: string }
   | { type: "chat_final"; text: string }
-  | { type: "chat_error"; message: string };
+  | { type: "chat_error"; message: string }
+  | {
+      type: "status";
+      phase: "thinking" | "tool_use" | "compacting";
+      label?: string;
+    };
 
 /** Options for {@link OpenClawGatewayClient.runAgent}. */
 export interface RunAgentOptions {
@@ -351,7 +356,69 @@ export class OpenClawGatewayClient {
           }
         }
 
-        // Ignore other events (tick, agent lifecycle, health, etc.)
+        // ── Agent events: lifecycle, tool, compaction ───────
+        // STATUS_SESSIONKEY_FILTERED: same sessionKey filter as chat events.
+        // STATUS_BEST_EFFORT: these are informational — drop silently on mismatch.
+        if (frame.type === "event" && frame.event === "agent") {
+          const payload = frame.payload as Record<string, unknown> | undefined;
+          const frameSessionKey = payload?.sessionKey as string | undefined;
+          if (!frameSessionKey || frameSessionKey !== opts.sessionKey) {
+            return; // Missing or mismatched sessionKey — drop
+          }
+
+          const stream = payload?.stream as string | undefined;
+          const data = payload?.data as Record<string, unknown> | undefined;
+          const phase = data?.phase as string | undefined;
+
+          if (stream === "lifecycle" && phase === "start") {
+            push({
+              kind: "event",
+              value: { type: "status", phase: "thinking" },
+            });
+            return;
+          }
+
+          if (stream === "tool") {
+            if (phase === "start") {
+              // STATUS_NEVER_LEAKS_CONTENT: only tool name, never args or results
+              const toolName = data?.name as string | undefined;
+              push({
+                kind: "event",
+                value: {
+                  type: "status",
+                  phase: "tool_use",
+                  ...(toolName ? { label: toolName } : {}),
+                },
+              });
+            } else if (phase === "end") {
+              push({
+                kind: "event",
+                value: { type: "status", phase: "thinking" },
+              });
+            }
+            return;
+          }
+
+          if (stream === "compaction") {
+            if (phase === "start") {
+              push({
+                kind: "event",
+                value: { type: "status", phase: "compacting" },
+              });
+            } else if (phase === "end") {
+              push({
+                kind: "event",
+                value: { type: "status", phase: "thinking" },
+              });
+            }
+            return;
+          }
+
+          // Drop assistant (redundant with chat delta) and error (handled by chat_error)
+          return;
+        }
+
+        // Ignore other events (tick, health, etc.)
       });
 
       // Pull loop: yield events from the queue

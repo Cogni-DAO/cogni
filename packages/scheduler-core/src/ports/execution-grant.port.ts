@@ -122,6 +122,17 @@ export interface ExecutionGrantUserPort {
    * Used for atomicity cleanup when schedule creation fails.
    */
   deleteGrant: (callerUserId: UserId, grantId: string) => Promise<void>;
+
+  /**
+   * Find existing valid (non-revoked, non-expired) grant or create one. Idempotent.
+   * Used by governance sync to ensure a stable grant exists for system-ops schedules.
+   * Advisory lock recommended at the call site to prevent concurrent races.
+   */
+  ensureGrant: (input: {
+    userId: UserId;
+    billingAccountId: string;
+    scopes: readonly string[];
+  }) => Promise<ExecutionGrant>;
 }
 
 /**

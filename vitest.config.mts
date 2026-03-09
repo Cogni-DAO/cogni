@@ -5,19 +5,39 @@
  * Module: `vitest.config`
  * Purpose: Vitest test runner configuration for unit tests, contract tests, and lint tests (no infrastructure required).
  * Scope: Configures test environment for fast tests only. Excludes component tests requiring DB/Docker/binaries.
- * Invariants: Coverage disabled by default; fast execution; v8 provider for Node.js compatibility.
+ * Invariants: Coverage disabled by default; fast execution; v8 provider for Node.js compatibility; constrained envs use threads pool (MessagePort IPC, no signals) to avoid ulimit -i 0 hangs.
  * Side-effects: file system (coverage reports written to ./coverage/)
  * Notes: Uses vite-tsconfig-paths for module resolution; excludes tests/component/** from main test run.
  * Links: SonarCloud integration workflow
  * @public
  */
 
+import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { defineConfig } from "vitest/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Detect constrained containers (e.g. Claude Code remote) where pending signals
+// ulimit is 0, causing the multi-fork pool to hang. Fix: use threads pool with
+// maxWorkers 2. Threads use MessagePort IPC (no signals), so ulimit -i 0 doesn't
+// affect them. CI and local dev are unaffected (use default forks pool).
+// Note: `ulimit -i` is Linux-only; on macOS the catch returns false (unconstrained).
+function isConstrainedEnvironment(): boolean {
+  try {
+    const pending = execSync("bash -c 'ulimit -i'", {
+      encoding: "utf8",
+    }).trim();
+    if (pending === "unlimited") return false;
+    return Number(pending) < 128;
+  } catch {
+    return false;
+  }
+}
+
+const constrained = isConstrainedEnvironment();
 
 export default defineConfig({
   esbuild: {
@@ -26,6 +46,8 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    pool: constrained ? "threads" : "forks",
+    ...(constrained ? { maxWorkers: 2 } : {}),
     setupFiles: ["./tests/setup.ts"],
     include: [
       "tests/**/*.{test,spec}.{ts,tsx}",
@@ -59,8 +81,8 @@ export default defineConfig({
         "**/index.ts",
       ],
     },
-    testTimeout: 10_000,
-    hookTimeout: 10_000,
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
   },
   plugins: [tsconfigPaths({ projects: ["./tsconfig.base.json"] })],
   resolve: {

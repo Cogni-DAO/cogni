@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-19
 - **Status:** stable
 
 ## Purpose
@@ -45,9 +44,8 @@ Vertical slices containing use cases like accounts/, ai/, and home/. Orchestrate
 
 ## Public Surface
 
-- **Exports:** accounts/services (admin ops), ai/services (completion), home/components (landing page), site-meta/services (route manifest)
+- **Exports:** accounts/services (admin ops), ai/services (completion), home/components (landing page), ingestion/services (webhook receiver), site-meta/services (route manifest)
 - **Routes (if any):** Feature-specific routes via app/
-- **CLI (if any):** none
 - **Env/Config keys:** Feature-specific environment variables
 - **Files considered API:** actions.ts, index.ts, public components
 

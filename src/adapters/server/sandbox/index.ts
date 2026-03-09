@@ -22,7 +22,7 @@ export {
   OpenClawGatewayClient,
   type RunAgentOptions,
 } from "./openclaw-gateway-client";
-export { ProxyBillingReader } from "./proxy-billing-reader";
+
 export { SandboxAgentCatalogProvider } from "./sandbox-agent-catalog.provider";
 export {
   SANDBOX_PROVIDER_ID,

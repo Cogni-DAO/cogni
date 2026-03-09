@@ -4,70 +4,62 @@ type: handoff
 work_item_id: task.0029
 status: active
 created: 2026-02-12
-updated: 2026-02-12
-branch: ""
-last_commit: ""
+updated: 2026-02-13
+branch: fix/kill-proxy-billing-path
+last_commit: 00a440ae
 ---
 
-# Handoff: Canonicalize billing at GraphExecutorPort — callback + receipt barrier
+# Handoff: Kill proxy billing path — LiteLLM callback is sole cost authority
 
 ## Context
 
-- **All sandbox:openclaw LLM calls bill $0** (bug.0037, P0). `gemini-2.5-flash` is NOT free (`is_free: false`). Revenue leakage is active.
-- Root cause: nginx proxy captures `$upstream_http_x_litellm_response_cost` from LiteLLM response headers, but **streaming SSE responses don't include cost in headers** — cost depends on total tokens, unknown until stream completes.
-- The only test that would catch this (`sandbox-llm-roundtrip-billing.stack.test.ts:96`) is `it.skip`'d due to bug.0013.
-- task.0029 is the architectural fix: replace log-scraping billing with LiteLLM webhook callbacks. Spec: [billing-ingest.md](../docs/spec/billing-ingest.md).
-- A design review was completed this session — 3 blocking issues identified, owner provided resolution direction (see Decisions Made).
+- **task.0029** shipped a LiteLLM `generic_api` callback ingest endpoint (PR #399, `feat/billing-callback-fix`). The callback writes `charge_receipts` with real cost data.
+- **Duplicate receipt bug:** Gateway calls produced TWO receipts — $0 from `ProxyBillingReader` (synchronous audit log) and real-cost from callback (async). Different `source_reference` keys prevented idempotency dedup.
+- **This branch** (`fix/kill-proxy-billing-path`, off `feat/billing-callback-fix`) deletes the entire proxy audit log billing path, refactors `commitUsageFact()` to be a strict LiteLLM-authoritative receipt writer, and removes the legacy nginx audit log.
 
 ## Current State
 
-- **bug.0037** filed and triaged → `proj.unified-graph-launch`, status: Todo
-- **task.0029** status: Todo — no branch, no code written yet
-- **Spec** (`billing-ingest.md`) is draft with 3 open questions — owner resolved the approach (below) but spec not yet updated
-- **Design review verdict**: NEEDS DISCUSSION → owner responded with partial agreement and revised approach
-- Current billing paths still operational: inproc (works), ephemeral sandbox (works), gateway (broken — $0 cost)
+- **6 commits on `fix/kill-proxy-billing-path`:**
+  1. `0aa9a895` — Delete ProxyBillingReader, billing volumes, OPENCLAW_BILLING_DIR, factory wiring
+  2. `de01a5f6` — Refactor `commitUsageFact()`: cost-known/unknown branching, remove `isModelFree()` call, add billing metrics
+  3. `6d952d5e` — Rename invariants across codebase (spec, route, AGENTS.md, tests)
+  4. `516859ed` — Rewrite unit tests, fix lint in stack tests
+  5. `51e00cf2` — (band-aid) mkdir for /billing — superseded by commit 6
+  6. `00a440ae` — Remove legacy audit log from gateway nginx config entirely
+- **Verified:** `pnpm typecheck` passes, `pnpm check:docs` passes, unit tests pass (4/4)
+- **NOT done:** `pnpm test:contract`, push, PR creation, E2E verification, squash commits 5+6
 
 ## Decisions Made
 
-Owner resolved the 3 blocking design issues from the review:
-
-1. **Gateway call_id delivery** — Do NOT require `x-litellm-call-id` from the gateway WS stream. Use `metadata.run_id` correlation from the LiteLLM callback instead. New invariant: `BILLING_CORRELATION_BY_RUN_ID` for gateway mode. Inproc/ephemeral can still use per-call barriers if call_id is available. Gateway WS enrichment (tool events + call_id) is a separate future task for accuracy, not correctness.
-
-2. **Barrier race / UX** — Do NOT synchronously block the user response on receipt existence. Instead: implement a `ReconciliationService` that records expected `run_id` at run start; a periodic job marks runs "unreconciled" if no receipts arrive after N minutes; alert/log but never fail the user response post-stream.
-
-3. **Payload shape** — Accept LiteLLM's native `StandardLoggingPayload[]` directly at the ingest endpoint. Do NOT build a custom callback class. Write the Zod schema against the actual LiteLLM payload. Verified: LiteLLM generic logger sends `List[StandardLoggingPayload]` including `call_id`, `response_cost`, `model`, `user`, `metadata` ([LiteLLM docs](https://docs.litellm.ai/docs/proxy/logging)).
-
-4. **No ReceiptBarrierPort** — Fold receipt queries into existing `AccountService` or billing service. The "barrier" is a decorator policy decision, not a new hex port. Keeps it simple.
+1. **COST_AUTHORITY_IS_LITELLM** — `commitUsageFact()` does NOT consult model catalog. `costUsd` must come from LiteLLM (0 is valid). See `billing.ts:97-122`.
+2. **RECEIPT_WRITES_REQUIRE_CALL_ID_AND_COST** — Receipt written iff `usageUnitId` exists AND `costUsd` is a number. Unknown cost → defer (litellm) or error (other).
+3. **Metrics for alerting, not logs** — `billingMissingCostDeferredTotal` and `billingInvariantViolationTotal` counters in `metrics.ts`. Defer path uses `log.debug` (expected path, not a warning).
+4. **Nginx audit log deleted** — Gateway proxy no longer writes `/billing/audit.jsonl`. Ephemeral proxy (`nginx.conf.template`) still uses audit logs for its own billing path.
+5. **Commits 5+6 should be squashed** — Commit 5 was a band-aid (`mkdir /billing`), commit 6 is the proper fix (remove audit log). Squash before PR.
 
 ## Next Actions
 
-- [ ] Update `billing-ingest.md` spec with the 3 resolved decisions above (especially `BILLING_CORRELATION_BY_RUN_ID` and reconciliation model)
-- [ ] Verify LiteLLM `StandardLoggingPayload` shape against a real callback (run LiteLLM with `GENERIC_LOGGER_ENDPOINT` pointing at a request-bin or local echo server)
-- [ ] Implement ingest endpoint: `POST /api/internal/billing/ingest` accepting native `StandardLoggingPayload[]`, Zod validation, `commitUsageFact()`, shared-secret auth
-- [ ] Configure LiteLLM webhook: `success_callback: ["langfuse", "webhook"]` with `BILLING_INGEST_TOKEN`
-- [ ] Add reconciliation tracking: record expected `run_id` at run start, periodic check for unreconciled runs
-- [ ] Strip billing from adapters: remove `ProxyBillingReader`, billing volumes, `proxyBillingEntries`, cost extraction from sandbox/gateway providers
-- [ ] Unskip `sandbox-llm-roundtrip-billing.stack.test.ts` and adapt to callback-driven billing
+- [ ] Squash commits 5+6 (or interactive rebase to fold 6 into 1)
+- [ ] Run `pnpm test:contract` — verify contract tests pass
+- [ ] Push `fix/kill-proxy-billing-path` and create PR against `feat/billing-callback-fix` (or `staging`)
+- [ ] E2E: `pnpm dev:stack`, run gateway call, verify exactly ONE receipt with cost > 0
+- [ ] Update handoff doc with final state after merge
 
 ## Risks / Gotchas
 
-- **LiteLLM webhook batching**: generic logger sends `List[StandardLoggingPayload]` (batch), not individual calls. Ingest endpoint must handle array payloads.
-- **`metadata.run_id` availability**: the proxy sets `x-litellm-spend-logs-metadata` with `run_id` — verify this survives into the callback's `metadata` field. If not, fall back to LiteLLM DB query by `call_id`.
-- **Free model cost=0 vs missing cost**: `isModelFree()` checks LiteLLM catalog; `gemini-2.5-flash` is `is_free: false` in `litellm.config.yaml:135`. Don't confuse "model is free" with "cost data is missing."
-- **Existing billing test is `it.skip`**: `tests/stack/sandbox/sandbox-llm-roundtrip-billing.stack.test.ts:96` — skipped due to bug.0013 (proxy container vanishes). The test DOES assert `costUsd > 0` (line 118). Unskipping requires fixing or working around the proxy container race.
+- **Silent callback failure = no receipt.** If LiteLLM callback fails, paid calls have ZERO receipts. Reconciler (task.0039) is the planned safety net but not yet built. Monitor `billing_missing_cost_deferred_total` metric.
+- **Docker volume orphans.** Existing deployments have `openclaw_billing` named volume. Needs `docker volume prune` on deploy.
+- **`ProxyBillingEntry` type stays.** Still used by ephemeral sandbox path (`LlmProxyManager.stop()`). Do not delete from `src/ports/sandbox-runner.port.ts`.
+- **Ephemeral proxy unaffected.** `nginx.conf.template` (non-gateway) still writes audit logs to `${ACCESS_LOG_PATH}` — that's the ephemeral billing path, separate system.
 
 ## Pointers
 
-| File / Resource                                                     | Why it matters                                                          |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `docs/spec/billing-ingest.md`                                       | Design spec — needs updates per decisions above                         |
-| `docs/spec/billing-sandbox.md`                                      | Current proxy-driven billing spec (to be superseded)                    |
-| `work/items/bug.0037.gateway-proxy-zero-cost-streaming.md`          | Motivating bug — $0 cost for all gateway calls                          |
-| `work/items/task.0029.callback-driven-billing-kill-log-scraping.md` | Work item with requirements and migration plan                          |
-| `src/adapters/server/sandbox/proxy-billing-reader.ts`               | Gateway billing reader (to be deleted)                                  |
-| `src/adapters/server/sandbox/sandbox-graph.provider.ts:529-567`     | Gateway billing emission (to be simplified)                             |
-| `src/adapters/server/ai/billing-executor.decorator.ts`              | Current billing decorator (to be modified for reconciliation)           |
-| `src/features/ai/services/billing.ts`                               | `commitUsageFact()` — the receipt writer                                |
-| `platform/infra/services/sandbox-proxy/nginx-gateway.conf.template` | Gateway nginx config capturing `$upstream_http_x_litellm_response_cost` |
-| `platform/infra/services/runtime/configs/litellm.config.yaml`       | LiteLLM config — add webhook callback here                              |
-| `tests/stack/sandbox/sandbox-llm-roundtrip-billing.stack.test.ts`   | Skipped billing E2E test — unskip when ready                            |
+| File / Resource                                                     | Why it matters                                                       |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `src/features/ai/services/billing.ts`                               | `commitUsageFact()` — cost-known/unknown branching at lines 97-122   |
+| `src/shared/observability/server/metrics.ts`                        | `billingMissingCostDeferredTotal` + `billingInvariantViolationTotal` |
+| `docs/spec/billing-ingest.md`                                       | Invariants table — 4 new billing invariants                          |
+| `platform/infra/services/sandbox-proxy/nginx-gateway.conf.template` | Audit log removed                                                    |
+| `tests/unit/features/ai/billing-receipt-invariants.spec.ts`         | 4 unit tests proving the invariants                                  |
+| `work/items/task.0029.callback-driven-billing-kill-log-scraping.md` | Parent work item                                                     |
+| PR #399 (`feat/billing-callback-fix`)                               | Base branch                                                          |

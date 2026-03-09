@@ -32,7 +32,9 @@ import type {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SANDBOX_IMAGE = "cogni-sandbox-runtime:latest";
+export const SANDBOX_OPENCLAW_IMAGE = "cogni-sandbox-openclaw:latest";
 export const SANDBOX_INTERNAL_NETWORK = "sandbox-internal";
+export const GATEWAY_CONTAINER = "openclaw-gateway";
 
 /** Default limits for sandbox tests - tight timeouts to fail fast.
  *  Full proxy+sandbox flow completes in <1s; 3s is generous headroom. */
@@ -177,6 +179,51 @@ export async function execInContainer(
   });
 
   return LlmProxyManager.demuxDockerStream(Buffer.concat(chunks));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gateway Workspace Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Ensure /workspace/current exists inside the gateway container.
+ * Idempotent: clones from the read-only git-sync mirror only if .git is absent.
+ * Uses git rev-parse (not test -d) because git-sync uses worktrees where .git is a file.
+ * Call in beforeAll for any test suite that needs the writable workspace.
+ */
+export async function ensureGatewayWorkspace(docker: Docker): Promise<void> {
+  await execInContainer(
+    docker,
+    GATEWAY_CONTAINER,
+    "git -C /workspace/current rev-parse --git-dir >/dev/null 2>&1 || git clone /repo/current /workspace/current",
+    60_000
+  );
+}
+
+/**
+ * Create a throwaway git clone inside the gateway container for isolated test work.
+ * Returns the path. Caller is responsible for cleanup via `cleanupGatewayDir()`.
+ */
+export async function createGatewayTestClone(
+  docker: Docker,
+  name: string
+): Promise<string> {
+  const dir = `/workspace/_test_${name}`;
+  await execInContainer(
+    docker,
+    GATEWAY_CONTAINER,
+    `rm -rf ${dir} && git clone /repo/current ${dir}`,
+    30_000
+  );
+  return dir;
+}
+
+/** Remove a directory inside the gateway container. Best-effort. */
+export async function cleanupGatewayDir(
+  docker: Docker,
+  dir: string
+): Promise<void> {
+  await execInContainer(docker, GATEWAY_CONTAINER, `rm -rf ${dir}`, 10_000);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

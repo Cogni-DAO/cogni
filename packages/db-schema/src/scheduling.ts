@@ -16,6 +16,7 @@
  * @public
  */
 
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -104,6 +105,11 @@ export const schedules = pgTable(
     cron: text("cron").notNull(),
     /** IANA timezone (e.g., "UTC", "America/New_York") */
     timezone: text("timezone").notNull(),
+    /**
+     * Temporal schedule ID override. When NULL, Temporal ID = row.id (user schedules).
+     * When set, maps this DB row to a semantic Temporal schedule (e.g., "governance:community").
+     */
+    temporalScheduleId: text("temporal_schedule_id"),
     /** Pause/resume toggle */
     enabled: boolean("enabled").notNull().default(true),
     /** Next scheduled execution time (null if disabled or no future runs) */
@@ -122,6 +128,10 @@ export const schedules = pgTable(
     /** For reconciler: find enabled schedules with stale next_run_at */
     nextRunIdx: index("schedules_next_run_idx").on(table.nextRunAt),
     grantIdx: index("schedules_grant_idx").on(table.executionGrantId),
+    /** Prevents duplicate governance rows under retries/concurrency */
+    temporalIdUnique: uniqueIndex("schedules_temporal_id_unique")
+      .on(table.ownerUserId, table.temporalScheduleId)
+      .where(sql`temporal_schedule_id IS NOT NULL`),
   })
 ).enableRLS();
 

@@ -5,18 +5,18 @@ title: Development Lifecycle
 status: draft
 spec_state: proposed
 trust: draft
-summary: Command-driven workflows from idea to closeout
+summary: Status-driven development lifecycle with deterministic command dispatch
 read_when: Starting new work, understanding the development flow, reviewing PRs
 implements: proj.development-workflows
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-09
+verified: 2026-02-18
 tags: [workflow, commands]
 ---
 
 # Development Lifecycle
 
-> Work enters the system as ideas or bugs. It flows through triage, planning, execution, review, and closeout via `/commands` that enforce content boundaries.
+> Every work item status maps to exactly one `/command`. Automation picks the next item, dispatches the matching command, and commits the result. No ambiguity, no status rot.
 
 ### Key References
 
@@ -28,41 +28,114 @@ tags: [workflow, commands]
 
 ## Design
 
+### Status Enum
+
+9 values. Every `needs_*` status has exactly one command that resolves it.
+
+#### Command-driven (automation dispatches these)
+
+| Status            | Command                  | What happens                                                        |
+| ----------------- | ------------------------ | ------------------------------------------------------------------- |
+| `needs_triage`    | `/triage`                | Routes item; stories → `done`; tasks/bugs → next status             |
+| `needs_research`  | `/research`              | Executes spike; spike → `done`; creates follow-up items             |
+| `needs_design`    | `/design`                | Writes/updates spec; task/bug → `needs_implement`                   |
+| `needs_implement` | `/implement`             | Writes code on branch                                               |
+| `needs_closeout`  | `/closeout`              | Docs/headers pass + creates PR                                      |
+| `needs_merge`     | `/review-implementation` | Reviews PR; APPROVE → `done` or REQUEST CHANGES → `needs_implement` |
+
+#### Terminal
+
+| Status      | Meaning                                                          |
+| ----------- | ---------------------------------------------------------------- |
+| `done`      | PR merged. `deploy_verified` field tracks prod deploy separately |
+| `blocked`   | Cannot proceed. `blocked_by:` field required                     |
+| `cancelled` | Abandoned, won't do                                              |
+
 ### Workflow
 
 ```mermaid
 graph LR
-  idea["/idea"] --> triage["/triage"]
-  bug["/bug"] --> triage
-  triage --> research["/research"]
-  triage --> project["/project"]
-  triage --> task["/task"]
-  research --> project
-  project --> spec["/spec"]
-  spec --> task
-  task --> implement["/implement"]
-  implement --> PR
-  PR --> review_d["/review-design"]
-  PR --> review_i["/review-implementation"]
-  review_d --> closeout["/closeout"]
-  review_i --> closeout
+  idea["/idea"] --> needs_triage
+  bug_cmd["/bug"] --> needs_triage
+  needs_triage -->|"/triage: story"| done
+  needs_triage -->|"/triage: spike"| needs_research
+  needs_triage -->|"/triage: task/bug complex"| needs_design
+  needs_triage -->|"/triage: task/bug simple"| needs_implement
+  needs_research -->|"/research"| done
+  needs_design -->|"/design"| needs_implement
+  needs_implement -->|"/implement"| needs_closeout
+  needs_closeout -->|"/closeout"| needs_merge
+  needs_merge -->|"APPROVE"| done
+  needs_merge -->|"REQUEST CHANGES"| needs_implement
+```
+
+### Transition Rules
+
+```
+/idea or /bug       → item created at needs_triage
+
+/triage on story    → story: done (intake complete); may create task/bug items
+/triage on bug      → needs_implement | needs_design | needs_research
+/triage on task     → needs_implement | needs_design | needs_research
+/triage on spike    → needs_research
+
+/research           → item: done; creates follow-up task/bug/spike items as needed
+
+/design on task/bug → same item: needs_implement (writes spec, may create additional tasks)
+/design on story    → story: done (intake); creates task items at needs_implement
+
+/implement          → needs_closeout
+/closeout           → needs_merge (PR created, pr: field set)
+/review-impl        → done (APPROVE) | needs_implement + revision++ (REQUEST CHANGES)
 ```
 
 ### Commands
 
-| Command                  | Creates/Updates                               | Purpose                                                       |
-| ------------------------ | --------------------------------------------- | ------------------------------------------------------------- |
-| `/idea`                  | `story.*` item (+ `spike.*` if unclear)       | Entry point: new feature concept                              |
-| `/research`              | `docs/research/*.md` + proposed layout        | Execute a spike: research + plausible project/spec/task plan  |
-| `/bug`                   | `bug.*` item                                  | Entry point: something is broken                              |
-| `/triage`                | updates item                                  | Route to project or leave standalone                          |
-| `/project`               | `proj.*` project                              | Plan roadmap with Crawl/Walk/Run phases                       |
-| `/spec`                  | spec in `docs/spec/`                          | Write or update technical contract                            |
-| `/task`                  | `task.*` item                                 | Decompose into PR-sized work                                  |
-| `/implement`             | code changes                                  | Execute a task/bug: clean code, checkpointed, spec-aligned    |
-| `/review-design`         | —                                             | Critical design review against architecture and principles    |
-| `/review-implementation` | —                                             | Critical code review against style, specs, and best practices |
-| `/closeout`              | updates item, spec, headers, AGENTS.md, index | Pre-PR finish pass: scan diff, update all docs, close item    |
+| Command                  | Entry Status      | Exit Status                 | Creates/Updates                         | Purpose                                                    |
+| ------------------------ | ----------------- | --------------------------- | --------------------------------------- | ---------------------------------------------------------- |
+| `/idea`                  | —                 | `needs_triage`              | `story.*` item (+ `spike.*` if unclear) | Entry point: new feature concept                           |
+| `/bug`                   | —                 | `needs_triage`              | `bug.*` item                            | Entry point: something is broken                           |
+| `/triage`                | `needs_triage`    | varies by type              | updates item                            | Route to project or leave standalone                       |
+| `/research`              | `needs_research`  | `done`                      | `docs/research/*.md` + follow-up items  | Execute a spike: research + proposed layout                |
+| `/design`                | `needs_design`    | `needs_implement`           | spec + task items (optional)            | Write spec contract; task/bug stays as lifecycle carrier   |
+| `/task`                  | —                 | `needs_implement`           | `task.*` item                           | Decompose into PR-sized work (utility, not lifecycle gate) |
+| `/implement`             | `needs_implement` | `needs_closeout`            | code changes                            | Execute a task/bug: clean code, checkpointed, spec-aligned |
+| `/closeout`              | `needs_closeout`  | `needs_merge`               | docs + PR                               | Docs pass + PR creation; sets `pr:` field                  |
+| `/review-implementation` | `needs_merge`     | `done` or `needs_implement` | —                                       | Critical code review; APPROVE or REQUEST CHANGES           |
+| `/pull-request`          | any               | —                           | PR                                      | Standalone PR creation (manual workflow)                   |
+
+### Automation Dispatch
+
+The governance runner selects and dispatches work items in a deterministic loop:
+
+```
+SELECT item WHERE
+  type IN (task, bug, spike)
+  AND status NOT IN (done, blocked, cancelled)
+  AND claimed_by_run IS NULL
+ORDER BY priority ASC, selection_weight DESC
+
+DISPATCH based on status:
+  needs_merge           → /review-implementation  (weight: 6)
+  needs_closeout        → /closeout               (weight: 5)
+  needs_implement       → /implement              (weight: 4)
+  needs_design          → /design                 (weight: 3)
+  needs_research        → /research               (weight: 2)
+  needs_triage          → /triage                 (weight: 1)
+
+PRE-DISPATCH:
+  SET claimed_by_run = <run_id>, claimed_at = <now>
+
+POST-DISPATCH:
+  COMMIT work item changes
+  CLEAR claimed_by_run, claimed_at
+```
+
+Items closer to `done` get higher selection weight, ensuring near-complete work finishes before new work starts.
+
+### Loop Detection
+
+`revision: 0` field in frontmatter. Incremented each time `/review-implementation` sends an item back to `needs_implement`. If `revision >= 3` → auto-set `blocked` with note "Review loop limit — escalate to human."
 
 ### Spec State Lifecycle
 
@@ -78,37 +151,37 @@ graph LR
 **Bug (simple fix):**
 
 ```
-/bug → /triage (attach proj.* or none) → /task → PR → /closeout
+/bug → needs_triage → /triage → needs_implement → /implement → needs_closeout → /closeout → needs_merge → /review-implementation → done
 ```
 
-**New idea, new project:**
+**Story (new idea, spawns tasks):**
 
 ```
-/idea → /triage → new proj.* → /project → /spec (draft) → /task(s) → PR(s) → /review-design → /review-implementation → /closeout
+/idea → needs_triage → /triage → story: done + task created at needs_design
+→ /design → task: needs_implement → /implement → needs_closeout → /closeout → needs_merge → /review-implementation → done
 ```
 
-**Idea slots into existing project:**
+**Spike (unknown design space):**
 
 ```
-/idea → /triage → attach proj.* → /task → PR → /closeout
-        └─ if contract change: /spec (draft) before /task
+/idea (creates spike) → needs_triage → /triage → needs_research → /research → spike: done (+ follow-up items)
 ```
 
-**Research spike (unknown design space):**
+**Design-required task:**
 
 ```
-/idea (creates story.* + spike.*) → /triage → /research spike.XXXX → docs/research/<topic>.md + proposed layout → /project → /spec → /task(s) → PR(s) → /closeout
+needs_design → /design (writes spec, same item stays carrier) → needs_implement → /implement → ...
 ```
 
 ### When to Create What
 
-| Situation                           | Flow                                                                          |
-| ----------------------------------- | ----------------------------------------------------------------------------- |
-| Small fix, no behavior change       | `/bug` → `/task` → PR → `/closeout`                                           |
-| Single PR, clear scope              | `/idea` → `/triage` → `/task` → PR → `/closeout`                              |
-| Multi-PR effort                     | `/idea` → `/triage` → `/project` → `/spec` → `/task`(s) → PR(s) → `/closeout` |
-| Unknown design space, need research | `/idea` → `/triage` → `/research` → `/project` → `/spec` → `/task`(s)         |
-| Architecture decision               | ADR in `docs/decisions/adr/`                                                  |
+| Situation                           | Flow                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| Small fix, no behavior change       | `/bug` → `/triage` → `/implement` → `/closeout` → `/review-implementation`  |
+| Single PR, clear scope              | `/idea` → `/triage` → `/implement` → `/closeout` → `/review-implementation` |
+| Multi-PR effort                     | `/idea` → `/triage` → `/design` → `/implement`(s) → `/closeout` → `/review` |
+| Unknown design space, need research | `/idea` → `/triage` → `/research` → follow-up tasks                         |
+| Architecture decision               | ADR in `docs/decisions/adr/`                                                |
 
 ### PR Body Format
 
@@ -124,25 +197,35 @@ Spec: docs/spec/feature.md#invariants (or Spec-Impact: none)
 
 ## Goal
 
-Enumerate the command-driven workflows, their sequencing, and the gates that enforce quality.
+Define a status-driven lifecycle where every `needs_*` status maps to exactly one `/command`, enabling deterministic automation dispatch.
 
 ## Non-Goals
 
 - Type taxonomy (see [docs-work-system](./docs-work-system.md))
 - Project management methodology
 - CI implementation details
+- Deploy verification automation (tracked via `deploy_verified` field, separate concern)
 
 ## Invariants
 
-| Rule                 | Constraint                                                                                                                 |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| PR_LINKS_ITEM        | Every code PR references exactly one primary work item (`task.*` or `bug.*`) and at least one spec, or `Spec-Impact: none` |
-| TRIAGE_OWNS_ROUTING  | Only `/triage` sets or changes the `project:` linkage on an idea or bug                                                    |
-| SPEC_NO_EXEC_PLAN    | Specs never contain roadmap, phases, tasks, owners, or timelines. At any `spec_state`                                      |
-| SPEC_STATE_LIFECYCLE | `draft` → `proposed` → `active` → `deprecated`. No skipping                                                                |
-| ACTIVE_MEANS_CLEAN   | `spec_state: active` requires Open Questions empty and `verified:` current                                                 |
-| PROJECTS_BEFORE_CODE | Projects may exist before any code. Specs are created or updated when code lands                                           |
-| REVIEW_BEFORE_MERGE  | Design and implementation reviews use `/review-design` and `/review-implementation` before `/closeout`                     |
+| Rule                      | Constraint                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| STATUS_COMMAND_MAP        | Every `needs_*` status has exactly one command. No ambiguity.                                                              |
+| BRANCH_REQUIRED           | `branch:` must be set when status ∈ {`needs_implement`, `needs_closeout`, `needs_merge`}. `/implement` creates if missing. |
+| PR_EVIDENCE_REQUIRED      | `pr:` must be set before entering `needs_merge`.                                                                           |
+| BLOCKED_EVIDENCE          | `blocked_by:` must be set when status = `blocked`.                                                                         |
+| CLEAN_WORKTREE_ON_EXIT    | `/implement` and `/closeout` must end with clean `git status`.                                                             |
+| COMMIT_ON_PROGRESS        | Commands that change repo files must end with ≥1 commit. Review-only commands are exempt.                                  |
+| CLAIM_REQUIRED            | Governance runner must set `claimed_by_run` before acting. Prevents double-dispatch.                                       |
+| LOOP_LIMIT                | `revision >= 5` → `blocked` with escalation note.                                                                          |
+| STORIES_ARE_INTAKE        | Stories go `done` after triage. Never enter implementation lifecycle.                                                      |
+| DEPLOY_TRACKED_SEPARATELY | `done` = merged. `deploy_verified` field tracks production deployment.                                                     |
+| PR_LINKS_ITEM             | Every code PR references exactly one primary work item (`task.*` or `bug.*`) and at least one spec, or `Spec-Impact: none` |
+| TRIAGE_OWNS_ROUTING       | Only `/triage` sets or changes the `project:` linkage on an idea or bug                                                    |
+| SPEC_NO_EXEC_PLAN         | Specs never contain roadmap, phases, tasks, owners, or timelines. At any `spec_state`                                      |
+| SPEC_STATE_LIFECYCLE      | `draft` → `proposed` → `active` → `deprecated`. No skipping                                                                |
+| ACTIVE_MEANS_CLEAN        | `spec_state: active` requires Open Questions empty and `verified:` current                                                 |
+| REVIEW_BEFORE_MERGE       | `/review-implementation` runs at `needs_merge` (reviews the PR, not pre-PR code)                                           |
 
 ### File Pointers
 
@@ -154,11 +237,13 @@ Enumerate the command-driven workflows, their sequencing, and the gates that enf
 | `.claude/commands/triage.md`                | `/triage` command definition                |
 | `.claude/commands/project.md`               | `/project` command definition               |
 | `.claude/commands/spec.md`                  | `/spec` command definition                  |
+| `.claude/commands/design.md`                | `/design` command definition                |
 | `.claude/commands/task.md`                  | `/task` command definition                  |
 | `.claude/commands/implement.md`             | `/implement` command definition             |
-| `.claude/commands/review-design.md`         | `/review-design` command definition         |
 | `.claude/commands/review-implementation.md` | `/review-implementation` command definition |
 | `.claude/commands/closeout.md`              | `/closeout` command definition              |
+| `.claude/commands/pull-request.md`          | `/pull-request` command definition          |
+| `.openclaw/skills/gov-engineering/SKILL.md` | ENGINEERING governance dispatch loop        |
 | `scripts/validate-docs-metadata.mjs`        | Frontmatter and heading validation          |
 
 ## Open Questions

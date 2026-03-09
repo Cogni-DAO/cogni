@@ -150,13 +150,14 @@ Extract cross-process types to `packages/ai-core/` so `packages/langgraph-server
 
 #### Step 8: LangGraphServerAdapter
 
-| Deliverable                                                            | Status      | Est | Work Item |
-| ---------------------------------------------------------------------- | ----------- | --- | --------- |
-| Create `src/adapters/server/ai/langgraph-server.adapter.ts`            | Not Started | 2   | —         |
-| Implement `GraphExecutorPort` interface                                | Not Started | 1   | —         |
-| Build request payload with server-derived identity context             | Not Started | 1   | —         |
-| Translate server stream → AiEvents (text_delta, assistant_final, done) | Not Started | 2   | —         |
-| Emit `usage_report` with `executorType: 'langgraph_server'`            | Not Started | 1   | —         |
+| Deliverable                                                                                                                  | Status      | Est | Work Item |
+| ---------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Create `src/adapters/server/ai/langgraph-server.adapter.ts`                                                                  | Not Started | 2   | —         |
+| Implement `GraphExecutorPort` interface                                                                                      | Not Started | 1   | —         |
+| Build request payload with server-derived identity context                                                                   | Not Started | 1   | —         |
+| Translate server stream → AiEvents (text_delta, assistant_final, done)                                                       | Not Started | 2   | —         |
+| Derive StatusEvent from stream (thinking/tool_use phases) — see [streaming-status spec](../../docs/spec/streaming-status.md) | Not Started | 1   | —         |
+| Emit `usage_report` with `executorType: 'langgraph_server'`                                                                  | Not Started | 1   | —         |
 
 #### Step 9: Model Allowlist
 

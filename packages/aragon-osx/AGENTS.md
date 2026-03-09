@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2025-12-13
 - **Status:** draft
 
 ## Purpose
@@ -46,8 +45,6 @@ Pure TypeScript package for Node Formation P0. Provides Aragon OSx encoding, add
   - `osx/receipt` - Receipt decoders (strict, throws if events missing)
   - `osx/version` - Pinned version constants
   - Types: `HexAddress`, `Hex`, `SupportedChainId`, `AragonOsxAddresses`
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`, `encoding.ts`, `aragon.ts`, `osx/*.ts`, `types.ts`
 
 ## Ports

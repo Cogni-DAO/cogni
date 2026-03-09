@@ -84,7 +84,7 @@ export function createWorkflowInput(overrides?: {
     scheduleId: overrides?.scheduleId ?? FIXED_IDS.scheduleId,
     graphId: overrides?.graphId ?? FIXED_IDS.graphId,
     executionGrantId: overrides?.executionGrantId ?? FIXED_IDS.grantId,
-    input: overrides?.input ?? { messages: [], model: "openrouter/auto" },
+    input: overrides?.input ?? { messages: [], model: "gpt-4o-mini" },
     scheduledFor: overrides?.scheduledFor ?? "2025-01-15T10:00:00.000Z",
   };
 }

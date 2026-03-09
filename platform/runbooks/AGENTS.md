@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-12
 - **Status:** draft
 
 ## Purpose
@@ -31,16 +30,7 @@ Operational procedures and documentation for deployment, rollback, and incident 
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** `*.md` runbook documents
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 
@@ -60,11 +50,6 @@ Minimal local commands:
 - Step-by-step procedures with clear prerequisites
 - Include troubleshooting sections for common issues
 - Reference specific commands and environment variables
-
-## Dependencies
-
-- **Internal:** none
-- **External:** none
 
 ## Change Protocol
 

@@ -7,6 +7,7 @@ Your task is to ensure that these directories are exactly in sync with one anoth
 .cursor/
 .gemini/
 .github/
+.openclaw/
 <agent-directories>
 
 See "git status" for the most recently updated agent custom command that has been edited. This is the ONLY change you must propogate. This might originate in any of the above directories, and your job is to propogate this change verbatim to all other agent directories. Identify the exact change, and now propgate this, verbatim, to all other agent instruction directories.

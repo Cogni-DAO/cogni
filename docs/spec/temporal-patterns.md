@@ -9,7 +9,7 @@ summary: Temporal workflow/activity patterns — determinism rules, schedule con
 read_when: Writing Temporal workflows or activities, configuring schedules, or debugging replay issues.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-06
+verified: 2026-03-09
 tags: [ai-graphs, infra]
 ---
 
@@ -191,6 +191,69 @@ await temporalClient.schedule.create({
 | Delete       | `DELETE /schedules` | None          |
 | Execute      | Temporal fires      | Runs workflow |
 | Reconcile    | Admin CLI only      | None          |
+
+### Pipeline Stage Composition
+
+Complex workflows (e.g., epoch collection) decompose into **typed child workflows** representing pipeline stages. Each stage has explicit I/O types, is independently retryable, and appears as a separate workflow in the Temporal UI.
+
+**Convention:**
+
+- Stage workflows live in `workflows/stages/` and are exported from the barrel file
+- Stage I/O types live in `workflows/stage-types.ts` — plain serializable objects only
+- Activity proxy configs live in `workflows/activity-profiles.ts` — shared across all workflows
+- Parent workflows compose stages via `executeChild()` with stable workflowIds
+- Use `patched()` to gate structural changes for in-flight replay safety
+
+```typescript
+// Parent workflow: thin orchestrator
+export async function CollectEpochWorkflow(raw: ScheduleActionPayload) {
+  // Setup activities (inline — cheap, always needed)
+  const epoch = await ensureEpochForWindow({ ... });
+  if (epoch.status !== "open") return;
+
+  // Stage 1: collect from all sources (child workflow)
+  await executeChild(CollectSourcesWorkflow, {
+    args: [{ epochId: epoch.epochId, sources, periodStart, periodEnd }],
+    workflowId: `collect-sources-${epoch.epochId}`,
+  });
+
+  // Stage 2: enrich and allocate (child workflow)
+  await executeChild(EnrichAndAllocateWorkflow, {
+    args: [{ epochId: epoch.epochId, attributionPipeline, weightConfig }],
+    workflowId: `enrich-allocate-${epoch.epochId}`,
+  });
+
+  // Terminal: pool + auto-close (inline — conditional, simple)
+  // ...
+}
+```
+
+**Shared activity proxy configs** eliminate retry/timeout duplication:
+
+```typescript
+// workflows/activity-profiles.ts
+import type { ActivityOptions } from "@temporalio/workflow";
+
+export const STANDARD_ACTIVITY_OPTIONS: ActivityOptions = {
+  startToCloseTimeout: "2 minutes",
+  retry: {
+    initialInterval: "2s",
+    maximumInterval: "1m",
+    backoffCoefficient: 2,
+    maximumAttempts: 5,
+  },
+};
+
+export const EXTERNAL_API_ACTIVITY_OPTIONS: ActivityOptions = {
+  startToCloseTimeout: "5 minutes",
+  retry: {
+    initialInterval: "5s",
+    maximumInterval: "2m",
+    backoffCoefficient: 2,
+    maximumAttempts: 3,
+  },
+};
+```
 
 ### Anti-Patterns
 

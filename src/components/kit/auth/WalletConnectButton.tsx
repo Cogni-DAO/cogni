@@ -4,8 +4,10 @@
 /**
  * Module: `@components/kit/auth/WalletConnectButton`
  * Purpose: Custom wallet connect button matching treasury badge design with hydration stability.
+ *   Opens SignInDialog (wallet + OAuth options) instead of RainbowKit directly when not connected.
  * Scope: Client-side only. Used in header. Does not handle wallet selection UI or persistence.
  * Invariants: Treasury badge styling; min-width prevents CLS; ready/connected gates per RainbowKit docs.
+ *   SIWE fallback: if wallet connected but not authenticated, shows "Sign message" CTA.
  * Side-effects: none
  * Notes: Uses ConnectButton.Custom for full styling control. No wagmi hooks (state from render props only).
  *        ready = mounted && authenticationStatus !== 'loading'
@@ -18,8 +20,11 @@
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import type React from "react";
+import { useState } from "react";
 
 import { cn } from "@/shared/util";
+
+import { SignInDialog } from "./SignInDialog";
 
 interface WalletConnectButtonProps {
   /**
@@ -47,6 +52,8 @@ export function WalletConnectButton({
   // variant = "default",
   className,
 }: WalletConnectButtonProps = {}): React.JSX.Element {
+  const [dialogOpen, setDialogOpen] = useState(false);
+
   return (
     <div className={cn("relative shrink-0", className)}>
       <ConnectButton.Custom>
@@ -82,16 +89,39 @@ export function WalletConnectButton({
             );
           }
 
-          // Not connected: show connect button
-          if (!connected) {
+          // Wallet connected but SIWE not completed — "Sign message" fallback
+          if (account && authenticationStatus === "unauthenticated") {
             return (
               <button
                 type="button"
                 onClick={openConnectModal}
-                className={BASE_BADGE_CLASSES}
+                className={cn(
+                  BASE_BADGE_CLASSES,
+                  "border-primary/50 bg-primary/5"
+                )}
               >
-                <span className="text-muted-foreground">Connect</span>
+                <span className="text-foreground">Sign message</span>
               </button>
+            );
+          }
+
+          // Not connected: show connect button → opens our sign-in dialog
+          if (!connected) {
+            return (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDialogOpen(true)}
+                  className={BASE_BADGE_CLASSES}
+                >
+                  <span className="text-muted-foreground">Connect</span>
+                </button>
+                <SignInDialog
+                  open={dialogOpen}
+                  onOpenChange={setDialogOpen}
+                  onWalletConnect={openConnectModal}
+                />
+              </>
             );
           }
 

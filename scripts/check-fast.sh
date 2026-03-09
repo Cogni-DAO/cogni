@@ -15,7 +15,7 @@
 #   - set -o pipefail: Catches failures in piped commands
 #   - set -u: Treats unbound variables as errors
 # Side-effects: None in default mode; --fix mode modifies files via ESLint and Prettier
-# Links: docs/spec/style.md, AGENTS.md, package.json:41-42
+# Links: docs/spec/style.md, AGENTS.md, package.json:41-42, vitest.config.mts
 
 set +e
 set -o pipefail
@@ -73,11 +73,11 @@ else
 fi
 
 run_check "ui-tokens" "bash scripts/check-ui-tokens.sh"
-run_check "test:unit" "pnpm test:unit"
-run_check "test:contract" "pnpm test:contract"
-run_check "test:meta" "pnpm test:meta"
+
+# Consolidated test invocations: fewer vitest cold starts saves ~300s in constrained envs.
+# Root-config tests (unit + contract + meta + packages:integration) share vitest.config.mts.
+run_check "test:core" "pnpm vitest run tests/unit tests/ports tests/contract tests/meta tests/packages"
 run_check "test:packages:local" "pnpm test:packages:local"
-run_check "test:packages:integration" "pnpm test:packages:integration"
 run_check "test:services:local" "pnpm test:services:local"
 run_check "check:docs" "pnpm check:docs"
 run_check "check:root-layout" "pnpm check:root-layout"

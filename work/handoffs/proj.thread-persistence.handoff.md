@@ -4,68 +4,64 @@ type: handoff
 work_item_id: proj.thread-persistence
 status: active
 created: 2026-02-10
-updated: 2026-02-11
-branch: fix/health-monitoring
-last_commit: 793098f0
+updated: 2026-02-13
+branch: feat/task-0040-ai-sdk-streaming
+last_commit: b958ef55
 ---
 
-# Handoff: Thread Persistence
+# Handoff: Thread Persistence — What's Next
 
 ## Context
 
-- The platform currently has **no server-side message persistence** — the client (assistant-ui) sends full conversation history on every request, meaning users can fabricate assistant/tool messages
-- We designed a server-authoritative persistence layer using **AI SDK `UIMessage[]` per thread**, replacing two earlier draft specs (`usage-history.md` with `run_artifacts`, and `server-transcript-authority.md` with `chat_messages`)
-- The canonical spec is [`docs/spec/thread-persistence.md`](../../docs/spec/thread-persistence.md) — all invariants, schema, port interface, and event mapping live there
-- The project roadmap is [`work/projects/proj.thread-persistence.md`](../projects/proj.thread-persistence.md) — 3 phases: P0 (DB + route bridge, backend-only), P1 (contract change + client migration), P2 (retention + GDPR)
-- **No implementation code has been written yet** — only spec, project, and research artifacts
+- Server-authoritative conversation persistence using AI SDK `UIMessage[]` per thread, stored in `ai_threads` JSONB with RLS
+- **P0 (Done — task.0030):** DB schema, `ThreadPersistencePort`, adapter, route bridge (load→execute→persist), secrets redaction, multi-turn stack test
+- **P1 streaming (Done — task.0042):** Contract narrowed to `{ message, model, graphName, stateKey? }`, route uses `createUIMessageStream`, client uses `useChatRuntime` + `DefaultChatTransport`. PR #396
+- The remaining P1 work is **thread list UI** (task.0035) and **sandbox observability enrichment** (no work item yet)
+- Canonical spec: [`docs/spec/thread-persistence.md`](../../docs/spec/thread-persistence.md). Project roadmap: [`work/projects/proj.thread-persistence.md`](../projects/proj.thread-persistence.md)
 
 ## Current State
 
-- **Done:** Spec approved and committed (`thread-persistence.md`), project rewritten, old specs deleted, all cross-references updated
-- **Done:** Research artifact at `docs/research/ai-sdk-transcript-authority-analysis.md` documents AI SDK 5/6 patterns, assistant-ui runtime options, and the AiEvent mapping rationale
-- **Not started:** All P0 deliverables (table, port, adapter, route refactor, masking, tests)
-- **Not started:** AI SDK package (`ai`) not yet added as a dependency
-- **Not started:** `@assistant-ui/react-ai-sdk` package not yet added (P1)
+- **Done:** ai_threads table, ThreadPersistencePort, DrizzleThreadPersistenceAdapter, RLS, optimistic concurrency, UIMessage accumulator, secrets redaction, AI SDK streaming end-to-end
+- **Done:** Contract + route + client migrated to AI SDK Data Stream Protocol. Tests updated (contract, SSE reconciliation, free/paid model, langfuse, thread-persistence, chat-streaming stack tests)
+- **Todo (task.0035):** Thread history sidebar — `listThreads` endpoint exists in the port but has no route or UI. Users currently get a fresh thread on page refresh.
+- **Todo:** History load on mount — when a user returns to a thread (via stateKey URL or sidebar), client should display server-loaded messages before allowing new input
+- **Not started:** LangGraph executor-conditional history loading (only relevant when `langgraph_server` gets durable checkpoints)
+- **Not started:** Gateway tool-use streaming enrichment (OpenClaw WS only emits `text_delta` + `chat_final`, no tool events)
 
 ## Decisions Made
 
-- **P0 is backend-only** — server extracts last user message from existing `messages[]` payload, ignores client-supplied history, loads from `ai_threads`. No client changes in P0. Contract change + `useChatRuntime` migration happen together in P1.
-- **UIMessage[] JSONB per thread** — not normalized rows, not `run_artifacts`. See [spec: Key Decision 1](../../docs/spec/thread-persistence.md#1-uimessage-jsonb-vs-normalized-message-rows)
-- **AiEvent stays internal** — mapped to AI SDK stream parts at the route layer via a ~30-line accumulator. See [spec: Key Decision 2](../../docs/spec/thread-persistence.md#2-aievent-stays-internal)
-- **RLS via `owner_user_id` / `app.current_user_id`** — same pattern as `billing_accounts` and `charge_receipts`. See [tenant-scope.ts](../../packages/db-client/src/tenant-scope.ts)
-- **MESSAGES_GROW_ONLY** — enforced in adapter code (`saveThread` rejects if `newMessages.length < oldMessages.length`), not a DB constraint
-- **Minimal accumulator** — we build the response `UIMessage` ourselves from AiEvent stream, not using AI SDK's `toUIMessageStreamResponse()`. See [spec: Response UIMessage Assembly](../../docs/spec/thread-persistence.md#response-uimessage-assembly)
-- **Thread ID prefix validated** — `owner_user_id` is authoritative; threadId prefix `${ownerUserId}:${stateKey}` is verified, never trusted
-- **`ai_threads` is canonical for MVP** — LangGraph thread duality deferred until `langgraph_server` is deployed to prod with durable checkpoints
+- UIMessage[] JSONB per thread — [spec: Key Decision 1](../../docs/spec/thread-persistence.md#1-uimessage-jsonb-vs-normalized-message-rows)
+- AiEvent stays internal, bridged at route layer — [spec: Key Decision 2](../../docs/spec/thread-persistence.md#2-aievent-stays-internal)
+- Wire format: `createUIMessageStream` (AI SDK SSE) — [spec: Key Decision 3](../../docs/spec/thread-persistence.md#3-wire-format-ai-sdk-data-stream-protocol)
+- Message conversion preserves `toCoreMessages()` pipeline — [spec: Key Decision 4](../../docs/spec/thread-persistence.md#4-message-conversion-preserve-existing-pipeline)
+- `assistant-stream` package still in deps (used nowhere in chat route) — can be removed once no other consumer exists
 
 ## Next Actions
 
-- [ ] Create a `task.*` work item for P0 implementation
-- [ ] Add `ai` package (AI SDK 5+) as a dependency — needed for `UIMessage` types and `convertToModelMessages()`
-- [ ] Create `ai_threads` Drizzle schema in `packages/db-schema/src/ai-threads.ts` per spec schema
-- [ ] Create `ThreadPersistencePort` in `src/ports/thread-persistence.port.ts` per spec port interface
-- [ ] Create `DrizzleThreadPersistenceAdapter` with RLS + MESSAGES_GROW_ONLY enforcement
-- [ ] Refactor chat route (`src/app/api/v1/ai/chat/route.ts`): extract last user message from `messages[]`, load→execute→persist flow with AiEvent→UIMessageStream bridge
-- [ ] Add PII masking utility (`src/features/ai/services/masking.ts`) applied before `saveThread()`
-- [ ] Write stack tests per acceptance checks in spec (multi-turn, tenant isolation, grow-only, disconnect safety)
+- [ ] **task.0035: Thread history sidebar** — `listThreads` API route + basic sidebar UI for thread selection
+- [ ] **task.0035: History load on mount** — client fetches thread messages from server when stateKey is known (URL param or sidebar click)
+- [ ] **Remove `assistant-stream` dep** — verify no remaining imports, then remove from package.json
+- [ ] **bug.0036 verification** — confirm the closed-controller TypeError is gone with `createUIMessageStream` (expected fixed as side effect)
+- [ ] **bug.0011 verification** — confirm gateway truncation is still handled by `assistant_final` reconciliation in the new bridge
+- [ ] **Gateway tool-use enrichment** — extend `OpenClawGatewayClient` to emit `tool_call_start`/`tool_call_result` AiEvents from WS stream (no work item yet)
+- [ ] **Spec update: Executor State Duality** — document that `ai_threads` is a UI projection for external executors
 
 ## Risks / Gotchas
 
-- `convertToModelMessages()` expects AI SDK `UIMessage` shape — our current `Message` type from `src/core/chat/model.ts` does not match and cannot be used directly for prompt reconstruction
-- LangGraph executor manages its own prompt assembly from checkpoints — `convertToModelMessages()` path only applies to `inproc`/`claude_sdk` executors. For MVP, `ai_threads` is canonical for all executors.
-- The `assistant-stream` package (currently used for SSE) will be replaced by AI SDK's `createUIMessageStream()` — this changes the wire protocol from assistant-stream format to AI SDK Data Stream Protocol
-- RLS setting is `app.current_user_id` (user-scoped), not account-scoped — `ai_threads.owner_user_id` maps to the authenticated user, not a billing account
+- `tests/helpers/data-stream.ts` has legacy aliases (`readDataStreamEvents`, `DataStreamChunkType`) — safe to remove after confirming no stack test uses the old names
+- Thread-persistence stack test removed the "FABRICATED_BY_CLIENT" assertion since client no longer sends history — the invariant is now enforced by contract validation, not server-side filtering
+- `useChatRuntime` sends full local UIMessage[] to `prepareSendMessagesRequest` — the callback extracts only the last user text. If assistant-ui changes this API, the extraction logic in `ChatRuntimeProvider.client.tsx:extractLastUserText` may need updating
+- `finish` chunk omits `usage` data (AI SDK `strictObject` validation rejects it) — usage is consumed by the billing decorator internally, not exposed to client
 
 ## Pointers
 
-| File / Resource                                                                                                                        | Why it matters                                                                    |
-| -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [`docs/spec/thread-persistence.md`](../../docs/spec/thread-persistence.md)                                                             | Canonical spec — all invariants, schema, port interface, event mapping            |
-| [`work/projects/proj.thread-persistence.md`](../projects/proj.thread-persistence.md)                                                   | Project roadmap — P0/P1/P2 deliverable tables                                     |
-| [`docs/research/ai-sdk-transcript-authority-analysis.md`](../../docs/research/ai-sdk-transcript-authority-analysis.md)                 | Research: AI SDK patterns, assistant-ui runtimes, mapping rationale               |
-| [`packages/ai-core/src/events/ai-events.ts`](../../packages/ai-core/src/events/ai-events.ts)                                           | AiEvent union — the internal stream contract that gets bridged                    |
-| [`src/app/api/v1/ai/chat/route.ts`](../../src/app/api/v1/ai/chat/route.ts)                                                             | Current route handler — will be refactored for load→execute→persist               |
-| [`src/contracts/ai.chat.v1.contract.ts`](../../src/contracts/ai.chat.v1.contract.ts)                                                   | Current contract — P0 extracts last user msg; P1 changes to `{threadId, message}` |
-| [`src/features/ai/chat/providers/ChatRuntimeProvider.client.tsx`](../../src/features/ai/chat/providers/ChatRuntimeProvider.client.tsx) | Current client runtime — P1 migrates to `useChatRuntime`                          |
-| [`packages/db-client/src/tenant-scope.ts`](../../packages/db-client/src/tenant-scope.ts)                                               | RLS helper — `SET LOCAL app.current_user_id` pattern to reuse                     |
-| [`src/adapters/server/ai/billing-executor.decorator.ts`](../../src/adapters/server/ai/billing-executor.decorator.ts)                   | Billing decorator — must remain unchanged (AiEvent contract preserved)            |
+| File / Resource                                                                                                                        | Why it matters                                                                      |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [`docs/spec/thread-persistence.md`](../../docs/spec/thread-persistence.md)                                                             | Canonical spec — invariants, schema, event mapping, port interface                  |
+| [`work/projects/proj.thread-persistence.md`](../projects/proj.thread-persistence.md)                                                   | Project roadmap — P0/P1/P2 deliverable tables with status                           |
+| [`work/items/task.0035.thread-history-sidebar.md`](../items/task.0035.thread-history-sidebar.md)                                       | Next work item — thread list + history load                                         |
+| [`src/app/api/v1/ai/chat/route.ts`](../../src/app/api/v1/ai/chat/route.ts)                                                             | Chat route — createUIMessageStream bridge, UIMessage accumulator, two-phase persist |
+| [`src/features/ai/chat/providers/ChatRuntimeProvider.client.tsx`](../../src/features/ai/chat/providers/ChatRuntimeProvider.client.tsx) | Client runtime — useChatRuntime, DefaultChatTransport, extractLastUserText          |
+| [`src/contracts/ai.chat.v1.contract.ts`](../../src/contracts/ai.chat.v1.contract.ts)                                                   | Wire contract — `{ message, model, graphName, stateKey? }`                          |
+| [`src/ports/thread-persistence.port.ts`](../../src/ports/thread-persistence.port.ts)                                                   | Port interface — loadThread, saveThread, softDelete, listThreads                    |
+| [`tests/helpers/data-stream.ts`](../../tests/helpers/data-stream.ts)                                                                   | SSE test parser — readSseEvents, SseEvent, type guards                              |

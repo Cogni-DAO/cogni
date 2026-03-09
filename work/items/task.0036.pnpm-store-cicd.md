@@ -2,7 +2,7 @@
 id: task.0036
 type: task
 title: "CI/CD pipeline for pnpm-store image rebuild on lockfile change"
-status: Todo
+status: needs_design
 priority: 1
 estimate: 2
 summary: Automate pnpm-store image builds triggered by pnpm-lock.yaml changes. Tag by lockfile hash. Deploy step syncs image contents into server pnpm_store volume. Enables offline pnpm install inside sandbox containers.
@@ -18,6 +18,10 @@ created: 2026-02-12
 updated: 2026-02-12
 labels: [openclaw, sandbox, docker, cicd, p1]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 15
 ---
 
 # CI/CD pipeline for pnpm-store image rebuild on lockfile change
@@ -73,6 +77,10 @@ task.0031 ships the `cogni-sandbox-openclaw` devtools image with `PNPM_STORE_DIR
 - [ ] Verify offline install: `pnpm install --offline --frozen-lockfile` succeeds in sandbox container
 - [ ] Add compose bootstrap one-shot service that runs `pnpm install --offline --frozen-lockfile` as part of deploy (replaces P0 agent-first-action pattern)
 - [ ] Idempotency: skip if `node_modules` exists AND `.cogni/bootstrap-lock-hash` matches current `pnpm-lock.yaml` hash
+
+## Motivation (2026-02-13)
+
+CI broke because `@assistant-ui/react` was added during AI SDK streaming work but the pnpm-store image was never regenerated. The `sandbox-openclaw-pnpm-smoke` workspace bootstrap tests had to be skipped (`describe.skip`) pending this automation. Until this task lands, every lockfile change requires a manual `pnpm sandbox:pnpm-store:seed` locally and a manual GHCR publish for prod. This is the primary blocker for re-enabling those tests.
 
 ## Non-Goals
 

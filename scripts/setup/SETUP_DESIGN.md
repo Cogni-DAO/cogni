@@ -121,6 +121,26 @@ pnpm setup github --env production
      - `OPENROUTER_API_KEY` (prompt if not in local env)
      - `EVM_RPC_URL` (prompt if not in local env - Sepolia RPC from alchemy.com or infura.io)
      - `OPENCLAW_GATEWAY_TOKEN` (generated random, ≥32 chars — gateway WS auth)
+     - `OPENCLAW_GITHUB_RW_TOKEN` (GitHub PAT with Contents:Write + Pull requests:Write — host-side git relay)
+     - `DISCORD_BOT_TOKEN` (Discord bot token — from discord.com/developers/applications → Bot → Reset Token)
+     - **OAuth providers (optional — provider silently skipped if missing):**
+       - `GH_OAUTH_CLIENT_ID` + `GH_OAUTH_CLIENT_SECRET` (from github.com/settings/developers → OAuth Apps)
+       - `DISCORD_OAUTH_CLIENT_ID` + `DISCORD_OAUTH_CLIENT_SECRET` (from discord.com/developers/applications → OAuth2)
+       - `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` (from console.cloud.google.com/apis/credentials)
+       - See [OAuth App Setup Guide](../../docs/guides/oauth-app-setup.md) for step-by-step
+     - `SCHEDULER_API_TOKEN` (generated random, ≥32 chars — scheduler-worker → app API bearer auth)
+     - `BILLING_INGEST_TOKEN` (generated random, ≥32 chars — LiteLLM callback → billing ingest bearer auth)
+     - `INTERNAL_OPS_TOKEN` (generated random, ≥32 chars — deploy-time bearer auth for `/api/internal/ops/governance/schedules/sync`)
+     - **GitHub App for attribution ingestion (optional — skipped if missing):**
+       - `GH_REVIEW_APP_ID` + `GH_REVIEW_APP_PRIVATE_KEY_BASE64` (from github.com/organizations → Developer settings → GitHub Apps)
+       - `GH_WEBHOOK_SECRET` (from the GitHub App's webhook settings page — the secret used for HMAC-SHA256 payload verification)
+       - **Webhook URL must be set in the GitHub App** to `https://<domain>/api/internal/webhooks/github` (e.g. `https://preview.cognidao.org/api/internal/webhooks/github`)
+       - See [VCS Integration Spec](../../docs/spec/vcs-integration.md) for app permissions and setup
+     - **GitHub repos for ingestion:**
+       - `GH_REPOS` (comma-separated, e.g. `Cogni-DAO/node-template` — set as GitHub Actions **variable**, not secret)
+     - **Grafana (optional):**
+       - `GRAFANA_URL` (Grafana instance URL)
+       - `GRAFANA_SERVICE_ACCOUNT_TOKEN` (service account token with viewer+ role)
    - **Deployment secrets:** From previous steps
      - `SSH_DEPLOY_KEY` (from `~/.ssh/cogni_template_<env>_deploy`)
      - `VM_HOST` (from `.env.<env>` file)
@@ -157,7 +177,6 @@ For current manual process, see [DEPLOY.md](../../platform/runbooks/DEPLOY.md).
    - **Note:** SonarCloud creates two separate checks: `sonar` (GitHub Action job) and `SonarCloud Code Analysis` (Quality Gate). Both should be added to required checks.
 
 4. **Print GitHub Apps checklist:**
-   - Install URLs for: `cogni-git-review`, `cogni-git-admin`, `sonarcloud`
    - **SonarCloud setup:**
      1. Create SonarCloud project for your repo and organization
      2. Update `sonar-project.properties` with your organization and project key

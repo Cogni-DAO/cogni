@@ -113,7 +113,7 @@ const ThreadWelcome: FC = () => {
 
 const ThreadSuggestions: FC = () => {
   return (
-    <div className="aui-thread-welcome-suggestions grid w-full grid-cols-2 gap-2 pb-2">
+    <div className="aui-thread-welcome-suggestions grid w-full grid-cols-1 gap-2 pb-2 sm:grid-cols-2">
       {[
         {
           title: "Dream of",

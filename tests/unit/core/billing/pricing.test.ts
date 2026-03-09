@@ -3,8 +3,8 @@
 
 /**
  * Module: `@tests/unit/core/billing/pricing`
- * Purpose: Unit tests for pricing helpers.
- * Scope: Verifies calculateLlmUserCharge and CREDITS_PER_USD constant. Does not test policy layer.
+ * Purpose: Unit tests for pricing helpers and revenue share math.
+ * Scope: Verifies calculateLlmUserCharge, calculateRevenueShareBonus, and CREDITS_PER_USD constant. Does not test policy layer.
  * Invariants: Single ceil at the end; markup applied before rounding.
  * Side-effects: none
  * Links: `src/core/billing/pricing.ts`
@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import {
   CREDITS_PER_USD,
   calculateLlmUserCharge,
+  calculateRevenueShareBonus,
   usdCentsToCredits,
   usdToCredits,
 } from "@/core/billing/pricing";
@@ -120,6 +121,44 @@ describe("Pricing Logic", () => {
       expect(result.userCostUsd).toBeCloseTo(0.0015, 10);
       // Credits: ceil(0.0015 * 10_000_000) = 15000
       expect(result.chargedCredits).toBe(15000n);
+    });
+  });
+
+  describe("calculateRevenueShareBonus", () => {
+    it("computes 75% bonus using scaled integer math", () => {
+      // 100,000,000 credits * 0.75 = 75,000,000
+      expect(calculateRevenueShareBonus(100_000_000n, 0.75)).toBe(75_000_000n);
+    });
+
+    it("returns 0n when revenueShare is 0", () => {
+      expect(calculateRevenueShareBonus(100_000_000n, 0)).toBe(0n);
+    });
+
+    it("returns 0n when revenueShare is negative", () => {
+      expect(calculateRevenueShareBonus(100_000_000n, -0.5)).toBe(0n);
+    });
+
+    it("computes 100% bonus", () => {
+      expect(calculateRevenueShareBonus(100_000_000n, 1.0)).toBe(100_000_000n);
+    });
+
+    it("floors fractional credits (no rounding up)", () => {
+      // 3 credits * 0.75 = 2.25 → floor = 2
+      expect(calculateRevenueShareBonus(3n, 0.75)).toBe(2n);
+    });
+
+    it("handles small credit amounts", () => {
+      // 1 credit * 0.75 = 0.75 → floor = 0
+      expect(calculateRevenueShareBonus(1n, 0.75)).toBe(0n);
+    });
+
+    it("handles typical purchase amounts", () => {
+      // $10 purchase = 100,000,000 credits → 75% = 75,000,000
+      expect(calculateRevenueShareBonus(100_000_000n, 0.75)).toBe(75_000_000n);
+      // $100 purchase = 1,000,000,000 credits → 75% = 750,000,000
+      expect(calculateRevenueShareBonus(1_000_000_000n, 0.75)).toBe(
+        750_000_000n
+      );
     });
   });
 });

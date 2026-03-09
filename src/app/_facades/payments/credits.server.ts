@@ -6,7 +6,7 @@
  * Purpose: App-layer wiring for widget payments. Resolves dependencies, delegates to feature services, and maps port types to contract DTOs.
  * Scope: Server-only facade. Handles billing account resolution from session user, maps Date to ISO string for contract compliance; does not perform direct persistence or HTTP handling.
  * Invariants: Billing account from session identity only; return types use z.infer; Date fields map to ISO strings.
- * Side-effects: IO (via AccountService port).
+ * Side-effects: IO (via AccountService, ServiceAccountService ports).
  * Notes: Errors bubble to route handlers for HTTP mapping. Facades own DTO mapping (port types → contract types).
  * Links: docs/spec/payments-design.md, src/contracts/AGENTS.md
  * @public
@@ -36,7 +36,8 @@ export async function confirmCreditsPaymentFacade(
   ctx: RequestContext
 ): Promise<CreditsConfirmOutput> {
   const start = performance.now();
-  const accountService = getContainer().accountsForUser(
+  const container = getContainer();
+  const accountService = container.accountsForUser(
     toUserId(params.sessionUser.id)
   );
 
@@ -46,7 +47,9 @@ export async function confirmCreditsPaymentFacade(
   try {
     billingAccount = await getOrCreateBillingAccountForUser(accountService, {
       userId: params.sessionUser.id,
-      walletAddress: params.sessionUser.walletAddress,
+      ...(params.sessionUser.walletAddress
+        ? { walletAddress: params.sessionUser.walletAddress }
+        : {}),
     });
   } catch (error) {
     if (
@@ -67,13 +70,17 @@ export async function confirmCreditsPaymentFacade(
     }),
   };
 
-  const result = await confirmCreditsPayment(accountService, {
-    billingAccountId: billingAccount.id,
-    defaultVirtualKeyId: billingAccount.defaultVirtualKeyId,
-    amountUsdCents: params.amountUsdCents,
-    clientPaymentId: params.clientPaymentId,
-    metadata: params.metadata,
-  });
+  const result = await confirmCreditsPayment(
+    accountService,
+    container.serviceAccountService,
+    {
+      billingAccountId: billingAccount.id,
+      defaultVirtualKeyId: billingAccount.defaultVirtualKeyId,
+      amountUsdCents: params.amountUsdCents,
+      clientPaymentId: params.clientPaymentId,
+      metadata: params.metadata,
+    }
+  );
 
   // Log domain event (widget payment confirmed)
   const event: PaymentsConfirmedEvent = {
@@ -112,7 +119,9 @@ export async function getCreditsSummaryFacade(
   try {
     billingAccount = await getOrCreateBillingAccountForUser(accountService, {
       userId: params.sessionUser.id,
-      walletAddress: params.sessionUser.walletAddress,
+      ...(params.sessionUser.walletAddress
+        ? { walletAddress: params.sessionUser.walletAddress }
+        : {}),
     });
   } catch (error) {
     if (

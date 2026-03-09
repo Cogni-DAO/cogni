@@ -122,6 +122,13 @@ Per [openclaw-sandbox-controls.md](../../docs/spec/openclaw-sandbox-controls.md)
 | Replace hardcoded `AVAILABLE_GRAPHS` in `ChatComposerExtras` with `useAgents()` hook   | Not Started | 1   | task.0018 |
 | [ ] Deduplicate agent name/description — catalog should derive from execution registry | Not Started | 1   |           |
 
+#### Streaming Status Events
+
+| Deliverable                                                                                | Status | Est | Work Item |
+| ------------------------------------------------------------------------------------------ | ------ | --- | --------- |
+| Consume OpenClaw agent events (lifecycle, tool, compaction) — surface status in chat UI    | Done   | 2   | task.0074 |
+| Stream reasoning tokens from OpenClaw → AI SDK reasoning parts → assistant-ui Reasoning UI | Todo   | 2   | task.0078 |
+
 #### Gateway Client Hardening
 
 Model after upstream `openclaw/src/gateway/client.ts` features:
@@ -165,13 +172,14 @@ Host still owns push+PR in warm pool mode — workers never need GitHub credenti
 
 #### Multi-Agent + Custom Agents
 
-| Deliverable                                                                             | Status      | Est |
-| --------------------------------------------------------------------------------------- | ----------- | --- |
-| [ ] OpenClaw multi-agent routing (`--agent` selection per-run via `agents.list` config) | Not Started | 2   |
-| [ ] Skills audit: identify sandbox-compatible skills, bundle curated set into image     | Not Started | 2   |
-| [ ] Dashboard-driven agent + skill creation (config changes via git commit)             | Not Started | 3   |
-| [ ] Persistent sessions: workspace volume across runs for DAO agents                    | Not Started | 2   |
-| [ ] Conversation continuity: inject prior messages as workspace context files           | Not Started | 2   |
+| Deliverable                                                                                          | Status      | Est | Work Item |
+| ---------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| [ ] Subagent spawning: upstream header fix + config + flash/strong model tiers + delegation strategy | Todo        | 3   | task.0045 |
+| [ ] OpenClaw multi-agent routing (`--agent` selection per-run via `agents.list` config)              | Not Started | 2   |           |
+| [ ] Skills audit: identify sandbox-compatible skills, bundle curated set into image                  | Not Started | 2   |           |
+| [ ] Dashboard-driven agent + skill creation (config changes via git commit)                          | Not Started | 3   |           |
+| [ ] Persistent sessions: workspace volume across runs for DAO agents                                 | Not Started | 2   |           |
+| [ ] Conversation continuity: inject prior messages as workspace context files                        | Not Started | 2   |           |
 
 #### Observability
 
@@ -204,6 +212,7 @@ Host still owns push+PR in warm pool mode — workers never need GitHub credenti
 - [openclaw-sandbox-controls.md](../../docs/spec/openclaw-sandbox-controls.md) — Invariants 20-25: git relay, dynamic catalog, credential strategy, anti-patterns
 - [openclaw-sandbox-spec.md](../../docs/spec/openclaw-sandbox-spec.md) — Invariants 13-19: container image, LLM protocol, I/O protocol, billing
 - [sandboxed-agents.md](../../docs/spec/sandboxed-agents.md) — Invariants 1-12: core sandbox architecture, socket bridge
+- [streaming-status.md](../../docs/spec/streaming-status.md) — StatusEvent pipeline: OpenClaw agent events → AiEvent → transient data-status SSE chunks
 
 ## Design Notes
 

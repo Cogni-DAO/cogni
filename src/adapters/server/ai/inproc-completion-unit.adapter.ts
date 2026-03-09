@@ -77,6 +77,8 @@ export interface CompletionStreamParams {
   tools?: readonly import("@/ports").LlmToolDefinition[];
   /** Tool choice for LLM (optional) */
   toolChoice?: import("@/ports").LlmToolChoice;
+  /** Billing correlation metadata forwarded to LiteLLM as x-litellm-spend-logs-metadata header */
+  spendLogsMetadata?: { run_id: string; graph_id: string };
 }
 
 /**
@@ -192,6 +194,10 @@ export class InProcCompletionUnitAdapter {
           ...(abortSignal && { abortSignal }),
           ...(tools && { tools }),
           ...(toolChoice && { toolChoice }),
+          spendLogsMetadata: {
+            run_id: runContext.runId,
+            graph_id: runContext.graphId,
+          },
         }).catch((error: unknown) => {
           // Classify at typed boundary: convert InsufficientCreditsPortError to typed result
           if (isInsufficientCreditsPortError(error)) {

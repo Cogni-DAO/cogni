@@ -86,6 +86,21 @@ export interface AssistantFinalEvent {
 }
 
 /**
+ * Agent activity status for UI indicators.
+ * Emitted by providers to surface agent phases (thinking, tool use, compaction).
+ * Per STATUS_IS_EPHEMERAL: never persisted in ai_threads.messages.
+ * Per STATUS_BEST_EFFORT: missing events must not break streaming, persistence, or billing.
+ * Per STATUS_NEVER_LEAKS_CONTENT: label contains at most a tool name, never args or results.
+ */
+export interface StatusEvent {
+  readonly type: "status";
+  /** Current agent phase. */
+  readonly phase: "thinking" | "tool_use" | "compacting";
+  /** Optional label for display (e.g., tool name). */
+  readonly label?: string;
+}
+
+/**
  * Stream completed.
  * Emitted by runtime when the entire response is done.
  */
@@ -118,5 +133,6 @@ export type AiEvent =
   | ToolCallResultEvent
   | UsageReportEvent
   | AssistantFinalEvent
+  | StatusEvent
   | DoneEvent
   | ErrorEvent;

@@ -2,7 +2,7 @@
 id: bug.0026
 type: bug
 title: Scheduler worker silently stops polling — schedules enabled but runs cease
-status: Backlog
+status: needs_triage
 priority: 0
 estimate: 2
 summary: Production scheduler-worker health check uses /livez (always 200) instead of /readyz, and worker.run() rejection doesn't exit the process or update health state. The container appears healthy forever even after the Temporal worker stops polling, so schedules stay "enabled" but no runs execute.
@@ -20,6 +20,10 @@ created: 2026-02-11
 updated: 2026-02-11
 labels: [temporal, scheduling, reliability, silent-failure]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 13
 ---
 
 # Scheduler worker silently stops polling — schedules enabled but runs cease

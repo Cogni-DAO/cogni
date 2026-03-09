@@ -6,11 +6,11 @@ title: Docs + Work System Infrastructure
 state: Active
 priority: 0
 estimate: 4
-summary: Engineering roadmap to build knowledge + project management infrastructure (Plane, MkDocs, CI gates, submodules)
-outcome: Automated CI enforcement, Plane as work canonical, MkDocs publishing, optional cogni-knowledge submodule
+summary: CI-validated docs system with Fumadocs publishing inside the existing Next.js app
+outcome: Searchable docs site at /docs/* rendering all /docs and /work markdown, CI enforcement of structure, branch preview via deploys
 assignees: derekg1729
 created: 2026-02-06
-updated: 2026-02-06
+updated: 2026-02-13
 labels: [docs, infra, tooling]
 ---
 
@@ -18,18 +18,18 @@ labels: [docs, infra, tooling]
 
 ## Goal
 
-Build the tooling infrastructure that enforces our docs + work system:
+Build the tooling infrastructure that enforces and publishes our docs + work system:
 
-- CI gates that validate docs structure and PR linkage
-- Plane as canonical work tracker (with `/work` as export mirror)
-- MkDocs for published documentation
-- Optional: cogni-knowledge repo as git submodule
+- CI gates that validate docs structure and frontmatter
+- Fumadocs-powered docs site within the existing Next.js app (replaces MkDocs plan)
+- Branch preview via standard CI preview deployments (agent pushes → preview URL)
+- Future: in-app branch switching, Plane as canonical work tracker
 
 ## Roadmap
 
 ### Crawl (P0) — Validator + CI Gates
 
-**Goal:** Standardize identifiers, headings, and enforceability before integrating external tools.
+**Goal:** Standardize identifiers, headings, and enforceability before publishing anything.
 
 | Deliverable                                                        | Status      | Est | Work Item |
 | ------------------------------------------------------------------ | ----------- | --- | --------- |
@@ -43,159 +43,106 @@ Build the tooling infrastructure that enforces our docs + work system:
 | Migrate all specs to new template (design-first, table invariants) | Not Started | 3   | —         |
 | Harden validator: enforce new spec heading order                   | Not Started | 1   | —         |
 
-### Walk (P1) — MkDocs + Repo Separation
+### Walk (P1) — Fumadocs Integration
 
-**Goal:** Published docs navigation; optionally separate docs into own repo.
+**Goal:** Ship a searchable docs site at `/docs/*` that renders all `/docs` and `/work` markdown within the existing Next.js app.
 
-| Deliverable                               | Status      | Est | Work Item            |
-| ----------------------------------------- | ----------- | --- | -------------------- |
-| MkDocs pipeline (CI builds on `/docs/**`) | Not Started | 3   | (create at P1 start) |
-| `mkdocs.yml` at repo root                 | Not Started | 1   | (create at P1 start) |
-| Link checking (`lychee`)                  | Not Started | 1   | (create at P1 start) |
-| (Optional) Create `cogni-knowledge` repo  | Not Started | 2   | (create at P1 start) |
-| (Optional) Mount as git submodule         | Not Started | 2   | (create at P1 start) |
+| Deliverable                                              | Status      | Est | Work Item      |
+| -------------------------------------------------------- | ----------- | --- | -------------- |
+| Install fumadocs-core, fumadocs-ui, fumadocs-mdx         | Not Started | 1   | task.0043      |
+| Content source config mapping /docs and /work trees      | Not Started | 1   | task.0043      |
+| `(docs)` route group with DocsLayout + catch-all page    | Not Started | 1   | task.0043      |
+| Sidebar generation from directory hierarchy              | Not Started | 1   | task.0043      |
+| Flexsearch integration (built-in, no external deps)      | Not Started | 1   | task.0043      |
+| Exclude `_templates/`, `archive/`, `_index.md` from site | Not Started | 0   | task.0043      |
+| Link checking (`lychee`)                                 | Not Started | 1   | (P1 follow-up) |
+| Verify Next.js 16 compatibility with Fumadocs            | Not Started | 0   | task.0043      |
 
-**Submodule Pinning Policy (if adopted):**
+**Why Fumadocs over MkDocs:**
 
-| Scenario                               | Action                                    |
-| -------------------------------------- | ----------------------------------------- |
-| Code PR references a spec that changed | Must bump submodule SHA in same PR        |
-| Docs-only change (no code impact)      | Submodule updated independently           |
-| Breaking spec change                   | Coordinated PR: bump submodule + fix code |
+- Renders inside existing Next.js App Router — no separate build pipeline or subdomain
+- Reads plain markdown with YAML frontmatter as-is — zero migration
+- Ships Flexsearch, sidebar, TOC, breadcrumbs, dark mode OOTB
+- Content source is a pluggable seam — filesystem now, git API later
 
-### Run (P2) — Plane Integration + PR Linkage
+### Run (P2) — Branch Preview + Polish
 
-**Goal:** PRs automatically link to work; `/work` becomes export-only.
+**Goal:** Agent-pushed branches produce preview docs; frontmatter metadata rendered as visual affordances.
 
-| Deliverable                             | Status      | Est | Work Item            |
-| --------------------------------------- | ----------- | --- | -------------------- |
-| Enable Plane GitHub integration         | Not Started | 2   | (create at P2 start) |
-| PR reference format standardized        | Not Started | 1   | (create at P2 start) |
-| CI gate: PR body Spec + Work validation | Not Started | 2   | (create at P2 start) |
-| `/work` becomes export-only             | Not Started | 1   | (create at P2 start) |
-| Generate `/work` from Plane export      | Not Started | 2   | (create at P2 start) |
+| Deliverable                                          | Status      | Est | Work Item            |
+| ---------------------------------------------------- | ----------- | --- | -------------------- |
+| CI preview deploy builds docs from branch filesystem | Not Started | 1   | (create at P2 start) |
+| Status/trust/priority badges from frontmatter        | Not Started | 2   | (create at P2 start) |
+| Cross-reference rendering (clickable spec_refs)      | Not Started | 2   | (create at P2 start) |
+| Filtered views (all active specs, in-progress tasks) | Not Started | 2   | (create at P2 start) |
+| PR reference format + CI gate on PR body             | Not Started | 2   | (create at P2 start) |
 
-**Plane GitHub Integration:**
+### Sprint (P3) — In-App Branch Switching + Plane
 
-- PR merges update linked Plane issue state (configurable)
-- Plane issues link back to PRs automatically
+**Goal:** Users switch between git branches in the docs UI; Plane replaces `/work` markdown.
 
-### Sprint (P3) — Plane MCP for Agents
+| Deliverable                                              | Status      | Est | Work Item            |
+| -------------------------------------------------------- | ----------- | --- | -------------------- |
+| GitHub API content source (swap filesystem for git API)  | Not Started | 3   | (create at P3 start) |
+| Branch picker UI component                               | Not Started | 2   | (create at P3 start) |
+| Plane GitHub integration (PR merge → issue state update) | Not Started | 2   | (create at P3 start) |
+| `/work` becomes Plane export-only                        | Not Started | 1   | (create at P3 start) |
+| Plane MCP server for agent CRUD                          | Not Started | 3   | (create at P3 start) |
 
-**Goal:** Agents use Plane directly instead of markdown parsing.
+## CI Enforcement
 
-| Deliverable                  | Status      | Est | Work Item            |
-| ---------------------------- | ----------- | --- | -------------------- |
-| Plane MCP server integration | Not Started | 3   | (create at P3 start) |
-| Agent CRUD operations        | Not Started | 3   | (create at P3 start) |
-
-**Plane MCP Operations:**
-
-- `plane.list_issues(project_id, filters)`
-- `plane.get_issue(issue_id)`
-- `plane.create_issue(project_id, data)`
-- `plane.update_issue(issue_id, data)`
-- `plane.transition_state(issue_id, state)`
-
-### Future — Backstage TechDocs + Dolt
-
-**TechDocs (optional):**
-
-- Follows TechDocs CI publish model
-- Each repo publishes independently
-- Backstage aggregates via catalog
-
-**Dolt (future):**
-Use Dolt as branchable, decentralized Postgres-compatible store for knowledge/task graphs; not the v0 human-authored docs surface.
-
-## Canonical Systems Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                          CANONICAL SYSTEMS                               │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐       │
-│  │ Work Tracking   │    │ Knowledge/Docs  │    │ Code            │       │
-│  │ ═══════════════ │    │ ═══════════════ │    │ ═══════════════ │       │
-│  │                 │    │                 │    │                 │       │
-│  │ CANONICAL:      │    │ CANONICAL:      │    │ CANONICAL:      │       │
-│  │ Plane           │    │ /docs (v0)      │    │ cogni-template  │       │
-│  │                 │    │ cogni-knowledge │    │ (monorepo)      │       │
-│  │ MIRROR:         │    │ (P1+ submodule) │    │                 │       │
-│  │ /work (export)  │    │                 │    │                 │       │
-│  │                 │    │ PUBLISHED:      │    │                 │       │
-│  │ INTEGRATION:    │    │ MkDocs (now)    │    │                 │       │
-│  │ GitHub ↔ Plane  │    │ TechDocs (P2+)  │    │                 │       │
-│  └─────────────────┘    └─────────────────┘    └─────────────────┘       │
-│                                                                          │
-│  ────────────────── LINKAGE ──────────────────                           │
-│                                                                          │
-│  Code PR ──references──► Spec (id) + Work Item (Plane ID)                │
-│  Work Item ──links──► Spec(s) ──links──► Acceptance Checks (tests)       │
-│  Git submodule pins docs SHA at each code commit (P1+)                   │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
-```
-
-### System Boundaries
-
-| System            | Canonical For                        | Sync Direction               | Drift Prevention                           |
-| ----------------- | ------------------------------------ | ---------------------------- | ------------------------------------------ |
-| **Plane**         | Work state (initiatives, issues)     | Plane → `/work` export       | `/work` is read-only after Plane cutover   |
-| **`/docs`**       | Specifications, ADRs, guides         | Authored here                | CI validates structure + required headings |
-| **Git submodule** | Docs SHA pinned to code commit (P1+) | `cogni-knowledge` → monorepo | Submodule update workflow                  |
-| **MkDocs**        | Published navigation surface         | Built from `/docs`           | CI publish on docs changes                 |
-
-## CI Enforcement Tables
-
-### P0 Checks (Current Focus)
+### P0 Checks (Current)
 
 | Check                                              | Script                               | Failure Mode  |
 | -------------------------------------------------- | ------------------------------------ | ------------- |
 | Required YAML frontmatter properties               | `scripts/validate-docs-metadata.mjs` | Merge blocked |
-| `spec_state` field validation                      | Extend validator                     | Merge blocked |
 | Stable headings (Design/Goal/Non-Goals/Invariants) | `scripts/validate-docs-metadata.mjs` | Merge blocked |
 | Unique `id` values                                 | Existing validator                   | Merge blocked |
-| Type matches directory                             | Extend validator                     | Merge blocked |
 | Valid arrays in tags/labels fields                 | Existing validator                   | Merge blocked |
 
-### P2 Checks (With Plane)
+### P2 Checks (Planned)
 
-| Check                                 | Implementation                     | Failure Mode             |
-| ------------------------------------- | ---------------------------------- | ------------------------ |
-| PR body contains Spec + Work Item     | GitHub Action parsing PR body      | Merge blocked            |
-| `/work` edits forbidden (export-only) | Path-based check on modified files | Merge blocked            |
-| Plane backlink confirmed              | Plane webhook or API check         | Warning (soft initially) |
+| Check                             | Implementation                | Failure Mode  |
+| --------------------------------- | ----------------------------- | ------------- |
+| PR body contains Spec + Work Item | GitHub Action parsing PR body | Merge blocked |
+| Link checking                     | `lychee` CI step              | Merge blocked |
 
 ## Constraints
 
-- Infrastructure changes should not break existing docs
-- Plane integration is additive (markdown still works during transition)
-- Submodule is optional — can keep docs in monorepo
+- Zero changes to existing markdown files — Fumadocs must render them as-is
+- Docs routes must coexist with `(app)` and `(public)` route groups
+- No external search dependencies (Algolia, Typesense, etc.)
+- Content source must be isolated and swappable (filesystem → git API)
 
 ## Dependencies
 
 - [x] `yaml` package for YAML parsing in validator
+- [ ] `fumadocs-core`, `fumadocs-ui`, `fumadocs-mdx` npm packages (P1)
+- [ ] Next.js 16 compatibility verification (P1)
 - [ ] GitHub Action for PR body validation (P2)
-- [ ] Plane workspace setup (P2)
-- [ ] MkDocs configuration (P1)
-
-## Explicitly Deferred Items
-
-| Item                                              | Deferred To | Rationale                       |
-| ------------------------------------------------- | ----------- | ------------------------------- |
-| Deprecation/redirect policy for moved specs       | P1          | Needs submodule mechanics first |
-| Spec versioning scheme (v0, v1, breaking changes) | P1          | Low urgency                     |
-| Multi-repo doc search aggregation                 | P2          | Backstage TechDocs handles this |
+- [ ] Plane workspace setup (P3)
 
 ## As-Built Specs
 
 - [docs-work-system.md](../../docs/spec/docs-work-system.md) — document taxonomy and conventions
+- [docs-site.md](../../docs/spec/docs-site.md) — Fumadocs integration design (draft)
 
 ## Design Notes
 
+**MkDocs → Fumadocs decision (2026-02-13):**
+
+MkDocs was the original plan for docs publishing. Fumadocs replaces it because:
+
+- MkDocs requires a separate Python build pipeline and subdomain/deployment
+- Fumadocs renders natively inside the existing Next.js App Router
+- Fumadocs reads the exact markdown + YAML frontmatter format we already use
+- The content source abstraction makes future branch switching a loader swap, not a rewrite
+
+**Branch preview strategy:**
+
+Build-time filesystem source means every branch gets its own docs via CI preview deploys. This is the zero-code path for agent-pushed doc previews. In-app branch switching (P3) swaps the content loader from filesystem to GitHub API with a `ref` param — rendering layer stays identical.
+
 **Open questions:**
 
-- When should Plane become canonical (blocking `/work` edits)?
-- Should cogni-knowledge repo be created before or after P1 tooling?
+- Should the docs site be public or behind auth?
+- Which `/work` subdirs to render (items + projects? handoffs? charters?)

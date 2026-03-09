@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek
-- **Last reviewed:** 2025-12-02
 - **Status:** stable
 
 ## Purpose
@@ -32,9 +31,6 @@ Navigation UI components for mobile and desktop. Provides NavigationLink with ac
 - **Exports:**
   - `NavigationLink` - Next.js Link wrapper with active route detection
   - `MobileNav` - Sheet-based mobile navigation (md:hidden)
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** `NavigationLink.tsx`, `MobileNav.tsx`
 
 ## Responsibilities

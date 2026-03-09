@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-15
 - **Status:** draft
 
 ## Purpose
@@ -31,7 +30,6 @@
 ## Public Surface
 
 - **Exports:** none (no implementation yet)
-- **Routes (if any):** none
 - **CLI (if any):** Planned: `pnpm setup local|infra|github|dao`
 - **Env/Config keys:** none currently
 - **Files considered API:** none (planning phase)

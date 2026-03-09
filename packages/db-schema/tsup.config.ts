@@ -22,6 +22,9 @@ export const tsupConfig = defineConfig({
     "src/billing.ts",
     "src/ai.ts",
     "src/ai-threads.ts",
+    "src/identity.ts",
+    "src/attribution.ts",
+    "src/profile.ts",
   ],
   format: ["esm"],
   dts: false, // tsc -b emits per-file declarations; tsup handles JS only

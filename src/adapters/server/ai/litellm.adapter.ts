@@ -6,7 +6,7 @@
  * Purpose: LiteLLM service implementation for AI completion and streaming with cost extraction and runtime secret validation.
  * Scope: Implements LlmService port (completion + stream), extracts cost from headers, validates secrets at adapter boundary. Does not handle auth or rate-limiting.
  * Invariants:
- *   - Never logs prompts/keys/chunks
+ *   - Never logs prompts/keys/chunks; error response excerpts are redacted + bounded (<=2KB)
  *   - 30s timeout (completion), 15s connect timeout (stream)
  *   - Settles once; model required
  *   - Stream abort rejects with LlmError(kind='aborted')
@@ -33,6 +33,7 @@ import {
   type LlmToolCall,
   type LlmToolCallDelta,
 } from "@/ports";
+import { scrubStringContent } from "@/shared/ai/content-scrubbing";
 import {
   computePromptHash,
   DEFAULT_MAX_TOKENS,
@@ -43,6 +44,31 @@ import { assertRuntimeSecrets } from "@/shared/env/invariants";
 import { makeLogger } from "@/shared/observability";
 
 const logger = makeLogger({ component: "LiteLlmAdapter" });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Private error diagnostics (operator logs only — never returned to callers)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Max chars of provider response body to include in operator logs. */
+const MAX_ERROR_BODY_LOG_CHARS = 2048;
+
+/**
+ * Safely read and redact error response body for operator diagnostics.
+ * Truncates to MAX_ERROR_BODY_LOG_CHARS, redacts secrets via shared scrubber, never throws.
+ * Logged in operator logs ONLY — never attached to thrown errors or returned to callers.
+ */
+async function readErrorResponseExcerpt(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    const truncated =
+      text.length > MAX_ERROR_BODY_LOG_CHARS
+        ? `${text.slice(0, MAX_ERROR_BODY_LOG_CHARS)}…[truncated]`
+        : text;
+    return scrubStringContent(truncated);
+  } catch {
+    return "[unreadable]";
+  }
+}
 
 /**
  * Extract provider name from LiteLLM model ID prefix.
@@ -197,6 +223,11 @@ export class LiteLlmAdapter implements LlmService {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${env.LITELLM_MASTER_KEY}`,
+          ...(params.spendLogsMetadata && {
+            "x-litellm-spend-logs-metadata": JSON.stringify(
+              params.spendLogsMetadata
+            ),
+          }),
         },
         body: JSON.stringify(requestBody),
         /** 30 second timeout */
@@ -206,8 +237,24 @@ export class LiteLlmAdapter implements LlmService {
       // Handle fetch errors (network, timeout, abort)
       if (error instanceof Error) {
         if (error.name === "AbortError" || error.name === "TimeoutError") {
+          logger.warn(
+            { requestId, traceId, model, rootCauseKind: "timeout" },
+            "adapter.litellm.network_error"
+          );
           throw new LlmError(`LiteLLM request timed out`, "timeout", 408);
         }
+        const causeCode = (error.cause as { code?: string } | undefined)?.code;
+        logger.warn(
+          {
+            requestId,
+            traceId,
+            model,
+            rootCauseKind: "network",
+            errorMessage: error.message,
+            ...(causeCode && { causeCode }),
+          },
+          "adapter.litellm.network_error"
+        );
         throw new LlmError(
           `LiteLLM network error: ${error.message}`,
           "unknown"
@@ -219,7 +266,8 @@ export class LiteLlmAdapter implements LlmService {
     // Handle HTTP errors with typed LlmError (per AI_SETUP_SPEC.md)
     if (!response.ok) {
       const kind = classifyLlmErrorFromStatus(response.status);
-      // Structured boundary log: status, kind, correlation IDs (no raw provider message)
+      const responseExcerpt = await readErrorResponseExcerpt(response);
+      // Operator log: includes private root cause for debugging (never sent to clients)
       logger.warn(
         {
           statusCode: response.status,
@@ -227,6 +275,8 @@ export class LiteLlmAdapter implements LlmService {
           requestId,
           traceId,
           model,
+          provider: extractProviderFromModel(model),
+          responseExcerpt,
         },
         "adapter.litellm.http_error"
       );
@@ -426,6 +476,11 @@ export class LiteLlmAdapter implements LlmService {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${env.LITELLM_MASTER_KEY}`,
+          ...(params.spendLogsMetadata && {
+            "x-litellm-spend-logs-metadata": JSON.stringify(
+              params.spendLogsMetadata
+            ),
+          }),
         },
         body: JSON.stringify(requestBody),
         signal,
@@ -437,12 +492,28 @@ export class LiteLlmAdapter implements LlmService {
           throw new LlmError("LiteLLM stream aborted", "aborted");
         }
         if (error.name === "TimeoutError") {
+          logger.warn(
+            { requestId, traceId, model, rootCauseKind: "timeout" },
+            "adapter.litellm.stream_network_error"
+          );
           throw new LlmError(
             "LiteLLM stream connection timed out",
             "timeout",
             408
           );
         }
+        const causeCode = (error.cause as { code?: string } | undefined)?.code;
+        logger.warn(
+          {
+            requestId,
+            traceId,
+            model,
+            rootCauseKind: "network",
+            errorMessage: error.message,
+            ...(causeCode && { causeCode }),
+          },
+          "adapter.litellm.stream_network_error"
+        );
         throw new LlmError(
           `LiteLLM stream init failed: ${error.message}`,
           "unknown"
@@ -459,7 +530,8 @@ export class LiteLlmAdapter implements LlmService {
     // Handle HTTP errors with typed LlmError (per AI_SETUP_SPEC.md)
     if (!response.ok) {
       const kind = classifyLlmErrorFromStatus(response.status);
-      // Structured boundary log: status, kind, correlation IDs (no raw provider message)
+      const responseExcerpt = await readErrorResponseExcerpt(response);
+      // Operator log: includes private root cause for debugging (never sent to clients)
       logger.warn(
         {
           statusCode: response.status,
@@ -467,6 +539,8 @@ export class LiteLlmAdapter implements LlmService {
           requestId,
           traceId,
           model,
+          provider: extractProviderFromModel(model),
+          responseExcerpt,
         },
         "adapter.litellm.stream_http_error"
       );
@@ -573,7 +647,7 @@ export class LiteLlmAdapter implements LlmService {
                   const errorKind = statusCode
                     ? classifyLlmErrorFromStatus(statusCode)
                     : "unknown";
-                  // Structured boundary log: status, kind, correlation IDs (no raw provider message)
+                  // Operator log: includes private error detail for debugging
                   logger.warn(
                     {
                       statusCode,
@@ -581,7 +655,11 @@ export class LiteLlmAdapter implements LlmService {
                       requestId,
                       traceId,
                       model,
+                      provider: extractProviderFromModel(model),
                       litellmCallId,
+                      errorDetail: scrubStringContent(
+                        errorMsg.slice(0, MAX_ERROR_BODY_LOG_CHARS)
+                      ),
                     },
                     "adapter.litellm.sse_error"
                   );

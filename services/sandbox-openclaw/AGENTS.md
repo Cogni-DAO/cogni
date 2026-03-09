@@ -5,12 +5,13 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-13
 - **Status:** draft
 
 ## Purpose
 
 Multi-stage devtools image for running OpenClaw in Cogni. One image for both gateway (long-running) and ephemeral (one-shot) modes. Adds pnpm, git, socat, and the sandbox entrypoint onto a published GHCR OpenClaw base with header-forwarding.
+
+> **Active mode: gateway only.** Ephemeral is deprioritized (2026-02-12) — OpenClaw is our primary AI brain and ephemeral boots too slowly. May be reintroduced later. See `src/adapters/server/sandbox/AGENTS.md`.
 
 ## Pointers
 
@@ -33,10 +34,9 @@ Multi-stage devtools image for running OpenClaw in Cogni. One image for both gat
 ## Public Surface
 
 - **Exports:** Docker image `cogni-sandbox-openclaw:latest` (`ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest`)
-- **Routes:** none
 - **CLI:** `pnpm sandbox:openclaw:docker:build`, `pnpm sandbox:pnpm-store:build`, `pnpm sandbox:pnpm-store:seed`, `pnpm sandbox:pnpm-store:seed:from-ghcr`
 - **Env/Config keys (runtime):** `npm_config_store_dir`, `HOME`, `COREPACK_HOME`, `LLM_PROXY_SOCKET`, `LLM_PROXY_PORT`, `OPENCLAW_CONFIG_PATH`, `OPENCLAW_STATE_DIR`, `OPENCLAW_LOAD_SHELL_ENV`
-- **Files considered API:** Dockerfile, Dockerfile.pnpm-store, entrypoint.sh, seed-pnpm-store.sh, openclaw-gateway.json
+- **Files considered API:** Dockerfile, Dockerfile.pnpm-store, entrypoint.sh, seed-pnpm-store.sh, openclaw-gateway.json, gateway-workspace/SOUL.md, gateway-workspace/GOVERN.md, gateway-workspace/AGENTS.md, gateway-workspace/TOOLS.md, gateway-workspace/MEMORY.md
 
 ## Responsibilities
 
@@ -83,5 +83,6 @@ docker run --rm cogni-sandbox-openclaw:latest "pnpm --version && git --version &
 
 - `entrypoint.sh` is copied from `sandbox-runtime/` (not symlinked) for build context isolation
 - Build context is repo root (not service dir) — COPY paths are relative to repo root
-- `openclaw-gateway.json` is the gateway agent config — bind-mounted into compose, not baked into image
+- `openclaw-gateway.json` is the gateway agent config — bind-mounted into compose, not baked into image. `sessions_spawn` is enabled; subagent defaults configured (`maxConcurrent: 3`, `archiveAfterMinutes: 30`)
+- `gateway-workspace/` contains the agent's system prompt files (SOUL.md, GOVERN.md, AGENTS.md, TOOLS.md, MEMORY.md) — bind-mounted to `/workspace/gateway/` in the container
 - Gateway mode overrides entrypoint to `["node", "/app/dist/index.js", "gateway"]` — devtools unused but present

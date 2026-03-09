@@ -6,11 +6,11 @@ title: Node Formation UI & CLI Tooling
 state: Active
 priority: 2
 estimate: 5
-summary: Extend DAO formation beyond P0 web wizard — multi-holder, CLI setup tools, federation enrollment, encoding parity tests
-outcome: Complete formation pipeline with CLI tooling, multi-holder support, federation enrollment, and automated e2e testing
+summary: Extend DAO formation beyond the initial web wizard — rewards-ready token mint mode, CLI setup tools, federation enrollment, and encoding parity tests
+outcome: Complete formation pipeline with rewards-ready GovernanceERC20 setup, CLI tooling, federation enrollment, and automated e2e testing
 assignees: derekg1729
 created: 2026-02-07
-updated: 2026-02-07
+updated: 2026-03-03
 labels: [web3, setup, cli]
 ---
 
@@ -20,18 +20,19 @@ labels: [web3, setup, cli]
 
 ## Goal
 
-Extend the P0 web DAO formation wizard (complete, manually validated on Base mainnet) to cover multi-holder token distribution, CLI-based setup tooling, automated e2e testing, encoding parity validation, and federation enrollment.
+Extend the P0 web DAO formation wizard (complete, manually validated on Base mainnet) to cover rewards-ready token mint configuration, CLI-based setup tooling, automated e2e testing, encoding parity validation, and federation enrollment.
 
 ## Roadmap
 
 ### Crawl (P0) — Remaining P0 Items
 
-**Goal:** Close remaining P0 gaps — automated e2e testing and encoding parity validation.
+**Goal:** Close remaining P0 gaps and make the token setup compatible with real contributor distributions.
 
-| Deliverable                                                                                                                                                                                                                                         | Status      | Est | Work Item |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Automated e2e testing (DAO formation flow with testnet)                                                                                                                                                                                             | Not Started | 2   | —         |
-| Encoding parity test: TokenVoting setup encoding must match Foundry exactly (`packages/aragon-osx/src/__tests__/encoding.parity.test.ts`). Fixture generation: Run Foundry script with known inputs, capture encoded bytes, commit as test fixture. | Not Started | 2   | —         |
+| Deliverable                                                                                                                                                                                                                                         | Status      | Est | Work Item   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | ----------- |
+| Rewards-ready mint mode — fixed `GovernanceERC20` supply minted to a DAO-controlled emissions holder, with server verification of holder + total supply                                                                                             | Not Started | 2   | `task.0135` |
+| Automated e2e testing (DAO formation flow with testnet)                                                                                                                                                                                             | Not Started | 2   | —           |
+| Encoding parity test: TokenVoting setup encoding must match Foundry exactly (`packages/aragon-osx/src/__tests__/encoding.parity.test.ts`). Fixture generation: Run Foundry script with known inputs, capture encoded bytes, commit as test fixture. | Not Started | 2   | —           |
 
 ### Walk (P1) — Multi-Holder + CLI Setup Tools + Operator Registry
 
@@ -66,6 +67,7 @@ Extend the P0 web DAO formation wizard (complete, manually validated on Base mai
 - Node Formation is Node-owned tooling — no Operator dependencies
 - No private key env vars — all transactions signed via wallet UI
 - Server derives ALL addresses from tx receipts (never trusts client)
+- Rewards-ready formation must reuse the same `GovernanceERC20` later used for distributions; do not introduce a throwaway bootstrap token path
 - Package isolation: `aragon-osx` cannot import `src/`, `services/`, or browser/node-specific APIs
 - Import boundaries: `packages/setup-cli` → `packages/aragon-osx` allowed; → `src/*`, `services/*` forbidden
 - **Do NOT build npx flow preemptively** — evaluate after P1 adoption
@@ -74,6 +76,7 @@ Extend the P0 web DAO formation wizard (complete, manually validated on Base mai
 
 - [ ] Foundry fixtures for encoding parity test
 - [ ] Testnet infrastructure for automated e2e
+- [ ] `task.0135` — rewards-ready token formation governance decisions + implementation
 - [ ] P1 adoption metrics before building npx flow
 
 ## As-Built Specs

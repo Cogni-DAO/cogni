@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-11
 - **Status:** draft
 
 ## Purpose
@@ -31,16 +30,8 @@ Service configuration files for runtime stack services (LiteLLM proxy, Grafana A
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY`, `LITELLM_DATABASE_URL`, `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_LOKI_API_KEY`, `METRICS_TOKEN`, `PROMETHEUS_REMOTE_WRITE_URL`, `PROMETHEUS_USERNAME`, `PROMETHEUS_PASSWORD`
+- **Env/Config keys:** `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY`, `LITELLM_DATABASE_URL`, `GENERIC_LOGGER_ENDPOINT` (billing callback URL), `GENERIC_LOGGER_HEADERS` (billing callback auth), `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_LOKI_API_KEY`, `METRICS_TOKEN`, `PROMETHEUS_REMOTE_WRITE_URL`, `PROMETHEUS_USERNAME`, `PROMETHEUS_PASSWORD`
 - **Files considered API:** litellm.config.yaml, alloy-config.alloy, alloy-config.metrics.alloy, grafana-provisioning/datasources/loki.yaml
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 
@@ -82,6 +73,7 @@ Mounted as volumes in docker-compose.yml.
 
 ## Notes
 
-- litellm.config.yaml is single source of truth for model metadata
+- litellm.config.yaml is single source of truth for model metadata and callback config
+- `generic_api` callback: LiteLLM fires `POST GENERIC_LOGGER_ENDPOINT` with `StandardLoggingPayload[]` on every successful LLM call. Auth via `GENERIC_LOGGER_HEADERS` (Bearer token). Env vars set on litellm service in docker-compose.
 - App fetches from `/model/info` endpoint to read `model_info` fields
 - Adding models: update config + restart LiteLLM, app cache refreshes within 1h

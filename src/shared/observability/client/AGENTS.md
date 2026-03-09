@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2025-12-05
 - **Status:** stable
 
 ## Purpose
@@ -41,8 +40,6 @@ Client-side structured logging using browser console with EVENT_NAMES registry e
   - `info(event, meta?)` - Dev-only console
   - `warn(event, meta?)` - Always-on console
   - `error(event, meta?)` - Always-on console
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `NODE_ENV`
 - **Files considered API:** `index.ts`, `logger.ts`
 

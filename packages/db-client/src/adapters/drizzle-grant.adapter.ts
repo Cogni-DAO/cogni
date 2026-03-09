@@ -151,6 +151,71 @@ export class DrizzleExecutionGrantUserAdapter
 
     this.logger.info({ grantId }, "Deleted execution grant");
   }
+
+  async ensureGrant(input: {
+    userId: UserId;
+    billingAccountId: string;
+    scopes: readonly string[];
+  }): Promise<ExecutionGrant> {
+    const actorId = userActor(input.userId);
+    return withTenantScope(this.db, actorId, async (tx) => {
+      // Find existing valid (non-revoked) grant
+      const existing = await tx.query.executionGrants.findFirst({
+        where: and(
+          eq(executionGrants.userId, input.userId),
+          eq(executionGrants.billingAccountId, input.billingAccountId),
+          isNull(executionGrants.revokedAt)
+        ),
+      });
+
+      if (
+        existing &&
+        (!existing.expiresAt || existing.expiresAt > new Date())
+      ) {
+        // Verify existing grant has all required scopes
+        const missingScopes = [...input.scopes].filter(
+          (s) => !existing.scopes.includes(s)
+        );
+        if (missingScopes.length === 0) {
+          this.logger.info(
+            { grantId: existing.id, userId: input.userId },
+            "Found existing valid grant"
+          );
+          return toGrant(existing);
+        }
+        this.logger.warn(
+          {
+            grantId: existing.id,
+            userId: input.userId,
+            missingScopes,
+          },
+          "Existing grant missing required scopes, creating new grant"
+        );
+      }
+
+      // Create new grant
+      const [row] = await tx
+        .insert(executionGrants)
+        .values({
+          userId: input.userId,
+          billingAccountId: input.billingAccountId,
+          scopes: [...input.scopes],
+          expiresAt: null,
+        })
+        .returning();
+
+      if (!row) {
+        throw new Error("Failed to create execution grant");
+      }
+
+      this.logger.info(
+        { grantId: row.id, userId: input.userId },
+        "Created execution grant (ensureGrant)"
+      );
+
+      return toGrant(row);
+    });
+  }
 }
 
 // ── Worker adapter (serviceDb, BYPASSRLS — withTenantScope is no-op) ─

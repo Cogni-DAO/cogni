@@ -88,7 +88,7 @@ write_files:
       docker network create cogni-edge || true
 
       # Create deployment directories
-      mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime /opt/cogni-template-sourcecred
+      mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime
       mkdir -p /var/lib/cogni
 
       # Write success marker

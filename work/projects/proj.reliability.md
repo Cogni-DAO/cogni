@@ -32,6 +32,7 @@ Feb 7–8, 2026: Two multi-hour outages across production and preview with zero 
 | Deliverable                                                                                                      | Status           | Est |
 | ---------------------------------------------------------------------------------------------------------------- | ---------------- | --- |
 | Deploy disk cleanup: prune before pulls, dual gate (15GB free / 70% used), remove keep-last tag                  | Done (bug.0015)  | 2   |
+| Deploy targeted pulls + SSH keepalive: pull only per-deploy images, pin busybox, prevent SSH timeout             | Done (bug.0038)  | 2   |
 | VM watchdog: HEALTHCHECK on `/livez` + autoheal sidecar auto-restarts unhealthy app container (~60-90s recovery) | Todo (task.0014) | 2   |
 | OTel fix: set `OTEL_NODE_RESOURCE_DETECTORS=none` in production env                                              | Not Started      | 1   |
 | OTel fix: add `resourceDetectors: []` to `NodeSDK` constructor in `src/instrumentation.ts`                       | Not Started      | 1   |

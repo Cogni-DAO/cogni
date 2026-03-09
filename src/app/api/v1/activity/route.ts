@@ -39,6 +39,7 @@ export const GET = wrapRouteHandlerWithLogging(
       from: searchParams.get("from") || undefined,
       to: searchParams.get("to") || undefined,
       step: searchParams.get("step") || undefined,
+      groupBy: searchParams.get("groupBy") || undefined,
       cursor: searchParams.get("cursor") || undefined,
       limit: searchParams.has("limit")
         ? Number.parseInt(searchParams.get("limit") || "20", 10)
@@ -82,6 +83,7 @@ export const GET = wrapRouteHandlerWithLogging(
         from,
         to,
         ...(inputResult.data.step && { step: inputResult.data.step }),
+        ...(inputResult.data.groupBy && { groupBy: inputResult.data.groupBy }),
         ...(inputResult.data.cursor && { cursor: inputResult.data.cursor }),
         ...(inputResult.data.limit && { limit: inputResult.data.limit }),
         sessionUser,

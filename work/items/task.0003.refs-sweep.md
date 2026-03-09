@@ -2,7 +2,7 @@
 id: task.0003
 type: task
 title: Sweep stale doc references across the codebase
-status: Todo
+status: needs_design
 priority: 2
 estimate: 3
 summary: Replace ~560 stale refs to old docs/UPPER_CASE.md paths with new typed directory paths
@@ -18,6 +18,10 @@ created: 2026-02-08
 updated: 2026-02-08
 labels: [docs, refactor]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 16
 ---
 
 # Sweep Stale Doc References

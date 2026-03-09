@@ -2,7 +2,7 @@
 id: bug.0002
 type: bug
 title: "P0 SECURITY: Deploy artifacts expose all secrets"
-status: In Progress
+status: needs_design
 priority: 0
 estimate: 2
 summary: Deploy workflow uploads secrets as GitHub Actions artifact, exposing all production credentials
@@ -18,6 +18,10 @@ created: 2026-02-06
 updated: 2026-02-06
 labels: [security, p0, secrets, ci]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 1
 ---
 
 ## Execution Checklist

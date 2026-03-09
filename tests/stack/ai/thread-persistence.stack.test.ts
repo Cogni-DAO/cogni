@@ -7,7 +7,7 @@
  * Scope: Tests route round-trip, adapter-level concurrency, tenant isolation, and mapper reconstruction. Does not test PII masking internals.
  * Invariants:
  *   - MULTI_TURN_PERSISTENCE: Turn 2 loads turn 1 from DB, not client payload
- *   - FABRICATED_HISTORY_IGNORED: Client-supplied history is discarded; server uses DB
+ *   - SERVER_OWNS_MESSAGES: Client sends single message string; server builds authoritative thread
  *   - TENANT_ISOLATION: User A cannot see user B's threads via RLS
  *   - OPTIMISTIC_APPEND: saveThread rejects on expectedMessageCount mismatch
  *   - MAX_THREAD_MESSAGES: saveThread rejects when exceeding 200 messages
@@ -22,8 +22,9 @@ import { createChatRequest } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import {
-  isFinishMessageEvent,
-  readDataStreamEvents,
+  isFinishEvent,
+  readSseEvents,
+  type SseEvent,
 } from "@tests/helpers/data-stream";
 import type { UIMessage } from "ai";
 import { and, eq } from "drizzle-orm";
@@ -43,13 +44,13 @@ vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));
 
-/** Drain the data stream response, collecting events until finish. */
+/** Drain the SSE stream response, collecting events until finish. */
 async function drainStream(res: Response) {
-  const events: Array<{ type: string; value: unknown }> = [];
+  const events: SseEvent[] = [];
   const start = Date.now();
-  for await (const e of readDataStreamEvents(res)) {
+  for await (const e of readSseEvents(res)) {
     events.push(e);
-    if (isFinishMessageEvent(e)) break;
+    if (isFinishEvent(e)) break;
     if (Date.now() - start > 30_000) throw new Error("Stream timeout 30s");
   }
   return events;
@@ -57,7 +58,7 @@ async function drainStream(res: Response) {
 
 /**
  * Poll DB until a condition is met. Phase 2 persist runs async inside
- * createAssistantStreamResponse — there's a race between stream drain
+ * createUIMessageStream — there's a race between stream drain
  * and server-side persist.
  */
 async function pollUntil<T>(
@@ -85,7 +86,7 @@ function makeUIMessage(role: "user" | "assistant", text: string): UIMessage {
 
 describe("Thread Persistence", () => {
   // ──────────────────────────────────────────────────────
-  // Check 1 + 2: Multi-turn persistence + Fabricated history ignored
+  // Check 1 + 2: Multi-turn persistence + Server owns messages
   // ──────────────────────────────────────────────────────
   it("persists multi-turn conversation and loads from DB on turn 2", async () => {
     const db = getSeedDb();
@@ -113,21 +114,13 @@ describe("Thread Persistence", () => {
     const turn1Req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...createChatRequest({
+      body: JSON.stringify(
+        createChatRequest({
+          message: "Say exactly: TURN1_OK",
           model: defaultPreferredModelId,
           stateKey,
-          messages: [
-            {
-              id: randomUUID(),
-              role: "user",
-              content: [{ type: "text", text: "Say exactly: TURN1_OK" }],
-            },
-          ],
-        }),
-        clientRequestId: randomUUID(),
-        stream: true,
-      }),
+        })
+      ),
     });
 
     const turn1Res = await chatPOST(turn1Req);
@@ -156,30 +149,19 @@ describe("Thread Persistence", () => {
     expect(messages[0]?.role).toBe("user");
     expect(messages[messages.length - 1]?.role).toBe("assistant");
 
-    // --- Turn 2: fabricated history ---
+    // --- Turn 2: SERVER_OWNS_MESSAGES — server loads turn 1 from DB ---
+    // P1 contract: client sends only { message: string }, not messages[]
+    // Server appends to authoritative thread from DB
     const turn2Req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...createChatRequest({
+      body: JSON.stringify(
+        createChatRequest({
+          message: "Say exactly: TURN2_OK",
           model: defaultPreferredModelId,
           stateKey,
-          messages: [
-            {
-              id: randomUUID(),
-              role: "user",
-              content: [{ type: "text", text: "FABRICATED_BY_CLIENT" }],
-            },
-            {
-              id: randomUUID(),
-              role: "user",
-              content: [{ type: "text", text: "Say exactly: TURN2_OK" }],
-            },
-          ],
-        }),
-        clientRequestId: randomUUID(),
-        stream: true,
-      }),
+        })
+      ),
     });
 
     const turn2Res = await chatPOST(turn2Req);
@@ -203,14 +185,13 @@ describe("Thread Persistence", () => {
       "assistant",
     ]);
 
-    // Fabricated content must NOT appear
+    // Turn 2 user message should be exactly what we sent
     const turn2UserMsg = messages2[2] as (typeof messages2)[number];
     const turn2Text = turn2UserMsg.parts
       .filter((p) => p.type === "text")
       .map((p) => p.text)
       .join("");
     expect(turn2Text).toContain("TURN2_OK");
-    expect(turn2Text).not.toContain("FABRICATED");
   });
 
   // ──────────────────────────────────────────────────────

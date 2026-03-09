@@ -30,11 +30,15 @@ export const CORE_TEST_ENV = {
   LITELLM_MASTER_KEY: "test-key",
   // Scheduler
   SCHEDULER_API_TOKEN: "x".repeat(32),
+  // Billing ingest (LiteLLM callback auth)
+  BILLING_INGEST_TOKEN: "x".repeat(32),
   // Temporal (required infrastructure)
   TEMPORAL_ADDRESS: "localhost:7233",
   TEMPORAL_NAMESPACE: "test-namespace",
   // OpenClaw gateway auth (min 32 chars)
   OPENCLAW_GATEWAY_TOKEN: "x".repeat(32),
+  // OpenClaw git relay token (host-side push)
+  OPENCLAW_GITHUB_RW_TOKEN: "ghp_test_token",
   // Repo access (required in all envs — no cwd fallback)
   COGNI_REPO_PATH: process.cwd(),
 } as const;

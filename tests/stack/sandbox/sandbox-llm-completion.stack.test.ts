@@ -39,7 +39,8 @@ import {
 
 let ctx: SandboxTestContextWithProxy | null = null;
 
-describe("Sandbox LLM Proxy Infrastructure (P0.5)", () => {
+// Skipped: ephemeral sandbox infrastructure not in use; tests timeout without Docker setup
+describe.skip("Sandbox LLM Proxy Infrastructure (P0.5)", () => {
   const docker = new Docker();
   const litellmMasterKey = process.env.LITELLM_MASTER_KEY;
 

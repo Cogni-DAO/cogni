@@ -2,7 +2,7 @@
 id: spike.0020
 type: spike
 title: Research messenger integration via OpenClaw channels
-status: Done
+status: done
 priority: 1
 estimate: 1
 summary: Investigate leveraging OpenClaw's channel plugin system for WhatsApp/Telegram/etc tenant integrations vs building custom connectionId-based messenger adapters
@@ -24,6 +24,10 @@ labels:
   - research
 external_refs:
   - docs/research/messenger-integration-openclaw-channels.md
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 # Research: Messenger Integration via OpenClaw Channels

@@ -71,7 +71,8 @@ export class DrizzleThreadPersistenceAdapter implements ThreadPersistencePort {
     ownerUserId: string,
     stateKey: string,
     messages: UIMessage[],
-    expectedMessageCount: number
+    expectedMessageCount: number,
+    metadata?: Record<string, unknown>
   ): Promise<void> {
     // MAX_THREAD_MESSAGES enforcement
     if (messages.length > MAX_THREAD_MESSAGES) {
@@ -112,6 +113,9 @@ export class DrizzleThreadPersistenceAdapter implements ThreadPersistencePort {
             ownerUserId,
             stateKey,
             messages: sql`${JSON.stringify(messages)}::jsonb`,
+            ...(metadata
+              ? { metadata: sql`${JSON.stringify(metadata)}::jsonb` }
+              : {}),
           })
           .onConflictDoNothing({
             target: [aiThreads.ownerUserId, aiThreads.stateKey],
@@ -162,6 +166,13 @@ export class DrizzleThreadPersistenceAdapter implements ThreadPersistencePort {
           updatedAt: aiThreads.updatedAt,
           messageCount: sql<number>`jsonb_array_length(${aiThreads.messages})`,
           metadata: aiThreads.metadata,
+          title: sql<string | null>`COALESCE(
+            ${aiThreads.metadata}->>'title',
+            LEFT(
+              (jsonb_path_query_first(${aiThreads.messages}, '$[*] ? (@.role == "user").parts[*] ? (@.type == "text").text') #>> '{}'),
+              100
+            )
+          )`,
         })
         .from(aiThreads)
         .where(
@@ -176,6 +187,7 @@ export class DrizzleThreadPersistenceAdapter implements ThreadPersistencePort {
 
       return rows.map((row) => ({
         stateKey: row.stateKey,
+        title: row.title ?? undefined,
         updatedAt: row.updatedAt,
         messageCount: row.messageCount,
         metadata: row.metadata ?? undefined,

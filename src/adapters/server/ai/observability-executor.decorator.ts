@@ -34,7 +34,7 @@ import {
   scrubTraceInput,
   scrubTraceOutput,
   truncateSessionId,
-} from "@/shared/ai/langfuse-scrubbing";
+} from "@/shared/ai/content-scrubbing";
 import { EVENT_NAMES } from "@/shared/observability/events";
 import type { AiEvent } from "@/types/ai-events";
 

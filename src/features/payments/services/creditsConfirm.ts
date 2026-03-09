@@ -3,18 +3,23 @@
 
 /**
  * Module: `@features/payments/services/creditsConfirm`
- * Purpose: Confirm widget payments by crediting billing accounts via ledger writes.
- * Scope: Feature-layer orchestration for payment confirmations; does not expose HTTP handling or session resolution. Validates idempotency via ledger reference lookup.
- * Invariants: Credits computed via usdCentsToCredits (integer-only math); idempotent on clientPaymentId per billing account.
- * Side-effects: IO (via AccountService port).
- * Notes: Billing account resolution occurs at app layer; this service assumes a valid billing account and default virtual key.
- * Links: docs/spec/payments-design.md, src/core/billing/pricing.ts
+ * Purpose: Confirm widget payments by crediting user billing account and minting system tenant bonus.
+ * Scope: Feature-layer orchestration for payment confirmations and revenue share; does not expose HTTP handling or session resolution.
+ * Invariants: Credits via usdCentsToCredits (integer math); idempotent on clientPaymentId; system tenant bonus sequential + idempotent.
+ * Side-effects: IO (via AccountService and ServiceAccountService ports).
+ * Notes: Billing account resolved at app layer. Reads SYSTEM_TENANT_REVENUE_SHARE from env (llmPricingPolicy pattern).
+ * Links: docs/spec/payments-design.md, docs/spec/system-tenant.md, src/core/billing/pricing.ts
  * @public
  */
 
-import { usdCentsToCredits } from "@/core";
-import type { AccountService } from "@/ports";
-import { WIDGET_PAYMENT_REASON } from "@/shared";
+import { calculateRevenueShareBonus, usdCentsToCredits } from "@/core";
+import type { AccountService, ServiceAccountService } from "@/ports";
+import {
+  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+  PLATFORM_REVENUE_SHARE_REASON,
+  WIDGET_PAYMENT_REASON,
+} from "@/shared";
+import { serverEnv } from "@/shared/env";
 
 export interface CreditsConfirmInput {
   billingAccountId: string;
@@ -32,6 +37,7 @@ export interface CreditsConfirmResult {
 
 export async function confirmCreditsPayment(
   accountService: AccountService,
+  serviceAccountService: ServiceAccountService,
   input: CreditsConfirmInput
 ): Promise<CreditsConfirmResult> {
   const existingEntry = await accountService.findCreditLedgerEntryByReference({
@@ -62,6 +68,7 @@ export async function confirmCreditsPayment(
     ...(input.metadata ?? {}),
   };
 
+  // Step 1: Credit the user (appDb, RLS-scoped)
   const { newBalance } = await accountService.creditAccount({
     billingAccountId: input.billingAccountId,
     amount: credits,
@@ -70,6 +77,32 @@ export async function confirmCreditsPayment(
     virtualKeyId: input.defaultVirtualKeyId,
     metadata,
   });
+
+  // Step 2: Mint bonus credits to system tenant (serviceDb, BYPASSRLS)
+  // Sequential + idempotent — separate DB connection, not one transaction.
+  // If crash between steps: retry skips user credit (idempotent), applies system tenant credit.
+  const bonusCredits = calculateRevenueShareBonus(
+    creditsAsBigInt,
+    serverEnv().SYSTEM_TENANT_REVENUE_SHARE
+  );
+
+  if (bonusCredits > 0n) {
+    const existingBonus =
+      await serviceAccountService.findCreditLedgerEntryByReference({
+        billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+        reason: PLATFORM_REVENUE_SHARE_REASON,
+        reference: input.clientPaymentId,
+      });
+
+    if (!existingBonus) {
+      await serviceAccountService.creditAccount({
+        billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+        amount: Number(bonusCredits),
+        reason: PLATFORM_REVENUE_SHARE_REASON,
+        reference: input.clientPaymentId,
+      });
+    }
+  }
 
   return {
     billingAccountId: input.billingAccountId,

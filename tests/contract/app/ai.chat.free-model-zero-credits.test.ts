@@ -158,16 +158,7 @@ describe("POST /api/v1/ai/chat - Free Model Zero Credits", () => {
         const response = await fetch({
           method: "POST",
           body: JSON.stringify({
-            stateKey: "test-thread",
-            clientRequestId: "00000000-0000-4000-8000-000000000001",
-            messages: [
-              {
-                id: "msg-1",
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hello" }],
-              },
-            ],
+            message: "Hello",
             model: "free-model",
             graphName: "langgraph:poet",
           }),
@@ -195,16 +186,7 @@ describe("POST /api/v1/ai/chat - Free Model Zero Credits", () => {
         const response = await fetch({
           method: "POST",
           body: JSON.stringify({
-            stateKey: "test-thread",
-            clientRequestId: "00000000-0000-4000-8000-000000000002",
-            messages: [
-              {
-                id: "msg-1",
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hello" }],
-              },
-            ],
+            message: "Hello",
             model: "paid-model",
             graphName: "langgraph:poet",
           }),

@@ -5,7 +5,7 @@ Your audience: the engineer who will fix this. Write enough detail that they can
 Read these before starting:
 
 - [Item Template](work/_templates/item.md) — required structure and headings
-- [Items Index](work/items/_index.md) — current items, next available ID
+- [Work Items](work/items/) — individual item files are the source of truth
 - [Work README](work/README.md) — field reference and hard rules
 
 ## Process
@@ -16,9 +16,9 @@ Read these before starting:
    - Identify root cause if possible — or narrow down to the suspect area
    - Note which spec invariants (if any) are violated
 
-2. **Check for duplicates**: Scan `_index.md` for existing bugs in the same area.
+2. **Check for duplicates**: Quick scan of `work/items/` for existing bugs in the same area.
 
-3. **Assign ID**: Read `work/items/_index.md`. Find the highest `<num>` across ALL item types. New ID = `bug.<next>` (zero-padded to 4 digits).
+3. **Assign ID**: Run `pnpm work:next-id` to get the next available number. New ID = `bug.<next>` (zero-padded to 4 digits).
 
 4. **Create file from template**:
 
@@ -29,7 +29,7 @@ Read these before starting:
    Then edit the copy:
    - `id: bug.<num>` — must match filename prefix
    - `type: bug`
-   - `status: Backlog` (or `In Progress` if actively fixing)
+   - `status: needs_triage`
    - `priority: 1` default; `0` for security/data-loss bugs
    - `project:` — leave empty (routing happens in `/triage`)
    - `spec_refs:` — spec IDs whose invariants are violated
@@ -42,17 +42,17 @@ Read these before starting:
    - **Allowed Changes**: Narrow scope to the affected area
    - **Validation**: Exact command that should pass after the fix
 
-5. **Update `_index.md`**: Add row to `## Active` table, sorted by priority.
+5. **Finalize**:
+   - Run `pnpm check:docs` and fix any errors until clean.
+   - Commit all changes (work item file) on the current branch.
+   - Push to remote.
 
-6. **Validate**: Run `pnpm check:docs` and fix any errors.
-
-7. **Report**: File path, ID, severity assessment. Suggest next step: `/triage` to route to a project.
+6. **Report**: File path, ID, severity assessment. Next command: `/triage`.
 
 ## Rules
 
 - **INVESTIGATE_BEFORE_FILING** — read the code first. No bugs filed on assumptions.
 - **ID_IMMUTABLE** — `bug.<num>` never changes
-- **INDEX_MUST_MATCH** — `_index.md` row must match frontmatter exactly
 - **INCLUDE_CODE_POINTERS** — always reference specific files/lines, not just "the login flow"
 
 #$BUG

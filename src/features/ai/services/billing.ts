@@ -7,161 +7,28 @@
  * Scope: Calculate user charge from provider cost, record charge receipt. Does NOT perform pre-flight checks or LLM calls.
  * Invariants:
  *   - ONE_LEDGER_WRITER: Only this module calls accountService.recordChargeReceipt()
- *   - Post-call billing NEVER blocks user response (catches errors in prod)
- *   - ZERO_CREDIT_RECEIPTS_WRITTEN: Always records receipt even when chargedCredits = 0n
- *   - IDEMPOTENT_CHARGES: source_reference = runId/attempt/usageUnitId; DB constraint prevents duplicates
- *   - TEST_ENV_RETHROWS_BILLING: APP_ENV === "test" re-throws for test visibility
+ *   - BILLING_NEVER_THROWS: Post-call billing NEVER blocks user response or throws (catches all errors, logs)
+ *   - COST_AUTHORITY_IS_LITELLM: All LLM cost/tokens used for billing originate from LiteLLM (callback or spend/logs). App code never infers cost.
+ *   - RECEIPT_WRITES_REQUIRE_CALL_ID_AND_COST: A receipt is written iff usageUnitId exists AND costUsd is a number (0 allowed). Missing cost never writes.
+ *   - NO_PLACEHOLDER_RECEIPTS: Never write $0/empty receipts as placeholders for non-free calls. Defer until authoritative cost arrives.
+ *   - IDEMPOTENCY_KEY_IS_LITELLM_CALL_ID: source_reference = runId/attempt/usageUnitId; DB constraint prevents duplicates
  * Side-effects: IO (writes charge receipt via AccountService)
  * Notes: Per GRAPH_EXECUTION.md, COMPLETION_REFACTOR_PLAN.md P2 extraction
  * Links: completion.ts, ports/account.port.ts, llmPricingPolicy.ts, GRAPH_EXECUTION.md
  * @public
  */
 
-import type { GraphId } from "@cogni/ai-core";
 import type { Logger } from "pino";
 import type { AccountService } from "@/ports";
-import { isModelFree } from "@/shared/ai/model-catalog.server";
-import { serverEnv } from "@/shared/env";
 import { EVENT_NAMES } from "@/shared/observability";
 import type { AiBillingCommitCompleteEvent } from "@/shared/observability/events/ai";
+import {
+  billingInvariantViolationTotal,
+  billingMissingCostDeferredTotal,
+} from "@/shared/observability/server/metrics";
 import type { RunContext } from "@/types/run-context";
 import type { UsageFact } from "@/types/usage";
 import { calculateDefaultLlmCharge } from "./llmPricingPolicy";
-
-/**
- * Context for billing a completed LLM call.
- * Run semantics (runId, attempt) are set by caller (completion.ts), not by billing.
- */
-export interface BillingContext {
-  readonly billingAccountId: string;
-  readonly virtualKeyId: string;
-  /** Canonical execution identity (set by caller) */
-  readonly runId: string;
-  /** Retry attempt number (set by caller; P0: always 0) */
-  readonly attempt: number;
-  /** Ingress request correlation (set by caller; P0: equals runId) */
-  readonly ingressRequestId?: string;
-  readonly model: string;
-  readonly providerCostUsd: number | undefined;
-  readonly litellmCallId: string | undefined;
-  readonly provenance: "response" | "stream";
-  readonly graphId: GraphId;
-}
-
-/**
- * Record charge receipt for a completed LLM call.
- *
- * TODO(P0): DIRECT-CALL-ONLY. This function is for non-graph direct LLM calls.
- * Graph execution will use usage_report events -> commitUsageFact() instead.
- * Remove this function when graphs are implemented (see GRAPH_EXECUTION.md P0 checklist).
- *
- * Non-blocking in production (catches all errors).
- * Re-throws in test environment for visibility.
- *
- * Invariants:
- * - ZERO_CREDIT_RECEIPTS_WRITTEN: Always records receipt even when chargedCredits = 0n
- * - TEST_ENV_RETHROWS_BILLING: APP_ENV === "test" re-throws for test visibility
- *
- * @param context - Billing context from LLM result
- * @param accountService - Account service port for charge recording
- * @param log - Logger for error reporting
- */
-export async function recordBilling(
-  context: BillingContext,
-  accountService: AccountService,
-  log: Logger
-): Promise<void> {
-  const {
-    billingAccountId,
-    virtualKeyId,
-    runId,
-    attempt,
-    ingressRequestId,
-    model,
-    providerCostUsd,
-    litellmCallId,
-    provenance,
-    graphId,
-  } = context;
-
-  try {
-    const isFree = await isModelFree(model);
-    let chargedCredits = 0n;
-    let userCostUsd: number | null = null;
-
-    if (!isFree && typeof providerCostUsd === "number") {
-      // Use policy function for consistent calculation
-      const charge = calculateDefaultLlmCharge(providerCostUsd);
-      chargedCredits = charge.chargedCredits;
-      userCostUsd = charge.userCostUsd;
-
-      log.debug(
-        {
-          runId,
-          providerCostUsd,
-          userCostUsd,
-          chargedCredits: chargedCredits.toString(),
-        },
-        "Cost calculation complete"
-      );
-    } else if (!isFree && typeof providerCostUsd !== "number") {
-      // CRITICAL: Non-free model but no cost data (degraded billing)
-      log.error(
-        { runId, model, litellmCallId, isFree },
-        "CRITICAL: LiteLLM response missing cost data - billing incomplete (degraded under-billing mode)"
-      );
-    }
-    // If no cost available or free model: chargedCredits stays 0n
-
-    // usageUnitId: litellmCallId (happy path) or deterministic fallback
-    const usageUnitId = litellmCallId ?? `MISSING:${runId}/0`;
-    if (!litellmCallId) {
-      log.error(
-        { runId, model, isFree },
-        "BUG: LiteLLM response missing call ID - using fallback usageUnitId"
-      );
-    }
-
-    const sourceReference = computeIdempotencyKey(runId, attempt, usageUnitId);
-
-    await accountService.recordChargeReceipt({
-      billingAccountId,
-      virtualKeyId,
-      runId,
-      attempt,
-      ...(ingressRequestId && { ingressRequestId }),
-      chargedCredits,
-      responseCostUsd: userCostUsd,
-      litellmCallId: litellmCallId ?? null,
-      provenance,
-      chargeReason: "llm_usage",
-      sourceSystem: "litellm",
-      sourceReference,
-      receiptKind: "llm",
-      llmDetail: {
-        providerCallId: litellmCallId ?? null,
-        model,
-        provider: null, // Not available in BillingContext
-        tokensIn: null, // Not available in BillingContext
-        tokensOut: null, // Not available in BillingContext
-        latencyMs: null,
-        graphId,
-      },
-    });
-  } catch (error) {
-    // Post-call billing is best-effort - NEVER block user response
-    // recordChargeReceipt should never throw InsufficientCreditsPortError per design
-    log.error(
-      { err: error, runId, billingAccountId },
-      `CRITICAL: Post-call billing failed (${provenance}) - user response NOT blocked`
-    );
-    // DO NOT RETHROW - user already got LLM response, must see it
-    // EXCEPT in test environment where we need to catch these issues
-    if (serverEnv().APP_ENV === "test") {
-      throw error;
-    }
-  }
-}
 
 // ============================================================================
 // Run-Centric Billing (GRAPH_EXECUTION.md P0)
@@ -228,33 +95,45 @@ export async function commitUsageFact(
   }
 
   try {
-    // Determine model and cost
+    // COST_AUTHORITY_IS_LITELLM: costUsd must be provided by LiteLLM (0 allowed)
     const model = fact.model ?? "unknown";
-    const isFree = await isModelFree(model);
-    let chargedCredits = 0n;
-    let userCostUsd: number | null = null;
+    const costUsd = fact.costUsd;
 
-    if (!isFree && typeof fact.costUsd === "number") {
-      const charge = calculateDefaultLlmCharge(fact.costUsd);
-      chargedCredits = charge.chargedCredits;
-      userCostUsd = charge.userCostUsd;
-
-      log.debug(
-        {
-          runId,
-          ingressRequestId,
-          providerCostUsd: fact.costUsd,
-          userCostUsd,
-          chargedCredits: chargedCredits.toString(),
-        },
-        "commitUsageFact: cost calculation complete"
-      );
-    } else if (!isFree && typeof fact.costUsd !== "number") {
-      log.error(
-        { runId, ingressRequestId, model, usageUnitId },
-        "CRITICAL: UsageFact missing cost data - billing incomplete (degraded under-billing mode)"
-      );
+    if (typeof costUsd !== "number") {
+      // Cost unknown — defer or error based on source
+      if (source === "litellm") {
+        // DEFER: callback-backed — callback/reconciler will supply cost
+        billingMissingCostDeferredTotal.inc({ source_system: source });
+        log.debug(
+          { runId, ingressRequestId, model, usageUnitId, source },
+          "Cost unknown — deferring to LiteLLM callback (no receipt written)"
+        );
+      } else {
+        // Invariant violation: non-litellm source with unknown cost
+        billingInvariantViolationTotal.inc({
+          type: "non_litellm_unknown_cost",
+        });
+        log.error(
+          { runId, ingressRequestId, model, usageUnitId, source },
+          "Invariant violation: non-litellm source with unknown cost in commitUsageFact"
+        );
+      }
+      return;
     }
+
+    // RECEIPT_WRITES_REQUIRE_CALL_ID_AND_COST: cost known — calculate charge, write receipt
+    const { chargedCredits, userCostUsd } = calculateDefaultLlmCharge(costUsd);
+
+    log.debug(
+      {
+        runId,
+        ingressRequestId,
+        providerCostUsd: costUsd,
+        userCostUsd,
+        chargedCredits: chargedCredits.toString(),
+      },
+      "commitUsageFact: cost calculation complete"
+    );
 
     // Compute idempotency key
     const sourceReference = computeIdempotencyKey(runId, attempt, usageUnitId);
@@ -313,9 +192,5 @@ export async function commitUsageFact(
       sourceSystem: source,
     };
     log.error({ ...errorEvent, err: error });
-    // Re-throw in test environment for visibility
-    if (serverEnv().APP_ENV === "test") {
-      throw error;
-    }
   }
 }

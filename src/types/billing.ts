@@ -4,7 +4,7 @@
 /**
  * Module: `@types/billing`
  * Purpose: Shared billing type definitions and categorization constants (logic-free).
- * Scope: Defines charge_reason enum for activity tracking, BillingCommitFn callback type for DI. Re-exports SourceSystem from @cogni/ai-core. Does NOT implement business logic.
+ * Scope: Defines charge_reason enum for activity tracking. Re-exports SourceSystem from @cogni/ai-core. Does NOT implement business logic.
  * Invariants:
  * - ONLY exports: enums (as const arrays), literal union types, simple string mappings, and callback type aliases
  * - FORBIDDEN: functions, computations, validation logic, or business rules
@@ -17,24 +17,6 @@
 
 // Re-export from canonical source (per SINGLE_SOURCE_OF_TRUTH invariant)
 export { SOURCE_SYSTEMS, type SourceSystem } from "@cogni/ai-core";
-
-import type { RunContext } from "@/types/run-context";
-import type { UsageFact } from "@/types/usage";
-
-/**
- * Injected billing commit function for the BillingGraphExecutorDecorator.
- *
- * Created in the app layer (facade or route handler) as a closure binding
- * `commitUsageFact` + `accountService` + `log`. Passed through the factory
- * to the decorator — adapter/bootstrap layers never import from features.
- *
- * @param fact - Usage fact from a usage_report event
- * @param context - Run context for correlation (runId, attempt, ingressRequestId)
- */
-export type BillingCommitFn = (
-  fact: UsageFact,
-  context: RunContext
-) => Promise<void>;
 
 /**
  * Charge reasons represent the economic/billing category of a charge.

@@ -67,6 +67,44 @@ Improve observability infrastructure across four axes: (1) finer-grained activit
 
 **Alerts detail:** Loki ruler configuration, alert on error rate spike, alert on critical events (payment failures, etc.).
 
+### Error Envelope Standardization Track (Public vs Private)
+
+> Principle: Every error has two audiences — **public** (API consumers get sanitized errorCode) and **private** (operator logs get root cause). Both must always be present.
+
+**Problem:** Error context is lost at multiple boundaries. Adapters strip response bodies. `normalizeErrorToExecutionCode()` collapses `provider_4xx`/`provider_5xx`/`unknown` → `"internal"`. Route layer string-matches error messages. Operators see `{"errorCode":"internal"}` with zero debugging value.
+
+#### P0: Adapter-Level Private Root Cause Logging
+
+**Goal:** Every adapter error path logs private diagnostics (redacted, bounded) without changing public error codes.
+
+| Deliverable                                                                | Status | Est | Work Item |
+| -------------------------------------------------------------------------- | ------ | --- | --------- |
+| LiteLLM adapter: log response body excerpt + network error cause           | Done   | 1   | bug.0059  |
+| Rename `langfuse-scrubbing.ts` → `content-scrubbing.ts` (shared redaction) | Done   | 0   | bug.0059  |
+
+#### P1: Error Envelope Type + Boundary Propagation
+
+**Goal:** Define `ErrorEnvelope` type, carry private details through graph execution boundary, structured route responses.
+
+| Deliverable                                                                                                             | Status      | Est | Work Item |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Define `ErrorEnvelope` type (`{ public: { errorCode, message }, private: { rootCause, statusCode, responseExcerpt } }`) | Not Started | 1   | —         |
+| `GraphResult.errorDetail` carries private context to provider boundary                                                  | Not Started | 1   | —         |
+| Route-layer structured error responses: `{ errorCode, message, suggestion }` instead of generic 503                     | Not Started | 2   | —         |
+| Map `provider_4xx` → `not_found` / `invalid_request` in `normalizeErrorToExecutionCode()`                               | Not Started | 1   | —         |
+
+#### P2: CI Enforcement
+
+**Goal:** Prevent regression via compile-time and CI guards.
+
+| Deliverable                                                                    | Status      | Est | Work Item |
+| ------------------------------------------------------------------------------ | ----------- | --- | --------- |
+| CI guard: fail on `console.*` usage at system boundaries                       | Not Started | 1   | —         |
+| CI guard: fail on unstructured error logging (no `errorCode` field)            | Not Started | 1   | —         |
+| Tests: public errors never include private fields; excerpts <=2KB and redacted | Not Started | 1   | —         |
+
+---
+
 ### LLM Error Handling Track
 
 > Source: `docs/ERROR_HANDLING_IMPROVEMENT_DESIGN.md` — Spec: [error-handling.md](../../docs/spec/error-handling.md) (as-built architecture)

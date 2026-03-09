@@ -6,7 +6,7 @@
  * Purpose: Global setup for stack tests - ensures /livez and /readyz pass before running tests.
  * Scope: Polls liveness then readiness probes with explicit budgets; fails fast if probes don't pass. Does not run functional tests.
  * Invariants: Must run before any stack tests execute; /readyz is prerequisite for functional tests.
- *             Uses AbortController with timeouts < interval to prevent hung requests.
+ *             Uses AbortController with timeouts that exceed the /readyz handler's internal budgets (~13s).
  * Side-effects: IO (HTTP probe requests to TEST_BASE_URL)
  * Notes: Implements CI contract: livez (10-20s, fail-fast) then readyz (60-120s, correctness gate).
  *        Validates /readyz contract (status === 'healthy'); prints response body on failures.
@@ -22,8 +22,8 @@ const LIVEZ_BUDGET_MS = 20_000; // 20s fail-fast budget
 const LIVEZ_INTERVAL_MS = 1_000; // Poll every 1s (fast fail-fast signal)
 const LIVEZ_TIMEOUT_MS = 500; // Request timeout < interval
 const READYZ_BUDGET_MS = 120_000; // 120s correctness budget
-const READYZ_INTERVAL_MS = 5_000; // Poll every 5s
-const READYZ_TIMEOUT_MS = 3_000; // Request timeout < interval
+const READYZ_INTERVAL_MS = 20_000; // Poll every 20s (handler needs up to 13s for sequential checks)
+const READYZ_TIMEOUT_MS = 15_000; // Must exceed handler's internal timeouts (3s RPC + 5s Temporal + 5s worker)
 const MAX_BODY_PREVIEW = 2048; // Cap error body output (2KB)
 
 interface ProbeOptions {
@@ -90,7 +90,11 @@ async function pollEndpoint(options: ProbeOptions): Promise<void> {
       clearTimeout(timeoutId);
 
       const errorMsg = error instanceof Error ? error.message : "fetch failed";
-      lastError = errorMsg;
+      // Preserve structured HTTP errors over abort/timeout noise
+      const isAbort = errorMsg === "This operation was aborted";
+      if (!isAbort || lastError === null) {
+        lastError = errorMsg;
+      }
 
       if (i === maxAttempts) {
         console.log(`❌ ${probeName} attempt ${i}/${maxAttempts}: ${errorMsg}`);

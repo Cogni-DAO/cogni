@@ -96,6 +96,21 @@ export interface GraphRunResult {
 }
 
 /**
+ * Injected preflight credit check function for PreflightCreditCheckDecorator.
+ *
+ * Created in the app layer (facade/route) as a closure binding
+ * `preflightCreditCheck` + `accountService`. Passed through the factory
+ * to the decorator — adapter/bootstrap layers never import from features.
+ *
+ * @throws InsufficientCreditsPortError if balance < estimated cost
+ */
+export type PreflightCreditCheckFn = (
+  billingAccountId: string,
+  model: string,
+  messages: readonly Message[]
+) => Promise<void>;
+
+/**
  * Port interface for graph execution.
  * Per UNIFIED_GRAPH_EXECUTOR invariant: all graphs flow through this interface.
  *

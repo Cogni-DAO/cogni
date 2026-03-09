@@ -2,7 +2,7 @@
 id: bug.0005
 type: bug
 title: "Scheduled runs invisible in Activity — internal route bypasses RunEventRelay billing"
-status: Todo
+status: done
 priority: 0
 estimate: 2
 summary: POST /api/internal/graphs/{graphId}/runs drains graph stream without processing usage_report events, so scheduled runs never write charge_receipts. Activity dashboard (now receipts-only) shows no data for recurring runs.
@@ -18,6 +18,10 @@ created: 2026-02-09
 updated: 2026-02-09
 labels: [billing, scheduler, regression]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 ## Problem

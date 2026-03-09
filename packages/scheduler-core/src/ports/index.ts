@@ -40,6 +40,7 @@ export {
   type ScheduleControlPort,
   ScheduleControlUnavailableError,
   type ScheduleDescription,
+  type ScheduleOverlapPolicyHint,
 } from "./schedule-control.port";
 export {
   type CreateScheduleInput,

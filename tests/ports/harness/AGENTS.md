@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-11
 - **Status:** draft
 
 ## Purpose
@@ -31,9 +30,7 @@ Shared helpers to spin up and tear down resources for port tests and adapter tes
 ## Public Surface
 
 - **Exports:** makeHarness, dispose, lightweight stubs (e.g., LLM HTTP stub)
-- **Routes:** none
 - **CLI:** `pnpm test`
-- **Env/Config keys:** none
 - **Files considered API:** `factory.ts`, `types.ts`
 
 ## Responsibilities

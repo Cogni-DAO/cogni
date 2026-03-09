@@ -2,7 +2,7 @@
 id: task.0035
 type: task
 title: Thread history sidebar — list, switch, load conversations
-status: Todo
+status: done
 priority: 1
 estimate: 3
 summary: Add thread list API + sidebar UI to the chat page so users can see past conversations, switch between them, and start new threads.
@@ -11,13 +11,17 @@ spec_refs: thread-persistence
 assignees: derekg1729
 credit:
 project: proj.thread-persistence
-branch:
+branch: feat/task-0035-thread-sidebar
 pr:
 reviewer:
 created: 2026-02-11
-updated: 2026-02-11
+updated: 2026-02-14
 labels: [ai-graphs, ui]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 # Thread history sidebar — list, switch, load conversations
@@ -84,7 +88,7 @@ pnpm check
 
 ## PR / Links
 
--
+- Handoff: [handoff](../handoffs/task.0035.handoff.md)
 
 ## Attribution
 

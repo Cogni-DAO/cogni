@@ -16,7 +16,6 @@
 
 import { Check, ChevronDown, ShieldCheck } from "lucide-react";
 import { useState } from "react";
-import { ScrollArea } from "@/components/kit/data-display/ScrollArea";
 import {
   Dialog,
   DialogContent,
@@ -93,14 +92,15 @@ export function ModelPicker({
 
       <DialogContent
         className={cn(
-          // Mobile: bottom sheet
-          "fixed inset-x-0 bottom-0 rounded-t-2xl",
+          // Mobile: centered card with margins
+          "fixed inset-3 top-auto w-auto max-w-none translate-x-0 translate-y-0 rounded-2xl",
+          "max-h-[var(--max-height-dialog-mobile)]",
           // Desktop: centered modal
-          "sm:top-[var(--center-50)] sm:bottom-auto sm:left-[var(--center-50)]",
+          "sm:inset-auto sm:top-[var(--center-50)] sm:left-[var(--center-50)] sm:w-full",
           "sm:translate-x-[var(--center-neg-50)] sm:translate-y-[var(--center-neg-50)]",
-          "sm:max-w-lg sm:rounded-2xl",
-          // Shared
-          "flex max-h-[var(--max-height-dialog)] flex-col gap-4"
+          "sm:max-h-[var(--max-height-dialog)] sm:max-w-lg sm:rounded-2xl",
+          // Shared — override base grid with flex
+          "flex flex-col gap-4"
         )}
       >
         <DialogHeader>
@@ -117,7 +117,7 @@ export function ModelPicker({
         />
 
         {/* Models list */}
-        <ScrollArea className="-mx-6 flex-1 px-6">
+        <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">
           <div className="space-y-1">
             {filteredModels.length === 0 ? (
               <div className="py-6 text-center text-muted-foreground text-sm">
@@ -186,7 +186,7 @@ export function ModelPicker({
               })
             )}
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );

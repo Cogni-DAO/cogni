@@ -79,8 +79,10 @@ function getStepMessage(walletStep: PaymentFlowState["walletStep"]): string {
   }
 }
 
-function formatCredits(amount: number): string {
-  return amount.toLocaleString("en-US");
+/** Format credit amount as USD display string. Uses protocol constant (10M credits = $1). */
+function formatCreditsAsUsd(credits: number): string {
+  const usd = credits / 10_000_000;
+  return `$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function PaymentFlowDialog({
@@ -160,7 +162,7 @@ export function PaymentFlowDialog({
                 <CheckCircle2 className="h-16 w-16 text-success" />
                 <p className="font-semibold text-foreground text-xl">
                   {creditsAdded != null
-                    ? `${formatCredits(creditsAdded)} credits added`
+                    ? `${formatCreditsAsUsd(creditsAdded)} added`
                     : "Payment successful"}
                 </p>
               </div>

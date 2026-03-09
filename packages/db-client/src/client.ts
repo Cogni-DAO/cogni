@@ -33,6 +33,6 @@ export interface LoggerLike {
  * Creates a Drizzle database client for the `app_user` role (RLS enforced).
  * Use this for all user-facing request paths.
  */
-export function createAppDbClient(connectionString: string): Database {
+export function createAppDbClient(connectionString: string) {
   return buildClient(connectionString, "cogni_template_app");
 }

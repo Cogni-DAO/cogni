@@ -17,6 +17,12 @@
 
 // Model selection rules (re-exported from core for app layer access)
 export { pickDefaultModel } from "@/core";
+// Thread data hooks
+export {
+  useDeleteThread,
+  useLoadThread,
+  useThreads,
+} from "./chat/hooks/useThreads";
 export type { ChatComposerExtrasProps } from "./components/ChatComposerExtras";
 // Model/graph selection components
 export {

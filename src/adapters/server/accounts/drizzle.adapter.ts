@@ -739,4 +739,76 @@ export class ServiceDrizzleAccountService implements ServiceAccountService {
       };
     });
   }
+
+  async creditAccount({
+    billingAccountId,
+    amount,
+    reason,
+    reference,
+    virtualKeyId,
+    metadata,
+  }: {
+    billingAccountId: string;
+    amount: number;
+    reason: string;
+    reference?: string;
+    virtualKeyId?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<{ newBalance: number }> {
+    return await this.db.transaction(async (tx) => {
+      await ensureBillingAccountExists(tx, billingAccountId);
+      const resolvedVirtualKeyId =
+        virtualKeyId ?? (await findDefaultKey(tx, billingAccountId)).id;
+
+      const normalizedAmount = normalizeAmount(amount);
+      const amountBigInt = BigInt(normalizedAmount);
+
+      const [updatedAccount] = await tx
+        .update(billingAccounts)
+        .set({
+          balanceCredits: sql`balance_credits + ${amountBigInt}`,
+        })
+        .where(eq(billingAccounts.id, billingAccountId))
+        .returning({ balanceCredits: billingAccounts.balanceCredits });
+
+      if (!updatedAccount) {
+        throw new BillingAccountNotFoundPortError(billingAccountId);
+      }
+
+      const newBalance = toNumber(updatedAccount.balanceCredits);
+
+      await tx.insert(creditLedger).values({
+        billingAccountId,
+        virtualKeyId: resolvedVirtualKeyId,
+        amount: amountBigInt,
+        balanceAfter: updatedAccount.balanceCredits,
+        reason,
+        reference: reference ?? null,
+        metadata: metadata ?? null,
+      });
+
+      return { newBalance };
+    });
+  }
+
+  async findCreditLedgerEntryByReference({
+    billingAccountId,
+    reason,
+    reference,
+  }: {
+    billingAccountId: string;
+    reason: string;
+    reference: string;
+  }): Promise<CreditLedgerEntry | null> {
+    const entry = await this.db.query.creditLedger.findFirst({
+      where: and(
+        eq(creditLedger.billingAccountId, billingAccountId),
+        eq(creditLedger.reason, reason),
+        eq(creditLedger.reference, reference)
+      ),
+      orderBy: (ledger, { desc: orderDesc }) => orderDesc(ledger.createdAt),
+    });
+
+    return entry ? mapLedgerRow(entry) : null;
+  }
 }

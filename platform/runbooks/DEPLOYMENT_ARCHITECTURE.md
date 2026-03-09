@@ -50,9 +50,6 @@
         └── configs/               # Service configuration files
             ├── litellm.config.yaml
             └── alloy-config.alloy
-    └── sourcecred/                 # SourceCred instance
-        ├── docker-compose.sourcecred.yml
-        └── instance/               # SourceCred configuration and data
   ```
 
 - ## Container Stack
@@ -75,17 +72,6 @@
 - `git-sync`: Clones repo at pinned SHA into `repo_data` volume (bootstrap profile, `--one-time`). App reads via `/repo/current` symlink.
 - `db-provision`: Database user/schema provisioning (bootstrap profile)
 - `db-migrate`: Database migrations via dedicated migrator image (bootstrap profile)
-- `sourcecred`: Cred analysis and UI (separate compose project, shares network)
-
-  > **Note**: SourceCred uses an immutable runner image. To update runtime version:
-  >
-  > 1. Run: `./platform/infra/services/sourcecred/release.sh sc<VER>-node<VER>-<DATE>`
-  >    (Example: `./platform/infra/services/sourcecred/release.sh sc0.11.2-node18-2025-12-07`)
-  > 2. Invariant: Requires `docker login ghcr.io` with push access.
-  > 3. Update `docker-compose.sourcecred.yml` to use the new tag.
-  >    - Package: https://github.com/orgs/Cogni-DAO/packages/container/package/cogni-sourcecred-runner
-  >    - Pull: `docker pull ghcr.io/cogni-dao/cogni-sourcecred-runner:sc0.11.2-node18-2025-12-07`
-
   **Registry Authentication**:
 
   For private GHCR images, VMs authenticate using bot account credentials:

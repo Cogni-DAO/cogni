@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-02-11
 - **Status:** stable
 
 ## Purpose
@@ -47,8 +46,8 @@ Drizzle ORM table definitions for all database domains. Provides type-safe schem
   - `@cogni/db-schema/billing` - Billing tables
   - `@cogni/db-schema/ai` - AI-related tables
   - `@cogni/db-schema/ai-threads` - Thread persistence table (UIMessage[] JSONB, RLS, optimistic concurrency)
-- **CLI:** none
-- **Env/Config keys:** none
+  - `@cogni/db-schema/identity` - Identity binding tables (`userBindings`, `linkTransactions`, `identityEvents`)
+  - `@cogni/db-schema/attribution` - Attribution pipeline tables (`epochs`, `ingestionReceipts`, `epochSelection`, `epochReceiptClaimants`, `epochUserProjections`, `epochReviewSubjectOverrides`, `epochFinalClaimantAllocations`, `ingestionCursors`, `epochPoolComponents`, `epochStatements`, `epochStatementSignatures`)
 - **Files considered API:** All `src/*.ts` files via package.json exports
 
 ## Ports

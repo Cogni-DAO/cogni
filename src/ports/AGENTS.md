@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-11
 - **Status:** stable
 
 ## Purpose
@@ -38,11 +37,12 @@ Ports describe _what_ the domain needs from external services, not _how_ they wo
 
 - **Exports:**
   - AccountService (user-scoped: getOrCreateBillingAccountForUser, getBalance, debitForUsage, creditAccount, recordChargeReceipt, listChargeReceipts, listLlmChargeDetails, listCreditLedgerEntries, findCreditLedgerEntryByReference)
-  - ServiceAccountService (service-role: getBillingAccountById, getOrCreateBillingAccountForUser — BYPASSRLS subset)
+  - ServiceAccountService (service-role: getBillingAccountById, getOrCreateBillingAccountForUser, creditAccount, findCreditLedgerEntryByReference — BYPASSRLS for system tenant operations)
   - LlmService (completion, completionStream with CompletionStreamParams including abortSignal, tools, toolChoice; returns providerCostUsd, litellmCallId, toolCalls)
   - AgentCatalogPort (listAgents; discovery-only interface per AGENT_DISCOVERY.md)
   - AgentDescriptor (agentId, graphId, name, description; P0_AGENT_GRAPH_IDENTITY: agentId === graphId)
   - GraphExecutorPort (runGraph → stream + completion promise; execution-only per GRAPH_EXECUTION.md)
+  - PreflightCreditCheckFn (DI callback for PreflightCreditCheckDecorator; throws InsufficientCreditsPortError)
   - GraphRunRequest (includes toolIds for per-run tool allowlist; graphId typed as GraphId), GraphRunResult, GraphFinal
   - LlmChargeDetail (type for llm_charge_details read results)
   - ChatDeltaEvent (text_delta | error | done)
@@ -73,8 +73,6 @@ Ports describe _what_ the domain needs from external services, not _how_ they wo
   - ThreadSummary (listing DTO: stateKey, updatedAt, messageCount)
   - Grant errors (GrantNotFoundError, GrantExpiredError, GrantRevokedError, GrantScopeMismatchError)
   - Schedule errors (ScheduleNotFoundError, ScheduleAccessDeniedError, InvalidCronExpressionError, InvalidTimezoneError)
-- **Routes:** none
-- **CLI:** none
 - **Env/Config:** none
 - **Files considered API:** all \*.port.ts files
 

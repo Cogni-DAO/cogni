@@ -7,6 +7,10 @@
 # Invariants:
 #   - APP_IMAGE and DEPLOY_ENVIRONMENT must be set; secrets via env vars
 #   - Prunes BEFORE pull when free < 15GB or used > 70%
+#   - TARGETED_PULL: Only pull images that change per deploy (app, migrator, scheduler-worker, sandbox).
+#     Static/pinned images (postgres, litellm, alloy, temporal, autoheal, nginx, git-sync, busybox)
+#     use local Docker cache. After prune they'll be pulled on next `compose up -d`.
+#   - SSH_KEEPALIVE: All SSH connections use ServerAliveInterval to survive long operations.
 # Notes:
 #   - Dual gate (15GB free / 70% used) prevents overlayfs extraction failures on 40GB disks
 #   - Hard prune may force service image re-pull (reliability > speed)
@@ -58,12 +62,9 @@ on_fail() {
     ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs --tail 80 litellm 2>&1 || true" || true
 
     echo ""
-    echo "=== sourcecred compose ps ==="
-    ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml ps 2>&1 || true" || true
+    echo "=== logs: scheduler-worker ==="
+    ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs --tail 80 scheduler-worker 2>&1 || true" || true
 
-    echo ""
-    echo "=== logs: sourcecred ==="
-    ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml logs --tail 200 sourcecred 2>&1 || true" || true
   fi
 
   exit "$code"
@@ -149,7 +150,7 @@ SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/deploy_key}"
 if [[ -f "$SSH_KEY_PATH" ]]; then
     # Found deploy key (CI or explicit local override)
     log_info "SSH key validated: $SSH_KEY_PATH"
-    SSH_OPTS="-i $SSH_KEY_PATH -o StrictHostKeyChecking=yes"
+    SSH_OPTS="-i $SSH_KEY_PATH -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=12"
     
     # Validate permissions
     if [[ "$(stat -c %a "$SSH_KEY_PATH" 2>/dev/null || stat -f %A "$SSH_KEY_PATH" 2>/dev/null)" != "600" ]]; then
@@ -159,7 +160,7 @@ if [[ -f "$SSH_KEY_PATH" ]]; then
 else
     # No deploy key found - use default SSH (local development)
     log_info "No deploy key found, using default SSH configuration"
-    SSH_OPTS="-o StrictHostKeyChecking=yes"
+    SSH_OPTS="-o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=12"
 fi
 
 # Validate required environment variables
@@ -207,7 +208,6 @@ REQUIRED_SECRETS=(
     "APP_DB_SERVICE_USER"
     "APP_DB_SERVICE_PASSWORD"
     "APP_DB_NAME"
-    "SOURCECRED_GITHUB_TOKEN"
     "EVM_RPC_URL"
     # Temporal DB credentials (self-hosted Temporal)
     "TEMPORAL_DB_USER"
@@ -216,6 +216,12 @@ REQUIRED_SECRETS=(
     "SCHEDULER_WORKER_IMAGE"
     # OpenClaw gateway auth (must match openclaw-gateway.json gateway.auth.token)
     "OPENCLAW_GATEWAY_TOKEN"
+    "OPENCLAW_GITHUB_RW_TOKEN"
+    # Grafana observability (for grafana-health skill + MCP)
+    "GRAFANA_URL"
+    "GRAFANA_SERVICE_ACCOUNT_TOKEN"
+    # Internal ops auth (deploy-time governance sync trigger)
+    "INTERNAL_OPS_TOKEN"
 )
 
 # Check required environment variables (not secrets)
@@ -269,6 +275,7 @@ OPTIONAL_SECRETS=(
     "GRAFANA_CLOUD_LOKI_API_KEY"
     "METRICS_TOKEN"
     "SCHEDULER_API_TOKEN"
+    "BILLING_INGEST_TOKEN"
     "PROMETHEUS_REMOTE_WRITE_URL"
     "PROMETHEUS_USERNAME"
     "PROMETHEUS_PASSWORD"
@@ -278,6 +285,19 @@ OPTIONAL_SECRETS=(
     "LANGFUSE_PUBLIC_KEY"
     "LANGFUSE_SECRET_KEY"
     "LANGFUSE_BASE_URL"
+    "DISCORD_BOT_TOKEN"
+    # OAuth providers (optional — provider silently skipped if missing)
+    "GH_OAUTH_CLIENT_ID"
+    "GH_OAUTH_CLIENT_SECRET"
+    "DISCORD_OAUTH_CLIENT_ID"
+    "DISCORD_OAUTH_CLIENT_SECRET"
+    "GOOGLE_OAUTH_CLIENT_ID"
+    "GOOGLE_OAUTH_CLIENT_SECRET"
+    # GitHub App credentials (required only for GitHub ingestion)
+    "GH_REVIEW_APP_ID"
+    "GH_REVIEW_APP_PRIVATE_KEY_BASE64"
+    "GH_REPOS"
+    "GH_WEBHOOK_SECRET"
 )
 
 for secret in "${OPTIONAL_SECRETS[@]}"; do
@@ -369,7 +389,6 @@ echo -e "\033[0;32m[INFO]\033[0m Docker prerequisites verified"
 # Compose shortcuts (explicit project names, no global export)
 EDGE_COMPOSE="docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml"
 RUNTIME_COMPOSE="docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml"
-SOURCECRED_COMPOSE="docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml"
 
 log_info() {
     echo -e "\033[0;32m[INFO]\033[0m $1"
@@ -453,7 +472,7 @@ hash_file() {
 # Usage: append_env_if_set FILE KEY VALUE
 append_env_if_set() {
     local file="${1:?file required}" key="${2:?key required}" val="${3-}"
-    [[ -n "$val" ]] && printf '%s=%s\n' "$key" "$val" >> "$file"
+    if [[ -n "$val" ]]; then printf '%s=%s\n' "$key" "$val" >> "$file"; fi
 }
 
 log_info "Setting up deployment environment on VM..."
@@ -509,6 +528,10 @@ GIT_READ_USERNAME=${GIT_READ_USERNAME}
 GIT_READ_TOKEN=${GIT_READ_TOKEN}
 # OpenClaw gateway auth
 OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN}
+# Grafana observability (for grafana-health skill + MCP)
+GRAFANA_URL=${GRAFANA_URL}
+GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_SERVICE_ACCOUNT_TOKEN}
 ENV_EOF
 
 # Verify .env was written
@@ -523,6 +546,8 @@ append_env_if_set "$RUNTIME_ENV" LOKI_USERNAME "${GRAFANA_CLOUD_LOKI_USER-}"
 append_env_if_set "$RUNTIME_ENV" LOKI_PASSWORD "${GRAFANA_CLOUD_LOKI_API_KEY-}"
 append_env_if_set "$RUNTIME_ENV" METRICS_TOKEN "${METRICS_TOKEN-}"
 append_env_if_set "$RUNTIME_ENV" SCHEDULER_API_TOKEN "${SCHEDULER_API_TOKEN-}"
+append_env_if_set "$RUNTIME_ENV" BILLING_INGEST_TOKEN "${BILLING_INGEST_TOKEN-}"
+append_env_if_set "$RUNTIME_ENV" INTERNAL_OPS_TOKEN "${INTERNAL_OPS_TOKEN-}"
 # Prometheus write path (Alloy)
 append_env_if_set "$RUNTIME_ENV" PROMETHEUS_REMOTE_WRITE_URL "${PROMETHEUS_REMOTE_WRITE_URL-}"
 append_env_if_set "$RUNTIME_ENV" PROMETHEUS_USERNAME "${PROMETHEUS_USERNAME-}"
@@ -534,11 +559,20 @@ append_env_if_set "$RUNTIME_ENV" PROMETHEUS_READ_PASSWORD "${PROMETHEUS_READ_PAS
 append_env_if_set "$RUNTIME_ENV" LANGFUSE_PUBLIC_KEY "${LANGFUSE_PUBLIC_KEY-}"
 append_env_if_set "$RUNTIME_ENV" LANGFUSE_SECRET_KEY "${LANGFUSE_SECRET_KEY-}"
 append_env_if_set "$RUNTIME_ENV" LANGFUSE_BASE_URL "${LANGFUSE_BASE_URL-}"
-
-# SourceCred env
-cat > /opt/cogni-template-sourcecred/.env << ENV_EOF
-SOURCECRED_GITHUB_TOKEN=${SOURCECRED_GITHUB_TOKEN}
-ENV_EOF
+# Discord bot (OpenClaw channel plugin)
+append_env_if_set "$RUNTIME_ENV" DISCORD_BOT_TOKEN "${DISCORD_BOT_TOKEN-}"
+# OAuth providers (optional — provider silently skipped if missing)
+append_env_if_set "$RUNTIME_ENV" GH_OAUTH_CLIENT_ID "${GH_OAUTH_CLIENT_ID-}"
+append_env_if_set "$RUNTIME_ENV" GH_OAUTH_CLIENT_SECRET "${GH_OAUTH_CLIENT_SECRET-}"
+append_env_if_set "$RUNTIME_ENV" DISCORD_OAUTH_CLIENT_ID "${DISCORD_OAUTH_CLIENT_ID-}"
+append_env_if_set "$RUNTIME_ENV" DISCORD_OAUTH_CLIENT_SECRET "${DISCORD_OAUTH_CLIENT_SECRET-}"
+append_env_if_set "$RUNTIME_ENV" GOOGLE_OAUTH_CLIENT_ID "${GOOGLE_OAUTH_CLIENT_ID-}"
+append_env_if_set "$RUNTIME_ENV" GOOGLE_OAUTH_CLIENT_SECRET "${GOOGLE_OAUTH_CLIENT_SECRET-}"
+# GitHub App credentials (scheduler-worker ingestion)
+append_env_if_set "$RUNTIME_ENV" GH_REVIEW_APP_ID "${GH_REVIEW_APP_ID-}"
+append_env_if_set "$RUNTIME_ENV" GH_REVIEW_APP_PRIVATE_KEY_BASE64 "${GH_REVIEW_APP_PRIVATE_KEY_BASE64-}"
+append_env_if_set "$RUNTIME_ENV" GH_REPOS "${GH_REPOS-}"
+append_env_if_set "$RUNTIME_ENV" GH_WEBHOOK_SECRET "${GH_WEBHOOK_SECRET-}"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 2: Start edge stack (idempotent - only starts if not running)
@@ -597,34 +631,6 @@ log_info "Logging into GHCR for private image pulls..."
 echo "${GHCR_DEPLOY_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 4: Deploy SourceCred (After cleanup, before app pull)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-log_info "Deploying SourceCred stack..."
-
-# Pre-flight: Check Token
-token=$(sed -n 's/^SOURCECRED_GITHUB_TOKEN=//p' /opt/cogni-template-sourcecred/.env | head -n1)
-if [[ -z "${token:-}" ]]; then
-   log_error "SOURCECRED_GITHUB_TOKEN empty in /opt/cogni-template-sourcecred/.env"
-   exit 1
-fi
-
-# Pre-flight: Inspect Config (fail fast if config is obviously wrong)
-log_info "SourceCred Configuration:"
-grep -C 2 "repositories" /opt/cogni-template-sourcecred/instance/config/plugins/sourcecred/github/config.json || log_warn "Could not read GitHub config"
-
-# 3. Pull image (Immutable Artifact - SC-invariant-2)
-log_info "Pulling SourceCred image..."
-$SOURCECRED_COMPOSE pull sourcecred
-
-# 4. Start service
-log_info "Starting SourceCred container..."
-$SOURCECRED_COMPOSE up -d
-
-# 4. Verify readiness (fail-fast, check config availability - SC-3)
-log_info "Waiting for SourceCred readiness..."
-bash /tmp/healthcheck-sourcecred.sh "$SOURCECRED_COMPOSE"
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 5.9: Assert profile services exist (guard against silent compose drift)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RESOLVED_SERVICES=$($RUNTIME_COMPOSE --profile bootstrap --profile sandbox-openclaw config --services)
@@ -639,27 +645,32 @@ done
 log_info "Profile guardrail passed: openclaw-gateway, llm-proxy-openclaw resolved"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 6: Validate images exist (fail fast)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-log_info "Validating required images are available..."
-if ! $RUNTIME_COMPOSE --dry-run --profile bootstrap --profile sandbox-openclaw pull; then
-  log_error "❌ Required images not found in registry"
-  log_error "Build workflow may have failed - check previous workflow run"
-  log_error "Expected: APP_IMAGE=${APP_IMAGE}, MIGRATOR_IMAGE=${MIGRATOR_IMAGE}"
-  exit 1
-fi
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 7: Pull images while old app is still serving traffic
+# Step 6+7: Pull only images that change per deploy (targeted, not blanket)
+# Static/pinned images (postgres, litellm, alloy, temporal, autoheal, nginx,
+# git-sync, busybox) use local Docker cache. Only re-pulled after prune or
+# when their pins change in docker-compose.yml.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "[$(date -u +%H:%M:%S)] Pulling updated images (app continues serving)..."
 emit_deployment_event "deployment.pull_started" "in_progress" "Pulling images from registry"
-$RUNTIME_COMPOSE --profile bootstrap --profile sandbox-openclaw pull
+
+# Per-deploy images (change every deploy)
+docker pull "$APP_IMAGE"
+docker pull "$MIGRATOR_IMAGE"
+docker pull "$SCHEDULER_WORKER_IMAGE"
+
+# Sandbox images (may update on :latest — per openclaw-sandbox-spec)
+# Manifest check ~2s each; skips download if digest unchanged.
+OPENCLAW_GATEWAY_IMAGE="ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest"
+PNPM_STORE_IMAGE="ghcr.io/cogni-dao/node-template:pnpm-store-latest"
+docker pull "$OPENCLAW_GATEWAY_IMAGE"
+docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"
+
 log_info "[$(date -u +%H:%M:%S)] Pull complete"
 emit_deployment_event "deployment.pull_complete" "success" "Images pulled successfully"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 7.5: Seed pnpm_store volume (idempotent, skip if hash matches)
+# Image already pulled above; seed script uses $PNPM_STORE_IMAGE.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 source /tmp/seed-pnpm-store.sh
 
@@ -706,6 +717,32 @@ log_info "[$(date -u +%H:%M:%S)] Stack up complete"
 emit_deployment_event "deployment.stack_up_complete" "success" "All containers started"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 10.1: Wait for app readiness before post-deploy hooks
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+log_info "[$(date -u +%H:%M:%S)] Waiting for app to be ready..."
+for i in $(seq 1 30); do
+  if $RUNTIME_COMPOSE exec -T app sh -c 'curl -fsS http://localhost:3000/readyz' &>/dev/null; then
+    log_info "[$(date -u +%H:%M:%S)] App ready after ~${i}s"
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    log_error "App did not become ready after 30s"
+    $RUNTIME_COMPOSE logs --tail=20 app
+    exit 1
+  fi
+  sleep 1
+done
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 10.2: Sync governance schedules (idempotent, after app + Temporal are up)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+log_info "[$(date -u +%H:%M:%S)] Syncing governance schedules..."
+emit_deployment_event "deployment.governance_sync_started" "in_progress" "Syncing governance schedules"
+$RUNTIME_COMPOSE exec -T app sh -lc 'curl -fsS -X POST http://localhost:3000/api/internal/ops/governance/schedules/sync -H "Authorization: Bearer ${INTERNAL_OPS_TOKEN:?INTERNAL_OPS_TOKEN is required}"'
+log_info "[$(date -u +%H:%M:%S)] Governance schedules synced"
+emit_deployment_event "deployment.governance_sync_complete" "success" "Governance schedules synced"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 11: Checksum-gated restart for LiteLLM config changes
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HASH_DIR="/var/lib/cogni"
@@ -732,6 +769,28 @@ else
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 11.2: Checksum-gated recreate for OpenClaw config changes
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OPENCLAW_CONFIG="/opt/cogni-template-runtime/openclaw/openclaw-gateway.json"
+OPENCLAW_HASH_FILE="$HASH_DIR/openclaw-gateway.sha256"
+
+mkdir -p "$HASH_DIR"
+
+NEW_HASH="$(hash_file "$OPENCLAW_CONFIG")"
+OLD_HASH="$(cat "$OPENCLAW_HASH_FILE" 2>/dev/null || true)"
+
+if [[ "$NEW_HASH" != "$OLD_HASH" ]]; then
+  log_info "OpenClaw config changed (hash: ${NEW_HASH:0:12}...), recreating gateway..."
+  emit_deployment_event "deployment.openclaw_recreate" "in_progress" "Recreating OpenClaw gateway due to config change"
+  $RUNTIME_COMPOSE --profile sandbox-openclaw up -d --no-deps --force-recreate openclaw-gateway \
+    && echo "$NEW_HASH" > "$OPENCLAW_HASH_FILE"
+  log_info "OpenClaw gateway recreated with new config"
+  emit_deployment_event "deployment.openclaw_recreate_complete" "success" "OpenClaw gateway recreated successfully"
+else
+  log_info "OpenClaw config unchanged (hash: ${NEW_HASH:0:12}...), no recreate needed"
+fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 11.5: OpenClaw readiness gate (fail deploy if crash-looping)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Waiting for OpenClaw readiness..."
@@ -748,9 +807,6 @@ echo "=== Edge stack ==="
 $EDGE_COMPOSE ps
 echo "=== Runtime stack ==="
 $RUNTIME_COMPOSE ps
-echo "=== SourceCred stack ==="
-$SOURCECRED_COMPOSE ps
-
 emit_deployment_event "deployment.complete" "success" "Deployment completed successfully"
 log_info "✅ Deployment complete!"
 EOF
@@ -769,7 +825,7 @@ log_info "deploy-remote.sh ready: ${LOCAL_SIZE} bytes, sha256=${LOCAL_SHA}"
 
 # Deploy bundles to VM via rsync
 log_info "Deploying edge and runtime bundles to VM..."
-ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime /opt/cogni-template-sourcecred"
+ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime"
 
 # Upload edge bundle (rarely changes - Caddy config only)
 rsync -av -e "ssh $SSH_OPTS" \
@@ -780,11 +836,6 @@ rsync -av -e "ssh $SSH_OPTS" \
 rsync -av -e "ssh $SSH_OPTS" \
   "$REPO_ROOT/platform/infra/services/runtime/" \
   root@"$VM_HOST":/opt/cogni-template-runtime/
-
-# Upload sourcecred bundle
-rsync -av -e "ssh $SSH_OPTS" \
-  "$REPO_ROOT/platform/infra/services/sourcecred/" \
-  root@"$VM_HOST":/opt/cogni-template-sourcecred/
 
 # Upload sandbox-proxy config (OpenClaw nginx)
 rsync -av -e "ssh $SSH_OPTS" \
@@ -797,12 +848,16 @@ scp $SSH_OPTS \
   "$REPO_ROOT/services/sandbox-openclaw/openclaw-gateway.json" \
   root@"$VM_HOST":/opt/cogni-template-runtime/openclaw/openclaw-gateway.json
 
+# Upload OpenClaw gateway workspace (SOUL.md, GOVERN.md, AGENTS.md, etc.)
+rsync -av -e "ssh $SSH_OPTS" \
+  "$REPO_ROOT/services/sandbox-openclaw/gateway-workspace/" \
+  root@"$VM_HOST":/opt/cogni-template-runtime/openclaw/gateway-workspace/
+
 # Upload and execute deployment script
 scp $SSH_OPTS "$ARTIFACT_DIR/deploy-remote.sh" root@"$VM_HOST":/tmp/deploy-remote.sh
 
 # Upload healthcheck scripts (called from deploy-remote.sh)
 scp $SSH_OPTS \
-  "$REPO_ROOT/platform/ci/scripts/healthcheck-sourcecred.sh" \
   "$REPO_ROOT/platform/ci/scripts/healthcheck-openclaw.sh" \
   "$REPO_ROOT/platform/ci/scripts/seed-pnpm-store.sh" \
   root@"$VM_HOST":/tmp/
@@ -825,7 +880,7 @@ fi
 log_info "deploy-remote.sh verified on VM (sha256 match)"
 
 ssh $SSH_OPTS root@"$VM_HOST" \
-    "DOMAIN='$DOMAIN' APP_ENV='$APP_ENV' DEPLOY_ENVIRONMENT='$DEPLOY_ENVIRONMENT' APP_IMAGE='$APP_IMAGE' MIGRATOR_IMAGE='$MIGRATOR_IMAGE' SCHEDULER_WORKER_IMAGE='$SCHEDULER_WORKER_IMAGE' DATABASE_URL='$DATABASE_URL' DATABASE_SERVICE_URL='$DATABASE_SERVICE_URL' LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' AUTH_SECRET='$AUTH_SECRET' POSTGRES_ROOT_USER='$POSTGRES_ROOT_USER' POSTGRES_ROOT_PASSWORD='$POSTGRES_ROOT_PASSWORD' APP_DB_USER='$APP_DB_USER' APP_DB_PASSWORD='$APP_DB_PASSWORD' APP_DB_SERVICE_USER='$APP_DB_SERVICE_USER' APP_DB_SERVICE_PASSWORD='$APP_DB_SERVICE_PASSWORD' APP_DB_NAME='$APP_DB_NAME' EVM_RPC_URL='$EVM_RPC_URL' TEMPORAL_DB_USER='$TEMPORAL_DB_USER' TEMPORAL_DB_PASSWORD='$TEMPORAL_DB_PASSWORD' SOURCECRED_GITHUB_TOKEN='$SOURCECRED_GITHUB_TOKEN' GHCR_DEPLOY_TOKEN='$GHCR_DEPLOY_TOKEN' GHCR_USERNAME='$GHCR_USERNAME' GRAFANA_CLOUD_LOKI_URL='${GRAFANA_CLOUD_LOKI_URL:-}' GRAFANA_CLOUD_LOKI_USER='${GRAFANA_CLOUD_LOKI_USER:-}' GRAFANA_CLOUD_LOKI_API_KEY='${GRAFANA_CLOUD_LOKI_API_KEY:-}' METRICS_TOKEN='${METRICS_TOKEN:-}' SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN:-}' PROMETHEUS_REMOTE_WRITE_URL='${PROMETHEUS_REMOTE_WRITE_URL:-}' PROMETHEUS_USERNAME='${PROMETHEUS_USERNAME:-}' PROMETHEUS_PASSWORD='${PROMETHEUS_PASSWORD:-}' PROMETHEUS_QUERY_URL='${PROMETHEUS_QUERY_URL:-}' PROMETHEUS_READ_USERNAME='${PROMETHEUS_READ_USERNAME:-}' PROMETHEUS_READ_PASSWORD='${PROMETHEUS_READ_PASSWORD:-}' LANGFUSE_PUBLIC_KEY='${LANGFUSE_PUBLIC_KEY:-}' LANGFUSE_SECRET_KEY='${LANGFUSE_SECRET_KEY:-}' LANGFUSE_BASE_URL='${LANGFUSE_BASE_URL:-}' COGNI_REPO_URL='$COGNI_REPO_URL' COGNI_REPO_REF='$COGNI_REPO_REF' GIT_READ_USERNAME='$GIT_READ_USERNAME' GIT_READ_TOKEN='$GIT_READ_TOKEN' OPENCLAW_GATEWAY_TOKEN='$OPENCLAW_GATEWAY_TOKEN' COMMIT_SHA='${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}' DEPLOY_ACTOR='${GITHUB_ACTOR:-$(whoami)}' bash /tmp/deploy-remote.sh"
+    "DOMAIN='$DOMAIN' APP_ENV='$APP_ENV' DEPLOY_ENVIRONMENT='$DEPLOY_ENVIRONMENT' APP_IMAGE='$APP_IMAGE' MIGRATOR_IMAGE='$MIGRATOR_IMAGE' SCHEDULER_WORKER_IMAGE='$SCHEDULER_WORKER_IMAGE' DATABASE_URL='$DATABASE_URL' DATABASE_SERVICE_URL='$DATABASE_SERVICE_URL' LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' AUTH_SECRET='$AUTH_SECRET' POSTGRES_ROOT_USER='$POSTGRES_ROOT_USER' POSTGRES_ROOT_PASSWORD='$POSTGRES_ROOT_PASSWORD' APP_DB_USER='$APP_DB_USER' APP_DB_PASSWORD='$APP_DB_PASSWORD' APP_DB_SERVICE_USER='$APP_DB_SERVICE_USER' APP_DB_SERVICE_PASSWORD='$APP_DB_SERVICE_PASSWORD' APP_DB_NAME='$APP_DB_NAME' EVM_RPC_URL='$EVM_RPC_URL' TEMPORAL_DB_USER='$TEMPORAL_DB_USER' TEMPORAL_DB_PASSWORD='$TEMPORAL_DB_PASSWORD' GHCR_DEPLOY_TOKEN='$GHCR_DEPLOY_TOKEN' GHCR_USERNAME='$GHCR_USERNAME' GRAFANA_CLOUD_LOKI_URL='${GRAFANA_CLOUD_LOKI_URL:-}' GRAFANA_CLOUD_LOKI_USER='${GRAFANA_CLOUD_LOKI_USER:-}' GRAFANA_CLOUD_LOKI_API_KEY='${GRAFANA_CLOUD_LOKI_API_KEY:-}' METRICS_TOKEN='${METRICS_TOKEN:-}' SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN:-}' BILLING_INGEST_TOKEN='${BILLING_INGEST_TOKEN:-}' INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN:-}' PROMETHEUS_REMOTE_WRITE_URL='${PROMETHEUS_REMOTE_WRITE_URL:-}' PROMETHEUS_USERNAME='${PROMETHEUS_USERNAME:-}' PROMETHEUS_PASSWORD='${PROMETHEUS_PASSWORD:-}' PROMETHEUS_QUERY_URL='${PROMETHEUS_QUERY_URL:-}' PROMETHEUS_READ_USERNAME='${PROMETHEUS_READ_USERNAME:-}' PROMETHEUS_READ_PASSWORD='${PROMETHEUS_READ_PASSWORD:-}' LANGFUSE_PUBLIC_KEY='${LANGFUSE_PUBLIC_KEY:-}' LANGFUSE_SECRET_KEY='${LANGFUSE_SECRET_KEY:-}' LANGFUSE_BASE_URL='${LANGFUSE_BASE_URL:-}' COGNI_REPO_URL='$COGNI_REPO_URL' COGNI_REPO_REF='$COGNI_REPO_REF' GIT_READ_USERNAME='$GIT_READ_USERNAME' GIT_READ_TOKEN='$GIT_READ_TOKEN' OPENCLAW_GATEWAY_TOKEN='$OPENCLAW_GATEWAY_TOKEN' OPENCLAW_GITHUB_RW_TOKEN='${OPENCLAW_GITHUB_RW_TOKEN:-}' GRAFANA_URL='${GRAFANA_URL:-}' GRAFANA_SERVICE_ACCOUNT_TOKEN='${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}' DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN:-}' GH_OAUTH_CLIENT_ID='${GH_OAUTH_CLIENT_ID:-}' GH_OAUTH_CLIENT_SECRET='${GH_OAUTH_CLIENT_SECRET:-}' DISCORD_OAUTH_CLIENT_ID='${DISCORD_OAUTH_CLIENT_ID:-}' DISCORD_OAUTH_CLIENT_SECRET='${DISCORD_OAUTH_CLIENT_SECRET:-}' GOOGLE_OAUTH_CLIENT_ID='${GOOGLE_OAUTH_CLIENT_ID:-}' GOOGLE_OAUTH_CLIENT_SECRET='${GOOGLE_OAUTH_CLIENT_SECRET:-}' GH_REVIEW_APP_ID='${GH_REVIEW_APP_ID:-}' GH_REVIEW_APP_PRIVATE_KEY_BASE64='${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}' GH_REPOS='${GH_REPOS:-}' GH_WEBHOOK_SECRET='${GH_WEBHOOK_SECRET:-}' COMMIT_SHA='${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}' DEPLOY_ACTOR='${GITHUB_ACTOR:-$(whoami)}' bash /tmp/deploy-remote.sh"
 
 # Health validation
 log_info "Validating deployment health..."
@@ -894,5 +949,4 @@ log_info ""
 log_info "🔧 Deployment management:"
 log_info "  - SSH access: ssh root@$VM_HOST"
 log_info "  - Edge logs: docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml logs"
-log_info "  - Runtime logs: docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs
-  - SourceCred logs: docker compose --project-name cogni-sourcecred -f /opt/cogni-template-sourcecred/docker-compose.sourcecred.yml logs"
+log_info "  - Runtime logs: docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs"

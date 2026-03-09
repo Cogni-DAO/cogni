@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-22
 - **Status:** draft
 
 ## Purpose
@@ -32,14 +31,6 @@ Production-safe smoke tests that verify critical functionality without data muta
 - **Exports:** none
 - **Routes (if any):** Tests all routes externally
 - **CLI (if any):** pnpm e2e:smoke, pnpm e2e:prod
-- **Env/Config keys:** none
-- **Files considered API:** none
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

@@ -23,8 +23,11 @@ export { FakeClock } from "./fake-clock";
 export { FakeRng } from "./fake-rng";
 export { FakeTelemetry } from "./fake-telemetry";
 export {
+  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
   newTestSessionUser,
   newTestUserId,
+  SYSTEM_BILLING_ACCOUNT,
   TEST_SESSION_USER_1,
   TEST_SESSION_USER_2,
   TEST_SESSION_USER_3,

@@ -5,13 +5,12 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-01-20
 - **Status:** draft
 - **Parent:** [features/ai](../AGENTS.md)
 
 ## Purpose
 
-Chat subfeature of AI - provides assistant-ui integration for conversational AI interface. Chat is owned by AI feature, not a separate domain.
+Chat subfeature of AI — provides assistant-ui + AI SDK streaming integration for conversational AI interface. Chat is owned by AI feature, not a separate domain.
 
 ## Pointers
 
@@ -41,86 +40,79 @@ Chat subfeature of AI - provides assistant-ui integration for conversational AI 
 
 ## Public Surface
 
-- **Exports:** ChatRuntimeProvider, ChatCreditsHint, mapHttpError, toErrorAlertProps
-- **Routes:** /api/v1/ai/chat (POST) - routes to AI completion services
-- **Env/Config keys:** none
-- **Files considered API:** providers/ChatRuntimeProvider.client.tsx, components/ChatCreditsHint.tsx, utils/mapHttpError.ts, utils/toErrorAlertProps.ts
+- **Exports:** ChatRuntimeProvider, ChatCreditsHint, mapHttpError, toErrorAlertProps, useThreads, useLoadThread, useDeleteThread
+- **Routes:**
+  - `/api/v1/ai/chat` (POST) - chat with server-authoritative thread persistence
+  - `/api/v1/ai/threads` (GET) - list threads
+  - `/api/v1/ai/threads/[stateKey]` (GET, DELETE) - load/delete thread
+- **Files considered API:** providers/ChatRuntimeProvider.client.tsx, hooks/useThreads.ts, components/ChatCreditsHint.tsx, utils/mapHttpError.ts, utils/toErrorAlertProps.ts
 
 ## Ports
 
 - **Uses ports:** none (delegates to AI completion services via API route)
 - **Implements ports:** none
-- **Contracts:** ai.chat.v1 (wire format)
+- **Contracts:** ai.chat.v1 (wire format), ai.threads.v1 (thread list/load/delete)
 
 ## Responsibilities
 
 - **This subfeature does:**
   - Provide chat UI using assistant-ui components
-  - Manage chat runtime state with useExternalStoreRuntime
-  - Transform wire format (assistant-ui) ↔ DTO format in API route
+  - Manage chat runtime state with useChatRuntime + DefaultChatTransport
+  - Send single user message text via prepareSendMessagesRequest (not full history)
+  - Capture stateKey from X-State-Key response header for multi-turn continuity
+  - Support thread switching via initialMessages + initialStateKey props (key-based remount)
+  - Provide React Query hooks for thread list, load, and delete operations
   - Show conditional credits hint when balance is zero
   - Handle abort/cancellation without state corruption
 
 - **This subfeature does not:**
-  - Persist messages to database (v2)
-  - Implement streaming (v1)
   - Handle authentication (enforced by (app) layout)
   - Manage billing (delegated to AI completion services)
   - Contain AI business logic (owned by features/ai/services)
 
 ## Implementation Status
 
-**v1 (Current):**
-
-- ✅ assistant-ui integration with useDataStreamRuntime
-- ✅ /api/v1/ai/chat endpoint with SSE streaming
-- ✅ Token-by-token rendering via assistant-stream
-- ✅ Multi-turn conversation state via stateKey
-- ✅ Tool call visualization (tool_call_start/tool_call_result events)
-- ✅ Custom welcome copy with 3 suggestions
-- ✅ Conditional credits hint
-- ✅ Zod runtime validation (route input + client output)
-
-**v2 (Planned):**
-
-- ⏳ Database persistence
-- ⏳ Thread routing /chat/[stateKey]
-- ⏳ Thread list/history
-- ⏳ Context window optimization
-- ⏳ Stop/abort generating
-
-**Critical v2 Note:** Message storage + context optimization required. Current implementation sends all messages on every request (unbounded growth). v2 needs smart windowing, summarization, or embedding-based retrieval.
+- useChatRuntime + DefaultChatTransport (AI SDK Data Stream Protocol)
+- /api/v1/ai/chat: createUIMessageStream SSE streaming
+- Server-authoritative thread persistence (ai_threads table)
+- Client sends `{ message, model, graphName, stateKey? }` — no history replay
+- Multi-turn conversation state via stateKey + server-loaded UIMessage[] history
+- Tool call visualization (tool_call_start/tool_call_result → UIMessageChunk)
+- assistant_final reconciliation (gateway truncation fix)
+- Zod runtime validation on input; contract types via z.infer
 
 ## Thread State Management
 
-### P0 Design (Current)
+### Current Design
 
 **Contract:**
 
-- Request: `stateKey?: string` in JSON body (optional)
-- Response: `X-State-Key` header (always returned)
+- Request: `{ message: string, model, graphName, stateKey?: string }`
+- Response: AI SDK Data Stream Protocol (SSE) + `X-State-Key` header
 - Server generates `stateKey` if absent; client reuses for multi-turn
 
-**UI State Pattern:**
+**Client Transport Pattern:**
 
 ```typescript
-// Future-safe: map pattern for thread switching/forks
-const [stateKeyMap, setStateKeyMap] = useState<Record<string, string>>({});
-const activeStateKey = "default"; // Placeholder for future state/thread selection
-const stateKey = stateKeyMap[activeStateKey];
-
-// body MUST be object (assistant-ui limitation), not function
-body: { model, graphName, ...(stateKey ? { stateKey } : {}) }
-
-// onResponse captures server-generated stateKey
-setStateKeyMap(prev => ({ ...prev, [activeStateKey]: newStateKey }));
+const runtime = useChatRuntime({
+  transport: new DefaultChatTransport({
+    api: "/api/v1/ai/chat",
+    prepareSendMessagesRequest: ({ messages }) => ({
+      body: {
+        message: extractLastUserText(messages),
+        model,
+        graphName,
+        stateKey,
+      },
+    }),
+    fetch: async (url, init) => {
+      /* intercept response for stateKey capture */
+    },
+  }),
+});
 ```
 
-**Why `stateKeyMap` (not single state)?**
-
-- Trivially migrates when thread list/switching added
-- Supports forks/reruns (multiple states per session)
-- No refactor needed for v2 state store
+**stateKey lifecycle:** stateKeyMap pattern supports future thread switching/forks.
 
 ### Naming Convention
 
@@ -135,18 +127,9 @@ setStateKeyMap(prev => ({ ...prev, [activeStateKey]: newStateKey }));
 
 **Note:** `stateKey` is canonical at Cogni boundaries; providers derive their own identifiers internally.
 
-### Progression
-
-| Phase  | Capability                          | stateKey Ownership                   |
-| ------ | ----------------------------------- | ------------------------------------ |
-| **P0** | Single conversation, no persistence | ChatRuntimeProvider local state      |
-| **P1** | Thread list UI, URL routing         | Lift to page-level state or context  |
-| **P2** | Persistence, forks, history         | Conversation store (Zustand/context) |
-
 ## Usage
 
 ```typescript
-// In chat page
 import { ChatRuntimeProvider } from "@/features/ai/chat/providers/ChatRuntimeProvider.client";
 import { Thread } from "@/components";
 
@@ -165,17 +148,15 @@ import { Thread } from "@/components";
 ## Dependencies
 
 - **Internal:** @/contracts/ai.chat.v1.contract, @/features/payments/public, @/components/vendor/assistant-ui, @/components/vendor/shadcn
-- **External:** @assistant-ui/react, @assistant-ui/react-markdown, @tanstack/react-query, next-auth
+- **External:** @assistant-ui/react, @assistant-ui/react-ai-sdk, @assistant-ui/react-markdown, ai (AI SDK), @tanstack/react-query, next-auth
 
 ## Change Protocol
 
-- On wire format change: Update ai.chat.v1 contract, transform functions in route
+- On wire format change: Update ai.chat.v1 contract first, then fix TypeScript errors
 - Breaking changes: Bump to ai.chat.v2
-- Keep message shape compatible with assistant-ui ThreadMessageLike
+- All types from contract via z.infer — no manual interfaces
 
 ## Notes
 
-- Components in `src/components/vendor/assistant-ui/` are exact copies from assistant-ui starter
-- ThreadWelcome customized with Cogni-specific copy
-- ChatCreditsHint integrated into welcome screen
-- All types from contract via z.infer - no manual interfaces
+- Chat streaming uses AI SDK Data Stream Protocol (SSE), not custom wire format
+- `createUIMessageStream` does NOT auto-emit finish — route must manually write `{ type: "finish" }`

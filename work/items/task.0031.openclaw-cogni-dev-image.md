@@ -2,7 +2,7 @@
 id: task.0031
 type: task
 title: "Build unified cogni-sandbox-openclaw devtools image + pnpm cache volumes"
-status: In Progress
+status: done
 priority: 0
 estimate: 3
 summary: Multi-stage cogni-sandbox-openclaw image — node:22-bookworm + GHCR OpenClaw base (header-forwarding) + devtools (pnpm, git, socat). Parameterized via ARG OPENCLAW_BASE. pnpm_store named volume for fast installs. One image for both gateway and ephemeral.
@@ -18,6 +18,10 @@ created: 2026-02-11
 updated: 2026-02-12
 labels: [openclaw, sandbox, docker, p1]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 17
 ---
 
 # Build unified cogni-sandbox-openclaw devtools image + pnpm cache volumes

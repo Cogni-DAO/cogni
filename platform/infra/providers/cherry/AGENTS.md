@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-12
 - **Status:** draft
 
 ## Purpose
@@ -30,16 +29,8 @@ Cherry Servers cloud provider configurations split between immutable VM provisio
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** `CHERRY_AUTH_TOKEN`
 - **Files considered API:** `base/variables.tf`, `app/variables.tf`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

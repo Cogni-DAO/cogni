@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-04
 - **Status:** stable
 
 ## Purpose
@@ -32,7 +31,6 @@ Full-stack HTTP API integration tests requiring running Docker Compose infrastru
 ## Public Surface
 
 - **Exports:** none (test-only directory)
-- **Routes (if any):** none
 - **CLI (if any):** pnpm test:stack:dev, pnpm test:stack:docker, pnpm db:migrate:test
 - **Env/Config keys:** TEST_BASE_URL, DATABASE_URL, DATABASE_SERVICE_URL, APP_ENV, COGNI_REPO_PATH
 - **Files considered API:** \*.stack.test.ts files

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-12
 - **Status:** draft
 
 ## Purpose
@@ -30,16 +29,8 @@ Shared templates and utility scripts for infrastructure deployments across all p
 ## Public Surface
 
 - **Exports:** Shell scripts, configuration templates
-- **Routes (if any):** none
 - **CLI (if any):** Direct script execution
-- **Env/Config keys:** none
 - **Files considered API:** `scripts/*.sh`, `*.tmpl`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

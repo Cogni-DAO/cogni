@@ -9,14 +9,14 @@ summary: Host-side git relay, dynamic agent catalog, credential strategy, and an
 read_when: Implementing sandbox agent variants, git relay, or sandbox dashboard
 owner: derekg1729
 created: 2026-02-07
-verified: 2026-02-07
+verified: 2026-02-12
 tags: [sandbox, openclaw]
 ---
 
 # OpenClaw Sandbox Controls Design
 
 > [!CRITICAL]
-> Sandbox agents produce code changes inside `network=none` containers. **Host-side git relay** handles all credential-bearing operations (clone, push, PR creation). Sandbox never holds git credentials. UI surfaces are Cogni-native (Next.js), not OpenClaw's gateway UI.
+> Sandbox agents produce code changes inside the OpenClaw gateway container (long-running, `sandbox-internal` + `cogni-edge` networks). Gateway has internet egress and `GITHUB_TOKEN` for `gh` CLI / curl. **Host-side git relay** handles push via `docker exec` + `bundle` extraction with `sandbox/*` branch allowlist. UI surfaces are Cogni-native (Next.js), not OpenClaw's gateway UI.
 
 ## Context
 
@@ -37,17 +37,19 @@ Define the invariants and design contracts for sandbox agents that produce code 
 
 > Numbering continues from [OpenClaw Sandbox](openclaw-sandbox-spec.md) invariants 13–19.
 
-20. **HOST_SIDE_GIT_RELAY**: All git operations requiring credentials (clone, push, PR create) execute on the host, never inside the sandbox. Agent commits locally inside the container; host extracts and pushes after container exit.
+20. **HOST_SIDE_GIT_RELAY**: All git operations requiring credentials (push, PR create) execute on the host, never inside the sandbox. In gateway mode, the host uses `docker exec` to run git commands inside the long-running container and `git format-patch` to extract commits. In ephemeral mode (deprioritized), the host clones pre-run and pushes post-run from the host filesystem. Agent commits locally; host extracts and pushes after the agent session completes.
 
 21. **CATALOG_FROM_API**: Chat UI fetches agent list from `GET /api/v1/ai/agents` at runtime. No hardcoded `AVAILABLE_GRAPHS` array. The API returns both langgraph and sandbox agents — the hook is a full replacement.
 
 22. **ENV_CREDENTIALS_FIRST**: P1 uses `GITHUB_TOKEN` env var on the host for git push + PR creation. No `ConnectionBroker` dependency. Upgrade to GitHub App installation auth (via `TENANT_CONNECTIONS_SPEC.md`) at P2.
 
-23. **WORKSPACE_SURVIVES_FOR_PUSH**: When git relay is enabled, workspace cleanup is deferred until after host-side push completes. Provider must not `rmSync` workspace in the `finally` block when a push is pending.
+23. **BRANCH_KEY_IDENTITY**: Git relay branches are named `sandbox/<branchKey>` where `branchKey` is a stable identifier for a line of work, **not** the ephemeral `runId`. Multiple runs and agents can append commits to the same branch. `runId` is for audit/logging/billing only.
 
-24. **COGNI_NATIVE_UI**: Dashboard and controls are Next.js pages within the existing app shell. OpenClaw's Lit-based Control UI is not exposed (invariant 18: NO_OPENCLAW_DASHBOARD). All observability routes through Cogni's existing Pino/Loki/Langfuse/Prometheus stack.
+24. **WORKSPACE_SURVIVES_FOR_PUSH**: In ephemeral mode, workspace cleanup is deferred until after host-side push completes. In gateway mode, the workspace persists on a named volume (`cogni_workspace`) and is not cleaned up per-run — branch reset is the cleanup mechanism.
 
-25. **AGENT_VARIANTS_IN_REGISTRY**: Multiple sandbox agent types (simple LLM, OpenClaw coder) are entries in `SANDBOX_AGENTS` registry inside `SandboxGraphProvider`. Each maps to an image + argv + limits + workspace setup function. No separate providers per agent type.
+25. **COGNI_NATIVE_UI**: Dashboard and controls are Next.js pages within the existing app shell. OpenClaw's Lit-based Control UI is not exposed (invariant 18: NO_OPENCLAW_DASHBOARD). All observability routes through Cogni's existing Pino/Loki/Langfuse/Prometheus stack.
+
+26. **AGENT_VARIANTS_IN_REGISTRY**: Multiple sandbox agent types (simple LLM, OpenClaw coder) are entries in `SANDBOX_AGENTS` registry inside `SandboxGraphProvider`. Each maps to an image + argv + limits + workspace setup function. No separate providers per agent type.
 
 ---
 
@@ -86,46 +88,77 @@ OPENCLAW_LOAD_SHELL_ENV=0
 
 ---
 
-### 2. Host-Side Git Relay Flow
+### 2. branchKey Contract
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│ PRE-RUN (host, in SandboxGraphProvider)                              │
-│ ─────────────────────────                                            │
-│ 1. git clone --depth=1 --branch=${baseBranch} ${repoUrl} repo/      │
-│ 2. git -C repo/ checkout -b sandbox/${runId}                         │
-│ 3. Write workspace files (.cogni/, .openclaw/)                       │
-│ 4. Result: workspace ready                                           │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ SANDBOX RUN (container, network=none, via SandboxRunnerPort)         │
-│ ─────────────────────────────────────                                │
-│ - Agent reads /workspace/repo/**, calls LLM, modifies files         │
-│ - Agent runs: git add -A && git commit -m "..." (local only)         │
-│ - No push (no credentials, no network)                               │
-└─────────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ POST-RUN (host, in SandboxGraphProvider)                             │
-│ ─────────────────────────────────────────                            │
-│ 1. git -C repo/ log --oneline ${baseBranch}..HEAD → changes?        │
-│ 2. If no changes: skip, cleanup workspace                            │
-│ 3. If changes: git push origin sandbox/${runId}                      │
-│ 4. If createPr: POST /repos/{owner}/{repo}/pulls                    │
-│ 5. Cleanup workspace after push completes                            │
-└─────────────────────────────────────────────────────────────────────┘
-```
+`branchKey` is the stable identifier for a git relay branch. It determines the branch name `sandbox/<branchKey>` and enables multi-run continuation on the same branch.
 
-**Why host-side?** Per SECRETS_HOST_ONLY (invariant 4) and HOST_SIDE_CLONE (invariant 6). The agent can `git commit` locally because git doesn't require credentials for local operations. Only push/PR creation needs tokens, and those stay on the host.
+**branchKey source priority (strict):**
 
-**Why not on `SandboxRunSpec`?** The port (`SandboxRunnerPort`) handles container execution only. Git relay is provider-level orchestration that wraps `runOnce()` — clone before, push after. This keeps the port interface simple and the security boundary clear.
+1. **Explicit `branchName`** (preferred) — caller provides the branch identity directly, e.g. via API parameter or UI input. This is the recommended path for all orchestrated workflows.
+2. **`workItemId`** — derived from the work item being addressed, e.g. `task.0022`. Natural fit when the agent is executing a tracked task.
+3. **`stateKey`** (opt-in only) — conversation-scoped key. **Never auto-derived.** Only used when the caller explicitly opts into thread-scoped branch mode. Reason: conversation scope != line-of-work scope; defaulting here creates long-lived junk branches with unrelated diffs.
+
+**Rules:**
+
+- If no branchKey can be resolved, git relay is **skipped** (agent runs normally, no branch/push/PR). This is not an error — it means the caller didn't request code output.
+- `runId` is **never** used as branchKey. It is ephemeral (audit, logging, billing, temp artifacts only).
+- `ensureWorkspaceBranch` is idempotent: if `sandbox/<branchKey>` already exists, check it out; if not, create from `baseRef`.
+- Multiple runs and agents can append commits to the same branchKey. A single PR accumulates all changes.
 
 ---
 
-### 3. Dynamic Catalog vs Hardcoded Graphs
+### 3. Host-Side Git Relay Flow (Gateway Mode)
+
+> Gateway is the only active execution mode (2026-02-12). Ephemeral mode is deprioritized.
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ PRE-RUN (host → docker exec into gateway container)                   │
+│ ──────────────────────────────────────────────                        │
+│ 1. Resolve branchKey from request (explicit > workItemId > opt-in)    │
+│ 2. ensureWorkspaceBranch(branchKey, baseRef):                         │
+│    - If sandbox/<branchKey> exists locally → git checkout             │
+│    - If not → git checkout -b sandbox/<branchKey> from baseRef        │
+│ 3. Workspace: /workspace/current on cogni_workspace volume            │
+│ 4. Result: agent will work on sandbox/<branchKey>                     │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ AGENT RUN (inside gateway container, via WebSocket session)           │
+│ ──────────────────────────────────────────────                        │
+│ - Agent reads /workspace/current/**, calls LLM, modifies files       │
+│ - Agent runs: git add -A && git commit -m "..." (local only)          │
+│ - No push (no credentials, sandbox-internal network only)             │
+└──────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ POST-RUN (host → docker exec to extract, then host-side push)        │
+│ ──────────────────────────────────────────────                        │
+│ 1. docker exec: git log baseRef..HEAD → any new commits?             │
+│ 2. If no commits: skip push, leave branch for future runs            │
+│ 3. If commits: docker exec: git format-patch baseRef..HEAD --stdout  │
+│ 4. Host: apply patches to local clone, push sandbox/<branchKey>      │
+│ 5. Host: create or update PR via GitHub API (GITHUB_TOKEN)           │
+│ 6. Return PR URL in GraphFinal.content                                │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+**Concurrency model:**
+
+- **P0**: Single mutable `/workspace/current`. One branchKey active at a time. Provider holds a branchKey lock to prevent concurrent mutation.
+- **P0.5**: Per-branch git worktrees at `/workspace/wt/<branchKey>`. Eliminates checkout/reset races and supports concurrent branches.
+
+**Why host-side push?** Defense-in-depth for git write operations. The `GitRelay` bundles commits out of the container and pushes from the host, enforcing a `sandbox/*` branch allowlist. The gateway container also has `GITHUB_TOKEN` for `gh` CLI read operations (issues, PRs, API queries), but the relay remains the controlled path for push.
+
+**Why `docker exec` + `bundle`?** The gateway is a long-running container on a named volume — the host can't directly access the workspace filesystem (Docker Desktop). `docker exec` runs git commands inside the container; `bundle` serializes commits to stdout for the host to apply and push.
+
+**Why not on `SandboxRunSpec`?** The port (`SandboxRunnerPort`) handles container execution only. Git relay is provider-level orchestration that wraps the gateway session — branch setup before, patch extraction after. This keeps the port interface simple and the security boundary clear.
+
+---
+
+### 4. Dynamic Catalog vs Hardcoded Graphs
 
 Current state: `ChatComposerExtras` has a hardcoded `AVAILABLE_GRAPHS` array with 5 entries (brain, poet, ponderer, research, sandbox:agent) and a `CATALOG_STATIC_IN_P0` TODO noting this is temporary.
 
@@ -154,22 +187,22 @@ export function useAgents() {
 
 ---
 
-### 4. Credential Strategy (Phased)
+### 5. Credential Strategy (Phased)
 
 **P1: Env var**
 
-- `GITHUB_TOKEN` in host `.env` (not in sandbox, not in proxy)
-- Used by `SandboxGraphProvider` post-run for `git push` + `octokit.pulls.create()`
+- `OPENCLAW_GITHUB_RW_TOKEN` in host `.env`
+- Passed into gateway container as `GITHUB_TOKEN` (enables `gh` CLI for read operations)
+- Used by host-side `GitRelay` for push (bundles out of container, pushes from host)
 - Scoped to the org/repos this Cogni instance operates on
 
 **P2: GitHub App Installation**
 
 - Per-repo scoped tokens via `TENANT_CONNECTIONS_SPEC.md` `ConnectionBroker`
 - `credential_type: "github_app_installation"`
-- `SandboxGraphProvider` calls `broker.resolveForTool()` before push
 - Multi-tenant: each billing account has its own GitHub App installation
 
-**Never** pass `GITHUB_TOKEN` into the sandbox container. The host-side relay is the only consumer.
+**Note:** `GITHUB_TOKEN` is present in the gateway container for `gh` CLI / `curl` use. This is acceptable because the gateway runs our own agent config — not untrusted code. Ephemeral containers (`network=none`) never receive tokens.
 
 ---
 
@@ -177,14 +210,13 @@ export function useAgents() {
 
 | Pattern                                    | Problem                                                     |
 | ------------------------------------------ | ----------------------------------------------------------- |
-| Pass `GITHUB_TOKEN` to sandbox env         | Violates SECRETS_HOST_ONLY; agent could exfiltrate          |
+| Pass tokens to ephemeral sandbox env       | Ephemeral runs untrusted code; tokens must stay out         |
+| Derive branchKey from `runId`              | Branch explosion; blocks multi-run continuation (inv. 23)   |
 | OpenClaw gateway inside sandbox            | Invariant 17; requires network listeners                    |
 | Port OpenClaw's Lit UI                     | Wrong framework (we use Next.js), assumes gateway WebSocket |
 | Separate `GraphProvider` per agent variant | Over-engineering; registry pattern is simpler               |
 | Hardcode graphs in UI component            | Drifts from API catalog; violates CATALOG_FROM_API          |
-| `git push` inside sandbox container        | Network=none; would require breaking isolation              |
 | Git relay config on `SandboxRunSpec` port  | Port handles container exec only; git is provider-level     |
-| Build dashboard before git relay works     | No data to show; build P2 after P1 produces runs            |
 | Build `ConnectionBroker` for P1            | Over-engineering; env var sufficient for single-org         |
 
 ---

@@ -17,8 +17,8 @@ Read these before starting:
 
 Before writing any code, verify:
 
-- your work item
-- your work item branch
+- your work item (must be at `status: needs_implement`)
+- your work item branch — if `branch:` is empty, create one: `git checkout -b <type>/<id>-<slug>` from `staging` and set the `branch:` field in frontmatter
 - branch clean starting state:
 
 ```bash
@@ -31,10 +31,31 @@ You do not work until you have a unique work item id and clean associated branch
 
 ## Phase 2 — Plan Checkpoints
 
-Read the work item's plan/todo list. Identify **checkpoints** — natural boundaries where the code should be in a green/healthy state before moving on. A checkpoint is reached when:
+Read the work item's Design section (if present) and existing plan. Identify **checkpoints** — natural boundaries where the code should be in a green/healthy state before moving on.
 
-- A coherent unit of functionality is complete
-- Tests can be written and should pass
+Update the work item's Plan section with this structure for each checkpoint:
+
+```markdown
+- [ ] **Checkpoint N**
+  - Milestone: [what functional state is achieved]
+  - Invariants: [SCREAMING_SNAKE rules from Design section]
+  - Todos:
+    - [ ] do x to `<file.ts:line>`
+    - [ ] create `<path/to/new.ts>`
+  - Validation/Testing:
+    - [ ] What can now function e2e? [describe]
+    - Test levels:
+      - [ ] unit: `pnpm test path/to/test.ts`
+      - [ ] contract: [if applicable]
+      - [ ] component: [if applicable]
+      - [ ] stack: [if applicable]
+```
+
+A checkpoint is complete when:
+
+- All todos are done
+- All invariants from Design section upheld
+- All test levels pass
 - `pnpm check` passes
 
 List your checkpoints before starting implementation.
@@ -69,7 +90,7 @@ If you encounter a blocker — something in the plan that doesn't work, a design
 1. **Try to resolve it** — find the solution most aligned with the task, specs, and current architecture. Check AGENTS.md files, related specs, and existing patterns.
 2. **If you find a good solution** — implement it and note what you did and why in the work item.
 3. **If you can't find a highly-aligned solution** — stop. Update the work item:
-   - Set `status: In Progress` (keep it, don't mark Done)
+   - Set `status: blocked` and `blocked_by:` with the reason
    - Add a `## Blockers` section describing what's blocked and why
    - Note what you tried and what options remain
    - Ask the user for guidance before continuing
@@ -78,7 +99,7 @@ Never force through a blocker with a hack. A clean pause is better than a dirty 
 
 ---
 
-## Phase 5 — Final Checkpoint
+## Phase 5 — Finalize
 
 When the full todo list is complete:
 
@@ -89,11 +110,13 @@ pnpm check
 
 All tests must pass. Then:
 
-1. Update the work item: set `status: In Progress` (reviewer will mark Done after approval)
-2. Update `updated:` date
-3. Run `pnpm check:docs` if any `.md` files were touched
-4. Report what was implemented, what tests were added, and any notes for the reviewer
-5. Recommend: `/review-implementation` for code review
+1. Update the work item: set `status: needs_closeout`, update `updated:` date.
+2. Update `_index.md` to reflect `needs_closeout` status.
+3. Run `pnpm check:docs` and fix any errors until clean.
+4. Commit all changes on the work item's branch. `git status` must be clean after commit.
+5. Push to remote.
+6. Report what was implemented, what tests were added, and any notes for the reviewer.
+7. Next command: `/closeout` (docs pass + PR creation).
 
 ---
 

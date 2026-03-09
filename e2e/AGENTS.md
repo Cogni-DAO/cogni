@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-27
 - **Status:** draft
 
 ## Purpose
@@ -33,13 +32,6 @@ End-to-end Playwright tests for API routes and UI workflows.
 - **Routes (if any):** Tests all routes externally
 - **CLI (if any):** pnpm e2e, pnpm e2e:smoke, pnpm e2e:prod, pnpm e2e:all, pnpm e2e:debug, pnpm e2e:report
 - **Env/Config keys:** TEST_BASE_URL
-- **Files considered API:** none
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

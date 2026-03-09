@@ -3,7 +3,7 @@ id: proj.sourcecred-onchain
 type: project
 primary_charter:
 title: SourceCred On-Chain Integration
-state: Paused
+state: Dropped
 priority: 3
 estimate: 3
 summary: Generic Cred→CSV→Safe integration in cogni-template so forks can activate on-chain payouts via config
@@ -11,7 +11,7 @@ outcome: cogni-template ships generic payout script and CI job; forks (e.g., cog
 assignees:
   - cogni-dev
 created: 2026-02-07
-updated: 2026-02-07
+updated: 2026-02-17
 labels:
   - sourcecred
   - web3
@@ -19,6 +19,8 @@ labels:
 ---
 
 # SourceCred On-Chain Integration
+
+> **DROPPED** — Superseded by [proj.transparent-credit-payouts](proj.transparent-credit-payouts.md). The receipt-first architecture replaces SourceCred's algorithmic grain→CSV→Safe pipeline with signed, auditable WorkReceipts. SourceCred itself continues running in the stack until fully migrated at proj.transparent-credit-payouts P2.
 
 > Source: SOURCECRED.md Phases 3–4
 

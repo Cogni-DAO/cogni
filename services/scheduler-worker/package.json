@@ -12,13 +12,25 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@cogni/attribution-ledger": "workspace:*",
+    "@cogni/attribution-pipeline-contracts": "workspace:*",
+    "@cogni/attribution-pipeline-plugins": "workspace:*",
     "@cogni/db-client": "workspace:*",
+    "@cogni/ingestion-core": "workspace:*",
+    "@cogni/repo-spec": "workspace:*",
     "@cogni/scheduler-core": "workspace:*",
+    "@octokit/auth-app": "^7.1.4",
+    "@octokit/core": "^6.1.4",
+    "@octokit/plugin-retry": "^7.1.3",
+    "@octokit/plugin-throttling": "^9.4.0",
+    "@octokit/webhooks-methods": "^6.0.0",
     "@temporalio/activity": "^1.11.7",
     "@temporalio/client": "^1.11.7",
     "@temporalio/worker": "^1.11.7",
     "@temporalio/workflow": "^1.11.7",
     "pino": "^9.6.0",
+    "prom-client": "^15.1.0",
+    "viem": "^2.21.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

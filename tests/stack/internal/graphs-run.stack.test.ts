@@ -252,10 +252,9 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
     });
   });
 
-  describe("default model fallback", () => {
-    // Documents that omitting model falls back to "openrouter/auto".
-    // If we remove default-model support, this test should fail and be deleted.
-    it("uses openrouter/auto when input omits model", async () => {
+  describe("model validation", () => {
+    // Model is required - no fallback allowed
+    it("returns 400 when input omits model", async () => {
       const idempotencyKey = `${randomUUID()}:2025-01-21T09:00:00Z`;
       const input = { messages: [{ role: "user", content: "Hello" }] }; // no model
 
@@ -269,12 +268,9 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
         params: Promise.resolve({ graphId: TEST_GRAPH_ID }),
       });
 
-      // Without "openrouter/auto" in LiteLLM config, the LLM call fails
-      // and the graph returns ok:false. This documents the current fallback behavior.
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(400);
       const body = await response.json();
-      expect(body.ok).toBe(false);
-      expect(body.error).toBeDefined();
+      expect(body.error).toBe("model field is required");
     });
   });
 

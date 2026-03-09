@@ -39,13 +39,13 @@ export const STEP_MS: Record<ActivityStep, number> = {
 };
 
 /**
- * Maximum allowed range (in ms) for each step to enforce maxPoints cap (~240 buckets).
+ * Maximum allowed range (in ms) for each step to enforce maxPoints cap (~48 buckets).
  */
 export const MAX_RANGE_FOR_STEP: Record<ActivityStep, number> = {
-  "5m": 20 * 60 * 60 * 1000, // 20 hours (240 buckets)
-  "15m": 60 * 60 * 60 * 1000, // 60 hours / 2.5 days (240 buckets)
-  "1h": 10 * 24 * 60 * 60 * 1000, // 10 days (240 buckets)
-  "6h": 60 * 24 * 60 * 60 * 1000, // 60 days (240 buckets)
+  "5m": 4 * 60 * 60 * 1000, // 4 hours (48 buckets)
+  "15m": 12 * 60 * 60 * 1000, // 12 hours (48 buckets)
+  "1h": 2 * 24 * 60 * 60 * 1000, // 2 days (48 buckets)
+  "6h": 12 * 24 * 60 * 60 * 1000, // 12 days (48 buckets)
   "1d": 90 * 24 * 60 * 60 * 1000, // 90 days (max range, 90 buckets)
 };
 
@@ -60,6 +60,14 @@ export const MAX_RANGE_MS = 90 * 24 * 60 * 60 * 1000;
  */
 export const TimeRangeSchema = z.enum(["1d", "1w", "1m"]);
 export type TimeRange = z.infer<typeof TimeRangeSchema>;
+
+/**
+ * Grouping dimension for chart breakdown.
+ * - "model": group by LLM model name (e.g. "claude-opus-4.6", "deepseek-v3")
+ * - "graphId": group by agent/graph ID (e.g. "langgraph:poet", "raw-completion")
+ */
+export const ActivityGroupBySchema = z.enum(["model", "graphId"]);
+export type ActivityGroupBy = z.infer<typeof ActivityGroupBySchema>;
 
 export const aiActivityOperation = {
   id: "ai.activity.v1",
@@ -88,6 +96,9 @@ export const aiActivityOperation = {
       step: ActivityStepSchema.optional().describe(
         "Bucket granularity (server-derived if omitted)"
       ),
+      groupBy: ActivityGroupBySchema.optional().describe(
+        "Breakdown dimension for chart series (model or graphId). Omit for aggregate-only."
+      ),
       cursor: z.string().optional().describe("Opaque cursor for pagination"),
       limit: z
         .number()
@@ -112,6 +123,22 @@ export const aiActivityOperation = {
         requests: z.number().int().nonnegative(),
       })
     ),
+    /** Per-group breakdown keyed by group name. Only present when groupBy is specified. */
+    groupedSeries: z
+      .array(
+        z.object({
+          group: z.string().describe("Group key (model name or graphId)"),
+          buckets: z.array(
+            z.object({
+              bucketStart: z.string().datetime(),
+              spend: z.number().nonnegative(),
+              tokens: z.number().int().nonnegative(),
+              requests: z.number().int().nonnegative(),
+            })
+          ),
+        })
+      )
+      .optional(),
     totals: z.object({
       spend: z.object({
         total: z.string().describe("Decimal string USD"),

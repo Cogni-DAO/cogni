@@ -76,6 +76,20 @@ export function testUser(n: 1 | 2 | 3 | 4 | 5): SessionUser {
   return users[n - 1];
 }
 
+// --- System tenant (matches seeded migration records) ---
+
+export {
+  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
+} from "@/shared/constants/system-tenant";
+
+/** Mock billing account row for the system tenant. */
+export const SYSTEM_BILLING_ACCOUNT = {
+  id: "00000000-0000-4000-b000-000000000000",
+  ownerUserId: "00000000-0000-4000-a000-000000000001",
+  defaultVirtualKeyId: "vk-system-default",
+} as const;
+
 // --- Random helpers (opt-in for tests that need uniqueness) ---
 
 /** Create a random valid UserId. Use only when test needs a unique identity. */

@@ -3,7 +3,7 @@
 
 /**
  * Module: `@components/kit/data-display/ActivityChart`
- * Purpose: Reusable area chart component for activity metrics.
+ * Purpose: Reusable stacked bar chart component for activity metrics with per-model breakdown.
  * Scope: Renders a single metric chart. Does not fetch data.
  * Invariants: Uses Recharts and shadcn/chart.
  * Side-effects: none
@@ -13,7 +13,7 @@
 
 "use client";
 
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 
 import {
   Card,
@@ -30,15 +30,14 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/vendor/shadcn/chart";
+
 export interface ActivityChartProps {
   title: string;
   description: string;
-  data: {
-    date: string;
-    value: number;
-  }[];
+  /** Each data point has `date` plus one numeric key per model/series */
+  data: Record<string, unknown>[];
+  /** Keys in config correspond to data keys (model names or "value" for single-series) */
   config: ChartConfig;
-  color?: string;
   /** Bucket granularity: "5m" | "15m" | "1h" | "6h" | "1d" */
   effectiveStep?: string;
 }
@@ -48,13 +47,10 @@ export function ActivityChart({
   description,
   data,
   config,
-  color = "hsl(var(--chart-1))",
   effectiveStep,
 }: ActivityChartProps) {
-  // Format ticks based on granularity: show time for sub-day steps
   const formatTick = (value: string) => {
     const date = new Date(value);
-    // If step is sub-day (5m, 15m, 1h, 6h), show time
     if (effectiveStep && effectiveStep !== "1d") {
       return date.toLocaleTimeString("en-US", {
         hour: "numeric",
@@ -62,14 +58,12 @@ export function ActivityChart({
         hour12: true,
       });
     }
-    // Otherwise show date
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     });
   };
 
-  // Tooltip shows full date + time for sub-day, date only for daily
   const formatTooltipLabel = (value: string) => {
     const date = new Date(value);
     if (effectiveStep && effectiveStep !== "1d") {
@@ -87,29 +81,24 @@ export function ActivityChart({
     });
   };
 
+  // Derive series keys from config (each key maps to a Bar)
+  const seriesKeys = Object.keys(config);
+
   return (
     <Card>
-      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
-        <div className="grid flex-1 gap-1 text-center sm:text-left">
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
+      <CardHeader className="pt-4 pb-2 sm:pt-5 sm:pb-3">
+        <div className="grid flex-1 gap-0.5">
+          <CardTitle className="font-medium text-muted-foreground text-sm">
+            {title}
+          </CardTitle>
+          <CardDescription className="font-bold text-foreground text-lg">
+            {description}
+          </CardDescription>
         </div>
       </CardHeader>
-      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        <ChartContainer config={config} className="aspect-auto h-64 w-full">
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient
-                id={`fill${title.replaceAll(/\s+/g, "")}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor={color} stopOpacity={0.8} />
-                <stop offset="95%" stopColor={color} stopOpacity={0.1} />
-              </linearGradient>
-            </defs>
+      <CardContent className="px-2 pb-2 sm:px-4">
+        <ChartContainer config={config} className="aspect-auto h-36 w-full">
+          <BarChart data={data} barCategoryGap="6%" barSize={14}>
             <CartesianGrid vertical={false} />
             <XAxis
               dataKey="date"
@@ -128,15 +117,19 @@ export function ActivityChart({
                 />
               }
             />
-            <Area
-              dataKey="value"
-              type="natural"
-              fill={`url(#fill${title.replaceAll(/\s+/g, "")})`}
-              stroke={color}
-              stackId="a"
-            />
+            {seriesKeys.map((key, i) => (
+              <Bar
+                key={key}
+                dataKey={key}
+                stackId="a"
+                fill={`var(--color-${key})`}
+                radius={
+                  i === seriesKeys.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]
+                }
+              />
+            ))}
             <ChartLegend content={<ChartLegendContent />} />
-          </AreaChart>
+          </BarChart>
         </ChartContainer>
       </CardContent>
     </Card>

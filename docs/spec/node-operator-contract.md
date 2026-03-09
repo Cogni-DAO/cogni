@@ -59,6 +59,23 @@ Establish enforceable invariants ensuring Node sovereignty, deployment portabili
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Node**     | A fully sovereign DAO+app: closed-loop wallet control, crypto payments for deployment/inference/revenue, self-deployable infrastructure. This repo today.                  |
 | **Operator** | A Meta-Node (Node++) with control plane + data plane. Same hex architecture and CI/CD rails as Node, but domain is platform governance rather than single-node operations. |
+| **Project**  | A governance/payout domain within a Node. Each project has its own DAO address, weight policy, payment rails, and epoch stream. Identified by `scope_id` in the database.  |
+
+### Identity Primitives
+
+The system uses several orthogonal identity keys. Each has a single, non-overlapping purpose. See [Identity Model spec](./identity-model.md) for the full taxonomy.
+
+| Key                  | Type | Purpose                            | Scope                | Overloading Prohibited                            |
+| -------------------- | ---- | ---------------------------------- | -------------------- | ------------------------------------------------- |
+| `node_id`            | UUID | Deployment/instance identity       | Infra, DB tenancy    | Never used for governance domain or epoch scoping |
+| `scope_id`           | UUID | Governance/payout domain (project) | Ledger, epochs       | Never used for deployment identity                |
+| `user_id`            | UUID | Person identity                    | Cross-node           | Never replaced by wallet address or DID           |
+| `billing_account_id` | UUID | Payment/subscription tenancy       | Within a Node's DB   | Never used for governance or deployment identity  |
+| `dao_address`        | TEXT | On-chain contract identity         | Per-project on-chain | Attribute, not a database key                     |
+
+**`node_id` = deployment identity only.** One node = one database, one set of infrastructure, one `docker compose up`. Multiple projects (scope_ids) can exist within a single node. `node_id` is never overloaded for governance semantics.
+
+**`scope_id` = governance domain.** Identifies which project an epoch, its activity, and its payouts belong to. V0 default: `scope_id = 'default'` (single-project nodes). Multi-scope activates when `.cogni/projects/*.yaml` manifests are added. All epoch-level invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are composite on `(node_id, scope_id)`. See [Attribution Ledger spec](./attribution-ledger.md#project-scoping).
 
 ### Operator Architecture
 
@@ -69,16 +86,17 @@ Establish enforceable invariants ensuring Node sovereignty, deployment portabili
 
 ### Boot Seams Matrix
 
-| Capability          | Node Owns                      | Operator Provides      | Call Direction       | Self-Host Option |
-| ------------------- | ------------------------------ | ---------------------- | -------------------- | ---------------- |
-| App deployment      | Infra keys, deploy scripts     | —                      | —                    | Always self-host |
-| DAO wallet ops      | Wallet keys, signing           | —                      | —                    | Always self-host |
-| Incoming payments   | PaymentReceiver contract       | —                      | —                    | Always self-host |
-| AI inference (Node) | Provider keys, billing         | —                      | Node → Provider      | Always self-host |
-| PR code review      | Manual review                  | git-review-daemon      | Operator → Node repo | OSS standalone   |
-| Repo admin actions  | Manual via GitHub UI           | git-admin-daemon       | Operator → Node repo | OSS standalone   |
-| Repo-spec policy    | Authors `.cogni/repo-spec.yml` | Consumes snapshot+hash | Operator reads Node  | —                |
-| Cred scoring        | —                              | cognicred              | Operator internal    | vNext            |
+| Capability          | Node Owns                        | Operator Provides      | Call Direction       | Self-Host Option |
+| ------------------- | -------------------------------- | ---------------------- | -------------------- | ---------------- |
+| App deployment      | Infra keys, deploy scripts       | —                      | —                    | Always self-host |
+| DAO wallet ops      | Wallet keys, signing             | —                      | —                    | Always self-host |
+| Incoming payments   | PaymentReceiver contract         | —                      | —                    | Always self-host |
+| AI inference (Node) | Provider keys, billing           | —                      | Node → Provider      | Always self-host |
+| PR code review      | Manual review                    | git-review-daemon      | Operator → Node repo | OSS standalone   |
+| Repo admin actions  | Manual via GitHub UI             | git-admin-daemon       | Operator → Node repo | OSS standalone   |
+| Repo-spec policy    | Authors `.cogni/repo-spec.yml`   | Consumes snapshot+hash | Operator reads Node  | —                |
+| Project manifests   | Authors `.cogni/projects/*.yaml` | Consumes snapshot+hash | Operator reads Node  | —                |
+| Cred scoring        | —                                | cognicred              | Operator internal    | vNext            |
 
 **AI Inference Billing:**
 
@@ -103,7 +121,9 @@ Establish enforceable invariants ensuring Node sovereignty, deployment portabili
 | Operator | Node DB           | **NO**         | Never direct access          |
 | Operator | Node wallet       | **NO**         | Never custody                |
 
-**Operator Node Registry:** Operator maintains a derived `node_registry_nodes` table for control-plane routing. This is rebuildable from on-chain receipts + repo-spec snapshots. `node_id` (UUID) is the canonical tenant key in Operator APIs/headers/claims. See [Node Formation Spec §9](node-formation.md#9-operator-node-registry-p1).
+**Operator Node Registry:** Operator maintains a derived `operator_node_registrations` table for control-plane routing, with per-scope config cached in `operator_node_scopes`. This is rebuildable from repo-spec snapshots (fetched via VCS API). `node_id` (UUID) is the Operator's federation/deployment identity — it identifies a deployed Node instance, not a tenant within the Node. Within a Node's own DB, tenant isolation uses `billing_account_id` (= `billing_accounts.id`); `node_id` is never used for RLS or tenant scoping inside the Node repo. A `node_id` may map to one or many `billing_account_id`s. See [VCS Integration §Node Registration Lifecycle](./vcs-integration.md#node-registration-lifecycle) for the registration schema and reconciliation model, and [Node Formation Spec §9](node-formation.md#9-operator-node-registry-p1) for the formation trigger.
+
+**Scope within a Node:** A single Node deployment (`node_id`) can host multiple governance domains (`scope_id`). Each scope has its own DAO address, weight policy, epoch stream, and payment rails — declared via `.cogni/projects/*.yaml`. The Operator sees scopes as sub-resources of a Node: `node_id` for routing, `scope_id` for governance granularity. Ledger invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are always composite on `(node_id, scope_id)`. See [Attribution Ledger §Project Scoping](./attribution-ledger.md#project-scoping).
 
 ### Deployment Portability
 

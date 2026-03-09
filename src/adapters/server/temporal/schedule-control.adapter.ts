@@ -3,13 +3,15 @@
 
 /**
  * Module: `@adapters/server/temporal/schedule-control`
- * Purpose: Temporal implementation of ScheduleControlPort.
+ * Purpose: Temporal implementation of ScheduleControlPort (create/update/pause/resume/delete/describe).
  * Scope: Implements schedule lifecycle via Temporal client. Does not handle workflow execution logic.
  * Invariants:
- *   - Per CRUD_IS_TEMPORAL_AUTHORITY: Only CRUD endpoints use this adapter
+ *   - Per CRUD_IS_TEMPORAL_AUTHORITY: Only CRUD endpoints and governance sync use this adapter
  *   - Per WORKER_NEVER_CONTROLS_SCHEDULES: Worker must not depend on this
  *   - Per OVERLAP_SKIP_DEFAULT: Schedules use overlap=SKIP
  *   - Per CATCHUP_WINDOW_ZERO: No backfill (catchupWindow=0)
+ *   - updateSchedule preserves existing state (pause, notes) via previous.state
+ *   - describeSchedule extracts input + dbScheduleId from action.args[0]; cron returns null (compiled to calendars by Temporal)
  * Side-effects: IO (Temporal RPC calls)
  * Links: docs/spec/scheduler.md, docs/spec/temporal-patterns.md, ScheduleControlPort
  * @public
@@ -22,6 +24,7 @@ import {
   type ScheduleControlPort,
   ScheduleControlUnavailableError,
   type ScheduleDescription,
+  type ScheduleOverlapPolicyHint,
 } from "@cogni/scheduler-core";
 import {
   Client,
@@ -46,6 +49,20 @@ export interface TemporalScheduleControlConfig {
 
 /** Workflow type name for scheduled graph execution (defined in scheduler-temporal-worker) */
 const SCHEDULED_RUN_WORKFLOW_TYPE = "GovernanceScheduledRunWorkflow";
+
+/** Map port-level overlap hint to Temporal SDK enum */
+function toTemporalOverlapPolicy(
+  hint: ScheduleOverlapPolicyHint | undefined
+): ScheduleOverlapPolicy {
+  switch (hint) {
+    case "skip":
+      return ScheduleOverlapPolicy.SKIP;
+    case "allow_all":
+      return ScheduleOverlapPolicy.ALLOW_ALL;
+    default:
+      return ScheduleOverlapPolicy.BUFFER_ONE;
+  }
+}
 
 /**
  * Temporal implementation of ScheduleControlPort.
@@ -111,25 +128,26 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
         },
         action: {
           type: "startWorkflow",
-          workflowType: SCHEDULED_RUN_WORKFLOW_TYPE,
+          workflowType: params.workflowType ?? SCHEDULED_RUN_WORKFLOW_TYPE,
           // Per WORKFLOW_ID_INCLUDES_TIMESTAMP: workflowId includes schedule time
           // Temporal appends timestamp automatically for scheduled workflows
           workflowId: params.scheduleId,
           args: [
             {
+              // Legacy compatibility: keep scheduleId for already-deployed workers.
               scheduleId: params.scheduleId,
+              temporalScheduleId: params.scheduleId,
+              dbScheduleId: params.dbScheduleId ?? null,
               graphId: params.graphId,
               executionGrantId: params.executionGrantId,
               input: params.input,
             },
           ],
-          taskQueue: this.config.taskQueue,
+          taskQueue: params.taskQueueOverride ?? this.config.taskQueue,
         },
         policies: {
-          // Per OVERLAP_SKIP_DEFAULT: Only one workflow instance per schedule at a time
-          overlap: ScheduleOverlapPolicy.SKIP,
-          // Per CATCHUP_WINDOW_ZERO: No backfill in P0
-          catchupWindow: "0s",
+          overlap: toTemporalOverlapPolicy(params.overlapPolicy),
+          catchupWindow: params.catchupWindowMs ?? 60_000,
         },
       });
     } catch (error) {
@@ -198,6 +216,53 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
     }
   }
 
+  async updateSchedule(
+    scheduleId: string,
+    params: CreateScheduleParams
+  ): Promise<void> {
+    const client = await this.getClient();
+
+    try {
+      const handle = client.schedule.getHandle(scheduleId);
+      await handle.update((previous) => ({
+        spec: {
+          cronExpressions: [params.cron],
+          timezone: params.timezone,
+        },
+        action: {
+          type: "startWorkflow" as const,
+          workflowType: params.workflowType ?? SCHEDULED_RUN_WORKFLOW_TYPE,
+          workflowId: params.scheduleId,
+          args: [
+            {
+              scheduleId: params.scheduleId,
+              temporalScheduleId: params.scheduleId,
+              dbScheduleId: params.dbScheduleId ?? null,
+              graphId: params.graphId,
+              executionGrantId: params.executionGrantId,
+              input: params.input,
+            },
+          ],
+          taskQueue: params.taskQueueOverride ?? this.config.taskQueue,
+        },
+        policies: {
+          overlap: toTemporalOverlapPolicy(params.overlapPolicy),
+          catchupWindow: params.catchupWindowMs ?? 60_000,
+        },
+        // Preserve existing state (pause, notes, limits) — don't reset with empty object
+        state: previous.state,
+      }));
+    } catch (error) {
+      if (error instanceof TemporalScheduleNotFoundError) {
+        throw new ScheduleControlNotFoundError(scheduleId);
+      }
+      throw new ScheduleControlUnavailableError(
+        "updateSchedule",
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
   async describeSchedule(
     scheduleId: string
   ): Promise<ScheduleDescription | null> {
@@ -213,11 +278,36 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
       const nextTime = nextActionTimes[0];
       const lastAction = recentActions[recentActions.length - 1];
 
+      // Extract config fields for drift detection
+      // NOTE: Temporal compiles cronExpressions into calendars at create time,
+      // so we can't read the original cron string back. Set to null — cron drift
+      // detection is an MVP tradeoff; input comparison catches the critical cases.
+      // Future: store canonical config in schedule memo for full drift detection.
+      const tz =
+        typeof description.spec.timezone === "string"
+          ? description.spec.timezone
+          : null;
+      const action = description.action;
+      const actionArgs =
+        action.type === "startWorkflow" && action.args?.[0]
+          ? (action.args[0] as Record<string, unknown>)
+          : null;
+      const actionInput: ScheduleDescription["input"] = actionArgs
+        ? ((actionArgs.input as ScheduleDescription["input"]) ?? null)
+        : null;
+      const actionDbScheduleId: string | null = actionArgs
+        ? ((actionArgs.dbScheduleId as string | null) ?? null)
+        : null;
+
       return {
         scheduleId,
         nextRunAtIso: nextTime ? nextTime.toISOString() : null,
         lastRunAtIso: lastAction ? lastAction.scheduledAt.toISOString() : null,
         isPaused: description.state.paused,
+        cron: null, // Temporal compiles crons to calendars; can't read back
+        timezone: tz,
+        input: actionInput,
+        dbScheduleId: actionDbScheduleId,
       };
     } catch (error) {
       if (error instanceof TemporalScheduleNotFoundError) {
@@ -225,6 +315,42 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
       }
       throw new ScheduleControlUnavailableError(
         "describeSchedule",
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  async triggerSchedule(scheduleId: string): Promise<void> {
+    const client = await this.getClient();
+
+    try {
+      const handle = client.schedule.getHandle(scheduleId);
+      await handle.trigger();
+    } catch (error) {
+      if (error instanceof TemporalScheduleNotFoundError) {
+        throw new ScheduleControlNotFoundError(scheduleId);
+      }
+      throw new ScheduleControlUnavailableError(
+        "triggerSchedule",
+        error instanceof Error ? error : undefined
+      );
+    }
+  }
+
+  async listScheduleIds(prefix: string): Promise<string[]> {
+    const client = await this.getClient();
+
+    try {
+      const ids: string[] = [];
+      for await (const schedule of client.schedule.list()) {
+        if (schedule.scheduleId.startsWith(prefix)) {
+          ids.push(schedule.scheduleId);
+        }
+      }
+      return ids;
+    } catch (error) {
+      throw new ScheduleControlUnavailableError(
+        "listScheduleIds",
         error instanceof Error ? error : undefined
       );
     }

@@ -32,6 +32,7 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
     const infrastructurePatterns = [
       "billing-executor.decorator.ts", // wraps stream with billing
       "observability-executor.decorator.ts", // wraps stream with telemetry
+      "preflight-credit-check.decorator.ts", // wraps stream with credit gate
       "aggregating-executor.ts", // routes to provider
       "graph-executor.factory.ts", // lazy provider internal delegation
       "graph-executor.port.ts", // interface definition / JSDoc

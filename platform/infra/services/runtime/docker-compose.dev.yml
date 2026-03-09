@@ -46,6 +46,16 @@ services:
       # Optional vars - pass-through only if set in host (absent = undefined, not empty string)
       - METRICS_TOKEN
       - SCHEDULER_API_TOKEN
+      - BILLING_INGEST_TOKEN
+      - INTERNAL_OPS_TOKEN
+      - GH_WEBHOOK_SECRET
+      # OAuth providers (optional — provider silently skipped if missing)
+      - GH_OAUTH_CLIENT_ID
+      - GH_OAUTH_CLIENT_SECRET
+      - DISCORD_OAUTH_CLIENT_ID
+      - DISCORD_OAUTH_CLIENT_SECRET
+      - GOOGLE_OAUTH_CLIENT_ID
+      - GOOGLE_OAUTH_CLIENT_SECRET
       - LANGFUSE_PUBLIC_KEY
       - LANGFUSE_SECRET_KEY
       - LANGFUSE_BASE_URL
@@ -67,11 +77,9 @@ services:
       # Override via env for test:stack:dev where app runs on host
       - SCHEDULER_WORKER_HEALTH_URL=${SCHEDULER_WORKER_HEALTH_URL:-http://scheduler-worker:9000}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
-      # Shared billing dir: proxy writes JSONL audit log, app reads for billing
-      - OPENCLAW_BILLING_DIR=/openclaw-billing
+      - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
     volumes:
       - repo_data:/repo:ro
-      - ${OPENCLAW_BILLING_HOST_DIR:-/tmp/cogni-openclaw-billing}:/openclaw-billing:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,6 +135,9 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_BASE_URL}
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
+      # Billing ingest callback (generic_api → app ingest endpoint)
+      - GENERIC_LOGGER_ENDPOINT=${GENERIC_LOGGER_ENDPOINT:-http://app:3000/api/internal/billing/ingest}
+      - "GENERIC_LOGGER_HEADERS=Authorization=Bearer ${BILLING_INGEST_TOKEN}"
     volumes:
       - ./configs/${LITELLM_CONFIG:-litellm.config.yaml}:/app/config.yaml:ro
     command: --config /app/config.yaml --host 0.0.0.0 --port 4000
@@ -467,6 +478,12 @@ services:
       # Override: http://host.docker.internal:3000 for test:stack:dev (app on host)
       - APP_BASE_URL=${SCHEDULER_APP_BASE_URL:-http://app:3000}
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN?SCHEDULER_API_TOKEN is required}
+      # GitHub App credentials (optional — required only for GitHub ingestion)
+      # Bare passthrough: passes empty string "" when var is unset in host env.
+      # Zod schema coerces "" → undefined so both cases are safe.
+      - GH_REVIEW_APP_ID
+      - GH_REVIEW_APP_PRIVATE_KEY_BASE64
+      - GH_REPOS
       # Observability
       - LOG_LEVEL=${PINO_LOG_LEVEL:-info}
       - SERVICE_NAME=scheduler-worker
@@ -508,7 +525,6 @@ services:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
     volumes:
       - ../sandbox-proxy/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
-      - ${OPENCLAW_BILLING_HOST_DIR:-/tmp/cogni-openclaw-billing}:/billing
     command: >
       sh -c "envsubst '$$LITELLM_MASTER_KEY' < /etc/nginx/nginx.conf.template
       > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
@@ -530,26 +546,44 @@ services:
       - "autoheal=true"
     networks:
       - sandbox-internal
+      - cogni-edge # internet egress for curl, gh, web search
       - internal # needed for host port binding (internal:true blocks port publish)
     ports:
       - "127.0.0.1:3333:18789"
-    entrypoint: ["node", "/app/dist/index.js", "gateway"]
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /workspace/.openclaw-config && cp /opt/openclaw-config-source.json /workspace/.openclaw-config/openclaw.json && exec node /app/dist/index.js gateway",
+      ]
     environment:
-      - HOME=/tmp
+      - HOME=/workspace
       - npm_config_store_dir=/pnpm-store
-      - OPENCLAW_CONFIG_PATH=/etc/openclaw/openclaw.json
-      - OPENCLAW_STATE_DIR=/tmp/openclaw-state
+      - OPENCLAW_CONFIG_PATH=/workspace/.openclaw-config/openclaw.json
+      - OPENCLAW_STATE_DIR=/workspace/.openclaw-state
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
       - OPENCLAW_LOAD_SHELL_ENV=0
+      - GITHUB_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
+      - COGNI_REPO_URL=${COGNI_REPO_URL}
+      - GIT_AUTHOR_NAME=Cogni Agent
+      - GIT_COMMITTER_NAME=Cogni Agent
+      - GIT_AUTHOR_EMAIL=agent@cogni.dev
+      - GIT_COMMITTER_EMAIL=agent@cogni.dev
       - OPENCLAW_RAW_STREAM=1
       - OPENCLAW_RAW_STREAM_PATH=/tmp/openclaw-raw-stream.jsonl
       - PI_RAW_STREAM=1
       - PI_RAW_STREAM_PATH=/tmp/pi-raw-stream.jsonl
+      # Grafana observability (for grafana-health skill)
+      - GRAFANA_URL=${GRAFANA_URL}
+      - GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_SERVICE_ACCOUNT_TOKEN}
+      # Discord bot (OpenClaw channel plugin)
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m
     volumes:
-      - ../../../../services/sandbox-openclaw/${OPENCLAW_CONFIG:-openclaw-gateway.json}:/etc/openclaw/openclaw.json:ro
+      - ../../../../services/sandbox-openclaw/${OPENCLAW_CONFIG:-openclaw-gateway.json}:/opt/openclaw-config-source.json:ro # seed config — copied to writable path on startup
+      - ../../../../services/sandbox-openclaw/gateway-workspace:/workspace/gateway
       - repo_data:/repo:ro # git-synced codebase (read-only mirror, updated by git-sync)
       - pnpm_store:/pnpm-store # persistent pnpm content-addressable store
       - cogni_workspace:/workspace # RW volume — pnpm hardlinks require same fs as pnpm_store

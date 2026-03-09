@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-26
 - **Status:** draft
 
 ## Purpose
@@ -30,10 +29,7 @@ Unit tests for application bootstrapping and dependency injection container logi
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm test tests/unit/bootstrap`
-- **Env/Config keys:** none
-- **Files considered API:** none
 
 ## Responsibilities
 

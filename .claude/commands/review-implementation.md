@@ -105,6 +105,25 @@ Output a structured review:
 ### Verdict: APPROVE / REQUEST CHANGES
 ```
 
+### Post-Verdict Actions
+
+**If APPROVE:**
+
+1. Set work item `status: done`, update `updated:` date.
+2. Update `_index.md` to reflect done status.
+3. Run `pnpm check:docs` and fix any errors until clean.
+4. Commit all changes on the work item's branch. Push to remote.
+
+**If REQUEST CHANGES:**
+
+1. Increment `revision:` field in work item frontmatter (e.g., `revision: 0` → `revision: 1`).
+2. **LOOP_LIMIT check**: If `revision >= 5`, set `status: blocked` with `blocked_by: Review loop limit — escalate to human` instead of sending back to implement.
+3. Otherwise, set `status: needs_implement`.
+4. Add blocking issues to the work item's `## Review Feedback` section.
+5. Update `_index.md` to reflect new status.
+6. Run `pnpm check:docs` and fix any errors until clean.
+7. Commit all changes on the work item's branch. Push to remote.
+
 ---
 
 ## Rules
@@ -115,3 +134,4 @@ Output a structured review:
 - **NO_RUBBER_STAMPS** — if you found no issues, you didn't look hard enough. Re-read the diff
 - **OSS_OVER_BESPOKE** — flag custom code that duplicates well-maintained OSS functionality
 - **TEST_THE_EDGES** — if edge cases aren't tested, flag them as missing coverage
+- **LOOP_LIMIT** — if `revision >= 5` after increment, auto-block instead of sending back to implement

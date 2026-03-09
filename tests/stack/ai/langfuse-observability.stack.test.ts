@@ -23,10 +23,7 @@ import { randomUUID } from "node:crypto";
 import { createChatRequest } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
-import {
-  isFinishMessageEvent,
-  readDataStreamEvents,
-} from "@tests/helpers/data-stream";
+import { isFinishEvent, readSseEvents } from "@tests/helpers/data-stream";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -196,32 +193,21 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Hello, please respond briefly.",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [
-                  { type: "text", text: "Hello, please respond briefly." },
-                ],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
       // Consume stream
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - Trace was created with non-null input
@@ -264,30 +250,21 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Say hello",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Say hello" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
       // Consume stream
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - Output was set on terminal
@@ -332,29 +309,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Hi",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hi" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - traceId is valid 32-hex format
@@ -398,29 +366,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Test",
             model: modelId,
             stateKey: longStateKey,
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Test" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - sessionId is truncated to 200 chars
@@ -461,29 +420,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Hello",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hello" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - Exactly one trace output update
@@ -522,29 +472,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Hello",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hello" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - Tags include graphId and environment
@@ -583,29 +524,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Hello",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hello" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - userId passed to trace (as top-level param, not in tags)
@@ -647,29 +579,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Hello",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hello" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - billingAccountId in metadata
@@ -713,29 +636,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: sensitiveMessage,
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: sensitiveMessage }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert - Input is scrubbed
@@ -790,30 +704,21 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Say hello briefly.",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Say hello briefly." }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
       // Consume stream fully
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert: One trace via createTraceWithIO (graph-execution), NOT createTrace (llm-completion)
@@ -865,29 +770,20 @@ describe("Langfuse Observability Stack Tests", () => {
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...createChatRequest({
+        body: JSON.stringify(
+          createChatRequest({
+            message: "Hi",
             model: modelId,
             stateKey: randomUUID(),
-            messages: [
-              {
-                id: randomUUID(),
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hi" }],
-              },
-            ],
-          }),
-          clientRequestId: randomUUID(),
-          stream: true,
-        }),
+          })
+        ),
       });
 
       const res = await chatPOST(req);
       expect(res.status).toBe(200);
 
-      for await (const e of readDataStreamEvents(res)) {
-        if (isFinishMessageEvent(e)) break;
+      for await (const e of readSseEvents(res)) {
+        if (isFinishEvent(e)) break;
       }
 
       // Assert: All three calls use the same traceId

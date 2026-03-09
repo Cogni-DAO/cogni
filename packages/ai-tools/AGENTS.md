@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-03
 - **Status:** draft
 
 ## Purpose
@@ -59,8 +58,6 @@ Pure tool definitions for AI agent execution. Defines `ToolContract`, `ToolImple
   - `createToolCatalog()`, `getToolById()`, `getToolIds()`, `hasToolId()` - Catalog accessors
   - `toBoundToolRuntime()`, `contractToRuntime()` - Runtime adapter converters (contractToRuntime for DI)
   - `ToolCapabilities`, `AuthCapability`, `ClockCapability`, `MetricsCapability`, `RepoCapability` - Capability interfaces
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`, `types.ts`, `schema.ts`, `catalog.ts`, `runtime-adapter.ts`, `capabilities/*.ts`, `tools/*.ts`
 
 ## Ports

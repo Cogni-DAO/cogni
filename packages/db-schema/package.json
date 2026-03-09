@@ -33,6 +33,18 @@
     "./ai-threads": {
       "types": "./dist/ai-threads.d.ts",
       "import": "./dist/ai-threads.js"
+    },
+    "./identity": {
+      "types": "./dist/identity.d.ts",
+      "import": "./dist/identity.js"
+    },
+    "./attribution": {
+      "types": "./dist/attribution.d.ts",
+      "import": "./dist/attribution.js"
+    },
+    "./profile": {
+      "types": "./dist/profile.d.ts",
+      "import": "./dist/profile.js"
     }
   },
   "files": [

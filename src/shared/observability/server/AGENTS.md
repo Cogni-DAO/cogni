@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2025-12-06
 - **Status:** stable
 
 ## Purpose
@@ -48,8 +47,6 @@ Server-side logging and metrics utilities. Pino logging with sync mode; Promethe
   - `aiChatStreamDurationMs`, `aiLlmCallDurationMs`, `aiLlmTokensTotal`, `aiLlmCostUsdTotal`, `aiLlmErrorsTotal` - AI metrics
   - `statusBucket(status)`, `classifyLlmError(error)` - Metric helpers
   - `LlmErrorCode` - Error code type
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `PINO_LOG_LEVEL`, `NODE_ENV`, `SERVICE_NAME`, `VITEST`
 - **Files considered API:** `index.ts`, `logger.ts`, `logEvent.ts`, `helpers.ts`, `metrics.ts`
 

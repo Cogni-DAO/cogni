@@ -4,7 +4,7 @@
 /**
  * Module: `@app/readyz`
  * Purpose: HTTP endpoint providing readiness check with full validation (env, secrets, EVM RPC, Temporal).
- * Scope: Returns service readiness status; validates env, runtime secrets, EVM RPC connectivity, and Temporal connectivity. Does not check DB connectivity yet.
+ * Scope: Returns service readiness status; validates env, runtime secrets, EVM RPC connectivity, Temporal connectivity, and system tenant presence. Does not check DB connectivity beyond system tenant lookup.
  * Invariants: Always returns valid readyz schema; force-dynamic runtime; returns 503 if env/secrets/infra connectivity invalid.
  * Side-effects: IO (HTTP response, structured logging, network calls to RPC and Temporal)
  * Notes: Used by Docker HEALTHCHECK, deployment validation, K8s readiness probes.
@@ -17,6 +17,7 @@
 import { NextResponse } from "next/server";
 
 import { getContainer } from "@/bootstrap/container";
+import { verifySystemTenant } from "@/bootstrap/healthchecks";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { metaReadyzOperation } from "@/contracts/meta.readyz.read.v1.contract";
 import { EnvValidationError, serverEnv } from "@/shared/env";
@@ -103,6 +104,9 @@ export const GET = wrapRouteHandlerWithLogging(
       // Test scheduler-worker connectivity (5s budget)
       // This ensures the Temporal worker is polling before stack tests run
       await assertSchedulerWorkerConnectivity(env);
+
+      // Verify system tenant billing account exists (per SYSTEM_TENANT_STARTUP_CHECK)
+      await verifySystemTenant(container.serviceAccountService);
 
       const payload = {
         status: "healthy" as const,

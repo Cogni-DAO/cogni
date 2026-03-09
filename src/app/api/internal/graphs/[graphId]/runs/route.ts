@@ -9,6 +9,7 @@
  *   - INTERNAL_API_SHARED_SECRET: Requires Bearer SCHEDULER_API_TOKEN
  *   - EXECUTION_IDEMPOTENCY_PERSISTED: Uses execution_requests table for deduplication
  *   - GRANT_VALIDATED_TWICE: Re-validates grant (defense-in-depth)
+ *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: preflight credit check via decorator (DI closure)
  *   - Uses AiExecutionErrorCode from ai-core (no parallel error system)
  * Side-effects: IO (HTTP request/response, database, graph execution)
  * Links: docs/spec/scheduler.md, graphs.run.internal.v1.contract
@@ -26,15 +27,17 @@ import {
   InternalGraphRunInputSchema,
   type InternalGraphRunOutput,
 } from "@/contracts/graphs.run.internal.v1.contract";
-import { commitUsageFact, executeStream } from "@/features/ai/public.server";
+import { executeStream } from "@/features/ai/public.server";
+import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
+import type { PreflightCreditCheckFn } from "@/ports";
 import {
   isGrantExpiredError,
   isGrantNotFoundError,
   isGrantRevokedError,
   isGrantScopeMismatchError,
+  isInsufficientCreditsPortError,
 } from "@/ports";
 import { serverEnv } from "@/shared/env";
-import type { BillingCommitFn } from "@/types/billing";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -80,6 +83,20 @@ function extractBearerToken(authHeader: string | null): string | null {
 function computeRequestHash(graphId: string, input: unknown): string {
   const normalized = JSON.stringify({ graphId, input });
   return createHash("sha256").update(normalized, "utf8").digest("hex");
+}
+
+/**
+ * Extract the stable schedule ID from an idempotency key.
+ * Format: "{temporalScheduleId}:{ISO-8601 scheduledFor}"
+ * Schedule IDs may contain colons (e.g. "governance:govern"), so we match
+ * the ISO-8601 timestamp boundary (":YYYY-MM-DDT") rather than splitting naively.
+ * @internal Exported for testing only.
+ */
+export function extractScheduleId(idempotencyKey: string): string {
+  const isoSeparatorIdx = idempotencyKey.search(/:\d{4}-\d{2}-\d{2}T/);
+  return isoSeparatorIdx > 0
+    ? idempotencyKey.slice(0, isoSeparatorIdx)
+    : idempotencyKey;
 }
 
 interface RouteParams {
@@ -320,6 +337,17 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       traceId
     );
 
+    // Extract scheduleId (stable) from idempotencyKey so runs of the same
+    // schedule share conversation state and Langfuse session grouping.
+    const scheduleId = extractScheduleId(idempotencyKey);
+
+    const stateKey = createHash("sha256")
+      .update(scheduleId, "utf8")
+      .digest("hex");
+
+    // gov: prefix distinguishes governance sessions from user sessions (ba:) in Langfuse
+    const sessionId = `gov:${grant.billingAccountId}:s:${stateKey.slice(0, 32)}`;
+
     // Build caller from grant + billing account
     const caller = {
       billingAccountId: grant.billingAccountId,
@@ -327,25 +355,47 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       requestId: ctx.reqId,
       traceId: ctx.traceId,
       userId: grant.userId,
+      sessionId,
     };
 
     // Parse input for graph execution
     const messages = Array.isArray(input.messages)
       ? (input.messages as { role: string; content: string }[])
-      : [];
-    const model =
-      typeof input.model === "string" ? input.model : "openrouter/auto";
+      : typeof input.message === "string"
+        ? [{ role: "user", content: input.message }]
+        : [];
 
-    // Create billing commit closure (app layer CAN import features — DI boundary)
+    // Model is required - no fallback
+    if (typeof input.model !== "string") {
+      log.error("Missing required model field");
+      return NextResponse.json(
+        { error: "model field is required" },
+        { status: 400 }
+      );
+    }
+    const model = input.model;
+
     const accountService = container.accountsForUser(toUserId(grant.userId));
-    const billingCommitFn: BillingCommitFn = (fact, context) =>
-      commitUsageFact(fact, context, accountService, log);
+
+    // Create preflight credit check closure
+    // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: decorator handles all execution paths
+    const preflightCheckFn: PreflightCreditCheckFn = (
+      billingAccountId,
+      m,
+      msgs
+    ) =>
+      preflightCreditCheck({
+        billingAccountId,
+        messages: [...msgs],
+        model: m,
+        accountService,
+      });
 
     // Create graph executor and run
     const executor = createGraphExecutor(
       executeStream,
       toUserId(grant.userId),
-      billingCommitFn
+      preflightCheckFn
     );
     const result = executor.runGraph({
       runId,
@@ -357,14 +407,44 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       })),
       model,
       caller,
+      stateKey,
     });
 
-    // Consume stream and wait for final result
-    for await (const _event of result.stream) {
-      // Drain stream to completion
-    }
+    // Consume stream and wait for final result.
+    // Wrapped in try/catch so preflight credit failures (thrown during stream
+    // iteration by PreflightCreditCheckDecorator) finalize the idempotency
+    // record cleanly instead of leaving it "pending" forever.
+    let final: Awaited<typeof result.final>;
+    try {
+      for await (const _event of result.stream) {
+        // Drain stream to completion
+      }
 
-    const final = await result.final;
+      final = await result.final;
+    } catch (error) {
+      const errorCode = isInsufficientCreditsPortError(error)
+        ? "insufficient_credits"
+        : "internal";
+
+      log.warn(
+        { runId, graphId, errorCode },
+        "Scheduled graph execution rejected before start"
+      );
+
+      // --- 10a. Finalize idempotency record with failure ---
+      await container.executionRequestPort.finalizeRequest(idempotencyKey, {
+        ok: false,
+        errorCode,
+      });
+
+      const errorResponse: InternalGraphRunOutput = {
+        ok: false,
+        runId,
+        traceId,
+        error: errorCode,
+      };
+      return NextResponse.json(errorResponse, { status: 200 });
+    }
 
     // --- 10. Finalize idempotency record with outcome ---
     await container.executionRequestPort.finalizeRequest(idempotencyKey, {

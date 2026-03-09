@@ -4,7 +4,7 @@
 /**
  * Module: `@tests/stack/ai/billing-idempotency.stack`
  * Purpose: Verify IDEMPOTENT_CHARGES invariant for run-centric billing.
- * Scope: Executes completion route, then replays with exact persisted values to verify idempotency. Does not test usage_report event path (P0 refactor pending).
+ * Scope: Executes completion route, then replays with exact persisted values to verify idempotency. Receipts arrive via async LiteLLM callback (CALLBACK_IS_SOLE_WRITER). Does not validate refund logic or partial failure scenarios.
  * Invariants:
  *   - IDEMPOTENT_CHARGES: DB unique on (source_system, source_reference) prevents duplicate charges
  * Side-effects: IO (database writes, LLM calls via mock-openai-api in test mode)
@@ -26,6 +26,7 @@ vi.mock("@/app/_lib/auth/session", () => ({
 import type { UserId } from "@cogni/ids";
 import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
+import { waitForReceipts } from "@tests/helpers/poll-db";
 import { UserDrizzleAccountService } from "@/adapters/server/accounts/drizzle.adapter";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST as completionPOST } from "@/app/api/v1/ai/completion/route";
@@ -99,11 +100,8 @@ describe("Billing Idempotency (IDEMPOTENT_CHARGES)", () => {
     const completionRes = await completionPOST(completionReq);
     expect(completionRes.status).toBe(200);
 
-    // Step 2: Read back the persisted (source_system, source_reference) from DB
-    const receipts = await db
-      .select()
-      .from(chargeReceipts)
-      .where(eq(chargeReceipts.billingAccountId, billingAccountId));
+    // Step 2: Wait for receipt from async LiteLLM callback (CALLBACK_IS_SOLE_WRITER)
+    const receipts = await waitForReceipts(db, billingAccountId);
 
     expect(receipts.length).toBe(1);
     const originalReceipt = receipts[0];

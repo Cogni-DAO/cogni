@@ -14,6 +14,7 @@
 import type { z } from "zod";
 
 import type {
+  ActivityGroupBy,
   aiActivityOperation,
   TimeRange,
 } from "@/contracts/ai.activity.v1.contract";
@@ -22,6 +23,7 @@ type ActivityData = z.infer<typeof aiActivityOperation.output>;
 
 export interface FetchActivityParams {
   range: TimeRange;
+  groupBy?: ActivityGroupBy;
   cursor?: string;
   limit?: number;
 }
@@ -31,6 +33,7 @@ export async function fetchActivity(
 ): Promise<ActivityData> {
   const searchParams = new URLSearchParams({
     range: params.range,
+    ...(params.groupBy && { groupBy: params.groupBy }),
     ...(params.cursor && { cursor: params.cursor }),
     ...(params.limit && { limit: params.limit.toString() }),
   });

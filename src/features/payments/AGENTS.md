@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-11
 - **Status:** draft
 
 ## Purpose
@@ -35,7 +34,7 @@ Feature layer for USDC payment attempts with backend verification. Handles payme
   - `createIntent(userRepo, clock, input)` - Create payment intent with on-chain transfer params (user repo only)
   - `submitTxHash(userRepo, serviceRepo, accountService, verifier, clock, log, input)` - Submit txHash for verification (dual repos)
   - `getStatus(userRepo, serviceRepo, accountService, verifier, clock, log, input)` - Poll status with throttled verification (dual repos)
-  - `confirmCreditsPayment(accountService, input)` - Atomic credit settlement; idempotent on clientPaymentId
+  - `confirmCreditsPayment(accountService, serviceAccountService, input)` - Credit settlement with system tenant revenue share bonus; idempotent on clientPaymentId
   - `getCreditsSummary(accountService, input)` - Fetch balance and recent ledger entries
 - **Exports (hooks/):**
   - `usePaymentFlow(options)` - React hook orchestrating USDC payment flow with wagmi + backend; uses attemptId guard to cancel stale async on reset; returns PaymentFlowState
@@ -50,8 +49,6 @@ Feature layer for USDC payment attempts with backend verification. Handles payme
   - Types: `PaymentsFeatureError`
   - Guards: `isPaymentsFeatureError`, `mapPaymentPortErrorToFeature`
 - **Routes:** none (used by app layer routes)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** services/_, hooks/_, api/\*, utils/mapBackendStatus.ts, errors.ts, public.ts
 
 ## Ports

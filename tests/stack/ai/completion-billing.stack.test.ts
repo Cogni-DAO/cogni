@@ -23,6 +23,7 @@ vi.mock("@/app/_lib/auth/session", () => ({
 
 import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
+import { waitForReceipts } from "@tests/helpers/poll-db";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST } from "@/app/api/v1/ai/completion/route";
 import { aiCompletionOperation } from "@/contracts/ai.completion.v1.contract";
@@ -81,6 +82,13 @@ describe("Completion Billing Stack Test", () => {
       ),
     });
 
+    // Receipts arrive asynchronously via LiteLLM callback (CALLBACK_IS_SOLE_WRITER)
+    const receiptsBefore = await db
+      .select()
+      .from(chargeReceipts)
+      .where(eq(chargeReceipts.billingAccountId, billingAccountId));
+    const initialReceiptCount = receiptsBefore.length;
+
     // Act
     const response = await POST(req);
 
@@ -96,13 +104,15 @@ describe("Completion Billing Stack Test", () => {
 
     // Assert - charge_receipt row created (per ACTIVITY_METRICS.md)
     // NOTE: No model/tokens/billingStatus - LiteLLM is canonical for telemetry
-    const receiptRows = await db
-      .select()
-      .from(chargeReceipts)
-      .where(eq(chargeReceipts.billingAccountId, billingAccountId));
-
-    expect(receiptRows.length).toBeGreaterThan(0);
-    const [receipt] = receiptRows;
+    const receiptRows = await waitForReceipts(db, billingAccountId, {
+      minCount: initialReceiptCount + 1,
+      timeoutMs: 30_000,
+    });
+    expect(receiptRows.length).toBeGreaterThan(initialReceiptCount);
+    const [receipt] = receiptRows.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
     if (!receipt) throw new Error("No charge receipt row");
 
     // Get the virtual key to verify
@@ -119,7 +129,28 @@ describe("Completion Billing Stack Test", () => {
     expect(receipt.virtualKeyId).toBe(virtualKeyId);
     expect(receipt.runId).toBeTruthy();
     expect(receipt.provenance).toBe("stream"); // Per UNIFIED_GRAPH_EXECUTOR: all execution flows through streaming
-    expect(receipt.chargedCredits).toBeGreaterThanOrEqual(0n);
+
+    // Per RECEIPT_WRITES_REQUIRE_CALL_ID_AND_COST: paid model must have cost > 0
+    expect(receipt.responseCostUsd).not.toBeNull();
+    expect(Number(receipt.responseCostUsd)).toBeGreaterThan(0);
+
+    // Exactly 1 receipt per litellm_call_id (no duplicates)
+    const allReceipts = await db
+      .select()
+      .from(chargeReceipts)
+      .where(eq(chargeReceipts.runId, receipt.runId));
+    for (const r of allReceipts) {
+      if (!r.litellmCallId) continue;
+      const byCallId = allReceipts.filter(
+        (x) => x.litellmCallId === r.litellmCallId
+      );
+      expect(byCallId).toHaveLength(1);
+    }
+    // No $0 receipts for paid models
+    const zeroReceipts = allReceipts.filter(
+      (r) => r.responseCostUsd !== null && Number(r.responseCostUsd) === 0
+    );
+    expect(zeroReceipts).toHaveLength(0);
 
     // Assert - Linked llm_charge_details row with model, graphId, tokens
     const details = await db
@@ -172,7 +203,7 @@ describe("Completion Billing Stack Test", () => {
 
     // Assert - balanceAfter matches final balance
     expect(ledgerRow.balanceAfter).toBe(finalBalance);
-  });
+  }, 45_000);
 
   it("should fail with insufficient credits (preflight gating) and not create records", async () => {
     // Arrange

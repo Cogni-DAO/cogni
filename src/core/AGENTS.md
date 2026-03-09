@@ -5,12 +5,11 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-01-13
 - **Status:** draft
 
 ## Purpose
 
-Pure domain logic with entities, rules, and business invariants. No I/O, time, or RNG dependencies. Includes account models, credit pricing calculations, chat message validation, AI utilities (system prompt, token estimation), and payment attempt state machine for USDC credit top-ups.
+Pure domain logic with entities, rules, and business invariants. No I/O, time, or RNG dependencies. Includes account models, credit pricing calculations, chat message validation, AI utilities (system prompt, token estimation), payment attempt state machine for USDC credit top-ups, and attribution ledger domain (re-exported from `@cogni/attribution-ledger`).
 
 ## Pointers
 
@@ -41,21 +40,13 @@ Pure domain logic with entities, rules, and business invariants. No I/O, time, o
   - Account entities (Account, BillingAccount)
   - Payment entities (PaymentAttempt, PaymentAttemptStatus, ClientVisibleStatus, PaymentErrorCode)
   - Business rules (credit pricing, message validation, payment state transitions, amount bounds, TTLs)
-  - Billing functions (CREDITS_PER_USD, usdToCredits, usdCentsToCredits, creditsToUsd, calculateLlmUserCharge)
+  - Billing functions (CREDITS_PER_USD, usdToCredits, usdCentsToCredits, creditsToUsd, calculateLlmUserCharge, calculateRevenueShareBonus)
   - Payment constants (MIN_PAYMENT_CENTS, MAX_PAYMENT_CENTS, PAYMENT_INTENT_TTL_MS, PENDING_UNVERIFIED_TTL_MS)
   - Domain errors (InsufficientCreditsError, PaymentIntentExpiredError, PaymentVerificationError, etc.)
   - Utilities (USDC conversion, message builders, payment state checkers)
   - AI utilities (system prompt application, token estimation)
-- **Routes:** none
-- **CLI:** none
-- **Env/Config keys:** none
-- **Files considered API:** public.ts, payments/public.ts, billing/public.ts, chat/public.ts, accounts/public.ts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
+  - Ledger domain (re-exported from `@cogni/attribution-ledger`): model types, `computeStatementItems()`, `buildReceiptMessage()`, error classes
+- **Files considered API:** public.ts, payments/public.ts, billing/public.ts, chat/public.ts, accounts/public.ts, attribution/public.ts
 
 ## Responsibilities
 

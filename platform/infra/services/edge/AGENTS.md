@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-06
 - **Status:** draft
 
 ## Purpose
@@ -31,7 +30,7 @@ Always-on TLS termination layer (Caddy). Isolated from app deployments to preven
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** `/api/v1/public/*` (rate limited, X-Real-IP header), `/sourcecred/*` (proxied to SourceCred)
+- **Routes (if any):** `/api/v1/public/*` (rate limited, X-Real-IP header)
 - **CLI (if any):** `docker compose --project-name cogni-edge -f docker-compose.yml`
 - **Env/Config keys:** `DOMAIN`
 - **Files considered API:** `docker-compose.yml`, `configs/Caddyfile.tmpl`

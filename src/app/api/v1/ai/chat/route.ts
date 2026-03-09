@@ -3,23 +3,24 @@
 
 /**
  * Module: `@app/api/v1/ai/chat`
- * Purpose: HTTP endpoint for chat API using assistant-ui streaming with server-authoritative thread persistence.
- * Scope: Extracts user message, loads thread from DB, executes graph, streams via assistant-stream, accumulates response UIMessage for persistence. Does not implement business logic.
+ * Purpose: HTTP endpoint for chat API using AI SDK Data Stream Protocol with server-authoritative thread persistence.
+ * Scope: Accepts user message string, loads thread from DB, executes graph, streams via createUIMessageStream, accumulates response UIMessage for persistence. Does not implement business logic.
  * Invariants:
- *   - CLIENT_SENDS_USER_ONLY: server extracts last user message from messages[], ignores all other client history
+ *   - CLIENT_SENDS_USER_ONLY: client sends single message string; server loads authoritative thread from DB
  *   - OPTIMISTIC_APPEND: two-phase save (user before execute, assistant after pump) with expectedMessageCount guard
- *   - Uses official assistant-stream helper (no custom SSE)
+ *   - METADATA_ON_INSERT: thread metadata (model, graphName) saved on first persist only (expectedLen === 0)
+ *   - Uses AI SDK createUIMessageStream (no custom SSE)
  *   - Per ASSISTANT_FINAL_REQUIRED: reconciles truncated text_delta events with assistant_final
+ *   - Per STATUS_IS_EPHEMERAL: StatusEvent maps to transient data-status chunk, never persisted
  * Side-effects: IO (HTTP request/response, DB persistence)
- * Notes: P0 wire format unchanged — createAssistantStreamResponse stays. UIMessage accumulator is persistence-only.
- * Links: Uses ai.chat.v1 contract, completion.server facade, assistant-stream, ThreadPersistencePort
+ * Notes: P1 wire format — createUIMessageStream + createUIMessageStreamResponse (SSE). UIMessage accumulator is persistence-only.
+ * Links: Uses ai.chat.v1 contract, completion.server facade, AI SDK streaming, ThreadPersistencePort
  * @public
  */
 
 import { toUserId } from "@cogni/ids";
-import type { UIMessage } from "ai";
-import { createAssistantStreamResponse } from "assistant-stream";
-import type { ReadonlyJSONValue } from "assistant-stream/utils";
+import type { UIMessage, UIMessageChunk } from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -34,7 +35,7 @@ import {
   redactSecretsInMessages,
   uiMessagesToMessageDtos,
 } from "@/features/ai/public.server";
-import { ThreadConflictError } from "@/ports";
+import { isInsufficientCreditsPortError, ThreadConflictError } from "@/ports";
 import {
   aiChatStreamDurationMs,
   logRequestWarn,
@@ -68,6 +69,17 @@ function handleRouteError(
     return NextResponse.json(
       { error: "Thread conflict — please retry" },
       { status: 409 }
+    );
+  }
+
+  // Port-level credit errors (thrown directly by PreflightCreditCheckDecorator
+  // during stream iteration — not mapped to feature errors by the facade in
+  // the streaming path)
+  if (isInsufficientCreditsPortError(error)) {
+    logRequestWarn(ctx.log, error, "INSUFFICIENT_CREDITS");
+    return NextResponse.json(
+      { error: "Insufficient credits" },
+      { status: 402 }
     );
   }
 
@@ -174,38 +186,8 @@ export const POST = wrapRouteHandlerWithLogging(
       }
       input = inputParseResult.data;
 
-      // --- CLIENT_SENDS_USER_ONLY: extract last user message, ignore rest ---
-      const lastUserMsg = [...input.messages]
-        .reverse()
-        .find((m) => m.role === "user");
-      if (!lastUserMsg) {
-        return NextResponse.json(
-          { error: "No user message found in messages[]" },
-          { status: 400 }
-        );
-      }
-      const userText =
-        typeof lastUserMsg.content === "string"
-          ? lastUserMsg.content
-          : lastUserMsg.content
-              .filter((p) => p.type === "text")
-              .map((p) => (p as { text: string }).text)
-              .join("\n");
-      if (!userText.trim()) {
-        return NextResponse.json(
-          { error: "Empty user message" },
-          { status: 400 }
-        );
-      }
-      const MAX_USER_TEXT_CHARS = 16_000;
-      if (userText.length > MAX_USER_TEXT_CHARS) {
-        return NextResponse.json(
-          {
-            error: `User message exceeds ${MAX_USER_TEXT_CHARS} character limit`,
-          },
-          { status: 400 }
-        );
-      }
+      // --- CLIENT_SENDS_USER_ONLY: message comes directly from input ---
+      const userText = input.message;
 
       const handlerStartMs = performance.now();
 
@@ -256,13 +238,20 @@ export const POST = wrapRouteHandlerWithLogging(
       };
 
       // --- Phase 1: persist user message before execution (optimistic) ---
+      // Metadata (model, graphName) saved on INSERT only — first persist creates the thread row.
+      const threadMetadata =
+        expectedLen === 0
+          ? { model: input.model, graphName: input.graphName }
+          : undefined;
+
       let threadWithUser = [...existingThread, userUIMessage];
       try {
         await threadPersistence.saveThread(
           sessionUser.id,
           stateKey,
           redactSecretsInMessages(threadWithUser),
-          expectedLen
+          expectedLen,
+          threadMetadata
         );
       } catch (e) {
         if (!(e instanceof ThreadConflictError)) throw e;
@@ -277,7 +266,8 @@ export const POST = wrapRouteHandlerWithLogging(
           sessionUser.id,
           stateKey,
           redactSecretsInMessages(threadWithUser),
-          expectedLen
+          expectedLen,
+          expectedLen === 0 ? threadMetadata : undefined
         );
         // If this throws ThreadConflictError again, handleRouteError catches → 409
       }
@@ -341,241 +331,227 @@ export const POST = wrapRouteHandlerWithLogging(
         resolvePumpDone = r;
       });
 
-      // --- Stream response (callback streams + accumulates, no persistence) ---
-      const response = createAssistantStreamResponse(async (controller) => {
-        // Helper: finalize tool-call substream with result, then close.
-        // assistant-stream requires explicit close() after setResponse().
-        async function finalizeToolCall(
-          toolCtrl: ReturnType<typeof controller.addToolCallPart>,
-          toolCallId: string,
-          result: ReadonlyJSONValue,
-          aborted: boolean
-        ): Promise<void> {
+      // --- Stream response via AI SDK Data Stream Protocol (SSE) ---
+      const textPartId = nanoid();
+      let textBlockOpen = false;
+
+      const uiStream = createUIMessageStream({
+        execute: async ({ writer }) => {
           try {
-            await toolCtrl.setResponse({ result });
-          } catch (err) {
-            const isClosedError =
-              err instanceof Error &&
-              (err.message.includes("Controller is already closed") ||
-                (err as NodeJS.ErrnoException).code === "ERR_INVALID_STATE");
-            if (isClosedError && aborted) {
-              ctx.log.debug(
-                { toolCallId, phase: "setResponse" },
-                "tool_call skipped (client abort)"
-              );
-              return;
+            let eventSeq = 0;
+
+            for await (const event of deltaStream) {
+              if (request.signal.aborted) break;
+              eventSeq++;
+
+              if (event.type === "text_delta") {
+                accumulatedText += event.delta;
+                if (!textBlockOpen) {
+                  writer.write({ type: "text-start", id: textPartId });
+                  textBlockOpen = true;
+                }
+                writer.write({
+                  type: "text-delta",
+                  delta: event.delta,
+                  id: textPartId,
+                });
+              } else if (event.type === "assistant_final") {
+                assistantFinalContent = event.content;
+                ctx.log.debug(
+                  {
+                    seq: eventSeq,
+                    accLen: accumulatedText.length,
+                    finalLen: event.content.length,
+                  },
+                  "ai.chat_assistant_final_received"
+                );
+              } else if (event.type === "tool_call_start") {
+                // Close text block before tool call
+                if (textBlockOpen) {
+                  writer.write({ type: "text-end", id: textPartId });
+                  textBlockOpen = false;
+                }
+
+                ctx.log.info(
+                  { toolCallId: event.toolCallId, toolName: event.toolName },
+                  "tool_call_start received"
+                );
+
+                writer.write({
+                  type: "tool-input-start",
+                  toolCallId: event.toolCallId,
+                  toolName: event.toolName,
+                } as UIMessageChunk);
+
+                if (event.args != null) {
+                  writer.write({
+                    type: "tool-input-available",
+                    toolCallId: event.toolCallId,
+                    toolName: event.toolName,
+                    input: event.args,
+                  } as UIMessageChunk);
+                }
+
+                // Accumulator: track tool call for persistence
+                const idx = accToolParts.length;
+                accToolParts.push({
+                  toolCallId: event.toolCallId,
+                  toolName: event.toolName,
+                  input: event.args ?? {},
+                  state: "input-available",
+                });
+                toolPartIndexByCallId.set(event.toolCallId, idx);
+              } else if (event.type === "tool_call_result") {
+                writer.write({
+                  type: "tool-output-available",
+                  toolCallId: event.toolCallId,
+                  output: event.result,
+                } as UIMessageChunk);
+
+                ctx.log.info(
+                  { toolCallId: event.toolCallId },
+                  "tool_call_result completed"
+                );
+
+                // Accumulator: update tool part with result
+                const partIdx = toolPartIndexByCallId.get(event.toolCallId);
+                if (partIdx !== undefined) {
+                  const part = accToolParts[partIdx];
+                  if (!part) continue;
+                  part.output = event.result;
+                  part.state = "output-available";
+                }
+              } else if (event.type === "status") {
+                // STATUS_IS_EPHEMERAL: transient data part, never persisted in UIMessage
+                // STATUS_BEST_EFFORT: safe to skip if stream is backpressured
+                writer.write({
+                  type: "data-status",
+                  data: {
+                    phase: event.phase,
+                    ...(event.label ? { label: event.label } : {}),
+                  },
+                  transient: true,
+                } as UIMessageChunk);
+              }
             }
-            throw err;
-          }
-          try {
-            await toolCtrl.close();
-          } catch (err) {
-            const isClosedError =
-              err instanceof Error &&
-              (err.message.includes("Controller is already closed") ||
-                (err as NodeJS.ErrnoException).code === "ERR_INVALID_STATE");
-            if (isClosedError && aborted) {
-              ctx.log.debug(
-                { toolCallId, phase: "close" },
-                "tool_call close skipped (client abort)"
+
+            // Reconcile: if assistant_final has text beyond what deltas delivered,
+            // append the remainder.
+            if (
+              assistantFinalContent !== undefined &&
+              assistantFinalContent.length > accumulatedText.length &&
+              assistantFinalContent.startsWith(accumulatedText)
+            ) {
+              const remainder = assistantFinalContent.slice(
+                accumulatedText.length
               );
+              ctx.log.info(
+                {
+                  accLen: accumulatedText.length,
+                  finalLen: assistantFinalContent.length,
+                  remainderLen: remainder.length,
+                },
+                "ai.chat_reconcile_appending_remainder"
+              );
+              if (!textBlockOpen) {
+                writer.write({ type: "text-start", id: textPartId });
+                textBlockOpen = true;
+              }
+              writer.write({
+                type: "text-delta",
+                delta: remainder,
+                id: textPartId,
+              });
+            } else if (
+              assistantFinalContent !== undefined &&
+              assistantFinalContent !== accumulatedText &&
+              !assistantFinalContent.startsWith(accumulatedText)
+            ) {
+              ctx.log.warn(
+                {
+                  accLen: accumulatedText.length,
+                  finalLen: assistantFinalContent.length,
+                  accTail: accumulatedText.slice(-40),
+                  finalTail: assistantFinalContent.slice(-40),
+                },
+                "ai.chat_reconcile_content_diverged"
+              );
+            }
+
+            if (
+              assistantFinalContent === undefined &&
+              accumulatedText.length > 0
+            ) {
+              ctx.log.error(
+                {
+                  accLen: accumulatedText.length,
+                  eventCount: eventSeq,
+                },
+                "ai.chat_assistant_final_missing — ASSISTANT_FINAL_REQUIRED violated"
+              );
+            }
+
+            // Close text block if still open
+            if (textBlockOpen) {
+              writer.write({ type: "text-end", id: textPartId });
+              textBlockOpen = false;
+            }
+
+            // Flush barrier
+            await new Promise((r) => setTimeout(r, 0));
+
+            // Wait for final result (billing) with 15s timeout
+            const FINAL_TIMEOUT_MS = 15000;
+            const finalTimeout = new Promise<{ ok: false; error: "timeout" }>(
+              (resolve) =>
+                setTimeout(
+                  () => resolve({ ok: false, error: "timeout" }),
+                  FINAL_TIMEOUT_MS
+                )
+            );
+
+            const result = await Promise.race([final, finalTimeout]);
+
+            if (result.ok) {
+              // AI SDK uiMessageChunkSchema uses z.strictObject for finish —
+              // only finishReason and messageMetadata are allowed (no usage).
+              writer.write({
+                type: "finish",
+                finishReason: result.finishReason as
+                  | "stop"
+                  | "length"
+                  | "tool-calls"
+                  | "content-filter"
+                  | "other"
+                  | "error",
+              });
             } else {
               ctx.log.warn(
-                { toolCallId, reqId: ctx.reqId, aborted, err },
-                "tool_call close failed"
+                { reqId: ctx.reqId, error: result.error },
+                "ai.chat_stream_final_error"
               );
-            }
-          }
-        }
-
-        try {
-          const toolCallControllers = new Map<
-            string,
-            ReturnType<typeof controller.addToolCallPart>
-          >();
-
-          let eventSeq = 0;
-
-          for await (const event of deltaStream) {
-            if (request.signal.aborted) break;
-            eventSeq++;
-
-            if (event.type === "text_delta") {
-              accumulatedText += event.delta;
-              controller.appendText(event.delta);
-            } else if (event.type === "assistant_final") {
-              assistantFinalContent = event.content;
-              ctx.log.debug(
-                {
-                  seq: eventSeq,
-                  accLen: accumulatedText.length,
-                  finalLen: event.content.length,
-                },
-                "ai.chat_assistant_final_received"
-              );
-            } else if (event.type === "tool_call_start") {
-              ctx.log.info(
-                { toolCallId: event.toolCallId, toolName: event.toolName },
-                "tool_call_start received, creating controller"
-              );
-              const toolCtrl = controller.addToolCallPart({
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
+              writer.write({
+                type: "error",
+                errorText: `Stream finalization failed: ${result.error}`,
               });
-              if (event.args != null) {
-                if (typeof toolCtrl.argsText?.append !== "function") {
-                  throw new Error(
-                    "assistant-stream API contract violated: toolCtrl.argsText.append is not a function"
-                  );
-                }
-                toolCtrl.argsText.append(JSON.stringify(event.args));
-              }
-              toolCallControllers.set(event.toolCallId, toolCtrl);
-
-              // Accumulator: track tool call for persistence
-              const idx = accToolParts.length;
-              accToolParts.push({
-                toolCallId: event.toolCallId,
-                toolName: event.toolName,
-                input: event.args ?? {},
-                state: "input-available",
-              });
-              toolPartIndexByCallId.set(event.toolCallId, idx);
-            } else if (event.type === "tool_call_result") {
-              const toolCtrl = toolCallControllers.get(event.toolCallId);
-              if (!toolCtrl) {
-                ctx.log.warn(
-                  { toolCallId: event.toolCallId },
-                  "tool_call_result without matching tool_call_start"
-                );
-                continue;
-              }
-              await finalizeToolCall(
-                toolCtrl,
-                event.toolCallId,
-                event.result as ReadonlyJSONValue,
-                request.signal.aborted
-              );
-              ctx.log.info(
-                { toolCallId: event.toolCallId },
-                "tool_call_result completed"
-              );
-
-              // Accumulator: update tool part with result
-              const partIdx = toolPartIndexByCallId.get(event.toolCallId);
-              if (partIdx !== undefined) {
-                const part = accToolParts[partIdx];
-                if (!part) continue;
-                part.output = event.result;
-                part.state = "output-available";
-              }
             }
-          }
-
-          // Reconcile: if assistant_final has text beyond what deltas delivered,
-          // append the remainder.
-          if (
-            assistantFinalContent !== undefined &&
-            assistantFinalContent.length > accumulatedText.length &&
-            assistantFinalContent.startsWith(accumulatedText)
-          ) {
-            const remainder = assistantFinalContent.slice(
-              accumulatedText.length
-            );
+          } catch (error) {
+            if (error instanceof Error && error.name === "AbortError") {
+              ctx.log.info({ reqId: ctx.reqId }, "ai.chat_client_aborted");
+            } else {
+              ctx.log.error({ err: error }, "Stream error in route");
+              throw error;
+            }
+          } finally {
+            const streamMs = performance.now() - streamStartMs;
+            aiChatStreamDurationMs.observe(streamMs);
             ctx.log.info(
-              {
-                accLen: accumulatedText.length,
-                finalLen: assistantFinalContent.length,
-                remainderLen: remainder.length,
-              },
-              "ai.chat_reconcile_appending_remainder"
+              { reqId: ctx.reqId, streamMs },
+              "ai.chat_stream_closed"
             );
-            controller.appendText(remainder);
-          } else if (
-            assistantFinalContent !== undefined &&
-            assistantFinalContent !== accumulatedText &&
-            !assistantFinalContent.startsWith(accumulatedText)
-          ) {
-            ctx.log.warn(
-              {
-                accLen: accumulatedText.length,
-                finalLen: assistantFinalContent.length,
-                accTail: accumulatedText.slice(-40),
-                finalTail: assistantFinalContent.slice(-40),
-              },
-              "ai.chat_reconcile_content_diverged"
-            );
+            resolvePumpDone();
           }
-
-          if (
-            assistantFinalContent === undefined &&
-            accumulatedText.length > 0
-          ) {
-            ctx.log.error(
-              {
-                accLen: accumulatedText.length,
-                eventCount: eventSeq,
-              },
-              "ai.chat_assistant_final_missing — ASSISTANT_FINAL_REQUIRED violated"
-            );
-          }
-
-          // Flush barrier
-          await new Promise((r) => setTimeout(r, 0));
-
-          // Wait for final result (billing) with 15s timeout
-          const FINAL_TIMEOUT_MS = 15000;
-          const finalTimeout = new Promise<{ ok: false; error: "timeout" }>(
-            (resolve) =>
-              setTimeout(
-                () => resolve({ ok: false, error: "timeout" }),
-                FINAL_TIMEOUT_MS
-              )
-          );
-
-          const result = await Promise.race([final, finalTimeout]);
-
-          if (result.ok) {
-            controller.enqueue({
-              type: "message-finish",
-              path: [],
-              finishReason: result.finishReason as
-                | "stop"
-                | "length"
-                | "tool-calls"
-                | "content-filter"
-                | "other"
-                | "error"
-                | "unknown",
-              usage: {
-                promptTokens: result.usage.promptTokens,
-                completionTokens: result.usage.completionTokens,
-              },
-            });
-          } else {
-            ctx.log.warn(
-              { reqId: ctx.reqId, error: result.error },
-              "ai.chat_stream_final_error"
-            );
-            controller.enqueue({
-              type: "error",
-              path: [],
-              error: `Stream finalization failed: ${result.error}`,
-            });
-          }
-        } catch (error) {
-          if (error instanceof Error && error.name === "AbortError") {
-            ctx.log.info({ reqId: ctx.reqId }, "ai.chat_client_aborted");
-          } else {
-            ctx.log.error({ err: error }, "Stream error in route");
-            throw error;
-          }
-        } finally {
-          const streamMs = performance.now() - streamStartMs;
-          aiChatStreamDurationMs.observe(streamMs);
-          ctx.log.info({ reqId: ctx.reqId, streamMs }, "ai.chat_stream_closed");
-          resolvePumpDone();
-        }
+        },
       });
 
       // --- Phase 2: persist assistant message after pump (disconnect-safe) ---
@@ -656,12 +632,16 @@ export const POST = wrapRouteHandlerWithLogging(
         ctx.log.error({ err, stateKey }, "ai.thread_persist_unhandled")
       );
 
-      // Return response with stateKey header for thread continuity
-      const headers = new Headers(response.headers);
-      headers.set("X-State-Key", stateKey);
-      return new NextResponse(response.body, {
-        status: response.status,
-        headers,
+      // Return SSE response with stateKey header for thread continuity
+      // Wrap in NextResponse: createUIMessageStreamResponse returns Response,
+      // but wrapRouteHandlerWithLogging expects NextResponse.
+      const sseResponse = createUIMessageStreamResponse({
+        stream: uiStream,
+        headers: { "X-State-Key": stateKey },
+      });
+      return new NextResponse(sseResponse.body, {
+        status: sseResponse.status,
+        headers: sseResponse.headers,
       });
     } catch (error) {
       const errorResponse = handleRouteError(ctx, error, input?.model);

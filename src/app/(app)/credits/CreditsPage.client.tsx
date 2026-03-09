@@ -67,15 +67,19 @@ export function CreditsPageClient(): ReactElement {
     setAmountInput(""); // Clear after user acknowledges success
   };
 
-  const balanceDisplay = summaryQuery.isLoading
-    ? "—"
-    : formatDollars(summaryQuery.data?.balanceCredits ?? 0);
+  const balance = summaryQuery.data?.balanceCredits ?? 0;
+  const balanceDisplay = summaryQuery.isLoading ? "—" : formatDollars(balance);
+  const isNegative = balance < 0;
 
   return (
     <PageContainer maxWidth="2xl">
       {/* Balance Card */}
       <Card className="flex items-center justify-between p-6">
-        <span className="font-bold text-4xl">$ {balanceDisplay}</span>
+        <span
+          className={`font-bold text-4xl ${isNegative ? "text-destructive" : ""}`}
+        >
+          $ {balanceDisplay}
+        </span>
       </Card>
 
       {/* Buy Credits Section */}

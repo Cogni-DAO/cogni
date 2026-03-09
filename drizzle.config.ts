@@ -7,7 +7,8 @@
  * Scope: Database migration configuration and schema paths. Does not handle runtime database connections.
  * Invariants: Schema path matches actual database schema location; migration output directory exists
  * Side-effects: IO (file system operations during migration generation)
- * Notes: Uses DATABASE_URL directly if available, falls back to buildDatabaseUrl helper; strict mode enabled for schema validation
+ * Notes: Migrations run as app_user (DB owner). Seed migrations use set_config() for RLS context.
+ *        Falls back from DATABASE_URL to buildDatabaseUrl helper; strict mode enabled for schema validation
  * Links: Used by pnpm db:generate and pnpm db:migrate scripts
  * @public
  */
@@ -18,10 +19,8 @@ import { buildDatabaseUrl, type DbEnvInput } from "./src/shared/db/db-url";
 
 function getDatabaseUrl(): string {
   const directUrl = process.env.DATABASE_URL?.trim();
-
   if (directUrl) {
     try {
-      // Ensure direct URLs are valid; fall back to component pieces otherwise
       new URL(directUrl);
       return directUrl;
     } catch {

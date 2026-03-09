@@ -2,7 +2,7 @@
 id: task.0010
 type: task
 title: "OpenClaw gateway model selection — session-level override or agent-per-specialty"
-status: Done
+status: done
 priority: 1
 estimate: 3
 summary: Design and implement dynamic model selection for OpenClaw gateway mode. GraphRunRequest.model must reach the actual LLM call. Two viable mechanisms exist in OpenClaw — session-level modelOverride via sessions.patch, or agent-per-specialty with distinct tool/workspace configs.
@@ -19,6 +19,10 @@ labels: [openclaw, gateway, model-routing]
 external_refs:
 assignees: derekg1729
 credit:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 # OpenClaw gateway model selection

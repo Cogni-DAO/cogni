@@ -20,7 +20,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ORIGINAL_ENV = process.env;
 
-describe("bootstrap container DI wiring", () => {
+// Container DI tests use vi.resetModules() + dynamic imports which are slow
+// in sandboxed/CI environments. Use generous timeout to prevent flaky failures.
+describe("bootstrap container DI wiring", { timeout: 30_000 }, () => {
   beforeEach(() => {
     vi.resetModules(); // ensure fresh module evaluation
     process.env = { ...ORIGINAL_ENV }; // clean env copy

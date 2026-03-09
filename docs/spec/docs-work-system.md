@@ -10,7 +10,7 @@ read_when: Creating any doc or work item, understanding what goes where
 implements: proj.docs-system-infrastructure
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-09
+verified: 2026-02-18
 tags: [docs, work, meta]
 ---
 
@@ -145,8 +145,9 @@ labels: []
 id: task.0042 # immutable, must match filename prefix
 type: task|bug|story|spike|subtask
 title: Example Task
-status: Backlog|Todo|In Progress|Done|Cancelled
+status: needs_triage|needs_research|needs_design|needs_implement|needs_closeout|needs_merge|done|blocked|cancelled
 priority: 0-3
+rank: 99 # positive integer, 1 = highest within priority band
 estimate: 0-5
 summary: One line
 outcome: Deliverable
@@ -156,6 +157,13 @@ assignees: handle
 credit:
 pr:
 reviewer:
+branch:
+revision: 0 # integer, incremented on review rejection
+blocked_by: # required when status=blocked
+deploy_verified: false # set by cleanup agent after production deploy
+claimed_by_run: # governance runner lock
+claimed_at: # governance runner lock timestamp
+last_command: # last /command that acted on this item
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 labels: []

@@ -6,10 +6,10 @@
 #   - Inherits log_info, log_warn, emit_deployment_event functions from caller
 # Links: work/items/task.0031.openclaw-cogni-dev-image.md
 
-PNPM_STORE_IMAGE="ghcr.io/cogni-dao/node-template:pnpm-store-latest"
+# $PNPM_STORE_IMAGE set by deploy-remote.sh (Step 6+7) and already pulled.
+PNPM_STORE_IMAGE="${PNPM_STORE_IMAGE:?PNPM_STORE_IMAGE must be set by caller}"
 
 log_info "Seeding pnpm_store volume..."
-docker pull "$PNPM_STORE_IMAGE" || { log_warn "pnpm-store image not found, skipping seed"; return 0; }
 
 bash /tmp/seed-pnpm-store-core.sh --image "$PNPM_STORE_IMAGE" --volume pnpm_store \
   && emit_deployment_event "deployment.pnpm_store_seeded" "success" "pnpm store seeded" \

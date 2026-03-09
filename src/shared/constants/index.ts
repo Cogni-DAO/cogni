@@ -16,3 +16,6 @@ export const MAX_MESSAGE_CHARS = 4000;
 
 /* Payments */
 export * from "./payments";
+
+/* System tenant */
+export * from "./system-tenant";

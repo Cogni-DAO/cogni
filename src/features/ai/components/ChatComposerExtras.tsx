@@ -61,7 +61,7 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
 ];
 
 /** Default graph ID - exported for page initialization */
-export const DEFAULT_GRAPH_ID: GraphId = "langgraph:poet";
+export const DEFAULT_GRAPH_ID: GraphId = "sandbox:openclaw";
 
 export interface ChatComposerExtrasProps {
   selectedModel: string;

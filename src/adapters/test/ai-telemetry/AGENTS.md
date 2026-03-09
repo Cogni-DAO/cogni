@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-12-17
 - **Status:** stable
 
 ## Purpose
@@ -31,9 +30,6 @@ In-memory test doubles for AI telemetry ports. Records invocations for test asse
 ## Public Surface
 
 - **Exports:** FakeAiTelemetryAdapter (implements AiTelemetryPort)
-- **Routes:** none
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** fake-ai-telemetry.adapter.ts
 
 ## Ports

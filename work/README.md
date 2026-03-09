@@ -23,7 +23,7 @@ tags: [work, meta]
 | `charters/`       | Strategic themes (`chr.<slug>.md`)                |
 | `projects/`       | Phased roadmaps (`proj.<slug>.md`)                |
 | `items/`          | PR-sized work (`<type>.<num>.<slug>.md`)          |
-| `items/_index.md` | Canonical discoverability surface                 |
+| `items/_index.md` | Generated index (run `pnpm work:index`)           |
 | `items/_archive/` | Completed items archived by YYYY/MM               |
 | `handoffs/`       | Agent handoff packets (bounded, per work item)    |
 | `_templates/`     | Templates for charters, projects, items, handoffs |
@@ -92,8 +92,9 @@ labels: [security, ai]
 id: task.0042
 type: task
 title: Add resource limits to sandbox containers
-status: Todo
+status: needs_implement
 priority: 1
+rank: 99
 estimate: 2
 summary: Configure CPU/memory limits for sandbox containers
 outcome: All sandbox containers have enforced resource limits
@@ -104,6 +105,9 @@ project: proj.sandboxed-agents
 branch:
 pr:
 reviewer:
+revision: 0
+blocked_by:
+deploy_verified: false
 created: 2026-02-09
 updated: 2026-02-09
 labels: [security]
@@ -132,27 +136,34 @@ external_refs:
 
 ### Work Item
 
-| Field           | Req         | Description                                 |
-| --------------- | ----------- | ------------------------------------------- |
-| `id`            | Yes         | `<type>.<num>` immutable                    |
-| `type`          | Yes         | task, bug, spike, story, subtask            |
-| `title`         | Yes         | Human readable                              |
-| `status`        | Yes         | Backlog, Todo, In Progress, Done, Cancelled |
-| `priority`      | Yes         | 0-3                                         |
-| `estimate`      | Yes         | 0-5                                         |
-| `summary`       | Yes         | What needs to be done?                      |
-| `outcome`       | Yes         | What is the deliverable?                    |
-| `spec_refs`     | No          | Spec IDs (not paths)                        |
-| `assignees`     | Yes         | CSV of handles                              |
-| `credit`        | No          | Attribution for contributors                |
-| `project`       | No          | `proj.{slug}` parent (optional)             |
-| `branch`        | No          | Git branch name for this work               |
-| `pr`            | Before Done | PR number/URL                               |
-| `reviewer`      | Before Done | Review assignee                             |
-| `created`       | Yes         | YYYY-MM-DD                                  |
-| `updated`       | Yes         | YYYY-MM-DD                                  |
-| `labels`        | No          | CSV labels                                  |
-| `external_refs` | No          | External URLs                               |
+| Field             | Req         | Description                                                                                                        |
+| ----------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| `id`              | Yes         | `<type>.<num>` immutable                                                                                           |
+| `type`            | Yes         | task, bug, spike, story, subtask                                                                                   |
+| `title`           | Yes         | Human readable                                                                                                     |
+| `status`          | Yes         | needs_triage, needs_research, needs_design, needs_implement, needs_closeout, needs_merge, done, blocked, cancelled |
+| `priority`        | Yes\*       | 0-3 (\*optional when `needs_triage`)                                                                               |
+| `rank`            | Yes\*       | Positive integer, 1 = highest within priority band (\*optional when `needs_triage`, default: 99)                   |
+| `estimate`        | Yes\*       | 0-5 (\*optional when `needs_triage`)                                                                               |
+| `summary`         | Yes         | What needs to be done?                                                                                             |
+| `outcome`         | Yes         | What is the deliverable?                                                                                           |
+| `spec_refs`       | No          | Spec IDs (not paths)                                                                                               |
+| `assignees`       | Yes         | CSV of handles                                                                                                     |
+| `credit`          | No          | Attribution for contributors                                                                                       |
+| `project`         | No          | `proj.{slug}` parent (optional)                                                                                    |
+| `branch`          | No          | Git branch name for this work                                                                                      |
+| `pr`              | Before done | PR number/URL                                                                                                      |
+| `reviewer`        | Before done | Review assignee                                                                                                    |
+| `revision`        | Yes         | Integer, incremented on review rejection (default: 0)                                                              |
+| `blocked_by`      | If blocked  | Required when status=blocked                                                                                       |
+| `deploy_verified` | No          | Boolean, set by cleanup agent after prod deploy                                                                    |
+| `claimed_by_run`  | No          | Governance runner lock (automation-only)                                                                           |
+| `claimed_at`      | No          | Timestamp, set with claimed_by_run                                                                                 |
+| `last_command`    | No          | Last `/command` that acted on this item                                                                            |
+| `created`         | Yes         | YYYY-MM-DD                                                                                                         |
+| `updated`         | Yes         | YYYY-MM-DD                                                                                                         |
+| `labels`          | No          | CSV labels                                                                                                         |
+| `external_refs`   | No          | External URLs                                                                                                      |
 
 ## Handoffs
 
@@ -216,11 +227,14 @@ Required sections (6 max):
 5. **ITEMS_ARE_PR_SIZED** — If an item spans multiple PRs, break it up
 6. **PR_LINKS_ITEM** — Every PR references exactly one Work Item ID (e.g., `WI: bug.0004`)
 7. **SLUG_RENAME_OK** — Renaming the slug portion of a filename is allowed; renaming `<type>.<num>` is forbidden
+8. **INDEX_IS_DERIVED** — `_index.md` is generated from frontmatter by `pnpm work:index`. Never hand-edit. It is gitignored.
 
 ## Agent Safety
 
-- Agents must not directory-list `work/items/`; use `work/items/_index.md` and search by ID.
-- Creating or closing an item must update `_index.md`.
+- Agents may scan `work/items/*.md` and parse frontmatter directly.
+- `_index.md` is a generated convenience view — never edit it manually.
+- Creating or closing an item only requires editing the item file.
+- Use `pnpm work:next-id` to get the next available numeric ID.
 
 ## Related
 

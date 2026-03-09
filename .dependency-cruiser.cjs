@@ -27,6 +27,7 @@ const srcLayers = {
   assets: "^src/assets",
   contracts: "^src/contracts",
   mcp: "^src/mcp",
+  scripts: "^src/scripts",
 };
 
 // Monorepo boundary layers (packages/)
@@ -250,6 +251,12 @@ module.exports = {
       to: { path: "^services/" },
     },
 
+    // scripts → bootstrap (CLI wrappers that call job modules)
+    {
+      from: { path: "^src/scripts" },
+      to: { path: ["^src/bootstrap"] },
+    },
+
     // Files not in a known layer are caught by the forbidden `no-unknown-layer` rule below.
   ],
 
@@ -313,7 +320,7 @@ module.exports = {
       name: "no-internal-adapter-imports",
       severity: "error",
       from: {
-        path: "^src/(?!adapters/server/)(?!auth\\.ts$)(?!bootstrap/container\\.ts$)(?!bootstrap/graph-executor\\.factory\\.ts$)(?!bootstrap/agent-discovery\\.ts$)",
+        path: "^src/(?!adapters/server/)(?!auth\\.ts$)(?!bootstrap/container\\.ts$)(?!bootstrap/graph-executor\\.factory\\.ts$)(?!bootstrap/agent-discovery\\.ts$)(?!bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts$)",
       },
       to: {
         path: "^src/adapters/server/(?!index\\.ts$).*\\.ts$",
@@ -322,7 +329,8 @@ module.exports = {
         "Import from @/adapters/server (index.ts), not internal adapter files. " +
         "Exempt: auth.ts (bootstrap), container.ts (trust boundaries), " +
         "graph-executor.factory.ts + agent-discovery.ts (sandbox subpath imports " +
-        "to avoid Turbopack bundling dockerode native addon chain).",
+        "to avoid Turbopack bundling dockerode native addon chain), " +
+        "syncGovernanceSchedules.job.ts (needs serviceDb for advisory lock).",
     },
 
     // adapters/test: must use @/adapters/test (index.ts), not internal files
@@ -535,13 +543,14 @@ module.exports = {
       severity: "error",
       from: {
         path: "^src/",
-        pathNot: "^src/(auth\\.ts|bootstrap/container\\.ts)$",
+        pathNot:
+          "^src/(auth\\.ts|bootstrap/container\\.ts|bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts)$",
       },
       to: {
         path: "^src/adapters/server/db/drizzle\\.service-client\\.ts$",
       },
       comment:
-        "Only auth.ts and container.ts may import the service-db adapter (BYPASSRLS singleton)",
+        "Only auth.ts, container.ts, and governance job may import the service-db adapter (BYPASSRLS singleton)",
     },
 
     // =========================================================================
@@ -574,6 +583,47 @@ module.exports = {
       comment: "adapters must not import the composition root",
     },
 
+    // activities/ and workflows/ cannot import adapters/ (clean architecture)
+    {
+      name: "no-service-activities-to-adapters",
+      severity: "error",
+      from: {
+        path: "^services/[^/]+/src/(activities|workflows)/",
+      },
+      to: {
+        path: "^services/[^/]+/src/adapters/",
+      },
+      comment:
+        "activities/workflows depend on ports, not adapters (clean architecture)",
+    },
+
+    // activities/ and workflows/ cannot import @cogni/db-client (concrete adapter package)
+    {
+      name: "no-service-activities-to-db-client",
+      severity: "error",
+      from: {
+        path: "^services/[^/]+/src/(activities|workflows)/",
+      },
+      to: {
+        path: "^packages/db-client/",
+      },
+      comment:
+        "activities/workflows use port interfaces, not concrete DB adapters",
+    },
+
+    // activities/ and workflows/ cannot import bootstrap/ (composition root)
+    {
+      name: "no-service-activities-to-bootstrap",
+      severity: "error",
+      from: {
+        path: "^services/[^/]+/src/(activities|workflows)/",
+      },
+      to: {
+        path: "^services/[^/]+/src/bootstrap/",
+      },
+      comment: "activities/workflows must not reach into the composition root",
+    },
+
     // =========================================================================
     // Scheduler worker boundary rules (per SCHEDULER_SPEC.md)
     // =========================================================================
@@ -590,6 +640,21 @@ module.exports = {
       },
       comment:
         "Per WORKER_NEVER_CONTROLS_SCHEDULES: worker executes workflows only, CRUD endpoints are schedule authority",
+    },
+
+    // scheduler-worker activities/workflows must dispatch allocators through
+    // attribution-pipeline-contracts, not import allocation.ts directly.
+    {
+      name: "no-worker-direct-ledger-allocation-subpath",
+      severity: "error",
+      from: {
+        path: "^services/scheduler-worker/src/(activities|workflows)/",
+      },
+      to: {
+        path: "^packages/attribution-ledger/src/allocation\\.ts$",
+      },
+      comment:
+        "Worker allocation must go through plugin registry dispatch, not direct ledger allocation imports",
     },
   ],
 };

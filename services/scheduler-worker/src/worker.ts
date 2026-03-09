@@ -8,51 +8,27 @@
  * Invariants:
  *   - Per WORKER_NEVER_CONTROLS_SCHEDULES: Does NOT depend on ScheduleControlPort
  *   - Per TEMPORAL_DETERMINISM: Workflows are bundled separately from activities
- *   - Zero imports from src/** (arch compliance)
- *   - All dependencies injected via config
+ *   - All dependencies injected via ServiceContainer from bootstrap/container.ts
+ *   - No concrete adapter imports — uses container for wiring
  * Side-effects: IO (connects to Temporal, starts worker)
  * Links: docs/spec/scheduler.md, docs/spec/temporal-patterns.md
  * @internal
  */
 
-import {
-  DrizzleExecutionGrantWorkerAdapter,
-  DrizzleScheduleRunAdapter,
-} from "@cogni/db-client";
-import { createServiceDbClient } from "@cogni/db-client/service";
 import { NativeConnection, Worker } from "@temporalio/worker";
-import type { Logger } from "pino";
 
 import { createActivities } from "./activities/index.js";
-
-/**
- * Logger interface expected by the worker.
- * Compatible with pino's Logger type.
- */
-export interface LoggerLike {
-  info(obj: Record<string, unknown>, msg?: string): void;
-  warn(obj: Record<string, unknown>, msg?: string): void;
-  error(obj: Record<string, unknown>, msg?: string): void;
-  debug?(obj: Record<string, unknown>, msg?: string): void;
-  child?(bindings: Record<string, unknown>): LoggerLike;
-}
+import { createContainer } from "./bootstrap/container.js";
+import type { Env } from "./bootstrap/env.js";
+import { logWorkerEvent, WORKER_EVENT_NAMES } from "./observability/index.js";
+import type { Logger } from "./observability/logger.js";
 
 /**
  * Configuration for starting the Temporal scheduler worker.
  */
 export interface SchedulerWorkerConfig {
-  /** Temporal server address */
-  temporalAddress: string;
-  /** Temporal namespace */
-  namespace: string;
-  /** Temporal task queue */
-  taskQueue: string;
-  /** PostgreSQL connection string for DB activities */
-  databaseUrl: string;
-  /** App base URL for internal API calls */
-  appBaseUrl: string;
-  /** Scheduler API token (treat as secret - never log) */
-  schedulerApiToken: string;
+  /** Validated environment */
+  env: Env;
   /** Logger instance */
   logger: Logger;
 }
@@ -64,55 +40,38 @@ export interface SchedulerWorkerConfig {
 export async function startSchedulerWorker(
   config: SchedulerWorkerConfig
 ): Promise<{ shutdown: () => Promise<void> }> {
-  const {
-    temporalAddress,
-    namespace,
-    taskQueue,
-    databaseUrl,
-    appBaseUrl,
-    schedulerApiToken,
-    logger,
-  } = config;
+  const { env, logger } = config;
 
-  logger.info(
-    { temporalAddress, namespace, taskQueue },
-    "Connecting to Temporal"
-  );
+  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+    temporalAddress: env.TEMPORAL_ADDRESS,
+    namespace: env.TEMPORAL_NAMESPACE,
+    taskQueue: env.TEMPORAL_TASK_QUEUE,
+    phase: "temporal_connect",
+  });
 
   // Create Temporal connection
   const connection = await NativeConnection.connect({
-    address: temporalAddress,
+    address: env.TEMPORAL_ADDRESS,
   });
 
-  // Create database client and adapters for activities
-  const db = createServiceDbClient(databaseUrl);
-  const grantAdapter = new DrizzleExecutionGrantWorkerAdapter(
-    db,
-    logger.child({ component: "DrizzleExecutionGrantWorkerAdapter" })
-  );
-  const runAdapter = new DrizzleScheduleRunAdapter(
-    db,
-    logger.child({ component: "DrizzleScheduleRunAdapter" })
-  );
+  // Build service container (all concrete adapter wiring)
+  const container = createContainer(env, logger);
 
-  // Create activities with injected deps
+  // Create activities with injected deps (typed against ports)
   const activities = createActivities({
-    db,
-    grantAdapter,
-    runAdapter,
-    config: {
-      appBaseUrl,
-      schedulerApiToken,
-    },
-    logger: logger.child({ component: "activities" }),
+    grantAdapter: container.grantAdapter,
+    runAdapter: container.runAdapter,
+    config: container.config,
+    logger:
+      container.logger.child?.({ component: "activities" }) ?? container.logger,
   });
 
   // Create Temporal Worker
   // Note: workflowsPath points to the compiled workflow file
   const worker = await Worker.create({
     connection,
-    namespace,
-    taskQueue,
+    namespace: env.TEMPORAL_NAMESPACE,
+    taskQueue: env.TEMPORAL_TASK_QUEUE,
     workflowsPath: new URL(
       "./workflows/scheduled-run.workflow.js",
       import.meta.url
@@ -120,26 +79,41 @@ export async function startSchedulerWorker(
     activities,
   });
 
-  logger.info({ namespace, taskQueue }, "Temporal Worker created");
+  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+    namespace: env.TEMPORAL_NAMESPACE,
+    taskQueue: env.TEMPORAL_TASK_QUEUE,
+    phase: "worker_created",
+  });
 
   // Start the worker (runs in background)
   const runPromise = worker.run();
 
   // Handle worker errors
   runPromise.catch((err) => {
-    logger.error({ err }, "Worker run failed");
+    logger.error(
+      { event: WORKER_EVENT_NAMES.LIFECYCLE_FATAL, err },
+      WORKER_EVENT_NAMES.LIFECYCLE_FATAL
+    );
   });
 
-  logger.info("Scheduler worker started, polling for tasks");
+  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {
+    phase: "polling",
+  });
 
   // Return shutdown function
   return {
     shutdown: async () => {
-      logger.info("Shutting down Temporal Worker");
+      logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_SHUTDOWN, {
+        phase: "temporal_worker",
+      });
       worker.shutdown();
       await runPromise;
       await connection.close();
-      logger.info("Temporal Worker shutdown complete");
+      logWorkerEvent(
+        logger,
+        WORKER_EVENT_NAMES.LIFECYCLE_SHUTDOWN_COMPLETE,
+        {}
+      );
     },
   };
 }

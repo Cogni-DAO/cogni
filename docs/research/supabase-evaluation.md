@@ -57,13 +57,13 @@ Document the engineering due diligence for Supabase adoption, establishing which
                   │  :80 :443     │     project: cogni-edge
                   └───────┬───────┘
                           │ cogni-edge network (external)
-      ┌───────────────────┼───────────────────────┐
-      │                   │                       │
- ┌────┴────┐      ┌──────┴──────┐         ┌──────┴───────┐
- │   app   │      │   litellm   │         │  sourcecred  │
- │  :3000  │      │   :4000     │         │    :6006     │
- │ Next.js │      │  LLM proxy  │         │  analytics   │
- └────┬────┘      └──────┬──────┘         └──────────────┘
+      ┌───────────────────┤
+      │                   │
+ ┌────┴────┐      ┌──────┴──────┐
+ │   app   │      │   litellm   │
+ │  :3000  │      │   :4000     │
+ │ Next.js │      │  LLM proxy  │
+ └────┬────┘      └──────┬──────┘
       │                  │
       │    internal network (isolated)
  ┌────┴────────────┬─────┴────────┬──────────────┐
@@ -83,20 +83,19 @@ Document the engineering due diligence for Supabase adoption, establishing which
 
 ### 1.2 Component Inventory
 
-| Service               | Role                            | State it owns                  | Exposes to                                      | External deps                         | Secrets required                                                                 | Persistence            |
-| --------------------- | ------------------------------- | ------------------------------ | ----------------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------- | ---------------------- |
-| **caddy**             | TLS termination + reverse proxy | TLS certs                      | Internet (:80,:443) → app:3000, sourcecred:6006 | DOMAIN                                | caddy_data volume                                                                |
-| **app** (Next.js)     | Business logic, API, UI         | Session JWTs (cookie)          | Caddy reverse proxy                             | postgres, litellm, temporal, langfuse | AUTH_SECRET, LITELLM_MASTER_KEY, DATABASE_URL, DATABASE_SERVICE_URL, EVM_RPC_URL | None (stateless)       |
-| **postgres**          | Primary data store              | All user/billing/schedule data | app, litellm, temporal, db-provision            | None                                  | POSTGRES_ROOT_USER/PASSWORD                                                      | postgres_data volume   |
-| **litellm**           | LLM proxy + cost tracking       | Spend logs (in PG)             | app, sandbox                                    | OpenRouter API                        | OPENROUTER_API_KEY, LITELLM_MASTER_KEY                                           | LiteLLM DB in postgres |
-| **temporal**          | Workflow orchestration          | Workflow state                 | scheduler-worker, app                           | temporal-postgres                     | TEMPORAL_DB_USER/PASSWORD                                                        | temporal_postgres_data |
-| **temporal-postgres** | Temporal state store            | Temporal internal state        | temporal only                                   | None                                  | TEMPORAL_DB_USER/PASSWORD                                                        | temporal_postgres_data |
-| **scheduler-worker**  | Temporal task executor          | None (reads/writes via app DB) | temporal task queue                             | app internal API, postgres            | DATABASE_SERVICE_URL, SCHEDULER_API_TOKEN                                        | None (stateless)       |
-| **alloy**             | Log + metrics collection        | Buffer/cache                   | Docker socket, app:metrics                      | Loki, Grafana Cloud                   | LOKI*\*, PROMETHEUS*\*, METRICS_TOKEN                                            | alloy_data volume      |
-| **db-provision**      | DB role/schema bootstrap        | None (one-shot)                | postgres                                        | None                                  | POSTGRES*ROOT*_, APP*DB*_                                                        | None                   |
-| **db-migrate**        | Schema migrations               | None (one-shot)                | postgres                                        | None                                  | DATABASE_URL                                                                     | None                   |
-| **git-sync**          | Clone brain repo                | None                           | GitHub                                          | None                                  | GIT_READ_TOKEN                                                                   | repo_data volume       |
-| **sourcecred**        | Contribution analytics          | Cred scores                    | GitHub API                                      | None                                  | SOURCECRED_GITHUB_TOKEN                                                          | Bind mounts            |
+| Service               | Role                            | State it owns                  | Exposes to                           | External deps                         | Secrets required                                                                 | Persistence            |
+| --------------------- | ------------------------------- | ------------------------------ | ------------------------------------ | ------------------------------------- | -------------------------------------------------------------------------------- | ---------------------- |
+| **caddy**             | TLS termination + reverse proxy | TLS certs                      | Internet (:80,:443) → app:3000       | DOMAIN                                | caddy_data volume                                                                |
+| **app** (Next.js)     | Business logic, API, UI         | Session JWTs (cookie)          | Caddy reverse proxy                  | postgres, litellm, temporal, langfuse | AUTH_SECRET, LITELLM_MASTER_KEY, DATABASE_URL, DATABASE_SERVICE_URL, EVM_RPC_URL | None (stateless)       |
+| **postgres**          | Primary data store              | All user/billing/schedule data | app, litellm, temporal, db-provision | None                                  | POSTGRES_ROOT_USER/PASSWORD                                                      | postgres_data volume   |
+| **litellm**           | LLM proxy + cost tracking       | Spend logs (in PG)             | app, sandbox                         | OpenRouter API                        | OPENROUTER_API_KEY, LITELLM_MASTER_KEY                                           | LiteLLM DB in postgres |
+| **temporal**          | Workflow orchestration          | Workflow state                 | scheduler-worker, app                | temporal-postgres                     | TEMPORAL_DB_USER/PASSWORD                                                        | temporal_postgres_data |
+| **temporal-postgres** | Temporal state store            | Temporal internal state        | temporal only                        | None                                  | TEMPORAL_DB_USER/PASSWORD                                                        | temporal_postgres_data |
+| **scheduler-worker**  | Temporal task executor          | None (reads/writes via app DB) | temporal task queue                  | app internal API, postgres            | DATABASE_SERVICE_URL, SCHEDULER_API_TOKEN                                        | None (stateless)       |
+| **alloy**             | Log + metrics collection        | Buffer/cache                   | Docker socket, app:metrics           | Loki, Grafana Cloud                   | LOKI*\*, PROMETHEUS*\*, METRICS_TOKEN                                            | alloy_data volume      |
+| **db-provision**      | DB role/schema bootstrap        | None (one-shot)                | postgres                             | None                                  | POSTGRES*ROOT*_, APP*DB*_                                                        | None                   |
+| **db-migrate**        | Schema migrations               | None (one-shot)                | postgres                             | None                                  | DATABASE_URL                                                                     | None                   |
+| **git-sync**          | Clone brain repo                | None                           | GitHub                               | None                                  | GIT_READ_TOKEN                                                                   | repo_data volume       |
 
 ### 1.3 Data Store Summary
 

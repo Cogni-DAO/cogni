@@ -113,13 +113,17 @@ describe("app/_facades/payments/credits.server", () => {
       }
     );
 
-    expect(mockConfirmCreditsPayment).toHaveBeenCalledWith(accountService, {
-      billingAccountId: "billing-1",
-      defaultVirtualKeyId: "vk-1",
-      amountUsdCents: 100,
-      clientPaymentId: "payment-xyz",
-      metadata: { source: "test" },
-    });
+    expect(mockConfirmCreditsPayment).toHaveBeenCalledWith(
+      accountService,
+      expect.anything(), // serviceAccountService (from container)
+      {
+        billingAccountId: "billing-1",
+        defaultVirtualKeyId: "vk-1",
+        amountUsdCents: 100,
+        clientPaymentId: "payment-xyz",
+        metadata: { source: "test" },
+      }
+    );
 
     expect(result).toEqual({
       billingAccountId: "billing-1",

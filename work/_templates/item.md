@@ -2,8 +2,9 @@
 id: # <type>.<num> — must match filename prefix
 type: # task | bug | story | spike | subtask
 title:
-status: Backlog
+status: needs_triage
 priority: 1
+rank: 99
 estimate: 2
 summary:
 outcome:
@@ -14,6 +15,9 @@ project:
 branch:
 pr:
 reviewer:
+revision: 0
+blocked_by:
+deploy_verified: false
 created:
 updated:
 labels: []

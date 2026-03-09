@@ -2,7 +2,7 @@
 id: bug.0016
 type: bug
 title: Production compose missing OpenClaw services — --profile sandbox-openclaw is silent no-op
-status: Done
+status: done
 priority: 0
 estimate: 2
 summary: OpenClaw services (llm-proxy-openclaw, openclaw-gateway) and sandbox-internal network only exist in docker-compose.dev.yml. deploy.sh --profile sandbox-openclaw flags silently do nothing.
@@ -18,6 +18,10 @@ created: 2026-02-10
 updated: 2026-02-10
 labels: [openclaw, deploy, infra]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 # Production compose missing OpenClaw services — --profile sandbox-openclaw is silent no-op

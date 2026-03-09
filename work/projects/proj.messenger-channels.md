@@ -39,11 +39,13 @@ The existing gateway compose service needs channel sections enabled in its confi
 
 | Deliverable                                                                                                       | Status      | Est | Work Item |
 | ----------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Add `channels:` section to `openclaw-gateway.json` template (Telegram + WhatsApp enabled, others discoverable)    | Not Started | 1   | —         |
-| Remove `message` and `sessions_send` from tool deny list in gateway config                                        | Not Started | 0   | —         |
-| Add `OPENCLAW_STATE_DIR` volume mount in gateway compose for persistent channel auth state                        | Not Started | 1   | —         |
+| Add `channels:` section to `openclaw-gateway.json` (Discord first, then Telegram + WhatsApp)                      | Not Started | 1   | task.0041 |
+| Remove `message` and `sessions_send` from tool deny list in gateway config                                        | Not Started | 0   | task.0041 |
+| Add `OPENCLAW_STATE_DIR` volume mount in gateway compose for persistent channel auth state                        | Not Started | 1   | task.0041 |
 | Namespace state dirs by accountId — each account's auth state in `${STATE_DIR}/channels/${channel}/${accountId}/` | Not Started | 1   | —         |
-| Verify gateway restarts reconnect Telegram (bot token) and WhatsApp (Baileys session) automatically               | Not Started | 1   | —         |
+| Verify gateway restarts reconnect Discord (bot token) automatically                                               | Not Started | 1   | task.0041 |
+| Dedicated Discord community agent — separate agent with bindings, workspace, cost-effective model                 | Not Started | 2   | task.0076 |
+| Governance scheduled runs post status updates to `#continuous-cogni-updates` Discord channel                      | Not Started | 2   | task.0075 |
 
 #### 3 Proxy Endpoints (Cogni → OpenClaw Gateway)
 
@@ -56,15 +58,16 @@ Cogni exposes 3 HTTP endpoints that proxy to OpenClaw gateway WS methods. Cogni 
 | `POST /api/v1/channels/disconnect` — proxies `channels.logout` WS call for the tenant's account, updates Cogni mapping                                                              | Not Started | 1   | —         |
 | Extend gateway client with `channelsStatus()`, `channelsLogout()`, `webLoginStart()`, `webLoginWait()` methods using existing WS frame protocol                                     | Not Started | 2   | —         |
 
-#### Tenant-Channel Mapping (Cogni-Side Persistence)
+#### Tenant-Channel Persistence + Credential Encryption
 
-Cogni stores a lightweight mapping: `{tenantId, channel, accountId, displayName, connectedAt}`. This is NOT the full `connections` table from `proj.tenant-connections` — it's a simpler registration record. Actual channel auth state lives in OpenClaw's `STATE_DIR` volume.
+Per [messenger-channels spec](../../docs/spec/messenger-channels.md): `channel_registrations` table with AES-256-GCM encrypted credentials. AccountId = `"tenant-{billingAccountId}"` (per spec ACCOUNT_ID_IS_TENANT_SCOPED). QR-based auth state (WhatsApp) stays in STATE_DIR volume.
 
-| Deliverable                                                                                                            | Status      | Est | Work Item |
-| ---------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| `channel_accounts` table: `(id, billing_account_id, channel, account_id, display_name, connected_at, disconnected_at)` | Not Started | 1   | —         |
-| One OpenClaw accountId per tenant per channel constraint (unique index on `billing_account_id + channel`)              | Not Started | 0   | —         |
-| AccountId generation: `tenant-{billingAccountId}-{channel}` to ensure namespace isolation in OpenClaw state dirs       | Not Started | 0   | —         |
+| Deliverable                                                                                                                | Status      | Est | Work Item |
+| -------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| `channel_registrations` table with encrypted_credential column (see spec schema)                                           | Not Started | 1   | —         |
+| AES-256-GCM encrypt/decrypt utility (`src/shared/crypto/channel-credentials.ts`) + `CHANNEL_ENCRYPTION_KEY` env var        | Not Started | 1   | —         |
+| AccountId derivation: `"tenant-{billingAccountId}"` — deterministic, one per tenant (see spec ACCOUNT_ID_IS_TENANT_SCOPED) | Not Started | 0   | —         |
+| RLS policy on `channel_registrations` — standard tenant scoping via `billing_account_id`                                   | Not Started | 0   | —         |
 
 #### Channel Management UI
 
@@ -77,19 +80,17 @@ Single Next.js page showing connected channels with connect/disconnect actions.
 | WhatsApp connect flow: click Connect → QR code displayed → scan → status turns green                   | Not Started | 2   | —         |
 | Disconnect button per connected channel account                                                        | Not Started | 0   | —         |
 
-### Walk (P1) — Credential Encryption + Operational Hardening
+### Walk (P1) — Operational Hardening + Connections Migration
 
-**Goal:** Channel credentials (bot tokens) stored encrypted in Cogni. Reconnect behavior is reliable. Admin guardrails prevent tenant collisions.
+**Goal:** Reconnect behavior is reliable. Rate limiting and audit logging protect channel operations. Migrate to `connections` table if `proj.tenant-connections` is available.
 
-| Deliverable                                                                                                                                                                    | Status      | Est | Work Item            |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --- | -------------------- |
-| Migrate `channel_accounts` to use `connections` table from `proj.tenant-connections` — `provider: "openclaw:<channel>"`, `credential_type: "bot_token"` or `"channel_session"` | Not Started | 2   | (create at P1 start) |
-| AEAD-encrypt bot tokens at rest (Telegram bot token, Slack OAuth token, etc.)                                                                                                  | Not Started | 2   | (create at P1 start) |
-| Reconnect-safe volumes: verify Baileys auth state survives gateway container restart + compose down/up                                                                         | Not Started | 1   | (create at P1 start) |
-| Rate limits on connect/disconnect endpoints (prevent QR abuse, token brute-force)                                                                                              | Not Started | 1   | (create at P1 start) |
-| Audit log: connect/disconnect events recorded with timestamp + billingAccountId + channel + accountId                                                                          | Not Started | 1   | (create at P1 start) |
-| Admin guardrail: reject `connect` if another tenant already owns that OpenClaw accountId (defense-in-depth beyond unique index)                                                | Not Started | 1   | (create at P1 start) |
-| Health poll: periodic `channels.status` probe, push alerts to observability if account disconnects unexpectedly                                                                | Not Started | 1   | (create at P1 start) |
+| Deliverable                                                                                                                                                                     | Status      | Est | Work Item            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Migrate `channel_registrations` to `connections` table from `proj.tenant-connections` — `provider: "openclaw:<channel>"`, `credential_type: "bot_token"` or `"channel_session"` | Not Started | 2   | (create at P1 start) |
+| Rate limits on connect/disconnect endpoints (prevent QR abuse, token brute-force)                                                                                               | Not Started | 1   | (create at P1 start) |
+| Audit log: connect/disconnect events recorded with timestamp + billingAccountId + channel + accountId                                                                           | Not Started | 1   | (create at P1 start) |
+| Health poll: periodic `channels.status` probe, push alerts to observability if account disconnects unexpectedly                                                                 | Not Started | 1   | (create at P1 start) |
+| Discord billing user attribution — propagate Discord user ID into LLM proxy billing metadata                                                                                    | Not Started | 2   | task.0077            |
 
 ### Run (P2+) — Cogni-Mediated Messaging + Cloud API + Scaling
 
@@ -119,60 +120,15 @@ Single Next.js page showing connected channels with connect/disconnect actions.
 - [x] LLM proxy with billing headers (`llm-proxy-openclaw` → LiteLLM)
 - [ ] task.0008 — Gateway client protocol lifecycle (P0 channel methods build on this)
 - [ ] task.0019 — Gateway auth parameterization (channels endpoints need authenticated gateway WS)
-- [ ] proj.tenant-connections P0 — Connection model for P1 credential encryption (NOT required for P0)
+- [ ] proj.tenant-connections P0 — Connection model for P1 migration (NOT required for P0 — P0 uses `channel_registrations` with standalone AES-256-GCM)
 
 ## As-Built Specs
 
-- (none yet — spec created when code merges)
+- [messenger-channels.md](../../docs/spec/messenger-channels.md) — Multi-tenant channel management: isolation model, credential lifecycle, endpoint contracts, invariants
 
 ## Design Notes
 
-### Why Not Build Per-Channel Adapters in Cogni?
-
-OpenClaw already has 15+ channel plugins with multi-account support, unified routing, QR login flows, and protocol implementations. Building Cogni-side adapters would:
-
-1. Duplicate thousands of lines of battle-tested protocol code
-2. Create a maintenance burden for protocol changes (WhatsApp updates, Telegram API changes)
-3. Require Cogni to understand channel-specific auth flows (Baileys session state, Discord bot tokens, Slack OAuth)
-
-Instead, Cogni is a **thin management proxy**: it stores which tenant owns which channel account, proxies management actions to OpenClaw, and provides UI. All the hard channel work stays in OpenClaw.
-
-### AccountId Namespacing
-
-OpenClaw uses `accountId` to namespace per-account state (auth dirs, sessions, transcripts). To prevent cross-tenant collision, Cogni generates deterministic accountIds:
-
-```
-accountId = "tenant-{billingAccountId}-{channel}"
-```
-
-This ensures:
-
-- Each tenant gets their own Baileys auth dir, Telegram session, etc.
-- OpenClaw's multi-account support separates state automatically
-- No shared state between tenants even on a single gateway instance
-
-### OpenClaw Gateway WS Methods Used
-
-| Cogni Endpoint                      | OpenClaw WS Method                | Purpose                                             |
-| ----------------------------------- | --------------------------------- | --------------------------------------------------- |
-| `GET /channels/status`              | `channels.status`                 | Get all channel/account snapshots, filter by tenant |
-| `POST /channels/connect` (Telegram) | Config update + `channels.status` | Write bot token to config, verify connection        |
-| `POST /channels/connect` (WhatsApp) | `webLoginStart` + `webLoginWait`  | QR code generation and scan waiting                 |
-| `POST /channels/disconnect`         | `channels.logout`                 | Logout and clear credentials                        |
-
-### Message Flow in P0 (OpenClaw-Native)
-
-```
-User sends WhatsApp message
-  → Baileys (inside OpenClaw gateway) receives
-  → OpenClaw routing: resolve-route.ts → agent "main"
-  → Agent calls LLM via llm-proxy-openclaw:8080
-  → Proxy injects billing headers → LiteLLM → upstream
-  → Agent gets response, sends back to WhatsApp via Baileys
-  → Cogni sees billing in proxy audit log only
-```
-
-Cogni has no visibility into message content in P0. This is acceptable for v0 — billing is accurate (LLM calls are tracked), and conversation quality depends on the OpenClaw agent's system prompt (configurable via workspace behavior files).
+Design content (accountId namespacing, WS method mapping, isolation model, credential flow) lives in the [messenger-channels spec](../../docs/spec/messenger-channels.md). This project owns the roadmap and deliverable tracking only.
 
 ### Research Artifacts
 

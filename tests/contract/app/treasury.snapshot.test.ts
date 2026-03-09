@@ -28,6 +28,9 @@ vi.mock("@/app/_facades/treasury/snapshot.server", () => ({
 vi.mock("@/shared/env", () => ({
   serverEnv: () => MOCK_SERVER_ENV,
 }));
+vi.mock("@/shared/env/server-env", () => ({
+  serverEnv: () => MOCK_SERVER_ENV,
+}));
 
 // Mock rate limiter to always allow requests in contract tests
 vi.mock("@/bootstrap/http/rateLimiter", () => ({

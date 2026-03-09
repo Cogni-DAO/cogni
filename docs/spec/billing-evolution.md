@@ -149,8 +149,13 @@ Cost source: LiteLLM `usage.cost` (stream) or `x-litellm-response-cost` header (
 
 _(none — planned work tracked in proj.payments-enhancements.md: pre-call max-cost estimation, reconciliation scripts, credit_holds table, on-chain watcher, cents sprawl cleanup, conservative pre-call estimate tuning)_
 
+## Forward Path
+
+The `credit_ledger` and prepaid credit model documented here is the current as-built system. The forward path ([x402 per-request settlement](./x402-e2e.md)) eliminates credit balances — users pay per-request via x402 `upto` scheme (USDC on Base). `charge_receipts` and the LiteLLM cost oracle remain unchanged across both models.
+
 ## Related
 
 - [Activity Metrics](./activity-metrics.md)
 - [Graph Execution](graph-execution.md)
 - [Accounts Design](../ACCOUNTS_DESIGN.md)
+- [x402 E2E](./x402-e2e.md) — Forward path: per-request settlement

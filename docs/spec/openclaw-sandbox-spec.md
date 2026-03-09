@@ -9,14 +9,14 @@ summary: OpenClaw agent runtime in Cogni — two execution modes (ephemeral sand
 read_when: Implementing OpenClaw sandbox or gateway agent, modifying container images, or debugging sandbox LLM calls
 owner: derekg1729
 created: 2026-02-07
-verified: 2026-02-12
+verified: 2026-02-15
 tags: [sandbox, openclaw, ai-agents]
 ---
 
 # OpenClaw Sandbox Integration
 
 > [!CRITICAL]
-> OpenClaw runs in two modes: **ephemeral** (one-shot `network=none` container, CLI invocation) and **gateway** (long-running service on `sandbox-internal`, WS protocol). Both route LLM calls through an nginx proxy to LiteLLM — OpenClaw never touches API keys directly. OpenClaw's own sandbox and cron are **disabled** in both modes. Supersedes the former `CLAWDBOT_ADAPTER_SPEC.md`.
+> OpenClaw runs in two modes: **ephemeral** (one-shot `network=none` container, CLI invocation) and **gateway** (long-running service on `sandbox-internal` + `cogni-edge`, WS protocol). Gateway has internet egress (curl, git, web_fetch, web_search). Ephemeral remains fully isolated. Both route LLM calls through an nginx proxy to LiteLLM. OpenClaw's own sandbox and cron are **disabled** in both modes.
 
 ## Published Images
 
@@ -42,7 +42,7 @@ All images are multi-arch (`linux/amd64` + `linux/arm64`). Docker resolves the c
 | --------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- |
 | **Container**         | `cogni-sandbox-openclaw:latest`              | `cogni-sandbox-openclaw:latest` (entrypoint overridden to gateway mode)          |
 | **Lifecycle**         | One-shot per run, destroyed after            | Long-running compose service, shared                                             |
-| **Network**           | `network=none` (isolated)                    | `sandbox-internal` (Docker DNS)                                                  |
+| **Network**           | `network=none` (isolated)                    | `sandbox-internal` + `cogni-edge` (Docker DNS + internet egress)                 |
 | **Invocation**        | CLI: `--local --agent main --message ...`    | WS: custom frame protocol on port 18789                                          |
 | **Concurrency**       | Single user per container                    | Multiple concurrent sessions                                                     |
 | **LLM proxy**         | Per-run nginx via unix socket (socat)        | Shared nginx (`llm-proxy-openclaw:8080`) via TCP                                 |
@@ -93,7 +93,7 @@ Define the invariants and design contracts for running OpenClaw in Cogni: which 
 
 ### Gateway mode only
 
-21. **GATEWAY_ON_INTERNAL_ONLY**: The OpenClaw gateway runs on `sandbox-internal` network only, never exposed to the public internet. Auth via token (`gateway.auth.mode: "token"`).
+21. **GATEWAY_NETWORK_ACCESS**: The OpenClaw gateway runs on `sandbox-internal` (LLM proxy access) and `cogni-edge` (internet egress for curl, git, web search). Never exposed to the public internet. Auth via token (`gateway.auth.mode: "token"`). `GITHUB_TOKEN` is passed as env var for GitHub API access via curl. `COGNI_REPO_URL` is passed for git remote setup. Ephemeral containers remain `network=none`.
 
 22. **OUTBOUND_HEADERS_PER_SESSION**: Billing headers (`x-litellm-end-user-id`, `x-litellm-spend-logs-metadata`, `x-cogni-run-id`) are set per-session via the `outboundHeaders` field on the WS `agent` call. The gateway proxy passes these through to LiteLLM without overwriting.
 
@@ -381,8 +381,8 @@ The `SandboxGraphProvider` generates this config and writes it to `/workspace/.o
   tools: {
     elevated: { enabled: false }, // invariant 15: OPENCLAW_ELEVATED_DISABLED
     deny: [
-      "group:web", // web_fetch, web_search — no network
-      "browser", // Chrome CDP — no network, no display
+      // group:web ALLOWED — gateway has internet egress via cogni-edge network
+      "browser", // Chrome CDP — no Chromium, no display
       "cron", // invariant 14: OPENCLAW_CRON_DISABLED
       "gateway", // no gateway running
       "nodes", // no device mesh
@@ -414,9 +414,9 @@ The `SandboxGraphProvider` generates this config and writes it to `/workspace/.o
 | `edit`             | Yes    | Edits files in `/workspace`                                               |
 | `apply_patch`      | Yes    | Applies patches in `/workspace`                                           |
 | `image`            | Maybe  | Uses LLM for generation — would work if model supports it, but not tested |
-| `web_fetch`        | No     | Denied — `network=none`                                                   |
-| `web_search`       | No     | Denied — `network=none`                                                   |
-| `browser`          | No     | Denied — no Chromium, no display, no network                              |
+| `web_fetch`        | Yes    | Gateway has internet egress via `cogni-edge`. Ephemeral: still denied.    |
+| `web_search`       | Yes    | Gateway has internet egress via `cogni-edge`. Ephemeral: still denied.    |
+| `browser`          | No     | Denied — no Chromium, no display                                          |
 | `cron`             | No     | Denied — Temporal is scheduler                                            |
 | `memory`           | Yes    | Vector memory within workspace (local files only)                         |
 | `sessions_list`    | Yes    | Read-only session introspection                                           |
@@ -603,10 +603,25 @@ OpenClaw reads these files from the workspace directory at session start. They f
 ```markdown
 # /workspace/AGENTS.md
 
-You are a sandboxed coding agent. You have access to bash, file read/write/edit.
-You do NOT have internet access. All LLM calls route through localhost:8080.
-Do not attempt web searches, fetches, or browser actions — they will fail.
-Focus on the task in the workspace.
+You are a Cogni coding agent. You have access to bash, file read/write/edit,
+web_fetch, web_search, curl, and git. You have internet access for research.
+GITHUB_TOKEN is set — use it for GitHub API calls via curl.
+LLM calls route through the proxy. Do not attempt browser actions (no Chromium).
+```
+
+```markdown
+# /workspace/TOOLS.md
+
+## Git Remote Setup
+
+Your workspace was cloned from a local mirror. To interact with GitHub:
+git remote set-url origin "$COGNI_REPO_URL"
+  git config credential.helper '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
+Then git fetch/push/pull work normally. COGNI_REPO_URL and GITHUB_TOKEN are in your env.
+
+## GitHub API (no gh CLI — use curl)
+
+curl -sH "Authorization: Bearer $GITHUB_TOKEN" https://api.github.com/repos/OWNER/REPO/...
 ```
 
 ```markdown
@@ -619,7 +634,15 @@ if the task is ambiguous.
 
 #### Skills
 
-OpenClaw skills (in `skills/` directory) provide domain-specific behavior. Skills that require network access (web search, APIs) are non-functional in the sandbox. Skills that work with local files (coding patterns, documentation) work fine.
+OpenClaw skills (in `skills/` directory) provide domain-specific behavior. The gateway has internet egress, so web-based skills (web search, API calls, curl) are functional. `gh` CLI is not installed — use `curl` with `GITHUB_TOKEN` for GitHub API calls. Browser-based skills remain non-functional (no Chromium). Ephemeral mode (`network=none`) has no network access — web skills are denied there.
+
+#### Cogni Skills (MVP)
+
+Gateway-only skills for governance and observability. Require env vars passed to `openclaw-gateway` service.
+
+| Skill               | Purpose                                          | Env Vars Required                                       | Gateway Only |
+| ------------------- | ------------------------------------------------ | ------------------------------------------------------- | ------------ |
+| `deployment-health` | Query Grafana metrics (LLM cost, service health) | `GRAFANA_URL`, `GRAFANA_SERVICE_ACCOUNT_TOKEN` (Viewer) | Yes          |
 
 ---
 

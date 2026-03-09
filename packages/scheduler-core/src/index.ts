@@ -60,12 +60,24 @@ export {
   ScheduleControlUnavailableError,
   type ScheduleDescription,
   ScheduleNotFoundError,
+  type ScheduleOverlapPolicyHint,
   // ScheduleRunRepository
   type ScheduleRunRepository,
   type ScheduleUserPort,
   type ScheduleWorkerPort,
   type UpdateScheduleInput,
 } from "./ports";
+// Services (pure orchestration — no adapters, no I/O beyond ports)
+export {
+  type GovernanceScheduleConfig,
+  type GovernanceScheduleEntry,
+  type GovernanceScheduleSyncDeps,
+  type GovernanceScheduleSyncResult,
+  governanceScheduleId,
+  type LedgerScheduleConfig,
+  syncGovernanceSchedules,
+  type UpsertGovernanceScheduleRowParams,
+} from "./services/syncGovernanceSchedules";
 // Types
 export {
   type ExecutionGrant,

@@ -149,9 +149,6 @@ describe("POST /api/v1/ai/chat - Paid Model Zero Credits", () => {
     const accountService = createMockAccountServiceWithDefaults();
     accountService.getBalance = vi.fn().mockResolvedValue(0);
 
-    // Spy on the facade implementation (which we mocked above, but we want to verify calls)
-    // const { completionStream } = await import("@/app/_facades/ai/completion.server");
-
     await testApiHandler({
       appHandler,
       test: async ({
@@ -162,17 +159,8 @@ describe("POST /api/v1/ai/chat - Paid Model Zero Credits", () => {
         const response = await fetch({
           method: "POST",
           body: JSON.stringify({
-            stateKey: "test-thread",
-            clientRequestId: "00000000-0000-4000-8000-000000000003",
-            messages: [
-              {
-                id: "msg-1",
-                role: "user",
-                createdAt: new Date().toISOString(),
-                content: [{ type: "text", text: "Hello" }],
-              },
-            ],
-            model: "paid-model", // Not "free-model"
+            message: "Hello",
+            model: "paid-model",
             graphName: "langgraph:poet",
           }),
         });
@@ -180,13 +168,6 @@ describe("POST /api/v1/ai/chat - Paid Model Zero Credits", () => {
         expect(response.status).toBe(402);
         const json = await response.json();
         expect(json.error).toBe("Insufficient credits");
-
-        // Verify LLM logic (mocked facade) threw error and didn't proceed to stream
-        // Since we mocked the facade to throw, we just verify the route handled it.
-        // To verify "LLM port not called", we rely on the fact that the facade throws *before* calling LLM service in the real implementation.
-        // In this test, we are testing the *route's* handling of the error.
-        // The unit test `tests/unit/features/ai/services/completion.test.ts` already verifies that `execute` doesn't call LLM service.
-        // But per user request, we want to ensure the route returns 402.
       },
     });
   });

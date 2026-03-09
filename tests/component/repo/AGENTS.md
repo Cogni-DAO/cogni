@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-12
 - **Status:** draft
 
 ## Purpose
@@ -31,7 +30,6 @@ Component tests for RipgrepAdapter, GitLsFilesAdapter, and Brain repo capability
 ## Public Surface
 
 - **Exports:** `createTempGitRepo()`, `cleanupTempGitRepo()`, `assertBinariesAvailable()`, `KNOWN_FILE`, `TempGitRepo` (from fixtures/temp-git-repo.ts — shared with brain tests)
-- **Routes:** none
 - **CLI:** `pnpm test:component -- tests/component/repo`
 - **Env/Config keys:** none (uses temp directories)
 - **Files considered API:** `fixtures/temp-git-repo.ts` (shared fixture)

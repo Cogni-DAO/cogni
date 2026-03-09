@@ -5,12 +5,12 @@ title: System Tenant & Governance Execution Design
 status: draft
 spec_state: draft
 trust: draft
-summary: System tenant (`cogni_system`) executes governance AI loops as a first-class tenant with server-resolved context, explicit tool allowlists, budget caps, and defense-in-depth policy enforcement.
+summary: System tenant (slug `cogni_system`, UUID PKs) executes governance AI loops as a first-class tenant with server-resolved context, explicit tool allowlists, budget caps, and defense-in-depth policy enforcement.
 read_when: Implementing governance loops, tool policy enforcement, or system-initiated AI execution
 implements: []
 owner: cogni-dev
 created: 2026-01-20
-verified: null
+verified: 2026-02-14
 tags:
   - system-tenant
   - governance
@@ -28,13 +28,24 @@ Cogni needs to execute governance AI loops (e.g., automated code review, policy 
 - Bypass billing/policy systems entirely (audit gap)
 - Require special-case execution paths (maintenance burden)
 
-This spec defines `cogni_system` as a **first-class tenant** using the same `GraphExecutorPort` execution envelope as customers, with explicit tool allowlists (not wildcards), per-tool budgets, and defense-in-depth policy enforcement.
+This spec defines the system tenant (slug `cogni_system`, UUID PKs) as a **first-class tenant** using the same `GraphExecutorPort` execution envelope as customers, with explicit tool allowlists (not wildcards), per-tool budgets, and defense-in-depth policy enforcement.
+
+### Identity Model
+
+| Constant                            | Value                                  | Purpose                             |
+| ----------------------------------- | -------------------------------------- | ----------------------------------- |
+| `COGNI_SYSTEM_PRINCIPAL_USER_ID`    | `00000000-0000-4000-a000-000000000001` | User row owning the billing account |
+| `COGNI_SYSTEM_BILLING_ACCOUNT_ID`   | `00000000-0000-4000-b000-000000000000` | Billing account PK                  |
+| `COGNI_SYSTEM_BILLING_ACCOUNT_SLUG` | `cogni_system`                         | Human-readable slug (not a PK)      |
+| `SYSTEM_ACTOR` (ops/audit)          | `00000000-0000-4000-a000-000000000000` | RLS actor for scheduler/settlement  |
+
+**Naming convention:** `COGNI_SYSTEM_*` = tenant-like identity. `SYSTEM_*` = ops/audit identity (`@cogni/ids/system`). These are separate concerns.
 
 ## Goal
 
 Enable system-initiated AI execution with:
 
-- System tenant (`cogni_system`) as a first-class billing account with `is_system_tenant=true`
+- System tenant (UUID PK, slug `cogni_system`) as a first-class billing account with `is_system_tenant=true`
 - Server-side tenant/actor context resolution from auth (never from client payloads)
 - Explicit tool allowlists (no `*` wildcards) to prevent privilege escalation
 - Budget caps and rate limits (high but not unlimited) to prevent runaway loops
@@ -80,25 +91,26 @@ Enable system-initiated AI execution with:
 
 ### billing_accounts (extension)
 
-**New column:**
+**New columns:**
 
-| Column             | Type    | Notes                   |
-| ------------------ | ------- | ----------------------- |
-| `is_system_tenant` | boolean | NOT NULL, default false |
+| Column             | Type    | Notes                             |
+| ------------------ | ------- | --------------------------------- |
+| `is_system_tenant` | boolean | NOT NULL, default false           |
+| `slug`             | text    | UNIQUE, nullable. Human-friendly. |
 
 **Constraint:** `is_system_tenant` is metadata only — no RLS or authorization logic branches on this field.
 
-**System tenant bootstrap (idempotent):**
+**System tenant bootstrap (idempotent, UUID PKs):**
 
 ```sql
 -- 1. Seed service principal user (app-level owner, NOT the DAO governance address)
 INSERT INTO users (id, wallet_address)
-VALUES ('cogni_system_principal', NULL)
+VALUES ('00000000-0000-4000-a000-000000000001', NULL)
 ON CONFLICT (id) DO NOTHING;
 
--- 2. Seed system tenant owned by service principal
-INSERT INTO billing_accounts (id, owner_user_id, is_system_tenant, balance_credits, created_at)
-VALUES ('cogni_system', 'cogni_system_principal', true, 0, now())
+-- 2. Seed system tenant owned by service principal (UUID PK + slug)
+INSERT INTO billing_accounts (id, owner_user_id, is_system_tenant, slug, balance_credits, created_at)
+VALUES ('00000000-0000-4000-b000-000000000000', '00000000-0000-4000-a000-000000000001', true, 'cogni_system', 0, now())
 ON CONFLICT (id) DO NOTHING;
 ```
 
@@ -113,13 +125,15 @@ ON CONFLICT (id) DO NOTHING;
 
 ```typescript
 // In app bootstrap (src/bootstrap/healthchecks.ts)
-async function verifySystemTenantExists(db: DbClient): Promise<void> {
-  const result = await db.query.billingAccounts.findFirst({
-    where: eq(billingAccounts.id, "cogni_system"),
-  });
-  if (!result) {
+import { COGNI_SYSTEM_BILLING_ACCOUNT_ID } from "@/shared";
+
+async function verifySystemTenantExists(serviceAccountService): Promise<void> {
+  const account = await serviceAccountService.getBillingAccountById(
+    COGNI_SYSTEM_BILLING_ACCOUNT_ID
+  );
+  if (!account) {
     throw new Error(
-      "FATAL: cogni_system billing account missing. Run migrations/seeds."
+      "FATAL: cogni_system billing account missing. Run migrations."
     );
   }
 }
@@ -191,13 +205,13 @@ The codebase already has the primitives needed:
 
 **What's missing:**
 
-| Gap                               | Fix                                              |
-| --------------------------------- | ------------------------------------------------ |
-| No `is_system_tenant` flag        | Add column to `billing_accounts`                 |
-| No `cogni_system` record          | Add idempotent seed + startup healthcheck        |
-| No `PolicyResolverPort`           | Add port for authoritative policy resolution     |
-| No required `tenantId` in context | Make required + test escape hatch                |
-| No side-effect tool idempotency   | Add idempotency key + dedupe at adapter boundary |
+| Gap                               | Fix                                              | Status  |
+| --------------------------------- | ------------------------------------------------ | ------- |
+| No `is_system_tenant` flag        | Add column to `billing_accounts`                 | Done    |
+| No `cogni_system` record          | Add idempotent seed + startup healthcheck        | Done    |
+| No `PolicyResolverPort`           | Add port for authoritative policy resolution     | Pending |
+| No required `tenantId` in context | Make required + test escape hatch                | Pending |
+| No side-effect tool idempotency   | Add idempotency key + dedupe at adapter boundary | Pending |
 
 ### Key Decisions
 
@@ -311,7 +325,7 @@ Without idempotency:
 
 **Manual (until automated):**
 
-1. Verify `cogni_system` billing account exists: `SELECT * FROM billing_accounts WHERE id = 'cogni_system';`
+1. Verify system tenant billing account exists: `SELECT * FROM billing_accounts WHERE slug = 'cogni_system';`
 2. Verify startup healthcheck fails if system tenant missing (delete record, restart app, should fail fast)
 3. Verify tool execution denied if `tenantId` missing from context
 4. Verify PolicyResolverPort returns authoritative max allowlist for system/customer tenants

@@ -65,7 +65,7 @@ Operator shares CI/CD, observability, deploy invariants, and hex architecture wi
 - Every cross-boundary call via explicit, versioned contract
 - LLM-facing changes require eval regression gates
 - Same deploy path, different config: preview and prod use identical images
-- `node_id` is canonical tenant key everywhere (never tenant/org/account_id synonyms)
+- Canonical tenant key is `billing_account_id` in DB and `tenantId` at runtime (same UUID = `billing_accounts.id`). `node_id` is reserved for federation/node-registry (deployed-instance identity). No new synonyms (`org_id`, `account_id`, etc.).
 
 ---
 
@@ -161,11 +161,34 @@ Requirements:
 
 ## Appendix: Tenant Scoping
 
-- **Canonical key**: `node_id` everywhere (headers, JWT claims, DB columns, events)
-- **Internal JWTs**: 5-15 min TTL, rotating keys, clock skew tolerance 60-120s
-- **Headers**: `X-Node-ID` required on internal API calls
+### Terminology & ID Mapping
 
-**Known gap — Database-layer isolation:** No PostgreSQL RLS policies exist. Tenant isolation is application-layer only (OpenFGA). See [Database RLS Spec](docs/spec/database-rls.md) for the remediation plan.
+| Term                 | Layer             | Value                             | Purpose                                                                                                                    |
+| -------------------- | ----------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `billing_account_id` | DB column         | `billing_accounts.id` (UUID)      | Canonical tenant key for all RLS, FK references, data isolation                                                            |
+| `tenantId`           | Runtime context   | Same UUID as `billing_account_id` | Canonical name in `ToolInvocationContext`, `ToolPolicyContext`, workflow IDs, authz contexts                               |
+| `node_id`            | Deployment        | `.cogni/repo-spec.yaml` (UUID)    | Deployment/instance identity. One node = one DB, one infra. Never governance scoping.                                      |
+| `scope_id`           | Governance domain | `.cogni/projects/*.yaml` (UUID)   | Governance/payout domain (project). `uuidv5(node_id, scope_key)`. Each scope has its own DAO, weight policy, epoch stream. |
+| `dao_address`        | On-chain          | Contract address                  | Attribute of a scope (project), not a tenant key. Lives in project manifest.                                               |
+
+> See [Identity Model spec](docs/spec/identity-model.md) for the full taxonomy, relationships, and prohibited overloading.
+
+**Rules:**
+
+- `billing_account_id` (DB) and `tenantId` (runtime) are the **same value** — `billing_accounts.id` UUID
+- `node_id` is deployment identity only — never used for governance domain, epoch scoping, or RLS
+- `scope_id` is governance identity only — never used for deployment routing or DB tenancy
+- `dao_address` is an attribute of a scope, not a database key
+- Do NOT introduce new synonyms (`org_id`, `account_id`, `tenant_id` DB column, `project_id` DB column, etc.)
+- External provider IDs (e.g., WalletConnect project ID) must be namespaced (e.g., `walletconnect_project_id`) to avoid collision with `scope_id`
+- V0 default: `scope_id = 'default'` everywhere. Multi-scope activates when `.cogni/projects/*.yaml` manifests are added.
+
+### Transport & Auth
+
+- **Headers**: `X-Tenant-ID` required on internal API calls (value = `billing_accounts.id`)
+- **Internal JWTs**: 5-15 min TTL, rotating keys, clock skew tolerance 60-120s
+
+**Known gap — Database-layer isolation:** PostgreSQL RLS policies exist for core tables (`billing_accounts`, `charge_receipts`, `ai_threads`, etc.) using `app.current_user_id`. See [Database RLS Spec](docs/spec/database-rls.md) for remaining coverage.
 
 ---
 
@@ -181,8 +204,9 @@ Requirements:
 | [AI Architecture & Evals](docs/spec/ai-evals.md)                       | LangGraph, Langfuse, eval gates    |
 | [Services Migration Guide](work/projects/proj.cicd-services-gitops.md) | Implementation checklist           |
 | [Architecture](docs/spec/architecture.md)                              | Hex architecture details           |
+| [Identity Model](docs/spec/identity-model.md)                          | All identity primitives            |
 
 ---
 
-**Last Updated**: 2025-12-23
+**Last Updated**: 2026-02-22
 **Status**: Design Approved

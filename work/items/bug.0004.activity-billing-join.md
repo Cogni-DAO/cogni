@@ -2,7 +2,7 @@
 id: bug.0004
 type: bug
 title: "/activity dashboard cost column broken — charge_receipts needs linked telemetry"
-status: Backlog
+status: needs_triage
 priority: 1
 estimate: 3
 summary: Activity join on litellm_call_id vs spend_logs.request_id fails for some providers; fix by storing telemetry in our DB at write time
@@ -18,6 +18,10 @@ created: 2026-02-08
 updated: 2026-02-08
 labels: [billing, activity, dashboard]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 8
 ---
 
 ## Problem

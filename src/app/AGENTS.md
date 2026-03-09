@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-11-23
 - **Status:** draft
 
 ## Purpose
@@ -50,15 +49,8 @@ Next.js App Router delivery layer. UI pages and API routes that expose features 
   - Protected pages: `/chat` (via `(app)/chat/page.tsx`)
   - Infra: `/health`, `/openapi.json`, `/meta/route-manifest` (via `(infra)/*`)
   - API: `/api/auth/*`, `/api/v1/ai/completion`
-- **CLI (if any):** none
-- **Env/Config keys:** none
+  - Internal ops: `/api/internal/ops/governance/schedules/sync` [POST] (deploy-only trigger)
 - **Files considered API:** layout.tsx, page.tsx, api/\*\*/route.ts, (infra)/\*\*/route.ts
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 

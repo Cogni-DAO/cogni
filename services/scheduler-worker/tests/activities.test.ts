@@ -49,7 +49,6 @@ const mockLogger = {
 
 describe("createActivities", () => {
   it("returns all expected activity functions", () => {
-    const mockDb = {} as Parameters<typeof createActivities>[0]["db"];
     const mockGrantAdapter = {
       validateGrantForGraph: vi.fn(),
     } as unknown as Parameters<typeof createActivities>[0]["grantAdapter"];
@@ -60,7 +59,6 @@ describe("createActivities", () => {
     } as unknown as Parameters<typeof createActivities>[0]["runAdapter"];
 
     const activities = createActivities({
-      db: mockDb,
       grantAdapter: mockGrantAdapter,
       runAdapter: mockRunAdapter,
       config: {
@@ -89,7 +87,6 @@ describe("validateGrantActivity", () => {
     } as unknown as Parameters<typeof createActivities>[0]["grantAdapter"];
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: mockGrantAdapter,
       runAdapter: {} as Parameters<typeof createActivities>[0]["runAdapter"],
       config: {
@@ -119,7 +116,6 @@ describe("validateGrantActivity", () => {
     } as unknown as Parameters<typeof createActivities>[0]["grantAdapter"];
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: mockGrantAdapter,
       runAdapter: {} as Parameters<typeof createActivities>[0]["runAdapter"],
       config: {
@@ -147,7 +143,6 @@ describe("createScheduleRunActivity", () => {
     } as unknown as Parameters<typeof createActivities>[0]["runAdapter"];
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: {} as Parameters<
         typeof createActivities
       >[0]["grantAdapter"],
@@ -162,7 +157,7 @@ describe("createScheduleRunActivity", () => {
     const scheduledFor = "2025-01-15T10:00:00.000Z";
 
     await activities.createScheduleRunActivity({
-      scheduleId: FIXED_IDS.scheduleId,
+      dbScheduleId: FIXED_IDS.scheduleId,
       runId: FIXED_IDS.runId,
       scheduledFor,
     });
@@ -184,7 +179,6 @@ describe("updateScheduleRunActivity", () => {
     } as unknown as Parameters<typeof createActivities>[0]["runAdapter"];
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: {} as Parameters<
         typeof createActivities
       >[0]["grantAdapter"],
@@ -217,7 +211,6 @@ describe("updateScheduleRunActivity", () => {
     } as unknown as Parameters<typeof createActivities>[0]["runAdapter"];
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: {} as Parameters<
         typeof createActivities
       >[0]["grantAdapter"],
@@ -250,7 +243,6 @@ describe("updateScheduleRunActivity", () => {
     } as unknown as Parameters<typeof createActivities>[0]["runAdapter"];
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: {} as Parameters<
         typeof createActivities
       >[0]["grantAdapter"],
@@ -289,7 +281,6 @@ describe("executeGraphActivity", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: {} as Parameters<
         typeof createActivities
       >[0]["grantAdapter"],
@@ -302,10 +293,10 @@ describe("executeGraphActivity", () => {
     });
 
     const result = await activities.executeGraphActivity({
-      scheduleId: FIXED_IDS.scheduleId,
+      temporalScheduleId: FIXED_IDS.scheduleId,
       graphId: FIXED_IDS.graphId,
       executionGrantId: FIXED_IDS.grantId,
-      input: { messages: [], model: "openrouter/auto" },
+      input: { messages: [], model: "gpt-4o-mini" },
       scheduledFor: "2025-01-15T10:00:00.000Z",
       runId: FIXED_IDS.runId,
     });
@@ -321,7 +312,7 @@ describe("executeGraphActivity", () => {
         },
         body: JSON.stringify({
           executionGrantId: FIXED_IDS.grantId,
-          input: { messages: [], model: "openrouter/auto" },
+          input: { messages: [], model: "gpt-4o-mini" },
           runId: FIXED_IDS.runId,
         }),
       })
@@ -341,7 +332,6 @@ describe("executeGraphActivity", () => {
     vi.stubGlobal("fetch", mockFetch);
 
     const activities = createActivities({
-      db: {} as Parameters<typeof createActivities>[0]["db"],
       grantAdapter: {} as Parameters<
         typeof createActivities
       >[0]["grantAdapter"],
@@ -355,7 +345,7 @@ describe("executeGraphActivity", () => {
 
     await expect(
       activities.executeGraphActivity({
-        scheduleId: FIXED_IDS.scheduleId,
+        temporalScheduleId: FIXED_IDS.scheduleId,
         graphId: FIXED_IDS.graphId,
         executionGrantId: FIXED_IDS.grantId,
         input: {},

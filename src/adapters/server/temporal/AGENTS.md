@@ -5,12 +5,11 @@
 ## Metadata
 
 - **Owners:** @cogni-dao
-- **Last reviewed:** 2026-01-22
 - **Status:** stable
 
 ## Purpose
 
-Temporal schedule control adapter implementing `ScheduleControlPort` for schedule lifecycle management (create/pause/resume/delete).
+Temporal schedule control adapter implementing `ScheduleControlPort` for schedule lifecycle management (create/update/pause/resume/delete/describe).
 
 ## Pointers
 
@@ -33,8 +32,6 @@ Temporal schedule control adapter implementing `ScheduleControlPort` for schedul
 ## Public Surface
 
 - **Exports:** `TemporalScheduleControlAdapter`, `TemporalScheduleControlConfig`
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE` (all required)
 - **Files considered API:** `index.ts`
 
@@ -61,7 +58,7 @@ pnpm test:stack
 
 ## Standards
 
-- Per `CRUD_IS_TEMPORAL_AUTHORITY`: Only CRUD endpoints use these adapters
+- Per `CRUD_IS_TEMPORAL_AUTHORITY`: Only CRUD endpoints and governance sync use these adapters
 - Per `WORKER_NEVER_CONTROLS_SCHEDULES`: Worker service must not depend on ScheduleControlPort
 - Temporal is required infrastructure - app fails to start without TEMPORAL_ADDRESS configured
 
@@ -80,3 +77,5 @@ pnpm test:stack
 
 - Temporal adapter hardcodes `overlap=SKIP` and `catchupWindow=0` per spec
 - Connection is lazy - only connects when first schedule operation is called
+- `updateSchedule()` preserves existing schedule state (pause, notes) via `previous.state`
+- `describeSchedule()` returns input from action args; cron returns null (Temporal compiles crons to calendars)

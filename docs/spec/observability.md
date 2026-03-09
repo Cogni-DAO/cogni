@@ -299,7 +299,7 @@ clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_STREAM_ERROR, { messageId });
 ### Implementation Status
 
 - [x] Add `LANGFUSE_TRACE_CREATED`, `LANGFUSE_TRACE_COMPLETED` to `EVENT_NAMES` (`src/shared/observability/events/index.ts`)
-- [x] Create structured redaction utility (`src/shared/ai/langfuse-scrubbing.ts`)
+- [x] Create structured redaction utility (`src/shared/ai/content-scrubbing.ts`)
 - [x] Create `ObservabilityGraphExecutorDecorator` (`src/adapters/server/ai/observability-executor.decorator.ts`)
 - [x] Add `startSpan()`, `updateTraceOutput()` to `LangfuseAdapter` (`src/adapters/server/ai-telemetry/langfuse.adapter.ts`)
 - [x] Add span infrastructure to `createToolRunner()` (`@cogni/ai-core/tooling/tool-runner.ts`) — wiring deferred (tool visibility via generation messages)
@@ -316,8 +316,7 @@ clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_STREAM_ERROR, { messageId });
 
 **Open work:**
 
-- [ ] Review tool-runner span scrubbing: ensure `spanInput`/`spanOutput` hooks are wired from composition root with langfuse-scrubbing functions
-- [ ] Move `langfuse-scrubbing.ts` from `src/shared/ai/` to `src/adapters/observability/langfuse/` (adapter layer owns vendor-specific scrubbing)
+- [ ] Review tool-runner span scrubbing: ensure `spanInput`/`spanOutput` hooks are wired from composition root with content-scrubbing functions
 
 ### Langfuse API Verification
 

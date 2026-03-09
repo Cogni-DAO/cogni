@@ -2,7 +2,7 @@
 id: bug.0017
 type: bug
 title: Deploy does not reload Alloy when bind-mounted config changes
-status: Backlog
+status: needs_triage
 priority: 0
 estimate: 1
 summary: "Two-layer bug: (1) docker compose up -d does not recreate containers when bind-mounted file contents change, and (2) Docker file-level bind mounts lock to the inode at creation — rsync replaces files atomically (new inode), so even native reload endpoints see stale content. Only a container restart picks up the new file."
@@ -18,6 +18,10 @@ created: 2026-02-10
 updated: 2026-02-10
 labels: [infra, observability, deploy]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 12
 ---
 
 # Deploy does not reload Alloy when bind-mounted config changes

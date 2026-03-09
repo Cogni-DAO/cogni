@@ -9,7 +9,7 @@
  * - Credits are BIGINT.
  * - billing_accounts.owner_user_id FK → auth.users(id).
  * - payment_attempts has partial unique index on (chain_id, tx_hash) where tx_hash is not null.
- * - credit_ledger(reference) is unique for widget_payment and charge_receipt.
+ * - credit_ledger(reference) is unique for widget_payment, charge_receipt, and platform_revenue_share.
  * - charge_receipts: UNIQUE(source_system, source_reference) for run-centric idempotency
  * - charge_receipts.request_id is NOT unique (multiple receipts per request allowed for graphs)
  * - charge_receipts has run_id, attempt columns for run-level queries
@@ -104,6 +104,10 @@ export const creditLedger = pgTable(
     )
       .on(table.reference)
       .where(sql`${table.reason} = 'charge_receipt'`),
+    /** Idempotency guard for revenue share bonus credits per system-tenant spec */
+    revenueShareRefUnique: uniqueIndex("credit_ledger_revenue_share_ref_unique")
+      .on(table.reference)
+      .where(sql`${table.reason} = 'platform_revenue_share'`),
   })
 ).enableRLS();
 

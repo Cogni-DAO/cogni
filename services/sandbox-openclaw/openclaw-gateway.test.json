@@ -41,24 +41,50 @@
   "agents": {
     "defaults": {
       "model": { "primary": "cogni/test-model" },
+      "subagents": {
+        "model": "cogni/test-model",
+        "maxConcurrent": 3,
+        "archiveAfterMinutes": 30
+      },
       "sandbox": { "mode": "off" },
       "skipBootstrap": true,
       "timeoutSeconds": 540,
-      "heartbeat": { "every": "0" }
+      "heartbeat": { "every": "0" },
+      "memorySearch": {
+        "enabled": true,
+        "extraPaths": ["/repo/current/docs", "/repo/current/work"]
+      }
     },
-    "list": [{ "id": "main", "default": true, "workspace": "/repo/current" }]
+    "list": [
+      { "id": "main", "default": true, "workspace": "/workspace/gateway" }
+    ]
+  },
+  "skills": {
+    "load": {
+      "extraDirs": ["/repo/current/.openclaw/skills"]
+    }
+  },
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "token": "${DISCORD_BOT_TOKEN}",
+      "groupPolicy": "open"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "discord": { "enabled": true }
+    }
   },
   "tools": {
     "elevated": { "enabled": false },
     "deny": [
-      "group:web",
       "browser",
       "cron",
       "gateway",
       "nodes",
-      "sessions_send",
-      "sessions_spawn",
-      "message"
+      "sessions_list",
+      "sessions_history"
     ]
   },
   "cron": { "enabled": false },

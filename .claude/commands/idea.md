@@ -5,7 +5,7 @@ Your audience: engineers who will triage, scope, and eventually implement this. 
 Read these before starting:
 
 - [Item Template](work/_templates/item.md) — required structure and headings
-- [Items Index](work/items/_index.md) — current items, next available ID
+- [Work Items](work/items/) — individual item files are the source of truth
 - [Work README](work/README.md) — field reference and hard rules
 - [Content Boundaries](docs/spec/docs-work-system.md#content-boundaries) — what belongs in items vs specs vs projects
 
@@ -13,9 +13,9 @@ Read these before starting:
 
 1. **Understand the idea**: Read the user's input. Ask clarifying questions if the problem or value proposition is unclear. Identify which area of the codebase or product this touches.
 
-2. **Check for duplicates**: Scan `_index.md` for existing items covering the same ground. If one exists, suggest updating it instead.
+2. **Check for duplicates**: Quick scan of `work/items/` for existing items covering the same ground. If one exists, suggest updating it instead.
 
-3. **Assign ID**: Read `work/items/_index.md`. Find the highest `<num>` across ALL item types. New ID = `story.<next>` (zero-padded to 4 digits).
+3. **Assign ID**: Run `pnpm work:next-id` to get the next available number. New ID = `story.<next>` (zero-padded to 4 digits).
 
 4. **Create file from template**:
 
@@ -26,7 +26,7 @@ Read these before starting:
    Then edit the copy:
    - `id: story.<num>` — must match filename prefix
    - `type: story`
-   - `status: Backlog`
+   - `status: needs_triage`
    - `project:` — leave empty (routing happens in `/triage`)
    - `created:` and `updated:` — today's date
    - **Requirements**: Capture the user's intent. What problem does this solve? Who benefits? What does success look like? Be specific enough that an engineer can scope it.
@@ -45,16 +45,16 @@ Read these before starting:
    - Requirements = the research questions that need answering
    - Suggest `/research spike.<num>` as the next step after triage
 
-6. **Update `_index.md`**: Add row(s) to `## Active` table, sorted by priority (0 first).
+6. **Finalize**:
+   - Run `pnpm check:docs` and fix any errors until clean.
+   - Commit all changes (work item file(s)) on the current branch.
+   - Push to remote.
 
-7. **Validate**: Run `pnpm check:docs` and fix any errors.
-
-8. **Report**: Show file path(s) and ID(s). Suggest next step: `/triage` to route to a project. If a spike was created, note that `/research spike.<num>` should follow triage.
+7. **Report**: Show file path(s) and ID(s). Next command: `/triage`.
 
 ## Rules
 
 - **ID_IMMUTABLE** — `story.<num>` never changes once assigned
-- **INDEX_MUST_MATCH** — `_index.md` row must match frontmatter exactly
 - **STORIES_CAPTURE_INTENT** — write for the reader who wasn't in the room. Link enough context.
 - **NO_OVER_PLANNING** — stories describe _what_ and _why_; decomposition into tasks happens later
 

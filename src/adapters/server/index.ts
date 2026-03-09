@@ -64,6 +64,8 @@ export { LiteLlmAdapter } from "./ai/litellm.adapter";
 export type { ObservabilityDecoratorConfig } from "./ai/observability-executor.decorator";
 // Observability decorator for Langfuse traces
 export { ObservabilityGraphExecutorDecorator } from "./ai/observability-executor.decorator";
+// Preflight credit check decorator — rejects runs with insufficient credits before LLM execution
+export { PreflightCreditCheckDecorator } from "./ai/preflight-credit-check.decorator";
 export {
   TavilyWebSearchAdapter,
   type TavilyWebSearchConfig,
@@ -80,6 +82,11 @@ export {
   type LangfuseSpanHandle,
 } from "./ai-telemetry/langfuse.adapter";
 export { type Database, getAppDb } from "./db/client";
+export { DrizzleGovernanceStatusAdapter } from "./governance/drizzle-governance-status.adapter";
+export {
+  GITHUB_ADAPTER_VERSION,
+  GitHubWebhookNormalizer,
+} from "./ingestion/github-webhook";
 export {
   type MimirAdapterConfig,
   MimirMetricsAdapter,

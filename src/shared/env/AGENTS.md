@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-04
 - **Status:** draft
 
 ## Purpose
@@ -51,10 +50,11 @@ Single source of truth for environment variables. Lazy validation with Zod preve
 
 ## File Map
 
-- `server.ts` → server-only vars via lazy serverEnv() function. Never import from client code.
+- `server-env.ts` → All env validation logic (Zod schema, `serverEnv()`, `EnvValidationError`). No `server-only` guard — safe for bootstrap/job code under plain Node.
+- `server.ts` → Thin re-export of `server-env.ts` with `import "server-only"` guard. Next.js routes import through this.
 - `client.ts` → public, browser-safe vars (NEXT*PUBLIC*\* only).
 - `invariants.ts` → cross-field validation and runtime secret checks. assertEnvInvariants() runs after Zod parse. assertRuntimeSecrets() validates secrets at adapter boundaries (not during build).
-- `index.ts` → re-exports and tiny helpers.
+- `index.ts` → re-exports from `server.ts` (preserving `server-only` guard) + tiny helpers.
 
 ## Vars by layer
 
@@ -100,6 +100,9 @@ Optional:
 - OPENROUTER_API_KEY (for LiteLLM providers)
 - AUTH_SECRET (≥32 chars) - TODO: when session management added
 - METRICS_TOKEN (≥32 chars) - Bearer auth for /api/metrics endpoint
+- BILLING_INGEST_TOKEN (≥32 chars) - Bearer auth for LiteLLM callback → billing ingest endpoint
+- SCHEDULER_API_TOKEN (≥32 chars) - Bearer auth for scheduler-worker → internal graph execution API
+- INTERNAL_OPS_TOKEN (≥32 chars) - Bearer auth for deploy-time internal ops endpoints
 - PROMETHEUS_REMOTE_WRITE_URL (url) - Grafana Cloud write endpoint (must end with /api/prom/push)
 - PROMETHEUS_QUERY_URL (url) - Explicit query endpoint (alternative to deriving from write URL)
 - PROMETHEUS_READ_USERNAME - Basic auth username for Prometheus queries (read path)

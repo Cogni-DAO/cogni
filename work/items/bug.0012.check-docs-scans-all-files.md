@@ -2,7 +2,7 @@
 id: bug.0012
 type: bug
 title: "pre-commit check:docs validates all files, not just staged — blocks unrelated commits"
-status: Backlog
+status: needs_triage
 priority: 2
 estimate: 1
 summary: The pre-commit hook runs `pnpm check:docs` on the entire work/ and docs/ tree when any .md file is staged. Untracked or unstaged files with validation errors block commits that don't touch those files.
@@ -18,6 +18,10 @@ created: 2026-02-10
 updated: 2026-02-10
 labels: [dx, pre-commit]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 3
 ---
 
 # pre-commit check:docs validates all files, not just staged — blocks unrelated commits

@@ -151,6 +151,22 @@ export const publicRateLimitExceededTotal = getOrCreateCounter(
 );
 
 // =============================================================================
+// Billing Metrics (alertable)
+// =============================================================================
+
+export const billingMissingCostDeferredTotal = getOrCreateCounter(
+  "billing_missing_cost_deferred_total",
+  "Usage facts deferred due to missing cost (callback expected)",
+  ["source_system"] as const
+);
+
+export const billingInvariantViolationTotal = getOrCreateCounter(
+  "billing_invariant_violation_total",
+  "Billing invariant violations by type",
+  ["type"] as const
+);
+
+// =============================================================================
 // Helpers
 // =============================================================================
 

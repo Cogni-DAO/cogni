@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek
-- **Last reviewed:** 2025-12-02
 - **Status:** stable
 
 ## Purpose
@@ -31,9 +30,6 @@ Theme switching UI components. Provides SheetThemeToggle for mobile navigation a
 
 - **Exports:**
   - `SheetThemeToggle` - Inline 3-button theme toggle for mobile Sheet navigation
-- **Routes (if any):** none
-- **CLI (if any):** none
-- **Env/Config keys:** none
 - **Files considered API:** `SheetThemeToggle.tsx`
 
 ## Responsibilities

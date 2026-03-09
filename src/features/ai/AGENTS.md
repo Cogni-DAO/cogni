@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-02-11
 - **Status:** stable
 
 ## Purpose
@@ -35,11 +34,12 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
 ## Public Surface
 
 - **Exports (via public.ts/public.server.ts):**
-  - `ChatRuntimeProvider` (chat runtime state)
+  - `ChatRuntimeProvider` (chat runtime state with thread switching)
   - `ModelPicker` (model selection dialog)
   - `ChatComposerExtras` (composer toolbar with model and graph selection)
   - `GraphPicker` (graph/agent selection dialog)
   - `useModels` (React Query hook for models list)
+  - `useThreads`, `useLoadThread`, `useDeleteThread` (React Query hooks for thread list/load/delete)
   - `getPreferredModelId`, `setPreferredModelId`, `validatePreferredModel` (localStorage preferences)
   - `StreamFinalResult` (discriminated union for stream completion: ok with usage/finishReason, or error)
   - `AiEvent` (union of all AI runtime events: text_delta, tool events, done)
@@ -49,7 +49,10 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
   - `redactSecretsInMessages` (best-effort credential redaction before persistence)
 - **Routes:**
   - `/api/v1/ai/completion` (POST) - text completion with credits metering
-  - `/api/v1/ai/chat` (POST) - chat endpoint (P1: consumes AiEvents, maps to assistant-stream format)
+  - `/api/v1/ai/chat` (POST) - chat endpoint (AI SDK Data Stream Protocol, server-authoritative thread persistence)
+  - `/api/v1/ai/threads` (GET) - list threads for authenticated user (paginated, recency-ordered)
+  - `/api/v1/ai/threads/[stateKey]` (GET) - load thread messages
+  - `/api/v1/ai/threads/[stateKey]` (DELETE) - soft-delete thread
   - `/api/v1/ai/models` (GET) - list available models with tier info
   - `/api/v1/activity` (GET) - usage statistics and logs
 - **Subdirectories:**
@@ -60,7 +63,7 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
     - `completion.ts` - Orchestrator with internal DRY helpers (execute, executeStream)
     - `message-preparation.ts` - Message filtering, validation, fallbackPromptHash
     - `preflight-credit-check.ts` - Upper-bound credit estimation
-    - `billing.ts` - Non-blocking charge receipt recording (commitUsageFact with Zod validation, recordBilling)
+    - `billing.ts` - Non-blocking charge receipt recording (commitUsageFact — strict ledger writer, COST_AUTHORITY_IS_LITELLM)
     - `telemetry.ts` - DB + Langfuse writes (ai_invocation_summaries)
     - `metrics.ts` - Prometheus metric recording
     - `ai_runtime.ts` - AI runtime orchestration with RunEventRelay (pump+fanout UI stream adapter; billing handled by BillingGraphExecutorDecorator at port level)
@@ -74,7 +77,7 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
 
 - **Uses ports:** GraphExecutorPort (runGraph with GraphId), AccountService (recordChargeReceipt), LlmService (completion, completionStream), AiTelemetryPort (recordInvocation), LangfusePort (createTrace, recordGeneration)
 - **Implements ports:** none
-- **Contracts:** ai.completion.v1, ai.chat.v1, ai.models.v1, ai.activity.v1
+- **Contracts:** ai.completion.v1, ai.chat.v1, ai.threads.v1, ai.models.v1, ai.activity.v1
 
 ## Responsibilities
 

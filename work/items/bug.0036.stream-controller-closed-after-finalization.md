@@ -2,7 +2,7 @@
 id: bug.0036
 type: bug
 title: "Chat route enqueues to closed assistant-stream controller — unhandled TypeError"
-status: Backlog
+status: needs_triage
 priority: 1
 estimate: 1
 summary: "After the AiEvent pump loop exits, the chat route tries to controller.enqueue() message-finish or error chunks, but createAssistantStreamResponse has already closed the underlying controller. This produces unhandled TypeError: Controller is already closed."
@@ -19,6 +19,10 @@ created: 2026-02-11
 updated: 2026-02-11
 labels: [streaming, reliability]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 6
 ---
 
 # Chat route enqueues to closed assistant-stream controller

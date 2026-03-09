@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-07
 - **Status:** stable
 
 ## Purpose
@@ -31,8 +30,6 @@ Deterministic fake implementations of ports for CI and test environments. No ext
 ## Public Surface
 
 - **Exports:** FakeMetricsAdapter, FakeWebSearchAdapter, FakeRepoAdapter, FakeEvmOnchainClient, getTestEvmOnchainClient(), resetTestEvmOnchainClient(), FakeOnChainVerifierAdapter, getTestOnChainVerifier(), resetTestOnChainVerifier()
-- **Routes (if any):** none
-- **CLI (if any):** none
 - **Env/Config keys:** none (deterministic responses only)
 - **Files considered API:** index.ts barrel export, test helper functions for configuring fakes (singleton accessors)
 

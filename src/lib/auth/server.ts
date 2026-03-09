@@ -5,7 +5,7 @@
  * Module: `@/lib/auth/server`
  * Purpose: Canonical server-side session helper for Auth4.
  * Scope: Server-only. Wraps NextAuth's getServerSession with invariant enforcement. Do not use on client.
- * Invariants: Returns null unless both id AND walletAddress are present (wallet-first auth).
+ * Invariants: Returns null unless id is present. walletAddress may be null for OAuth-only users.
  * Side-effects: IO (NextAuth session retrieval)
  * Links: docs/spec/authentication.md
  * @public
@@ -19,10 +19,12 @@ import type { SessionUser } from "@/shared/auth";
 export async function getServerSessionUser(): Promise<SessionUser | null> {
   const session = await getServerSession(authOptions);
   const id = session?.user?.id;
-  const walletAddress = session?.user?.walletAddress;
+  if (!id) return null;
 
-  // Enforce wallet-first invariant: require both id and walletAddress
-  if (!id || !walletAddress) return null;
-
-  return { id, walletAddress };
+  return {
+    id,
+    walletAddress: session?.user?.walletAddress ?? null,
+    displayName: session?.user?.displayName ?? null,
+    avatarColor: session?.user?.avatarColor ?? null,
+  };
 }

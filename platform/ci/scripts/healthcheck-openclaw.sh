@@ -13,7 +13,7 @@
 set -euo pipefail
 
 COMPOSE_CMD="${1:?Usage: healthcheck-openclaw.sh COMPOSE_CMD}"
-TIMEOUT="${2:-120}"
+TIMEOUT="${2:-180}"
 
 SERVICES=(openclaw-gateway llm-proxy-openclaw)
 

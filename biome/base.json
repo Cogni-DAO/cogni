@@ -131,7 +131,7 @@
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.ts",
-        "scripts/**/*.{ts,js,cjs,mjs}",
+        "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "docs/templates/**/*.ts",
         "services/**/*.ts",
         "**/*.config.ts",
@@ -153,7 +153,7 @@
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.{ts,tsx}",
-        "scripts/**/*.{ts,js,cjs,mjs}",
+        "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "services/**/*.ts",
         "**/*.config.ts",
         "**/*.config.js",
@@ -207,10 +207,18 @@
         "packages/ids/tsup.config.ts",
         "packages/ids/vitest.config.ts",
         "packages/db-schema/tsup.config.ts",
+        "packages/ingestion-core/tsup.config.ts",
+        "packages/attribution-ledger/tsup.config.ts",
+        "packages/repo-spec/tsup.config.ts",
+        "packages/attribution-pipeline-contracts/tsup.config.ts",
+        "packages/attribution-pipeline-contracts/vitest.config.ts",
+        "packages/attribution-pipeline-plugins/tsup.config.ts",
+        "packages/attribution-pipeline-plugins/vitest.config.ts",
         "services/scheduler-worker/tsup.config.ts",
         "services/scheduler-worker/vitest.config.ts",
         "vitest.workspace.ts",
-        "vitest.component.config.mts"
+        "vitest.component.config.mts",
+        "vitest.external.config.mts"
       ],
       "linter": {
         "rules": {

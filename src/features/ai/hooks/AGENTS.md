@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2025-12-03
 - **Status:** stable
 - **Parent:** [features/ai](../AGENTS.md)
 
@@ -32,7 +31,6 @@ React hooks for AI feature including models list fetching with React Query integ
 
 - **Exports (via ../public.ts):** useModels
 - **Routes:** none (consumes /api/v1/ai/models)
-- **Env/Config keys:** none
 - **Files considered API:** useModels.ts
 
 ## Responsibilities

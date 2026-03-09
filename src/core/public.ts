@@ -33,9 +33,34 @@ export {
   ESTIMATED_USD_PER_1K_TOKENS,
   estimateTotalTokens,
 } from "./ai/token-estimation.server";
+// Ledger domain
+export type {
+  EpochStatus,
+  FinalizedAllocation,
+  StatementLineItem,
+} from "./attribution/public";
+export {
+  AllocationNotFoundError,
+  ATTRIBUTION_STATEMENT_TYPES,
+  // Legacy user-only helpers remain re-exported for compatibility while the
+  // app/core surface finishes migrating to claimant-aware naming.
+  computeAllocationSetHash,
+  computeStatementItems,
+  EPOCH_STATUSES,
+  EpochAlreadyFinalizedError,
+  EpochNotFoundError,
+  EpochNotOpenError,
+  isAllocationNotFoundError,
+  isEpochAlreadyFinalizedError,
+  isEpochNotFoundError,
+  isEpochNotOpenError,
+  isPoolComponentMissingError,
+  PoolComponentMissingError,
+} from "./attribution/public";
 export {
   CREDITS_PER_USD,
   calculateLlmUserCharge,
+  calculateRevenueShareBonus,
   creditsToUsd,
   usdCentsToCredits,
   usdToCredits,

@@ -17,7 +17,7 @@ import { makeTestCtx } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { asNumber } from "@tests/_fixtures/db-utils";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   getTestOnChainVerifier,
@@ -38,6 +38,7 @@ import { CHAIN_ID } from "@/shared/web3/chain";
 
 describe("Payment Numeric Flow Validation", () => {
   let testUserId: string;
+  let testBillingAccountId: string;
   let sessionUser: SessionUser;
   const seedDb = getSeedDb();
 
@@ -51,6 +52,7 @@ describe("Payment Numeric Flow Validation", () => {
     });
 
     testUserId = seeded.user.id;
+    testBillingAccountId = seeded.billingAccount.id;
     if (!seeded.user.walletAddress) {
       throw new Error("Test user missing wallet address");
     }
@@ -130,9 +132,12 @@ describe("Payment Numeric Flow Validation", () => {
       // Step 5: Verify payment CREDITED
       expect(result.status).toBe("CREDITED");
 
-      // Step 6: Verify ledger entry has correct credits
+      // Step 6: Verify ledger entry has correct credits (scoped to test user's billing account)
       const ledgerEntry = await seedDb.query.creditLedger.findFirst({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0x1dollar`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0x1dollar`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
 
       if (!ledgerEntry) {
@@ -227,9 +232,12 @@ describe("Payment Numeric Flow Validation", () => {
       // Step 5: Verify payment CREDITED
       expect(result.status).toBe("CREDITED");
 
-      // Step 6: Verify ledger entry has correct credits
+      // Step 6: Verify ledger entry has correct credits (scoped to test user's billing account)
       const ledgerEntry = await seedDb.query.creditLedger.findFirst({
-        where: eq(creditLedger.reference, `${CHAIN_ID}:0x50dollars`),
+        where: and(
+          eq(creditLedger.reference, `${CHAIN_ID}:0x50dollars`),
+          eq(creditLedger.billingAccountId, testBillingAccountId)
+        ),
       });
 
       if (!ledgerEntry) {

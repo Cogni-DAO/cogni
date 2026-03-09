@@ -76,6 +76,31 @@ export function usdCentsToCredits(amountUsdCents: number | bigint): bigint {
  * @param markupFactor - Multiplier (e.g., 2.0 = 100% markup)
  * @returns { chargedCredits, userCostUsd }
  */
+/**
+ * Precision scale for revenue share calculation (4 decimal places).
+ * revenueShare 0.75 → 7500n / 10000n. Avoids float math on bigint credits.
+ */
+const REVENUE_SHARE_SCALE = 10_000n;
+
+/**
+ * Calculate bonus credits minted to the system tenant on a credit purchase.
+ * Uses scaled-integer arithmetic to stay consistent with the rest of this file.
+ *
+ * @param purchasedCredits - Credits the user received (bigint)
+ * @param revenueShare - Fraction to mint as bonus (0–1, e.g. 0.75)
+ * @returns Bonus credits as BigInt (floor), or 0n when share ≤ 0
+ */
+export function calculateRevenueShareBonus(
+  purchasedCredits: bigint,
+  revenueShare: number
+): bigint {
+  if (revenueShare <= 0) return 0n;
+  const shareScaled = BigInt(
+    Math.round(revenueShare * Number(REVENUE_SHARE_SCALE))
+  );
+  return (purchasedCredits * shareScaled) / REVENUE_SHARE_SCALE;
+}
+
 export function calculateLlmUserCharge(
   providerCostUsd: number,
   markupFactor: number

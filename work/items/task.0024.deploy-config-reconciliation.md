@@ -2,7 +2,7 @@
 id: task.0024
 type: task
 title: Deploy-time config reconciliation — hash-based apply for bind-mounted services
-status: Backlog
+status: needs_triage
 priority: 0
 estimate: 2
 summary: "Single-file bind mounts can pin the old inode after atomic replace (rsync temp→rename); containers keep running stale config. deploy.sh has no mechanism to detect config changes and apply them. Directory mounts avoid the inode issue — prefer those for configs."
@@ -18,6 +18,10 @@ created: 2026-02-11
 updated: 2026-02-11
 labels: [infra, deploy, reliability]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 14
 ---
 
 # Deploy-time config reconciliation

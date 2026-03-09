@@ -99,9 +99,9 @@ vi.mock("@/shared/observability", async (importOriginal) => {
 
 import { TEST_SESSION_USER_1 } from "@tests/_fakes/ids";
 import {
-  isFinishMessageEvent,
+  isFinishEvent,
   isTextDeltaEvent,
-  readDataStreamEvents,
+  readSseEvents,
 } from "@tests/helpers/data-stream";
 import { completionStream } from "@/app/_facades/ai/completion.server";
 import { getSessionUser } from "@/app/_lib/auth/session";
@@ -124,7 +124,7 @@ function createSyntheticStream(opts: {
 
   const stream = (async function* (): AsyncIterable<AiEvent> {
     // Initial yield: gives the ReadableStream backing
-    // createAssistantStreamResponse time to initialize its reader.
+    // createUIMessageStream time to initialize its reader.
     // Without this, synchronous generators can race the stream close.
     // Real streams (LLM, gateway WS) always have I/O delays.
     await new Promise((r) => setTimeout(r, 0));
@@ -156,38 +156,33 @@ function createSyntheticStream(opts: {
   return { stream, final };
 }
 
-/** Build a valid NextRequest for the chat route. */
+/** Build a valid NextRequest for the chat route (P1 format). */
 function buildChatRequest(): NextRequest {
   return new NextRequest("http://localhost:3000/api/v1/ai/chat", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      messages: [
-        {
-          role: "user",
-          content: [{ type: "text", text: "Hello" }],
-        },
-      ],
+      message: "Hello",
       model: "test-model",
       graphName: "sandbox:openclaw",
     }),
   });
 }
 
-/** Collect all text deltas from a Data Stream response into a single string. */
+/** Collect all text deltas from an SSE response into a single string. */
 async function collectTextFromResponse(res: Response): Promise<{
   text: string;
-  events: Array<{ type: string; value: unknown }>;
+  events: Array<{ type: string; data: Record<string, unknown> }>;
 }> {
-  const events: Array<{ type: string; value: unknown }> = [];
+  const events: Array<{ type: string; data: Record<string, unknown> }> = [];
   const textParts: string[] = [];
 
-  for await (const event of readDataStreamEvents(res)) {
+  for await (const event of readSseEvents(res)) {
     events.push(event);
     if (isTextDeltaEvent(event)) {
-      textParts.push(event.value as string);
+      textParts.push(event.data.delta as string);
     }
-    if (isFinishMessageEvent(event)) break;
+    if (isFinishEvent(event)) break;
   }
 
   return { text: textParts.join(""), events };
@@ -228,8 +223,8 @@ describe("Chat SSE Reconciliation", () => {
     // Assert: reconstructed text equals the full assistant_final content
     expect(text).toBe(FULL_TEXT);
 
-    // Assert: finish message is present
-    const hasFinish = events.some((e) => isFinishMessageEvent(e));
+    // Assert: finish event is present
+    const hasFinish = events.some((e) => isFinishEvent(e));
     expect(hasFinish).toBe(true);
 
     // Assert: multiple text deltas arrived (chunked streaming + reconciliation)
@@ -325,7 +320,69 @@ describe("Chat SSE Reconciliation", () => {
     expect(text).toBe("Hello world");
   });
 
-  it("finish message includes usage from final promise", async () => {
+  it("StatusEvent emits transient data-status chunk — not persisted (STATUS_IS_EPHEMERAL)", async () => {
+    // Arrange: stream includes status events between text events
+    const stream = (async function* (): AsyncIterable<AiEvent> {
+      await new Promise((r) => setTimeout(r, 0));
+      yield { type: "status", phase: "thinking" } as AiEvent;
+      await new Promise((r) => setTimeout(r, 0));
+      yield { type: "text_delta", delta: "Hello" };
+      await new Promise((r) => setTimeout(r, 0));
+      yield { type: "status", phase: "tool_use", label: "exec" } as AiEvent;
+      await new Promise((r) => setTimeout(r, 0));
+      yield { type: "status", phase: "thinking" } as AiEvent;
+      await new Promise((r) => setTimeout(r, 0));
+      yield { type: "text_delta", delta: " world" };
+      await new Promise((r) => setTimeout(r, 0));
+      yield { type: "assistant_final", content: "Hello world" };
+      await new Promise((r) => setTimeout(r, 0));
+      yield { type: "done" };
+    })();
+
+    vi.mocked(completionStream).mockResolvedValue({
+      stream,
+      final: Promise.resolve({
+        ok: true as const,
+        requestId: "test-req-id",
+        usage: { promptTokens: 5, completionTokens: 5 },
+        finishReason: "stop",
+      }),
+    });
+
+    // Act
+    const res = await chatPOST(buildChatRequest());
+    expect(res.status).toBe(200);
+
+    const { text, events } = await collectTextFromResponse(res);
+
+    // Assert: text is correct (status events don't interfere)
+    expect(text).toBe("Hello world");
+
+    // Assert: data-status events appear in the SSE stream
+    const statusEvents = events.filter((e) => e.type === "data-status");
+    expect(statusEvents.length).toBeGreaterThanOrEqual(1);
+
+    // Assert: status events have transient flag and phase data
+    for (const se of statusEvents) {
+      expect(se.data).toHaveProperty("transient", true);
+      expect(se.data).toHaveProperty("data");
+      const innerData = se.data.data as Record<string, unknown>;
+      expect(innerData).toHaveProperty("phase");
+      expect(["thinking", "tool_use", "compacting"]).toContain(innerData.phase);
+    }
+
+    // Assert: at least one tool_use status with label
+    const toolStatus = statusEvents.find(
+      (e) => (e.data.data as Record<string, unknown>)?.phase === "tool_use"
+    );
+    if (toolStatus) {
+      expect((toolStatus.data.data as Record<string, unknown>).label).toBe(
+        "exec"
+      );
+    }
+  });
+
+  it("finish event includes finishReason from final promise", async () => {
     const synthetic = createSyntheticStream({
       fullText: "short",
       deltaCharCount: 5,
@@ -337,12 +394,12 @@ describe("Chat SSE Reconciliation", () => {
     const res = await chatPOST(buildChatRequest());
     const { events } = await collectTextFromResponse(res);
 
-    // Assert: finish message has expected usage
-    const finish = events.find((e) => isFinishMessageEvent(e));
+    // Assert: finish event has expected finishReason
+    const finish = events.find((e) => isFinishEvent(e));
     expect(finish).toBeDefined();
-    expect(finish?.value).toMatchObject({
+    expect(finish?.data).toMatchObject({
+      type: "finish",
       finishReason: "stop",
-      usage: { promptTokens: 10, completionTokens: 20 },
     });
   });
 });

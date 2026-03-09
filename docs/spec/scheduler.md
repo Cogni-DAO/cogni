@@ -8,7 +8,7 @@ summary: Temporal-based scheduling system for graph execution via internal HTTP 
 read_when: Implementing scheduled workflows, execution grants, or Temporal integration
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-05
+verified: 2026-02-16
 tags: [scheduler]
 ---
 
@@ -33,13 +33,15 @@ tags: [scheduler]
 
 4. **GRANT_VALIDATED_TWICE**: Worker validates grant before calling API (fail-fast). Execution service re-validates grant validity + scope (defense-in-depth). Scope format: `graph:execute:{graphId}` or `graph:execute:*`.
 
-5. **RUN_LEDGER_FOR_GOVERNANCE**: Every execution creates `schedule_runs` record with status progression (pending→running→success/error).
+5. **RUN_LEDGER_FOR_DB_SCHEDULES**: DB-backed schedules create `schedule_runs` records with status progression (pending→running→success/error). Temporal-only schedules (e.g., governance `governance:*`) do not write `schedule_runs`.
 
 6. **EXECUTION_VIA_SERVICE_API**: Worker triggers runs via HTTP to `POST /api/internal/graphs/{graphId}/runs`. Worker NEVER imports graph execution code.
 
 7. **INTERNAL_API_SHARED_SECRET**: Internal calls require Bearer token (shared secret). Follows `METRICS_TOKEN` pattern. Caller service name logged. P1: JWT with aud/exp.
 
 8. **EXECUTION_IDEMPOTENCY_PERSISTED**: `execution_requests` table persists idempotency key → `{runId, traceId}`. This is the correctness layer for slot deduplication.
+
+9a. **SCHEDULE_CREATION_REJECTS_IF_CURRENTLY_UNPAYABLE**: `POST /api/v1/schedules` performs a coarse credit gate before creating the schedule. Paid model + balance ≤ 0 → 402. Free models and requests without a model field bypass the check. This is a creation-time guard only; the `PreflightCreditCheckDecorator` enforces at execution time (per CREDITS_ENFORCED_AT_EXECUTION_PORT).
 
 9. **RUN_OWNERSHIP_BOUNDARY**: Worker owns `schedule_runs`. Execution service owns graph runs + billing (`charge_receipts`). Correlation via `runId` and `langfuseTraceId`.
 
@@ -49,9 +51,9 @@ tags: [scheduler]
 
 11. **WORKER_NEVER_CONTROLS_SCHEDULES**: `scheduler-temporal-worker` must not depend on `ScheduleControlPort` or call Temporal schedule APIs. CRUD routes are the single authority. Enforce via dep-cruiser.
 
-12. **WORKFLOW_ID_INCLUDES_TIMESTAMP**: Temporal workflowId = `{scheduleId}:{TemporalScheduledStartTime}`. Each scheduled slot gets a unique workflow. `scheduleId` remains the business key for correlation. Temporal overlap=SKIP ensures only one active workflow per schedule at a time.
+12. **WORKFLOW_ID_INCLUDES_TIMESTAMP**: Temporal workflowId = `{temporalScheduleId}:{TemporalScheduledStartTime}`. Each scheduled slot gets a unique workflow. `temporalScheduleId` remains the business key for correlation. Temporal overlap=SKIP ensures only one active workflow per schedule at a time.
 
-13. **SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS**: Slot deduplication handled by `execution_requests` table with key = `scheduleId:TemporalScheduledStartTime`. The internal API idempotency layer (request_hash check) is the correctness guarantee—not workflowId uniqueness.
+13. **SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS**: Slot deduplication handled by `execution_requests` table with key = `temporalScheduleId:TemporalScheduledStartTime`. The internal API idempotency layer (request_hash check) is the correctness guarantee—not workflowId uniqueness.
 
 13b. **ACTIVITY_IDEMPOTENCY**: All Activities must be idempotent or rely on downstream idempotency. `executeGraphActivity` relies on `execution_requests` table. `updateScheduleRunActivity` must use monotonic status updates (pending→running→success/error, never backwards).
 
@@ -64,6 +66,8 @@ tags: [scheduler]
 17. **DB_TIMING_IS_CACHE_ONLY**: `schedules.next_run_at` and `last_run_at` are cache columns for UI/quick-queries. Authoritative timing lives in Temporal. Synced on CRUD only; drift is acceptable.
 
 18. **SKIP_MISSED_RUNS**: P0 does not backfill missed runs. Temporal `catchupWindow=0` enforces this.
+
+19. **UPDATE_ON_DRIFT**: `syncGovernanceSchedules` describes each existing Temporal schedule and compares input payload (model, message) and timezone against desired config. If config has drifted, it calls `updateSchedule()` to patch the schedule in-place. Unchanged schedules are skipped. This prevents stale schedules from running with outdated parameters after config changes.
 
 ---
 
@@ -137,17 +141,17 @@ tags: [scheduler]
 │                                                                             │
 │  Temporal Schedule fires → GovernanceScheduledRunWorkflow                   │
 │    Activity: validateGrantActivity(grantId)         // fail-fast            │
-│    Activity: createScheduleRunActivity(...)         // ledger entry         │
+│    Activity: createScheduleRunActivity(...)         // DB-backed only       │
 │    Activity: executeGraphActivity({                                         │
-│      scheduleId,                                                            │
+│      temporalScheduleId,                                                    │
 │      graphId,                                                               │
 │      grantId,                                                               │
 │      scheduledFor: TemporalScheduledStartTime,      // from Temporal        │
-│      idempotencyKey: `${scheduleId}:${scheduledFor}`                        │
+│      idempotencyKey: `${temporalScheduleId}:${scheduledFor}`                │
 │    })                                                                       │
 │      → POST /api/internal/graphs/{graphId}/runs                             │
 │         ├─ Bearer: $INTERNAL_API_TOKEN                                      │
-│         ├─ Idempotency-Key: {scheduleId}:{scheduledFor}                     │
+│         ├─ Idempotency-Key: {temporalScheduleId}:{scheduledFor}             │
 │         └─ Body: { executionGrantId, input }                                │
 │    Activity: updateScheduleRunActivity(success/error)                       │
 │                                                                             │
@@ -160,14 +164,14 @@ tags: [scheduler]
 
 ### Idempotency Layers
 
-| Layer             | Key                                         | Storage              | Prevents                    |
-| ----------------- | ------------------------------------------- | -------------------- | --------------------------- |
-| Temporal Schedule | scheduleId (DB UUID)                        | Temporal             | Duplicate schedule identity |
-| Workflow          | workflowId = `{scheduleId}:{scheduledFor}`  | Temporal             | Concurrent slot executions  |
-| Execution API     | `{scheduleId}:{TemporalScheduledStartTime}` | `execution_requests` | Duplicate runs on retry     |
-| Billing           | `runId/attempt/unit`                        | `charge_receipts`    | Duplicate charges           |
+| Layer             | Key                                                 | Storage              | Prevents                    |
+| ----------------- | --------------------------------------------------- | -------------------- | --------------------------- |
+| Temporal Schedule | temporalScheduleId (string)                         | Temporal             | Duplicate schedule identity |
+| Workflow          | workflowId = `{temporalScheduleId}:{scheduledFor}`  | Temporal             | Concurrent slot executions  |
+| Execution API     | `{temporalScheduleId}:{TemporalScheduledStartTime}` | `execution_requests` | Duplicate runs on retry     |
+| Billing           | `runId/attempt/unit`                                | `charge_receipts`    | Duplicate charges           |
 
-> **Note:** Temporal `scheduleId` = DB `schedules.id`. Each scheduled slot gets a unique `workflowId` with timestamp suffix. `overlap=SKIP` ensures only one active workflow per schedule at a time.
+> **Note:** DB-backed schedules use UUID IDs; governance schedules use Temporal-only IDs like `governance:govern`. Workflow input carries `temporalScheduleId` plus optional `dbScheduleId`.
 
 ---
 
@@ -214,7 +218,7 @@ tags: [scheduler]
 | Column              | Type        | Constraints                 | Notes                                 |
 | ------------------- | ----------- | --------------------------- | ------------------------------------- |
 | `id`                | uuid        | PK                          |                                       |
-| `schedule_id`       | uuid        | NOT NULL, FK schedules      |                                       |
+| `schedule_id`       | uuid        | NOT NULL, FK schedules      | DB-backed schedules only              |
 | `run_id`            | text        | NULL                        | Set after execution API responds      |
 | `scheduled_for`     | timestamptz | NOT NULL                    | From TemporalScheduledStartTime       |
 | `started_at`        | timestamptz | NULL                        |                                       |
@@ -231,15 +235,15 @@ tags: [scheduler]
 
 ### `execution_requests`
 
-| Column            | Type        | Constraints | Notes                                   |
-| ----------------- | ----------- | ----------- | --------------------------------------- |
-| `idempotency_key` | text        | PK          | `scheduleId:TemporalScheduledStartTime` |
-| `request_hash`    | text        | NOT NULL    | SHA256 of normalized request payload    |
-| `run_id`          | text        | NOT NULL    |                                         |
-| `trace_id`        | text        | NULL        |                                         |
-| `ok`              | boolean     | NOT NULL    | Execution outcome                       |
-| `error_code`      | text        | NULL        | `AiExecutionErrorCode` if `ok=false`    |
-| `created_at`      | timestamptz | NOT NULL    |                                         |
+| Column            | Type        | Constraints | Notes                                           |
+| ----------------- | ----------- | ----------- | ----------------------------------------------- |
+| `idempotency_key` | text        | PK          | `temporalScheduleId:TemporalScheduledStartTime` |
+| `request_hash`    | text        | NOT NULL    | SHA256 of normalized request payload            |
+| `run_id`          | text        | NOT NULL    |                                                 |
+| `trace_id`        | text        | NULL        |                                                 |
+| `ok`              | boolean     | NOT NULL    | Execution outcome                               |
+| `error_code`      | text        | NULL        | `AiExecutionErrorCode` if `ok=false`            |
+| `created_at`      | timestamptz | NOT NULL    |                                                 |
 
 **Purpose:** Persists idempotency as the correctness layer for slot deduplication.
 **Invariants:**
@@ -267,7 +271,7 @@ tags: [scheduler]
 | `packages/db-client/src/adapters/drizzle-schedule.adapter.ts`          | `DrizzleScheduleManagerAdapter`                         |
 | `packages/db-client/src/adapters/drizzle-run.adapter.ts`               | `DrizzleScheduleRunAdapter`                             |
 | `src/contracts/schedules.*.v1.contract.ts`                             | Schedule CRUD contracts (4 files)                       |
-| `src/app/api/v1/schedules/route.ts`                                    | POST (create), GET (list)                               |
+| `src/app/api/v1/schedules/route.ts`                                    | POST (create with credit gate), GET (list)              |
 | `src/app/api/v1/schedules/[scheduleId]/route.ts`                       | PATCH (update), DELETE                                  |
 | `src/bootstrap/container.ts`                                           | Wire scheduling ports                                   |
 | `packages/scheduler-core/src/payloads.ts`                              | Zod payload schemas                                     |

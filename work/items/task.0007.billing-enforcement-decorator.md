@@ -2,7 +2,7 @@
 id: task.0007
 type: task
 title: "Billing enforcement decorator at GraphExecutorPort level"
-status: Done
+status: done
 priority: 1
 estimate: 2
 summary: Create BillingGraphExecutorDecorator (same pattern as ObservabilityGraphExecutorDecorator) that intercepts usage_report events from the stream and calls commitUsageFact(). Applied at factory level so ALL execution paths get billing automatically.
@@ -18,6 +18,10 @@ created: 2026-02-09
 updated: 2026-02-10
 labels: [ai-graphs, billing]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 99
 ---
 
 ## Requirements

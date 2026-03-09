@@ -42,7 +42,8 @@ export {
   toCoreMessages,
   uiMessagesToMessageDtos,
 } from "./services/mappers";
-// Preflight credit check (for facade-level gating before graph execution)
+// Preflight credit check (used ONLY as closure source for PreflightCreditCheckDecorator DI;
+// never call directly for enforcement — the decorator is the single enforcement path)
 export { preflightCreditCheck } from "./services/preflight-credit-check";
 // Secrets redaction for thread persistence
 export { redactSecretsInMessages } from "./services/secrets-redaction";

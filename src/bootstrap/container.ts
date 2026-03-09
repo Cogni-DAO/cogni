@@ -4,8 +4,8 @@
 /**
  * Module: `@bootstrap/container`
  * Purpose: Dependency injection container for application composition root with environment-based adapter selection.
- * Scope: Wire adapters to ports for runtime dependency injection. Does not handle request-scoped lifecycle.
- * Invariants: All ports wired; single container instance per process; config.unhandledErrorPolicy set by env.
+ * Scope: Wire adapters to ports for runtime dependency injection. Provides webhookRegistrations for ingestion route. Does not handle request-scoped lifecycle.
+ * Invariants: All ports wired; single container instance per process; config.unhandledErrorPolicy set by env; webhookRegistrations lazy-initialized.
  * Side-effects: IO (initializes logger and emits startup log on first access)
  * Notes: LLM always uses LiteLlmAdapter; stack tests route to mock-openai-api. ContainerConfig controls wrapper behavior.
  * Links: Used by API routes and other entry points; configure adapters here for DI.
@@ -18,19 +18,25 @@ import type {
   RepoCapability,
   WebSearchCapability,
 } from "@cogni/ai-tools";
+import type { AttributionStore } from "@cogni/attribution-ledger";
+import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { UserId } from "@cogni/ids";
-import { userActor } from "@cogni/ids";
+import { toUserId, userActor } from "@cogni/ids";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { Logger } from "pino";
 import {
+  type Database,
   DrizzleAiTelemetryAdapter,
   DrizzleExecutionGrantUserAdapter,
   DrizzleExecutionGrantWorkerAdapter,
   DrizzleExecutionRequestAdapter,
+  DrizzleGovernanceStatusAdapter,
   DrizzleScheduleRunAdapter,
   DrizzleScheduleUserAdapter,
   DrizzleThreadPersistenceAdapter,
   EvmRpcOnChainVerifierAdapter,
+  GITHUB_ADAPTER_VERSION,
+  GitHubWebhookNormalizer,
   getAppDb,
   LangfuseAdapter,
   LiteLlmAdapter,
@@ -64,9 +70,11 @@ import type {
   AccountService,
   AiTelemetryPort,
   Clock,
+  DataSourceRegistration,
   ExecutionGrantUserPort,
   ExecutionGrantWorkerPort,
   ExecutionRequestPort,
+  GovernanceStatusPort,
   LangfusePort,
   LlmService,
   MetricsQueryPort,
@@ -79,7 +87,9 @@ import type {
   ThreadPersistencePort,
   TreasuryReadPort,
 } from "@/ports";
-import { serverEnv } from "@/shared/env";
+import { getScopeId } from "@/shared/config";
+import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
+import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
 import type { EvmOnchainClient } from "@/shared/web3/onchain/evm-onchain-client.interface";
 
@@ -128,6 +138,12 @@ export interface Container {
   toolSource: ToolSourcePort;
   /** Thread persistence scoped to a user (RLS enforced) */
   threadPersistenceForUser(userId: UserId): ThreadPersistencePort;
+  /** Governance status queries (system tenant scope) */
+  governanceStatus: GovernanceStatusPort;
+  /** Epoch ledger store — shared by app and scheduler-worker */
+  attributionStore: AttributionStore;
+  /** Webhook source registrations — normalizers for webhook ingestion */
+  webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
 }
 
 // Feature-specific dependency types
@@ -169,6 +185,27 @@ export function getContainer(): Container {
  */
 export function resetContainer(): void {
   _container = null;
+  _webhookRegistrations = null;
+}
+
+/** Lazy singleton for webhook registrations (avoids import cost at container init). */
+let _webhookRegistrations: ReadonlyMap<string, DataSourceRegistration> | null =
+  null;
+
+function getWebhookRegistrations(): ReadonlyMap<
+  string,
+  DataSourceRegistration
+> {
+  if (!_webhookRegistrations) {
+    const registrations = new Map<string, DataSourceRegistration>();
+    registrations.set("github", {
+      source: "github",
+      version: GITHUB_ADAPTER_VERSION,
+      webhook: new GitHubWebhookNormalizer(),
+    });
+    _webhookRegistrations = registrations;
+  }
+  return _webhookRegistrations;
 }
 
 function createContainer(): Container {
@@ -372,6 +409,14 @@ function createContainer(): Container {
     toolSource,
     threadPersistenceForUser: (userId: UserId) =>
       new DrizzleThreadPersistenceAdapter(db, userActor(userId)),
+    governanceStatus: new DrizzleGovernanceStatusAdapter(
+      db,
+      userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
+    ),
+    attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
+    get webhookRegistrations() {
+      return getWebhookRegistrations();
+    },
   };
 }
 
@@ -419,4 +464,12 @@ export function resolveSchedulingDeps(): SchedulingDeps {
     scheduleRunRepository: container.scheduleRunRepository,
     scheduleManager: container.scheduleManager,
   };
+}
+
+/**
+ * Resolve appDb for facade-level queries that don't need a full port abstraction.
+ * Uses appDb (RLS-scoped) — caller must be authenticated.
+ */
+export function resolveAppDb(): Database {
+  return getAppDb();
 }

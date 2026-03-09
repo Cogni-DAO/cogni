@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-12
 - **Status:** draft
 
 ## Purpose
@@ -30,16 +29,9 @@ Infrastructure as Code configurations for cloud providers, services, and deploym
 ## Public Surface
 
 - **Exports:** none
-- **Routes (if any):** none
 - **CLI (if any):** tofu commands in provider directories
 - **Env/Config keys:** `CHERRY_AUTH_TOKEN`, provider auth tokens, deployment variables
 - **Files considered API:** `providers/*/variables.tf`, `files/*.tmpl`
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

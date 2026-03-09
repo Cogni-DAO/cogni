@@ -2,7 +2,7 @@
 id: task.0028
 type: task
 title: "Create Grafana Cloud P0 alert rules (post-deploy, human)"
-status: Backlog
+status: needs_triage
 priority: 0
 estimate: 1
 summary: After task.0027 is deployed, verify metrics flow to Mimir, create alert folder + 5 P0 alert rules in Grafana Cloud, and verify they evaluate correctly.
@@ -18,6 +18,10 @@ created: 2026-02-12
 updated: 2026-02-12
 labels: [infra, observability, reliability, P0, human]
 external_refs:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 22
 ---
 
 # Create Grafana Cloud P0 alert rules (post-deploy, human)

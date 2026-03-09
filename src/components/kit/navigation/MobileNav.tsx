@@ -53,7 +53,9 @@ export function MobileNav({ className }: MobileNavProps): ReactElement {
           aria-label="Mobile navigation"
         >
           <NavigationLink href="/chat">Chat</NavigationLink>
+          <NavigationLink href="/work">Work</NavigationLink>
           <NavigationLink href="/activity">Activity</NavigationLink>
+          <NavigationLink href="/gov">Gov</NavigationLink>
           <NavigationLink href="/credits">Credits</NavigationLink>
           <a
             href="https://github.com/cogni-DAO/cogni-template"
@@ -62,6 +64,15 @@ export function MobileNav({ className }: MobileNavProps): ReactElement {
             className="flex items-center gap-2 font-medium text-muted-foreground text-sm transition-colors hover:text-foreground"
           >
             GitHub
+            <ExternalLink className="h-4 w-4" />
+          </a>
+          <a
+            href="https://discord.gg/3b9sSyhZ4z"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 font-medium text-muted-foreground text-sm transition-colors hover:text-foreground"
+          >
+            Discord
             <ExternalLink className="h-4 w-4" />
           </a>
         </nav>

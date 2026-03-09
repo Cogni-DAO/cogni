@@ -319,9 +319,9 @@ describe("Activity API Stack Tests", () => {
       expect(json).not.toHaveProperty("chartSeries");
     });
 
-    it("step=1h with exactly 10 days passes", async () => {
+    it("step=1h with exactly 2 days passes", async () => {
       const request = new NextRequest(
-        "http://localhost:3000/api/v1/activity?from=2024-01-01T00:00:00Z&to=2024-01-11T00:00:00Z&step=1h"
+        "http://localhost:3000/api/v1/activity?from=2024-01-01T00:00:00Z&to=2024-01-03T00:00:00Z&step=1h"
       );
 
       const response = await GET(request);

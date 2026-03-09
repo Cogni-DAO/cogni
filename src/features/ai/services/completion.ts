@@ -258,6 +258,8 @@ export interface ExecuteStreamParams {
   tools?: readonly import("@/ports").LlmToolDefinition[];
   /** Optional tool choice policy */
   toolChoice?: import("@/ports").LlmToolChoice;
+  /** Billing correlation metadata forwarded to LiteLLM as x-litellm-spend-logs-metadata header */
+  spendLogsMetadata?: { run_id: string; graph_id: string };
 }
 
 /**
@@ -279,6 +281,7 @@ export async function executeStream({
   abortSignal,
   tools,
   toolChoice,
+  spendLogsMetadata,
 }: ExecuteStreamParams): Promise<{
   stream: AsyncIterable<import("@/ports").ChatDeltaEvent>;
   final: Promise<StreamFinalResult>;
@@ -331,6 +334,7 @@ export async function executeStream({
       ...(abortSignal && { abortSignal }),
       ...(tools && tools.length > 0 && { tools }),
       ...(toolChoice && { toolChoice }),
+      ...(spendLogsMetadata && { spendLogsMetadata }),
     });
     stream = result.stream;
     final = result.final;

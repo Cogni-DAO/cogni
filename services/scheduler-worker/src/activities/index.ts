@@ -15,23 +15,27 @@
  * @internal
  */
 
-import type {
-  DrizzleExecutionGrantWorkerAdapter,
-  DrizzleScheduleRunAdapter,
-} from "@cogni/db-client";
-import type { createServiceDbClient } from "@cogni/db-client/service";
 import { SYSTEM_ACTOR } from "@cogni/ids/system";
 import { ApplicationFailure, activityInfo } from "@temporalio/activity";
-import type { Logger } from "pino";
+import {
+  activityDurationMs,
+  activityErrorsTotal,
+  logWorkerEvent,
+  WORKER_EVENT_NAMES,
+} from "../observability/index.js";
+import type { Logger } from "../observability/logger.js";
+import type {
+  ExecutionGrantWorkerPort,
+  ScheduleRunRepository,
+} from "../ports/index.js";
 
 /**
  * Dependencies injected into activities at worker creation.
  * Activities are created as closures over these deps.
  */
 export interface ActivityDeps {
-  db: ReturnType<typeof createServiceDbClient>;
-  grantAdapter: DrizzleExecutionGrantWorkerAdapter;
-  runAdapter: DrizzleScheduleRunAdapter;
+  grantAdapter: ExecutionGrantWorkerPort;
+  runAdapter: ScheduleRunRepository;
   config: {
     appBaseUrl: string;
     schedulerApiToken: string;
@@ -51,7 +55,7 @@ export interface ValidateGrantInput {
  * Input for createScheduleRunActivity.
  */
 export interface CreateScheduleRunInput {
-  scheduleId: string;
+  dbScheduleId: string;
   runId: string;
   scheduledFor: string; // ISO string
 }
@@ -60,7 +64,7 @@ export interface CreateScheduleRunInput {
  * Input for executeGraphActivity.
  */
 export interface ExecuteGraphInput {
-  scheduleId: string;
+  temporalScheduleId: string;
   graphId: string;
   executionGrantId: string;
   input: Record<string, unknown>;
@@ -120,18 +124,39 @@ export function createActivities(deps: ActivityDeps) {
   ): Promise<void> {
     const { grantId, graphId } = input;
     const correlation = getWorkflowCorrelation();
-    logger.info(
-      { ...correlation, grantId, graphId },
-      "Validating grant for graph"
-    );
+    const start = performance.now();
 
-    // This throws on validation failure
-    await grantAdapter.validateGrantForGraph(SYSTEM_ACTOR, grantId, graphId);
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_GRANT_VALIDATED, {
+      ...correlation,
+      grantId,
+      graphId,
+      phase: "start",
+    });
 
-    logger.info(
-      { ...correlation, grantId, graphId },
-      "Grant validated successfully"
-    );
+    try {
+      await grantAdapter.validateGrantForGraph(SYSTEM_ACTOR, grantId, graphId);
+
+      const durationMs = performance.now() - start;
+      activityDurationMs
+        .labels({ activity: "validateGrant", status: "success" })
+        .observe(durationMs);
+
+      logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_GRANT_VALIDATED, {
+        ...correlation,
+        grantId,
+        graphId,
+        durationMs,
+      });
+    } catch (err) {
+      const durationMs = performance.now() - start;
+      activityDurationMs
+        .labels({ activity: "validateGrant", status: "error" })
+        .observe(durationMs);
+      activityErrorsTotal
+        .labels({ activity: "validateGrant", error_type: "unknown" })
+        .inc();
+      throw err;
+    }
   }
 
   /**
@@ -142,32 +167,57 @@ export function createActivities(deps: ActivityDeps) {
   async function createScheduleRunActivity(
     input: CreateScheduleRunInput
   ): Promise<void> {
-    const { scheduleId, runId, scheduledFor } = input;
+    const { dbScheduleId, runId, scheduledFor } = input;
     const correlation = getWorkflowCorrelation();
-    logger.info(
-      { ...correlation, scheduleId, runId, scheduledFor },
-      "Creating schedule run"
-    );
+    const start = performance.now();
 
-    await runAdapter.createRun(SYSTEM_ACTOR, {
-      scheduleId,
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_RUN_CREATED, {
+      ...correlation,
+      dbScheduleId,
       runId,
-      scheduledFor: new Date(scheduledFor),
+      scheduledFor,
+      phase: "start",
     });
 
-    logger.info({ ...correlation, runId }, "Schedule run created");
+    try {
+      await runAdapter.createRun(SYSTEM_ACTOR, {
+        scheduleId: dbScheduleId,
+        runId,
+        scheduledFor: new Date(scheduledFor),
+      });
+
+      const durationMs = performance.now() - start;
+      activityDurationMs
+        .labels({ activity: "createScheduleRun", status: "success" })
+        .observe(durationMs);
+
+      logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_RUN_CREATED, {
+        ...correlation,
+        runId,
+        durationMs,
+      });
+    } catch (err) {
+      const durationMs = performance.now() - start;
+      activityDurationMs
+        .labels({ activity: "createScheduleRun", status: "error" })
+        .observe(durationMs);
+      activityErrorsTotal
+        .labels({ activity: "createScheduleRun", error_type: "unknown" })
+        .inc();
+      throw err;
+    }
   }
 
   /**
    * Calls internal API to execute graph.
    * Per EXECUTION_VIA_SERVICE_API: Worker NEVER imports graph execution code.
-   * Per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS: Uses scheduleId:scheduledFor as idempotency key.
+   * Per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS: Uses temporalScheduleId:scheduledFor as idempotency key.
    */
   async function executeGraphActivity(
     input: ExecuteGraphInput
   ): Promise<ExecuteGraphOutput> {
     const {
-      scheduleId,
+      temporalScheduleId,
       graphId,
       executionGrantId,
       input: graphInput,
@@ -175,16 +225,20 @@ export function createActivities(deps: ActivityDeps) {
       runId,
     } = input;
     const correlation = getWorkflowCorrelation();
+    const start = performance.now();
 
     // Per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS
-    const idempotencyKey = `${scheduleId}:${scheduledFor}`;
+    const idempotencyKey = `${temporalScheduleId}:${scheduledFor}`;
 
     const url = `${config.appBaseUrl}/api/internal/graphs/${graphId}/runs`;
 
-    logger.info(
-      { ...correlation, scheduleId, graphId, runId, idempotencyKey },
-      "Calling internal graph execution API"
-    );
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_GRAPH_EXECUTING, {
+      ...correlation,
+      temporalScheduleId,
+      graphId,
+      runId,
+      idempotencyKey,
+    });
 
     const response = await fetch(url, {
       method: "POST",
@@ -203,16 +257,31 @@ export function createActivities(deps: ActivityDeps) {
     if (!response.ok) {
       // Handle HTTP errors
       const errorText = await response.text();
+      const durationMs = performance.now() - start;
+      const errorType =
+        response.status >= 400 && response.status < 500
+          ? "non_retryable"
+          : "retryable";
+
+      activityDurationMs
+        .labels({ activity: "executeGraph", status: "error" })
+        .observe(durationMs);
+      activityErrorsTotal
+        .labels({ activity: "executeGraph", error_type: errorType })
+        .inc();
+
       logger.error(
         {
+          event: WORKER_EVENT_NAMES.ACTIVITY_GRAPH_ERROR,
           ...correlation,
           status: response.status,
-          scheduleId,
+          temporalScheduleId,
           graphId,
           runId,
           errorText,
+          durationMs,
         },
-        "Internal API returned error"
+        WORKER_EVENT_NAMES.ACTIVITY_GRAPH_ERROR
       );
 
       // 4xx errors are non-retryable (auth, validation, business logic failures)
@@ -221,7 +290,7 @@ export function createActivities(deps: ActivityDeps) {
         throw ApplicationFailure.nonRetryable(
           `Internal API client error: ${response.status} - ${errorText}`,
           "InternalApiClientError",
-          { status: response.status, scheduleId, graphId, runId }
+          { status: response.status, temporalScheduleId, graphId, runId }
         );
       }
 
@@ -232,22 +301,36 @@ export function createActivities(deps: ActivityDeps) {
     }
 
     const result = (await response.json()) as ExecuteGraphOutput;
+    const durationMs = performance.now() - start;
 
     if (result.ok) {
-      logger.info(
-        { ...correlation, scheduleId, graphId, runId: result.runId },
-        "Graph execution completed successfully"
-      );
+      activityDurationMs
+        .labels({ activity: "executeGraph", status: "success" })
+        .observe(durationMs);
+
+      logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_GRAPH_COMPLETED, {
+        ...correlation,
+        temporalScheduleId,
+        graphId,
+        runId: result.runId,
+        durationMs,
+      });
     } else {
+      activityDurationMs
+        .labels({ activity: "executeGraph", status: "error" })
+        .observe(durationMs);
+
       logger.warn(
         {
+          event: WORKER_EVENT_NAMES.ACTIVITY_GRAPH_ERROR,
           ...correlation,
-          scheduleId,
+          temporalScheduleId,
           graphId,
           runId: result.runId,
           errorCode: result.errorCode,
+          durationMs,
         },
-        "Graph execution completed with error"
+        WORKER_EVENT_NAMES.ACTIVITY_GRAPH_ERROR
       );
     }
 
@@ -263,30 +346,52 @@ export function createActivities(deps: ActivityDeps) {
   ): Promise<void> {
     const { runId, status, traceId, errorMessage } = input;
     const correlation = getWorkflowCorrelation();
-    logger.info(
-      { ...correlation, runId, status },
-      "Updating schedule run status"
-    );
+    const start = performance.now();
 
-    if (status === "running") {
-      await runAdapter.markRunStarted(
-        SYSTEM_ACTOR,
-        runId,
-        traceId ?? undefined
-      );
-    } else {
-      await runAdapter.markRunCompleted(
-        SYSTEM_ACTOR,
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_RUN_UPDATED, {
+      ...correlation,
+      runId,
+      status,
+      phase: "start",
+    });
+
+    try {
+      if (status === "running") {
+        await runAdapter.markRunStarted(
+          SYSTEM_ACTOR,
+          runId,
+          traceId ?? undefined
+        );
+      } else {
+        await runAdapter.markRunCompleted(
+          SYSTEM_ACTOR,
+          runId,
+          status,
+          errorMessage
+        );
+      }
+
+      const durationMs = performance.now() - start;
+      activityDurationMs
+        .labels({ activity: "updateScheduleRun", status: "success" })
+        .observe(durationMs);
+
+      logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_RUN_UPDATED, {
+        ...correlation,
         runId,
         status,
-        errorMessage
-      );
+        durationMs,
+      });
+    } catch (err) {
+      const durationMs = performance.now() - start;
+      activityDurationMs
+        .labels({ activity: "updateScheduleRun", status: "error" })
+        .observe(durationMs);
+      activityErrorsTotal
+        .labels({ activity: "updateScheduleRun", error_type: "unknown" })
+        .inc();
+      throw err;
     }
-
-    logger.info(
-      { ...correlation, runId, status },
-      "Schedule run status updated"
-    );
   }
 
   return {

@@ -17,13 +17,21 @@ Charters are strategic — they describe areas of development, not specific deli
 
 ## Projects
 
-<!-- List projects that fall under this charter. Reference by ID. -->
+| Priority | Target | Score (0-5) | Status | Notes |
+| -------- | ------ | ----------- | ------ | ----- |
+| P0       |        |             |        |       |
+| P1       |        |             |        |       |
+| P2       |        |             |        |       |
 
-| Project      | Status | Summary           |
-| ------------ | ------ | ----------------- |
-| proj.example | Active | Brief description |
+| Project | Why now | Score (0-5) | Status | Notes |
+| ------- | ------- | ----------- | ------ | ----- |
+|         |         |             |        |       |
+|         |         |             |        |       |
+|         |         |             |        |       |
+|         |         |             |        |       |
 
-## Constraints
-
-- Constraint 1
-- Constraint 2
+| Resource | Use | Where | Notes |
+| -------- | --- | ----- | ----- |
+|          |     |       |       |
+|          |     |       |       |
+|          |     |       |       |

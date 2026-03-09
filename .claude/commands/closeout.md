@@ -66,26 +66,26 @@ For each spec in the work item's `spec_refs` (skip if none):
 ## Phase 5 — Project & Work Item
 
 1. **Update the work item**:
-   - Set `status: Done`
-   - Set `pr:` to PR number or URL (if known; leave for user if not)
+   - Set `status: needs_merge`
    - Set `reviewer:` if known
    - Update `updated:` date
 
 2. **Update the project** (if work item has `project:` set):
-   - Mark the corresponding deliverable as Done in the roadmap table.
+   - Mark the corresponding deliverable as in-review in the roadmap table.
    - Add/update spec links in `## As-Built Specs`.
 
-3. **Update `_index.md`**: Reflect the item's Done status.
+3. **Update `_index.md`**: Reflect the item's `needs_merge` status.
 
 ---
 
-## Phase 6 — Validate
+## Phase 6 — Finalize
 
-```bash
-pnpm check:docs
-```
-
-Fix any errors. Then report: what was updated, what was flagged, any follow-up items discovered.
+1. Run `pnpm check:docs` and fix any errors until clean.
+2. Commit all changes (doc updates, header updates, spec updates, work item, project, `_index.md`) on the work item's branch. `git status` must be clean.
+3. Push to remote.
+4. Create PR to `staging` using `/pull-request` logic (conventional commit title + summary).
+5. Set `pr:` in work item frontmatter with the PR URL. Commit and push this update.
+6. Report: what was updated, what was flagged, any follow-up items discovered. Next command: `/review-implementation`.
 
 ---
 

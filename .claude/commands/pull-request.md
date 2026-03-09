@@ -1,3 +1,5 @@
+**Note:** In the standard lifecycle, PR creation is handled by `/closeout`. Use this command standalone for manual workflows or environments without GitHub auth. If a work item exists, it should already be at `needs_merge` or `needs_closeout`.
+
 Goal: Produce a Conventional Commit PR title and a concise, factual PR summary for this branch, into the `staging` branch. STAGING. Assume MVP quality unless evidence exists otherwise.
 
 Hard rules:

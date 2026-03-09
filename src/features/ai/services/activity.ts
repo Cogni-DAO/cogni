@@ -7,7 +7,7 @@
  * Scope: Validates inputs for Activity dashboard. Does not access DB directly.
  * Invariants:
  * - Enforces max time range (90 days).
- * - Enforces maxPoints (~240 buckets) via step selection.
+ * - Enforces maxPoints (~48 buckets) via step selection.
  * - Throws InvalidRangeError for invalid ranges (from >= to).
  * Side-effects: none
  * Links: [activity.server.ts](../../../app/_facades/ai/activity.server.ts), ai.activity.v1.contract.ts
@@ -36,12 +36,12 @@ const STEPS_ORDERED: ActivityStep[] = ["5m", "15m", "1h", "6h", "1d"];
 
 /**
  * Derive the optimal step for a given range.
- * Picks the finest granularity that keeps bucket count <= 240.
+ * Picks the finest granularity that keeps bucket count <= 48.
  */
 export function deriveStep(rangeMs: number): ActivityStep {
   for (const step of STEPS_ORDERED) {
     const bucketCount = Math.ceil(rangeMs / STEP_MS[step]);
-    if (bucketCount <= 240) {
+    if (bucketCount <= 48) {
       return step;
     }
   }
@@ -83,7 +83,7 @@ export function validateActivityRange(params: {
       MAX_RANGE_FOR_STEP[effectiveStep] / (1000 * 60 * 60 * 24)
     );
     throw new InvalidRangeError(
-      `Date range too large for ${effectiveStep} step (max ~${maxDays} days for ~240 buckets)`
+      `Date range too large for ${effectiveStep} step (max ~${maxDays} days for ~48 buckets)`
     );
   }
 

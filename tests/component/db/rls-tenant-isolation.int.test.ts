@@ -4,7 +4,7 @@
 /**
  * Module: `@tests/component/db/rls-tenant-isolation.int.test`
  * Purpose: Verify PostgreSQL RLS policies enforce tenant isolation at the database layer.
- * Scope: Tests that SET LOCAL app.current_user_id restricts row visibility per user. Does not test application-layer auth.
+ * Scope: Tests that SET LOCAL app.current_user_id restricts row visibility per user for users, billing_accounts, virtual_keys, and ai_threads tables. Does not test application-layer auth.
  * Invariants:
  * - User A cannot SELECT user B's billing_accounts, virtual_keys, or users row
  * - Missing SET LOCAL (no tenant context) returns zero rows
@@ -26,7 +26,12 @@ import {
   withTenantScope as productionWithTenantScope,
   setTenantContext,
 } from "@/adapters/server/db/client";
-import { billingAccounts, users, virtualKeys } from "@/shared/db/schema";
+import {
+  aiThreads,
+  billingAccounts,
+  users,
+  virtualKeys,
+} from "@/shared/db/schema";
 
 interface TestTenant {
   userId: string;
@@ -123,11 +128,31 @@ describe("RLS Tenant Isolation", () => {
       billingAccountId: tenantB.billingAccountId,
       isDefault: true,
     });
+
+    // Seed ai_threads for both tenants
+    await seedDb.insert(aiThreads).values({
+      ownerUserId: tenantA.userId,
+      stateKey: `rls-test-${tenantA.userId.slice(0, 8)}`,
+      messages: JSON.stringify([
+        { id: "1", role: "user", parts: [{ type: "text", text: "from A" }] },
+      ]),
+    });
+    await seedDb.insert(aiThreads).values({
+      ownerUserId: tenantB.userId,
+      stateKey: `rls-test-${tenantB.userId.slice(0, 8)}`,
+      messages: JSON.stringify([
+        { id: "2", role: "user", parts: [{ type: "text", text: "from B" }] },
+      ]),
+    });
   });
 
   afterAll(async () => {
     // Cleanup via service role (bypasses RLS)
-    await getSeedDb()
+    const seedDb = getSeedDb();
+    await seedDb
+      .delete(aiThreads)
+      .where(sql`owner_user_id IN (${tenantA.userId}, ${tenantB.userId})`);
+    await seedDb
       .delete(users)
       .where(sql`id IN (${tenantA.userId}, ${tenantB.userId})`);
   });
@@ -183,6 +208,51 @@ describe("RLS Tenant Isolation", () => {
       );
       const ids = rows.map((r) => r.id);
       expect(ids).not.toContain(tenantB.virtualKeyId);
+    });
+  });
+
+  describe("ai_threads - direct FK isolation", () => {
+    it("user A sees only own threads", async () => {
+      const rows = await withTenantScope(db, tenantA.userId, (tx) =>
+        tx.select().from(aiThreads)
+      );
+      expect(rows.length).toBeGreaterThanOrEqual(1);
+      for (const row of rows) {
+        expect(row.ownerUserId).toBe(tenantA.userId);
+      }
+    });
+
+    it("user A cannot see user B's threads", async () => {
+      const rows = await withTenantScope(db, tenantA.userId, (tx) =>
+        tx.select().from(aiThreads)
+      );
+      const owners = rows.map((r) => r.ownerUserId);
+      expect(owners).not.toContain(tenantB.userId);
+    });
+
+    it("no SET LOCAL on ai_threads returns zero rows", async () => {
+      const rows = await withoutTenantScope(db, (tx) =>
+        tx.select().from(aiThreads)
+      );
+      expect(rows).toHaveLength(0);
+    });
+
+    it("cross-tenant INSERT is rejected by RLS policy", async () => {
+      let caught: unknown;
+      try {
+        await withTenantScope(db, tenantA.userId, (tx) =>
+          tx.insert(aiThreads).values({
+            ownerUserId: tenantB.userId, // User A trying to write as User B
+            stateKey: `rls-xss-${randomUUID().slice(0, 8)}`,
+            messages: JSON.stringify([]),
+          })
+        );
+      } catch (e) {
+        caught = e;
+      }
+      expect(caught).toBeDefined();
+      const cause = (caught as { cause?: { code?: string } }).cause;
+      expect(cause?.code).toBe("42501"); // insufficient_privilege (RLS WITH CHECK)
     });
   });
 

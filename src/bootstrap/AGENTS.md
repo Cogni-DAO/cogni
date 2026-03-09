@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-02-11
 - **Status:** stable
 
 ## Purpose
@@ -48,21 +47,21 @@ System setup installers were moved to `platform/bootstrap/` and are out of scope
 ## Public Surface
 
 - **Exports:**
+  - `verifySystemTenant(serviceAccountService)` - Startup healthcheck: fails fast if cogni_system billing account missing (per SYSTEM_TENANT_STARTUP_CHECK)
+  - `runGovernanceSchedulesSyncJob()` - Job: advisory lock + governance schedule sync via container
   - `getContainer()` - Singleton DI container with logger and config
   - `resetContainer()` - Reset singleton (tests only)
   - `Container` interface - Ports + logger + config (includes accountsForUser(userId), serviceAccountService, metricsQuery, metricsCapability, repoCapability, toolSource, threadPersistenceForUser(userId); no usageService)
   - `ContainerConfig` interface - Runtime config (unhandledErrorPolicy, rateLimitBypass, DEPLOY_ENVIRONMENT)
   - `UnhandledErrorPolicy` type - `"rethrow" | "respond_500"`
   - `resolveAiAdapterDeps()` - AI adapter dependencies for factory
-  - `createGraphExecutor(completionStreamFn, userId, billingCommitFn)` - Factory for GraphExecutorPort with billing + observability decorators (from `graph-executor.factory.ts`)
+  - `createGraphExecutor(completionStreamFn, userId, billingCommitFn, preflightCheckFn)` - Factory for GraphExecutorPort with preflight + billing + observability decorators (from `graph-executor.factory.ts`)
   - `createAgentCatalog()`, `listAgentsForApi()` - Discovery factory (from `agent-discovery.ts`)
   - `wrapRouteHandlerWithLogging()` - Route logging wrapper with metrics (from `http/`)
   - `wrapPublicRoute()` - Lazy singleton wrapper for public routes with rate limiting (from `http/`)
   - `makeWrapPublicRoute()` - Pure factory for testing (from `http/wrapPublicRoute`)
   - `RateLimitBypassConfig` - Test bypass config type (from `http/wrapPublicRoute`)
   - `TokenBucketRateLimiter`, `publicApiLimiter`, `extractClientIp` - Rate limiting utilities (from `http/`)
-- **Routes:** none
-- **CLI:** none
 - **Env/Config keys:** none (uses `@/shared/env`)
 - **Files considered API:** `container.ts`, `graph-executor.factory.ts`, `agent-discovery.ts`, `http/index.ts`, `http/wrapPublicRoute.ts`, `http/rateLimiter.ts`
 
@@ -71,6 +70,7 @@ System setup installers were moved to `platform/bootstrap/` and are out of scope
 - `ai/` - AI tool bindings and tool source factory
 - `capabilities/` - Capability factories (MetricsCapability, RepoCapability, WebSearchCapability)
 - `http/` - Route wrappers and rate limiting
+- `jobs/` - Job modules (advisory lock + container wiring for CLI-invoked tasks)
 
 ## Responsibilities
 

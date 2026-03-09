@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-02-11
 - **Status:** draft
 
 ## Purpose
@@ -40,18 +39,24 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
 - **Routes (if any):**
   - `/api/auth/[...nextauth]` [GET, POST]
   - `/api/setup/verify` [POST] - DAO formation verification
+  - `/api/internal/billing/ingest` [POST] - LiteLLM generic_api callback receiver (bearer auth, Docker-internal only)
+  - `/api/internal/ops/governance/schedules/sync` [POST] - deploy-time governance sync trigger (bearer auth)
   - `/api/v1/ai/completion` [POST]
   - `/api/v1/ai/chat` [POST] - streaming chat with server-authoritative thread persistence
   - `/api/v1/activity` [GET]
-- **CLI (if any):** none
-- **Env/Config keys:** none
+  - `/api/v1/public/attribution/epochs` [GET] - closed epochs list (public, no auth)
+  - `/api/v1/public/attribution/epochs/[id]/user-projections` [GET] - closed epoch user projections (public)
+  - `/api/v1/public/attribution/epochs/[id]/claimants` [GET] - closed epoch claimant attribution (public)
+  - `/api/v1/public/attribution/epochs/[id]/statement` [GET] - epoch statement (public)
+  - `/api/v1/attribution/epochs` [GET] - all epochs (SIWE auth)
+  - `/api/v1/attribution/epochs/[id]/activity` [GET] - epoch activity events (SIWE auth)
+  - `/api/v1/attribution/epochs/[id]/claimants` [GET] - claimant-aware finalized attribution (SIWE auth)
+  - `/api/v1/attribution/epochs/[id]/user-projections` [GET, PATCH=410] - read per-user unsigned projections; edits are deprecated
+  - `/api/v1/attribution/epochs/[id]/review-subject-overrides` [GET, PATCH, DELETE] - review-time subject overrides (SIWE + approver)
+  - `/api/v1/attribution/epochs/[id]/pool-components` [POST] - record pool component (SIWE + approver)
+  - `/api/v1/users/me` [GET, PATCH] - current profile
+  - `/api/v1/users/me/ownership` [GET] - current ownership summary derived from linked identities
 - **Files considered API:** v1/_/route.ts, admin/_/route.ts
-
-## Ports (optional)
-
-- **Uses ports:** none directly (features use ports)
-- **Implements ports:** none
-- **Contracts:** none
 
 ## Responsibilities
 

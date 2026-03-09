@@ -3,73 +3,47 @@
 
 /**
  * Module: `@tests/helpers/data-stream`
- * Purpose: Data Stream Protocol parsing utilities for testing assistant-stream endpoints.
- * Scope: Provides utilities to parse data-stream format in tests. Does not contain test assertions.
- * Invariants: Yields parsed events incrementally as they arrive; handles newline-delimited JSON
+ * Purpose: AI SDK Data Stream Protocol (SSE) parsing utilities for testing.
+ * Scope: Provides utilities to parse SSE-formatted UIMessageChunk events in tests. Does not contain test assertions.
+ * Invariants: Yields parsed events incrementally as they arrive; handles SSE `data: {json}` format
  * Side-effects: IO (reads from ReadableStream)
- * Notes: Use for stack tests that need to consume and validate assistant-stream responses.
- * Links: tests/stack/ai/chat-streaming.stack.test.ts, assistant-stream package
+ * Notes: P1 wire format — parses `data: {json}\n\n` SSE events from createUIMessageStreamResponse.
+ * Links: tests/stack/ai/chat-streaming.stack.test.ts, AI SDK streaming
  * @public
  */
 
 /**
- * Data Stream Protocol chunk types.
- * See: assistant-stream/src/core/serialization/data-stream/chunk-types.ts
+ * Parsed SSE event structure (UIMessageChunk from AI SDK)
  */
-export const DataStreamChunkType = {
-  TextDelta: "0",
-  Data: "2",
-  Error: "3",
-  Annotation: "8",
-  ToolCall: "9",
-  ToolCallResult: "a",
-  StartToolCall: "b",
-  ToolCallArgsTextDelta: "c",
-  FinishMessage: "d",
-  FinishStep: "e",
-  StartStep: "f",
-  ReasoningDelta: "g",
-  Source: "h",
-} as const;
-
-export type DataStreamChunkTypeValue =
-  (typeof DataStreamChunkType)[keyof typeof DataStreamChunkType];
-
-/**
- * Parsed Data Stream event structure
- */
-export interface DataStreamEvent {
-  /** Chunk type code (e.g., "0" for text delta) */
+export interface SseEvent {
+  /** The chunk type (e.g., "text-delta", "text-start", "finish", "error") */
   type: string;
-  /** Parsed JSON value */
-  value: unknown;
+  /** The full parsed JSON payload */
+  data: Record<string, unknown>;
 }
 
 /**
- * Asynchronously reads and parses Data Stream Protocol events from a Response body stream.
+ * Asynchronously reads and parses AI SDK Data Stream Protocol (SSE) events from a Response body stream.
  *
- * Data Stream format:
- * - Each line is: `<type>:<json_value>`
- * - Lines are separated by newlines
- * - Type is a single character or short string code
+ * SSE format from createUIMessageStreamResponse:
+ * - Each event is: `data: {json}\n\n`
+ * - `data: [DONE]\n\n` signals end of stream
  *
  * @param res - Response object with a readable body stream
- * @yields {DataStreamEvent} Parsed events as they arrive
+ * @yields {SseEvent} Parsed events as they arrive
  * @throws {Error} If response body is not readable or parsing fails
  *
  * @example
  * ```ts
  * const response = await fetch('/api/chat');
- * for await (const event of readDataStreamEvents(response)) {
- *   if (event.type === DataStreamChunkType.TextDelta) {
- *     console.log('Text:', event.value);
+ * for await (const event of readSseEvents(response)) {
+ *   if (isTextDeltaEvent(event)) {
+ *     console.log('Text:', event.data.delta);
  *   }
  * }
  * ```
  */
-export async function* readDataStreamEvents(
-  res: Response
-): AsyncIterable<DataStreamEvent> {
+export async function* readSseEvents(res: Response): AsyncIterable<SseEvent> {
   const reader = res.body?.getReader();
   if (!reader) throw new Error("No response body reader");
 
@@ -83,48 +57,48 @@ export async function* readDataStreamEvents(
 
       buf += decoder.decode(value, { stream: true });
 
-      // Data Stream events are separated by newlines
-      let idx = buf.indexOf("\n");
+      // SSE events are delimited by double newlines
+      let idx = buf.indexOf("\n\n");
       while (idx !== -1) {
-        const line = buf.slice(0, idx);
-        buf = buf.slice(idx + 1);
+        const block = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
 
-        // Skip empty lines
-        if (line.trim().length === 0) {
-          idx = buf.indexOf("\n");
-          continue;
+        // Parse SSE data lines from block
+        for (const line of block.split("\n")) {
+          if (!line.startsWith("data: ")) continue;
+
+          const payload = line.slice(6); // Remove "data: " prefix
+
+          // [DONE] signals end of stream
+          if (payload === "[DONE]") return;
+
+          let data: Record<string, unknown>;
+          try {
+            data = JSON.parse(payload) as Record<string, unknown>;
+          } catch {
+            throw new Error(`Invalid JSON in SSE data: ${payload}`);
+          }
+
+          if (typeof data.type === "string") {
+            yield { type: data.type, data };
+          }
         }
 
-        // Parse type:value format
-        const colonIdx = line.indexOf(":");
-        if (colonIdx === -1) {
-          throw new Error(`Invalid data stream line: ${line}`);
-        }
-
-        const type = line.slice(0, colonIdx);
-        const jsonStr = line.slice(colonIdx + 1);
-
-        let value: unknown;
-        try {
-          value = JSON.parse(jsonStr);
-        } catch {
-          throw new Error(`Invalid JSON in data stream: ${jsonStr}`);
-        }
-
-        yield { type, value };
-        idx = buf.indexOf("\n");
+        idx = buf.indexOf("\n\n");
       }
     }
 
     // Process any remaining content
     if (buf.trim().length > 0) {
-      const colonIdx = buf.indexOf(":");
-      if (colonIdx !== -1) {
-        const type = buf.slice(0, colonIdx);
-        const jsonStr = buf.slice(colonIdx + 1);
+      for (const line of buf.split("\n")) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6);
+        if (payload === "[DONE]") return;
         try {
-          const value = JSON.parse(jsonStr);
-          yield { type, value };
+          const data = JSON.parse(payload) as Record<string, unknown>;
+          if (typeof data.type === "string") {
+            yield { type: data.type, data };
+          }
         } catch {
           // Ignore incomplete final chunk
         }
@@ -136,26 +110,62 @@ export async function* readDataStreamEvents(
 }
 
 /**
- * Type guard for text delta events
+ * Type guard for text-delta events
  */
-export function isTextDeltaEvent(
-  event: DataStreamEvent
-): event is DataStreamEvent & { value: string } {
-  return event.type === DataStreamChunkType.TextDelta;
+export function isTextDeltaEvent(event: SseEvent): event is SseEvent & {
+  data: { type: "text-delta"; delta: string; id: string };
+} {
+  return event.type === "text-delta";
 }
 
 /**
- * Type guard for finish message events
+ * Type guard for text-start events
  */
-export function isFinishMessageEvent(event: DataStreamEvent): boolean {
-  return event.type === DataStreamChunkType.FinishMessage;
+export function isTextStartEvent(
+  event: SseEvent
+): event is SseEvent & { data: { type: "text-start"; id: string } } {
+  return event.type === "text-start";
+}
+
+/**
+ * Type guard for finish events
+ */
+export function isFinishEvent(event: SseEvent): boolean {
+  return event.type === "finish";
 }
 
 /**
  * Type guard for error events
  */
 export function isErrorEvent(
-  event: DataStreamEvent
-): event is DataStreamEvent & { value: string } {
-  return event.type === DataStreamChunkType.Error;
+  event: SseEvent
+): event is SseEvent & { data: { type: "error"; errorText: string } } {
+  return event.type === "error";
 }
+
+// ─── Legacy aliases for backwards compatibility with existing test imports ────
+
+/** @deprecated Use readSseEvents */
+export const readDataStreamEvents = readSseEvents;
+/** @deprecated Use isFinishEvent */
+export const isFinishMessageEvent = isFinishEvent;
+
+/**
+ * @deprecated Data Stream chunk types no longer apply to SSE format.
+ * Kept for stack test compilation — values are meaningless in the new format.
+ */
+export const DataStreamChunkType = {
+  TextDelta: "text-delta",
+  Data: "data",
+  Error: "error",
+  Annotation: "annotation",
+  ToolCall: "tool-call",
+  ToolCallResult: "tool-result",
+  StartToolCall: "tool-input-start",
+  ToolCallArgsTextDelta: "tool-input-delta",
+  FinishMessage: "finish",
+  FinishStep: "finish-step",
+  StartStep: "start-step",
+  ReasoningDelta: "reasoning-delta",
+  Source: "source",
+} as const;

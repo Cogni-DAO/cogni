@@ -14,6 +14,16 @@
  */
 
 import { Client, Connection } from "@temporalio/client";
+import type { TemporalScheduleControlConfig } from "@/adapters/server/temporal/schedule-control.adapter";
+
+/** Centralized test Temporal config from env (single source of truth). */
+export function getTestTemporalConfig(): TemporalScheduleControlConfig {
+  return {
+    address: process.env.TEMPORAL_ADDRESS ?? "localhost:7233",
+    namespace: process.env.TEMPORAL_NAMESPACE ?? "cogni-test",
+    taskQueue: process.env.TEMPORAL_TASK_QUEUE ?? "scheduler-tasks",
+  };
+}
 
 let clientInstance: Client | null = null;
 let connectionInstance: Connection | null = null;
@@ -27,8 +37,7 @@ export async function getTestTemporalClient(): Promise<Client> {
     return clientInstance;
   }
 
-  const address = process.env.TEMPORAL_ADDRESS ?? "localhost:7233";
-  const namespace = process.env.TEMPORAL_NAMESPACE ?? "cogni-test";
+  const { address, namespace } = getTestTemporalConfig();
 
   connectionInstance = await Connection.connect({ address });
   clientInstance = new Client({

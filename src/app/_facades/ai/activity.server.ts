@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/_facades/ai/activity.server`
- * Purpose: App-layer facade for Activity dashboard with granular time bucketing.
- * Scope: Resolves session user to billing account, fetches receipts + LLM details, aggregates into buckets. Does not handle HTTP transport.
+ * Purpose: App-layer facade for Activity dashboard with granular time bucketing and optional per-model/agent breakdown.
+ * Scope: Resolves session user to billing account, fetches receipts + LLM details, aggregates into buckets. Supports groupBy (model|graphId) for stacked chart series. Does not handle HTTP transport.
  * Invariants:
  * - Only app layer imports this; validates billing account.
  * - Per CHARGE_RECEIPTS_IS_LEDGER_TRUTH: charge_receipts is the primary data source for Activity.
@@ -22,6 +22,7 @@ import { toUserId } from "@cogni/ids";
 import type { z } from "zod";
 import { resolveActivityDeps } from "@/bootstrap/container";
 import {
+  type ActivityGroupBy,
   type aiActivityOperation,
   STEP_MS,
 } from "@/contracts/ai.activity.v1.contract";
@@ -40,6 +41,7 @@ type ActivityInput = {
   from: string;
   to: string;
   step?: z.infer<typeof aiActivityOperation.input>["step"];
+  groupBy?: ActivityGroupBy;
   cursor?: string;
   limit?: number;
   sessionUser: SessionUser;
@@ -72,6 +74,111 @@ function generateBucketRange(from: Date, to: Date, stepMs: number): number[] {
     buckets.push(epoch);
   }
   return buckets;
+}
+
+type Bucket = { tokens: number; requests: number; spend: number };
+const EMPTY_BUCKET: Readonly<Bucket> = { tokens: 0, requests: 0, spend: 0 };
+
+/** Max distinct groups before remainder is folded into "Others". */
+const MAX_GROUPS = 5;
+
+type DetailMap = Map<
+  string,
+  {
+    model: string;
+    provider: string | null;
+    graphId: string;
+    tokensIn: number | null;
+    tokensOut: number | null;
+    latencyMs: number | null;
+  }
+>;
+
+/**
+ * Build per-group time series from receipts, sorted by total spend descending.
+ * Groups beyond MAX_GROUPS are merged into "Others".
+ */
+function buildGroupedSeries(
+  receipts: ReadonlyArray<{
+    id: string;
+    createdAt: Date;
+    responseCostUsd: string | null;
+  }>,
+  detailMap: DetailMap,
+  groupBy: ActivityGroupBy,
+  stepMs: number,
+  allBucketEpochs: readonly number[]
+): NonNullable<ActivityOutput["groupedSeries"]> {
+  // Accumulate: group → epoch → bucket
+  const grouped = new Map<string, Map<number, Bucket>>();
+
+  function getOrCreateEpochMap(group: string): Map<number, Bucket> {
+    const existing = grouped.get(group);
+    if (existing) return existing;
+    const fresh = new Map<number, Bucket>();
+    grouped.set(group, fresh);
+    return fresh;
+  }
+
+  for (const receipt of receipts) {
+    const detail = detailMap.get(receipt.id);
+    const group =
+      groupBy === "model"
+        ? (detail?.model ?? "unknown")
+        : (detail?.graphId ?? "unknown");
+    const epoch = toBucketEpoch(receipt.createdAt, stepMs);
+    const epochMap = getOrCreateEpochMap(group);
+    const prev = epochMap.get(epoch) ?? { ...EMPTY_BUCKET };
+
+    prev.tokens += (detail?.tokensIn ?? 0) + (detail?.tokensOut ?? 0);
+    prev.requests += 1;
+    prev.spend += receipt.responseCostUsd
+      ? Number.parseFloat(receipt.responseCostUsd)
+      : 0;
+
+    epochMap.set(epoch, prev);
+  }
+
+  // Rank groups by total spend descending
+  const ranked = [...grouped.entries()]
+    .map(([group, epochs]) => {
+      let totalSpend = 0;
+      for (const b of epochs.values()) totalSpend += b.spend;
+      return { group, totalSpend, epochs };
+    })
+    .sort((a, b) => b.totalSpend - a.totalSpend);
+
+  const topEntries = ranked.slice(0, MAX_GROUPS);
+  const overflowEntries = ranked.slice(MAX_GROUPS);
+
+  // Merge overflow into "Others" if needed
+  if (overflowEntries.length > 0) {
+    const othersEpochs = new Map<number, Bucket>();
+    for (const { epochs } of overflowEntries) {
+      for (const [epoch, b] of epochs) {
+        const prev = othersEpochs.get(epoch) ?? { ...EMPTY_BUCKET };
+        prev.tokens += b.tokens;
+        prev.requests += b.requests;
+        prev.spend += b.spend;
+        othersEpochs.set(epoch, prev);
+      }
+    }
+    topEntries.push({ group: "Others", totalSpend: 0, epochs: othersEpochs });
+  }
+
+  // Zero-fill each group across all bucket epochs
+  return topEntries.map(({ group, epochs }) => ({
+    group,
+    buckets: allBucketEpochs.map((epoch) => {
+      const b = epochs.get(epoch) ?? EMPTY_BUCKET;
+      return {
+        bucketStart: new Date(epoch).toISOString(),
+        spend: b.spend,
+        tokens: b.tokens,
+        requests: b.requests,
+      };
+    }),
+  }));
 }
 
 export async function getActivity(
@@ -171,6 +278,16 @@ export async function getActivity(
     };
   });
 
+  const groupedSeries = input.groupBy
+    ? buildGroupedSeries(
+        receipts,
+        detailMap,
+        input.groupBy,
+        stepMs,
+        allBucketEpochs
+      )
+    : undefined;
+
   // Calculate totals from all receipts in range
   let totalUserSpend = 0;
   let totalTokens = 0;
@@ -243,6 +360,7 @@ export async function getActivity(
   const result: ActivityOutput = {
     effectiveStep,
     chartSeries,
+    groupedSeries,
     totals,
     rows,
     nextCursor,

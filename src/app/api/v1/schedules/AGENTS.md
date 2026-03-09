@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2026-01-19
 - **Status:** draft
 
 ## Purpose
@@ -42,8 +41,6 @@ REST API routes for schedule CRUD operations. Auth-protected endpoints for creat
   - `GET /api/v1/schedules` — list user's schedules
   - `PATCH /api/v1/schedules/[scheduleId]` — update schedule
   - `DELETE /api/v1/schedules/[scheduleId]` — delete schedule (returns 204)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** route.ts, [scheduleId]/route.ts
 
 ## Ports

@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-03
 - **Status:** draft
 
 ## Purpose
@@ -36,7 +35,6 @@ Pure validation guards for Brain-mode AI responses. Checks server-collected sour
 ## Public Surface
 
 - **Exports:** `needsCitationRetry()`, `parseCitation()`, `validateSources()`, `INSUFFICIENT_CITATION_MESSAGE`, `ParsedCitation`
-- **Env/Config keys:** none
 - **Files considered API:** `citation.guard.ts`, `index.ts`
 
 ## Responsibilities

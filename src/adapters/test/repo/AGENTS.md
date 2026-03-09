@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-03
 - **Status:** draft
 
 ## Purpose
@@ -30,7 +29,6 @@ Deterministic fake RepoCapability for testing. Returns fixed results without spa
 ## Public Surface
 
 - **Exports:** `FakeRepoAdapter`
-- **Env/Config keys:** none
 - **Files considered API:** `fake-repo.adapter.ts`
 
 ## Responsibilities

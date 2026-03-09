@@ -2,7 +2,7 @@
 id: bug.0013
 type: bug
 title: "Sandbox stack tests flaky — proxy container vanishes during readiness check"
-status: Backlog
+status: needs_triage
 priority: 2
 estimate: 2
 summary: Ephemeral sandbox proxy container disappears mid-startup, causing "no such container" in LlmProxyManager.waitForProxyReady. Affects 3 stack tests.
@@ -19,6 +19,10 @@ labels: [sandbox, proxy, flaky-test, docker]
 external_refs:
 assignees: derekg1729
 credit:
+revision: 0
+blocked_by:
+deploy_verified: false
+rank: 4
 ---
 
 # Sandbox stack tests flaky — proxy container vanishes during readiness check

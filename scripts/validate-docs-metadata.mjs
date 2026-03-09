@@ -25,10 +25,22 @@ const ADR_DECISION = ["proposed", "accepted", "deprecated", "superseded"];
 
 // === WORK ENUMS ===
 const PROJECT_STATE = ["Active", "Paused", "Done", "Dropped"];
-const ITEM_STATUS = ["Backlog", "Todo", "In Progress", "Done", "Cancelled"];
+const ITEM_STATUS = [
+  "needs_triage",
+  "needs_research",
+  "needs_design",
+  "needs_implement",
+  "needs_review",
+  "needs_closeout",
+  "needs_merge",
+  "done",
+  "blocked",
+  "cancelled",
+];
 const ITEM_TYPES = ["task", "bug", "spike", "story", "subtask"];
 const PRIORITY = [0, 1, 2, 3];
 const ESTIMATE = [0, 1, 2, 3, 4, 5];
+const PROJECT_ESTIMATE_MAX = 50;
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -88,6 +100,7 @@ const ITEM_REQUIRED = [
   "title",
   "status",
   "priority",
+  "rank",
   "estimate",
   "summary",
   "outcome",
@@ -263,9 +276,14 @@ function validateProject(file, props, content, allIds) {
       `invalid priority: ${props.priority} (expected: ${PRIORITY.join("|")})`
     );
   }
-  if (props.estimate !== undefined && !ESTIMATE.includes(props.estimate)) {
+  if (
+    props.estimate !== undefined &&
+    (typeof props.estimate !== "number" ||
+      props.estimate < 0 ||
+      props.estimate > PROJECT_ESTIMATE_MAX)
+  ) {
     errors.push(
-      `invalid estimate: ${props.estimate} (expected: ${ESTIMATE.join("|")})`
+      `invalid estimate: ${props.estimate} (expected: 0-${PROJECT_ESTIMATE_MAX})`
     );
   }
   if (props.id && !String(props.id).startsWith("proj.")) {
@@ -337,8 +355,12 @@ function validateCharter(file, props, content, allIds) {
 function validateItem(file, props, content, allIds, projectIds) {
   const errors = [];
 
+  const TRIAGE_OPTIONAL = ["priority", "rank", "estimate"];
   for (const key of ITEM_REQUIRED) {
     if (props[key] === undefined || props[key] === null || props[key] === "") {
+      if (props.status === "needs_triage" && TRIAGE_OPTIONAL.includes(key)) {
+        continue;
+      }
       errors.push(`missing required key: ${key}`);
     }
   }
@@ -353,14 +375,32 @@ function validateItem(file, props, content, allIds, projectIds) {
       `invalid status: ${props.status} (expected: ${ITEM_STATUS.join("|")})`
     );
   }
-  if (props.priority !== undefined && !PRIORITY.includes(props.priority)) {
+  if (
+    props.priority !== undefined &&
+    props.priority !== null &&
+    !PRIORITY.includes(props.priority)
+  ) {
     errors.push(
       `invalid priority: ${props.priority} (expected: ${PRIORITY.join("|")})`
     );
   }
-  if (props.estimate !== undefined && !ESTIMATE.includes(props.estimate)) {
+  if (
+    props.estimate !== undefined &&
+    props.estimate !== null &&
+    !ESTIMATE.includes(props.estimate)
+  ) {
     errors.push(
       `invalid estimate: ${props.estimate} (expected: ${ESTIMATE.join("|")})`
+    );
+  }
+  if (
+    props.rank !== undefined &&
+    props.rank !== null &&
+    props.rank !== "" &&
+    (!Number.isInteger(props.rank) || props.rank < 1)
+  ) {
+    errors.push(
+      `invalid rank: ${props.rank} (expected positive integer, 1 = highest)`
     );
   }
 

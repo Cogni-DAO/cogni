@@ -159,6 +159,40 @@ The cogni-git-review repository implements static gates that read `.cogni/repo-s
 
 **Effect:** Sensitive provider keys cannot be quietly wired into unrelated modules or new network clients.
 
+### Per-Scope Payment Rails (Multi-Project)
+
+When a Node hosts multiple governance domains (scope_ids), each project manifest can declare its own payment rails:
+
+```yaml
+# .cogni/projects/chat-service.yaml
+dao:
+  contract: "0xAAAA..."
+  chain_id: "8453"
+payments:
+  receiving_address: "0xAAAA..." # Chat service DAO's wallet
+  allowed_tokens: [USDC]
+```
+
+**Invariants for per-scope rails:**
+
+- **SCOPE_OWNS_RAILS**: Each scope's `receiving_address` must match its declared `dao.contract` or be an explicitly authorized address. No scope may use another scope's receiving address.
+- **FALLBACK_SCOPE_RAILS**: The `'default'` scope inherits from `.cogni/repo-spec.yaml` `payments_in` (existing V0 behavior). Named scopes override with their own manifest.
+- **RAIL_PAYOUT_ALIGNMENT**: Epoch payouts for a scope draw from that scope's DAO treasury. The `payout_statements` for scope X reference scope X's payment rails, never another scope's.
+
+### Governance Config Protection
+
+`.cogni/**` files (especially scope manifests and weight policies) are governance-critical and must be protected:
+
+1. **CODEOWNERS guard**: `.cogni/**` must be listed in `CODEOWNERS` with explicit DAO-authorized reviewers. PRs changing scope config require these reviewers' approval.
+
+2. **Policy change events**: When a `.cogni/projects/*.yaml` manifest is modified (weight policy, DAO address, payment rails), the merge triggers an immutable **"policy_changed"** event in the `activity_events` table. This event:
+   - Records the old and new values (before/after snapshot)
+   - References the merge commit SHA as `artifact_url`
+   - Is append-only (ACTIVITY_APPEND_ONLY) and auditable
+   - Ensures payout explanations can reference which policy was active for each epoch
+
+3. **Weight policy pinning**: Each epoch stores its `weight_config` at creation time. A policy change mid-epoch does NOT retroactively affect the current epoch's weights — only future epochs pick up the new policy.
+
 ### Extensibility Baseline
 
 As additional payment providers and on-chain verification (Ponder) are added:
@@ -200,3 +234,5 @@ _(none — on-chain reconciliation and multi-provider routing tracked in proj.pa
 - [Chain Configuration](./chain-config.md)
 - [Authentication](./authentication.md)
 - [Billing Evolution](./billing-evolution.md)
+- [Identity Model](./identity-model.md) — node_id, scope_id definitions
+- [Attribution Ledger](./attribution-ledger.md) — scope_id in ledger invariants

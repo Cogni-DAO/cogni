@@ -4,8 +4,8 @@
 /**
  * Module: `@tests/unit/adapters/server/ai/billing-executor-decorator.spec`
  * Purpose: Unit tests for BillingGraphExecutorDecorator billing validation and stream wrapping.
- * Scope: Tests Zod validation (strict for inproc/sandbox, hints for external), commitFn invocation, usage_report consumption, and error propagation. Does not test actual DB writes.
- * Invariants: ONE_LEDGER_WRITER, USAGE_FACT_VALIDATED, BILLING_INDEPENDENT_OF_CLIENT
+ * Scope: Tests Zod validation (strict for inproc/sandbox, hints for external), usage_report consumption, and error propagation. Does not test receipt writes (CALLBACK_IS_SOLE_WRITER).
+ * Invariants: CALLBACK_IS_SOLE_WRITER, USAGE_FACT_VALIDATED, BILLING_INDEPENDENT_OF_CLIENT
  * Side-effects: none
  * Links: src/adapters/server/ai/billing-executor.decorator.ts, GRAPH_EXECUTION.md
  * @internal
@@ -16,7 +16,7 @@ import {
   buildInprocUsageFact,
   buildSandboxUsageFact,
 } from "@tests/_fakes";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { BillingGraphExecutorDecorator } from "@/adapters/server/ai/billing-executor.decorator";
 import type {
@@ -31,7 +31,6 @@ import type {
   TextDeltaEvent,
   UsageReportEvent,
 } from "@/types/ai-events";
-import type { BillingCommitFn } from "@/types/billing";
 import type { UsageFact } from "@/types/usage";
 
 // ---------------------------------------------------------------------------
@@ -95,11 +94,9 @@ describe("BillingGraphExecutorDecorator stream wrapping", () => {
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
@@ -115,10 +112,8 @@ describe("BillingGraphExecutorDecorator stream wrapping", () => {
     const inner = createFakeInnerExecutor([
       { type: "done" } satisfies DoneEvent,
     ]);
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
@@ -137,53 +132,45 @@ describe("BillingGraphExecutorDecorator stream wrapping", () => {
 // ============================================================================
 
 describe("BillingGraphExecutorDecorator billing validation", () => {
-  it("valid inproc fact → commitFn called with correct args", async () => {
+  it("valid inproc fact → passes validation without error", async () => {
     const fact = buildInprocUsageFact();
     const innerEvents: AiEvent[] = [
       { type: "usage_report", fact } satisfies UsageReportEvent,
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
     const result = decorator.runGraph(fakeRequest);
-    await collectStream(result.stream);
-
-    expect(commitFn).toHaveBeenCalledTimes(1);
-    const [calledFact, calledContext] = commitFn.mock.calls[0] ?? [];
-    expect(calledFact.usageUnitId).toBe("litellm-call-id-456");
-    expect(calledContext.runId).toBe("run-123");
-    expect(calledContext.ingressRequestId).toBe("req-123");
-    expect(calledContext.attempt).toBe(0);
+    // Should not throw — valid fact passes validation
+    const collected = await collectStream(result.stream);
+    expect(collected.map((e) => e.type)).toEqual(["done"]);
   });
 
-  it("valid sandbox fact → commitFn called", async () => {
+  it("valid sandbox fact → passes validation without error", async () => {
     const fact = buildSandboxUsageFact();
     const innerEvents: AiEvent[] = [
       { type: "usage_report", fact } satisfies UsageReportEvent,
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
-    await collectStream(decorator.runGraph(fakeRequest).stream);
-
-    expect(commitFn).toHaveBeenCalledTimes(1);
+    const collected = await collectStream(
+      decorator.runGraph(fakeRequest).stream
+    );
+    expect(collected.map((e) => e.type)).toEqual(["done"]);
   });
 
-  it("inproc executor missing usageUnitId → throws billing failure", async () => {
+  it("inproc executor missing usageUnitId → throws validation failure", async () => {
     const { usageUnitId: _, ...factWithoutId } = buildInprocUsageFact();
     const innerEvents: AiEvent[] = [
       { type: "text_delta", delta: "Hello" } satisfies TextDeltaEvent,
@@ -194,11 +181,9 @@ describe("BillingGraphExecutorDecorator billing validation", () => {
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
@@ -206,13 +191,11 @@ describe("BillingGraphExecutorDecorator billing validation", () => {
 
     // Stream iteration should throw because of billing-authoritative hard failure
     await expect(collectStream(result.stream)).rejects.toThrow(
-      "Billing failed"
+      "Billing validation failed"
     );
-    // commitFn should NOT have been called
-    expect(commitFn).not.toHaveBeenCalled();
   });
 
-  it("sandbox executor missing usageUnitId → throws billing failure", async () => {
+  it("sandbox executor missing usageUnitId → throws validation failure", async () => {
     const { usageUnitId: _, ...factWithoutId } = buildSandboxUsageFact();
     const innerEvents: AiEvent[] = [
       {
@@ -222,21 +205,18 @@ describe("BillingGraphExecutorDecorator billing validation", () => {
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
     await expect(
       collectStream(decorator.runGraph(fakeRequest).stream)
-    ).rejects.toThrow("Billing failed");
-    expect(commitFn).not.toHaveBeenCalled();
+    ).rejects.toThrow("Billing validation failed");
   });
 
-  it("valid external fact (no usageUnitId) → commitFn called (hints schema passes)", async () => {
+  it("valid external fact (no usageUnitId) → passes validation (hints schema)", async () => {
     const externalFact = buildExternalUsageFact();
     const innerEvents: AiEvent[] = [
       { type: "text_delta", delta: "Response" } satisfies TextDeltaEvent,
@@ -244,23 +224,20 @@ describe("BillingGraphExecutorDecorator billing validation", () => {
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
     const result = decorator.runGraph(fakeRequest);
     const collected = await collectStream(result.stream);
 
-    // Hints schema passes (usageUnitId optional for external) → commitFn IS called
+    // Hints schema passes (usageUnitId optional for external) — no error
     expect(collected.map((e) => e.type)).toEqual(["text_delta", "done"]);
-    expect(commitFn).toHaveBeenCalledTimes(1);
   });
 
-  it("external executor with malformed data → soft skip, commitFn NOT called", async () => {
+  it("external executor with malformed data → soft skip (no throw)", async () => {
     // Remove runId to fail hints validation (runId is required even in hints schema)
     const { runId: _, ...factWithoutRunId } = buildExternalUsageFact();
     const innerEvents: AiEvent[] = [
@@ -272,11 +249,9 @@ describe("BillingGraphExecutorDecorator billing validation", () => {
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
@@ -285,37 +260,9 @@ describe("BillingGraphExecutorDecorator billing validation", () => {
 
     // No error — soft skip for malformed hints (non-authoritative)
     expect(collected.map((e) => e.type)).toEqual(["text_delta", "done"]);
-    // commitFn NOT called because validation failed
-    expect(commitFn).not.toHaveBeenCalled();
   });
 
-  it("commitFn DB error → swallowed, stream continues", async () => {
-    const fact = buildInprocUsageFact();
-    const innerEvents: AiEvent[] = [
-      { type: "usage_report", fact } satisfies UsageReportEvent,
-      { type: "done" } satisfies DoneEvent,
-    ];
-
-    // commitFn throws a non-billing error (e.g., DB error)
-    const commitFn = vi
-      .fn<BillingCommitFn>()
-      .mockRejectedValue(new Error("DB connection failed"));
-    const inner = createFakeInnerExecutor(innerEvents);
-    const decorator = new BillingGraphExecutorDecorator(
-      inner,
-      commitFn,
-      makeNoopLogger()
-    );
-
-    const result = decorator.runGraph(fakeRequest);
-    const collected = await collectStream(result.stream);
-
-    // Error swallowed — stream continues
-    expect(collected.map((e) => e.type)).toEqual(["done"]);
-    expect(commitFn).toHaveBeenCalledTimes(1);
-  });
-
-  it("multiple usage_report events → commitFn called for each", async () => {
+  it("multiple usage_report events → all consumed, none yielded", async () => {
     const fact1 = buildInprocUsageFact({ usageUnitId: "call-1" });
     const fact2 = buildInprocUsageFact({ usageUnitId: "call-2" });
     const innerEvents: AiEvent[] = [
@@ -324,18 +271,17 @@ describe("BillingGraphExecutorDecorator billing validation", () => {
       { type: "done" } satisfies DoneEvent,
     ];
 
-    const commitFn = vi.fn<BillingCommitFn>().mockResolvedValue(undefined);
     const inner = createFakeInnerExecutor(innerEvents);
     const decorator = new BillingGraphExecutorDecorator(
       inner,
-      commitFn,
       makeNoopLogger()
     );
 
-    await collectStream(decorator.runGraph(fakeRequest).stream);
+    const collected = await collectStream(
+      decorator.runGraph(fakeRequest).stream
+    );
 
-    expect(commitFn).toHaveBeenCalledTimes(2);
-    expect(commitFn.mock.calls[0]?.[0].usageUnitId).toBe("call-1");
-    expect(commitFn.mock.calls[1]?.[0].usageUnitId).toBe("call-2");
+    // Both usage_report events consumed, only done yielded
+    expect(collected.map((e) => e.type)).toEqual(["done"]);
   });
 });

@@ -14,7 +14,15 @@
  * @public
  */
 
-import { bigint, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  bigint,
+  boolean,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 /**
  * Users table - primary identity table for SIWE authentication.
@@ -33,14 +41,25 @@ export const users = pgTable("users", {
  * Billing accounts table - per-user billing entity.
  * FK target for: executionGrants, virtualKeys, creditLedger, chargeReceipts, paymentAttempts
  */
-export const billingAccounts = pgTable("billing_accounts", {
-  id: text("id").primaryKey(),
-  ownerUserId: text("owner_user_id")
-    .notNull()
-    .unique()
-    .references(() => users.id, { onDelete: "cascade" }),
-  balanceCredits: bigint("balance_credits", { mode: "bigint" }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-}).enableRLS();
+export const billingAccounts = pgTable(
+  "billing_accounts",
+  {
+    id: text("id").primaryKey(),
+    ownerUserId: text("owner_user_id")
+      .notNull()
+      .unique()
+      .references(() => users.id, { onDelete: "cascade" }),
+    isSystemTenant: boolean("is_system_tenant").notNull().default(false),
+    slug: text("slug").unique(),
+    balanceCredits: bigint("balance_credits", { mode: "bigint" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    /** Enforce exactly one system tenant at DB level */
+    oneSystemTenant: uniqueIndex("billing_accounts_one_system_tenant")
+      .on(table.isSystemTenant)
+      .where(sql`${table.isSystemTenant} = true`),
+  })
+).enableRLS();

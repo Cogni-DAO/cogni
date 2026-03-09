@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-01-20
 - **Status:** draft
 
 ## Purpose
@@ -36,7 +35,6 @@ LangGraph dev server adapter. Connects to external `langgraph dev` server (port 
   - `createDevClient()` — SDK client factory
   - `deriveThreadId()` — UUIDv5 thread derivation from billingAccountId + stateKey
   - `translateSdkStreamToAiEvents()` — SDK stream to AiEvent translation
-- **CLI:** none
 - **Env/Config keys:** `LANGGRAPH_DEV_URL` (enables dev server path when set)
 - **Files considered API:** `index.ts`, `provider.ts`, `agent-catalog.provider.ts`
 
