@@ -9,7 +9,7 @@ summary: Temporal workflow/activity patterns — determinism rules, schedule con
 read_when: Writing Temporal workflows or activities, configuring schedules, or debugging replay issues.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-06
+verified: 2026-03-09
 tags: [ai-graphs, infra]
 ---
 

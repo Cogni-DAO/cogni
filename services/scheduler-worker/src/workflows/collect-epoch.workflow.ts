@@ -3,12 +3,12 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/workflows/collect-epoch`
- * Purpose: Temporal Workflow for epoch ingestion, selection, allocation, pool estimation, and auto-close.
- * Scope: Deterministic orchestration only. All I/O happens in Activities. Steps: compute window → ensure epoch → collect per source → materialize selection → compute allocations → ensure pool → auto-close check. Does not handle finalization (see FinalizeEpochWorkflow).
+ * Purpose: Temporal Workflow orchestrator for epoch ingestion — delegates to child workflows for collection, enrichment, and allocation.
+ * Scope: Deterministic orchestration only. All I/O happens in Activities (via child workflows). Steps: compute window → ensure epoch → CollectSourcesWorkflow → EnrichAndAllocateWorkflow → ensure pool → auto-close check. Does not handle finalization (see FinalizeEpochWorkflow).
  * Invariants:
  *   - Per TEMPORAL_DETERMINISM: No I/O, network calls, or direct imports of adapters
  *   - Per WRITES_VIA_TEMPORAL: All writes execute in Temporal activities
- *   - Per CURSOR_STATE_PERSISTED: Cursors saved after each adapter collect() call
+ *   - Per CHILD_WORKFLOW_COMPOSITION: Collection and enrichment stages delegate to typed child workflows via executeChild()
  *   - Per ACTIVITY_IDEMPOTENT: All activities idempotent via PK constraints or upsert
  *   - Per WEIGHT_PINNING: Epoch weightConfig is pinned at creation; subsequent runs use pinned value
  * Side-effects: none (deterministic orchestration only)
@@ -19,55 +19,25 @@
 import { computeEpochWindowV1 } from "@cogni/attribution-ledger/epoch-window";
 import {
   ApplicationFailure,
+  executeChild,
+  ParentClosePolicy,
   proxyActivities,
   workflowInfo,
 } from "@temporalio/workflow";
 
 import type { EnrichmentActivities } from "../activities/enrichment.js";
 import type { LedgerActivities } from "../activities/ledger.js";
+import { STANDARD_ACTIVITY_OPTIONS } from "./activity-profiles.js";
+import { CollectSourcesWorkflow } from "./stages/collect-sources.workflow.js";
+import { EnrichAndAllocateWorkflow } from "./stages/enrich-and-allocate.workflow.js";
 
-// Proxy ledger activities with reasonable timeouts.
-// collectFromSource may hit GitHub API pagination — allow up to 5 minutes.
-const {
-  ensureEpochForWindow,
-  loadCursor,
-  saveCursor,
-  insertReceipts,
-  materializeSelection,
-  computeAllocations,
-  ensurePoolComponents,
-  autoCloseIngestion,
-  resolveStreams,
-} = proxyActivities<LedgerActivities>({
-  startToCloseTimeout: "2 minutes",
-  retry: {
-    initialInterval: "2 seconds",
-    maximumInterval: "1 minute",
-    backoffCoefficient: 2,
-    maximumAttempts: 5,
-  },
-});
+// Proxy ledger activities with standard timeout/retry profile.
+// Only activities that remain inline in this parent workflow (setup + pool/close).
+const { ensureEpochForWindow, ensurePoolComponents, autoCloseIngestion } =
+  proxyActivities<LedgerActivities>(STANDARD_ACTIVITY_OPTIONS);
 
-const { collectFromSource } = proxyActivities<LedgerActivities>({
-  startToCloseTimeout: "5 minutes",
-  retry: {
-    initialInterval: "5 seconds",
-    maximumInterval: "2 minutes",
-    backoffCoefficient: 2,
-    maximumAttempts: 3,
-  },
-});
-
-const { deriveWeightConfig, evaluateEpochDraft, buildLockedEvaluations } =
-  proxyActivities<EnrichmentActivities>({
-    startToCloseTimeout: "2 minutes",
-    retry: {
-      initialInterval: "2 seconds",
-      maximumInterval: "1 minute",
-      backoffCoefficient: 2,
-      maximumAttempts: 5,
-    },
-  });
+const { deriveWeightConfig, buildLockedEvaluations } =
+  proxyActivities<EnrichmentActivities>(STANDARD_ACTIVITY_OPTIONS);
 
 /** Schedule adapter wrapper (infra — extract .input immediately) */
 interface ScheduleActionPayload {
@@ -101,12 +71,12 @@ export interface AttributionIngestRunV1 {
 }
 
 /**
- * CollectEpochWorkflow — orchestrates one epoch collection pass.
+ * CollectEpochWorkflow — thin orchestrator for one epoch collection pass.
  *
- * 1. Compute epoch window from TemporalScheduledStartTime
- * 2. Derive weight config from pipeline profile
- * 3. Ensure epoch exists (any status) — pin weights on first create
- * 4. For each source, resolve streams from adapter, then per sourceRef/stream: collect → insert → save cursor
+ * 1-4. Setup: compute window, derive weights, ensure epoch
+ * 5.   Delegate source collection to CollectSourcesWorkflow (child)
+ * 6-8. Delegate enrichment + allocation to EnrichAndAllocateWorkflow (child)
+ * 9-10. Pool + auto-close (inline, conditional)
  *
  * Receives ScheduleActionPayload from the schedule adapter; extracts .input immediately.
  * Deterministic workflow ID: ledger-collect-{scopeKey}-{periodStart}-{periodEnd}
@@ -156,46 +126,31 @@ export async function CollectEpochWorkflow(
   // If epoch already closed/finalized, skip collection
   if (epoch.status !== "open") return;
 
-  // 5. Collect from each source, each sourceRef — streams resolved from adapter
-  for (const [source, sourceConfig] of Object.entries(config.activitySources)) {
-    const { streams } = await resolveStreams({ source });
-    for (const sourceRef of sourceConfig.sourceRefs) {
-      for (const stream of streams) {
-        const cursorValue = await loadCursor({ source, stream, sourceRef });
-        const result = await collectFromSource({
-          source,
-          streams: [stream],
-          cursorValue,
-          periodStart: periodStartIso,
-          periodEnd: periodEndIso,
-        });
-        if (result.events.length > 0) {
-          await insertReceipts({
-            events: result.events,
-            producerVersion: result.producerVersion,
-          });
-        }
-        await saveCursor({
-          source,
-          stream,
-          sourceRef,
-          cursorValue: result.nextCursorValue,
-        });
-      }
-    }
-  }
+  // 5. Collect from all sources (child workflow — independently retryable/visible)
+  await executeChild(CollectSourcesWorkflow, {
+    args: [
+      {
+        epochId: epoch.epochId,
+        sources: config.activitySources,
+        periodStart: periodStartIso,
+        periodEnd: periodEndIso,
+      },
+    ],
+    workflowId: `collect-sources-${epoch.epochId}`,
+    parentClosePolicy: ParentClosePolicy.PARENT_CLOSE_POLICY_TERMINATE,
+  });
 
-  // 6. Materialize selection and resolve identities (SELECTION_AUTO_POPULATE)
-  await materializeSelection({ epochId: epoch.epochId, attributionPipeline });
-
-  // 7. Evaluate epoch with draft evaluations (profile-driven enricher dispatch)
-  await evaluateEpochDraft({ epochId: epoch.epochId, attributionPipeline });
-
-  // 8. Compute allocations
-  await computeAllocations({
-    epochId: epoch.epochId,
-    attributionPipeline,
-    weightConfig: epoch.weightConfig,
+  // 6-8. Enrich and allocate (child workflow — selection → enrichment → allocation)
+  await executeChild(EnrichAndAllocateWorkflow, {
+    args: [
+      {
+        epochId: epoch.epochId,
+        attributionPipeline,
+        weightConfig: epoch.weightConfig,
+      },
+    ],
+    workflowId: `enrich-allocate-${epoch.epochId}`,
+    parentClosePolicy: ParentClosePolicy.PARENT_CLOSE_POLICY_TERMINATE,
   });
 
   // 9. Ensure pool components (base_issuance from config, idempotent)

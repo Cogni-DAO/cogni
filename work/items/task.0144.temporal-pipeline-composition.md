@@ -1,7 +1,7 @@
 ---
 id: task.0144
 type: task
-status: needs_implement
+status: needs_merge
 title: "Typed Temporal pipeline composition — shared proxy configs, child workflows, stage I/O types"
 priority: 1
 rank: 5
@@ -14,8 +14,8 @@ spec_refs:
 assignees: []
 credit:
 project: proj.transparent-credit-payouts
-branch:
-pr:
+branch: task/0144-temporal-pipeline-composition
+pr: https://github.com/Cogni-DAO/node-template/pull/524
 reviewer:
 revision: 1
 blocked_by:

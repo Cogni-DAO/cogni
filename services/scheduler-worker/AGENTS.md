@@ -28,6 +28,8 @@ src/
 │   └── index.ts     # ExecutionGrantWorkerPort, ScheduleRunRepository
 ├── activities/      # Temporal activities (I/O via injected ports)
 ├── workflows/       # Temporal workflows (deterministic, no I/O)
+│   ├── stages/      # Child workflows for pipeline stage composition (CollectSources, EnrichAndAllocate)
+│   └── activity-profiles.ts  # Shared proxyActivities timeout/retry config profiles
 ├── adapters/        # Concrete implementations (Octokit, GitHub App auth)
 │   └── ingestion/   # GitHub poll adapter + webhook normalizer + token provider
 ├── observability/   # Logger factory (sole pino importer), redaction
@@ -80,7 +82,7 @@ src/
 
 ## Responsibilities
 
-- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow, execute scheduler activities (validateGrant, executeGraph, updateRun, createRun), ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertReceipts, saveCursor, materializeSelection, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), dispatch enrichment and allocation via profile/allocator registries from `@cogni/attribution-pipeline-plugins` and `@cogni/attribution-pipeline-contracts`, resolve receipt claimants during materializeSelection (draft) and lock them at autoCloseIngestion, and produce claimant-aware finalized statements from locked claimant records × allocator output via explodeToClaimants()
+- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow + CollectSourcesWorkflow + EnrichAndAllocateWorkflow (child workflows), execute scheduler activities (validateGrant, executeGraph, updateRun, createRun), ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertReceipts, saveCursor, materializeSelection, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), dispatch enrichment and allocation via profile/allocator registries from `@cogni/attribution-pipeline-plugins` and `@cogni/attribution-pipeline-contracts`, resolve receipt claimants during materializeSelection (draft) and lock them at autoCloseIngestion, and produce claimant-aware finalized statements from locked claimant records × allocator output via explodeToClaimants()
 - This directory **does not**: Import from src/, create/modify/delete schedules (CRUD is authority), define port interfaces (those live in packages), change ledger core contracts for plugin-specific payloads
 
 ## Usage

@@ -146,15 +146,16 @@ Critical comparison against SourceCred's full-history mirror model. SourceCred i
 
 **Enrichment + scoring pipeline:**
 
-| Deliverable                                           | Status      | Est | Work Item                                              |
-| ----------------------------------------------------- | ----------- | --- | ------------------------------------------------------ |
-| Scope-aware epoch API routing (blocks multi-scope)    | Not Started | 3   | task.0123                                              |
-| Epoch artifact pipeline + echo enricher               | In Review   | 3   | task.0113                                              |
-| Plugin pipeline framework + built-in plugins packages | In Review   | 3   | task.0124                                              |
-| Store ISP + Zod enricher/allocator output schemas     | Done        | 3   | task.0133                                              |
-| work-item-budget-v0 allocation algorithm              | Not Started | 2   | task.0114                                              |
-| Per-receipt EIP-191 wallet signing                    | Not Started | 2   | (create at P1 start — EIP-712 foundation in task.0119) |
-| `ledger_issuers` role system (can_issue, can_approve) | Not Started | 2   | (create at P1 start)                                   |
+| Deliverable                                                         | Status      | Est | Work Item                                              |
+| ------------------------------------------------------------------- | ----------- | --- | ------------------------------------------------------ |
+| Scope-aware epoch API routing (blocks multi-scope)                  | Not Started | 3   | task.0123                                              |
+| Epoch artifact pipeline + echo enricher                             | In Review   | 3   | task.0113                                              |
+| Plugin pipeline framework + built-in plugins packages               | In Review   | 3   | task.0124                                              |
+| Store ISP + Zod enricher/allocator output schemas                   | Done        | 3   | task.0133                                              |
+| Typed pipeline composition — child workflows + shared proxy configs | In Review   | 3   | task.0144                                              |
+| work-item-budget-v0 allocation algorithm                            | Not Started | 2   | task.0114                                              |
+| Per-receipt EIP-191 wallet signing                                  | Not Started | 2   | (create at P1 start — EIP-712 foundation in task.0119) |
+| `ledger_issuers` role system (can_issue, can_approve)               | Not Started | 2   | (create at P1 start)                                   |
 
 **Multi-source economics + pool stabilization:**
 
@@ -233,6 +234,7 @@ See [attribution-ledger spec](../../docs/spec/attribution-ledger.md) for full ar
 - [attribution-ledger](../../docs/spec/attribution-ledger.md) — V0 schema, invariants, API, claimant-aware finalization, architecture
 - [plugin-attribution-pipeline](../../docs/spec/plugin-attribution-pipeline.md) — profile-driven plugin contracts, schema-backed descriptors, generic worker dispatch
 - [attribution-pipeline-overview](../../docs/spec/attribution-pipeline-overview.md) — end-to-end map from repo-spec through signed statement
+- [temporal-patterns](../../docs/spec/temporal-patterns.md) — workflow conventions, child workflow composition, shared proxy configs
 
 ## Research
 
