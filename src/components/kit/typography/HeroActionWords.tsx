@@ -18,7 +18,7 @@ import { AnimatePresence, motion } from "motion/react";
 import type { ReactElement } from "react";
 import { useCallback, useEffect, useState } from "react";
 
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 import { codeToken } from "@/styles/ui";
 
 interface HeroActionWordsProps {

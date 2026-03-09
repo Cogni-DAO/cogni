@@ -3,59 +3,21 @@
 
 /**
  * Module: `@ports`
- * Purpose: Hex entry file for port interfaces and port-level errors - canonical import surface.
- * Scope: Re-exports public port interfaces and error classes. Does not export implementations or runtime objects.
- * Invariants: Named exports only, no runtime coupling except error classes, no export *
+ * Purpose: Client-safe port facade — canonical import surface for port interfaces and errors.
+ * Scope: Re-exports public port interfaces and error classes from local port files. Does NOT re-export packages with node: transitive deps (those live in @/ports/server). Does not contain implementations.
+ * Invariants: Named exports only, no runtime coupling except error classes, no export *,
+ *             no imports that transitively reach node: builtins.
  * Side-effects: none
- * Notes: Enforces architectural boundaries via ESLint entry-point rules
- * Links: Used by features and adapters for port contracts
+ * Notes: Server-only ports (e.g. @cogni/scheduler-core) live in @/ports/server.
+ *        See bug.0147 for the environment-safe split rationale.
+ * Links: @/ports/server (server-only surface), .dependency-cruiser.cjs
  * @public
  */
 
 export type { GraphId } from "@cogni/ai-core";
-// Scheduling ports - re-exported from @cogni/scheduler-core package
-export {
-  type CreateScheduleInput,
-  type CreateScheduleParams,
-  type ExecutionGrant,
-  type ExecutionGrantUserPort,
-  type ExecutionGrantWorkerPort,
-  type ExecutionOutcome,
-  type ExecutionRequest,
-  type ExecutionRequestPort,
-  GrantExpiredError,
-  GrantNotFoundError,
-  GrantRevokedError,
-  GrantScopeMismatchError,
-  type IdempotencyCheckResult,
-  InvalidCronExpressionError,
-  InvalidTimezoneError,
-  isGrantExpiredError,
-  isGrantNotFoundError,
-  isGrantRevokedError,
-  isGrantScopeMismatchError,
-  isInvalidCronExpressionError,
-  isInvalidTimezoneError,
-  isScheduleAccessDeniedError,
-  isScheduleControlConflictError,
-  isScheduleControlNotFoundError,
-  isScheduleControlUnavailableError,
-  isScheduleNotFoundError,
-  ScheduleAccessDeniedError,
-  ScheduleControlConflictError,
-  ScheduleControlNotFoundError,
-  type ScheduleControlPort,
-  ScheduleControlUnavailableError,
-  type ScheduleDescription,
-  ScheduleNotFoundError,
-  type ScheduleRun,
-  type ScheduleRunRepository,
-  type ScheduleRunStatus,
-  type ScheduleSpec,
-  type ScheduleUserPort,
-  type ScheduleWorkerPort,
-  type UpdateScheduleInput,
-} from "@cogni/scheduler-core";
+// Scheduling ports moved to @/ports/server — @cogni/scheduler-core uses node:util
+// and contaminates client bundles via barrel re-export. Server-only consumers
+// must import from "@/ports/server" instead.
 export {
   type AccountService,
   type BillingAccount,

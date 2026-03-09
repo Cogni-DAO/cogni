@@ -16,7 +16,7 @@
 
 import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 import type { PaymentFlowState } from "@/types/payments";
 import { PaymentButton } from "./PaymentButton";
 import { PaymentFlowDialog } from "./PaymentFlowDialog";

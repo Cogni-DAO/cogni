@@ -30,13 +30,13 @@ import {
 import { executeStream } from "@/features/ai/public.server";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
+import { isInsufficientCreditsPortError } from "@/ports";
 import {
   isGrantExpiredError,
   isGrantNotFoundError,
   isGrantRevokedError,
   isGrantScopeMismatchError,
-  isInsufficientCreditsPortError,
-} from "@/ports";
+} from "@/ports/server";
 import { serverEnv } from "@/shared/env";
 
 export const dynamic = "force-dynamic";
