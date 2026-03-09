@@ -5,8 +5,8 @@ title: "Financial Ledger: Double-Entry Treasury with On-Chain Settlement"
 status: draft
 spec_state: draft
 trust: draft
-summary: "Double-entry financial ledger using TigerBeetle as the transaction engine and Postgres for metadata. LedgerPort is the write path for all money-movement operations. Blockchain is the external settlement rail; TigerBeetle is the internal source of financial truth. x402 at the edge, TigerBeetle at the core."
-read_when: Working on treasury accounting, on-chain distributions, settlement workflows, the LedgerPort, operator wallet, x402 payments, or any code that moves money.
+summary: "Double-entry financial ledger using TigerBeetle as the transaction engine and Postgres for metadata. FinancialLedgerPort is the write path for all money-movement operations. Blockchain is the external settlement rail; TigerBeetle is the internal source of financial truth. x402 at the edge, TigerBeetle at the core."
+read_when: Working on treasury accounting, on-chain distributions, settlement workflows, the FinancialLedgerPort, operator wallet, x402 payments, or any code that moves money.
 implements: proj.financial-ledger
 owner: derekg1729
 created: 2026-03-02
@@ -42,7 +42,7 @@ Operations that do NOT touch value (attribution scoring, weight computation, ide
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | DOUBLE_ENTRY_CANONICAL       | TigerBeetle enforces balanced double-entry at the engine level. Every transfer debits one account and credits another. Unbalanced transactions are structurally impossible.                                                                                  |
 | TIGERBEETLE_IS_BALANCE_TRUTH | TigerBeetle account balances are the source of truth for all monetary state. Postgres balances (e.g., `billing_accounts.balance_credits`) become reconciliation checks, not authoritative.                                                                   |
-| LEDGER_PORT_IS_WRITE_PATH    | All money-movement operations go through `LedgerPort`. No direct TigerBeetle writes from feature code.                                                                                                                                                       |
+| LEDGER_PORT_IS_WRITE_PATH    | All money-movement operations go through `FinancialLedgerPort`. No direct TigerBeetle writes from feature code.                                                                                                                                              |
 | POSTGRES_IS_METADATA         | Postgres stores account names, descriptions, transfer explanations, workflow state, and reporting views. TigerBeetle stores balances and transfers. Linked via `user_data_128` fields.                                                                       |
 | CHAIN_IS_SETTLEMENT          | Blockchain is the external settlement rail. TigerBeetle records the economic event when a chain transaction is confirmed. Do not mirror every raw blockchain event — record what the app recognizes (confirmed deposit, funded distributor, claimed tokens). |
 | X402_AT_EDGE                 | x402 proves and settles external payments. TigerBeetle records how those payments change internal balances. The ledger works identically for prepaid credits and x402 per-request settlement.                                                                |
@@ -67,12 +67,14 @@ Operations that do NOT touch value (attribution scoring, weight computation, ide
                              │ economic event recognized
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  LedgerPort (src/ports/ledger.port.ts)                       │
+│  FinancialLedgerPort (@cogni/financial-ledger)     │
 │                                                              │
 │  transfer(debit, credit, amount, ledger, metadata)           │
-│  pendingTransfer(...)  →  postTransfer(...)  |  voidTransfer  │
+│  linkedTransfers(transfers[])                                │
 │  lookupAccounts(ids)                                         │
 │  getAccountBalance(id)                                       │
+│  --- Walk/x402 (task.0147) ---                               │
+│  pendingTransfer(...)  →  postTransfer(...)  |  voidTransfer  │
 └────────────────────────────┬────────────────────────────────┘
                              │
               ┌──────────────┴──────────────┐
@@ -145,6 +147,32 @@ Assets:Treasury:EUR                 ; EUR balance (for hosting payments)
 Expense:Infrastructure:Hosting:EUR  ; Cherry Servers hosting costs
 ```
 
+### Cross-Ledger Transfers (USDC → CREDIT)
+
+TigerBeetle transfers operate within a single ledger. A USDC deposit that mints credits requires **two linked transfers** executed atomically:
+
+```
+Transfer 1 (ledger 2 / USDC, scale=6):
+  debit:  Assets:OnChain:USDC
+  credit: Clearing:USDCtoCredit:USDC
+  amount: deposit_amount_micro_usdc
+
+Transfer 2 (ledger 200 / CREDIT, scale=0):
+  debit:  Clearing:USDCtoCredit:CREDIT
+  credit: Liability:UserCredits:CREDIT
+  amount: deposit_amount_micro_usdc * CREDITS_PER_USD / 1_000_000
+```
+
+Both transfers use TigerBeetle's `linked` flag — if either fails, both fail. The clearing accounts (`Clearing:USDCtoCredit:USDC` and `Clearing:USDCtoCredit:CREDIT`) exist solely to bridge ledgers. Their balances should net to zero over time (reconciliation check).
+
+The conversion ratio uses the existing protocol constant: `CREDITS_PER_USD = 10_000_000`. Since USDC scale=6 (micro-USDC), the math is: `credits = micro_usdc * 10` (integer, no floats).
+
+### Co-Write Failure Semantics
+
+**Crawl**: All co-writes are non-blocking. Postgres write is the authoritative path. TigerBeetle write is fire-and-forget — on failure, log critical and continue. Reconciliation cron (separate concern) detects and alerts on Postgres/TB divergence. This means deposits succeed and AI responses are never blocked even if TigerBeetle is down.
+
+**Walk**: Transactional guarantees added as TigerBeetle becomes the balance authority.
+
 ## Financial Events
 
 **Real-time (per AI call):**
@@ -176,17 +204,17 @@ Expense:Infrastructure:Hosting:EUR  ; Cherry Servers hosting costs
 
 ## Design
 
-### LedgerPort Integration Points
+### FinancialLedgerPort Integration Points
 
-The LedgerPort is called from these existing code paths:
+The FinancialLedgerPort is called from these existing code paths:
 
-| Existing code path                         | What changes                                          |
-| ------------------------------------------ | ----------------------------------------------------- |
-| `AccountService.recordChargeReceipt()`     | Also calls `LedgerPort.transfer()` for AI spend       |
-| `AccountService.creditAccount()` (deposit) | Also calls `LedgerPort.transfer()` for credit mint    |
-| Attribution `finalizeEpoch()`              | Also calls `LedgerPort.pendingTransfer()` for accrual |
-| Operator wallet top-up (new)               | Calls `LedgerPort.transfer()` for OpenRouter expense  |
-| Cherry Servers cron (new)                  | Calls `LedgerPort.transfer()` for hosting expense     |
+| Existing code path                         | What changes                                                   |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `AccountService.recordChargeReceipt()`     | Also calls `FinancialLedgerPort.transfer()` for AI spend       |
+| `AccountService.creditAccount()` (deposit) | Also calls `FinancialLedgerPort.transfer()` for credit mint    |
+| Attribution `finalizeEpoch()`              | Also calls `FinancialLedgerPort.pendingTransfer()` for accrual |
+| Operator wallet top-up (new)               | Calls `FinancialLedgerPort.transfer()` for OpenRouter expense  |
+| Cherry Servers cron (new)                  | Calls `FinancialLedgerPort.transfer()` for hosting expense     |
 
 The pattern is **co-write**: the existing Postgres operation continues to work, and a TigerBeetle transfer is recorded alongside it. TigerBeetle becomes the balance authority over time; Postgres balances become reconciliation checks.
 
@@ -231,7 +259,7 @@ The x402 transition deletes `credit_ledger` and `billing_accounts.balance_credit
 ## Non-Goals
 
 - Full GAAP reporting, tax, or accounting dimensions (Crawl)
-- Decorating every operation magically — explicit LedgerPort calls from money-domain services
+- Decorating every operation magically — explicit FinancialLedgerPort calls from money-domain services
 - Mirroring every raw blockchain event 1:1 — record economic events the app recognizes
 - Building a "finance layer" — this is a money-movement core for 5-7 operations
 - Beancount/hledger as runtime source of truth (export to plaintext accounting format for external audit if needed)

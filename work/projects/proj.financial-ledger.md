@@ -6,7 +6,7 @@ title: "Financial Ledger — TigerBeetle Treasury + MerkleDistributor Settlement
 state: Active
 priority: 1
 estimate: 5
-summary: "All money I/O in one place. TigerBeetle as the double-entry transaction engine, Postgres for metadata. LedgerPort is the write path for all money-movement. Signed attribution statements become auditable Merkle claim manifests and DAO-controlled token distributions."
+summary: "All money I/O in one place. TigerBeetle as the double-entry transaction engine, Postgres for metadata. FinancialLedgerPort is the write path for all money-movement. Signed attribution statements become auditable Merkle claim manifests and DAO-controlled token distributions."
 outcome: "Every dollar in and every token out has a TigerBeetle double-entry transfer and an auditable settlement manifest. Finalized attribution statements produce DAO-controlled Merkle claims that contributors can actually claim on-chain."
 assignees: derekg1729
 created: 2026-02-28
@@ -53,7 +53,8 @@ TigerBeetle is the transaction engine enforcing double-entry at the database lev
 
 | Deliverable                                                                                                                                            | Status      | Est | Work Item         |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ----------------- |
-| TigerBeetle ledger + LedgerPort integration with existing money-movement paths (AI spend, credit deposits, hosting)                                    | Not Started | 3   | `task.0145`       |
+| TigerBeetle ledger + FinancialLedgerPort integration with existing money-movement paths (AI spend, credit deposits)                                    | Not Started | 3   | `task.0145`       |
+| FinancialLedgerPort two-phase transfers (x402, operator top-ups, epoch accruals)                                                                       | Not Started | 2   | `task.0147`       |
 | Node formation update: mint fixed `GovernanceERC20` supply to a DAO-controlled emissions holder instead of founder bootstrap mint                      | Not Started | 2   | `task.0135`       |
 | `computeMerkleTree(statement)` pure function — takes finalized statement `credit_amount` entitlements + settlement policy → root + proofs per claimant | Not Started | 2   | (create at start) |
 | Settlement manifest store/view — persist `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, `publishedAt`          | Not Started | 2   | (create at start) |
@@ -131,7 +132,8 @@ TigerBeetle is the transaction engine enforcing double-entry at the database lev
 - [ ] Operator Port operational (signing + policy boundary for treasury actions)
 - [ ] `task.0135` — rewards-ready token formation decisions and implementation completed
 - [ ] Stock per-epoch MerkleDistributor path selected and deployed on Base
-- [ ] TigerBeetle deployed + LedgerPort wired (task.0145)
+- [ ] TigerBeetle deployed + `@cogni/financial-ledger` package + FinancialLedgerPort wired (task.0145)
+- [ ] FinancialLedgerPort two-phase transfers for x402/operator top-ups (task.0147)
 
 **Crawl handoff into this project:**
 
