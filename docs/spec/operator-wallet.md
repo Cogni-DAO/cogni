@@ -110,8 +110,7 @@ Setup flow (run once during DAO formation):
    - Controller: operator wallet address (can update percentages)
 7. Update .cogni/repo-spec.yaml:
    a. Set operator_wallet.address to the Privy-returned address
-   b. Set operator_wallet.split_address to the deployed Split address
-   c. Set payments_in.credits_topup.receiving_address to the Split address
+   b. Set payments_in.credits_topup.receiving_address to the deployed Split address
 8. Fund operator wallet with small ETH balance on Base (for gas — ~$0.01 covers many txs at L2 prices)
 ```
 
@@ -124,7 +123,7 @@ The port is a narrow, typed interface — a bounded payments actuator, not a gen
 ```typescript
 interface OperatorWalletPort {
   /** Return the operator wallet's public address (checksummed) */
-  getAddress(): string;
+  getAddress(): Promise<string>;
 
   /** Return the Split contract address (from repo-spec) */
   getSplitAddress(): string;
@@ -142,7 +141,6 @@ interface OperatorWalletPort {
   /**
    * Fund OpenRouter credits via Coinbase Commerce protocol.
    * Encodes the appropriate Transfers function internally — caller cannot control calldata.
-   * Function determined by transfer_intent.metadata.function_name.
    *
    * @param intent - TransferIntent from OpenRouter's /api/v1/credits/coinbase
    * @returns txHash on successful broadcast
@@ -157,30 +155,28 @@ Future transaction types get their own named methods on the port — never a gen
 ### P0 Adapter: Privy Server Wallet
 
 ```typescript
-// src/adapters/server/wallet/privy-operator-wallet.adapter.ts
+// packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts
 
 class PrivyOperatorWalletAdapter implements OperatorWalletPort {
-  private privyClient: PrivyClient; // @privy-io/server-auth SDK
-  private walletId: string; // Privy wallet ID (from provisioning)
-  private operatorAddress: string; // from repo-spec, verified at startup
-  private splitAddress: string; // from repo-spec operator_wallet.split_address
+  private client: PrivyClient; // @privy-io/node SDK
+  private walletId: string; // Privy wallet ID (lazy-verified)
+  private expectedAddress: string; // from repo-spec, verified against Privy
+  private splitAddress: string; // from payments_in.credits_topup.receiving_address
 
   async distributeSplit(token: string): Promise<string> {
-    // 1. Encode SplitMain.distributeERC20(splitAddress, token, ...)
-    // 2. Submit via Privy API (Privy handles signing + broadcast)
-    // 3. Return txHash
+    // 1. Derive SplitParams from billing constants (calculateSplitAllocations)
+    // 2. Encode distribute(splitParams, token, distributor) via splitV2ABI
+    // 3. Submit via Privy wallet RPC (Privy handles signing + broadcast)
+    // 4. Return txHash
   }
 
   async fundOpenRouterTopUp(intent: TransferIntent): Promise<string> {
-    // 1. Validate intent.metadata.sender === this.operatorAddress
+    // 1. Validate intent.metadata.sender === this.expectedAddress
     // 2. Validate intent.metadata.contract_address is in allowlist
-    // 3. Validate intent.metadata.chain_id === repo-spec chain_id
+    // 3. Validate intent.metadata.chain_id === Base (8453)
     // 4. Validate value <= OPERATOR_MAX_TOPUP_USD cap
-    // 5. Encode per metadata.function_name:
-    //    - swapAndTransferUniswapV3Native → set msg.value (ETH)
-    //    - transferTokenPreApproved → approve USDC to Transfers contract
-    //    - swapAndTransferUniswapV3TokenPreApproved → approve + swap
-    // 6. Submit via Privy API (Privy handles signing + broadcast)
+    // 5. Encode transferTokenPreApproved via call_data fields
+    // 6. Submit via Privy wallet RPC (Privy handles signing + broadcast)
     // 7. Return txHash
   }
 }
@@ -211,14 +207,13 @@ The `OperatorWalletPort` abstraction makes the custody backend swappable. If the
 
 operator_wallet:
   address: "0x..." # checksummed Privy-managed EOA
-  split_address: "0x..." # Splits contract address (receives user payments)
 
 payments_in:
   credits_topup:
-    receiving_address: "0x..." # same as operator_wallet.split_address (NOT the EOA)
+    receiving_address: "0x..." # Split contract address (NOT the operator EOA)
 ```
 
-The `receiving_address` now points to the Split contract. The on-chain verifier, payment intent creation, and credit settlement all work as-is — they only care that USDC arrived at the configured address.
+The `receiving_address` points to the Split contract. The Split address is the single source of truth — no redundant `split_address` field. The on-chain verifier, payment intent creation, and credit settlement all work as-is — they only care that USDC arrived at the configured address.
 
 ### Key Rotation
 
@@ -259,7 +254,7 @@ Provide a secure, narrow payments actuator for the platform's outbound on-chain 
 | SIMULATE_BEFORE_BROADCAST   | Every transaction SHOULD be simulated before broadcast where the custody provider supports it.                                                         |
 | INTENT_ONLY_CALLERS         | Workflow and UI layers submit typed intents. They MUST NOT construct calldata or access Privy credentials.                                             |
 | SINGLE_OPERATOR_WALLET      | Exactly one operator wallet per deployment. Address recorded in repo-spec (governance-in-git).                                                         |
-| RECEIVING_ADDRESS_MATCH     | `payments_in.credits_topup.receiving_address` MUST equal `operator_wallet.split_address`. Startup validation.                                          |
+| RECEIVING_ADDRESS_IS_SPLIT  | `payments_in.credits_topup.receiving_address` MUST be the deployed Split contract address. Single source of truth for where user payments land.        |
 | PRIVY_SIGNED_REQUESTS       | All Privy API calls MUST use signed requests (`PRIVY_SIGNING_KEY`). App Secret alone is insufficient for signing.                                      |
 
 ### Schema
@@ -272,14 +267,17 @@ DAO treasury share is handled on-chain by the Split contract — no `outbound_tr
 
 ### File Pointers
 
-| File                                                          | Purpose                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------- |
-| `scripts/provision-operator-wallet.ts`                        | Programmatic wallet creation via Privy API (new)        |
-| `src/ports/operator-wallet.port.ts`                           | `OperatorWalletPort` interface (new)                    |
-| `src/adapters/server/wallet/privy-operator-wallet.adapter.ts` | P0 adapter: Privy server wallet (new)                   |
-| `src/shared/config/repoSpec.server.ts`                        | `getOperatorWalletConfig()` from repo-spec              |
-| `.cogni/repo-spec.yaml`                                       | `operator_wallet.address` + `receiving_address`         |
-| `src/shared/env/server-env.ts`                                | `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY` |
+| File                                                                           | Purpose                                                               |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `packages/operator-wallet/src/port/operator-wallet.port.ts`                    | `OperatorWalletPort` interface + `TransferIntent` type                |
+| `packages/operator-wallet/src/domain/split-allocation.ts`                      | Split allocation math and billing constants                           |
+| `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts` | P0 adapter: Privy server wallet                                       |
+| `src/ports/operator-wallet.port.ts`                                            | Re-export from `@cogni/operator-wallet`                               |
+| `scripts/provision-operator-wallet.ts`                                         | Programmatic wallet creation via Privy API                            |
+| `scripts/deploy-split.ts`                                                      | Split contract deployment on Base                                     |
+| `src/shared/config/repoSpec.server.ts`                                         | `getOperatorWalletConfig()`, `getDaoTreasuryAddress()` from repo-spec |
+| `.cogni/repo-spec.yaml`                                                        | `operator_wallet.address` + `receiving_address`                       |
+| `src/shared/env/server-env.ts`                                                 | `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY`               |
 
 ### Env Vars
 

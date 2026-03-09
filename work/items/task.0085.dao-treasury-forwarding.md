@@ -2,7 +2,7 @@
 id: task.0085
 type: task
 title: Splits deployment + distribution wiring
-status: in_progress
+status: needs_review
 priority: 0
 estimate: 2
 summary: Deploy Push Split V2o2 on Base via repeatable script, implement distributeSplit() in Privy adapter, wire into credit settlement flow.
@@ -86,6 +86,7 @@ DAO treasury address read via `getDaoTreasuryAddress()` from `cogni_dao.dao_cont
 ### Open question: distribution trigger
 
 `distribute()` is a batch operation (~81k gas). Calling per-payment wastes gas. Options:
+
 1. **Per-payment in creditsConfirm.ts** — simple, wasteful
 2. **Periodic Temporal activity** — efficient, needs scheduler wiring
 3. **Manual/operator-triggered** — simplest start, no automation
@@ -96,6 +97,7 @@ Recommendation: start with (3) — the adapter is ready, script can call it. Wir
 
 - `packages/operator-wallet/` (new package — port, domain, adapter)
 - `scripts/deploy-split.ts` (new)
+- `scripts/distribute-split.ts` (new — manual distribution trigger)
 - `src/ports/operator-wallet.port.ts` (re-export from package)
 - `src/bootstrap/container.ts` (wiring)
 - `src/shared/config/repoSpec.server.ts` (getDaoTreasuryAddress accessor)
@@ -121,8 +123,9 @@ Recommendation: start with (3) — the adapter is ready, script can call it. Wir
   - [x] Container wires adapter from `@cogni/operator-wallet/adapters/privy`
   - [x] `pnpm check` passes, contract tests pass
 
-- [ ] **Checkpoint 3: Wire distribution trigger**
-  - Deferred — see open question above. Adapter is ready; trigger mechanism TBD.
+- [x] **Checkpoint 3: Wire distribution trigger**
+  - [x] `scripts/distribute-split.ts` — manual CLI trigger (option 3)
+  - [ ] Automated trigger (periodic/event-driven) — follow-up task
 
 ## Validation
 

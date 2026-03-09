@@ -19,7 +19,7 @@ import { encodeFunctionData } from "viem";
 
 import {
   calculateSplitAllocations,
-  OPENROUTER_CRYPTO_FEE,
+  OPENROUTER_CRYPTO_FEE_PPM,
   SPLIT_TOTAL_ALLOCATION,
 } from "../../domain/split-allocation.js";
 import type {
@@ -47,10 +47,10 @@ export interface PrivyOperatorWalletConfig {
   splitAddress: string;
   /** DAO treasury address from repo-spec (cogni_dao.dao_contract) */
   treasuryAddress: string;
-  /** Billing markup factor (default: 2.0) */
-  markupFactor: number;
-  /** Revenue share fraction (default: 0.75) */
-  revenueShare: number;
+  /** Billing markup factor in PPM (e.g., 2_000_000n for 2.0x) */
+  markupPpm: bigint;
+  /** Revenue share in PPM (e.g., 750_000n for 75%) */
+  revenueSharePpm: bigint;
 }
 
 /**
@@ -64,8 +64,8 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
   private readonly expectedAddress: string;
   private readonly splitAddress: string;
   private readonly treasuryAddress: string;
-  private readonly markupFactor: number;
-  private readonly revenueShare: number;
+  private readonly markupPpm: bigint;
+  private readonly revenueSharePpm: bigint;
   private verifyPromise: Promise<void> | undefined;
   private walletId: string | undefined;
 
@@ -80,8 +80,8 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
     this.expectedAddress = config.expectedAddress;
     this.splitAddress = config.splitAddress;
     this.treasuryAddress = config.treasuryAddress;
-    this.markupFactor = config.markupFactor;
-    this.revenueShare = config.revenueShare;
+    this.markupPpm = config.markupPpm;
+    this.revenueSharePpm = config.revenueSharePpm;
   }
 
   /**
@@ -140,9 +140,9 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
     // Derive allocations from billing constants (same math as deploy-split.ts)
     const { operatorAllocation, treasuryAllocation } =
       calculateSplitAllocations(
-        this.markupFactor,
-        this.revenueShare,
-        OPENROUTER_CRYPTO_FEE
+        this.markupPpm,
+        this.revenueSharePpm,
+        OPENROUTER_CRYPTO_FEE_PPM
       );
 
     // Sort recipients ascending by address (0xSplits requirement)

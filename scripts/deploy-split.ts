@@ -15,7 +15,8 @@ import { PUSH_SPLIT_V2o2_FACTORY_ADDRESS } from "@0xsplits/splits-sdk/constants"
 import { splitV2o2FactoryAbi } from "@0xsplits/splits-sdk/constants/abi";
 import {
   calculateSplitAllocations,
-  OPENROUTER_CRYPTO_FEE,
+  numberToPpm,
+  OPENROUTER_CRYPTO_FEE_PPM,
   SPLIT_TOTAL_ALLOCATION,
 } from "@cogni/operator-wallet";
 import type { Address } from "viem";
@@ -46,9 +47,11 @@ async function main(): Promise<void> {
   const treasuryAddress = getAddress(
     requireEnv("DAO_TREASURY_ADDRESS")
   ) as Address;
-  const markupFactor = Number(process.env.USER_PRICE_MARKUP_FACTOR ?? "2.0");
-  const revenueShare = Number(
-    process.env.SYSTEM_TENANT_REVENUE_SHARE ?? "0.75"
+  const markupPpm = numberToPpm(
+    Number(process.env.USER_PRICE_MARKUP_FACTOR ?? "2.0")
+  );
+  const revenueSharePpm = numberToPpm(
+    Number(process.env.SYSTEM_TENANT_REVENUE_SHARE ?? "0.75")
   );
 
   // Private key for deploying (operator wallet or deployer EOA)
@@ -65,9 +68,9 @@ async function main(): Promise<void> {
 
   // --- Derive allocations ---
   const { operatorAllocation, treasuryAllocation } = calculateSplitAllocations(
-    markupFactor,
-    revenueShare,
-    OPENROUTER_CRYPTO_FEE
+    markupPpm,
+    revenueSharePpm,
+    OPENROUTER_CRYPTO_FEE_PPM
   );
 
   console.log("═══════════════════════════════════════════════════");
@@ -80,9 +83,9 @@ async function main(): Promise<void> {
     `  Treasury (${Number(treasuryAllocation) / 1e4}%): ${treasuryAddress}`
   );
   console.log(`  Deployer:    ${account.address}`);
-  console.log(`  Markup:      ${markupFactor}x`);
-  console.log(`  RevShare:    ${revenueShare}`);
-  console.log(`  ProviderFee: ${OPENROUTER_CRYPTO_FEE}`);
+  console.log(`  Markup:      ${Number(markupPpm) / 1e6}x`);
+  console.log(`  RevShare:    ${Number(revenueSharePpm) / 1e6}`);
+  console.log(`  ProviderFee: ${Number(OPENROUTER_CRYPTO_FEE_PPM) / 1e6}`);
 
   // --- Clients ---
   const publicClient = createPublicClient({

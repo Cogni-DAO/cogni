@@ -4,18 +4,24 @@
 /**
  * Module: `@cogni/operator-wallet/domain/split-allocation`
  * Purpose: Pure split allocation math for 0xSplits V2 revenue distribution.
- * Scope: Derives operator/DAO allocation ratios from billing economics. Does not perform I/O or access env.
- * Invariants: Allocations sum to SPLIT_TOTAL_ALLOCATION; operator share strictly between 0 and 1.
+ * Scope: Derives operator/DAO allocation ratios from billing economics using bigint-only arithmetic. Does not perform I/O, access env, or use floating-point math.
+ * Invariants: Allocations sum to SPLIT_TOTAL_ALLOCATION; operator share strictly between 0 and 1; all inputs are scaled bigint (PPM).
  * Side-effects: none
  * Links: docs/spec/operator-wallet.md, scripts/deploy-split.ts
  * @public
  */
 
 /**
- * OpenRouter crypto top-up provider fee (5%).
+ * Parts-per-million scale factor (1_000_000 = 100%).
+ * Used as the canonical fixed-point scale for all split allocation inputs.
+ */
+export const PPM = 1_000_000n;
+
+/**
+ * OpenRouter crypto top-up provider fee in PPM (50_000 = 5%).
  * Source: spike.0090 — validated on Base mainnet.
  */
-export const OPENROUTER_CRYPTO_FEE = 0.05;
+export const OPENROUTER_CRYPTO_FEE_PPM = 50_000n;
 
 /**
  * Minimum inbound USDC payment in dollars.
@@ -31,29 +37,82 @@ export const MINIMUM_PAYMENT_USD = 2;
 export const SPLIT_TOTAL_ALLOCATION = 1_000_000n;
 
 /**
+ * Convert a decimal number to PPM bigint at the system boundary.
+ * Use this at env/config parsing time — never inside core math.
+ *
+ * @param value - Decimal value (e.g., 2.0 for 2x markup, 0.75 for 75%)
+ * @returns Scaled bigint in PPM (e.g., 2_000_000n, 750_000n)
+ */
+export function numberToPpm(value: number): bigint {
+  return BigInt(Math.round(value * 1_000_000));
+}
+
+/**
  * Derive operator/DAO split allocations from billing economics.
+ * All inputs are scaled bigint in PPM (1_000_000 = 100%).
  *
- * operatorShare = (1 + revenueShare) / (markup × (1 - providerFee))
+ * Formula (conceptual):
+ *   operatorShare = (1 + revenueShare) / (markup × (1 − providerFee))
  *
- * With defaults (markup=2.0, revenueShare=0.75, fee=0.05):
- *   1.75 / (2.0 × 0.95) = 0.921053 → operator 921_053 / 1_000_000
+ * In PPM arithmetic:
+ *   numerator   = (PPM + revenueSharePpm) × PPM
+ *   denominator = markupPpm × (PPM − providerFeePpm)
+ *   operatorAllocation = numerator / denominator  (with largest-remainder rounding)
+ *
+ * With defaults (markup=2_000_000, revenueShare=750_000, fee=50_000):
+ *   (1_750_000 × 1_000_000) / (2_000_000 × 950_000) = 1_750_000_000_000 / 1_900_000_000_000
+ *   → 921_052 with remainder 1_200_000_000_000 (> half denominator) → rounds up to 921_053
  *   DAO gets the remainder: 78_947 / 1_000_000 (7.9%)
+ *
+ * Uses largest-remainder (Hamilton's method) to guarantee allocations sum exactly
+ * to SPLIT_TOTAL_ALLOCATION with deterministic, fair rounding.
  */
 export function calculateSplitAllocations(
-  markupFactor: number,
-  revenueShare: number,
-  providerFee: number = OPENROUTER_CRYPTO_FEE
+  markupPpm: bigint,
+  revenueSharePpm: bigint,
+  providerFeePpm: bigint = OPENROUTER_CRYPTO_FEE_PPM
 ): { operatorAllocation: bigint; treasuryAllocation: bigint } {
-  const operatorShare = (1 + revenueShare) / (markupFactor * (1 - providerFee));
-  if (operatorShare >= 1 || operatorShare <= 0) {
+  // Guard: denominator must be positive
+  if (markupPpm <= 0n) {
+    throw new Error(`Invalid split: markupPpm=${markupPpm} must be > 0`);
+  }
+  const feeComplement = PPM - providerFeePpm;
+  if (feeComplement <= 0n) {
     throw new Error(
-      `Invalid split: operatorShare=${operatorShare} (must be 0 < x < 1). ` +
-        `Check markup=${markupFactor}, revenueShare=${revenueShare}, fee=${providerFee}`
+      `Invalid split: providerFeePpm=${providerFeePpm} must be < ${PPM}`
     );
   }
-  const operatorAllocation = BigInt(
-    Math.round(operatorShare * Number(SPLIT_TOTAL_ALLOCATION))
-  );
+
+  // Pure bigint arithmetic — no floating point
+  const numerator = (PPM + revenueSharePpm) * SPLIT_TOTAL_ALLOCATION;
+  const denominator = (markupPpm * feeComplement) / PPM;
+
+  if (denominator <= 0n) {
+    throw new Error(
+      `Invalid split: computed denominator=${denominator} must be > 0. ` +
+        `Check markupPpm=${markupPpm}, providerFeePpm=${providerFeePpm}`
+    );
+  }
+
+  // Floor division + remainder for largest-remainder rounding
+  const quotient = numerator / denominator;
+  const remainder = numerator % denominator;
+
+  // Largest-remainder: round up if remainder >= half the denominator
+  const operatorAllocation =
+    2n * remainder >= denominator ? quotient + 1n : quotient;
+
+  // Validate result is in valid range (0 < operator < total)
+  if (
+    operatorAllocation <= 0n ||
+    operatorAllocation >= SPLIT_TOTAL_ALLOCATION
+  ) {
+    throw new Error(
+      `Invalid split: operatorAllocation=${operatorAllocation} (must be 0 < x < ${SPLIT_TOTAL_ALLOCATION}). ` +
+        `Check markupPpm=${markupPpm}, revenueSharePpm=${revenueSharePpm}, providerFeePpm=${providerFeePpm}`
+    );
+  }
+
   return {
     operatorAllocation,
     treasuryAllocation: SPLIT_TOTAL_ALLOCATION - operatorAllocation,

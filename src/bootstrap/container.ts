@@ -22,6 +22,7 @@ import type { AttributionStore } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
+import { numberToPpm } from "@cogni/operator-wallet";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { Logger } from "pino";
 import {
@@ -430,8 +431,8 @@ function createContainer(): Container {
           expectedAddress: operatorWalletConfig.address,
           splitAddress: paymentConfig.receivingAddress,
           treasuryAddress,
-          markupFactor: env.USER_PRICE_MARKUP_FACTOR,
-          revenueShare: env.SYSTEM_TENANT_REVENUE_SHARE,
+          markupPpm: numberToPpm(env.USER_PRICE_MARKUP_FACTOR),
+          revenueSharePpm: numberToPpm(env.SYSTEM_TENANT_REVENUE_SHARE),
         });
       })();
 
