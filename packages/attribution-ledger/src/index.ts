@@ -157,6 +157,8 @@ export type {
   SelectionStore,
   SelectionWriter,
   StatementStore,
+  TransitionEpochForWindowParams,
+  TransitionEpochForWindowResult,
   UnselectedReceipt,
   UpsertEvaluationParams,
   UpsertReviewSubjectOverrideParams,

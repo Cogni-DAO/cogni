@@ -57,6 +57,7 @@ function makeMockStore(
     listEpochs: vi.fn(),
     closeIngestion: vi.fn(),
     closeIngestionWithEvaluations: vi.fn(),
+    transitionEpochForWindow: vi.fn(),
     finalizeEpoch: vi.fn(),
     upsertDraftEvaluation: vi.fn(),
     getEvaluationsForEpoch: vi.fn().mockResolvedValue([]),
@@ -1003,6 +1004,289 @@ describe("materializeSelection", () => {
     );
   });
 });
+
+// ── findStaleOpenEpoch ──────────────────────────────────────────
+
+describe("findStaleOpenEpoch", () => {
+  it("returns null when no open epoch exists", async () => {
+    const store = makeMockStore({
+      getOpenEpoch: vi.fn().mockResolvedValue(null),
+    });
+    const { findStaleOpenEpoch } = createAttributionActivities({
+      attributionStore: store,
+      sourceRegistrations: new Map(),
+      registries,
+      nodeId: NODE_ID,
+      scopeId: SCOPE_ID,
+      chainId: 8453,
+      logger: mockLogger,
+    });
+
+    const result = await findStaleOpenEpoch({
+      periodStart: "2026-02-23T00:00:00.000Z",
+      periodEnd: "2026-03-02T00:00:00.000Z",
+    });
+
+    expect(result.staleEpoch).toBeNull();
+  });
+
+  it("returns null when open epoch matches current window (not stale)", async () => {
+    const epoch = makeEpoch({
+      periodStart: new Date("2026-02-16T00:00:00Z"),
+      periodEnd: new Date("2026-02-23T00:00:00Z"),
+    });
+    const store = makeMockStore({
+      getOpenEpoch: vi.fn().mockResolvedValue(epoch),
+    });
+    const { findStaleOpenEpoch } = createAttributionActivities({
+      attributionStore: store,
+      sourceRegistrations: new Map(),
+      registries,
+      nodeId: NODE_ID,
+      scopeId: SCOPE_ID,
+      chainId: 8453,
+      logger: mockLogger,
+    });
+
+    const result = await findStaleOpenEpoch({
+      periodStart: "2026-02-16T00:00:00.000Z",
+      periodEnd: "2026-02-23T00:00:00.000Z",
+    });
+
+    expect(result.staleEpoch).toBeNull();
+  });
+
+  it("returns stale epoch when open epoch is for a different window", async () => {
+    const epoch = makeEpoch({
+      id: 5n,
+      periodStart: new Date("2026-02-16T00:00:00Z"),
+      periodEnd: new Date("2026-02-23T00:00:00Z"),
+      weightConfig: { "github:pr_merged": 500 },
+    });
+    const store = makeMockStore({
+      getOpenEpoch: vi.fn().mockResolvedValue(epoch),
+    });
+    const { findStaleOpenEpoch } = createAttributionActivities({
+      attributionStore: store,
+      sourceRegistrations: new Map(),
+      registries,
+      nodeId: NODE_ID,
+      scopeId: SCOPE_ID,
+      chainId: 8453,
+      logger: mockLogger,
+    });
+
+    const result = await findStaleOpenEpoch({
+      periodStart: "2026-02-23T00:00:00.000Z",
+      periodEnd: "2026-03-02T00:00:00.000Z",
+    });
+
+    expect(result.staleEpoch).not.toBeNull();
+    expect(result.staleEpoch?.epochId).toBe("5");
+    expect(result.staleEpoch?.weightConfig).toEqual({
+      "github:pr_merged": 500,
+    });
+    expect(result.staleEpoch?.periodStart).toBe("2026-02-16T00:00:00.000Z");
+    expect(result.staleEpoch?.periodEnd).toBe("2026-02-23T00:00:00.000Z");
+  });
+});
+
+// ── transitionEpochForWindow ────────────────────────────────────
+
+describe("transitionEpochForWindow", () => {
+  const staleEpoch = makeEpoch({
+    id: 1n,
+    periodStart: new Date("2026-02-16T00:00:00Z"),
+    periodEnd: new Date("2026-02-23T00:00:00Z"),
+  });
+  const newEpoch = makeEpoch({
+    id: 2n,
+    periodStart: new Date("2026-02-23T00:00:00Z"),
+    periodEnd: new Date("2026-03-02T00:00:00Z"),
+  });
+
+  function makeCloseParams() {
+    return {
+      staleEpochId: "1",
+      staleWeightConfig: { "github:pr_merged": 1000 },
+      approvers: ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+      attributionPipeline: "cogni-v0.0",
+      evaluations: [
+        {
+          nodeId: NODE_ID,
+          epochId: "1",
+          evaluationRef: "cogni.echo.v0",
+          status: "locked" as const,
+          algoRef: "echo-v0",
+          inputsHash: "inputs-hash",
+          payloadHash: "payload-hash",
+          payloadJson: { totalEvents: 1, byEventType: { pr_merged: 1 } },
+        },
+      ],
+      artifactsHash: "artifacts-hash-abc",
+    };
+  }
+
+  it("closes stale epoch and creates new epoch atomically", async () => {
+    const store = makeMockStore({
+      lockClaimantsForEpoch: vi.fn().mockResolvedValue(3),
+      transitionEpochForWindow: vi.fn().mockResolvedValue({
+        epoch: newEpoch,
+        isNew: true,
+        closedStaleEpochId: staleEpoch.id,
+      }),
+    });
+
+    const { transitionEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
+      sourceRegistrations: new Map(),
+      registries,
+      nodeId: NODE_ID,
+      scopeId: SCOPE_ID,
+      chainId: 8453,
+      logger: mockLogger,
+    });
+
+    const result = await transitionEpochForWindow({
+      periodStart: "2026-02-23T00:00:00.000Z",
+      periodEnd: "2026-03-02T00:00:00.000Z",
+      weightConfig: { "github:pr_merged": 1000 },
+      closeParams: makeCloseParams(),
+    });
+
+    expect(result.epochId).toBe("2");
+    expect(result.status).toBe("open");
+    expect(result.isNew).toBe(true);
+    expect(result.closedStaleEpochId).toBe("1");
+
+    // Claimants locked before transition
+    expect(store.lockClaimantsForEpoch).toHaveBeenCalledWith(1n);
+
+    // Store called with computed hashes and required closeParams
+    expect(store.transitionEpochForWindow).toHaveBeenCalledOnce();
+    const storeCall = vi.mocked(store.transitionEpochForWindow).mock
+      .calls[0][0];
+    expect(storeCall.closeParams.approverSetHash).toBeTypeOf("string");
+    expect(storeCall.closeParams.weightConfigHash).toBeTypeOf("string");
+    expect(storeCall.closeParams.allocationAlgoRef).toBe("weight-sum-v0");
+    expect(storeCall.closeParams.evaluations).toHaveLength(1);
+    expect(storeCall.closeParams.evaluations[0].epochId).toBe(1n);
+  });
+
+  it("returns existing epoch on idempotent rerun", async () => {
+    const existingEpoch = makeEpoch({
+      id: 2n,
+      periodStart: new Date("2026-02-23T00:00:00Z"),
+      periodEnd: new Date("2026-03-02T00:00:00Z"),
+    });
+    const store = makeMockStore({
+      lockClaimantsForEpoch: vi.fn().mockResolvedValue(0),
+      transitionEpochForWindow: vi.fn().mockResolvedValue({
+        epoch: existingEpoch,
+        isNew: false,
+        closedStaleEpochId: 1n,
+      }),
+    });
+
+    const { transitionEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
+      sourceRegistrations: new Map(),
+      registries,
+      nodeId: NODE_ID,
+      scopeId: SCOPE_ID,
+      chainId: 8453,
+      logger: mockLogger,
+    });
+
+    const result = await transitionEpochForWindow({
+      periodStart: "2026-02-23T00:00:00.000Z",
+      periodEnd: "2026-03-02T00:00:00.000Z",
+      weightConfig: { "github:pr_merged": 1000 },
+      closeParams: makeCloseParams(),
+    });
+
+    expect(result.epochId).toBe("2");
+    expect(result.isNew).toBe(false);
+    expect(result.closedStaleEpochId).toBe("1");
+  });
+
+  it("works with empty approvers array", async () => {
+    const store = makeMockStore({
+      lockClaimantsForEpoch: vi.fn().mockResolvedValue(0),
+      transitionEpochForWindow: vi.fn().mockResolvedValue({
+        epoch: newEpoch,
+        isNew: true,
+        closedStaleEpochId: 1n,
+      }),
+    });
+
+    const { transitionEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
+      sourceRegistrations: new Map(),
+      registries,
+      nodeId: NODE_ID,
+      scopeId: SCOPE_ID,
+      chainId: 8453,
+      logger: mockLogger,
+    });
+
+    const closeParams = makeCloseParams();
+    closeParams.approvers = [];
+
+    const result = await transitionEpochForWindow({
+      periodStart: "2026-02-23T00:00:00.000Z",
+      periodEnd: "2026-03-02T00:00:00.000Z",
+      weightConfig: { "github:pr_merged": 1000 },
+      closeParams,
+    });
+
+    expect(result.epochId).toBe("2");
+    // Empty approvers → computeApproverSetHash([]) still produces a valid hash
+    const storeCall = vi.mocked(store.transitionEpochForWindow).mock
+      .calls[0][0];
+    expect(storeCall.closeParams.approverSetHash).toBeTypeOf("string");
+    expect(storeCall.closeParams.approvers).toEqual([]);
+  });
+
+  it("locks claimants before calling store transition", async () => {
+    const callOrder: string[] = [];
+    const store = makeMockStore({
+      lockClaimantsForEpoch: vi.fn().mockImplementation(async () => {
+        callOrder.push("lockClaimants");
+        return 2;
+      }),
+      transitionEpochForWindow: vi.fn().mockImplementation(async () => {
+        callOrder.push("transition");
+        return {
+          epoch: newEpoch,
+          isNew: true,
+          closedStaleEpochId: 1n,
+        };
+      }),
+    });
+
+    const { transitionEpochForWindow } = createAttributionActivities({
+      attributionStore: store,
+      sourceRegistrations: new Map(),
+      registries,
+      nodeId: NODE_ID,
+      scopeId: SCOPE_ID,
+      chainId: 8453,
+      logger: mockLogger,
+    });
+
+    await transitionEpochForWindow({
+      periodStart: "2026-02-23T00:00:00.000Z",
+      periodEnd: "2026-03-02T00:00:00.000Z",
+      weightConfig: { "github:pr_merged": 1000 },
+      closeParams: makeCloseParams(),
+    });
+
+    expect(callOrder).toEqual(["lockClaimants", "transition"]);
+  });
+});
+
+// ── computeAllocations ──────────────────────────────────────────
 
 describe("computeAllocations", () => {
   it("dispatches through the profile allocator and writes user projections", async () => {

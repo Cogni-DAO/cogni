@@ -14,6 +14,7 @@
  * - NODE_SCOPED: all operations are scoped to a node_id.
  * - RECEIPT_SCOPE_AGNOSTIC: receipts carry no scope_id; scope assigned at selection via epoch membership.
  * - EVALUATION_FINAL_ATOMIC: locked evaluation writes + artifacts_hash + epoch open→review in one transaction.
+ * - EPOCH_CLOSE_ON_TRANSITION: transitionEpochForWindow closes stale open epoch + creates new epoch atomically. No grace period.
  * - STATEMENT_FROM_FINAL_ONLY: allocation for statements consumes only status='locked' evaluations and claimant records.
  * - CLAIMANT_RESOLUTION_REQUIRED: upsertDraftClaimants, lockClaimantsForEpoch, loadLockedClaimants manage the epoch_receipt_claimants lifecycle.
  * Side-effects: none
@@ -276,6 +277,25 @@ export interface CloseIngestionWithEvaluationsParams {
   readonly artifactsHash: string;
 }
 
+/** Params for the atomic epoch transition: close stale open epoch + create epoch for a new window. */
+export interface TransitionEpochForWindowParams {
+  readonly nodeId: string;
+  readonly scopeId: string;
+  readonly periodStart: Date;
+  readonly periodEnd: Date;
+  readonly weightConfig: Record<string, number>;
+  /** Close payload for the stale epoch. Always required — this method is only called when a stale epoch exists. */
+  readonly closeParams: CloseIngestionWithEvaluationsParams;
+}
+
+/** Result from transitionEpochForWindow. */
+export interface TransitionEpochForWindowResult {
+  readonly epoch: AttributionEpoch;
+  readonly isNew: boolean;
+  /** ID of the stale epoch that was closed during this transition. */
+  readonly closedStaleEpochId: bigint;
+}
+
 /**
  * Narrowed params for auto-population INSERT (SELECTION_AUTO_POPULATE).
  * Intentionally excludes weightOverrideMilli and note to prevent accidental overwrites.
@@ -418,6 +438,21 @@ export interface EpochWriter {
   closeIngestionWithEvaluations(
     params: CloseIngestionWithEvaluationsParams
   ): Promise<AttributionEpoch>;
+
+  /**
+   * Atomic epoch transition: close stale open epoch + create epoch for a new window.
+   * Single DB transaction eliminates race window between close and create.
+   * Only called when findStaleOpenEpoch detected a stale epoch blocking the new window.
+   *
+   * Behavior:
+   * - If an epoch already exists for this window → return it (idempotent rerun).
+   * - Otherwise → close stale epoch (open → review) + create new epoch, atomically.
+   *
+   * Invariants: ONE_OPEN_EPOCH, EPOCH_WINDOW_UNIQUE, EVALUATION_FINAL_ATOMIC.
+   */
+  transitionEpochForWindow(
+    params: TransitionEpochForWindowParams
+  ): Promise<TransitionEpochForWindowResult>;
 
   /**
    * Atomic finalize: epoch transition + statement upsert + signature upsert in one DB transaction.
