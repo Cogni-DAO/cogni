@@ -218,6 +218,8 @@
         "packages/attribution-pipeline-contracts/vitest.config.ts",
         "packages/attribution-pipeline-plugins/tsup.config.ts",
         "packages/attribution-pipeline-plugins/vitest.config.ts",
+        "packages/work-items/tsup.config.ts",
+        "packages/work-items/vitest.config.ts",
         "services/scheduler-worker/tsup.config.ts",
         "services/scheduler-worker/vitest.config.ts",
         "vitest.workspace.ts",

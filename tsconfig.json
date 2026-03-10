@@ -16,6 +16,7 @@
     { "path": "./packages/attribution-pipeline-contracts" },
     { "path": "./packages/attribution-pipeline-plugins" },
     { "path": "./packages/scheduler-core" },
-    { "path": "./packages/repo-spec" }
+    { "path": "./packages/repo-spec" },
+    { "path": "./packages/work-items" }
   ]
 }
