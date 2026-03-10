@@ -14,7 +14,7 @@ assignees: []
 credit:
 project: proj.vcs-integration
 branch: worktree-feat-git-review-v0
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/545
 reviewer:
 revision: 0
 blocked_by:
@@ -65,7 +65,7 @@ Check name matches branch protection rule. PRs merge when review passes.
 - Modify: `src/features/review/summary-formatter.ts:22,43` — update display text
 - Modify: `tests/external/review/pr-review-e2e.external.test.ts:38` — update `CHECK_RUN_NAME`
 - Modify: `tests/unit/features/review/summary-formatter.test.ts:67` — update assertion
-- Verify: `work/items/task.0149.pr-review-bot-v0.md` — update R3 description
+- Verify: `work/items/task.0153.pr-review-bot-v0.md` — update R3 description
 
 ## Validation
 

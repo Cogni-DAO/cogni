@@ -30,7 +30,7 @@ external_refs:
 
 ## Problem
 
-The PR review feature (task.0149) is functionally complete but needs:
+The PR review feature (task.0153) is functionally complete but needs:
 
 1. Output polish — the PR comment/check summary is sparse compared to the legacy cogni-git-review
 2. Deployment verification — preview/production environments haven't been tested

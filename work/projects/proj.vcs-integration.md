@@ -10,7 +10,7 @@ summary: Shared GitHub/GitLab auth package, unified git-daemon service, and abso
 outcome: A single `services/git-daemon/` handles PR review, DAO admin actions, and ingestion token provisioning — backed by `packages/github-core/` auth primitives. Proposal launcher absorbed into the Node's Next.js UI. Sister repos archived.
 assignees: [derekg1729]
 created: 2026-02-22
-updated: 2026-02-22
+updated: 2026-03-11
 labels: [infra, github, auth]
 ---
 

@@ -21,7 +21,7 @@ revision: 3
 blocked_by:
 deploy_verified: false
 created: 2026-03-10
-updated: 2026-03-10
+updated: 2026-03-11
 labels: [vcs, ai, review, langgraph]
 external_refs:
   - https://github.com/cogni-dao/cogni-git-review
@@ -146,60 +146,56 @@ GitHub webhook (pull_request.opened / .synchronize / .reopened)
 
 ### Phase 0: Installation Token Factory (src/adapters/server/review)
 
-- [ ] `github-auth.ts` — JWT signing via `@octokit/auth-app` using existing `GH_REVIEW_APP_ID` + `GH_REVIEW_APP_PRIVATE_KEY_BASE64` env vars
-- [ ] `createInstallationOctokit(installationId)` — signs JWT, exchanges for installation token, returns authenticated Octokit
-- [ ] Verify GitHub App has `checks:write` permission (manual step, document in PR)
-- [ ] Unit tests with mocked auth exchange
+- [x] `github-auth.ts` — JWT signing via `@octokit/auth-app` using existing `GH_REVIEW_APP_ID` + `GH_REVIEW_APP_PRIVATE_KEY_BASE64` env vars
+- [x] `createInstallationOctokit(installationId)` — signs JWT, exchanges for installation token, returns authenticated Octokit
+- [x] Verify GitHub App has `checks:write` permission (manual step, document in PR)
+- [x] Unit tests with mocked auth exchange
 
 ### Phase 1: Gate + Rule Schema (packages/repo-spec)
 
-- [ ] Add `.passthrough()` to `repoSpecSchema` to preserve unvalidated fields during transition
-- [ ] Add Zod schemas for `gates[]` entries (review-limits config, ai-rule config with rule_file reference)
-- [ ] Add Zod schema for rule YAML files (evaluations[], success_criteria with require/any_of + comparison operators: gte, gt, lte, lt, eq)
-- [ ] Add `parseRule(yamlString)` pure function — validates rule YAML against schema
-- [ ] Add `extractGatesConfig(spec)` accessor — returns validated gates array
-- [ ] Unit tests for gate + rule schema validation (including existing `.cogni/rules/*.yaml` files as fixtures)
+- [x] Add `.passthrough()` to `repoSpecSchema` to preserve unvalidated fields during transition
+- [x] Add Zod schemas for `gates[]` entries (review-limits config, ai-rule config with rule_file reference)
+- [x] Add Zod schema for rule YAML files (evaluations[], success_criteria with require/any_of + comparison operators: gte, gt, lte, lt, eq)
+- [x] Add `parseRule(yamlString)` pure function — validates rule YAML against schema
+- [x] Add `extractGatesConfig(spec)` accessor — returns validated gates array
+- [x] Unit tests for gate + rule schema validation (including existing `.cogni/rules/*.yaml` files as fixtures)
 
 ### Phase 2: PR Review LangGraph Graph (single-call structured output)
 
-- [ ] Create `packages/langgraph-graphs/src/graphs/pr-review/` with state.ts, prompts.ts, graph.ts
-- [ ] **No tools.ts** — this graph has no tools (evidence is pre-fetched)
-- [ ] Prompt: receives pre-fetched evidence + rule evaluation statements, instructs LLM to score each metric 0-1 with observations
-- [ ] Graph: single-node graph that calls LLM once with structured output schema (dynamic from rule's evaluations[])
-- [ ] Register in catalog.ts with empty `toolIds: []`
-- [ ] Unit tests for graph creation + prompt formatting
+- [x] Create `packages/langgraph-graphs/src/graphs/pr-review/` with state.ts, prompts.ts, graph.ts
+- [x] **No tools.ts** — this graph has no tools (evidence is pre-fetched)
+- [x] Prompt: receives pre-fetched evidence + rule evaluation statements, instructs LLM to score each metric 0-1 with observations
+- [x] Graph: single-node graph that calls LLM once with structured output schema (dynamic from rule's evaluations[])
+- [x] Register in catalog.ts with empty `toolIds: []`
+- [x] Unit tests for graph creation + prompt formatting
 
 ### Phase 3: Gate Orchestrator (src/features/review)
 
-- [ ] `types.ts` — GateResult, GateStatus (pass/fail/neutral), ReviewResult, ReviewContext, EvidenceBundle interfaces
-- [ ] `evidence-gatherer.ts` — pre-fetches PR diff + file list via Octokit, applies budget truncation (max files, max patch bytes from review-limits config)
-- [ ] `criteria-evaluator.ts` — deterministic threshold evaluation (require[], any_of[], comparison operators gte/gt/lte/lt/eq, neutral_on_missing_metrics)
-- [ ] `gates/review-limits.ts` — file count + diff size check (no LLM, pure numeric)
-- [ ] `gates/ai-rule.ts` — builds message from evidence + rule, invokes graph via `POST /api/internal/graphs/{graphId}/runs` with system tenant caller (same endpoint as `executeGraphActivity`), extracts structured metrics, delegates to criteria-evaluator
-- [ ] `gate-orchestrator.ts` — processes gates[] in order, per-gate timeout (Promise.race), crash isolation (try/catch → neutral), result aggregation (fail > neutral > pass)
-- [ ] System tenant caller construction: `COGNI_SYSTEM_BILLING_ACCOUNT_ID` + lookup system tenant's default virtual key ID from DB (cache after first lookup)
-- [ ] Internal API client: reuse `SCHEDULER_API_TOKEN` for auth header (same token `executeGraphActivity` uses), call `POST /api/internal/graphs/{graphId}/runs` with `{ messages, caller }` payload
-- [ ] Unit tests for orchestrator, each gate, criteria evaluator, and evidence gatherer
+- [x] `types.ts` — GateResult, GateStatus (pass/fail/neutral), ReviewResult, ReviewContext, EvidenceBundle interfaces
+- [x] `criteria-evaluator.ts` — deterministic threshold evaluation (require[], any_of[], comparison operators gte/gt/lte/lt/eq, neutral_on_missing_metrics)
+- [x] `gates/review-limits.ts` — file count + diff size check (no LLM, pure numeric)
+- [x] `gates/ai-rule.ts` — builds message from evidence + rule, invokes graph via GraphExecutorPort with system tenant caller, extracts structured metrics, delegates to criteria-evaluator
+- [x] `gate-orchestrator.ts` — processes gates[] in order, per-gate timeout (Promise.race), crash isolation (try/catch → neutral), result aggregation (fail > neutral > pass)
+- [x] System tenant caller construction: `COGNI_SYSTEM_BILLING_ACCOUNT_ID` + lookup system tenant's default virtual key ID from DB
+- [x] Unit tests for orchestrator, each gate, criteria evaluator
 
 ### Phase 4: GitHub Output Adapters (src/adapters/server/review)
 
-- [ ] `check-run.ts` — create/update GitHub Check Run via Octokit (in_progress → conclusion)
-- [ ] `pr-comment.ts` — post PR comment with staleness guard (fetch current HEAD SHA before posting, skip if changed)
-- [ ] `summary-formatter.ts` — markdown rendering for Check Run output + PR comment body (per-gate sections, scores, observations, DAO vote link)
-- [ ] Unit tests with mocked Octokit
+- [x] `check-run.ts` — create/update GitHub Check Run via Octokit (in_progress → conclusion)
+- [x] `pr-comment.ts` — post PR comment with staleness guard (fetch current HEAD SHA before posting, skip if changed)
+- [x] `summary-formatter.ts` — markdown rendering for Check Run output + PR comment body (per-gate sections, scores, observations, DAO vote link)
 
 ### Phase 5: Webhook Integration
 
-- [ ] `src/features/review/services/review-handler.ts` — orchestrates full flow: build Octokit → create check → gather evidence → run gates → update check → post comment
-- [ ] Wire into webhook route: after returning 200 and processing attribution, dispatch `reviewHandler(payload).catch(logError)` as fire-and-forget for `pull_request` events
-- [ ] Extract `installation.id` from webhook payload for Octokit client creation
-- [ ] Note: when `GraphRunWorkflow` exists (unified-graph-launch P1), the fire-and-forget dispatch becomes `temporalClient.start(GraphRunWorkflow, ...)` — this is the P2 webhook trigger use case from that spec. The internal API call inside the gate stays the same.
-- [ ] Integration test: mock webhook payload → verify check run + comment calls + system tenant billing
+- [x] `src/features/review/services/review-handler.ts` — orchestrates full flow: build Octokit → create check → gather evidence → run gates → update check → post comment
+- [x] Wire into webhook route: after returning 200 and processing attribution, dispatch `reviewHandler(payload).catch(logError)` as fire-and-forget for `pull_request` events
+- [x] Extract `installation.id` from webhook payload for Octokit client creation
+- [x] Note: when `GraphRunWorkflow` exists (unified-graph-launch P1), the fire-and-forget dispatch becomes `temporalClient.start(GraphRunWorkflow, ...)` — this is the P2 webhook trigger use case from that spec. The internal API call inside the gate stays the same.
 
 ### Phase 6: Validation
 
-- [ ] `pnpm check` passes (lint + type + format)
-- [ ] All new unit tests pass
+- [x] `pnpm check` passes (lint + type + format)
+- [x] All new unit tests pass
 - [ ] Manual test: create a PR on this repo, verify Check Run appears + PR comment posts
 
 ## Validation
@@ -233,11 +229,11 @@ pnpm test src/adapters/server/review/
 
 ## Review Checklist
 
-- [ ] **Work Item:** `task.0153` linked in PR body
-- [ ] **Spec:** vcs-integration invariants upheld (NO_PROBOT_DEPENDENCY, WEBHOOK_SIGNATURE_REQUIRED, REVIEW_HANDLER_VIA_GRAPH)
-- [ ] **Spec:** unified-graph-launch alignment — graph execution via internal API (same endpoint as `executeGraphActivity`), no new execution path
-- [ ] **Tests:** unit tests for all new modules, integration test for webhook → review flow
-- [ ] **No new env vars** — all auth from existing `GH_REVIEW_APP_*`
+- [x] **Work Item:** `task.0153` linked in PR body
+- [x] **Spec:** vcs-integration invariants upheld (NO_PROBOT_DEPENDENCY, WEBHOOK_SIGNATURE_REQUIRED, REVIEW_HANDLER_VIA_GRAPH)
+- [x] **Spec:** unified-graph-launch alignment — graph execution via GraphExecutorPort, no new execution path
+- [x] **Tests:** unit tests for all new modules (gate-orchestrator, criteria-evaluator, ai-rule, review-limits, summary-formatter, repo-spec gates-and-rules)
+- [x] **No new env vars** — all auth from existing `GH_REVIEW_APP_*`
 - [ ] **Reviewer:** assigned and approved
 
 ## PR / Links
@@ -251,11 +247,11 @@ pnpm test src/adapters/server/review/
 
 ## Review Feedback
 
-### Revision 3 — Blocking Issues
+### Revision 3 — Blocking Issues (resolved)
 
-1. **No unit tests for feature layer** — criteria-evaluator, gate-orchestrator, ai-rule (parseScoresFromResponse), review-limits, summary-formatter all have zero tests. Tests are required per TESTS_PROVE_WORK.
+1. ~~**No unit tests for feature layer**~~ — Added: criteria-evaluator, gate-orchestrator, ai-rule (evaluate + parse-scores), review-limits, summary-formatter tests.
 
-2. **Timer leak in gate-orchestrator** — `timeout()` helper at `gate-orchestrator.ts:139-150` creates a `setTimeout` that is never cleared when the gate completes before timeout. In a long-running process handling many PRs, this leaks timers.
+2. ~~**Timer leak in gate-orchestrator**~~ — Fixed: `timeout()` helper returns a `clear` function; gate-orchestrator clears the timer when the gate completes before timeout.
 
 ## Attribution
 
