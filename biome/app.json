@@ -2,6 +2,31 @@
   "overrides": [
     {
       "includes": [
+        "apps/web/src/components/**/*.{ts,tsx}",
+        "apps/web/src/features/**/components/**/*.{ts,tsx}",
+        "apps/web/src/features/**/hooks/**/*.{ts,tsx}",
+        "apps/web/src/app/**/*.client.{ts,tsx}"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@/ports/server"],
+                    "message": "@/ports/server re-exports @cogni/scheduler-core (node:util) — server-only. Client components must use @/ports (client-safe barrel). See bug.0147."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
         "apps/web/src/app/**/page.tsx",
         "apps/web/src/app/**/layout.tsx",
         "apps/web/src/app/**/loading.tsx",
