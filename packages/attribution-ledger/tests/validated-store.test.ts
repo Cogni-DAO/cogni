@@ -114,7 +114,7 @@ class MockAttributionStore {
     return null;
   }
   async insertPoolComponent() {
-    return {} as never;
+    return { component: {} as never, created: true };
   }
   async getPoolComponentsForEpoch() {
     return [];

@@ -328,7 +328,7 @@ export async function seedClosedEpoch(
   ]);
 
   // 5. Insert pool component
-  const poolComponent = await store.insertPoolComponent(
+  const { component: poolComponent } = await store.insertPoolComponent(
     makePoolComponent({
       nodeId,
       epochId: epoch.id,
@@ -453,7 +453,7 @@ export async function seedReviewEpoch(
     }),
   ]);
 
-  const poolComponent = await store.insertPoolComponent(
+  const { component: poolComponent } = await store.insertPoolComponent(
     makePoolComponent({
       nodeId,
       epochId: epoch.id,

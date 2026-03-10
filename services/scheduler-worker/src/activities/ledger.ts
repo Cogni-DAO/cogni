@@ -887,31 +887,23 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     let ensured = 0;
 
     for (const estimate of estimates) {
-      try {
-        await attributionStore.insertPoolComponent({
-          nodeId,
-          epochId,
-          componentId: estimate.componentId,
-          algorithmVersion: estimate.algorithmVersion,
-          inputsJson: estimate.inputsJson,
-          amountCredits: estimate.amountCredits,
-          evidenceRef: estimate.evidenceRef,
-        });
+      // insertPoolComponent is idempotent (ON CONFLICT DO NOTHING + SELECT)
+      const { created } = await attributionStore.insertPoolComponent({
+        nodeId,
+        epochId,
+        componentId: estimate.componentId,
+        algorithmVersion: estimate.algorithmVersion,
+        inputsJson: estimate.inputsJson,
+        amountCredits: estimate.amountCredits,
+        evidenceRef: estimate.evidenceRef,
+      });
+      if (created) {
         ensured++;
-      } catch (err) {
-        // Idempotent: PK conflict means component already exists — skip
-        const msg = err instanceof Error ? err.message : String(err);
-        if (
-          msg.includes("duplicate key") ||
-          msg.includes("unique constraint")
-        ) {
-          logger.info(
-            { componentId: estimate.componentId },
-            "Pool component already exists — skipping"
-          );
-        } else {
-          throw err;
-        }
+      } else {
+        logger.info(
+          { componentId: estimate.componentId },
+          "Pool component already exists — skipping"
+        );
       }
     }
 

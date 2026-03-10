@@ -84,7 +84,7 @@ export const POST = wrapRouteHandlerWithLogging<{
       const nodeId = getNodeId();
 
       // input.amountCredits is already bigint (zBigint transform)
-      const component = await store.insertPoolComponent({
+      const { component, created } = await store.insertPoolComponent({
         nodeId,
         epochId,
         componentId: input.componentId,
@@ -105,7 +105,7 @@ export const POST = wrapRouteHandlerWithLogging<{
         recordPoolComponentOperation.output.parse(
           toPoolComponentDto(component)
         ),
-        { status: 201 }
+        { status: created ? 201 : 200 }
       );
     } catch (error) {
       const errorResponse = handleRouteError(ctx, error);

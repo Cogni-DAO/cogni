@@ -82,7 +82,9 @@ function makeMockStore(
     getUserDisplayNames: vi.fn().mockResolvedValue(new Map()),
     upsertCursor: vi.fn(),
     getCursor: vi.fn().mockResolvedValue(null),
-    insertPoolComponent: vi.fn(),
+    insertPoolComponent: vi
+      .fn()
+      .mockResolvedValue({ component: {}, created: true }),
     getPoolComponentsForEpoch: vi.fn(),
     insertEpochStatement: vi.fn(),
     getStatementForEpoch: vi.fn(),

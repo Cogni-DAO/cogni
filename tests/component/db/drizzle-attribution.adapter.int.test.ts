@@ -709,10 +709,11 @@ describe("DrizzleAttributionAdapter (Component)", () => {
     });
 
     it("inserts and retrieves pool components", async () => {
-      const comp = await adapter.insertPoolComponent(
+      const { component: comp, created } = await adapter.insertPoolComponent(
         makePoolComponent({ epochId })
       );
 
+      expect(created).toBe(true);
       expect(comp.componentId).toBe("base_issuance");
       expect(comp.amountCredits).toBe(10000n);
 
@@ -720,10 +721,17 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       expect(all).toHaveLength(1);
     });
 
-    it("POOL_UNIQUE_PER_TYPE: rejects duplicate component_id per epoch", async () => {
-      await expect(
-        adapter.insertPoolComponent(makePoolComponent({ epochId }))
-      ).rejects.toThrow();
+    it("POOL_UNIQUE_PER_TYPE: duplicate insert is idempotent, returns existing", async () => {
+      const { component: existing, created } =
+        await adapter.insertPoolComponent(makePoolComponent({ epochId }));
+
+      expect(created).toBe(false);
+      expect(existing.componentId).toBe("base_issuance");
+      expect(existing.amountCredits).toBe(10000n);
+
+      // Still only one row
+      const all = await adapter.getPoolComponentsForEpoch(epochId);
+      expect(all).toHaveLength(1);
     });
 
     it("POOL_IMMUTABLE: UPDATE on pool components is rejected by trigger", async () => {

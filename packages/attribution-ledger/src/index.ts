@@ -147,6 +147,7 @@ export type {
   InsertStatementParams,
   InsertUserProjectionParams,
   OverrideStore,
+  PoolComponentInsertResult,
   PoolStore,
   ProjectionStore,
   ReceiptClaimantsRecord,
