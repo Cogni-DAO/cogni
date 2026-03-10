@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/api/v1/attribution/epochs/[id]/activity/route`
- * Purpose: Authenticated HTTP endpoint for epoch ingestion receipts with selection join.
- * Scope: SIWE-protected route; exposes PII fields (platformUserId, platformLogin, etc.). Does not contain business logic.
+ * Purpose: Authenticated HTTP endpoint for epoch activity — UNION of window receipts and epoch-selected receipts with selection join.
+ * Scope: SIWE-protected route; exposes PII fields (platformUserId, platformLogin, etc.). Does not contain business logic. Displays cross-epoch promoted receipts alongside window receipts.
  * Invariants: NODE_SCOPED, ALL_MATH_BIGINT, VALIDATE_IO, ACTIVITY_AUTHED.
  * Side-effects: IO (HTTP response, database read)
  * Links: docs/spec/attribution-ledger.md, contracts/attribution.epoch-activity.v1.contract

@@ -2,7 +2,7 @@
 id: bug.0149
 type: bug
 title: "Epoch receipt scope too narrow + pendingSelectionDto fabricates inclusion"
-status: done
+status: needs_merge
 priority: 0
 rank: 10
 estimate: 2
