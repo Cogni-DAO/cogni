@@ -2,7 +2,7 @@
 id: task.0151
 type: task
 title: "packages/work-items — MarkdownWorkItemAdapter + contract tests"
-status: needs_closeout
+status: done
 priority: 0
 rank: 6
 estimate: 3
@@ -14,7 +14,7 @@ credit:
 project: proj.agentic-project-management
 branch: design/agentic-project-management
 pr:
-reviewer:
+reviewer: claude
 revision: 0
 blocked_by:
 deploy_verified: false
