@@ -113,18 +113,42 @@ function decideInclusion(
   return false;
 }
 
-export const PROMOTION_SELECTION_POLICY: SelectionPolicyDescriptor = {
-  policyRef: PROMOTION_SELECTION_POLICY_REF,
-  select(context: SelectionContext): SelectionDecision[] {
-    const promotedShas = buildPromotedShas(context.allReceipts);
-    const promotedPrNumbers = buildPromotedPrNumbers(
-      context.allReceipts,
-      promotedShas
-    );
+/**
+ * Configuration for the promotion-selection policy.
+ * Allows excluding specific platform logins (e.g. automation bots).
+ */
+export interface PromotionSelectionConfig {
+  readonly excludedLogins?: readonly string[];
+}
 
-    return context.receiptsToSelect.map((receipt) => ({
-      receiptId: receipt.receiptId,
-      included: decideInclusion(receipt, promotedShas, promotedPrNumbers),
-    }));
-  },
-};
+/**
+ * Factory: create a promotion-selection policy with optional bot exclusion.
+ * Receipts from excluded logins are always `included: false`.
+ */
+export function createPromotionSelectionPolicy(
+  config?: PromotionSelectionConfig
+): SelectionPolicyDescriptor {
+  const excludedLogins = new Set(config?.excludedLogins ?? []);
+  return {
+    policyRef: PROMOTION_SELECTION_POLICY_REF,
+    select(context: SelectionContext): SelectionDecision[] {
+      const promotedShas = buildPromotedShas(context.allReceipts);
+      const promotedPrNumbers = buildPromotedPrNumbers(
+        context.allReceipts,
+        promotedShas
+      );
+
+      return context.receiptsToSelect.map((receipt) => ({
+        receiptId: receipt.receiptId,
+        included:
+          receipt.platformLogin && excludedLogins.has(receipt.platformLogin)
+            ? false
+            : decideInclusion(receipt, promotedShas, promotedPrNumbers),
+      }));
+    },
+  };
+}
+
+/** Default instance — no exclusions, backward-compatible. */
+export const PROMOTION_SELECTION_POLICY: SelectionPolicyDescriptor =
+  createPromotionSelectionPolicy();

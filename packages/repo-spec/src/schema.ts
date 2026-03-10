@@ -88,6 +88,8 @@ export const activitySourceSpecSchema = z.object({
   attribution_pipeline: z.string().min(1),
   /** External namespaces for cursor scoping (e.g., repo slugs) */
   source_refs: z.array(z.string().min(1)).min(1),
+  /** Platform logins to exclude from attribution (e.g., automation bots) */
+  excluded_logins: z.array(z.string().min(1)).optional(),
 });
 
 export type ActivitySourceSpec = z.infer<typeof activitySourceSpecSchema>;

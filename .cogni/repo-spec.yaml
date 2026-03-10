@@ -27,6 +27,7 @@ activity_ledger:
     github:
       attribution_pipeline: cogni-v0.0
       source_refs: ["Cogni-DAO/node-template"]
+      excluded_logins: ["Cogni-1729"]
 
 intent:
   name: cogni-template
