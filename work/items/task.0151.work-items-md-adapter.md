@@ -215,24 +215,35 @@ export function workItemPortContract(
 
 ### Package Wiring Changes
 
-1. **`packages/work-items/package.json`**: Add `"yaml": "^2.6.1"` to dependencies; add `vitest` to devDeps
-2. **`packages/work-items/tsup.config.ts`**: Change `platform: "node"` (adapter uses `node:fs`, `node:crypto`)
-3. **`packages/work-items/src/index.ts`**: Add `export { MarkdownWorkItemAdapter } from "./adapters/markdown/index.js"`
+1. **`packages/work-items/package.json`**: Add `"yaml": "^2.6.1"` to dependencies; add `vitest` to devDeps. Add `"./markdown"` export entry point.
+2. **`packages/work-items/tsup.config.ts`**: Add second entry `src/adapters/markdown/index.ts`; keep root entry `platform: "neutral"`, adapter entry `platform: "node"`
+3. **`packages/work-items/src/index.ts`**: Do NOT re-export adapter (keep root entry pure types). Consumers use `@cogni/work-items/markdown`.
 4. **`packages/work-items/AGENTS.md`**: Update responsibilities (now includes adapter), add `yaml` to external deps
 5. **`packages/work-items/vitest.config.ts`**: New — package-local test config
 6. **`scripts/validate-docs-metadata.mjs`**: Add `relations` and `claimed_by_run`, `claimed_at`, `last_command` to optional fields
+
+### Error Types
+
+- `StaleRevisionError`: Thrown by `patch()`, `transitionStatus()`, `setAssignees()`, `upsertExternalRef()` when `expectedRevision` doesn't match current SHA-256. Callers should re-read and retry.
+- `InvalidTransitionError`: Thrown by `transitionStatus()` when `isValidTransition(from, to)` returns false.
+- Both live in `src/adapters/markdown/errors.ts` (adapter-specific; port interface uses `Promise` rejection).
+
+### Known Limitations
+
+- **ID allocation race**: Two concurrent `create()` calls can allocate the same ID. v0 assumes single-caller (one agent at a time). Future: lockfile or counter file.
+- **`listRelations()` is O(n)**: Scans all files for incoming relations. Acceptable for <200 files.
 
 ### Files
 
 - Create: `packages/work-items/src/adapters/markdown/adapter.ts` — main adapter class
 - Create: `packages/work-items/src/adapters/markdown/frontmatter.ts` — parse/serialize/revision helpers
+- Create: `packages/work-items/src/adapters/markdown/errors.ts` — StaleRevisionError, InvalidTransitionError
 - Create: `packages/work-items/src/adapters/markdown/index.ts` — barrel export
 - Create: `packages/work-items/tests/contract/work-item-port.contract.ts` — portable contract tests
 - Create: `packages/work-items/tests/adapters/markdown.test.ts` — markdown adapter test binding
 - Create: `packages/work-items/vitest.config.ts` — package vitest config
-- Modify: `packages/work-items/src/index.ts` — add adapter re-export
-- Modify: `packages/work-items/package.json` — add yaml dep, vitest devDep
-- Modify: `packages/work-items/tsup.config.ts` — platform: "node"
+- Modify: `packages/work-items/package.json` — add yaml dep, vitest devDep, `./markdown` export
+- Modify: `packages/work-items/tsup.config.ts` — dual entry points, adapter platform: "node"
 - Modify: `packages/work-items/AGENTS.md` — update responsibilities and deps
 - Modify: `scripts/validate-docs-metadata.mjs` — accept new optional frontmatter fields
 
