@@ -20,6 +20,9 @@ export { BRAIN_GRAPH_NAME, createBrainGraph } from "./brain/graph";
 export { createPoetGraph, POET_GRAPH_NAME } from "./poet/graph";
 // Ponderer graph (philosophical thinker)
 export { createPondererGraph, PONDERER_GRAPH_NAME } from "./ponderer/graph";
+// PR Review graph (single-call structured output, no tools)
+export { createPrReviewGraph, PR_REVIEW_GRAPH_NAME } from "./pr-review/graph";
+export { buildReviewUserMessage } from "./pr-review/prompts";
 // Research graph (deep research with web search)
 export { createResearchGraph, RESEARCH_GRAPH_NAME } from "./research/graph";
 // Shared graph types
