@@ -21,13 +21,14 @@ project: proj.system-tenant-governance
 branch: feat/mission-control
 pr:
 reviewer:
-revision: 2
+revision: 3
 blocked_by:
 deploy_verified: false
 created: 2026-03-10
-updated: 2026-03-10
+updated: 2026-03-11
 labels: [governance, heartbeat, operator, mission-control]
 external_refs:
+  - docs/research/autonomous-agent-operator-loops.md
 ---
 
 # Mission Control: Operator Loop with WIP Tracking and Work Item Execution
@@ -58,15 +59,17 @@ The HEARTBEAT schedule fires hourly via Temporal and routes to `/git-sync`. The 
 
 ### Research-Backed Principles
 
+> Full research: [docs/research/autonomous-agent-operator-loops.md](../../docs/research/autonomous-agent-operator-loops.md)
+
 These findings constrain the design:
 
-1. **Budget tracker provides continuous signal** (Google BATS) — the agent MUST see its own cost data, not guess. Without real spend data, agents waste 40% more resources.
-2. **Reflection-retrieval** (BabyAGI) — store reflections after each task; retrieve past reflections for similar objectives on next run. Improves task quality measurably.
-3. **Plan-and-Execute over ReAct** — separate planning (mission-control) from execution (brain subagent). ReAct exhibits goal drift after dozens of steps.
-4. **Hard iteration caps** — `MAX_STEPS` is non-negotiable. Circuit breaker: 3 failures on same task means escalate or skip.
-5. **External verification over self-correction** — use tests, type checks, git status, Grafana metrics. LLMs cannot self-correct reasoning without external signals.
-6. **Outcome tracking, not activity tracking** — measure downstream impact (did the PR merge? did the error rate drop?), not tasks closed.
-7. **Stale reasoning detection** — old reasoning becomes misleading. Use fresh context per run, not accumulated history.
+1. **Budget tracker provides continuous signal** ([Google BATS](https://arxiv.org/abs/2511.17006)) — inject live budget/runway data into the agent's context BEFORE the pick/dispatch decision. Budget-unaware agents waste 40% more resources. Comparable accuracy with 40% fewer tool calls when budget signal is visible.
+2. **Plan-and-Execute over ReAct** ([Plan-and-Act](https://arxiv.org/html/2503.09572v3)) — separate planning (mission-control procedure) from execution (brain subagent). Plan-and-Execute achieves 92% completion vs 85% for ReAct, and recovers from single-step failures by falling back to the master plan.
+3. **External verification over self-evaluation** ([Reflexion](https://arxiv.org/abs/2303.11366), [SWE-Agent](https://arxiv.org/abs/2405.15793)) — never ask "did you succeed?" Use tests, git status, PR state, Grafana metrics. Reflexion achieves 91% pass@1 vs 80% baseline by using test results, not self-judgment.
+4. **Reflection-retrieval for similar tasks** ([Reflexion](https://nanothoughts.substack.com/p/reflecting-on-reflexion), [BabyAGI](https://babyagi.org/)) — store reflections after each task; retrieve past reflections for SIMILAR objectives on next run. Before dispatching, scan completed work for same-skill reflections and include in brief.
+5. **Same-failure circuit breaker** (production patterns) — track `last_failure_reason`, not just `fail_count`. 3 identical failures = stuck (escalate). 3 different failures = progress through failure modes (continue).
+6. **Fresh context per run** ([Devin](https://devin.ai/agents101), [SWE-Agent history collapse](https://arxiv.org/abs/2405.15793)) — each run starts fresh. No accumulated conversation history. Only persistent state: WIP.md, EDO index, _budget_header.md. Stale reasoning corrupts decisions.
+7. **Single sub-agent at a time** ([Claude Code](https://blog.promptlayer.com/claude-code-behind-the-scenes-of-the-master-agent-loop/)) — one brain subagent, one work item, one lifecycle skill. No parallel execution. Sequential is safer for autonomous operation.
 
 ### The Operator Loop (centerpiece)
 
@@ -91,9 +94,11 @@ HEARTBEAT trigger arrives
   │     Read WIP.md. For each active entry:
   │       - Check completion signal (git status, PR state, work item status)
   │       - If DONE → move to WIP.md completed section, record reflection
-  │       - If STALE (started >3 runs ago, no progress) → increment fail_count
-  │       - If fail_count ≥ 3 → CIRCUIT BREAK: post Discord escalation,
-  │         mark item as blocked in WIP.md, move on
+  │       - If STALE (started >3 runs ago, no progress) → record failure reason
+  │         - If same last_failure_reason repeating → increment fail_count
+  │         - If different failure reason → reset fail_count to 1 (progress through different modes)
+  │       - If fail_count ≥ 3 with SAME reason → CIRCUIT BREAK: post Discord
+  │         escalation, mark item as blocked in WIP.md, move on
   │
   ├─ Step 4. CHECK PAST DECISIONS (~5s)
   │     Read edo_index.md. For each EDO with by_date ≤ now:
@@ -130,11 +135,23 @@ HEARTBEAT trigger arrives
   │       needs_research  → /research               (weight: 2)
   │       needs_triage    → /triage                 (weight: 1)
   │       active alert    → /bug (create work item first, then triage)
+  │
+  │     REFLECTION RETRIEVAL (from Reflexion research):
+  │       Before dispatch, scan WIP.md ## Completed for entries with same skill.
+  │       If found, include their reflection text in the brain subagent brief.
+  │       Example: dispatching /implement → find last 3 /implement reflections.
+  │
+  │     READ BUDGET before delegating:
+  │       Read _budget_header.md. Include runway_days and burn_rate in brief
+  │       so brain subagent sees cost context (BATS: budget signal must be visible).
+  │
   │     Delegate to brain subagent with:
   │       - work item path
   │       - lifecycle skill to run
   │       - max_tokens budget (from remaining budget)
   │       - expected completion signal
+  │       - relevant reflections from past similar work
+  │       - current runway/budget summary
   │     Record dispatch in WIP.md
   │
   ├─ Step 8. RECORD
@@ -166,6 +183,7 @@ Persisted at `gateway-workspace/memory/mission-control/WIP.md`. This is the agen
   started: 2026-03-10T12:00Z
   expected_signal: "PR created on feat/attribution-v2 branch"
   fail_count: 0
+  last_failure_reason: ""
   last_checked: 2026-03-10T13:00Z
   last_status: "branch exists, 2 commits since dispatch"
 
@@ -176,7 +194,8 @@ Persisted at `gateway-workspace/memory/mission-control/WIP.md`. This is the agen
   started: 2026-03-09T10:00Z
   blocked_at: 2026-03-10T12:00Z
   fail_count: 3
-  reason: "Type errors persist after 3 attempts"
+  last_failure_reason: "Type errors in src/services/attribution.ts — same error 3 runs"
+  reason: "Same failure repeated 3 times — circuit breaker tripped"
   escalation: "Discord message sent 2026-03-10T12:01Z"
 
 ## Completed (last 10, for reflection-retrieval)
@@ -401,8 +420,10 @@ For each item in ## Active:
 
 - Check expected_signal using external tools (gh pr list, git log, etc.)
 - If signal met → move to ## Completed with reflection
-- If not met → increment last_checked timestamp
-- If fail_count ≥ 3 → move to ## Blocked, post Discord escalation
+- If not met → record failure reason in last_failure_reason
+  - If SAME reason as last time → increment fail_count
+  - If DIFFERENT reason → reset fail_count to 1 (progress through failure modes)
+- If fail_count ≥ 3 with same reason → move to ## Blocked, post Discord escalation
 
 ### Step 4: CHECK PAST DECISIONS
 
@@ -458,7 +479,18 @@ Map work item status to lifecycle skill (per development-lifecycle spec):
   needs_triage    → /triage
   active alert    → /bug (create work item first, then triage)
 
-Delegate to brain subagent with: work item path, skill, token budget.
+BEFORE delegating:
+
+1. **Retrieve reflections**: Scan WIP.md ## Completed for entries with the SAME skill.
+   Include the last 3 matching reflections in the brain subagent brief.
+   (Reflexion research: past experience on similar tasks improves quality.)
+
+2. **Include budget context**: Read /workspace/memory/\_budget_header.md.
+   Include runway_days, burn_rate, and runway_indicator in the brief.
+   (BATS research: budget signal must be visible to the executor, not just the planner.)
+
+Delegate to brain subagent with: work item path, skill, token budget,
+relevant reflections, and budget summary.
 Update WIP.md with dispatch details.
 
 ## Phase 3: RECORD + REPORT (mechanical)
@@ -521,7 +553,7 @@ EXIT. Do not continue processing.
 - [ ] FINANCIAL_FEEDBACK: \_budget_header.md updated with REAL cost data, credit balance, treasury balance, and runway from mc-billing.sh
 - [ ] RUNWAY_VISIBLE: Discord report includes runway_indicator (🟢 >30d, 🟡 7-30d, 🔴 <7d) and runway_days
 - [ ] OUTCOME_VERIFICATION: Past EDOs checked via external signals (metrics, git, gh CLI), not self-evaluation
-- [ ] CIRCUIT_BREAKER: 3 consecutive failures on same item triggers escalation + blocked status
+- [ ] CIRCUIT_BREAKER: 3 identical failures (same last_failure_reason) triggers escalation + blocked status. Different failures reset count (progress through failure modes).
 - [ ] GOV_CORE_CONTRACT: Decision output follows gov-core format (focus/action/no-op with expected outcome)
 - [ ] EDO_ON_REAL_DECISIONS: EDO written only when action taken, not on no-op
 - [ ] GIT_SYNC_PRESERVED: Git sync runs as Step 1 (not removed)
@@ -529,6 +561,8 @@ EXIT. Do not continue processing.
 - [ ] COST_DISCIPLINE: Observation is cheap (curl/bash). Only Step 7 (brain dispatch) is expensive. Over-budget skips dispatch.
 - [ ] ONE_FOCUS: Exactly one work item per run. WIP continuity preferred over starting new work.
 - [ ] REFLECTION_STORED: Completed items include a reflection for future retrieval
+- [ ] REFLECTION_RETRIEVED: Before dispatch, scan completed items for same-skill reflections and include in brain brief (Reflexion pattern)
+- [ ] BUDGET_SIGNAL_VISIBLE: Brain subagent receives runway + burn rate in its brief, not just pass/fail gate (BATS pattern)
 - [ ] DISCORD_REPORT: Summary posted to governance channel every run
 
 ### Action Taxonomy
