@@ -14,7 +14,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {
-  pendingSelectionDto,
   toIngestionReceiptDto,
   toSelectionDto,
 } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
@@ -60,12 +59,24 @@ export const GET = wrapRouteHandlerWithLogging<{
       return NextResponse.json({ error: "Epoch not found" }, { status: 404 });
     }
 
-    // Load receipts + selections and join in-memory (V0 data sizes are small)
-    const receipts = await store.getReceiptsForWindow(
-      nodeId,
-      epoch.periodStart,
-      epoch.periodEnd
-    );
+    // Load both: window receipts (may be pending) + epoch-selected receipts (may be cross-epoch)
+    const [windowReceipts, epochSelectedReceipts] = await Promise.all([
+      store.getReceiptsForWindow(nodeId, epoch.periodStart, epoch.periodEnd),
+      store.getReceiptsForEpoch(nodeId, epochId),
+    ]);
+
+    // Deduplicate by receiptId (window receipts take priority — same data, just dedup)
+    const seen = new Set<string>();
+    const receipts: typeof windowReceipts = [];
+    for (const r of windowReceipts) {
+      seen.add(r.receiptId);
+      receipts.push(r);
+    }
+    for (const r of epochSelectedReceipts) {
+      if (!seen.has(r.receiptId)) {
+        receipts.push(r);
+      }
+    }
     const selections = await store.getSelectionForEpoch(epochId);
     const selectionMap = new Map(selections.map((s) => [s.receiptId, s]));
 
@@ -116,13 +127,12 @@ export const GET = wrapRouteHandlerWithLogging<{
       const resolvedUserId = needsResolution
         ? (resolvedIdentities.get(r.platformUserId) ?? null)
         : null;
-      const selectionDto = resolvedUserId
-        ? selection
-          ? toSelectionDto({ ...selection, userId: resolvedUserId })
-          : pendingSelectionDto(resolvedUserId)
-        : selection
-          ? toSelectionDto(selection)
-          : null;
+      const selectionDto = selection
+        ? toSelectionDto({
+            ...selection,
+            userId: resolvedUserId ?? selection.userId,
+          })
+        : null;
       return {
         ...toIngestionReceiptDto(r),
         selection: selectionDto,

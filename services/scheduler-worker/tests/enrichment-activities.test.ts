@@ -90,7 +90,7 @@ function makeMockStore(
     insertSelectionDoNothing: vi.fn(),
     resolveIdentities: vi.fn().mockResolvedValue(new Map()),
     finalizeEpochAtomic: vi.fn(),
-    getUnselectedReceipts: vi.fn().mockResolvedValue([]),
+    getSelectionCandidates: vi.fn().mockResolvedValue([]),
     updateSelectionUserId: vi.fn(),
     ...overrides,
   } as AttributionStore;

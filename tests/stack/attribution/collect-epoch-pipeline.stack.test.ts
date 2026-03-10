@@ -220,14 +220,12 @@ describe("[attribution] CollectEpochWorkflow pipeline (stack)", () => {
     expect(stagingPr.eventTime).toBeInstanceOf(Date);
 
     // 3. Selections were materialized
-    // getUnselectedReceipts returns receipts with NO selection row OR userId IS NULL.
+    // getSelectionCandidates returns receipts with NO selection row OR userId IS NULL.
     // Since we have no user_bindings in the test DB, userId will be null — but selection
     // rows MUST exist (hasExistingSelection: true). This proves the selection policy ran.
-    const unselected = await store.getUnselectedReceipts(
+    const unselected = await store.getSelectionCandidates(
       TEST_NODE_ID,
-      epoch.id,
-      PERIOD_START,
-      PERIOD_END
+      epoch.id
     );
     for (const u of unselected) {
       expect(u.hasExistingSelection).toBe(true);
@@ -346,11 +344,9 @@ describe("[attribution] CollectEpochWorkflow pipeline (stack)", () => {
     if (!epoch) throw new Error("Epoch not found after workflow completion");
 
     // All receipts should now have resolved userIds — no unselected with null userId
-    const unselected = await store.getUnselectedReceipts(
+    const unselected = await store.getSelectionCandidates(
       TEST_NODE_ID,
-      epoch.id,
-      PERIOD_START,
-      PERIOD_END
+      epoch.id
     );
     // Only the release PR (platformUserId "99999") has no binding — it's excluded anyway
     for (const u of unselected) {

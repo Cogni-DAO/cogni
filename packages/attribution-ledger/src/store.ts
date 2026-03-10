@@ -481,6 +481,11 @@ export interface ReceiptStore {
   ): Promise<IngestionReceipt[]>;
   /** Return all receipts for a node regardless of time window. Used for cross-epoch promotion matching. */
   getAllReceipts(nodeId: string): Promise<IngestionReceipt[]>;
+  /** Return all receipts that have a selection row for the given epoch (includes cross-epoch). */
+  getReceiptsForEpoch(
+    nodeId: string,
+    epochId: bigint
+  ): Promise<IngestionReceipt[]>;
 }
 
 /** Read-only selection queries — safe for enrichers and allocation consumers. */
@@ -514,20 +519,19 @@ export interface SelectionWriter {
   /**
    * Insert selection rows with ON CONFLICT DO NOTHING semantics.
    * Used by auto-population (SELECTION_AUTO_POPULATE) to avoid overwriting
-   * admin-set fields if a row is created between getUnselectedReceipts and insert.
+   * admin-set fields if a row is created between getSelectionCandidates and insert.
    */
   insertSelectionDoNothing(params: InsertSelectionAutoParams[]): Promise<void>;
 
   /**
-   * Returns receipts in the epoch window that need selection work:
+   * Returns receipts that need selection work for the given epoch:
    * - No selection row exists (new receipts)
    * - Selection row exists but user_id IS NULL (unresolved)
+   * No time-window filter — the selection policy decides what belongs in the epoch.
    */
-  getUnselectedReceipts(
+  getSelectionCandidates(
     nodeId: string,
-    epochId: bigint,
-    periodStart: Date,
-    periodEnd: Date
+    epochId: bigint
   ): Promise<UnselectedReceipt[]>;
 
   /**
