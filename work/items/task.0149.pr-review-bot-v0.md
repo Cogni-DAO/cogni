@@ -2,7 +2,7 @@
 id: task.0149
 type: task
 title: "PR Review Bot V0 — LangGraph graph + gate orchestrator for automated PR review"
-status: done
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 4

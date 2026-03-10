@@ -45,7 +45,7 @@ Consolidate all VCS integration into this repo: a shared auth package (`packages
 | Node registration lifecycle — core port, webhook handler, scope reconciliation        | Not Started | 5   | task.0122            |
 | `services/git-daemon/` scaffold — main, config, health, Fastify, per-app webhook URLs | Not Started | 1   | (create at P1 start) |
 | Create Admin GitHub App (contents:write, admin:write, members:write)                  | Not Started | 0.5 | (create at P1 start) |
-| Review handler — PR review via graphExecutor                                          | Not Started | 3   | task.0149            |
+| Review handler — PR review via graphExecutor                                          | In Review   | 3   | task.0149            |
 | Admin handler — merge PR, grant/revoke collaborator (on-chain authorized)             | Not Started | 2   | (create at P1 start) |
 | Onchain webhook — Alchemy HMAC verify + CogniAction parse                             | Not Started | 1   | (create at P1 start) |
 | Authorization policy — DAO allowlist enforcement                                      | Not Started | 1   | (create at P1 start) |

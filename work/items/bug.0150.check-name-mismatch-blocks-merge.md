@@ -2,7 +2,7 @@
 id: bug.0150
 type: bug
 title: "Check name mismatch: code creates 'Cogni PR Review' but branch protection requires 'Cogni Git PR Review'"
-status: needs_implement
+status: done
 priority: 0
 rank: 1
 estimate: 1
