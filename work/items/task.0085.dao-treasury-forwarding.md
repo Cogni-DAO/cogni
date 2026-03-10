@@ -135,7 +135,7 @@ Recommendation: start with (3) — the adapter is ready, script can call it. Wir
   - [x] Facade updated to use orchestrator, logs structured settlement outcome
   - [x] `scripts/distribute-split.ts` — manual CLI fallback
   - [x] 4 unit tests for orchestrator, facade test updated
-  - [ ] Package extraction of payments application layer — follow-up (task.0148)
+  - [ ] Package extraction of payments application layer — follow-up (task.0146)
 
 ## Validation
 

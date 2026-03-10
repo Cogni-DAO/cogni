@@ -2,13 +2,13 @@
 id: task.0146
 type: task
 title: Extract payments application orchestration + billing ports into packages
-status: backlog
+status: needs_design
 priority: 3
 estimate: 3
 summary: Extract the payments application layer (confirmCreditsPurchase orchestrator), TreasurySettlementPort, and billing ports (AccountService, ServiceAccountService) from src/ into standalone packages.
 outcome: Payments application orchestration lives in a package independent of the Next.js app. Billing ports and treasury settlement port are package-level, enabling reuse by scheduler-worker and other services.
 spec_refs: operator-wallet
-assignees:
+assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
 branch:
@@ -58,3 +58,10 @@ These are app-local (`src/`) because the orchestrator depends on billing ports (
 - [ ] Update `src/` to re-export from packages
 - [ ] Update dep-cruiser rules if needed
 - [ ] `pnpm check` passes
+
+## Validation
+
+```bash
+pnpm check
+pnpm test tests/unit/features/payments/
+```
