@@ -45,9 +45,9 @@ export function createPrReviewGraph(opts: CreateReactAgentGraphOptions) {
 
   return createReactAgent({
     llm,
-    tools: [], // No tools — evidence is pre-fetched
+    tools: [],
     messageModifier: PR_REVIEW_SYSTEM_PROMPT,
-    stateSchema: MessagesAnnotation,
+    ...(responseFormat === undefined && { stateSchema: MessagesAnnotation }),
     ...(responseFormat !== undefined && { responseFormat }),
   });
 }

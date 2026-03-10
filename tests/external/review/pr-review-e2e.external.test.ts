@@ -172,7 +172,7 @@ describeIfReady("PR Review E2E (external)", () => {
     }
 
     expect(checkRun?.status).toBe("completed");
-    expect(checkRun?.conclusion).toMatch(/^(success|failure|neutral)$/);
+    expect(checkRun?.conclusion).toMatch(/^(success|failure)$/);
 
     // Poll for PR comment (should appear shortly after check run)
     const COMMENT_TIMEOUT_MS = 15_000;
@@ -188,7 +188,8 @@ describeIfReady("PR Review E2E (external)", () => {
 
     expect(reviewComment).toBeDefined();
     expect(reviewComment?.body).toContain("Cogni PR Review");
-    // Should contain at least one gate result
+    // Should contain at least one gate result with metric scores
     expect(reviewComment?.body).toMatch(/review.limits|ai-rule|review-limits/i);
+    expect(reviewComment?.body).toMatch(/\| Metric \| Score \| Observation \|/);
   }, 210_000);
 });
