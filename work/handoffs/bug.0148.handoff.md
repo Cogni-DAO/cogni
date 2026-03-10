@@ -1,7 +1,7 @@
 ---
-id: bug.0147
+id: bug.0148
 type: handoff
-work_item_id: bug.0147
+work_item_id: bug.0148
 status: active
 created: 2026-03-09
 updated: 2026-03-09
@@ -21,7 +21,7 @@ last_commit: 0eab5da9
 
 ## Current State
 
-- **Bug filed**: `work/items/bug.0147.attribution-pipeline-correctness.md` — priority 0, three failures documented
+- **Bug filed**: `work/items/bug.0148.attribution-pipeline-correctness.md` — priority 0, three failures documented
 - **Worktree created**: `fix/bug-0147-attribution-correctness` off staging — no code changes yet
 - **Root cause for Failure 1 (bot exclusion)**: Confirmed — `github.ts:418-427` only checks `__typename !== "User"`, Cogni-1729 is a User account
 - **Root cause for Failure 2 (credit misattribution)**: Confirmed — `platformUserId` is `pr.author.databaseId`, automation bot is the PR author
@@ -58,5 +58,5 @@ last_commit: 0eab5da9
 | `services/scheduler-worker/src/activities/ledger.ts`                                  | `materializeSelection` (line 538) — dispatches policy, writes selections via `insertSelectionDoNothing` (line 625). Key to Failure 3. |
 | `packages/attribution-pipeline-plugins/src/profiles/cogni-v0.0.ts`                    | Active profile — confirms `selectionPolicyRef: PROMOTION_SELECTION_POLICY_REF`                                                        |
 | `.cogni/repo-spec.yaml`                                                               | Repo config — add `excludedLogins` / `excludedPlatformUserIds` here                                                                   |
-| `work/items/bug.0147.attribution-pipeline-correctness.md`                             | Full bug report with reproduction steps                                                                                               |
+| `work/items/bug.0148.attribution-pipeline-correctness.md`                             | Full bug report with reproduction steps                                                                                               |
 | Grafana Cloud LogQL                                                                   | `{service="scheduler-worker", env="preview"} \| json \| component="ledger"` — trace selection decisions                               |
