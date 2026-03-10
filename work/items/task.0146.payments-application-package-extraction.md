@@ -31,6 +31,7 @@ rank: 80
 ## Context
 
 Task.0085 introduced:
+
 - `src/ports/treasury-settlement.port.ts` — semantic settlement port
 - `src/features/payments/application/confirmCreditsPurchase.ts` — application orchestrator
 - `src/adapters/server/treasury/split-treasury-settlement.adapter.ts` — adapter
