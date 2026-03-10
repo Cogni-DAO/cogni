@@ -62,8 +62,8 @@ The port's `SubjectRef` must align with actor kinds so that when the `actors` ta
 
 | Deliverable                                                                       | Status      | Est | Work Item                |
 | --------------------------------------------------------------------------------- | ----------- | --- | ------------------------ |
-| `packages/work-items/` — port interfaces, domain types, status transition table   | Not Started | 2   | task.0149                |
-| `packages/work-items/` — MarkdownWorkItemAdapter + contract tests                 | Not Started | 3   | task.0151                |
+| `packages/work-items/` — port interfaces, domain types, status transition table   | Done        | 2   | task.0149                |
+| `packages/work-items/` — MarkdownWorkItemAdapter + contract tests                 | In Review   | 3   | task.0151                |
 | Migrate `/triage` + `/implement` skills to use port (proof-of-concept)            | Not Started | 2   | task.0152                |
 | Migrate remaining skills (`/closeout`, `/review-implementation`, `/bug`, `/idea`) | Not Started | 2   | (create after task.0152) |
 
@@ -337,7 +337,7 @@ interface WorkItemCommandPort {
 
 ## As-Built Specs
 
-- (none yet — specs created when code merges)
+- [Work Items Port](../../docs/spec/work-items-port.md) — port interfaces, domain types, transition rules, adapter contract
 
 ## Design Notes
 

@@ -8,7 +8,7 @@ rank: 5
 estimate: 2
 summary: "Create a pure packages/work-items package with WorkItemQueryPort, WorkItemCommandPort interfaces, all domain types (WorkItem, SubjectRef, ExternalRef, WorkRelation, WorkItemStatus), and a status transition validation table derived from development-lifecycle.md."
 outcome: "packages/work-items exports typed port interfaces and domain types. No I/O, no adapter code. The status transition table is a pure data structure that any adapter can use to validate transitions. Package builds and passes typecheck."
-spec_refs: [identity-model-spec, development-lifecycle]
+spec_refs: [work-items-port, identity-model-spec, development-lifecycle]
 assignees: []
 credit:
 project: proj.agentic-project-management

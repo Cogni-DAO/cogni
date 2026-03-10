@@ -2,13 +2,13 @@
 id: task.0151
 type: task
 title: "packages/work-items — MarkdownWorkItemAdapter + contract tests"
-status: done
+status: needs_merge
 priority: 0
 rank: 6
 estimate: 3
 summary: "Implement MarkdownWorkItemAdapter in packages/work-items/src/adapters/markdown/, co-located with the port interfaces. Includes YAML frontmatter parsing, atomic read-modify-write with optimistic concurrency (SHA-256 revision), centralized ID allocation, status transition enforcement, and an adapter-agnostic contract test suite."
 outcome: "MarkdownWorkItemAdapter passes all contract tests. get/list/create/patch/transitionStatus work against real markdown files. Optimistic concurrency rejects stale writes. ID allocation prevents collisions. Validator updated to accept relations and external_refs frontmatter."
-spec_refs: [identity-model-spec, development-lifecycle]
+spec_refs: [work-items-port, identity-model-spec, development-lifecycle]
 assignees: []
 credit:
 project: proj.agentic-project-management
