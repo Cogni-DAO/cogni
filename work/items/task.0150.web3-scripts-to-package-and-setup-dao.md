@@ -105,6 +105,10 @@ pnpm test:external  # requires PRIVY_* env vars
 pnpm dev:stack      # verify real adapter wiring
 ```
 
+## PR / Links
+
+- Handoff: [handoff](../handoffs/task.0150.handoff.md)
+
 ## Attribution
 
 -
