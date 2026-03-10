@@ -6,7 +6,7 @@ status: active
 created: 2026-03-10
 updated: 2026-03-10
 branch: design/agentic-project-management
-last_commit: f784465b
+last_commit: d6387ef3
 ---
 
 # Handoff: @cogni/work-items — Port + Markdown Adapter
