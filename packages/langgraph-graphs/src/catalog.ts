@@ -24,6 +24,10 @@ import {
 } from "./graphs/ponderer/graph";
 import { PONDERER_TOOL_IDS } from "./graphs/ponderer/tools";
 import {
+  createPrReviewGraph,
+  PR_REVIEW_GRAPH_NAME,
+} from "./graphs/pr-review/graph";
+import {
   createResearchGraph,
   RESEARCH_GRAPH_NAME,
 } from "./graphs/research/graph";
@@ -98,6 +102,18 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     toolIds: RESEARCH_TOOL_IDS,
     graphFactory: createResearchGraph,
   },
+
+  /**
+   * PR Review graph - single-call structured output for PR evaluation.
+   * No tools — evidence is pre-fetched and passed as message content.
+   */
+  [PR_REVIEW_GRAPH_NAME]: {
+    displayName: "PR Review",
+    description:
+      "Evaluates pull requests against declarative rules with structured scoring",
+    toolIds: [],
+    graphFactory: createPrReviewGraph,
+  },
 } as const;
 
 /**
@@ -119,6 +135,7 @@ export const LANGGRAPH_GRAPH_IDS = {
   poet: `${LANGGRAPH_PROVIDER_ID}:${POET_GRAPH_NAME}`,
   ponderer: `${LANGGRAPH_PROVIDER_ID}:${PONDERER_GRAPH_NAME}`,
   research: `${LANGGRAPH_PROVIDER_ID}:${RESEARCH_GRAPH_NAME}`,
+  "pr-review": `${LANGGRAPH_PROVIDER_ID}:${PR_REVIEW_GRAPH_NAME}`,
 } as const;
 
 /**

@@ -59,6 +59,15 @@ export interface GraphRunRequest {
    * - LangGraph Server: required (derive threadId, send only new input)
    */
   readonly stateKey?: string;
+  /**
+   * Optional structured output format for the graph.
+   * When set, the graph returns parsed JSON in `GraphFinal.structuredOutput`.
+   * The schema is a Zod schema or JSON Schema object.
+   */
+  readonly responseFormat?: {
+    readonly prompt?: string;
+    readonly schema: unknown;
+  };
 }
 
 /**
@@ -82,6 +91,8 @@ export interface GraphFinal {
   readonly error?: AiExecutionErrorCode;
   /** Final assistant response content (for trace output) */
   readonly content?: string;
+  /** Parsed structured output (when graph uses responseFormat) */
+  readonly structuredOutput?: Record<string, unknown>;
 }
 
 /**

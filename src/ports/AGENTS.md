@@ -43,7 +43,7 @@ Importable from any module (client components, server components, hooks, service
 Does NOT re-export packages with `node:` transitive dependencies.
 
 - AccountService, ServiceAccountService, LlmService, AgentCatalogPort, AgentDescriptor
-- GraphExecutorPort, PreflightCreditCheckFn, GraphRunRequest, GraphRunResult, GraphFinal
+- GraphExecutorPort, PreflightCreditCheckFn, GraphRunRequest (with optional `responseFormat`), GraphRunResult, GraphFinal (with optional `structuredOutput`)
 - LlmChargeDetail, ChatDeltaEvent, LlmError, LlmErrorKind, isLlmError
 - PaymentAttemptUserRepository, PaymentAttemptServiceRepository, OnChainVerifier
 - MetricsQueryPort, AiTelemetryPort, LangfusePort, Clock

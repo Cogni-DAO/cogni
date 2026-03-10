@@ -11,7 +11,7 @@
  * @public
  */
 
-import type { RepoSpec } from "./schema.js";
+import type { GateConfig, RepoSpec } from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // Accessor result types
@@ -188,4 +188,24 @@ export function extractLedgerConfig(spec: RepoSpec): LedgerConfig | null {
  */
 export function extractLedgerApprovers(spec: RepoSpec): string[] {
   return (spec.activity_ledger?.approvers ?? []).map((a) => a.toLowerCase());
+}
+
+// ---------------------------------------------------------------------------
+// Gate config accessors
+// ---------------------------------------------------------------------------
+
+export interface GatesConfig {
+  gates: GateConfig[];
+  failOnError: boolean;
+}
+
+/**
+ * Extract gates configuration from parsed repo-spec.
+ * Returns empty gates array if no gates are configured.
+ */
+export function extractGatesConfig(spec: RepoSpec): GatesConfig {
+  return {
+    gates: spec.gates ?? [],
+    failOnError: spec.fail_on_error ?? false,
+  };
 }

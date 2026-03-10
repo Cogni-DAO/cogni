@@ -15,6 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { dispatchPrReview } from "@/app/_facades/review/dispatch.server";
 import { getContainer } from "@/bootstrap/container";
 import {
   receiveWebhook,
@@ -95,11 +96,11 @@ export async function POST(
     headers[key.toLowerCase()] = value;
   });
 
-  // 4. Delegate to feature service
+  const eventType = headers["x-github-event"] ?? "unknown";
+
+  // 4. Delegate ingestion to feature service (verify → normalize → insert receipts)
   try {
     const container = getContainer();
-
-    const eventType = headers["x-github-event"] ?? "unknown";
 
     const result = await receiveWebhook(
       {
@@ -115,11 +116,19 @@ export async function POST(
       "webhook processed"
     );
 
+    // 5. Fire-and-forget: dispatch PR review after successful verification.
+    // Runs async — errors logged, never block webhook response.
+    if (source === "github" && eventType === "pull_request") {
+      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
+      dispatchPrReview(payload, env, log);
+    }
+
     return NextResponse.json(
       { ok: true, eventCount: result.eventCount },
       { status: 200 }
     );
   } catch (error) {
+    // Verification / parse errors → reject
     if (error instanceof WebhookSourceNotFoundError) {
       log.warn({ source }, "webhook source not found");
       return NextResponse.json({ error: error.message }, { status: 404 });
@@ -132,6 +141,22 @@ export async function POST(
       log.warn({ source }, "webhook payload parse error");
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    throw error;
+
+    // DB or other infra error — still dispatch review (signature was already verified
+    // inside receiveWebhook before the DB insert that failed).
+    log.error(
+      { source, eventType, error: String(error) },
+      "webhook ingestion failed — dispatching review anyway"
+    );
+
+    if (source === "github" && eventType === "pull_request") {
+      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
+      dispatchPrReview(payload, env, log);
+    }
+
+    return NextResponse.json(
+      { ok: false, error: "Ingestion failed" },
+      { status: 500 }
+    );
   }
 }

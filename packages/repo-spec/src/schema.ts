@@ -129,6 +129,99 @@ export const activityLedgerSpecSchema = z.object({
 export type ActivityLedgerSpec = z.infer<typeof activityLedgerSpecSchema>;
 
 // ---------------------------------------------------------------------------
+// Gate + rule schemas (PR review)
+// ---------------------------------------------------------------------------
+
+/** Comparison operators for success criteria thresholds. */
+export const comparisonOperators = ["gte", "gt", "lte", "lt", "eq"] as const;
+
+/** A single threshold criterion (e.g., { metric: "coherent-change", gte: 0.8 }). */
+export const thresholdCriterionSchema = z
+  .object({
+    metric: z.string().min(1),
+  })
+  .catchall(z.number().min(0).max(1))
+  .refine(
+    (obj) => {
+      const ops = Object.keys(obj).filter((k) =>
+        (comparisonOperators as readonly string[]).includes(k)
+      );
+      return ops.length === 1;
+    },
+    {
+      message:
+        "Exactly one comparison operator (gte, gt, lte, lt, eq) required per threshold",
+    }
+  );
+
+export type ThresholdCriterion = z.infer<typeof thresholdCriterionSchema>;
+
+/** Success criteria block from a rule YAML. */
+export const successCriteriaSchema = z.object({
+  /** If true, missing metrics result in neutral instead of fail. */
+  neutral_on_missing_metrics: z.boolean().optional().default(false),
+  /** All criteria must pass. */
+  require: z.array(thresholdCriterionSchema).optional(),
+  /** At least one criterion must pass. */
+  any_of: z.array(thresholdCriterionSchema).optional(),
+});
+
+export type SuccessCriteria = z.infer<typeof successCriteriaSchema>;
+
+/**
+ * Evaluation entry: key-value where key is the metric name
+ * and value is the evaluation prompt text.
+ */
+export const evaluationEntrySchema = z
+  .record(z.string(), z.string())
+  .refine((obj) => Object.keys(obj).length === 1, {
+    message:
+      "Each evaluation entry must have exactly one key (the metric name)",
+  });
+
+/** Rule YAML schema (e.g., .cogni/rules/pr-syntropy-coherence.yaml). */
+export const ruleSchema = z.object({
+  id: z.string().min(1),
+  schema_version: z.string().optional(),
+  blocking: z.boolean().optional().default(true),
+  workflow_id: z.string().optional(),
+  evaluations: z.array(evaluationEntrySchema).min(1),
+  success_criteria: successCriteriaSchema,
+});
+
+export type Rule = z.infer<typeof ruleSchema>;
+
+/** Gate config: review-limits (no LLM — pure numeric checks). */
+export const reviewLimitsGateSchema = z.object({
+  type: z.literal("review-limits"),
+  id: z.string().optional(),
+  with: z.object({
+    max_changed_files: z.number().int().positive().optional(),
+    max_total_diff_kb: z.number().positive().optional(),
+  }),
+});
+
+/** Gate config: ai-rule (invokes LLM for rule evaluation). */
+export const aiRuleGateSchema = z.object({
+  type: z.literal("ai-rule"),
+  id: z.string().optional(),
+  with: z.object({
+    rule_file: z.string().min(1),
+  }),
+});
+
+/** Union of all gate types. */
+export const gateConfigSchema = z.discriminatedUnion("type", [
+  reviewLimitsGateSchema,
+  aiRuleGateSchema,
+]);
+
+export type GateConfig = z.infer<typeof gateConfigSchema>;
+
+/** Gates array schema. */
+export const gatesArraySchema = z.array(gateConfigSchema);
+
+// ---------------------------------------------------------------------------
 // Scope identity primitives
 // ---------------------------------------------------------------------------
 
@@ -142,36 +235,44 @@ export const scopeKeySchema = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/);
  * Schema for full .cogni/repo-spec.yaml structure.
  * Validates structure only; chain alignment checked in accessors via chainId parameter.
  */
-export const repoSpecSchema = z.object({
-  /** Unique node identity — scopes all ledger tables. Generated once at init, never changes. */
-  node_id: z.string().uuid("node_id must be a valid UUID"),
+export const repoSpecSchema = z
+  .object({
+    /** Unique node identity — scopes all ledger tables. Generated once at init, never changes. */
+    node_id: z.string().uuid("node_id must be a valid UUID"),
 
-  /** Stable opaque scope UUID — DB FK, never changes. Optional for backward compat. */
-  scope_id: scopeIdSchema.optional(),
+    /** Stable opaque scope UUID — DB FK, never changes. Optional for backward compat. */
+    scope_id: scopeIdSchema.optional(),
 
-  /** Human-friendly scope slug — for display, logs, schedule IDs. Optional for backward compat. */
-  scope_key: scopeKeySchema.optional(),
+    /** Human-friendly scope slug — for display, logs, schedule IDs. Optional for backward compat. */
+    scope_key: scopeKeySchema.optional(),
 
-  /** Activity ledger configuration (optional — needed only when LEDGER_INGEST is enabled) */
-  activity_ledger: activityLedgerSpecSchema.optional(),
+    /** Activity ledger configuration (optional — needed only when LEDGER_INGEST is enabled) */
+    activity_ledger: activityLedgerSpecSchema.optional(),
 
-  /** DAO governance configuration */
-  cogni_dao: z.object({
-    /**
-     * Chain ID as string or number (YAML flexibility).
-     * Validated against expected chain ID at extraction time.
-     */
-    chain_id: z.union([z.string(), z.number()]),
-  }),
+    /** DAO governance configuration */
+    cogni_dao: z.object({
+      /**
+       * Chain ID as string or number (YAML flexibility).
+       * Validated against expected chain ID at extraction time.
+       */
+      chain_id: z.union([z.string(), z.number()]),
+    }),
 
-  /** Payment configuration (required) */
-  payments_in: z.object({
-    /** Inbound payment configuration for USDC credits top-up (required) */
-    credits_topup: creditsTopupSpecSchema,
-  }),
+    /** Payment configuration (required) */
+    payments_in: z.object({
+      /** Inbound payment configuration for USDC credits top-up (required) */
+      credits_topup: creditsTopupSpecSchema,
+    }),
 
-  /** Governance schedule configuration (optional — defaults to empty schedules) */
-  governance: governanceSpecSchema.optional().default({ schedules: [] }),
-});
+    /** Governance schedule configuration (optional — defaults to empty schedules) */
+    governance: governanceSpecSchema.optional().default({ schedules: [] }),
+
+    /** PR review gate configuration (optional — gates run in declared order). */
+    gates: gatesArraySchema.optional(),
+
+    /** Whether gate errors/timeouts result in failure instead of neutral. */
+    fail_on_error: z.boolean().optional().default(false),
+  })
+  .passthrough();
 
 export type RepoSpec = z.infer<typeof repoSpecSchema>;

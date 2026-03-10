@@ -138,6 +138,12 @@ export const serverSchema = z.object({
   // Required when GitHub webhook ingestion is enabled. Per WEBHOOK_SECRET_NOT_IN_CODE.
   GH_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // GitHub Review App credentials - for PR review Check Runs + comments.
+  // Optional: PR review feature is disabled when not configured.
+  // These are the same env vars used by scheduler-worker for ingestion.
+  GH_REVIEW_APP_ID: z.string().min(1).optional(),
+  GH_REVIEW_APP_PRIVATE_KEY_BASE64: z.string().min(1).optional(),
+
   // Billing ingest token - Bearer auth for LiteLLM generic_api callback → billing ingest endpoint
   // Per billing-ingest-spec: CALLBACK_AUTHENTICATED invariant. Min 32 chars to reduce weak-token risk.
   // Required: Billing ingest endpoint will reject all callbacks without this token.

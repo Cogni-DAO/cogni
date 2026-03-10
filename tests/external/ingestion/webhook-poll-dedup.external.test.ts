@@ -26,11 +26,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAttributionActivities } from "../../../services/scheduler-worker/src/activities/ledger";
 import { GitHubSourceAdapter } from "../../../services/scheduler-worker/src/adapters/ingestion/github";
 import { GitHubAppTokenProvider } from "../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
+import type { GitHubFixtures } from "./_github-fixture-helper";
 import {
-  cleanupFixtures,
-  createFixtures,
-  type GitHubFixtures,
-} from "./_github-fixture-helper";
+  acquireSharedFixtures,
+  releaseSharedFixtures,
+} from "./_shared-fixtures";
 
 // ---------------------------------------------------------------------------
 // Config — skip if prerequisites missing
@@ -79,11 +79,11 @@ describeIfReady("Webhook + Poll Dedup (external)", () => {
   let fixtures: GitHubFixtures;
 
   beforeAll(() => {
-    fixtures = createFixtures(TEST_REPO);
+    fixtures = acquireSharedFixtures();
   }, 60_000);
 
   afterAll(() => {
-    if (fixtures) cleanupFixtures(fixtures);
+    releaseSharedFixtures();
   });
 
   it(
