@@ -85,36 +85,36 @@ Agents and skills can read/write work items via typed port interfaces, backed by
 
 Frontmatter (snake_case) → WorkItem (camelCase):
 
-| Frontmatter | WorkItem | Notes |
-| --- | --- | --- |
-| `id` | `id` | Branded via `toWorkItemId()` |
-| `type` | `type` | Direct map |
-| `title` | `title` | Direct map |
-| `status` | `status` | Direct map |
-| `priority` | `priority` | Direct map |
-| `rank` | `rank` | Direct map |
-| `estimate` | `estimate` | Direct map |
-| `summary` | `summary` | Direct map |
-| `outcome` | `outcome` | Direct map |
-| `project` | `projectId` | Branded via `toWorkItemId()` |
-| `assignees` | `assignees` | String → `{ kind: "user", userId }` |
-| `labels` | `labels` | Direct map (array) |
-| `spec_refs` | `specRefs` | snake → camel |
-| `branch` | `branch` | Direct map |
-| `pr` | `pr` | Direct map |
-| `reviewer` | `reviewer` | Direct map |
-| `revision` | `revision` | Frontmatter counter (number), NOT the concurrency Revision |
-| `blocked_by` | `blockedBy` | Branded via `toWorkItemId()` |
-| `deploy_verified` | `deployVerified` | snake → camel |
-| `external_refs` | `externalRefs` | snake → camel, array of ExternalRef |
-| `relations` | (via `listRelations`) | Stored per-file, queried cross-file |
-| `claimed_by_run` | `claimedByRun` | Operational field for agent locking |
-| `claimed_at` | `claimedAt` | Operational field for agent locking |
-| `last_command` | `lastCommand` | Operational field |
-| `created` | `createdAt` | Frontmatter `YYYY-MM-DD` → ISO string |
-| `updated` | `updatedAt` | Frontmatter `YYYY-MM-DD` → ISO string |
-| `credit` | (not in WorkItem) | Preserved as unknown field |
-| `parent` | `parentId` | If present, branded via `toWorkItemId()` |
+| Frontmatter       | WorkItem              | Notes                                                      |
+| ----------------- | --------------------- | ---------------------------------------------------------- |
+| `id`              | `id`                  | Branded via `toWorkItemId()`                               |
+| `type`            | `type`                | Direct map                                                 |
+| `title`           | `title`               | Direct map                                                 |
+| `status`          | `status`              | Direct map                                                 |
+| `priority`        | `priority`            | Direct map                                                 |
+| `rank`            | `rank`                | Direct map                                                 |
+| `estimate`        | `estimate`            | Direct map                                                 |
+| `summary`         | `summary`             | Direct map                                                 |
+| `outcome`         | `outcome`             | Direct map                                                 |
+| `project`         | `projectId`           | Branded via `toWorkItemId()`                               |
+| `assignees`       | `assignees`           | String → `{ kind: "user", userId }`                        |
+| `labels`          | `labels`              | Direct map (array)                                         |
+| `spec_refs`       | `specRefs`            | snake → camel                                              |
+| `branch`          | `branch`              | Direct map                                                 |
+| `pr`              | `pr`                  | Direct map                                                 |
+| `reviewer`        | `reviewer`            | Direct map                                                 |
+| `revision`        | `revision`            | Frontmatter counter (number), NOT the concurrency Revision |
+| `blocked_by`      | `blockedBy`           | Branded via `toWorkItemId()`                               |
+| `deploy_verified` | `deployVerified`      | snake → camel                                              |
+| `external_refs`   | `externalRefs`        | snake → camel, array of ExternalRef                        |
+| `relations`       | (via `listRelations`) | Stored per-file, queried cross-file                        |
+| `claimed_by_run`  | `claimedByRun`        | Operational field for agent locking                        |
+| `claimed_at`      | `claimedAt`           | Operational field for agent locking                        |
+| `last_command`    | `lastCommand`         | Operational field                                          |
+| `created`         | `createdAt`           | Frontmatter `YYYY-MM-DD` → ISO string                      |
+| `updated`         | `updatedAt`           | Frontmatter `YYYY-MM-DD` → ISO string                      |
+| `credit`          | (not in WorkItem)     | Preserved as unknown field                                 |
+| `parent`          | `parentId`            | If present, branded via `toWorkItemId()`                   |
 
 **Revision strategy**: The `Revision` (optimistic concurrency token) is `SHA-256(raw frontmatter YAML)`. Computed on every read, checked on every write. Distinct from frontmatter `revision:` field (which is a numeric counter used by the review loop).
 
@@ -194,7 +194,7 @@ export function workItemPortContract(
     query: WorkItemQueryPort;
     command: WorkItemCommandPort;
     cleanup: () => Promise<void>;
-  }>,
+  }>
 ): void {
   describe("WorkItemPort contract", () => {
     // create + get roundtrip
