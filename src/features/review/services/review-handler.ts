@@ -22,6 +22,8 @@ import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
 } from "@/shared/constants/system-tenant";
+import { EVENT_NAMES } from "@/shared/observability/events";
+import { logEvent } from "@/shared/observability/server/logEvent";
 
 import { runGates } from "../gate-orchestrator";
 import { formatCheckRunSummary, formatPrComment } from "../summary-formatter";
@@ -80,38 +82,34 @@ export async function handlePrReview(
   deps: ReviewHandlerDeps
 ): Promise<void> {
   const { owner, repo, prNumber, headSha } = ctx;
+  const reqId = randomUUID();
   const log = deps.log.child({
     component: "pr-review",
     owner,
     repo,
     prNumber,
     headSha,
+    reqId,
   });
-
-  log.info("Starting PR review");
+  const start = performance.now();
 
   // 1. Create Check Run (in_progress)
   let checkRunId: number | undefined;
   try {
     checkRunId = await deps.createCheckRun(owner, repo, headSha);
-    log.info({ checkRunId }, "Check run created");
-  } catch (error) {
-    log.error(
-      { error: String(error) },
-      "Failed to create check run — continuing without it"
-    );
+  } catch {
+    logEvent(log, EVENT_NAMES.ADAPTER_GITHUB_REVIEW_ERROR, {
+      reqId,
+      dep: "github",
+      reasonCode: "check_run_create_failed",
+      durationMs: Math.round(performance.now() - start),
+    });
+    // Continue without check run
   }
 
   try {
     // 2. Gather evidence
     const evidence = await deps.gatherEvidence(owner, repo, prNumber);
-    log.info(
-      {
-        changedFiles: evidence.changedFiles,
-        diffKb: Math.round(evidence.totalDiffBytes / 1024),
-      },
-      "Evidence gathered"
-    );
 
     // 3. Load gates config from local repo-spec
     const repoSpecYaml = deps.readRepoSpec();
@@ -119,7 +117,6 @@ export async function handlePrReview(
     const gatesConfig = extractGatesConfig(repoSpec);
 
     if (gatesConfig.gates.length === 0) {
-      log.info("No gates configured — skipping review");
       if (checkRunId) {
         await deps.updateCheckRun(
           owner,
@@ -129,6 +126,14 @@ export async function handlePrReview(
           "No review gates configured."
         );
       }
+      logEvent(log, EVENT_NAMES.REVIEW_COMPLETE, {
+        reqId,
+        outcome: "success",
+        conclusion: "pass",
+        gateCount: 0,
+        changedFiles: evidence.changedFiles,
+        durationMs: Math.round(performance.now() - start),
+      });
       return;
     }
 
@@ -165,11 +170,6 @@ export async function handlePrReview(
       log,
       loadRule,
     });
-
-    log.info(
-      { conclusion: result.conclusion, gateCount: result.gateResults.length },
-      "Gate orchestration complete"
-    );
 
     // 7. Update Check Run
     if (checkRunId) {
@@ -209,15 +209,26 @@ export async function handlePrReview(
       commentBody
     );
 
-    if (posted) {
-      log.info("PR comment posted");
-    } else {
-      log.info("PR comment skipped — HEAD SHA changed during review (stale)");
-    }
+    const durationMs = Math.round(performance.now() - start);
+    logEvent(log, EVENT_NAMES.REVIEW_COMPLETE, {
+      reqId,
+      outcome: "success",
+      conclusion: result.conclusion,
+      gateCount: result.gateResults.length,
+      changedFiles: evidence.changedFiles,
+      commentPosted: posted,
+      durationMs,
+    });
   } catch (error) {
-    log.error({ error: String(error) }, "PR review failed");
+    const durationMs = Math.round(performance.now() - start);
+    logEvent(log, EVENT_NAMES.REVIEW_COMPLETE, {
+      reqId,
+      outcome: "error",
+      errorCode: "review_failed",
+      durationMs,
+    });
 
-    // Update check run to failure if possible
+    // Update check run to neutral if possible
     if (checkRunId) {
       try {
         await deps.updateCheckRun(

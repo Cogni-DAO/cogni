@@ -93,6 +93,10 @@ export const EVENT_NAMES = {
   SANDBOX_EXECUTION_STARTED: "sandbox.execution.started",
   SANDBOX_EXECUTION_COMPLETE: "sandbox.execution.complete",
 
+  // Review Domain
+  REVIEW_COMPLETE: "feature.review.complete",
+  ADAPTER_GITHUB_REVIEW_ERROR: "adapter.github_review.error",
+
   // Invariant Warnings
   INV_PROVIDER_META_MODEL_MISSING: "inv_provider_meta_model_missing",
   INV_MODELS_CONTRACT_VALIDATION_FAILED:
