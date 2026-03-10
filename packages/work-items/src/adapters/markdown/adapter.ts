@@ -173,6 +173,15 @@ function slugify(title: string): string {
     .slice(0, 60);
 }
 
+/** Verify a resolved path is inside the expected directory. Throws on traversal. */
+function assertContained(resolved: string, parent: string): void {
+  const norm = path.resolve(resolved);
+  const container = path.resolve(parent);
+  if (!norm.startsWith(container + path.sep) && norm !== container) {
+    throw new Error(`Path traversal blocked: ${norm} is outside ${container}`);
+  }
+}
+
 // ── Query helpers ────────────────────────────────────
 
 function matchesQuery(item: WorkItem, query: WorkQuery): boolean {
@@ -338,7 +347,9 @@ export class MarkdownWorkItemAdapter
     const body = `\n\n# ${input.title}\n`;
     const content = serializeFrontmatter(raw, body);
 
-    const filePath = path.join(this.workDir, "work", "items", filename);
+    const itemsDir = path.join(this.workDir, "work", "items");
+    const filePath = path.join(itemsDir, filename);
+    assertContained(filePath, itemsDir);
     await writeFile(filePath, content, "utf8");
 
     const parsed = parseFrontmatter(content);
