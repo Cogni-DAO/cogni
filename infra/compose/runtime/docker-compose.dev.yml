@@ -9,7 +9,7 @@ services:
   app:
     image: ${APP_IMAGE:-cogni-template-local}
     build:
-      context: ../../../..
+      context: ../../..
       dockerfile: ./apps/web/Dockerfile
     container_name: app
     restart: always
@@ -247,7 +247,7 @@ services:
   db-migrate:
     image: ${MIGRATOR_IMAGE:-cogni-template-migrate-local}
     build:
-      context: ../../../..
+      context: ../../..
       dockerfile: ./apps/web/Dockerfile
       target: migrator
     container_name: db-migrate
@@ -453,7 +453,7 @@ services:
   scheduler-worker:
     image: ${SCHEDULER_WORKER_IMAGE:-cogni-scheduler-worker-local}
     build:
-      context: ../../../..
+      context: ../../..
       dockerfile: services/scheduler-worker/Dockerfile
     container_name: scheduler-worker
     restart: unless-stopped
@@ -582,8 +582,8 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m
     volumes:
-      - ../../../../services/sandbox-openclaw/${OPENCLAW_CONFIG:-openclaw-gateway.json}:/opt/openclaw-config-source.json:ro # seed config — copied to writable path on startup
-      - ../../../../services/sandbox-openclaw/gateway-workspace:/workspace/gateway
+      - ../../../services/sandbox-openclaw/${OPENCLAW_CONFIG:-openclaw-gateway.json}:/opt/openclaw-config-source.json:ro # seed config — copied to writable path on startup
+      - ../../../services/sandbox-openclaw/gateway-workspace:/workspace/gateway
       - repo_data:/repo:ro # git-synced codebase (read-only mirror, updated by git-sync)
       - pnpm_store:/pnpm-store # persistent pnpm content-addressable store
       - cogni_workspace:/workspace # RW volume — pnpm hardlinks require same fs as pnpm_store

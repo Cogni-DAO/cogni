@@ -58,7 +58,7 @@ scripts/fetch_github_job_logs.sh  # Fetch job logs from GitHub Actions API (requ
 
 ## Dependencies
 
-- **Internal:** `../infra/providers/cherry/app/`
+- **Internal:** `../../infra/tofu/cherry/app/`
 - **External:** Docker, OpenTofu, git, curl, jq
 
 ## Change Protocol

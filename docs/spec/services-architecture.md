@@ -166,19 +166,19 @@ Worker services (like `scheduler-worker`) don't need contracts — job payloads 
 Enforced by dependency-cruiser:
 
 ```javascript
-// services/ cannot import from src/
+// services/ cannot import from apps/web/src/
 {
   name: "no-services-to-src",
   severity: "error",
   from: { path: "^services/" },
-  to: { path: "^src/" }
+  to: { path: "^apps/web/src/" }
 }
 
-// src/ cannot import from services/
+// apps/web/src/ cannot import from services/
 {
   name: "no-src-to-services",
   severity: "error",
-  from: { path: "^src/" },
+  from: { path: "^apps/web/src/" },
   to: { path: "^services/" }
 }
 ```

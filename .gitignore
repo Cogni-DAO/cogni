@@ -95,8 +95,8 @@ terraform.rc
 id_*
 !*.pub
 # Protect keys directory but allow .pub files
-platform/infra/providers/cherry/base/keys/*
-!platform/infra/providers/cherry/base/keys/*.pub
+infra/tofu/cherry/base/keys/*
+!infra/tofu/cherry/base/keys/*.pub
 services/*/dist
 
 # Claude Code worktrees

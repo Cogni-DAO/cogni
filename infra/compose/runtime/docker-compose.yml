@@ -10,7 +10,7 @@ services:
   app:
     image: ${APP_IMAGE:-cogni-template-local}
     build:
-      context: ../../../..
+      context: ../../..
       dockerfile: ./apps/web/Dockerfile
     restart: always
     networks:

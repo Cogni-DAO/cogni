@@ -13,10 +13,10 @@ Nginx config templates for sandbox LLM proxy containers — **ephemeral** (`ngin
 
 ## Pointers
 
-- [Sandbox Spec](../../../../docs/spec/sandboxed-agents.md)
-- [LlmProxyManager](../../../../src/adapters/server/sandbox/llm-proxy-manager.ts) (generates config from template)
-- [Billing Spec](../../../../docs/spec/external-executor-billing.md)
-- [Billing Ingest Spec](../../../../docs/spec/billing-ingest.md)
+- [Sandbox Spec](../../../docs/spec/sandboxed-agents.md)
+- [LlmProxyManager](../../../apps/web/src/adapters/server/sandbox/llm-proxy-manager.ts) (generates config from template)
+- [Billing Spec](../../../docs/spec/external-executor-billing.md)
+- [Billing Ingest Spec](../../../docs/spec/billing-ingest.md)
 
 ## Boundaries
 
@@ -52,7 +52,7 @@ Template is consumed programmatically by `LlmProxyManager.generateConfig()`. Not
 
 ## Dependencies
 
-- **Internal:** consumed by `src/adapters/server/sandbox/llm-proxy-manager.ts`
+- **Internal:** consumed by `apps/web/src/adapters/server/sandbox/llm-proxy-manager.ts`
 - **External:** nginx:alpine Docker image, LiteLLM upstream
 
 ## Change Protocol
