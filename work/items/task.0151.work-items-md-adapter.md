@@ -13,7 +13,7 @@ assignees: []
 credit:
 project: proj.agentic-project-management
 branch: design/agentic-project-management
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/542
 reviewer: claude
 revision: 0
 blocked_by:
