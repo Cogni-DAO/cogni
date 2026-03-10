@@ -22,7 +22,7 @@ import type {
 
 import { createEchoAdapter } from "./plugins/echo/adapter";
 import { INCLUDE_ALL_SELECTION_POLICY } from "./plugins/include-all-selection/descriptor";
-import { PROMOTION_SELECTION_POLICY } from "./plugins/promotion-selection/descriptor";
+import { createPromotionSelectionPolicy } from "./plugins/promotion-selection/descriptor";
 import { WEIGHT_SUM_ALLOCATOR } from "./plugins/weight-sum/descriptor";
 import { COGNI_V0_PROFILE } from "./profiles/cogni-v0.0";
 
@@ -37,10 +37,19 @@ export interface DefaultRegistries {
 }
 
 /**
+ * Optional configuration for registry construction.
+ */
+export interface RegistryConfig {
+  readonly excludedLogins?: readonly string[];
+}
+
+/**
  * Create the default registries with all built-in plugins and profiles.
  * Returns immutable maps keyed by ref strings.
  */
-export function createDefaultRegistries(): DefaultRegistries {
+export function createDefaultRegistries(
+  config?: RegistryConfig
+): DefaultRegistries {
   const echoAdapter = createEchoAdapter();
 
   const profiles: ProfileRegistry = new Map([
@@ -55,8 +64,11 @@ export function createDefaultRegistries(): DefaultRegistries {
     [WEIGHT_SUM_ALLOCATOR.algoRef, WEIGHT_SUM_ALLOCATOR],
   ]);
 
+  const promotionPolicy = createPromotionSelectionPolicy({
+    excludedLogins: config?.excludedLogins,
+  });
   const selectionPolicies: SelectionPolicyRegistry = new Map([
-    [PROMOTION_SELECTION_POLICY.policyRef, PROMOTION_SELECTION_POLICY],
+    [promotionPolicy.policyRef, promotionPolicy],
     [INCLUDE_ALL_SELECTION_POLICY.policyRef, INCLUDE_ALL_SELECTION_POLICY],
   ]);
 

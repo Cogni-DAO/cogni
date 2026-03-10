@@ -184,7 +184,7 @@ function partitionReceipts(receipts: readonly ApiIngestionReceipt[]): {
     };
     receiptsById.set(r.receiptId, mapped);
 
-    if (r.selection?.included === false) {
+    if (!r.selection?.included) {
       continue;
     }
 
@@ -248,7 +248,7 @@ export function composeEpochView(
   >();
 
   for (const receipt of receipts) {
-    if (receipt.selection?.included === false) {
+    if (!receipt.selection?.included) {
       continue;
     }
 

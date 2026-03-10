@@ -27,12 +27,12 @@ export interface SelectionDecision {
 /**
  * Context passed to a selection policy's `select()` function.
  * Contains all receipts in the epoch window — both the unselected batch
- * and the full window (for cross-referencing, e.g., promotion lookups).
+ * and the full receipt set (for cross-referencing, e.g., cross-epoch promotion lookups).
  */
 export interface SelectionContext {
   /** Receipts needing a selection decision (the current unselected batch). */
   readonly receiptsToSelect: readonly IngestionReceipt[];
-  /** All receipts in the epoch window (for cross-referencing). */
+  /** All receipts for the node (for cross-referencing, including cross-epoch). */
   readonly allReceipts: readonly IngestionReceipt[];
 }
 

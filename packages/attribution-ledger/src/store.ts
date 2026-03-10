@@ -479,6 +479,8 @@ export interface ReceiptStore {
     since: Date,
     until: Date
   ): Promise<IngestionReceipt[]>;
+  /** Return all receipts for a node regardless of time window. Used for cross-epoch promotion matching. */
+  getAllReceipts(nodeId: string): Promise<IngestionReceipt[]>;
 }
 
 /** Read-only selection queries — safe for enrichers and allocation consumers. */

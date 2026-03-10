@@ -973,6 +973,15 @@ export class DrizzleAttributionAdapter implements AttributionStore {
     return rows.map(toIngestionReceipt);
   }
 
+  async getAllReceipts(nodeId: string): Promise<IngestionReceipt[]> {
+    const rows = await this.db
+      .select()
+      .from(ingestionReceipts)
+      .where(eq(ingestionReceipts.nodeId, nodeId))
+      .orderBy(ingestionReceipts.eventTime);
+    return rows.map(toIngestionReceipt);
+  }
+
   // ── Selection ────────────────────────────────────────────────
 
   async upsertSelection(params: UpsertSelectionParams[]): Promise<void> {
