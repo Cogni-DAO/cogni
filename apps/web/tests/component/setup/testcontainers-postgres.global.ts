@@ -12,7 +12,7 @@
  *   - Migrations run as app_user (DB owner, same as production)
  * Side-effects: IO (Docker containers, process.env, file system)
  * Notes: Used by vitest.component.config.mts as globalSetup; sets APP_ENV=test for fake adapters.
- * Links: vitest component config, platform/infra/services/runtime/postgres-init/provision.sh
+ * Links: vitest component config, infra/compose/runtime/postgres-init/provision.sh
  * @internal
  */
 
@@ -25,7 +25,7 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROVISION_SH = path.resolve(
   __dirname,
-  "../../../platform/infra/services/runtime/postgres-init/provision.sh"
+  "../../../../../infra/compose/runtime/postgres-init/provision.sh"
 );
 
 const APP_DB_USER = "app_user";

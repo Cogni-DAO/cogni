@@ -37,7 +37,7 @@ How should we ingest contribution events (GitHub PRs, reviews, Discord activity)
 | Ledger schema + statement storage | Done                   | `packages/db-schema/src/attribution.ts`             |
 | Core attribution domain           | Done                   | `packages/attribution-ledger/src/`                  |
 | Temporal worker infrastructure    | Done                   | `services/scheduler-worker/`                        |
-| SourceCred instance (standalone)  | Running                | `platform/infra/services/sourcecred/`               |
+| SourceCred instance (standalone)  | Running                | `infra/compose/sourcecred/`                         |
 | Billing/credit system             | Done                   | `packages/db-schema/src/billing.ts`                 |
 | Governance status API             | Done                   | `src/ports/governance-status.port.ts`               |
 | Attribution APIs/routes           | Done                   | `src/app/api/v1/attribution/`                       |

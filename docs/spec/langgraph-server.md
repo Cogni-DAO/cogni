@@ -96,12 +96,12 @@ One canonical way to run LangGraph graphs (dev, container, hosted) such that:
 
 ### Package Ownership
 
-| Path                                                | Purpose                                                                              | Rule                           |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------ |
-| `packages/langgraph-server/`                        | Node.js service code (HTTP API, tenant scoping, LiteLLM wiring, event normalization) | Dockerfile builds/runs this    |
-| `packages/langgraph-graphs/`                        | Feature-sliced graph definitions + prompts                                           | Next.js must NEVER import this |
-| `packages/ai-core/`                                 | Executor-agnostic primitives (AiEvent, UsageFact, tool schemas)                      | No graph definitions here      |
-| `platform/infra/services/runtime/langgraph-server/` | Docker packaging (Dockerfile, compose config, env)                                   | No TS logic here               |
+| Path                              | Purpose                                                                              | Rule                           |
+| --------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------ |
+| `packages/langgraph-server/`      | Node.js service code (HTTP API, tenant scoping, LiteLLM wiring, event normalization) | Dockerfile builds/runs this    |
+| `packages/langgraph-graphs/`      | Feature-sliced graph definitions + prompts                                           | Next.js must NEVER import this |
+| `packages/ai-core/`               | Executor-agnostic primitives (AiEvent, UsageFact, tool schemas)                      | No graph definitions here      |
+| `infra/compose/langgraph-server/` | Docker packaging (Dockerfile, compose config, env)                                   | No TS logic here               |
 
 ### Non-Goals (P0)
 
@@ -347,7 +347,7 @@ const threadId = `${request.accountId}:${request.stateKey ?? request.runId}`;
 langgraph-server:
   build:
     context: ../../../..
-    dockerfile: platform/infra/services/runtime/langgraph-server/Dockerfile
+    dockerfile: infra/compose/langgraph-server/Dockerfile
   container_name: langgraph-server
   restart: unless-stopped
   networks:
@@ -369,7 +369,7 @@ langgraph-server:
     start_period: 30s
 ```
 
-**Dockerfile location:** `platform/infra/services/runtime/langgraph-server/Dockerfile` builds `packages/langgraph-server/`.
+**Dockerfile location:** `infra/compose/langgraph-server/Dockerfile` builds `packages/langgraph-server/`.
 
 **Networking:** Uses docker DNS names `litellm` and `postgres` directly.
 
@@ -464,7 +464,7 @@ packages/langgraph-server/                           ← Service that imports gr
 3. **No rebuild of LangGraph Server capabilities** — Use checkpoints/threads/runs as-is
 4. **No executor-specific billing logic** — UsageFact is normalized; adapters translate
 5. **No P0 deletion guarantees** — Document explicitly; implement in P1
-6. **No TS logic in platform/** — `platform/infra/services/runtime/langgraph-server/` contains Docker packaging only
+6. **No TS logic in infra/** — `infra/compose/langgraph-server/` contains Docker packaging only
 7. **No custom SSE event vocabulary** — Route maps AiEvents to Data Stream Protocol via official helper
 8. **No protocol encoding in runtime** — Runtime emits AiEvents only; route handles wire protocol
 

@@ -328,7 +328,7 @@ jobs:
 
       - name: Compute migrator fingerprint and tag
         run: |
-          FINGERPRINT=$(platform/ci/scripts/compute_migrator_fingerprint.sh)
+          FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh)
           echo "MIGRATOR_FINGERPRINT=$FINGERPRINT" >> $GITHUB_ENV
           # Content-addressed migrator tag (decoupled from app commit, lowercase for GHCR)
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -410,21 +410,21 @@ jobs:
           # Images pre-built with GHA cache; no --build needed
           # Temporal services required for schedule CRUD + execution tests
           # scheduler-worker required for workflow execution tests
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml \
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile sandbox-openclaw \
             up -d app postgres litellm mock-llm caddy temporal-postgres temporal temporal-ui scheduler-worker git-sync llm-proxy-openclaw openclaw-gateway
 
       - name: Probe container-boundary (git-sync volume)
-        run: platform/ci/scripts/probe-repo-volume.sh
+        run: scripts/ci/probe-repo-volume.sh
 
       - name: Provision database roles
         run: |
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml \
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile bootstrap run --rm db-provision
 
       - name: Run migrations
         run: |
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml \
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile bootstrap run --rm db-migrate
 
       - name: Run stack tests
@@ -446,7 +446,7 @@ jobs:
           loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
-          compose_file: platform/infra/services/runtime/docker-compose.dev.yml
+          compose_file: infra/compose/runtime/docker-compose.dev.yml
 
       - name: Upload failure context artifact
         if: failure()
@@ -460,4 +460,4 @@ jobs:
       - name: Teardown stack
         if: always()
         run: |
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml down -v
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml down -v

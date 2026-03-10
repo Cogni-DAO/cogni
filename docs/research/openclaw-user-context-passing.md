@@ -218,7 +218,7 @@ and trust level. Use this to:
 
 ## Open Questions
 
-1. **Cred score source**: SourceCred integration exists in `platform/infra/services/sourcecred/` but isn't wired to user identity. Is SourceCred the right cred system, or do we want something simpler (interaction count + tenure + DAO membership)?
+1. **Cred score source**: SourceCred integration exists in `infra/compose/sourcecred/` but isn't wired to user identity. Is SourceCred the right cred system, or do we want something simpler (interaction count + tenure + DAO membership)?
 
 2. **Context staleness in multi-turn conversations**: In gateway mode, sessions persist across multiple messages. Should context be refreshed on every message, or only at session creation? Refreshing on every turn means the trust tier could change mid-conversation (unlikely but possible).
 

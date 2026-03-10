@@ -191,15 +191,15 @@ Enforced by dependency-cruiser:
 
 ### File Pointers
 
-| File                               | Purpose                            |
-| ---------------------------------- | ---------------------------------- |
-| `services/*/package.json`          | Service workspace declarations     |
-| `services/*/Dockerfile`            | Multi-stage Docker build           |
-| `services/*/src/main.ts`           | Entry point with signal handling   |
-| `services/*/src/config.ts`         | Zod env schema                     |
-| `services/*/src/health.ts`         | Health endpoint handlers           |
-| `.dependency-cruiser.cjs`          | Import boundary enforcement        |
-| `platform/infra/services/runtime/` | Docker Compose service definitions |
+| File                       | Purpose                            |
+| -------------------------- | ---------------------------------- |
+| `services/*/package.json`  | Service workspace declarations     |
+| `services/*/Dockerfile`    | Multi-stage Docker build           |
+| `services/*/src/main.ts`   | Entry point with signal handling   |
+| `services/*/src/config.ts` | Zod env schema                     |
+| `services/*/src/health.ts` | Health endpoint handlers           |
+| `.dependency-cruiser.cjs`  | Import boundary enforcement        |
+| `infra/compose/`           | Docker Compose service definitions |
 
 ## Acceptance Checks
 

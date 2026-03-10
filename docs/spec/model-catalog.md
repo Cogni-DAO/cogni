@@ -129,7 +129,7 @@ When evaluating new models for this catalog:
 
 ## Related
 
-- [LiteLLM config](../../platform/infra/services/runtime/configs/litellm.config.yaml) — proxy routing
+- [LiteLLM config](../../infra/compose/configs/litellm.config.yaml) — proxy routing
 - [openclaw-gateway.json](../../services/sandbox-openclaw/openclaw-gateway.json) — agent model catalog
 - [external-executor-billing](./external-executor-billing.md) — billing reconciliation
 - [openclaw-subagents](./openclaw-subagents.md) — subagent model tier strategy

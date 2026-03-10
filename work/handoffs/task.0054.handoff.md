@@ -27,7 +27,7 @@ last_commit: 50d93e6d22b7135ad83df82fd19752d7789f1ff1
 - Temporal schedule creation with identity split (temporalScheduleId + dbScheduleId)
 - Internal ops route `POST /api/internal/ops/governance/schedules/sync`
 - CLI helper `pnpm governance:schedules:sync`
-- Deploy script integration (`platform/ci/scripts/deploy.sh`)
+- Deploy script integration (`scripts/ci/deploy.sh`)
 - Unit tests (8 passing) + stack tests (4 governance tests passing, 1 user schedule test passing)
 - Package rebuild workflow documented: `pnpm packages:build` → `pnpm scheduler:docker:build` → `docker restart scheduler-worker`
 

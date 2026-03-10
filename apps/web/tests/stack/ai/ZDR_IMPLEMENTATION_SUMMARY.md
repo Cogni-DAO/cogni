@@ -4,13 +4,13 @@
 
 ### Files Changed
 
-| File                                                          | Change                                                    |
-| ------------------------------------------------------------- | --------------------------------------------------------- |
-| `platform/infra/services/runtime/configs/litellm.config.yaml` | Added `extra_body.provider.zdr: true` to Anthropic models |
-| `platform/infra/services/runtime/docker-compose.dev.yml`      | Added `LITELLM_LOG=DEBUG` (dev only)                      |
-| `tests/stack/ai/zdr-config.stack.test.ts`                     | **New** - Config smoke test (runs in CI)                  |
-| `tests/stack/ai/zdr-passthrough.dev.test.ts.skip`             | **Skipped** - Integration test (needs e2e infra)          |
-| `tests/stack/ai/ZDR_INTEGRATION_TEST.md`                      | Documentation for deferred integration test               |
+| File                                              | Change                                                    |
+| ------------------------------------------------- | --------------------------------------------------------- |
+| `infra/compose/configs/litellm.config.yaml`       | Added `extra_body.provider.zdr: true` to Anthropic models |
+| `infra/compose/runtime/docker-compose.dev.yml`    | Added `LITELLM_LOG=DEBUG` (dev only)                      |
+| `tests/stack/ai/zdr-config.stack.test.ts`         | **New** - Config smoke test (runs in CI)                  |
+| `tests/stack/ai/zdr-passthrough.dev.test.ts.skip` | **Skipped** - Integration test (needs e2e infra)          |
+| `tests/stack/ai/ZDR_INTEGRATION_TEST.md`          | Documentation for deferred integration test               |
 
 ### What Was Implemented
 

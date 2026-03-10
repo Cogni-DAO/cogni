@@ -294,7 +294,7 @@ We keep a **hard separation**:
   - [ ] Compare on-chain totals vs credited totals
   - [ ] Flag discrepancies for manual review
   - [ ] Output CSV report with mismatches
-- [ ] Add to ops runbook: `platform/runbooks/PAYMENTS_RECONCILIATION.md`
+- [ ] Add to ops runbook: `docs/runbooks/PAYMENTS_RECONCILIATION.md`
 
 ### 5.3 Monitoring & Alerts (Future)
 

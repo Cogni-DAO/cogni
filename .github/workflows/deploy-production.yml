@@ -117,7 +117,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_SERVICE_URL: ${{ secrets.DATABASE_SERVICE_URL }}
-        run: platform/ci/scripts/validate-dsns.sh
+        run: scripts/ci/validate-dsns.sh
 
       - name: Deploy to Cherry Servers
         env:
@@ -181,7 +181,7 @@ jobs:
           GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
           GH_REPOS: ${{ vars.GH_REPOS }}
           GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
-        run: platform/ci/scripts/deploy.sh
+        run: scripts/ci/deploy.sh
 
       - name: Upload deployment artifacts
         if: always()

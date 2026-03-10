@@ -56,13 +56,13 @@ last_commit: ec9311af
 
 ## Pointers
 
-| File / Resource                                          | Why it matters                                                          |
-| -------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `platform/infra/services/runtime/docker-compose.dev.yml` | Gateway network + env config (cogni-edge, GITHUB_TOKEN, COGNI_REPO_URL) |
-| `platform/infra/services/runtime/docker-compose.yml`     | Prod equivalent                                                         |
-| `services/sandbox-openclaw/openclaw-gateway.json`        | Tool deny list (group:web removed)                                      |
-| `docs/spec/openclaw-sandbox-spec.md`                     | Invariant 21 (GATEWAY_NETWORK_ACCESS), tool table, workspace templates  |
-| `docs/spec/openclaw-sandbox-controls.md`                 | Credential strategy, anti-patterns, relay rationale                     |
-| `src/adapters/server/sandbox/sandbox-graph.provider.ts`  | Where post-run push wiring goes                                         |
-| `src/shared/env/server.ts`                               | `OPENCLAW_GITHUB_RW_TOKEN` Zod schema                                   |
-| `AGENTS.md`                                              | Git remote setup commands (bottom of file)                              |
+| File / Resource                                         | Why it matters                                                          |
+| ------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `infra/compose/docker-compose.dev.yml`                  | Gateway network + env config (cogni-edge, GITHUB_TOKEN, COGNI_REPO_URL) |
+| `infra/compose/docker-compose.yml`                      | Prod equivalent                                                         |
+| `services/sandbox-openclaw/openclaw-gateway.json`       | Tool deny list (group:web removed)                                      |
+| `docs/spec/openclaw-sandbox-spec.md`                    | Invariant 21 (GATEWAY_NETWORK_ACCESS), tool table, workspace templates  |
+| `docs/spec/openclaw-sandbox-controls.md`                | Credential strategy, anti-patterns, relay rationale                     |
+| `src/adapters/server/sandbox/sandbox-graph.provider.ts` | Where post-run push wiring goes                                         |
+| `src/shared/env/server.ts`                              | `OPENCLAW_GITHUB_RW_TOKEN` Zod schema                                   |
+| `AGENTS.md`                                             | Git remote setup commands (bottom of file)                              |

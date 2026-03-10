@@ -10,13 +10,13 @@
 ## Purpose
 
 Application composition root. Provides environment validation and dependency injection wiring for runtime.  
-System setup installers were moved to `platform/bootstrap/` and are out of scope here.
+System setup installers were moved to `scripts/bootstrap/` and are out of scope here.
 
 ## Pointers
 
 - [Root AGENTS.md](../../AGENTS.md)
 - [Architecture](../../docs/spec/architecture.md)
-- [Platform bootstrap (installers)](../../platform/bootstrap/README.md)
+- [Platform bootstrap (installers)](../../scripts/bootstrap/README.md)
 
 ## Boundaries
 
@@ -109,5 +109,5 @@ Bootstrap application runtime dependencies.
 
 ## Notes
 
-- System installers moved to platform/bootstrap/
+- System installers moved to scripts/bootstrap/
 - Focus on runtime composition only

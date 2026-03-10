@@ -59,7 +59,7 @@ last_commit: 00a440ae
 | `src/features/ai/services/billing.ts`                               | `commitUsageFact()` — cost-known/unknown branching at lines 97-122   |
 | `src/shared/observability/server/metrics.ts`                        | `billingMissingCostDeferredTotal` + `billingInvariantViolationTotal` |
 | `docs/spec/billing-ingest.md`                                       | Invariants table — 4 new billing invariants                          |
-| `platform/infra/services/sandbox-proxy/nginx-gateway.conf.template` | Audit log removed                                                    |
+| `infra/compose/nginx-gateway.conf.template`                         | Audit log removed                                                    |
 | `tests/unit/features/ai/billing-receipt-invariants.spec.ts`         | 4 unit tests proving the invariants                                  |
 | `work/items/task.0029.callback-driven-billing-kill-log-scraping.md` | Parent work item                                                     |
 | PR #399 (`feat/billing-callback-fix`)                               | Base branch                                                          |

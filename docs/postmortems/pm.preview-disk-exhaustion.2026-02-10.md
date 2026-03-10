@@ -150,5 +150,5 @@ The OpenClaw services (`llm-proxy-openclaw`, `openclaw-gateway`) and `sandbox-in
 - [Postmortem: Production VM Loss (2026-02-07)](./2026-02-07-production-vm-loss.md) — same VM, prior disk/infra incident
 - [proj.openclaw-capabilities](../../work/projects/proj.openclaw-capabilities.md) — OpenClaw project
 - [proj.reliability](../../work/projects/proj.reliability.md) — Reliability project
-- [deploy.sh](../../platform/ci/scripts/deploy.sh) — Deploy script
-- [docker-compose.yml](../../platform/infra/services/runtime/docker-compose.yml) — Production compose
+- [deploy.sh](../../scripts/ci/deploy.sh) — Deploy script
+- [docker-compose.yml](../../infra/compose/runtime/docker-compose.yml) — Production compose

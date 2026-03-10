@@ -125,7 +125,7 @@ Document the engineering due diligence for Supabase adoption, establishing which
 | **DSN_ONLY_RUNTIME**      | Yes                  | src/shared/env/server.ts requires DATABASE_URL + DATABASE_SERVICE_URL as explicit DSNs        | buildDatabaseUrl() is tooling-only (drizzle.config.ts). Runtime reads DSN directly.                                                                                         |
 | **ROLE_SEPARATION**       | Yes                  | src/shared/env/invariants.ts assertEnvInvariants()                                            | Three roles: postgres (root, provisioning-only), app_user (RLS enforced), app_service (BYPASSRLS). Boot rejects same-user DSNs or superuser names.                          |
 | **RLS_ENFORCED**          | Yes (P0 complete)    | src/adapters/server/db/migrations/0004_enable_rls.sql; packages/db-client/src/tenant-scope.ts | 10 tables with tenant_isolation policy. SET LOCAL app.current_user_id per transaction. Missing context = zero rows (fail-closed).                                           |
-| **PROVISION_CONVERGENCE** | Create-or-skip (gap) | platform/infra/services/runtime/postgres-init/provision.sh                                    | Currently creates roles if missing, does NOT ALTER ROLE ... PASSWORD for existing ones. P1 item in proj.database-ops.                                                       |
+| **PROVISION_CONVERGENCE** | Create-or-skip (gap) | infra/compose/postgres-init/provision.sh                                                      | Currently creates roles if missing, does NOT ALTER ROLE ... PASSWORD for existing ones. P1 item in proj.database-ops.                                                       |
 | **BACKUPS_EXIST**         | **NO**               | N/A                                                                                           | proj.database-ops line 2: "No backup exists today. A single docker volume rm or disk failure results in total data loss." WAL-G planned (P0 in that spec), not implemented. |
 
 ### 2.3 Network & Secrets Invariants
@@ -385,7 +385,7 @@ Document the engineering due diligence for Supabase adoption, establishing which
 | **Storage**           | None (no file uploads)                  | N/A                                                             | 0              | N/A                                             | Not needed for current MVP                        |
 | **Realtime**          | SSE via assistant-stream (AI chat only) | src/app/api/v1/ai/chat/route.ts                                 | 2              | Stack tests                                     | No DB change subscriptions                        |
 | **Edge/Functions**    | None (Node.js only)                     | N/A                                                             | 0              | N/A                                             | Not needed                                        |
-| **API gateway**       | Caddy + Next.js proxy                   | platform/infra/services/edge/, src/proxy.ts                     | 3              | CI/CD deploy validation                         | No distributed rate limiting                      |
+| **API gateway**       | Caddy + Next.js proxy                   | infra/compose/, src/proxy.ts                                    | 3              | CI/CD deploy validation                         | No distributed rate limiting                      |
 | **Postgres ops**      | Drizzle migrations, 3-role model, RLS   | drizzle.config.ts, provision.sh, migrations/0004_enable_rls.sql | 2              | 6 RLS integration tests, contract tests         | **No backups**, no pooler, no credential rotation |
 | **Audit events**      | Structured JSON logging (79 events)     | src/shared/observability/events/                                | 2              | Event registry enforced at compile time         | Not append-only, not tamper-evident               |
 | **Tracing / LLM obs** | OTel + Pino + Langfuse + Prometheus     | src/bootstrap/otel.ts, src/shared/observability/                | 2              | Metrics endpoint tested                         | No OTel exporter, no Grafana dashboards           |
@@ -432,33 +432,33 @@ This evaluation confirms that assessment is correct. The overlap between Supabas
 
 ## Appendix: File Citation Index
 
-| Claim                       | File                                                        | Lines/Excerpt                                         |
-| --------------------------- | ----------------------------------------------------------- | ----------------------------------------------------- |
-| SIWE auth implementation    | src/auth.ts                                                 | Lines 54-163: Credentials provider with siwe.verify() |
-| JWT 30-day sessions         | src/auth.ts                                                 | Line 50: maxAge: 30 _ 24 _ 60 \* 60                   |
-| Proxy auth boundary         | src/proxy.ts                                                | Lines 21-57: getToken() validation on /api/v1/\*      |
-| RLS policies (10 tables)    | src/adapters/server/db/migrations/0004_enable_rls.sql       | 11,171 bytes of ALTER TABLE + CREATE POLICY           |
-| Tenant scoping              | packages/db-client/src/tenant-scope.ts                      | withTenantScope() wraps Drizzle tx + SET LOCAL        |
-| Role separation enforcement | src/shared/env/invariants.ts                                | assertEnvInvariants() rejects same-user DSNs          |
-| No backups                  | work/projects/proj.database-ops.md                          | "No backup exists today" (Crawl P0)                   |
-| WAL-G plan                  | work/projects/proj.database-ops.md                          | Crawl P0: backups with WAL-G                          |
-| pgBouncer plan              | work/projects/proj.database-ops.md                          | Run P2: connection pooler                             |
-| Supabase OSS only decision  | work/projects/proj.database-ops.md                          | Goal: "adopt only Supabase OSS building blocks"       |
-| 79 event names              | src/shared/observability/events/index.ts                    | EVENT_NAMES const registry                            |
-| Prometheus metrics          | src/shared/observability/server/metrics.ts                  | 8 metrics defined (166 lines)                         |
-| OTel tracing                | src/bootstrap/otel.ts                                       | withRootSpan() + withChildSpan()                      |
-| Sandbox network isolation   | src/adapters/server/sandbox/sandbox-runner.adapter.ts       | NetworkMode: 'none', CapDrop: ["ALL"]                 |
-| Docker compose services     | platform/infra/services/runtime/docker-compose.yml          | 12 services, 352 lines                                |
-| 3-layer deployment          | platform/runbooks/DEPLOYMENT_ARCHITECTURE.md                | Base (OpenTofu) → Edge (Caddy) → Runtime (compose)    |
-| 6 deployment modes          | docs/spec/environments.md                                   | App-only through full Docker stack                    |
-| Drizzle migrations          | drizzle.config.ts + src/adapters/server/db/migrations/      | 4 migration files                                     |
-| Application pool config     | packages/db-client/src/build-client.ts                      | max: 10, idle_timeout: 20                             |
-| Temporal worker             | services/scheduler-worker/src/main.ts                       | 94 lines, graceful shutdown                           |
-| LiteLLM config              | platform/infra/services/runtime/configs/litellm.config.yaml | 204 lines, 20+ models                                 |
-| AI telemetry port           | src/ports/ai-telemetry.port.ts                              | RecordInvocationParams with correlation IDs           |
-| Usage port (LiteLLM API)    | src/ports/usage.port.ts                                     | ActivityUsagePort with spend logs/charts              |
-| RBAC design (not built)     | docs/spec/rbac.md                                           | OpenFGA, dual-check, actor/subject model              |
-| Sandbox spec                | docs/spec/sandboxed-agents.md                               | P0 complete, P0.5a complete, P0.5 complete            |
+| Claim                       | File                                                   | Lines/Excerpt                                         |
+| --------------------------- | ------------------------------------------------------ | ----------------------------------------------------- |
+| SIWE auth implementation    | src/auth.ts                                            | Lines 54-163: Credentials provider with siwe.verify() |
+| JWT 30-day sessions         | src/auth.ts                                            | Line 50: maxAge: 30 _ 24 _ 60 \* 60                   |
+| Proxy auth boundary         | src/proxy.ts                                           | Lines 21-57: getToken() validation on /api/v1/\*      |
+| RLS policies (10 tables)    | src/adapters/server/db/migrations/0004_enable_rls.sql  | 11,171 bytes of ALTER TABLE + CREATE POLICY           |
+| Tenant scoping              | packages/db-client/src/tenant-scope.ts                 | withTenantScope() wraps Drizzle tx + SET LOCAL        |
+| Role separation enforcement | src/shared/env/invariants.ts                           | assertEnvInvariants() rejects same-user DSNs          |
+| No backups                  | work/projects/proj.database-ops.md                     | "No backup exists today" (Crawl P0)                   |
+| WAL-G plan                  | work/projects/proj.database-ops.md                     | Crawl P0: backups with WAL-G                          |
+| pgBouncer plan              | work/projects/proj.database-ops.md                     | Run P2: connection pooler                             |
+| Supabase OSS only decision  | work/projects/proj.database-ops.md                     | Goal: "adopt only Supabase OSS building blocks"       |
+| 79 event names              | src/shared/observability/events/index.ts               | EVENT_NAMES const registry                            |
+| Prometheus metrics          | src/shared/observability/server/metrics.ts             | 8 metrics defined (166 lines)                         |
+| OTel tracing                | src/bootstrap/otel.ts                                  | withRootSpan() + withChildSpan()                      |
+| Sandbox network isolation   | src/adapters/server/sandbox/sandbox-runner.adapter.ts  | NetworkMode: 'none', CapDrop: ["ALL"]                 |
+| Docker compose services     | infra/compose/runtime/docker-compose.yml               | 12 services, 352 lines                                |
+| 3-layer deployment          | docs/runbooks/DEPLOYMENT_ARCHITECTURE.md               | Base (OpenTofu) → Edge (Caddy) → Runtime (compose)    |
+| 6 deployment modes          | docs/spec/environments.md                              | App-only through full Docker stack                    |
+| Drizzle migrations          | drizzle.config.ts + src/adapters/server/db/migrations/ | 4 migration files                                     |
+| Application pool config     | packages/db-client/src/build-client.ts                 | max: 10, idle_timeout: 20                             |
+| Temporal worker             | services/scheduler-worker/src/main.ts                  | 94 lines, graceful shutdown                           |
+| LiteLLM config              | infra/compose/configs/litellm.config.yaml              | 204 lines, 20+ models                                 |
+| AI telemetry port           | src/ports/ai-telemetry.port.ts                         | RecordInvocationParams with correlation IDs           |
+| Usage port (LiteLLM API)    | src/ports/usage.port.ts                                | ActivityUsagePort with spend logs/charts              |
+| RBAC design (not built)     | docs/spec/rbac.md                                      | OpenFGA, dual-check, actor/subject model              |
+| Sandbox spec                | docs/spec/sandboxed-agents.md                          | P0 complete, P0.5a complete, P0.5 complete            |
 
 ## Acceptance Checks
 

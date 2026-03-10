@@ -75,7 +75,7 @@ The app image creates `nextjs` as UID 1001 (`Dockerfile:70-71`). Git 2.35.2+ rej
 
 ### CI Validation
 
-After `docker compose up`, CI runs `platform/ci/scripts/probe-repo-volume.sh`:
+After `docker compose up`, CI runs `scripts/ci/probe-repo-volume.sh`:
 
 ```bash
 docker exec app sh -lc 'git -C /repo/current rev-parse HEAD | grep -Eq "^[0-9a-f]{40}$"'
@@ -91,15 +91,15 @@ Fails CI immediately if UID mismatch, volume mount, or missing binary.
 
 ### File Pointers
 
-| File                                                     | Role                                |
-| -------------------------------------------------------- | ----------------------------------- |
-| `Dockerfile`                                             | `nextjs` user UID 1001 (line 70-71) |
-| `platform/infra/services/runtime/docker-compose.dev.yml` | repo-init + git-sync (dev)          |
-| `platform/infra/services/runtime/docker-compose.yml`     | repo-init + git-sync (prod)         |
-| `src/shared/env/server.ts`                               | `COGNI_REPO_PATH` schema (required) |
-| `src/bootstrap/capabilities/repo.ts`                     | Factory wiring shaOverride          |
-| `platform/ci/scripts/probe-repo-volume.sh`               | CI container-boundary probe         |
-| `.github/workflows/ci.yaml`                              | CI step invoking probe              |
+| File                                           | Role                                |
+| ---------------------------------------------- | ----------------------------------- |
+| `Dockerfile`                                   | `nextjs` user UID 1001 (line 70-71) |
+| `infra/compose/runtime/docker-compose.dev.yml` | repo-init + git-sync (dev)          |
+| `infra/compose/runtime/docker-compose.yml`     | repo-init + git-sync (prod)         |
+| `src/shared/env/server.ts`                     | `COGNI_REPO_PATH` schema (required) |
+| `src/bootstrap/capabilities/repo.ts`           | Factory wiring shaOverride          |
+| `scripts/ci/probe-repo-volume.sh`              | CI container-boundary probe         |
+| `.github/workflows/ci.yaml`                    | CI step invoking probe              |
 
 ## Acceptance Checks
 

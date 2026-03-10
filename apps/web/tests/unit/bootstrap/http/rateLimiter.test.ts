@@ -9,7 +9,7 @@
  * Side-effects: none (isolated test instances with fake timers)
  * Notes: Uses per-test limiter instances for determinism; stack test validates actual endpoint wiring.
  *        Tests verify X-Real-IP precedence to prevent spoofing.
- * Links: src/bootstrap/http/rateLimiter.ts, platform/infra/services/edge/configs/Caddyfile.tmpl
+ * Links: src/bootstrap/http/rateLimiter.ts, infra/compose/edge/configs/Caddyfile.tmpl
  * @public
  */
 

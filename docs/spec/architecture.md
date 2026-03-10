@@ -48,7 +48,7 @@ Every dependency points inward.
 **References:**
 
 - Hexagonal: [Alistair Cockburn's System Design](https://www.geeksforgeeks.org/system-design/hexagonal-architecture-system-design/)
-- Infrastructure: [Deployment Architecture](../platform/runbooks/DEPLOYMENT_ARCHITECTURE.md)
+- Infrastructure: [Deployment Architecture](../docs/runbooks/DEPLOYMENT_ARCHITECTURE.md)
 - Chain Configuration: [Chain Config](chain-config.md)
 - Accounts & Credits: [Accounts Design](accounts-design.md)
 - API Endpoints: [Accounts API Endpoints](accounts-api-endpoints.md)
@@ -71,7 +71,7 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 ## System Layers (by directory)
 
 - **src/bootstrap/** → Composition root (DI/factories), env (Zod), exports a container/getPort().
-- **platform/** → Infrastructure tooling, CI/CD scripts, deployment automation, dev setup.
+- **infra/**, **scripts/** → Infrastructure tooling, CI/CD scripts, deployment automation, dev setup.
 - **src/contracts/** → Operation contracts (id, Zod in/out, scopes, version). No logic.
 - **src/mcp/** → MCP host bootstrap. Registers tools mapped 1:1 to contracts.
 - **src/app/** → Delivery/UI + Next.js API routes. Includes `providers/` for client-side context composition (wagmi, RainbowKit, React Query).
@@ -161,21 +161,18 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] ├── CI-CD.md # CI/CD documentation
 [x] └── templates/ # document templates
 
-[x] platform/ # platform tooling and infrastructure
-[x] ├── infra/ # Infrastructure as Code and deployment configs
-[x] │ ├── providers/
-[x] │ │ ├── cherry/ # Cherry Servers provider
-[x] │ │ │ ├── base/ # VM + static bootstrap (immutable)
-[x] │ │ └── akash/ # Akash provider configs
-[x] │ ├── services/
-[x] │ │ ├── runtime/ # Docker Compose for local dev (postgres, litellm)
-[x] │ │ └── loki-promtail/ # Log aggregation stack
-[x] │ └── files/ # Shared templates and utility scripts
+[x] infra/ # Infrastructure as Code and deployment configs
+[x] ├── compose/ # Docker Compose for local dev (postgres, litellm)
+[x] ├── tofu/
+[x] │ ├── cherry/ # Cherry Servers provider
+[x] │ │ ├── base/ # VM + static bootstrap (immutable)
+[x] │ └── akash/ # Akash provider configs
+[x] scripts/ # CI/CD, bootstrap, and utility scripts
 [x] ├── ci/ # CI/CD automation
 [x] ├── bootstrap/ # One-time dev machine setup installers
 [x] │ ├── install/ # Focused installer scripts (tofu, pnpm, docker, reuse)
 [x] │ └── README.md # Installation instructions
-[x] └── runbooks/ # Deploy, rollback, incident docs
+[x] docs/runbooks/ # Deploy, rollback, incident docs
 
 [x] src/
 [x] ├── auth.ts # Auth.js configuration (SIWE credentials provider)
@@ -490,7 +487,7 @@ Agentic graphs (P1), Loki/Grafana, Akash/IaC planned. See [Graph Execution](grap
 - [Error Handling Architecture](error-handling.md) - Layered error translation patterns and implementation guidelines
 - [Model Selection](model-selection.md) - Dynamic model fetching from LiteLLM, validation, and UI integration
 - [CI/CD Pipeline Flow](ci-cd.md) - Branch model, workflows, and deployment automation
-- [Deployment Architecture](../platform/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
+- [Deployment Architecture](../docs/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
 - [Build Architecture](build-architecture.md) - Monorepo build order, Docker strategy, and workspace package handling
 - [Route Runtime Policy](runtime-policy.md) - When to use Node.js vs Edge runtime in API routes
 - [Decentralized Identity](decentralized-user-identity.md) - Subject DID (did:key), linked DIDs (did:pkh), auth-method-agnostic identity

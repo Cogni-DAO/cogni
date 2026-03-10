@@ -419,7 +419,7 @@ volumes:
 ### 10. Deployment Criticality
 
 - [ ] Classify: **critical** (deploy fails if unhealthy) or **optional** (best-effort)
-- [ ] If critical: add a post-deploy health gate in `platform/ci/scripts/` and wire it into `deploy.sh` after `compose up`
+- [ ] If critical: add a post-deploy health gate in `scripts/ci/` and wire it into `deploy.sh` after `compose up`
 - [ ] If using compose profiles: add a profile guardrail asserting the service resolves in `compose config --services` — compose silently ignores profiles for missing services
 
 ### 11. Documentation

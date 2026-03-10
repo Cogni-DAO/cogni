@@ -203,6 +203,6 @@ push to main → build-prod.yml (build → test → push) → deploy-production.
 ## Related Documentation
 
 - [Application Architecture](architecture.md) - Hexagonal design and code organization
-- [Deployment Architecture](../platform/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
+- [Deployment Architecture](../docs/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
 - [CI/CD Services Roadmap](CICD_SERVICES_ROADMAP.md) - Service build/deploy integration plan (GitOps migration)
-- [CI/CD Conflict Recovery](../platform/runbooks/CICD_CONFLICT_RECOVERY.md) - How to resolve release→main conflicts without polluting history
+- [CI/CD Conflict Recovery](../docs/runbooks/CICD_CONFLICT_RECOVERY.md) - How to resolve release→main conflicts without polluting history

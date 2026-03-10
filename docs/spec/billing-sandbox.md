@@ -48,14 +48,14 @@ The proxy is **ephemeral — one per run**. `LlmProxyManager.start()` generates 
 
 ## Component Responsibilities
 
-| Component                      | Responsibility                                                                  | Key file                                                    |
-| ------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **Nginx proxy**                | Injects billing headers, logs `call_id` + `cost` per request                    | `platform/infra/services/sandbox-proxy/nginx.conf.template` |
-| **LlmProxyManager**            | Starts/stops proxy container, parses audit log → `ProxyBillingEntry[]`          | `src/adapters/server/sandbox/llm-proxy-manager.ts`          |
-| **SandboxRunnerAdapter**       | Runs sandbox container, threads billing entries into `SandboxRunResult`         | `src/adapters/server/sandbox/sandbox-runner.adapter.ts`     |
-| **SandboxGraphProvider**       | Emits `usage_report` AiEvent per billing entry (with `usageUnitId` + `costUsd`) | `src/adapters/server/sandbox/sandbox-graph.provider.ts`     |
-| **billing.ts**                 | Consumes `usage_report` → `commitUsageFact()` → `recordChargeReceipt()`         | `src/features/ai/services/billing.ts`                       |
-| **Agent (run.mjs / OpenClaw)** | Billing-ignorant. Still captures `litellmCallId` in stdout for debug only.      | `services/sandbox-runtime/agent/run.mjs`                    |
+| Component                      | Responsibility                                                                  | Key file                                                |
+| ------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Nginx proxy**                | Injects billing headers, logs `call_id` + `cost` per request                    | `infra/compose/nginx.conf.template`                     |
+| **LlmProxyManager**            | Starts/stops proxy container, parses audit log → `ProxyBillingEntry[]`          | `src/adapters/server/sandbox/llm-proxy-manager.ts`      |
+| **SandboxRunnerAdapter**       | Runs sandbox container, threads billing entries into `SandboxRunResult`         | `src/adapters/server/sandbox/sandbox-runner.adapter.ts` |
+| **SandboxGraphProvider**       | Emits `usage_report` AiEvent per billing entry (with `usageUnitId` + `costUsd`) | `src/adapters/server/sandbox/sandbox-graph.provider.ts` |
+| **billing.ts**                 | Consumes `usage_report` → `commitUsageFact()` → `recordChargeReceipt()`         | `src/features/ai/services/billing.ts`                   |
+| **Agent (run.mjs / OpenClaw)** | Billing-ignorant. Still captures `litellmCallId` in stdout for debug only.      | `services/sandbox-runtime/agent/run.mjs`                |
 
 ## Invariants
 
@@ -104,7 +104,7 @@ Gateway mode uses a **long-running** shared proxy (`llm-proxy-openclaw`) instead
 
 | Component               | Gateway mode file                                                      |
 | ----------------------- | ---------------------------------------------------------------------- |
-| **Nginx gateway proxy** | `platform/infra/services/sandbox-proxy/nginx-gateway.conf.template`    |
+| **Nginx gateway proxy** | `infra/compose/nginx-gateway.conf.template`                            |
 | **ProxyBillingReader**  | `src/adapters/server/sandbox/proxy-billing-reader.ts`                  |
 | **Volume (prod)**       | `openclaw_billing` named volume (app `:ro`, proxy rw)                  |
 | **Volume (dev)**        | `${OPENCLAW_BILLING_HOST_DIR:-/tmp/cogni-openclaw-billing}` bind mount |

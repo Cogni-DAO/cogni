@@ -104,7 +104,7 @@ package.json
 pnpm docker:test:stack:down
 
 # Or force remove all containers
-docker compose -f platform/infra/services/runtime/docker-compose.dev.yml down -v
+docker compose -f infra/compose/runtime/docker-compose.dev.yml down -v
 ```
 
 #### Tests fail but CI passes
@@ -121,14 +121,14 @@ docker compose -f platform/infra/services/runtime/docker-compose.dev.yml down -v
 
 ### File Pointers
 
-| File                                                     | Purpose                       |
-| -------------------------------------------------------- | ----------------------------- |
-| `scripts/check-full.sh`                                  | Orchestrator script           |
-| `vitest.config.mts`                                      | Unit test config              |
-| `vitest.integration.config.mts`                          | Integration test config       |
-| `vitest.stack.config.mts`                                | Stack test config             |
-| `platform/infra/services/runtime/docker-compose.dev.yml` | Docker compose for test stack |
-| `.env.test`                                              | Deterministic test env        |
+| File                                           | Purpose                       |
+| ---------------------------------------------- | ----------------------------- |
+| `scripts/check-full.sh`                        | Orchestrator script           |
+| `vitest.config.mts`                            | Unit test config              |
+| `vitest.integration.config.mts`                | Integration test config       |
+| `vitest.stack.config.mts`                      | Stack test config             |
+| `infra/compose/runtime/docker-compose.dev.yml` | Docker compose for test stack |
+| `.env.test`                                    | Deterministic test env        |
 
 ## Acceptance Checks
 

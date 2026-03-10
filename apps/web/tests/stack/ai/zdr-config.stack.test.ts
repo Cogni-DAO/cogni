@@ -8,7 +8,7 @@
  * Invariants: ZDR-enabled models must have extra_body.provider.zdr === true in config.
  * Side-effects: none (reads config file only)
  * Notes: Runs in APP_ENV=test (no docker/adapters needed). Guards against config regressions.
- * Links: platform/infra/services/runtime/configs/litellm.config.yaml, https://openrouter.ai/docs/guides/features/zdr#per-request-zdr-enforcement
+ * Links: infra/compose/runtime/configs/litellm.config.yaml, https://openrouter.ai/docs/guides/features/zdr#per-request-zdr-enforcement
  * @public
  */
 
@@ -19,7 +19,7 @@ import yaml from "yaml";
 
 const LITELLM_CONFIG_PATH = path.join(
   process.cwd(),
-  "platform/infra/services/runtime/configs/litellm.config.yaml"
+  "infra/compose/runtime/configs/litellm.config.yaml"
 );
 
 describe("ZDR Configuration", () => {

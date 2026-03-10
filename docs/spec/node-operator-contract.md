@@ -165,9 +165,9 @@ smart-contracts/          # Per-node DAO contracts
   src/                    # Token.sol, Governor.sol, PaymentReceiver.sol
   deploy/                 # Deploy scripts + config
   addresses/              # Deployed addresses (env-scoped)
-platform/                 # Deployment + CD infrastructure
-  infra/services/runtime/ # Docker Compose (postgres, litellm, langgraph-server)
-  opentofu/               # IaC for cloud deployment
+infra/                    # Deployment + CD infrastructure
+  compose/                # Docker Compose (postgres, litellm, langgraph-server)
+  tofu/                   # IaC for cloud deployment
 evals/                    # AI evaluation datasets + regression harness
 tests/                    # Test suites
 e2e/                      # End-to-end tests
@@ -201,10 +201,10 @@ packages/
   core-primitives/          # Logging, env, tracing
 smart-contracts/            # Operator-level contracts (vNext)
   src/                      # Registry.sol, Factory.sol
-platform/
+infra/
   docker/                   # App + services containers
   k8s/                      # Helm charts (Operator-owned)
-  opentofu/                 # Operator infrastructure
+  tofu/                     # Operator infrastructure
 evals/                      # Control plane + service evals
 tests/
 e2e/
@@ -225,12 +225,12 @@ Operator shares CI/CD, observability, deploy invariants, and hex architecture wi
 
 ### File Pointers
 
-| File                                                 | Purpose                            |
-| ---------------------------------------------------- | ---------------------------------- |
-| `.cogni/repo-spec.yml`                               | Node's declarative policy          |
-| `src/`                                               | Next.js app (Node-owned)           |
-| `packages/`                                          | Shared pure libraries              |
-| `platform/infra/services/runtime/docker-compose.yml` | Docker Compose deployment baseline |
+| File                                       | Purpose                            |
+| ------------------------------------------ | ---------------------------------- |
+| `.cogni/repo-spec.yml`                     | Node's declarative policy          |
+| `src/`                                     | Next.js app (Node-owned)           |
+| `packages/`                                | Shared pure libraries              |
+| `infra/compose/runtime/docker-compose.yml` | Docker Compose deployment baseline |
 
 ## Acceptance Checks
 
@@ -252,6 +252,6 @@ _(none)_
 ## Related
 
 - [Node CI/CD Contract](../NODE_CI_CD_CONTRACT.md) — CI/CD invariants, portability, Jenkins path
-- [Deployment Architecture](../../platform/runbooks/DEPLOYMENT_ARCHITECTURE.md) — VM provisioning, Docker Compose stack
+- [Deployment Architecture](../../docs/runbooks/DEPLOYMENT_ARCHITECTURE.md) — VM provisioning, Docker Compose stack
 - [Packages Architecture](./packages-architecture.md) — Pure library boundaries
 - [Services Architecture](./services-architecture.md) — Deployable service contracts

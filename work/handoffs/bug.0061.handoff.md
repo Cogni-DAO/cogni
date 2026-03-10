@@ -53,7 +53,7 @@ Make negative credit balances visible & accurate in UI. Fix cost estimates to ma
 - Cost estimates: [`src/core/ai/token-estimation.server.ts`](../../src/core/ai/token-estimation.server.ts), [`src/features/ai/services/preflight-credit-check.ts`](../../src/features/ai/services/preflight-credit-check.ts)
 - Defaults: [`src/features/ai/components/ChatComposerExtras.tsx:64`](../../src/features/ai/components/ChatComposerExtras.tsx)
 - Specs: [`docs/spec/model-catalog.md`](../../docs/spec/model-catalog.md)
-- Configs: [`platform/infra/services/runtime/configs/litellm.config.yaml`](../../platform/infra/services/runtime/configs/litellm.config.yaml), [`services/sandbox-openclaw/openclaw-gateway.json`](../../services/sandbox-openclaw/openclaw-gateway.json)
+- Configs: [`infra/compose/configs/litellm.config.yaml`](../../infra/compose/configs/litellm.config.yaml), [`services/sandbox-openclaw/openclaw-gateway.json`](../../services/sandbox-openclaw/openclaw-gateway.json)
 
 ## Commits
 

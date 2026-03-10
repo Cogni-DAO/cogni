@@ -7,7 +7,7 @@
  * Scope: Polls Docker health status + TCP port 3333 with a budget; skips gracefully if gateway container not present.
  * Invariants: Must run after wait-for-probes (app is up) but before functional tests.
  * Side-effects: IO (Docker API inspect, TCP connect to localhost:3333)
- * Links: platform/infra/services/runtime/docker-compose.dev.yml (openclaw-gateway service)
+ * Links: infra/compose/runtime/docker-compose.dev.yml (openclaw-gateway service)
  * @internal
  */
 

@@ -109,13 +109,13 @@ P0 runtime isolation is complete:
 
 ### File Pointers
 
-| File                                        | Role                                              |
-| ------------------------------------------- | ------------------------------------------------- |
-| `platform/ci/scripts/validate-dsns.sh`      | CI DSN validation script                          |
-| `.github/workflows/deploy-production.yml`   | Calls DSN validator before deploy                 |
-| `.github/workflows/staging-preview.yml`     | Calls DSN validator before deploy                 |
-| `platform/runbooks/INFRASTRUCTURE_SETUP.md` | Documents two config surfaces                     |
-| `src/shared/env/invariants.ts`              | Runtime startup invariant check (role separation) |
+| File                                      | Role                                              |
+| ----------------------------------------- | ------------------------------------------------- |
+| `scripts/ci/validate-dsns.sh`             | CI DSN validation script                          |
+| `.github/workflows/deploy-production.yml` | Calls DSN validator before deploy                 |
+| `.github/workflows/staging-preview.yml`   | Calls DSN validator before deploy                 |
+| `docs/runbooks/INFRASTRUCTURE_SETUP.md`   | Documents two config surfaces                     |
+| `src/shared/env/invariants.ts`            | Runtime startup invariant check (role separation) |
 
 ## Acceptance Checks
 

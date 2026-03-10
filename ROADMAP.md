@@ -30,10 +30,10 @@ Cogni is a DAO-first "org factory." This repo ships the **Node** — a sovereign
 
 ## Repository Structures
 
-| Repo         | Key Directories                                                | Purpose                               |
-| ------------ | -------------------------------------------------------------- | ------------------------------------- |
-| **Node**     | `src/`, `packages/`, `smart-contracts/`, `platform/`, `evals/` | Sovereign DAO+app                     |
-| **Operator** | `apps/operator/`, `services/*`, `packages/*`, `platform/k8s/`  | Meta-Node: control plane + data plane |
+| Repo         | Key Directories                                                         | Purpose                               |
+| ------------ | ----------------------------------------------------------------------- | ------------------------------------- |
+| **Node**     | `src/`, `packages/`, `smart-contracts/`, `infra/`, `scripts/`, `evals/` | Sovereign DAO+app                     |
+| **Operator** | `apps/operator/`, `services/*`, `packages/*`, `infra/k8s/`              | Meta-Node: control plane + data plane |
 
 **Design Principle — Mirror Rails, Not Features:**
 Operator shares CI/CD, observability, deploy invariants, and hex architecture with Node. Only domain logic differs.

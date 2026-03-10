@@ -426,7 +426,7 @@ The `SandboxGraphProvider` generates this config and writes it to `/workspace/.o
 
 The `cogni` provider's `models` array must list every LiteLLM model alias the agent might use. The `SandboxGraphProvider` generates this from our LiteLLM config.
 
-**Mapping from LiteLLM config** (`platform/infra/services/runtime/configs/litellm.config.yaml`):
+**Mapping from LiteLLM config** (`infra/compose/configs/litellm.config.yaml`):
 
 ```json5
 // Each LiteLLM model_name becomes an OpenClaw model entry:

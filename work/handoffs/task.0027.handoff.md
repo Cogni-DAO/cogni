@@ -53,14 +53,14 @@ last_commit: d3846042
 
 ## Pointers
 
-| File / Resource                                                      | Why it matters                                                                   |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `platform/infra/services/runtime/configs/alloy-config.metrics.alloy` | Main config: exporters, scrapes, relabel, log drops                              |
-| `platform/infra/services/runtime/configs/alloy-config.alloy`         | Dev config: log drops only (should be consolidated)                              |
-| `platform/infra/services/runtime/docker-compose.yml`                 | Prod compose: alloy host mounts                                                  |
-| `platform/infra/services/runtime/docker-compose.dev.yml`             | Dev compose: alloy host mounts                                                   |
-| `work/items/task.0027.alloy-infra-metrics-alerts.md`                 | Full requirements, alert expressions, acceptance criteria                        |
-| `docs/spec/observability-requirements.md`                            | Governing invariants: BELOW_APP_ATTRIBUTION, PRE_CRASH_CURVE, HEARTBEAT_LIVENESS |
-| `docs/spec/observability.md`                                         | Observability architecture, logging contract, label cardinality rules            |
-| `src/bootstrap/http/wrapRouteHandlerWithLogging.ts`                  | Where `route`, `status`, `durationMs` JSON fields originate                      |
-| `http://127.0.0.1:12345/metrics`                                     | Alloy self-metrics (drop counters, scrape status)                                |
+| File / Resource                                      | Why it matters                                                                   |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `infra/compose/configs/alloy-config.metrics.alloy`   | Main config: exporters, scrapes, relabel, log drops                              |
+| `infra/compose/configs/alloy-config.alloy`           | Dev config: log drops only (should be consolidated)                              |
+| `infra/compose/docker-compose.yml`                   | Prod compose: alloy host mounts                                                  |
+| `infra/compose/docker-compose.dev.yml`               | Dev compose: alloy host mounts                                                   |
+| `work/items/task.0027.alloy-infra-metrics-alerts.md` | Full requirements, alert expressions, acceptance criteria                        |
+| `docs/spec/observability-requirements.md`            | Governing invariants: BELOW_APP_ATTRIBUTION, PRE_CRASH_CURVE, HEARTBEAT_LIVENESS |
+| `docs/spec/observability.md`                         | Observability architecture, logging contract, label cardinality rules            |
+| `src/bootstrap/http/wrapRouteHandlerWithLogging.ts`  | Where `route`, `status`, `durationMs` JSON fields originate                      |
+| `http://127.0.0.1:12345/metrics`                     | Alloy self-metrics (drop counters, scrape status)                                |

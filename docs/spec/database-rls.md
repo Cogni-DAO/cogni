@@ -346,25 +346,25 @@ Follows the Commit 3 construction-time binding pattern. `UserDrizzlePaymentAttem
 
 ### File Pointers
 
-| File                                                         | Role                                                              |
-| ------------------------------------------------------------ | ----------------------------------------------------------------- |
-| `platform/infra/services/runtime/postgres-init/provision.sh` | DML grants, `app_service` role, `ALTER DEFAULT PRIVILEGES`        |
-| `src/adapters/server/db/migrations/0004_enable_rls.sql`      | RLS + policies on 10 tables (hand-written SQL migration)          |
-| `packages/db-schema/src/index.ts`                            | Root barrel re-exporting all schema slices                        |
-| `packages/db-client/src/client.ts`                           | `createAppDbClient` (app-role, root export)                       |
-| `packages/db-client/src/service.ts`                          | `createServiceDbClient` (service-role, `./service` sub-path only) |
-| `packages/db-client/src/build-client.ts`                     | Shared `buildClient()` factory + `Database` type                  |
-| `packages/ids/src/index.ts`                                  | `UserId`, `ActorId`, `toUserId`, `userActor` branded types        |
-| `packages/ids/src/system.ts`                                 | `SYSTEM_ACTOR: ActorId` (sub-path gated)                          |
-| `packages/db-client/src/tenant-scope.ts`                     | `withTenantScope` + `setTenantContext` (accept `ActorId`)         |
-| `src/adapters/server/db/drizzle.client.ts`                   | `getAppDb()` singleton (app-role only)                            |
-| `src/adapters/server/db/drizzle.service-client.ts`           | `getServiceDb()` singleton (BYPASSRLS, depcruiser-gated)          |
-| `src/adapters/server/db/tenant-scope.ts`                     | Re-exports from `@cogni/db-client`                                |
-| `src/shared/db/db-url.ts`                                    | Append `?sslmode=require` for non-localhost URLs                  |
-| `src/shared/env/server.ts`                                   | Zod refine rejecting non-localhost URLs without `sslmode`         |
-| `src/shared/env/invariants.ts`                               | Role separation checks (`assertEnvInvariants()`)                  |
-| `tests/component/db/rls-tenant-isolation.int.test.ts`        | Cross-tenant isolation + missing-context tests                    |
-| `tests/component/db/rls-adapter-wiring.int.test.ts`          | Adapter wiring gate tests                                         |
+| File                                                    | Role                                                              |
+| ------------------------------------------------------- | ----------------------------------------------------------------- |
+| `infra/compose/postgres-init/provision.sh`              | DML grants, `app_service` role, `ALTER DEFAULT PRIVILEGES`        |
+| `src/adapters/server/db/migrations/0004_enable_rls.sql` | RLS + policies on 10 tables (hand-written SQL migration)          |
+| `packages/db-schema/src/index.ts`                       | Root barrel re-exporting all schema slices                        |
+| `packages/db-client/src/client.ts`                      | `createAppDbClient` (app-role, root export)                       |
+| `packages/db-client/src/service.ts`                     | `createServiceDbClient` (service-role, `./service` sub-path only) |
+| `packages/db-client/src/build-client.ts`                | Shared `buildClient()` factory + `Database` type                  |
+| `packages/ids/src/index.ts`                             | `UserId`, `ActorId`, `toUserId`, `userActor` branded types        |
+| `packages/ids/src/system.ts`                            | `SYSTEM_ACTOR: ActorId` (sub-path gated)                          |
+| `packages/db-client/src/tenant-scope.ts`                | `withTenantScope` + `setTenantContext` (accept `ActorId`)         |
+| `src/adapters/server/db/drizzle.client.ts`              | `getAppDb()` singleton (app-role only)                            |
+| `src/adapters/server/db/drizzle.service-client.ts`      | `getServiceDb()` singleton (BYPASSRLS, depcruiser-gated)          |
+| `src/adapters/server/db/tenant-scope.ts`                | Re-exports from `@cogni/db-client`                                |
+| `src/shared/db/db-url.ts`                               | Append `?sslmode=require` for non-localhost URLs                  |
+| `src/shared/env/server.ts`                              | Zod refine rejecting non-localhost URLs without `sslmode`         |
+| `src/shared/env/invariants.ts`                          | Role separation checks (`assertEnvInvariants()`)                  |
+| `tests/component/db/rls-tenant-isolation.int.test.ts`   | Cross-tenant isolation + missing-context tests                    |
+| `tests/component/db/rls-adapter-wiring.int.test.ts`     | Adapter wiring gate tests                                         |
 
 ## Acceptance Checks
 

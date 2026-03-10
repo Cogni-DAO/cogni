@@ -129,20 +129,20 @@ A separate developer is implementing `services/sandbox-runtime/agent/run.mjs` �
 
 ## Key Files
 
-| File                                                        | What                                         |
-| ----------------------------------------------------------- | -------------------------------------------- |
-| `docs/spec/openclaw-sandbox-spec.md`                        | Master spec — P0 section has verified steps  |
-| `docs/spec/sandboxed-agents.md`                             | Parent spec — invariants 1-12, phase defs    |
-| `services/sandbox-openclaw/Dockerfile`                      | 6-line thin image (openclaw:local + socat)   |
-| `services/sandbox-openclaw/entrypoint.sh`                   | socat bridge + bash -lc exec                 |
-| `platform/infra/services/sandbox-proxy/nginx.conf.template` | Proxy config (header bug fixed)              |
-| `src/adapters/server/sandbox/sandbox-runner.adapter.ts`     | Container lifecycle (P0.5, done)             |
-| `src/adapters/server/sandbox/llm-proxy-manager.ts`          | Proxy lifecycle (P0.5, done)                 |
-| `src/ports/sandbox-runner.port.ts`                          | Port interfaces                              |
-| `tests/_fixtures/sandbox/openclaw-config.json`              | Working config fixture (proxy endpoint)      |
-| `tests/_fixtures/sandbox/openclaw-expected-output.json`     | Example successful output                    |
-| `tests/_fixtures/sandbox/fixtures.ts`                       | Test helpers (runWithProxy, createWorkspace) |
-| `scripts/diag-openclaw-sandbox.mjs`                         | Diagnostic script (WIP, needs tsx)           |
+| File                                                    | What                                         |
+| ------------------------------------------------------- | -------------------------------------------- |
+| `docs/spec/openclaw-sandbox-spec.md`                    | Master spec — P0 section has verified steps  |
+| `docs/spec/sandboxed-agents.md`                         | Parent spec — invariants 1-12, phase defs    |
+| `services/sandbox-openclaw/Dockerfile`                  | 6-line thin image (openclaw:local + socat)   |
+| `services/sandbox-openclaw/entrypoint.sh`               | socat bridge + bash -lc exec                 |
+| `infra/compose/nginx.conf.template`                     | Proxy config (header bug fixed)              |
+| `src/adapters/server/sandbox/sandbox-runner.adapter.ts` | Container lifecycle (P0.5, done)             |
+| `src/adapters/server/sandbox/llm-proxy-manager.ts`      | Proxy lifecycle (P0.5, done)                 |
+| `src/ports/sandbox-runner.port.ts`                      | Port interfaces                              |
+| `tests/_fixtures/sandbox/openclaw-config.json`          | Working config fixture (proxy endpoint)      |
+| `tests/_fixtures/sandbox/openclaw-expected-output.json` | Example successful output                    |
+| `tests/_fixtures/sandbox/fixtures.ts`                   | Test helpers (runWithProxy, createWorkspace) |
+| `scripts/diag-openclaw-sandbox.mjs`                     | Diagnostic script (WIP, needs tsx)           |
 
 ## Commits This Session
 

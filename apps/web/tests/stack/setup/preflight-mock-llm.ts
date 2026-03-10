@@ -7,7 +7,7 @@
  * Scope: Sends a single completion request through LiteLLM → mock-llm; fails fast with actionable instructions. Does not run functional tests.
  * Invariants: Must run after wait-for-probes (app is up) but before functional tests.
  * Side-effects: IO (HTTP requests to LiteLLM via LITELLM_BASE_URL)
- * Links: platform/infra/services/runtime/configs/litellm.test.config.yaml, tests/_fakes/ai/test-constants.ts
+ * Links: infra/compose/runtime/configs/litellm.test.config.yaml, tests/_fakes/ai/test-constants.ts
  * @internal
  */
 

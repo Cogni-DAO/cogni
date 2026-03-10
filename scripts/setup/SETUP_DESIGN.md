@@ -45,7 +45,7 @@ pnpm dev  # You're ready!
 3. Prompt for `OPENROUTER_API_KEY`
 4. Prompt for `EVM_RPC_URL` (Sepolia RPC from alchemy.com or infura.io)
 5. Prompt for `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (optional, from cloud.walletconnect.com)
-6. Run `platform/bootstrap/install/install-pnpm.sh`
+6. Run `scripts/bootstrap/install/install-pnpm.sh`
 7. `pnpm install` and setup git hooks
 
 **No SSH keys, no Docker, no Cherry VMs, no GitHub secrets.**
@@ -80,7 +80,7 @@ pnpm setup github --env production
 
 1. **Generate SSH keypair:**
    - `ssh-keygen -t ed25519 -f ~/.ssh/<repo-name>_<env>_deploy`
-   - Copy public key → `platform/infra/providers/cherry/base/keys/`
+   - Copy public key → `infra/tofu/cherry/base/keys/`
    - **Manual:** User commits public key to repo
 
 2. **Update Terraform vars:**
@@ -169,7 +169,7 @@ pnpm setup github --env production
          - `PROMETHEUS_READ_PASSWORD` (Grafana Access Policy token with metrics:read scope)
            Create at: https://grafana.com/orgs/<org>/access-policies → Add policy → metrics:read → Add token
 
-For current manual process, see [DEPLOY.md](../../platform/runbooks/DEPLOY.md).
+For current manual process, see [DEPLOY.md](../../docs/runbooks/DEPLOY.md).
 
 3. **Apply branch protection rules:**
    - `main`: 2 required reviews, required checks, enforce for admins

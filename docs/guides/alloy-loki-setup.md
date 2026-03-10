@@ -135,7 +135,7 @@ These variables are already configured in:
 
 ### Step 3: Alloy Configuration
 
-The Alloy configuration is already created at `platform/infra/services/runtime/configs/alloy-config.alloy` with:
+The Alloy configuration is already created at `infra/compose/configs/alloy-config.alloy` with:
 
 - **Container allowlist**: `(app|litellm|caddy)` only
 - **Strict label cardinality**: `{app, env, service, stream}` only
@@ -147,7 +147,7 @@ See the actual config file for full implementation details.
 ### Step 4: Deploy Stack
 
 ```bash
-cd platform/infra/services/runtime
+cd infra/services/runtime
 docker compose --env-file .env.runtime.local down
 docker compose --env-file .env.runtime.local up -d
 ```
@@ -166,7 +166,7 @@ Wait ~30 seconds for services to stabilize.
 4. Test locally with Grafana Cloud
 5. Update documentation:
    - `docs/spec/observability.md` — Complete Grafana Cloud setup guide
-   - `platform/infra/services/runtime/AGENTS.md` — Added setup instructions
+   - `infra/compose/AGENTS.md` — Added setup instructions
 6. Standardize environment files:
    - Merge `.env.example` into `.env.local.example`
    - Delete `.env.example`

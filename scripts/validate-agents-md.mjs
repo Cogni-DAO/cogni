@@ -93,7 +93,6 @@ const LAYER_FROM_PATH = [
   { re: /^e2e\//, layer: "e2e" },
   { re: /^scripts\//, layer: "scripts" },
   { re: /^infra\//, layer: "infra" },
-  { re: /^platform\//, layer: "infra" },
   { re: /^packages\//, layer: "packages" },
   { re: /^services\//, layer: "services" },
 ];
@@ -286,13 +285,19 @@ function validateBoundaries(block, filePathRaw) {
     }
   }
 
-  // src/** layers may not import platform/**
+  // src/** layers may not import infra/** or scripts/**
   if (
     filePath.startsWith("src/") &&
-    j.may_import.some((x) => x === "platform" || x.startsWith("platform/"))
+    j.may_import.some(
+      (x) =>
+        x === "infra" ||
+        x.startsWith("infra/") ||
+        x === "scripts" ||
+        x.startsWith("scripts/")
+    )
   ) {
     errors.push(
-      `Boundaries: src layers cannot import platform/** (CI/IaC not runtime dependency)`
+      `Boundaries: src layers cannot import infra/** or scripts/** (CI/IaC not runtime dependency)`
     );
   }
 

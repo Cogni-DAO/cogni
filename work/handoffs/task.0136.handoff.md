@@ -72,7 +72,7 @@ last_commit: 0c0f73567ada4c24ec1c582e440a342c61409a83
 | `tests/external/ingestion/github-adapter.external.test.ts`           | Adapter test — **FAILING** (merge not possible)             |
 | `tests/external/ingestion/ledger-collection.external.test.ts`        | Ledger pipeline test — **FAILING** (producer_version null)  |
 | `docs/guides/github-app-webhook-setup.md`                            | New setup guide for dev/preview webhook config              |
-| `platform/ci/scripts/deploy.sh`                                      | `GH_WEBHOOK_SECRET` added in 3 places                       |
+| `scripts/ci/deploy.sh`                                               | `GH_WEBHOOK_SECRET` added in 3 places                       |
 | `src/features/ingestion/services/webhook-receiver.ts`                | Feature service: verify → normalize → insert                |
 | `packages/db-client/src/adapters/drizzle-attribution.adapter.ts:831` | `insertIngestionReceipts` — the ON CONFLICT DO NOTHING path |
 | `services/scheduler-worker/src/activities/ledger.ts:458`             | `insertReceipts` activity — needs `producerVersion`         |

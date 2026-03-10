@@ -106,15 +106,15 @@ Per user request: "fix the low hanging fruit asap"
 
 ## Pointers
 
-| File / Resource                                               | Why it matters                                                      |
-| ------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `work/items/bug.0065.md`                                      | Main bug - agent uses wrong tools for governance visibility         |
-| `work/items/bug.0066.md`                                      | Billing bug - $0 cost for paid models                               |
-| `work/items/bug.0067.md`                                      | P0 bug - model allowlist blocks governance                          |
-| `services/sandbox-openclaw/gateway-workspace/SOUL.md`         | Agent prompt - line 40 specifies brain model, § Finding Context     |
-| `src/features/ai/services/billing.ts:100-122`                 | Cost handling - passes when costUsd=0 (number) instead of deferring |
-| `platform/infra/services/runtime/configs/litellm.config.yaml` | LiteLLM model config - where to add free models                     |
-| Langfuse trace `33edddad-e95d-4dba-a900-99a578f5f94c`         | Production evidence of agent using sessions_history incorrectly     |
-| OpenClaw gateway logs 2026-02-15 11:45-14:15 UTC              | 11 "model not allowed: openrouter/auto" errors at 15min intervals   |
-| Grafana query: `{app="cogni-template", env="production"}`     | Log access for billing/governance event correlation                 |
-| `pnpm langfuse:trace`                                         | Command to fetch latest langfuse trace for debugging                |
+| File / Resource                                           | Why it matters                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------------- |
+| `work/items/bug.0065.md`                                  | Main bug - agent uses wrong tools for governance visibility         |
+| `work/items/bug.0066.md`                                  | Billing bug - $0 cost for paid models                               |
+| `work/items/bug.0067.md`                                  | P0 bug - model allowlist blocks governance                          |
+| `services/sandbox-openclaw/gateway-workspace/SOUL.md`     | Agent prompt - line 40 specifies brain model, § Finding Context     |
+| `src/features/ai/services/billing.ts:100-122`             | Cost handling - passes when costUsd=0 (number) instead of deferring |
+| `infra/compose/configs/litellm.config.yaml`               | LiteLLM model config - where to add free models                     |
+| Langfuse trace `33edddad-e95d-4dba-a900-99a578f5f94c`     | Production evidence of agent using sessions_history incorrectly     |
+| OpenClaw gateway logs 2026-02-15 11:45-14:15 UTC          | 11 "model not allowed: openrouter/auto" errors at 15min intervals   |
+| Grafana query: `{app="cogni-template", env="production"}` | Log access for billing/governance event correlation                 |
+| `pnpm langfuse:trace`                                     | Command to fetch latest langfuse trace for debugging                |

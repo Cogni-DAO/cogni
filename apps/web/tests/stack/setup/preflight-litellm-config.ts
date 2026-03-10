@@ -9,7 +9,7 @@
  *   - Stack tests MUST run against litellm.test.config.yaml (routes to mock-openai-api)
  *   - Stale containers from dev:stack must not silently serve prod config during test runs
  * Side-effects: IO (HTTP request to LiteLLM)
- * Links: platform/infra/services/runtime/configs/litellm.test.config.yaml
+ * Links: infra/compose/runtime/configs/litellm.test.config.yaml
  * @internal
  */
 
@@ -59,7 +59,7 @@ export default async function preflightLitellmConfig() {
         "   This happens when dev:stack containers linger from a previous session.",
         "   Fix: restart with test config:",
         "",
-        "     docker compose -f platform/infra/services/runtime/docker-compose.dev.yml down litellm",
+        "     docker compose -f infra/compose/runtime/docker-compose.dev.yml down litellm",
         "     pnpm dev:stack:test",
         "",
       ].join("\n")

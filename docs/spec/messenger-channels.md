@@ -388,7 +388,7 @@ Baileys auth state is a multi-file directory (~50KB) that Baileys updates autono
 | `src/app/api/v1/channels/connect/route.ts`                 | Connect route (to be created)                                    |
 | `src/app/api/v1/channels/disconnect/route.ts`              | Disconnect route (to be created)                                 |
 | `services/sandbox-openclaw/openclaw-gateway.json`          | Gateway config — needs `channels:` section added                 |
-| `platform/infra/services/runtime/docker-compose.yml`       | Compose — needs STATE_DIR named volume                           |
+| `infra/compose/runtime/docker-compose.yml`                 | Compose — needs STATE_DIR named volume                           |
 | `src/adapters/server/sandbox/openclaw-gateway-client.ts`   | Existing gateway WS client — needs channel methods               |
 
 ## Acceptance Checks

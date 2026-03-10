@@ -18,7 +18,7 @@ _We love you! ❤️_
 ```bash
 git clone https://github.com/Cogni-DAO/cogni-template
 cd cogni-template
-platform/bootstrap/setup.sh   # Install tools + dependencies, prompts to start dev stack
+scripts/bootstrap/setup.sh   # Install tools + dependencies, prompts to start dev stack
 cp .env.local.example .env.local  # Configure environment (add OpenRouter API key)
 pnpm dev:stack       # Start developing with full stack (DB + LiteLLM + Next.js)
 pnpm db:setup        # Migrate and Seed database, once dev stack is running
@@ -35,7 +35,7 @@ _We love you too, go for it! 🎯_
 ```bash
 git clone https://github.com/YOUR-ORG/your-fork
 cd your-fork
-platform/bootstrap/setup.sh --all   # Install all tools (includes OpenTofu, REUSE)
+scripts/bootstrap/setup.sh --all   # Install all tools (includes OpenTofu, REUSE)
 cp .env.local.example .env.local    # Configure environment
 pnpm dev:stack                      # Start dev stack
 ```
@@ -48,8 +48,8 @@ _We're working to automate more of this! Want to help? Contribute setup automati
 
 ### ✅ Current Script Support
 
-- **`platform/bootstrap/setup.sh`** - One-command dev environment setup (Volta, Node 22, pnpm, Docker Desktop)
-- **`platform/bootstrap/setup.sh --all`** - Full setup including OpenTofu and REUSE
+- **`scripts/bootstrap/setup.sh`** - One-command dev environment setup (Volta, Node 22, pnpm, Docker Desktop)
+- **`scripts/bootstrap/setup.sh --all`** - Full setup including OpenTofu and REUSE
 - **`tofu apply`** - VM provisioning (when manually configured)
 
 ### ⚠️ Current Manual Setup Required
@@ -62,7 +62,7 @@ _We're working to automate more of this! Want to help? Contribute setup automati
 
 **For Fork Owners (everything above, plus):**
 
-**Infra Setup** _(see [deploy.md](platform/runbooks/DEPLOY.md) for details)_
+**Infra Setup** _(see [deploy.md](docs/runbooks/DEPLOY.md) for details)_
 
 - Generate SSH keys for deployment, move to folder, commit
 - Get [Cherry Servers auth token](https://portal.cherryservers.com/settings/api-keys)

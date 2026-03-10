@@ -108,7 +108,7 @@ last_commit: 8fc4263de6aa0f024b58c0199b14f87f3a14378b
 
 - [ ] Implement `getDefaultModelFromLiteLLMConfig(type: 'flash' | 'thinking')` utility
 - [ ] Replace hardcoded `"gpt-4o-mini"` in `syncGovernanceSchedules.ts:124` with dynamic selection
-- [ ] Read metadata from `platform/infra/services/runtime/configs/litellm.config.yaml`
+- [ ] Read metadata from `infra/compose/configs/litellm.config.yaml`
 - [ ] Find models with `metadata.cogni.default_flash: true` or `default_thinking: true`
 
 ## Risks / Gotcas
@@ -123,7 +123,7 @@ last_commit: 8fc4263de6aa0f024b58c0199b14f87f3a14378b
 
 | File / Resource                                                       | Why it matters                                                   |
 | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `platform/infra/services/runtime/configs/litellm.config.yaml`         | LiteLLM model config - free model designation, DeepSeek fixes    |
+| `infra/compose/configs/litellm.config.yaml`                           | LiteLLM model config - free model designation, DeepSeek fixes    |
 | `services/sandbox-openclaw/openclaw-gateway.json`                     | OpenClaw model allowlist - must match LiteLLM config             |
 | `services/sandbox-openclaw/gateway-workspace/SOUL.md`                 | Agent system prompt - references workspace files that must exist |
 | `packages/scheduler-core/src/services/syncGovernanceSchedules.ts:124` | Hardcoded gpt-4o-mini - replace with task.0068 solution          |

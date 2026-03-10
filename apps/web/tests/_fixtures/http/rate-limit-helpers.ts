@@ -10,7 +10,7 @@
  * Side-effects: none
  * Notes: Call generateUniqueTestIp() once per test file and reuse the IP for all requests in that file.
  *        X-Real-IP is set by Caddy from TCP source in production.
- * Links: Used by tests/stack/public/**, tests/stack/meta/** for public endpoint testing; see platform/infra/services/edge/configs/Caddyfile.tmpl for Caddy config.
+ * Links: Used by tests/stack/public/**, tests/stack/meta/** for public endpoint testing; see infra/compose/edge/configs/Caddyfile.tmpl for Caddy config.
  * @public
  */
 

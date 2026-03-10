@@ -197,12 +197,12 @@ Define the contract for auto-recovery when the app container becomes unresponsiv
 
 ### File Pointers
 
-| File                                                 | Purpose                                                   |
-| ---------------------------------------------------- | --------------------------------------------------------- |
-| `Dockerfile`                                         | HEALTHCHECK definition (livez, timeout, retries)          |
-| `platform/infra/services/runtime/docker-compose.yml` | autoheal service, app labels, app mem_limit, HEALTHCHECK  |
-| `src/app/(infra)/livez/route.ts`                     | Liveness probe (dependency-free)                          |
-| `src/app/(infra)/readyz/route.ts`                    | Readiness probe (full dependency chain, NOT for watchdog) |
+| File                                       | Purpose                                                   |
+| ------------------------------------------ | --------------------------------------------------------- |
+| `Dockerfile`                               | HEALTHCHECK definition (livez, timeout, retries)          |
+| `infra/compose/runtime/docker-compose.yml` | autoheal service, app labels, app mem_limit, HEALTHCHECK  |
+| `src/app/(infra)/livez/route.ts`           | Liveness probe (dependency-free)                          |
+| `src/app/(infra)/readyz/route.ts`          | Readiness probe (full dependency chain, NOT for watchdog) |
 
 ## Acceptance Checks
 
@@ -213,13 +213,13 @@ Define the contract for auto-recovery when the app container becomes unresponsiv
 grep -q '/livez' Dockerfile
 
 # Autoheal service exists in compose
-grep -q 'autoheal' platform/infra/services/runtime/docker-compose.yml
+grep -q 'autoheal' infra/compose/runtime/docker-compose.yml
 
 # App has mem_limit set
-grep -q 'mem_limit' platform/infra/services/runtime/docker-compose.yml
+grep -q 'mem_limit' infra/compose/runtime/docker-compose.yml
 
 # App has autoheal label
-grep -q 'autoheal.*true' platform/infra/services/runtime/docker-compose.yml
+grep -q 'autoheal.*true' infra/compose/runtime/docker-compose.yml
 ```
 
 **Manual (on VM after deploy):**

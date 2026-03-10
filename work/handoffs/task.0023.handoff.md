@@ -60,14 +60,14 @@ last_commit: pending
 
 ## Pointers
 
-| File / Resource                                          | Why it matters                                                 |
-| -------------------------------------------------------- | -------------------------------------------------------------- |
-| `docs/spec/openclaw-workspace.md`                        | Spec: invariants 29-30, design, anti-patterns                  |
-| `work/items/task.0023.gateway-agent-system-prompt.md`    | Task: 5-part plan, acceptance criteria, human review checklist |
-| `services/sandbox-openclaw/gateway-workspace/`           | The 4 system prompt files + .gitignore                         |
-| `.openclaw/skills/`                                      | 10 converted skills (from `.claude/commands/`)                 |
-| `services/sandbox-openclaw/openclaw-gateway.json`        | Gateway config — needs workspace/skills/memory updates         |
-| `platform/infra/services/runtime/docker-compose.yml:426` | Gateway service definition — needs volume mount                |
-| `scripts/validate-agents-md.mjs:407`                     | Validator exclusion for gateway-workspace                      |
-| `scripts/check-root-layout.ts:72`                        | Root layout allowlist for `.openclaw`                          |
-| `/Users/derek/dev/openclaw/src/agents/system-prompt.ts`  | Upstream: heartbeat section injection (lines ~590)             |
+| File / Resource                                         | Why it matters                                                 |
+| ------------------------------------------------------- | -------------------------------------------------------------- |
+| `docs/spec/openclaw-workspace.md`                       | Spec: invariants 29-30, design, anti-patterns                  |
+| `work/items/task.0023.gateway-agent-system-prompt.md`   | Task: 5-part plan, acceptance criteria, human review checklist |
+| `services/sandbox-openclaw/gateway-workspace/`          | The 4 system prompt files + .gitignore                         |
+| `.openclaw/skills/`                                     | 10 converted skills (from `.claude/commands/`)                 |
+| `services/sandbox-openclaw/openclaw-gateway.json`       | Gateway config — needs workspace/skills/memory updates         |
+| `infra/compose/docker-compose.yml:426`                  | Gateway service definition — needs volume mount                |
+| `scripts/validate-agents-md.mjs:407`                    | Validator exclusion for gateway-workspace                      |
+| `scripts/check-root-layout.ts:72`                       | Root layout allowlist for `.openclaw`                          |
+| `/Users/derek/dev/openclaw/src/agents/system-prompt.ts` | Upstream: heartbeat section injection (lines ~590)             |

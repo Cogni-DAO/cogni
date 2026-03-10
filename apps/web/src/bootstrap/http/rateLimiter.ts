@@ -10,7 +10,7 @@
  * Side-effects: global (in-memory rate limit store with periodic cleanup)
  * Notes: Per-instance limitation - multiple app instances each have independent limits (acceptable for MVP).
  *        IP extraction prefers X-Real-IP (Caddy-set) over X-Forwarded-For (fallback).
- * Links: Applied to /api/v1/public/* routes; Caddyfile sets X-Real-IP at platform/infra/services/edge/configs/Caddyfile.tmpl.
+ * Links: Applied to /api/v1/public/* routes; Caddyfile sets X-Real-IP at infra/compose/edge/configs/Caddyfile.tmpl.
  * @public
  */
 
@@ -142,7 +142,7 @@ export class TokenBucketRateLimiter {
  * - WITHOUT trusted_proxies validation, CDN headers can be spoofed
  *
  * References:
- * - Caddyfile: platform/infra/services/edge/configs/Caddyfile.tmpl (header_up X-Real-IP)
+ * - Caddyfile: infra/compose/edge/configs/Caddyfile.tmpl (header_up X-Real-IP)
  * - Unit tests: tests/unit/bootstrap/http/rateLimiter.test.ts
  */
 export function extractClientIp(request: NextRequest): string {

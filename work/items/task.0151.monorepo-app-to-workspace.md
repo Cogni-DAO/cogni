@@ -153,8 +153,8 @@ Additionally, `platform/` is over-nested (3 levels to a compose file) and mixes 
 - [ ] `mkdir -p infra/tofu/cherry infra/tofu/akash infra/compose infra/cd scripts/ci scripts/bootstrap`
 - [ ] `git mv platform/infra/providers/cherry/* infra/tofu/cherry/` (preserve provider split)
 - [ ] `git mv platform/infra/providers/akash/* infra/tofu/akash/` (if exists)
-- [ ] `git mv platform/infra/services/runtime/* infra/compose/` (docker-compose.dev.yml, docker-compose.yml, configs/, postgres-init/)
-- [ ] `git mv platform/infra/services/edge/docker-compose.yml infra/compose/docker-compose.edge.yml`
+- [ ] `git mv platform/infra/services/runtime/* infra/compose/runtime/` (docker-compose.dev.yml, docker-compose.yml, configs/, postgres-init/)
+- [ ] `git mv platform/infra/services/edge/docker-compose.yml infra/compose/edge/docker-compose.yml`
 - [ ] `git mv platform/infra/services/sandbox-proxy/* infra/compose/` (if exists)
 - [ ] `git mv platform/ci/scripts/* scripts/ci/`
 - [ ] `git mv platform/bootstrap/* scripts/bootstrap/`
