@@ -57,23 +57,23 @@ describe("finalizeEpoch validation: approver set", () => {
     expect(approversLower).not.toContain(signerLower);
   });
 
-  it("approverSetHash mismatch detected when set changes", () => {
+  it("approverSetHash mismatch detected when set changes", async () => {
     const originalApprovers = [approverAccount.address];
     const modifiedApprovers = [
       approverAccount.address,
       nonApproverAccount.address,
     ];
 
-    const originalHash = computeApproverSetHash(originalApprovers);
-    const modifiedHash = computeApproverSetHash(modifiedApprovers);
+    const originalHash = await computeApproverSetHash(originalApprovers);
+    const modifiedHash = await computeApproverSetHash(modifiedApprovers);
 
     expect(originalHash).not.toBe(modifiedHash);
   });
 
-  it("approverSetHash is stable when set is unchanged", () => {
+  it("approverSetHash is stable when set is unchanged", async () => {
     const approvers = [approverAccount.address];
-    const hash1 = computeApproverSetHash(approvers);
-    const hash2 = computeApproverSetHash(approvers);
+    const hash1 = await computeApproverSetHash(approvers);
+    const hash2 = await computeApproverSetHash(approvers);
     expect(hash1).toBe(hash2);
   });
 });

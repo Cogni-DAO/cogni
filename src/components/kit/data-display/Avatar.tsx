@@ -18,7 +18,7 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar";
 import type { VariantProps } from "class-variance-authority";
 import * as React from "react";
 
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 import { avatar, avatarFallback, avatarImage } from "@/styles/ui";
 
 export interface AvatarProps

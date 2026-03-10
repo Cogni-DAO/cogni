@@ -31,8 +31,10 @@ export {
   INCLUDE_ALL_SELECTION_POLICY,
   INCLUDE_ALL_SELECTION_POLICY_REF,
 } from "./plugins/include-all-selection/descriptor";
+export type { PromotionSelectionConfig } from "./plugins/promotion-selection/descriptor";
 // Promotion selection policy
 export {
+  createPromotionSelectionPolicy,
   PROMOTION_SELECTION_POLICY,
   PROMOTION_SELECTION_POLICY_REF,
 } from "./plugins/promotion-selection/descriptor";
@@ -50,4 +52,5 @@ export { COGNI_V0_PROFILE } from "./profiles/cogni-v0.0";
 export {
   createDefaultRegistries,
   type DefaultRegistries,
+  type RegistryConfig,
 } from "./registry";

@@ -1,5 +1,5 @@
 ---
-id: bug.0147
+id: bug.0148
 type: bug
 title: "Attribution pipeline credits bots and unpromoted PRs — three correctness failures in epoch selection"
 status: needs_triage
@@ -12,7 +12,7 @@ spec_refs: [plugin-attribution-pipeline]
 assignees: []
 credit:
 project:
-branch:
+branch: fix/bug-0147-attribution-correctness
 pr:
 reviewer:
 revision: 0
@@ -115,7 +115,7 @@ pnpm test services/scheduler-worker/tests/ledger-activities.test.ts
 
 ## Review Checklist
 
-- [ ] **Work Item:** `bug.0147` linked in PR body
+- [ ] **Work Item:** `bug.0148` linked in PR body
 - [ ] **Spec:** plugin-attribution-pipeline invariants upheld
 - [ ] **Tests:** new/updated tests cover the change
 - [ ] **Reviewer:** assigned and approved
@@ -125,6 +125,7 @@ pnpm test services/scheduler-worker/tests/ledger-activities.test.ts
 - Preview epoch #12: observed on 2026-03-09
 - PR #533: https://github.com/Cogni-DAO/node-template/pull/533
 - PR #534: https://github.com/Cogni-DAO/node-template/pull/534
+- Handoff: [handoff](../handoffs/bug.0148.handoff.md)
 
 ## Attribution
 

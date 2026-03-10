@@ -35,46 +35,37 @@ Ports describe _what_ the domain needs from external services, not _how_ they wo
 
 ## Public Surface
 
-- **Exports:**
-  - AccountService (user-scoped: getOrCreateBillingAccountForUser, getBalance, debitForUsage, creditAccount, recordChargeReceipt, listChargeReceipts, listLlmChargeDetails, listCreditLedgerEntries, findCreditLedgerEntryByReference)
-  - ServiceAccountService (service-role: getBillingAccountById, getOrCreateBillingAccountForUser, creditAccount, findCreditLedgerEntryByReference — BYPASSRLS for system tenant operations)
-  - LlmService (completion, completionStream with CompletionStreamParams including abortSignal, tools, toolChoice; returns providerCostUsd, litellmCallId, toolCalls)
-  - AgentCatalogPort (listAgents; discovery-only interface per AGENT_DISCOVERY.md)
-  - AgentDescriptor (agentId, graphId, name, description; P0_AGENT_GRAPH_IDENTITY: agentId === graphId)
-  - GraphExecutorPort (runGraph → stream + completion promise; execution-only per GRAPH_EXECUTION.md)
-  - PreflightCreditCheckFn (DI callback for PreflightCreditCheckDecorator; throws InsufficientCreditsPortError)
-  - GraphRunRequest (includes toolIds for per-run tool allowlist; graphId typed as GraphId), GraphRunResult, GraphFinal
-  - LlmChargeDetail (type for llm_charge_details read results)
-  - ChatDeltaEvent (text_delta | error | done)
-  - PaymentAttemptUserRepository (create, findById — RLS enforced, UserId bound at construction)
-  - PaymentAttemptServiceRepository (findByTxHash, updateStatus, bindTxHash, recordVerificationAttempt, logEvent — BYPASSRLS, billingAccountId defense-in-depth anchor)
-  - OnChainVerifier (verify transaction against expected parameters)
-  - MetricsQueryPort (queryRange, queryInstant for Prometheus-compatible backends)
-  - AiTelemetryPort (recordInvocation for ai_invocation_summaries DB writes)
-  - LangfusePort (createTrace, createTraceWithIO, updateTraceOutput, startSpan, recordGeneration, flush for optional Langfuse integration)
-  - Clock (now)
-  - Port-level errors (InsufficientCreditsPortError, BillingAccountNotFoundPortError, VirtualKeyNotFoundPortError, PaymentAttemptNotFoundPortError, TxHashAlreadyBoundPortError)
-  - LlmError, LlmErrorKind, isLlmError (typed error classification from status codes)
-  - normalizeErrorToExecutionCode (error-to-code normalization, re-exported for adapters)
-  - LlmToolDefinition, LlmToolCall, LlmToolChoice (tool calling types)
-  - Types (ChargeReceiptParams, ChargeReceiptProvenance, LlmCaller, BillingAccount, CreditLedgerEntry, CreatePaymentAttemptParams, LogPaymentEventParams, VerificationResult, VerificationStatus, CompletionStreamParams)
-  - ScheduleControlPort (create/pause/resume/delete schedule lifecycle)
-  - ScheduleUserPort (user-facing schedule CRUD, RLS-scoped)
-  - ScheduleWorkerPort (worker-only schedule reads/updates, BYPASSRLS)
-  - ExecutionGrantUserPort (user-facing grant create/revoke/delete)
-  - ExecutionGrantWorkerPort (worker-only grant validation)
-  - ExecutionRequestPort (idempotency layer for execution requests)
-  - ScheduleRunRepository (run ledger: createRun, markRunStarted, markRunCompleted)
-  - SandboxRunnerPort (runOnce; one-shot container execution with optional LLM proxy)
-  - SandboxRunSpec, SandboxRunResult, SandboxLlmProxyConfig (sandbox execution types)
-  - SandboxProgramContract (stdout JSON envelope for sandbox agent output; matches OpenClaw --json format)
-  - ThreadPersistencePort (loadThread, saveThread, softDelete, listThreads — tenant-scoped, optimistic concurrency)
-  - ThreadConflictError (thrown on saveThread expectedMessageCount mismatch)
-  - ThreadSummary (listing DTO: stateKey, updatedAt, messageCount)
-  - Grant errors (GrantNotFoundError, GrantExpiredError, GrantRevokedError, GrantScopeMismatchError)
-  - Schedule errors (ScheduleNotFoundError, ScheduleAccessDeniedError, InvalidCronExpressionError, InvalidTimezoneError)
+Two entrypoints enforce Next.js App Router environment boundaries (see bug.0147):
+
+### `index.ts` — Client-safe barrel
+
+Importable from any module (client components, server components, hooks, services).
+Does NOT re-export packages with `node:` transitive dependencies.
+
+- AccountService, ServiceAccountService, LlmService, AgentCatalogPort, AgentDescriptor
+- GraphExecutorPort, PreflightCreditCheckFn, GraphRunRequest, GraphRunResult, GraphFinal
+- LlmChargeDetail, ChatDeltaEvent, LlmError, LlmErrorKind, isLlmError
+- PaymentAttemptUserRepository, PaymentAttemptServiceRepository, OnChainVerifier
+- MetricsQueryPort, AiTelemetryPort, LangfusePort, Clock
+- Port-level errors (InsufficientCreditsPortError, BillingAccountNotFoundPortError, etc.)
+- SandboxRunnerPort, SandboxRunSpec, SandboxRunResult, SandboxProgramContract
+- ThreadPersistencePort, ThreadConflictError, ThreadSummary
+- Types (ChargeReceiptParams, LlmCaller, BillingAccount, CreditLedgerEntry, etc.)
+
+### `server.ts` — Server-only barrel
+
+Re-exports from `@cogni/scheduler-core` (transitively imports `node:util`).
+MUST NOT be imported by client components, hooks, or client-reachable barrels.
+Biome `noRestrictedImports` enforces this in `biome/app.json`.
+
+- ScheduleControlPort, ScheduleUserPort, ScheduleWorkerPort
+- ExecutionGrantUserPort, ExecutionGrantWorkerPort, ExecutionRequestPort
+- ScheduleRunRepository
+- Grant errors (GrantNotFoundError, GrantExpiredError, GrantRevokedError, GrantScopeMismatchError)
+- Schedule errors (ScheduleNotFoundError, ScheduleAccessDeniedError, InvalidCronExpressionError, InvalidTimezoneError)
+
 - **Env/Config:** none
-- **Files considered API:** all \*.port.ts files
+- **Files considered API:** all \*.port.ts files, `index.ts`, `server.ts`
 
 Note: src/ports/** is separate from src/contracts/**.
 Ports = internal dependencies; contracts = edge IO (HTTP/MCP).

@@ -12,6 +12,8 @@
  * @public
  */
 
-export { deriveAccountIdFromApiKey } from "./accountId";
+// NOTE: accountId.ts uses node:crypto and MUST NOT be re-exported here.
+// Client components import from this barrel — server-only symbols contaminate the client bundle.
+// Import accountId directly: import { deriveAccountIdFromApiKey } from "@/shared/util/accountId"
 export { cn } from "./cn";
 export { isValidUuid } from "./uuid";

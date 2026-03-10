@@ -80,48 +80,48 @@ describe("buildCanonicalMessage", () => {
 });
 
 describe("computeApproverSetHash", () => {
-  it("returns a hex SHA-256 hash", () => {
-    const hash = computeApproverSetHash([
+  it("returns a hex SHA-256 hash", async () => {
+    const hash = await computeApproverSetHash([
       "0x1234567890abcdef1234567890abcdef12345678",
     ]);
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("is case-insensitive (lowercase normalizes)", () => {
-    const upper = computeApproverSetHash([
+  it("is case-insensitive (lowercase normalizes)", async () => {
+    const upper = await computeApproverSetHash([
       "0xABCDEF1234567890ABCDEF1234567890ABCDEF12",
     ]);
-    const lower = computeApproverSetHash([
+    const lower = await computeApproverSetHash([
       "0xabcdef1234567890abcdef1234567890abcdef12",
     ]);
     expect(upper).toBe(lower);
   });
 
-  it("is order-independent (sorted before hashing)", () => {
-    const a = computeApproverSetHash(["0xaaa", "0xbbb", "0xccc"]);
-    const b = computeApproverSetHash(["0xccc", "0xaaa", "0xbbb"]);
+  it("is order-independent (sorted before hashing)", async () => {
+    const a = await computeApproverSetHash(["0xaaa", "0xbbb", "0xccc"]);
+    const b = await computeApproverSetHash(["0xccc", "0xaaa", "0xbbb"]);
     expect(a).toBe(b);
   });
 
-  it("produces expected hash for known input", () => {
-    const hash = computeApproverSetHash(["0xaaa", "0xbbb"]);
+  it("produces expected hash for known input", async () => {
+    const hash = await computeApproverSetHash(["0xaaa", "0xbbb"]);
     const expected = createHash("sha256").update("0xaaa,0xbbb").digest("hex");
     expect(hash).toBe(expected);
   });
 
-  it("is deterministic", () => {
+  it("is deterministic", async () => {
     const addrs = [
       "0x1234567890abcdef1234567890abcdef12345678",
       "0xfedcba0987654321fedcba0987654321fedcba09",
     ];
-    const a = computeApproverSetHash(addrs);
-    const b = computeApproverSetHash(addrs);
+    const a = await computeApproverSetHash(addrs);
+    const b = await computeApproverSetHash(addrs);
     expect(a).toBe(b);
   });
 
-  it("different sets produce different hashes", () => {
-    const a = computeApproverSetHash(["0xaaa"]);
-    const b = computeApproverSetHash(["0xbbb"]);
+  it("different sets produce different hashes", async () => {
+    const a = await computeApproverSetHash(["0xaaa"]);
+    const b = await computeApproverSetHash(["0xbbb"]);
     expect(a).not.toBe(b);
   });
 });

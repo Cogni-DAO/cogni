@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/activities/ledger`
- * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, auto-close, and finalization.
+ * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, epoch transition, and finalization.
  * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-712 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
  * Invariants:
  *   - NO_DOMAIN_LOGIC_HERE: this file must never contain selection policies, allocation formulas, enrichment logic, or source-specific branching (e.g. `if eventType === "pr_merged"`). It loads data, dispatches to contracts/plugins, and writes results.
@@ -16,8 +16,8 @@
  *   - Per SELECTION_POLICY_DELEGATED: materializeSelection resolves selection policy from the pipeline profile and dispatches via dispatchSelectionPolicy — zero hardcoded inclusion logic
  *   - Per IDENTITY_BEST_EFFORT: Unresolved receipts get userId=null in selection rows, never dropped
  *   - Per USER_PROJECTIONS_RECOMPUTABLE: upsertUserProjections persists recomputable user projections only
- *   - Per CONFIG_LOCKED_AT_REVIEW: autoCloseIngestion pins allocationAlgoRef + weightConfigHash
- *   - Per EVALUATION_FINAL_ATOMIC: autoCloseIngestion passes evaluations to closeIngestionWithEvaluations for atomic write
+ *   - Per CONFIG_LOCKED_AT_REVIEW: transitionEpochForWindow pins allocationAlgoRef + weightConfigHash when closing stale epoch
+ *   - Per EVALUATION_FINAL_ATOMIC: transitionEpochForWindow passes evaluations to store.transitionEpochForWindow for atomic close + create
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
  *   - Per FINALIZE_CLAIMANT_AWARE: finalizeEpoch loads locked claimant rows from epoch_receipt_claimants, dispatches the pinned allocator, explodes to claimant allocations, and stores claimant metadata in attribution statement lines
  * Side-effects: IO (database, GitHub API, viem EIP-712 verification)
@@ -25,7 +25,10 @@
  * @internal
  */
 
-import type { UnselectedReceipt } from "@cogni/attribution-ledger";
+import type {
+  CloseIngestionWithEvaluationsParams,
+  UnselectedReceipt,
+} from "@cogni/attribution-ledger";
 import {
   applyReceiptWeightOverrides,
   buildEIP712TypedData,
@@ -205,34 +208,66 @@ export interface ResolveStreamsOutput {
 }
 
 /**
- * Input for autoCloseIngestion activity.
+ * Input for findStaleOpenEpoch activity.
+ * Detects if an open epoch exists for a DIFFERENT window than the requested one.
  */
-export interface AutoCloseIngestionInput {
-  readonly epochId: string; // bigint serialized
-  readonly periodEnd: string; // ISO date
-  readonly gracePeriodMs: number;
-  readonly weightConfig: Record<string, number>;
-  readonly attributionPipeline: string;
-  readonly approvers: string[];
-  readonly evaluations: ReadonlyArray<{
-    readonly nodeId: string;
-    readonly epochId: string; // bigint as decimal string for Temporal wire format
-    readonly evaluationRef: string;
-    readonly status: "draft" | "locked";
-    readonly algoRef: string;
-    readonly inputsHash: string;
-    readonly payloadHash: string;
-    readonly payloadJson: Record<string, unknown>;
-  }>;
-  readonly artifactsHash: string;
+export interface FindStaleOpenEpochInput {
+  readonly periodStart: string; // ISO date — current window start
+  readonly periodEnd: string; // ISO date — current window end
 }
 
 /**
- * Output from autoCloseIngestion activity.
+ * Output from findStaleOpenEpoch activity.
+ * Returns stale epoch info if found, null otherwise.
  */
-export interface AutoCloseIngestionOutput {
-  readonly closed: boolean;
-  readonly reason: string;
+export interface FindStaleOpenEpochOutput {
+  readonly staleEpoch: {
+    readonly epochId: string; // bigint serialized
+    readonly weightConfig: Record<string, number>;
+    readonly periodStart: string; // ISO date
+    readonly periodEnd: string; // ISO date
+  } | null;
+}
+
+/**
+ * Input for transitionEpochForWindow activity.
+ * Atomically closes stale open epoch + creates epoch for a new window.
+ * Only called when findStaleOpenEpoch detected a stale epoch.
+ * Hash computation happens inside the activity (not safe in Temporal workflow code).
+ */
+export interface TransitionEpochForWindowInput {
+  readonly periodStart: string; // ISO date
+  readonly periodEnd: string; // ISO date
+  readonly weightConfig: Record<string, number>;
+  /** Close payload for the stale epoch — always required. */
+  readonly closeParams: {
+    readonly staleEpochId: string; // bigint serialized
+    readonly staleWeightConfig: Record<string, number>; // pinned config from stale epoch
+    readonly approvers: string[];
+    readonly attributionPipeline: string; // needed to resolve allocatorRef
+    readonly evaluations: ReadonlyArray<{
+      readonly nodeId: string;
+      readonly epochId: string; // bigint as decimal string for Temporal wire format
+      readonly evaluationRef: string;
+      readonly status: "draft" | "locked";
+      readonly algoRef: string;
+      readonly inputsHash: string;
+      readonly payloadHash: string;
+      readonly payloadJson: Record<string, unknown>;
+    }>;
+    readonly artifactsHash: string;
+  };
+}
+
+/**
+ * Output from transitionEpochForWindow activity.
+ */
+export interface TransitionEpochForWindowOutput {
+  readonly epochId: string; // bigint serialized
+  readonly status: string;
+  readonly isNew: boolean;
+  readonly weightConfig: Record<string, number>;
+  readonly closedStaleEpochId: string; // always set — this method only called for stale transitions
 }
 
 /**
@@ -569,12 +604,8 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       return { totalReceipts: 0, newSelections: 0, resolved: 0, unresolved: 0 };
     }
 
-    // 4. Load all receipts for cross-referencing, then dispatch selection policy
-    const allReceipts = await attributionStore.getReceiptsForWindow(
-      nodeId,
-      epoch.periodStart,
-      epoch.periodEnd
-    );
+    // 4. Load all receipts for cross-referencing (full history for cross-epoch promotion matching)
+    const allReceipts = await attributionStore.getAllReceipts(nodeId);
     const receiptsToSelect = unselected.map((u) => u.receipt);
     const decisions = dispatchSelectionPolicy(
       registries.selectionPolicies,
@@ -898,79 +929,128 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
   }
 
   /**
-   * Auto-close ingestion if epoch period has passed + grace period.
-   * Locks config at review: pins allocationAlgoRef, weightConfigHash, approverSetHash.
+   * Detect a stale open epoch that would block creation of a new epoch for the given window.
+   * Returns stale epoch info (serialized for Temporal wire) or null if no stale epoch exists.
    */
-  async function autoCloseIngestion(
-    input: AutoCloseIngestionInput
-  ): Promise<AutoCloseIngestionOutput> {
-    const epochId = BigInt(input.epochId);
-    const periodEnd = new Date(input.periodEnd);
-    const now = new Date();
-
-    // Check if grace period has elapsed
-    const graceDeadline = new Date(periodEnd.getTime() + input.gracePeriodMs);
-    if (now < graceDeadline) {
-      logger.info(
-        {
-          epochId: input.epochId,
-          periodEnd: input.periodEnd,
-          graceDeadline: graceDeadline.toISOString(),
-        },
-        "Grace period not elapsed — skipping auto-close"
-      );
-      return { closed: false, reason: "grace_period_not_elapsed" };
+  async function findStaleOpenEpoch(
+    input: FindStaleOpenEpochInput
+  ): Promise<FindStaleOpenEpochOutput> {
+    const openEpoch = await attributionStore.getOpenEpoch(nodeId, scopeId);
+    if (!openEpoch) {
+      return { staleEpoch: null };
     }
 
-    // Validate and compute config hashes
-    validateWeightConfig(input.weightConfig);
-    const weightConfigHash = await computeWeightConfigHash(input.weightConfig);
-    const profile = resolveProfile(
-      registries.profiles,
-      input.attributionPipeline
-    );
-    const allocationAlgoRef = profile.allocatorRef;
-    const approverSetHash = computeApproverSetHash(input.approvers);
+    // Same window → not stale (rerun within current epoch period)
+    if (
+      openEpoch.periodStart.toISOString() ===
+        new Date(input.periodStart).toISOString() &&
+      openEpoch.periodEnd.toISOString() ===
+        new Date(input.periodEnd).toISOString()
+    ) {
+      return { staleEpoch: null };
+    }
 
     logger.info(
       {
-        epochId: input.epochId,
+        staleEpochId: openEpoch.id.toString(),
+        staleWindow: `${openEpoch.periodStart.toISOString()}..${openEpoch.periodEnd.toISOString()}`,
+        newWindow: `${input.periodStart}..${input.periodEnd}`,
+      },
+      "Found stale open epoch blocking new window"
+    );
+
+    return {
+      staleEpoch: {
+        epochId: openEpoch.id.toString(),
+        weightConfig: openEpoch.weightConfig,
+        periodStart: openEpoch.periodStart.toISOString(),
+        periodEnd: openEpoch.periodEnd.toISOString(),
+      },
+    };
+  }
+
+  /**
+   * Atomic epoch transition: close stale open epoch (if any) + get-or-create epoch for the given window.
+   * Single DB transaction — no race window between close and create.
+   * Computes config hashes internally (crypto not safe in Temporal workflow code).
+   * Locks claimant rows for stale epoch before transition.
+   */
+  async function transitionEpochForWindow(
+    input: TransitionEpochForWindowInput
+  ): Promise<TransitionEpochForWindowOutput> {
+    const { closeParams: inputClose } = input;
+
+    // Lock claimants for stale epoch before the atomic transition
+    const staleEpochId = BigInt(inputClose.staleEpochId);
+    const lockedCount =
+      await attributionStore.lockClaimantsForEpoch(staleEpochId);
+    logger.info(
+      {
+        staleEpochId: inputClose.staleEpochId,
+        lockedClaimants: lockedCount,
+      },
+      "Claimant rows locked for stale epoch"
+    );
+
+    // Compute hashes from raw values (crypto happens here, not in workflow)
+    validateWeightConfig(inputClose.staleWeightConfig);
+    const weightConfigHash = await computeWeightConfigHash(
+      inputClose.staleWeightConfig
+    );
+    const approverSetHash = await computeApproverSetHash(inputClose.approvers);
+    const profile = resolveProfile(
+      registries.profiles,
+      inputClose.attributionPipeline
+    );
+    const allocationAlgoRef = profile.allocatorRef;
+
+    logger.info(
+      {
+        staleEpochId: inputClose.staleEpochId,
         allocationAlgoRef,
         weightConfigHash: `${weightConfigHash.slice(0, 12)}...`,
-        evaluationCount: input.evaluations.length,
+        evaluationCount: inputClose.evaluations.length,
       },
-      "Auto-closing ingestion with evaluations"
+      "Closing stale epoch during transition"
     );
 
-    // Reconstruct bigint epochId from wire string for domain layer
-    const evaluations = input.evaluations.map((e) => ({
-      ...e,
-      epochId: BigInt(e.epochId),
-    }));
-
-    // Lock claimant rows alongside evaluations
-    const lockedCount = await attributionStore.lockClaimantsForEpoch(epochId);
-    logger.info(
-      { epochId: input.epochId, lockedClaimants: lockedCount },
-      "Claimant rows locked"
-    );
-
-    const epoch = await attributionStore.closeIngestionWithEvaluations({
-      epochId,
-      approvers: input.approvers,
+    const closeParams: CloseIngestionWithEvaluationsParams = {
+      epochId: staleEpochId,
+      approvers: inputClose.approvers,
       approverSetHash,
       allocationAlgoRef,
       weightConfigHash,
-      evaluations,
-      artifactsHash: input.artifactsHash,
+      evaluations: inputClose.evaluations.map((e) => ({
+        ...e,
+        epochId: BigInt(e.epochId),
+      })),
+      artifactsHash: inputClose.artifactsHash,
+    };
+
+    const result = await attributionStore.transitionEpochForWindow({
+      nodeId,
+      scopeId,
+      periodStart: new Date(input.periodStart),
+      periodEnd: new Date(input.periodEnd),
+      weightConfig: input.weightConfig,
+      closeParams,
     });
 
     logger.info(
-      { epochId: input.epochId, status: epoch.status },
-      "Ingestion auto-closed with evaluations"
+      {
+        closedStaleEpochId: result.closedStaleEpochId.toString(),
+        newEpochId: result.epoch.id.toString(),
+      },
+      "Epoch transition complete — stale epoch closed, new epoch created"
     );
 
-    return { closed: true, reason: "auto_closed" };
+    return {
+      epochId: result.epoch.id.toString(),
+      status: result.epoch.status,
+      isNew: result.isNew,
+      weightConfig: result.epoch.weightConfig,
+      closedStaleEpochId: result.closedStaleEpochId.toString(),
+    };
   }
 
   /**
@@ -1073,7 +1153,7 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       );
     }
     // Self-consistent integrity check: recompute hash from pinned list
-    const pinnedApproverSetHash = computeApproverSetHash(epoch.approvers);
+    const pinnedApproverSetHash = await computeApproverSetHash(epoch.approvers);
     if (epoch.approverSetHash !== pinnedApproverSetHash) {
       throw new Error(
         `finalizeEpoch: approver set hash integrity failure — stored hash ${epoch.approverSetHash} does not match recomputed ${pinnedApproverSetHash}`
@@ -1270,7 +1350,8 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     materializeSelection,
     computeAllocations,
     ensurePoolComponents,
-    autoCloseIngestion,
+    findStaleOpenEpoch,
+    transitionEpochForWindow,
     finalizeEpoch,
     resolveStreams,
   };

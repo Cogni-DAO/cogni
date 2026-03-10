@@ -74,9 +74,6 @@ import type {
   AiTelemetryPort,
   Clock,
   DataSourceRegistration,
-  ExecutionGrantUserPort,
-  ExecutionGrantWorkerPort,
-  ExecutionRequestPort,
   GovernanceStatusPort,
   LangfusePort,
   LlmService,
@@ -85,13 +82,18 @@ import type {
   OperatorWalletPort,
   PaymentAttemptServiceRepository,
   PaymentAttemptUserRepository,
-  ScheduleRunRepository,
-  ScheduleUserPort,
   ServiceAccountService,
   ThreadPersistencePort,
   TreasuryReadPort,
   TreasurySettlementPort,
 } from "@/ports";
+import type {
+  ExecutionGrantUserPort,
+  ExecutionGrantWorkerPort,
+  ExecutionRequestPort,
+  ScheduleRunRepository,
+  ScheduleUserPort,
+} from "@/ports/server";
 import {
   getDaoTreasuryAddress,
   getOperatorWalletConfig,

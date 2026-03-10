@@ -52,7 +52,7 @@ export const POST = wrapRouteHandlerWithLogging<{
 
     // APPROVERS_PINNED_AT_REVIEW: pin current approver set + hash on the epoch
     const approvers = getLedgerApprovers();
-    const approverSetHash = computeApproverSetHash(approvers);
+    const approverSetHash = await computeApproverSetHash(approvers);
 
     const store = getContainer().attributionStore;
 

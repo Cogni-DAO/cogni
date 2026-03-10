@@ -14,6 +14,7 @@
 
 "use client";
 
+import type { GraphId } from "@cogni/ai-core";
 import { useEffect, useState } from "react";
 import {
   type GraphOption,
@@ -25,7 +26,6 @@ import {
   setPreferredModelId,
   validatePreferredModel,
 } from "@/features/ai/preferences/model-preference";
-import type { GraphId } from "@/ports";
 
 /**
  * TODO: P1 - Replace hardcoded graphs with API fetch from /api/v1/ai/agents

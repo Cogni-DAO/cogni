@@ -276,7 +276,7 @@ Epoch status models **governance finality**, not payment execution. Distribution
 
 **Transitions:**
 
-- `open → review`: Auto via Temporal at `period_end + grace_period` (configurable, default 24h), **or** admin triggers early via API route. Same state, different trigger.
+- `open → review`: Automatically at the start of the next epoch window (close-on-transition), **or** admin triggers early via API route. When a new window begins, `transitionEpochForWindow` closes the previous epoch and creates the new one atomically in a single DB transaction.
 - `review → finalized`: Admin action. Requires 1-of-N EIP-712 signature from scope's `approvers[]` + at least one `base_issuance` pool component.
 - No backward transitions. Corrections use `supersedes_statement_id` on a new epoch statement.
 
@@ -665,31 +665,30 @@ interface LedgerIngestRunV1 {
 
 1. **Compute epoch window** — `computeEpochWindowV1()` (pure, deterministic) derives `periodStart`/`periodEnd` from `TemporalScheduledStartTime` + `epochLengthDays`. Monday-aligned UTC boundaries, anchored to 2026-01-05.
 2. **Derive weight config** — `deriveWeightConfigV0()` maps `activitySources` keys to hardcoded V0 weights (e.g., `github:pr_merged: 1000`).
-3. **Ensure epoch** — `ensureEpochForWindow` activity looks up by `(node_id, scope_id, period_start, period_end)` regardless of status via `getEpochByWindow`. If found, returns as-is with pinned `weightConfig`. If not found, creates with input-derived weights. Weight config drift (input differs from existing) logs a warning; existing epoch's config wins (WEIGHT_PINNING).
-4. **Skip if not open** — If epoch status is `review` or `finalized`, workflow exits immediately.
-5. **Collect per source/sourceRef/stream** — For each `activitySources` entry, for each `sourceRef`, for each `stream`:
+3. **Detect stale epoch** — `findStaleOpenEpoch({ periodStart, periodEnd })` checks if an open epoch exists for a different window than the current one.
+4. **Ensure epoch (close-on-transition)** — Two paths:
+   - If stale epoch found: `buildLockedEvaluations({ epochId })` computes evaluations + `artifactsHash`, then `transitionEpochForWindow` atomically closes the stale epoch (`open→review`) and creates the new epoch in a single DB transaction (locks claimants, inserts locked evaluations, pins config hashes, creates new epoch).
+   - If no stale epoch: `ensureEpochForWindow` — find-or-create for the current window. Looks up by `(node_id, scope_id, period_start, period_end)` regardless of status. If found, returns as-is with pinned `weightConfig`. If not found, creates with input-derived weights. Weight config drift logs a warning; existing epoch's config wins (WEIGHT_PINNING).
+5. **Skip if not open** — If epoch status is `review` or `finalized`, workflow exits immediately.
+6. **Collect per source/sourceRef/stream** — Delegated to `CollectSourcesWorkflow` (child workflow). For each `activitySources` entry, for each `sourceRef`, for each `stream`:
    - Activity: load cursor from `ingestion_cursors`
    - Activity: `adapter.collect({ streams: [stream], cursor, window })` → receipts + `producerVersion`
    - Activity: insert `ingestion_receipts` (idempotent by PK, uses `adapter.version` as `producer_version`)
    - Activity: save cursor to `ingestion_cursors` (monotonic advancement)
-6. **Select, resolve identities, and resolve claimants** — `materializeSelection` activity (SELECTION_AUTO_POPULATE):
+7. **Select, resolve identities, and resolve claimants** — Delegated to `EnrichAndAllocateWorkflow` (child workflow). `materializeSelection` activity (SELECTION_AUTO_POPULATE):
    - Load epoch by ID → get period_start/period_end (guard assertion)
    - Query receipts in epoch window that are unselected (no selection row) or unresolved (selection.user_id IS NULL)
    - For each source: batch resolve `platformUserId` → `userId` via `user_bindings` (provider-scoped)
    - INSERT new selection rows (included=true, userId=resolved or NULL)
    - UPDATE existing unresolved rows: set userId only (never touch included/weight_override_milli/note)
    - **Claimant resolution**: for each selected receipt, insert draft `epoch_receipt_claimants` row via `upsertDraftClaimants()`. Default-author resolver: `claimantKey = user:{userId}` (resolved) or `identity:{source}:{platformUserId}` (unresolved). v0: single claimant per receipt, equal split.
-7. **Enrich (draft)** — `evaluateEpochDraft` activity:
+8. **Enrich (draft)** — `evaluateEpochDraft` activity:
    - Load selected receipts with metadata via `getSelectedReceiptsWithMetadata(epochId)`
    - Run each registered enricher (e.g., echo enricher aggregates receipt counts)
    - Compute `inputsHash` and `payloadHash` per evaluation
    - `upsertDraftEvaluation()` — overwrites previous draft (EVALUATION_UNIQUE_PER_REF_STATUS)
-8. **Compute allocations** — `computeAllocations` activity (unchanged, runs against selected receipts)
-9. **Ensure pool components** — `ensurePoolComponents` activity
-10. **Auto-close (at period end + grace):**
-    - `lockClaimantsForEpoch(epochId)` — copies all draft `epoch_receipt_claimants` rows to locked status (immutable after this point)
-    - `buildLockedEvaluations({ epochId })` — same computation as draft, returns evaluations + `artifactsHash` without writing
-    - `closeIngestionWithEvaluations({ epochId, evaluations, artifactsHash, ... })` — single transaction: insert locked evaluations + set `artifacts_hash` + pin config hashes + transition `open→review` (EVALUATION_FINAL_ATOMIC)
+9. **Compute allocations** — `computeAllocations` activity (unchanged, runs against selected receipts)
+10. **Ensure pool components** — `ensurePoolComponents` activity (inline in parent workflow, conditional on `baseIssuanceCredits`)
 
 Deterministic workflow ID: managed by Temporal Schedule (overlap=SKIP, run IDs per firing).
 

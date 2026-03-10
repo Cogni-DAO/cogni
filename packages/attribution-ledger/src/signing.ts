@@ -14,7 +14,17 @@
  * @public
  */
 
-import { createHash } from "node:crypto";
+/**
+ * Compute SHA-256 hash of a UTF-8 string using Web Crypto API (no node:crypto).
+ * Returns lowercase hex string. Async because crypto.subtle.digest is async.
+ */
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 export interface CanonicalMessageParams {
   readonly nodeId: string;
@@ -112,12 +122,14 @@ export function buildEIP712TypedData(
 
 /**
  * Compute deterministic hash of an approver set for pinning at closeIngestion.
- * Sorted, lowercased, SHA-256.
+ * Sorted, lowercased, SHA-256 via Web Crypto API (no node:crypto dependency).
  */
-export function computeApproverSetHash(approvers: readonly string[]): string {
+export async function computeApproverSetHash(
+  approvers: readonly string[]
+): Promise<string> {
   const canonical = [...approvers]
     .map((a) => a.toLowerCase())
     .sort()
     .join(",");
-  return createHash("sha256").update(canonical).digest("hex");
+  return sha256Hex(canonical);
 }

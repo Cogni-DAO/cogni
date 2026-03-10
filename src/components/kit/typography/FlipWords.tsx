@@ -17,7 +17,7 @@ import { AnimatePresence, motion } from "motion/react";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 
 export const FlipWords = ({
   words,

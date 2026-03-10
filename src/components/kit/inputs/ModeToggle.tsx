@@ -21,7 +21,7 @@ import { useTheme } from "next-themes";
 import type { ComponentProps } from "react";
 import React, { forwardRef, useEffect, useState } from "react";
 
-import { cn } from "@/shared/util";
+import { cn } from "@/shared/util/cn";
 import {
   dropdownContent,
   dropdownMenuCheck,

@@ -88,6 +88,56 @@ describe("composeEpochView", () => {
       )
     ).toBe(false);
   });
+
+  it("excludes receipts with null selection from contributor aggregation", () => {
+    const view = composeEpochView(
+      {
+        id: "13",
+        status: "open",
+        periodStart: "2026-03-09T00:00:00.000Z",
+        periodEnd: "2026-03-16T00:00:00.000Z",
+        weightConfig: {
+          "github:pr_merged": 8000,
+        },
+        poolTotalCredits: null,
+      },
+      [],
+      [
+        {
+          receiptId: "r-included",
+          source: "github",
+          eventType: "pr_merged",
+          platformUserId: "58641509",
+          platformLogin: "derekg1729",
+          artifactUrl: null,
+          eventTime: "2026-03-10T00:00:00.000Z",
+          metadata: null,
+          selection: {
+            userId: null,
+            included: true,
+            weightOverrideMilli: null,
+          },
+        },
+        {
+          receiptId: "r-null-selection",
+          source: "github",
+          eventType: "pr_merged",
+          platformUserId: "99999999",
+          platformLogin: "Cogni-1729",
+          artifactUrl: null,
+          eventTime: "2026-03-11T00:00:00.000Z",
+          metadata: null,
+          selection: null,
+        },
+      ]
+    );
+
+    // Only 1 contributor — the null-selection receipt should be excluded
+    expect(view.contributors).toHaveLength(1);
+    expect(view.contributors[0].displayName).toBe("derekg1729");
+    // Unresolved count should only include the included receipt (no userId)
+    expect(view.unresolvedCount).toBe(1);
+  });
 });
 
 /* ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@ import {
   InvalidTimezoneError,
   ScheduleAccessDeniedError,
   ScheduleNotFoundError,
-} from "@/ports";
+} from "@/ports/server";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";

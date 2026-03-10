@@ -52,6 +52,7 @@ function makeMockStore(
     listEpochs: vi.fn(),
     closeIngestion: vi.fn(),
     closeIngestionWithEvaluations: vi.fn(),
+    transitionEpochForWindow: vi.fn(),
     finalizeEpoch: vi.fn(),
     upsertDraftEvaluation: vi.fn(),
     getEvaluationsForEpoch: vi.fn().mockResolvedValue([]),

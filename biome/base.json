@@ -73,6 +73,10 @@
               {
                 "group": ["**/__arch_probes__/**", "@/__arch_probes__/**"],
                 "message": "Architecture probe imports are forbidden outside of tests - probes are test-only fixtures"
+              },
+              {
+                "group": ["@/shared/util"],
+                "message": "Import from specific modules (e.g. @/shared/util/cn) not the barrel. The barrel re-exports server-only code (node:crypto) that breaks client component bundling."
               }
             ]
           }

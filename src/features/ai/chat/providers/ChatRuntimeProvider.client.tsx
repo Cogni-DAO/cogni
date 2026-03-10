@@ -18,6 +18,7 @@
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
+import type { GraphId } from "@cogni/ai-core";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
@@ -28,9 +29,7 @@ import {
   useRef,
   useState,
 } from "react";
-
 import type { ChatError } from "@/contracts/error.chat.v1.contract";
-import type { GraphId } from "@/ports";
 import * as clientLogger from "@/shared/observability/client";
 import { EVENT_NAMES } from "@/shared/observability/events";
 

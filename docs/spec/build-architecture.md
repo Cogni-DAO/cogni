@@ -3,13 +3,13 @@ id: build-architecture-spec
 type: spec
 title: Build Architecture
 status: active
-spec_state: draft
-trust: draft
-summary: How the monorepo builds locally and in Docker — package build order, declaration generation, and layer caching.
-read_when: Debugging build failures, modifying Dockerfile, or adding workspace packages.
+spec_state: proposed
+trust: reviewed
+summary: How the monorepo builds locally and in Docker — package build order, declaration generation, layer caching, and bundler environment safety.
+read_when: Debugging build failures, modifying Dockerfile, adding workspace packages, or fixing barrel export contamination.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-06
+verified: 2026-03-09
 tags: [deployment]
 ---
 
@@ -40,6 +40,10 @@ Provide a deterministic, cacheable build pipeline where workspace packages build
 4. **SOLUTION_STYLE_ROOT_TSCONFIG**: `tsconfig.json` contains only `references` (no `include`). This prevents the "mixed-mode" anti-pattern where package sources are both directly included AND referenced, causing TS6305 errors in Docker builds.
 
 5. **DATA_DRIVEN_VALIDATION**: `pnpm packages:validate` discovers packages from `tsconfig.json` references and verifies declarations exist. No hardcoded package names — new packages are automatically validated.
+
+6. **WEBPACK_PRODUCTION_TURBOPACK_DEV**: Production builds use `next build --webpack`. Turbopack scans `thread-stream` test fixtures (via RainbowKit → WalletConnect → pino dep chain) and fails on non-JS files. Turbopack remains the default for `next dev`. Re-evaluate when upstream fixes land. See bug.0147.
+
+7. **BARREL_ENVIRONMENT_SAFETY**: Barrel re-exports (`index.ts`) importable by client components must not transitively reach `node:` builtins. Server-only symbols live in dedicated `server.ts` entrypoints (e.g. `src/ports/server.ts`). Biome `noRestrictedImports` in `biome/app.json` enforces this boundary. See bug.0147.
 
 ## Design
 
@@ -144,21 +148,24 @@ Five tsconfigs exist for different scenarios:
 
 ### Known Issues
 
-| Issue                         | Impact                                                 | Workaround                                                                 |
-| ----------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------- |
-| Build not graph-scoped        | Builds all packages even if app doesn't depend on them | Acceptable for 2 packages; revisit with turbo prune if package count grows |
-| AUTH_SECRET required at build | Next.js page collection triggers env validation        | Dockerfile sets placeholder; runtime must provide real value               |
+| Issue                                  | Impact                                                 | Workaround                                                                 |
+| -------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Build not graph-scoped                 | Builds all packages even if app doesn't depend on them | Acceptable for 2 packages; revisit with turbo prune if package count grows |
+| AUTH_SECRET required at build          | Next.js page collection triggers env validation        | Dockerfile sets placeholder; runtime must provide real value               |
+| Turbopack fails on thread-stream tests | RainbowKit → pino → thread-stream test fixtures        | Use `--webpack` for production builds (bug.0147)                           |
 
 ### File Pointers
 
-| File                        | Purpose                                       |
-| --------------------------- | --------------------------------------------- |
-| `Dockerfile`                | Multi-stage build with manifest-first caching |
-| `pnpm-workspace.yaml`       | Workspace member declarations                 |
-| `tsconfig.json`             | Solution-style root (references only)         |
-| `tsconfig.base.json`        | Shared compiler options + path aliases        |
-| `tsconfig.app.json`         | Fast app typecheck scope                      |
-| `packages/*/tsup.config.ts` | Package JS bundling (dts: false)              |
+| File                        | Purpose                                          |
+| --------------------------- | ------------------------------------------------ |
+| `Dockerfile`                | Multi-stage build with manifest-first caching    |
+| `pnpm-workspace.yaml`       | Workspace member declarations                    |
+| `tsconfig.json`             | Solution-style root (references only)            |
+| `tsconfig.base.json`        | Shared compiler options + path aliases           |
+| `tsconfig.app.json`         | Fast app typecheck scope                         |
+| `packages/*/tsup.config.ts` | Package JS bundling (dts: false)                 |
+| `biome/app.json`            | Client component lint rules (barrel import bans) |
+| `src/ports/server.ts`       | Server-only port re-exports (node: deps)         |
 
 ## Acceptance Checks
 

@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { deriveAccountIdFromApiKey } from "@/shared/util";
+import { deriveAccountIdFromApiKey } from "@/shared/util/accountId";
 
 describe("deriveAccountIdFromApiKey", () => {
   describe("Deterministic Output", () => {
