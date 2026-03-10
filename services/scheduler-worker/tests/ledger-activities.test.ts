@@ -66,6 +66,7 @@ function makeMockStore(
     getSelectedReceiptsWithMetadata: vi.fn().mockResolvedValue([]),
     insertIngestionReceipts: vi.fn(),
     getReceiptsForWindow: vi.fn(),
+    getAllReceipts: vi.fn().mockResolvedValue([]),
     upsertSelection: vi.fn(),
     getSelectionForEpoch: vi.fn(),
     getUnresolvedSelection: vi.fn(),
@@ -757,7 +758,7 @@ describe("materializeSelection", () => {
   function makeDeps(storeOverrides: Partial<AttributionStore> = {}) {
     const store = makeMockStore({
       getEpoch: vi.fn().mockResolvedValue(epoch),
-      getReceiptsForWindow: vi.fn().mockResolvedValue([defaultReleasePr]),
+      getAllReceipts: vi.fn().mockResolvedValue([defaultReleasePr]),
       ...storeOverrides,
     });
     const { materializeSelection } = createAttributionActivities({
@@ -981,7 +982,7 @@ describe("materializeSelection", () => {
     const { store, materializeSelection } = makeDeps({
       getUnselectedReceipts: vi.fn().mockResolvedValue(unselected),
       resolveIdentities: vi.fn().mockResolvedValue(identityMap),
-      getReceiptsForWindow: vi.fn().mockResolvedValue([releasePr]),
+      getAllReceipts: vi.fn().mockResolvedValue([releasePr]),
     });
 
     const result = await materializeSelection({

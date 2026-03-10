@@ -604,12 +604,8 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
       return { totalReceipts: 0, newSelections: 0, resolved: 0, unresolved: 0 };
     }
 
-    // 4. Load all receipts for cross-referencing, then dispatch selection policy
-    const allReceipts = await attributionStore.getReceiptsForWindow(
-      nodeId,
-      epoch.periodStart,
-      epoch.periodEnd
-    );
+    // 4. Load all receipts for cross-referencing (full history for cross-epoch promotion matching)
+    const allReceipts = await attributionStore.getAllReceipts(nodeId);
     const receiptsToSelect = unselected.map((u) => u.receipt);
     const decisions = dispatchSelectionPolicy(
       registries.selectionPolicies,
