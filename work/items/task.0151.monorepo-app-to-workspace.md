@@ -12,7 +12,7 @@ spec_refs: architecture-spec, build-architecture, services-architecture
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch:
+branch: feat/gitops-foundation
 pr:
 reviewer:
 revision: 0
