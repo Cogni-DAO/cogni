@@ -35,7 +35,7 @@ const describeIfReady = canRun ? describe : describe.skip;
 // ---------------------------------------------------------------------------
 
 const POLL_INTERVAL_MS = 3_000;
-const CHECK_RUN_NAME = "Cogni PR Review";
+const CHECK_RUN_NAME = "Cogni Git PR Review";
 
 function exec(cmd: string, opts?: { cwd?: string }): string {
   return execSync(cmd, {
@@ -181,15 +181,16 @@ describeIfReady("PR Review E2E (external)", () => {
 
     while (Date.now() - commentStart < COMMENT_TIMEOUT_MS) {
       const comments = getPrComments(TEST_REPO, prNumber);
-      reviewComment = comments.find((c) => c.body.includes("Cogni PR Review"));
+      reviewComment = comments.find((c) => c.body.includes("Cogni Review"));
       if (reviewComment) break;
       await sleep(POLL_INTERVAL_MS);
     }
 
     expect(reviewComment).toBeDefined();
-    expect(reviewComment?.body).toContain("Cogni PR Review");
+    expect(reviewComment?.body).toContain("Cogni Review");
+    // Should contain gate counts line
+    expect(reviewComment?.body).toMatch(/passed.*failed.*neutral/);
     // Should contain at least one gate result with metric scores
     expect(reviewComment?.body).toMatch(/review.limits|ai-rule|review-limits/i);
-    expect(reviewComment?.body).toMatch(/\| Metric \| Score \| Observation \|/);
   }, 210_000);
 });

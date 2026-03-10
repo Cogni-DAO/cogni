@@ -13,7 +13,7 @@
 
 import type { Octokit } from "@octokit/core";
 
-const CHECK_RUN_NAME = "Cogni PR Review";
+const CHECK_RUN_NAME = "Cogni Git PR Review";
 
 /**
  * Create a Check Run in "in_progress" state.

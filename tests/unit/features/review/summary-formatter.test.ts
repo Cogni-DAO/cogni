@@ -4,7 +4,7 @@
 /**
  * Module: `@tests/unit/features/review/summary-formatter`
  * Purpose: Unit tests for Check Run summary and PR comment markdown formatting.
- * Scope: Tests overall structure, per-gate sections, metrics tables, DAO vote link, and attribution footer. Does NOT test GitHub API.
+ * Scope: Tests overall structure, per-gate sections, metrics tables, counts line, gate ordering, DAO vote link, and attribution footer. Does NOT test GitHub API.
  * Invariants: Pure function — no side-effects, no mocking needed.
  * Side-effects: none
  * Links: task.0149
@@ -57,14 +57,51 @@ const failResult: ReviewResult = {
         { metric: "coherence", score: 0.4, observation: "Scattered changes" },
       ],
     },
+    {
+      gateId: "review-limits",
+      gateType: "review-limits",
+      status: "pass",
+      summary: "PR within size limits",
+    },
+  ],
+};
+
+const mixedResult: ReviewResult = {
+  conclusion: "fail",
+  gateResults: [
+    {
+      gateId: "passing-gate",
+      gateType: "review-limits",
+      status: "pass",
+      summary: "OK",
+    },
+    {
+      gateId: "failing-gate",
+      gateType: "ai-rule",
+      status: "fail",
+      summary: "Failed",
+      metrics: [{ metric: "quality", score: 0.3, observation: "Poor quality" }],
+    },
+    {
+      gateId: "neutral-gate",
+      gateType: "timeout",
+      status: "neutral",
+      summary: "Timed out",
+    },
   ],
 };
 
 describe("formatCheckRunSummary", () => {
-  it("includes overall conclusion", () => {
+  it("includes verdict line", () => {
     const md = formatCheckRunSummary(passResult);
     expect(md).toContain("PASS");
-    expect(md).toContain("Cogni PR Review");
+  });
+
+  it("includes counts line", () => {
+    const md = formatCheckRunSummary(passResult);
+    expect(md).toMatch(/2 passed/);
+    expect(md).toMatch(/0 failed/);
+    expect(md).toMatch(/0 neutral/);
   });
 
   it("includes per-gate sections", () => {
@@ -78,21 +115,54 @@ describe("formatCheckRunSummary", () => {
     expect(md).toContain("| coherence |");
     expect(md).toContain("92%");
   });
+
+  it("sorts gates: fail first, then pass, then neutral", () => {
+    const md = formatCheckRunSummary(mixedResult);
+    const failPos = md.indexOf("failing-gate");
+    const passPos = md.indexOf("passing-gate");
+    const neutralPos = md.indexOf("neutral-gate");
+    expect(failPos).toBeLessThan(passPos);
+    expect(passPos).toBeLessThan(neutralPos);
+  });
 });
 
 describe("formatPrComment", () => {
+  it("includes header with verdict", () => {
+    const md = formatPrComment(failResult);
+    expect(md).toContain("Cogni Review");
+    expect(md).toContain("FAIL");
+  });
+
+  it("includes gate counts", () => {
+    const md = formatPrComment(failResult);
+    expect(md).toContain("1 passed");
+    expect(md).toContain("1 failed");
+  });
+
+  it("shows blockers for failed gates", () => {
+    const md = formatPrComment(failResult);
+    expect(md).toContain("Blockers");
+    expect(md).toContain("code-quality");
+    expect(md).toContain("coherence");
+    expect(md).toContain("0.40");
+  });
+
   it("includes DAO vote link on failure when daoBaseUrl provided", () => {
-    const md = formatPrComment(failResult, "https://dao.example.com");
+    const md = formatPrComment(failResult, {
+      daoBaseUrl: "https://dao.example.com",
+    });
     expect(md).toContain("Propose Vote to Merge");
     expect(md).toContain("https://dao.example.com");
   });
 
   it("omits DAO vote link on pass", () => {
-    const md = formatPrComment(passResult, "https://dao.example.com");
+    const md = formatPrComment(passResult, {
+      daoBaseUrl: "https://dao.example.com",
+    });
     expect(md).not.toContain("Propose Vote to Merge");
   });
 
-  it("omits DAO vote link when no base URL", () => {
+  it("omits DAO vote link when no opts", () => {
     const md = formatPrComment(failResult);
     expect(md).not.toContain("Propose Vote to Merge");
   });
@@ -101,5 +171,15 @@ describe("formatPrComment", () => {
     const md = formatPrComment(passResult);
     expect(md).toContain("Cogni");
     expect(md).toContain("automated review");
+  });
+
+  it("includes staleness marker when headSha provided", () => {
+    const md = formatPrComment(passResult, { headSha: "abc1234567890" });
+    expect(md).toContain("<!-- cogni:summary v1 sha=abc1234");
+  });
+
+  it("omits staleness marker when no headSha", () => {
+    const md = formatPrComment(passResult);
+    expect(md).not.toContain("<!-- cogni:summary");
   });
 });

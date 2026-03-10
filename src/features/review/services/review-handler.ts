@@ -192,7 +192,10 @@ export async function handlePrReview(
         ? (repoSpec.cogni_dao.base_url as string)
         : undefined;
 
-    const commentBody = formatPrComment(result, daoBaseUrl);
+    const commentBody = formatPrComment(result, {
+      ...(daoBaseUrl !== undefined && { daoBaseUrl }),
+      headSha,
+    });
     const posted = await deps.postPrComment(
       owner,
       repo,
