@@ -14,7 +14,7 @@ credit:
 project:
 project_id:
 branch: fix/bug-0151-pool-component-idempotent
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/546
 reviewer:
 revision: 0
 blocked_by:
