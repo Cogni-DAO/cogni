@@ -63,7 +63,7 @@ The port's `SubjectRef` must align with actor kinds so that when the `actors` ta
 | Deliverable                                                                       | Status      | Est | Work Item                |
 | --------------------------------------------------------------------------------- | ----------- | --- | ------------------------ |
 | `packages/work-items/` — port interfaces, domain types, status transition table   | Not Started | 2   | task.0149                |
-| `packages/work-items-md/` — MarkdownWorkItemAdapter + contract tests              | Not Started | 3   | task.0151                |
+| `packages/work-items/` — MarkdownWorkItemAdapter + contract tests                 | Not Started | 3   | task.0151                |
 | Migrate `/triage` + `/implement` skills to use port (proof-of-concept)            | Not Started | 2   | task.0152                |
 | Migrate remaining skills (`/closeout`, `/review-implementation`, `/bug`, `/idea`) | Not Started | 2   | (create after task.0152) |
 
@@ -302,6 +302,7 @@ interface WorkItemCommandPort {
 
 ### Markdown adapter v0
 
+- **Location**: `packages/work-items/src/adapters/markdown/` (co-located with port, per `packages/db-client/` pattern)
 - **Source of truth**: `work/items/*.md` and `work/projects/*.md`
 - **Revision**: SHA-256 of raw frontmatter YAML (not file content — body is documentation, not state)
 - **Concurrency**: optimistic — `expectedRevision` checked before write; reject on mismatch
@@ -312,8 +313,8 @@ interface WorkItemCommandPort {
 
 ## Constraints
 
-- Port interfaces live in a pure package (`packages/work-items/`) — no I/O, no framework deps
-- Markdown adapter lives in `packages/db-client/` or a new `packages/work-items-md/` adapter package
+- Port interfaces and domain types live in `packages/work-items/src/` — pure, no I/O
+- Markdown adapter lives in `packages/work-items/src/adapters/markdown/` — same package, following `packages/db-client/src/adapters/` pattern
 - `SubjectRef.userId` must be compatible with `@cogni/ids` `UserId` branded type
 - Status transitions must respect `docs/spec/development-lifecycle.md` state machine
 - No external PM tool dependency in P0-P2 (OpenProject/Plane are P3 adapters)
@@ -355,5 +356,7 @@ interface WorkItemCommandPort {
 **Canonical relation direction:** Store only `blocks`, `parent_of`, `relates_to`, `duplicates`. Derive `blocked_by`, `child_of` at query time by reversing `fromId`/`toId`. This avoids double-storage, consistency drift, and halves the relation write surface. The existing `blocked_by` CSV in frontmatter maps to a `blocks` relation stored on the blocking item.
 
 **SubjectRef vs AttributionClaimant:** `SubjectRef` (assignment) and `AttributionClaimant` (credit) are separate concerns with similar shapes. `SubjectRef` models who is working on an item; `AttributionClaimant` models who earned credit. They may converge when the `actors` table unifies identity, but forcing convergence now would couple work management to the attribution pipeline. Keep separate, document the parallel.
+
+**Port + adapter co-location:** Port interfaces and the markdown adapter live in the same `packages/work-items/` package, following the `packages/db-client/src/adapters/` pattern. Port types in `src/`, adapter in `src/adapters/markdown/`. Future adapters (DB, OpenProject) will live in separate packages that depend on `@cogni/work-items` for the port interfaces — same pattern as `packages/db-client/` being the single adapter package today.
 
 **Cursor pagination:** The `WorkQuery.cursor` field exists in the interface for future adapters (DB, OpenProject). The markdown adapter ignores it and returns all matching items — documenting this explicitly. No cursor logic is built for v0.

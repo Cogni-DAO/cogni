@@ -1,12 +1,12 @@
 ---
 id: task.0151
 type: task
-title: "packages/work-items-md — MarkdownWorkItemAdapter + contract tests"
+title: "packages/work-items — MarkdownWorkItemAdapter + contract tests"
 status: needs_design
 priority: 0
 rank: 6
 estimate: 3
-summary: "Implement MarkdownWorkItemAdapter in packages/work-items-md, backed by work/items/*.md files. Includes YAML frontmatter parsing, atomic read-modify-write with optimistic concurrency (SHA-256 revision), centralized ID allocation, status transition enforcement, and an adapter-agnostic contract test suite."
+summary: "Implement MarkdownWorkItemAdapter in packages/work-items/src/adapters/markdown/, co-located with the port interfaces. Includes YAML frontmatter parsing, atomic read-modify-write with optimistic concurrency (SHA-256 revision), centralized ID allocation, status transition enforcement, and an adapter-agnostic contract test suite."
 outcome: "MarkdownWorkItemAdapter passes all contract tests. get/list/create/patch/transitionStatus work against real markdown files. Optimistic concurrency rejects stale writes. ID allocation prevents collisions. Validator updated to accept relations and external_refs frontmatter."
 spec_refs: [identity-model-spec, development-lifecycle]
 assignees: []
@@ -24,7 +24,7 @@ labels: [work-system, agents, infrastructure, adapters]
 external_refs:
 ---
 
-# packages/work-items-md — MarkdownWorkItemAdapter + contract tests
+# packages/work-items — MarkdownWorkItemAdapter + contract tests
 
 ## Requirements
 
@@ -42,14 +42,14 @@ external_refs:
 
 ## Allowed Changes
 
-- `packages/work-items-md/` (NEW) — adapter implementation
+- `packages/work-items/src/adapters/markdown/` (NEW) — adapter implementation
 - `packages/work-items/tests/` — contract test suite (adapter-agnostic)
 - `scripts/validate-docs-metadata.mjs` — accept `relations` and `external_refs` fields
 - Root config files — tsconfig reference, workspace dep, biome overrides
 
 ## Plan
 
-- [ ] Create `packages/work-items-md/` with standard package structure
+- [ ] Add `src/adapters/markdown/` directory inside `packages/work-items/`
 - [ ] Implement read path: `get()`, `list()`, `listRelations()`
 - [ ] Implement write path: `create()` with ID allocation
 - [ ] Implement `patch()` with optimistic concurrency
@@ -66,7 +66,7 @@ external_refs:
 **Command:**
 
 ```bash
-pnpm test packages/work-items-md/tests/
+pnpm test packages/work-items/tests/
 pnpm check
 ```
 
