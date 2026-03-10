@@ -2,7 +2,7 @@
 id: task.0149
 type: task
 title: "packages/work-items — port interfaces, domain types, and status transition table"
-status: needs_closeout
+status: done
 priority: 0
 rank: 5
 estimate: 2
