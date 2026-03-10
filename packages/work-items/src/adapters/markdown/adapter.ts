@@ -164,13 +164,16 @@ async function allocateNextId(
   return { id: toWorkItemId(`${type}.${numStr}`), numStr };
 }
 
-/** Slugify a title for use in filenames. */
+/** Slugify a title for use in filenames. No regex on uncontrolled input (CodeQL js/polynomial-redos). */
 function slugify(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+/, "")
-    .replace(/-+$/, "")
+  const slug = Array.from(title.toLowerCase(), (ch) =>
+    (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") ? ch : "-"
+  ).join("");
+  // Collapse consecutive dashes and trim — input is now controlled (only a-z, 0-9, -)
+  return slug
+    .replace(/-{2,}/g, "-")
+    .replace(/^-/, "")
+    .replace(/-$/, "")
     .slice(0, 60);
 }
 
