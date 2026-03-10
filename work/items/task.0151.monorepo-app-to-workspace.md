@@ -2,7 +2,7 @@
 id: task.0151
 type: task
 title: "Monorepo re-architecture: app to apps/web, platform/ to infra/ + scripts/"
-status: needs_closeout
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 5
@@ -15,7 +15,7 @@ project: proj.cicd-services-gitops
 branch: feat/gitops-foundation
 pr:
 reviewer:
-revision: 0
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-10
@@ -227,6 +227,47 @@ pnpm check:full
 - [ ] **Tests:** All existing tests pass from new locations; no test coverage regression
 - [ ] **Reviewer:** assigned and approved
 - [ ] **CI:** All GitHub Actions workflows pass on the PR branch
+
+## Review Feedback
+
+### R1 — Checkpoint 1 Review (2026-03-10)
+
+**Blocking (fixed in 3ef92e8c):**
+
+1. ~~`biome/app.json`: `noRestrictedImports` client guard dropped~~ — Fixed
+2. ~~`scripts/ci/AGENTS.md` and `scripts/bootstrap/AGENTS.md` layer mismatch~~ — Fixed (`layer: "scripts"`)
+
+**Non-blocking (Checkpoint 3 scope):**
+
+- `tsconfig.base.json` `@tests/*` alias points to root `tests/*` — incorrect for app tests importing `@tests/_fakes` (now at `apps/web/tests/_fakes`). Vitest runtime alias papers over this.
+- Root `tests/setup.ts` imports `@/instrumentation` (app code) — pre-existing, consider extracting to shared test utility.
+- Root deps (`cron-parser`, `pino`, `postgres`, `prom-client`) may be unnecessary at root.
+- ~30+ AGENTS.md files under `apps/web/` have broken relative links.
+
+### R2 — Checkpoint 2 Review (2026-03-10)
+
+**Blocking (must fix):**
+
+1. **Docker compose `context:` off-by-one** — Compose files moved from 4 levels deep (`platform/infra/services/runtime/`) to 3 levels deep (`infra/compose/runtime/`), but `context: ../../../..` was NOT decremented. Resolves one level ABOVE repo root. **Breaks all Docker builds.**
+   - `infra/compose/runtime/docker-compose.dev.yml:12,250,456` — change `../../../..` → `../../..`
+   - `infra/compose/runtime/docker-compose.yml:13` — change `../../../..` → `../../..`
+
+2. **Volume mount off-by-one** — Same root cause.
+   - `infra/compose/runtime/docker-compose.dev.yml:585-586` — `../../../../services/sandbox-openclaw/` → `../../../services/sandbox-openclaw/`
+
+3. **`.gitignore` stale SSH key path** — Lines 98-99 still reference `platform/infra/providers/cherry/base/keys/*`. SSH private keys at new path `infra/tofu/cherry/base/keys/` are **unprotected by gitignore**.
+   - Fix: `platform/infra/providers/cherry/base/keys/*` → `infra/tofu/cherry/base/keys/*`
+   - Fix: `!platform/infra/providers/cherry/base/keys/*.pub` → `!infra/tofu/cherry/base/keys/*.pub`
+
+**Verification:** After fixes, run `docker compose -f infra/compose/runtime/docker-compose.dev.yml config` to validate all paths resolve.
+
+**Non-blocking (Checkpoint 3 scope):**
+
+- `infra/AGENTS.md` stale pointers: `providers/cherry/` → `tofu/cherry/`, remove `files/` reference
+- `infra/tofu/cherry/AGENTS.md:57` stale `../../files/scripts/` reference
+- `infra/compose/sandbox-proxy/AGENTS.md` all relative links off by one level + stale `src/` path on L17
+- `infra/compose/runtime/configs/AGENTS.md:18` link off by one level
+- `scripts/check-root-layout.ts` still allows `platform` in root entries (L61, L118) — remove stale entry
 
 ## PR / Links
 
