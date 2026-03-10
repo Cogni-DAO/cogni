@@ -982,6 +982,28 @@ export class DrizzleAttributionAdapter implements AttributionStore {
     return rows.map(toIngestionReceipt);
   }
 
+  async getReceiptsForEpoch(
+    nodeId: string,
+    epochId: bigint
+  ): Promise<IngestionReceipt[]> {
+    await this.resolveEpochScoped(epochId);
+    const rows = await this.db
+      .select({ receipt: ingestionReceipts })
+      .from(ingestionReceipts)
+      .innerJoin(
+        epochSelection,
+        eq(epochSelection.receiptId, ingestionReceipts.receiptId)
+      )
+      .where(
+        and(
+          eq(ingestionReceipts.nodeId, nodeId),
+          eq(epochSelection.epochId, epochId)
+        )
+      )
+      .orderBy(ingestionReceipts.eventTime);
+    return rows.map((r) => toIngestionReceipt(r.receipt));
+  }
+
   // ── Selection ────────────────────────────────────────────────
 
   async upsertSelection(params: UpsertSelectionParams[]): Promise<void> {
@@ -1729,11 +1751,9 @@ export class DrizzleAttributionAdapter implements AttributionStore {
     return names;
   }
 
-  async getUnselectedReceipts(
+  async getSelectionCandidates(
     nodeId: string,
-    epochId: bigint,
-    periodStart: Date,
-    periodEnd: Date
+    epochId: bigint
   ): Promise<UnselectedReceipt[]> {
     await this.resolveEpochScoped(epochId);
     const rows = await this.db
@@ -1752,8 +1772,6 @@ export class DrizzleAttributionAdapter implements AttributionStore {
       .where(
         and(
           eq(ingestionReceipts.nodeId, nodeId),
-          gte(ingestionReceipts.eventTime, periodStart),
-          lte(ingestionReceipts.eventTime, periodEnd),
           or(
             isNull(epochSelection.id), // no selection row
             isNull(epochSelection.userId) // selection exists but unresolved

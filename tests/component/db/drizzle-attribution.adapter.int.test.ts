@@ -1240,14 +1240,9 @@ describe("DrizzleAttributionAdapter (Component)", () => {
       ).rejects.toThrow(EpochNotFoundError);
     });
 
-    it("getUnselectedReceipts throws EpochNotFoundError for cross-scope epochId", async () => {
+    it("getSelectionCandidates throws EpochNotFoundError for cross-scope epochId", async () => {
       await expect(
-        otherScopeAdapter.getUnselectedReceipts(
-          TEST_NODE_ID,
-          scopeTestEpochId,
-          new Date("2026-01-01"),
-          new Date("2026-12-31")
-        )
+        otherScopeAdapter.getSelectionCandidates(TEST_NODE_ID, scopeTestEpochId)
       ).rejects.toThrow(EpochNotFoundError);
     });
 

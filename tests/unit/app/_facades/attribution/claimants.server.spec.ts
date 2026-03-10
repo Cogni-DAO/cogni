@@ -83,7 +83,7 @@ function makeStore(
     resolveIdentities: vi.fn().mockResolvedValue(new Map()),
     getUserDisplayNames: vi.fn().mockResolvedValue(new Map()),
     finalizeEpochAtomic: vi.fn(),
-    getUnselectedReceipts: vi.fn(),
+    getSelectionCandidates: vi.fn(),
     updateSelectionUserId: vi.fn(),
     upsertReviewSubjectOverride: vi.fn(),
     batchUpsertReviewSubjectOverrides: vi.fn(),
