@@ -12,10 +12,15 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { LANGGRAPH_CATALOG } from "../../../src/catalog";
-import { PR_REVIEW_GRAPH_NAME } from "../../../src/graphs/pr-review/graph";
+import {
+  createPrReviewGraph,
+  PR_REVIEW_GRAPH_NAME,
+} from "../../../src/graphs/pr-review/graph";
 import { buildReviewUserMessage } from "../../../src/graphs/pr-review/prompts";
+import { CogniCompletionAdapter } from "../../../src/runtime/cogni/completion-adapter";
 
 describe("PR Review Graph", () => {
   describe("catalog registration", () => {
@@ -37,6 +42,40 @@ describe("PR Review Graph", () => {
   describe("graph name", () => {
     it("is 'pr-review'", () => {
       expect(PR_REVIEW_GRAPH_NAME).toBe("pr-review");
+    });
+  });
+
+  describe("responseFormat support", () => {
+    it("creates graph with responseFormat when provided", () => {
+      const schema = z.object({
+        metrics: z.array(
+          z.object({
+            metric: z.string(),
+            value: z.number(),
+            observations: z.array(z.string()),
+          })
+        ),
+        summary: z.string(),
+      });
+
+      const llm = new CogniCompletionAdapter();
+      const graph = createPrReviewGraph({
+        llm,
+        tools: [],
+        responseFormat: { schema },
+      });
+
+      // Graph should compile successfully with responseFormat
+      expect(graph).toBeDefined();
+      expect(typeof graph.invoke).toBe("function");
+    });
+
+    it("creates graph without responseFormat (backwards compatible)", () => {
+      const llm = new CogniCompletionAdapter();
+      const graph = createPrReviewGraph({ llm, tools: [] });
+
+      expect(graph).toBeDefined();
+      expect(typeof graph.invoke).toBe("function");
     });
   });
 });

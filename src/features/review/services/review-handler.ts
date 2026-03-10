@@ -28,7 +28,7 @@ import { formatCheckRunSummary, formatPrComment } from "../summary-formatter";
 import type { EvidenceBundle, ReviewContext } from "../types";
 
 /** Default model for PR review. */
-const DEFAULT_REVIEW_MODEL = "anthropic/claude-sonnet-4-20250514";
+const DEFAULT_REVIEW_MODEL = "gpt-4o-mini";
 
 /**
  * Dependencies for the review handler.

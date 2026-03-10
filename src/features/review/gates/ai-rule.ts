@@ -4,7 +4,7 @@
 /**
  * Module: `@features/review/gates/ai-rule`
  * Purpose: AI-powered gate that evaluates PRs against declarative rules via the graph executor.
- * Scope: Builds LLM message from evidence + rule, invokes graph, parses scores. Does not own the graph executor lifecycle.
+ * Scope: Builds LLM message from evidence + rule, invokes graph, consumes structured output. Does not own the graph executor lifecycle.
  * Invariants: Uses GraphExecutorPort for LLM routing + billing. System tenant billing.
  * Side-effects: IO (LLM call via graph executor)
  * Links: task.0149, packages/repo-spec/src/schema.ts (Rule)
@@ -15,11 +15,29 @@ import { randomUUID } from "node:crypto";
 import { LANGGRAPH_GRAPH_IDS } from "@cogni/langgraph-graphs";
 import { buildReviewUserMessage } from "@cogni/langgraph-graphs/graphs";
 import type { Rule } from "@cogni/repo-spec";
+import { z } from "zod";
 
 import type { GraphExecutorPort, LlmCaller } from "@/ports";
 
 import { evaluateCriteria } from "../criteria-evaluator";
 import type { EvidenceBundle, GateResult } from "../types";
+
+/**
+ * Static Zod schema for structured AI rule evaluation output.
+ * The LLM returns a list of metric evaluations — one per evaluation criterion.
+ */
+export const EvaluationOutputSchema = z.object({
+  metrics: z.array(
+    z.object({
+      metric: z.string(),
+      value: z.number().min(0).max(1),
+      observations: z.array(z.string()),
+    })
+  ),
+  summary: z.string(),
+});
+
+export type EvaluationOutput = z.infer<typeof EvaluationOutputSchema>;
 
 /** Parsed evaluation: metric name → prompt text. */
 function extractEvaluations(
@@ -30,42 +48,6 @@ function extractEvaluations(
     const [metric, prompt] = entries[0] as [string, string];
     return { metric, prompt };
   });
-}
-
-/** Parse LLM response text to extract metric scores. */
-export function parseScoresFromResponse(
-  responseText: string,
-  metricNames: readonly string[]
-): Map<string, { score: number; observation: string }> {
-  const results = new Map<string, { score: number; observation: string }>();
-
-  for (const metric of metricNames) {
-    // Look for patterns like "metric-name: 0.85" or "**metric-name**: 0.85"
-    // Also handle "metric_name" variations
-    const escapedMetric = metric.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const scorePattern = new RegExp(
-      `(?:\\*\\*)?${escapedMetric}(?:\\*\\*)?[:\\s]+([0-9](?:\\.[0-9]+)?)`,
-      "i"
-    );
-    const match = responseText.match(scorePattern);
-
-    if (match?.[1]) {
-      const score = Number.parseFloat(match[1]);
-      if (score >= 0 && score <= 1) {
-        // Extract observation: text after the score on the same line or next line
-        const afterScore = responseText.slice(
-          (match.index ?? 0) + match[0].length
-        );
-        const observationMatch = afterScore.match(
-          /[:\s-]*([^\n]+(?:\n(?![*#0-9])[^\n]*)?)/
-        );
-        const observation = observationMatch?.[1]?.trim() || "";
-        results.set(metric, { score, observation });
-      }
-    }
-  }
-
-  return results;
 }
 
 /**
@@ -94,7 +76,7 @@ export async function evaluateAiRule(params: {
     evaluations,
   });
 
-  // Invoke the pr-review graph via GraphExecutorPort
+  // Invoke the pr-review graph with structured output schema
   const runId = randomUUID();
   const result = executor.runGraph({
     runId,
@@ -103,6 +85,12 @@ export async function evaluateAiRule(params: {
     messages: [{ role: "user", content: userMessage }],
     model,
     caller,
+    responseFormat: {
+      prompt:
+        "Respond with a JSON object containing a `metrics` array and a `summary` string. " +
+        "Each metric entry must have: `metric` (name), `value` (0.0-1.0), `observations` (string array).",
+      schema: EvaluationOutputSchema,
+    },
   });
 
   // Drain stream and get final result
@@ -121,9 +109,8 @@ export async function evaluateAiRule(params: {
     };
   }
 
-  // Parse scores from LLM response
-  const responseText = final.content ?? "";
-  const parsed = parseScoresFromResponse(responseText, metricNames);
+  // Extract structured output — fall back to empty metrics if missing
+  const structured = final.structuredOutput as EvaluationOutput | undefined;
 
   // Build scores map for criteria evaluation
   const scores = new Map<string, number>();
@@ -133,15 +120,17 @@ export async function evaluateAiRule(params: {
     observation: string;
   }> = [];
 
-  for (const name of metricNames) {
-    const result = parsed.get(name);
-    if (result) {
-      scores.set(name, result.score);
-      metrics.push({
-        metric: name,
-        score: result.score,
-        observation: result.observation,
-      });
+  if (structured?.metrics) {
+    for (const entry of structured.metrics) {
+      // Only include metrics that were requested in the rule evaluations
+      if (metricNames.includes(entry.metric)) {
+        scores.set(entry.metric, entry.value);
+        metrics.push({
+          metric: entry.metric,
+          score: entry.value,
+          observation: entry.observations.join("; "),
+        });
+      }
     }
   }
 

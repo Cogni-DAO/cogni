@@ -2,10 +2,10 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/features/review/ai-rule-parse-scores`
- * Purpose: Unit tests for LLM response score parsing in the AI rule gate.
- * Scope: Tests metric:score extraction, markdown formatting, edge cases, range validation. Does NOT test LLM calls.
- * Invariants: Pure function — no side-effects, no mocking needed.
+ * Module: `@tests/unit/features/review/ai-rule-structured-output`
+ * Purpose: Unit tests for the AI rule evaluation structured output schema.
+ * Scope: Tests EvaluationOutputSchema validation. Does NOT test LLM calls or graph execution.
+ * Invariants: Pure schema validation + mock-based integration.
  * Side-effects: none
  * Links: task.0149
  * @public
@@ -13,58 +13,103 @@
 
 import { describe, expect, it } from "vitest";
 
-import { parseScoresFromResponse } from "@/features/review/gates/ai-rule";
+import {
+  type EvaluationOutput,
+  EvaluationOutputSchema,
+} from "@/features/review/gates/ai-rule";
 
-describe("parseScoresFromResponse", () => {
-  it("extracts simple metric: score patterns", () => {
-    const text = "coherent-change: 0.85 — good alignment\nclarity: 0.7 nice";
-    const result = parseScoresFromResponse(text, [
-      "coherent-change",
-      "clarity",
-    ]);
-    expect(result.get("coherent-change")?.score).toBe(0.85);
-    expect(result.get("clarity")?.score).toBe(0.7);
+describe("EvaluationOutputSchema", () => {
+  it("validates a well-formed evaluation output", () => {
+    const input: EvaluationOutput = {
+      metrics: [
+        {
+          metric: "coherent-change",
+          value: 0.85,
+          observations: ["Good alignment between title and diff"],
+        },
+        {
+          metric: "non-malicious",
+          value: 1.0,
+          observations: ["No suspicious patterns found"],
+        },
+      ],
+      summary: "PR looks good overall.",
+    };
+
+    const result = EvaluationOutputSchema.parse(input);
+    expect(result.metrics).toHaveLength(2);
+    expect(result.metrics[0]?.value).toBe(0.85);
+    expect(result.summary).toBe("PR looks good overall.");
   });
 
-  it("handles bold markdown metric names", () => {
-    const text = "**coherent-change**: 0.9 well done";
-    const result = parseScoresFromResponse(text, ["coherent-change"]);
-    expect(result.get("coherent-change")?.score).toBe(0.9);
+  it("rejects value below 0", () => {
+    const input = {
+      metrics: [{ metric: "test", value: -0.1, observations: [] }],
+      summary: "Bad",
+    };
+
+    expect(() => EvaluationOutputSchema.parse(input)).toThrow();
   });
 
-  it("extracts observation text after score", () => {
-    const text = "quality: 0.8 — changes are well structured";
-    const result = parseScoresFromResponse(text, ["quality"]);
-    expect(result.get("quality")?.observation).toContain("well structured");
+  it("rejects value above 1", () => {
+    const input = {
+      metrics: [{ metric: "test", value: 1.5, observations: [] }],
+      summary: "Bad",
+    };
+
+    expect(() => EvaluationOutputSchema.parse(input)).toThrow();
   });
 
-  it("ignores scores outside 0-1 range", () => {
-    const text = "quality: 1.5 too high";
-    const result = parseScoresFromResponse(text, ["quality"]);
-    expect(result.has("quality")).toBe(false);
+  it("accepts empty metrics array", () => {
+    const input = { metrics: [], summary: "No metrics evaluated." };
+    const result = EvaluationOutputSchema.parse(input);
+    expect(result.metrics).toHaveLength(0);
   });
 
-  it("handles integer score of 0", () => {
-    const text = "quality: 0 terrible";
-    const result = parseScoresFromResponse(text, ["quality"]);
-    expect(result.get("quality")?.score).toBe(0);
+  it("accepts multiple observations per metric", () => {
+    const input = {
+      metrics: [
+        {
+          metric: "quality",
+          value: 0.7,
+          observations: ["First note", "Second note", "Third note"],
+        },
+      ],
+      summary: "Multi-observation test.",
+    };
+
+    const result = EvaluationOutputSchema.parse(input);
+    expect(result.metrics[0]?.observations).toHaveLength(3);
   });
 
-  it("handles integer score of 1", () => {
-    const text = "quality: 1 perfect";
-    const result = parseScoresFromResponse(text, ["quality"]);
-    expect(result.get("quality")?.score).toBe(1);
+  it("accepts boundary values 0 and 1", () => {
+    const input = {
+      metrics: [
+        { metric: "min", value: 0, observations: [] },
+        { metric: "max", value: 1, observations: [] },
+      ],
+      summary: "Boundary test.",
+    };
+
+    const result = EvaluationOutputSchema.parse(input);
+    expect(result.metrics[0]?.value).toBe(0);
+    expect(result.metrics[1]?.value).toBe(1);
   });
 
-  it("returns empty map when no metrics found", () => {
-    const text = "some random text with no scores";
-    const result = parseScoresFromResponse(text, ["quality"]);
-    expect(result.size).toBe(0);
+  it("rejects missing summary", () => {
+    const input = {
+      metrics: [{ metric: "test", value: 0.5, observations: [] }],
+    };
+
+    expect(() => EvaluationOutputSchema.parse(input)).toThrow();
   });
 
-  it("handles metric names with special regex chars", () => {
-    const text = "check.quality: 0.75 ok";
-    const result = parseScoresFromResponse(text, ["check.quality"]);
-    expect(result.get("check.quality")?.score).toBe(0.75);
+  it("rejects missing metric name", () => {
+    const input = {
+      metrics: [{ value: 0.5, observations: [] }],
+      summary: "Test",
+    };
+
+    expect(() => EvaluationOutputSchema.parse(input)).toThrow();
   });
 });

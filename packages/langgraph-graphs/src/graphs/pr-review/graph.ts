@@ -41,12 +41,13 @@ export const PR_REVIEW_GRAPH_NAME = "pr-review" as const;
  * CompiledStateGraph type for LangGraph CLI schema extraction.
  */
 export function createPrReviewGraph(opts: CreateReactAgentGraphOptions) {
-  const { llm } = opts;
+  const { llm, responseFormat } = opts;
 
   return createReactAgent({
     llm,
-    tools: [], // No tools — evidence is pre-fetched
+    tools: [],
     messageModifier: PR_REVIEW_SYSTEM_PROMPT,
-    stateSchema: MessagesAnnotation,
+    ...(responseFormat === undefined && { stateSchema: MessagesAnnotation }),
+    ...(responseFormat !== undefined && { responseFormat }),
   });
 }
