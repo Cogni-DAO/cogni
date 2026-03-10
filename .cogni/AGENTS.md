@@ -1,6 +1,6 @@
 # .cogni · AGENTS.md
 
-> Scope: .cogni directory. Keep ≤150 lines. Do not restate root policies.
+> Scope: this directory only. Keep ≤150 lines. Do not restate root policies.
 
 ## Metadata
 

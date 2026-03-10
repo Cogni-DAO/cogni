@@ -14,9 +14,8 @@
  */
 
 /* eslint-env node */
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-
-import fg from "fast-glob";
 
 const REQ_HEADINGS = [
   "Metadata",
@@ -399,13 +398,13 @@ function validate(file) {
   return fileErrors.map((e) => `${file}: ${e}`);
 }
 
-// Find all AGENTS.md files including the root one
-const files = await fg([
-  "**/AGENTS.md",
-  "AGENTS.md",
-  "!**/node_modules/**",
-  "!**/gateway-workspace/**",
-]);
+// Find all tracked AGENTS.md files (git ls-files is ~2000x faster than filesystem glob)
+const files = execSync("git ls-files '*/AGENTS.md' 'AGENTS.md'", {
+  encoding: "utf8",
+})
+  .trim()
+  .split("\n")
+  .filter((f) => f && !f.includes("gateway-workspace/"));
 const allErrors = [];
 for (const f of files) {
   try {
