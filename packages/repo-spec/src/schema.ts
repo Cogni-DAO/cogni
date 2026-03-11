@@ -256,6 +256,14 @@ export const repoSpecSchema = z
        * Validated against expected chain ID at extraction time.
        */
       chain_id: z.union([z.string(), z.number()]),
+      /** DAO contract address */
+      dao_contract: z.string().optional(),
+      /** Aragon voting plugin contract address */
+      plugin_contract: z.string().optional(),
+      /** CogniSignal contract address */
+      signal_contract: z.string().optional(),
+      /** Proposal launcher base URL (for deep links) */
+      base_url: z.string().optional(),
     }),
 
     /** Payment configuration (required) */
