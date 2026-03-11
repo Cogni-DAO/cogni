@@ -14,79 +14,86 @@ tags: [dev, governance, alchemy, webhooks]
 
 # Alchemy Webhook Setup
 
-How to configure Alchemy webhooks for on-chain governance signal execution.
-
-## What This Does
-
 Alchemy monitors a CogniSignal contract for `CogniAction` events. When a DAO proposal executes a signal, Alchemy sends a webhook to this app. The app re-verifies the transaction on-chain and executes the GitHub action (merge PR, grant/revoke collaborator).
 
-## Prerequisites
+## Setup
 
-- [Alchemy account](https://dashboard.alchemy.com)
-- CogniSignal contract deployed (address in `.cogni/repo-spec.yaml` → `cogni_dao.signal_contract`)
-- GitHub App with `contents:write` + `administration:write` permissions
+1. [Alchemy Dashboard](https://dashboard.alchemy.com) → **Data** → **Webhooks** → **+ Create webhook**
+2. Type: **Custom**
+3. Chain: match `cogni_dao.chain_id` in your repo-spec (e.g. Base = 8453)
+4. GraphQL query — paste this, replacing `SIGNAL_CONTRACT` with your `cogni_dao.signal_contract` address:
+   ```graphql
+   {
+     block {
+       logs(
+         filter: {
+           addresses: ["SIGNAL_CONTRACT"]
+           topics: [
+             "0xfd9a8ea95d56c7bd709823c6589c50386a2e5833892ef0e93c7bf63fee30bde1"
+           ]
+         }
+       ) {
+         data
+         topics
+         account {
+           address
+         }
+         transaction {
+           hash
+           nonce
+           index
+           from {
+             address
+           }
+           to {
+             address
+           }
+           value
+           gasPrice
+           status
+           gasUsed
+         }
+       }
+     }
+   }
+   ```
+   The topic hash is the `CogniAction` event signature (`keccak256` of the event ABI). See [cogni-signal-evm-contracts](https://github.com/Cogni-DAO/cogni-signal-evm-contracts) `COGNI-GIT-ADMIN-INTEGRATION.md` for details.
+5. Webhook URL: a [smee.io](https://smee.io) channel for local dev (see below), or `https://<your-domain>/api/internal/webhooks/alchemy` for production
+6. Add to `.env.local`:
+   ```bash
+   ALCHEMY_WEBHOOK_SECRET=<"Auth token" from the Webhooks page>
+   EVM_RPC_URL=<from Alchemy Dashboard → Endpoints, same chain>
+   ```
 
-## Alchemy Dashboard
+Contract addresses (`signal_contract`, `dao_contract`, `chain_id`) come from `.cogni/repo-spec.yaml` or `.cogni/repo-spec.dev.yaml`.
 
-1. Go to **Notify** → **Create Webhook**
-2. Select **Address Activity**
-3. Configure:
-   - **Chain**: Match `cogni_dao.chain_id` in repo-spec (Sepolia = 11155111, Base = 8453)
-   - **Address**: Your `signal_contract` address
-   - **Webhook URL**: `https://<your-domain>/api/internal/webhooks/alchemy`
-4. Copy the **Signing Key** — this is your `ALCHEMY_WEBHOOK_SECRET`
-
-## Environment Variables
-
-| Variable                 | Source                             | Purpose                                       |
-| ------------------------ | ---------------------------------- | --------------------------------------------- |
-| `ALCHEMY_WEBHOOK_SECRET` | Alchemy dashboard signing key      | HMAC-SHA256 verification of incoming webhooks |
-| `EVM_RPC_URL`            | Alchemy dashboard → Apps → API Key | On-chain re-verification of tx receipts       |
-
-Both go in `.env.local`. The remaining config (signal_contract, dao_contract, chain_id) comes from `.cogni/repo-spec.yaml`.
+---
 
 ## Local Development
 
 Alchemy can't reach localhost. Use [smee.io](https://smee.io) as a proxy:
 
-1. Go to https://smee.io/new — copy the URL
-2. In Alchemy dashboard, set webhook URL to your smee URL
-3. Run the smee client:
-   ```bash
-   npx smee -u https://smee.io/<your-channel> --path /api/internal/webhooks/alchemy --port 3000
-   ```
-4. Start the app: `pnpm dev:stack`
+1. https://smee.io/new → copy the URL
+2. Use that smee URL as your webhook URL in Alchemy (step 5 above)
+3. Add to `.env.local`: `ALCHEMY_PROXY_URL=https://smee.io/<your-channel>`
+4. Run: `pnpm dev:smee:alchemy`
 
-Webhooks now flow: Alchemy → smee.io → localhost:3000.
+Use `.cogni/repo-spec.dev.yaml` (gitignored) for local DAO config. See [Developer Setup](./developer-setup.md#on-chain-governance-optional).
 
-## Sepolia Test DAO
+### Verification
 
-For local testing, override `.cogni/repo-spec.yaml` with Sepolia test contracts (do not commit):
-
-```yaml
-cogni_dao:
-  dao_contract: "0xB0FcB5Ae33DFB4829f663458798E5e3843B21839"
-  plugin_contract: "0x77BA7C0663b2f48F295E12e6a149F4882404B4ea"
-  signal_contract: "0x8f26cf7b9ca6790385e255e8ab63acc35e7b9fb1"
-  chain_id: "11155111"
-  base_url: "https://proposal.cognidao.org"
-```
-
-Test wallet (has Sepolia ETH): `0x7e1cc7be1c6074585bab220cfec9cc2eec4484341be20a524eca5bc8a90bf58d`
-
-RPC: `https://eth-sepolia.g.alchemy.com/v2/<your-alchemy-api-key>`
-
-## Verification
-
-After setup, trigger a CogniAction event on the monitored contract. You should see in app logs:
+Trigger a CogniAction event. App logs should show:
 
 ```
 signal dispatch: processing tx <hash>
 signal execution complete: { action: "merge", target: "change", success: true }
 ```
 
-If the webhook arrives but the signal is rejected, check:
+Rejection reasons: `chain_id mismatch`, `dao_contract mismatch`, `tx already executed`.
 
-- `chain_id mismatch` — repo-spec chain_id doesn't match the tx chain
-- `dao_contract mismatch` — repo-spec dao_contract doesn't match the event's dao address
-- `tx already executed` — duplicate webhook (idempotency working correctly)
+### Reference
+
+- [cogni-signal-evm-contracts](https://github.com/Cogni-DAO/cogni-signal-evm-contracts) — contract ABI, deployment, `CogniAction` event spec
+- [cogni-git-admin](https://github.com/Cogni-DAO/cogni-git-admin) — original webhook handler implementation
+  - `src/providers/onchain/alchemy.ts` — adapter (parses `event.data.block.logs[].transaction.hash`)
+  - `test/fixtures/alchemy/CogniSignal/` — real captured Alchemy payloads

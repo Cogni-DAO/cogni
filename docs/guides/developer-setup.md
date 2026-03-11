@@ -137,14 +137,14 @@ Execute DAO-governed actions (merge PRs, manage collaborators) triggered by on-c
 
 **Prerequisites:**
 
-1. A deployed CogniSignal contract — use the DAO formation UI at `/setup/dao` on Sepolia to create one
+1. A deployed CogniSignal contract — use the DAO formation UI at `/setup/dao` to create one
 2. Alchemy webhook monitoring the signal contract address
 
 **Environment variables** (`.env.local`):
 
 ```bash
 ALCHEMY_WEBHOOK_SECRET=<alchemy signing key>
-EVM_RPC_URL=<sepolia or mainnet rpc url>
+EVM_RPC_URL=<alchemy rpc url for same chain as your DAO>
 ```
 
 **Local repo-spec setup:**
@@ -162,7 +162,7 @@ cogni_dao:
   dao_contract: "<from formation>"
   plugin_contract: "<from formation>"
   signal_contract: "<from formation>"
-  chain_id: "11155111"
+  chain_id: "<from formation>"
   base_url: "https://proposal.cognidao.org"
 ```
 
