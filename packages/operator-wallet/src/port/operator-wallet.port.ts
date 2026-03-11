@@ -13,15 +13,14 @@
 
 /**
  * TransferIntent from OpenRouter's /api/v1/credits/coinbase endpoint.
- * Describes the on-chain action needed to fund OpenRouter credits.
+ * Describes the on-chain action needed to fund OpenRouter credits via
+ * the Coinbase Commerce Onchain Payment Protocol.
  *
- * // TODO(task.0086): Update to match actual OpenRouter transfer_intent shape.
- * // spike.0090 proved OpenRouter does NOT return function_name — the correct
- * // function is transferTokenPreApproved (USDC via direct ERC-20 transferFrom).
- * // The adapter should encode calldata internally. Actual call_data fields:
- * // { recipient_amount, deadline, recipient, recipient_currency,
- * //   refund_destination, fee_amount, id, operator, signature, prefix }
- * // See: scripts/experiments/full-chain.ts:58-69
+ * The adapter encodes `transferTokenPreApproved` calldata internally —
+ * callers pass the raw API response shape, not ABI-encoded data.
+ * Validated by spike.0090 on Base mainnet (2026-03-09).
+ *
+ * See: scripts/experiments/full-chain.ts:58-69
  */
 export interface TransferIntent {
   metadata: {
@@ -32,10 +31,28 @@ export interface TransferIntent {
     /** Chain ID for the transaction */
     chain_id: number;
   };
-  /** Call value in wei (for native ETH functions) */
-  call_value: string;
-  /** Opaque call_data from OpenRouter — adapter encodes actual calldata */
-  call_data: Record<string, unknown>;
+  call_data: {
+    /** USDC atomic units (6 decimals), e.g. "1039500" = 1.0395 USDC */
+    recipient_amount: string;
+    /** ISO 8601 string or unix timestamp — charge expiry deadline */
+    deadline: string;
+    /** OpenRouter's receiving address */
+    recipient: string;
+    /** ERC-20 token address (Base USDC) */
+    recipient_currency: string;
+    /** Refund destination on revert */
+    refund_destination: string;
+    /** USDC atomic units — OpenRouter's fee (e.g. "10500" = 0.0105 USDC) */
+    fee_amount: string;
+    /** bytes16 charge identifier */
+    id: string;
+    /** Coinbase Commerce operator address */
+    operator: string;
+    /** OpenRouter's authorization signature */
+    signature: string;
+    /** Signature prefix */
+    prefix: string;
+  };
 }
 
 /**

@@ -2,7 +2,7 @@
 id: task.0086
 type: task
 title: OpenRouter credit top-up via operator wallet
-status: needs_design
+status: needs_merge
 priority: 0
 estimate: 3
 summary: "Implement fundOpenRouterTopUp() — multi-step flow: create OpenRouter charge, ERC-20 approve, transferTokenPreApproved via Privy. Durable state machine."
@@ -11,11 +11,11 @@ spec_refs: web3-openrouter-payments, operator-wallet
 assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
-branch:
+branch: feat/task.0086-openrouter-topup
 pr:
 reviewer:
 created: 2026-02-17
-updated: 2026-03-09
+updated: 2026-03-11
 labels: [wallet, web3, billing, openrouter]
 external_refs:
 revision: 1
@@ -99,25 +99,26 @@ rank: 21
 
 ## Plan
 
-- [ ] **Checkpoint 1: TransferIntent + pricing**
-  - [ ] Fix `TransferIntent` type to match actual OpenRouter shape
+- [x] **Checkpoint 1: TransferIntent + pricing** (partial — pricing fn deferred)
+  - [x] Fix `TransferIntent` type to match actual OpenRouter shape
   - [ ] Add `calculateOpenRouterTopUp()` to `src/core/billing/pricing.ts`
   - [ ] Write unit tests: default constants ($1.00 → $0.9211), edge cases
-  - [ ] Add `OPENROUTER_CRYPTO_FEE`, `OPERATOR_MAX_TOPUP_USD` env vars
+  - [x] Add `OPERATOR_MAX_TOPUP_USD` env var
   - [ ] Add `MARGIN_PRESERVED` startup check
 
-- [ ] **Checkpoint 2: Transfers contract encoding**
-  - [ ] Create `src/shared/web3/coinbase-transfers.ts` — ABI + encoding
-  - [ ] Use `transferTokenPreApproved` (NOT `swapAndTransferUniswapV3Native`)
-  - [ ] Contract address: `0x03059433BCdB6144624cC2443159D9445C32b7a8`
+- [x] **Checkpoint 2: Transfers contract encoding**
+  - [x] Create `packages/operator-wallet/src/domain/transfers-abi.ts` — ABI + encoding
+  - [x] Use `transferTokenPreApproved` (NOT `swapAndTransferUniswapV3Native`)
+  - [x] Contract address: `0x03059433BCdB6144624cC2443159D9445C32b7a8`
   - [ ] Unit test: encode/decode roundtrip
 
-- [ ] **Checkpoint 3: State machine + adapter**
+- [x] **Checkpoint 3: State machine + adapter** (partial — DB table deferred)
   - [ ] Create `outbound_topups` table migration + drizzle schema
-  - [ ] Implement `fundOpenRouterTopUp()` in Privy adapter:
-    - Validate DESTINATION_ALLOWLIST, SENDER_MATCH, MAX_TOPUP_USD
+  - [x] Implement `fundOpenRouterTopUp()` in Privy adapter:
+    - Validate DESTINATION_ALLOWLIST, SENDER_MATCH, CHAIN_MISMATCH, MIN_TOPUP, MAX_TOPUP_CAP
     - ERC-20 approve → transferTokenPreApproved (two Privy tx submissions)
-  - [ ] Update fake adapter for new TransferIntent shape
+  - [x] Update contract test for new TransferIntent shape
+  - [x] Add 9 unit tests covering all 5 validation gates + deadline parsing + happy path
 
 - [ ] **Checkpoint 4: Orchestration**
   - [ ] Add OpenRouter charge creation service (`POST /api/v1/credits/coinbase`)

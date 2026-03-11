@@ -212,6 +212,10 @@ export const serverSchema = z.object({
   PRIVY_APP_ID: optionalString,
   PRIVY_APP_SECRET: optionalString,
   PRIVY_SIGNING_KEY: optionalString,
+
+  // Operator wallet top-up cap (USD)
+  // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.
+  OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().default(500),
 });
 
 type ServerEnv = z.infer<typeof serverSchema> & {
