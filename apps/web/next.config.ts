@@ -15,6 +15,24 @@ const nextConfig: NextConfig = {
     "pino",
     "pino-pretty",
   ],
+  // WalletConnect pulls pino@7 → thread-stream@0.15 which ships test files
+  // requiring 'tape'. outputFileTracingRoot broadens tracing to monorepo root,
+  // exposing these. Exclude test/bench dirs from tracing.
+  outputFileTracingExcludes: {
+    "/**": [
+      "**/thread-stream/test/**",
+      "**/pino/test/**",
+      "**/pino/benchmarks/**",
+    ],
+  },
+  // Temporary containment (bug.0157): WalletConnect pulls pino@7 → thread-stream
+  // which ships test files requiring 'tape'/'tap'. Stub thread-stream for Turbopack
+  // so it doesn't follow the test-file dependency chain during Client Component SSR.
+  turbopack: {
+    resolveAlias: {
+      "thread-stream": "./src/shared/stubs/thread-stream-noop.ts",
+    },
+  },
   typescript: {
     tsconfigPath: "./tsconfig.app.json",
   },
