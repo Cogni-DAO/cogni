@@ -10,6 +10,7 @@ summary: "Add Alchemy webhook ingestion and on-chain signal execution to cogni-t
 outcome: "Full governance loop operational: on-chain CogniAction signal → Alchemy webhook → cogni-template verifies on-chain → executes GitHub action. Review bot failure comments include working deep link to proposal launcher. Idempotent — duplicate webhooks are no-ops."
 spec_refs:
   - architecture-spec
+  - governance-signal-execution
 assignees:
   - derekg1729
 credit:

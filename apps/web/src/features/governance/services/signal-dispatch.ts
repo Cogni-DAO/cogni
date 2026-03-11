@@ -8,7 +8,7 @@
  *   Same pattern as dispatchPrReview() — errors logged, never thrown.
  * Invariants: Fire-and-forget — errors logged, never block webhook response.
  * Side-effects: IO (async signal execution)
- * Links: docs/design/governance-integration-crawl.md
+ * Links: docs/spec/governance-signal-execution.md
  * @public
  */
 

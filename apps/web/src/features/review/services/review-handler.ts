@@ -8,7 +8,7 @@
  * Invariants: Fire-and-forget — errors logged, never block webhook response. System tenant billing.
  *   ARCHITECTURE_ALIGNMENT — deps injected, no adapter imports.
  * Side-effects: IO (GitHub API via injected deps, LLM via graph executor)
- * Links: task.0153
+ * Links: docs/spec/governance-signal-execution.md
  * @public
  */
 

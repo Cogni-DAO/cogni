@@ -117,6 +117,7 @@ Enable the `cogni_system` billing account to execute governance AI loops as a fi
 
 - [System Tenant Design](../../docs/spec/system-tenant.md) — Core invariants, schema, policy resolution flow
 - [Governance Scheduling](../../docs/spec/governance-scheduling.md) — Declarative schedule sync from repo-spec
+- [Governance Signal Execution](../../docs/spec/governance-signal-execution.md) — On-chain DAO votes → Alchemy webhook → GitHub actions
 
 ## File Pointers (P0 Scope)
 

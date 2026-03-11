@@ -7,7 +7,7 @@
  * Scope: Pure parsing logic — uses viem for ABI decoding, Zod for runtime validation. Does not perform I/O.
  * Invariants: Signal schema validated at parse time. Invalid logs return null (logged, not thrown).
  * Side-effects: none
- * Links: docs/design/governance-integration-crawl.md, cogni-git-admin/src/core/signal/parser.ts
+ * Links: docs/spec/governance-signal-execution.md
  * @public
  */
 
