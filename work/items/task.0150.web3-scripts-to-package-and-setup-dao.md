@@ -96,6 +96,7 @@ pnpm dev:stack  # verify real adapter wiring + credit purchase flow
 
 ## PR / Links
 
+- PR: [#553](https://github.com/Cogni-DAO/node-template/pull/553) → `feat/operator-wallet-e2e`
 - Handoff: [handoff](../handoffs/task.0150.handoff.md)
 - Setup guide: [operator-wallet-setup.md](../../docs/guides/operator-wallet-setup.md)
 
