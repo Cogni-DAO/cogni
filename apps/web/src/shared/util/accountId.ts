@@ -31,6 +31,6 @@ import { createHash } from "node:crypto";
  * @returns Stable account ID in format "key:\{hash32chars\}"
  */
 export function deriveAccountIdFromApiKey(apiKey: string): string {
-  const hash = createHash("sha256").update(apiKey).digest("hex");
+  const hash = createHash("sha256").update(apiKey).digest("hex"); // codeql[js/insufficient-password-hash] Not password hashing — deterministic ID from high-entropy API key
   return `key:${hash.slice(0, 32)}`;
 }

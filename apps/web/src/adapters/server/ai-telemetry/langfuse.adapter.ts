@@ -237,7 +237,7 @@ export class LangfuseAdapter implements LangfusePort {
     input?: unknown;
     metadata?: Record<string, unknown>;
   }): LangfuseSpanHandle {
-    const spanId = `span_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const spanId = `span_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`; // codeql[js/insecure-randomness] Telemetry span ID — not security-sensitive
 
     try {
       const span = this.langfuse.span({

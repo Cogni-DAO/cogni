@@ -158,7 +158,7 @@ export class LlmProxyManager {
    */
   async start(config: LlmProxyConfig): Promise<LlmProxyHandle> {
     const {
-      runId,
+      runId, // codeql[js/insecure-randomness] Run ID uniqueness — not security-sensitive
       attempt,
       litellmMasterKey,
       billingAccountId,

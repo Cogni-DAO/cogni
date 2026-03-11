@@ -8,7 +8,13 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: path.join(__dirname, "../../"),
   // dockerode → ssh2 → cpu-features has a native .node addon that Turbopack
   // cannot resolve when built with --ignore-scripts. Leave as runtime require().
-  serverExternalPackages: ["dockerode", "ssh2", "cpu-features"],
+  serverExternalPackages: [
+    "dockerode",
+    "ssh2",
+    "cpu-features",
+    "pino",
+    "pino-pretty",
+  ],
   typescript: {
     tsconfigPath: "./tsconfig.app.json",
   },
