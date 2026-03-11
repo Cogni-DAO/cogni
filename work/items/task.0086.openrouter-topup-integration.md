@@ -12,7 +12,7 @@ assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
 branch: feat/task.0086-openrouter-topup
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/556
 reviewer:
 created: 2026-02-17
 updated: 2026-03-11
