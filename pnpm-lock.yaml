@@ -11,6 +11,48 @@ importers:
 
   .:
     dependencies:
+      '@cogni/ai-core':
+        specifier: workspace:*
+        version: link:packages/ai-core
+      '@cogni/ai-tools':
+        specifier: workspace:*
+        version: link:packages/ai-tools
+      '@cogni/aragon-osx':
+        specifier: workspace:*
+        version: link:packages/aragon-osx
+      '@cogni/attribution-ledger':
+        specifier: workspace:*
+        version: link:packages/attribution-ledger
+      '@cogni/attribution-pipeline-plugins':
+        specifier: workspace:*
+        version: link:packages/attribution-pipeline-plugins
+      '@cogni/cogni-contracts':
+        specifier: workspace:*
+        version: link:packages/cogni-contracts
+      '@cogni/db-client':
+        specifier: workspace:*
+        version: link:packages/db-client
+      '@cogni/db-schema':
+        specifier: workspace:*
+        version: link:packages/db-schema
+      '@cogni/ids':
+        specifier: workspace:*
+        version: link:packages/ids
+      '@cogni/ingestion-core':
+        specifier: workspace:*
+        version: link:packages/ingestion-core
+      '@cogni/langgraph-graphs':
+        specifier: workspace:*
+        version: link:packages/langgraph-graphs
+      '@cogni/repo-spec':
+        specifier: workspace:*
+        version: link:packages/repo-spec
+      '@cogni/scheduler-core':
+        specifier: workspace:*
+        version: link:packages/scheduler-core
+      '@cogni/work-items':
+        specifier: workspace:*
+        version: link:packages/work-items
       cron-parser:
         specifier: ^4.9.0
         version: 4.9.0
@@ -36,18 +78,6 @@ importers:
       '@biomejs/biome':
         specifier: ^2.3.7
         version: 2.3.7
-      '@cogni/ai-tools':
-        specifier: workspace:*
-        version: link:packages/ai-tools
-      '@cogni/aragon-osx':
-        specifier: workspace:*
-        version: link:packages/aragon-osx
-      '@cogni/attribution-pipeline-plugins':
-        specifier: workspace:*
-        version: link:packages/attribution-pipeline-plugins
-      '@cogni/repo-spec':
-        specifier: workspace:*
-        version: link:packages/repo-spec
       '@commitlint/cli':
         specifier: ^19.8.1
         version: 19.8.1(@types/node@22.19.7)(typescript@5.9.3)
