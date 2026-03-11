@@ -1,221 +1,125 @@
 ---
 id: github-app-webhook-setup-guide
 type: guide
-title: GitHub App + Webhook Setup (Dev / Preview)
-status: draft
+title: GitHub App Setup — Local, Preview, Production
+status: active
 trust: draft
-summary: Create a GitHub App for attribution ingestion, configure webhook delivery via smee.io for local dev, and set secrets for preview/production.
-read_when: Setting up GitHub webhook ingestion for the first time, onboarding a new dev environment, or debugging webhook delivery.
+summary: Create GitHub Apps for webhook ingestion + PR review. One app per environment (local dev, preview, production) because each app has one webhook URL.
+read_when: Setting up GitHub webhook ingestion or PR review for any environment.
 owner: derekg1729
 created: 2026-03-06
-verified: 2026-03-06
-tags: [github, webhooks, ingestion, setup]
+verified: 2026-03-11
+tags: [github, webhooks, ingestion, review, setup]
 ---
 
-# GitHub App + Webhook Setup (Dev / Preview)
+# GitHub App Setup
 
-> Configure a GitHub App to deliver webhook events (PRs, reviews, issues, pushes) into the attribution ledger. Local dev uses smee.io as a proxy; preview/production receive webhooks directly.
+> One GitHub App per environment. Each app has one webhook URL — you cannot share an app across local/preview/production.
 
-## Prerequisites
+| Environment | App name convention           | Webhook URL                                                 | Install on                    |
+| ----------- | ----------------------------- | ----------------------------------------------------------- | ----------------------------- |
+| Local dev   | `cogni-review-dev-<yourname>` | smee.io proxy (see below)                                   | your personal test repo       |
+| Preview     | `cogni-review-preview`        | `https://preview.cognidao.org/api/internal/webhooks/github` | `Cogni-DAO/preview-test-repo` |
+| Production  | `cogni-review-production`     | `https://www.cognidao.org/api/internal/webhooks/github`     | `Cogni-DAO/node-template`     |
 
-- GitHub account with org admin (for org-level apps) or personal account access
-- Repo cloned locally with a working `.env.local`
-- `gh` CLI authenticated (`gh auth status`)
-- Node.js installed (for `npx smee`)
+## Create a GitHub App
 
-## Architecture
+1. Go to `https://github.com/organizations/Cogni-DAO/settings/apps/new` (org) or `https://github.com/settings/apps/new` (personal)
 
-The app has two ingestion paths that converge on the same `ingestion_receipts` table:
+2. Fill in:
 
-| Path        | Transport                                      | Where it runs      |
-| ----------- | ---------------------------------------------- | ------------------ |
-| **Poll**    | Temporal schedule -> GitHub GraphQL            | `scheduler-worker` |
-| **Webhook** | GitHub -> `POST /api/internal/webhooks/github` | Next.js app        |
+| Field          | Value                                        |
+| -------------- | -------------------------------------------- |
+| App name       | See table above                              |
+| Homepage URL   | `https://github.com/Cogni-DAO/node-template` |
+| Webhook URL    | See table above                              |
+| Webhook secret | Generate below                               |
+| Webhook active | Checked                                      |
 
-Both paths produce idempotent receipts (`ON CONFLICT DO NOTHING`). Webhooks provide near-instant ingestion; polling provides reconciliation.
+3. **Permissions (Repository):**
 
-## Step 1: Create a GitHub App
+| Permission    | Access       | Why                          |
+| ------------- | ------------ | ---------------------------- |
+| Checks        | Read & write | PR review creates Check Runs |
+| Contents      | Read-only    | Read repo files, diffs       |
+| Issues        | Read-only    | Attribution ingestion        |
+| Pull requests | Read & write | PR review posts comments     |
 
-Go to **GitHub Settings -> Developer settings -> GitHub Apps -> New GitHub App** (or `https://github.com/settings/apps/new` for personal).
+4. **Subscribe to events:** Issues, Issue comment, Pull request, Pull request review, Push
 
-| Field          | Value                                             |
-| -------------- | ------------------------------------------------- |
-| App name       | `cogni-ingestion-dev-<yourname>`                  |
-| Homepage URL   | `https://github.com/Cogni-DAO/cogni-template`     |
-| Webhook URL    | See Step 2 (smee for local, real URL for preview) |
-| Webhook secret | Generate: `openssl rand -hex 20`                  |
-| Webhook active | Checked                                           |
+5. Click **Create GitHub App**. Note the **App ID**.
 
-### Permissions (Repository)
+6. **Generate a private key:** App settings → Private keys → Generate. Download the `.pem` file.
 
-| Permission    | Access                   | Why                                 |
-| ------------- | ------------------------ | ----------------------------------- |
-| Checks        | Read & write             | PR review bot creates Check Runs    |
-| Contents      | Read-only                | Read repo files, diffs              |
-| Issues        | Read-only                | Attribution ingestion               |
-| Metadata      | Read-only (auto-granted) |                                     |
-| Pull requests | Read & write             | PR review bot posts comments on PRs |
+7. **Install the app:** App settings → Install App → select the target repo from the table above.
 
-### Subscribe to events
+## Configure Secrets
 
-- Issues
-- Issue comment
-- Pull request
-- Pull request review
-- Push
-
-### Where can this app be installed?
-
-- **Only on this account** (for dev apps)
-
-Click **Create GitHub App**. Note the **App ID** from the app settings page.
-
-## Step 2: Generate a private key
-
-On the app settings page, scroll to **Private keys -> Generate a private key**. Download the `.pem` file, then base64-encode it:
+### Generate values
 
 ```bash
-base64 < ~/Downloads/cogni-ingestion-dev-yourname.*.private-key.pem | tr -d '\n'
+# Webhook secret
+WEBHOOK_SECRET=$(openssl rand -hex 20)
+echo "Webhook secret: $WEBHOOK_SECRET"
+# Paste this into the GitHub App's webhook secret field
+
+# Base64-encode the private key
+APP_KEY=$(base64 < ~/Downloads/<app-name>.*.private-key.pem | tr -d '\n')
+echo "Base64 key: $APP_KEY"
 ```
 
-## Step 3: Install the app on your test repo
-
-On the app settings page: **Install App -> (your account) -> Only select repositories -> choose your test repo** (e.g. `derekg1729/test-repo`).
-
-## Step 4: Configure environment variables
-
-Add to `.env.local`:
+### Local dev — `.env.local`
 
 ```bash
-GH_REVIEW_APP_ID=<app-id-from-step-1>
-GH_REVIEW_APP_PRIVATE_KEY_BASE64=<base64-from-step-2>
+GH_REVIEW_APP_ID=<app-id>
+GH_REVIEW_APP_PRIVATE_KEY_BASE64=<base64-key>
 GH_REPOS=<owner>/<test-repo>
-GH_WEBHOOK_SECRET=<secret-from-step-1>
+GH_WEBHOOK_SECRET=<webhook-secret>
+GH_WEBHOOK_PROXY_URL=https://smee.io/<your-channel>  # see below
 ```
 
-## Step 5: Webhook delivery — local dev (smee.io)
-
-GitHub can't reach `localhost`. Use [smee.io](https://smee.io) to proxy webhook deliveries to your machine.
-
-### 5a. Create a smee channel
-
-Go to **https://smee.io/new** — copy the channel URL (e.g. `https://smee.io/AbCdEf123456`).
-
-### 5b. Set the GitHub App's webhook URL to your smee channel
-
-On the app settings page: **Webhook URL** -> paste the smee channel URL.
-
-### 5c. Add the smee URL to `.env.local`
-
-```bash
-GH_WEBHOOK_PROXY_URL=https://smee.io/AbCdEf123456
-```
-
-### 5d. Run the smee client
-
-In a separate terminal:
-
-```bash
-pnpm dev:smee
-```
-
-This reads `GH_WEBHOOK_PROXY_URL` from `.env.local` and forwards every webhook delivery from GitHub -> smee.io -> your local app.
-
-> **Tip:** Open your smee channel URL in a browser to see deliveries in real-time.
-
-### 5e. Start the app
-
-```bash
-pnpm dev:stack
-```
-
-Now push a commit or open a PR on your test repo — you should see the webhook arrive in the smee dashboard and get forwarded to your local app.
-
-## Step 5 (alt): Webhook delivery — preview / production
-
-For deployed environments, the GitHub App's webhook URL points directly at the app:
-
-| Environment | Webhook URL                                                 |
-| ----------- | ----------------------------------------------------------- |
-| Preview     | `https://preview.cognidao.org/api/internal/webhooks/github` |
-| Production  | `https://www.cognidao.org/api/internal/webhooks/github`     |
-
-Set the secret as a GitHub Actions environment secret:
+### Preview / Production — GitHub Actions secrets
 
 ```bash
 # Preview
-gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni-template --env preview --body "$GH_WEBHOOK_SECRET"
+APP_ID=<preview-app-id>
+gh secret set GH_REVIEW_APP_ID --repo Cogni-DAO/node-template --env preview --body "$APP_ID"
+gh secret set GH_REVIEW_APP_PRIVATE_KEY_BASE64 --repo Cogni-DAO/node-template --env preview --body "$APP_KEY"
+gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/node-template --env preview --body "$WEBHOOK_SECRET"
+gh variable set GH_REPOS --repo Cogni-DAO/node-template --env preview --body "Cogni-DAO/preview-test-repo"
 
 # Production
-gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/cogni-template --env production --body "$GH_WEBHOOK_SECRET"
+APP_ID=<prod-app-id>
+gh secret set GH_REVIEW_APP_ID --repo Cogni-DAO/node-template --env production --body "$APP_ID"
+gh secret set GH_REVIEW_APP_PRIVATE_KEY_BASE64 --repo Cogni-DAO/node-template --env production --body "$APP_KEY"
+gh secret set GH_WEBHOOK_SECRET --repo Cogni-DAO/node-template --env production --body "$WEBHOOK_SECRET"
+gh variable set GH_REPOS --repo Cogni-DAO/node-template --env production --body "Cogni-DAO/node-template"
 ```
 
-## Triggering test events
+## Local Dev — smee.io Webhook Proxy
 
-Full flow from a fresh setup to seeing real GitHub events in the UI:
+GitHub can't reach localhost. Use smee.io to forward webhooks.
 
-```bash
-# 1. Start infrastructure (postgres, temporal, scheduler-worker, etc.)
-pnpm dev:infra
+1. Go to `https://smee.io/new` — copy the channel URL
+2. Set it as the GitHub App's webhook URL
+3. Add `GH_WEBHOOK_PROXY_URL=<smee-url>` to `.env.local`
+4. Run `pnpm dev:smee` in a separate terminal
+5. Run `pnpm dev:stack`
 
-# 2. Provision + migrate + seed the database
-#    Seeds 4 epochs including an open epoch for the current week
-pnpm db:setup
+Test: push a commit or open a PR on your test repo. Check smee dashboard + app logs.
 
-# 3. Start the Next.js app (Terminal 1)
-pnpm dev
+## Verify
 
-# 4. Start the smee webhook proxy (Terminal 2)
-pnpm dev:smee
-
-# 5. Create real GitHub fixtures (Terminal 3)
-#    Creates a merged PR + closed issue on the test repo
-pnpm dev:trigger-github
-```
-
-The script targets `derekg1729/test-repo` by default. Override with `E2E_GITHUB_REPO` in `.env.local`.
-
-GitHub fires webhooks → smee forwards → app inserts receipts → visible in `/gov/epoch` within seconds (the seeded open epoch covers the current week).
-
-## Verifying it works
-
-### Check webhook delivery
-
-1. Run `pnpm dev:trigger-github` (or push a commit to your test repo)
-2. Check the GitHub App's **Advanced -> Recent Deliveries** for green checkmarks
-3. Check smee.io dashboard (local dev) for forwarded payloads
-4. Check app logs for `webhook received` / `receipts inserted` messages
-
-### Check the database
-
-```sql
-SELECT id, event_type, metadata->>'repo' AS repo, retrieved_at
-FROM ingestion_receipts
-WHERE source = 'github'
-ORDER BY retrieved_at DESC
-LIMIT 10;
-```
-
-### Re-deliver a webhook
-
-On the GitHub App settings page: **Advanced -> Recent Deliveries -> pick one -> Redeliver**. Useful for debugging without creating new PRs/pushes.
+1. Open a PR on the target repo (or `pnpm dev:trigger-github` for local dev)
+2. GitHub App → Advanced → Recent Deliveries: green checkmarks
+3. PR shows "Cogni Git PR Review" Check Run + review comment
 
 ## Troubleshooting
 
-| Symptom                                | Cause                                | Fix                                                                                 |
-| -------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------- |
-| 404 from webhook route                 | `GH_WEBHOOK_SECRET` not set or empty | Set the env var and restart                                                         |
-| 401 from webhook route                 | Secret mismatch                      | Ensure `.env.local` secret matches the GitHub App's webhook secret                  |
-| No deliveries in smee dashboard        | Wrong webhook URL in GitHub App      | Update to your smee channel URL                                                     |
-| Deliveries in smee but no forwarding   | smee client not running              | Run `npx smee -u <url> -t http://localhost:3000/api/internal/webhooks/github`       |
-| Deliveries in smee but app returns 500 | App not running or crash             | Check `pnpm dev:stack` logs                                                         |
-| Events arrive but zero receipts        | Normalizer filtering them            | Check `event_type` — bot authors are filtered, unsupported event types return empty |
-
-## Reference
-
-- Webhook route: `src/app/api/internal/webhooks/[source]/route.ts`
-- Normalizer: `src/adapters/server/ingestion/github-webhook.ts`
-- Feature service: `src/features/ingestion/services/webhook-receiver.ts`
-- Architecture decision: `docs/research/webhook-ingestion-architecture.md`
-- Attribution ledger spec: `docs/spec/attribution-ledger.md`
-- Unit tests: `tests/unit/adapters/server/ingestion/github-webhook-normalizer.test.ts`
+| Symptom                 | Fix                                              |
+| ----------------------- | ------------------------------------------------ |
+| 404 from webhook route  | `GH_WEBHOOK_SECRET` not set — add it and restart |
+| 401 from webhook route  | Secret mismatch — compare app config vs env var  |
+| Check Run never appears | App missing `checks:write` permission            |
+| Review silently skipped | `GH_REVIEW_APP_ID` or private key not configured |
+| No smee forwarding      | `pnpm dev:smee` not running                      |
