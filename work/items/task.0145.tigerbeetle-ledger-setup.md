@@ -15,11 +15,11 @@ project: proj.financial-ledger
 branch: task/0145-tigerbeetle-ledger
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-09
-updated: 2026-03-09
+updated: 2026-03-12
 labels: [treasury, accounting, governance]
 external_refs:
 ---
@@ -181,6 +181,21 @@ pnpm check
 - [ ] **Cross-ledger:** clearing accounts net to zero after deposit + spend cycle
 - [ ] **N-API:** Adapter via subpath export, lazy require in container.ts
 - [ ] **Non-blocking:** All co-writes fire-and-forget, log critical on failure
+
+## Review Feedback
+
+### Revision 1 (2026-03-12)
+
+**Blocking:**
+
+1. **R5 requirement text stale after MVP simplification.** R5 says "co-writes linked TigerBeetle transfers (USDC → clearing → CREDIT)" but code does single-ledger `EQUITY_CREDIT_ISSUANCE → LIABILITY_USER_CREDITS` on CREDIT ledger only. The 5-account MVP dropped clearing accounts. **Fix:** Update R5 text to match MVP: "creditAccount() for deposits co-writes a TigerBeetle transfer (Equity:CreditIssuance → Liability:UserCredits on CREDIT ledger)."
+
+2. **R8: No integration tests against real TigerBeetle.** Task plan step 6 requires `tigerbeetle.adapter.int.test.ts`. Domain tests exist, but adapter behavior (account creation, transfers, idempotency, linked transfers) is untested. **Fix:** Write integration tests or explicitly defer to a follow-up task.
+
+**Suggestions (non-blocking):**
+
+- `LINKED_FLAG = 1` magic number in `tigerbeetle.adapter.ts:174` — consider importing `TransferFlags` from `tigerbeetle-node` if available.
+- `AccountBalance` TSDoc (`financial-ledger.port.ts:54`) describes only one field but interface has four.
 
 ## PR / Links
 
