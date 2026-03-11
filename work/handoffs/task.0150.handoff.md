@@ -4,70 +4,69 @@ type: handoff
 work_item_id: task.0150
 status: active
 created: 2026-03-10
-updated: 2026-03-10
-branch: feat/operator-wallet-v0-task.0085
-last_commit: ab54bce5
+updated: 2026-03-11
+branch: feat/task.0150-operator-wallet-e2e
+last_commit: c28cc583
 ---
 
-# Handoff: Operator Wallet E2E Validation
+# Handoff: Operator Wallet E2E Validation — Privy + 0xSplits Testing
 
 ## Context
 
-- The operator wallet payment pipeline was built in task.0085: user pays USDC to a Split contract, `distribute()` splits funds ~92% operator / ~8% DAO, operator eventually funds OpenRouter (task.0086)
-- **All code was tested only with FakeOperatorWalletAdapter.** The real PrivyOperatorWalletAdapter has never been called — no Privy credentials exist, no Split contract is deployed, repo-spec has placeholder addresses
-- This task validates the pipeline end-to-end before task.0086 (OpenRouter top-up) can build on it
-- The payment pipeline is: USDC → Split contract → `distributeSplit()` → operator/DAO allocation → (future) `fundOpenRouterTopUp()`
-- task.0086 is blocked by this task
+- The operator wallet payment pipeline code is complete but **never tested against real infrastructure** — all tests use `FakeOperatorWalletAdapter`
+- `PrivyOperatorWalletAdapter` has never been called; the container always returns `operatorWallet: undefined` because no Privy credentials exist
+- A 0xSplits Split contract must be deployed on Base to replace the placeholder `receiving_address` in repo-spec
+- task.0086 (OpenRouter top-up — the final piece closing the financial loop) is blocked until this e2e validation proves the pipeline works
+- Branch was rebased onto staging's monorepo architecture (`apps/web/src/`, `packages/`); `pnpm check` passes clean
 
 ## Current State
 
-- **task.0085 PR:** [#538](https://github.com/Cogni-DAO/node-template/pull/538) — targets `feat/operator-wallet` feature branch, not merged yet
-- **Code complete:** `@cogni/operator-wallet` package, `PrivyOperatorWalletAdapter`, `SplitTreasurySettlementAdapter`, `confirmCreditsPurchase()` orchestrator all exist and pass `pnpm check`
-- **Never exercised in prod mode:** Container sets `operatorWallet: undefined` (no Privy env vars) → treasury settlement silently no-ops
-- **Scripts exist but never run on mainnet:** `scripts/deploy-split.ts`, `scripts/provision-operator-wallet.ts`, `scripts/distribute-split.ts`
-- **No test:external tests** for operator wallet (existing external tests are GitHub-only)
-- **`fundOpenRouterTopUp()` throws "not implemented"** — that's task.0086, not this task
-- **repo-spec placeholders:** `operator_wallet.address: 0x000...000`, `receiving_address` still points directly to DAO wallet
+- **Code complete:** `@cogni/operator-wallet` package, `PrivyOperatorWalletAdapter`, `SplitTreasurySettlementAdapter`, `confirmCreditsPurchase` orchestrator, env propagation across 8 deploy/CI files — all pass `pnpm check`
+- **repo-spec placeholders:** `operator_wallet.address: 0x0000...`, `receiving_address` still points to DAO wallet (not a Split)
+- **No Privy account:** `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY` do not exist anywhere
+- **Split contract not deployed:** `scripts/deploy-split.ts` exists but has never been run
+- **Zero external tests:** No `test:external` coverage for operator wallet (existing external tests are GitHub-only in `apps/web/tests/external/review/`)
+- **`fundOpenRouterTopUp()` throws "not implemented"** — that's task.0086 scope, not this task
+- **Work item status:** `needs_implement` — all 4 checkpoint checklists unchecked
 
 ## Decisions Made
 
-- [task.0150 work item](../items/task.0150.web3-scripts-to-package-and-setup-dao.md) — full plan with 4 checkpoints
-- [operator-wallet spec](../../docs/spec/operator-wallet.md) — custody model, Privy integration design
-- [Split allocation math](../../packages/operator-wallet/src/domain/split-allocation.ts) — 92.1% operator / 7.9% DAO derived from billing constants (2x markup, 75% revenue share, 5% provider fee)
-- Setup wizard refactor (scripts → DAO formation UI pattern) is deferred — validate the pipeline works first
-- `distributeSplit()` is the only method that needs real validation; `fundOpenRouterTopUp()` is task.0086's scope
+- [Privy over local keystore](../../docs/spec/operator-wallet.md) — HSM custody, no key material in app, port abstraction for future swap
+- [Split as receiving address](../../docs/spec/operator-wallet.md#architecture-three-access-layers) — trustless 92.1%/7.9% revenue split derived from billing constants
+- [Spike.0090 validated full chain](../../work/projects/proj.ai-operator-wallet.md#crawl-p0--operator-wallet--outbound-payments) on Base mainnet: 23.6s, ~$0.001 gas total
+- `distributeSplit()` is the only method needing real validation; `fundOpenRouterTopUp()` deferred to task.0086
 
 ## Next Actions
 
-- [ ] Obtain Privy credentials (PRIVY_APP_ID, PRIVY_APP_SECRET, PRIVY_SIGNING_KEY) — create account at privy.io
-- [ ] Run `pnpm tsx scripts/provision-operator-wallet.ts` — record wallet address
+- [ ] Create Privy account, enable "Require signed requests", obtain credentials
+- [ ] Run `pnpm tsx scripts/provision-operator-wallet.ts` — record returned wallet address
 - [ ] Update `.cogni/repo-spec.yaml` → `operator_wallet.address` with real address
-- [ ] Fund a deployer EOA with ETH on Base (~$0.01 gas)
-- [ ] Run `pnpm tsx scripts/deploy-split.ts` with real operator + DAO treasury addresses
+- [ ] Fund deployer EOA with ETH on Base (~$0.01), run `pnpm tsx scripts/deploy-split.ts`
 - [ ] Update `.cogni/repo-spec.yaml` → `payments_in.credits_topup.receiving_address` with Split address
-- [ ] Verify on Basescan: Split contract exists, recipients/allocations correct
-- [ ] Write `tests/external/operator-wallet.external.test.ts` — guard with env var check, test `getAddress()`, `getSplitAddress()`, `distributeSplit()`
-- [ ] Boot `pnpm dev:stack` with Privy env vars — verify container wires real adapter (check logs)
-- [ ] Closeout: update task.0150 status, unblock task.0086
+- [ ] Verify on Basescan: Split exists, recipients + allocations match 92.1%/7.9%
+- [ ] Write `apps/web/tests/external/operator-wallet.external.test.ts` — test `getAddress()`, `getSplitAddress()`, `distributeSplit(USDC)` with env var skip guard
+- [ ] Boot `pnpm dev:stack` with Privy env vars — verify logs show real adapter init (not "skipping")
+- [ ] Run `pnpm check` with real addresses in repo-spec
 
 ## Risks / Gotchas
 
-- **Privy signing key format:** Must be base64-encoded PKCS8. The `PRIVY_SIGNING_KEY` env var is multi-line — ensure `.env.local` handles it correctly
-- **Container wiring:** `src/bootstrap/container.ts:398-442` — requires ALL THREE Privy env vars AND valid `operator_wallet.address` in repo-spec AND valid `cogni_dao.dao_contract`. If any are missing, adapter is `undefined` and settlement silently no-ops (no error)
-- **0xSplits recipient ordering:** Recipients must be sorted by ascending address. `deploy-split.ts` handles this, but verify the deployed contract matches
-- **Sepolia vs mainnet:** Mainnet deploy is ~$0.01 gas. Open question whether to test on Sepolia first. The spike.0090 experiments ran on Base mainnet successfully
-- **Other devs on shared checkout:** This branch is the main working directory. Use a worktree for implementation to avoid collisions (multiple agents have stepped on each other in this session)
+- **Privy signing key format:** `PRIVY_SIGNING_KEY` is multi-line PEM (base64-encoded PKCS8). Ensure `.env.local` wraps it correctly — see `.env.local.example` for format
+- **Container wiring requires ALL of:** three Privy env vars + `operator_wallet.address` in repo-spec + `cogni_dao.dao_contract` in repo-spec. Any missing → adapter is `undefined`, settlement silently no-ops (no error thrown)
+- **0xSplits recipient ordering:** Recipients must be sorted ascending by address — adapter handles this, but verify deployed contract matches
+- **distributeSplit with 0 USDC:** Succeeds but distributes nothing (wasted gas). Seed a small amount for meaningful testing
+- **Monorepo paths:** External tests go under `apps/web/tests/external/`, not root `tests/`. Container is at `apps/web/src/bootstrap/container.ts:401-437`
 
 ## Pointers
 
-| File / Resource                                                                | Why it matters                                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| `work/items/task.0150.web3-scripts-to-package-and-setup-dao.md`                | Full plan with 4 checkpoints                                                                      |
-| `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts` | The real adapter — `distributeSplit()` impl, `fundOpenRouterTopUp()` stub                         |
-| `src/bootstrap/container.ts` (lines 398-442)                                   | Wiring logic: decides Fake vs Real adapter based on env vars                                      |
-| `scripts/deploy-split.ts`                                                      | Split deployment script — deploy on Base, outputs address                                         |
-| `scripts/provision-operator-wallet.ts`                                         | Privy wallet provisioning — creates wallet, outputs address                                       |
-| `scripts/experiments/full-chain.ts`                                            | Spike.0090 proof: full USDC → Split → OpenRouter chain works                                      |
-| `.cogni/repo-spec.yaml`                                                        | `operator_wallet.address` + `payments_in.credits_topup.receiving_address` — both need real values |
-| `tests/external/`                                                              | Existing external test pattern (env var guards, skip if missing)                                  |
-| `work/items/task.0086.openrouter-topup-integration.md`                         | Next task after this — blocked_by: task.0150                                                      |
+| File / Resource                                                                | Why it matters                                                                |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `work/items/task.0150.web3-scripts-to-package-and-setup-dao.md`                | Work item — 4 checkpoint checklists                                           |
+| `docs/spec/operator-wallet.md`                                                 | Spec — invariants, provisioning flow, custody design                          |
+| `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts` | Real Privy adapter — `verify()`, `distributeSplit()`                          |
+| `packages/operator-wallet/src/domain/split-allocation.ts`                      | `calculateSplitAllocations()` — bigint PPM math                               |
+| `scripts/provision-operator-wallet.ts`                                         | CLI to create Privy wallet                                                    |
+| `scripts/deploy-split.ts`                                                      | CLI to deploy Split contract on Base                                          |
+| `scripts/experiments/full-chain.ts`                                            | Spike.0090 — proven e2e chain (reference for API shapes + contract addresses) |
+| `apps/web/src/bootstrap/container.ts:401-437`                                  | Container wiring — Fake vs Real adapter decision                              |
+| `.cogni/repo-spec.yaml`                                                        | `operator_wallet.address` + `receiving_address` (currently placeholders)      |
+| `apps/web/tests/external/review/`                                              | Existing external test pattern (env var guards, skip if missing)              |
