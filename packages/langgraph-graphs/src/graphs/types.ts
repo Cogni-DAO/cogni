@@ -55,4 +55,9 @@ export interface CreateReactAgentGraphOptions {
   readonly llm: LanguageModelLike;
   /** Tools wrapped via toLangChainTools() */
   readonly tools: ReadonlyArray<StructuredToolInterface>;
+  /** Optional structured output format. When set, graph returns `structuredResponse`. */
+  readonly responseFormat?: {
+    readonly prompt?: string;
+    readonly schema: unknown;
+  };
 }

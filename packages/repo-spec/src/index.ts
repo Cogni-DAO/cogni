@@ -13,12 +13,14 @@
 
 export {
   extractChainId,
+  extractGatesConfig,
   extractGovernanceConfig,
   extractLedgerApprovers,
   extractLedgerConfig,
   extractNodeId,
   extractPaymentConfig,
   extractScopeId,
+  type GatesConfig,
   type GovernanceConfig,
   type GovernanceSchedule,
   type InboundPaymentConfig,
@@ -26,21 +28,33 @@ export {
   type LedgerPoolConfig,
 } from "./accessors.js";
 export { parseRepoSpec } from "./parse.js";
+export { parseRule } from "./rules.js";
 export {
   type ActivityLedgerSpec,
   type ActivitySourceSpec,
   activityLedgerSpecSchema,
   activitySourceSpecSchema,
+  aiRuleGateSchema,
   type CreditsTopupSpec,
   creditsTopupSpecSchema,
+  type GateConfig,
   type GovernanceScheduleSpec,
   type GovernanceSpec,
+  gateConfigSchema,
+  gatesArraySchema,
   governanceScheduleSchema,
   governanceSpecSchema,
   type PoolConfigSpec,
   poolConfigSpecSchema,
   type RepoSpec,
+  type Rule,
   repoSpecSchema,
+  reviewLimitsGateSchema,
+  ruleSchema,
+  type SuccessCriteria,
   scopeIdSchema,
   scopeKeySchema,
+  successCriteriaSchema,
+  type ThresholdCriterion,
+  thresholdCriterionSchema,
 } from "./schema.js";

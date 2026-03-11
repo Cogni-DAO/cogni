@@ -10,7 +10,7 @@ read_when: Adding a VCS integration, working on GitHub/GitLab auth, wiring webho
 implements: proj.vcs-integration
 owner: derekg1729
 created: 2026-02-22
-verified: 2026-02-22
+verified: 2026-03-10
 tags: [infra, github, auth, services]
 ---
 
@@ -32,6 +32,43 @@ tags: [infra, github, auth, services]
 | **Sister Repo** | [cogni-proposal-launcher](https://github.com/Cogni-DAO/cogni-proposal-launcher) | Aragon proposal UI (to be absorbed)    |
 
 ## Design
+
+### Current Implementation (Crawl — task.0153)
+
+PR review runs **in-process** within the Next.js app — no `services/git-daemon/` or `packages/github-core/` yet. The architecture below describes the Walk target; this section documents what is built today.
+
+```
+GitHub webhook (pull_request.opened / .synchronize / .reopened)
+  │
+  POST /api/internal/webhooks/github
+    ├─ Verify signature (existing)
+    ├─ Return 200 immediately
+    ├─ [existing] Attribution normalization (sync)
+    └─ [Crawl] Fire-and-forget: dispatch PR review (async)
+          │
+          ├─ src/app/_facades/review/dispatch.server.ts
+          │    └─ createInstallationOctokit() → src/adapters/server/review/github-auth.ts
+          │
+          ├─ src/features/review/services/review-handler.ts
+          │    ├─ Create Check Run (in_progress) via injected adapter
+          │    ├─ Gather evidence via injected adapter
+          │    ├─ Load gates from .cogni/repo-spec.yaml (local fs)
+          │    ├─ Gate orchestrator (src/features/review/gate-orchestrator.ts)
+          │    │    ├─ review-limits: deterministic size check
+          │    │    └─ ai-rule: invoke pr-review graph via GraphExecutorPort
+          │    │         └─ packages/langgraph-graphs/src/graphs/pr-review/
+          │    ├─ Update Check Run (conclusion + markdown summary)
+          │    └─ Post PR comment (staleness guard)
+          │
+          └─ Billing: system tenant (COGNI_SYSTEM_BILLING_ACCOUNT_ID)
+```
+
+**Key differences from Walk target:**
+
+- Auth lives in `src/adapters/server/review/github-auth.ts`, not `packages/github-core/`
+- Review dispatched from Next.js webhook route, not `services/git-daemon/`
+- Self-install only — reads `.cogni/` from local filesystem
+- Graph execution via `GraphExecutorPort` (in-proc), not internal API endpoint
 
 ### Why Two GitHub Apps
 

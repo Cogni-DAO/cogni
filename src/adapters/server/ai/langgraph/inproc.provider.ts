@@ -225,6 +225,9 @@ export class LangGraphInProcProvider implements GraphProvider {
       createToolExecFn,
       toolContracts,
       request: runnerRequest,
+      ...(req.responseFormat !== undefined && {
+        responseFormat: req.responseFormat,
+      }),
     });
 
     // Map package result to GraphFinal
@@ -330,6 +333,9 @@ export class LangGraphInProcProvider implements GraphProvider {
       finishReason: "stop",
       ...(result.usage !== undefined && { usage: result.usage }),
       ...(result.content !== undefined && { content: result.content }),
+      ...(result.structuredOutput !== undefined && {
+        structuredOutput: result.structuredOutput,
+      }),
     };
   }
 

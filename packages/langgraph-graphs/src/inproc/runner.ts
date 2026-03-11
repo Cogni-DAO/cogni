@@ -89,6 +89,7 @@ export function createInProcGraphRunner<TTool = unknown>(
     createToolExecFn,
     toolContracts,
     request,
+    responseFormat,
   } = opts;
 
   // SINGLE_QUEUE_PER_RUN: Runner creates queue, all events flow here
@@ -126,7 +127,11 @@ export function createInProcGraphRunner<TTool = unknown>(
   });
 
   // Use factory from catalog instead of hardcoded graph
-  const graph = createGraph({ llm, tools });
+  const graph = createGraph({
+    llm,
+    tools,
+    ...(responseFormat !== undefined && { responseFormat }),
+  });
 
   const final = (async (): Promise<GraphResult> => {
     try {
@@ -153,6 +158,12 @@ export function createInProcGraphRunner<TTool = unknown>(
 
       const assistantContent = extractAssistantContent(result.messages);
 
+      // Extract structured response if present (from responseFormat graphs)
+      const structuredOutput =
+        result.structuredResponse !== undefined
+          ? (result.structuredResponse as Record<string, unknown>)
+          : undefined;
+
       // ASSISTANT_FINAL_REQUIRED: exactly one per run
       emit({ type: "assistant_final", content: assistantContent });
       emit({ type: "done" });
@@ -164,6 +175,7 @@ export function createInProcGraphRunner<TTool = unknown>(
         finishReason: "stop",
         content: assistantContent,
         ...(collectedUsage !== null && { usage: collectedUsage }),
+        ...(structuredOutput !== undefined && { structuredOutput }),
       };
     } catch (error) {
       // Normalize error using duck-typed LlmError detection (kind/status properties)

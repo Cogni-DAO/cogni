@@ -23,9 +23,9 @@ import {
   isAiExecutionErrorCode,
 } from "@cogni/ai-core";
 import type { BaseMessage } from "@langchain/core/messages";
-import { AIMessage } from "@langchain/core/messages";
+import { AIMessage, SystemMessage } from "@langchain/core/messages";
 import type { RunnableConfig } from "@langchain/core/runnables";
-import { Runnable } from "@langchain/core/runnables";
+import { Runnable, RunnableLambda } from "@langchain/core/runnables";
 import { convertToOpenAITool } from "@langchain/core/utils/function_calling";
 import { fromBaseMessage, type Message } from "../core/message-converters";
 import { getCogniExecContext } from "./exec-context";
@@ -246,6 +246,88 @@ export class CogniCompletionAdapter extends Runnable<BaseMessage[], AIMessage> {
         };
       }),
     });
+  }
+
+  /**
+   * Return a Runnable that invokes the LLM and parses JSON structured output.
+   *
+   * Implements the BaseChatModel.withStructuredOutput() contract so LangGraph's
+   * `createReactAgent({ responseFormat })` works with our adapter.
+   *
+   * LangGraph calls this in the `generate_structured_response` node:
+   *   model.withStructuredOutput(schema, options).invoke(messages, config)
+   *
+   * The caller provides the Zod schema — this method just instructs JSON mode
+   * and validates the response against it.
+   *
+   * @param schema - Zod schema or JSON Schema object
+   * @param _options - StructuredOutputMethodOptions (name, method, includeRaw, strict)
+   */
+  withStructuredOutput<
+    RunOutput extends Record<string, unknown> = Record<string, unknown>,
+  >(
+    schema: { parse: (v: unknown) => RunOutput } | Record<string, unknown>,
+    _options?: Record<string, unknown>
+  ): Runnable<BaseMessage[], RunOutput> {
+    return RunnableLambda.from(
+      async (
+        messages: BaseMessage[],
+        config?: RunnableConfig
+      ): Promise<RunOutput> => {
+        // Prepend system instruction for JSON output
+        const augmented = [
+          new SystemMessage({
+            content:
+              "You must respond with valid JSON only. " +
+              "No markdown code fences, no extra text outside the JSON object.",
+          }),
+          ...messages,
+        ];
+
+        const aiMessage = await this.invoke(augmented, config);
+
+        // Extract text content from AIMessage
+        const text =
+          typeof aiMessage.content === "string"
+            ? aiMessage.content
+            : Array.isArray(aiMessage.content)
+              ? aiMessage.content
+                  .filter(
+                    (p): p is { type: "text"; text: string } =>
+                      typeof p === "object" &&
+                      p !== null &&
+                      "type" in p &&
+                      p.type === "text"
+                  )
+                  .map((p) => p.text)
+                  .join("")
+              : "";
+
+        // Strip markdown code fences if model wraps JSON in them
+        // Trim first so ^ and $ anchors match even with leading/trailing whitespace
+        const cleaned = text
+          .trim()
+          .replace(/^```(?:json)?\n?/i, "")
+          .replace(/\n?```$/, "")
+          .trim();
+
+        let parsed: RunOutput;
+        try {
+          parsed = JSON.parse(cleaned) as RunOutput;
+        } catch {
+          throw new Error(
+            `[CogniCompletionAdapter.withStructuredOutput] LLM returned invalid JSON: ${cleaned.slice(0, 200)}`
+          );
+        }
+
+        // Validate with Zod if schema has .parse()
+        if ("parse" in schema && typeof schema.parse === "function") {
+          return schema.parse(parsed) as RunOutput;
+        }
+
+        return parsed;
+      }
+    );
   }
 
   /**

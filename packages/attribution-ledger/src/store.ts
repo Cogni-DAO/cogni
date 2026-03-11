@@ -618,10 +618,17 @@ export interface CursorStore {
   ): Promise<IngestionCursor | null>;
 }
 
+/** Result of an idempotent pool component insert (ON CONFLICT DO NOTHING). */
+export interface PoolComponentInsertResult {
+  component: AttributionPoolComponent;
+  /** true if a new row was inserted; false if the component already existed. */
+  created: boolean;
+}
+
 export interface PoolStore {
   insertPoolComponent(
     params: InsertPoolComponentParams
-  ): Promise<AttributionPoolComponent>;
+  ): Promise<PoolComponentInsertResult>;
   getPoolComponentsForEpoch(
     epochId: bigint
   ): Promise<AttributionPoolComponent[]>;

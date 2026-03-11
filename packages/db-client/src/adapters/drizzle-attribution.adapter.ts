@@ -13,7 +13,7 @@
  * - SELECTION_FREEZE_ON_FINALIZE: DB trigger enforces; adapter does not duplicate check.
  * - ONE_OPEN_EPOCH: DB constraint enforces; adapter lets DB error propagate.
  * - USER_PROJECTIONS_RECOMPUTABLE: upsertUserProjections updates projected_units/receipt_count and never stores signed final units.
- * - POOL_LOCKED_AT_REVIEW: insertPoolComponent rejects inserts when epoch status != 'open'.
+ * - POOL_LOCKED_AT_REVIEW: insertPoolComponent rejects inserts when epoch status != 'open'. Idempotent via ON CONFLICT DO NOTHING + SELECT fallback; returns { component, created }.
  * - CONFIG_LOCKED_AT_REVIEW: closeIngestion pins allocationAlgoRef + weightConfigHash.
  * - EVALUATION_FINAL_ATOMIC: closeIngestionWithEvaluations inserts locked evaluations + sets artifacts_hash + transitions epoch in one transaction.
  * - EPOCH_CLOSE_ON_TRANSITION: transitionEpochForWindow closes stale open epoch + creates new epoch in one DB transaction.
@@ -45,6 +45,7 @@ import type {
   InsertSignatureParams,
   InsertStatementParams,
   InsertUserProjectionParams,
+  PoolComponentInsertResult,
   ReceiptClaimantsRecord,
   ReviewSubjectOverrideRecord,
   SelectedReceiptForAllocation,
@@ -1248,13 +1249,14 @@ export class DrizzleAttributionAdapter implements AttributionStore {
 
   async insertPoolComponent(
     params: InsertPoolComponentParams
-  ): Promise<AttributionPoolComponent> {
+  ): Promise<PoolComponentInsertResult> {
     const epoch = await this.resolveEpochScoped(params.epochId);
     // POOL_LOCKED_AT_REVIEW: reject pool component inserts after closeIngestion
     if (epoch.status !== "open") {
       throw new EpochNotOpenError(params.epochId.toString());
     }
-    const [row] = await this.db
+    // Idempotent: ON CONFLICT DO NOTHING + SELECT fallback (matches adapter pattern)
+    const [inserted] = await this.db
       .insert(epochPoolComponents)
       .values({
         nodeId: params.nodeId,
@@ -1265,9 +1267,25 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         amountCredits: params.amountCredits,
         evidenceRef: params.evidenceRef ?? null,
       })
+      .onConflictDoNothing({
+        target: [epochPoolComponents.epochId, epochPoolComponents.componentId],
+      })
       .returning();
-    if (!row) throw new Error("insertPoolComponent: INSERT returned no rows");
-    return toPoolComponent(row);
+    if (inserted)
+      return { component: toPoolComponent(inserted), created: true };
+    // Conflict: row already exists — SELECT by unique key (epochId, componentId)
+    const [existing] = await this.db
+      .select()
+      .from(epochPoolComponents)
+      .where(
+        and(
+          eq(epochPoolComponents.epochId, params.epochId),
+          eq(epochPoolComponents.componentId, params.componentId)
+        )
+      );
+    if (!existing)
+      throw new Error("insertPoolComponent: conflict but row not found");
+    return { component: toPoolComponent(existing), created: false };
   }
 
   async getPoolComponentsForEpoch(

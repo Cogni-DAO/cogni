@@ -48,12 +48,13 @@ Go to **GitHub Settings -> Developer settings -> GitHub Apps -> New GitHub App**
 
 ### Permissions (Repository)
 
-| Permission    | Access                   |
-| ------------- | ------------------------ |
-| Contents      | Read-only                |
-| Issues        | Read-only                |
-| Metadata      | Read-only (auto-granted) |
-| Pull requests | Read-only                |
+| Permission    | Access                   | Why                                 |
+| ------------- | ------------------------ | ----------------------------------- |
+| Checks        | Read & write             | PR review bot creates Check Runs    |
+| Contents      | Read-only                | Read repo files, diffs              |
+| Issues        | Read-only                | Attribution ingestion               |
+| Metadata      | Read-only (auto-granted) |                                     |
+| Pull requests | Read & write             | PR review bot posts comments on PRs |
 
 ### Subscribe to events
 
