@@ -275,7 +275,10 @@ export const repoSpecSchema = z
       /** DAO treasury contract address (EVM) */
       dao_contract: z
         .string()
-        .regex(/^0x[a-fA-F0-9]{40}$/, "dao_contract must be a valid EVM address")
+        .regex(
+          /^0x[a-fA-F0-9]{40}$/,
+          "dao_contract must be a valid EVM address"
+        )
         .optional(),
       /**
        * Chain ID as string or number (YAML flexibility).

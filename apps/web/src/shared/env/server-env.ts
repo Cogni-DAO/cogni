@@ -205,6 +205,13 @@ export const serverSchema = z.object({
   COGNI_REPO_PATH: z.string().min(1),
   // SHA override for mounts without .git (e.g., git-sync worktree)
   COGNI_REPO_SHA: optionalString,
+
+  // Privy (Operator Wallet) - Optional
+  // Required only when operator wallet features are enabled.
+  // Per operator-wallet.md: KEY_NEVER_IN_APP — Privy HSM holds signing keys.
+  PRIVY_APP_ID: optionalString,
+  PRIVY_APP_SECRET: optionalString,
+  PRIVY_SIGNING_KEY: optionalString,
 });
 
 type ServerEnv = z.infer<typeof serverSchema> & {
