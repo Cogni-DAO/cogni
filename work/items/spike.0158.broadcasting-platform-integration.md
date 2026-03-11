@@ -2,7 +2,7 @@
 id: spike.0158
 type: spike
 title: "Broadcasting Platform Integration — Research Spike"
-status: needs_design
+status: done
 priority: 1
 rank: 10
 estimate: 2
@@ -12,7 +12,7 @@ spec_refs:
 assignees:
   - derekg1729
 credit:
-project:
+project: proj.broadcasting
 branch: claude/research-broadcasting-integration-8p2DB
 pr:
 reviewer:
