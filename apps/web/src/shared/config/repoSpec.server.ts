@@ -15,6 +15,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  type DaoConfig,
+  extractDaoConfig,
   extractGovernanceConfig,
   extractLedgerApprovers,
   extractPaymentConfig,
@@ -28,6 +30,7 @@ import { serverEnv } from "@/shared/env";
 import { CHAIN_ID } from "@/shared/web3/chain";
 
 export type {
+  DaoConfig,
   GovernanceConfig,
   GovernanceSchedule,
   InboundPaymentConfig,
@@ -122,15 +125,7 @@ export function getGovernanceConfig(): GovernanceConfig {
 // DAO config — cogni_dao section (for governance signal execution + review deep links)
 // ---------------------------------------------------------------------------
 
-export interface DaoConfig {
-  readonly dao_contract: string;
-  readonly plugin_contract: string;
-  readonly signal_contract: string;
-  readonly chain_id: string;
-  readonly base_url: string;
-}
-
-let cachedDaoConfig: DaoConfig | null = null;
+let cachedDaoConfig: DaoConfig | null | undefined;
 
 /**
  * DAO governance configuration from repo-spec.
@@ -138,36 +133,10 @@ let cachedDaoConfig: DaoConfig | null = null;
  * All five fields must be present for the config to be valid.
  */
 export function getDaoConfig(): DaoConfig | null {
-  if (cachedDaoConfig) return cachedDaoConfig;
+  if (cachedDaoConfig !== undefined) return cachedDaoConfig;
 
   const spec = loadRepoSpec();
-  const dao = spec.cogni_dao as Record<string, unknown> | undefined;
-  if (!dao) return null;
-
-  const daoContract = dao.dao_contract as string | undefined;
-  const pluginContract = dao.plugin_contract as string | undefined;
-  const signalContract = dao.signal_contract as string | undefined;
-  const chainId = dao.chain_id as string | number | undefined;
-  const baseUrl = dao.base_url as string | undefined;
-
-  if (
-    !daoContract ||
-    !pluginContract ||
-    !signalContract ||
-    !chainId ||
-    !baseUrl
-  ) {
-    return null;
-  }
-
-  cachedDaoConfig = {
-    dao_contract: daoContract,
-    plugin_contract: pluginContract,
-    signal_contract: signalContract,
-    chain_id: String(chainId),
-    base_url: baseUrl,
-  };
-
+  cachedDaoConfig = extractDaoConfig(spec);
   return cachedDaoConfig;
 }
 

@@ -12,7 +12,9 @@
  */
 
 export {
+  type DaoConfig,
   extractChainId,
+  extractDaoConfig,
   extractGatesConfig,
   extractGovernanceConfig,
   extractLedgerApprovers,

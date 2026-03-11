@@ -37,8 +37,12 @@ export const mergeSpec = {
 
 export type MergeParams = Record<keyof typeof mergeSpec, string>;
 
+/** Allowlist: repoUrl must be a GitHub HTTPS URL. */
+const githubUrlRe = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/;
+
 /**
  * Validate URL search params against a spec. Returns typed params or null.
+ * repoUrl is additionally validated against a GitHub HTTPS allowlist to prevent XSS.
  */
 export function validateDeeplinkParams(
   searchParams: URLSearchParams
@@ -59,6 +63,9 @@ export function validateDeeplinkParams(
     if (!ok) return null;
     out[key] = raw;
   }
+
+  // Protocol validation: repoUrl must be a GitHub HTTPS URL
+  if (!out.repoUrl || !githubUrlRe.test(out.repoUrl)) return null;
 
   return out as MergeParams;
 }

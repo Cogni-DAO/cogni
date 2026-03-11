@@ -14,7 +14,12 @@
 
 import { randomUUID } from "node:crypto";
 import type { Rule } from "@cogni/repo-spec";
-import { extractGatesConfig, parseRepoSpec, parseRule } from "@cogni/repo-spec";
+import {
+  extractDaoConfig,
+  extractGatesConfig,
+  parseRepoSpec,
+  parseRule,
+} from "@cogni/repo-spec";
 import type { Logger } from "pino";
 
 import type { GraphExecutorPort, LlmCaller } from "@/ports";
@@ -173,44 +178,22 @@ export async function handlePrReview(
 
     // 7. Build DAO deep link (for Check Run "View Details" page)
     const daoBaseUrl = (() => {
-      if (
-        !("cogni_dao" in repoSpec) ||
-        !repoSpec.cogni_dao ||
-        typeof repoSpec.cogni_dao !== "object" ||
-        !("base_url" in repoSpec.cogni_dao)
-      ) {
-        return undefined;
-      }
-      const dao = repoSpec.cogni_dao as Record<string, unknown>;
-      const base = dao.base_url as string | undefined;
-      const daoContract = dao.dao_contract as string | undefined;
-      const pluginContract = dao.plugin_contract as string | undefined;
-      const signalContract = dao.signal_contract as string | undefined;
-      const daoChainId = dao.chain_id as string | undefined;
-
-      if (
-        !base ||
-        !daoContract ||
-        !pluginContract ||
-        !signalContract ||
-        !daoChainId
-      ) {
-        return undefined;
-      }
+      const dao = extractDaoConfig(repoSpec);
+      if (!dao) return undefined;
 
       try {
-        const url = new URL("/propose/merge", base);
-        url.searchParams.set("dao", daoContract);
-        url.searchParams.set("plugin", pluginContract);
-        url.searchParams.set("signal", signalContract);
-        url.searchParams.set("chainId", daoChainId);
+        const url = new URL("/propose/merge", dao.base_url);
+        url.searchParams.set("dao", dao.dao_contract);
+        url.searchParams.set("plugin", dao.plugin_contract);
+        url.searchParams.set("signal", dao.signal_contract);
+        url.searchParams.set("chainId", dao.chain_id);
         url.searchParams.set("action", "merge");
         url.searchParams.set("target", "change");
         url.searchParams.set("pr", String(prNumber));
         url.searchParams.set("repoUrl", `https://github.com/${owner}/${repo}`);
         return url.toString();
       } catch {
-        return base;
+        return dao.base_url;
       }
     })();
 
