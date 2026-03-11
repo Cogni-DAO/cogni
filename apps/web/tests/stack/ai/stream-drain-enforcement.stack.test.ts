@@ -15,6 +15,7 @@
 
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
@@ -22,7 +23,7 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
     // Find all .runGraph( call sites in src/ (production code only)
     const grepResult = execSync(
       "grep -rn '\\.runGraph(' src/ --include='*.ts' || true",
-      { encoding: "utf-8", cwd: process.cwd() }
+      { encoding: "utf-8", cwd: join(process.cwd(), "apps/web") }
     );
 
     const allSites = grepResult.split("\n").filter(Boolean);
@@ -50,7 +51,10 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
 
     for (const site of consumerSites) {
       const filePath = site.split(":")[0] ?? "";
-      const fileContent = readFileSync(filePath, "utf-8");
+      const fileContent = readFileSync(
+        join(process.cwd(), "apps/web", filePath),
+        "utf-8"
+      );
 
       const hasPumpDrain =
         fileContent.includes("RunEventRelay") ||

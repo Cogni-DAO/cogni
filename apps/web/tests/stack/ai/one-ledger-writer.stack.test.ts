@@ -14,6 +14,7 @@
  */
 
 import { execSync } from "node:child_process";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("ONE_LEDGER_WRITER Invariant", () => {
@@ -21,7 +22,7 @@ describe("ONE_LEDGER_WRITER Invariant", () => {
     // Search for actual method calls (not interface definitions or docs)
     const result = execSync(
       "grep -rn '\\.recordChargeReceipt(' src/ --include='*.ts' || true",
-      { encoding: "utf-8", cwd: process.cwd() }
+      { encoding: "utf-8", cwd: join(process.cwd(), "apps/web") }
     );
 
     const callSites = result
@@ -51,7 +52,7 @@ describe("ONE_LEDGER_WRITER Invariant", () => {
     // Verify billing.ts imports AccountService
     const billingImports = execSync(
       "grep -n 'AccountService' src/features/ai/services/billing.ts || true",
-      { encoding: "utf-8", cwd: process.cwd() }
+      { encoding: "utf-8", cwd: join(process.cwd(), "apps/web") }
     );
 
     expect(billingImports).toContain("AccountService");
@@ -60,7 +61,7 @@ describe("ONE_LEDGER_WRITER Invariant", () => {
     // (completion.ts, ai_runtime.ts, etc. may import AccountService for read-only ops)
     const otherCallSites = execSync(
       "grep -rn 'recordChargeReceipt' src/features/ --include='*.ts' | grep -v billing.ts | grep -v AGENTS.md || true",
-      { encoding: "utf-8", cwd: process.cwd() }
+      { encoding: "utf-8", cwd: join(process.cwd(), "apps/web") }
     );
 
     const violations = otherCallSites.split("\n").filter(Boolean);
