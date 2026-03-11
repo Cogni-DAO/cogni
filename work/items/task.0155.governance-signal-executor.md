@@ -15,7 +15,7 @@ assignees:
 credit:
 project: proj.system-tenant-governance
 branch: feat/governance-integration
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/549
 reviewer:
 revision: 0
 blocked_by:
