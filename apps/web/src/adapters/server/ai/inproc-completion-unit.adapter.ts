@@ -125,7 +125,7 @@ export type CompletionStreamFn = (
  * Per COMPLETION_UNIT_NOT_PORT: This is a CompletionUnitAdapter, NOT a GraphExecutorPort.
  * Provides executeCompletionUnit() for LangGraphInProcProvider and other graph providers.
  *
- * Per PROVIDER_AGGREGATION: Graph routing is handled by AggregatingGraphExecutor.
+ * Per ROUTING_BY_NAMESPACE_ONLY: Graph routing is handled by NamespaceGraphRouter.
  * This adapter provides the completion unit execution that providers use internally.
  */
 export class InProcCompletionUnitAdapter {

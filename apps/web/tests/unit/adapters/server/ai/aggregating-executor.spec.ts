@@ -3,10 +3,10 @@
 
 /**
  * Module: `@tests/unit/adapters/server/ai/aggregating-executor`
- * Purpose: Unit tests for AggregatingGraphExecutor routing behavior.
- * Scope: Verifies graphId routing, provider dispatch. Does NOT test actual graph execution, billing, or provider internals.
+ * Purpose: Unit tests for NamespaceGraphRouter routing behavior.
+ * Scope: Verifies graphId namespace routing, provider dispatch. Does NOT test actual graph execution, billing, or provider internals.
  * Invariants:
- *   - PROVIDER_AGGREGATION: Routes by graphId prefix to correct provider
+ *   - ROUTING_BY_NAMESPACE_ONLY: Routes by graphId.split(":")[0] to Map<string, GraphExecutorPort>
  * Side-effects: none
  * Notes: Discovery (listAgents) is tested in aggregating-agent-catalog.spec.ts
  * Links: aggregating-executor.ts, GRAPH_EXECUTION.md
@@ -14,21 +14,23 @@
  */
 
 import {
-  createMockGraphProvider,
+  createMockGraphExecutor,
   createTestGraphRunRequest,
 } from "@tests/_fixtures/ai/fixtures";
 import { describe, expect, it, vi } from "vitest";
-import { AggregatingGraphExecutor } from "@/adapters/server/ai/aggregating-executor";
-import type { GraphProvider } from "@/adapters/server/ai/graph-provider";
+import { NamespaceGraphRouter } from "@/adapters/server/ai/aggregating-executor";
+import type { GraphExecutorPort } from "@/ports";
 
-describe("AggregatingGraphExecutor", () => {
+describe("NamespaceGraphRouter", () => {
   describe("fail-fast behavior", () => {
-    it("returns error when graphId does not match any provider", async () => {
-      const provider = createMockGraphProvider("langgraph", ["chat"]);
-      const aggregator = new AggregatingGraphExecutor([provider]);
+    it("returns error when graphId namespace does not match any provider", async () => {
+      const provider = createMockGraphExecutor();
+      const router = new NamespaceGraphRouter(
+        new Map([["langgraph", provider]])
+      );
 
       const request = createTestGraphRunRequest({ graphId: "unknown:graph" });
-      const result = aggregator.runGraph(request);
+      const result = router.runGraph(request);
 
       const final = await result.final;
       expect(final.ok).toBe(false);
@@ -37,23 +39,40 @@ describe("AggregatingGraphExecutor", () => {
       // Provider should NOT be called
       expect(provider.runGraph).not.toHaveBeenCalled();
     });
+
+    it("returns error when graphId has no namespace separator", async () => {
+      const provider = createMockGraphExecutor();
+      const router = new NamespaceGraphRouter(
+        new Map([["langgraph", provider]])
+      );
+
+      const request = createTestGraphRunRequest({
+        graphId: "nocolon" as import("@cogni/ai-core").GraphId,
+      });
+      const result = router.runGraph(request);
+
+      const final = await result.final;
+      expect(final.ok).toBe(false);
+      expect(final.error).toBe("internal");
+
+      expect(provider.runGraph).not.toHaveBeenCalled();
+    });
   });
 
   describe("routing", () => {
-    it("routes to correct provider based on graphId prefix", async () => {
-      const langGraphProvider = createMockGraphProvider("langgraph", [
-        "chat",
-        "poet",
-      ]);
-      const claudeProvider = createMockGraphProvider("claude_sdk", ["planner"]);
-      const aggregator = new AggregatingGraphExecutor([
-        langGraphProvider,
-        claudeProvider,
-      ]);
+    it("routes to correct provider based on graphId namespace", async () => {
+      const langGraphProvider = createMockGraphExecutor();
+      const claudeProvider = createMockGraphExecutor();
+      const router = new NamespaceGraphRouter(
+        new Map<string, GraphExecutorPort>([
+          ["langgraph", langGraphProvider],
+          ["claude_sdk", claudeProvider],
+        ])
+      );
 
       // Route to langgraph provider
       const request1 = createTestGraphRunRequest({ graphId: "langgraph:poet" });
-      aggregator.runGraph(request1);
+      router.runGraph(request1);
       expect(langGraphProvider.runGraph).toHaveBeenCalledWith(request1);
       expect(claudeProvider.runGraph).not.toHaveBeenCalled();
 
@@ -64,50 +83,22 @@ describe("AggregatingGraphExecutor", () => {
       const request2 = createTestGraphRunRequest({
         graphId: "claude_sdk:planner",
       });
-      aggregator.runGraph(request2);
+      router.runGraph(request2);
       expect(claudeProvider.runGraph).toHaveBeenCalledWith(request2);
       expect(langGraphProvider.runGraph).not.toHaveBeenCalled();
     });
 
-    it("uses first matching provider when multiple could handle", () => {
-      // Both providers claim to handle "shared" prefix
-      const provider1: GraphProvider = {
-        providerId: "shared",
-        canHandle: (graphId) => graphId.startsWith("shared:"),
-        runGraph: vi.fn().mockReturnValue({
-          stream: (async function* () {
-            yield { type: "done" };
-          })(),
-          final: Promise.resolve({
-            ok: true,
-            runId: "test",
-            requestId: "test",
-          }),
-        }),
-      };
-      const provider2: GraphProvider = {
-        providerId: "shared",
-        canHandle: (graphId) => graphId.startsWith("shared:"),
-        runGraph: vi.fn().mockReturnValue({
-          stream: (async function* () {
-            yield { type: "done" };
-          })(),
-          final: Promise.resolve({
-            ok: true,
-            runId: "test",
-            requestId: "test",
-          }),
-        }),
-      };
+    it("routes deterministically by namespace — Map lookup, not iteration", () => {
+      // With Map, same namespace → same provider (no ambiguity)
+      const provider = createMockGraphExecutor();
+      const router = new NamespaceGraphRouter(new Map([["shared", provider]]));
 
-      const aggregator = new AggregatingGraphExecutor([provider1, provider2]);
-      const request = createTestGraphRunRequest({ graphId: "shared:test" });
+      const request = createTestGraphRunRequest({
+        graphId: "shared:test" as import("@cogni/ai-core").GraphId,
+      });
+      router.runGraph(request);
 
-      aggregator.runGraph(request);
-
-      // First provider in array should be called
-      expect(provider1.runGraph).toHaveBeenCalled();
-      expect(provider2.runGraph).not.toHaveBeenCalled();
+      expect(provider.runGraph).toHaveBeenCalledWith(request);
     });
   });
 });

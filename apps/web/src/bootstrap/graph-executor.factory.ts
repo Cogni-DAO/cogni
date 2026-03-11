@@ -8,27 +8,26 @@
  * Invariants:
  *   - Facade NEVER imports adapters directly (use this factory)
  *   - Per UNIFIED_GRAPH_EXECUTOR: all graph execution flows through GraphExecutorPort
- *   - Per PROVIDER_AGGREGATION: AggregatingGraphExecutor routes to providers
+ *   - Per ROUTING_BY_NAMESPACE_ONLY: NamespaceGraphRouter routes by graphId prefix via Map
  *   - Per LANGFUSE_INTEGRATION: ObservabilityGraphExecutorDecorator wraps for Langfuse traces
  *   - Per CALLBACK_IS_SOLE_WRITER: BillingGraphExecutorDecorator validates usage_report events (receipt writes via LiteLLM callback)
  *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: PreflightCreditCheckDecorator rejects runs with insufficient credits
  *   - LAZY_SANDBOX_IMPORT: Sandbox provider loaded via dynamic import() to defer dockerode native addon chain (SandboxRunnerAdapter)
  * Side-effects: global (module-scoped cached sandbox provider promise)
- * Links: container.ts, AggregatingGraphExecutor, GRAPH_EXECUTION.md, OBSERVABILITY.md
+ * Links: container.ts, NamespaceGraphRouter, GRAPH_EXECUTION.md, OBSERVABILITY.md
  * @public
  */
 
 import type { UserId } from "@cogni/ids";
 import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 import {
-  AggregatingGraphExecutor,
   BillingGraphExecutorDecorator,
   type CompletionStreamFn,
   createLangGraphDevClient,
-  type GraphProvider,
   InProcCompletionUnitAdapter,
   LangGraphDevProvider,
   LangGraphInProcProvider,
+  NamespaceGraphRouter,
   ObservabilityGraphExecutorDecorator,
   PreflightCreditCheckDecorator,
 } from "@/adapters/server";
@@ -47,17 +46,17 @@ import {
 } from "./container";
 
 /**
- * Factory for creating AggregatingGraphExecutor with all configured providers.
+ * Factory for creating NamespaceGraphRouter with all configured providers.
  * Per UNIFIED_GRAPH_EXECUTOR: all graph execution flows through GraphExecutorPort.
- * Per PROVIDER_AGGREGATION: AggregatingGraphExecutor routes by graphId to providers.
+ * Per ROUTING_BY_NAMESPACE_ONLY: NamespaceGraphRouter routes by graphId namespace via Map.
  * Per CATALOG_SINGLE_SOURCE_OF_TRUTH: Provider imports catalog from @cogni/langgraph-graphs.
  * Per MUTUAL_EXCLUSION: Register exactly one langgraph provider (InProc XOR Dev) based on env.
  *
  * Architecture boundary: Facade calls this factory (app → bootstrap),
- * factory creates aggregator (bootstrap → adapters). Facade never imports adapters.
+ * factory creates router (bootstrap → adapters). Facade never imports adapters.
  *
  * Decorator stack (outer → inner):
- *   ObservabilityGraphExecutorDecorator → PreflightCreditCheckDecorator → BillingGraphExecutorDecorator → AggregatingGraphExecutor
+ *   ObservabilityGraphExecutorDecorator → PreflightCreditCheckDecorator → BillingGraphExecutorDecorator → NamespaceGraphRouter
  *
  * @param completionStreamFn - Feature function for LLM streaming (from features/ai)
  * @param userId - User ID for adapter dependency resolution
@@ -78,23 +77,26 @@ export function createGraphExecutor(
     ? createDevProvider(devUrl)
     : createInProcProvider(deps, completionStreamFn);
 
-  // Build providers array: langgraph + sandbox
+  // Build namespace → provider map
   const env = serverEnv();
-  const providers: GraphProvider[] = [
-    langGraphProvider,
-    new LazySandboxGraphProvider(
-      env.LITELLM_MASTER_KEY,
-      env.OPENCLAW_GATEWAY_URL,
-      env.OPENCLAW_GATEWAY_TOKEN
-    ),
-  ];
+  const providers = new Map<string, GraphExecutorPort>([
+    [langGraphProvider.providerId, langGraphProvider],
+    [
+      "sandbox",
+      new LazySandboxGraphProvider(
+        env.LITELLM_MASTER_KEY,
+        env.OPENCLAW_GATEWAY_URL,
+        env.OPENCLAW_GATEWAY_TOKEN
+      ),
+    ],
+  ]);
 
-  // Create aggregating executor with all configured providers
-  const aggregator = new AggregatingGraphExecutor(providers);
+  // Create namespace router with all configured providers
+  const router = new NamespaceGraphRouter(providers);
 
   // Wrap with billing validation decorator (intercepts + validates usage_report events)
   // Per CALLBACK_IS_SOLE_WRITER: decorator validates only; LiteLLM callback writes receipts
-  const billed = new BillingGraphExecutorDecorator(aggregator, container.log);
+  const billed = new BillingGraphExecutorDecorator(router, container.log);
 
   // Wrap with preflight credit check (rejects runs with insufficient credits)
   // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: all execution paths get credit check automatically
@@ -148,13 +150,13 @@ function createDevProvider(apiUrl: string): LangGraphDevProvider {
 // ---------------------------------------------------------------------------
 
 /** Module-scoped singleton: caches the dynamic import + provider construction */
-let _sandboxProvider: Promise<GraphProvider> | null = null;
+let _sandboxProvider: Promise<GraphExecutorPort> | null = null;
 
 function loadSandboxProvider(
   litellmMasterKey: string,
   gatewayUrl: string,
   gatewayToken: string
-): Promise<GraphProvider> {
+): Promise<GraphExecutorPort> {
   if (!_sandboxProvider) {
     _sandboxProvider = import("@/adapters/server/sandbox").then(
       ({
@@ -171,7 +173,10 @@ function loadSandboxProvider(
           gatewayToken
         );
 
-        return new SandboxGraphProvider(runner, gatewayClient) as GraphProvider;
+        return new SandboxGraphProvider(
+          runner,
+          gatewayClient
+        ) as GraphExecutorPort;
       }
     );
   }
@@ -179,18 +184,16 @@ function loadSandboxProvider(
 }
 
 /**
- * GraphProvider that lazy-loads SandboxGraphProvider on first use.
+ * GraphExecutorPort that lazy-loads SandboxGraphProvider on first use.
  *
  * Avoids top-level import of dockerode → ssh2 → cpu-features (native addon)
  * which breaks Turbopack bundling when the barrel re-exports it.
  *
- * canHandle() is sync (prefix check only).
- * runGraph() returns {stream, final} synchronously; the async generator
- * inside awaits the cached import before delegating.
+ * Per LAZY_SANDBOX_IMPORT: runGraph() returns {stream, final} synchronously;
+ * the async generator inside awaits the cached import before delegating.
  */
-class LazySandboxGraphProvider implements GraphProvider {
-  readonly providerId = "sandbox";
-  private readonly delegate: Promise<GraphProvider>;
+class LazySandboxGraphProvider implements GraphExecutorPort {
+  private readonly delegate: Promise<GraphExecutorPort>;
 
   constructor(
     litellmMasterKey: string,
@@ -202,10 +205,6 @@ class LazySandboxGraphProvider implements GraphProvider {
       gatewayUrl,
       gatewayToken
     );
-  }
-
-  canHandle(graphId: string): boolean {
-    return graphId.startsWith(`${this.providerId}:`);
   }
 
   runGraph(req: GraphRunRequest): GraphRunResult {

@@ -3,17 +3,17 @@
 
 /**
  * Module: `@adapters/server/sandbox/sandbox-graph.provider`
- * Purpose: GraphProvider implementation that executes agents in sandboxed containers.
+ * Purpose: GraphExecutorPort implementation that executes agents in sandboxed containers.
  * Scope: Routes sandbox:* graphIds through SandboxRunnerAdapter. Does not implement agent logic.
  * Invariants:
  *   - Per SANDBOXED_AGENTS.md P0.75: Agent runs in sandbox via graph execution pipeline
- *   - Per UNIFIED_GRAPH_EXECUTOR: Registered in AggregatingGraphExecutor like any provider
+ *   - Per UNIFIED_GRAPH_EXECUTOR: Registered in NamespaceGraphRouter like any provider
  *   - Per SECRETS_HOST_ONLY: Only messages + model passed to sandbox, never credentials
  *   - Per BILLING_INDEPENDENT_OF_CLIENT: ephemeral emits usage_report for RunEventRelay billing; gateway relies on LiteLLM callback (COST_AUTHORITY_IS_LITELLM)
  *   - Per SESSION_MODEL_OVERRIDE: Gateway mode calls configureSession() before runAgent() so GraphRunRequest.model reaches LiteLLM via OpenClaw sessions.patch
  *   - Per STATUS_BEST_EFFORT: StatusEvent pass-through from gateway — never blocks stream or billing
  * Side-effects: IO (creates tmp workspace, runs Docker containers via SandboxRunnerPort, HTTP to gateway)
- * Links: docs/spec/sandboxed-agents.md, graph-provider.ts, sandbox-runner.adapter.ts, openclaw-gateway-client.ts
+ * Links: docs/spec/sandboxed-agents.md, sandbox-runner.adapter.ts, openclaw-gateway-client.ts
  * @internal
  */
 
@@ -32,6 +32,7 @@ import type { Logger } from "pino";
 
 import type {
   AiExecutionErrorCode,
+  GraphExecutorPort,
   GraphFinal,
   GraphRunRequest,
   GraphRunResult,
@@ -41,7 +42,6 @@ import type {
 } from "@/ports";
 import { EVENT_NAMES, makeLogger } from "@/shared/observability";
 
-import type { GraphProvider } from "../ai/graph-provider";
 import type { OpenClawGatewayClient } from "./openclaw-gateway-client";
 
 /** Provider ID for sandbox agent execution */
@@ -117,7 +117,7 @@ const SANDBOX_AGENTS: Record<string, SandboxAgentEntry> = {
 };
 
 /**
- * GraphProvider that executes agents in sandboxed Docker containers.
+ * GraphExecutorPort that executes agents in sandboxed Docker containers.
  *
  * Per SANDBOXED_AGENTS.md P0.75: integrates sandbox execution into the
  * standard chat pipeline so users can select "sandbox:agent" in the UI.
@@ -130,7 +130,7 @@ const SANDBOX_AGENTS: Record<string, SandboxAgentEntry> = {
  * 5. Emit usage_report for billing
  * 6. Return GraphFinal
  */
-export class SandboxGraphProvider implements GraphProvider {
+export class SandboxGraphProvider implements GraphExecutorPort {
   readonly providerId = SANDBOX_PROVIDER_ID;
   private readonly log: Logger;
 
@@ -143,12 +143,6 @@ export class SandboxGraphProvider implements GraphProvider {
       { agents: Object.keys(SANDBOX_AGENTS) },
       "SandboxGraphProvider initialized"
     );
-  }
-
-  canHandle(graphId: string): boolean {
-    if (!graphId.startsWith(`${this.providerId}:`)) return false;
-    const agentName = graphId.slice(this.providerId.length + 1);
-    return agentName in SANDBOX_AGENTS;
   }
 
   runGraph(req: GraphRunRequest): GraphRunResult {

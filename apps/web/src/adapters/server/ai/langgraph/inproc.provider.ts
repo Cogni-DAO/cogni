@@ -37,6 +37,7 @@ import type { Logger } from "pino";
 import type {
   AiExecutionErrorCode,
   CompletionFinalResult,
+  GraphExecutorPort,
   GraphFinal,
   GraphRunRequest,
   GraphRunResult,
@@ -45,7 +46,6 @@ import type {
 } from "@/ports";
 import { EVENT_NAMES, makeLogger } from "@/shared/observability";
 
-import type { GraphProvider } from "../graph-provider";
 import type { CompletionUnitParams } from "../inproc-completion-unit.adapter";
 
 import type { LangGraphCatalog } from "./catalog";
@@ -88,7 +88,7 @@ interface ProviderCatalogEntry {
  *
  * Note: Discovery (listAgents) is in LangGraphInProcAgentCatalogProvider.
  */
-export class LangGraphInProcProvider implements GraphProvider {
+export class LangGraphInProcProvider implements GraphExecutorPort {
   readonly providerId = LANGGRAPH_PROVIDER_ID;
   private readonly log: Logger;
   private readonly catalog: LangGraphCatalog<CreateGraphFn>;
@@ -109,14 +109,6 @@ export class LangGraphInProcProvider implements GraphProvider {
       },
       "LangGraphInProcProvider initialized"
     );
-  }
-
-  canHandle(graphId: string): boolean {
-    if (!graphId.startsWith(`${this.providerId}:`)) {
-      return false;
-    }
-    const graphName = graphId.slice(this.providerId.length + 1);
-    return graphName in this.catalog;
   }
 
   runGraph(req: GraphRunRequest): GraphRunResult {
