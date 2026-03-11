@@ -3,9 +3,9 @@
 
 /**
  * Module: `@shared/config/repoSpec.server`
- * Purpose: Server-only thin wrapper — file I/O, caching, and CHAIN_ID validation. All schema logic delegated to @cogni/repo-spec.
- * Scope: Reads and caches repo-spec on first access; passes CHAIN_ID to package accessors. Does not define schemas or validation logic.
- * Invariants: Chain ID must match CHAIN_ID; ledger config requires scope_id + scope_key.
+ * Purpose: Server-only thin wrapper — file I/O, caching, and CHAIN_ID validation for repo-spec accessors including DAO governance config.
+ * Scope: Reads and caches repo-spec on first access; does not define schemas, validation logic, or perform network I/O.
+ * Invariants: Chain ID must match CHAIN_ID; ledger config requires scope_id + scope_key; DaoConfig requires all five cogni_dao fields.
  * Side-effects: IO (reads repo-spec from disk) on first call only.
  * Links: packages/repo-spec/src/index.ts, .cogni/repo-spec.yaml
  * @public

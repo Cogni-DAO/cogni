@@ -2,7 +2,7 @@
 id: task.0155
 type: task
 title: "Governance signal executor: Alchemy webhook → on-chain verification → GitHub actions"
-status: done
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 3
