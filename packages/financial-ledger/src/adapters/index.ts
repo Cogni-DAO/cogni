@@ -11,4 +11,7 @@
  * @public
  */
 
-export { TigerBeetleAdapter } from "./tigerbeetle.adapter.js";
+export {
+  createTigerBeetleAdapter,
+  TigerBeetleAdapter,
+} from "./tigerbeetle.adapter.js";

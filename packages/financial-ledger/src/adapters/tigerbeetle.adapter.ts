@@ -20,6 +20,7 @@ import type {
   CreateAccountsError,
   CreateTransfersError,
 } from "tigerbeetle-node";
+import { createClient } from "tigerbeetle-node";
 
 import { ACCOUNT_DEFINITIONS } from "../domain/accounts.js";
 import {
@@ -231,4 +232,16 @@ export class TigerBeetleAdapter implements FinancialLedgerPort {
       debitsPending: account.debits_pending,
     };
   }
+}
+
+/**
+ * Create a TigerBeetleAdapter connected to the given address.
+ * Wraps tigerbeetle-node createClient so callers don't import the N-API addon directly.
+ */
+export function createTigerBeetleAdapter(address: string): TigerBeetleAdapter {
+  const client = createClient({
+    cluster_id: 0n,
+    replica_addresses: [address],
+  });
+  return new TigerBeetleAdapter(client);
 }

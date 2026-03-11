@@ -21,6 +21,7 @@ import type {
 import type { AttributionStore } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { FinancialLedgerPort } from "@cogni/financial-ledger";
+import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
 import { numberToPpm } from "@cogni/operator-wallet";
@@ -307,32 +308,16 @@ function createContainer(): Container {
       })();
 
   // FinancialLedger: optional — only when TIGERBEETLE_ADDRESS is configured
-  // Uses lazy require to avoid pulling N-API addon when not configured
+  // @cogni/financial-ledger/adapters is in serverExternalPackages (N-API addon, not bundleable)
   const financialLedger: FinancialLedgerPort | undefined = (() => {
     if (!env.TIGERBEETLE_ADDRESS) return undefined;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createClient } = require("tigerbeetle-node") as {
-        createClient: (opts: {
-          cluster_id: bigint;
-          replica_addresses: string[];
-          // biome-ignore lint/suspicious/noExplicitAny: dynamic require typing
-        }) => any;
-      };
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { TigerBeetleAdapter } =
-        require("@cogni/financial-ledger/adapters") as {
-          TigerBeetleAdapter: new (client: unknown) => FinancialLedgerPort;
-        };
-      const client = createClient({
-        cluster_id: 0n,
-        replica_addresses: [env.TIGERBEETLE_ADDRESS],
-      });
+      const adapter = createTigerBeetleAdapter(env.TIGERBEETLE_ADDRESS);
       log.info(
         { address: env.TIGERBEETLE_ADDRESS },
         "TigerBeetle financial ledger connected"
       );
-      return new TigerBeetleAdapter(client);
+      return adapter;
     } catch (err) {
       log.warn(
         { err },

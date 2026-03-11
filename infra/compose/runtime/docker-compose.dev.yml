@@ -63,7 +63,7 @@ services:
       - LANGFUSE_BASE_URL
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
       # TigerBeetle (Financial Ledger) — optional, silently skipped if missing
-      - TIGERBEETLE_ADDRESS=${TIGERBEETLE_ADDRESS:-tigerbeetle:3000}
+      - TIGERBEETLE_ADDRESS=${TIGERBEETLE_ADDRESS:-tigerbeetle:3001}
       # Privy (Operator Wallet) — optional, silently skipped if missing
       - PRIVY_APP_ID
       - PRIVY_APP_SECRET
@@ -648,13 +648,13 @@ services:
     networks:
       - internal
     ports:
-      - "127.0.0.1:3000:3000"
-    command: ["start", "--addresses=0.0.0.0:3000", "/data/0_0.tigerbeetle"]
+      - "127.0.0.1:3001:3001"
+    command: ["start", "--addresses=0.0.0.0:3001", "/data/0_0.tigerbeetle"]
     volumes:
       - tigerbeetle_data:/data
     healthcheck:
       # TigerBeetle doesn't have an HTTP health endpoint; check TCP port
-      test: ["CMD-SHELL", "echo > /dev/tcp/127.0.0.1/3000 || exit 1"]
+      test: ["CMD-SHELL", "echo > /dev/tcp/127.0.0.1/3001 || exit 1"]
       interval: 10s
       timeout: 2s
       retries: 5
