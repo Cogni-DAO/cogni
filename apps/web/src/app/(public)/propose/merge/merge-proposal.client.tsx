@@ -13,7 +13,6 @@
  * @public
  */
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { encodeFunctionData } from "viem";
@@ -29,14 +28,9 @@ import {
   Alert,
   AlertDescription,
   AlertTitle,
-} from "@/components/kit/feedback/Alert";
-import { Button } from "@/components/kit/inputs/Button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/kit/layout/Card";
+  Button,
+  WalletConnectButton,
+} from "@/components";
 import {
   COGNI_SIGNAL_ABI,
   TOKEN_VOTING_ABI,
@@ -45,9 +39,9 @@ import {
   estimateProposalGas,
   generateProposalTimestamps,
   getChainName,
-  type MergeParams,
   validateDeeplinkParams,
 } from "@/features/governance/lib/proposal-utils";
+import { getDaoUrl } from "@/shared/web3/block-explorer";
 
 export function MergeProposal() {
   const searchParams = useSearchParams();
@@ -65,13 +59,14 @@ export function MergeProposal() {
 
   if (!params) {
     return (
-      <Alert variant="destructive">
-        <AlertTitle>Missing Required Parameters</AlertTitle>
-        <AlertDescription>
-          This page requires valid URL parameters. Please check the link and try
-          again.
-        </AlertDescription>
-      </Alert>
+      <div className="flex min-h-screen items-center justify-center">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertTitle>Invalid Link</AlertTitle>
+          <AlertDescription>
+            Missing required URL parameters. Check the link from your PR review.
+          </AlertDescription>
+        </Alert>
+      </div>
     );
   }
 
@@ -107,20 +102,21 @@ export function MergeProposal() {
       ];
 
       const { startDate, endDate } = generateProposalTimestamps();
+      const proposalArgs = [
+        "0x" as `0x${string}`,
+        actions,
+        0n,
+        startDate,
+        endDate,
+        0,
+        false,
+      ] as const;
 
       const gasLimit = await estimateProposalGas(client, {
         address: params.plugin as `0x${string}`,
         abi: TOKEN_VOTING_ABI,
         functionName: "createProposal",
-        args: [
-          "0x" as `0x${string}`,
-          actions,
-          0n,
-          startDate,
-          endDate,
-          0,
-          false,
-        ],
+        args: proposalArgs,
         account: address,
       });
 
@@ -128,15 +124,7 @@ export function MergeProposal() {
         address: params.plugin as `0x${string}`,
         abi: TOKEN_VOTING_ABI,
         functionName: "createProposal",
-        args: [
-          "0x" as `0x${string}`,
-          actions,
-          0n,
-          startDate,
-          endDate,
-          0,
-          false,
-        ],
+        args: proposalArgs,
         gas: gasLimit,
         account: address,
       });
@@ -145,42 +133,73 @@ export function MergeProposal() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <h1 className="font-bold text-2xl">Create Merge Proposal</h1>
+  const daoUrl = getDaoUrl(requiredChainId, params.dao);
+  const proposalsUrl = daoUrl ? `${daoUrl}/proposals` : null;
 
-      <div>
-        <ConnectButton />
+  // ── Success ──────────────────────────────────────────────
+  if (isSuccess && data) {
+    return (
+      <SuccessView
+        proposalsUrl={proposalsUrl}
+        prUrl={prUrl}
+        prNumber={params.pr}
+      />
+    );
+  }
+
+  // ── Default ──────────────────────────────────────────────
+  return (
+    <div className="space-y-8">
+      {/* Header — what and where */}
+      <div className="space-y-1">
+        <p className="font-mono text-muted-foreground text-xs uppercase tracking-widest">
+          Cogni governance · {getChainName(params.chainId)}
+        </p>
+        <h1 className="font-bold text-3xl tracking-tight">
+          {params.action} PR #{params.pr}
+        </h1>
+        <p className="text-muted-foreground">
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline transition-colors hover:text-foreground"
+          >
+            {repoName}#{params.pr}
+          </a>
+        </p>
       </div>
 
-      <NetworkStatus
+      {/* The thing they're signing */}
+      <div className="rounded-lg border border-border p-5">
+        <p className="text-lg">
+          If the vote passes, Cogni will{" "}
+          <span className="font-semibold">{params.action}</span> this pull
+          request.
+        </p>
+      </div>
+
+      {/* CTA */}
+      <ProposalCta
         isConnected={isConnected}
-        currentChainId={chainId}
-        requiredChainId={requiredChainId}
         isCorrectChain={isCorrectChain}
+        isPending={isPending}
+        chainName={getChainName(params.chainId)}
         onSwitch={() => switchChain?.({ chainId: requiredChainId })}
+        onSubmit={createProposal}
       />
 
-      <ProposalSummary params={params} decodedRepoUrl={decodedRepoUrl} />
-
-      {isConnected && (
-        <ProposalAction
-          params={params}
-          repoName={repoName}
-          prUrl={prUrl}
-          isCorrectChain={isCorrectChain}
-          isPending={isPending}
-          isSuccess={isSuccess}
-          error={error}
-          txHash={data}
-          onSubmit={createProposal}
-        />
-      )}
-
-      {!isConnected && (
-        <p className="text-muted-foreground">
-          Please connect your wallet to continue.
-        </p>
+      {error && (
+        <Alert variant="destructive">
+          <AlertTitle>Failed</AlertTitle>
+          <AlertDescription>
+            {error.message?.includes("User rejected")
+              ? "Transaction cancelled."
+              : error.message?.includes("insufficient funds")
+                ? "Insufficient funds for gas."
+                : (error.message ?? "Unknown error")}
+          </AlertDescription>
+        </Alert>
       )}
     </div>
   );
@@ -190,191 +209,85 @@ export function MergeProposal() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function NetworkStatus({
+function ProposalCta({
   isConnected,
-  currentChainId,
-  requiredChainId,
   isCorrectChain,
+  isPending,
+  chainName,
   onSwitch,
+  onSubmit,
 }: {
   isConnected: boolean;
-  currentChainId: number;
-  requiredChainId: number;
   isCorrectChain: boolean;
+  isPending: boolean;
+  chainName: string;
   onSwitch: () => void;
+  onSubmit: () => void;
 }) {
-  if (!isConnected) return null;
+  if (!isConnected) {
+    return (
+      <div className="space-y-2">
+        <p className="text-muted-foreground text-sm">
+          Connect a wallet on {chainName} to continue.
+        </p>
+        <WalletConnectButton />
+      </div>
+    );
+  }
 
   if (!isCorrectChain) {
     return (
-      <Alert>
-        <AlertTitle>Wrong Network</AlertTitle>
-        <AlertDescription className="space-y-2">
-          <p>
-            Connected to {getChainName(currentChainId)} but this proposal
-            requires {getChainName(requiredChainId)}.
-          </p>
-          <Button variant="outline" size="sm" onClick={onSwitch}>
-            Switch to {getChainName(requiredChainId)}
-          </Button>
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
-  return (
-    <Alert variant="success">
-      <AlertTitle>Connected to {getChainName(requiredChainId)}</AlertTitle>
-    </Alert>
-  );
-}
-
-function ProposalSummary({
-  params,
-  decodedRepoUrl,
-}: {
-  params: MergeParams;
-  decodedRepoUrl: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Proposal Summary</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1 text-sm">
-        <p>
-          <span className="font-medium">Repository:</span> {decodedRepoUrl}
-        </p>
-        <p>
-          <span className="font-medium">Pull Request:</span> #{params.pr}
-        </p>
-        <p>
-          <span className="font-medium">Action:</span> {params.action}
-        </p>
-        <p>
-          <span className="font-medium">Target:</span> {params.target}
-        </p>
-        <p>
-          <span className="font-medium">Network:</span>{" "}
-          {getChainName(params.chainId)} (Chain ID: {params.chainId})
-        </p>
-        <hr className="my-2 border-border" />
-        <p className="font-mono text-muted-foreground text-xs">
-          DAO: {params.dao}
-        </p>
-        <p className="font-mono text-muted-foreground text-xs">
-          Plugin: {params.plugin}
-        </p>
-        <p className="font-mono text-muted-foreground text-xs">
-          Signal: {params.signal}
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ProposalAction({
-  params,
-  repoName,
-  prUrl,
-  isCorrectChain,
-  isPending,
-  isSuccess,
-  error,
-  txHash,
-  onSubmit,
-}: {
-  params: MergeParams;
-  repoName: string;
-  prUrl: string;
-  isCorrectChain: boolean;
-  isPending: boolean;
-  isSuccess: boolean;
-  error: Error | null;
-  txHash: string | undefined;
-  onSubmit: () => void;
-}) {
-  if (isSuccess && txHash) {
-    return (
-      <Alert variant="success">
-        <AlertTitle>Proposal Created Successfully</AlertTitle>
-        <AlertDescription className="space-y-2">
-          <p className="break-all font-mono text-xs">
-            Transaction Hash: {txHash}
-          </p>
-          <p className="text-sm">
-            <a
-              href={`https://app.aragon.org/dao/base/${params.dao}/proposals`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline"
-            >
-              View on Aragon App
-            </a>
-          </p>
-        </AlertDescription>
-      </Alert>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Proposal Action</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <p>
-            <span className="font-medium">Call:</span> CogniSignal.signal()
-          </p>
-          <p>
-            <span className="font-medium">Target:</span>{" "}
-            <span className="font-mono text-xs">{params.signal}</span>
-          </p>
-          <p>
-            <span className="font-medium">Title:</span> {repoName}-
-            {params.action}-PR#{params.pr}
-          </p>
-          <p>
-            <span className="font-medium">PR:</span>{" "}
-            <a
-              href={prUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline"
-            >
-              {prUrl}
-            </a>
-          </p>
-        </CardContent>
-      </Card>
-
-      <Button
-        onClick={onSubmit}
-        disabled={isPending || !isCorrectChain}
-        variant={isCorrectChain && !isPending ? "default" : "secondary"}
-      >
-        {isPending ? "Creating Proposal..." : "Create Proposal"}
+      <Button variant="outline" onClick={onSwitch}>
+        Switch to {chainName}
       </Button>
+    );
+  }
 
-      {!isCorrectChain && (
-        <p className="text-muted-foreground text-sm">
-          Switch to {getChainName(params.chainId)} to enable proposal creation.
+  return (
+    <Button onClick={onSubmit} disabled={isPending}>
+      {isPending ? "Confirm in wallet..." : "Create Proposal"}
+    </Button>
+  );
+}
+
+function SuccessView({
+  proposalsUrl,
+  prUrl,
+  prNumber,
+}: {
+  proposalsUrl: string | null;
+  prUrl: string;
+  prNumber: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-6 py-12 text-center">
+      <div className="flex size-16 items-center justify-center rounded-full bg-success/10">
+        <span className="text-3xl text-success" aria-hidden="true">
+          &#x2713;
+        </span>
+      </div>
+
+      <div className="space-y-1">
+        <h1 className="font-bold text-2xl tracking-tight">Proposal Created</h1>
+        <p className="text-muted-foreground">
+          DAO members can now vote on this proposal.
         </p>
-      )}
+      </div>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Proposal Creation Failed</AlertTitle>
-          <AlertDescription>
-            {error.message?.includes("User rejected")
-              ? "Transaction was cancelled by user"
-              : error.message?.includes("insufficient funds")
-                ? "Insufficient funds for transaction"
-                : (error.message ?? "Unknown error occurred")}
-          </AlertDescription>
-        </Alert>
-      )}
+      <div className="flex flex-col gap-3 sm:flex-row">
+        {proposalsUrl && (
+          <Button asChild>
+            <a href={proposalsUrl} target="_blank" rel="noopener noreferrer">
+              Vote on Aragon
+            </a>
+          </Button>
+        )}
+        <Button variant="outline" asChild>
+          <a href={prUrl} target="_blank" rel="noopener noreferrer">
+            Back to PR #{prNumber}
+          </a>
+        </Button>
+      </div>
     </div>
   );
 }
