@@ -95,6 +95,8 @@ services:
         condition: service_healthy
       temporal:
         condition: service_healthy
+      tigerbeetle:
+        condition: service_healthy
       git-sync:
         condition: service_completed_successfully
 
@@ -628,6 +630,8 @@ services:
     profiles:
       - bootstrap
     restart: "no"
+    cap_add:
+      - IPC_LOCK
     command:
       [
         "format",
@@ -643,6 +647,8 @@ services:
     image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
     container_name: tigerbeetle
     restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
     labels:
       - "autoheal=true"
     networks:

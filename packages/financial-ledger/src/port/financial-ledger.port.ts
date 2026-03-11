@@ -51,7 +51,7 @@ export interface LedgerAccount {
 }
 
 export interface AccountBalance {
-  /** Net credit balance: credits_posted - debits_posted */
+  /** Total credits posted to this account */
   readonly creditsPosted: bigint;
   readonly debitsPosted: bigint;
   readonly creditsPending: bigint;

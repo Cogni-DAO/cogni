@@ -360,6 +360,8 @@ export class UserDrizzleAccountService implements AccountService {
   }
 
   async recordChargeReceipt(params: ChargeReceiptParams): Promise<void> {
+    let committedReceiptId: string | undefined;
+
     await withTenantScope(this.db, this.actorId, async (tx) => {
       // Idempotency check: (source_system, source_reference) per GRAPH_EXECUTION.md
       // This prevents double-debits on retries
@@ -466,27 +468,29 @@ export class UserDrizzleAccountService implements AccountService {
         );
       }
 
-      // TigerBeetle co-write: fire-and-forget AI usage debit
-      // Postgres is source of truth; TB is async shadow ledger
-      if (this.financialLedger && receipt) {
-        this.financialLedger
-          .transfer({
-            id: uuidToBigInt(receipt.id),
-            debitAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
-            creditAccountId: ACCOUNT.REVENUE_AI_USAGE,
-            amount: BigInt(params.chargedCredits),
-            ledger: LEDGER.CREDIT,
-            code: TRANSFER_CODE.AI_USAGE,
-            userData128: uuidToBigInt(receipt.id),
-          })
-          .catch((err) => {
-            logger.error(
-              { err, receiptId: receipt.id },
-              "TigerBeetle co-write failed for charge receipt"
-            );
-          });
-      }
+      committedReceiptId = receipt?.id;
     });
+
+    // CO_WRITE_NON_BLOCKING: TigerBeetle co-write AFTER Postgres tx commits.
+    // Fires only if PG succeeded — avoids orphaned TB transfers on PG rollback.
+    if (this.financialLedger && committedReceiptId) {
+      this.financialLedger
+        .transfer({
+          id: uuidToBigInt(committedReceiptId),
+          debitAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
+          creditAccountId: ACCOUNT.REVENUE_AI_USAGE,
+          amount: BigInt(params.chargedCredits),
+          ledger: LEDGER.CREDIT,
+          code: TRANSFER_CODE.AI_USAGE,
+          userData128: uuidToBigInt(committedReceiptId),
+        })
+        .catch((err) => {
+          logger.error(
+            { err, receiptId: committedReceiptId },
+            "TigerBeetle co-write failed for charge receipt"
+          );
+        });
+    }
   }
 
   async creditAccount({
@@ -505,7 +509,9 @@ export class UserDrizzleAccountService implements AccountService {
     metadata?: Record<string, unknown>;
   }): Promise<{ newBalance: number }> {
     const ledgerEntryId = randomUUID();
-    return withTenantScope(this.db, this.actorId, async (tx) => {
+    let committedAmount: bigint | undefined;
+
+    const result = await withTenantScope(this.db, this.actorId, async (tx) => {
       await ensureBillingAccountExists(tx, billingAccountId);
       const resolvedVirtualKeyId =
         virtualKeyId ?? (await findDefaultKey(tx, billingAccountId)).id;
@@ -538,28 +544,31 @@ export class UserDrizzleAccountService implements AccountService {
         metadata: metadata ?? null,
       });
 
-      // TigerBeetle co-write: deposit credit (fire-and-forget)
-      if (this.financialLedger && reason === "deposit") {
-        this.financialLedger
-          .transfer({
-            id: uuidToBigInt(ledgerEntryId),
-            debitAccountId: ACCOUNT.EQUITY_CREDIT_ISSUANCE,
-            creditAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
-            amount: amountBigInt,
-            ledger: LEDGER.CREDIT,
-            code: TRANSFER_CODE.CREDIT_DEPOSIT,
-            userData128: uuidToBigInt(ledgerEntryId),
-          })
-          .catch((err) => {
-            logger.error(
-              { err, ledgerEntryId },
-              "TigerBeetle co-write failed for credit deposit"
-            );
-          });
-      }
-
+      committedAmount = amountBigInt;
       return { newBalance };
     });
+
+    // CO_WRITE_NON_BLOCKING: TigerBeetle co-write AFTER Postgres tx commits.
+    if (this.financialLedger && reason === "deposit" && committedAmount) {
+      this.financialLedger
+        .transfer({
+          id: uuidToBigInt(ledgerEntryId),
+          debitAccountId: ACCOUNT.EQUITY_CREDIT_ISSUANCE,
+          creditAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
+          amount: committedAmount,
+          ledger: LEDGER.CREDIT,
+          code: TRANSFER_CODE.CREDIT_DEPOSIT,
+          userData128: uuidToBigInt(ledgerEntryId),
+        })
+        .catch((err) => {
+          logger.error(
+            { err, ledgerEntryId },
+            "TigerBeetle co-write failed for credit deposit"
+          );
+        });
+    }
+
+    return result;
   }
 
   async listCreditLedgerEntries({
@@ -812,7 +821,9 @@ export class ServiceDrizzleAccountService implements ServiceAccountService {
     metadata?: Record<string, unknown>;
   }): Promise<{ newBalance: number }> {
     const ledgerEntryId = randomUUID();
-    return await this.db.transaction(async (tx) => {
+    let committedAmount: bigint | undefined;
+
+    const result = await this.db.transaction(async (tx) => {
       await ensureBillingAccountExists(tx, billingAccountId);
       const resolvedVirtualKeyId =
         virtualKeyId ?? (await findDefaultKey(tx, billingAccountId)).id;
@@ -845,28 +856,31 @@ export class ServiceDrizzleAccountService implements ServiceAccountService {
         metadata: metadata ?? null,
       });
 
-      // TigerBeetle co-write: deposit credit (fire-and-forget)
-      if (this.financialLedger && reason === "deposit") {
-        this.financialLedger
-          .transfer({
-            id: uuidToBigInt(ledgerEntryId),
-            debitAccountId: ACCOUNT.EQUITY_CREDIT_ISSUANCE,
-            creditAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
-            amount: amountBigInt,
-            ledger: LEDGER.CREDIT,
-            code: TRANSFER_CODE.CREDIT_DEPOSIT,
-            userData128: uuidToBigInt(ledgerEntryId),
-          })
-          .catch((err) => {
-            logger.error(
-              { err, ledgerEntryId },
-              "TigerBeetle co-write failed for credit deposit"
-            );
-          });
-      }
-
+      committedAmount = amountBigInt;
       return { newBalance };
     });
+
+    // CO_WRITE_NON_BLOCKING: TigerBeetle co-write AFTER Postgres tx commits.
+    if (this.financialLedger && reason === "deposit" && committedAmount) {
+      this.financialLedger
+        .transfer({
+          id: uuidToBigInt(ledgerEntryId),
+          debitAccountId: ACCOUNT.EQUITY_CREDIT_ISSUANCE,
+          creditAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
+          amount: committedAmount,
+          ledger: LEDGER.CREDIT,
+          code: TRANSFER_CODE.CREDIT_DEPOSIT,
+          userData128: uuidToBigInt(ledgerEntryId),
+        })
+        .catch((err) => {
+          logger.error(
+            { err, ledgerEntryId },
+            "TigerBeetle co-write failed for credit deposit"
+          );
+        });
+    }
+
+    return result;
   }
 
   async findCreditLedgerEntryByReference({
