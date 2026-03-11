@@ -26,14 +26,15 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 
 **Goal:** Baseline established — canonical builds, check:full gate, runtime DSN isolation.
 
-| Deliverable                                                               | Status    | Est | Work Item |
-| ------------------------------------------------------------------------- | --------- | --- | --------- |
-| Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done      | 1   | —         |
-| Manifest-first Docker layering for cache optimization                     | Done      | 1   | —         |
-| `check:full` local CI-parity gate with trap-based cleanup                 | Done      | 1   | —         |
-| `validate-dsns.sh` for runtime DSN isolation                              | Done      | 1   | —         |
-| Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done      | 1   | —         |
-| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | In Review | 5   | task.0151 |
+| Deliverable                                                               | Status      | Est | Work Item |
+| ------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done        | 1   | —         |
+| Manifest-first Docker layering for cache optimization (app)               | Done        | 1   | —         |
+| Manifest-first Docker layering for cache optimization (scheduler-worker)  | Not Started | 2   | task.0160 |
+| `check:full` local CI-parity gate with trap-based cleanup                 | Done        | 1   | —         |
+| `validate-dsns.sh` for runtime DSN isolation                              | Done        | 1   | —         |
+| Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done        | 1   | —         |
+| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | In Review   | 5   | task.0151 |
 
 ### Walk (P1) — DSN-Only Provisioning & Build Improvements
 
