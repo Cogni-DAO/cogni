@@ -444,6 +444,7 @@ function createContainer(): Container {
           treasuryAddress,
           markupPpm: numberToPpm(env.USER_PRICE_MARKUP_FACTOR),
           revenueSharePpm: numberToPpm(env.SYSTEM_TENANT_REVENUE_SHARE),
+          maxTopUpUsd: env.OPERATOR_MAX_TOPUP_USD,
         });
       })();
 
