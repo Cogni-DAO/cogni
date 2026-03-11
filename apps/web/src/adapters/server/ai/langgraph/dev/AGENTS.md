@@ -30,7 +30,7 @@ LangGraph dev server adapter. Connects to external `langgraph dev` server (port 
 ## Public Surface
 
 - **Exports:**
-  - `LangGraphDevProvider` — Implements GraphProvider for dev server execution
+  - `LangGraphDevProvider` — Implements GraphExecutorPort for dev server execution
   - `LangGraphDevAgentCatalogProvider` — Implements AgentCatalogProvider for dev server discovery
   - `createDevClient()` — SDK client factory
   - `deriveThreadId()` — UUIDv5 thread derivation from billingAccountId + stateKey
@@ -41,7 +41,7 @@ LangGraph dev server adapter. Connects to external `langgraph dev` server (port 
 ## Ports
 
 - **Uses ports:** none
-- **Implements ports:** GraphProvider (via `LangGraphDevProvider`), AgentCatalogProvider (via `LangGraphDevAgentCatalogProvider`)
+- **Implements ports:** GraphExecutorPort (via `LangGraphDevProvider`), AgentCatalogProvider (via `LangGraphDevAgentCatalogProvider`)
 - **Contracts:** none (dev-only adapter)
 
 ## Responsibilities

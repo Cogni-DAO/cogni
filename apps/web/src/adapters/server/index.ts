@@ -29,10 +29,9 @@ export type { AgentCatalogProvider } from "./ai/agent-catalog.provider";
 // Agent discovery infrastructure
 export { AggregatingAgentCatalog } from "./ai/aggregating-agent-catalog";
 // Graph execution infrastructure
-export { AggregatingGraphExecutor } from "./ai/aggregating-executor";
+export { NamespaceGraphRouter } from "./ai/aggregating-executor";
 // Billing decorator for automatic billing enforcement at port level
 export { BillingGraphExecutorDecorator } from "./ai/billing-executor.decorator";
-export type { GraphProvider } from "./ai/graph-provider";
 export {
   type CompletionStreamFn,
   type CompletionStreamParams,

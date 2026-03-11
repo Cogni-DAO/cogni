@@ -320,7 +320,7 @@ export async function completionStream(
 
   // Per UNIFIED_GRAPH_EXECUTOR: use bootstrap factory (app → bootstrap → adapters)
   // Facade CANNOT import adapters - architecture boundary enforced by depcruise
-  // Per PROVIDER_AGGREGATION: AggregatingGraphExecutor routes by graphId to providers
+  // Per ROUTING_BY_NAMESPACE_ONLY: NamespaceGraphRouter routes by graphId namespace to providers
   const { accountService, clock } = resolveAiAdapterDeps(userId);
 
   // Create preflight credit check closure (app layer → features DI boundary)
@@ -338,7 +338,7 @@ export async function completionStream(
     });
 
   // Create graph executor via bootstrap factory
-  // Routing is handled by AggregatingGraphExecutor - facade is graph-agnostic
+  // Routing is handled by NamespaceGraphRouter - facade is graph-agnostic
   const graphExecutor = createGraphExecutor(
     executeStream,
     userId,

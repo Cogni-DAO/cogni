@@ -6,7 +6,7 @@
  * Purpose: Internal interface for agent catalog providers.
  * Scope: Defines provider contract for AggregatingAgentCatalog. NOT a public port in P0.
  * Invariants:
- *   - PROVIDER_AGGREGATION: AggregatingAgentCatalog routes discovery to AgentCatalogProvider[]
+ *   - DISCOVERY_SEPARATION: AggregatingAgentCatalog fans out discovery to AgentCatalogProvider[]
  *   - DISCOVERY_NO_EXECUTION_DEPS: Providers do not require execution infrastructure
  *   - P0_AGENT_GRAPH_IDENTITY: agentId === graphId (one agent per graph)
  * Side-effects: none
@@ -27,6 +27,8 @@ export type { AgentDescriptor } from "@/ports";
  *
  * Per DISCOVERY_NO_EXECUTION_DEPS: providers do not require CompletionStreamFn
  * or any execution infrastructure.
+ *
+ * Per DISCOVERY_SEPARATION: discovery is pure listAgents() fanout, no routing.
  */
 export interface AgentCatalogProvider {
   /** Provider identifier (e.g., "langgraph", "claude_sdk") */
@@ -37,13 +39,4 @@ export interface AgentCatalogProvider {
    * Used for discovery and UI agent selector.
    */
   listAgents(): readonly AgentDescriptor[];
-
-  /**
-   * Check if this provider handles the given graphId.
-   * Used by aggregator for routing.
-   *
-   * @param graphId - Namespaced graph ID (e.g., "langgraph:poet")
-   * @returns true if this provider handles the graph
-   */
-  canHandle(graphId: string): boolean;
 }

@@ -3,15 +3,15 @@
 
 /**
  * Module: `@adapters/server/ai/aggregating-executor`
- * Purpose: Routes graph execution to appropriate provider by graphId.
- * Scope: Implements GraphExecutorPort for unified graph access. Routes by graphId prefix. Does NOT contain graph orchestration logic.
+ * Purpose: Routes graph execution to appropriate provider by graphId namespace.
+ * Scope: Implements GraphExecutorPort for unified graph access. Routes by graphId prefix via Map lookup. Does NOT contain graph orchestration logic.
  * Invariants:
- *   - PROVIDER_AGGREGATION: Routes graphId → GraphProvider
+ *   - ROUTING_BY_NAMESPACE_ONLY: Routes graphId.split(":")[0] → Map<string, GraphExecutorPort>
  *   - UNIFIED_GRAPH_EXECUTOR: All graphs flow through GraphExecutorPort
  *   - GRAPH_ID_NAMESPACED: graphId format is ${providerId}:${graphName}
  * Side-effects: none (delegates to providers)
  * Notes: Discovery (listAgents) is in AggregatingAgentCatalog, not here.
- * Links: GRAPH_EXECUTION.md, graph-provider.ts
+ * Links: GRAPH_EXECUTION.md
  * @public
  */
 
@@ -25,38 +25,36 @@ import type {
 } from "@/ports";
 import { makeLogger } from "@/shared/observability";
 
-import type { GraphProvider } from "./graph-provider";
-
 /**
- * Aggregating graph executor that routes to providers by graphId.
+ * Namespace-based graph router that delegates to providers by graphId prefix.
  *
  * Implements GraphExecutorPort for unified graph access.
- * App uses only this aggregator; no facade-level graph conditionals.
+ * App uses only this router; no facade-level graph conditionals.
  *
- * Per GRAPH_ID_NAMESPACED: graphId format is "${providerId}:${graphName}".
- * The aggregator routes based on the providerId prefix.
+ * Per ROUTING_BY_NAMESPACE_ONLY: parses graphId.split(":")[0] once,
+ * looks up provider in Map<string, GraphExecutorPort>. No per-provider routing logic.
  *
  * Note: Discovery (listing agents) is in AggregatingAgentCatalog.
  */
-export class AggregatingGraphExecutor implements GraphExecutorPort {
+export class NamespaceGraphRouter implements GraphExecutorPort {
   private readonly log: Logger;
-  private readonly providers: readonly GraphProvider[];
+  private readonly providers: ReadonlyMap<string, GraphExecutorPort>;
 
   /**
-   * Create aggregating executor with given providers.
+   * Create namespace router with given provider map.
    *
-   * @param providers - Graph providers to aggregate
+   * @param providers - Map of namespace → GraphExecutorPort
    */
-  constructor(providers: readonly GraphProvider[]) {
+  constructor(providers: ReadonlyMap<string, GraphExecutorPort>) {
     this.providers = providers;
-    this.log = makeLogger({ component: "AggregatingGraphExecutor" });
+    this.log = makeLogger({ component: "NamespaceGraphRouter" });
 
     this.log.debug(
       {
-        providerCount: providers.length,
-        providers: providers.map((p) => p.providerId),
+        providerCount: providers.size,
+        namespaces: [...providers.keys()],
       },
-      "AggregatingGraphExecutor initialized"
+      "NamespaceGraphRouter initialized"
     );
   }
 
@@ -64,26 +62,33 @@ export class AggregatingGraphExecutor implements GraphExecutorPort {
    * Execute a graph run by routing to appropriate provider.
    *
    * Routing strategy:
-   * 1. Use graphId to find provider that can handle it
-   * 2. Provider.canHandle() checks if graphId matches provider's graphs
+   * 1. Parse namespace from graphId (split on first ":")
+   * 2. Look up provider in Map
+   * 3. Delegate to provider.runGraph()
    *
    * Per UNIFIED_GRAPH_EXECUTOR: all execution flows through this method.
+   * Per ROUTING_BY_NAMESPACE_ONLY: deterministic Map lookup, no per-provider logic.
    */
   runGraph(req: GraphRunRequest): GraphRunResult {
     const { runId, graphId } = req;
 
-    this.log.debug(
-      { runId, graphId },
-      "AggregatingGraphExecutor.runGraph routing"
-    );
+    this.log.debug({ runId, graphId }, "NamespaceGraphRouter.runGraph routing");
 
-    // Find provider that can handle this graphId
-    const provider = this.providers.find((p) => p.canHandle(graphId));
-    if (provider) {
-      this.log.debug(
-        { runId, graphId, providerId: provider.providerId },
-        "Routing to provider"
+    // Parse namespace from graphId (e.g., "langgraph:poet" → "langgraph")
+    const colonIndex = graphId.indexOf(":");
+    if (colonIndex === -1) {
+      this.log.error(
+        { runId, graphId },
+        "Invalid graphId format: missing namespace separator"
       );
+      return this.createErrorResult(runId, req.ingressRequestId, "internal");
+    }
+
+    const namespace = graphId.slice(0, colonIndex);
+    const provider = this.providers.get(namespace);
+
+    if (provider) {
+      this.log.debug({ runId, graphId, namespace }, "Routing to provider");
       return provider.runGraph(req);
     }
 
@@ -92,9 +97,10 @@ export class AggregatingGraphExecutor implements GraphExecutorPort {
       {
         runId,
         graphId,
-        availableProviders: this.providers.map((p) => p.providerId),
+        namespace,
+        availableNamespaces: [...this.providers.keys()],
       },
-      "No provider found for graphId"
+      "No provider found for namespace"
     );
     return this.createErrorResult(runId, req.ingressRequestId, "internal");
   }

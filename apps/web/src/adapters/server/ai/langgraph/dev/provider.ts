@@ -4,7 +4,7 @@
 /**
  * Module: `@adapters/server/ai/langgraph/dev/provider`
  * Purpose: LangGraph dev server execution provider.
- * Scope: Implements GraphProvider for langgraph dev. Uses SDK Client.runs.stream(). Does NOT handle production server (P1).
+ * Scope: Implements GraphExecutorPort for langgraph dev. Uses SDK Client.runs.stream(). Does NOT handle production server (P1).
  * Invariants:
  *   - STABLE_GRAPH_IDS: providerId = "langgraph" (same as InProc)
  *   - MUTUAL_EXCLUSION: Either this or InProc registered, never both
@@ -13,7 +13,7 @@
  *   - STATEFUL_ONLY: Always send only last user message; server owns thread state
  *   - TOOL_CATALOG_IS_CANONICAL: Reads entry.toolIds for default catalog tools
  * Side-effects: IO (network calls to langgraph dev server)
- * Links: LANGGRAPH_SERVER.md (MVP section), graph-provider.ts
+ * Links: LANGGRAPH_SERVER.md (MVP section)
  * @internal
  */
 
@@ -24,13 +24,12 @@ import type { Logger } from "pino";
 
 import type {
   AiExecutionErrorCode,
+  GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
 } from "@/ports";
 import { makeLogger } from "@/shared/observability";
 import type { AiEvent } from "@/types/ai-events";
-
-import type { GraphProvider } from "../../graph-provider";
 
 import {
   type SdkStreamChunk,
@@ -61,7 +60,7 @@ export interface LangGraphDevProviderConfig {
  *
  * Connects to langgraph dev server (port 2024) for graph execution.
  */
-export class LangGraphDevProvider implements GraphProvider {
+export class LangGraphDevProvider implements GraphExecutorPort {
   readonly providerId = LANGGRAPH_PROVIDER_ID;
   private readonly log: Logger;
   private readonly availableGraphs: Set<string>;
@@ -80,18 +79,6 @@ export class LangGraphDevProvider implements GraphProvider {
       },
       "LangGraphDevProvider initialized"
     );
-  }
-
-  /**
-   * Check if this provider handles the given graphId.
-   * Per GRAPH_ID_NAMESPACED: graphId format is "langgraph:{graphName}"
-   */
-  canHandle(graphId: string): boolean {
-    if (!graphId.startsWith(`${this.providerId}:`)) {
-      return false;
-    }
-    const graphName = graphId.slice(this.providerId.length + 1);
-    return this.availableGraphs.has(graphName);
   }
 
   /**
