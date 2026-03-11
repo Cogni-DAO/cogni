@@ -16,6 +16,8 @@ import { join, relative } from "node:path";
 
 import YAML from "yaml";
 
+import { serverEnv } from "@/shared/env";
+
 export interface WorkItem {
   id: string;
   type: string;
@@ -101,7 +103,7 @@ async function scanDir(
 }
 
 export async function getWorkItems(): Promise<WorkItem[]> {
-  const projectRoot = process.cwd();
+  const projectRoot = serverEnv().COGNI_REPO_ROOT;
   const items: WorkItem[] = [];
 
   for (const scanDir_ of SCAN_DIRS) {

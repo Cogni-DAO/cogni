@@ -24,6 +24,7 @@ import {
   type RepoSpec,
 } from "@cogni/repo-spec";
 
+import { serverEnv } from "@/shared/env";
 import { CHAIN_ID } from "@/shared/web3/chain";
 
 export type {
@@ -43,7 +44,11 @@ let cachedSpec: RepoSpec | null = null;
 function loadRepoSpec(): RepoSpec {
   if (cachedSpec) return cachedSpec;
 
-  const repoSpecPath = path.join(process.cwd(), ".cogni", "repo-spec.yaml");
+  const repoSpecPath = path.join(
+    serverEnv().COGNI_REPO_ROOT,
+    ".cogni",
+    "repo-spec.yaml"
+  );
 
   if (!fs.existsSync(repoSpecPath)) {
     throw new Error(

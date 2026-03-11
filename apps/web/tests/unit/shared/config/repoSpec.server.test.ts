@@ -35,9 +35,11 @@ function writeRepoSpec(yaml: string): string {
   return tmpDir;
 }
 
-/** Mock process.cwd instead of process.chdir — thread-safe (chdir is process-global). */
-function useTmpCwd(dir: string): void {
-  vi.spyOn(process, "cwd").mockReturnValue(dir);
+/** Point serverEnv().COGNI_REPO_ROOT at a temp dir so loadRepoSpec finds the fixture. */
+function useTmpRoot(dir: string): void {
+  vi.doMock("@/shared/env", () => ({
+    serverEnv: () => ({ COGNI_REPO_ROOT: dir }),
+  }));
 }
 
 afterEach(() => {
@@ -62,7 +64,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         '    receiving_address: "0x1111111111111111111111111111111111111111"',
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -90,7 +92,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         '    receiving_address: "0x1111111111111111111111111111111111111111"',
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -112,7 +114,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         '    receiving_address: "0x1111111111111111111111111111111111111111"',
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -134,7 +136,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         "    receiving_address: 0x1234",
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -156,7 +158,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         "    provider: ''",
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -178,7 +180,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         '    receiving_address: "0x1111111111111111111111111111111111111111"',
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -202,7 +204,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         '    receiving_address: "not-an-address"',
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -227,7 +229,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         '      - "AnotherChain"',
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -249,7 +251,7 @@ describe("getPaymentConfig (repo-spec)", () => {
         "payments_in:", // missing credits_topup
       ].join("\n")
     );
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getPaymentConfig } = await loadPaymentConfig();
@@ -293,7 +295,7 @@ describe("getGovernanceConfig (repo-spec)", () => {
     ].join("\n");
 
     const tmpDir = writeRepoSpec(yaml);
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getGovernanceConfig } = await loadRepoSpecModule();
@@ -319,7 +321,7 @@ describe("getGovernanceConfig (repo-spec)", () => {
 
   it("returns empty schedules when governance section is omitted", async () => {
     const tmpDir = writeRepoSpec(BASE_YAML);
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getGovernanceConfig } = await loadRepoSpecModule();
@@ -342,7 +344,7 @@ describe("getGovernanceConfig (repo-spec)", () => {
     ].join("\n");
 
     const tmpDir = writeRepoSpec(yaml);
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getGovernanceConfig } = await loadRepoSpecModule();
@@ -365,7 +367,7 @@ describe("getGovernanceConfig (repo-spec)", () => {
     ].join("\n");
 
     const tmpDir = writeRepoSpec(yaml);
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getGovernanceConfig } = await loadRepoSpecModule();
@@ -388,7 +390,7 @@ describe("getGovernanceConfig (repo-spec)", () => {
     ].join("\n");
 
     const tmpDir = writeRepoSpec(yaml);
-    useTmpCwd(tmpDir);
+    useTmpRoot(tmpDir);
 
     try {
       const { getGovernanceConfig } = await loadRepoSpecModule();

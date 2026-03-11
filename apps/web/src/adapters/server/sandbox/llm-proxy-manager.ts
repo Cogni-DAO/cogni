@@ -29,6 +29,7 @@ import Docker from "dockerode";
 import type { Logger } from "pino";
 
 import type { ProxyBillingEntry } from "@/ports";
+import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
 
 /** Nginx image for proxy container */
@@ -84,7 +85,7 @@ export interface ProxyStopResult {
 
 /** Path to the nginx config template */
 const TEMPLATE_PATH = join(
-  process.cwd(),
+  serverEnv().COGNI_REPO_ROOT,
   "infra/compose/sandbox-proxy/nginx.conf.template"
 );
 
