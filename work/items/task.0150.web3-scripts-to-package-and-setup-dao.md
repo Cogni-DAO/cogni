@@ -2,7 +2,7 @@
 id: task.0150
 type: task
 title: Operator wallet e2e validation — Privy credentials, Split deploy, test:external
-status: needs_design
+status: needs_implement
 priority: 1
 estimate: 3
 summary: Validate the operator wallet pipeline end-to-end. Provision Privy credentials, deploy Split on Base, update repo-spec with real addresses, create test:external tests for PrivyOperatorWalletAdapter and distributeSplit(). Without this, the entire task.0085 pipeline is untested against real infrastructure.
@@ -11,11 +11,11 @@ spec_refs: operator-wallet
 assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
-branch:
+branch: feat/task.0150-operator-wallet-e2e
 pr:
 reviewer:
 created: 2026-03-10
-updated: 2026-03-10
+updated: 2026-03-11
 labels: [wallet, web3, testing]
 external_refs:
 revision: 2
