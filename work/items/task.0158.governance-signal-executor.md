@@ -97,6 +97,7 @@ pnpm test apps/web/tests/unit/features/governance/
 - Design doc: docs/design/governance-integration-crawl.md
 - Source: cogni-git-admin (signal parser, action handlers)
 - Related: proj.web3-gov-mvp (proposal launcher pages — separate PR)
+- Handoff: [handoff](../handoffs/task.0158.handoff.md)
 
 ## Attribution
 
