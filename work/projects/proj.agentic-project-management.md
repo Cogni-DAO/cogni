@@ -27,7 +27,7 @@ The end state: users "claim" work items via the app UI, dispatch agents (Cogni, 
 ### What exists today
 
 - Work items are `.md` files with YAML frontmatter in `work/items/`
-- `src/lib/work-scanner.ts` — read-only filesystem scanner for the `/work` dashboard
+- ~~`src/lib/work-scanner.ts`~~ — replaced by `WorkItemQueryPort` (task.0158)
 - `scripts/validate-docs-metadata.mjs` — CI validation of frontmatter schema
 - `services/scheduler-worker/src/enrichers/work-item-linker.ts` — regex extraction of work item IDs from PR metadata
 - `docs/spec/development-lifecycle.md` — status-driven command dispatch spec
@@ -63,7 +63,8 @@ The port's `SubjectRef` must align with actor kinds so that when the `actors` ta
 | Deliverable                                                                       | Status      | Est | Work Item                |
 | --------------------------------------------------------------------------------- | ----------- | --- | ------------------------ |
 | `packages/work-items/` — port interfaces, domain types, status transition table   | Done        | 2   | task.0155                |
-| `packages/work-items/` — MarkdownWorkItemAdapter + contract tests                 | In Review   | 3   | task.0156                |
+| `packages/work-items/` — MarkdownWorkItemAdapter + contract tests                 | Done        | 3   | task.0156                |
+| Wire WorkItemQueryPort into UI — contracts, API routes, React Query dashboard     | In Review   | 3   | task.0158                |
 | Migrate `/triage` + `/implement` skills to use port (proof-of-concept)            | Not Started | 2   | task.0152                |
 | Migrate remaining skills (`/closeout`, `/review-implementation`, `/bug`, `/idea`) | Not Started | 2   | (create after task.0152) |
 

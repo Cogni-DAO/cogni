@@ -2,7 +2,7 @@
 id: task.0156
 type: task
 title: "packages/work-items — MarkdownWorkItemAdapter + contract tests"
-status: needs_merge
+status: done
 priority: 0
 rank: 6
 estimate: 3
