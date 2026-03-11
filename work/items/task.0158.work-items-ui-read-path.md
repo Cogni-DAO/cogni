@@ -13,7 +13,7 @@ assignees: []
 credit:
 project: proj.agentic-project-management
 branch: feat/work-items-ui-read-path
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/555
 reviewer:
 revision: 1
 blocked_by:
