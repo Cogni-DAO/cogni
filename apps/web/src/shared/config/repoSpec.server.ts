@@ -17,9 +17,11 @@ import path from "node:path";
 import {
   extractGovernanceConfig,
   extractLedgerApprovers,
+  extractOperatorWalletConfig,
   extractPaymentConfig,
   type GovernanceConfig,
   type InboundPaymentConfig,
+  type OperatorWalletSpec,
   parseRepoSpec,
   type RepoSpec,
 } from "@cogni/repo-spec";
@@ -131,4 +133,18 @@ export function getLedgerApprovers(): string[] {
   const spec = loadRepoSpec();
   cachedLedgerApprovers = extractLedgerApprovers(spec);
   return cachedLedgerApprovers;
+}
+
+let cachedOperatorWalletConfig: OperatorWalletSpec | undefined | null = null;
+
+/**
+ * Operator wallet configuration from repo-spec.
+ * Returns undefined if operator_wallet section is not present.
+ */
+export function getOperatorWalletConfig(): OperatorWalletSpec | undefined {
+  if (cachedOperatorWalletConfig !== null) return cachedOperatorWalletConfig;
+
+  const spec = loadRepoSpec();
+  cachedOperatorWalletConfig = extractOperatorWalletConfig(spec);
+  return cachedOperatorWalletConfig;
 }

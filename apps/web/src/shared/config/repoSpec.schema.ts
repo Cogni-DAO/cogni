@@ -22,6 +22,8 @@ export {
   type GovernanceSpec,
   governanceScheduleSchema,
   governanceSpecSchema,
+  type OperatorWalletSpec,
+  operatorWalletSpecSchema,
   type PoolConfigSpec,
   poolConfigSpecSchema,
   type RepoSpec,

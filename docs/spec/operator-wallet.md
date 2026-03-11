@@ -44,7 +44,9 @@ tags: [web3, wallet, security]
 
 The operator wallet serves one role: **outbound** — executing OpenRouter top-ups after credit settlement.
 
-**Inbound** is handled by the [Splits](https://splits.org/) contract. Users pay USDC to the Split address (`operator_wallet.split_address` in repo-spec). The Split distributes ~92.1% to the operator wallet and ~7.9% to the DAO treasury on-chain. The app calls `distributeERC20()` after credit mint to trigger distribution.
+**Inbound** is handled by the [Splits](https://splits.org/) contract. Users pay USDC to the Split address (`operator_wallet.split_address` in repo-spec). The Split distributes ~92.1% to the operator wallet and ~7.9% to the DAO treasury on-chain. The app calls `distribute()` after credit mint to trigger distribution.
+
+> **Validated (spike.0090):** Push Split V2o2 on Base distributes USDC via direct ERC-20 transfers to recipients (no warehouse withdrawal step). Deploy: ~166k gas, distribute: ~81k gas. Factory: `0x8E8eB0cC6AE34A38B67D5Cf91ACa38f60bc3Ecf4`. SDK: `splitV2ABI` from `@0xsplits/splits-sdk/constants/abi`.
 
 The operator wallet itself is a plain EOA that receives USDC from the Split and uses it to top up OpenRouter credits via the Coinbase Commerce protocol.
 
@@ -94,7 +96,7 @@ Setup flow (run once during DAO formation):
 1. Create Privy app → obtain App ID + App Secret
 2. Enable wallet policies:
    - Only Base (chain_id 8453)
-   - Only allowed contracts (USDC, Coinbase Transfers)
+   - Only allowed contracts (USDC, Coinbase Transfers 0x0305...)
    - Per-tx caps
 3. Enable "Require signed requests" → obtain Signing Key
 4. Programmatically create operator wallet via Privy API
@@ -110,7 +112,7 @@ Setup flow (run once during DAO formation):
    a. Set operator_wallet.address to the Privy-returned address
    b. Set operator_wallet.split_address to the deployed Split address
    c. Set payments_in.credits_topup.receiving_address to the Split address
-8. Fund operator wallet with small ETH balance on Base (for gas)
+8. Fund operator wallet with small ETH balance on Base (for gas — ~$0.01 covers many txs at L2 prices)
 ```
 
 No keystore files. No passphrases. No local key material. Privy holds the signing key in its HSM infrastructure.
@@ -190,17 +192,17 @@ The `OperatorWalletPort` abstraction makes the custody backend swappable. If the
 
 ### Custody Safety
 
-| Constraint                | Enforcement                                                                                                                                                 |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Typed intents only**    | Port exposes `distributeSplit` and `fundOpenRouterTopUp` — no generic signing method.                                                                       |
-| **Destination allowlist** | Split distribute targets the Split contract from repo-spec. Top-up goes to Coinbase Transfers contract. No other destinations possible.                     |
-| **Max per-tx**            | `OPERATOR_MAX_TOPUP_USD` env cap for top-ups. Port rejects any intent exceeding this.                                                                       |
-| **Address in repo-spec**  | Operator wallet address is governance-in-git. Changing it requires a commit (auditable).                                                                    |
-| **Key ≠ App**             | Privy HSM holds the signing key. The app never loads or accesses raw key material.                                                                          |
-| **Key ≠ AI**              | The AI (OpenClaw, governance agents) submits intents through the workflow layer. The AI never accesses key material or Privy credentials.                   |
-| **Privy wallet policies** | Privy-side policies restrict chain, contracts, and caps — defense in depth on top of app-side validation.                                                   |
-| **Signed requests**       | All Privy API calls use "Require signed requests" — `PRIVY_SIGNING_KEY` authenticates the app to Privy. Leaked `APP_SECRET` alone cannot sign transactions. |
-| **DAO share via Splits**  | DAO treasury receives its share via on-chain Split contract — no app-level sweep. Operator wallet only holds its operational share.                         |
+| Constraint                | Enforcement                                                                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Typed intents only**    | Port exposes `distributeSplit` and `fundOpenRouterTopUp` — no generic signing method.                                                                                         |
+| **Destination allowlist** | Split distribute targets the Split contract from repo-spec. Top-up targets Coinbase Transfers (`0x0305...`) with direct ERC-20 approval (not Permit2). No other destinations. |
+| **Max per-tx**            | `OPERATOR_MAX_TOPUP_USD` env cap for top-ups. Port rejects any intent exceeding this.                                                                                         |
+| **Address in repo-spec**  | Operator wallet address is governance-in-git. Changing it requires a commit (auditable).                                                                                      |
+| **Key ≠ App**             | Privy HSM holds the signing key. The app never loads or accesses raw key material.                                                                                            |
+| **Key ≠ AI**              | The AI (OpenClaw, governance agents) submits intents through the workflow layer. The AI never accesses key material or Privy credentials.                                     |
+| **Privy wallet policies** | Privy-side policies restrict chain, contracts, and caps — defense in depth on top of app-side validation.                                                                     |
+| **Signed requests**       | All Privy API calls use "Require signed requests" — `PRIVY_SIGNING_KEY` authenticates the app to Privy. Leaked `APP_SECRET` alone cannot sign transactions.                   |
+| **DAO share via Splits**  | DAO treasury receives its share via on-chain Split contract — no app-level sweep. Operator wallet only holds its operational share.                                           |
 
 ### repo-spec Configuration
 

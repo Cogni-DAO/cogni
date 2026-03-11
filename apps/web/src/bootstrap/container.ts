@@ -56,6 +56,7 @@ import {
   FakeMetricsAdapter,
   getTestEvmOnchainClient,
   getTestOnChainVerifier,
+  getTestOperatorWallet,
 } from "@/adapters/test";
 import { createToolBindings } from "@/bootstrap/ai/tool-bindings";
 import { createBoundToolSource } from "@/bootstrap/ai/tool-source.factory";
@@ -76,6 +77,7 @@ import type {
   LlmService,
   MetricsQueryPort,
   OnChainVerifier,
+  OperatorWalletPort,
   PaymentAttemptServiceRepository,
   PaymentAttemptUserRepository,
   ServiceAccountService,
@@ -89,7 +91,7 @@ import type {
   ScheduleRunRepository,
   ScheduleUserPort,
 } from "@/ports/server";
-import { getScopeId } from "@/shared/config";
+import { getOperatorWalletConfig, getScopeId } from "@/shared/config";
 import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
@@ -146,6 +148,8 @@ export interface Container {
   attributionStore: AttributionStore;
   /** Webhook source registrations — normalizers for webhook ingestion */
   webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
+  /** Operator wallet — undefined when PRIVY_APP_ID not set */
+  operatorWallet: OperatorWalletPort | undefined;
 }
 
 // Feature-specific dependency types
@@ -382,6 +386,41 @@ function createContainer(): Container {
     DEPLOY_ENVIRONMENT: env.DEPLOY_ENVIRONMENT ?? "local",
   };
 
+  // OperatorWallet: test uses fake, production uses Privy (optional — only when configured)
+  // NOTE: PrivyOperatorWalletAdapter imported directly (not from barrel) to avoid
+  // pulling @privy-io/node into the test bundle. Same pattern as SandboxGraphProvider.
+  const operatorWalletConfig = getOperatorWalletConfig();
+  const operatorWallet: OperatorWalletPort | undefined = env.isTestMode
+    ? getTestOperatorWallet()
+    : (() => {
+        if (
+          !env.PRIVY_APP_ID ||
+          !env.PRIVY_APP_SECRET ||
+          !env.PRIVY_SIGNING_KEY
+        ) {
+          return undefined;
+        }
+        if (!operatorWalletConfig) {
+          log.warn(
+            "PRIVY_APP_ID set but operator_wallet missing from repo-spec — skipping operator wallet"
+          );
+          return undefined;
+        }
+        // Lazy import: @privy-io/node can be slow to load.
+        // Only loaded when Privy env vars are configured (production).
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { PrivyOperatorWalletAdapter } =
+          // eslint-disable-next-line unicorn/prefer-module
+          require("../adapters/server/wallet/privy-operator-wallet.adapter") as typeof import("@/adapters/server/wallet/privy-operator-wallet.adapter");
+        return new PrivyOperatorWalletAdapter({
+          appId: env.PRIVY_APP_ID,
+          appSecret: env.PRIVY_APP_SECRET,
+          signingKey: env.PRIVY_SIGNING_KEY,
+          expectedAddress: operatorWalletConfig.address,
+          splitAddress: operatorWalletConfig.split_address,
+        });
+      })();
+
   return {
     log,
     config,
@@ -419,6 +458,7 @@ function createContainer(): Container {
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },
+    operatorWallet,
   };
 }
 

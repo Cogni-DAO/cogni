@@ -37,6 +37,13 @@ intent:
 # true: errors/timeouts result in 'failure' conclusion (blocks merge)
 fail_on_error: true
 
+# Operator wallet configuration (Privy-managed)
+# address: Privy-managed EOA that receives operator share from Split
+# split_address: Splits contract that receives user payments
+operator_wallet:
+  address: "0x0000000000000000000000000000000000000000" # placeholder — run scripts/provision-operator-wallet.ts to set
+  split_address: "0x0000000000000000000000000000000000000000" # placeholder — deploy Split contract to set
+
 cogni_dao:
   dao_contract: "0xF61c3fafD4D34b4568e7a500d92b28Ac175e83C6" # Current Cogni parent DAO Contract Address
   plugin_contract: "0x609B427f04C1C42De3e28898cb7b9Bad329e6b77" # DAO's Aragon Voting Plugin Address

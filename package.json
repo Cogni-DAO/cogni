@@ -156,6 +156,7 @@
     "@cogni/repo-spec": "workspace:*",
     "@cogni/scheduler-core": "workspace:*",
     "@cogni/work-items": "workspace:*",
+    "@privy-io/node": "^0.10.1",
     "cron-parser": "^4.9.0",
     "drizzle-orm": "^0.44.7",
     "pino": "^10.1.0",
@@ -164,6 +165,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@0xsplits/splits-sdk": "6.4.1",
     "@axe-core/playwright": "^4.11.0",
     "@biomejs/biome": "^2.3.7",
     "@commitlint/cli": "^19.8.1",

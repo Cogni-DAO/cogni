@@ -109,6 +109,10 @@ export type {
   VerificationResult,
   VerificationStatus,
 } from "./onchain-verifier.port";
+export type {
+  OperatorWalletPort,
+  TransferIntent,
+} from "./operator-wallet.port";
 export {
   type CreatePaymentAttemptParams,
   isPaymentAttemptNotFoundPortError,
