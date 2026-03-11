@@ -8,8 +8,16 @@
 
 // biome-ignore lint/style/noDefaultExport: thread-stream's public API is a default export
 export default class ThreadStream {
-  write() {}
-  end() {}
-  flush() {}
-  destroy() {}
+  write() {
+    /* noop — client stub */
+  }
+  end() {
+    /* noop — client stub */
+  }
+  flush() {
+    /* noop — client stub */
+  }
+  destroy() {
+    /* noop — client stub */
+  }
 }
