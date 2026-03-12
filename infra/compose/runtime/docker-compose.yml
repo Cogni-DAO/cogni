@@ -64,6 +64,8 @@ services:
       - LANGFUSE_SECRET_KEY
       - LANGFUSE_BASE_URL
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
+      # TigerBeetle (Financial Ledger) — optional, silently skipped if missing
+      - TIGERBEETLE_ADDRESS=${TIGERBEETLE_ADDRESS:-tigerbeetle:3002}
       # Privy (Operator Wallet) — optional, silently skipped if missing
       - PRIVY_APP_ID
       - PRIVY_APP_SECRET
@@ -515,6 +517,42 @@ services:
       git-sync:
         condition: service_completed_successfully
 
+  # =============================================================================
+  # TigerBeetle (Financial Ledger)
+  # Per financial-ledger-spec: double-entry ledger engine
+  # Self-initializing: formats data file on first boot, then starts.
+  # Optional — app gracefully handles absence (FinancialLedgerPort | undefined).
+  # =============================================================================
+
+  tigerbeetle:
+    image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    security_opt:
+      - "seccomp=unconfined"
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        if [ ! -f /data/0_0.tigerbeetle ]; then
+          echo "TigerBeetle: formatting data file (first boot)..."
+          /tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/0_0.tigerbeetle
+        fi
+        exec /tigerbeetle start --addresses=0.0.0.0:3002 /data/0_0.tigerbeetle
+    volumes:
+      - tigerbeetle_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 3002"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 15s
+
 networks:
   # External network shared with edge stack (Caddy)
   # App must be on this network for Caddy to reverse_proxy to it
@@ -540,5 +578,7 @@ volumes:
     name: repo_data
   pnpm_store:
     name: pnpm_store
+  tigerbeetle_data:
+    name: tigerbeetle_data
   cogni_workspace:
     name: cogni_workspace

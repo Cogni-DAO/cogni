@@ -63,7 +63,7 @@ services:
       - LANGFUSE_BASE_URL
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
       # TigerBeetle (Financial Ledger) — optional, silently skipped if missing
-      - TIGERBEETLE_ADDRESS=${TIGERBEETLE_ADDRESS:-tigerbeetle:3001}
+      - TIGERBEETLE_ADDRESS=${TIGERBEETLE_ADDRESS:-tigerbeetle:3002}
       # Privy (Operator Wallet) — optional, silently skipped if missing
       - PRIVY_APP_ID
       - PRIVY_APP_SECRET
@@ -94,8 +94,6 @@ services:
       litellm:
         condition: service_healthy
       temporal:
-        condition: service_healthy
-      tigerbeetle:
         condition: service_healthy
       git-sync:
         condition: service_completed_successfully
@@ -621,27 +619,8 @@ services:
   # =============================================================================
   # TigerBeetle (Financial Ledger)
   # Per financial-ledger-spec: double-entry ledger engine
-  # Bootstrap profile: format runs once to initialize data file
+  # Self-initializing: formats data file on first boot, then starts.
   # =============================================================================
-
-  tigerbeetle-format:
-    image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
-    container_name: tigerbeetle-format
-    profiles:
-      - bootstrap
-    restart: "no"
-    cap_add:
-      - IPC_LOCK
-    command:
-      [
-        "format",
-        "--cluster=0",
-        "--replica=0",
-        "--replica-count=1",
-        "/data/0_0.tigerbeetle",
-      ]
-    volumes:
-      - tigerbeetle_data:/data
 
   tigerbeetle:
     image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
@@ -649,22 +628,31 @@ services:
     restart: unless-stopped
     cap_add:
       - IPC_LOCK
+    security_opt:
+      - "seccomp=unconfined"
     labels:
       - "autoheal=true"
     networks:
       - internal
     ports:
-      - "127.0.0.1:3001:3001"
-    command: ["start", "--addresses=0.0.0.0:3001", "/data/0_0.tigerbeetle"]
+      - "127.0.0.1:3002:3002"
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        if [ ! -f /data/0_0.tigerbeetle ]; then
+          echo "TigerBeetle: formatting data file (first boot)..."
+          /tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/0_0.tigerbeetle
+        fi
+        exec /tigerbeetle start --addresses=0.0.0.0:3002 --cache-grid=256MiB --development /data/0_0.tigerbeetle
     volumes:
       - tigerbeetle_data:/data
     healthcheck:
-      # TigerBeetle doesn't have an HTTP health endpoint; check TCP port
-      test: ["CMD-SHELL", "echo > /dev/tcp/127.0.0.1/3001 || exit 1"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 3002"]
       interval: 10s
       timeout: 2s
       retries: 5
-      start_period: 10s
+      start_period: 15s
 
 networks:
   cogni-edge:

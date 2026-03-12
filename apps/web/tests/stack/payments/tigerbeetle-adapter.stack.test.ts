@@ -23,19 +23,24 @@ import {
 import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import { beforeAll, describe, expect, it } from "vitest";
 
-const TB_ADDRESS = process.env.TIGERBEETLE_ADDRESS;
-if (!TB_ADDRESS) {
-  throw new Error(
-    "TIGERBEETLE_ADDRESS is required for TigerBeetle stack tests. " +
-      "Start the stack with: pnpm dev:stack:test"
-  );
+function requireTigerBeetle(): string {
+  const addr = process.env.TIGERBEETLE_ADDRESS;
+  if (!addr) {
+    throw new Error(
+      "TIGERBEETLE_ADDRESS is required for TigerBeetle stack tests. " +
+        "Start the stack with: pnpm dev:stack:test"
+    );
+  }
+  return addr;
 }
 
-const adapter = createTigerBeetleAdapter(TB_ADDRESS);
-
 describe("TigerBeetleAdapter (stack)", () => {
-  // Ensure accounts are initialized before any test
+  let adapter: ReturnType<typeof createTigerBeetleAdapter>;
+
   beforeAll(async () => {
+    const address = requireTigerBeetle();
+    adapter = createTigerBeetleAdapter(address);
+    // Trigger lazy account creation
     await adapter.lookupAccounts([ACCOUNT.LIABILITY_USER_CREDITS]);
   });
 
