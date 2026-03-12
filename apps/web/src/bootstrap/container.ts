@@ -29,6 +29,7 @@ import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/priv
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { WorkItemQueryPort } from "@cogni/work-items";
 import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
+import Redis from "ioredis";
 import type { Logger } from "pino";
 import {
   ALCHEMY_ADAPTER_VERSION,
@@ -50,6 +51,7 @@ import {
   LiteLlmAdapter,
   type MimirAdapterConfig,
   MimirMetricsAdapter,
+  RedisRunStreamAdapter,
   SystemClock,
   TemporalScheduleControlAdapter,
   UserDrizzleAccountService,
@@ -91,6 +93,7 @@ import type {
   PaymentAttemptServiceRepository,
   PaymentAttemptUserRepository,
   ProviderFundingPort,
+  RunStreamPort,
   ServiceAccountService,
   ThreadPersistencePort,
   TreasuryReadPort,
@@ -167,6 +170,8 @@ export interface Container {
   attributionStore: AttributionStore;
   /** Work item queries — reads from markdown files via WorkItemQueryPort */
   workItemQuery: WorkItemQueryPort;
+  /** Run event streaming — publish/subscribe via Redis Streams */
+  runStream: RunStreamPort;
   /** Webhook source registrations — normalizers for webhook ingestion */
   webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
   /** Financial ledger — undefined when TIGERBEETLE_ADDRESS not set */
@@ -455,6 +460,7 @@ function createContainer(): Container {
     DEPLOY_ENVIRONMENT: env.DEPLOY_ENVIRONMENT ?? "local",
   };
 
+<<<<<<< HEAD
   // OperatorWallet: test uses fake, production uses Privy (optional — only when configured)
   const operatorWalletConfig = getOperatorWalletConfig();
   const operatorWallet: OperatorWalletPort | undefined = env.isTestMode
@@ -531,6 +537,14 @@ function createContainer(): Container {
     );
   })();
 
+  // Redis client for run event streaming (ephemeral stream plane)
+  // Per REDIS_IS_STREAM_PLANE: only transient data, no durable state
+  const redisClient = new Redis(env.REDIS_URL, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 3,
+  });
+  const runStream = new RedisRunStreamAdapter(redisClient);
+
   return {
     log,
     config,
@@ -566,6 +580,7 @@ function createContainer(): Container {
     ),
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
     workItemQuery: new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT),
+    runStream,
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },

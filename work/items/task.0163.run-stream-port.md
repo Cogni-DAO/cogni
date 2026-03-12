@@ -4,7 +4,7 @@ type: task
 primary_charter:
 title: "RunStreamPort + RedisRunStreamAdapter: hexagonal streaming boundary"
 state: Active
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 2
 estimate: 2
@@ -13,7 +13,7 @@ outcome: Publish/subscribe streaming of AiEvents via Redis Streams with cursor-b
 assignees: []
 project: proj.unified-graph-launch
 created: 2026-03-12
-updated: 2026-03-12
+updated: 2026-03-13
 labels:
   - ai-graphs
 depends_on:
@@ -82,13 +82,37 @@ Per spec [unified-graph-launch.md §7-10](../../docs/spec/unified-graph-launch.m
 
 - Create: `src/ports/run-stream.port.ts` — RunStreamPort interface
 - Create: `src/adapters/server/ai/redis-run-stream.adapter.ts` — Redis Streams implementation (owns its ioredis client creation)
-- Create: `src/adapters/test/ai/fake-run-stream.adapter.ts` — In-memory fake for `APP_ENV=test` (no Redis dependency)
 - Create: `src/contracts/run-stream.contract.ts` — Zod schemas for stream entry format
 - Modify: `src/ports/index.ts` — export RunStreamPort
 - Modify: `src/adapters/server/index.ts` — export RedisRunStreamAdapter
-- Modify: `src/bootstrap/container.ts` — register RunStreamPort (Redis adapter in prod, fake in test mode)
-- Test: `src/adapters/server/ai/__tests__/redis-run-stream.adapter.test.ts` — unit tests with Redis mock
-- Test: `src/adapters/server/ai/__tests__/redis-run-stream.adapter.component.test.ts` — component test with testcontainers Redis
+- Modify: `src/bootstrap/container.ts` — register RunStreamPort (always Redis adapter)
+- Test: `src/adapters/server/ai/__tests__/redis-run-stream.adapter.test.ts` — unit tests with mocked ioredis
+
+## Plan
+
+- [ ] **Checkpoint 1: Port + Contract + Exports**
+  - Milestone: RunStreamPort interface + Zod contract + barrel exports
+  - Invariants: ARCHITECTURE_ALIGNMENT
+  - Todos:
+    - [ ] Create `src/ports/run-stream.port.ts`
+    - [ ] Create `src/contracts/run-stream.contract.ts` (Zod schema for stream entry)
+    - [ ] Export RunStreamPort from `src/ports/index.ts`
+  - Validation: `pnpm check` passes
+
+- [ ] **Checkpoint 2: RedisRunStreamAdapter + Container Wiring**
+  - Milestone: Adapter implements port, wired in container
+  - Invariants: REDIS_IS_STREAM_PLANE, ARCHITECTURE_ALIGNMENT
+  - Todos:
+    - [ ] Create `src/adapters/server/ai/redis-run-stream.adapter.ts`
+    - [ ] Export from `src/adapters/server/index.ts`
+    - [ ] Wire in `src/bootstrap/container.ts`
+  - Validation: `pnpm check` passes
+
+- [ ] **Checkpoint 3: Unit Test**
+  - Milestone: Unit test with mocked ioredis covers publish/subscribe/expire
+  - Todos:
+    - [ ] Create `src/adapters/server/ai/__tests__/redis-run-stream.adapter.test.ts`
+  - Validation: `pnpm check && pnpm test src/adapters/server/ai/__tests__/redis-run-stream`
 
 ## Validation
 
@@ -100,10 +124,6 @@ pnpm test src/adapters/server/ai/__tests__/redis-run-stream
 ```
 
 **Expected:** All lint, type, format checks pass. Unit tests pass with mocked Redis. Component tests pass with testcontainers Redis.
-
-### Test-Mode Strategy
-
-`APP_ENV=test` → container wires `FakeRunStreamAdapter` (in-memory Map of arrays). No Redis required for unit tests or `pnpm check`. Component tests use testcontainers Redis for real adapter integration testing.
 
 ### Edge Cases
 

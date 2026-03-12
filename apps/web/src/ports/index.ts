@@ -128,6 +128,14 @@ export {
   type PaymentErrorCode,
   TxHashAlreadyBoundPortError,
 } from "./payment-attempt.port";
+export {
+  RUN_STREAM_BLOCK_MS,
+  RUN_STREAM_DEFAULT_TTL_SECONDS,
+  RUN_STREAM_KEY_PREFIX,
+  RUN_STREAM_MAXLEN,
+  type RunStreamEntry,
+  type RunStreamPort,
+} from "./run-stream.port";
 export type {
   ProviderFundingContext,
   ProviderFundingOutcome,

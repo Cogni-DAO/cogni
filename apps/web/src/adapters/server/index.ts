@@ -65,6 +65,7 @@ export type { ObservabilityDecoratorConfig } from "./ai/observability-executor.d
 export { ObservabilityGraphExecutorDecorator } from "./ai/observability-executor.decorator";
 // Preflight credit check decorator — rejects runs with insufficient credits before LLM execution
 export { PreflightCreditCheckDecorator } from "./ai/preflight-credit-check.decorator";
+export { RedisRunStreamAdapter } from "./ai/redis-run-stream.adapter";
 export {
   TavilyWebSearchAdapter,
   type TavilyWebSearchConfig,
