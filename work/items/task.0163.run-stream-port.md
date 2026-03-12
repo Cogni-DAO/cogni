@@ -33,7 +33,7 @@ A hexagonal port/adapter pair that enables publishing `AiEvent` streams to Redis
 
 **Solution**: New `RunStreamPort` interface in `src/ports/` + `RedisRunStreamAdapter` in `src/adapters/server/ai/` using `ioredis` XADD/XREAD/XRANGE/EXPIRE commands.
 
-**Reuses**: Existing hexagonal port/adapter pattern. Existing `AiEvent` type from `@cogni/ai-core`. Existing `ioredis` client from task.0162.
+**Reuses**: Existing hexagonal port/adapter pattern. Existing `AiEvent` type from `@cogni/ai-core`. `ioredis` dependency from task.0162. Creates and owns the Redis client connection used by the adapter.
 
 **Rejected**: Custom WebSocket server — more complex, doesn't support replay. Temporal queries — not designed for high-throughput streaming (burns workflow history). PostgreSQL LISTEN/NOTIFY — not an append-log, no replay support.
 
@@ -70,20 +70,23 @@ interface RunStreamPort {
 
 ### Invariants
 
-- [ ] REDIS_IS_STREAM_PLANE: Only ephemeral stream data in Redis (spec: unified-graph-launch)
-- [ ] PUMP_TO_COMPLETION_VIA_REDIS: Publisher pumps all events regardless of subscriber count (spec: unified-graph-launch)
-- [ ] SSE_FROM_REDIS_NOT_MEMORY: Subscribers read from Redis, not in-process memory (spec: unified-graph-launch)
-- [ ] ARCHITECTURE_ALIGNMENT: Port in `src/ports/`, adapter in `src/adapters/server/` (spec: architecture)
-- [ ] STREAM_PUBLISH_IN_ACTIVITY: Port is called from Temporal activities, not workflows (spec: unified-graph-launch)
+Per spec [unified-graph-launch.md §7-10](../../docs/spec/unified-graph-launch.md):
+
+- `REDIS_IS_STREAM_PLANE` — only ephemeral stream data in Redis
+- `PUMP_TO_COMPLETION_VIA_REDIS` — publisher pumps all events regardless of subscriber count
+- `SSE_FROM_REDIS_NOT_MEMORY` — subscribers read from Redis, not in-process memory
+- `STREAM_PUBLISH_IN_ACTIVITY` — port is called from Temporal activities, not workflows
+- `ARCHITECTURE_ALIGNMENT` — port in `src/ports/`, adapter in `src/adapters/server/` (spec: architecture)
 
 ### Files
 
 - Create: `src/ports/run-stream.port.ts` — RunStreamPort interface
-- Create: `src/adapters/server/ai/redis-run-stream.adapter.ts` — Redis Streams implementation
+- Create: `src/adapters/server/ai/redis-run-stream.adapter.ts` — Redis Streams implementation (owns its ioredis client creation)
+- Create: `src/adapters/test/ai/fake-run-stream.adapter.ts` — In-memory fake for `APP_ENV=test` (no Redis dependency)
 - Create: `src/contracts/run-stream.contract.ts` — Zod schemas for stream entry format
 - Modify: `src/ports/index.ts` — export RunStreamPort
 - Modify: `src/adapters/server/index.ts` — export RedisRunStreamAdapter
-- Modify: `src/bootstrap/container.ts` — register RunStreamPort with Redis adapter
+- Modify: `src/bootstrap/container.ts` — register RunStreamPort (Redis adapter in prod, fake in test mode)
 - Test: `src/adapters/server/ai/__tests__/redis-run-stream.adapter.test.ts` — unit tests with Redis mock
 - Test: `src/adapters/server/ai/__tests__/redis-run-stream.adapter.component.test.ts` — component test with testcontainers Redis
 
@@ -97,6 +100,10 @@ pnpm test src/adapters/server/ai/__tests__/redis-run-stream
 ```
 
 **Expected:** All lint, type, format checks pass. Unit tests pass with mocked Redis. Component tests pass with testcontainers Redis.
+
+### Test-Mode Strategy
+
+`APP_ENV=test` → container wires `FakeRunStreamAdapter` (in-memory Map of arrays). No Redis required for unit tests or `pnpm check`. Component tests use testcontainers Redis for real adapter integration testing.
 
 ### Edge Cases
 
