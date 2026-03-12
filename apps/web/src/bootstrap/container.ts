@@ -427,7 +427,7 @@ function createContainer(): Container {
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
     ),
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
-    workItemQuery: new MarkdownWorkItemAdapter(process.cwd()),
+    workItemQuery: new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT),
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },
