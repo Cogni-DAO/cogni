@@ -1,5 +1,5 @@
 ---
-id: task.0161
+id: task.0162
 type: task
 title: "Mission Control: operator loop — deterministic pre-step + thin dispatch prompt"
 status: done

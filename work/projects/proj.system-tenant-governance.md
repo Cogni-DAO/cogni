@@ -38,7 +38,7 @@ Enable the `cogni_system` billing account to execute governance AI loops as a fi
 | Governance run foundation: repo-spec governance config + system tenant execution grant                               | Done        | 2   | task.0054 |
 | Governance signal executor: Alchemy webhook → on-chain verification → GitHub actions                                 | In Review   | 3   | task.0161 |
 | Governance health brief endpoint: app-served metrics/logs for governance agent consumption                           | Todo        | 3   | task.0083 |
-| Mission Control operator loop: deterministic pre-step + thin dispatch prompt                                         | In Review   | 2   | task.0161 |
+| Mission Control operator loop: deterministic pre-step + thin dispatch prompt                                         | In Review   | 2   | task.0162 |
 | Direct system account funding: "Keep Cogni Alive" on credits page                                                    | Todo        | 2   | task.0090 |
 | PolicyResolverPort: interface + DrizzlePolicyResolverAdapter with system/customer policies                           | Not Started | 3   | —         |
 | ToolPolicyContext: required tenantId + test escape hatch                                                             | Not Started | 2   | —         |
