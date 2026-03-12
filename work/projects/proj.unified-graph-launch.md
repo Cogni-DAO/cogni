@@ -62,23 +62,26 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 | Delete old paths — ProxyBillingReader, billing volumes, OPENCLAW_BILLING_DIR, gateway audit log          | Done        | 1   | task.0029 |
 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing           | In Review   | 3   | task.0006 |
 
-### Walk (P1): Unified Workflow Path + Run Persistence
+### Walk (P1): Unified Workflow Path + Run Persistence + Redis Streaming
 
-**Goal:** All graph runs go through `GraphRunWorkflow`. Durable run records with trigger provenance.
+**Goal:** All graph runs go through `GraphRunWorkflow`. Durable run records with trigger provenance. Real-time SSE streaming via Redis Streams.
 
-| Deliverable                                                                                             | Status      | Est | Work Item |
-| ------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Add `graph_runs` table (product/run lifecycle semantics — not a billing bandaid)                        | Not Started | 2   | —         |
-| Add trigger provenance fields: `run_kind`, `trigger_source`, `trigger_ref`, `requested_by`              | Not Started | 1   | —         |
-| Add `trigger_*` columns to existing `schedule_runs` table                                               | Not Started | 1   | —         |
-| Create `GraphRunWorkflow` in `services/scheduler-worker/`                                               | Not Started | 2   | —         |
-| Refactor `POST /api/v1/ai/chat` to start `GraphRunWorkflow` instead of inline execution                 | Not Started | 2   | —         |
-| Add `Idempotency-Key` header support to chat endpoint                                                   | Not Started | 1   | —         |
-| Ensure `executeGraphActivity` reuses existing internal API path (`/api/internal/graphs/{graphId}/runs`) | Not Started | 1   | —         |
-| Migrate `schedule_runs` correlation to use `graph_runs.id`                                              | Not Started | 1   | —         |
-| Add attempt semantics (unfreeze `attempt` from 0)                                                       | Not Started | 1   | —         |
-| Observability instrumentation                                                                           | Not Started | 1   | —         |
-| Documentation updates                                                                                   | Not Started | 1   | —         |
+**Three-plane architecture:** Temporal (control) + Redis Streams (stream) + PostgreSQL (durable). See [unified-graph-launch.md §4](../../docs/spec/unified-graph-launch.md) for full design.
+
+| Deliverable                                                                          | Status      | Est | Work Item |
+| ------------------------------------------------------------------------------------ | ----------- | --- | --------- |
+| **Infrastructure: Redis 7** — add to docker-compose, add `ioredis` dep, env config   | Not Started | 1   | task.0162 |
+| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams | Not Started | 2   | task.0163 |
+| **`graph_runs` table** — run lifecycle, trigger provenance, status tracking          | Not Started | 2   | —         |
+| **GraphRunWorkflow** — unified Temporal workflow with `executeAndStreamActivity`     | Not Started | 3   | —         |
+| **Refactor chat endpoint** — start workflow → subscribe Redis → SSE response         | Not Started | 3   | —         |
+| **Reconnection endpoint** — `GET /api/v1/ai/runs/{runId}/stream` with Last-Event-ID  | Not Started | 2   | —         |
+| **Migrate scheduled runs** — `GovernanceScheduledRunWorkflow` → `GraphRunWorkflow`   | Not Started | 2   | —         |
+| Add `Idempotency-Key` header support to chat endpoint                                | Not Started | 1   | —         |
+| Migrate `schedule_runs` correlation to use `graph_runs.id`                           | Not Started | 1   | —         |
+| Add attempt semantics (unfreeze `attempt` from 0)                                    | Not Started | 1   | —         |
+| Observability instrumentation                                                        | Not Started | 1   | —         |
+| Documentation updates                                                                | Not Started | 1   | —         |
 
 **Note:** When `graph_runs` exists, reconciler can optionally switch reference-set from LiteLLM spend/logs to `graph_runs`, but it is not required. The LiteLLM API approach remains valid long-term.
 
@@ -98,7 +101,8 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 - **IDEMPOTENT_RUN_START**: `workflowId = graph-run:{tenantId}:{idempotencyKey}` — duplicate starts are no-ops (P1 goal)
 - **LITELLM_IS_REFERENCE_SET**: For billing reconciliation, LiteLLM spend/logs API is the universal reference set across all executor types. No new DB tables required for reconciliation (design review decision 2026-02-13).
 - **GRAPH_RUNS_IS_PRODUCT_TABLE**: `graph_runs` table (P1) exists for product/run lifecycle semantics, not as a billing reconciliation dependency.
-- P0 accepts polling for results; streaming deferred to P1
+- **REDIS_IS_STREAM_PLANE**: Redis holds only ephemeral stream data. PostgreSQL is durable truth. Redis loss = stream interruption, not data loss.
+- **SSE_FROM_REDIS_NOT_MEMORY**: SSE endpoints read from Redis Streams, not in-process memory. Enables cross-process streaming and reconnection.
 - No generic event bus or rule engine — scope is graph execution only
 
 ## Dependencies
