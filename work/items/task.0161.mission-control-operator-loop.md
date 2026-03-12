@@ -74,9 +74,10 @@ The LLM's job is:
 
 **Rejected alternatives:**
 
-- "mc-pick.sh scraping `_index.md`" — brittle markdown parsing when we have a proper TypeScript port with structured query, sort, and claim
-- "Agent decides what to work on" — picking the next item is policy execution (finish-before-starting, tier filtering), not intelligence. PM process already prioritizes.
-- "Scan EDO files for reflections" — noisy and expensive. The work item already contains design context + spec refs.
+- "mc-pick.sh scraping `_index.md`" — brittle markdown parsing when we have a typed port
+- "Agent decides what to work on" — policy execution, not intelligence
+- "Scan EDO files for reflections" — noisy. Work item has design context.
+- "Claim mechanism" — there's 1 agent. Lifecycle skills already update status on completion. No concurrent dispatch to protect against.
 
 ### Degradation Ladder
 
@@ -250,19 +251,20 @@ Write EDO if action taken (template: `/workspace/memory-templates/EDO.template.m
 EXIT.
 ```
 
+### Coexistence with gov-core / gov-engineering
+
+These existing skills are legacy. `/mission-control` replaces their function. Leave them in place for now; prune when mission-control is proven.
+
 ### Walk phase (future, NOT this PR)
 
-- mc-pick.ts calls `adapter.claim(id, runId, command)` before dispatch
-- mc-pick.ts checks `claimedByRun` to avoid double-dispatch
 - Move mc-pick.ts to a proper `bin` in the work-items package
-- Add stuck detection: if same item claimed 3 runs with same `lastCommand` → auto-block
+- Stuck detection: if same item + same status for 3 consecutive runs → auto-block
 - Richer gates: check firing alerts, error rate thresholds
 
 ### Run phase (future)
 
 - mc-status.sh → mc-status.ts (full TypeScript controller)
 - Budget signal injected as structured context per BATS pattern
-- Reflection retrieval from completed items (per Reflexion research)
 
 ### Files
 
@@ -297,7 +299,9 @@ EXIT.
 - [ ] ONE_FOCUS: Exactly 1 work item per run
 - [ ] COST_DISCIPLINE: Only dispatch (step 3) is expensive. Steps 1-2 and 4 are deterministic.
 - [ ] RUNTIME_CAPS: OpenClaw enforces timeoutSeconds:540, subagents.maxConcurrent:3
-- [ ] NO_RETRY: Brain failure → report + exit. Next run re-evaluates fresh. No retry loops.
+- [ ] NO_RETRY: Brain failure → report + exit. Next run re-evaluates fresh.
+- [ ] SHELL_SAFE: mc-status.sh validates external inputs before arithmetic (jq tonumber, not raw string interpolation into bc)
+- [ ] TSX_PREINSTALLED: tsx must be available in container (pnpm store or global install), not npx cold-fetched at runtime
 
 ## Validation
 
