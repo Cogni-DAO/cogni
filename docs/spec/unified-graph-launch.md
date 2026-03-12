@@ -7,7 +7,7 @@ spec_state: draft
 trust: draft
 summary: All graph execution flows through GraphRunWorkflow in Temporal — Redis Streams bridge real-time SSE streaming
 read_when: Adding new graph trigger types, modifying execution paths, or implementing idempotency
-implements: []
+implements: proj.unified-graph-launch
 owner: cogni-dev
 created: 2026-02-03
 verified: null
@@ -179,7 +179,7 @@ Fold trigger fields into the run persistence table per GRAPH_EXECUTION.md P1.
 │   2. createRunRecordActivity(runId, triggerContext)                     │
 │   3. executeAndStreamActivity(runId, graphId, input)                   │
 │      └─ GraphExecutorPort.runGraph() → pump AsyncIterable<AiEvent>     │
-│      └─ Each event → XADD run:{runId} * type <t> data <json>          │
+│      └─ Each event → XADD run:{runId} MAXLEN ~10000 * data <json>     │
 │      └─ On done/error → XADD terminal event + EXPIRE key 3600s        │
 │   4. finalizeRunActivity(runId, result)                                │
 └────────────────────────────────────────────────────────────────────────┘
@@ -187,7 +187,7 @@ Fold trigger fields into the run persistence table per GRAPH_EXECUTION.md P1.
                               ▼
 ┌─ STREAM PLANE (Redis) ────────────────────────────────────────────────┐
 │ Key: run:{runId}                                                       │
-│ Format: XADD run:{runId} * type <event_type> data <json_payload>       │
+│ Format: XADD run:{runId} MAXLEN ~10000 * data <json_payload>           │
 │ Each entry gets a Redis-assigned stream ID (used as SSE Last-Event-ID) │
 │ MAXLEN ~10000 per stream (safety cap)                                  │
 │ EXPIRE 3600s after terminal event (auto-cleanup)                       │
@@ -221,29 +221,60 @@ Fold trigger fields into the run persistence table per GRAPH_EXECUTION.md P1.
 - Docker compose: add Redis 7
 - New dependency: `ioredis`
 
-#### 5. RunStreamPort (Hexagonal Boundary)
+#### 5. RunStreamPort (Hexagonal Boundary) — Implemented
 
 ```typescript
 // src/ports/run-stream.port.ts
+const RUN_STREAM_KEY_PREFIX = "run:";
+const RUN_STREAM_MAXLEN = 10_000;
+const RUN_STREAM_BLOCK_MS = 5_000;
+const RUN_STREAM_DEFAULT_TTL_SECONDS = 3_600;
+
+interface RunStreamEntry {
+  id: string; // Redis stream ID (e.g. "1710000000000-0")
+  event: AiEvent; // Deserialized event payload
+}
+
 interface RunStreamPort {
   /** Publish a single event to the run's stream. */
   publish(runId: string, event: AiEvent): Promise<void>;
 
-  /** Subscribe to a run's stream from a cursor. Yields {id, event} pairs.
-   *  Terminates when a terminal event (done/error) is received. */
+  /** Subscribe to a run's stream from a cursor. Yields RunStreamEntry pairs.
+   *  Terminates when a terminal event (done/error) is received.
+   *  Phase 1: XRANGE replay from fromId (catch-up).
+   *  Phase 2: XREAD BLOCK for live events (uses duplicated client). */
   subscribe(
     runId: string,
+    signal: AbortSignal,
     fromId?: string
-  ): AsyncIterable<{ id: string; event: AiEvent }>;
+  ): AsyncIterable<RunStreamEntry>;
 
   /** Set TTL on a run's stream (called after terminal event). */
   expire(runId: string, ttlSeconds: number): Promise<void>;
 }
 ```
 
-Adapter: `src/adapters/server/ai/redis-run-stream.adapter.ts` — implements `RunStreamPort` using `ioredis` XADD/XREAD/XRANGE/EXPIRE.
+**Adapter:** `src/adapters/server/ai/redis-run-stream.adapter.ts` — `RedisRunStreamAdapter` implements `RunStreamPort` using `ioredis` XADD/XREAD/XRANGE/EXPIRE. Wired in `src/bootstrap/container.ts` (always Redis, `lazyConnect: true`).
+
+**Key implementation details:**
+
+- **publish()**: `XADD run:{runId} MAXLEN ~10000 * data <json>` — events stored as JSON in a single `data` field
+- **subscribe()**: Two-phase — Phase 1 replays via `XRANGE` (skips fromId entry, tracks cursor to last yielded ID), Phase 2 uses `XREAD COUNT 100 BLOCK 5000` on a `redis.duplicate()` client to avoid blocking the shared connection
+- **Terminal events**: `done` and `error` event types signal stream completion — subscriber stops after yielding a terminal event
+- **Cursor handoff**: After replay, XREAD cursor is the last replayed entry ID (not fromId), preventing duplicate delivery
 
 **REDIS_IS_EPHEMERAL**: Redis holds only transient stream data. If Redis restarts mid-run, the activity detects publish failure and marks the run as errored. PostgreSQL remains the durable source of truth for all persisted state.
+
+#### 6. Redis Infrastructure — Implemented
+
+Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
+
+- **Image**: `redis:7-alpine` (pinned by digest for reproducibility)
+- **Config**: `--save ""` (no RDB persistence), `--maxmemory 128mb`, `--maxmemory-policy noeviction`
+- **Network**: `internal` (production), `cogni-edge` with port 6379 exposed (dev)
+- **Healthcheck**: `redis-cli ping` with 10s interval
+- **Env**: `REDIS_URL` (optional, defaults to `redis://localhost:6379`), validated via Zod in `server-env.ts`
+- **Dependency**: `ioredis ^5.6.1` in `apps/web/package.json` (ships own types)
 
 ### Risks and Mitigations
 
@@ -259,17 +290,29 @@ Adapter: `src/adapters/server/ai/redis-run-stream.adapter.ts` — implements `Ru
 
 ### File Pointers
 
+**Implemented (task.0162, task.0163):**
+
+| File                                                  | Purpose                                          |
+| ----------------------------------------------------- | ------------------------------------------------ |
+| `src/ports/run-stream.port.ts`                        | RunStreamPort interface + stream constants       |
+| `src/adapters/server/ai/redis-run-stream.adapter.ts`  | RedisRunStreamAdapter (XADD/XREAD/XRANGE/EXPIRE) |
+| `src/bootstrap/container.ts`                          | Redis client + RunStreamPort wiring              |
+| `src/shared/env/server-env.ts`                        | REDIS_URL env var (optional, Zod validated)      |
+| `src/contracts/run-stream.contract.ts`                | Zod schema for stream entry wire format          |
+| `infra/compose/runtime/docker-compose.yml`            | Redis 7 service (production)                     |
+| `infra/compose/runtime/docker-compose.dev.yml`        | Redis 7 service (dev, port 6379 exposed)         |
+| `tests/unit/adapters/server/ai/redis-run-stream.*.ts` | Unit tests with mocked ioredis (11 tests)        |
+
+**Planned (future tasks):**
+
 | File                                                                 | Purpose                                                |
 | -------------------------------------------------------------------- | ------------------------------------------------------ |
 | `services/scheduler-worker/src/workflows/graph-run.workflow.ts`      | GraphRunWorkflow (unified execution path)              |
 | `services/scheduler-worker/src/activities/execute-graph.activity.ts` | executeAndStreamActivity (pumps + publishes to Redis)  |
-| `src/ports/run-stream.port.ts`                                       | RunStreamPort interface (hexagonal boundary)           |
-| `src/adapters/server/ai/redis-run-stream.adapter.ts`                 | Redis Streams adapter (XADD/XREAD/XRANGE)              |
 | `src/app/api/v1/ai/chat/route.ts`                                    | API trigger (starts workflow → subscribes Redis → SSE) |
 | `src/app/api/v1/ai/runs/[runId]/stream/route.ts`                     | Reconnection SSE endpoint                              |
 | `src/features/ai/services/ai_runtime.ts`                             | AI runtime (workflow start + Redis subscribe)          |
 | `packages/db-schema/src/scheduling.ts`                               | Schema: `graph_runs` table                             |
-| `infra/compose/runtime/docker-compose.yml`                           | Redis 7 service definition                             |
 
 ## Acceptance Checks
 
