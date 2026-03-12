@@ -4,7 +4,8 @@ type: task
 primary_charter:
 title: "RunStreamPort + RedisRunStreamAdapter: hexagonal streaming boundary"
 state: Active
-status: needs_closeout
+status: needs_implement
+revision: 1
 priority: 0
 rank: 2
 estimate: 2
@@ -132,3 +133,16 @@ pnpm test src/adapters/server/ai/__tests__/redis-run-stream
 - **MAXLEN exceeded**: `~10000` is approximate trim — Redis may keep slightly more entries
 - **Subscriber disconnects mid-stream**: No effect on publisher (fire-and-forget pattern)
 - **Multiple subscribers**: Each gets independent cursor — Redis Streams support this natively
+
+## Review Feedback
+
+### Revision 1 — Blocking Issues
+
+1. **Duplicate event delivery on replay→live transition** (`redis-run-stream.adapter.ts:96-105`): After XRANGE replay yields entries (e.g. IDs 2-0, 3-0, 4-0), the XREAD cursor is set to `fromId` (e.g. "1-0") instead of the last replayed entry's ID. XREAD returns entries strictly after the cursor, so it re-delivers all replayed entries as duplicates. Fix: track last yielded entry ID during replay and use that as the XREAD cursor.
+
+2. **Missing test for replay→live cursor handoff**: Add a test where XRANGE returns non-terminal entries, then XREAD follows — assert XREAD cursor equals the last replayed entry ID, not `fromId`.
+
+### Suggestions (non-blocking)
+
+- `run-stream.contract.ts` is orphaned — not imported anywhere. Either use for validation or remove.
+- `adapters/server/ai/AGENTS.md` Public Surface + Files API don't list `redis-run-stream.adapter.ts`.
