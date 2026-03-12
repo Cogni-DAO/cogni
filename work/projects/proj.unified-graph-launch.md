@@ -70,8 +70,8 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 
 | Deliverable                                                                          | Status      | Est | Work Item |
 | ------------------------------------------------------------------------------------ | ----------- | --- | --------- |
-| **Infrastructure: Redis 7** — add to docker-compose, add `ioredis` dep, env config   | Not Started | 1   | task.0162 |
-| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams | Not Started | 2   | task.0163 |
+| **Infrastructure: Redis 7** — add to docker-compose, add `ioredis` dep, env config   | Done        | 1   | task.0162 |
+| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams | Done        | 2   | task.0163 |
 | **`graph_runs` table** — run lifecycle, trigger provenance, status tracking          | Not Started | 2   | —         |
 | **GraphRunWorkflow** — unified Temporal workflow with `executeAndStreamActivity`     | Not Started | 3   | —         |
 | **Refactor chat endpoint** — start workflow → subscribe Redis → SSE response         | Not Started | 3   | —         |
