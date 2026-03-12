@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Status:** active
+- **Status:** stable
 
 ## Purpose
 
@@ -63,6 +63,12 @@ cd/
 - **ROLLBACK_BY_REVERT**: Git revert restores previous digest
 - **NO_SECRETS_IN_MANIFESTS**: All secrets SOPS-encrypted at rest
 - **AKASH_PORTABLE_SERVICES**: Service definitions must be extractable for future SDL generation
+
+## Notes
+
+- Placeholder IPs (10.0.0.1) in EndpointSlices replaced with real Compose VM IPs during task.0149
+- Secret template files (.enc.yaml) contain placeholder values — encrypt with `sops` after filling real secrets
+- Argo CD install is a Kustomize remote base pinned to v2.13.4 — update version deliberately
 
 ## Change Protocol
 
