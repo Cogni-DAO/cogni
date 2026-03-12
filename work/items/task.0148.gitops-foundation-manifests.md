@@ -15,11 +15,11 @@ project: proj.cicd-services-gitops
 branch: feat/gitops-foundation
 pr:
 reviewer:
-revision: 2
+revision: 3
 blocked_by: task.0151
 deploy_verified: false
 created: 2026-03-09
-updated: 2026-03-10
+updated: 2026-03-12
 labels: [deployment, infra, ci-cd, gitops]
 external_refs:
 ---
@@ -71,6 +71,37 @@ A complete set of deployment manifests, IaC modules, and Argo CD configuration �
 - **Full k8s (EKS/GKE)**: Overkill for pre-users. k3s gives us full K8s API on a single node with ~512MB RAM overhead. Same manifests work on full k8s later.
 - **Pulumi/CDK**: TypeScript IaC is appealing but adds runtime dependency. OpenTofu is already established in the repo and battle-tested.
 - **k3s on same VM as Docker Compose**: Messy coexistence. Dedicated VM keeps the transition clean and allows easy rollback.
+- **Akash SDL directly (skip k3s)**: Akash SDL is a docker-compose-like format (`services` + `profiles` + `deployment`), not raw Kubernetes manifests. However: (1) Akash requires Cosmos wallet + cross-chain bridging (EVM→axlUSDC) — blocked by dual-chain complexity (see `infra/tofu/akash/FUTURE_AKASH_INTEGRATION.md`), (2) Akash's managed k8s gives us no control over probes, rolling updates, or reconciliation — k3s gives us full K8s API now, (3) the service definitions we write (images, env vars, resource requests, health endpoints) translate mechanically to SDL when ready. Starting with Akash SDL now would block on payment infrastructure with no deployment benefit.
+
+### Akash Network Compatibility
+
+**Status**: Akash is the Phase 5 target per `FUTURE_AKASH_INTEGRATION.md`. Blocked by EVM→Cosmos bridge complexity.
+
+**Key finding**: Akash SDL is structurally similar to docker-compose, NOT Kubernetes manifests. SDL has `services` (image, env, expose, credentials), `profiles` (compute resources, placement/pricing), and `deployment` (service→profile mapping with replica count). Akash providers run k8s internally, but tenants interact via SDL only.
+
+**What carries forward to Akash** (reusable across both platforms):
+
+| Artifact                               | k3s (now)                     | Akash SDL (future)                              |
+| -------------------------------------- | ----------------------------- | ----------------------------------------------- |
+| Docker images + GHCR registry          | `image:` in Deployment        | `image:` + `credentials:` in services           |
+| Env vars (ConfigMap)                   | `envFrom: configMapRef`       | `env:` list in services                         |
+| Resource requests                      | `resources.requests`          | `profiles.compute.resources`                    |
+| Health endpoints (`/livez`, `/readyz`) | K8s liveness/readiness probes | Provider's k8s handles probes internally        |
+| Service-to-service networking          | K8s Service DNS               | SDL `expose.to.service` (same hostname pattern) |
+| Image immutability (digests)           | Kustomize `images:` overlay   | SDL `image:` field                              |
+| Private registry auth                  | k3s `registries.yaml`         | SDL `credentials:` block                        |
+
+**What does NOT carry forward** (k3s-specific, replaced on Akash):
+
+- **Argo CD** → replaced by Akash Terraform provider or CLI deployment
+- **Kustomize overlays** → replaced by per-env SDL files (or OpenTofu templating)
+- **Selectorless Service + EndpointSlice** → not needed (Akash SDL handles inter-service networking natively)
+- **k3s OpenTofu module** → replaced by Akash OpenTofu provider (already scaffolded in `infra/tofu/akash/`)
+- **SOPS/age/ksops** → replaced by SDL `env:` vars injected via CI (Akash has no native secret management)
+
+**Migration path** (k3s → Akash): Mechanical translation. For each Kustomize base, generate an SDL file: map Deployment→services, ConfigMap→env list, resource requests→profiles.compute. The Akash Terraform provider (`akash-network/terraform-provider-akash`) handles deployment lifecycle. Existing CI pipeline swaps `kubectl kustomize | kubectl apply` for `akash tx deployment create`.
+
+**Design decision**: Build k3s + Kustomize + Argo CD now. This gives immediate value (rollback-by-revert, self-healing, audit trail) on Cherry Servers. The service-level artifacts (images, env, resources, health) are platform-portable. The k3s orchestration layer (~30% of this task's output) is intentionally disposable when Akash payment infra unblocks.
 
 ### Migration Strategy
 
@@ -79,6 +110,8 @@ A complete set of deployment manifests, IaC modules, and Argo CD configuration �
 **Phase B (task.0149)**: Provision k3s VM. Install Argo CD. Point at `infra/cd/`. Migrate scheduler-worker. Verify. Retire scheduler-worker from Compose.
 
 **Phase C (future, P2)**: Migrate remaining services (app, litellm, temporal, postgres) to k3s. Retire Docker Compose entirely.
+
+**Phase D (future, P5)**: When Akash payment infra unblocks (EVM→Cosmos bridge), generate SDL files from Kustomize bases. Swap Argo CD + k3s for Akash Terraform provider. Retire Cherry Servers VMs.
 
 **Scheduler-worker goes first** because it's:
 
@@ -111,6 +144,7 @@ During the transition period (scheduler-worker in k3s, everything else in Compos
 - [ ] NO_SECRETS_IN_MANIFESTS: Secrets referenced via K8s Secret objects; SOPS/age encrypts at rest in repo (spec: proj.cicd-services-gitops)
 - [ ] SIMPLE_SOLUTION: Kustomize (built-in) over Helm (template engine), k3s (lightweight) over full k8s
 - [ ] ARCHITECTURE_ALIGNMENT: Extends existing OpenTofu + Cherry Servers pattern
+- [ ] AKASH_PORTABLE_SERVICES: Service definitions (images, env, resources, health) must be extractable for future SDL generation — no k3s-specific logic baked into service configs
 
 ### Files
 
