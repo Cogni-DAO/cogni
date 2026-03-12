@@ -92,12 +92,16 @@ services:
       - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
       - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
+      # Redis (stream plane — ephemeral only)
+      - REDIS_URL=redis://redis:6379
     volumes:
       - repo_data:/repo:ro
     depends_on:
       postgres:
         condition: service_healthy
       litellm:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       temporal:
         condition: service_healthy
@@ -161,6 +165,32 @@ services:
       timeout: 5s
       retries: 8
       start_period: 120s
+
+  # =============================================================================
+  # Redis 7 — ephemeral stream plane (no persistence, no volume)
+  # Per unified-graph-launch spec: REDIS_IS_STREAM_PLANE
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--maxmemory"
+      - "128mb"
+      - "--maxmemory-policy"
+      - "noeviction"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
 
   postgres:
     image: postgres:15

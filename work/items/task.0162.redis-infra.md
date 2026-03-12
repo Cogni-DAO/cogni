@@ -4,7 +4,7 @@ type: task
 primary_charter:
 title: "Redis 7 infrastructure: docker-compose, ioredis dependency, env config"
 state: Active
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 1
@@ -13,7 +13,7 @@ outcome: Redis 7 available in all runtime stacks; ioredis installed; REDIS_URL w
 assignees: []
 project: proj.unified-graph-launch
 created: 2026-03-12
-updated: 2026-03-12
+updated: 2026-03-13
 labels:
   - ai-graphs
   - infra
@@ -50,6 +50,28 @@ Per spec [unified-graph-launch.md §7](../../docs/spec/unified-graph-launch.md):
 - Modify: docker-compose env sections — add `REDIS_URL` passthrough
 
 **Not in scope** (deferred to task.0163): connection factory, container.ts registration. No consumer exists in this task — wiring happens when `RedisRunStreamAdapter` lands.
+
+## Plan
+
+- [ ] **Checkpoint 1: Docker Compose**
+  - Milestone: Redis 7 service defined in both compose files
+  - Invariants: REDIS_IS_STREAM_PLANE (ephemeral, no volume)
+  - Todos:
+    - [ ] Add `redis` service to `docker-compose.yml` (healthcheck, internal network, no volume, `--save ""`)
+    - [ ] Add `redis` depends_on to `app` service in `docker-compose.yml`
+    - [ ] Add `REDIS_URL` passthrough to `app` environment in `docker-compose.yml`
+    - [ ] Add `redis` service to `docker-compose.dev.yml` with port 6379 exposed
+    - [ ] Add `redis` depends_on to `app` service in `docker-compose.dev.yml`
+    - [ ] Add `REDIS_URL` passthrough to `app` environment in `docker-compose.dev.yml`
+  - Validation: `docker compose -f ... config --quiet` passes for both files
+
+- [ ] **Checkpoint 2: ioredis + env config**
+  - Milestone: ioredis installed, REDIS_URL in server-env.ts and .env.local.example
+  - Todos:
+    - [ ] Add `ioredis` to `apps/web/package.json`
+    - [ ] Add `REDIS_URL` optional field to `serverSchema` in `server-env.ts`
+    - [ ] Document `REDIS_URL` in `.env.local.example`
+  - Validation: `pnpm check` passes
 
 ## Validation
 
