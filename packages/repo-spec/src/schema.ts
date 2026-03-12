@@ -272,14 +272,6 @@ export const repoSpecSchema = z
 
     /** DAO governance configuration */
     cogni_dao: z.object({
-      /** DAO treasury contract address (EVM) */
-      dao_contract: z
-        .string()
-        .regex(
-          /^0x[a-fA-F0-9]{40}$/,
-          "dao_contract must be a valid EVM address"
-        )
-        .optional(),
       /**
        * Chain ID as string or number (YAML flexibility).
        * Normalized to string at extraction time.

@@ -73,13 +73,13 @@ describe("TigerBeetleAdapter (stack)", () => {
         (a) => a.id === ACCOUNT.LIABILITY_USER_CREDITS
       );
       expect(liability).toBeDefined();
-      expect(liability!.ledger).toBe(LEDGER.CREDIT);
-      expect(liability!.code).toBe(ACCOUNT_CODE.LIABILITY);
+      expect(liability?.ledger).toBe(LEDGER.CREDIT);
+      expect(liability?.code).toBe(ACCOUNT_CODE.LIABILITY);
 
       const treasury = accounts.find((a) => a.id === ACCOUNT.ASSETS_TREASURY);
       expect(treasury).toBeDefined();
-      expect(treasury!.ledger).toBe(LEDGER.USDC);
-      expect(treasury!.code).toBe(ACCOUNT_CODE.ASSETS);
+      expect(treasury?.ledger).toBe(LEDGER.USDC);
+      expect(treasury?.code).toBe(ACCOUNT_CODE.ASSETS);
     });
   });
 
@@ -227,7 +227,7 @@ describe("TigerBeetleAdapter (stack)", () => {
         888888n,
       ]);
       expect(result).toHaveLength(1);
-      expect(result[0]!.id).toBe(ACCOUNT.LIABILITY_USER_CREDITS);
+      expect(result[0]?.id).toBe(ACCOUNT.LIABILITY_USER_CREDITS);
     });
   });
 });
