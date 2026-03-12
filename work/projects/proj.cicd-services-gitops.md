@@ -10,7 +10,7 @@ summary: Build pipeline improvements (graph-scoped builds, env decoupling), chec
 outcome: Faster builds, better developer tooling, and a single source of truth for database secrets (3 DSNs only)
 assignees: derekg1729
 created: 2026-02-06
-updated: 2026-02-06
+updated: 2026-03-12
 labels: [deployment, infra, ci-cd]
 ---
 
@@ -26,15 +26,15 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 
 **Goal:** Baseline established — canonical builds, check:full gate, runtime DSN isolation.
 
-| Deliverable                                                               | Status    | Est | Work Item |
-| ------------------------------------------------------------------------- | --------- | --- | --------- |
-| Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done      | 1   | —         |
-| Manifest-first Docker layering for cache optimization (app)               | Done      | 1   | —         |
-| Manifest-first Docker layering for cache optimization (scheduler-worker)  | In Review | 2   | task.0160 |
-| `check:full` local CI-parity gate with trap-based cleanup                 | Done      | 1   | —         |
-| `validate-dsns.sh` for runtime DSN isolation                              | Done      | 1   | —         |
-| Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done      | 1   | —         |
-| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | In Review | 5   | task.0151 |
+| Deliverable                                                               | Status | Est | Work Item |
+| ------------------------------------------------------------------------- | ------ | --- | --------- |
+| Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done   | 1   | —         |
+| Manifest-first Docker layering for cache optimization (app)               | Done   | 1   | —         |
+| Manifest-first Docker layering for cache optimization (scheduler-worker)  | Done   | 2   | task.0160 |
+| `check:full` local CI-parity gate with trap-based cleanup                 | Done   | 1   | —         |
+| `validate-dsns.sh` for runtime DSN isolation                              | Done   | 1   | —         |
+| Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done   | 1   | —         |
+| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | Done   | 5   | task.0151 |
 
 ### Walk (P1) — DSN-Only Provisioning & Build Improvements
 
@@ -54,16 +54,16 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 
 **Goal:** 3 DSNs are the only database secrets; builds are graph-scoped; check:full is fully featured.
 
-| Deliverable                                                                                                                                                                                                                                                                                                                                         | Status      | Est | Work Item                   |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------------------------- |
-| Delete `APP_DB_*` secrets from GitHub                                                                                                                                                                                                                                                                                                               | Not Started | 1   | (create at P2 start)        |
-| Delete `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD` secrets from GitHub                                                                                                                                                                                                                                                                           | Not Started | 1   | (create at P2 start)        |
-| Update docs: "Only 3 DSNs exist"                                                                                                                                                                                                                                                                                                                    | Not Started | 1   | (create at P2 start)        |
-| Add `DATABASE_ROOT_URL` to INFRASTRUCTURE_SETUP.md secret table                                                                                                                                                                                                                                                                                     | Not Started | 1   | (create at P2 start)        |
-| Graph-scoped builds: adopt `pnpm deploy` for service Dockerfiles — eliminates fragile multi-COPY symlink approach. Root `package.json` currently lists all `@cogni/*` workspace packages as deps to ensure pnpm creates root-level symlinks needed by the scheduler-worker Dockerfile (task.0151 workaround). `pnpm deploy` resolves this properly. | Not Started | 3   | (create at P2 start)        |
-| App as workspace package: move app to `apps/web` for proper filter targeting (`pnpm --filter web... build`)                                                                                                                                                                                                                                         | Not Started | 2   | — (superseded by task.0151) |
-| `check:full --watch`: re-run on file changes                                                                                                                                                                                                                                                                                                        | Not Started | 2   | (create at P2 start)        |
-| Parallel test execution in check:full (once isolation is proven stable)                                                                                                                                                                                                                                                                             | Not Started | 2   | (create at P2 start)        |
+| Deliverable                                                                                                                                                                                                                                                                                                                                         | Status      | Est | Work Item            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Delete `APP_DB_*` secrets from GitHub                                                                                                                                                                                                                                                                                                               | Not Started | 1   | (create at P2 start) |
+| Delete `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD` secrets from GitHub                                                                                                                                                                                                                                                                           | Not Started | 1   | (create at P2 start) |
+| Update docs: "Only 3 DSNs exist"                                                                                                                                                                                                                                                                                                                    | Not Started | 1   | (create at P2 start) |
+| Add `DATABASE_ROOT_URL` to INFRASTRUCTURE_SETUP.md secret table                                                                                                                                                                                                                                                                                     | Not Started | 1   | (create at P2 start) |
+| Graph-scoped builds: adopt `pnpm deploy` for service Dockerfiles — eliminates fragile multi-COPY symlink approach. Root `package.json` currently lists all `@cogni/*` workspace packages as deps to ensure pnpm creates root-level symlinks needed by the scheduler-worker Dockerfile (task.0151 workaround). `pnpm deploy` resolves this properly. | Not Started | 3   | (create at P2 start) |
+| App as workspace package: move app to `apps/web` for proper filter targeting (`pnpm --filter web... build`)                                                                                                                                                                                                                                         | Done        | 2   | task.0151            |
+| `check:full --watch`: re-run on file changes                                                                                                                                                                                                                                                                                                        | Not Started | 2   | (create at P2 start) |
+| Parallel test execution in check:full (once isolation is proven stable)                                                                                                                                                                                                                                                                             | Not Started | 2   | (create at P2 start) |
 
 | Test architecture: `tests/_fakes/` and `tests/_fixtures/` import `@/` app code — they're app-owned, not shared. Either move into `apps/web/tests/` or extract truly shared parts into a test utils package. Same coupling affects stack/external tests. Root `tests/` should be free of `@/` imports. | Not Started | 3 | (create at P2 start) |
 
@@ -75,26 +75,25 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 
 > Source: `docs/CICD_SERVICES_ROADMAP.md`
 
-#### P0: Bridge MVP (Current Tooling) — Partially Complete
+#### P0: Bridge MVP (Current Tooling) — Complete
 
 **Goal:** Get scheduler-worker into production using existing SSH+Compose. Minimal changes. **Scope guard:** Only scheduler-worker. No generalized service loops. **Exemption:** Temporarily violates `NO_COUPLED_PIPELINES` — service build runs in app pipeline as bridge.
 
-| Deliverable                                                                                                                           | Status      | Est | Work Item |
-| ------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| `build-service.sh` script (scheduler-worker only)                                                                                     | Done        | 1   | —         |
-| Extend `build-prod.yml` to build scheduler-worker after app                                                                           | Done        | 1   | —         |
-| Extend `push.sh` to push service image, capture digest                                                                                | Done        | 1   | —         |
-| Pass `SCHEDULER_WORKER_IMAGE` as full digest ref through workflow outputs                                                             | Done        | 1   | —         |
-| Wire scheduler-worker into `deploy.sh` (env var substitution)                                                                         | Done        | 1   | —         |
-| Add `/version` endpoint (`{ sha, service, buildTs, imageDigest }`)                                                                    | Done        | 1   | —         |
-| Validate `/livez` + `/readyz` in staging-preview E2E                                                                                  | Not Started | 1   | —         |
-| Add smoke test exercising real service behavior                                                                                       | Not Started | 1   | —         |
-| VM disk sizing: Preview VM at 20GB insufficient for full stack                                                                        | Not Started | 1   | —         |
-| Deploy cleanup: `docker image prune -f` in deploy.sh                                                                                  | Not Started | 1   | —         |
-| Deploy resilience: failed deploys must not take down running site                                                                     | Not Started | 1   | —         |
-| SHA-pin OpenClaw images: gateway pull (`:latest`), ephemeral base (`FROM openclaw:local`) — mutable tags violate `IMAGE_IMMUTABILITY` | Not Started | 1   | —         |
-| Document service tagging in CI-CD.md                                                                                                  | Not Started | 1   | —         |
-| Add scheduler-worker to SERVICES_ARCHITECTURE.md status table                                                                         | Not Started | 1   | —         |
+| Deliverable                                                                     | Status | Est | Work Item |
+| ------------------------------------------------------------------------------- | ------ | --- | --------- |
+| `build-service.sh` script (scheduler-worker only)                               | Done   | 1   | —         |
+| Extend `build-prod.yml` to build scheduler-worker after app                     | Done   | 1   | —         |
+| Extend `push.sh` to push service image, capture digest                          | Done   | 1   | —         |
+| Pass `SCHEDULER_WORKER_IMAGE` as full digest ref through workflow outputs       | Done   | 1   | —         |
+| Wire scheduler-worker into `deploy.sh` (env var substitution)                   | Done   | 1   | —         |
+| Add `/version` endpoint (`{ sha, service, buildTs, imageDigest }`)              | Done   | 1   | —         |
+| Validate `/livez` + `/readyz` in stack tests                                    | Done   | 1   | —         |
+| Add smoke test exercising real service behavior                                 | Done   | 1   | —         |
+| Deploy cleanup: disk-aware prune in deploy.sh (dual gate: 15GB free / 70% used) | Done   | 1   | —         |
+| Deploy resilience: rolling update + zero-downtime edge separation + autoheal    | Done   | 1   | —         |
+| Add scheduler-worker to SERVICES_ARCHITECTURE.md status table                   | Done   | 1   | —         |
+| SHA-pin OpenClaw images: gateway + deploy.sh use `@sha256:` digest              | Done   | 1   | —         |
+| VM disk sizing: Both VMs upgraded to B1-2-2gb-40s-shared (40GB)                 | Done   | 1   | —         |
 
 **Service Contract (all services — Done):**
 
@@ -113,7 +112,7 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Deliverable                                                                    | Status      | Est | Work Item |
 | ------------------------------------------------------------------------------ | ----------- | --- | --------- |
 | Extend digest-driven deploy to app+migrator                                    | Not Started | 1   | —         |
-| Create `platform/cd/` dir with Kustomize bases+overlays                        | Not Started | 3   | task.0148 |
+| Create `infra/cd/` dir with Kustomize bases+overlays                           | Not Started | 3   | task.0148 |
 | Write Kustomize base for scheduler-worker (`base/scheduler-worker/`)           | Not Started | ↑   | task.0148 |
 | Create overlays: `overlays/staging/`, `overlays/production/`                   | Not Started | ↑   | task.0148 |
 | Argo app-of-apps pattern for multi-service management                          | Not Started | ↑   | task.0148 |
@@ -251,65 +250,42 @@ Load increasing?
 | Service health smoke test in CI (build image → start → curl /livez → teardown)                                    | Not Started | 2   | (create at P2 start) |
 | GitOps deploy manifests: auto-generate K8s Deployment from service Dockerfile + env schema                        | Not Started | 3   | (create at P2 start) |
 
-### Health Probe Separation (Livez/Readyz) Track
+### Health Probe Separation (Livez/Readyz) Track — Complete
 
 > Source: docs/spec/health-probes.md
 > Related spec: [health-probes.md](../../docs/spec/health-probes.md)
 
-**Goal:** Separate liveness (`/livez`) from readiness (`/readyz`) probes to enable fast CI smoke tests without full env, while maintaining strict runtime validation for deploy gates. Avoid double-boot waste by checking both probes against the same running stack container.
+**Status:** All P0 items implemented. Both web app and scheduler-worker have `/livez` + `/readyz`. CI, deploy, and stack tests all use the correct endpoints.
 
-#### P0: MVP Critical Path
+#### P0: MVP Critical Path — Done
 
-| Deliverable                                                                               | Status      | Est | Work Item |
-| ----------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Create `/livez` endpoint (liveness probe, <100ms, no deps)                                | Not Started | 1   | —         |
-| Rename `/health` to `/readyz` (readiness probe, full env+secrets validation)              | Not Started | 1   | —         |
-| Update Docker HEALTHCHECK to use `/readyz`                                                | Not Started | 1   | —         |
-| Update `test-image.sh` to poll `/livez` with minimal env (pre-push gate)                  | Not Started | 1   | —         |
-| Update CI workflows to use livez gate before push (staging-preview.yml, build-prod.yml)   | Not Started | 1   | —         |
-| Update stack test validation: poll `/livez` FIRST, then `/readyz` (single container boot) | Not Started | 1   | —         |
-| Update deploy validation to hard-gate on `/readyz` (deploy.sh, wait-for-health.sh)        | Not Started | 1   | —         |
-| Chores: observability labels, doc updates, search for /health hardcoded strings           | Not Started | 1   | —         |
+| Deliverable                                                                             | Status | Est | Work Item |
+| --------------------------------------------------------------------------------------- | ------ | --- | --------- |
+| Create `/livez` endpoint (liveness probe, <100ms, no deps)                              | Done   | 1   | —         |
+| Rename `/health` to `/readyz` (readiness probe, full env+secrets validation)            | Done   | 1   | —         |
+| Update Docker HEALTHCHECK to use `/livez` (compose) for liveness gating                 | Done   | 1   | —         |
+| Update `test-image.sh` to poll `/livez` with minimal env (pre-push gate)                | Done   | 1   | —         |
+| Update CI workflows to use livez gate before push (staging-preview.yml, build-prod.yml) | Done   | 1   | —         |
+| Update stack test validation: tests cover both `/livez` and `/readyz`                   | Done   | 1   | —         |
+| Update deploy validation to hard-gate on `/readyz` (deploy.sh, wait-for-health.sh)      | Done   | 1   | —         |
 
-**P0 Detailed Checklist:**
+**As-built files:**
 
-- [ ] Create `/livez` endpoint (liveness probe)
-  - [ ] Contract: `src/contracts/meta.livez.read.v1.contract.ts`
-  - [ ] Route: `src/app/(infra)/livez/route.ts` (ISOLATED: no env/db imports)
-  - [ ] No env validation, no DB, no external deps
-  - [ ] Always returns 200 if process is alive
-  - [ ] Contract test: Must pass with missing AUTH_SECRET (verifies isolation)
-- [ ] Rename `/health` to `/readyz` (readiness probe)
-  - [ ] Contract: Rename `meta.health.read.v1.contract.ts` to `meta.readyz.read.v1.contract.ts`
-  - [ ] Route: Move `src/app/(infra)/health/route.ts` to `src/app/(infra)/readyz/route.ts`
-  - [ ] MVP scope: env validation + runtime secrets only (no DB check yet)
-  - [ ] Future: Add DB connectivity check with explicit timeout budget
-  - [ ] Any new deps MUST update budget + tests (prevent unbounded growth)
-- [ ] Update Docker HEALTHCHECK to use `/readyz`
-  - [ ] Modify `Dockerfile` HEALTHCHECK command
-  - [ ] Keep strict runtime validation (requires full env)
-- [ ] Update `test-image.sh` to fast livez gate (pre-push validation)
-  - [ ] Boot container with minimal env (NODE_ENV, APP_ENV, DATABASE_URL placeholder)
-  - [ ] Poll `/livez` for 10-20s (fail-fast if process not booting)
-  - [ ] Do NOT rely on Docker HEALTHCHECK (requires full env for /readyz)
-  - [ ] Exit 0 if livez responds 200, exit 1 if timeout
-  - [ ] Used in CI BEFORE pushing images to registry (prevents broken image publish)
-- [ ] Update CI workflows (livez gate before push)
-  - [ ] `staging-preview.yml`: Keep test-image.sh step (line 75-79), validates /livez
-  - [ ] `build-prod.yml`: Keep test-image.sh step (line 53-54), validates /livez
-  - [ ] Images only push to registry if livez gate passes
-- [ ] Update stack test validation (single boot, livez then readyz)
-  - [ ] Modify `check:full` to poll `/livez` FIRST (10-20s budget, fail-fast)
-  - [ ] Then poll `/readyz` after livez passes (longer budget, correctness gate)
-  - [ ] Both checks hit the SAME already-running stack container
-  - [ ] Docker HEALTHCHECK (/readyz) runs in background as extra signal
-- [ ] Update deploy validation to hard-gate on `/readyz`
-  - [ ] `platform/ci/scripts/deploy.sh`: Must poll `/readyz` and fail deploy if not ready
-  - [ ] `platform/infra/files/scripts/wait-for-health.sh`: Switch to `/readyz`
-- [ ] Chores
-  - [ ] Add probe type labels to observability (future: duration histograms)
-  - [ ] Update all documentation references from `/health` to `/livez` or `/readyz`
-  - [ ] Search codebase for any remaining /health hardcoded strings
+| File                                                       | State                                                |
+| ---------------------------------------------------------- | ---------------------------------------------------- |
+| `apps/web/src/contracts/meta.livez.read.v1.contract.ts`    | Liveness contract (status: alive, no deps)           |
+| `apps/web/src/contracts/meta.readyz.read.v1.contract.ts`   | Readiness contract (full env+secrets validation)     |
+| `apps/web/src/app/(infra)/livez/route.ts`                  | Fast liveness endpoint (isolated, no env imports)    |
+| `apps/web/src/app/(infra)/readyz/route.ts`                 | Readiness endpoint (env+secrets+connectivity checks) |
+| `apps/web/tests/contract/livez-isolation.contract.test.ts` | Verifies /livez works without AUTH_SECRET            |
+| `apps/web/tests/contract/readyz-logging.contract.test.ts`  | Verifies readyz error response contract              |
+| `apps/web/tests/stack/meta/meta-endpoints.stack.test.ts`   | Black-box HTTP tests for both endpoints              |
+| `services/scheduler-worker/src/health.ts`                  | /livez, /readyz, /version, /metrics for worker       |
+| `scripts/ci/test-image.sh`                                 | Polls /livez with minimal env (pre-push gate)        |
+| `scripts/ci/deploy.sh`                                     | Hard-gates on /readyz before post-deploy hooks       |
+| `scripts/wait-for-health.sh`                               | Takes readyz URL as arg, polls for deployment gate   |
+| `infra/compose/runtime/docker-compose.yml`                 | App + scheduler-worker healthchecks use /livez       |
+| `infra/compose/runtime/docker-compose.dev.yml`             | App healthcheck uses /livez                          |
 
 #### P1: Enhanced Monitoring
 
@@ -317,14 +293,6 @@ Load increasing?
 | --------------------------------------------------------------------------------------- | ----------- | --- | --------- |
 | Add Prometheus metrics for probe response times (histograms + dependency status gauge)  | Not Started | 2   | —         |
 | Add structured logging for readiness failures (which dependency failed, failure reason) | Not Started | 1   | —         |
-
-- [ ] Add Prometheus metrics for probe response times
-  - [ ] `app_livez_duration_seconds` histogram
-  - [ ] `app_readyz_duration_seconds` histogram
-  - [ ] `app_readyz_dependency_status` gauge (per dependency)
-- [ ] Add structured logging for readiness failures
-  - [ ] Log which dependency failed (DB, auth, env)
-  - [ ] Include failure reason in response body
 
 #### P2: Kubernetes Readiness Gates (Future)
 
@@ -334,27 +302,6 @@ Load increasing?
 | Add startup probe configuration (K8s 1.18+)                          | Not Started | 1   | —         |
 
 **Note:** Do NOT build this preemptively. Evaluate when deploying to K8s.
-
-**File Pointers (P0 Scope):**
-
-| File                                                     | Change                                                             |
-| -------------------------------------------------------- | ------------------------------------------------------------------ |
-| `src/contracts/meta.livez.read.v1.contract.ts`           | **Create**: Liveness contract (status: alive, no deps)             |
-| `src/contracts/meta.readyz.read.v1.contract.ts`          | **Rename from**: `meta.health.read.v1.contract.ts` (strict checks) |
-| `src/app/(infra)/livez/route.ts`                         | **Create**: Fast liveness endpoint (ISOLATED, no env imports)      |
-| `src/app/(infra)/readyz/route.ts`                        | **Rename from**: `health/route.ts` (MVP: env+secrets only)         |
-| `src/contracts/http/router.v1.ts`                        | **Update**: Register `/livez` and `/readyz` routes                 |
-| `tests/contract/livez-isolation.contract.test.ts`        | **Create**: Verify /livez works without AUTH_SECRET                |
-| `Dockerfile`                                             | **Update**: HEALTHCHECK to use `/readyz` (line 87-88)              |
-| `platform/ci/scripts/test-image.sh`                      | **Update**: Poll /livez with minimal env (pre-push gate)           |
-| `.github/workflows/staging-preview.yml`                  | **Keep**: test-image.sh validates /livez before push (line 75-79)  |
-| `.github/workflows/build-prod.yml`                       | **Keep**: test-image.sh validates /livez before push (line 53-54)  |
-| `scripts/check-full.sh`                                  | **Update**: Poll /livez then /readyz on running stack (step 4)     |
-| `tests/stack/meta/meta-endpoints.stack.test.ts`          | **Update**: Test both `/livez` and `/readyz` endpoints             |
-| `platform/infra/files/scripts/wait-for-health.sh`        | **Update**: Use `/readyz` for deployment validation                |
-| `platform/ci/scripts/deploy.sh`                          | **Update**: Hard-gate on `/readyz` (fail deploy if not ready)      |
-| `platform/infra/services/runtime/docker-compose.yml`     | **Update**: Service healthcheck to use `/readyz`                   |
-| `platform/infra/services/runtime/docker-compose.dev.yml` | **Update**: Service healthcheck to use `/readyz`                   |
 
 ## As-Built Specs
 
@@ -410,17 +357,17 @@ k3s Cluster (OpenTofu-provisioned)
 | Manifests | Kustomize      | Overlay model, minimal patches        |
 | Signing   | cosign keyless | OIDC-based, no key management         |
 
-### File Pointers (P0 Scope, from CICD_SERVICES_ROADMAP.md)
+### File Pointers (P0 Scope — as-built paths after task.0151 re-architecture)
 
-| File                                      | Change                                                                     |
-| ----------------------------------------- | -------------------------------------------------------------------------- |
-| `platform/ci/scripts/build-service.sh`    | Build scheduler-worker Dockerfile                                          |
-| `platform/ci/scripts/push.sh`             | Push service image, capture digest via inspect                             |
-| `platform/ci/scripts/deploy.sh`           | Accept SCHEDULER_WORKER_IMAGE env var, wire into compose                   |
-| `.github/workflows/build-prod.yml`        | Add scheduler-worker build+push, output digest ref                         |
-| `.github/workflows/deploy-production.yml` | Accept SCHEDULER_WORKER_IMAGE digest input                                 |
-| `services/scheduler-worker/src/health.ts` | `/version` endpoint                                                        |
-| `docker-compose.yml`                      | scheduler-worker service with `$SCHEDULER_WORKER_IMAGE`, stop_grace_period |
+| File                                       | Purpose                                                                    |
+| ------------------------------------------ | -------------------------------------------------------------------------- |
+| `scripts/ci/build-service.sh`              | Build scheduler-worker Dockerfile                                          |
+| `scripts/ci/push.sh`                       | Push service image, capture digest via inspect                             |
+| `scripts/ci/deploy.sh`                     | Accept SCHEDULER_WORKER_IMAGE env var, wire into compose                   |
+| `.github/workflows/build-prod.yml`         | Build scheduler-worker after app, output digest ref                        |
+| `.github/workflows/deploy-production.yml`  | Accept SCHEDULER_WORKER_IMAGE digest input                                 |
+| `services/scheduler-worker/src/health.ts`  | /livez, /readyz, /version, /metrics                                        |
+| `infra/compose/runtime/docker-compose.yml` | scheduler-worker service with `$SCHEDULER_WORKER_IMAGE`, stop_grace_period |
 
 ### Node → Operator Migration Track
 

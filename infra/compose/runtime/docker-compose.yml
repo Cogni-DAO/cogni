@@ -441,7 +441,7 @@ services:
         condition: service_healthy
 
   openclaw-gateway:
-    image: ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest
+    image: ghcr.io/cogni-dao/cogni-sandbox-openclaw@sha256:29b6b1d8f6e2c6b7f26af31a0e9ee24707ba35004e55f70dd732ad8deded0207
     container_name: openclaw-gateway
     profiles: [sandbox-openclaw]
     restart: unless-stopped

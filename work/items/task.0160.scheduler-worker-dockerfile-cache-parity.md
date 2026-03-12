@@ -2,7 +2,7 @@
 id: task.0160
 type: task
 title: Scheduler-worker Dockerfile cache parity with app
-status: needs_merge
+status: done
 priority: 1
 rank: 1
 estimate: 2
@@ -17,7 +17,7 @@ pr: https://github.com/Cogni-DAO/node-template/pull/557
 reviewer:
 revision: 0
 blocked_by:
-deploy_verified: false
+deploy_verified: true
 created: 2026-03-11
 updated: 2026-03-11
 labels: [ci-cd, infra, performance]

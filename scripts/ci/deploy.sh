@@ -660,7 +660,8 @@ docker pull "$SCHEDULER_WORKER_IMAGE"
 
 # Sandbox images (may update on :latest — per openclaw-sandbox-spec)
 # Manifest check ~2s each; skips download if digest unchanged.
-OPENCLAW_GATEWAY_IMAGE="ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest"
+# SHA-pinned for IMAGE_IMMUTABILITY — update digest when publishing new OpenClaw image
+OPENCLAW_GATEWAY_IMAGE="ghcr.io/cogni-dao/cogni-sandbox-openclaw@sha256:29b6b1d8f6e2c6b7f26af31a0e9ee24707ba35004e55f70dd732ad8deded0207"
 PNPM_STORE_IMAGE="ghcr.io/cogni-dao/node-template:pnpm-store-latest"
 docker pull "$OPENCLAW_GATEWAY_IMAGE"
 docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"

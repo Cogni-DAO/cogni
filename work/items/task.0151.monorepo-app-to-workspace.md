@@ -2,7 +2,7 @@
 id: task.0151
 type: task
 title: "Monorepo re-architecture: app to apps/web, platform/ to infra/ + scripts/"
-status: needs_implement
+status: done
 priority: 0
 rank: 1
 estimate: 5
@@ -17,7 +17,7 @@ pr: https://github.com/Cogni-DAO/node-template/pull/547
 reviewer:
 revision: 3
 blocked_by:
-deploy_verified: false
+deploy_verified: true
 created: 2026-03-10
 updated: 2026-03-12
 labels: [architecture, monorepo, infra]
