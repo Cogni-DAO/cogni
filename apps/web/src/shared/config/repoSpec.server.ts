@@ -3,9 +3,9 @@
 
 /**
  * Module: `@shared/config/repoSpec.server`
- * Purpose: Server-only thin wrapper — file I/O, caching, and CHAIN_ID validation. All schema logic delegated to @cogni/repo-spec.
- * Scope: Reads and caches repo-spec on first access; passes CHAIN_ID to package accessors. Does not define schemas or validation logic.
- * Invariants: Chain ID must match CHAIN_ID; ledger config requires scope_id + scope_key.
+ * Purpose: Server-only thin wrapper — file I/O, caching, and CHAIN_ID validation for repo-spec accessors including DAO governance config.
+ * Scope: Reads and caches repo-spec on first access; does not define schemas, validation logic, or perform network I/O.
+ * Invariants: Chain ID must match CHAIN_ID; ledger config requires scope_id + scope_key; DaoConfig requires all five cogni_dao fields.
  * Side-effects: IO (reads repo-spec from disk) on first call only.
  * Links: packages/repo-spec/src/index.ts, .cogni/repo-spec.yaml
  * @public
@@ -15,6 +15,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import {
+  type DaoConfig,
+  extractDaoConfig,
   extractGovernanceConfig,
   extractLedgerApprovers,
   extractPaymentConfig,
@@ -28,6 +30,7 @@ import { serverEnv } from "@/shared/env";
 import { CHAIN_ID } from "@/shared/web3/chain";
 
 export type {
+  DaoConfig,
   GovernanceConfig,
   GovernanceSchedule,
   InboundPaymentConfig,
@@ -116,6 +119,25 @@ export function getGovernanceConfig(): GovernanceConfig {
   const spec = loadRepoSpec();
   cachedGovernanceConfig = extractGovernanceConfig(spec);
   return cachedGovernanceConfig;
+}
+
+// ---------------------------------------------------------------------------
+// DAO config — cogni_dao section (for governance signal execution + review deep links)
+// ---------------------------------------------------------------------------
+
+let cachedDaoConfig: DaoConfig | null | undefined;
+
+/**
+ * DAO governance configuration from repo-spec.
+ * Returns null if cogni_dao section is missing or incomplete.
+ * All five fields must be present for the config to be valid.
+ */
+export function getDaoConfig(): DaoConfig | null {
+  if (cachedDaoConfig !== undefined) return cachedDaoConfig;
+
+  const spec = loadRepoSpec();
+  cachedDaoConfig = extractDaoConfig(spec);
+  return cachedDaoConfig;
 }
 
 let cachedLedgerApprovers: string[] | null = null;

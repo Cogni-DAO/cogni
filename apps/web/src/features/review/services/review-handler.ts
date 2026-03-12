@@ -8,13 +8,18 @@
  * Invariants: Fire-and-forget — errors logged, never block webhook response. System tenant billing.
  *   ARCHITECTURE_ALIGNMENT — deps injected, no adapter imports.
  * Side-effects: IO (GitHub API via injected deps, LLM via graph executor)
- * Links: task.0153
+ * Links: docs/spec/governance-signal-execution.md
  * @public
  */
 
 import { randomUUID } from "node:crypto";
 import type { Rule } from "@cogni/repo-spec";
-import { extractGatesConfig, parseRepoSpec, parseRule } from "@cogni/repo-spec";
+import {
+  extractDaoConfig,
+  extractGatesConfig,
+  parseRepoSpec,
+  parseRule,
+} from "@cogni/repo-spec";
 import type { Logger } from "pino";
 
 import type { GraphExecutorPort, LlmCaller } from "@/ports";
@@ -171,9 +176,32 @@ export async function handlePrReview(
       loadRule,
     });
 
-    // 7. Update Check Run
+    // 7. Build DAO deep link (for Check Run "View Details" page)
+    const daoBaseUrl = (() => {
+      const dao = extractDaoConfig(repoSpec);
+      if (!dao) return undefined;
+
+      try {
+        const url = new URL("/propose/merge", dao.base_url);
+        url.searchParams.set("dao", dao.dao_contract);
+        url.searchParams.set("plugin", dao.plugin_contract);
+        url.searchParams.set("signal", dao.signal_contract);
+        url.searchParams.set("chainId", dao.chain_id);
+        url.searchParams.set("action", "merge");
+        url.searchParams.set("target", "change");
+        url.searchParams.set("pr", String(prNumber));
+        url.searchParams.set("repoUrl", `https://github.com/${owner}/${repo}`);
+        return url.toString();
+      } catch {
+        return dao.base_url;
+      }
+    })();
+
+    // 8. Update Check Run (with proposal link on View Details page)
     if (checkRunId) {
-      const summary = formatCheckRunSummary(result);
+      const summary = formatCheckRunSummary(result, {
+        ...(daoBaseUrl !== undefined && { daoBaseUrl }),
+      });
       await deps.updateCheckRun(
         owner,
         repo,
@@ -183,21 +211,12 @@ export async function handlePrReview(
       );
     }
 
-    // 8. Post PR Comment (with staleness guard)
-    const daoBaseUrl =
-      "cogni_dao" in repoSpec &&
-      repoSpec.cogni_dao &&
-      typeof repoSpec.cogni_dao === "object" &&
-      "base_url" in repoSpec.cogni_dao
-        ? (repoSpec.cogni_dao.base_url as string)
-        : undefined;
-
+    // 9. Post PR Comment (with staleness guard)
     const checkRunUrl = checkRunId
       ? `https://github.com/${owner}/${repo}/runs/${checkRunId}`
       : undefined;
 
     const commentBody = formatPrComment(result, {
-      ...(daoBaseUrl !== undefined && { daoBaseUrl }),
       headSha,
       ...(checkRunUrl !== undefined && { checkRunUrl }),
     });

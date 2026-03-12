@@ -23,8 +23,12 @@ import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
+import type { WorkItemQueryPort } from "@cogni/work-items";
+import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
 import type { Logger } from "pino";
 import {
+  ALCHEMY_ADAPTER_VERSION,
+  AlchemyWebhookNormalizer,
   type Database,
   DrizzleAiTelemetryAdapter,
   DrizzleExecutionGrantUserAdapter,
@@ -144,6 +148,8 @@ export interface Container {
   governanceStatus: GovernanceStatusPort;
   /** Epoch ledger store — shared by app and scheduler-worker */
   attributionStore: AttributionStore;
+  /** Work item queries — reads from markdown files via WorkItemQueryPort */
+  workItemQuery: WorkItemQueryPort;
   /** Webhook source registrations — normalizers for webhook ingestion */
   webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
 }
@@ -204,6 +210,11 @@ function getWebhookRegistrations(): ReadonlyMap<
       source: "github",
       version: GITHUB_ADAPTER_VERSION,
       webhook: new GitHubWebhookNormalizer(),
+    });
+    registrations.set("alchemy", {
+      source: "alchemy",
+      version: ALCHEMY_ADAPTER_VERSION,
+      webhook: new AlchemyWebhookNormalizer(),
     });
     _webhookRegistrations = registrations;
   }
@@ -416,6 +427,7 @@ function createContainer(): Container {
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
     ),
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
+    workItemQuery: new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT),
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },

@@ -84,6 +84,10 @@ export {
 export { type Database, getAppDb } from "./db/client";
 export { DrizzleGovernanceStatusAdapter } from "./governance/drizzle-governance-status.adapter";
 export {
+  ALCHEMY_ADAPTER_VERSION,
+  AlchemyWebhookNormalizer,
+} from "./ingestion/alchemy-webhook";
+export {
   GITHUB_ADAPTER_VERSION,
   GitHubWebhookNormalizer,
 } from "./ingestion/github-webhook";

@@ -7,7 +7,7 @@
  * Scope: Pure formatting — receives review results, returns markdown strings. Does not perform I/O.
  * Invariants: Output is valid GitHub-flavored markdown. Format aligns with cogni-git-review.
  * Side-effects: none
- * Links: task.0153
+ * Links: docs/spec/governance-signal-execution.md
  * @public
  */
 
@@ -17,8 +17,16 @@ import type { GateResult, GateStatus, ReviewResult } from "./types";
  * Format the Check Run summary (markdown for the "output" field).
  * Matches cogni-git-review summary-adapter.js format.
  */
-export function formatCheckRunSummary(result: ReviewResult): string {
+export function formatCheckRunSummary(
+  result: ReviewResult,
+  opts?: { daoBaseUrl?: string }
+): string {
   const lines: string[] = [];
+
+  // DAO vote link (failures only — top of View Details page)
+  if (opts?.daoBaseUrl && result.conclusion === "fail") {
+    lines.push(`[Propose DAO Vote to Merge](${opts.daoBaseUrl})\n\n---\n`);
+  }
 
   // Verdict
   lines.push(`**${verdictLabel(result.conclusion)}**\n`);
@@ -42,7 +50,6 @@ export function formatCheckRunSummary(result: ReviewResult): string {
 export function formatPrComment(
   result: ReviewResult,
   opts?: {
-    daoBaseUrl?: string;
     headSha?: string;
     checkRunUrl?: string;
   }
@@ -74,13 +81,6 @@ export function formatPrComment(
       }
     }
     lines.push("");
-  }
-
-  // DAO vote link (failures only)
-  if (opts?.daoBaseUrl && result.conclusion === "fail") {
-    lines.push(
-      `\n---\n[Propose Vote to Merge](${opts.daoBaseUrl}) — override via DAO governance`
-    );
   }
 
   // View Details link to Check Run

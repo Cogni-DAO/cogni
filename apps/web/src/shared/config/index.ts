@@ -12,8 +12,10 @@
  */
 
 export {
+  type DaoConfig,
   type GovernanceConfig,
   type GovernanceSchedule,
+  getDaoConfig,
   getGovernanceConfig,
   getLedgerApprovers,
   getNodeId,

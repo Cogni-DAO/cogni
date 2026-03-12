@@ -51,8 +51,8 @@ import { users } from "@cogni/db-schema/refs";
 // ── Configuration ───────────────────────────────────────────────
 
 const REPO_REF = "Cogni-DAO/node-template";
-const NODE_ID = "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d";
-const SCOPE_ID = "a28a8b1e-1f9d-5cd5-9329-569e4819feda";
+const NODE_ID = "538b4da2-bd59-4c3a-928a-8a40b6627205";
+const SCOPE_ID = "cdea48f9-d223-5b5c-a1a3-9ffdd42c3f83";
 // Must match cogni-v0.0 profile defaultWeightConfig
 const WEIGHT_CONFIG: Record<string, number> = {
   "github:pr_merged": 1000,

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7-labs
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
@@ -23,33 +24,19 @@ WORKDIR /app
 
 # Copy workspace config for dependency resolution
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
-COPY packages/ids/package.json packages/ids/
-COPY packages/ai-core/package.json packages/ai-core/
-COPY packages/scheduler-core/package.json packages/scheduler-core/
-COPY packages/db-schema/package.json packages/db-schema/
-COPY packages/db-client/package.json packages/db-client/
-COPY packages/attribution-ledger/package.json packages/attribution-ledger/
-COPY packages/attribution-pipeline-contracts/package.json packages/attribution-pipeline-contracts/
-COPY packages/attribution-pipeline-plugins/package.json packages/attribution-pipeline-plugins/
-COPY packages/ingestion-core/package.json packages/ingestion-core/
-COPY packages/repo-spec/package.json packages/repo-spec/
-COPY services/scheduler-worker/package.json services/scheduler-worker/
+COPY --parents packages/*/package.json ./
+COPY --parents services/scheduler-worker/package.json ./
 
 # Install all dependencies (dev + prod) for build
-RUN pnpm install --frozen-lockfile --filter @cogni/scheduler-worker-service...
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm install --frozen-lockfile --filter @cogni/scheduler-worker-service...
 
 # Copy source files for packages that need to be built
-COPY packages/ids packages/ids
-COPY packages/ai-core packages/ai-core
-COPY packages/scheduler-core packages/scheduler-core
-COPY packages/db-schema packages/db-schema
-COPY packages/db-client packages/db-client
-COPY packages/attribution-ledger packages/attribution-ledger
-COPY packages/attribution-pipeline-contracts packages/attribution-pipeline-contracts
-COPY packages/attribution-pipeline-plugins packages/attribution-pipeline-plugins
-COPY packages/ingestion-core packages/ingestion-core
-COPY packages/repo-spec packages/repo-spec
-COPY services/scheduler-worker services/scheduler-worker
+COPY --parents packages/ids/ packages/ai-core/ packages/scheduler-core/ \
+     packages/db-schema/ packages/db-client/ packages/attribution-ledger/ \
+     packages/attribution-pipeline-contracts/ packages/attribution-pipeline-plugins/ \
+     packages/ingestion-core/ packages/repo-spec/ ./
+COPY --parents services/scheduler-worker/ ./
 
 # Build packages in dependency order (transpile-only for service)
 RUN pnpm --filter @cogni/ids build && \

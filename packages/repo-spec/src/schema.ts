@@ -253,9 +253,26 @@ export const repoSpecSchema = z
     cogni_dao: z.object({
       /**
        * Chain ID as string or number (YAML flexibility).
-       * Validated against expected chain ID at extraction time.
+       * Normalized to string at extraction time.
        */
-      chain_id: z.union([z.string(), z.number()]),
+      chain_id: z.union([z.string(), z.number()]).transform((v) => String(v)),
+      /** DAO contract address (EVM 0x-prefixed, 40 hex chars) */
+      dao_contract: z
+        .string()
+        .regex(/^0x[0-9a-fA-F]{40}$/, "Invalid EVM address")
+        .optional(),
+      /** Aragon voting plugin contract address */
+      plugin_contract: z
+        .string()
+        .regex(/^0x[0-9a-fA-F]{40}$/, "Invalid EVM address")
+        .optional(),
+      /** CogniSignal contract address */
+      signal_contract: z
+        .string()
+        .regex(/^0x[0-9a-fA-F]{40}$/, "Invalid EVM address")
+        .optional(),
+      /** Proposal launcher base URL (for deep links) */
+      base_url: z.string().url().optional(),
     }),
 
     /** Payment configuration (required) */

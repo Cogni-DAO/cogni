@@ -118,7 +118,7 @@ describe("parseRepoSpec", () => {
         ...VALID_OBJECT,
         cogni_dao: { chain_id: 8453 },
       });
-      expect(result.cogni_dao.chain_id).toBe(8453);
+      expect(result.cogni_dao.chain_id).toBe("8453");
     });
 
     it("strips extra fields (Zod strict passthrough)", () => {

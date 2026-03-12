@@ -93,6 +93,11 @@ export const EVENT_NAMES = {
   SANDBOX_EXECUTION_STARTED: "sandbox.execution.started",
   SANDBOX_EXECUTION_COMPLETE: "sandbox.execution.complete",
 
+  // Signal Execution Domain
+  SIGNAL_EXECUTION_COMPLETE: "feature.signal_execution.complete",
+  SIGNAL_DISPATCH_SKIPPED: "feature.signal_dispatch.skipped",
+  ADAPTER_EVM_RPC_ERROR: "adapter.evm_rpc.error",
+
   // Review Domain
   REVIEW_COMPLETE: "feature.review.complete",
   ADAPTER_GITHUB_REVIEW_ERROR: "adapter.github_review.error",

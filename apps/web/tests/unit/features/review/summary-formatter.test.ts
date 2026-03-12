@@ -124,6 +124,26 @@ describe("formatCheckRunSummary", () => {
     expect(failPos).toBeLessThan(passPos);
     expect(passPos).toBeLessThan(neutralPos);
   });
+
+  it("includes DAO vote link on failure when daoBaseUrl provided", () => {
+    const md = formatCheckRunSummary(failResult, {
+      daoBaseUrl: "https://dao.example.com",
+    });
+    expect(md).toContain("Propose DAO Vote to Merge");
+    expect(md).toContain("https://dao.example.com");
+  });
+
+  it("omits DAO vote link on pass", () => {
+    const md = formatCheckRunSummary(passResult, {
+      daoBaseUrl: "https://dao.example.com",
+    });
+    expect(md).not.toContain("Propose DAO Vote to Merge");
+  });
+
+  it("omits DAO vote link when no opts", () => {
+    const md = formatCheckRunSummary(failResult);
+    expect(md).not.toContain("Propose DAO Vote to Merge");
+  });
 });
 
 describe("formatPrComment", () => {
@@ -145,26 +165,6 @@ describe("formatPrComment", () => {
     expect(md).toContain("code-quality");
     expect(md).toContain("| coherence |");
     expect(md).toContain("| 0.40 |");
-  });
-
-  it("includes DAO vote link on failure when daoBaseUrl provided", () => {
-    const md = formatPrComment(failResult, {
-      daoBaseUrl: "https://dao.example.com",
-    });
-    expect(md).toContain("Propose Vote to Merge");
-    expect(md).toContain("https://dao.example.com");
-  });
-
-  it("omits DAO vote link on pass", () => {
-    const md = formatPrComment(passResult, {
-      daoBaseUrl: "https://dao.example.com",
-    });
-    expect(md).not.toContain("Propose Vote to Merge");
-  });
-
-  it("omits DAO vote link when no opts", () => {
-    const md = formatPrComment(failResult);
-    expect(md).not.toContain("Propose Vote to Merge");
   });
 
   it("includes View Details link when checkRunUrl provided", () => {

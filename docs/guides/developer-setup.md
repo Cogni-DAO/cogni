@@ -99,6 +99,87 @@ pnpm dev:trigger-github
 
 Receipts appear in `/gov/epoch` within seconds. The seeded open epoch covers the current week, so new webhook receipts show up immediately.
 
+## PR Review Bot (optional)
+
+Runs automated AI-powered code review on PRs. Requires the GitHub App from above with `Checks:write` + `Pull requests:write` permissions. See [GitHub App + Webhook Setup](./github-app-webhook-setup.md) for credentials.
+
+**Environment variables** (`.env.local`):
+
+```bash
+GH_REVIEW_APP_ID=<your app id>
+GH_REVIEW_APP_PRIVATE_KEY_BASE64=<base64-encoded private key>
+GH_REPOS=<owner/repo>
+GH_WEBHOOK_SECRET=<webhook secret>
+GH_WEBHOOK_PROXY_URL=<smee channel url>
+```
+
+**Run it:**
+
+```bash
+# Terminal 1: dev stack
+pnpm dev:stack
+
+# Terminal 2: smee proxy for GitHub webhooks
+npx smee -u $GH_WEBHOOK_PROXY_URL --path /api/internal/webhooks/github --port 3000
+```
+
+Push a branch and open a PR on the configured repo. The review bot creates a Check Run, runs LLM-powered gate evaluations, posts a PR comment with results. Click "View Details" on the Check Run to see the full review summary.
+
+**Automated external tests** (requires credentials + running stack + smee):
+
+```bash
+pnpm test:external
+```
+
+## On-Chain Governance (optional)
+
+Execute DAO-governed actions (merge PRs, manage collaborators) triggered by on-chain signals. Requires an Alchemy webhook monitoring a CogniSignal contract. See [Alchemy Webhook Setup](./alchemy-webhook-setup.md) for configuration.
+
+**Prerequisites:**
+
+1. A deployed CogniSignal contract — use the DAO formation UI at `/setup/dao` to create one
+2. Alchemy webhook monitoring the signal contract address
+
+**Environment variables** (`.env.local`):
+
+```bash
+ALCHEMY_WEBHOOK_SECRET=<alchemy signing key>
+EVM_RPC_URL=<alchemy rpc url for same chain as your DAO>
+```
+
+**Local repo-spec setup:**
+
+After forming a DAO via `/setup/dao`, create `.cogni/repo-spec.dev.yaml` (gitignored) by copying the committed spec and replacing the `cogni_dao` block with your test DAO:
+
+```bash
+cp .cogni/repo-spec.yaml .cogni/repo-spec.dev.yaml
+```
+
+Edit the `cogni_dao` section with your formation output and add `base_url`:
+
+```yaml
+cogni_dao:
+  dao_contract: "<from formation>"
+  plugin_contract: "<from formation>"
+  signal_contract: "<from formation>"
+  chain_id: "<from formation>"
+  base_url: "https://proposal.cognidao.org"
+```
+
+The app automatically prefers `repo-spec.dev.yaml` over `repo-spec.yaml` when present.
+
+**Run it:**
+
+```bash
+# Terminal 1: dev stack
+pnpm dev:stack
+
+# Terminal 2: smee proxy for Alchemy webhooks
+npx smee -u <alchemy-smee-url> --path /api/internal/webhooks/alchemy --port 3000
+```
+
+When a PR review fails, the Check Run "View Details" page shows a "Propose DAO Vote to Merge" link. Submitting that proposal on-chain triggers an Alchemy webhook, which the app verifies and executes (e.g., merging the PR).
+
 ## Available Modes
 
 - `pnpm dev:stack` - Host app + containerized postgres/litellm
@@ -146,3 +227,5 @@ The repo's `.claude/settings.json` SessionStart hook reads these vars and config
 - [Databases Spec](../spec/databases.md) — migration architecture and database setup
 - [Testing Guide](./testing.md) — testing strategy and adapter patterns
 - [Discord Bot Setup](./discord-bot-setup.md) — connect a Discord bot to the OpenClaw gateway
+- [GitHub App + Webhook Setup](./github-app-webhook-setup.md) — GitHub App creation and webhook credentials
+- [Alchemy Webhook Setup](./alchemy-webhook-setup.md) — on-chain signal webhook configuration

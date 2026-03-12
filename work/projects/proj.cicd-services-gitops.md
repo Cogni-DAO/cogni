@@ -29,7 +29,8 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 | Deliverable                                                               | Status    | Est | Work Item |
 | ------------------------------------------------------------------------- | --------- | --- | --------- |
 | Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done      | 1   | —         |
-| Manifest-first Docker layering for cache optimization                     | Done      | 1   | —         |
+| Manifest-first Docker layering for cache optimization (app)               | Done      | 1   | —         |
+| Manifest-first Docker layering for cache optimization (scheduler-worker)  | In Review | 2   | task.0160 |
 | `check:full` local CI-parity gate with trap-based cleanup                 | Done      | 1   | —         |
 | `validate-dsns.sh` for runtime DSN isolation                              | Done      | 1   | —         |
 | Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done      | 1   | —         |

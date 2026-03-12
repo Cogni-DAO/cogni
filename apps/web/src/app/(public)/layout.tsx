@@ -21,10 +21,10 @@ export default function PublicLayout({
   children: ReactNode;
 }>): ReactNode {
   return (
-    <>
+    <div className="flex min-h-screen flex-col">
       <AppHeader />
-      {children}
+      <main className="flex-1">{children}</main>
       <AppFooter />
-    </>
+    </div>
   );
 }

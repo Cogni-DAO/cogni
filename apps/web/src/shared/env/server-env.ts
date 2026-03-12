@@ -138,6 +138,10 @@ export const serverSchema = z.object({
   // Required when GitHub webhook ingestion is enabled. Per WEBHOOK_SECRET_NOT_IN_CODE.
   GH_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // Alchemy webhook secret - HMAC-SHA256 verification for incoming Alchemy webhook payloads.
+  // Required when on-chain governance signal execution is enabled.
+  ALCHEMY_WEBHOOK_SECRET: z.string().min(1).optional(),
+
   // GitHub Review App credentials - for PR review Check Runs + comments.
   // Optional: PR review feature is disabled when not configured.
   // These are the same env vars used by scheduler-worker for ingestion.

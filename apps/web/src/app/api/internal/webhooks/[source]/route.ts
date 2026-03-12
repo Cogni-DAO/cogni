@@ -17,6 +17,7 @@
 import { NextResponse } from "next/server";
 import { dispatchPrReview } from "@/app/_facades/review/dispatch.server";
 import { getContainer } from "@/bootstrap/container";
+import { dispatchSignalExecution } from "@/features/governance/services/signal-dispatch";
 import {
   receiveWebhook,
   WebhookPayloadParseError,
@@ -46,6 +47,8 @@ function resolveWebhookSecret(
   switch (source) {
     case "github":
       return env.GH_WEBHOOK_SECRET ?? null;
+    case "alchemy":
+      return env.ALCHEMY_WEBHOOK_SECRET ?? null;
     default:
       return null;
   }
@@ -116,11 +119,16 @@ export async function POST(
       "webhook processed"
     );
 
-    // 5. Fire-and-forget: dispatch PR review after successful verification.
+    // 5. Fire-and-forget dispatches after successful verification.
     // Runs async — errors logged, never block webhook response.
     if (source === "github" && eventType === "pull_request") {
       const payload = JSON.parse(bodyBuffer.toString("utf-8"));
       dispatchPrReview(payload, env, log);
+    }
+
+    if (source === "alchemy") {
+      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
+      dispatchSignalExecution(payload, env, log);
     }
 
     return NextResponse.json(
@@ -152,6 +160,11 @@ export async function POST(
     if (source === "github" && eventType === "pull_request") {
       const payload = JSON.parse(bodyBuffer.toString("utf-8"));
       dispatchPrReview(payload, env, log);
+    }
+
+    if (source === "alchemy") {
+      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
+      dispatchSignalExecution(payload, env, log);
     }
 
     return NextResponse.json(

@@ -4,15 +4,16 @@
 /**
  * Module: `@app/(app)/work/view`
  * Purpose: Client-side work dashboard with sorting, filtering, and search.
- * Scope: Presentation + URL-driven filter state. Does not fetch data or modify server state.
- * Invariants: KIT_IS_ONLY_API, MOBILE_FIRST
- * Side-effects: none
- * Links: [WorkPage](./page.tsx)
+ * Scope: Presentation + URL-driven filter state. Fetches data via React Query.
+ * Invariants: KIT_IS_ONLY_API, MOBILE_FIRST, CONTRACTS_ARE_TRUTH
+ * Side-effects: IO (fetches from /api/v1/work/items)
+ * Links: [WorkPage](./page.tsx), [fetchWorkItems](./_api/fetchWorkItems.ts)
  * @public
  */
 
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 
@@ -30,7 +31,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components";
-import type { WorkItem } from "@/lib/work-scanner";
+import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
+
+import { fetchWorkItems } from "./_api/fetchWorkItems";
 
 const STATUS_ORDER: Record<string, number> = {
   needs_merge: 0,
@@ -64,7 +67,7 @@ const STATUS_PILL: Record<string, string> = {
   cancelled: "bg-muted text-muted-foreground",
 };
 
-function sortItems(items: WorkItem[]): WorkItem[] {
+function sortItems(items: WorkItemDto[]): WorkItemDto[] {
   return [...items].sort((a, b) => {
     // Priority ascending (undefined last)
     const pa = a.priority ?? 999;
@@ -77,13 +80,13 @@ function sortItems(items: WorkItem[]): WorkItem[] {
     if (sa !== sb) return sa - sb;
 
     // Updated descending (fallback to created)
-    const da = a.updated || a.created || "";
-    const db = b.updated || b.created || "";
+    const da = a.updatedAt || a.createdAt || "";
+    const db = b.updatedAt || b.createdAt || "";
     return db.localeCompare(da);
   });
 }
 
-function getUnique(items: WorkItem[], key: keyof WorkItem): string[] {
+function getUnique(items: WorkItemDto[], key: keyof WorkItemDto): string[] {
   const set = new Set<string>();
   for (const item of items) {
     const val = item[key];
@@ -92,9 +95,17 @@ function getUnique(items: WorkItem[], key: keyof WorkItem): string[] {
   return [...set].sort();
 }
 
-export function WorkDashboardView({ items }: { items: WorkItem[] }) {
+export function WorkDashboardView() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["work-items"],
+    queryFn: fetchWorkItems,
+    staleTime: 30_000,
+  });
+
+  const items = data?.items ?? [];
 
   const typeFilter = searchParams.get("type") ?? "";
   const statusFilter = searchParams.get("status") ?? "";
@@ -210,72 +221,86 @@ export function WorkDashboardView({ items }: { items: WorkItem[] }) {
         />
       </div>
 
+      {/* Loading / Error states */}
+      {isLoading && (
+        <p className="py-8 text-center text-muted-foreground">
+          Loading work items...
+        </p>
+      )}
+      {error && (
+        <p className="py-8 text-center text-danger">
+          Failed to load work items.
+        </p>
+      )}
+
       {/* Table — edge-to-edge on mobile, rounded on md+ */}
-      <div className="-mx-5 overflow-x-auto border-t border-b md:mx-0 md:rounded-md md:border">
-        <Table className="min-w-[var(--min-width-table-scroll)]">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10 md:w-14">Pri</TableHead>
-              <TableHead className="w-10">Est</TableHead>
-              <TableHead className="w-44 md:w-72">ID</TableHead>
-              <TableHead className="w-24 md:w-28">Status</TableHead>
-              <TableHead>Title</TableHead>
-              <TableHead className="w-24">Updated</TableHead>
-              <TableHead>Branch</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 ? (
+      {!isLoading && !error && (
+        <div className="-mx-5 overflow-x-auto border-t border-b md:mx-0 md:rounded-md md:border">
+          <Table className="min-w-[var(--min-width-table-scroll)]">
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="py-8 text-center text-muted-foreground"
-                >
-                  No work items found.
-                </TableCell>
+                <TableHead className="w-10 md:w-14">Pri</TableHead>
+                <TableHead className="w-10">Est</TableHead>
+                <TableHead className="w-44 md:w-72">ID</TableHead>
+                <TableHead className="w-24 md:w-28">Status</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead className="w-24">Updated</TableHead>
+                <TableHead>Branch</TableHead>
               </TableRow>
-            ) : (
-              filtered.map((item) => (
-                <TableRow key={item.path}>
-                  <TableCell className="text-center text-xs">
-                    <span
-                      className={`inline-flex w-8 justify-center rounded-md px-2 py-0.5 font-medium ${priorityPill(item.priority)}`}
-                    >
-                      {item.priority ?? "\u2014"}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center text-xs">
-                    {item.estimate ?? "\u2014"}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {item.id || "\u2014"}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {item.status ? (
-                      <span
-                        className={`inline-flex rounded-md px-2 py-0.5 font-medium text-xs ${STATUS_PILL[item.status] ?? "bg-muted text-muted-foreground"}`}
-                      >
-                        {item.status}
-                      </span>
-                    ) : (
-                      "\u2014"
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {item.title || "\u2014"}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {item.updated || item.created || "\u2014"}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {item.branch || "\u2014"}
+            </TableHeader>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    No work items found.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                filtered.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-center text-xs">
+                      <span
+                        className={`inline-flex w-8 justify-center rounded-md px-2 py-0.5 font-medium ${priorityPill(item.priority)}`}
+                      >
+                        {item.priority ?? "\u2014"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center text-xs">
+                      {item.estimate ?? "\u2014"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {item.id || "\u2014"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {item.status ? (
+                        <span
+                          className={`inline-flex rounded-md px-2 py-0.5 font-medium text-xs ${STATUS_PILL[item.status] ?? "bg-muted text-muted-foreground"}`}
+                        >
+                          {item.status}
+                        </span>
+                      ) : (
+                        "\u2014"
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {item.title || "\u2014"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {item.updatedAt || item.createdAt || "\u2014"}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {item.branch || "\u2014"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
