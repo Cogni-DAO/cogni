@@ -40,7 +40,7 @@ These workflows should **persist and adapt** as the underlying infrastructure ch
 | Document PR body format conventions          | Done        | 1   | —                          |
 | Document agent operating model in AGENTS.md  | Not Started | 2   | wi.document-agent-workflow |
 | Document trust handling rules in AGENTS.md   | Not Started | 1   | wi.document-trust-handling |
-| Enable TypeScript LSP plugin for Claude Code | Not Started | 1   | task.0162                  |
+| Enable TypeScript LSP plugin for Claude Code | In Review   | 1   | task.0162                  |
 
 ### Walk (P1) — Review Gates + Quality Pipeline
 

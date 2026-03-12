@@ -2,7 +2,7 @@
 id: task.0162
 type: task
 title: Enable TypeScript LSP plugin for Claude Code
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 10
 estimate: 1
@@ -53,7 +53,7 @@ The LSP advantage is **precision, not speed** — ripgrep is already fast. LSP r
 - [x] Update `.claude/settings.json` to enable the plugin at project scope (merge into existing settings, preserve hooks)
 - [x] Update `docs/research/grep-vs-lsp-analysis.md` frontmatter: `status: draft` → `status: active`, `trust: draft` → `trust: reviewed`, add `verified: 2026-03-12`
 - [x] Run `pnpm check:docs` and fix any lint errors
-- [ ] Commit and push
+- [x] Commit and push
 
 ## Validation
 
