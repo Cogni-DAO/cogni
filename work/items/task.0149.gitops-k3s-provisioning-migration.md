@@ -54,6 +54,14 @@ Scheduler-worker runs as a Kubernetes pod on k3s, managed by Argo CD, with GitOp
 - **Auto-promotion via Argo CD Image Updater** — Adds a running controller + GHCR poll loop. A 5-line CI script that commits the new digest is simpler and gives explicit PR-based promotion
 - **Private networking (VLAN)** — Cherry Servers private networking requires same project + region and isn't available in all regions. Public IP + UFW firewall rules is simpler and proven (same as current Compose VM). k3s API is not exposed (only kubectl via SSH)
 
+### Implementation Constraints (from design review)
+
+1. **CLUSTERIP_NOT_HEADLESS**: Use plain selectorless ClusterIP Service + manual EndpointSlice for the Compose→k3s bridge. Remove `clusterIP: None` from task.0148's `external-services.yaml` — headless adds unnecessary constraints (no virtual IP, DNS returns all endpoints directly). Standard ClusterIP with EndpointSlice gives the same connectivity with simpler DNS semantics.
+
+2. **KSOPS_MANIFESTS_EXPLICIT**: The ksops sidecar CMP must be explicit task output — actual repo-server sidecar container spec, volume mounts, plugin config YAML, and `cmp-plugin.yaml` ConfigMap all committed to the repo under `infra/cd/argocd/`. "We'll use ksops" is not sufficient.
+
+3. **K3S_CONFIG_YAML**: Durable k3s settings (`--disable traefik`, `--disable servicelb`) go in `/etc/rancher/k3s/config.yaml` written by cloud-init, NOT as install-script `INSTALL_K3S_EXEC` flags. `registries.yaml` remains separate for GHCR auth. This makes the k3s config declarative and inspectable on the node.
+
 ### Design Decisions
 
 #### Network: Public IP + UFW firewall
@@ -109,15 +117,19 @@ This is a manual one-time ops step documented in the runbook, not automated in O
 - [ ] ROLLBACK_BY_REVERT: Git revert of digest change → Argo syncs previous image (spec: ci-cd-spec)
 - [ ] NO_SECRETS_IN_MANIFESTS: All secrets SOPS-encrypted at rest, decrypted by ksops at apply time (spec: ci-cd-spec)
 - [ ] WATCHDOG_LIVEZ_NOT_READYZ: k3s livenessProbe uses /livez (already correct in task.0148 deployment.yaml)
+- [ ] CLUSTERIP_NOT_HEADLESS: External services use plain selectorless ClusterIP (not headless `clusterIP: None`) + manual EndpointSlice (review constraint)
+- [ ] KSOPS_MANIFESTS_EXPLICIT: ksops sidecar CMP wiring is committed as actual manifests — container spec, volumes, plugin config YAML (review constraint)
+- [ ] K3S_CONFIG_YAML: Durable k3s flags live in `/etc/rancher/k3s/config.yaml`, not install-script EXEC args (review constraint)
 - [ ] SIMPLE_SOLUTION: Uses existing task.0148 manifests + standard OSS (ksops, age, UFW). No bespoke controllers or operators
 - [ ] ARCHITECTURE_ALIGNMENT: Follows established patterns — cherry/base OpenTofu pattern, existing CI pipeline structure (spec: architecture)
 
 ### Files
 
-#### Modify (fill placeholders from task.0148)
+#### Modify (fill placeholders + fix from task.0148)
 
-- `infra/tofu/cherry/k3s/bootstrap-k3s.yaml` — Uncomment Argo CD install block (lines 105-110), add ksops sidecar setup
-- `infra/cd/argocd/install.yaml` — Add ksops sidecar CMP patch (volumes, containers, plugin config)
+- `infra/cd/base/scheduler-worker/external-services.yaml` — Remove `clusterIP: None` from all 3 Services (CLUSTERIP_NOT_HEADLESS constraint). Plain selectorless ClusterIP + EndpointSlice
+- `infra/tofu/cherry/k3s/bootstrap-k3s.yaml` — Move `--disable traefik --disable servicelb` from `INSTALL_K3S_EXEC` to `/etc/rancher/k3s/config.yaml` (K3S_CONFIG_YAML constraint). Uncomment Argo CD install block. Add ksops setup
+- `infra/cd/argocd/install.yaml` — Add ksops sidecar CMP patches (KSOPS_MANIFESTS_EXPLICIT constraint)
 - `infra/cd/overlays/staging/kustomization.yaml` — Replace placeholder image digest + EndpointSlice IPs with real values
 - `infra/cd/overlays/production/kustomization.yaml` — Same (production IPs + digest, when ready)
 - `infra/cd/secrets/.sops.yaml` — Replace placeholder age public keys with real generated keys
@@ -134,6 +146,8 @@ This is a manual one-time ops step documented in the runbook, not automated in O
 
 #### Create
 
+- `infra/cd/argocd/ksops-cmp.yaml` — ksops ConfigManagementPlugin config (plugin.yaml content for the sidecar)
+- `infra/cd/argocd/repo-server-patch.yaml` — Kustomize strategic merge patch: ksops sidecar container, volume mounts, age key secret volume on argocd-repo-server Deployment
 - `infra/tofu/cherry/k3s/terraform.tfvars.example` — Example tfvars matching base pattern
 - `scripts/ci/promote-k8s-image.sh` — Updates overlay kustomization.yaml with new image digest, commits to staging
 - `docs/runbooks/k3s-bootstrap.md` — One-time ops runbook: provision, firewall, age keygen, secret encryption, verify
