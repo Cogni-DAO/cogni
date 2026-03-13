@@ -3,9 +3,7 @@
 #
 # Cloud-init for k3s VM provisioning.
 # Extends the base/bootstrap.yaml pattern: same marker files, same logging,
-# same failure handling. Installs k3s instead of Docker.
-#
-# Argo CD install commands are included but commented — exercised in task.0149.
+# same failure handling. Installs k3s with Argo CD + ksops for GitOps.
 #cloud-config
 
 package_update: true
@@ -21,6 +19,16 @@ swap:
   size: 2147483648
 
 write_files:
+  # k3s server config — durable settings (K3S_CONFIG_YAML constraint)
+  # Install script reads this automatically; no INSTALL_K3S_EXEC flags needed.
+  - path: /etc/rancher/k3s/config.yaml
+    owner: root:root
+    permissions: "0644"
+    content: |
+      disable:
+        - traefik
+        - servicelb
+
   # k3s GHCR registry auth — node-level, all pods get access
   - path: /etc/rancher/k3s/registries.yaml
     owner: root:root
@@ -78,9 +86,9 @@ write_files:
       # Restart journald with updated config
       systemctl restart systemd-journald
 
-      # Install k3s — disable traefik (Caddy handles ingress) and servicelb
+      # Install k3s — config.yaml provides --disable flags
       echo "Installing k3s..."
-      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sh -
+      curl -sfL https://get.k3s.io | sh -
 
       # Wait for k3s to be ready
       echo "Waiting for k3s node to be ready..."
@@ -102,12 +110,12 @@ write_files:
       rm -rf /tmp/age /tmp/age.tar.gz
       age --version
 
-      # Argo CD install — uncomment during task.0149
-      # echo "Installing Argo CD..."
-      # kubectl create namespace argocd || true
-      # kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
-      # echo "Waiting for Argo CD to be ready..."
-      # kubectl -n argocd wait --for=condition=Available deployment/argocd-server --timeout=300s
+      # Install Argo CD (non-HA, pinned to v2.13.4)
+      echo "Installing Argo CD..."
+      kubectl create namespace argocd || true
+      kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+      echo "Waiting for Argo CD to be ready..."
+      kubectl -n argocd wait --for=condition=Available deployment/argocd-server --timeout=300s
 
       # Write success marker
       {
@@ -116,6 +124,7 @@ write_files:
         echo "k3s_version=$(k3s --version 2>&1 | head -1)"
         echo "kubectl_version=$(kubectl version --client --short 2>/dev/null || kubectl version --client 2>&1 | head -1)"
         echo "age_version=$(age --version 2>&1)"
+        echo "argocd=installed"
       } > "$MARKER_DIR/bootstrap.ok"
 
       echo "=== k3s bootstrap completed at $(date -u +%FT%TZ) ==="

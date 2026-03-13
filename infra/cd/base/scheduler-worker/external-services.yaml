@@ -9,7 +9,8 @@
 # Overlay patches replace placeholder IPs with real Compose VM addresses.
 # Remove these resources when each dependency migrates to k3s.
 #
-# Pattern: Selectorless Service + EndpointSlice (K8s v1.33+ recommended).
+# Pattern: Selectorless ClusterIP Service + manual EndpointSlice.
+# Plain ClusterIP (not headless) gives a stable virtual IP with standard DNS.
 # See: https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/
 
 # --- Temporal (gRPC) ---
@@ -18,7 +19,6 @@ kind: Service
 metadata:
   name: temporal
 spec:
-  clusterIP: None
   ports:
     - port: 7233
       protocol: TCP
@@ -46,7 +46,6 @@ kind: Service
 metadata:
   name: postgres
 spec:
-  clusterIP: None
   ports:
     - port: 5432
       protocol: TCP
@@ -74,7 +73,6 @@ kind: Service
 metadata:
   name: app
 spec:
-  clusterIP: None
   ports:
     - port: 3000
       protocol: TCP

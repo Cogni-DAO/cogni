@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# k3s VM Configuration Example
+# Copy to terraform.tfvars and fill in your values.
+# Also: export CHERRY_AUTH_TOKEN=<token>
+
+# Required: Cherry Servers project ID
+project_id = "YOUR_PROJECT_ID"
+
+# Required: Environment name
+environment = "staging"
+
+# Required: GHCR deploy token (read:packages scope)
+ghcr_deploy_token = "ghp_..."
+
+# Optional overrides (defaults shown)
+# region = "LT-Siauliai"
+# plan = "B1-2-2gb-40s-shared"
+# vm_name_prefix = "cogni-k3s"
+# ghcr_deploy_username = "cogni-deploy"
+# public_key_path = "keys/id_rsa.pub"

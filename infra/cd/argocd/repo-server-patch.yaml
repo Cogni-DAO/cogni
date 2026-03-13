@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Strategic merge patch for argocd-repo-server Deployment.
+# Adds ksops sidecar CMP container + age key volume for SOPS secret decryption.
+#
+# The sidecar runs alongside the repo-server and handles .enc.yaml files.
+# Age private key is mounted from the sops-age-key K8s Secret (created manually
+# during cluster bootstrap — see docs/runbooks/k3s-bootstrap.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      volumes:
+        # ksops CMP plugin config — from ConfigMap
+        - name: ksops-cmp-plugin
+          configMap:
+            name: ksops-cmp-plugin
+        # Age private key for SOPS decryption — from manually created Secret
+        - name: sops-age-key
+          secret:
+            secretName: sops-age-key
+        # Shared /tmp for CMP sidecar communication
+        - name: cmp-tmp
+          emptyDir: {}
+      containers:
+        # ksops sidecar CMP container
+        - name: ksops
+          # viaduct-ai/ksops bundles sops + age + kustomize
+          image: viaduct/ksops:v4.3.2
+          command: ["/var/run/argocd/argocd-cmp-server"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+          volumeMounts:
+            # CMP plugin config
+            - name: ksops-cmp-plugin
+              mountPath: /home/argocd/cmp-server/config/plugin.yaml
+              subPath: plugin.yaml
+            # Age private key — ksops/sops reads from SOPS_AGE_KEY_FILE
+            - name: sops-age-key
+              mountPath: /home/argocd/.config/sops/age/keys.txt
+              subPath: keys.txt
+            # Shared tmp for CMP server socket
+            - name: cmp-tmp
+              mountPath: /tmp
+            # Repo source — CMP needs access to the checked-out repo
+            - name: var-files
+              mountPath: /var/run/argocd
+            - name: plugins
+              mountPath: /home/argocd/cmp-server/plugins
+          env:
+            - name: SOPS_AGE_KEY_FILE
+              value: /home/argocd/.config/sops/age/keys.txt
