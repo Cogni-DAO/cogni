@@ -11,7 +11,7 @@ outcome: All graph runs flow through GraphRunWorkflow; no inline execution in HT
 assignees:
   - derekg1729
 created: 2026-02-07
-updated: 2026-03-12
+updated: 2026-03-13
 labels:
   - ai-graphs
   - scheduler
@@ -68,20 +68,13 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 
 **Three-plane architecture:** Temporal (control) + Redis Streams (stream) + PostgreSQL (durable). See [unified-graph-launch.md §4](../../docs/spec/unified-graph-launch.md) for full design.
 
-| Deliverable                                                                          | Status      | Est | Work Item |
-| ------------------------------------------------------------------------------------ | ----------- | --- | --------- |
-| **Infrastructure: Redis 7** — add to docker-compose, add `ioredis` dep, env config   | Done        | 1   | task.0162 |
-| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams | Done        | 2   | task.0163 |
-| **`graph_runs` table** — run lifecycle, trigger provenance, status tracking          | Not Started | 2   | —         |
-| **GraphRunWorkflow** — unified Temporal workflow with `executeAndStreamActivity`     | Not Started | 3   | —         |
-| **Refactor chat endpoint** — start workflow → subscribe Redis → SSE response         | Not Started | 3   | —         |
-| **Reconnection endpoint** — `GET /api/v1/ai/runs/{runId}/stream` with Last-Event-ID  | Not Started | 2   | —         |
-| **Migrate scheduled runs** — `GovernanceScheduledRunWorkflow` → `GraphRunWorkflow`   | Not Started | 2   | —         |
-| Add `Idempotency-Key` header support to chat endpoint                                | Not Started | 1   | —         |
-| Migrate `schedule_runs` correlation to use `graph_runs.id`                           | Not Started | 1   | —         |
-| Add attempt semantics (unfreeze `attempt` from 0)                                    | Not Started | 1   | —         |
-| Observability instrumentation                                                        | Not Started | 1   | —         |
-| Documentation updates                                                                | Not Started | 1   | —         |
+| Deliverable                                                                                               | Status      | Est | Work Item |
+| --------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| **Infrastructure: Redis 7** — docker-compose, `ioredis` dep, env config                                   | Done        | 1   | task.0162 |
+| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                      | Done        | 2   | task.0163 |
+| **GraphRunWorkflow + `graph_runs` table** — unified Temporal workflow, run persistence, attempt semantics | Not Started | 5   | task.0164 |
+| **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency                    | Not Started | 5   | task.0165 |
+| **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs        | Not Started | 3   | task.0166 |
 
 **Note:** When `graph_runs` exists, reconciler can optionally switch reference-set from LiteLLM spend/logs to `graph_runs`, but it is not required. The LiteLLM API approach remains valid long-term.
 
