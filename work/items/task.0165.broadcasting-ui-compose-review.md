@@ -57,59 +57,97 @@ The broadcasting domain layer (task.0159) delivers API routes for draft, list, s
 
 ## Allowed Changes
 
-- `apps/web/src/app/(app)/broadcasting/` — **create** (page.tsx, view.tsx, \_api/)
-- `apps/web/src/features/broadcasting/components/` — **create** (compose form, message list, post detail, review form)
-- `apps/web/src/features/broadcasting/hooks/` — **create** (React Query hooks for broadcast API)
-- `apps/web/src/features/layout/components/AppSidebar.tsx` — **modify** (add broadcasting nav item)
-- `apps/web/src/features/layout/components/footer-items.tsx` — **modify** (add broadcasting link)
+- `apps/web/src/app/(app)/broadcasting/` — **create** (page.tsx, view.tsx, \_api/broadcasts.ts)
+- `apps/web/src/features/layout/components/AppSidebar.tsx` — **modify** (add nav item)
+- `apps/web/src/features/layout/components/footer-items.tsx` — **modify** (add link)
 - `apps/web/src/proxy.ts` — **modify** (add `/broadcasting` to `APP_ROUTES`)
 - `apps/web/src/contracts/broadcast.*.v1.contract.ts` — **read only** (import types, do not modify)
 
+## Design
+
+### Outcome
+
+A user can compose broadcast drafts, monitor their status, and review platform posts — all from the app UI without needing API tools.
+
+### Approach
+
+**Solution**: Single-page dashboard at `/broadcasting` with inline expand for detail + review. Follows the exact pattern of `/work` (table list, status pills, URL-driven filters) and `/schedules` (CRUD with React Query mutations). No new components library — uses existing kit primitives (`Table`, `Select`, `Button`, `Input`, `Dialog`, `Badge`) plus plain `<textarea>` and `<input type="checkbox">` where shadcn primitives don't exist yet.
+
+**Reuses**:
+
+- `/work` view pattern: `page.tsx` (auth shell) → `view.tsx` (client, React Query, URL filters, Table)
+- `/schedules/_api/` pattern: typed fetch wrappers per operation (GET list, POST create, GET detail, POST review)
+- `@/contracts/broadcast.*.v1.contract.ts` for all types via `z.infer<>`
+- `useMutation` + `useQueryClient().invalidateQueries()` from React Query (already a dep) for compose + review
+- `Dialog` from shadcn for compose form modal (already available in kit)
+- `Badge` for status pills and risk levels (already available)
+- `ExpandableTableRow` from kit for inline detail view (already exists, avoids a separate page)
+
+**Rejected**:
+
+- **Separate `/broadcasting/[id]` page** — adds routing complexity for no benefit at Crawl scale. Inline expand (like `ExpandableTableRow`) is simpler and keeps context.
+- **Feature-level hooks directory** (`features/broadcasting/hooks/`) — over-engineering. The `_api/` fetch functions + inline `useQuery`/`useMutation` in the view component is the established pattern. Hooks would be a premature abstraction for 4 fetch functions.
+- **Custom feature components** (`features/broadcasting/components/`) — at Crawl, the entire UI fits in ~2 files: `view.tsx` (list + compose) and an inline detail/review expansion. Splitting into 4+ component files is premature. If the UI grows in Walk, extract then.
+
+### Architecture
+
+```
+apps/web/src/app/(app)/broadcasting/
+  page.tsx          ← auth shell (same as /work/page.tsx)
+  view.tsx          ← "use client" — list, compose dialog, inline detail/review
+  _api/
+    broadcasts.ts   ← all 4 fetch functions in one file (they're ~15 lines each)
+```
+
+No `features/broadcasting/` directory needed at Crawl. The view is ~200 lines of presentation with no business logic — it just calls API endpoints and renders responses. When the UI grows (Walk: previews, campaigns, engagement), extract components then.
+
+### Invariants
+
+- [ ] MESSAGE_IS_PLATFORM_AGNOSTIC: compose form body is a plain textarea with no platform-specific hints, labels, or character counters (spec: broadcasting-spec)
+- [ ] REVIEW_BEFORE_HIGH_RISK: risk level badge shown on each platform post; review buttons only appear for `pending_review` posts (spec: broadcasting-spec)
+- [ ] CONTRACTS_ARE_TRUTH: all request/response types are `z.infer<>` from `broadcast.*.v1.contract.ts` — no manual interfaces (spec: architecture)
+- [ ] KIT_IS_ONLY_API: UI uses `@/components` barrel exports only, never direct vendor imports (spec: architecture)
+- [ ] SIMPLE_SOLUTION: ~3 new files total, no new npm deps, no new component directories
+- [ ] ARCHITECTURE_ALIGNMENT: `page.tsx` → `view.tsx` → `_api/` follows established `/work` and `/schedules` patterns (spec: architecture)
+
+### Files
+
+- Create: `apps/web/src/app/(app)/broadcasting/page.tsx` — auth shell (5 lines, same as work/page.tsx)
+- Create: `apps/web/src/app/(app)/broadcasting/view.tsx` — client view: list table, compose dialog, inline detail expand with review actions
+- Create: `apps/web/src/app/(app)/broadcasting/_api/broadcasts.ts` — 4 typed fetch functions (fetchList, createDraft, fetchStatus, submitReview)
+- Modify: `apps/web/src/proxy.ts` — add `/broadcasting` to `APP_ROUTES` array
+- Modify: `apps/web/src/features/layout/components/AppSidebar.tsx` — add nav item (`Radio` icon from lucide)
+- Modify: `apps/web/src/features/layout/components/footer-items.tsx` — add Broadcasting link
+
 ## Plan
 
-### 1. Navigation + Route Shell
+### 1. Wiring (nav + auth)
 
 - [ ] Add `/broadcasting` to `APP_ROUTES` in `proxy.ts`
-- [ ] Add broadcasting item to `AppSidebar.tsx` nav links (icon: `Megaphone` or `Radio` from lucide)
-- [ ] Add broadcasting link to `footer-items.tsx`
-- [ ] Create `apps/web/src/app/(app)/broadcasting/page.tsx` — auth check + render view
+- [ ] Add nav item to `AppSidebar.tsx` (`{ href: "/broadcasting", label: "Broadcast", icon: Radio }`)
+- [ ] Add link to `footer-items.tsx`
+- [ ] Create `broadcasting/page.tsx` — auth shell identical to work/page.tsx
 
-### 2. API Client Hooks
+### 2. API fetch functions
 
-- [ ] Create `apps/web/src/app/(app)/broadcasting/_api/fetchBroadcasts.ts` — `GET /api/v1/broadcasting`
-- [ ] Create `apps/web/src/app/(app)/broadcasting/_api/createDraft.ts` — `POST /api/v1/broadcasting`
-- [ ] Create `apps/web/src/app/(app)/broadcasting/_api/fetchBroadcastStatus.ts` — `GET /api/v1/broadcasting/[messageId]`
-- [ ] Create `apps/web/src/app/(app)/broadcasting/_api/submitReview.ts` — `POST /api/v1/broadcasting/[messageId]/posts/[postId]/review`
+- [ ] Create `broadcasting/_api/broadcasts.ts` with 4 functions:
+  - `fetchBroadcasts(status?: string)` → `GET /api/v1/broadcasting[?status=]`
+  - `createDraft(input: BroadcastDraftInput)` → `POST /api/v1/broadcasting`
+  - `fetchBroadcastStatus(messageId: string)` → `GET /api/v1/broadcasting/[messageId]`
+  - `submitReview(messageId: string, postId: string, input: BroadcastReviewInput)` → `POST .../review`
 
-### 3. Compose Form
+### 3. View component
 
-- [ ] Create `apps/web/src/features/broadcasting/components/ComposeForm.tsx`
-- [ ] Fields: body (textarea, max 5000), title (input, optional), targetPlatforms (checkbox group), mediaUrls (URL input list, optional)
-- [ ] Submit handler calls `createDraft`, invalidates query cache
-- [ ] Validation via Zod schema from `broadcast.draft.v1.contract`
+- [ ] Create `broadcasting/view.tsx` ("use client") with:
+  - **List**: `useQuery` for `fetchBroadcasts`, `Select` for status filter, `Table` with columns: body (truncated), status `Badge`, platforms, createdAt
+  - **Compose**: `Dialog` with form (body `<textarea>`, title `Input`, platforms `ToggleGroup`, optional mediaUrls). `useMutation` → `createDraft`, invalidate on success
+  - **Detail expand**: `ExpandableTableRow` — on click, fetch posts via `fetchBroadcastStatus`. Show each post: platform, optimizedBody, status, riskLevel `Badge`, reviewDecision
+  - **Review**: for `pending_review` posts, `Button` approve/reject + inline edit `<textarea>`. `useMutation` → `submitReview`, invalidate on success
 
-### 4. Message List View
+### 4. Validate
 
-- [ ] Create `apps/web/src/app/(app)/broadcasting/view.tsx` — client component
-- [ ] React Query hook for `fetchBroadcasts` with status filter
-- [ ] Status filter dropdown (same pattern as work dashboard)
-- [ ] Table or card list: body preview, status pill, platforms, createdAt
-- [ ] Click row → expand or navigate to detail
-
-### 5. Detail + Review View
-
-- [ ] Create `apps/web/src/features/broadcasting/components/MessageDetail.tsx`
-- [ ] Fetch message + posts via `fetchBroadcastStatus`
-- [ ] Show message metadata (body, title, platforms, status)
-- [ ] List platform posts with: platform icon, optimized body, status pill, risk badge, review decision
-- [ ] For `pending_review` posts: approve/reject buttons + edit textarea
-- [ ] Submit review calls `submitReview`, invalidates query cache
-
-### 6. Validate
-
-- [ ] `pnpm check` — lint, types, format pass
-- [ ] Manual: navigate to `/broadcasting`, compose a draft, see it in the list
-- [ ] Manual: view message detail, see platform posts (if any exist from API/workflow)
+- [ ] `pnpm check` passes
+- [ ] Manual: `/broadcasting` renders, compose creates draft, detail expands, review submits
 
 ## Validation
 
