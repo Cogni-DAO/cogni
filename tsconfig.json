@@ -5,6 +5,7 @@
   "references": [
     { "path": "./apps/web/tsconfig.app.json" },
     { "path": "./packages/ai-core" },
+    { "path": "./packages/broadcast-core" },
     { "path": "./packages/ai-tools" },
     { "path": "./packages/aragon-osx" },
     { "path": "./packages/cogni-contracts" },

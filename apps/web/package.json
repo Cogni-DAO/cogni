@@ -20,6 +20,7 @@
     "@cogni/ai-tools": "workspace:*",
     "@cogni/aragon-osx": "workspace:*",
     "@cogni/attribution-ledger": "workspace:*",
+    "@cogni/broadcast-core": "workspace:*",
     "@cogni/cogni-contracts": "workspace:*",
     "@cogni/db-client": "workspace:*",
     "@cogni/db-schema": "workspace:*",

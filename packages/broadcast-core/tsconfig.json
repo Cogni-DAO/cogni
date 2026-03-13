@@ -11,15 +11,10 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "baseUrl": "."
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist", "__arch_probes__"],
-  "references": [
-    { "path": "../broadcast-core" },
-    { "path": "../db-schema" },
-    { "path": "../ids" },
-    { "path": "../attribution-ledger" },
-    { "path": "../scheduler-core" }
-  ]
+  "references": [{ "path": "../ids" }]
 }

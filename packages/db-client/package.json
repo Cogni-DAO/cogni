@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@cogni/ai-core": "workspace:*",
+    "@cogni/broadcast-core": "workspace:*",
     "@cogni/db-schema": "workspace:*",
     "@cogni/attribution-ledger": "workspace:*",
     "@cogni/ids": "workspace:*",

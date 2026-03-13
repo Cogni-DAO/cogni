@@ -24,6 +24,7 @@ export const tsupConfig = defineConfig({
     "src/ai-threads.ts",
     "src/identity.ts",
     "src/attribution.ts",
+    "src/broadcasting.ts",
     "src/profile.ts",
   ],
   format: ["esm"],

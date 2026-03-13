@@ -19,7 +19,18 @@ import type {
   WebSearchCapability,
 } from "@cogni/ai-tools";
 import type { AttributionStore } from "@cogni/attribution-ledger";
-import { DrizzleAttributionAdapter } from "@cogni/db-client";
+import {
+  type BroadcastLedgerUserPort,
+  type BroadcastLedgerWorkerPort,
+  type ContentOptimizerPort,
+  PLATFORM_IDS,
+  type PublishPort,
+} from "@cogni/broadcast-core";
+import {
+  DrizzleAttributionAdapter,
+  DrizzleBroadcastUserAdapter,
+  DrizzleBroadcastWorkerAdapter,
+} from "@cogni/db-client";
 import type { FinancialLedgerPort } from "@cogni/financial-ledger";
 import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
@@ -58,6 +69,8 @@ import {
   ViemTreasuryAdapter,
 } from "@/adapters/server";
 import { ServiceDrizzleAccountService } from "@/adapters/server/accounts/drizzle.adapter";
+import { EchoContentOptimizerAdapter } from "@/adapters/server/broadcast/echo-content-optimizer.adapter";
+import { EchoPublishAdapter } from "@/adapters/server/broadcast/echo-publish.adapter";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { ServiceDrizzlePaymentAttemptRepository } from "@/adapters/server/payments/drizzle-payment-attempt.adapter";
 import { OpenRouterFundingAdapter } from "@/adapters/server/treasury/openrouter-funding.adapter";
@@ -163,6 +176,14 @@ export interface Container {
   threadPersistenceForUser(userId: UserId): ThreadPersistencePort;
   /** Governance status queries (system tenant scope) */
   governanceStatus: GovernanceStatusPort;
+  /** Broadcasting ledger — user-facing CRUD for content messages and platform posts */
+  broadcastLedger: BroadcastLedgerUserPort;
+  /** Broadcasting ledger — worker-facing, bypasses RLS for system operations */
+  broadcastWorkerLedger: BroadcastLedgerWorkerPort;
+  /** Broadcasting content optimizer — transforms message body for target platforms */
+  broadcastOptimizer: ContentOptimizerPort;
+  /** Broadcasting publishers — keyed by platform ID (echo adapters for Crawl) */
+  broadcastPublishers: ReadonlyMap<string, PublishPort>;
   /** Epoch ledger store — shared by app and scheduler-worker */
   attributionStore: AttributionStore;
   /** Work item queries — reads from markdown files via WorkItemQueryPort */
@@ -557,6 +578,21 @@ function createContainer(): Container {
     governanceStatus: new DrizzleGovernanceStatusAdapter(
       db,
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
+    ),
+    broadcastLedger: new DrizzleBroadcastUserAdapter(
+      db,
+      log.child({ component: "DrizzleBroadcastUserAdapter" })
+    ),
+    broadcastWorkerLedger: new DrizzleBroadcastWorkerAdapter(
+      serviceDb,
+      log.child({ component: "DrizzleBroadcastWorkerAdapter" })
+    ),
+    broadcastOptimizer: new EchoContentOptimizerAdapter(),
+    broadcastPublishers: new Map(
+      PLATFORM_IDS.map((pid) => [
+        pid,
+        new EchoPublishAdapter(pid, log.child({ component: "EchoPublish" })),
+      ])
     ),
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
     workItemQuery: new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT),

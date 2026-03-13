@@ -2,7 +2,7 @@
 id: task.0159
 type: task
 title: "Broadcasting Crawl — core domain, schema, workflow, and X adapter"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 1
 estimate: 5
@@ -14,7 +14,7 @@ assignees:
   - derekg1729
 credit:
 project: proj.broadcasting
-branch:
+branch: claude/research-broadcasting-integration-8p2DB
 pr:
 reviewer:
 revision: 0

@@ -201,6 +201,8 @@
     },
     {
       "includes": [
+        "packages/broadcast-core/tsup.config.ts",
+        "packages/broadcast-core/vitest.config.ts",
         "packages/ai-core/tsup.config.ts",
         "packages/ai-tools/tsup.config.ts",
         "packages/ai-tools/vitest.config.ts",

@@ -51,6 +51,10 @@
       "import": "./dist/attribution.js",
       "default": "./dist/attribution.js"
     },
+    "./broadcasting": {
+      "types": "./dist/broadcasting.d.ts",
+      "import": "./dist/broadcasting.js"
+    },
     "./profile": {
       "types": "./dist/profile.d.ts",
       "import": "./dist/profile.js",
