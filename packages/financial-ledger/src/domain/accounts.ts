@@ -55,16 +55,15 @@ export const TRANSFER_CODE = {
 } as const;
 
 // ─── Well-Known Account IDs ────────────────────────────────────────
-// MVP: 5 accounts across 2 ledgers. Expand only when a real flow requires it.
+// 6 accounts across 2 ledgers. Expand only when a real flow requires it.
 //
 // CREDIT ledger (1xxx):
 //   Credit issuance → user liability → revenue on consumption
 //
 // USDC ledger (2xxx):
-//   Treasury holds USDC → operator float after Split distribute
+//   Treasury holds USDC → operator float after Split distribute → provider float after top-up
 //
 // Future accounts (add when flows exist):
-//   - Expense:ProviderTopUp:USDC (when OpenRouter top-up co-write is wired)
 //   - COGNI/EUR ledgers (when token distribution or hosting expense tracking ships)
 
 export const ACCOUNT = {

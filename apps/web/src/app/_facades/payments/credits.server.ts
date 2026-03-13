@@ -71,7 +71,16 @@ export async function confirmCreditsPaymentFacade(
     }),
   };
 
-  const env = serverEnv();
+  const pricingConfig = (() => {
+    if (!container.providerFunding) return undefined;
+    const env = serverEnv();
+    return {
+      markupFactor: env.USER_PRICE_MARKUP_FACTOR,
+      revenueShare: env.SYSTEM_TENANT_REVENUE_SHARE,
+      cryptoFee: env.OPENROUTER_CRYPTO_FEE,
+    };
+  })();
+
   const result = await confirmCreditsPurchase(
     {
       accountService,
@@ -80,13 +89,7 @@ export async function confirmCreditsPaymentFacade(
       financialLedger: container.financialLedger,
       providerFunding: container.providerFunding,
       log: enrichedCtx.log,
-      pricingConfig: container.providerFunding
-        ? {
-            markupFactor: env.USER_PRICE_MARKUP_FACTOR,
-            revenueShare: env.SYSTEM_TENANT_REVENUE_SHARE,
-            cryptoFee: env.OPENROUTER_CRYPTO_FEE,
-          }
-        : undefined,
+      pricingConfig,
     },
     {
       billingAccountId: billingAccount.id,

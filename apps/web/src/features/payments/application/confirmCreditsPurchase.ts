@@ -23,6 +23,7 @@ import {
   LEDGER,
   TB_TRANSFER_NAMESPACE,
   TRANSFER_CODE,
+  USDC_SCALE,
   uuidToBigInt,
 } from "@cogni/financial-ledger";
 import type { Logger } from "pino";
@@ -130,9 +131,9 @@ export async function confirmCreditsPurchase(
   // Step 4: TB co-write — record Split distribute (Treasury → OperatorFloat)
   if (deps.financialLedger && settlement) {
     try {
-      const amountMicroUsdc = BigInt(
-        Math.round((input.amountUsdCents / 100) * 1_000_000)
-      );
+      // cents × 10_000 = micro-USDC (all-bigint, no float rounding)
+      const amountMicroUsdc =
+        BigInt(input.amountUsdCents) * (USDC_SCALE / 100n);
       await deps.financialLedger.transfer({
         id: deterministicTransferId(
           paymentIntentId,
@@ -153,6 +154,12 @@ export async function confirmCreditsPurchase(
   }
 
   // Step 5: Provider funding (OpenRouter top-up)
+  if (deps.providerFunding && !deps.pricingConfig) {
+    log.warn(
+      { paymentIntentId },
+      "providerFunding configured but pricingConfig missing — skipping funding"
+    );
+  }
   if (deps.providerFunding && deps.pricingConfig) {
     try {
       const topUpUsd = calculateOpenRouterTopUp(
@@ -172,9 +179,10 @@ export async function confirmCreditsPurchase(
       // Step 6: TB co-write — record provider top-up (OperatorFloat → ProviderFloat)
       if (deps.financialLedger && fundingOutcome) {
         try {
-          const topUpMicroUsdc = BigInt(
-            Math.round(fundingOutcome.topUpUsd * 1_000_000)
-          );
+          // topUpUsd is a float from pricing — convert to cents then to micro-USDC
+          const topUpMicroUsdc =
+            BigInt(Math.round(fundingOutcome.topUpUsd * 100)) *
+            (USDC_SCALE / 100n);
           await deps.financialLedger.transfer({
             id: deterministicTransferId(
               paymentIntentId,

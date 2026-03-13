@@ -16,8 +16,10 @@
  */
 
 import { providerFundingAttempts } from "@cogni/db-schema/billing";
+import { TB_TRANSFER_NAMESPACE } from "@cogni/financial-ledger";
 import { eq } from "drizzle-orm";
 import type { Logger } from "pino";
+import { v5 as uuidv5 } from "uuid";
 import type { Database } from "@/adapters/server";
 import type {
   OperatorWalletPort,
@@ -105,8 +107,8 @@ export class OpenRouterFundingAdapter implements ProviderFundingPort {
       }
     }
 
-    // Create new funding attempt
-    const attemptId = crypto.randomUUID();
+    // Create new funding attempt — deterministic ID for idempotent inserts
+    const attemptId = uuidv5(paymentIntentId, TB_TRANSFER_NAMESPACE);
     const amountUsdcMicro = BigInt(Math.round(topUpUsd * 1_000_000));
 
     await this.db.insert(providerFundingAttempts).values({
@@ -148,15 +150,16 @@ export class OpenRouterFundingAdapter implements ProviderFundingPort {
   private async resumeFromCharge(
     paymentIntentId: string,
     attemptId: string,
-    chargeId: string,
+    _previousChargeId: string,
     topUpUsd: number
   ): Promise<ProviderFundingOutcome | undefined> {
     this.log.info(
-      { paymentIntentId, chargeId },
-      "provider funding resuming from charge_created"
+      { paymentIntentId },
+      "provider funding resuming — creating fresh charge"
     );
 
-    // Re-fetch charge to get fresh transfer_intent
+    // Create a new charge (previous charge may have expired).
+    // Update the row so chargeId stays consistent with what we fund.
     let chargeResponse: OpenRouterChargeResponse;
     try {
       chargeResponse = await this.createOpenRouterCharge(topUpUsd);
@@ -164,6 +167,14 @@ export class OpenRouterFundingAdapter implements ProviderFundingPort {
       await this.markFailed(attemptId, err);
       throw err;
     }
+
+    await this.db
+      .update(providerFundingAttempts)
+      .set({
+        chargeId: chargeResponse.id,
+        updatedAt: new Date(),
+      })
+      .where(eq(providerFundingAttempts.id, attemptId));
 
     return this.fundCharge(
       paymentIntentId,
