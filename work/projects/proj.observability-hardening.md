@@ -314,6 +314,17 @@ Reused:
 
 **Context:** PostHog is now required infrastructure (env vars mandatory, `initAnalytics()` always called). However, the core product loop (interactive chat) has zero instrumentation, `sessionId` values are meaningless random UUIDs, and 6 registered events have no call sites.
 
+#### P0: Frontend Behavior Tracking (`posthog-js`)
+
+**Goal:** PostHog captures frontend user behavior — pageviews, session duration, bounce rate, referrers, crawler detection. Without this, AI agents are blind to website traffic patterns.
+
+| Deliverable                                                                              | Status      | Est | Work Item |
+| ---------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Install `posthog-js`, add `PostHogProvider` to Next.js app layout (SSR-safe, no flash)   | Not Started | 1   | —         |
+| Configure auto-capture: pageviews, session recording off, referrer tracking on           | Not Started | 1   | —         |
+| Ensure `distinct_id` aligns with server-side `capture()` identity (same `users.id` UUID) | Not Started | 1   | —         |
+| Verify events flow to self-hosted PostHog instance in dev stack                          | Not Started | 1   | —         |
+
 #### P0: Core Loop Instrumentation
 
 **Goal:** The interactive chat route — the primary user-facing feature — emits agent execution events.
@@ -331,6 +342,17 @@ Reused:
 | Deliverable                                                                                         | Status      | Est | Work Item |
 | --------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
 | Derive `sessionId` from JWT session hash (or Next-Auth session ID) instead of `crypto.randomUUID()` | Not Started | 1   | —         |
+
+#### P1: PostHog HogQL Agent Query Interface
+
+**Goal:** AI agents can programmatically query PostHog analytics — platform health, traffic patterns, user behavior, KPI monitoring. Without this, all the captured data is write-only.
+
+| Deliverable                                                                                             | Status      | Est | Work Item |
+| ------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Create PostHog query adapter (HogQL via `POST /api/projects/:id/query/`) in adapters layer              | Not Started | 2   | —         |
+| Define agent-facing query port: traffic summary, bounce rate, active users, event counts by time window | Not Started | 1   | —         |
+| Wire as an agent tool so AI agents can self-serve analytics queries                                     | Not Started | 2   | —         |
+| Integration test: agent queries PostHog for pageview counts, gets structured response                   | Not Started | 1   | —         |
 
 #### P1: Dead Event Audit
 
