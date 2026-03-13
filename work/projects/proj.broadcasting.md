@@ -40,6 +40,7 @@ Enable AI-generated content to be drafted, optimized per platform, reviewed by h
 | `broadcastWorkflow` Temporal workflow (draft → review signal → publish)                     | Not Started | 2   | task.0159 |
 | `ContentOptimizerPort` basic implementation (LLM via GraphExecutorPort)                     | Not Started | 1   | task.0159 |
 | API contracts (`broadcast.draft.v1`, `broadcast.review.v1`, `broadcast.status.v1`) + routes | Not Started | 1   | task.0159 |
+| Broadcasting UI — compose draft, message list, detail + review                              | Not Started | 3   | task.0165 |
 
 ### Walk (P1) — Schema Evolution + LinkedIn + Blog + Engagement
 
@@ -66,7 +67,7 @@ Enable AI-generated content to be drafted, optimized per platform, reviewed by h
 | Content calendar UI                                                      | Not Started | 3   | (create at P2 start) |
 | A/B testing (post variants per platform)                                 | Not Started | 2   | (create at P2 start) |
 | Cross-platform threading (X thread → LinkedIn carousel → Bluesky thread) | Not Started | 2   | (create at P2 start) |
-| Review UI with side-by-side platform previews                            | Not Started | 2   | (create at P2 start) |
+| Review UI with side-by-side platform previews (upgrade from task.0165)   | Not Started | 2   | (create at P2 start) |
 | Analytics dashboard (engagement trends over time)                        | Not Started | 2   | (create at P2 start) |
 
 ## Constraints
