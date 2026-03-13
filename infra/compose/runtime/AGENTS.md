@@ -114,10 +114,16 @@ docker compose --project-name cogni-runtime logs -f app
 
 - `llm-proxy-openclaw`: nginx auth-injecting proxy on `sandbox-internal` network, injects `LITELLM_MASTER_KEY`
 - `openclaw-gateway`: long-running OpenClaw gateway on `sandbox-internal` + `internal`, port 127.0.0.1:3333→18789
-- Both behind `sandbox-openclaw` profile — activated by deploy.sh `--profile sandbox-openclaw`
+- Both behind `sandbox-openclaw` profile — activated by `COMPOSE_PROFILES` env var (set by workflow)
 - Config: `sandbox-proxy/nginx-gateway.conf.template` (nginx), `openclaw/openclaw-gateway.json` (OpenClaw)
 - Networks: `sandbox-internal` (internal: true) for isolation; `litellm` on both `internal` and `sandbox-internal`
 - Post-deploy health gate: `healthcheck-openclaw.sh` fails deploy if either service crashes or times out
+
+**Scheduler Worker (profile: compose-scheduler-worker):**
+
+- Profile-gated: staging uses k3s (task.0149), production still uses Compose
+- Activated by `COMPOSE_PROFILES` env var including `compose-scheduler-worker`
+- Remove entirely when production migrates to k3s
 
 **Temporal Services:**
 

@@ -41,15 +41,17 @@ GitOps deployment manifests for Kubernetes (k3s). Kustomize bases define service
 
 ```
 cd/
+├── apps/                    # Argo CD Application CRDs (applied by cloud-init)
+│   └── staging.yaml         # scheduler-worker-staging Application
 ├── base/                    # Kustomize bases (one per service)
-│   └── scheduler-worker/    # First service — deployment, service, configmap, external-services
+│   └── scheduler-worker/    # Deployment, Service, ConfigMap, EndpointSlice
 ├── overlays/                # Environment-specific patches
 │   ├── staging/             # Staging image digests, namespace, EndpointSlice IPs
 │   └── production/          # Production image digests, namespace, EndpointSlice IPs
-├── argocd/                  # Argo CD configuration
-│   ├── install.yaml         # Non-HA Argo CD install (Kustomize remote base)
-│   ├── app-of-apps.yaml     # Root Application managing all service Applications
-│   └── applications/        # Per-service Argo Application manifests
+├── argocd/                  # Argo CD install (Kustomize: remote base + ksops patches)
+│   ├── install.yaml         # Kustomization: Argo CD v2.13.4 + ksops CMP
+│   ├── ksops-cmp.yaml       # ConfigManagementPlugin for SOPS/age decryption
+│   └── repo-server-patch.yaml  # Strategic merge patch: ksops sidecar on repo-server
 └── secrets/                 # SOPS/age encrypted K8s Secrets
     ├── .sops.yaml           # Encryption rules (age public keys per env)
     ├── staging/             # Encrypted secrets for staging
@@ -66,9 +68,10 @@ cd/
 
 ## Notes
 
-- Placeholder IPs (10.0.0.1) in EndpointSlices replaced with real Compose VM IPs during task.0149
-- Secret template files (.enc.yaml) contain placeholder values — encrypt with `sops` after filling real secrets
-- Argo CD install is a Kustomize remote base pinned to v2.13.4 — update version deliberately
+- Placeholder IPs (10.0.0.1) in EndpointSlices — replace with real Compose VM IP when provisioning
+- Secret template files (.enc.yaml) contain placeholder values — encrypt with `sops` after `tofu apply` outputs the age public key
+- Argo CD install is a Kustomize remote base pinned to v2.13.4 with ksops sidecar patches
+- `apps/staging.yaml` is applied by k3s cloud-init bootstrap — Argo CD auto-syncs the staging overlay
 
 ## Change Protocol
 

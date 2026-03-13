@@ -120,13 +120,13 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Kustomize images use `@sha256:` digests                                        | Done        | ↑   | task.0148 |
 | Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Done        | ↑   | task.0148 |
 | OpenTofu: k3s module extending Cherry Servers provider                         | Done        | ↑   | task.0148 |
-| OpenTofu: Provision k3s cluster (single node MVP)                              | Not Started | 3   | task.0149 |
-| Install Argo CD on k3s                                                         | Not Started | ↑   | task.0149 |
-| Migrate scheduler-worker from Compose to k3s                                   | Not Started | ↑   | task.0149 |
-| Promotion flow: PR to change image digest in overlay → Argo syncs              | Not Started | ↑   | task.0149 |
+| OpenTofu: Provision k3s cluster (single node MVP)                              | In Review   | 3   | task.0149 |
+| Install Argo CD on k3s                                                         | In Review   | ↑   | task.0149 |
+| Migrate scheduler-worker from Compose to k3s                                   | In Review   | ↑   | task.0149 |
+| Promotion flow: PR to change image digest in overlay → Argo syncs              | In Review   | ↑   | task.0149 |
 | Storage plan: PVCs for stateful deps (postgres data), backup strategy          | Not Started | 2   | —         |
-| ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | ↑   | task.0149 |
-| Retire SSH deploy for services (keep for app until P2)                         | Not Started | ↑   | task.0149 |
+| ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | In Review   | ↑   | task.0149 |
+| Retire SSH deploy for services (keep for app until P2)                         | In Review   | ↑   | task.0149 |
 
 #### P2: Supply Chain + Progressive Delivery
 

@@ -68,5 +68,5 @@ cd k3s && tofu init && tofu validate
 ## Notes
 
 - Base creates VM with static OS bootstrap only (Docker + Compose)
-- k3s creates VM with k3s, age, and GHCR registry auth (Argo CD install deferred to task.0149)
+- k3s creates VM with k3s, age keypair, GHCR registry auth, Argo CD (kustomized with ksops), and app-of-apps Application — fully automated via cloud-init
 - App handles container deployment over SSH with health validation

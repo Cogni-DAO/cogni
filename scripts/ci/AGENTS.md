@@ -29,8 +29,8 @@ CI/CD automation scripts and configuration documentation for multiple pipeline s
 ## Public Surface
 
 - **Exports:** none
-- **CLI (if any):** `scripts/build.sh`, `scripts/push.sh`, `scripts/deploy.sh`, `scripts/test-image.sh`, `scripts/loki_push.sh`, `scripts/fetch_github_job_logs.sh`, `scripts/healthcheck-openclaw.sh`, `scripts/seed-pnpm-store.sh`
-- **Env/Config keys:** `IMAGE_NAME`, `IMAGE_TAG`, `APP_IMAGE`, `MIGRATOR_IMAGE`, `COGNI_REPO_URL`, `COGNI_REPO_REF`, `PLATFORM`, `GHCR_PAT`, `CHERRY_AUTH_TOKEN`, `TF_VAR_*`, `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_NAME`, `LOKI_URL`, `LOKI_USER`, `LOKI_TOKEN`, `INTERNAL_OPS_TOKEN`, `LOG_FILE`, `JOB_NAME`, `LABELS`, `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT`, `GITHUB_JOB`, `OUTPUT_FILE`
+- **CLI (if any):** `scripts/build.sh`, `scripts/push.sh`, `scripts/deploy.sh`, `scripts/test-image.sh`, `scripts/loki_push.sh`, `scripts/fetch_github_job_logs.sh`, `scripts/healthcheck-openclaw.sh`, `scripts/seed-pnpm-store.sh`, `scripts/promote-k8s-image.sh`
+- **Env/Config keys:** `IMAGE_NAME`, `IMAGE_TAG`, `APP_IMAGE`, `MIGRATOR_IMAGE`, `SCHEDULER_WORKER_IMAGE`, `COMPOSE_PROFILES`, `SCHEDULER_WORKER_DIGEST`, `COGNI_REPO_URL`, `COGNI_REPO_REF`, `PLATFORM`, `GHCR_PAT`, `CHERRY_AUTH_TOKEN`, `TF_VAR_*`, `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_NAME`, `LOKI_URL`, `LOKI_USER`, `LOKI_TOKEN`, `INTERNAL_OPS_TOKEN`, `LOG_FILE`, `JOB_NAME`, `LABELS`, `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT`, `GITHUB_JOB`, `OUTPUT_FILE`
 - **Files considered API:** `scripts/*.sh`
 
 ## Responsibilities
@@ -77,6 +77,8 @@ scripts/fetch_github_job_logs.sh  # Fetch job logs from GitHub Actions API (requ
 - `deploy.sh` uses checksum-gated restart for LiteLLM: compares SHA256 of config file against stored hash at `/var/lib/cogni/litellm-config.sha256`, restarts only if changed
 - `deploy.sh` runs `git-sync` as a bootstrap step before db-provision to populate `/repo` volume for brain tools
 - `deploy.sh` sources `seed-pnpm-store.sh` (Step 7.5) to idempotently seed the `pnpm_store` Docker volume from a GHCR store image
-- `deploy.sh` uses targeted pulls: only per-deploy images (app, migrator, scheduler-worker) and sandbox `:latest` images (cogni-sandbox-openclaw, pnpm-store) are explicitly pulled. The `:latest` pulls do a manifest check (~2s) and skip download if unchanged. Static/pinned images (postgres, litellm, alloy, temporal, autoheal, nginx, git-sync, busybox) use local Docker cache and are pulled by `compose up -d` only when missing.
+- `deploy.sh` uses targeted pulls: per-deploy images (app, migrator, and scheduler-worker if set) and sandbox `:latest` images are explicitly pulled. Static/pinned images use local Docker cache.
+- `deploy.sh` is branch-free: `COMPOSE_PROFILES` env var (set by workflow) controls which profiles are active. No `--profile` flags or if/else in the script.
 - `deploy.sh` SSH connections use `ServerAliveInterval=15 ServerAliveCountMax=12` to prevent broken pipe on long operations
+- `promote-k8s-image.sh` updates `infra/cd/overlays/staging/kustomization.yaml` with a new `@sha256:` digest, commits to staging. Called by CI after scheduler-worker image push. Requires `SCHEDULER_WORKER_DIGEST` env var.
 - `COGNI_REPO_URL`, `COGNI_REPO_REF`, `GIT_READ_TOKEN`, and `GIT_READ_USERNAME` are required env vars for deploy.sh, set by CI workflows
