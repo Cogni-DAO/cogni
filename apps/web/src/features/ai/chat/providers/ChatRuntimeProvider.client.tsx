@@ -26,6 +26,7 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -33,6 +34,7 @@ import type { ChatError } from "@/contracts/error.chat.v1.contract";
 import * as clientLogger from "@/shared/observability/client";
 import { EVENT_NAMES } from "@/shared/observability/events";
 
+import { createWebSpeechDictationAdapter } from "../adapters/web-speech-dictation.adapter";
 import { mapHttpError } from "../utils/mapHttpError";
 
 /**
@@ -147,12 +149,16 @@ export function ChatRuntimeProvider({
     onFinish?.();
   }, [queryClient, onFinish]);
 
+  // Dictation adapter — stable across renders (Web Speech API availability doesn't change)
+  const dictationAdapter = useMemo(() => createWebSpeechDictationAdapter(), []);
+
   // Transport-level options (api, request shape, response interception) must be
   // on the transport — they are NOT valid ChatInit/useChatRuntime options.
   // useDynamicChatTransport inside useChatRuntime wraps this in a ref-based
   // proxy, so recreating each render is safe.
   const runtime = useChatRuntime({
     messages: initialMessages,
+    adapters: dictationAdapter ? { dictation: dictationAdapter } : undefined,
     transport: new DefaultChatTransport({
       api: "/api/v1/ai/chat",
       prepareSendMessagesRequest: ({ messages }) => ({

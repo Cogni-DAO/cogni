@@ -11,4 +11,5 @@
  * @public
  */
 
+export { ComposerVoiceInput } from "./ComposerVoiceInput";
 export { Thread, type ThreadProps } from "./Thread";

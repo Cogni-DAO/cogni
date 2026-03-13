@@ -2,7 +2,7 @@
 id: task.0162
 type: task
 title: Add voice-to-text input to chat composer
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 99
 estimate: 3
@@ -15,7 +15,7 @@ project:
 branch: claude/add-voice-to-text-e35go
 pr:
 reviewer:
-revision: 1
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-13
