@@ -237,6 +237,17 @@ jobs:
       - name: Deploy to preview
         run: scripts/ci/deploy.sh
 
+      - name: Promote scheduler-worker to k8s overlay
+        if: success()
+        env:
+          SCHEDULER_WORKER_DIGEST: ${{ needs.build.outputs.scheduler_worker_image }}
+        run: |
+          if [[ -n "${SCHEDULER_WORKER_DIGEST:-}" ]]; then
+            scripts/ci/promote-k8s-image.sh
+          else
+            echo "No scheduler-worker digest available, skipping k8s promotion"
+          fi
+
       - name: Upload deployment artifacts
         if: always()
         uses: actions/upload-artifact@v4
