@@ -1,5 +1,5 @@
 ---
-id: task.0163
+id: task.0168
 type: task
 primary_charter:
 title: "RunStreamPort + RedisRunStreamAdapter: hexagonal streaming boundary"
@@ -18,7 +18,7 @@ updated: 2026-03-13
 labels:
   - ai-graphs
 depends_on:
-  - task.0162
+  - task.0167
 branch: claude/unified-graph-launch-mmXvl
 ---
 
@@ -34,7 +34,7 @@ A hexagonal port/adapter pair that enables publishing `AiEvent` streams to Redis
 
 **Solution**: New `RunStreamPort` interface in `src/ports/` + `RedisRunStreamAdapter` in `src/adapters/server/ai/` using `ioredis` XADD/XREAD/XRANGE/EXPIRE commands.
 
-**Reuses**: Existing hexagonal port/adapter pattern. Existing `AiEvent` type from `@cogni/ai-core`. `ioredis` dependency from task.0162. Creates and owns the Redis client connection used by the adapter.
+**Reuses**: Existing hexagonal port/adapter pattern. Existing `AiEvent` type from `@cogni/ai-core`. `ioredis` dependency from task.0167. Creates and owns the Redis client connection used by the adapter.
 
 **Rejected**: Custom WebSocket server — more complex, doesn't support replay. Temporal queries — not designed for high-throughput streaming (burns workflow history). PostgreSQL LISTEN/NOTIFY — not an append-log, no replay support.
 

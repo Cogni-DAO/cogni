@@ -1,5 +1,5 @@
 ---
-id: task.0164
+id: task.0169
 type: task
 title: "GraphRunWorkflow + promote schedule_runs → graph_runs"
 status: needs_merge
@@ -13,7 +13,7 @@ spec_refs:
 assignees: []
 project: proj.unified-graph-launch
 blocked_by:
-  - task.0163
+  - task.0168
 created: 2026-03-13
 updated: 2026-03-13
 branch: claude/unified-graph-launch-mmXvl
@@ -89,7 +89,7 @@ pnpm test
 
 ## Review Checklist
 
-- [ ] **Work Item:** task.0164 linked in PR body
+- [ ] **Work Item:** task.0169 linked in PR body
 - [ ] **Spec:** ONE_RUN_EXECUTION_PATH, IDEMPOTENT_RUN_START, PUMP_TO_COMPLETION_VIA_REDIS, STREAM_PUBLISH_IN_ACTIVITY invariants upheld
 - [ ] **Design Decision:** Single run ledger — no second table, no idempotency_key on run table
 - [ ] **Tests:** new/updated tests cover the change

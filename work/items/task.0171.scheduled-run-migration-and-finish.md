@@ -1,5 +1,5 @@
 ---
-id: task.0166
+id: task.0171
 type: task
 title: "Scheduled run migration + observability + documentation finish pass"
 status: needs_triage
@@ -13,7 +13,7 @@ spec_refs:
 assignees: []
 project: proj.unified-graph-launch
 blocked_by:
-  - task.0165
+  - task.0170
 created: 2026-03-13
 updated: 2026-03-13
 labels:
@@ -69,7 +69,7 @@ pnpm test
 
 ## Review Checklist
 
-- [ ] **Work Item:** task.0166 linked in PR body
+- [ ] **Work Item:** task.0171 linked in PR body
 - [ ] **Spec:** ONE_RUN_EXECUTION_PATH invariant upheld for scheduled path
 - [ ] **Tests:** new/updated tests cover the change
 - [ ] **Reviewer:** assigned and approved

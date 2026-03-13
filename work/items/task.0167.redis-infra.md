@@ -1,5 +1,5 @@
 ---
-id: task.0162
+id: task.0167
 type: task
 primary_charter:
 title: "Redis 7 infrastructure: docker-compose, ioredis dependency, env config"
@@ -49,7 +49,7 @@ Per spec [unified-graph-launch.md §7](../../docs/spec/unified-graph-launch.md):
 - Modify: `.env.local.example` — document `REDIS_URL`
 - Modify: docker-compose env sections — add `REDIS_URL` passthrough
 
-**Not in scope** (deferred to task.0163): connection factory, container.ts registration. No consumer exists in this task — wiring happens when `RedisRunStreamAdapter` lands.
+**Not in scope** (deferred to task.0168): connection factory, container.ts registration. No consumer exists in this task — wiring happens when `RedisRunStreamAdapter` lands.
 
 ## Plan
 

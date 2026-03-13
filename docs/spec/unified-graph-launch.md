@@ -305,7 +305,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 
 ### File Pointers
 
-**Implemented (task.0162, task.0163):**
+**Implemented (task.0167, task.0168):**
 
 | File                                                  | Purpose                                          |
 | ----------------------------------------------------- | ------------------------------------------------ |
@@ -318,7 +318,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 | `infra/compose/runtime/docker-compose.dev.yml`        | Redis 7 service (dev, port 6379 exposed)         |
 | `tests/unit/adapters/server/ai/redis-run-stream.*.ts` | Unit tests with mocked ioredis (11 tests)        |
 
-**Implemented (task.0164):**
+**Implemented (task.0169):**
 
 | File                                                                | Purpose                                                               |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------- |

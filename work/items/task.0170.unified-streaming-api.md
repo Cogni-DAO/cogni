@@ -1,5 +1,5 @@
 ---
-id: task.0165
+id: task.0170
 type: task
 title: "Unified streaming API: chat endpoint refactor + reconnection + idempotency"
 status: needs_triage
@@ -13,7 +13,7 @@ spec_refs:
 assignees: []
 project: proj.unified-graph-launch
 blocked_by:
-  - task.0164
+  - task.0169
 created: 2026-03-13
 updated: 2026-03-13
 labels:
@@ -75,7 +75,7 @@ pnpm test
 
 ## Review Checklist
 
-- [ ] **Work Item:** task.0165 linked in PR body
+- [ ] **Work Item:** task.0170 linked in PR body
 - [ ] **Spec:** SSE_FROM_REDIS_NOT_MEMORY, ONE_RUN_EXECUTION_PATH, IDEMPOTENT_RUN_START invariants upheld
 - [ ] **Tests:** new/updated tests cover the change
 - [ ] **Reviewer:** assigned and approved
