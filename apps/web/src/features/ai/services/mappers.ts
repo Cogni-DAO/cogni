@@ -39,7 +39,7 @@ export interface MessageDtoToolCall {
  * Supports user, assistant (with optional tool calls), and tool (with tool result) messages.
  */
 export interface MessageDto {
-  role: "user" | "assistant" | "tool";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
   timestamp?: string | undefined;
   /** Tool calls made by assistant (only for role: "assistant") */
@@ -52,6 +52,7 @@ export interface MessageDto {
  * Convert DTOs to core Message format.
  *
  * Handles:
+ * - system: system instructions (passed through for OpenAI compatibility)
  * - user: plain text message
  * - assistant: text + optional tool calls
  * - tool: tool result with required toolCallId
@@ -64,7 +65,7 @@ export function toCoreMessages(
 ): Message[] {
   return dtos.map((dto) => {
     const normalizedRole = normalizeMessageRole(dto.role);
-    if (!normalizedRole || normalizedRole === "system") {
+    if (!normalizedRole) {
       throw new ChatValidationError(
         ChatErrorCode.INVALID_CONTENT,
         `Invalid role: ${dto.role}`
@@ -102,7 +103,7 @@ export function toCoreMessages(
       };
     }
 
-    // User/assistant without tool calls
+    // System/User/Assistant without tool calls
     return {
       role: normalizedRole,
       content: dto.content,

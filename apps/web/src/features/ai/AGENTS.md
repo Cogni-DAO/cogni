@@ -5,6 +5,7 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
+- **Last reviewed:** 2026-03-05
 - **Status:** stable
 
 ## Purpose
@@ -19,7 +20,7 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
 - [LangGraph Server](../../../../../docs/spec/langgraph-server.md) (external runtime, adapter implementation)
 - [LangGraph Patterns](../../../../../docs/spec/langgraph-patterns.md) (graph patterns, anti-patterns)
 - [Chat subfeature](./chat/AGENTS.md)
-- **Related:** [../payments/](../payments/) (credits), [../../contracts/](../../contracts/) (ai.completion.v1, ai.chat.v1, ai.models.v1)
+- **Related:** [../payments/](../payments/) (credits), [../../contracts/](../../contracts/) (ai.completions.v1, ai.chat.v1, ai.models.v1)
 
 ## Boundaries
 
@@ -48,7 +49,7 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
   - `uiMessagesToMessageDtos` (UIMessage[] → MessageDto[] bridge for thread persistence pipeline)
   - `redactSecretsInMessages` (best-effort credential redaction before persistence)
 - **Routes:**
-  - `/api/v1/ai/completion` (POST) - text completion with credits metering
+  - `/api/v1/chat/completions` (POST) - OpenAI-compatible chat completions (streaming + non-streaming, `cogni_status` extension)
   - `/api/v1/ai/chat` (POST) - chat endpoint (AI SDK Data Stream Protocol, server-authoritative thread persistence)
   - `/api/v1/ai/threads` (GET) - list threads for authenticated user (paginated, recency-ordered)
   - `/api/v1/ai/threads/[stateKey]` (GET) - load thread messages
@@ -77,7 +78,7 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
 
 - **Uses ports:** GraphExecutorPort (runGraph with GraphId), AccountService (recordChargeReceipt), LlmService (completion, completionStream), AiTelemetryPort (recordInvocation), LangfusePort (createTrace, recordGeneration)
 - **Implements ports:** none
-- **Contracts:** ai.completion.v1, ai.chat.v1, ai.threads.v1, ai.models.v1, ai.activity.v1
+- **Contracts:** chat.completions.v1, ai.chat.v1, ai.threads.v1, ai.models.v1, ai.activity.v1
 
 ## Responsibilities
 
@@ -141,7 +142,7 @@ import { Thread } from "@/components/kit/chat";
 
 ## Change Protocol
 
-- On wire format change: Update contract (ai.completion.v1, ai.chat.v1, ai.models.v1)
+- On wire format change: Update contract (chat.completions.v1, ai.chat.v1, ai.models.v1)
 - On public API change: Update public.ts exports and this AGENTS.md
 - Breaking changes: Bump contract version
 - Keep old versions until callers migrate

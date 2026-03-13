@@ -3,8 +3,8 @@
 
 /**
  * Module: `@tests/stack/ai/completion-billing.stack`
- * Purpose: Verify end-to-end billing flow for AI completion calls in the development stack.
- * Scope: Integration test hitting /api/v1/ai/completion that asserts charge_receipt row creation, credit_ledger debit, and balance_credits update. Does not test production deployment.
+ * Purpose: Verify end-to-end billing flow for AI chat completions in the development stack.
+ * Scope: Integration test hitting /api/v1/chat/completions that asserts charge_receipt row creation, credit_ledger debit, and balance_credits update. Does not test production deployment.
  * Invariants: Successful LLM call creates charge_receipt row; credit_ledger records debit; balance is atomically updated.
  * Side-effects: IO (database writes via container, LiteLLM calls)
  * Notes: Requires dev stack running (pnpm dev:stack:db:setup). Uses real DB and LiteLLM. Mocks session.
@@ -25,8 +25,8 @@ import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { waitForReceipts } from "@tests/helpers/poll-db";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { POST } from "@/app/api/v1/ai/completion/route";
-import { aiCompletionOperation } from "@/contracts/ai.completion.v1.contract";
+import { POST } from "@/app/api/v1/chat/completions/route";
+import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
 import type { SessionUser } from "@/shared/auth/session";
 import {
   billingAccounts,
@@ -73,14 +73,17 @@ describe("Completion Billing Stack Test", () => {
       isDefault: true,
     });
 
-    const req = new NextRequest("http://localhost:3000/api/v1/ai/completion", {
-      method: "POST",
-      body: JSON.stringify(
-        createCompletionRequest({
-          messages: [{ role: "user", content: "Say 'hello' in one word." }],
-        })
-      ),
-    });
+    const req = new NextRequest(
+      "http://localhost:3000/api/v1/chat/completions",
+      {
+        method: "POST",
+        body: JSON.stringify(
+          createCompletionRequest({
+            messages: [{ role: "user", content: "Say 'hello' in one word." }],
+          })
+        ),
+      }
+    );
 
     // Receipts arrive asynchronously via LiteLLM callback (CALLBACK_IS_SOLE_WRITER)
     const receiptsBefore = await db
@@ -96,11 +99,13 @@ describe("Completion Billing Stack Test", () => {
     expect(response.status).toBe(200);
     const json = await response.json();
 
-    // Assert - Response matches contract exactly (prevents drift)
-    const validated = aiCompletionOperation.output.parse(json);
-    expect(validated.message.role).toBe("assistant");
-    expect(validated.message.content).toBeTruthy();
-    expect(validated.message.timestamp).toBeTruthy();
+    // Assert - Response matches OpenAI ChatCompletion contract
+    const validated = chatCompletionsContract.output.parse(json);
+    expect(validated.object).toBe("chat.completion");
+    expect(validated.choices).toHaveLength(1);
+    expect(validated.choices[0]?.message.role).toBe("assistant");
+    expect(validated.choices[0]?.message.content).toBeTruthy();
+    expect(validated.usage.total_tokens).toBeGreaterThan(0);
 
     // Assert - charge_receipt row created (per ACTIVITY_METRICS.md)
     // NOTE: No model/tokens/billingStatus - LiteLLM is canonical for telemetry
@@ -237,16 +242,19 @@ describe("Completion Billing Stack Test", () => {
       isDefault: true,
     });
 
-    const req = new NextRequest("http://localhost:3000/api/v1/ai/completion", {
-      method: "POST",
-      body: JSON.stringify(createCompletionRequest()),
-    });
+    const req = new NextRequest(
+      "http://localhost:3000/api/v1/chat/completions",
+      {
+        method: "POST",
+        body: JSON.stringify(createCompletionRequest()),
+      }
+    );
 
     // Act
     const response = await POST(req);
 
-    // Assert - Request failed
-    expect(response.status).toBe(402); // Payment Required or similar
+    // Assert - Request failed (OpenAI: 429 insufficient_quota)
+    expect(response.status).toBe(429);
 
     // Assert - NO charge_receipt row created (transaction rolled back)
     const usageRows = await db

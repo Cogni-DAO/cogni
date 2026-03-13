@@ -199,7 +199,7 @@ import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { POST as completionPOST } from "@/app/api/v1/ai/completion/route";
+import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
 import type { SessionUser } from "@/shared/auth";
 import { billingAccounts, users, virtualKeys } from "@/shared/db/schema";
 import { metricsRegistry } from "@/shared/observability";
@@ -260,14 +260,17 @@ describe("LLM Metrics Instrumentation", () => {
     );
 
     // 3. Call completion (in-process, metrics recorded in same registry)
-    const req = new NextRequest("http://localhost:3000/api/v1/ai/completion", {
-      method: "POST",
-      body: JSON.stringify(
-        createCompletionRequest({
-          messages: [{ role: "user", content: "Hello metrics test" }],
-        })
-      ),
-    });
+    const req = new NextRequest(
+      "http://localhost:3000/api/v1/chat/completions",
+      {
+        method: "POST",
+        body: JSON.stringify(
+          createCompletionRequest({
+            messages: [{ role: "user", content: "Hello metrics test" }],
+          })
+        ),
+      }
+    );
 
     const res = await completionPOST(req);
     expect(res.status).toBe(200);

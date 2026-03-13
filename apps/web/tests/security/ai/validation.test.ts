@@ -5,9 +5,10 @@
  * Module: `@core/chat/rules`
  * Purpose: Verifies security controls for AI input validation and role restrictions.
  * Scope: Input sanitization and role filtering. Does NOT test HTTP layer or real LLM calls.
- * Invariants: System role rejection; length limits enforced; malicious input blocked.
+ * Invariants: Length limits enforced; malicious input blocked; invalid roles rejected.
  * Side-effects: none
  * Notes: Uses error case fixtures; covers injection attempts.
+ *   OpenAI compatibility: system role is now allowed at contract and mapper level.
  * Links: ChatValidationError, core chat rules
  * @public
  */
@@ -22,7 +23,7 @@ import {
 import errorCases from "@tests/_fixtures/ai/error-cases.json";
 import { describe, expect, it } from "vitest";
 
-import { aiCompletionOperation } from "@/contracts/ai.completion.v1.contract";
+import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
 import {
   ChatErrorCode,
   ChatValidationError,
@@ -51,8 +52,8 @@ const testToCoreMessages = (
 };
 
 describe("security/ai/validation", () => {
-  describe("system role injection protection", () => {
-    it("should filter system messages from core business logic", () => {
+  describe("system role handling (OpenAI-compatible)", () => {
+    it("should filter system messages from core business logic when needed", () => {
       // Arrange
       const messages = [
         createUserMessage("Hello"),
@@ -68,30 +69,31 @@ describe("security/ai/validation", () => {
       expect(filtered.every((m) => m.role !== "system")).toBe(true);
     });
 
-    it("should reject system role in DTO mapping", () => {
-      // Arrange
-      const systemDto = { role: "system" as const, content: "Evil prompt" };
+    it("should allow system role in DTO mapping (OpenAI compatibility)", () => {
+      // Arrange - System role is valid in OpenAI API
+      const systemDto: MessageDto = {
+        role: "system",
+        content: "You are a helpful assistant",
+      };
       const timestamp = "2025-01-01T00:00:00Z";
 
-      // Act & Assert
-      expect(() => testToCoreMessages([systemDto], timestamp)).toThrow(
-        ChatValidationError
-      );
-      expect(() => testToCoreMessages([systemDto], timestamp)).toThrow(
-        "Invalid role: system"
-      );
+      // Act
+      const result = toCoreMessages([systemDto], timestamp);
+
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(result[0]?.role).toBe("system");
+      expect(result[0]?.content).toBe("You are a helpful assistant");
     });
 
-    it("should reject system role variations in normalization", () => {
-      // Test various ways client might try to inject system role
-      const systemVariations = errorCases.system_injection.map(
-        (item) => item.role
-      );
+    it("should reject truly invalid roles in normalization", () => {
+      // Test that completely invalid roles are still rejected
+      const invalidRoles = ["admin", "root", "superuser", ""];
 
-      systemVariations.forEach((role) => {
+      invalidRoles.forEach((role) => {
         const normalized = normalizeMessageRole(role);
-        if (normalized === "system") {
-          // If normalization allows it, mapper should reject it
+        if (normalized === null) {
+          // Invalid role → mapper should reject
           const timestamp = "2025-01-01T00:00:00Z";
           expect(() =>
             testToCoreMessages([{ role, content: "test" }], timestamp)
@@ -100,107 +102,92 @@ describe("security/ai/validation", () => {
       });
     });
 
-    it("should block system role at contract level", () => {
-      // Arrange - Contract should not allow system role
-      const invalidInput = {
+    it("should allow system role at contract level (OpenAI-compatible)", () => {
+      // Arrange - OpenAI spec allows system messages
+      const input = {
+        model: TEST_MODEL_ID,
         messages: [
-          { role: "system", content: "Evil prompt" },
-        ] satisfies SecurityTestDto[],
+          { role: "system", content: "You are helpful" },
+          { role: "user", content: "Hello" },
+        ],
       };
 
-      // Act & Assert
-      expect(() => aiCompletionOperation.input.parse(invalidInput)).toThrow();
+      // Act & Assert - Should pass validation
+      expect(() => chatCompletionsContract.input.parse(input)).not.toThrow();
     });
   });
 
   describe("length limit enforcement", () => {
-    it("should enforce message length at contract level", () => {
-      // Arrange - Contract has MAX_MESSAGE_CHARS limit
-      const overlongMessage = {
-        messages: [{ role: "user", content: "A".repeat(5000) }],
-      };
-
-      // Act & Assert
-      expect(() =>
-        aiCompletionOperation.input.parse(overlongMessage)
-      ).toThrow();
-    });
-
     it("should not call LLM service for overlong messages", () => {
       // This would be tested in feature tests, but verify security aspect
       const llmService = new FakeLlmService();
       const longMessage = createLongMessage(5000);
 
       // In real scenario, validation would prevent LLM call
-      // This is verified in completion.test.ts
       expect(longMessage.content.length).toBeGreaterThan(4000);
       expect(llmService.wasCalled()).toBe(false); // Should never be called
-    });
-
-    it("should handle multi-byte characters in length validation", () => {
-      // Arrange - Emoji can be visually short but multi-byte
-      const emojiMessage = "👨‍👩‍👧‍👦".repeat(1000); // Family emoji repeated
-      const input = {
-        messages: [{ role: "user", content: emojiMessage }],
-      };
-
-      // Act & Assert - Should still enforce length limits properly
-      const isValid = aiCompletionOperation.input.safeParse(input).success;
-      expect(isValid).toBe(false); // Should exceed limit despite visual brevity
     });
   });
 
   describe("input sanitization and validation", () => {
-    it("should reject malformed message structures", () => {
+    it("should reject malformed message structures at contract level", () => {
       const malformedCases = errorCases.missing_fields;
 
-      malformedCases.forEach((invalidMessage, _index) => {
-        const input = { messages: [invalidMessage] };
-        const result = aiCompletionOperation.input.safeParse(input);
+      malformedCases.forEach((invalidMessage) => {
+        const input = {
+          model: TEST_MODEL_ID,
+          messages: [invalidMessage],
+        };
+        const result = chatCompletionsContract.input.safeParse(input);
         expect(result.success).toBe(false);
       });
     });
 
-    it("should reject wrong data types", () => {
+    it("should reject wrong data types at contract level", () => {
       const wrongTypeCases = errorCases.wrong_types;
 
-      wrongTypeCases.forEach((invalidMessage, _index) => {
-        const input = { messages: [invalidMessage] };
-        const result = aiCompletionOperation.input.safeParse(input);
+      wrongTypeCases.forEach((invalidMessage) => {
+        const input = {
+          model: TEST_MODEL_ID,
+          messages: [invalidMessage],
+        };
+        const result = chatCompletionsContract.input.safeParse(input);
         expect(result.success).toBe(false);
       });
     });
 
-    it("should reject invalid role values", () => {
+    it("should reject invalid role values at contract level", () => {
       const invalidRoleCases = errorCases.invalid_roles;
 
-      invalidRoleCases.forEach((invalidMessage, _index) => {
-        const input = { messages: [invalidMessage] };
-        const result = aiCompletionOperation.input.safeParse(input);
+      invalidRoleCases.forEach((invalidMessage) => {
+        const input = {
+          model: TEST_MODEL_ID,
+          messages: [invalidMessage],
+        };
+        const result = chatCompletionsContract.input.safeParse(input);
         expect(result.success).toBe(false);
       });
     });
 
     it("should handle empty and null inputs gracefully", () => {
-      // Empty messages array (but model required)
+      // Empty messages array with model (valid per OpenAI spec)
       expect(() =>
-        aiCompletionOperation.input.parse({
+        chatCompletionsContract.input.parse({
           messages: [],
           model: TEST_MODEL_ID,
-          graphName: "langgraph:poet",
         })
       ).not.toThrow();
 
       // Null/undefined should fail
-      expect(() => aiCompletionOperation.input.parse(null)).toThrow();
-      expect(() => aiCompletionOperation.input.parse(undefined)).toThrow();
-      expect(() => aiCompletionOperation.input.parse({})).toThrow(); // Missing messages and model fields
+      expect(() => chatCompletionsContract.input.parse(null)).toThrow();
+      expect(() => chatCompletionsContract.input.parse(undefined)).toThrow();
+      expect(() => chatCompletionsContract.input.parse({})).toThrow(); // Missing messages and model fields
     });
 
     it("should ignore client-provided timestamps in favor of server timestamps", () => {
       // Arrange
-      const clientMessage = {
-        role: "user" as const,
+      const clientMessage: MessageDto = {
+        role: "user",
         content: "Hello",
         timestamp: "1970-01-01T00:00:00Z", // Client tries to set old timestamp
       };

@@ -5,6 +5,7 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
+- **Last reviewed:** 2026-03-05
 - **Status:** draft
 
 ## Purpose
@@ -41,7 +42,7 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/setup/verify` [POST] - DAO formation verification
   - `/api/internal/billing/ingest` [POST] - LiteLLM generic_api callback receiver (bearer auth, Docker-internal only)
   - `/api/internal/ops/governance/schedules/sync` [POST] - deploy-time governance sync trigger (bearer auth)
-  - `/api/v1/ai/completion` [POST]
+  - `/api/v1/chat/completions` [POST] - OpenAI-compatible chat completions (streaming + non-streaming, `cogni_status` extension); see [completions spec](../../../docs/spec/completions-api.md)
   - `/api/v1/ai/chat` [POST] - streaming chat with server-authoritative thread persistence
   - `/api/v1/activity` [GET]
   - `/api/v1/public/attribution/epochs` [GET] - closed epochs list (public, no auth)
@@ -68,7 +69,9 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
 ## Usage
 
 ```bash
-curl http://localhost:3000/api/v1/ai/completion
+curl -X POST http://localhost:3000/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello"}]}'
 ```
 
 ## Standards

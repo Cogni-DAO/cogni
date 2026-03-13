@@ -35,7 +35,12 @@ import {
   redactSecretsInMessages,
   uiMessagesToMessageDtos,
 } from "@/features/ai/public.server";
-import { isInsufficientCreditsPortError, ThreadConflictError } from "@/ports";
+import {
+  isInsufficientCreditsPortError,
+  isLlmError,
+  ThreadConflictError,
+} from "@/ports";
+import { ChatValidationError } from "@/shared/errors";
 import {
   aiChatStreamDurationMs,
   logRequestWarn,
@@ -83,6 +88,47 @@ function handleRouteError(
     );
   }
 
+  // Chat validation errors (structured via ChatValidationError)
+  if (error instanceof ChatValidationError) {
+    logRequestWarn(ctx.log, error, "MESSAGE_VALIDATION_ERROR");
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  // Abort errors
+  if (error instanceof Error && error.name === "AbortError") {
+    logRequestWarn(ctx.log, error, "REQUEST_TIMEOUT");
+    return NextResponse.json({ error: "Request timeout" }, { status: 408 });
+  }
+
+  // LLM errors (structured via LlmError kind/status)
+  // Must precede isAccountsFeatureError — both use duck-typed .kind field
+  if (isLlmError(error)) {
+    if (error.kind === "timeout") {
+      logRequestWarn(ctx.log, error, "REQUEST_TIMEOUT");
+      return NextResponse.json({ error: "Request timeout" }, { status: 408 });
+    }
+    if (error.kind === "rate_limited" || error.status === 429) {
+      logRequestWarn(ctx.log, error, "RATE_LIMIT_EXCEEDED");
+      return NextResponse.json(
+        { error: "Rate limit exceeded" },
+        { status: 429 }
+      );
+    }
+    if (error.status === 404) {
+      logRequestWarn(ctx.log, error, "MODEL_UNAVAILABLE");
+      return NextResponse.json(
+        { code: "MODEL_UNAVAILABLE", model },
+        { status: 409 }
+      );
+    }
+    // Catch-all for other LLM errors (provider_4xx, provider_5xx, unknown)
+    logRequestWarn(ctx.log, error, "LLM_SERVICE_UNAVAILABLE");
+    return NextResponse.json(
+      { error: "AI service temporarily unavailable" },
+      { status: 503 }
+    );
+  }
+
   // Accounts feature errors
   if (isAccountsFeatureError(error)) {
     if (error.kind === "INSUFFICIENT_CREDITS") {
@@ -109,48 +155,6 @@ function handleRouteError(
       { error: error.kind === "GENERIC" ? error.message : "Account error" },
       { status: 400 }
     );
-  }
-
-  // LLM-specific errors
-  if (error instanceof Error) {
-    if (
-      error.message.includes("MESSAGE_TOO_LONG") ||
-      error.message.includes("INVALID_CONTENT")
-    ) {
-      logRequestWarn(ctx.log, error, "MESSAGE_VALIDATION_ERROR");
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-    if (
-      error.message.includes("timeout") ||
-      error.message.includes("AbortError")
-    ) {
-      logRequestWarn(ctx.log, error, "REQUEST_TIMEOUT");
-      return NextResponse.json({ error: "Request timeout" }, { status: 408 });
-    }
-    if (error.message.includes("LiteLLM API error: 429")) {
-      logRequestWarn(ctx.log, error, "RATE_LIMIT_EXCEEDED");
-      return NextResponse.json(
-        { error: "Rate limit exceeded" },
-        { status: 429 }
-      );
-    }
-    if (
-      error.message.includes("LiteLLM API error: 404") ||
-      error.message.includes("No endpoints found")
-    ) {
-      logRequestWarn(ctx.log, error, "MODEL_UNAVAILABLE");
-      return NextResponse.json(
-        { code: "MODEL_UNAVAILABLE", model },
-        { status: 409 }
-      );
-    }
-    if (error.message.includes("LiteLLM")) {
-      logRequestWarn(ctx.log, error, "LLM_SERVICE_UNAVAILABLE");
-      return NextResponse.json(
-        { error: "AI service temporarily unavailable" },
-        { status: 503 }
-      );
-    }
   }
 
   return null; // Unhandled → let wrapper catch as 500

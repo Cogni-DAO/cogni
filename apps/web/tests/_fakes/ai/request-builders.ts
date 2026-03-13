@@ -5,10 +5,10 @@
  * Module: `@tests/_fakes/ai/request-builders`
  * Purpose: Builder functions for creating AI request bodies with all required fields.
  * Scope: Request creation utilities for stack/contract tests. Does NOT handle actual API calls.
- * Invariants: All required fields have defaults; includes graphName (required since P0.75).
+ * Invariants: All required fields have defaults; OpenAI-compatible format.
  * Side-effects: none
- * Notes: P1 chat contract uses { message: string } instead of { messages[] }.
- * Links: ai.completion.v1.contract, ai.chat.v1.contract
+ * Notes: Builds OpenAI Chat Completions API compatible request bodies.
+ * Links: ai.completions.v1.contract, ai.chat.v1.contract
  * @public
  */
 
@@ -22,15 +22,23 @@ import { TEST_MODEL_ID } from "./test-constants";
 export const TEST_GRAPH_NAME = "langgraph:poet";
 
 /**
- * Options for completion request builder.
+ * Options for OpenAI-compatible completion request builder.
  */
 export interface CompletionRequestOptions {
   /** Messages array (defaults to single user message "Hello") */
   messages?: Array<{ role: string; content: string }>;
   /** Model ID (defaults to TEST_MODEL_ID) */
   model?: string;
-  /** Graph name or fully-qualified graphId (defaults to TEST_GRAPH_NAME) */
-  graphName?: string;
+  /** Graph name (extension field, defaults to TEST_GRAPH_NAME) */
+  graph_name?: string;
+  /** Enable streaming */
+  stream?: boolean;
+  /** Stream options */
+  stream_options?: { include_usage?: boolean };
+  /** Temperature */
+  temperature?: number;
+  /** Max tokens */
+  max_tokens?: number;
 }
 
 /**
@@ -48,16 +56,17 @@ export interface ChatRequestOptions {
 }
 
 /**
- * Create a completion request body for v1/ai/completion endpoint.
+ * Create an OpenAI-compatible chat completions request body.
  *
- * Per ai.completion.v1.contract: requires messages, model, graphName.
+ * Per chatCompletionsContract: requires model, messages.
+ * graph_name is an optional extension field.
  *
  * @example
  * ```ts
  * const body = createCompletionRequest({
  *   messages: [{ role: "user", content: "Hello" }],
  * });
- * const req = new NextRequest("http://localhost/api/v1/ai/completion", {
+ * const req = new NextRequest("http://localhost/api/v1/chat/completions", {
  *   method: "POST",
  *   body: JSON.stringify(body),
  * });
@@ -65,16 +74,27 @@ export interface ChatRequestOptions {
  */
 export function createCompletionRequest(
   options: CompletionRequestOptions = {}
-): {
-  messages: Array<{ role: string; content: string }>;
-  model: string;
-  graphName: string;
-} {
-  return {
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {
     messages: options.messages ?? [{ role: "user", content: "Hello" }],
     model: options.model ?? TEST_MODEL_ID,
-    graphName: options.graphName ?? TEST_GRAPH_NAME,
   };
+
+  // Optional extension field
+  if (options.graph_name !== undefined) {
+    result.graph_name = options.graph_name;
+  } else {
+    result.graph_name = TEST_GRAPH_NAME;
+  }
+
+  if (options.stream !== undefined) result.stream = options.stream;
+  if (options.stream_options !== undefined)
+    result.stream_options = options.stream_options;
+  if (options.temperature !== undefined)
+    result.temperature = options.temperature;
+  if (options.max_tokens !== undefined) result.max_tokens = options.max_tokens;
+
+  return result;
 }
 
 /**
@@ -115,8 +135,8 @@ export function createChatRequest(options: ChatRequestOptions = {}): {
 }
 
 /**
- * Create a completion request body from Message[] (internal format).
- * Converts from Message[] to completion contract DTO format.
+ * Create an OpenAI-compatible request body from Message[] (internal format).
+ * Converts from Message[] to OpenAI message format.
  *
  * @example
  * ```ts

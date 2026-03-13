@@ -25,14 +25,14 @@ function baseUrl(path = ""): string {
 }
 
 describe("API Auth Guard Stack Test", () => {
-  it("should return 401 when calling /api/v1/ai/completion without session", async () => {
+  it("should return 401 when calling /api/v1/chat/completions without session", async () => {
     // Arrange: Prepare valid request body
     const requestBody = {
       messages: [{ role: "user", content: "Hello AI" }],
     };
 
     // Act: Call protected endpoint without auth cookie
-    const response = await fetch(`${baseUrl()}/api/v1/ai/completion`, {
+    const response = await fetch(`${baseUrl()}/api/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -52,7 +52,7 @@ describe("API Auth Guard Stack Test", () => {
   // Current blocker: synthetic JWT sessions fail JWE decryption in route handlers
   // See: docs/spec/authentication.md (deferred_work section)
   // See: tests/_fixtures/auth/synthetic-session.ts (JWE format notes)
-  it.skip("should return 200 when calling /api/v1/ai/completion with valid session and seeded billing account", async () => {
+  it.skip("should return 200 when calling /api/v1/chat/completions with valid session and seeded billing account", async () => {
     // Arrange: Create test wallet and synthetic session
     const wallet = generateTestWallet("test-api-guard-wallet");
     const walletAddress = wallet.account.address.toLowerCase();
@@ -92,7 +92,7 @@ describe("API Auth Guard Stack Test", () => {
     };
 
     // Act: Call protected endpoint with synthetic session cookie
-    const response = await fetch(`${baseUrl()}/api/v1/ai/completion`, {
+    const response = await fetch(`${baseUrl()}/api/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -109,10 +109,10 @@ describe("API Auth Guard Stack Test", () => {
     expect(response.status).toBe(200);
 
     const data = await response.json();
-    expect(data).toHaveProperty("message");
-    expect(data.message).toHaveProperty("role", "assistant");
-    expect(data.message).toHaveProperty("content");
-    expect(typeof data.message.content).toBe("string");
+    expect(data).toHaveProperty("choices");
+    expect(data.choices[0].message).toHaveProperty("role", "assistant");
+    expect(data.choices[0].message).toHaveProperty("content");
+    expect(typeof data.choices[0].message.content).toBe("string");
 
     // Verify billing account balance was updated (side effect)
     const updatedBillingAccount = await db.query.billingAccounts.findFirst({
@@ -128,7 +128,7 @@ describe("API Auth Guard Stack Test", () => {
     // before they reach the route handler
 
     // Act: Call various /api/v1/ai/* endpoints without auth
-    const endpoints = ["/api/v1/ai/completion"];
+    const endpoints = ["/api/v1/chat/completions"];
 
     for (const endpoint of endpoints) {
       const response = await fetch(`${baseUrl()}${endpoint}`, {
@@ -167,7 +167,7 @@ describe("API Auth Guard Stack Test", () => {
     });
 
     // Act: Call endpoint with synthetic auth cookie but without billing account seeded
-    const response = await fetch(`${baseUrl()}/api/v1/ai/completion`, {
+    const response = await fetch(`${baseUrl()}/api/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

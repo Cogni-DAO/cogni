@@ -27,7 +27,7 @@ vi.mock("@/app/_lib/auth/session", () => ({
 import { createCompletionRequest, TEST_MODEL_ID } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { POST as completionPOST } from "@/app/api/v1/ai/completion/route";
+import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
 import type { SessionUser } from "@/shared/auth";
 import {
   billingAccounts,
@@ -84,7 +84,7 @@ describe("LiteLLM Call ID → Spend Log Mapping (Contract Test)", () => {
 
     // 2. Make completion call (uses real LiteLLM, not fake)
     const completionReq = new NextRequest(
-      "http://localhost:3000/api/v1/ai/completion",
+      "http://localhost:3000/api/v1/chat/completions",
       {
         method: "POST",
         body: JSON.stringify(
@@ -101,7 +101,8 @@ describe("LiteLLM Call ID → Spend Log Mapping (Contract Test)", () => {
     const completionRes = await completionPOST(completionReq);
     expect(completionRes.status).toBe(200);
     const completionJson = await completionRes.json();
-    const requestId = completionJson.message.requestId;
+    // Extract requestId from OpenAI completion ID format: chatcmpl-{reqId}
+    const requestId = (completionJson.id as string).replace("chatcmpl-", "");
     expect(requestId).toBeDefined();
 
     // 3. Query charge_receipts to get usageUnitId (this is the x-litellm-call-id we captured)

@@ -6,24 +6,27 @@
  * Purpose: App-layer coordinator for AI completion - session → billing account, delegates to feature layer.
  * Scope: Resolves session user to billing account + virtual key, creates LlmCaller, maps DTOs, normalizes errors. Does not contain business logic or HTTP concerns.
  * Invariants:
- *   - UNIFIED_GRAPH_EXECUTOR: Both completion() and completionStream() use GraphExecutorPort
+ *   - UNIFIED_GRAPH_EXECUTOR: Both chatCompletion() and completionStream() use GraphExecutorPort
  *   - Only app layer imports this; routes call this, not features/* directly
  *   - Must import features via public.ts ONLY (never import from services subdirectories)
  *   - NEVER import adapters (use bootstrap factories instead)
  *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: preflight credit check handled by decorator (no facade-level call)
  *   - Validates billing account before delegation; propagates feature errors
  * Side-effects: IO (via resolved dependencies)
- * Notes: completion() delegates to completionStream() and collects response server-side
+ * Notes: chatCompletion() delegates to completionStream() and collects response server-side.
+ *   Returns OpenAI-compatible ChatCompletion format.
  * Links: Called by API routes, delegates to features/ai/public.ts, GRAPH_EXECUTION.md
  * @public
  */
 
 import { createHash } from "node:crypto";
 import { toUserId } from "@cogni/ids";
-import type { z } from "zod";
 import { resolveAiAdapterDeps } from "@/bootstrap/container";
 import { createGraphExecutor } from "@/bootstrap/graph-executor.factory";
-import type { aiCompletionOperation } from "@/contracts/ai.completion.v1.contract";
+import type {
+  ChatCompletionOutput,
+  ChatMessage,
+} from "@/contracts/ai.completions.v1.contract";
 import { mapAccountsPortErrorToFeature } from "@/features/accounts/public";
 // Types from client-safe barrel (types only, no runtime)
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
@@ -45,21 +48,65 @@ import {
 import type { SessionUser } from "@/shared/auth";
 import type { RequestContext } from "@/shared/observability";
 
-interface CompletionInput {
+// ─────────────────────────────────────────────────────────────────────────────
+// Default graph for requests that don't specify one
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_GRAPH_NAME = "langgraph:default";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Message conversion: OpenAI → internal MessageDto
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Convert OpenAI ChatMessage array to internal MessageDto array.
+ * Maps OpenAI field names (snake_case) to internal format (camelCase).
+ */
+export function chatMessagesToDtos(messages: ChatMessage[]): MessageDto[] {
+  return messages.map((msg): MessageDto => {
+    if (msg.role === "system") {
+      return { role: "system", content: msg.content };
+    }
+    if (msg.role === "user") {
+      return { role: "user", content: msg.content };
+    }
+    if (msg.role === "tool") {
+      return {
+        role: "tool",
+        content: msg.content,
+        toolCallId: msg.tool_call_id,
+      };
+    }
+    // assistant
+    return {
+      role: "assistant",
+      content: msg.content ?? "",
+      ...(msg.tool_calls && msg.tool_calls.length > 0
+        ? {
+            toolCalls: msg.tool_calls.map((tc) => ({
+              id: tc.id,
+              name: tc.function.name,
+              arguments: tc.function.arguments,
+            })),
+          }
+        : {}),
+    };
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CompletionInput {
   messages: MessageDto[];
   model: string;
   sessionUser: SessionUser;
-  /** Graph name or fully-qualified graphId to execute (required) */
+  /** Graph name or fully-qualified graphId to execute */
   graphName: string;
-  /**
-   * Conversation state key for multi-turn conversations.
-   * If absent, server generates one.
-   */
+  /** Conversation state key for multi-turn conversations */
   stateKey?: string;
 }
-
-// Type-level enforcement: facade MUST return exact contract shape
-type CompletionOutput = z.infer<typeof aiCompletionOperation.output>;
 
 /**
  * Derive Langfuse sessionId from billingAccountId + stateKey.
@@ -79,59 +126,125 @@ function deriveSessionId(billingAccountId: string, stateKey: string): string {
   return `ba:${billingAccountId}:s:${stateKeyHash}`;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Finish reason mapping
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Non-streaming AI completion.
+ * Map internal finish reason to OpenAI-compatible finish_reason.
+ */
+export function toOpenAiFinishReason(
+  reason: string
+): "stop" | "length" | "tool_calls" | "content_filter" {
+  switch (reason) {
+    case "stop":
+      return "stop";
+    case "length":
+      return "length";
+    case "tool_calls":
+      return "tool_calls";
+    case "content_filter":
+      return "content_filter";
+    default:
+      return "stop";
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// chatCompletion: Non-streaming, returns OpenAI ChatCompletion format
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ChatCompletionInput {
+  messages: ChatMessage[];
+  model: string;
+  sessionUser: SessionUser;
+  /** Graph name or fully-qualified graphId to execute */
+  graphName?: string;
+  /** Conversation state key for multi-turn conversations */
+  stateKey?: string;
+}
+
+/**
+ * Non-streaming AI completion returning OpenAI ChatCompletion format.
  * Per UNIFIED_GRAPH_EXECUTOR: delegates to completionStream() and collects response server-side.
  * This ensures billing flows through GraphExecutorPort → RunEventRelay → commitUsageFact().
  */
-export async function completion(
-  input: CompletionInput,
+export async function chatCompletion(
+  input: ChatCompletionInput,
   ctx: RequestContext
-): Promise<CompletionOutput> {
-  const userId = toUserId(input.sessionUser.id);
-  const { clock } = resolveAiAdapterDeps(userId);
+): Promise<ChatCompletionOutput> {
+  const messageDtos = chatMessagesToDtos(input.messages);
+  const graphName = input.graphName ?? DEFAULT_GRAPH_NAME;
 
   // Delegate to streaming path (UNIFIED_GRAPH_EXECUTOR)
-  const { stream, final } = await completionStream(input, ctx);
+  const { stream, final } = await completionStream(
+    {
+      messages: messageDtos,
+      model: input.model,
+      sessionUser: input.sessionUser,
+      graphName,
+      ...(input.stateKey ? { stateKey: input.stateKey } : {}),
+    },
+    ctx
+  );
 
   // Collect text deltas server-side
-  // Errors (including InsufficientCreditsPortError from preflight) occur lazily during consumption
-  // Both stream consumption AND final await are wrapped - final can reject after loop completes
   const textParts: string[] = [];
   try {
     for await (const event of stream) {
       if (event.type === "text_delta") {
         textParts.push(event.delta);
       }
-      // done event signals end of stream; billing already handled by RunEventRelay
-      // Note: errors are thrown as exceptions, not emitted as events
     }
 
     // Await final to ensure billing completed via RunEventRelay
     const result = await final;
 
     if (!result.ok) {
-      // Preflight handles insufficient_credits before execution starts.
-      // Any error here is from graph execution itself.
       throw new Error(`Completion failed: ${result.error}`);
     }
 
-    // Build response in contract format
     const content = textParts.join("");
-    const timestamp = clock.now();
+    const finishReason = toOpenAiFinishReason(result.finishReason);
 
     return {
-      message: {
-        role: "assistant",
-        content,
-        timestamp,
-        requestId: result.requestId,
+      id: `chatcmpl-${result.requestId}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model: input.model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content,
+            ...(finishReason === "tool_calls" &&
+            result.ok &&
+            "toolCalls" in result &&
+            result.toolCalls
+              ? {
+                  tool_calls: result.toolCalls.map((tc) => ({
+                    id: tc.id,
+                    type: "function" as const,
+                    function: {
+                      name: tc.function.name,
+                      arguments: tc.function.arguments,
+                    },
+                  })),
+                }
+              : {}),
+          },
+          finish_reason: finishReason,
+        },
+      ],
+      usage: {
+        prompt_tokens: result.usage.promptTokens,
+        completion_tokens: result.usage.completionTokens,
+        total_tokens: result.usage.promptTokens + result.usage.completionTokens,
       },
     };
   } catch (error) {
     // Map port-level errors to feature errors for route handler.
-    // Port errors arrive lazily from the decorator via stream iteration.
-    // Route layer handles AccountsFeatureError via isAccountsFeatureError() → 402/403.
     if (
       isInsufficientCreditsPortError(error) ||
       isBillingAccountNotFoundPortError(error) ||
@@ -142,6 +255,53 @@ export async function completion(
     throw error;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// chatCompletionStream: Streaming, returns AiEvent stream for SSE conversion
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ChatCompletionStreamInput {
+  messages: ChatMessage[];
+  model: string;
+  sessionUser: SessionUser;
+  /** Graph name or fully-qualified graphId to execute */
+  graphName?: string;
+  /** Conversation state key for multi-turn conversations */
+  stateKey?: string;
+  /** Abort signal for cancellation */
+  abortSignal?: AbortSignal;
+}
+
+/**
+ * Streaming AI completion. Returns an AiEvent stream and final promise.
+ * The route handler converts AiEvents to OpenAI SSE chunk format.
+ */
+export async function chatCompletionStream(
+  input: ChatCompletionStreamInput,
+  ctx: RequestContext
+): Promise<{
+  stream: AsyncIterable<AiEvent>;
+  final: Promise<StreamFinalResult>;
+}> {
+  const messageDtos = chatMessagesToDtos(input.messages);
+  const graphName = input.graphName ?? DEFAULT_GRAPH_NAME;
+
+  return completionStream(
+    {
+      messages: messageDtos,
+      model: input.model,
+      sessionUser: input.sessionUser,
+      graphName,
+      ...(input.stateKey ? { stateKey: input.stateKey } : {}),
+      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+    },
+    ctx
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// completionStream: shared core (used by chat route AND completions route)
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Stream chat completion via AI streaming service.
@@ -218,10 +378,6 @@ export async function completionStream(
 
   const timestamp = clock.now();
   const coreMessages = toCoreMessages(input.messages, timestamp);
-
-  // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: preflight credit check is handled
-  // by PreflightCreditCheckDecorator inside the graph executor stack.
-  // No facade-level preflightCreditCheck() call needed.
 
   const aiRuntime = createAiRuntime({ graphExecutor });
 

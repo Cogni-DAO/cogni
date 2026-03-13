@@ -8,9 +8,10 @@
  * Invariants:
  *   - Contract compliance; error mapping; dependency injection; timestamp consistency.
  *   - UNIFIED_GRAPH_EXECUTOR: All execution flows through GraphExecutorPort.runGraph()
+ *   - Returns OpenAI-compatible ChatCompletion format
  * Side-effects: none
  * Notes: Uses fake services for isolation; mocks GraphExecutor at bootstrap boundary.
- * Links: aiCompletionOperation contract, completion facade, GRAPH_EXECUTION.md
+ * Links: chatCompletionsContract, completion facade, GRAPH_EXECUTION.md
  * @public
  */
 
@@ -23,8 +24,8 @@ import {
 import { TEST_MODEL_ID } from "@tests/_fakes/ai/fakes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { completion } from "@/app/_facades/ai/completion.server";
-import { aiCompletionOperation } from "@/contracts/ai.completion.v1.contract";
+import { chatCompletion } from "@/app/_facades/ai/completion.server";
+import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
 import type {
   GraphExecutorPort,
   GraphRunRequest,
@@ -104,14 +105,11 @@ describe("app/_facades/ai/completion.server", () => {
     vi.resetAllMocks();
   });
 
-  describe("completion", () => {
-    it("should handle valid DTO input and return contract-compliant output via GraphExecutorPort", async () => {
+  describe("chatCompletion", () => {
+    it("should handle valid input and return OpenAI-compatible ChatCompletion output via GraphExecutorPort", async () => {
       // Arrange
       const input = {
-        messages: [
-          { role: "user" as const, content: "Hello" },
-          { role: "assistant" as const, content: "Hi there" },
-        ],
+        messages: [{ role: "user" as const, content: "Hello" }],
         model: TEST_MODEL_ID,
         sessionUser,
         graphName: "langgraph:poet",
@@ -144,7 +142,7 @@ describe("app/_facades/ai/completion.server", () => {
       };
 
       // Act
-      const result = await completion(input, testCtx);
+      const result = await chatCompletion(input, testCtx);
 
       // Assert - CRITICAL: GraphExecutorPort.runGraph() MUST be called
       expect(fakeExecutor.runGraphSpy).toHaveBeenCalledTimes(1);
@@ -154,20 +152,22 @@ describe("app/_facades/ai/completion.server", () => {
       expect(runGraphCall.runId).toBe("test-req-123"); // P0: runId = ctx.reqId
       expect(runGraphCall.ingressRequestId).toBe("test-req-123");
       expect(runGraphCall.model).toBe(TEST_MODEL_ID);
-      expect(runGraphCall.messages).toHaveLength(2);
+      expect(runGraphCall.messages).toHaveLength(1);
 
-      // Verify contract-compliant output
-      expect(result).toEqual({
-        message: {
-          role: "assistant",
-          content: "AI response",
-          timestamp: "2025-01-01T12:00:00.000Z",
-          requestId: "req-123",
-        },
-      });
+      // Verify OpenAI-compatible output
+      expect(result.object).toBe("chat.completion");
+      expect(result.id).toContain("chatcmpl-");
+      expect(result.model).toBe(TEST_MODEL_ID);
+      expect(result.choices).toHaveLength(1);
+      expect(result.choices[0]?.message.role).toBe("assistant");
+      expect(result.choices[0]?.message.content).toBe("AI response");
+      expect(result.choices[0]?.finish_reason).toBe("stop");
+      expect(result.usage.prompt_tokens).toBe(10);
+      expect(result.usage.completion_tokens).toBe(20);
+      expect(result.usage.total_tokens).toBe(30);
 
       // Verify contract compliance
-      expect(() => aiCompletionOperation.output.parse(result)).not.toThrow();
+      expect(() => chatCompletionsContract.output.parse(result)).not.toThrow();
 
       // Verify billing account lookup
       expect(
@@ -227,7 +227,7 @@ describe("app/_facades/ai/completion.server", () => {
       };
 
       // Act & Assert
-      await expect(completion(input, testCtx)).rejects.toThrow(
+      await expect(chatCompletion(input, testCtx)).rejects.toThrow(
         "Completion failed: internal"
       );
     });
@@ -267,7 +267,7 @@ describe("app/_facades/ai/completion.server", () => {
       };
 
       // Act
-      await completion(input, testCtx);
+      await chatCompletion(input, testCtx);
 
       // Assert - Factory must be called with (streamFn, userId, billingCommitFn)
       expect(mockCreateGraphExecutor).toHaveBeenCalledTimes(1);
@@ -279,20 +279,16 @@ describe("app/_facades/ai/completion.server", () => {
       expect(typeof billingCommitFn).toBe("function");
     });
 
-    it("should set timestamps consistently from clock", async () => {
+    it("should return valid created timestamp", async () => {
       // Arrange
       const input = {
-        messages: [
-          { role: "user" as const, content: "First" },
-          { role: "assistant" as const, content: "Second" },
-        ],
+        messages: [{ role: "user" as const, content: "First" }],
         model: TEST_MODEL_ID,
         sessionUser,
         graphName: "langgraph:poet",
       };
 
-      const fixedTime = "2025-01-01T15:30:00.000Z";
-      const fakeClock = new FakeClock(fixedTime);
+      const fakeClock = new FakeClock("2025-01-01T15:30:00.000Z");
       const mockAccountService = createMockAccountServiceWithDefaults();
 
       mockResolveAiAdapterDeps.mockReturnValue({
@@ -318,10 +314,60 @@ describe("app/_facades/ai/completion.server", () => {
       };
 
       // Act
-      const result = await completion(input, testCtx);
+      const result = await chatCompletion(input, testCtx);
 
-      // Assert - Output timestamp should use clock
-      expect(result.message.timestamp).toBe(fixedTime);
+      // Assert - created should be a Unix timestamp in seconds
+      expect(typeof result.created).toBe("number");
+      expect(result.created).toBeGreaterThan(0);
+    });
+
+    it("should support system messages (OpenAI compatibility)", async () => {
+      // Arrange
+      const input = {
+        messages: [
+          { role: "system" as const, content: "You are a helpful assistant" },
+          { role: "user" as const, content: "Hello" },
+        ],
+        model: TEST_MODEL_ID,
+        sessionUser,
+        graphName: "langgraph:poet",
+      };
+
+      const fakeClock = new FakeClock();
+      const mockAccountService = createMockAccountServiceWithDefaults();
+
+      mockResolveAiAdapterDeps.mockReturnValue({
+        llmService: {} as never,
+        accountService: mockAccountService,
+        clock: fakeClock,
+        aiTelemetry: new FakeAiTelemetryAdapter(),
+        langfuse: undefined,
+      });
+
+      const fakeExecutor = createFakeGraphExecutor({
+        responseContent: "Hi!",
+        requestId: "req-sys",
+      });
+      mockCreateGraphExecutor.mockReturnValue(fakeExecutor);
+
+      const testCtx: RequestContext = {
+        log: makeNoopLogger(),
+        reqId: "test-req-sys",
+        traceId: "00000000000000000000000000000000",
+        routeId: "test.route",
+        clock: fakeClock,
+      };
+
+      // Act
+      const result = await chatCompletion(input, testCtx);
+
+      // Assert - System messages should be passed through
+      expect(fakeExecutor.runGraphSpy).toHaveBeenCalledTimes(1);
+      const runGraphCall = fakeExecutor.runGraphSpy.mock
+        .calls[0]?.[0] as GraphRunRequest;
+      expect(runGraphCall.messages).toHaveLength(2);
+      expect(runGraphCall.messages[0]?.role).toBe("system");
+      expect(result.choices[0]?.message.content).toBe("Hi!");
     });
   });
 });

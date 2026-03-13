@@ -18,7 +18,7 @@ import { desc, eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { POST } from "@/app/api/v1/ai/completion/route";
+import { POST } from "@/app/api/v1/chat/completions/route";
 import type { SessionUser } from "@/shared/auth/session";
 import {
   aiInvocationSummaries,
@@ -80,7 +80,7 @@ describe("AI Telemetry Stack Tests", () => {
       });
 
       const req = new NextRequest(
-        "http://localhost:3000/api/v1/ai/completion",
+        "http://localhost:3000/api/v1/chat/completions",
         {
           method: "POST",
           body: JSON.stringify(requestBody),
@@ -91,10 +91,14 @@ describe("AI Telemetry Stack Tests", () => {
       const response = await POST(req);
       const responseJson = await response.json();
 
-      // Assert - Response successful
+      // Assert - Response successful (OpenAI-compatible format)
       expect(response.status).toBe(200);
-      expect(responseJson.message?.requestId).toBeDefined();
-      const returnedRequestId = responseJson.message?.requestId as string;
+      expect(responseJson.id).toBeDefined();
+      // Extract requestId from OpenAI completion ID format: chatcmpl-{reqId}
+      const returnedRequestId = (responseJson.id as string).replace(
+        "chatcmpl-",
+        ""
+      );
 
       // Query ai_invocation_summaries by THIS request's ID (not status - avoids stale CI data)
       const rows = await db
@@ -197,7 +201,7 @@ describe("AI Telemetry Stack Tests", () => {
       });
 
       const req = new NextRequest(
-        "http://localhost:3000/api/v1/ai/completion",
+        "http://localhost:3000/api/v1/chat/completions",
         {
           method: "POST",
           body: JSON.stringify(requestBody),

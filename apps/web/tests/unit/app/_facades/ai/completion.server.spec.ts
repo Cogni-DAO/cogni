@@ -3,12 +3,12 @@
 
 /**
  * Module: `@tests/unit/app/_facades/ai/completion.server`
- * Purpose: Contract test to ensure completion facade returns exact aiCompletionOperation.output shape.
+ * Purpose: Contract test to ensure completion facade returns exact chatCompletionsContract.output shape.
  * Scope: Validates facade output matches contract schema to prevent drift between API/UI/tests. Does not test HTTP routing or real LLM calls.
- * Invariants: Facade output must always satisfy aiCompletionOperation.output.parse()
+ * Invariants: Facade output must always satisfy chatCompletionsContract.output.parse()
  * Side-effects: none
  * Notes: Uses reusable fixtures to ensure consistent test setup
- * Links: src/app/_facades/ai/completion.server.ts, src/contracts/ai.completion.v1.contract.ts
+ * Links: src/app/_facades/ai/completion.server.ts, src/contracts/ai.completions.v1.contract.ts
  * @public
  */
 
@@ -20,9 +20,8 @@ import {
   setupCompletionFacadeTest,
 } from "@tests/_fixtures/ai/completion-facade-setup";
 import { describe, expect, it, vi } from "vitest";
-import type { z } from "zod";
 
-import { aiCompletionOperation } from "@/contracts/ai.completion.v1.contract";
+import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
 import type { RequestContext } from "@/shared/observability";
 import { makeNoopLogger } from "@/shared/observability";
 
@@ -34,7 +33,7 @@ vi.mock("@/shared/env", () => ({
 }));
 
 describe("completion facade contract", () => {
-  it("should return exact shape matching aiCompletionOperation.output", async () => {
+  it("should return exact shape matching chatCompletionsContract.output (OpenAI ChatCompletion)", async () => {
     // Arrange - Use reusable fixture
     const { mockBillingAccount, clock } = setupCompletionFacadeTest();
     const mockDeps = createMockAiAdapterDeps();
@@ -55,7 +54,9 @@ describe("completion facade contract", () => {
     }));
 
     // Import after mocks are set up
-    const { completion } = await import("@/app/_facades/ai/completion.server");
+    const { chatCompletion } = await import(
+      "@/app/_facades/ai/completion.server"
+    );
 
     const testCtx: RequestContext = {
       log: makeNoopLogger(),
@@ -66,7 +67,7 @@ describe("completion facade contract", () => {
     };
 
     // Act
-    const result = await completion(
+    const result = await chatCompletion(
       {
         messages: [{ role: "user", content: "test" }],
         model: TEST_MODEL_ID,
@@ -76,14 +77,15 @@ describe("completion facade contract", () => {
       testCtx
     );
 
-    // Assert - Result matches contract schema exactly
-    expect(() => aiCompletionOperation.output.parse(result)).not.toThrow();
+    // Assert - Result matches OpenAI ChatCompletion schema exactly
+    expect(() => chatCompletionsContract.output.parse(result)).not.toThrow();
 
     // Assert - Validate structure
-    const validated: z.infer<typeof aiCompletionOperation.output> = result;
-    expect(validated.message.role).toBe("assistant");
-    expect(validated.message.content).toBeTruthy();
-    expect(validated.message.timestamp).toBe("2025-01-01T00:00:00.000Z");
+    expect(result.object).toBe("chat.completion");
+    expect(result.choices).toHaveLength(1);
+    expect(result.choices[0]?.message.role).toBe("assistant");
+    expect(result.choices[0]?.message.content).toBeTruthy();
+    expect(result.usage.total_tokens).toBeGreaterThanOrEqual(0);
   });
 
   it("should provide type safety via contract inference", async () => {
@@ -105,7 +107,9 @@ describe("completion facade contract", () => {
         .mockResolvedValue(mockBillingAccount),
     }));
 
-    const { completion } = await import("@/app/_facades/ai/completion.server");
+    const { chatCompletion } = await import(
+      "@/app/_facades/ai/completion.server"
+    );
 
     const testCtx: RequestContext = {
       log: makeNoopLogger(),
@@ -116,7 +120,7 @@ describe("completion facade contract", () => {
     };
 
     // Act
-    const result = await completion(
+    const result = await chatCompletion(
       {
         messages: [{ role: "user", content: "test" }],
         model: TEST_MODEL_ID,
@@ -127,7 +131,8 @@ describe("completion facade contract", () => {
     );
 
     // Assert - This should compile without errors - facade return type matches contract
-    const _typeCheck: z.infer<typeof aiCompletionOperation.output> = result;
+    const _typeCheck: import("@/contracts/ai.completions.v1.contract").ChatCompletionOutput =
+      result;
 
     // If this compiles, the facade signature is correct
     expect(_typeCheck).toBeDefined();

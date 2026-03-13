@@ -24,7 +24,7 @@ vi.mock("@/app/_lib/auth/session", () => ({
 import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { POST } from "@/app/api/v1/ai/completion/route";
+import { POST } from "@/app/api/v1/chat/completions/route";
 import type { SessionUser } from "@/shared/auth/session";
 import { billingAccounts, users, virtualKeys } from "@/shared/db/schema";
 
@@ -62,23 +62,26 @@ describe("Auth Flow Stack Test", () => {
       isDefault: true,
     });
 
-    const req = new NextRequest("http://localhost:3000/api/v1/ai/completion", {
-      method: "POST",
-      body: JSON.stringify(
-        createCompletionRequest({
-          messages: [{ role: "user", content: "Hello AI" }],
-        })
-      ),
-    });
+    const req = new NextRequest(
+      "http://localhost:3000/api/v1/chat/completions",
+      {
+        method: "POST",
+        body: JSON.stringify(
+          createCompletionRequest({
+            messages: [{ role: "user", content: "Hello AI" }],
+          })
+        ),
+      }
+    );
 
     // Act
     const response = await POST(req);
 
-    // Assert
+    // Assert (OpenAI-compatible format)
     expect(response.status).toBe(200);
     const json = await response.json();
-    expect(json).toHaveProperty("message");
-    expect(json.message.role).toBe("assistant");
+    expect(json).toHaveProperty("choices");
+    expect(json.choices[0].message.role).toBe("assistant");
 
     // Verify DB side effects
     // 1. Billing Account should exist (seeded above)
@@ -101,14 +104,17 @@ describe("Auth Flow Stack Test", () => {
     // Arrange
     vi.mocked(getSessionUser).mockResolvedValue(null);
 
-    const req = new NextRequest("http://localhost:3000/api/v1/ai/completion", {
-      method: "POST",
-      body: JSON.stringify(
-        createCompletionRequest({
-          messages: [{ role: "user", content: "Hello AI" }],
-        })
-      ),
-    });
+    const req = new NextRequest(
+      "http://localhost:3000/api/v1/chat/completions",
+      {
+        method: "POST",
+        body: JSON.stringify(
+          createCompletionRequest({
+            messages: [{ role: "user", content: "Hello AI" }],
+          })
+        ),
+      }
+    );
 
     // Act
     const response = await POST(req);

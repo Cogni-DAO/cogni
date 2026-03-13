@@ -29,7 +29,7 @@ import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { waitForReceipts } from "@tests/helpers/poll-db";
 import { UserDrizzleAccountService } from "@/adapters/server/accounts/drizzle.adapter";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { POST as completionPOST } from "@/app/api/v1/ai/completion/route";
+import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
 import type { SessionUser } from "@/shared/auth";
 import {
   billingAccounts,
@@ -86,7 +86,7 @@ describe("Billing Idempotency (IDEMPOTENT_CHARGES)", () => {
 
     // Step 1: Execute a real completion to produce a charge_receipt
     const completionReq = new NextRequest(
-      "http://localhost:3000/api/v1/ai/completion",
+      "http://localhost:3000/api/v1/chat/completions",
       {
         method: "POST",
         body: JSON.stringify(

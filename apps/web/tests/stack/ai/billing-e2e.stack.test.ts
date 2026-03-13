@@ -25,7 +25,7 @@ vi.mock("@/app/_lib/auth/session", () => ({
 import { createCompletionRequest, TEST_MODEL_ID } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { POST as completionPOST } from "@/app/api/v1/ai/completion/route";
+import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
 import { GET as summaryGET } from "@/app/api/v1/payments/credits/summary/route";
 import type { SessionUser } from "@/shared/auth";
 import {
@@ -86,7 +86,7 @@ describe("Billing E2E Stack Test", () => {
 
     // 2. Call Completion (T1 start)
     const completionReq = new NextRequest(
-      "http://localhost:3000/api/v1/ai/completion",
+      "http://localhost:3000/api/v1/chat/completions",
       {
         method: "POST",
         body: JSON.stringify(
@@ -102,8 +102,8 @@ describe("Billing E2E Stack Test", () => {
     expect(completionRes.status).toBe(200);
     const completionJson = await completionRes.json();
 
-    // Capture requestId from response
-    const requestId = completionJson.message.requestId;
+    // Capture requestId from OpenAI completion ID format: chatcmpl-{reqId}
+    const requestId = (completionJson.id as string).replace("chatcmpl-", "");
     expect(requestId).toBeDefined();
 
     // 3. Verify DB Invariants (T3) - per ACTIVITY_METRICS.md
