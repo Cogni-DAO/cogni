@@ -33,8 +33,8 @@ import { users } from "@/shared/db/schema";
 // ---------------------------------------------------------------------------
 
 /** Real node_id from .cogni/repo-spec.yaml — routes use getNodeId() */
-const REPO_NODE_ID = "538b4da2-bd59-4c3a-928a-8a40b6627205";
-const REPO_SCOPE_ID = "cdea48f9-d223-5b5c-a1a3-9ffdd42c3f83";
+const REPO_NODE_ID = "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d";
+const REPO_SCOPE_ID = "a28a8b1e-1f9d-5cd5-9329-569e4819feda";
 
 function baseUrl(path: string): string {
   const root = process.env.TEST_BASE_URL ?? "http://localhost:3000";
