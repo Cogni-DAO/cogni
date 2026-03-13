@@ -55,24 +55,39 @@ Define the invariants, schema, and architecture for routing all graph execution 
 
 10. **SSE_FROM_REDIS_NOT_MEMORY**: SSE endpoints read from Redis Streams (not in-process memory). This enables cross-process streaming and reconnection.
 
+11. **SINGLE_RUN_LEDGER**: One `graph_runs` table for all execution types (API, scheduled, webhook). Promoted from `schedule_runs` via rename + extend. No second run table. Idempotency stays in `execution_requests`, not in the run ledger.
+
 ## Schema
 
-**Option A: Extend `schedule_runs`** (if `graph_runs` not yet created)
+**Decision: Promote `schedule_runs` → `graph_runs` (single canonical run ledger)**
 
-| Column           | Type | Notes                                                      |
-| ---------------- | ---- | ---------------------------------------------------------- |
-| `run_kind`       | text | `user_immediate` \| `system_scheduled` \| `system_webhook` |
-| `trigger_source` | text | `api` \| `temporal_schedule` \| `webhook:{type}`           |
-| `trigger_ref`    | text | Upstream delivery ID / schedule ID                         |
-| `requested_by`   | text | User ID or `cogni_system`                                  |
+> Design review 2026-03-13: A single run table is the only defensible choice. Scheduled runs and API-triggered runs are the same entity with different provenance metadata. Splitting runs across two tables creates long-term product complexity and cross-table querying.
 
-**Option B: New `graph_runs` table** (preferred if P1 persistence lands)
+Rename `schedule_runs` to `graph_runs` and extend with trigger provenance columns:
 
-Fold trigger fields into the run persistence table per GRAPH_EXECUTION.md P1.
+| Column           | Type      | Notes                                                      |
+| ---------------- | --------- | ---------------------------------------------------------- |
+| `run_kind`       | text      | `user_immediate` \| `system_scheduled` \| `system_webhook` |
+| `trigger_source` | text      | `api` \| `temporal_schedule` \| `webhook:{type}`           |
+| `trigger_ref`    | text      | Upstream delivery ID / schedule ID                         |
+| `requested_by`   | text      | User ID or `cogni_system`                                  |
+| `graph_id`       | text      | Graph ID (e.g., `langgraph:poet`)                          |
+| `schedule_id`    | uuid null | Nullable — only set for scheduled runs                     |
+
+**Migration strategy:**
+
+1. Rename table `schedule_runs` → `graph_runs`
+2. Add new columns (`run_kind`, `trigger_source`, `trigger_ref`, `requested_by`, `graph_id`)
+3. Make `schedule_id` nullable (API/webhook runs have no schedule)
+4. Relax `schedule_slot_unique` constraint to `WHERE schedule_id IS NOT NULL`
+5. Backfill existing rows: `run_kind = 'system_scheduled'`, `trigger_source = 'temporal_schedule'`
+
+**Idempotency stays in `execution_requests`:** Idempotency is a request-layer concern, not a run-ledger concern. The run table represents execution state. `execution_requests` handles request deduplication. No `idempotency_key` column on `graph_runs`.
 
 **Forbidden:**
 
-- `run_requests` as separate table (adds indirection without value if `graph_runs` exists)
+- Second run table (no `graph_runs` alongside `schedule_runs` — one table only)
+- `idempotency_key` on the run table (stays in `execution_requests`)
 - Duplicating execution logic between scheduled and immediate paths
 
 ## Design
@@ -312,7 +327,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 | `src/app/api/v1/ai/chat/route.ts`                                    | API trigger (starts workflow → subscribes Redis → SSE) |
 | `src/app/api/v1/ai/runs/[runId]/stream/route.ts`                     | Reconnection SSE endpoint                              |
 | `src/features/ai/services/ai_runtime.ts`                             | AI runtime (workflow start + Redis subscribe)          |
-| `packages/db-schema/src/scheduling.ts`                               | Schema: `graph_runs` table                             |
+| `packages/db-schema/src/scheduling.ts`                               | Schema: `graph_runs` (promoted from `schedule_runs`)   |
 
 ## Acceptance Checks
 

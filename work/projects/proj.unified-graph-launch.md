@@ -68,13 +68,13 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 
 **Three-plane architecture:** Temporal (control) + Redis Streams (stream) + PostgreSQL (durable). See [unified-graph-launch.md §4](../../docs/spec/unified-graph-launch.md) for full design.
 
-| Deliverable                                                                                               | Status      | Est | Work Item |
-| --------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| **Infrastructure: Redis 7** — docker-compose, `ioredis` dep, env config                                   | Done        | 1   | task.0162 |
-| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                      | Done        | 2   | task.0163 |
-| **GraphRunWorkflow + `graph_runs` table** — unified Temporal workflow, run persistence, attempt semantics | Not Started | 5   | task.0164 |
-| **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency                    | Not Started | 5   | task.0165 |
-| **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs        | Not Started | 3   | task.0166 |
+| Deliverable                                                                                          | Status      | Est | Work Item |
+| ---------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| **Infrastructure: Redis 7** — docker-compose, `ioredis` dep, env config                              | Done        | 1   | task.0162 |
+| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                 | Done        | 2   | task.0163 |
+| **GraphRunWorkflow + promote `schedule_runs` → `graph_runs`** — single run ledger, Temporal workflow | Not Started | 5   | task.0164 |
+| **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency               | Not Started | 5   | task.0165 |
+| **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs   | Not Started | 3   | task.0166 |
 
 **Note:** When `graph_runs` exists, reconciler can optionally switch reference-set from LiteLLM spend/logs to `graph_runs`, but it is not required. The LiteLLM API approach remains valid long-term.
 
@@ -93,7 +93,7 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 - **ONE_RUN_EXECUTION_PATH**: All graph execution via `GraphRunWorkflow` — no inline execution in HTTP handlers (P1 goal)
 - **IDEMPOTENT_RUN_START**: `workflowId = graph-run:{tenantId}:{idempotencyKey}` — duplicate starts are no-ops (P1 goal)
 - **LITELLM_IS_REFERENCE_SET**: For billing reconciliation, LiteLLM spend/logs API is the universal reference set across all executor types. No new DB tables required for reconciliation (design review decision 2026-02-13).
-- **GRAPH_RUNS_IS_PRODUCT_TABLE**: `graph_runs` table (P1) exists for product/run lifecycle semantics, not as a billing reconciliation dependency.
+- **SINGLE_RUN_LEDGER**: `graph_runs` is promoted from `schedule_runs` (rename + extend). One table for all run types. No second run table. Idempotency stays in `execution_requests`.
 - **REDIS_IS_STREAM_PLANE**: Redis holds only ephemeral stream data. PostgreSQL is durable truth. Redis loss = stream interruption, not data loss.
 - **SSE_FROM_REDIS_NOT_MEMORY**: SSE endpoints read from Redis Streams, not in-process memory. Enables cross-process streaming and reconnection.
 - No generic event bus or rule engine — scope is graph execution only
