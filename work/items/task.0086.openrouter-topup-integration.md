@@ -2,151 +2,246 @@
 id: task.0086
 type: task
 title: OpenRouter credit top-up via operator wallet
-status: needs_merge
+status: needs_implement
 priority: 0
-estimate: 3
-summary: "Implement fundOpenRouterTopUp() — multi-step flow: create OpenRouter charge, ERC-20 approve, transferTokenPreApproved via Privy. Durable state machine."
-outcome: Every settled payment triggers an OpenRouter top-up for the provider cost amount. outbound_topups table tracks state. Credits provision automatically.
-spec_refs: web3-openrouter-payments, operator-wallet
+estimate: 2
+summary: "Wire OpenRouter top-up into credit purchase flow — application orchestrator composes TreasurySettlementPort + ProviderFundingPort + FinancialLedgerPort. Durable funding attempt row, deterministic TB transfer IDs, correct asset-swap accounting."
+outcome: Every confirmed credit purchase automatically tops up OpenRouter with the exact provider cost. Durable `provider_funding_attempts` row enables crash recovery. TigerBeetle records USDC movements as asset swaps (OperatorFloat → ProviderFloat), not expense.
+spec_refs: web3-openrouter-payments, operator-wallet, financial-ledger
 assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
-branch: feat/task.0086-openrouter-topup
-pr: https://github.com/Cogni-DAO/node-template/pull/556
+branch: feat/operator-wallet-e2e
+pr:
 reviewer:
 created: 2026-02-17
-updated: 2026-03-11
+updated: 2026-03-13
 labels: [wallet, web3, billing, openrouter]
 external_refs:
-revision: 1
-blocked_by: task.0150
+revision: 2
+blocked_by:
 deploy_verified: false
 rank: 21
 ---
 
 # OpenRouter credit top-up via operator wallet
 
-> Updated with spike.0090 findings. Old scope had wrong contract addresses and function names.
+## Already Built (PR #556, merged to feature branch)
 
-## Corrections from spike.0090
+Checkpoints 1-3 shipped the **adapter layer** — how to sign and submit the on-chain transaction:
 
-| Item                     | Old (wrong)                                  | Correct (spike-validated)                                        |
-| ------------------------ | -------------------------------------------- | ---------------------------------------------------------------- |
-| Transfers contract       | `0xeADE6bE02d043b3550bE19E960504dbA14A14971` | `0x03059433BCdB6144624cC2443159D9445C32b7a8`                     |
-| Function                 | `swapAndTransferUniswapV3Native` (needs ETH) | `transferTokenPreApproved` (USDC via direct ERC-20 transferFrom) |
-| Input token              | ETH (swap via Uniswap)                       | USDC (direct ERC-20 approval, no swap)                           |
-| Minimum charge           | $5                                           | $1                                                               |
-| `function_name` from API | Expected in response                         | NOT returned — hardcode `transferTokenPreApproved`               |
-| `calldata`               | Caller-provided                              | Adapter encodes internally from `call_data` fields               |
-| Gas                      | Unknown                                      | ~120k (~$0.0003)                                                 |
+- `TransferIntent` type matching actual OpenRouter `transfer_intent.call_data` shape
+- `transferTokenPreApproved` ABI encoding in `packages/operator-wallet/src/domain/transfers-abi.ts`
+- `fundOpenRouterTopUp()` in `PrivyOperatorWalletAdapter` — 5 validation gates (SENDER_MATCH, DESTINATION_ALLOWLIST, CHAIN_MISMATCH, MIN_TOPUP, MAX_TOPUP_CAP), ERC-20 approve + transferTokenPreApproved via Privy HSM
+- 9 unit tests covering all validation gates + deadline parsing + happy path
+- `OPERATOR_MAX_TOPUP_USD` env var (default 500)
+
+## Design
+
+### Outcome
+
+After `confirmCreditsPurchase()` mints credits and distributes the Split, it also tops up OpenRouter with the exact provider cost. TigerBeetle records USDC movements as asset swaps. A durable Postgres row enables crash recovery with deterministic TB transfer IDs.
+
+### Approach
+
+**Solution**: The existing `confirmCreditsPurchase` application orchestrator composes three ports: `TreasurySettlementPort` (Split distribution — unchanged), a new `ProviderFundingPort` (OpenRouter charge creation + funding), and `FinancialLedgerPort` (TB co-writes). Each port stays boundary-clean. A `provider_funding_attempts` row keyed by `paymentIntentId` provides crash recovery — if the process dies between steps, retry finds the existing row and resumes from the last completed step. TB transfer IDs are deterministic: derived from `(paymentIntentId, step)`.
+
+**Flow after this task:**
+
+```
+confirmCreditsPurchase() — application orchestrator
+  Step 1: creditAccount()                           → PG + TB (CREDIT)  ✅ exists
+  Step 2: system tenant bonus                       → PG + TB (CREDIT)  ✅ exists
+  Step 3: treasurySettlement.settle()               → distributeSplit   ✅ exists
+  Step 4: financialLedger.transfer()                → Treasury → OperatorFloat (USDC)  🆕
+  Step 5: providerFunding.fundAfterCreditPurchase() → create/reuse charge + fund  🆕
+       5a: upsert provider_funding_attempts row (PENDING)
+       5b: createOpenRouterCharge() or reuse existing charge_id
+       5c: operatorWallet.fundOpenRouterTopUp(intent)
+       5d: update row → FUNDED (store tx_hash)
+  Step 6: financialLedger.transfer()                → OperatorFloat → ProviderFloat (USDC)  🆕
+  All post-settlement steps non-blocking — log critical on failure
+```
+
+**Key design corrections (revision 2):**
+
+1. **Port boundary**: `TreasurySettlementPort` stays treasury-scoped (Split distribution only). OpenRouter funding lives in a separate `ProviderFundingPort`. The orchestrator composes both — no provider logic leaks into the treasury boundary.
+
+2. **Correct accounting**: A top-up is a prepaid asset, NOT an expense. `OperatorFloat:USDC → ProviderFloat:USDC` (asset swap). Expense booking happens later on usage/reconciliation (`ProviderFloat → Expense:ModelSpend`). The spec's current `Expense:AI:OpenRouter` line is wrong — update it.
+
+3. **Durable state**: `provider_funding_attempts` row keyed deterministically by `paymentIntentId`. On crash recovery, the row tells us where we left off — charge already created? reuse `charge_id`. Already funded? skip. TB transfer IDs derived from `(paymentIntentId, step_code)` via deterministic hash → idempotent against double-posting.
+
+**Reuses**: Existing `confirmCreditsPurchase` orchestrator. Existing `OperatorWalletPort.fundOpenRouterTopUp()`. Existing `FinancialLedgerPort.transfer()`. Existing pricing constants. Experimental scripts as reference for charge creation.
+
+**Rejected alternatives**:
+
+- **Temporal workflow**: Adds async complexity for a synchronous chain. Adapter already handles multi-step tx. The durable row + deterministic IDs give us crash recovery without a workflow engine.
+- **Expand TreasurySettlementPort**: Hard-bakes one provider into the wrong boundary. Treasury settlement is about routing revenue to DAO. Provider funding is about provisioning AI service. Different concerns, different ports.
+- **No DB record (logs + TB only)**: Insufficient for crash recovery. If `createOpenRouterCharge()` succeeds and process dies before `fundOpenRouterTopUp()`, we lose the charge_id. If funding succeeds and the TB post-write dies, we can't recover the transfer ID. The durable row solves both.
+- **`Expense:AI:OpenRouter` account**: Wrong accounting. A prepayment converts one asset to another. Expense is recognized on consumption, not on prepayment.
+
+### Invariants
+
+- [ ] PORT_BOUNDARY_CLEAN: TreasurySettlementPort stays treasury-scoped. Provider funding is a separate port. Orchestrator composes both (spec: architecture)
+- [ ] ASSET_SWAP_NOT_EXPENSE: Top-up posts OperatorFloat → ProviderFloat (asset-to-asset). Expense on usage/reconciliation only (spec: financial-ledger, DOUBLE_ENTRY_CANONICAL)
+- [ ] DETERMINISTIC_IDS: TB transfer IDs derived from (paymentIntentId, step_code). Idempotent on retry (spec: financial-ledger)
+- [ ] DURABLE_FUNDING_ROW: provider_funding_attempts row keyed by paymentIntentId enables crash recovery. Charge reuse on retry
+- [ ] TOPUP_FROM_CONSTANTS: `calculateOpenRouterTopUp()` derives amount from `MARKUP`, `REVENUE_SHARE`, `CRYPTO_FEE` — no hardcoded dollar amounts (spec: web3-openrouter-payments)
+- [ ] MARGIN_PRESERVED: Startup check `MARKUP × (1 - FEE) > 1 + REVENUE_SHARE` — fail fast if DAO would lose money (spec: web3-openrouter-payments)
+- [ ] SETTLEMENT_NON_BLOCKING: Steps 4-6 never block credit confirmation — log critical, continue (spec: financial-ledger, POST_CALL_NEVER_BLOCKS)
+- [ ] CO_WRITE_NON_BLOCKING: TigerBeetle writes fire-and-forget, log critical on failure (spec: financial-ledger)
+- [ ] LEDGER_PORT_IS_WRITE_PATH: USDC movements recorded through FinancialLedgerPort (spec: financial-ledger)
+- [ ] SIMPLE_SOLUTION: No Temporal, minimal new abstractions. Durable row is the minimum needed for correctness
+- [ ] ARCHITECTURE_ALIGNMENT: Pure math in core, HTTP + chain in adapter, orchestration in application (spec: architecture)
+
+### Files
+
+- Create: `apps/web/src/ports/provider-funding.port.ts` — `ProviderFundingPort` interface with `fundAfterCreditPurchase(context)`. Provider-agnostic (OpenRouter today, other providers tomorrow)
+- Create: `apps/web/src/adapters/server/treasury/openrouter-funding.adapter.ts` — implements `ProviderFundingPort`. Composes OpenRouter charge creation + `OperatorWalletPort.fundOpenRouterTopUp()`. Manages `provider_funding_attempts` row
+- Modify: `apps/web/src/core/billing/pricing.ts` — add `calculateOpenRouterTopUp(paymentUsd, markupFactor, revenueShare, cryptoFee): number`
+- Modify: `apps/web/src/shared/env/server-env.ts` — add `OPENROUTER_API_KEY` (optional), `OPENROUTER_CRYPTO_FEE` (default 0.05)
+- Modify: `apps/web/src/features/payments/application/confirmCreditsPurchase.ts` — add Steps 4-6 composing `FinancialLedgerPort` + `ProviderFundingPort`. Deps object instead of positional params
+- Modify: `apps/web/src/app/_facades/payments/credits.server.ts` — pass new deps from container
+- Modify: `apps/web/src/bootstrap/container.ts` — wire `ProviderFundingPort`, `MARGIN_PRESERVED` startup check
+- Modify: `packages/financial-ledger/src/domain/accounts.ts` — add `ASSETS_PROVIDER_FLOAT: 2003n` on USDC ledger (asset, not expense)
+- Modify: `apps/web/src/shared/db/schema.billing.ts` — add `provider_funding_attempts` table
+- Modify: `apps/web/src/adapters/server/db/migrations/` — new migration for `provider_funding_attempts`
+- Modify: `apps/web/src/ports/index.ts` — export new port
+- Modify: `docs/spec/financial-ledger.md` — fix OpenRouter top-up row: `Expense:AI:OpenRouter` → `Assets:ProviderFloat:USDC`
+- Test: `tests/unit/core/billing/pricing.test.ts` — `calculateOpenRouterTopUp` + margin check
+- Test: `tests/contract/provider-funding.contract.test.ts` — funding with FakeOperatorWallet + deterministic IDs
+
+### TigerBeetle Accounts
+
+The financial-ledger MVP has 5 accounts. This task adds 1:
+
+```
+; --- Ledger 2: USDC ---
+Assets:ProviderFloat:USDC   ; 2003n — Prepaid provider credits (OpenRouter). Asset, not expense.
+                            ; Expense recognized on usage/reconciliation (Walk phase).
+```
+
+Two new USDC-ledger transfers per credit purchase:
+
+1. `ASSETS_TREASURY (2001n) → ASSETS_OPERATOR_FLOAT (2002n)` — Split distribute (code: `SPLIT_DISTRIBUTE = 3`)
+2. `ASSETS_OPERATOR_FLOAT (2002n) → ASSETS_PROVIDER_FLOAT (2003n)` — Provider top-up (code: `PROVIDER_TOPUP = 4`)
+
+Transfer IDs deterministic: `hash(paymentIntentId + TRANSFER_CODE)` truncated to u128.
+
+### Durable State: `provider_funding_attempts`
+
+```sql
+CREATE TABLE provider_funding_attempts (
+  id              UUID PRIMARY KEY,     -- deterministic from paymentIntentId
+  payment_intent_id TEXT NOT NULL UNIQUE, -- idempotency key
+  status          TEXT NOT NULL DEFAULT 'pending',  -- pending | charge_created | funded | failed
+  provider        TEXT NOT NULL DEFAULT 'openrouter',
+  charge_id       TEXT,                 -- OpenRouter charge ID (reuse on retry)
+  charge_expires_at TIMESTAMPTZ,
+  amount_usdc_micro BIGINT,             -- gross top-up amount (scale=6)
+  funding_tx_hash TEXT,                 -- on-chain tx hash
+  error_message   TEXT,                 -- last error if failed
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+On crash recovery: lookup by `paymentIntentId` → resume from last status. `charge_created` → reuse `charge_id` (skip re-creation). `funded` → skip entirely.
 
 ## Requirements
 
-- Fix `TransferIntent` type to match actual OpenRouter `transfer_intent.call_data` shape:
-  ```typescript
-  {
-    (recipient_amount,
-      deadline,
-      recipient,
-      recipient_currency,
-      refund_destination,
-      fee_amount,
-      id,
-      operator,
-      signature,
-      prefix);
-  }
-  ```
-  See: `scripts/experiments/full-chain.ts:58-69`
-- `calculateOpenRouterTopUp(paymentUsd, markupFactor, revenueShare, providerFee)` pure function in `src/core/billing/pricing.ts`
-- New env vars: `OPENROUTER_CRYPTO_FEE` (default 0.05), `OPERATOR_MAX_TOPUP_USD` (default 500)
-- `MARGIN_PRESERVED` startup check: `MARKUP × (1 - FEE) > 1 + REVENUE_SHARE` — fail fast if violated
-- `fundOpenRouterTopUp()` implemented as multi-step flow:
-  1. `POST /api/v1/credits/coinbase` → get charge with `transfer_intent`
-  2. ERC-20 `approve(transfersContract, recipientAmount + feeAmount)`
-  3. `transferTokenPreApproved(intent)` on Transfers contract via Privy
-- `DESTINATION_ALLOWLIST`: validate `contract_address` against allowlist (only `0x0305...`)
-- `OPERATOR_MAX_TOPUP_USD`: per-tx cap validation
-- `SENDER_MATCH`: `intent.metadata.sender === operator wallet address`
-- `outbound_topups` DB table with state machine: `CHARGE_PENDING` → `CHARGE_CREATED` → `TX_BROADCAST` → `CONFIRMED` (terminal: `FAILED`)
-- `TOPUP_IDEMPOTENT`: keyed by `clientPaymentId` — no duplicate charges
-- `NO_REBROADCAST`: TX_BROADCAST state → poll only, never re-broadcast
-- Dispatch triggered from `creditsConfirm.ts` alongside Split distribution (TOPUP_AFTER_CREDIT)
-
-## Key spike references
-
-- `scripts/experiments/openrouter-topup.ts` — working charge creation + top-up flow
-- `scripts/experiments/full-chain.ts:205-288` — working end-to-end with approve + transfer
-- `scripts/experiments/shared.ts` — `TRANSFERS_ABI` with `transferTokenPreApproved` signature
-- Transfers contract: `0x03059433BCdB6144624cC2443159D9445C32b7a8`
-- Gas: ~120k for transferTokenPreApproved (~$0.0003)
-- Provider fee: 5% on charge amount
-- Charge response shape: `data.web3_data.transfer_intent.{call_data, metadata}`
+- **R1**: `calculateOpenRouterTopUp(paymentUsd, markupFactor, revenueShare, cryptoFee)` pure function — returns gross top-up amount in USD
+- **R2**: `OPENROUTER_API_KEY` env var (optional — provider funding skipped when not set)
+- **R3**: `OPENROUTER_CRYPTO_FEE` env var (default 0.05 — 5%)
+- **R4**: `MARGIN_PRESERVED` startup assertion — fail fast if pricing constants don't preserve positive margin
+- **R5**: `ProviderFundingPort` interface — `fundAfterCreditPurchase(context)` with `paymentIntentId` + `amountUsdCents`
+- **R6**: `OpenRouterFundingAdapter` — creates charge, calls `fundOpenRouterTopUp()`, manages `provider_funding_attempts` row
+- **R7**: `provider_funding_attempts` table — keyed by `paymentIntentId`, tracks status for crash recovery
+- **R8**: TigerBeetle transfer: `ASSETS_TREASURY → ASSETS_OPERATOR_FLOAT` on USDC ledger (Split distribute)
+- **R9**: TigerBeetle transfer: `ASSETS_OPERATOR_FLOAT → ASSETS_PROVIDER_FLOAT` on USDC ledger (provider top-up)
+- **R10**: `ASSETS_PROVIDER_FLOAT: 2003n` — new asset account (prepaid, not expense)
+- **R11**: Deterministic TB transfer IDs from `(paymentIntentId, step_code)`
+- **R12**: All Steps 4-6 non-blocking — log critical, don't throw to user
+- **R13**: Update spec `financial-ledger.md` — fix OpenRouter row accounting
 
 ## Allowed Changes
 
-- `src/ports/operator-wallet.port.ts` (fix TransferIntent type)
-- `src/core/billing/pricing.ts` (add calculateOpenRouterTopUp)
-- `src/shared/env/server-env.ts` (add OPENROUTER_CRYPTO_FEE, OPERATOR_MAX_TOPUP_USD)
-- `src/shared/web3/coinbase-transfers.ts` (new — Transfers ABI, address, encoding helpers)
-- `src/adapters/server/wallet/privy-operator-wallet.adapter.ts` (implement fundOpenRouterTopUp)
-- `src/adapters/test/wallet/fake-operator-wallet.adapter.ts` (update for new TransferIntent shape)
-- `src/features/payments/services/creditsConfirm.ts` (dispatch top-up after credit settlement)
-- `src/shared/db/schema.billing.ts` (add outbound_topups table)
-- `src/adapters/server/db/migrations/` (new migration for outbound_topups)
-- `src/bootstrap/` (margin safety startup check)
-- `tests/` (unit tests for calculateOpenRouterTopUp, margin check, top-up flow)
+- `apps/web/src/ports/provider-funding.port.ts` (new — ProviderFundingPort interface)
+- `apps/web/src/ports/index.ts` (export new port)
+- `apps/web/src/adapters/server/treasury/openrouter-funding.adapter.ts` (new — OpenRouter adapter)
+- `apps/web/src/core/billing/pricing.ts` (add calculateOpenRouterTopUp)
+- `apps/web/src/shared/env/server-env.ts` (add OPENROUTER_API_KEY, OPENROUTER_CRYPTO_FEE)
+- `apps/web/src/shared/db/schema.billing.ts` (add provider_funding_attempts table)
+- `apps/web/src/adapters/server/db/migrations/` (new migration)
+- `apps/web/src/features/payments/application/confirmCreditsPurchase.ts` (compose new ports)
+- `apps/web/src/app/_facades/payments/credits.server.ts` (pass new deps)
+- `apps/web/src/bootstrap/container.ts` (wire ProviderFundingPort, margin check)
+- `packages/financial-ledger/src/domain/accounts.ts` (add ASSETS_PROVIDER_FLOAT)
+- `docs/spec/financial-ledger.md` (fix accounting for OpenRouter top-up row)
+- `tests/` (unit + contract tests)
 
 ## Plan
 
-- [x] **Checkpoint 1: TransferIntent + pricing** (partial — pricing fn deferred)
-  - [x] Fix `TransferIntent` type to match actual OpenRouter shape
-  - [ ] Add `calculateOpenRouterTopUp()` to `src/core/billing/pricing.ts`
-  - [ ] Write unit tests: default constants ($1.00 → $0.9211), edge cases
-  - [x] Add `OPERATOR_MAX_TOPUP_USD` env var
-  - [ ] Add `MARGIN_PRESERVED` startup check
+- [ ] **Step 1: Pricing + env**
+  - [ ] Add `calculateOpenRouterTopUp()` to `pricing.ts`
+  - [ ] Add `OPENROUTER_API_KEY`, `OPENROUTER_CRYPTO_FEE` to `server-env.ts`
+  - [ ] Unit tests for pricing function + edge cases
+  - [ ] `MARGIN_PRESERVED` startup check in `container.ts`
 
-- [x] **Checkpoint 2: Transfers contract encoding**
-  - [x] Create `packages/operator-wallet/src/domain/transfers-abi.ts` — ABI + encoding
-  - [x] Use `transferTokenPreApproved` (NOT `swapAndTransferUniswapV3Native`)
-  - [x] Contract address: `0x03059433BCdB6144624cC2443159D9445C32b7a8`
-  - [ ] Unit test: encode/decode roundtrip
+- [ ] **Step 2: Port + domain**
+  - [ ] Create `ProviderFundingPort` interface in `src/ports/provider-funding.port.ts`
+  - [ ] Add `ASSETS_PROVIDER_FLOAT: 2003n` to `accounts.ts` + `ACCOUNT_DEFINITIONS`
+  - [ ] Export from `src/ports/index.ts`
 
-- [x] **Checkpoint 3: State machine + adapter** (partial — DB table deferred)
-  - [ ] Create `outbound_topups` table migration + drizzle schema
-  - [x] Implement `fundOpenRouterTopUp()` in Privy adapter:
-    - Validate DESTINATION_ALLOWLIST, SENDER_MATCH, CHAIN_MISMATCH, MIN_TOPUP, MAX_TOPUP_CAP
-    - ERC-20 approve → transferTokenPreApproved (two Privy tx submissions)
-  - [x] Update contract test for new TransferIntent shape
-  - [x] Add 9 unit tests covering all 5 validation gates + deadline parsing + happy path
+- [ ] **Step 3: DB + adapter**
+  - [ ] Add `provider_funding_attempts` table to `schema.billing.ts` + migration
+  - [ ] Create `OpenRouterFundingAdapter` — charge creation + funding + durable row
+  - [ ] Deterministic TB transfer ID generation from (paymentIntentId, step_code)
 
-- [ ] **Checkpoint 4: Orchestration**
-  - [ ] Add OpenRouter charge creation service (`POST /api/v1/credits/coinbase`)
-  - [ ] Add dispatch logic to `creditsConfirm.ts`
-  - [ ] State transitions: CHARGE_PENDING → CHARGE_CREATED → TX_BROADCAST → CONFIRMED
-  - [ ] Idempotency on clientPaymentId
-  - [ ] Integration test for full flow
+- [ ] **Step 4: Orchestrator wiring**
+  - [ ] Expand `confirmCreditsPurchase` — add Steps 4-6 (TB co-writes + provider funding)
+  - [ ] Refactor to deps object (too many positional params)
+  - [ ] Update facade to pass new deps from container
+  - [ ] Wire `ProviderFundingPort` in `container.ts`
+
+- [ ] **Step 5: Spec + tests**
+  - [ ] Fix `financial-ledger.md` — OpenRouter row: Expense → Assets:ProviderFloat
+  - [ ] Unit: `calculateOpenRouterTopUp` default constants ($1.00 → $0.9211), edge cases
+  - [ ] Contract: provider funding with FakeOperatorWallet + deterministic IDs
 
 ## Validation
 
 ```bash
 pnpm check
 pnpm test tests/unit/core/billing/pricing.test.ts
-pnpm test tests/contract/operator-wallet.contract.ts
+pnpm test tests/contract/provider-funding.contract.test.ts
 ```
 
 ## Review Checklist
 
 - [ ] **Work Item:** `task.0086` linked in PR body
-- [ ] **Spec:** DESTINATION_ALLOWLIST, SENDER_MATCH, MAX_TOPUP_CAP, TOPUP_IDEMPOTENT, NO_REBROADCAST, MARGIN_PRESERVED invariants upheld
-- [ ] **Tests:** calculateOpenRouterTopUp unit + margin check + top-up flow integration
-- [ ] **Reviewer:** assigned and approved
-- [ ] **Architecture:** Pure math in core, contract encoding in shared/web3, tx submission in adapter, orchestration in features
+- [ ] **Spec:** PORT_BOUNDARY_CLEAN, ASSET_SWAP_NOT_EXPENSE, DETERMINISTIC_IDS, DURABLE_FUNDING_ROW, TOPUP_FROM_CONSTANTS, MARGIN_PRESERVED
+- [ ] **Tests:** calculateOpenRouterTopUp unit + margin check + provider funding contract test
+- [ ] **Architecture:** Separate ports for treasury vs provider. Pure math in core. Durable state in Postgres. Asset accounting in TB
+- [ ] **Non-blocking:** All post-settlement steps fire-and-forget, log critical on failure
+
+## Review Feedback
+
+### Revision 2 (2026-03-13)
+
+**Blocking (3 design bugs fixed):**
+
+1. **Port boundary violation.** V1 design expanded `TreasurySettlementPort` with OpenRouter logic — wrong boundary. Treasury settlement is about routing revenue to DAO. Provider funding is about provisioning AI service. **Fix:** Separate `ProviderFundingPort`. Application orchestrator composes both.
+
+2. **Wrong ledger posting.** V1 design posted `OperatorFloat → ExpenseProviderTopup`. A top-up is a prepaid asset, not an expense. **Fix:** `OperatorFloat → Assets:ProviderFloat:USDC` (asset swap). Expense recognized on usage/reconciliation (Walk phase). Spec `financial-ledger.md` also needs correction.
+
+3. **Missing durability.** V1 design rejected all DB records ("logs + TB are the audit trail"). Insufficient for crash recovery: if `createOpenRouterCharge()` succeeds and process dies, charge_id is lost. **Fix:** `provider_funding_attempts` table keyed by `paymentIntentId`. Deterministic TB transfer IDs from `(paymentIntentId, step_code)`.
 
 ## PR / Links
 
-- Depends on: task.0085 (Splits deployment — distributeSplit must work first)
-- Branch target: `feat/operator-wallet-v0` (not staging)
+- Previous PR: [#556](https://github.com/Cogni-DAO/node-template/pull/556) (adapter layer — merged)
+- Depends on: task.0145 (TigerBeetle — PR #559, merged)
+- Branch target: `feat/operator-wallet-e2e` (not staging)
 
 ## Attribution
 
