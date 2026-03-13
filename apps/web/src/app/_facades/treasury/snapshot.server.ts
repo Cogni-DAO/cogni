@@ -14,8 +14,10 @@
 
 import { getContainer } from "@/bootstrap/container";
 import type { TreasurySnapshotResponseV1 } from "@/contracts/treasury.snapshot.v1.contract";
-import { getPaymentConfig } from "@/shared/config/repoSpec.server";
+import { getDaoConfig } from "@/shared/config/repoSpec.server";
 import type { RequestContext } from "@/shared/observability";
+import { EVENT_NAMES } from "@/shared/observability/events";
+import { CHAIN_ID } from "@/shared/web3/chain";
 
 const TREASURY_RPC_TIMEOUT_MS = 5000; // 5 second strict timeout
 
@@ -46,38 +48,45 @@ export async function getTreasurySnapshotFacade(
   ctx: RequestContext
 ): Promise<TreasurySnapshotResponseV1> {
   const { treasuryReadPort } = getContainer();
-  const config = getPaymentConfig();
+  const daoConfig = getDaoConfig();
+  if (!daoConfig) {
+    ctx.log.error(
+      {
+        event: EVENT_NAMES.TREASURY_CONFIG_MISSING,
+        errorCode: "TREASURY_NO_DAO_CONFIG",
+      },
+      "cogni_dao section missing or incomplete in repo-spec"
+    );
+    throw new Error("cogni_dao config missing from repo-spec");
+  }
 
+  const treasuryAddress = daoConfig.dao_contract;
   const start = performance.now();
-  let rpcSuccess = false;
 
   try {
-    // Call TreasuryReadPort with strict timeout
     const snapshot = await withTimeout(
       treasuryReadPort.getTreasurySnapshot({
-        chainId: config.chainId,
-        treasuryAddress: config.receivingAddress,
+        chainId: CHAIN_ID,
+        treasuryAddress,
         tokenAddresses: [], // Phase 2: ETH only
       }),
       TREASURY_RPC_TIMEOUT_MS,
       "Treasury RPC timeout exceeded"
     );
 
-    rpcSuccess = true;
-    const duration = performance.now() - start;
-
     ctx.log.info(
       {
-        chainId: config.chainId,
-        treasuryAddress: config.receivingAddress,
+        event: EVENT_NAMES.TREASURY_SNAPSHOT_COMPLETE,
+        outcome: "success",
+        chainId: CHAIN_ID,
+        treasuryAddress,
         blockNumber: snapshot.blockNumber.toString(),
         balances: snapshot.balances.length,
-        duration,
+        durationMs: performance.now() - start,
       },
       "treasury_rpc_success"
     );
 
-    // Map TreasurySnapshot to contract DTO
     return {
       treasuryAddress: snapshot.treasuryAddress,
       chainId: snapshot.chainId,
@@ -92,24 +101,24 @@ export async function getTreasurySnapshotFacade(
       timestamp: snapshot.timestamp,
       staleWarning: false,
     };
-  } catch (error) {
-    const duration = performance.now() - start;
+  } catch {
+    const durationMs = performance.now() - start;
 
     ctx.log.warn(
       {
-        chainId: config.chainId,
-        treasuryAddress: config.receivingAddress,
-        duration,
-        error: error instanceof Error ? error.message : String(error),
-        rpcSuccess,
+        event: EVENT_NAMES.TREASURY_SNAPSHOT_COMPLETE,
+        outcome: "error",
+        errorCode: "TREASURY_RPC_FAILURE",
+        chainId: CHAIN_ID,
+        treasuryAddress,
+        durationMs,
       },
       "treasury_rpc_failure"
     );
 
-    // Return fallback response with staleWarning instead of throwing
     return {
-      treasuryAddress: config.receivingAddress,
-      chainId: config.chainId,
+      treasuryAddress,
+      chainId: CHAIN_ID,
       blockNumber: "0",
       balances: [],
       timestamp: Date.now(),
