@@ -7,13 +7,13 @@ schema_version: "0.1.4"
 # Scopes ledger tables alongside scope_id. Never used for governance domain.
 # Generated once at init; must never change for an existing deployment.
 # See: docs/spec/identity-model.md
-node_id: "538b4da2-bd59-4c3a-928a-8a40b6627205"
+node_id: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d"
 
 # Governance domain (project). V0 default: 'default' (single-project node).
 # Multi-scope: declare named scopes in .cogni/projects/*.yaml instead.
 # scope_id is the canonical DB key (stable UUID FK); scope_key is the human-friendly slug.
 # Derived: uuidv5(node_id, "default") — deterministic per deployment
-scope_id: "cdea48f9-d223-5b5c-a1a3-9ffdd42c3f83"
+scope_id: "a28a8b1e-1f9d-5cd5-9329-569e4819feda"
 scope_key: "default"
 
 # Activity ledger ingestion configuration
@@ -38,11 +38,11 @@ intent:
 fail_on_error: true
 
 cogni_dao:
-  dao_contract: "0x08092cf85fcf8258e55e9db3b3b0afd0f408537e" # Dev DAO Contract Address (node-template)
-  plugin_contract: "0xe287e723de86348bdeb67af3f1310e6623e24ad4" # Dev Aragon Voting Plugin Address
-  signal_contract: "0xb87acef56be3ccfc6a71c48fb0a2276ff395d1af" # Dev CogniSignal Contract Address
-  chain_id: "8453" # Chain ID: Base mainnet
-  base_url: "http://localhost:3000" # Local dev
+  dao_contract: "0xF61c3fafD4D34b4568e7a500d92b28Ac175e83C6" # Current Cogni parent DAO Contract Address
+  plugin_contract: "0x609B427f04C1C42De3e28898cb7b9Bad329e6b77" # DAO's Aragon Voting Plugin Address
+  signal_contract: "0x590FC79B9c925C377fA63F4AaF54cdbF4Ee273A1" # DAO's CogniSignal Contract Address
+  chain_id: "8453" # Chain ID: Eth Sepolia testnet
+  base_url: "https://proposal.cognidao.org" # v0 Base URL: cogni-proposal-launcher service
 
 # DAO Financial Rails Configuration
 # Inbound payment configuration for USDC credits top-up

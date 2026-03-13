@@ -93,6 +93,10 @@ export const EVENT_NAMES = {
   SANDBOX_EXECUTION_STARTED: "sandbox.execution.started",
   SANDBOX_EXECUTION_COMPLETE: "sandbox.execution.complete",
 
+  // Treasury Domain
+  TREASURY_SNAPSHOT_COMPLETE: "feature.treasury_snapshot.complete",
+  TREASURY_CONFIG_MISSING: "feature.treasury_snapshot.config_missing",
+
   // Signal Execution Domain
   SIGNAL_EXECUTION_COMPLETE: "feature.signal_execution.complete",
   SIGNAL_DISPATCH_SKIPPED: "feature.signal_dispatch.skipped",
