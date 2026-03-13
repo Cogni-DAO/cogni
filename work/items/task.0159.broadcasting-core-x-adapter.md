@@ -2,7 +2,7 @@
 id: task.0159
 type: task
 title: "Broadcasting Crawl — core domain, schema, workflow, and X adapter"
-status: needs_closeout
+status: needs_implement
 priority: 1
 rank: 1
 estimate: 5
@@ -17,11 +17,12 @@ project: proj.broadcasting
 branch: claude/research-broadcasting-integration-8p2DB
 pr:
 reviewer:
-revision: 1
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-13
 updated: 2026-03-13
+
 labels: [broadcasting, x-twitter, temporal, crawl]
 external_refs:
 ---
@@ -208,3 +209,18 @@ pnpm test:contract           # contract tests pass
 2. **`as never` type escapes** — `apps/web/src/app/api/v1/broadcasting/[messageId]/route.ts:82` and `apps/web/src/app/api/v1/broadcasting/[messageId]/posts/[postId]/review/route.ts:98`: Uses `as never` to bypass branded type system. **Fix:** Use `toContentMessageId(messageId)` and `toPlatformPostId(postId)` from `@cogni/broadcast-core`.
 
 3. **`"edited"` decision without `editedBody`** — `packages/db-client/src/adapters/drizzle-broadcast-user.adapter.ts:213-216`: When `decision === "edited"` but `editedBody` is undefined, the method does not set status, leaving the post in an inconsistent state (e.g., stuck in `pending_review`). **Fix:** Either require `editedBody` when decision is `"edited"` (throw if missing), or treat `"edited"` without body as `"approved"`.
+
+### Blocking Issues (revision 2)
+
+1. **Duplicate work item ID** — `task.0159.governance-e2e-validation.md` conflicts with `task.0159.broadcasting-core-x-adapter.md`, causing `pnpm check:docs` to fail. **Fix:** Delete or re-number the governance task file.
+
+2. **Incomplete scope vs. task status** — Task requirements 4–6 (X adapter, ContentOptimizerPort, Temporal broadcastWorkflow) are not implemented. The task was marked `needs_closeout` but ~40% of stated requirements are missing. **Fix:** Either split the task (create follow-up task for workflow/adapters, mark this as the domain+persistence deliverable) or implement the remaining scope before closing.
+
+### Non-blocking Suggestions (revision 2)
+
+- `toContentMessage`/`toPlatformPost` mappers duplicated across user and worker adapters — extract to shared file
+- `toResponse`/`toPostResponse`/`handleRouteError` duplicated across route files — extract to shared module
+- Review route ignores `messageId` param — verify post belongs to message to prevent cross-message review
+- `PLATFORM_IDS`/`REVIEW_DECISIONS` redeclared in contracts instead of importing from `@cogni/broadcast-core` — drift risk
+- `assessRisk` takes `_platformPosts` param but never uses it — remove or use
+- No state transition validation at adapter or feature layer — `canTransitionMessage()` is defined but never called
