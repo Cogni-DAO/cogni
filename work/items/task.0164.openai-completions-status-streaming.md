@@ -2,7 +2,7 @@
 id: task.0164
 type: task
 title: OpenAI-compatible completions — document endpoint + surface agent status streams
-status: done
+status: needs_merge
 priority: 1
 rank: 10
 estimate: 2
@@ -12,10 +12,10 @@ spec_refs: streaming-status, graph-execution
 assignees: derekg1729
 credit:
 project:
-branch: claude/openai-compatible-completions-mRQCh
-pr:
+branch: claude/verify-openai-compatibility-KMDAd
+pr: https://github.com/Cogni-DAO/node-template/pull/571
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-06
