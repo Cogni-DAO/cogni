@@ -249,7 +249,7 @@ pnpm test tests/contract/provider-funding.contract.test.ts
 
 **Suggestions (non-blocking):**
 
-- Use `BigInt(cents) * 10_000n` instead of `BigInt(Math.round((cents / 100) * 1_000_000))` to avoid float arithmetic on currency.
+- Use `USDC_SCALE` from `@cogni/financial-ledger` (already exported) instead of hardcoded `1_000_000`. Convert cents → micro-USDC with all-bigint math: `BigInt(amountUsdCents) * USDC_SCALE / 100n`. No floats, no magic numbers. Same for the `topUpUsd` conversion (will need `BigInt(Math.round(topUpUsd * 100)) * USDC_SCALE / 100n` since topUpUsd is a float from the pricing function).
 - Use `isMarginPreserved()` from `pricing.ts` in `container.ts` instead of inlining the same logic.
 - Consider deterministic row ID via `uuid5(namespace, paymentIntentId)` for truly idempotent inserts.
 - Log a warning when `providerFunding` is set but `pricingConfig` is missing — silent misconfiguration skip is risky.
