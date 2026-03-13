@@ -1,45 +1,73 @@
 ---
-title: PostHog Self-Hosted Setup
+title: PostHog Product Analytics
 status: active
 owner: platform
 created: 2025-02-28
+updated: 2026-03-13
 ---
 
-# PostHog Self-Hosted Setup
+# PostHog Product Analytics
 
-PostHog is the product analytics event store for Cogni, backed by ClickHouse for SQL-queryable analytics.
+PostHog is the product analytics event store for Cogni. Events are captured server-side and queryable via HogQL API by AI agents.
 
-## Architecture
+## Architecture Decision: PostHog Cloud
 
-```
-App (Next.js)  ──HTTP POST──▶  PostHog Web (API)  ──▶  Kafka  ──▶  ClickHouse
-                                     │
-Scheduler-Worker ──HTTP POST──▶      │
-                                     ▼
-                              PostHog Worker (background processing)
-```
+**Decision (2026-03-13):** Use PostHog Cloud (free tier, 1M events/month) for production. Self-hosted stack (`infra/compose/posthog/`) is retained for local dev only.
 
-**Key principle:** Server-side first. The app emits events via `capture()` helper to PostHog's HTTP API. ClickHouse is the queryable analytics store.
+**Why:**
 
-## Deployment Options
+- AI-first analytics — agents query PostHog's HogQL API (`POST /api/projects/:id/query/`), not a human dashboard
+- Self-hosted PostHog is 9 containers (~4GB RAM) — too heavy to add to the single production VM
+- PostHog Cloud free tier is generous (1M events/month, no credit card, 1 year retention)
+- Same `capture()` code and HogQL API work identically with both Cloud and self-hosted
+- When event volume outgrows the free tier, migrate to self-hosted or paid Cloud
 
-### Option A: Self-Hosted (Docker Compose)
+**Hosts:**
 
-Self-hosted PostHog runs as a separate compose stack alongside the main Cogni runtime.
+| Environment  | POSTHOG_HOST               | Source                          |
+| ------------ | -------------------------- | ------------------------------- |
+| Production   | `https://us.i.posthog.com` | GitHub environment secret       |
+| Dev (host)   | `http://localhost:8000`    | `.env.local` (self-hosted)      |
+| Dev (docker) | `http://posthog-web:8000`  | docker-compose internal DNS     |
+| CI/Test      | `http://localhost:18000`   | Dummy — events silently dropped |
 
-**Resource requirements:** ~4GB RAM minimum (ClickHouse + Kafka + PostgreSQL + Redis + PostHog services).
+## Production Setup (PostHog Cloud)
 
-#### Start PostHog
+1. Sign up at [posthog.com](https://posthog.com) (GitHub SSO, no credit card)
+2. Create organization + project
+3. Skip the "install snippet" step — server-side `capture()` is already wired
+4. Copy **Project API Key** from Project Settings (format: `phc_xxxxxxxxxxxx`)
+5. Set GitHub environment secrets (both `preview` and `production` environments):
+   - `POSTHOG_API_KEY` = your `phc_...` key
+   - `POSTHOG_HOST` = `https://us.i.posthog.com` (US) or `https://eu.i.posthog.com` (EU)
+
+## Local Dev Setup (Self-Hosted, Optional)
+
+Self-hosted PostHog runs as a separate compose stack for local development.
+
+**Resource requirements:** ~4GB RAM minimum.
 
 ```bash
-# Start PostHog stack (creates internal network automatically)
+# Start PostHog stack
 pnpm posthog:up
 
-# Wait for health (PostHog web takes ~60s to start)
+# Wait for health (~60s startup)
 docker compose -f infra/compose/posthog/docker-compose.posthog.yml ps
 ```
 
-#### Services & Ports
+### First-Time Setup (Local)
+
+1. Open `http://localhost:8000` in browser
+2. Create an admin account
+3. Copy the **Project API Key** from Settings > Project > API Key
+4. Set in `.env.local`:
+
+```bash
+POSTHOG_API_KEY=phc_your_project_api_key_here
+POSTHOG_HOST=http://localhost:8000
+```
+
+### Services & Ports (Self-Hosted)
 
 | Service              | Port (host)      | Purpose                       |
 | -------------------- | ---------------- | ----------------------------- |
@@ -50,32 +78,6 @@ docker compose -f infra/compose/posthog/docker-compose.posthog.yml ps
 | `posthog-redis`      | (internal only)  | Cache + queue                 |
 | `posthog-kafka`      | (internal only)  | Event ingestion pipeline      |
 | `posthog-zookeeper`  | (internal only)  | Kafka coordination            |
-
-#### First-Time Setup
-
-1. Open `http://localhost:8000` in browser
-2. Create an admin account
-3. Copy the **Project API Key** from Settings > Project > API Key
-4. Set environment variables in `.env.local`:
-
-```bash
-POSTHOG_API_KEY=phc_your_project_api_key_here
-POSTHOG_HOST=http://localhost:8000       # For pnpm dev (host mode)
-# POSTHOG_HOST=http://posthog-web:8000  # For Docker mode (app in container on internal network)
-```
-
-### Option B: PostHog Cloud (Recommended for Production)
-
-PostHog Cloud free tier supports up to 1M events/month.
-
-1. Sign up at posthog.com
-2. Copy your Project API Key
-3. Set environment variables:
-
-```bash
-POSTHOG_API_KEY=phc_your_project_api_key_here
-POSTHOG_HOST=https://us.i.posthog.com   # or https://eu.i.posthog.com
-```
 
 ## App Configuration
 
@@ -173,9 +175,9 @@ docker compose -f infra/compose/posthog/docker-compose.posthog.yml down -v
 
 ## Risks & Trade-offs
 
-### Resource Footprint
+### PostHog Cloud Dependency
 
-PostHog self-hosted requires ~4GB RAM (ClickHouse alone needs ~2GB). This is significant for local dev. **Recommendation:** Use PostHog Cloud for individual dev; self-host for staging/production.
+Production analytics depend on PostHog Cloud (external SaaS). If PostHog Cloud has an outage, `capture()` calls fail silently (fire-and-forget HTTP). No app impact, but events are lost. Migration path to self-hosted exists if needed (same API, same `capture()` code).
 
 ### Identity
 
