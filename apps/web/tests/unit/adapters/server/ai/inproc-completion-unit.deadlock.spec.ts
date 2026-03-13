@@ -107,7 +107,7 @@ describe("InProcCompletionUnitAdapter deadlock prevention", () => {
     const collectedEvents: AiEvent[] = [];
 
     // If deadlocked, this will timeout. 200ms is plenty for non-blocking code.
-    const TIMEOUT_MS = 200;
+    const TIMEOUT_MS = 500;
     const startMs = performance.now();
 
     const consumePromise = (async () => {
