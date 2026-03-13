@@ -29,6 +29,7 @@ import {
   chatCompletionsContract,
 } from "@/contracts/ai.completions.v1.contract";
 import { isAccountsFeatureError } from "@/features/accounts/public";
+import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
@@ -170,12 +171,13 @@ function sseEncode(data: string): string {
  * Build a ReadableStream that converts AiEvents to OpenAI SSE chunks.
  */
 function createOpenAiSseStream(
-  aiStream: AsyncIterable<import("@/features/ai/public").AiEvent>,
-  final: Promise<import("@/features/ai/public").StreamFinalResult>,
+  aiStream: AsyncIterable<AiEvent>,
+  final: Promise<StreamFinalResult>,
   model: string,
   completionId: string,
   created: number,
-  includeUsage: boolean
+  includeUsage: boolean,
+  log: RequestContext["log"]
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
 
@@ -276,6 +278,10 @@ function createOpenAiSseStream(
           ? toOpenAiFinishReason(result.finishReason)
           : "stop";
 
+        if (!result.ok) {
+          log.error({ error: result.error }, "Stream completed with error");
+        }
+
         // Final chunk with finish_reason
         const finalChunk: ChatCompletionChunk = {
           id: completionId,
@@ -337,8 +343,8 @@ function createOpenAiSseStream(
         );
         controller.enqueue(encoder.encode(sseEncode("[DONE]")));
         controller.close();
-        // Error is logged by the wrapper; don't re-throw from stream
-        void error;
+        // Log the error — wrapper can't catch errors from inside a ReadableStream
+        log.error({ error }, "SSE stream error");
       }
     },
   });
@@ -412,7 +418,8 @@ export const POST = wrapRouteHandlerWithLogging(
           input.model,
           completionId,
           created,
-          includeUsage
+          includeUsage,
+          ctx.log
         );
 
         return new NextResponse(sseStream, {

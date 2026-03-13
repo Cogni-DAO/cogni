@@ -17,19 +17,22 @@
 
 import { z } from "zod";
 
+/** Input message length limit — caps client-submitted messages */
+const MAX_INPUT_MESSAGE_CHARS = 4_000;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Request: Messages
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SystemMessageSchema = z.object({
   role: z.literal("system"),
-  content: z.string(),
+  content: z.string().max(MAX_INPUT_MESSAGE_CHARS),
   name: z.string().optional(),
 });
 
 const UserMessageSchema = z.object({
   role: z.literal("user"),
-  content: z.string(),
+  content: z.string().max(MAX_INPUT_MESSAGE_CHARS),
   name: z.string().optional(),
 });
 

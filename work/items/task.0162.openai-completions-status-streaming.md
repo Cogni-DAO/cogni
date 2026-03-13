@@ -1,5 +1,5 @@
 ---
-id: task.0136
+id: task.0162
 type: task
 title: OpenAI-compatible completions — document endpoint + surface agent status streams
 status: needs_implement
