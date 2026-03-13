@@ -19,6 +19,7 @@ import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { creditsConfirmOperation } from "@/contracts/payments.credits.confirm.v1.contract";
 import { AuthUserNotFoundError } from "@/features/payments/errors";
+import { AnalyticsEvents, capture } from "@/shared/analytics";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
@@ -84,7 +85,23 @@ export const POST = wrapRouteHandlerWithLogging(
       );
 
       // Validate output and return
-      return NextResponse.json(creditsConfirmOperation.output.parse(result));
+      const output = creditsConfirmOperation.output.parse(result);
+
+      capture({
+        event: AnalyticsEvents.BILLING_CREDITS_PURCHASED,
+        identity: {
+          userId: sessionUser.id,
+          sessionId: ctx.reqId,
+          tenantId: output.billingAccountId,
+          traceId: ctx.traceId,
+        },
+        properties: {
+          amount_usd: input.amountUsdCents / 100,
+          credits: output.balanceCredits,
+        },
+      });
+
+      return NextResponse.json(output);
     } catch (error) {
       const errorResponse = handleRouteError(ctx, error);
       if (errorResponse) return errorResponse;

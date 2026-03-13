@@ -41,6 +41,9 @@ export const CORE_TEST_ENV = {
   OPENCLAW_GITHUB_RW_TOKEN: "ghp_test_token",
   // Repo access (required in all envs — no cwd fallback)
   COGNI_REPO_PATH: process.cwd(),
+  // PostHog product analytics (required — test values, events silently dropped)
+  POSTHOG_API_KEY: "phc_test_key",
+  POSTHOG_HOST: "http://localhost:18000",
 } as const;
 
 /**

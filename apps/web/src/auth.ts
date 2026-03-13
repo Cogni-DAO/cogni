@@ -27,6 +27,7 @@ import { SiweMessage } from "siwe";
 
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { createBinding } from "@/adapters/server/identity/create-binding";
+import { AnalyticsEvents, capture } from "@/shared/analytics";
 import {
   isFailedIntent,
   isPendingIntent,
@@ -190,9 +191,10 @@ export const authOptions: NextAuthOptions = {
           const db = getServiceDb();
 
           // Check for existing user
-          let user = await db.query.users.findFirst({
+          const existingUser = await db.query.users.findFirst({
             where: eq(users.walletAddress, fields.address),
           });
+          let user = existingUser;
 
           if (!user) {
             // Create new user if not exists
@@ -242,6 +244,12 @@ export const authOptions: NextAuthOptions = {
           }
 
           getLog().info({ address: fields.address }, "[SIWE] Login success");
+
+          capture({
+            event: AnalyticsEvents.AUTH_SIGNED_IN,
+            identity: { userId: user.id, sessionId: randomUUID() },
+            properties: { provider: "wallet", is_new_user: !existingUser },
+          });
 
           // Always use DB UUID as primary ID
           return {
@@ -373,6 +381,11 @@ export const authOptions: NextAuthOptions = {
         }
         // Returning user (no link intent) — set user.id so jwt callback picks it up
         user.id = existing.userId;
+        capture({
+          event: AnalyticsEvents.AUTH_SIGNED_IN,
+          identity: { userId: existing.userId, sessionId: randomUUID() },
+          properties: { provider, is_new_user: false },
+        });
         return true;
       }
 
@@ -394,6 +407,11 @@ export const authOptions: NextAuthOptions = {
           { provider, userId: verifiedUserId },
           "[OAuth] Account linked"
         );
+        capture({
+          event: AnalyticsEvents.IDENTITY_PROVIDER_LINKED,
+          identity: { userId: verifiedUserId, sessionId: randomUUID() },
+          properties: { provider },
+        });
         return true;
       }
 
@@ -476,6 +494,11 @@ export const authOptions: NextAuthOptions = {
       user.id = userId;
       (user as { walletAddress?: string | null }).walletAddress = null;
       getLog().info({ provider, externalId }, "[OAuth] New user created");
+      capture({
+        event: AnalyticsEvents.AUTH_SIGNED_IN,
+        identity: { userId, sessionId: randomUUID() },
+        properties: { provider, is_new_user: true },
+      });
       return true;
     },
     /** Redirect authenticated users to /chat instead of landing on homepage */

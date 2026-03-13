@@ -48,7 +48,10 @@ You are setting up the Cogni-Template repo for the first time, or need a referen
    pnpm db:setup
    ```
 
-4. **Discord bot (optional):**
+4. **PostHog analytics (required):**
+   The app requires `POSTHOG_API_KEY` and `POSTHOG_HOST`. Copy the example values from `.env.local.example`, or see [PostHog Setup](./posthog-setup.md) for production keys.
+
+5. **Discord bot (optional):**
    If you want the OpenClaw gateway to connect a Discord bot, add `DISCORD_BOT_TOKEN` to `.env.local`. See [Discord Bot Setup](./discord-bot-setup.md) for full instructions.
 
 ## Daily Development
@@ -226,6 +229,7 @@ The repo's `.claude/settings.json` SessionStart hook reads these vars and config
 - [Environments Spec](../spec/environments.md) — deployment modes and stack configurations
 - [Databases Spec](../spec/databases.md) — migration architecture and database setup
 - [Testing Guide](./testing.md) — testing strategy and adapter patterns
+- [PostHog Setup](./posthog-setup.md) — PostHog Cloud and local dev analytics setup
 - [Discord Bot Setup](./discord-bot-setup.md) — connect a Discord bot to the OpenClaw gateway
 - [GitHub App + Webhook Setup](./github-app-webhook-setup.md) — GitHub App creation and webhook credentials
 - [Alchemy Webhook Setup](./alchemy-webhook-setup.md) — on-chain signal webhook configuration

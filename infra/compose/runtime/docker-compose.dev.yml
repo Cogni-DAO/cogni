@@ -70,6 +70,9 @@ services:
       # Brain repo tools (COGNI_BRAIN_SPEC.md Step 4)
       - COGNI_REPO_PATH=${COGNI_REPO_PATH:-/repo/current}
       - COGNI_REPO_SHA=${COGNI_REPO_REF:-}
+      # PostHog product analytics (optional — disabled when unset)
+      - POSTHOG_API_KEY=${POSTHOG_API_KEY?POSTHOG_API_KEY is required}
+      - POSTHOG_HOST=${POSTHOG_HOST?POSTHOG_HOST is required}
       # Temporal schedule orchestration (per SCHEDULER_SPEC.md)
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_NAMESPACE=cogni-${APP_ENV:-dev}
