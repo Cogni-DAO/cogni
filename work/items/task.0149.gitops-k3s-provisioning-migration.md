@@ -16,7 +16,7 @@ branch:
 pr:
 reviewer:
 revision: 0
-blocked_by: task.0148
+blocked_by:
 deploy_verified: false
 created: 2026-03-09
 updated: 2026-03-09

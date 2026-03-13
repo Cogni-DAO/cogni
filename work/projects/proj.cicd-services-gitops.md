@@ -26,15 +26,15 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 
 **Goal:** Baseline established — canonical builds, check:full gate, runtime DSN isolation.
 
-| Deliverable                                                               | Status    | Est | Work Item |
-| ------------------------------------------------------------------------- | --------- | --- | --------- |
-| Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done      | 1   | —         |
-| Manifest-first Docker layering for cache optimization (app)               | Done      | 1   | —         |
-| Manifest-first Docker layering for cache optimization (scheduler-worker)  | In Review | 2   | task.0160 |
-| `check:full` local CI-parity gate with trap-based cleanup                 | Done      | 1   | —         |
-| `validate-dsns.sh` for runtime DSN isolation                              | Done      | 1   | —         |
-| Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done      | 1   | —         |
-| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | In Review | 5   | task.0151 |
+| Deliverable                                                               | Status | Est | Work Item |
+| ------------------------------------------------------------------------- | ------ | --- | --------- |
+| Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done   | 1   | —         |
+| Manifest-first Docker layering for cache optimization (app)               | Done   | 1   | —         |
+| Manifest-first Docker layering for cache optimization (scheduler-worker)  | Done   | 2   | task.0160 |
+| `check:full` local CI-parity gate with trap-based cleanup                 | Done   | 1   | —         |
+| `validate-dsns.sh` for runtime DSN isolation                              | Done   | 1   | —         |
+| Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done   | 1   | —         |
+| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | Done   | 5   | task.0151 |
 
 ### Walk (P1) — DSN-Only Provisioning & Build Improvements
 
@@ -113,13 +113,13 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Deliverable                                                                    | Status      | Est | Work Item |
 | ------------------------------------------------------------------------------ | ----------- | --- | --------- |
 | Extend digest-driven deploy to app+migrator                                    | Not Started | 1   | —         |
-| Create `platform/cd/` dir with Kustomize bases+overlays                        | Not Started | 3   | task.0148 |
-| Write Kustomize base for scheduler-worker (`base/scheduler-worker/`)           | Not Started | ↑   | task.0148 |
-| Create overlays: `overlays/staging/`, `overlays/production/`                   | Not Started | ↑   | task.0148 |
-| Argo app-of-apps pattern for multi-service management                          | Not Started | ↑   | task.0148 |
-| Kustomize images use `@sha256:` digests                                        | Not Started | ↑   | task.0148 |
-| Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Not Started | ↑   | task.0148 |
-| OpenTofu: k3s module extending Cherry Servers provider                         | Not Started | ↑   | task.0148 |
+| Create `infra/cd/` dir with Kustomize bases+overlays                           | Done        | 3   | task.0148 |
+| Write Kustomize base for scheduler-worker (`base/scheduler-worker/`)           | Done        | ↑   | task.0148 |
+| Create overlays: `overlays/staging/`, `overlays/production/`                   | Done        | ↑   | task.0148 |
+| Argo app-of-apps pattern for multi-service management                          | Done        | ↑   | task.0148 |
+| Kustomize images use `@sha256:` digests                                        | Done        | ↑   | task.0148 |
+| Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Done        | ↑   | task.0148 |
+| OpenTofu: k3s module extending Cherry Servers provider                         | Done        | ↑   | task.0148 |
 | OpenTofu: Provision k3s cluster (single node MVP)                              | Not Started | 3   | task.0149 |
 | Install Argo CD on k3s                                                         | Not Started | ↑   | task.0149 |
 | Migrate scheduler-worker from Compose to k3s                                   | Not Started | ↑   | task.0149 |
