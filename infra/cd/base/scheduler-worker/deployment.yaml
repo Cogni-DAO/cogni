@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler-worker
+  labels:
+    app.kubernetes.io/name: scheduler-worker
+    app.kubernetes.io/part-of: cogni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scheduler-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: scheduler-worker
+        app.kubernetes.io/part-of: cogni
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: scheduler-worker
+          image: ghcr.io/cogni-dao/cogni-template:placeholder
+          ports:
+            - containerPort: 9000
+              name: health
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: scheduler-worker-config
+            - secretRef:
+                name: scheduler-worker-secrets
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
