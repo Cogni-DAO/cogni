@@ -24,6 +24,8 @@ export interface GateResult {
   readonly metrics?: ReadonlyArray<{
     readonly metric: string;
     readonly score: number;
+    /** Human-readable threshold from repo-spec (e.g., "≥ 0.80"). */
+    readonly requirement?: string;
     readonly observation: string;
   }>;
 }

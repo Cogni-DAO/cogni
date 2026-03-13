@@ -103,6 +103,7 @@ describe("evaluateAiRule", () => {
     expect(result.metrics?.[0]).toEqual({
       metric: "coherent-change",
       score: 0.9,
+      requirement: "\u2265 0.70",
       observation: "Well-structured change",
     });
   });

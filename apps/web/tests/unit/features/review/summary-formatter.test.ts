@@ -110,10 +110,37 @@ describe("formatCheckRunSummary", () => {
     expect(md).toContain("code-quality");
   });
 
-  it("includes metrics table for ai-rule gates", () => {
+  it("includes metrics table with Requirement column", () => {
     const md = formatCheckRunSummary(passResult);
+    expect(md).toContain("| Metric | Score | Requirement | Observation |");
     expect(md).toContain("| coherence |");
     expect(md).toContain("92%");
+    // No requirement set in fixture → dash placeholder
+    expect(md).toContain("| \u2014 |");
+  });
+
+  it("renders requirement threshold when present", () => {
+    const withReq: ReviewResult = {
+      conclusion: "pass",
+      gateResults: [
+        {
+          gateId: "test-gate",
+          gateType: "ai-rule",
+          status: "pass",
+          summary: "Passed",
+          metrics: [
+            {
+              metric: "quality",
+              score: 0.9,
+              requirement: "\u2265 0.80",
+              observation: "Good",
+            },
+          ],
+        },
+      ],
+    };
+    const md = formatCheckRunSummary(withReq);
+    expect(md).toContain("| \u2265 0.80 |");
   });
 
   it("sorts gates: fail first, then pass, then neutral", () => {

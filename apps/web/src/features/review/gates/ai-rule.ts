@@ -19,7 +19,7 @@ import { z } from "zod";
 
 import type { GraphExecutorPort, LlmCaller } from "@/ports";
 
-import { evaluateCriteria } from "../criteria-evaluator";
+import { evaluateCriteria, findRequirement } from "../criteria-evaluator";
 import type { EvidenceBundle, GateResult } from "../types";
 
 /**
@@ -117,6 +117,7 @@ export async function evaluateAiRule(params: {
   const metrics: Array<{
     metric: string;
     score: number;
+    requirement?: string;
     observation: string;
   }> = [];
 
@@ -125,9 +126,11 @@ export async function evaluateAiRule(params: {
       // Only include metrics that were requested in the rule evaluations
       if (metricNames.includes(entry.metric)) {
         scores.set(entry.metric, entry.value);
+        const req = findRequirement(entry.metric, rule.success_criteria);
         metrics.push({
           metric: entry.metric,
           score: entry.value,
+          ...(req != null ? { requirement: req } : {}),
           observation: entry.observations.join("; "),
         });
       }

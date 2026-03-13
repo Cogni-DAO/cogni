@@ -14,7 +14,11 @@
 import type { SuccessCriteria } from "@cogni/repo-spec";
 import { describe, expect, it } from "vitest";
 
-import { evaluateCriteria } from "@/features/review/criteria-evaluator";
+import {
+  evaluateCriteria,
+  findRequirement,
+  formatThreshold,
+} from "@/features/review/criteria-evaluator";
 
 describe("evaluateCriteria", () => {
   describe("require[] — all must pass", () => {
@@ -172,5 +176,57 @@ describe("evaluateCriteria", () => {
       };
       expect(evaluateCriteria(new Map([["x", 0.5]]), criteria)).toBe("neutral");
     });
+  });
+});
+
+describe("formatThreshold", () => {
+  it("formats gte operator", () => {
+    expect(formatThreshold({ metric: "q", gte: 0.8 })).toBe("\u2265 0.80");
+  });
+
+  it("formats gt operator", () => {
+    expect(formatThreshold({ metric: "q", gt: 0.5 })).toBe("> 0.50");
+  });
+
+  it("formats lte operator", () => {
+    expect(formatThreshold({ metric: "q", lte: 0.3 })).toBe("\u2264 0.30");
+  });
+
+  it("formats lt operator", () => {
+    expect(formatThreshold({ metric: "q", lt: 0.1 })).toBe("< 0.10");
+  });
+
+  it("formats eq operator", () => {
+    expect(formatThreshold({ metric: "q", eq: 0.5 })).toBe("= 0.50");
+  });
+
+  it("returns undefined for no operator", () => {
+    expect(formatThreshold({ metric: "q" })).toBeUndefined();
+  });
+});
+
+describe("findRequirement", () => {
+  it("finds threshold in require[]", () => {
+    const criteria: SuccessCriteria = {
+      neutral_on_missing_metrics: false,
+      require: [{ metric: "quality", gte: 0.8 }],
+    };
+    expect(findRequirement("quality", criteria)).toBe("\u2265 0.80");
+  });
+
+  it("finds threshold in any_of[]", () => {
+    const criteria: SuccessCriteria = {
+      neutral_on_missing_metrics: false,
+      any_of: [{ metric: "speed", lte: 0.5 }],
+    };
+    expect(findRequirement("speed", criteria)).toBe("\u2264 0.50");
+  });
+
+  it("returns undefined for unknown metric", () => {
+    const criteria: SuccessCriteria = {
+      neutral_on_missing_metrics: false,
+      require: [{ metric: "quality", gte: 0.8 }],
+    };
+    expect(findRequirement("unknown", criteria)).toBeUndefined();
   });
 });

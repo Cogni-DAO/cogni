@@ -11,9 +11,51 @@
  * @public
  */
 
-import type { SuccessCriteria } from "@cogni/repo-spec";
+import type { SuccessCriteria, ThresholdCriterion } from "@cogni/repo-spec";
 
 import type { GateStatus } from "./types";
+
+const OP_SYMBOLS: Record<string, string> = {
+  gte: "\u2265",
+  gt: ">",
+  lte: "\u2264",
+  lt: "<",
+  eq: "=",
+};
+
+/**
+ * Format a threshold criterion as a human-readable string (e.g., "≥ 0.80").
+ * Returns undefined if the threshold has no recognised operator.
+ */
+export function formatThreshold(
+  threshold: ThresholdCriterion
+): string | undefined {
+  for (const op of Object.keys(OP_SYMBOLS)) {
+    if (
+      op in threshold &&
+      typeof (threshold as Record<string, unknown>)[op] === "number"
+    ) {
+      const value = (threshold as Record<string, unknown>)[op] as number;
+      return `${OP_SYMBOLS[op]} ${value.toFixed(2)}`;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Look up the requirement string for a given metric across all criteria.
+ */
+export function findRequirement(
+  metricName: string,
+  criteria: SuccessCriteria
+): string | undefined {
+  const allThresholds = [
+    ...(criteria.require ?? []),
+    ...(criteria.any_of ?? []),
+  ];
+  const match = allThresholds.find((t) => t.metric === metricName);
+  return match ? formatThreshold(match) : undefined;
+}
 
 /**
  * Evaluate metric scores against success criteria.

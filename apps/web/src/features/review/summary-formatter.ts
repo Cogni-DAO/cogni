@@ -69,11 +69,12 @@ export function formatPrComment(
       lines.push(`- **${gate.gateId}**:`);
       if (gate.metrics && gate.metrics.length > 0) {
         lines.push("");
-        lines.push("  | Metric | Score | Observation |");
-        lines.push("  |--------|-------|-------------|");
+        lines.push("  | Metric | Score | Requirement | Observation |");
+        lines.push("  |--------|-------|-------------|-------------|");
         for (const m of gate.metrics) {
+          const req = m.requirement ?? "—";
           lines.push(
-            `  | ${m.metric} | ${m.score.toFixed(2)} | ${m.observation.slice(0, 100)} |`
+            `  | ${m.metric} | ${m.score.toFixed(2)} | ${req} | ${m.observation.slice(0, 100)} |`
           );
         }
       } else {
@@ -148,12 +149,13 @@ function formatGateSection(gate: GateResult): string {
   lines.push(`${gate.summary}\n`);
 
   if (gate.metrics && gate.metrics.length > 0) {
-    lines.push("| Metric | Score | Observation |");
-    lines.push("|--------|-------|-------------|");
+    lines.push("| Metric | Score | Requirement | Observation |");
+    lines.push("|--------|-------|-------------|-------------|");
     for (const m of gate.metrics) {
       const scoreBar = `${(m.score * 100).toFixed(0)}%`;
+      const req = m.requirement ?? "—";
       lines.push(
-        `| ${m.metric} | ${scoreBar} | ${m.observation.slice(0, 120)} |`
+        `| ${m.metric} | ${scoreBar} | ${req} | ${m.observation.slice(0, 120)} |`
       );
     }
     lines.push("");
