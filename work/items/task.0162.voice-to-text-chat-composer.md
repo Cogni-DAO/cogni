@@ -2,7 +2,7 @@
 id: task.0162
 type: task
 title: Add voice-to-text input to chat composer
-status: done
+status: needs_merge
 priority: 1
 rank: 99
 estimate: 3

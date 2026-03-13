@@ -18,7 +18,7 @@ Chat subfeature of AI — provides assistant-ui + AI SDK streaming integration f
 - [Parent: AI Feature](../AGENTS.md)
 - [Architecture](../../../../../../docs/spec/architecture.md)
 - [UI Implementation Guide](../../../../../../docs/spec/ui-implementation.md)
-- **Related:** [../services/](../services/) (completion, AI logic), [../../payments/](../../payments/) (credits)
+- **Related:** [../services/](../services/) (completion, AI logic), [../../payments/](../../payments/) (credits), [adapters/](adapters/) (dictation adapter)
 
 ## Boundaries
 
@@ -40,12 +40,12 @@ Chat subfeature of AI — provides assistant-ui + AI SDK streaming integration f
 
 ## Public Surface
 
-- **Exports:** ChatRuntimeProvider, ChatCreditsHint, mapHttpError, toErrorAlertProps, useThreads, useLoadThread, useDeleteThread
+- **Exports:** ChatRuntimeProvider, ChatCreditsHint, mapHttpError, toErrorAlertProps, useThreads, useLoadThread, useDeleteThread, createWebSpeechDictationAdapter, isSpeechRecognitionSupported
 - **Routes:**
   - `/api/v1/ai/chat` (POST) - chat with server-authoritative thread persistence
   - `/api/v1/ai/threads` (GET) - list threads
   - `/api/v1/ai/threads/[stateKey]` (GET, DELETE) - load/delete thread
-- **Files considered API:** providers/ChatRuntimeProvider.client.tsx, hooks/useThreads.ts, components/ChatCreditsHint.tsx, utils/mapHttpError.ts, utils/toErrorAlertProps.ts
+- **Files considered API:** providers/ChatRuntimeProvider.client.tsx, hooks/useThreads.ts, components/ChatCreditsHint.tsx, utils/mapHttpError.ts, utils/toErrorAlertProps.ts, adapters/web-speech-dictation.adapter.ts
 
 ## Ports
 
@@ -64,6 +64,7 @@ Chat subfeature of AI — provides assistant-ui + AI SDK streaming integration f
   - Provide React Query hooks for thread list, load, and delete operations
   - Show conditional credits hint when balance is zero
   - Handle abort/cancellation without state corruption
+  - Provide Web Speech API dictation adapter for voice-to-text input (progressive enhancement)
 
 - **This subfeature does not:**
   - Handle authentication (enforced by (app) layout)
@@ -80,6 +81,7 @@ Chat subfeature of AI — provides assistant-ui + AI SDK streaming integration f
 - Tool call visualization (tool_call_start/tool_call_result → UIMessageChunk)
 - assistant_final reconciliation (gateway truncation fix)
 - Zod runtime validation on input; contract types via z.infer
+- Web Speech API DictationAdapter via adapters/web-speech-dictation.adapter.ts (progressive enhancement)
 
 ## Thread State Management
 
