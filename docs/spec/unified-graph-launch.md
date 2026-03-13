@@ -3,14 +3,14 @@ id: spec.unified-graph-launch
 type: spec
 title: Unified Graph Launch Design
 status: draft
-spec_state: draft
+spec_state: proposed
 trust: draft
 summary: All graph execution flows through GraphRunWorkflow in Temporal — Redis Streams bridge real-time SSE streaming
 read_when: Adding new graph trigger types, modifying execution paths, or implementing idempotency
 implements: proj.unified-graph-launch
 owner: cogni-dev
 created: 2026-02-03
-verified: null
+verified: 2026-03-13
 tags:
   - ai-graphs
   - scheduler
@@ -318,6 +318,17 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 | `infra/compose/runtime/docker-compose.dev.yml`        | Redis 7 service (dev, port 6379 exposed)         |
 | `tests/unit/adapters/server/ai/redis-run-stream.*.ts` | Unit tests with mocked ioredis (11 tests)        |
 
+**Implemented (task.0164):**
+
+| File                                                                | Purpose                                                               |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `packages/db-schema/src/scheduling.ts`                              | `graph_runs` table (promoted from `schedule_runs`), `GRAPH_RUN_KINDS` |
+| `packages/scheduler-core/src/types.ts`                              | `GraphRun`, `GraphRunKind`, `GraphRunStatus` domain types             |
+| `packages/scheduler-core/src/ports/schedule-run.port.ts`            | `GraphRunRepository` port interface                                   |
+| `packages/db-client/src/adapters/drizzle-run.adapter.ts`            | `DrizzleGraphRunAdapter` (scheduled + non-scheduled paths)            |
+| `services/scheduler-worker/src/activities/index.ts`                 | `createGraphRunActivity`, `updateGraphRunActivity` activities         |
+| `services/scheduler-worker/src/workflows/scheduled-run.workflow.ts` | Passes trigger provenance to `graph_runs`                             |
+
 **Planned (future tasks):**
 
 | File                                                                 | Purpose                                                |
@@ -327,7 +338,6 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 | `src/app/api/v1/ai/chat/route.ts`                                    | API trigger (starts workflow → subscribes Redis → SSE) |
 | `src/app/api/v1/ai/runs/[runId]/stream/route.ts`                     | Reconnection SSE endpoint                              |
 | `src/features/ai/services/ai_runtime.ts`                             | AI runtime (workflow start + Redis subscribe)          |
-| `packages/db-schema/src/scheduling.ts`                               | Schema: `graph_runs` (promoted from `schedule_runs`)   |
 
 ## Acceptance Checks
 

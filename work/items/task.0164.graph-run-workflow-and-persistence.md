@@ -2,7 +2,7 @@
 id: task.0164
 type: task
 title: "GraphRunWorkflow + promote schedule_runs → graph_runs"
-status: needs_closeout
+status: needs_merge
 priority: 0
 rank: 3
 estimate: 5
@@ -70,7 +70,7 @@ labels:
   - Validation: `pnpm check` passes ✓
 
 - [ ] **Checkpoint 2: GraphRunWorkflow + activities** (DEFERRED)
-  - Blocked by WORKER_IS_DUMB: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/`
+  - Blocked by EXECUTION_VIA_SERVICE_API: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/`
   - Existing `GovernanceScheduledRunWorkflow` already uses promoted schema via internal API
   - Unified `GraphRunWorkflow` requires moving ports to shared packages — separate task
 
