@@ -1,16 +1,15 @@
 ---
 id: task.0162
 type: task
-title: "Mission Control: operator loop — deterministic pre-step + thin dispatch prompt"
-status: done
+title: "Mission Control: controller-first operator loop with typed snapshot model"
+status: needs_implement
 priority: 0
 rank: 1
-estimate: 2
-summary: "Replace HEARTBEAT → git-sync with a controller that precomputes status/gate/pick deterministically, then wakes the agent only for dispatch. mc-status.sh gathers financials. mc-pick uses @cogni/work-items port (not markdown scraping). The agent receives {item, skill, tier, budget} as input — zero decision-making on what to work on."
-outcome: "Each hourly run: deterministic pre-step (mc-status.sh → mc-pick.ts) produces a dispatch envelope {item, skill, tier, status JSON}. Agent wakes, runs /git-sync, dispatches brain subagent with the envelope, writes EDO, posts Discord. Selection is fully deterministic. LLM only does execution + recording."
+estimate: 3
+summary: "Redesign mission-control as a deterministic TS controller (not skill-first). Controller runs observe→gate→pick→snapshot, persists AgentSnapshot to disk. Agent only wakes for bounded dispatch. Four typed pieces: AgentDefinition, SignalProvider[], MissionPolicy, AgentSnapshot."
+outcome: "Each hourly run: mc-controller.ts gathers signals (health + work items), applies MissionPolicy (tier gating + finish-before-starting), persists AgentSnapshot to JSON, outputs DispatchEnvelope. SKILL.md is <20 lines — reads envelope, dispatches brain, reports. Dashboard (future) reads snapshots, never reruns scripts."
 spec_refs:
   - development-lifecycle
-  - governance-visibility-dashboard
 assignees:
   - derekg1729
 credit:
@@ -18,32 +17,33 @@ project: proj.system-tenant-governance
 branch: feat/mission-control-clean
 pr: https://github.com/Cogni-DAO/node-template/pull/562
 reviewer:
-revision: 7
+revision: 8
 blocked_by:
 deploy_verified: false
 created: 2026-03-10
-updated: 2026-03-12
+updated: 2026-03-13
 testing: "Untested — requires gateway container runtime (OpenClaw + Grafana + Base RPC). Validate in staging."
 labels: [governance, heartbeat, operator, mission-control]
 external_refs:
   - docs/research/autonomous-agent-operator-loops.md
 ---
 
-# Mission Control: Operator Loop
+# Mission Control: Controller-First Operator Loop
 
 ## Context
 
-HEARTBEAT fires hourly via Temporal → OpenClaw gateway → `/git-sync`. The agent has zero situational awareness and does no actual work.
+HEARTBEAT fires hourly via Temporal → OpenClaw gateway. The first implementation (revision 1–7) was skill-first: SKILL.md orchestrated calls to mc-status.sh and mc-pick.ts. The LLM still ran the controller logic (executing scripts, reading output, deciding flow).
 
-**Existing infra we use (not rebuild):**
+**Problem:** The center of gravity is wrong. Observe/gate/pick/report are deterministic policy — they belong in a TS controller, not in a prompt. The LLM should only wake for bounded execution dispatch.
+
+**Existing infra we reuse (not rebuild):**
 
 | Capability                            | Where                                                                                  |
 | ------------------------------------- | -------------------------------------------------------------------------------------- |
-| Health metrics (cost, tokens, errors) | `queries.sh` (14 commands, Grafana Prometheus + Loki)                                  |
+| Health metrics (cost, tokens, errors) | `queries.sh` (Grafana Prometheus + Loki)                                               |
 | Credit balance                        | `/api/v1/governance/status` → `systemCredits`                                          |
-| Work item query/filter/sort/claim     | `@cogni/work-items` package (`MarkdownWorkItemAdapter`)                                |
+| Work item query/filter/sort           | `@cogni/work-items` package (`MarkdownWorkItemAdapter`)                                |
 | Status → /command dispatch            | development-lifecycle spec                                                             |
-| EDO decision tracking                 | `memory/EDO/` + `memory-templates/EDO.template.md`                                     |
 | Git sync                              | `/git-sync` skill                                                                      |
 | Brain delegation                      | SOUL.md researcher→brain model                                                         |
 | Lifecycle skills                      | `/triage`, `/design`, `/implement`, `/closeout`, `/review-implementation`, `/research` |
@@ -53,265 +53,253 @@ HEARTBEAT fires hourly via Temporal → OpenClaw gateway → `/git-sync`. The ag
 
 ### Outcome
 
-The HEARTBEAT agent wakes up with a pre-decided envelope: `{item, skill, tier, budget}`. It doesn't choose what to work on — that's policy, not intelligence. It executes the chosen skill and reports results.
+A deterministic TS controller (`mc-controller.ts`) runs the full observe→gate→pick→snapshot loop. It persists an `AgentSnapshot` to disk after every run. The agent receives a pre-computed `DispatchEnvelope` — it never gathers signals, computes runway, or picks work items. Dashboard (walk phase) reads persisted snapshots.
 
-### Approach — Crawl
+### Approach
 
-**Split controller from agent.** Two deterministic CLI tools run BEFORE the agent prompt. The agent gets their output as input — it never parses markdown, calculates runway, or picks work items.
+**Controller-first architecture.** The controller is the center of gravity. Four typed pieces replace the previous monolithic skill:
 
-Architecture (matches Anthropic's skill/hook/subagent split):
+```
+AgentDefinition    — who (identity, model, workDir)
+SignalProvider[]    — observe (health, work queue — each returns typed data)
+MissionPolicy      — gate (tier thresholds, allowed statuses per tier, finish-before-starting weights)
+AgentSnapshot      — persist (signals + pick + outcome, written after every run)
+```
 
-- **mc-status.sh** (bash) — gathers financials + health → JSON. Stays bash because it's just curl + jq.
-- **mc-pick.ts** (TypeScript) — uses `@cogni/work-items` port to query/filter/sort/claim. No markdown scraping.
-- **SKILL.md** (prompt) — receives pre-computed JSON, dispatches brain, writes EDO, posts Discord.
+The controller orchestrates: gather signals → apply policy → pick item → persist snapshot → output envelope.
 
-The LLM's job is:
-
-1. Run /git-sync (mechanical)
-2. Read the pre-computed envelope (no computation)
-3. Dispatch brain subagent with the right skill (mechanical mapping)
-4. Write EDO (judgment — what to verify)
-5. Post Discord summary (mechanical)
+**Reuses:** `@cogni/work-items` MarkdownWorkItemAdapter (existing port), `queries.sh` helpers (existing bash), `/api/v1/governance/status` (existing API).
 
 **Rejected alternatives:**
 
-- "mc-pick.sh scraping `_index.md`" — brittle markdown parsing when we have a typed port
-- "Agent decides what to work on" — policy execution, not intelligence
-- "Scan EDO files for reflections" — noisy. Work item has design context.
-- "Claim mechanism" — there's 1 agent. Lifecycle skills already update status on completion. No concurrent dispatch to protect against.
+- "Keep SKILL.md as orchestrator" — skill-first. LLM runs controller logic that should be deterministic code.
+- "AgentProfile god object" — mixes identity, signals, policy, presentation. Split into four typed pieces.
+- "Dashboard reruns status scripts on page load" — expensive, non-deterministic. Persist snapshots, read projections.
+- "YAML config for agents" — premature. Code-first TS types + Zod until 2–3 agents prove the shape.
+- "Full API + UI in this PR" — scope creep. Crawl = controller + types + snapshot persistence. Walk = API contract + port + panel.
 
-### Degradation Ladder
+### Typed Pieces
 
-Budget tier controls what the agent is allowed to do. Enforced in mc-pick.ts (deterministic).
-
-| Tier     | Condition                  | Allowed actions                                                  |
-| -------- | -------------------------- | ---------------------------------------------------------------- |
-| `GREEN`  | runway > 30d               | Full lifecycle: any skill                                        |
-| `YELLOW` | 7d ≤ runway ≤ 30d          | Finish in-flight only: needs_merge, needs_closeout, needs_triage |
-| `RED`    | runway < 7d OR credits ≤ 0 | Report only. No dispatch.                                        |
-
-### mc-status.sh (bash, ~80 lines)
-
-Gathers financials + health. Outputs JSON. Sources `queries.sh` helpers for Prometheus/Loki.
-
-Data sources:
-
-- **Cost**: Prometheus `ai_llm_cost_usd_total` (24h, 7d, burn rate)
-- **Credits**: `curl http://app:3000/api/v1/governance/status` → `systemCredits` (BigInt / 10M = USD)
-- **Treasury**: Base mainnet RPC `eth_call` → DAO wallet USDC balance (`balanceOf` / 1M = USD)
-- **Runway**: `(credits_usd + treasury_usd) / burn_rate`
-- **Tier**: GREEN/YELLOW/RED from runway thresholds
-- **Errors**: Prometheus `ai_llm_errors_total` 24h + Grafana firing alerts count
-
-Output shape:
-
-```json
-{
-  "cost_24h_usd": 1.23,
-  "burn_rate_usd_per_day": 4.56,
-  "credits_usd": 100.0,
-  "treasury_usd": 500.0,
-  "runway_days": 131.5,
-  "tier": "GREEN",
-  "errors_24h": 3,
-  "firing_alerts": 0,
-  "timestamp": "2026-03-12T00:00:00Z"
-}
-```
-
-### mc-pick.ts (TypeScript, uses @cogni/work-items port)
-
-Deterministic work item selection via the proper port — no markdown table scraping.
+#### AgentDefinition
 
 ```typescript
-#!/usr/bin/env npx tsx
-// mc-pick.ts — Deterministic next-item selection. Outputs JSON.
-// Usage: npx tsx mc-pick.ts <tier> [--work-dir /repo/current]
-import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
-
-const STATUS_WEIGHT: Record<string, number> = {
-  needs_merge: 6,
-  needs_closeout: 5,
-  needs_implement: 4,
-  needs_design: 3,
-  needs_research: 2,
-  needs_triage: 1,
-};
-
-const YELLOW_ALLOWED = new Set([
-  "needs_merge",
-  "needs_closeout",
-  "needs_triage",
-]);
-
-const STATUS_TO_SKILL: Record<string, string> = {
-  needs_merge: "/review-implementation",
-  needs_closeout: "/closeout",
-  needs_implement: "/implement",
-  needs_design: "/design",
-  needs_research: "/research",
-  needs_triage: "/triage",
-};
-
-const tier = process.argv[2] ?? "GREEN";
-const workDir =
-  process.argv[3] === "--work-dir" ? process.argv[4] : "/repo/current";
-
-if (tier === "RED") {
-  console.log("null");
-  process.exit(0);
-}
-
-const adapter = new MarkdownWorkItemAdapter(workDir);
-
-// Query all actionable statuses
-const actionableStatuses = Object.keys(STATUS_WEIGHT) as any[];
-const { items } = await adapter.list({
-  statuses: actionableStatuses,
+const AgentDefinitionSchema = z.object({
+  id: z.string(), // "ceo"
+  name: z.string(), // "Cogni CEO"
+  workDir: z.string(), // "/repo/current"
+  model: z.string(), // "cogni/deepseek-v3.2"
 });
-
-// Filter by tier
-const allowed =
-  tier === "YELLOW" ? items.filter((i) => YELLOW_ALLOWED.has(i.status)) : items;
-
-// Sort: highest status weight first, then priority ASC, then rank ASC
-// (port already sorts by priority/rank — we re-sort to apply status weight)
-const sorted = allowed.sort((a, b) => {
-  const wa = STATUS_WEIGHT[a.status] ?? 0;
-  const wb = STATUS_WEIGHT[b.status] ?? 0;
-  if (wb !== wa) return wb - wa; // higher weight first
-  const pa = a.priority ?? 99;
-  const pb = b.priority ?? 99;
-  if (pa !== pb) return pa - pb; // lower priority number first
-  return (a.rank ?? 99) - (b.rank ?? 99);
-});
-
-const pick = sorted[0];
-if (!pick) {
-  console.log("null");
-  process.exit(0);
-}
-
-console.log(
-  JSON.stringify({
-    id: pick.id,
-    status: pick.status,
-    skill: STATUS_TO_SKILL[pick.status],
-    priority: pick.priority ?? 99,
-    rank: pick.rank ?? 99,
-  })
-);
 ```
 
-Why TypeScript over bash:
+Static identity. One per agent. For crawl, hardcoded for CEO agent.
 
-- `@cogni/work-items` port already has query, filter, sort, claim — why rewrite in bash?
-- No markdown parsing. Reads frontmatter directly via established adapter.
-- Container is `node:22` with `pnpm` and the repo mounted. `npx tsx` works.
-- When walk phase adds richer gates or stuck detection, TS is the natural place.
+#### SignalResult (output of each signal provider)
 
-### SKILL.md (thin prompt — ~30 lines)
+```typescript
+const HealthSignalSchema = z.object({
+  kind: z.literal("health"),
+  cost24hUsd: z.number(),
+  cost7dUsd: z.number(),
+  burnRateUsdPerDay: z.number(),
+  creditsUsd: z.number(),
+  treasuryUsd: z.number(),
+  runwayDays: z.number(),
+  errors24h: z.number(),
+  firingAlerts: z.number(),
+  timestamp: z.string().datetime(),
+});
+
+const WorkQueueSignalSchema = z.object({
+  kind: z.literal("work_queue"),
+  totalActionable: z.number(),
+  byStatus: z.record(z.string(), z.number()),
+  topItem: DispatchEnvelopeSchema.nullable(),
+});
+
+const SignalResultSchema = z.discriminatedUnion("kind", [
+  HealthSignalSchema,
+  WorkQueueSignalSchema,
+]);
+```
+
+Each signal provider returns one `SignalResult`. mc-status.sh provides `health`. mc-pick logic provides `work_queue`.
+
+#### MissionPolicy
+
+```typescript
+const MissionPolicySchema = z.object({
+  tierThresholds: z.object({
+    greenMinRunwayDays: z.number(), // 30
+    yellowMinRunwayDays: z.number(), // 7
+  }),
+  statusWeights: z.record(z.string(), z.number()),
+  yellowAllowedStatuses: z.array(z.string()),
+  statusToSkill: z.record(z.string(), z.string()),
+});
+```
+
+Deterministic rules. For crawl, a single hardcoded `CEO_POLICY` constant. Walk phase: `MissionPolicyProvider` interface.
+
+#### AgentSnapshot
+
+```typescript
+const AgentSnapshotSchema = z.object({
+  agentId: z.string(),
+  runId: z.string(), // ISO timestamp or UUID
+  tier: z.enum(["GREEN", "YELLOW", "RED"]),
+  signals: z.array(SignalResultSchema),
+  dispatch: DispatchEnvelopeSchema.nullable(),
+  outcome: z.enum(["dispatched", "no_op", "error"]).nullable(),
+  error: z.string().nullable(),
+  timestamp: z.string().datetime(),
+});
+```
+
+Persisted to `.openclaw/state/mission-control/snapshots/<runId>.json` after every run. Dashboard reads these files — never reruns scripts.
+
+#### DispatchEnvelope
+
+```typescript
+const DispatchEnvelopeSchema = z.object({
+  itemId: z.string(),
+  status: z.string(),
+  skill: z.string(),
+  priority: z.number(),
+  rank: z.number(),
+});
+```
+
+What the agent receives. One item, one skill. The agent's only job is to execute it.
+
+### Controller Flow (mc-controller.ts)
+
+```
+1. OBSERVE  — run mc-status.sh → parse HealthSignal
+             — run work-items query → compute WorkQueueSignal
+2. GATE     — derive tier from HealthSignal + MissionPolicy thresholds
+             — if RED → dispatch = null
+             — if YELLOW → filter to yellowAllowedStatuses
+3. PICK     — sort by statusWeight DESC, priority ASC, rank ASC
+             — top item → DispatchEnvelope (or null)
+4. SNAPSHOT — build AgentSnapshot, write to disk
+5. OUTPUT   — print DispatchEnvelope JSON to stdout (agent reads this)
+```
+
+The controller is a single `npx tsx mc-controller.ts` call. It replaces the previous pattern of SKILL.md calling mc-status.sh then mc-pick.ts sequentially.
+
+### SKILL.md (ultra-thin — <20 lines)
+
+The agent prompt becomes trivially simple:
 
 ```markdown
 # /mission-control
 
-> Operator loop. Runs hourly on HEARTBEAT. Receives pre-computed dispatch envelope.
+> Hourly operator loop. Receives pre-computed dispatch envelope.
 
 ## 1. SYNC
 
 Run /git-sync. Continue regardless of outcome.
 
-## 2. READ ENVELOPE
+## 2. EXECUTE
 
-Run: `bash /repo/current/.openclaw/skills/mission-control/mc-status.sh`
-Run: `npx tsx /repo/current/.openclaw/skills/mission-control/mc-pick.ts <tier>`
+Run: `npx tsx /repo/current/.openclaw/skills/mission-control/mc-controller.ts`
 
-Where `<tier>` is from the status JSON. mc-pick returns `{id, status, skill}` or `null`.
+Read the JSON output. If `dispatch` is null → skip to step 3.
+Otherwise: spawn brain subagent `/<skill> <itemId>`. One item. One skill. No scope creep.
+If brain fails → do NOT retry. Next run re-evaluates.
 
-If null or tier is RED → skip to step 4 (report only).
-
-## 3. DISPATCH
-
-Spawn brain subagent: `/<skill> <id>`
-
-Pass the item ID and the status JSON summary as context.
-One item. One skill. No scope creep.
-
-If the brain fails → post failure to Discord with the error.
-Do NOT retry. The next hourly run will re-evaluate.
-
-## 4. REPORT
+## 3. REPORT
 
 Post one message to Discord:
-
-    <tier_emoji> $X.XX/24h | Xd runway | N errors
-    /<skill> on <id> — OR — no-op: <reason>
-
-Write EDO if action taken (template: `/workspace/memory-templates/EDO.template.md`).
+<tier_emoji> $X.XX/24h | Xd runway | N errors
+/<skill> on <itemId> — OR — no-op: <reason>
 
 EXIT.
 ```
 
-### Coexistence with gov-core / gov-engineering
+The LLM makes zero decisions about what to work on. It dispatches what the controller chose and reports.
 
-These existing skills are legacy. `/mission-control` replaces their function. Leave them in place for now; prune when mission-control is proven.
+### Degradation Ladder
 
-### Walk phase (future, NOT this PR)
+Enforced in controller (deterministic), not in prompt.
 
-- Move mc-pick.ts to a proper `bin` in the work-items package
-- Stuck detection: if same item + same status for 3 consecutive runs → auto-block
-- Richer gates: check firing alerts, error rate thresholds
+| Tier     | Condition                  | Allowed actions                                             |
+| -------- | -------------------------- | ----------------------------------------------------------- |
+| `GREEN`  | runway > 30d               | Full lifecycle: any skill                                   |
+| `YELLOW` | 7d ≤ runway ≤ 30d          | Finish in-flight: needs_merge, needs_closeout, needs_triage |
+| `RED`    | runway < 7d OR credits ≤ 0 | Report only. No dispatch.                                   |
 
-### Run phase (future)
+### Crawl / Walk / Run
 
-- mc-status.sh → mc-status.ts (full TypeScript controller)
-- Budget signal injected as structured context per BATS pattern
+**Crawl (this PR):**
+
+- `types.ts` — all Zod schemas + inferred TS types (AgentDefinition, signals, policy, snapshot, envelope)
+- `mc-controller.ts` — single entry point, hardcoded CEO agent definition + policy
+- `mc-status.sh` — kept as-is (health signal provider, called by controller via `execSync`)
+- `SKILL.md` — thinned to <20 lines (reads controller output, dispatches, reports)
+- Snapshots written to disk as JSON files
+
+**Walk (future):**
+
+- Extract `SignalProvider` interface — `{ kind: string; gather(agent: AgentDefinition): Promise<SignalResult> }`
+- Extract `MissionPolicyProvider` interface
+- API contract: `mission-control.snapshot.v1.contract.ts` — `AgentMissionControlPort { listAgents(); getSnapshot(agentId); listRuns(agentId, limit); getQueue(agentId); }`
+- `AgentOverviewPanel(snapshot)` UI component with generic `SignalCard[]`
+- Move pick logic to `@cogni/work-items` package as `WorkItemPicker`
+
+**Run (future):**
+
+- mc-status.sh → mc-status.ts (full TS signal provider)
+- Pluggable signal providers (per-agent configuration)
+- Cross-agent orchestration
+- YAML config (only after 2+ agents prove the shape)
 
 ### Files
 
-**Create:**
-
-- `.openclaw/skills/mission-control/SKILL.md` — thin dispatch prompt (~30 lines)
-- `.openclaw/skills/mission-control/mc-status.sh` — JSON financials/health/tier (~80 lines)
-- `.openclaw/skills/mission-control/mc-pick.ts` — TypeScript work item selection via @cogni/work-items port (~60 lines)
-
 **Modify:**
 
-- `services/sandbox-openclaw/gateway-workspace/SOUL.md` — change `HEARTBEAT` → `/mission-control`
+- `.openclaw/skills/mission-control/types.ts` — **new**: Zod schemas + TS types for all four pieces + envelope
+- `.openclaw/skills/mission-control/mc-controller.ts` — **new**: deterministic controller (observe→gate→pick→snapshot→output)
+- `.openclaw/skills/mission-control/mc-status.sh` — keep as-is (health signal provider)
+- `.openclaw/skills/mission-control/mc-pick.ts` — **delete**: logic absorbed into mc-controller.ts
+- `.openclaw/skills/mission-control/SKILL.md` — thin to <20 lines (just dispatch + report)
 
 **Unchanged:**
 
+- `services/sandbox-openclaw/gateway-workspace/SOUL.md` — already routes HEARTBEAT → /mission-control
 - `.openclaw/skills/deployment-health/queries.sh` — mc-status.sh sources its helpers
-- `packages/work-items/` — mc-pick.ts consumes its existing API, no changes needed
-- `memory/EDO/` — used as-is for decision tracking
+- `packages/work-items/` — controller consumes existing API
+- `biome.json` — already includes `.openclaw/**/*`
 
 ### Invariants
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] DETERMINISTIC_SELECTION: mc-pick.ts uses @cogni/work-items port, not markdown parsing
-- [ ] THIN_PROMPT: SKILL.md is <40 lines. Agent receives pre-computed envelope, doesn't decide what to work on.
-- [ ] DEGRADATION_LADDER: mc-pick.ts respects tier (GREEN=all, YELLOW=finish+triage, RED=null)
-- [ ] FINISH_BEFORE_STARTING: status weight needs_merge(6) > needs_closeout(5) > ... > needs_triage(1)
-- [ ] HEARTBEAT_ROUTES_TO_MISSION_CONTROL: SOUL.md routes HEARTBEAT → /mission-control
-- [ ] USES_EXISTING_GOVERNANCE_API: Credits from `/api/v1/governance/status`
-- [ ] USES_EXISTING_EDO_TEMPLATE: Decision tracking via `memory-templates/EDO.template.md`
-- [ ] NO_SHADOW_STATE: No WIP.md, no budget file writes, no parallel state
-- [ ] ONE_FOCUS: Exactly 1 work item per run
-- [ ] COST_DISCIPLINE: Only dispatch (step 3) is expensive. Steps 1-2 and 4 are deterministic.
-- [ ] RUNTIME_CAPS: OpenClaw enforces timeoutSeconds:540, subagents.maxConcurrent:3
+- [ ] CONTROLLER_FIRST: mc-controller.ts runs observe→gate→pick→snapshot→output. Agent only dispatches.
+- [ ] TYPED_PIECES: Four separate types (AgentDefinition, SignalResult, MissionPolicy, AgentSnapshot) — no god object.
+- [ ] PERSISTED_SNAPSHOTS: Every run writes AgentSnapshot JSON to disk. No live recomputation for reads.
+- [ ] ZOD_AT_BOUNDARIES: All types have Zod schemas. Controller validates mc-status.sh output before use.
+- [ ] DETERMINISTIC_SELECTION: Work item selection via @cogni/work-items port, not markdown parsing.
+- [ ] THIN_PROMPT: SKILL.md is <20 lines. Agent receives pre-computed envelope, makes zero decisions.
+- [ ] DEGRADATION_LADDER: Controller enforces tier (GREEN=all, YELLOW=finish+triage, RED=null).
+- [ ] FINISH_BEFORE_STARTING: status weight needs_merge(6) > needs_closeout(5) > ... > needs_triage(1).
+- [ ] HEARTBEAT_ROUTES_TO_MISSION_CONTROL: SOUL.md routes HEARTBEAT → /mission-control.
+- [ ] NO_SHADOW_STATE: No WIP.md, no budget file writes. Snapshots are the only state.
+- [ ] ONE_FOCUS: Exactly 1 work item per run.
+- [ ] COST_DISCIPLINE: Only dispatch (brain subagent) is expensive. Everything else is deterministic TS/bash.
 - [ ] NO_RETRY: Brain failure → report + exit. Next run re-evaluates fresh.
-- [ ] SHELL_SAFE: mc-status.sh validates external inputs before arithmetic (jq tonumber, not raw string interpolation into bc)
-- [ ] TSX_PREINSTALLED: tsx must be available in container (pnpm store or global install), not npx cold-fetched at runtime
+- [ ] SHELL_SAFE: mc-status.sh validates external inputs via jq (not raw string interpolation).
+- [ ] NO_YAML: Code-first TS types + Zod. No YAML config until walk phase.
 
 ## Validation
 
-- [ ] mc-status.sh returns valid JSON from gateway container (`| jq .`)
-- [ ] mc-pick.ts returns correct item for each tier (GREEN picks any, YELLOW skips implement/design, RED returns null)
-- [ ] mc-pick.ts finish-before-starting: needs_merge item picked over needs_implement when both exist
-- [ ] mc-pick.ts uses @cogni/work-items adapter (no \_index.md parsing)
-- [ ] SOUL.md routes HEARTBEAT to /mission-control
-- [ ] Brain subagent receives item ID + lifecycle skill
-- [ ] Discord message posted with tier emoji + cost + action
-- [ ] Degradation: RED tier → report only, no dispatch
+- [ ] mc-controller.ts gathers HealthSignal from mc-status.sh (validates JSON with Zod)
+- [ ] mc-controller.ts gathers WorkQueueSignal from @cogni/work-items adapter
+- [ ] mc-controller.ts applies tier gating correctly (GREEN=all, YELLOW=filtered, RED=null)
+- [ ] mc-controller.ts persists AgentSnapshot to disk after every run
+- [ ] mc-controller.ts outputs DispatchEnvelope JSON to stdout (or null)
+- [ ] SKILL.md reads envelope and dispatches single brain subagent
+- [ ] Finish-before-starting: needs_merge item picked over needs_implement
+- [ ] Degradation: RED tier → snapshot written with dispatch=null, no brain spawned
+- [ ] Snapshot files accumulate (one per run), readable by future dashboard API
 - [ ] No retry on brain failure — single attempt per run
