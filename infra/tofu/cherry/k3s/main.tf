@@ -30,6 +30,8 @@ resource "cherryservers_server" "k3s" {
   user_data = base64encode(templatefile("${path.module}/bootstrap-k3s.yaml", {
     ghcr_deploy_username = var.ghcr_deploy_username
     ghcr_deploy_token    = var.ghcr_deploy_token
+    cogni_repo_url       = var.cogni_repo_url
+    cogni_repo_ref       = var.cogni_repo_ref
   }))
 
   allow_reinstall = true

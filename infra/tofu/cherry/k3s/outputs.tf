@@ -16,3 +16,9 @@ output "kubeconfig_command" {
   value       = "ssh root@${local.vm_ip} cat /etc/rancher/k3s/k3s.yaml"
   sensitive   = false
 }
+
+output "age_public_key_command" {
+  description = "Command to retrieve the age public key (for SOPS encryption)"
+  value       = "ssh root@${local.vm_ip} cat /var/lib/cogni/age-public-key.txt"
+  sensitive   = false
+}

@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Argo CD Application — scheduler-worker staging overlay.
+# Applied by cloud-init during k3s bootstrap. Argo CD auto-syncs on changes.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: scheduler-worker-staging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: cogni
+    environment: staging
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Cogni-DAO/cogni-template.git
+    targetRevision: staging
+    path: infra/cd/overlays/staging
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cogni-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

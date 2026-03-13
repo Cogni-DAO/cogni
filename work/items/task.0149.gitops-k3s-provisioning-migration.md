@@ -2,7 +2,7 @@
 id: task.0149
 type: task
 title: "GitOps k3s provisioning + scheduler-worker migration"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 1
 estimate: 3
@@ -137,8 +137,9 @@ This is a manual one-time ops step documented in the runbook, not automated in O
 
 #### Modify (retire scheduler-worker from Compose)
 
-- `infra/compose/runtime/docker-compose.yml` — Remove `scheduler-worker` service block
-- `scripts/ci/deploy.sh` — Remove scheduler-worker from TARGETED_PULL list, remove scheduler-worker log tail in `on_fail`, remove `SCHEDULER_WORKER_IMAGE` from required secrets
+- `infra/compose/runtime/docker-compose.yml` — Profile-gate scheduler-worker (`profiles: ["compose-scheduler-worker"]`)
+- `scripts/ci/deploy.sh` — Branch-free COMPOSE_PROFILES approach, uniform pull loop
+- `.github/workflows/deploy-production.yml` — Add `COMPOSE_PROFILES` env var
 
 #### Modify (CI k8s promotion)
 
@@ -150,7 +151,7 @@ This is a manual one-time ops step documented in the runbook, not automated in O
 - `infra/cd/argocd/repo-server-patch.yaml` — Kustomize strategic merge patch: ksops sidecar container, volume mounts, age key secret volume on argocd-repo-server Deployment
 - `infra/tofu/cherry/k3s/terraform.tfvars.example` — Example tfvars matching base pattern
 - `scripts/ci/promote-k8s-image.sh` — Updates overlay kustomization.yaml with new image digest, commits to staging
-- `docs/runbooks/k3s-bootstrap.md` — One-time ops runbook: provision, firewall, age keygen, secret encryption, verify
+- `infra/cd/apps/staging.yaml` — Argo CD Application CRD for staging overlay (applied by cloud-init)
 
 #### Test
 
@@ -170,8 +171,8 @@ This is a manual one-time ops step documented in the runbook, not automated in O
 - `infra/compose/runtime/docker-compose.yml` — remove scheduler-worker only
 - `scripts/ci/deploy.sh` — remove scheduler-worker references only
 - `scripts/ci/promote-k8s-image.sh` — new, small promotion script
-- `.github/workflows/staging-preview.yml` — add k8s promotion step
-- `docs/runbooks/k3s-bootstrap.md` — new runbook
+- `.github/workflows/staging-preview.yml` — add k8s promotion step + COMPOSE_PROFILES
+- `infra/cd/apps/` — Argo CD Application CRDs
 
 ### Out of Scope
 

@@ -86,21 +86,15 @@ write_files:
       # Restart journald with updated config
       systemctl restart systemd-journald
 
-      # Install k3s — config.yaml provides --disable flags
+      # ── k3s ──────────────────────────────────────────────────
       echo "Installing k3s..."
       curl -sfL https://get.k3s.io | sh -
-
-      # Wait for k3s to be ready
       echo "Waiting for k3s node to be ready..."
       kubectl wait --for=condition=Ready node --all --timeout=120s
-
-      # Validate
-      echo "Validating k3s installation..."
       k3s --version
       kubectl get nodes
-      kubectl get namespaces
 
-      # Install age for SOPS secret decryption
+      # ── age (SOPS decryption) ────────────────────────────────
       echo "Installing age..."
       AGE_VERSION="v1.2.0"
       curl -sLo /tmp/age.tar.gz "https://github.com/FiloSottile/age/releases/download/$${AGE_VERSION}/age-$${AGE_VERSION}-linux-amd64.tar.gz"
@@ -110,21 +104,56 @@ write_files:
       rm -rf /tmp/age /tmp/age.tar.gz
       age --version
 
-      # Install Argo CD (non-HA, pinned to v2.13.4)
-      echo "Installing Argo CD..."
-      kubectl create namespace argocd || true
-      kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
-      echo "Waiting for Argo CD to be ready..."
-      kubectl -n argocd wait --for=condition=Available deployment/argocd-server --timeout=300s
+      # Generate age keypair — private key goes to k8s Secret,
+      # public key saved for SOPS encryption (tofu output).
+      echo "Generating age keypair..."
+      age-keygen -o /tmp/age-key.txt 2>/tmp/age-keygen-output.txt
+      AGE_PUBKEY=$(grep "public key:" /tmp/age-keygen-output.txt | awk '{print $NF}')
+      echo "$AGE_PUBKEY" > "$MARKER_DIR/age-public-key.txt"
+      echo "Age public key: $AGE_PUBKEY"
 
-      # Write success marker
+      # ── Argo CD + ksops ──────────────────────────────────────
+      # Clone repo for kustomized manifests (ksops patches, app-of-apps).
+      echo "Cloning repo for Argo CD manifests..."
+      apt-get install -y git
+      git clone --depth=1 --branch "${cogni_repo_ref}" \
+        "${cogni_repo_url}" /tmp/cogni-repo
+
+      # Create argocd namespace + age key Secret BEFORE Argo CD install.
+      # ksops sidecar mounts this Secret as a volume.
+      kubectl create namespace argocd || true
+      kubectl -n argocd create secret generic sops-age-key \
+        --from-file=keys.txt=/tmp/age-key.txt
+      rm -f /tmp/age-key.txt /tmp/age-keygen-output.txt
+
+      # Apply kustomized Argo CD (base install + ksops sidecar patches).
+      echo "Installing Argo CD with ksops..."
+      kubectl kustomize /tmp/cogni-repo/infra/cd/argocd/ \
+        | kubectl apply -n argocd -f -
+      echo "Waiting for Argo CD to be ready..."
+      kubectl -n argocd wait --for=condition=Available \
+        deployment/argocd-server --timeout=300s
+
+      # Apply app-of-apps — Argo CD syncs the staging overlay.
+      # Sync will be degraded until SOPS secrets are encrypted
+      # with the age public key and committed to the repo.
+      echo "Applying Argo CD Application..."
+      kubectl apply -f /tmp/cogni-repo/infra/cd/apps/staging.yaml
+
+      # Cleanup
+      rm -rf /tmp/cogni-repo
+
+      # ── Success marker ───────────────────────────────────────
       {
         echo "bootstrap=ok"
         echo "timestamp=$(date -u +%FT%TZ)"
         echo "k3s_version=$(k3s --version 2>&1 | head -1)"
-        echo "kubectl_version=$(kubectl version --client --short 2>/dev/null || kubectl version --client 2>&1 | head -1)"
+        echo "kubectl_version=$(kubectl version --client 2>&1 | head -1)"
         echo "age_version=$(age --version 2>&1)"
+        echo "age_public_key=$AGE_PUBKEY"
         echo "argocd=installed"
+        echo "argocd_ksops=installed"
+        echo "argocd_app=scheduler-worker-staging"
       } > "$MARKER_DIR/bootstrap.ok"
 
       echo "=== k3s bootstrap completed at $(date -u +%FT%TZ) ==="

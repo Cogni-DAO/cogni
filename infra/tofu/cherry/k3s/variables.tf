@@ -55,3 +55,16 @@ variable "ghcr_deploy_username" {
   type        = string
   default     = "cogni-deploy"
 }
+
+# Argo CD bootstrap
+variable "cogni_repo_url" {
+  description = "Git repo URL for Argo CD source (must be accessible from k3s VM)"
+  type        = string
+  default     = "https://github.com/Cogni-DAO/cogni-template.git"
+}
+
+variable "cogni_repo_ref" {
+  description = "Git ref for Argo CD targetRevision (branch name)"
+  type        = string
+  default     = "staging"
+}
