@@ -64,7 +64,7 @@ Do NOT store image bytes in LangGraph message state (LangGraph checkpoints state
 Instead:
 
 1. **`ArtifactSinkPort`** — a port interface for writing artifacts to durable storage. MVP implementation writes to local filesystem; future: S3/R2. Returns an `ArtifactRef` (type + ID + metadata).
-2. **`onFullResult` callback** on `ToolRunnerConfig` — thin transition hook that fires after `boundTool.exec()` with full (non-redacted) output, before redaction. The callback writes to ArtifactSinkPort.
+2. **`onFullResult` async callback** on `ToolRunnerConfig` — thin transition hook that fires after `boundTool.exec()` with full (non-redacted) output, before redaction. Awaited with swallowed errors (sink failure must not break tool execution, but must be awaited to avoid race conditions). The callback writes to ArtifactSinkPort.
 3. **`GraphResult.artifacts` / `GraphFinal.artifacts`** carry only `ArtifactRef[]` (lightweight refs), not raw bytes.
 
 ### Redaction still prevents token waste
@@ -109,7 +109,7 @@ GraphResult:  artifacts: [{ type: "image", id: "art_xxx", mimeType: "image/png",
    d. Returns { imageBase64, mimeType, model, prompt }
 3. Tool runner (tool-runner.ts):
    a. boundTool.exec() → full output (with imageBase64)
-   b. onFullResult(toolCallId, fullOutput) → ArtifactSinkPort.write() → ArtifactRef
+   b. await onFullResult(toolCallId, fullOutput) → ArtifactSinkPort.write() → ArtifactRef (try/catch, swallow errors)
    c. boundTool.redact() → strips imageBase64 per allowlist
    d. Returns redacted output to LangChain tool → LLM
 4. LLM responds with text referencing the generated image
@@ -134,7 +134,7 @@ GraphResult:  artifacts: [{ type: "image", id: "art_xxx", mimeType: "image/png",
 
 5. **Refs, not bytes in GraphResult/GraphFinal** — `artifacts: ArtifactRef[]` carries lightweight references (type, ID, mimeType, size). Callers retrieve bytes separately. This keeps run payloads small and works beyond in-proc execution.
 
-6. **onFullResult as transition hook** — Added to `ToolRunnerConfig` as an optional `onFullResult(toolCallId: string, fullOutput: unknown) => void` callback. Fires after `boundTool.exec()`, before `boundTool.redact()`. The hook writes to ArtifactSinkPort. This is the minimal change to ai-core (additive, optional field).
+6. **onFullResult as async transition hook** — Added to `ToolRunnerConfig` as an optional `onFullResult(toolCallId: string, fullOutput: unknown) => Promise<void>` callback. Fires after `boundTool.exec()`, before `boundTool.redact()`. **Must be async and awaited** — the sink is async (filesystem/S3), so a sync callback creates a race where refs aren't populated by the time `GraphResult` is built. Errors are swallowed (sink failure must not break tool execution). This is the minimal change to ai-core (additive, optional field).
 
 7. **Redaction prevents token waste** — The LLM never sees the base64 payload. Only metadata (mimeType, model, prompt) is in the allowlist. Full image data flows through onFullResult to ArtifactSinkPort.
 
@@ -160,7 +160,7 @@ GraphResult:  artifacts: [{ type: "image", id: "art_xxx", mimeType: "image/png",
 - `ImageGenerateCapability` implementation calls LiteLLM proxy (not OpenRouter directly)
 - `ArtifactSinkPort` interface in `packages/ai-core/` with `write()` → `ArtifactRef`
 - `ArtifactRef` type: `{ type: "image"; id: string; mimeType: string; byteLength: number; toolCallId: string; metadata?: Record<string, unknown> }`
-- `onFullResult` optional callback on `ToolRunnerConfig` — fires with `(toolCallId, fullOutput)` after exec, before redact
+- `onFullResult` optional async callback on `ToolRunnerConfig` — fires with `(toolCallId, fullOutput)` after exec, before redact; awaited with swallowed errors
 - MVP `LocalFsArtifactSink` implementation in `apps/web/src/adapters/`
 - `GraphResult` and `GraphFinal` extended with optional `artifacts: ArtifactRef[]` field
 - Runner collects `ArtifactRef[]` accumulated during run, populates `GraphResult.artifacts`
@@ -189,8 +189,8 @@ GraphResult:  artifacts: [{ type: "image", id: "art_xxx", mimeType: "image/png",
 
 ### `packages/langgraph-graphs/` — Pipeline artifact support
 
-- `src/inproc/types.ts` — add `artifacts: ArtifactRef[]` to `GraphResult`, add `onArtifact` to `InProcRunnerOptions`
-- `src/inproc/runner.ts` — collect `ArtifactRef[]` from `onArtifact` callback, populate `GraphResult.artifacts`
+- `src/inproc/types.ts` — add `artifacts: ArtifactRef[]` to `GraphResult`
+- `src/inproc/runner.ts` — accept optional artifacts array, populate `GraphResult.artifacts`
 
 ### `apps/web/` — Wiring + port extension + MVP sink
 
@@ -209,8 +209,8 @@ GraphResult:  artifacts: [{ type: "image", id: "art_xxx", mimeType: "image/png",
 
 - [ ] Define `ArtifactRef` type in `src/tooling/types.ts` — `{ type: string; id: string; mimeType: string; byteLength: number; toolCallId: string; metadata?: Record<string, unknown> }`
 - [ ] Define `ArtifactSinkPort` interface in `src/tooling/ports/artifact-sink.port.ts` — `write(toolCallId: string, data: Buffer | string, metadata: { type: string; mimeType: string }) => Promise<ArtifactRef>`
-- [ ] Add optional `onFullResult?: (toolCallId: string, fullOutput: unknown) => void` to `ToolRunnerConfig`
-- [ ] In `tool-runner.ts`, call `config.onFullResult(toolCallId, validatedOutput)` after step 6 (validate output), before step 7 (redact) — fire-and-forget, swallow errors (instrumentation must not break execution)
+- [ ] Add optional `onFullResult?: (toolCallId: string, fullOutput: unknown) => Promise<void>` to `ToolRunnerConfig`
+- [ ] In `tool-runner.ts`, `await config.onFullResult(toolCallId, validatedOutput)` after step 6 (validate output), before step 7 (redact) — wrapped in try/catch, swallow errors (sink failure must not break tool execution, but must be awaited to avoid race conditions with artifact ref population)
 - [ ] Export from `src/index.ts`
 
 ### Layer 2: Tool contract + capability (packages/ai-tools)
@@ -227,14 +227,14 @@ GraphResult:  artifacts: [{ type: "image", id: "art_xxx", mimeType: "image/png",
 
 - [ ] Add `ArtifactRef` import from `@cogni/ai-core` in `src/inproc/types.ts`
 - [ ] Add optional `artifacts?: readonly ArtifactRef[]` field to `GraphResult`
-- [ ] Add optional `onArtifact?: (ref: ArtifactRef) => void` to `InProcRunnerOptions` — runner accumulates refs
-- [ ] In `runner.ts`, collect `ArtifactRef[]` during execution, populate `GraphResult.artifacts` in success path
+- [ ] In `runner.ts`, accept optional `artifacts` array in runner options; populate `GraphResult.artifacts` in success path
+- [ ] Note: NO `onArtifact` callback on runner — the provider accumulates refs in a closure via `onFullResult` and passes the final array to the runner result. Keep runner simple.
 
 ### Layer 4: Port + adapter wiring + MVP sink (apps/web)
 
 - [ ] Add `artifacts?: readonly ArtifactRef[]` field to `GraphFinal` in `src/ports/graph-executor.port.ts`
 - [ ] Create `src/adapters/server/ai/artifact-sink/local-fs.adapter.ts` — MVP `LocalFsArtifactSink` writes files to `/tmp/cogni-artifacts/<runId>/<toolCallId>.<ext>`, returns `ArtifactRef`
-- [ ] In `inproc.provider.ts`: wire `onFullResult` callback that checks for `imageBase64` in full output, calls `artifactSink.write()`, accumulates `ArtifactRef[]`, and passes them into runner options
+- [ ] In `inproc.provider.ts`: wire async `onFullResult` callback that checks for `imageBase64` in full output, calls `artifactSink.write()`, accumulates `ArtifactRef[]` in a closure, and passes the collected array into runner result
 - [ ] Pass `artifacts` through in `mapToGraphFinal` when constructing `GraphFinal`
 - [ ] Wire `ImageGenerateCapability` implementation in `src/bootstrap/ai/tool-bindings.ts` — implementation calls LiteLLM proxy chat completions with image model, extracts base64 from `message.images[0].image_url.url`
 
