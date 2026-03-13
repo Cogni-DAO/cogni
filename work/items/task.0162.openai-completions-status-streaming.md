@@ -2,7 +2,7 @@
 id: task.0162
 type: task
 title: OpenAI-compatible completions — document endpoint + surface agent status streams
-status: needs_implement
+status: done
 priority: 1
 rank: 10
 estimate: 2
@@ -19,7 +19,7 @@ revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-03-06
-updated: 2026-03-06
+updated: 2026-03-13
 labels: [ai, streaming, documentation, api]
 external_refs:
 ---
