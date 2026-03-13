@@ -260,6 +260,31 @@ export type ToolResult<T> =
     };
 
 // -----------------------------------------------------------------------------
+// Artifact Types (for tool outputs that produce non-text artifacts)
+// -----------------------------------------------------------------------------
+
+/**
+ * Reference to an artifact written to durable storage via ArtifactSinkPort.
+ * Carried in GraphResult/GraphFinal — never contains raw bytes.
+ *
+ * Per task.0163: image bytes go to ArtifactSinkPort, refs go in run payloads.
+ */
+export interface ArtifactRef {
+  /** Artifact kind (e.g., "image", "audio", "file") */
+  readonly type: string;
+  /** Unique artifact ID */
+  readonly id: string;
+  /** MIME type of the artifact (e.g., "image/png") */
+  readonly mimeType: string;
+  /** Size in bytes of the stored artifact */
+  readonly byteLength: number;
+  /** Tool call ID that produced this artifact */
+  readonly toolCallId: string;
+  /** Optional metadata (model, prompt, dimensions, etc.) */
+  readonly metadata?: Record<string, unknown>;
+}
+
+// -----------------------------------------------------------------------------
 // Tool Execution Types (canonical location per TOOL_EXEC_TYPES_IN_AI_CORE)
 // -----------------------------------------------------------------------------
 

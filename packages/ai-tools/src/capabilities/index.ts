@@ -14,6 +14,12 @@
  * @public
  */
 
+// Image generation capability (per task.0163)
+export type {
+  ImageGenerateCapability,
+  ImageGenerateParams,
+  ImageGenerateResult,
+} from "./image-generate";
 // Metrics capability (per GOVERNED_METRICS invariant)
 export type {
   MetricDataPoint,

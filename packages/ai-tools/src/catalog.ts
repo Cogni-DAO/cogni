@@ -15,6 +15,7 @@
  */
 
 import { getCurrentTimeBoundTool } from "./tools/get-current-time";
+import { imageGenerateBoundTool } from "./tools/image-generate";
 import { metricsQueryBoundTool } from "./tools/metrics-query";
 import { repoListBoundTool } from "./tools/repo-list";
 import { repoOpenBoundTool } from "./tools/repo-open";
@@ -93,6 +94,7 @@ export function createToolCatalog(
 export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   // Core tools (core__ prefix)
   getCurrentTimeBoundTool as CatalogBoundTool,
+  imageGenerateBoundTool as CatalogBoundTool,
   metricsQueryBoundTool as CatalogBoundTool,
   repoListBoundTool as CatalogBoundTool,
   repoOpenBoundTool as CatalogBoundTool,

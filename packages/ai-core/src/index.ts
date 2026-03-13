@@ -53,6 +53,11 @@ export {
 export type { GraphId } from "./graph/graph-id";
 // Span types (observability)
 export type { AiSpanHandle, AiSpanPort } from "./tooling/ai-span";
+// Artifact sink port
+export type {
+  ArtifactSinkPort,
+  ArtifactWriteParams,
+} from "./tooling/ports/artifact-sink.port";
 // Tool source port
 export type { ToolSourcePort } from "./tooling/ports/tool-source.port";
 // Tool policy (runtime)
@@ -79,6 +84,7 @@ export {
 // Tooling types
 // NOTE: Per FIX_LAYERING_CAPABILITY_TYPES, AuthCapability/ClockCapability are in @cogni/ai-tools
 export type {
+  ArtifactRef,
   BoundToolRuntime,
   EmitAiEvent,
   ParseableSchema,

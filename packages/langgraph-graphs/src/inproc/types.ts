@@ -14,7 +14,12 @@
  * @public
  */
 
-import type { AiEvent, AiExecutionErrorCode, ToolExecFn } from "@cogni/ai-core";
+import type {
+  AiEvent,
+  AiExecutionErrorCode,
+  ArtifactRef,
+  ToolExecFn,
+} from "@cogni/ai-core";
 import type { ToolContract } from "@cogni/ai-tools";
 // Import shared graph types from graphs/types.ts (single source of truth)
 import type {
@@ -145,4 +150,6 @@ export interface GraphResult {
   readonly content?: string;
   /** Parsed structured output (when graph uses responseFormat) */
   readonly structuredOutput?: Record<string, unknown>;
+  /** Artifact references produced during tool execution (per task.0163) */
+  readonly artifacts?: readonly ArtifactRef[];
 }

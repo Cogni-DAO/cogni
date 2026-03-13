@@ -17,7 +17,13 @@
  * @internal
  */
 
-import type { AiEvent, BoundToolRuntime, ToolSourcePort } from "@cogni/ai-core";
+import type {
+  AiEvent,
+  ArtifactRef,
+  ArtifactSinkPort,
+  BoundToolRuntime,
+  ToolSourcePort,
+} from "@cogni/ai-core";
 import {
   createStaticToolSourceFromRecord,
   createToolAllowlistPolicy,
@@ -95,7 +101,8 @@ export class LangGraphInProcProvider implements GraphProvider {
 
   constructor(
     private readonly adapter: CompletionUnitAdapter,
-    private readonly toolSource: ToolSourcePort
+    private readonly toolSource: ToolSourcePort,
+    private readonly artifactSink?: ArtifactSinkPort
   ) {
     this.log = makeLogger({ component: "LangGraphInProcProvider" });
 
@@ -184,14 +191,51 @@ export class LangGraphInProcProvider implements GraphProvider {
       .map((id) => TOOL_CATALOG[id])
       .filter((bt): bt is NonNullable<typeof bt> => bt !== undefined);
 
+    // Artifact collection closure — accumulated refs passed through to GraphResult
+    const collectedArtifacts: ArtifactRef[] = [];
+    const artifactSink = this.artifactSink;
+
     // Create tool execution function factory
     // Uses same toolIds for ToolRunner policy as configurable
     const createToolExecFn = (emit: (e: AiEvent) => void): ToolExecFn => {
       const policy = createToolAllowlistPolicy(toolIds);
       const source = createStaticToolSourceFromRecord(runtimeTools);
+
+      // Per task.0163: onFullResult hook extracts artifacts before redaction
+      const onFullResult = artifactSink
+        ? async (toolCallId: string, fullOutput: unknown): Promise<void> => {
+            // Detect image output by checking for imageBase64 field
+            const output = fullOutput as Record<string, unknown> | null;
+            if (
+              output &&
+              typeof output === "object" &&
+              "imageBase64" in output &&
+              typeof output.imageBase64 === "string" &&
+              typeof output.mimeType === "string"
+            ) {
+              const ref = await artifactSink.write({
+                type: "image",
+                data: Buffer.from(output.imageBase64, "base64"),
+                mimeType: output.mimeType,
+                toolCallId,
+                metadata: {
+                  ...(typeof output.model === "string" && {
+                    model: output.model,
+                  }),
+                  ...(typeof output.prompt === "string" && {
+                    prompt: output.prompt,
+                  }),
+                },
+              });
+              collectedArtifacts.push(ref);
+            }
+          }
+        : undefined;
+
       const toolRunner = createToolRunner(source, emit, {
         policy,
         ctx: { runId },
+        ...(onFullResult !== undefined && { onFullResult }),
       });
 
       return async (name, args, toolCallId) => {
@@ -235,7 +279,8 @@ export class LangGraphInProcProvider implements GraphProvider {
       final,
       runId,
       ingressRequestId,
-      graphName
+      graphName,
+      collectedArtifacts
     );
 
     return { stream, final: mappedFinal };
@@ -303,7 +348,8 @@ export class LangGraphInProcProvider implements GraphProvider {
     final: Promise<GraphResult>,
     runId: string,
     requestId: string,
-    graphName: string
+    graphName: string,
+    collectedArtifacts?: ArtifactRef[]
   ): Promise<GraphFinal> {
     const result = await final;
 
@@ -336,6 +382,8 @@ export class LangGraphInProcProvider implements GraphProvider {
       ...(result.structuredOutput !== undefined && {
         structuredOutput: result.structuredOutput,
       }),
+      ...(collectedArtifacts &&
+        collectedArtifacts.length > 0 && { artifacts: collectedArtifacts }),
     };
   }
 

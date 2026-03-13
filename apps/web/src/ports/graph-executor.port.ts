@@ -16,7 +16,11 @@
  * @public
  */
 
-import type { AiExecutionErrorCode, GraphId } from "@cogni/ai-core";
+import type {
+  AiExecutionErrorCode,
+  ArtifactRef,
+  GraphId,
+} from "@cogni/ai-core";
 import type { Message } from "@/core";
 import type { AiEvent } from "@/types/ai-events";
 import type { LlmCaller } from "./llm.port";
@@ -93,6 +97,8 @@ export interface GraphFinal {
   readonly content?: string;
   /** Parsed structured output (when graph uses responseFormat) */
   readonly structuredOutput?: Record<string, unknown>;
+  /** Artifact references produced during tool execution (per task.0163) */
+  readonly artifacts?: readonly ArtifactRef[];
 }
 
 /**

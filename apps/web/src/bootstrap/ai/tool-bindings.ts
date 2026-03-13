@@ -15,12 +15,14 @@
  */
 
 import type {
+  ImageGenerateCapability,
   MetricsCapability,
   RepoCapability,
   ToolImplementation,
   WebSearchCapability,
 } from "@cogni/ai-tools";
 import {
+  createImageGenerateImplementation,
   createMetricsQueryImplementation,
   createRepoListImplementation,
   createRepoOpenImplementation,
@@ -28,6 +30,8 @@ import {
   createWebSearchImplementation,
   GET_CURRENT_TIME_NAME,
   getCurrentTimeImplementation,
+  IMAGE_GENERATE_NAME,
+  imageGenerateStubImplementation,
   METRICS_QUERY_NAME,
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
@@ -43,6 +47,7 @@ export interface ToolBindingDeps {
   readonly metricsCapability: MetricsCapability;
   readonly webSearchCapability: WebSearchCapability;
   readonly repoCapability: RepoCapability;
+  readonly imageGenerateCapability?: ImageGenerateCapability;
 }
 
 /**
@@ -94,5 +99,11 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     [REPO_SEARCH_NAME]: createRepoSearchImplementation({
       repoCapability: deps.repoCapability,
     }) as AnyToolImplementation,
+
+    [IMAGE_GENERATE_NAME]: (deps.imageGenerateCapability
+      ? createImageGenerateImplementation({
+          imageGenerateCapability: deps.imageGenerateCapability,
+        })
+      : imageGenerateStubImplementation) as AnyToolImplementation,
   };
 }

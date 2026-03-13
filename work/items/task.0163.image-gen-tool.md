@@ -2,7 +2,7 @@
 id: task.0163
 type: task
 title: "Image generation tool + pipeline artifact support"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 10
 estimate: 5

@@ -14,6 +14,9 @@
 export type {
   AuthCapability,
   ClockCapability,
+  ImageGenerateCapability,
+  ImageGenerateParams,
+  ImageGenerateResult,
   MetricDataPoint,
   MetricQueryResult,
   MetricSummary,
@@ -63,7 +66,6 @@ export {
   toToolSpec,
   toToolSpecs,
 } from "./schema";
-// Tools
 export {
   GET_CURRENT_TIME_NAME,
   type GetCurrentTimeInput,
@@ -75,6 +77,20 @@ export {
   getCurrentTimeContract,
   getCurrentTimeImplementation,
 } from "./tools/get-current-time";
+// Tools
+export {
+  createImageGenerateImplementation,
+  IMAGE_GENERATE_NAME,
+  type ImageGenerateDeps,
+  type ImageGenerateInput,
+  ImageGenerateInputSchema,
+  type ImageGenerateOutput,
+  ImageGenerateOutputSchema,
+  type ImageGenerateRedacted,
+  imageGenerateBoundTool,
+  imageGenerateContract,
+  imageGenerateStubImplementation,
+} from "./tools/image-generate";
 export {
   createMetricsQueryImplementation,
   METRICS_QUERY_NAME,

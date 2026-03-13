@@ -221,6 +221,20 @@ model_list:
         cogni:
           default_flash: true
 
+  # ===== IMAGE GENERATION MODELS =====
+  # Used by core__image_generate tool via chat completions with image output
+  - model_name: gemini-2.0-flash-image
+    litellm_params:
+      model: openrouter/google/gemini-2.0-flash-exp:free
+      api_key: "os.environ/OPENROUTER_API_KEY"
+    model_info:
+      display_name: "Gemini 2.0 Flash (Image Gen)"
+      is_free: true
+      provider_key: "google"
+      metadata:
+        cogni:
+          image_gen: true
+
   # ===== EMBEDDING MODELS =====
   # Used by OpenClaw memory_search for semantic vector search
   # Uses openai/ prefix + api_base to avoid openrouter/ embedding routing bugs (BerriAI/litellm#19016)

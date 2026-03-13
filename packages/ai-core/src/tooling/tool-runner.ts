@@ -93,6 +93,24 @@ export interface ToolRunnerConfig {
    * Hook failures are swallowed (instrumentation must not break execution).
    */
   readonly spanOutput?: (result: unknown) => unknown;
+
+  /**
+   * Optional async hook called with the full (pre-redaction) tool output.
+   * Used by artifact pipelines to extract large payloads (e.g., image bytes)
+   * before redaction strips them.
+   *
+   * Per task.0163: this is the seam where ArtifactSinkPort consumers
+   * intercept full output to persist artifacts and collect ArtifactRefs.
+   *
+   * Errors are swallowed — artifact persistence must not break tool execution.
+   *
+   * @param toolCallId - Stable tool call ID for correlation
+   * @param fullOutput - Validated output before redaction
+   */
+  readonly onFullResult?: (
+    toolCallId: string,
+    fullOutput: unknown
+  ) => Promise<void>;
 }
 
 /**
@@ -123,6 +141,7 @@ export function createToolRunner(
   const traceId = config?.traceId;
   const spanInput = config?.spanInput;
   const spanOutput = config?.spanOutput;
+  const onFullResult = config?.onFullResult;
 
   /**
    * Execute a tool by name with given arguments.
@@ -316,6 +335,16 @@ export function createToolRunner(
         errorCode: "validation",
         safeMessage,
       };
+    }
+
+    // 6b. Fire onFullResult hook (pre-redaction) for artifact extraction
+    // Errors swallowed — artifact persistence must not break tool execution
+    if (onFullResult) {
+      try {
+        await onFullResult(toolCallId, validatedOutput);
+      } catch {
+        // Swallow: artifact sink failures are non-fatal
+      }
     }
 
     // 7. Redact output via boundTool.redact()
