@@ -370,9 +370,12 @@ services:
   # =============================================================================
   # Scheduler Worker (Temporal)
   # Per SCHEDULER_SPEC.md: Executes scheduled graph runs via internal API
+  # Profile-gated: staging uses k3s (task.0149), production still uses Compose.
+  # Remove this service entirely when production migrates to k3s.
   # =============================================================================
 
   scheduler-worker:
+    profiles: ["compose-scheduler-worker"]
     image: ${SCHEDULER_WORKER_IMAGE}
     restart: unless-stopped
     labels:
@@ -382,27 +385,18 @@ services:
       - internal
       - cogni-edge
     environment:
-      # Temporal connection
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_NAMESPACE=cogni-${APP_ENV}
       - TEMPORAL_TASK_QUEUE=scheduler-tasks
-      # Database: service role (BYPASSRLS) for cross-tenant scheduler operations.
-      # Pass through DATABASE_SERVICE_URL — worker needs BYPASSRLS for cross-tenant reads.
       - DATABASE_URL=${DATABASE_SERVICE_URL?DATABASE_SERVICE_URL is required}
-      # Internal API (scheduler-worker → app)
       - APP_BASE_URL=http://app:3000
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
-      # GitHub App credentials (optional — required only for GitHub ingestion)
-      # Bare passthrough: passes empty string "" when var is unset in host env.
-      # Zod schema coerces "" → undefined so both cases are safe.
       - GH_REVIEW_APP_ID
       - GH_REVIEW_APP_PRIVATE_KEY_BASE64
       - GH_REPOS
-      # Observability
       - LOG_LEVEL=${PINO_LOG_LEVEL:-info}
       - SERVICE_NAME=scheduler-worker
       - HEALTH_PORT=9000
-      # Image digest for /version endpoint (set by deploy pipeline)
       - IMAGE_DIGEST=${SCHEDULER_WORKER_IMAGE}
     depends_on:
       postgres:
@@ -410,8 +404,6 @@ services:
       temporal:
         condition: service_healthy
     healthcheck:
-      # node -e inline check: wget/curl not available in node:20-bookworm-slim
-      # Uses /livez (liveness) per WATCHDOG_LIVEZ_NOT_READYZ invariant
       test:
         [
           "CMD-SHELL",

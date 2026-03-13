@@ -137,7 +137,8 @@ jobs:
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
       APP_IMAGE: ${{ needs.build.outputs.image_name }}:${{ needs.build.outputs.image_tag }}
       MIGRATOR_IMAGE: ${{ needs.build.outputs.migrator_image }}
-      SCHEDULER_WORKER_IMAGE: ${{ needs.build.outputs.scheduler_worker_image }}
+      # scheduler-worker: managed by Argo CD on k3s (task.0149). Not in COMPOSE_PROFILES.
+      COMPOSE_PROFILES: "sandbox-openclaw"
       DEPLOY_ENVIRONMENT: preview
       APP_ENV: production
       COGNI_REPO_URL: https://github.com/${{ github.repository }}.git
