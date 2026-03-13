@@ -2,7 +2,7 @@
 id: task.0163
 type: task
 title: "Image generation tool + pipeline artifact support"
-status: needs_closeout
+status: needs_implement
 priority: 1
 rank: 10
 estimate: 5
@@ -16,7 +16,7 @@ project: proj.tool-use-evolution
 branch: feat/image-gen-tool
 pr:
 reviewer:
-revision: 2
+revision: 3
 blocked_by:
 deploy_verified: false
 created: 2026-03-12
@@ -293,6 +293,26 @@ pnpm test -- artifact-sink
 ## PR / Links
 
 -
+
+## Review Feedback
+
+### Rev 3 — Implementation Review (2026-03-13)
+
+**Verdict: REQUEST CHANGES**
+
+**Blocking:**
+
+1. **Missing `onFullResult` pipeline test** — Add test in `apps/web/tests/unit/shared/ai/tool-runner-pipeline.spec.ts`:
+   - `onFullResult` called with `(toolCallId, validatedOutput)` after `validateOutput()`, before `redact()`
+   - Errors in `onFullResult` are swallowed (tool exec still succeeds)
+   - `onFullResult` is awaited (not fire-and-forget)
+
+2. **Missing artifact sink behavior test** — Add a test covering the `onFullResult` → sink → ref collection flow. Can be in provider spec or new test file.
+
+**Non-blocking suggestions:**
+
+- Consider `Uint8Array` over `Buffer` in `ArtifactWriteParams.data` for cross-runtime compat
+- Add `vi.clearAllMocks()` in `beforeEach` for `image-generate.test.ts`
 
 ## Attribution
 
