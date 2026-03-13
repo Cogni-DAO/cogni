@@ -37,6 +37,7 @@ import {
   isGrantRevokedError,
   isGrantScopeMismatchError,
 } from "@/ports/server";
+import { AnalyticsEvents, capture } from "@/shared/analytics";
 import { serverEnv } from "@/shared/env";
 
 export const dynamic = "force-dynamic";
@@ -348,6 +349,21 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     // gov: prefix distinguishes governance sessions from user sessions (ba:) in Langfuse
     const sessionId = `gov:${grant.billingAccountId}:s:${stateKey.slice(0, 32)}`;
 
+    capture({
+      event: AnalyticsEvents.AGENT_RUN_REQUESTED,
+      identity: {
+        userId: grant.userId,
+        sessionId,
+        tenantId: grant.billingAccountId,
+        traceId,
+      },
+      properties: {
+        run_id: runId,
+        agent_type: graphId,
+        entrypoint: "schedule",
+      },
+    });
+
     // Build caller from grant + billing account
     const caller = {
       billingAccountId: grant.billingAccountId,
@@ -431,6 +447,21 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         "Scheduled graph execution rejected before start"
       );
 
+      capture({
+        event: AnalyticsEvents.AGENT_RUN_FAILED,
+        identity: {
+          userId: grant.userId,
+          sessionId: sessionId,
+          tenantId: grant.billingAccountId,
+          traceId,
+        },
+        properties: {
+          run_id: runId,
+          error_class: errorCode,
+          error_code: errorCode,
+        },
+      });
+
       // --- 10a. Finalize idempotency record with failure ---
       await container.executionRequestPort.finalizeRequest(idempotencyKey, {
         ok: false,
@@ -455,6 +486,20 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     // --- 11. Return result ---
     if (final.ok) {
       log.info({ runId, graphId }, "Scheduled graph execution completed");
+      capture({
+        event: AnalyticsEvents.AGENT_RUN_COMPLETED,
+        identity: {
+          userId: grant.userId,
+          sessionId: sessionId,
+          tenantId: grant.billingAccountId,
+          traceId,
+        },
+        properties: {
+          run_id: runId,
+          success: true,
+          agent_type: graphId,
+        },
+      });
       const successResponse: InternalGraphRunOutput = {
         ok: true,
         runId,
@@ -466,6 +511,20 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         { runId, graphId, error: final.error },
         "Scheduled graph execution failed"
       );
+      capture({
+        event: AnalyticsEvents.AGENT_RUN_FAILED,
+        identity: {
+          userId: grant.userId,
+          sessionId: sessionId,
+          tenantId: grant.billingAccountId,
+          traceId,
+        },
+        properties: {
+          run_id: runId,
+          error_class: final.error ?? "internal",
+          error_code: final.error ?? "internal",
+        },
+      });
       const errorResponse: InternalGraphRunOutput = {
         ok: false,
         runId,

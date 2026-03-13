@@ -38,8 +38,8 @@ Reusable kit wrappers for chat UI components with vendor isolation and compositi
 
 ## Public Surface
 
-- **Exports (via index.ts and ../index.ts):** Thread, ComposerAddAttachment
-- **Files considered API:** Thread.tsx, ComposerAddAttachment.tsx, index.ts
+- **Exports (via index.ts and ../index.ts):** Thread, ComposerAddAttachment, ComposerVoiceInput
+- **Files considered API:** Thread.tsx, ComposerAddAttachment.tsx, ComposerVoiceInput.tsx, index.ts
 
 ## Responsibilities
 
@@ -94,5 +94,6 @@ import { ChatComposerExtras } from "@/features/ai/public";
 - Thread provides composerLeft slot for toolbar extensions (model picker, etc.)
 - Slot positioned via CSS overlay to avoid vendor component edits
 - ComposerAddAttachment overrides vendor styling with semantic accent tokens
+- ComposerVoiceInput wraps ComposerPrimitive.Dictate/StopDictation for voice-to-text (progressive enhancement — hidden when no DictationAdapter configured)
 - Vendor Thread component (`@/components/vendor/assistant-ui/thread`) remains unmodified
 - composerLeft slot uses pointer-events CSS to allow clicks through overlay

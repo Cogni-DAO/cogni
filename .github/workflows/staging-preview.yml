@@ -24,6 +24,20 @@ jobs:
       scheduler_worker_image: ${{ steps.push.outputs.scheduler_worker_image }}
     env:
       NEXT_TELEMETRY_DISABLED: 1
+      # Required by serverEnv() Zod schema for pnpm check / test
+      LITELLM_MASTER_KEY: build-key
+      AUTH_SECRET: tNf5lFM9yMhdgwS5yeQB8Y2kmigblBqobkvI2XN2brg=
+      SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
+      BILLING_INGEST_TOKEN: test-billing-ingest-token-for-ci-min32ch
+      INTERNAL_OPS_TOKEN: test-internal-ops-token-for-ci-min32
+      OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
+      OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
+      DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
+      POSTHOG_API_KEY: phc_test_key_for_ci
+      POSTHOG_HOST: http://localhost:18000
+      TEMPORAL_ADDRESS: localhost:7233
+      TEMPORAL_NAMESPACE: cogni-test
+      TEMPORAL_TASK_QUEUE: scheduler-tasks
     steps:
       - uses: actions/checkout@v4
         with:
@@ -181,6 +195,8 @@ jobs:
       GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
       GH_REPOS: ${{ vars.GH_REPOS }}
       GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
       NEXT_TELEMETRY_DISABLED: 1
     steps:
       - name: Checkout

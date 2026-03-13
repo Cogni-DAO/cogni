@@ -3,7 +3,7 @@
 
 /**
  * Module: `@features/ai/chat/components/ChatComposerExtras`
- * Purpose: Provides composer toolbar extras for chat including model and graph selection.
+ * Purpose: Provides composer toolbar extras for chat including model selection, graph selection, and voice input.
  * Scope: Smart component managing model selection state, localStorage persistence, and API data synchronization. Does not implement model fetching or localStorage utilities (delegates to hooks and preferences module).
  * Invariants: Validates localStorage preference against API models.
  * Side-effects: global (localStorage via preferences module), IO (API fetch via useModels hook)
