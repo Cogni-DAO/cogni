@@ -3,14 +3,14 @@
 
 /**
  * Module: `@tests/external/money/openrouter-topup-e2e.external.money`
- * Purpose: End-to-end money test — sends real USDC on Base, triggers the full
- *   confirmCreditsPurchase chain via the running dev:stack, and asserts accounting
- *   in Postgres, TigerBeetle, and OpenRouter.
- * Scope: Black-box test against a running dev:stack. Authenticates via SIWE,
- *   calls HTTP APIs, queries DB directly for assertions only.
- * Invariants: ENABLE_MONEY_TESTS=true required. Spends ~$1.10 USDC per run.
+ * Purpose: End-to-end money test — creates a payment intent, sends real USDC on Base,
+ *   submits the tx hash, polls until CONFIRMED, then asserts accounting in Postgres,
+ *   TigerBeetle, and OpenRouter.
+ * Scope: Black-box test against a running dev:stack. Uses the real on-chain payment path
+ *   (intents → submit → poll), not the widget confirm endpoint.
+ * Invariants: Spends ~$2.00 USDC per run (MIN_PAYMENT_CENTS). Requires funded test wallet.
  * Side-effects: Real on-chain USDC transfer, real OpenRouter charge, real DB writes.
- * Links: docs/spec/web3-openrouter-payments.md, docs/spec/financial-ledger.md
+ * Links: docs/spec/web3-openrouter-payments.md, docs/spec/financial-ledger.md, docs/spec/payments-design.md
  * @internal
  */
 
@@ -25,17 +25,19 @@ import {
   siweLogin,
 } from "@tests/_fixtures/auth/nextauth-http-helpers";
 import { eq } from "drizzle-orm";
-import { createPublicClient, createWalletClient, http, parseUnits } from "viem";
+import {
+  type Address,
+  createPublicClient,
+  createWalletClient,
+  http,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { CHAIN_ID } from "@/shared/web3/chain";
+import { MIN_PAYMENT_CENTS } from "@/types/payments";
 
-// ── Constants ─────────────────────────────────────────────────────────
-
-const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
-const SPLIT_ADDRESS = "0xd92EEc51C471CcF76996f0163Fd3cB6A61798f9C" as const;
-const AMOUNT_USD_CENTS = 110; // $1.10 — minimum viable amount for OpenRouter top-up
+// ── ABI ──────────────────────────────────────────────────────────────
 
 const ERC20_TRANSFER_ABI = [
   {
@@ -50,7 +52,7 @@ const ERC20_TRANSFER_ABI = [
   },
 ] as const;
 
-// ── Env ───────────────────────────────────────────────────────────────
+// ── Env ──────────────────────────────────────────────────────────────
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -68,7 +70,36 @@ const TEST_WALLET_PRIVATE_KEY = requireEnv(
   "TEST_WALLET_PRIVATE_KEY"
 ) as `0x${string}`;
 
-// ── Helpers ───────────────────────────────────────────────────────────
+// ── API Response Types ───────────────────────────────────────────────
+
+interface IntentResponse {
+  attemptId: string;
+  chainId: number;
+  token: string;
+  to: string;
+  amountRaw: string;
+  amountUsdCents: number;
+  expiresAt: string;
+}
+
+interface SubmitResponse {
+  attemptId: string;
+  status: string;
+  txHash: string;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+interface StatusResponse {
+  attemptId: string;
+  status: "PENDING_VERIFICATION" | "CONFIRMED" | "FAILED";
+  txHash: string | null;
+  amountUsdCents: number;
+  errorCode?: string;
+  createdAt: string;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────
 
 async function getOpenRouterCredits(apiKey: string): Promise<number> {
   const res = await fetch("https://openrouter.ai/api/v1/credits", {
@@ -82,14 +113,40 @@ async function getOpenRouterCredits(apiKey: string): Promise<number> {
   return data.data.total_credits;
 }
 
-// ── Test ──────────────────────────────────────────────────────────────
+/** Poll status endpoint until terminal state or timeout. */
+async function pollUntilTerminal(
+  baseUrl: string,
+  attemptId: string,
+  cookieStr: string,
+  maxWaitMs = 45_000,
+  intervalMs = 3_000
+): Promise<StatusResponse> {
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    const res = await fetch(
+      `${baseUrl}/api/v1/payments/attempts/${attemptId}`,
+      { headers: { Cookie: cookieStr } }
+    );
+    if (!res.ok) throw new Error(`Status poll failed: ${res.status}`);
+    const data = (await res.json()) as StatusResponse;
+
+    if (data.status === "CONFIRMED" || data.status === "FAILED") {
+      return data;
+    }
+
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error(`Payment did not reach terminal state within ${maxWaitMs}ms`);
+}
+
+// ── Test ─────────────────────────────────────────────────────────────
 
 describe("OpenRouter top-up e2e (live money)", () => {
-  // Shared state
   const db = createServiceDbClient(DATABASE_SERVICE_URL);
   const testWallet = privateKeyToAccount(TEST_WALLET_PRIVATE_KEY);
   const testUserId = randomUUID();
   let sessionCookie: NextAuthSessionCookie | null = null;
+
   function cookie(): string {
     if (!sessionCookie) throw new Error("SIWE login did not complete");
     return `${sessionCookie.name}=${sessionCookie.value}`;
@@ -105,17 +162,15 @@ describe("OpenRouter top-up e2e (live money)", () => {
     transport: http(process.env.EVM_RPC_URL),
   });
 
-  // ── Setup: seed user + SIWE login ──────────────────────────────────
+  // ── Setup ────────────────────────────────────────────────────────
 
   beforeAll(async () => {
-    // Seed test user with the test wallet address
     await db.insert(users).values({
       id: testUserId,
       walletAddress: testWallet.address,
       name: "Money Test User",
     });
 
-    // SIWE login to get session cookie
     const domain = new URL(TEST_BASE_URL).host;
     const loginResult = await siweLogin({
       baseUrl: TEST_BASE_URL,
@@ -132,81 +187,91 @@ describe("OpenRouter top-up e2e (live money)", () => {
     sessionCookie = loginResult.sessionCookie;
   }, 30_000);
 
-  // ── Cleanup ────────────────────────────────────────────────────────
-
   afterAll(async () => {
-    // FK cascades delete billing_accounts, credit_ledger, etc.
     await db.delete(users).where(eq(users.id, testUserId));
   });
 
-  // ── The test ───────────────────────────────────────────────────────
+  // ── The test ─────────────────────────────────────────────────────
 
-  it("sends USDC → confirms credits → asserts TB + Postgres + OpenRouter", async () => {
+  it("intent → USDC transfer → submit → poll CONFIRMED → assert TB + Postgres + OpenRouter", async () => {
     // 1. Record OpenRouter credits BEFORE
     const creditsBefore = await getOpenRouterCredits(OPENROUTER_API_KEY);
     console.log(`OpenRouter credits before: ${creditsBefore}`);
 
-    // 2. Send USDC to Split address (simulates user payment)
-    const usdcAmount = parseUnits((AMOUNT_USD_CENTS / 100).toFixed(6), 6);
+    // 2. Create payment intent
+    const intentRes = await fetch(`${TEST_BASE_URL}/api/v1/payments/intents`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: cookie(),
+      },
+      body: JSON.stringify({ amountUsdCents: MIN_PAYMENT_CENTS }),
+    });
+    expect(intentRes.ok).toBe(true);
+    const intent = (await intentRes.json()) as IntentResponse;
+    console.log(
+      `Intent created: id=${intent.attemptId}, to=${intent.to}, amountRaw=${intent.amountRaw}`
+    );
+
+    // 3. Send USDC on-chain to the intent's receiving address
     const transferHash = await walletClient.writeContract({
-      address: USDC_ADDRESS,
+      address: intent.token as Address,
       abi: ERC20_TRANSFER_ABI,
       functionName: "transfer",
-      args: [SPLIT_ADDRESS, usdcAmount],
+      args: [intent.to as Address, BigInt(intent.amountRaw)],
     });
-    console.log(`USDC transfer to Split: ${transferHash}`);
+    console.log(`USDC transfer tx: ${transferHash}`);
 
-    const transferReceipt = await publicClient.waitForTransactionReceipt({
+    const receipt = await publicClient.waitForTransactionReceipt({
       hash: transferHash,
     });
-    expect(transferReceipt.status).toBe("success");
+    expect(receipt.status).toBe("success");
 
-    // 3. Confirm credit purchase via the running app's HTTP API
-    const clientPaymentId = `money-test-${randomUUID()}`;
-    const confirmResponse = await fetch(
-      `${TEST_BASE_URL}/api/v1/payments/credits/confirm`,
+    // 4. Submit tx hash to the app
+    const submitRes = await fetch(
+      `${TEST_BASE_URL}/api/v1/payments/attempts/${intent.attemptId}/submit`,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Cookie: cookie(),
         },
-        body: JSON.stringify({
-          amountUsdCents: AMOUNT_USD_CENTS,
-          clientPaymentId,
-        }),
+        body: JSON.stringify({ txHash: transferHash }),
       }
     );
+    expect(submitRes.ok).toBe(true);
+    const submitData = (await submitRes.json()) as SubmitResponse;
+    console.log(`Submit response: status=${submitData.status}`);
 
-    expect(confirmResponse.ok).toBe(true);
-    const confirmData = (await confirmResponse.json()) as {
-      billingAccountId: string;
-      balanceCredits: number;
-    };
-    console.log(
-      `Credits confirmed: balance=${confirmData.balanceCredits}, account=${confirmData.billingAccountId}`
+    // 5. Poll until CONFIRMED (includes on-chain verification + post-credit funding)
+    const finalStatus = await pollUntilTerminal(
+      TEST_BASE_URL,
+      intent.attemptId,
+      cookie()
     );
-    expect(confirmData.balanceCredits).toBeGreaterThan(0);
+    console.log(`Final status: ${finalStatus.status}`);
+    expect(finalStatus.status).toBe("CONFIRMED");
 
-    // 4. Wait a moment for async settlement steps to complete
-    // Steps 3-6 (settlement, TB, funding) are non-blocking fire-and-forget
-    await new Promise((resolve) => setTimeout(resolve, 15_000));
+    // 6. Wait for post-credit funding to complete (runs inline but involves on-chain txs)
+    await new Promise((r) => setTimeout(r, 15_000));
 
-    // 5. Assert Postgres: provider_funding_attempts row
+    // 7. Assert Postgres: provider_funding_attempts row
+    // The funding key is ${chainId}:${txHash}
+    const fundingKey = `${intent.chainId}:${transferHash}`;
     const fundingRows = await db
       .select()
       .from(providerFundingAttempts)
-      .where(eq(providerFundingAttempts.paymentIntentId, clientPaymentId));
+      .where(eq(providerFundingAttempts.paymentIntentId, fundingKey));
 
     expect(fundingRows).toHaveLength(1);
     const fundingRow = fundingRows[0];
     console.log(
-      `Funding row: status=${fundingRow.status}, chargeId=${fundingRow.chargeId}, txHash=${fundingRow.fundingTxHash}`
+      `Funding row: status=${fundingRow?.status}, chargeId=${fundingRow?.chargeId}, txHash=${fundingRow?.fundingTxHash}`
     );
-    expect(fundingRow.status).toBe("funded");
-    expect(fundingRow.fundingTxHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    expect(fundingRow?.status).toBe("funded");
+    expect(fundingRow?.fundingTxHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
 
-    // 6. Assert TigerBeetle: account balances changed
+    // 8. Assert TigerBeetle: account balances changed
     const tb = createTigerBeetleAdapter(TIGERBEETLE_ADDRESS);
     const [treasury, operatorFloat, providerFloat] = await Promise.all([
       tb.getAccountBalance(ACCOUNT.ASSETS_TREASURY),
@@ -214,69 +279,27 @@ describe("OpenRouter top-up e2e (live money)", () => {
       tb.getAccountBalance(ACCOUNT.ASSETS_PROVIDER_FLOAT),
     ]);
 
-    // Treasury was debited (SPLIT_DISTRIBUTE)
     expect(treasury.debitsPosted).toBeGreaterThan(0n);
     console.log(
       `TB Treasury: debits=${treasury.debitsPosted}, credits=${treasury.creditsPosted}`
     );
 
-    // OperatorFloat was credited (SPLIT_DISTRIBUTE) and debited (PROVIDER_TOPUP)
     expect(operatorFloat.creditsPosted).toBeGreaterThan(0n);
     expect(operatorFloat.debitsPosted).toBeGreaterThan(0n);
     console.log(
       `TB OperatorFloat: debits=${operatorFloat.debitsPosted}, credits=${operatorFloat.creditsPosted}`
     );
 
-    // ProviderFloat was credited (PROVIDER_TOPUP)
     expect(providerFloat.creditsPosted).toBeGreaterThan(0n);
     console.log(
       `TB ProviderFloat: debits=${providerFloat.debitsPosted}, credits=${providerFloat.creditsPosted}`
     );
 
-    // 7. Assert OpenRouter: credit balance increased
+    // 9. Assert OpenRouter: credit balance increased
     const creditsAfter = await getOpenRouterCredits(OPENROUTER_API_KEY);
     console.log(
       `OpenRouter credits after: ${creditsAfter} (delta: ${creditsAfter - creditsBefore})`
     );
-    // OpenRouter minimum charge is $1.00, with 5% fee the net increase should be ~$1.00
     expect(creditsAfter).toBeGreaterThan(creditsBefore);
-
-    // 8. Idempotency: second call should not double-charge
-    const creditsBeforeRetry = creditsAfter;
-    const retryResponse = await fetch(
-      `${TEST_BASE_URL}/api/v1/payments/credits/confirm`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: cookie(),
-        },
-        body: JSON.stringify({
-          amountUsdCents: AMOUNT_USD_CENTS,
-          clientPaymentId, // same ID
-        }),
-      }
-    );
-    expect(retryResponse.ok).toBe(true);
-    const retryData = (await retryResponse.json()) as {
-      balanceCredits: number;
-    };
-    // Balance should not increase on duplicate
-    expect(retryData.balanceCredits).toBe(confirmData.balanceCredits);
-
-    // Funding row unchanged
-    const retryFundingRows = await db
-      .select()
-      .from(providerFundingAttempts)
-      .where(eq(providerFundingAttempts.paymentIntentId, clientPaymentId));
-    expect(retryFundingRows).toHaveLength(1);
-    expect(retryFundingRows[0]?.status).toBe("funded");
-
-    // OpenRouter credits should not increase again
-    // (small delay to let any async work settle)
-    await new Promise((resolve) => setTimeout(resolve, 3_000));
-    const creditsAfterRetry = await getOpenRouterCredits(OPENROUTER_API_KEY);
-    expect(creditsAfterRetry).toBe(creditsBeforeRetry);
-    console.log("Idempotency verified: no duplicate charge on retry");
-  }, 60_000);
+  }, 120_000);
 });

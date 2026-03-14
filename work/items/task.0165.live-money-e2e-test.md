@@ -6,7 +6,7 @@ status: needs_closeout
 priority: 1
 rank: 25
 estimate: 2
-summary: Build an external:money test that sends real USDC to the Split contract on Base, triggers the full confirmCreditsPurchase chain via the running app's HTTP API, and asserts correctness in TigerBeetle, Postgres, and OpenRouter credits balance. Prerequisite — dev:stack running.
+summary: Build an external:money test that creates a payment intent, sends real USDC on Base via the on-chain payment path (intents → submit → poll CONFIRMED), then asserts correctness in TigerBeetle, Postgres, and OpenRouter credits balance. Prerequisite — dev:stack running.
 outcome: A single test validates the entire payment-to-provider pipeline with real money on Base mainnet. TigerBeetle balances, Postgres funding rows, and OpenRouter credit balance all asserted. Runs via `pnpm test:external:money`. Never in CI.
 spec_refs: web3-openrouter-payments, financial-ledger-spec, operator-wallet
 assignees: derekg1729
