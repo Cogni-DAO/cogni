@@ -16,9 +16,12 @@
  * @public
  */
 
-import type { AiExecutionErrorCode, GraphId } from "@cogni/ai-core";
-import type { Message } from "@/core";
-import type { AiEvent } from "@/types/ai-events";
+import type {
+  AiEvent,
+  AiExecutionErrorCode,
+  GraphId,
+  Message,
+} from "@cogni/ai-core";
 import type { LlmCaller } from "./llm.port";
 
 // Re-export canonical error code type from ai-core
