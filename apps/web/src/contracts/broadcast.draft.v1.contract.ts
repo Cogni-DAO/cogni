@@ -14,19 +14,12 @@
  * @internal
  */
 
+import { PLATFORM_IDS } from "@cogni/broadcast-core";
 import { z } from "zod";
 
-export const PLATFORM_IDS = [
-  "x",
-  "bluesky",
-  "linkedin",
-  "discord",
-  "blog",
-] as const;
-
 export const BroadcastDraftInputSchema = z.object({
-  body: z.string().min(1).max(5000),
-  title: z.string().max(200).optional(),
+  body: z.string().min(1).max(50_000),
+  title: z.string().max(500).optional(),
   targetPlatforms: z
     .array(z.enum(PLATFORM_IDS))
     .min(1)

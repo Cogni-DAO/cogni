@@ -51,6 +51,7 @@ export {
   type CreateContentMessageInput,
   type CreatePlatformPostInput,
   type FinalizePublishInput,
+  type GenerationPolicy,
   PLATFORM_IDS,
   PLATFORM_POST_STATUSES,
   type PlatformId,

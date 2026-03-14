@@ -11,7 +11,12 @@
  * @public
  */
 
-import type { ContentMessage, PlatformId, RiskLevel } from "../types";
+import type {
+  ContentMessage,
+  GenerationPolicy,
+  PlatformId,
+  RiskLevel,
+} from "../types";
 
 export interface OptimizationResult {
   readonly optimizedBody: string;
@@ -28,6 +33,7 @@ export interface OptimizationResult {
 export interface ContentOptimizerPort {
   optimize(
     message: ContentMessage,
-    targetPlatform: PlatformId
+    targetPlatform: PlatformId,
+    policy?: GenerationPolicy
   ): Promise<OptimizationResult>;
 }

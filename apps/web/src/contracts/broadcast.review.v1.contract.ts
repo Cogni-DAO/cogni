@@ -14,13 +14,12 @@
  * @internal
  */
 
+import { REVIEW_DECISIONS } from "@cogni/broadcast-core";
 import { z } from "zod";
-
-export const REVIEW_DECISIONS = ["approved", "rejected", "edited"] as const;
 
 export const BroadcastReviewInputSchema = z.object({
   decision: z.enum(REVIEW_DECISIONS),
-  editedBody: z.string().max(5000).optional(),
+  editedBody: z.string().max(50_000).optional(),
 });
 
 export const PlatformPostResponseSchema = z.object({

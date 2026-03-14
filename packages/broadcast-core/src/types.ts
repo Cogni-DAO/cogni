@@ -110,6 +110,22 @@ export interface PlatformPost {
   readonly updatedAt: Date;
 }
 
+// ── Generation Policy ────────────────────────────────────────────
+
+/**
+ * Token budget and trim strategy for LLM-based content optimization.
+ * Passed to ContentOptimizerPort so the adapter can enforce model-aware
+ * limits without leaking those concerns into Zod request contracts.
+ */
+export interface GenerationPolicy {
+  /** Max input tokens to send to the model. Adapter counts and enforces. */
+  readonly maxInputTokens?: number;
+  /** Max output tokens to request from the model. */
+  readonly maxOutputTokens?: number;
+  /** What to do when input exceeds maxInputTokens. */
+  readonly trimStrategy?: "truncate" | "summarize" | "fail";
+}
+
 // ── Input Types ──────────────────────────────────────────────────
 
 export interface CreateContentMessageInput {
