@@ -1,21 +1,24 @@
 # Infrastructure Setup
 
-Complete guide for provisioning VMs, configuring DNS, and setting up GitHub secrets for preview and production environments.
+Provisioning guide for the two-VM architecture: **Compose VM** (app, postgres, temporal, litellm) and **k3s VM** (scheduler-worker via Argo CD + GitOps).
 
-**When to use this guide:**
-
-- First-time deployment setup
-- Disaster recovery (VMs deleted/terminated)
-- Adding a new environment
+**When to use:** First-time setup, disaster recovery, adding an environment.
 
 ## Prerequisites
 
 - Cherry Servers account with API token ([portal.cherryservers.com](https://portal.cherryservers.com))
 - GitHub CLI authenticated (`gh auth login`)
 - OpenTofu installed (`scripts/bootstrap/install/install-tofu.sh`)
+- `age` installed (`brew install age` or [github.com/FiloSottile/age](https://github.com/FiloSottile/age))
+- `sops` installed (`brew install sops` or [github.com/getsops/sops](https://github.com/getsops/sops))
 - Domain access (Namecheap or your registrar)
 
 ## Quick Reference
+
+| VM         | Module        | Runs                                   | Managed By     |
+| ---------- | ------------- | -------------------------------------- | -------------- |
+| Compose VM | `cherry/base` | app, postgres, temporal, litellm, edge | Docker Compose |
+| k3s VM     | `cherry/k3s`  | scheduler-worker                       | Argo CD        |
 
 | Environment | Domain               | SSH Key                                     | GitHub Environment |
 | ----------- | -------------------- | ------------------------------------------- | ------------------ |
@@ -26,47 +29,23 @@ Complete guide for provisioning VMs, configuring DNS, and setting up GitHub secr
 
 ## Step 1: Generate SSH Deploy Keys
 
-Generate ed25519 keypairs for each environment. These keys allow CI to SSH into VMs for deployment.
-
 ```bash
-cd infra/tofu/cherry/base
-```
-
-### Preview Key
-
-```bash
-# Generate keypair (no passphrase for CI automation)
+# Generate keypairs (no passphrase for CI automation)
 ssh-keygen -t ed25519 -f ~/.ssh/cogni_template_preview_deploy -C "cogni-template-preview" -N ""
-
-# Copy public key to repo
-cp ~/.ssh/cogni_template_preview_deploy.pub keys/
-
-# Upload private key to GitHub Secrets immediately
-gh secret set SSH_DEPLOY_KEY --env preview --body "$(cat ~/.ssh/cogni_template_preview_deploy)"
-```
-
-### Production Key
-
-```bash
-# Generate keypair
 ssh-keygen -t ed25519 -f ~/.ssh/cogni_template_production_deploy -C "cogni-template-production" -N ""
 
-# Copy public key to repo
-cp ~/.ssh/cogni_template_production_deploy.pub keys/
+# Copy public keys to repo (used by both cherry/base and cherry/k3s)
+cp ~/.ssh/cogni_template_preview_deploy.pub infra/tofu/cherry/base/keys/
+cp ~/.ssh/cogni_template_production_deploy.pub infra/tofu/cherry/base/keys/
 
-# Upload private key to GitHub Secrets immediately
+# Upload private keys to GitHub Secrets
+gh secret set SSH_DEPLOY_KEY --env preview --body "$(cat ~/.ssh/cogni_template_preview_deploy)"
 gh secret set SSH_DEPLOY_KEY --env production --body "$(cat ~/.ssh/cogni_template_production_deploy)"
-```
 
-### Commit Public Keys & Cleanup
-
-```bash
-git add keys/*.pub
-git commit -m "chore(infra): add SSH deploy keys for preview and production"
+# Commit public keys
+git add infra/tofu/cherry/base/keys/*.pub
+git commit -m "chore(infra): add SSH deploy keys"
 git push
-
-# Optional: delete local private keys (now stored in GitHub Secrets)
-rm ~/.ssh/cogni_template_preview_deploy ~/.ssh/cogni_template_production_deploy
 ```
 
 ---
@@ -74,26 +53,22 @@ rm ~/.ssh/cogni_template_preview_deploy ~/.ssh/cogni_template_production_deploy
 ## Step 2: Set Credentials
 
 ```bash
-# Cherry API token (from portal.cherryservers.com → Settings → API Keys)
-export CHERRY_AUTH_TOKEN="<your-token>"
-
-# Get project ID from Cherry portal URL or project settings
-export CHERRY_PROJECT_ID="<your-project-id>"
+export CHERRY_AUTH_TOKEN="<cherry-api-token>"
+export CHERRY_PROJECT_ID="<cherry-project-id>"
 ```
 
 ---
 
 ## Step 3: Provision VMs
 
-> **Important**: Each environment has its own SSH keypair. The `TF_VAR_ssh_private_key` variable must match the public key in your tfvars file. If mismatched, the health check will fail with "SSH authentication failed".
+> **Important**: `TF_VAR_ssh_private_key` must match the public key in your tfvars. Mismatch → health check fails with "SSH authentication failed".
 
-### Preview Environment
+### 3a: Compose VM (`cherry/base`)
 
 ```bash
-# Set private key for health check (must match public_key_path in tfvars)
+cd infra/tofu/cherry/base
 export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_preview_deploy)"
 
-# Create tfvars file
 cat > terraform.preview.tfvars << EOF
 environment     = "preview"
 vm_name_prefix  = "cogni-template"
@@ -103,89 +78,153 @@ region          = "LT-Siauliai"
 public_key_path = "keys/cogni_template_preview_deploy.pub"
 EOF
 
-# Initialize and create workspace
 tofu init
 tofu workspace new preview || tofu workspace select preview
-
-# Provision VM
 tofu plan -var-file=terraform.preview.tfvars
 tofu apply -var-file=terraform.preview.tfvars
 
-# Save the IP
-export PREVIEW_IP=$(tofu output -raw vm_host)
-echo "Preview VM IP: $PREVIEW_IP"
+export COMPOSE_VM_IP=$(tofu output -raw vm_host)
+echo "Compose VM IP: $COMPOSE_VM_IP"
 ```
 
-### Production Environment
-
-> **Before switching:** Verify the previous workspace applied cleanly and you're not carrying stale state: `tofu workspace show`
+### 3b: k3s VM (`cherry/k3s`)
 
 ```bash
-# Set private key for health check (must match public_key_path in tfvars)
-export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_production_deploy)"
+cd infra/tofu/cherry/k3s
+export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_preview_deploy)"
 
-# Create tfvars file
-cat > terraform.production.tfvars << EOF
-environment     = "production"
-vm_name_prefix  = "cogni-template"
-project_id      = "${CHERRY_PROJECT_ID}"
-plan            = "B1-4-4gb-80s-shared"
-region          = "LT-Siauliai"
-public_key_path = "keys/cogni_template_production_deploy.pub"
+cat > terraform.preview.tfvars << EOF
+environment       = "preview"
+project_id        = "${CHERRY_PROJECT_ID}"
+plan              = "B1-4-4gb-80s-shared"
+region            = "LT-Siauliai"
+public_key_path   = "../base/keys/cogni_template_preview_deploy.pub"
+ghcr_deploy_token = "<github-pat-with-read-packages>"
 EOF
 
-# Switch workspace
-tofu workspace new production || tofu workspace select production
+tofu init
+tofu workspace new preview || tofu workspace select preview
+tofu plan -var-file=terraform.preview.tfvars
+tofu apply -var-file=terraform.preview.tfvars
 
-# Provision VM
-tofu plan -var-file=terraform.production.tfvars
-tofu apply -var-file=terraform.production.tfvars
+export K3S_VM_IP=$(tofu output -raw vm_host)
+echo "k3s VM IP: $K3S_VM_IP"
+```
 
-# Save the IP
-export PROD_IP=$(tofu output -raw vm_host)
-echo "Production VM IP: $PROD_IP"
+Cloud-init installs k3s, generates an age keypair, installs Argo CD with ksops, and applies the app-of-apps Application. Takes ~5 minutes. Argo CD sync stays degraded until Step 4 completes.
+
+---
+
+## Step 4: Bootstrap k3s Secrets
+
+After cloud-init finishes, Argo CD is running but cannot decrypt secrets (placeholder age key in `.sops.yaml`). This step wires the real age public key, encrypts secrets, and fills overlay placeholders.
+
+```bash
+# Wait for cloud-init
+ssh root@$K3S_VM_IP cloud-init status --wait
+
+# Verify bootstrap
+ssh root@$K3S_VM_IP cat /var/lib/cogni/bootstrap.ok
+
+# Get the age public key generated on the VM
+AGE_PUBLIC_KEY=$(ssh root@$K3S_VM_IP cat /var/lib/cogni/age-public-key.txt)
+echo "Age public key: $AGE_PUBLIC_KEY"
+```
+
+### 4a: Update `.sops.yaml` with real age key
+
+```bash
+cd infra/cd/secrets
+# Replace the placeholder with the real public key
+sed -i '' "s/age1staging_placeholder_replace_with_real_public_key/$AGE_PUBLIC_KEY/" .sops.yaml
+```
+
+### 4b: Encrypt secrets
+
+```bash
+# Create plaintext secrets file, then encrypt
+cat > staging/scheduler-worker.enc.yaml << EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: scheduler-worker-secrets
+  namespace: cogni-staging
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://<app_user>:<app_pass>@postgres:5432/<db_name>?sslmode=disable"
+  SCHEDULER_API_TOKEN: "<scheduler-api-token>"
+EOF
+
+sops --encrypt --in-place staging/scheduler-worker.enc.yaml
+```
+
+### 4c: Fill overlay placeholders
+
+Edit `infra/cd/overlays/staging/kustomization.yaml`:
+
+- Replace `10.0.0.1` (4 occurrences) with `$COMPOSE_VM_IP`
+- Replace `staging-placeholder-scheduler-worker` with the real image digest (`@sha256:...` from GHCR)
+
+### 4d: Allow k3s traffic on Compose VM firewall
+
+```bash
+ssh root@$COMPOSE_VM_IP bash -c "
+  ufw allow from $K3S_VM_IP to any port 7233 comment 'k3s→temporal'
+  ufw allow from $K3S_VM_IP to any port 5432 comment 'k3s→postgres'
+  ufw allow from $K3S_VM_IP to any port 3000 comment 'k3s→app'
+"
+```
+
+### 4e: Commit and push
+
+```bash
+git add infra/cd/secrets/.sops.yaml infra/cd/secrets/staging/ infra/cd/overlays/staging/
+git commit -m "chore(infra): wire k3s secrets + overlay for staging"
+git push
+```
+
+Argo CD auto-syncs within 3 minutes. Verify:
+
+```bash
+ssh root@$K3S_VM_IP kubectl -n argocd get app
+ssh root@$K3S_VM_IP kubectl -n cogni-staging get pods
 ```
 
 ---
 
-## Step 4: Configure DNS
+## Step 5: Configure DNS
 
-Update A records at your domain registrar (e.g., Namecheap → Advanced DNS):
+Update A records at your domain registrar:
 
-| Host      | Type | Value         | TTL       |
-| --------- | ---- | ------------- | --------- |
-| `preview` | A    | `$PREVIEW_IP` | Automatic |
-| `@`       | A    | `$PROD_IP`    | Automatic |
-| `www`     | A    | `$PROD_IP`    | Automatic |
+| Host      | Type | Value            | TTL       |
+| --------- | ---- | ---------------- | --------- |
+| `preview` | A    | `$COMPOSE_VM_IP` | Automatic |
+| `@`       | A    | `$COMPOSE_VM_IP` | Automatic |
+| `www`     | A    | `$COMPOSE_VM_IP` | Automatic |
 
-**Verify propagation** (may take 5-15 minutes):
+> k3s VM has no public DNS — scheduler-worker is internal only.
 
 ```bash
 dig +short preview.cognidao.org
-dig +short cognidao.org
 ```
 
 ---
 
-## Step 5: Update GitHub Secrets
+## Step 6: Update GitHub Secrets
 
 ### VM Host IPs
 
 ```bash
-gh secret set VM_HOST --env preview --body "$PREVIEW_IP"
+gh secret set VM_HOST --env preview --body "$COMPOSE_VM_IP"
 gh secret set VM_HOST --env production --body "$PROD_IP"
 ```
 
 ### Required Secrets Per Environment
 
-Both `preview` and `production` environments need these secrets. Generate fresh values for each environment:
-
 ```bash
-# Set environment (run this section twice: once for preview, once for production)
-ENV="preview"  # or "production"
+ENV="preview"  # run twice: preview, production
 
-# Database credentials — generate ALL values in one session, then set atomically.
-# DSNs are constructed from these values so usernames/passwords cannot diverge.
+# Database credentials — generate ALL in one session
 POSTGRES_ROOT_PASS=$(openssl rand -hex 32)
 APP_USER="cogni_app_${ENV}"
 APP_PASS=$(openssl rand -hex 32)
@@ -201,9 +240,7 @@ gh secret set APP_DB_SERVICE_USER --env $ENV --body "$SVC_USER"
 gh secret set APP_DB_SERVICE_PASSWORD --env $ENV --body "$SVC_PASS"
 gh secret set APP_DB_NAME --env $ENV --body "$DB_NAME"
 
-# Database connection strings (authoritative for runtime)
-# Constructed from the variables above — never hardcode usernames or passwords here.
-# ?sslmode=disable required for Docker-internal connections (postgres:5432 is not localhost)
+# DSNs (authoritative for runtime, constructed from above)
 gh secret set DATABASE_URL --env $ENV --body "postgresql://${APP_USER}:${APP_PASS}@postgres:5432/${DB_NAME}?sslmode=disable"
 gh secret set DATABASE_SERVICE_URL --env $ENV --body "postgresql://${SVC_USER}:${SVC_PASS}@postgres:5432/${DB_NAME}?sslmode=disable"
 
@@ -211,20 +248,12 @@ gh secret set DATABASE_SERVICE_URL --env $ENV --body "postgresql://${SVC_USER}:$
 gh secret set AUTH_SECRET --env $ENV --body "$(openssl rand -hex 32)"
 gh secret set LITELLM_MASTER_KEY --env $ENV --body "sk-$(openssl rand -hex 24)"
 gh secret set METRICS_TOKEN --env $ENV --body "$(openssl rand -base64 32)"
-
-# Domain
-gh secret set DOMAIN --env $ENV --body "preview.cognidao.org"  # or "cognidao.org" for production
-
-# API keys (same value can be shared across environments, or use separate keys)
+gh secret set DOMAIN --env $ENV --body "preview.cognidao.org"  # or "cognidao.org"
 gh secret set OPENROUTER_API_KEY --env $ENV --body "<your-openrouter-key>"
 gh secret set EVM_RPC_URL --env $ENV --body "<your-rpc-url>"
 ```
 
-> **Note**: `SSH_DEPLOY_KEY` was already set in Step 1.
-
 ### Repository Secrets (Shared)
-
-These are set once at repository level, not per-environment:
 
 ```bash
 gh secret set CHERRY_AUTH_TOKEN --body "<cherry-api-token>"
@@ -234,7 +263,7 @@ gh secret set ACTIONS_AUTOMATION_BOT_PAT --body "<bot-pat>"
 gh secret set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID --body "<walletconnect-project-id>"
 ```
 
-### Optional: Grafana Cloud Observability
+### Optional: Grafana Cloud
 
 ```bash
 gh secret set GRAFANA_CLOUD_LOKI_URL --env $ENV --body "<loki-push-url>"
@@ -247,162 +276,110 @@ gh secret set PROMETHEUS_PASSWORD --env $ENV --body "<prometheus-password>"
 
 ---
 
-## Step 6: Verify Setup
-
-Deployments are triggered automatically by CI:
-
-- **Preview**: Push to `staging` branch triggers `staging-preview.yml`
-- **Production**: Push to `main` branch triggers `deploy-production.yml`
-
-### Manual Verification
-
-After CI deploys, verify:
+## Step 7: Verify
 
 ```bash
-# Check HTTPS and health endpoints
+# Compose VM — HTTPS health
 curl -I https://preview.cognidao.org/readyz
-curl -I https://cognidao.org/readyz
 
-# SSH into VMs if needed
-ssh -i ~/.ssh/cogni_template_preview_deploy root@$PREVIEW_IP
-ssh -i ~/.ssh/cogni_template_production_deploy root@$PROD_IP
+# k3s VM — cluster + pods
+ssh root@$K3S_VM_IP kubectl get nodes
+ssh root@$K3S_VM_IP kubectl -n argocd get app
+ssh root@$K3S_VM_IP kubectl -n cogni-staging get pods
+
+# Argo CD UI (via port-forward)
+ssh root@$K3S_VM_IP -L 8080:localhost:443
+# Then: https://localhost:8080
 ```
 
 ---
 
 ## SSH Reference
 
-Quick commands for admin access to VMs.
-
-### Connect to VMs
-
 ```bash
-# Preview
-ssh -i ~/.ssh/cogni_template_preview_deploy root@<PREVIEW_IP>
+# Compose VM
+ssh -i ~/.ssh/cogni_template_preview_deploy root@<COMPOSE_VM_IP>
 
-# Production
-ssh -i ~/.ssh/cogni_template_production_deploy root@<PROD_IP>
+# k3s VM
+ssh -i ~/.ssh/cogni_template_preview_deploy root@<K3S_VM_IP>
+
+# Get IPs from tofu
+cd infra/tofu/cherry/base && tofu workspace select preview && tofu output -raw vm_host
+cd infra/tofu/cherry/k3s && tofu workspace select preview && tofu output -raw vm_host
 ```
 
-> **Tip**: Get current IPs from GitHub Secrets or `tofu output -raw vm_host` in the appropriate workspace.
+### Service Locations
 
-### Docker Compose Locations (on VM)
-
-| Stack                            | Path                                             | Project Name    |
-| -------------------------------- | ------------------------------------------------ | --------------- |
-| Edge (Caddy/TLS)                 | `/opt/cogni-template-edge/docker-compose.yml`    | `cogni-edge`    |
-| Runtime (app, postgres, litellm) | `/opt/cogni-template-runtime/docker-compose.yml` | `cogni-runtime` |
-
-```bash
-# Example: view runtime logs
-docker compose --project-name cogni-runtime -f /opt/cogni-template-runtime/docker-compose.yml logs --tail 100
-
-# Example: restart edge stack
-docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml restart
-```
+| Service          | VM         | Access                                                  |
+| ---------------- | ---------- | ------------------------------------------------------- |
+| App (Next.js)    | Compose VM | `https://<domain>/readyz`                               |
+| Postgres         | Compose VM | port 5432 (internal)                                    |
+| Temporal         | Compose VM | port 7233 (gRPC), 8233 (UI)                             |
+| LiteLLM          | Compose VM | port 4000 (internal)                                    |
+| scheduler-worker | k3s VM     | `kubectl -n cogni-staging logs deploy/scheduler-worker` |
+| Argo CD          | k3s VM     | `ssh -L 8080:localhost:443` then https://localhost:8080 |
 
 ---
 
 ## Troubleshooting
 
-### Certificate Errors (SSL mismatch)
-
-**Symptom**: Browser shows certificate for wrong domain (e.g., `cloudflare-dns.com`)
-
-**Cause**: VM was terminated and IP reassigned, or Caddy failed to obtain certificate
-
-**Fix**: Re-provision VM (Step 2), update DNS (Step 3), update GitHub secrets (Step 4)
-
 ### Health Check Fails: "SSH authentication failed"
 
-**Symptom**: `tofu apply` times out with `ssh: unable to authenticate, attempted methods [none publickey]`
-
-**Cause**: `TF_VAR_ssh_private_key` doesn't match the public key on the VM. Common when switching between preview/production.
-
-**Fix**:
+`TF_VAR_ssh_private_key` doesn't match the public key on the VM. Set the correct key and re-apply:
 
 ```bash
-# Ensure private key matches the environment you're provisioning
-export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_preview_deploy)"    # for preview
-export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_production_deploy)" # for production
-
-# Re-run apply
-tofu apply -var-file=terraform.<environment>.tfvars
+export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_preview_deploy)"
+tofu apply -var-file=terraform.preview.tfvars
 ```
 
-### SSH Connection Failed
+### Argo CD Sync Degraded
+
+SOPS decryption failing — age key mismatch. Verify Step 4 completed:
 
 ```bash
-# Verify key exists
-ls -la ~/.ssh/cogni_template_*_deploy
-
-# Test connection
-ssh -i ~/.ssh/cogni_template_preview_deploy root@$PREVIEW_IP echo "OK"
-
-# If key doesn't exist, regenerate:
-ssh-keygen -t ed25519 -f ~/.ssh/cogni_template_preview_deploy -C "cogni-template-preview"
-# Then update keys/ directory and GitHub secrets
+# Check the age public key on the VM matches .sops.yaml
+ssh root@$K3S_VM_IP cat /var/lib/cogni/age-public-key.txt
+grep age infra/cd/secrets/.sops.yaml
 ```
 
-### Deployment Fails at Health Check
+### Certificate Errors (SSL mismatch)
 
-```bash
-# SSH into VM and check containers
-ssh -i ~/.ssh/cogni_template_preview_deploy root@$PREVIEW_IP
-
-# On VM:
-docker ps -a
-docker compose --project-name cogni-edge -f /opt/cogni-template-edge/docker-compose.yml logs caddy
-docker compose --project-name cogni-runtime -f /opt/cogni-template-runtime/docker-compose.yml logs app
-```
+VM terminated and IP reassigned, or Caddy failed to obtain cert. Re-provision VM, update DNS, update GitHub secrets.
 
 ### DNS Not Propagating
 
 ```bash
-# Check current resolution
 dig +trace preview.cognidao.org
-
-# Force refresh (may need to wait or clear DNS cache)
-# On macOS:
-sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
+# macOS: sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
 ```
 
 ---
 
-## Reference: Complete Secrets Checklist
+## Reference: Secrets Checklist
 
-### Per-Environment Secrets
+### Per-Environment
 
-| Secret                    | Description                    | How to Generate                                                           |
-| ------------------------- | ------------------------------ | ------------------------------------------------------------------------- |
-| `VM_HOST`                 | VM IP address                  | From `tofu output`                                                        |
-| `DOMAIN`                  | Environment domain             | `preview.cognidao.org` or `cognidao.org`                                  |
-| `SSH_DEPLOY_KEY`          | Private SSH key                | `cat ~/.ssh/cogni_template_*_deploy`                                      |
-| `POSTGRES_ROOT_USER`      | DB root user                   | `postgres`                                                                |
-| `POSTGRES_ROOT_PASSWORD`  | DB root password               | `openssl rand -hex 32`                                                    |
-| `APP_DB_USER`             | App DB user (RLS enforced)     | `cogni_app_preview` or `cogni_app_production`                             |
-| `APP_DB_PASSWORD`         | App DB password                | `openssl rand -hex 32`                                                    |
-| `APP_DB_SERVICE_USER`     | Service DB user (BYPASSRLS)    | `cogni_app_preview_service` or `cogni_app_production_service`             |
-| `APP_DB_SERVICE_PASSWORD` | Service DB password            | `openssl rand -hex 32`                                                    |
-| `APP_DB_NAME`             | App database name              | `cogni_template_preview` or `cogni_template_production`                   |
-| `DATABASE_URL`            | App connection string (RLS)    | Derived: `postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@...` (see above) |
-| `DATABASE_SERVICE_URL`    | Service connection (BYPASSRLS) | Derived: `postgresql://${APP_DB_SERVICE_USER}:${...}@...` (see above)     |
-| `AUTH_SECRET`             | NextAuth secret                | `openssl rand -hex 32`                                                    |
-| `LITELLM_MASTER_KEY`      | LiteLLM API key                | `sk-$(openssl rand -hex 24)`                                              |
-| `METRICS_TOKEN`           | Metrics auth token             | `openssl rand -base64 32`                                                 |
-| `OPENROUTER_API_KEY`      | OpenRouter API key             | From openrouter.ai                                                        |
-| `EVM_RPC_URL`             | Ethereum RPC URL               | From Alchemy/Infura                                                       |
+| Secret                    | Description                    | Source                                   |
+| ------------------------- | ------------------------------ | ---------------------------------------- |
+| `VM_HOST`                 | Compose VM IP                  | `tofu output` (cherry/base)              |
+| `DOMAIN`                  | Environment domain             | `preview.cognidao.org` or `cognidao.org` |
+| `SSH_DEPLOY_KEY`          | Private SSH key                | Step 1                                   |
+| `POSTGRES_ROOT_USER`      | DB root user                   | `postgres`                               |
+| `POSTGRES_ROOT_PASSWORD`  | DB root password               | `openssl rand -hex 32`                   |
+| `APP_DB_USER`             | App DB user (RLS enforced)     | `cogni_app_<env>`                        |
+| `APP_DB_PASSWORD`         | App DB password                | `openssl rand -hex 32`                   |
+| `APP_DB_SERVICE_USER`     | Service DB user (BYPASSRLS)    | `cogni_app_<env>_service`                |
+| `APP_DB_SERVICE_PASSWORD` | Service DB password            | `openssl rand -hex 32`                   |
+| `APP_DB_NAME`             | Database name                  | `cogni_template_<env>`                   |
+| `DATABASE_URL`            | App connection string (RLS)    | Derived from above                       |
+| `DATABASE_SERVICE_URL`    | Service connection (BYPASSRLS) | Derived from above                       |
+| `AUTH_SECRET`             | NextAuth secret                | `openssl rand -hex 32`                   |
+| `LITELLM_MASTER_KEY`      | LiteLLM API key                | `sk-$(openssl rand -hex 24)`             |
+| `METRICS_TOKEN`           | Metrics auth token             | `openssl rand -base64 32`                |
+| `OPENROUTER_API_KEY`      | OpenRouter API key             | openrouter.ai                            |
+| `EVM_RPC_URL`             | Ethereum RPC URL               | Alchemy/Infura                           |
 
-> **Two Config Surfaces (P0):**
->
-> | Surface          | Secrets                                | Consumed By                               |
-> | ---------------- | -------------------------------------- | ----------------------------------------- |
-> | **Runtime**      | `DATABASE_URL`, `DATABASE_SERVICE_URL` | App, migrate, scheduler-worker containers |
-> | **Provisioning** | `POSTGRES_ROOT_*`, `APP_DB_*`          | `db-provision` container only             |
->
-> DSNs are authoritative for runtime. Component secrets are for provisioning only and must never
-> reach runtime containers. Deploy validates DSN invariants (distinct users, no superusers).
-> See `scripts/ci/validate-dsns.sh` and `docs/spec/database-url-alignment.md`.
+> **Two Config Surfaces:** DSNs (`DATABASE_URL`, `DATABASE_SERVICE_URL`) are authoritative for runtime. Component secrets (`POSTGRES_ROOT_*`, `APP_DB_*`) are for provisioning only. See `docs/spec/database-url-alignment.md`.
 
 ### Repository Secrets
 
@@ -413,11 +390,3 @@ sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
 | `SONAR_TOKEN`                          | SonarCloud token                |
 | `ACTIONS_AUTOMATION_BOT_PAT`           | Bot PAT for automation          |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect project ID        |
-
----
-
-## Future Roadmap
-
-- [ ] **Golden image via Packer**: Bake Docker+Compose into a snapshot image instead of boot-time installs. Eliminates nondeterministic failures from upstream repo/CDN issues. Cloud-init becomes config-only.
-- [ ] **Flaky LiteLLM Fix**: first deployment of the app on new infra tends to fail, for unhealthy litellm. re-deploy fixes. TODO: root cause and fix flakiness
-- [ ] **Workspace-environment guard**: Add a `precondition` in `main.tf` that validates `terraform.workspace == var.environment` to prevent applying the wrong tfvars in the wrong workspace (e.g., preview resources landing in production state).
