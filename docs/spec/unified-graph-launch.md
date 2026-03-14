@@ -329,10 +329,22 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 | `services/scheduler-worker/src/activities/index.ts`                 | `createGraphRunActivity`, `updateGraphRunActivity` activities         |
 | `services/scheduler-worker/src/workflows/scheduled-run.workflow.ts` | Passes trigger provenance to `graph_runs`                             |
 
+**Planned: Package extraction (task.0172)**
+
+Prerequisite for `GraphRunWorkflow`: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/` (dep-cruiser `PACKAGES_NO_SRC_IMPORTS`). Extract execution contracts to shared packages:
+
+| Package                             | Receives                                                                                                                  | Notes                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `@cogni/ai-core`                    | `Message`, `MessageRole`, `MessageToolCall`                                                                               | Canonical LLM message type — moved from `apps/web/src/core/chat/model.ts` |
+| `@cogni/graph-execution-core` (new) | `GraphExecutorPort`, `GraphRunRequest`, `GraphRunResult`, `GraphFinal`, `RunStreamPort`, `RunStreamEntry`, `RunInitiator` | Run lifecycle contracts; depends only on `ai-core`                        |
+
+**Key design decision:** `GraphRunRequest` carries only business-relevant run provenance (`initiator: { kind: 'user' | 'system' | 'webhook', id?: string }`), not billing, observability, or chat-session state. `LlmCaller` stays in `apps/web` — adapters receive it through constructor deps, not through the run request.
+
 **Planned (future tasks):**
 
 | File                                                                 | Purpose                                                |
 | -------------------------------------------------------------------- | ------------------------------------------------------ |
+| `packages/graph-execution-core/src/index.ts`                         | GraphExecutorPort, RunStreamPort, RunInitiator exports |
 | `services/scheduler-worker/src/workflows/graph-run.workflow.ts`      | GraphRunWorkflow (unified execution path)              |
 | `services/scheduler-worker/src/activities/execute-graph.activity.ts` | executeAndStreamActivity (pumps + publishes to Redis)  |
 | `src/app/api/v1/ai/chat/route.ts`                                    | API trigger (starts workflow → subscribes Redis → SSE) |

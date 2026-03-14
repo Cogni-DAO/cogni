@@ -14,6 +14,7 @@ assignees: []
 project: proj.unified-graph-launch
 blocked_by:
   - task.0168
+  - task.0172
 created: 2026-03-13
 updated: 2026-03-13
 branch: claude/unified-graph-launch-mmXvl
@@ -70,9 +71,8 @@ labels:
   - Validation: `pnpm check` passes ✓
 
 - [ ] **Checkpoint 2: GraphRunWorkflow + activities** (DEFERRED)
-  - Blocked by EXECUTION_VIA_SERVICE_API: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/`
+  - Blocked by task.0172: extract `packages/graph-execution-core` so scheduler-worker can import `GraphExecutorPort`
   - Existing `GovernanceScheduledRunWorkflow` already uses promoted schema via internal API
-  - Unified `GraphRunWorkflow` requires moving ports to shared packages — separate task
 
 - [ ] **Checkpoint 3: Integration test** (DEFERRED — depends on Checkpoint 2)
 

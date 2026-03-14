@@ -37,8 +37,3 @@ export interface Message {
 }
 
 export type MessageRole = "user" | "assistant" | "system" | "tool";
-
-export interface Conversation {
-  id: string;
-  messages: Message[];
-}

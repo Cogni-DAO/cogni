@@ -72,6 +72,7 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 | ---------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
 | **Infrastructure: Redis 7** — docker-compose, `ioredis` dep, env config                              | Done        | 1   | task.0167 |
 | **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                 | Done        | 2   | task.0168 |
+| **Extract `graph-execution-core` package** — decouple execution ports from Next.js                   | Not Started | 3   | task.0172 |
 | **GraphRunWorkflow + promote `schedule_runs` → `graph_runs`** — single run ledger, Temporal workflow | In Review   | 5   | task.0169 |
 | **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency               | Not Started | 5   | task.0170 |
 | **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs   | Not Started | 3   | task.0171 |
