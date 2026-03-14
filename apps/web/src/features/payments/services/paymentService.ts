@@ -22,6 +22,8 @@ import {
   isValidPaymentAmount,
   isValidTransition,
   isVerificationTimedOut,
+  MAX_PAYMENT_CENTS,
+  MIN_PAYMENT_CENTS,
   PAYMENT_INTENT_TTL_MS,
   toClientVisibleStatus,
   usdCentsToRawUsdc,
@@ -116,7 +118,7 @@ export async function createIntent(
 ): Promise<CreateIntentResult> {
   if (!isValidPaymentAmount(input.amountUsdCents)) {
     throw new Error(
-      `Invalid payment amount: ${input.amountUsdCents} cents. Must be between 100 and 1,000,000 cents.`
+      `Invalid payment amount: ${input.amountUsdCents} cents. Must be between ${MIN_PAYMENT_CENTS} and ${MAX_PAYMENT_CENTS} cents.`
     );
   }
 

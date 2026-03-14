@@ -71,14 +71,14 @@ describe("Payment Numeric Flow Validation", () => {
   });
 
   describe("$1 Payment Flow", () => {
-    it("correctly converts 100 cents → 1,000,000 raw USDC → 10,000,000 credits", async () => {
+    it("correctly converts 200 cents → 2,000,000 raw USDC → 20,000,000 credits", async () => {
       // NOTE: DB uses BIGINT for amount columns; tests normalize via asNumber().
       // Safe because max values < 2^53 (JavaScript safe integer limit).
       const ctx = makeTestCtx();
       const verifier = getTestOnChainVerifier();
-      const amountUsdCents = 100; // $1.00
-      const expectedAmountRaw = 1_000_000n; // 100 cents * 10,000
-      const expectedCredits = 10_000_000; // $1 * 10,000,000 credits/USD (protocol constant)
+      const amountUsdCents = 200; // $2.00 (MIN_PAYMENT_CENTS)
+      const expectedAmountRaw = 2_000_000n; // 200 cents * 10,000
+      const expectedCredits = 20_000_000; // $2 * 10,000,000 credits/USD (protocol constant)
 
       // Configure verifier to return VERIFIED with correct values
       verifier.setVerified({
