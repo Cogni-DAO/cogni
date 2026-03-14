@@ -50,6 +50,9 @@ Does NOT re-export packages with `node:` transitive dependencies.
 - Port-level errors (InsufficientCreditsPortError, BillingAccountNotFoundPortError, etc.)
 - SandboxRunnerPort, SandboxRunSpec, SandboxRunResult, SandboxProgramContract
 - ThreadPersistencePort, ThreadConflictError, ThreadSummary
+- OperatorWalletPort, TransferIntent
+- ProviderFundingPort, ProviderFundingContext, ProviderFundingOutcome
+- TreasurySettlementPort, TreasurySettlementOutcome
 - Types (ChargeReceiptParams, LlmCaller, BillingAccount, CreditLedgerEntry, etc.)
 
 ### `server.ts` — Server-only barrel
