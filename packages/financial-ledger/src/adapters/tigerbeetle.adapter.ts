@@ -151,15 +151,13 @@ export class TigerBeetleAdapter implements FinancialLedgerPort {
       },
     ]);
 
-    if (errors.length > 0) {
-      const error = errors[0];
-      if (error.result !== TRANSFER_EXISTS) {
-        throw new TransferError(
-          `Transfer failed (code=${error.result})`,
-          error.index,
-          error.result
-        );
-      }
+    const error = errors[0];
+    if (error && error.result !== TRANSFER_EXISTS) {
+      throw new TransferError(
+        `Transfer failed (code=${error.result})`,
+        error.index,
+        error.result
+      );
     }
   }
 
