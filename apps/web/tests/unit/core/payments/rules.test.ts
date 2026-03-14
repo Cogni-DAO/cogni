@@ -175,7 +175,7 @@ describe("core/payments/rules", () => {
 
   describe("isValidPaymentAmount", () => {
     describe("Accepts valid amounts within bounds", () => {
-      it("should accept minimum valid amount (100 cents = $1.00)", () => {
+      it("should accept minimum valid amount (200 cents = $2.00)", () => {
         expect(isValidPaymentAmount(MIN_PAYMENT_CENTS)).toBe(true);
       });
 
@@ -189,8 +189,8 @@ describe("core/payments/rules", () => {
     });
 
     describe("Rejects amounts below minimum", () => {
-      it("should reject 99 cents (below $1.00 minimum)", () => {
-        expect(isValidPaymentAmount(99)).toBe(false);
+      it("should reject 199 cents (below $2.00 minimum)", () => {
+        expect(isValidPaymentAmount(199)).toBe(false);
       });
 
       it("should reject 0 cents", () => {
@@ -540,8 +540,8 @@ describe("core/payments/rules", () => {
   });
 
   describe("Constants", () => {
-    it("MIN_PAYMENT_CENTS should equal 100", () => {
-      expect(MIN_PAYMENT_CENTS).toBe(100);
+    it("MIN_PAYMENT_CENTS should equal 200", () => {
+      expect(MIN_PAYMENT_CENTS).toBe(200);
     });
 
     it("MAX_PAYMENT_CENTS should equal 1,000,000", () => {

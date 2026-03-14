@@ -113,7 +113,7 @@ describe.skip("Payment Routes HTTP Contract Tests", () => {
         "http://localhost:3000/api/v1/payments/intents",
         {
           method: "POST",
-          body: JSON.stringify({ amountUsdCents: 50 }), // Below MIN_PAYMENT_CENTS (100)
+          body: JSON.stringify({ amountUsdCents: 50 }), // Below MIN_PAYMENT_CENTS (200)
         }
       );
 

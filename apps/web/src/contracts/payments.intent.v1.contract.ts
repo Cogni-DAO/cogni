@@ -5,7 +5,7 @@
  * Module: `@contracts/payments.intent.v1.contract`
  * Purpose: Contract for creating payment intents via HTTP API.
  * Scope: Defines request/response schemas for POST /api/v1/payments/intents; does not perform persistence or authentication.
- * Invariants: amountUsdCents must be between 100 ($1) and 1,000,000 ($10,000); all outputs include on-chain transfer parameters.
+ * Invariants: amountUsdCents must be between MIN_PAYMENT_CENTS and MAX_PAYMENT_CENTS; all outputs include on-chain transfer parameters.
  * Side-effects: none
  * Notes: Billing account and from address derived from session server-side; not provided in input.
  * Links: docs/spec/payments-design.md
@@ -13,6 +13,8 @@
  */
 
 import { z } from "zod";
+
+import { MAX_PAYMENT_CENTS, MIN_PAYMENT_CENTS } from "@/types/payments";
 
 export const paymentIntentOperation = {
   id: "payments.intent.v1",
@@ -23,8 +25,14 @@ export const paymentIntentOperation = {
     amountUsdCents: z
       .number()
       .int()
-      .min(100, "Minimum payment is $1.00 (100 cents)")
-      .max(1_000_000, "Maximum payment is $10,000.00 (1,000,000 cents)"),
+      .min(
+        MIN_PAYMENT_CENTS,
+        `Minimum payment is $${MIN_PAYMENT_CENTS / 100} (${MIN_PAYMENT_CENTS} cents)`
+      )
+      .max(
+        MAX_PAYMENT_CENTS,
+        `Maximum payment is $${MAX_PAYMENT_CENTS / 100} (${MAX_PAYMENT_CENTS} cents)`
+      ),
   }),
   output: z.object({
     attemptId: z.string().uuid(),

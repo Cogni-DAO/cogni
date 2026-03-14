@@ -12,8 +12,10 @@
  * @public
  */
 
-const MIN_AMOUNT_USD = 1;
-const MAX_AMOUNT_USD = 100000;
+import { MAX_PAYMENT_CENTS, MIN_PAYMENT_CENTS } from "@/types/payments";
+
+const MIN_AMOUNT_USD = MIN_PAYMENT_CENTS / 100;
+const MAX_AMOUNT_USD = MAX_PAYMENT_CENTS / 100;
 
 /**
  * Validate amount string while typing.
@@ -34,8 +36,8 @@ export function isValidAmountInput(input: string): boolean {
  * @example
  * parseDollarsToCents("10.50") → 1050
  * parseDollarsToCents("10.") → 1000
- * parseDollarsToCents("1") → 100
- * parseDollarsToCents("0.99") → null (below minimum)
+ * parseDollarsToCents("2") → 200
+ * parseDollarsToCents("1.99") → null (below minimum)
  * parseDollarsToCents("") → null
  */
 export function parseDollarsToCents(input: string): number | null {
