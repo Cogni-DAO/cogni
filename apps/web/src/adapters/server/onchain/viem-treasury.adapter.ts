@@ -31,7 +31,7 @@ export class ViemTreasuryAdapter implements TreasuryReadPort {
     treasuryAddress: string;
     tokenAddresses?: string[];
   }): Promise<TreasurySnapshot> {
-    // Validate params against canonical config
+    // Validate chainId against canonical config
     const config = getPaymentConfig();
 
     if (params.chainId !== config.chainId) {
@@ -41,13 +41,6 @@ export class ViemTreasuryAdapter implements TreasuryReadPort {
     }
 
     const treasuryChecksummed = getAddress(params.treasuryAddress);
-    const configTreasuryChecksummed = getAddress(config.receivingAddress);
-
-    if (treasuryChecksummed !== configTreasuryChecksummed) {
-      throw new Error(
-        `[ViemTreasuryAdapter] Treasury address mismatch: expected ${config.receivingAddress}, got ${params.treasuryAddress}`
-      );
-    }
 
     // Phase 2: Only support USDC (no custom tokens yet)
     if (params.tokenAddresses && params.tokenAddresses.length > 0) {
