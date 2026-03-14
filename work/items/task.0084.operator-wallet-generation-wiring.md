@@ -20,7 +20,7 @@ labels: [wallet, web3, billing]
 external_refs:
 revision: 4
 blocked_by:
-deploy_verified: false
+deploy_verified: true
 rank: 19
 ---
 

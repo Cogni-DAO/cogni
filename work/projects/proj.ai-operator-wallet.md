@@ -90,13 +90,14 @@ All three sub-experiments validated on Base mainnet. Key findings:
 
 **Goal:** Observability, automated balance checks, optional OSS custody adapter.
 
-| Deliverable                                               | Status      | Est | Work Item            |
-| --------------------------------------------------------- | ----------- | --- | -------------------- |
-| Grafana alerts: operator balance, top-up failures, margin | Not Started | 2   | (create at P1 start) |
-| OpenRouter balance probe (GET /api/v1/credits polling)    | Not Started | 1   | (create at P1 start) |
-| Keystore/Vault adapter (OSS fallback for Privy)           | Not Started | 3   | (create at P1 start) |
-| Circuit breaker: pause purchases on persistent failures   | Not Started | 2   | (create at P1 start) |
-| UI admin panel: trigger manual top-up, view status        | Not Started | 2   | (create at P1 start) |
+| Deliverable                                                                                                                                                                                                                                                | Status      | Est | Work Item            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Funding reconciler: sweep `payment_attempts` with status=CREDITED that have no matching `provider_funding_attempts` row, and re-trigger `runPostCreditFunding`. Covers crash window between CREDITED write and funding row insertion. Cron or startup job. | Not Started | 2   | (create at P1 start) |
+| Grafana alerts: operator balance, top-up failures, margin                                                                                                                                                                                                  | Not Started | 2   | (create at P1 start) |
+| OpenRouter balance probe (GET /api/v1/credits polling)                                                                                                                                                                                                     | Not Started | 1   | (create at P1 start) |
+| Keystore/Vault adapter (OSS fallback for Privy)                                                                                                                                                                                                            | Not Started | 3   | (create at P1 start) |
+| Circuit breaker: pause purchases on persistent failures                                                                                                                                                                                                    | Not Started | 2   | (create at P1 start) |
+| UI admin panel: trigger manual top-up, view status                                                                                                                                                                                                         | Not Started | 2   | (create at P1 start) |
 
 ### Run (P2+) — Autonomous Spending
 

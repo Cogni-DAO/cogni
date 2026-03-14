@@ -20,7 +20,7 @@ labels: [wallet, web3, billing]
 external_refs:
 revision: 2
 blocked_by: task.0084
-deploy_verified: false
+deploy_verified: true
 rank: 20
 ---
 
@@ -118,8 +118,8 @@ Recommendation: start with (3) — the adapter is ready, script can call it. Wir
   - [x] Create `scripts/deploy-split.ts` using `@0xsplits/splits-sdk`
   - [x] Derive allocations from `@cogni/operator-wallet` constants
   - [x] Deploy to Base, output checksummed Split address
-  - [ ] Run on Base mainnet (manual — requires deployer key)
-  - [ ] Update `.cogni/repo-spec.yaml` receiving_address with deployed address
+  - [x] Run on Base mainnet — deployed as `0xd92EEc51C471CcF76996f0163Fd3cB6A61798f9C` (task.0150)
+  - [x] Update `.cogni/repo-spec.yaml` receiving_address with deployed address (task.0150)
 
 - [x] **Checkpoint 2: Implement distributeSplit() + package extraction**
   - [x] Create `packages/operator-wallet` capability package
