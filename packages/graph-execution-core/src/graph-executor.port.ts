@@ -116,3 +116,17 @@ export interface GraphRunResult {
 export interface GraphExecutorPort {
   runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult;
 }
+
+/**
+ * Preflight credit check gate for graph execution.
+ *
+ * Called before execution to verify sufficient credits.
+ * The caller resolves billingAccountId via BillingResolver and passes it in.
+ *
+ * @throws InsufficientCreditsPortError if balance < estimated cost
+ */
+export type PreflightCreditCheckFn = (
+  billingAccountId: string,
+  model: string,
+  messages: readonly Message[]
+) => Promise<void>;
