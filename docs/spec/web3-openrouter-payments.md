@@ -73,14 +73,14 @@ sequenceDiagram
     participant Split as Split Contract
     participant Wallet as Operator Wallet (EOA)
     participant Treasury as DAO Treasury
-    participant App as confirmCreditsPurchase
+    participant App as verifyAndSettle / runPostCreditFunding
     participant DB as Database + TigerBeetle
     participant Adapter as OpenRouterFundingAdapter
     participant OR as OpenRouter API
     participant Chain as Base (8453)
 
     User->>Split: USDC transfer (existing payment flow)
-    App->>App: verify on-chain, mint credits (Steps 1-2)
+    App->>App: verify on-chain, mint credits (Steps 1-2, CREDITED transition)
 
     Note over App,Split: Step 3: Splits Distribution
     App->>Split: distributeERC20(USDC)
@@ -276,16 +276,17 @@ With defaults: `2.0 × 0.95 = 1.9 > 1.75` — DAO margin is 7.9% per dollar. The
 
 ### File Pointers
 
-| File                                                          | Purpose                                                                           |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `src/core/billing/pricing.ts`                                 | `calculateOpenRouterTopUp()`, `isMarginPreserved()` — pure top-up math            |
-| `src/ports/provider-funding.port.ts`                          | `ProviderFundingPort` interface                                                   |
-| `src/ports/operator-wallet.port.ts`                           | `OperatorWalletPort` interface — see [operator-wallet spec](./operator-wallet.md) |
-| `src/adapters/server/treasury/openrouter-funding.adapter.ts`  | `OpenRouterFundingAdapter` — charge creation, crash recovery, wallet delegation   |
-| `src/features/payments/application/confirmCreditsPurchase.ts` | Application orchestrator — composes Steps 1-6                                     |
-| `src/shared/env/server-env.ts`                                | `OPENROUTER_API_KEY`, `OPENROUTER_CRYPTO_FEE`                                     |
-| `packages/db-schema/src/billing.ts`                           | `providerFundingAttempts` table definition                                        |
-| `packages/financial-ledger/src/domain/accounts.ts`            | `ASSETS_PROVIDER_FLOAT`, `TB_TRANSFER_NAMESPACE`, `TRANSFER_CODE`                 |
+| File                                                          | Purpose                                                                                   |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `src/core/billing/pricing.ts`                                 | `calculateOpenRouterTopUp()`, `isMarginPreserved()` — pure top-up math                    |
+| `src/ports/provider-funding.port.ts`                          | `ProviderFundingPort` interface                                                           |
+| `src/ports/operator-wallet.port.ts`                           | `OperatorWalletPort` interface — see [operator-wallet spec](./operator-wallet.md)         |
+| `src/adapters/server/treasury/openrouter-funding.adapter.ts`  | `OpenRouterFundingAdapter` — charge creation, crash recovery, wallet delegation           |
+| `src/features/payments/application/confirmCreditsPurchase.ts` | `runPostCreditFunding()` — extracted steps 3-6, invoked by both widget and on-chain paths |
+| `src/features/payments/services/paymentService.ts`            | `verifyAndSettle()` — canonical CREDITED trigger, calls `runPostCreditFunding`            |
+| `src/shared/env/server-env.ts`                                | `OPENROUTER_API_KEY`, `OPENROUTER_CRYPTO_FEE`                                             |
+| `packages/db-schema/src/billing.ts`                           | `providerFundingAttempts` table definition                                                |
+| `packages/financial-ledger/src/domain/accounts.ts`            | `ASSETS_PROVIDER_FLOAT`, `TB_TRANSFER_NAMESPACE`, `TRANSFER_CODE`                         |
 
 ## Open Questions
 

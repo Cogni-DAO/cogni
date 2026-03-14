@@ -5,8 +5,8 @@ title: OpenRouter credit top-up via operator wallet
 status: needs_merge
 priority: 0
 estimate: 2
-summary: "Wire OpenRouter top-up into credit purchase flow — application orchestrator composes TreasurySettlementPort + ProviderFundingPort + FinancialLedgerPort. Durable funding attempt row, deterministic TB transfer IDs, correct asset-swap accounting."
-outcome: Every confirmed credit purchase automatically tops up OpenRouter with the exact provider cost. Durable `provider_funding_attempts` row enables crash recovery. TigerBeetle records USDC movements as asset swaps (OperatorFloat → ProviderFloat), not expense.
+summary: "Wire OpenRouter top-up into credit purchase flow — `runPostCreditFunding()` extracted and invoked from `verifyAndSettle()` (the canonical CREDITED transition). Composes TreasurySettlementPort + ProviderFundingPort + FinancialLedgerPort. Durable funding attempt row, deterministic TB transfer IDs, correct asset-swap accounting."
+outcome: "Every confirmed on-chain USDC payment automatically tops up OpenRouter with the exact provider cost. runPostCreditFunding fires from verifyAndSettle on CREDITED transition (exactly once via state guard). Durable provider_funding_attempts row enables crash recovery. TigerBeetle records USDC movements as asset swaps (OperatorFloat to ProviderFloat). P1 follow-up: funding reconciler for crash window."
 spec_refs: web3-openrouter-payments, operator-wallet, financial-ledger
 assignees: derekg1729
 credit:

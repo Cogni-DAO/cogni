@@ -3,11 +3,11 @@
 
 /**
  * Module: `@features/payments/services/paymentService`
- * Purpose: Orchestrate payment attempt lifecycle via ports. Handles intent creation, txHash submission, status polling, and settlement.
- * Scope: Feature-layer orchestration for payment attempts; validates state transitions, enforces TTLs; does not expose HTTP handling.
- * Invariants: State transitions via core/rules; atomic settlement via confirmCreditsPayment; RPC_ERROR is transient (retried on next poll).
- * Side-effects: IO (via AccountService, ServiceAccountService, PaymentAttemptUserRepository, PaymentAttemptServiceRepository, OnChainVerifier ports)
- * Notes: RPC_ERROR from OnChainVerifier leaves attempt in PENDING_UNVERIFIED for automatic retry via getStatus polling.
+ * Purpose: Orchestrate payment attempt lifecycle via ports. Handles intent creation, txHash submission, status polling, settlement, and post-credit funding.
+ * Scope: Feature-layer orchestration for payment attempts; validates state transitions, enforces TTLs, triggers post-credit funding on CREDITED; does not expose HTTP handling.
+ * Invariants: State transitions via core/rules; atomic settlement via confirmCreditsPayment; post-credit funding via runPostCreditFunding (fires exactly once on CREDITED transition); RPC_ERROR is transient (retried on next poll).
+ * Side-effects: IO (via AccountService, ServiceAccountService, PaymentAttemptUserRepository, PaymentAttemptServiceRepository, OnChainVerifier, PostCreditFundingDeps ports)
+ * Notes: RPC_ERROR from OnChainVerifier leaves attempt in PENDING_UNVERIFIED for automatic retry via getStatus polling. Post-credit funding (treasury settlement, TB co-writes, provider top-up) runs inline after CREDITED but never throws — all steps catch internally.
  * Links: docs/spec/payments-design.md
  * @public
  */

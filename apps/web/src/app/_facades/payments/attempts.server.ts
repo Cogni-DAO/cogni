@@ -3,11 +3,11 @@
 
 /**
  * Module: `@app/_facades/payments/attempts.server`
- * Purpose: App-layer wiring for payment attempts. Resolves dependencies, delegates to feature services, and maps port types to contract DTOs.
- * Scope: Server-only facade. Handles billing account resolution from session user, maps Date to ISO string for contract compliance; does not perform direct persistence or HTTP handling.
- * Invariants: Billing account from session only; state transition events include chainId and errorCode.
- * Side-effects: IO (via PaymentAttemptUserRepository, PaymentAttemptServiceRepository, AccountService, ServiceAccountService, OnChainVerifier ports).
- * Notes: Facades own DTO mapping. Emits payments.verified on CREDITED transitions.
+ * Purpose: App-layer wiring for payment attempts. Resolves dependencies (including post-credit funding deps), delegates to feature services, and maps port types to contract DTOs.
+ * Scope: Server-only facade. Handles billing account resolution from session user, builds PostCreditFundingDeps from container, maps Date to ISO string for contract compliance; does not perform direct persistence or HTTP handling.
+ * Invariants: Billing account from session only; state transition events include chainId and errorCode; post-credit funding deps threaded to service layer (not invoked in facade).
+ * Side-effects: IO (via PaymentAttemptUserRepository, PaymentAttemptServiceRepository, AccountService, ServiceAccountService, OnChainVerifier, PostCreditFundingDeps ports).
+ * Notes: Facades own DTO mapping. Emits payments.verified on CREDITED transitions. buildPostCreditFundingDeps() constructs funding deps from container when at least one downstream port is available.
  * Links: docs/spec/payments-design.md, src/contracts/AGENTS.md
  * @public
  */
