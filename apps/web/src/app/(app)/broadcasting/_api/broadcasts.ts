@@ -16,7 +16,10 @@ import type {
   ContentMessageListResponse,
   ContentMessageResponse,
 } from "@/contracts/broadcast.draft.v1.contract";
-import type { BroadcastReviewInput } from "@/contracts/broadcast.review.v1.contract";
+import type {
+  BroadcastReviewInput,
+  PlatformPostResponse,
+} from "@/contracts/broadcast.review.v1.contract";
 import type { BroadcastStatusResponse } from "@/contracts/broadcast.status.v1.contract";
 
 export async function fetchBroadcasts(
@@ -88,7 +91,7 @@ export async function submitReview(
   messageId: string,
   postId: string,
   input: BroadcastReviewInput
-): Promise<unknown> {
+): Promise<PlatformPostResponse> {
   const response = await fetch(
     `/api/v1/broadcasting/${encodeURIComponent(messageId)}/posts/${encodeURIComponent(postId)}/review`,
     {

@@ -2,7 +2,7 @@
 id: task.0165
 type: task
 title: "Broadcasting UI — compose draft + review posts"
-status: needs_closeout
+status: done
 priority: 1
 rank: 2
 estimate: 3

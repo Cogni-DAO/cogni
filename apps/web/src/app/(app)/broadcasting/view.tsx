@@ -37,6 +37,7 @@ import {
   SelectValue,
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -478,12 +479,12 @@ export function BroadcastingView(): ReactElement {
             <TableBody>
               {messages.length === 0 ? (
                 <TableRow>
-                  <td
+                  <TableCell
                     colSpan={5}
                     className="py-8 text-center text-muted-foreground"
                   >
                     No broadcasts yet. Create your first draft above.
-                  </td>
+                  </TableCell>
                 </TableRow>
               ) : (
                 messages.map((msg: ContentMessageResponse) => (
