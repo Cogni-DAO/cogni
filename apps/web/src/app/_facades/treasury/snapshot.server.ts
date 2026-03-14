@@ -19,7 +19,7 @@ import type { RequestContext } from "@/shared/observability";
 import { EVENT_NAMES } from "@/shared/observability/events";
 import { CHAIN_ID } from "@/shared/web3/chain";
 
-const TREASURY_RPC_TIMEOUT_MS = 5000; // 5 second strict timeout
+const TREASURY_RPC_TIMEOUT_MS = 10_000; // 10s — generous for slow RPC; calls are parallelized
 
 /**
  * Wraps a promise with a timeout
