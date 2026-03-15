@@ -205,7 +205,21 @@ describe("OpenRouter top-up e2e (live money)", () => {
   // ── The test ─────────────────────────────────────────────────────
 
   it("intent → USDC transfer → submit → poll CONFIRMED → assert TB + Postgres + OpenRouter", async () => {
-    // 1. Record OpenRouter credits BEFORE
+    // 1. Snapshot TigerBeetle balances BEFORE
+    const tb = createTigerBeetleAdapter(TIGERBEETLE_ADDRESS);
+    const [tbTreasuryBefore, tbOperatorBefore, tbProviderBefore] =
+      await Promise.all([
+        tb.getAccountBalance(ACCOUNT.ASSETS_TREASURY),
+        tb.getAccountBalance(ACCOUNT.ASSETS_OPERATOR_FLOAT),
+        tb.getAccountBalance(ACCOUNT.ASSETS_PROVIDER_FLOAT),
+      ]);
+    const tbBefore = {
+      treasury: tbTreasuryBefore,
+      operator: tbOperatorBefore,
+      provider: tbProviderBefore,
+    };
+
+    // 2. Record OpenRouter credits BEFORE
     const creditsBefore = await getOpenRouterCredits(OPENROUTER_API_KEY);
     console.log(`OpenRouter credits before: ${creditsBefore}`);
 
@@ -282,29 +296,43 @@ describe("OpenRouter top-up e2e (live money)", () => {
     expect(fundingRow?.status).toBe("funded");
     expect(fundingRow?.fundingTxHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
 
-    // 8. Assert TigerBeetle: account balances changed
-    const tb = createTigerBeetleAdapter(TIGERBEETLE_ADDRESS);
-    const [treasury, operatorFloat, providerFloat] = await Promise.all([
+    // 8. Assert TigerBeetle: check exact deltas (before vs after)
+    //    Expected micro-USDC amounts:
+    //      SPLIT_DISTRIBUTE: cents × 10_000 = 200 × 10_000 = 2_000_000
+    //      PROVIDER_TOPUP:   Math.round(topUpUsd × 100) × 10_000
+    const expectedSplitDistribute = BigInt(MIN_PAYMENT_CENTS) * 10_000n;
+    const topUpUsd =
+      ((MIN_PAYMENT_CENTS / 100) * (1 + 0.75)) / (2.0 * (1 - 0.05));
+    const expectedProviderTopup = BigInt(Math.round(topUpUsd * 100)) * 10_000n;
+
+    const [treasuryAfter, operatorAfter, providerAfter] = await Promise.all([
       tb.getAccountBalance(ACCOUNT.ASSETS_TREASURY),
       tb.getAccountBalance(ACCOUNT.ASSETS_OPERATOR_FLOAT),
       tb.getAccountBalance(ACCOUNT.ASSETS_PROVIDER_FLOAT),
     ]);
 
-    expect(treasury.debitsPosted).toBeGreaterThan(0n);
+    const treasuryDebitDelta =
+      treasuryAfter.debitsPosted - tbBefore.treasury.debitsPosted;
+    const operatorCreditDelta =
+      operatorAfter.creditsPosted - tbBefore.operator.creditsPosted;
+    const operatorDebitDelta =
+      operatorAfter.debitsPosted - tbBefore.operator.debitsPosted;
+    const providerCreditDelta =
+      providerAfter.creditsPosted - tbBefore.provider.creditsPosted;
+
     console.log(
-      `TB Treasury: debits=${treasury.debitsPosted}, credits=${treasury.creditsPosted}`
+      `TB deltas: treasury debit=${treasuryDebitDelta}, operator credit=${operatorCreditDelta} debit=${operatorDebitDelta}, provider credit=${providerCreditDelta}`
     );
 
-    expect(operatorFloat.creditsPosted).toBeGreaterThan(0n);
-    expect(operatorFloat.debitsPosted).toBeGreaterThan(0n);
-    console.log(
-      `TB OperatorFloat: debits=${operatorFloat.debitsPosted}, credits=${operatorFloat.creditsPosted}`
-    );
+    // Treasury debited exactly by SPLIT_DISTRIBUTE
+    expect(treasuryDebitDelta).toBe(expectedSplitDistribute);
 
-    expect(providerFloat.creditsPosted).toBeGreaterThan(0n);
-    console.log(
-      `TB ProviderFloat: debits=${providerFloat.debitsPosted}, credits=${providerFloat.creditsPosted}`
-    );
+    // OperatorFloat credited by SPLIT_DISTRIBUTE, debited by PROVIDER_TOPUP
+    expect(operatorCreditDelta).toBe(expectedSplitDistribute);
+    expect(operatorDebitDelta).toBe(expectedProviderTopup);
+
+    // ProviderFloat credited by PROVIDER_TOPUP
+    expect(providerCreditDelta).toBe(expectedProviderTopup);
 
     // 9. Assert OpenRouter: credit balance increased
     const creditsAfter = await getOpenRouterCredits(OPENROUTER_API_KEY);
