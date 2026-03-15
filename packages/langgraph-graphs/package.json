@@ -7,19 +7,23 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
-      "import": "./dist/runtime/index.js"
+      "import": "./dist/runtime/index.js",
+      "default": "./dist/runtime/index.js"
     },
     "./graphs": {
       "types": "./dist/graphs/index.d.ts",
-      "import": "./dist/graphs/index.js"
+      "import": "./dist/graphs/index.js",
+      "default": "./dist/graphs/index.js"
     },
     "./inproc": {
       "types": "./dist/inproc/index.d.ts",
-      "import": "./dist/inproc/index.js"
+      "import": "./dist/inproc/index.js",
+      "default": "./dist/inproc/index.js"
     }
   },
   "types": "./dist/index.d.ts",

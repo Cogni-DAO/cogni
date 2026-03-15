@@ -31,7 +31,7 @@ export class ViemTreasuryAdapter implements TreasuryReadPort {
     treasuryAddress: string;
     tokenAddresses?: string[];
   }): Promise<TreasurySnapshot> {
-    // Validate params against canonical config
+    // Validate chainId against canonical config
     const config = getPaymentConfig();
 
     if (params.chainId !== config.chainId) {
@@ -41,13 +41,6 @@ export class ViemTreasuryAdapter implements TreasuryReadPort {
     }
 
     const treasuryChecksummed = getAddress(params.treasuryAddress);
-    const configTreasuryChecksummed = getAddress(config.receivingAddress);
-
-    if (treasuryChecksummed !== configTreasuryChecksummed) {
-      throw new Error(
-        `[ViemTreasuryAdapter] Treasury address mismatch: expected ${config.receivingAddress}, got ${params.treasuryAddress}`
-      );
-    }
 
     // Phase 2: Only support USDC (no custom tokens yet)
     if (params.tokenAddresses && params.tokenAddresses.length > 0) {
@@ -56,13 +49,15 @@ export class ViemTreasuryAdapter implements TreasuryReadPort {
       );
     }
 
-    // Query USDC balance
+    // Query USDC balance + block number in parallel
     const usdcAddress = getAddress(USDC_TOKEN_ADDRESS);
-    const balanceRaw = await this.evmClient.getErc20Balance({
-      tokenAddress: usdcAddress as `0x${string}`,
-      holderAddress: treasuryChecksummed as `0x${string}`,
-    });
-    const blockNumber = await this.evmClient.getBlockNumber();
+    const [balanceRaw, blockNumber] = await Promise.all([
+      this.evmClient.getErc20Balance({
+        tokenAddress: usdcAddress as `0x${string}`,
+        holderAddress: treasuryChecksummed as `0x${string}`,
+      }),
+      this.evmClient.getBlockNumber(),
+    ]);
 
     return {
       treasuryAddress: treasuryChecksummed,

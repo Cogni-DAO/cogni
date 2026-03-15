@@ -10,7 +10,7 @@ read_when: Working on OperatorWalletPort, operator wallet provisioning, key mana
 implements: proj.ai-operator-wallet
 owner: derekg1729
 created: 2026-02-17
-verified:
+verified: 2026-03-15
 tags: [web3, wallet, security]
 ---
 
@@ -44,7 +44,9 @@ tags: [web3, wallet, security]
 
 The operator wallet serves one role: **outbound** — executing OpenRouter top-ups after credit settlement.
 
-**Inbound** is handled by the [Splits](https://splits.org/) contract. Users pay USDC to the Split address (`operator_wallet.split_address` in repo-spec). The Split distributes ~92.1% to the operator wallet and ~7.9% to the DAO treasury on-chain. The app calls `distributeERC20()` after credit mint to trigger distribution.
+**Inbound** is handled by the [Splits](https://splits.org/) contract. Users pay USDC to the Split address (`operator_wallet.split_address` in repo-spec). The Split distributes ~92.1% to the operator wallet and ~7.9% to the DAO treasury on-chain. The app calls `distribute()` after credit mint to trigger distribution.
+
+> **Validated (spike.0090):** Push Split V2o2 on Base distributes USDC via direct ERC-20 transfers to recipients (no warehouse withdrawal step). Deploy: ~166k gas, distribute: ~81k gas. Factory: `0x8E8eB0cC6AE34A38B67D5Cf91ACa38f60bc3Ecf4`. SDK: `splitV2ABI` from `@0xsplits/splits-sdk/constants/abi`.
 
 The operator wallet itself is a plain EOA that receives USDC from the Split and uses it to top up OpenRouter credits via the Coinbase Commerce protocol.
 
@@ -94,7 +96,7 @@ Setup flow (run once during DAO formation):
 1. Create Privy app → obtain App ID + App Secret
 2. Enable wallet policies:
    - Only Base (chain_id 8453)
-   - Only allowed contracts (USDC, Coinbase Transfers)
+   - Only allowed contracts (USDC, Coinbase Transfers 0x0305...)
    - Per-tx caps
 3. Enable "Require signed requests" → obtain Signing Key
 4. Programmatically create operator wallet via Privy API
@@ -108,9 +110,8 @@ Setup flow (run once during DAO formation):
    - Controller: operator wallet address (can update percentages)
 7. Update .cogni/repo-spec.yaml:
    a. Set operator_wallet.address to the Privy-returned address
-   b. Set operator_wallet.split_address to the deployed Split address
-   c. Set payments_in.credits_topup.receiving_address to the Split address
-8. Fund operator wallet with small ETH balance on Base (for gas)
+   b. Set payments_in.credits_topup.receiving_address to the deployed Split address
+8. Fund operator wallet with small ETH balance on Base (for gas — ~$0.01 covers many txs at L2 prices)
 ```
 
 No keystore files. No passphrases. No local key material. Privy holds the signing key in its HSM infrastructure.
@@ -122,7 +123,7 @@ The port is a narrow, typed interface — a bounded payments actuator, not a gen
 ```typescript
 interface OperatorWalletPort {
   /** Return the operator wallet's public address (checksummed) */
-  getAddress(): string;
+  getAddress(): Promise<string>;
 
   /** Return the Split contract address (from repo-spec) */
   getSplitAddress(): string;
@@ -140,7 +141,6 @@ interface OperatorWalletPort {
   /**
    * Fund OpenRouter credits via Coinbase Commerce protocol.
    * Encodes the appropriate Transfers function internally — caller cannot control calldata.
-   * Function determined by transfer_intent.metadata.function_name.
    *
    * @param intent - TransferIntent from OpenRouter's /api/v1/credits/coinbase
    * @returns txHash on successful broadcast
@@ -155,30 +155,28 @@ Future transaction types get their own named methods on the port — never a gen
 ### P0 Adapter: Privy Server Wallet
 
 ```typescript
-// src/adapters/server/wallet/privy-operator-wallet.adapter.ts
+// packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts
 
 class PrivyOperatorWalletAdapter implements OperatorWalletPort {
-  private privyClient: PrivyClient; // @privy-io/server-auth SDK
-  private walletId: string; // Privy wallet ID (from provisioning)
-  private operatorAddress: string; // from repo-spec, verified at startup
-  private splitAddress: string; // from repo-spec operator_wallet.split_address
+  private client: PrivyClient; // @privy-io/node SDK
+  private walletId: string; // Privy wallet ID (lazy-verified)
+  private expectedAddress: string; // from repo-spec, verified against Privy
+  private splitAddress: string; // from payments_in.credits_topup.receiving_address
 
   async distributeSplit(token: string): Promise<string> {
-    // 1. Encode SplitMain.distributeERC20(splitAddress, token, ...)
-    // 2. Submit via Privy API (Privy handles signing + broadcast)
-    // 3. Return txHash
+    // 1. Derive SplitParams from billing constants (calculateSplitAllocations)
+    // 2. Encode distribute(splitParams, token, distributor) via splitV2ABI
+    // 3. Submit via Privy wallet RPC (Privy handles signing + broadcast)
+    // 4. Return txHash
   }
 
   async fundOpenRouterTopUp(intent: TransferIntent): Promise<string> {
-    // 1. Validate intent.metadata.sender === this.operatorAddress
+    // 1. Validate intent.metadata.sender === this.expectedAddress
     // 2. Validate intent.metadata.contract_address is in allowlist
-    // 3. Validate intent.metadata.chain_id === repo-spec chain_id
+    // 3. Validate intent.metadata.chain_id === Base (8453)
     // 4. Validate value <= OPERATOR_MAX_TOPUP_USD cap
-    // 5. Encode per metadata.function_name:
-    //    - swapAndTransferUniswapV3Native → set msg.value (ETH)
-    //    - transferTokenPreApproved → approve USDC to Transfers contract
-    //    - swapAndTransferUniswapV3TokenPreApproved → approve + swap
-    // 6. Submit via Privy API (Privy handles signing + broadcast)
+    // 5. Encode transferTokenPreApproved via call_data fields
+    // 6. Submit via Privy wallet RPC (Privy handles signing + broadcast)
     // 7. Return txHash
   }
 }
@@ -190,17 +188,17 @@ The `OperatorWalletPort` abstraction makes the custody backend swappable. If the
 
 ### Custody Safety
 
-| Constraint                | Enforcement                                                                                                                                                 |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Typed intents only**    | Port exposes `distributeSplit` and `fundOpenRouterTopUp` — no generic signing method.                                                                       |
-| **Destination allowlist** | Split distribute targets the Split contract from repo-spec. Top-up goes to Coinbase Transfers contract. No other destinations possible.                     |
-| **Max per-tx**            | `OPERATOR_MAX_TOPUP_USD` env cap for top-ups. Port rejects any intent exceeding this.                                                                       |
-| **Address in repo-spec**  | Operator wallet address is governance-in-git. Changing it requires a commit (auditable).                                                                    |
-| **Key ≠ App**             | Privy HSM holds the signing key. The app never loads or accesses raw key material.                                                                          |
-| **Key ≠ AI**              | The AI (OpenClaw, governance agents) submits intents through the workflow layer. The AI never accesses key material or Privy credentials.                   |
-| **Privy wallet policies** | Privy-side policies restrict chain, contracts, and caps — defense in depth on top of app-side validation.                                                   |
-| **Signed requests**       | All Privy API calls use "Require signed requests" — `PRIVY_SIGNING_KEY` authenticates the app to Privy. Leaked `APP_SECRET` alone cannot sign transactions. |
-| **DAO share via Splits**  | DAO treasury receives its share via on-chain Split contract — no app-level sweep. Operator wallet only holds its operational share.                         |
+| Constraint                | Enforcement                                                                                                                                                                   |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Typed intents only**    | Port exposes `distributeSplit` and `fundOpenRouterTopUp` — no generic signing method.                                                                                         |
+| **Destination allowlist** | Split distribute targets the Split contract from repo-spec. Top-up targets Coinbase Transfers (`0x0305...`) with direct ERC-20 approval (not Permit2). No other destinations. |
+| **Max per-tx**            | `OPERATOR_MAX_TOPUP_USD` env cap for top-ups. Port rejects any intent exceeding this.                                                                                         |
+| **Address in repo-spec**  | Operator wallet address is governance-in-git. Changing it requires a commit (auditable).                                                                                      |
+| **Key ≠ App**             | Privy HSM holds the signing key. The app never loads or accesses raw key material.                                                                                            |
+| **Key ≠ AI**              | The AI (OpenClaw, governance agents) submits intents through the workflow layer. The AI never accesses key material or Privy credentials.                                     |
+| **Privy wallet policies** | Privy-side policies restrict chain, contracts, and caps — defense in depth on top of app-side validation.                                                                     |
+| **Signed requests**       | All Privy API calls use "Require signed requests" — `PRIVY_SIGNING_KEY` authenticates the app to Privy. Leaked `APP_SECRET` alone cannot sign transactions.                   |
+| **DAO share via Splits**  | DAO treasury receives its share via on-chain Split contract — no app-level sweep. Operator wallet only holds its operational share.                                           |
 
 ### repo-spec Configuration
 
@@ -209,14 +207,13 @@ The `OperatorWalletPort` abstraction makes the custody backend swappable. If the
 
 operator_wallet:
   address: "0x..." # checksummed Privy-managed EOA
-  split_address: "0x..." # Splits contract address (receives user payments)
 
 payments_in:
   credits_topup:
-    receiving_address: "0x..." # same as operator_wallet.split_address (NOT the EOA)
+    receiving_address: "0x..." # Split contract address (NOT the operator EOA)
 ```
 
-The `receiving_address` now points to the Split contract. The on-chain verifier, payment intent creation, and credit settlement all work as-is — they only care that USDC arrived at the configured address.
+The `receiving_address` points to the Split contract. The Split address is the single source of truth — no redundant `split_address` field. The on-chain verifier, payment intent creation, and credit settlement all work as-is — they only care that USDC arrived at the configured address.
 
 ### Key Rotation
 
@@ -246,38 +243,42 @@ Provide a secure, narrow payments actuator for the platform's outbound on-chain 
 
 ## Invariants
 
-| Rule                        | Constraint                                                                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| KEY_NEVER_IN_APP            | No raw private key material in the application process. Privy HSM holds the signing key.                                                               |
-| SECRETS_NEVER_IN_SOURCE     | `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY` MUST NOT be checked into source control.                                                                       |
-| SECRETS_FROM_SECRET_STORE   | All Privy credentials MUST be sourced from the deployment's secret store, not `.env` files.                                                            |
-| ADDRESS_VERIFIED_AT_STARTUP | Privy-reported wallet address MUST match `operator_wallet.address` from `.cogni/repo-spec.yaml`. Mismatch → fail fast.                                 |
-| NO_GENERIC_SIGNING          | `OperatorWalletPort` MUST NOT expose a generic `signTransaction(calldata)` method. Each tx type gets a named method.                                   |
-| DESTINATION_ALLOWLIST       | The adapter MUST reject any transaction where `to` is not in the hardcoded allowlist (Split contract for distributes, Coinbase Transfers for top-ups). |
-| SIMULATE_BEFORE_BROADCAST   | Every transaction SHOULD be simulated before broadcast where the custody provider supports it.                                                         |
-| INTENT_ONLY_CALLERS         | Workflow and UI layers submit typed intents. They MUST NOT construct calldata or access Privy credentials.                                             |
-| SINGLE_OPERATOR_WALLET      | Exactly one operator wallet per deployment. Address recorded in repo-spec (governance-in-git).                                                         |
-| RECEIVING_ADDRESS_MATCH     | `payments_in.credits_topup.receiving_address` MUST equal `operator_wallet.split_address`. Startup validation.                                          |
-| PRIVY_SIGNED_REQUESTS       | All Privy API calls MUST use signed requests (`PRIVY_SIGNING_KEY`). App Secret alone is insufficient for signing.                                      |
+| Rule                        | Constraint                                                                                                                                                                                                                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| KEY_NEVER_IN_APP            | No raw private key material in the application process. Privy HSM holds the signing key.                                                                                                                                                                                                   |
+| SECRETS_NEVER_IN_SOURCE     | `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY` MUST NOT be checked into source control.                                                                                                                                                                                                           |
+| SECRETS_FROM_SECRET_STORE   | All Privy credentials MUST be sourced from the deployment's secret store, not `.env` files.                                                                                                                                                                                                |
+| ADDRESS_VERIFIED_AT_STARTUP | Privy-reported wallet address MUST match `operator_wallet.address` from `.cogni/repo-spec.yaml`. Mismatch → fail fast.                                                                                                                                                                     |
+| NO_GENERIC_SIGNING          | `OperatorWalletPort` MUST NOT expose a generic `signTransaction(calldata)` method. Each tx type gets a named method.                                                                                                                                                                       |
+| DESTINATION_ALLOWLIST       | The adapter MUST reject any transaction where `to` is not in the hardcoded allowlist (Split contract for distributes, Coinbase Transfers for top-ups).                                                                                                                                     |
+| SIMULATE_BEFORE_BROADCAST   | Every transaction SHOULD be simulated before broadcast where the custody provider supports it.                                                                                                                                                                                             |
+| APPROVE_CONFIRMED_BEFORE_TX | Multi-step on-chain sequences (approve → transferTokenPreApproved) MUST wait for the prior tx to confirm on-chain before submitting the next. The adapter polls via `rpcClient.waitForTransactionReceipt()`. Without this, the custody provider simulates against stale state and reverts. |
+| INTENT_ONLY_CALLERS         | Workflow and UI layers submit typed intents. They MUST NOT construct calldata or access Privy credentials.                                                                                                                                                                                 |
+| SINGLE_OPERATOR_WALLET      | Exactly one operator wallet per deployment. Address recorded in repo-spec (governance-in-git).                                                                                                                                                                                             |
+| RECEIVING_ADDRESS_IS_SPLIT  | `payments_in.credits_topup.receiving_address` MUST be the deployed Split contract address. Single source of truth for where user payments land.                                                                                                                                            |
+| PRIVY_SIGNED_REQUESTS       | All Privy API calls MUST use signed requests (`PRIVY_SIGNING_KEY`). App Secret alone is insufficient for signing.                                                                                                                                                                          |
 
 ### Schema
 
 No new tables for the wallet itself. Outbound transfer state is tracked in:
 
-- `outbound_topups` — OpenRouter top-ups (new, see [web3-openrouter-payments spec](./web3-openrouter-payments.md))
+- `provider_funding_attempts` — OpenRouter top-ups (see [web3-openrouter-payments spec](./web3-openrouter-payments.md))
 
 DAO treasury share is handled on-chain by the Split contract — no `outbound_transfers` table needed.
 
 ### File Pointers
 
-| File                                                          | Purpose                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------- |
-| `scripts/provision-operator-wallet.ts`                        | Programmatic wallet creation via Privy API (new)        |
-| `src/ports/operator-wallet.port.ts`                           | `OperatorWalletPort` interface (new)                    |
-| `src/adapters/server/wallet/privy-operator-wallet.adapter.ts` | P0 adapter: Privy server wallet (new)                   |
-| `src/shared/config/repoSpec.server.ts`                        | `getOperatorWalletConfig()` from repo-spec              |
-| `.cogni/repo-spec.yaml`                                       | `operator_wallet.address` + `receiving_address`         |
-| `src/shared/env/server-env.ts`                                | `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY` |
+| File                                                                           | Purpose                                                               |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `packages/operator-wallet/src/port/operator-wallet.port.ts`                    | `OperatorWalletPort` interface + `TransferIntent` type                |
+| `packages/operator-wallet/src/domain/split-allocation.ts`                      | Split allocation math and billing constants                           |
+| `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts` | P0 adapter: Privy server wallet                                       |
+| `src/ports/operator-wallet.port.ts`                                            | Re-export from `@cogni/operator-wallet`                               |
+| `scripts/provision-operator-wallet.ts`                                         | Programmatic wallet creation via Privy API                            |
+| `scripts/deploy-split.ts`                                                      | Split contract deployment on Base                                     |
+| `src/shared/config/repoSpec.server.ts`                                         | `getOperatorWalletConfig()`, `getDaoTreasuryAddress()` from repo-spec |
+| `.cogni/repo-spec.yaml`                                                        | `operator_wallet.address` + `receiving_address`                       |
+| `src/shared/env/server-env.ts`                                                 | `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY`               |
 
 ### Env Vars
 
@@ -286,6 +287,7 @@ DAO treasury share is handled on-chain by the Split contract — no `outbound_tr
 | `PRIVY_APP_ID`           | Yes\*    | Privy application identifier                     |
 | `PRIVY_APP_SECRET`       | Yes\*    | Privy application secret (API auth)              |
 | `PRIVY_SIGNING_KEY`      | Yes\*    | Privy signed-requests key (tx auth)              |
+| `EVM_RPC_URL`            | Yes\*    | Base RPC for on-chain tx confirmation polling    |
 | `OPERATOR_MAX_TOPUP_USD` | No       | Per-tx cap for OpenRouter top-ups (default: 500) |
 
 \*Required when operator wallet features are enabled. Optional in schema so existing deployments don't break.

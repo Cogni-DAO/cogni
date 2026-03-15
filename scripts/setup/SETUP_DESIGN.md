@@ -141,6 +141,10 @@ pnpm setup github --env production
      - **Grafana (optional):**
        - `GRAFANA_URL` (Grafana instance URL)
        - `GRAFANA_SERVICE_ACCOUNT_TOKEN` (service account token with viewer+ role)
+     - **Privy — Operator Wallet (optional — skipped if missing):**
+       - `PRIVY_APP_ID` (from privy.io → App Settings)
+       - `PRIVY_APP_SECRET` (from privy.io → App Settings)
+       - `PRIVY_SIGNING_KEY` (PKCS8 PEM, multi-line — from privy.io → App Settings → Signing Key)
    - **Deployment secrets:** From previous steps
      - `SSH_DEPLOY_KEY` (from `~/.ssh/cogni_template_<env>_deploy`)
      - `VM_HOST` (from `.env.<env>` file)

@@ -195,6 +195,9 @@ jobs:
       GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
       GH_REPOS: ${{ vars.GH_REPOS }}
       GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+      PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+      PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+      PRIVY_SIGNING_KEY: ${{ secrets.PRIVY_SIGNING_KEY }}
       POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
       POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
       NEXT_TELEMETRY_DISABLED: 1

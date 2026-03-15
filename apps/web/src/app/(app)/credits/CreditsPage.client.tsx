@@ -52,7 +52,7 @@ export function CreditsPageClient(): ReactElement {
   const isValidAmount = amountCents !== null;
 
   const paymentFlow = usePaymentFlow({
-    amountUsdCents: amountCents ?? 100, // Default to $1.00 if invalid
+    amountUsdCents: amountCents ?? 200, // Default to $2.00 if invalid
     onSuccess: () => {
       // Refetch balance but DON'T clear amount (would unmount dialog)
       void queryClient.invalidateQueries({
@@ -93,7 +93,7 @@ export function CreditsPageClient(): ReactElement {
               setAmountInput(val);
             }
           }}
-          placeholder="1.00 - 100000.00"
+          placeholder="2.00 - 100000.00"
           disabled={
             // Lock input when: on-chain tx exists OR terminal state (requires explicit reset)
             paymentFlow.state.txHash !== null ||

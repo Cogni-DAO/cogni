@@ -8,43 +8,53 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./refs": {
       "types": "./dist/refs.d.ts",
-      "import": "./dist/refs.js"
+      "import": "./dist/refs.js",
+      "default": "./dist/refs.js"
     },
     "./scheduling": {
       "types": "./dist/scheduling.d.ts",
-      "import": "./dist/scheduling.js"
+      "import": "./dist/scheduling.js",
+      "default": "./dist/scheduling.js"
     },
     "./auth": {
       "types": "./dist/auth.d.ts",
-      "import": "./dist/auth.js"
+      "import": "./dist/auth.js",
+      "default": "./dist/auth.js"
     },
     "./billing": {
       "types": "./dist/billing.d.ts",
-      "import": "./dist/billing.js"
+      "import": "./dist/billing.js",
+      "default": "./dist/billing.js"
     },
     "./ai": {
       "types": "./dist/ai.d.ts",
-      "import": "./dist/ai.js"
+      "import": "./dist/ai.js",
+      "default": "./dist/ai.js"
     },
     "./ai-threads": {
       "types": "./dist/ai-threads.d.ts",
-      "import": "./dist/ai-threads.js"
+      "import": "./dist/ai-threads.js",
+      "default": "./dist/ai-threads.js"
     },
     "./identity": {
       "types": "./dist/identity.d.ts",
-      "import": "./dist/identity.js"
+      "import": "./dist/identity.js",
+      "default": "./dist/identity.js"
     },
     "./attribution": {
       "types": "./dist/attribution.d.ts",
-      "import": "./dist/attribution.js"
+      "import": "./dist/attribution.js",
+      "default": "./dist/attribution.js"
     },
     "./profile": {
       "types": "./dist/profile.d.ts",
-      "import": "./dist/profile.js"
+      "import": "./dist/profile.js",
+      "default": "./dist/profile.js"
     }
   },
   "files": [

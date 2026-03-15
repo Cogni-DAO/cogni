@@ -1,0 +1,49 @@
+{
+  "name": "@cogni/operator-wallet",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./adapters/privy": {
+      "types": "./dist/adapters/privy/index.d.ts",
+      "import": "./dist/adapters/privy/index.js",
+      "default": "./dist/adapters/privy/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "postbuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist/index.js')){console.error('ERROR: dist/index.js missing'); process.exit(1)}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "^2.0.0"
+  },
+  "peerDependencies": {
+    "@0xsplits/splits-sdk": ">=6.0.0",
+    "@privy-io/node": ">=0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "@0xsplits/splits-sdk": {
+      "optional": true
+    },
+    "@privy-io/node": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@0xsplits/splits-sdk": "6.4.1",
+    "@privy-io/node": "^0.10.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5"
+  }
+}

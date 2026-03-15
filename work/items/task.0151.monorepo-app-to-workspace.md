@@ -2,7 +2,7 @@
 id: task.0151
 type: task
 title: "Monorepo re-architecture: app to apps/web, platform/ to infra/ + scripts/"
-status: needs_implement
+status: done
 priority: 0
 rank: 1
 estimate: 5

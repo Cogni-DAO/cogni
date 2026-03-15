@@ -40,6 +40,7 @@ Deterministic test doubles for unit tests with no I/O dependencies.
   - FakeTelemetry (no-op telemetry)
   - FakeLlmService (deterministic LLM responses for unit tests)
   - MockAccountService (account/credits test doubles)
+  - MockServiceAccountService, MockTreasurySettlement, MockFinancialLedger, MockProviderFunding (payment port test doubles)
   - Test identity fixtures (TEST_USER_ID_1–5, TEST_SESSION_USER_1–5, TEST_WALLET_1–5, testUser(), newTestUserId(), newTestSessionUser())
   - Payment builders (createPaymentAttempt, createIntentAttempt, createPendingAttempt, createCreditedAttempt, createRejectedAttempt, createFailedAttempt, createExpiredIntent, createTimedOutPending)
   - makeTestCtx (RequestContext factory for facade/service tests)
@@ -48,7 +49,7 @@ Deterministic test doubles for unit tests with no I/O dependencies.
   - Request builders (createCompletionRequest, createChatRequest)
   - UsageFact builders (buildInprocUsageFact, buildSandboxUsageFact, buildExternalUsageFact)
   - TEST_GRAPH_NAME constant ("langgraph:poet")
-- **Files considered API:** index.ts, ids.ts, payments/fakes.ts, ai/fakes.ts, ai/tool-builders.ts, ai/graph-executor-fakes.ts, ai/request-builders.ts, ai/usage-fact-builders.ts, test-context.ts
+- **Files considered API:** index.ts, ids.ts, payments/fakes.ts, payments/mock-services.ts, ai/fakes.ts, ai/tool-builders.ts, ai/graph-executor-fakes.ts, ai/request-builders.ts, ai/usage-fact-builders.ts, test-context.ts
 
 ## Responsibilities
 

@@ -414,15 +414,16 @@ jobs:
           cache-from: type=gha,scope=sandbox-runtime
           cache-to: type=gha,mode=max,scope=sandbox-runtime
 
-      - name: Start app + DB + Temporal stack
+      - name: Start app + DB + Temporal + TigerBeetle stack
         run: |
           docker network create cogni-edge || true
           # Images pre-built with GHA cache; no --build needed
           # Temporal services required for schedule CRUD + execution tests
           # scheduler-worker required for workflow execution tests
+          # tigerbeetle required for financial ledger stack tests
           docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile sandbox-openclaw \
-            up -d app postgres litellm mock-llm caddy temporal-postgres temporal temporal-ui scheduler-worker git-sync llm-proxy-openclaw openclaw-gateway
+            up -d app postgres litellm mock-llm caddy temporal-postgres temporal temporal-ui scheduler-worker git-sync llm-proxy-openclaw openclaw-gateway tigerbeetle
 
       - name: Probe container-boundary (git-sync volume)
         run: scripts/ci/probe-repo-volume.sh
@@ -446,6 +447,8 @@ jobs:
           # Vitest runs on host, connects via port-forwarded localhost:55432
           DATABASE_URL: postgresql://user:password@localhost:55432/cogni_template_test
           DATABASE_SERVICE_URL: postgresql://user_service:service_password@localhost:55432/cogni_template_test
+          # TigerBeetle (host-side vitest, port-forwarded)
+          TIGERBEETLE_ADDRESS: 127.0.0.1:3002
         # Note: wait-for-probes.ts globalSetup polls /livez then /readyz before tests run
 
       - name: CI Telemetry
@@ -457,6 +460,13 @@ jobs:
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
           compose_file: infra/compose/runtime/docker-compose.dev.yml
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
+            --profile sandbox-openclaw \
+            logs --tail=300 2>&1 | tee ${{ runner.temp }}/ci-job.log
 
       - name: Upload failure context artifact
         if: failure()

@@ -3,11 +3,11 @@
 
 /**
  * Module: `@features/payments/services/paymentService`
- * Purpose: Orchestrate payment attempt lifecycle via ports. Handles intent creation, txHash submission, status polling, and settlement.
- * Scope: Feature-layer orchestration for payment attempts; validates state transitions, enforces TTLs; does not expose HTTP handling.
- * Invariants: State transitions via core/rules; atomic settlement via confirmCreditsPayment; RPC_ERROR is transient (retried on next poll).
- * Side-effects: IO (via AccountService, ServiceAccountService, PaymentAttemptUserRepository, PaymentAttemptServiceRepository, OnChainVerifier ports)
- * Notes: RPC_ERROR from OnChainVerifier leaves attempt in PENDING_UNVERIFIED for automatic retry via getStatus polling.
+ * Purpose: Orchestrate payment attempt lifecycle via ports. Handles intent creation, txHash submission, status polling, settlement, and post-credit funding.
+ * Scope: Feature-layer orchestration for payment attempts; validates state transitions, enforces TTLs, triggers post-credit funding on CREDITED; does not expose HTTP handling.
+ * Invariants: State transitions via core/rules; atomic settlement via confirmCreditsPayment; post-credit funding via runPostCreditFunding (fires exactly once on CREDITED transition); RPC_ERROR is transient (retried on next poll).
+ * Side-effects: IO (via AccountService, ServiceAccountService, PaymentAttemptUserRepository, PaymentAttemptServiceRepository, OnChainVerifier, PostCreditFundingDeps ports)
+ * Notes: RPC_ERROR from OnChainVerifier leaves attempt in PENDING_UNVERIFIED for automatic retry via getStatus polling. Post-credit funding (treasury settlement, TB co-writes, provider top-up) runs inline after CREDITED but never throws — all steps catch internally.
  * Links: docs/spec/payments-design.md
  * @public
  */
@@ -22,6 +22,8 @@ import {
   isValidPaymentAmount,
   isValidTransition,
   isVerificationTimedOut,
+  MAX_PAYMENT_CENTS,
+  MIN_PAYMENT_CENTS,
   PAYMENT_INTENT_TTL_MS,
   toClientVisibleStatus,
   usdCentsToRawUsdc,
@@ -37,6 +39,8 @@ import type {
 import { getPaymentConfig } from "@/shared/config/repoSpec.server";
 import type { Logger } from "@/shared/observability";
 import { USDC_TOKEN_ADDRESS, VERIFY_THROTTLE_SECONDS } from "@/shared/web3";
+import type { PostCreditFundingDeps } from "../application/confirmCreditsPurchase";
+import { runPostCreditFunding } from "../application/confirmCreditsPurchase";
 import { PaymentNotFoundError } from "../errors";
 import { confirmCreditsPayment } from "./creditsConfirm";
 
@@ -114,7 +118,7 @@ export async function createIntent(
 ): Promise<CreateIntentResult> {
   if (!isValidPaymentAmount(input.amountUsdCents)) {
     throw new Error(
-      `Invalid payment amount: ${input.amountUsdCents} cents. Must be between 100 and 1,000,000 cents.`
+      `Invalid payment amount: ${input.amountUsdCents} cents. Must be between ${MIN_PAYMENT_CENTS} and ${MAX_PAYMENT_CENTS} cents.`
     );
   }
 
@@ -178,7 +182,8 @@ export async function submitTxHash(
   onChainVerifier: OnChainVerifier,
   clock: Clock,
   log: Logger,
-  input: SubmitTxHashInput
+  input: SubmitTxHashInput,
+  postCreditFundingDeps?: PostCreditFundingDeps
 ): Promise<SubmitTxHashResult> {
   const now = new Date(clock.now());
 
@@ -238,7 +243,8 @@ export async function submitTxHash(
     onChainVerifier,
     clock,
     log,
-    input.defaultVirtualKeyId
+    input.defaultVirtualKeyId,
+    postCreditFundingDeps
   );
 
   if (!attempt.txHash) {
@@ -282,7 +288,8 @@ export async function getStatus(
   onChainVerifier: OnChainVerifier,
   clock: Clock,
   log: Logger,
-  input: GetStatusInput
+  input: GetStatusInput,
+  postCreditFundingDeps?: PostCreditFundingDeps
 ): Promise<GetStatusResult> {
   const now = new Date(clock.now());
 
@@ -340,7 +347,8 @@ export async function getStatus(
         onChainVerifier,
         clock,
         log,
-        input.defaultVirtualKeyId
+        input.defaultVirtualKeyId,
+        postCreditFundingDeps
       );
     }
   }
@@ -380,7 +388,8 @@ async function verifyAndSettle(
   onChainVerifier: OnChainVerifier,
   _clock: Clock,
   log: Logger,
-  defaultVirtualKeyId: string
+  defaultVirtualKeyId: string,
+  postCreditFundingDeps?: PostCreditFundingDeps
 ): Promise<PaymentAttempt> {
   if (!attempt.txHash) {
     return attempt;
@@ -466,6 +475,16 @@ async function verifyAndSettle(
           attempt.billingAccountId,
           "CREDITED"
         );
+
+        // Post-credit funding: treasury settlement + TB co-writes + provider top-up
+        // Runs inline (not fire-and-forget) but never throws (all steps catch internally).
+        // Uses chainId:txHash as canonical funding key (matches clientPaymentId used for crediting).
+        if (postCreditFundingDeps) {
+          await runPostCreditFunding(postCreditFundingDeps, {
+            paymentIntentId: clientPaymentId,
+            amountUsdCents: attempt.amountUsdCents,
+          });
+        }
       }
     } catch (error) {
       log.error(

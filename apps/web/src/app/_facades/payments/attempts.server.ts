@@ -3,21 +3,22 @@
 
 /**
  * Module: `@app/_facades/payments/attempts.server`
- * Purpose: App-layer wiring for payment attempts. Resolves dependencies, delegates to feature services, and maps port types to contract DTOs.
- * Scope: Server-only facade. Handles billing account resolution from session user, maps Date to ISO string for contract compliance; does not perform direct persistence or HTTP handling.
- * Invariants: Billing account from session only; state transition events include chainId and errorCode.
- * Side-effects: IO (via PaymentAttemptUserRepository, PaymentAttemptServiceRepository, AccountService, ServiceAccountService, OnChainVerifier ports).
- * Notes: Facades own DTO mapping. Emits payments.verified on CREDITED transitions.
+ * Purpose: App-layer wiring for payment attempts. Resolves dependencies (including post-credit funding deps), delegates to feature services, and maps port types to contract DTOs.
+ * Scope: Server-only facade. Handles billing account resolution from session user, builds PostCreditFundingDeps from container, maps Date to ISO string for contract compliance; does not perform direct persistence or HTTP handling.
+ * Invariants: Billing account from session only; state transition events include chainId and errorCode; post-credit funding deps threaded to service layer (not invoked in facade).
+ * Side-effects: IO (via PaymentAttemptUserRepository, PaymentAttemptServiceRepository, AccountService, ServiceAccountService, OnChainVerifier, PostCreditFundingDeps ports).
+ * Notes: Facades own DTO mapping. Emits payments.verified on CREDITED transitions. buildPostCreditFundingDeps() constructs funding deps from container when at least one downstream port is available.
  * Links: docs/spec/payments-design.md, src/contracts/AGENTS.md
  * @public
  */
 
 import { toUserId } from "@cogni/ids";
 import { getAddress } from "viem";
-import { getContainer } from "@/bootstrap/container";
+import { type Container, getContainer } from "@/bootstrap/container";
 import type { PaymentIntentOutput } from "@/contracts/payments.intent.v1.contract";
 import type { PaymentStatusOutput } from "@/contracts/payments.status.v1.contract";
 import type { PaymentSubmitOutput } from "@/contracts/payments.submit.v1.contract";
+import type { PostCreditFundingDeps } from "@/features/payments/application/confirmCreditsPurchase";
 import {
   AuthUserNotFoundError,
   WalletRequiredError,
@@ -29,6 +30,7 @@ import {
 } from "@/features/payments/services/paymentService";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 import type { SessionUser } from "@/shared/auth";
+import { serverEnv } from "@/shared/env/server-env";
 import type {
   PaymentsIntentCreatedEvent,
   PaymentsStateTransitionEvent,
@@ -36,6 +38,42 @@ import type {
   PaymentsVerifiedEvent,
   RequestContext,
 } from "@/shared/observability";
+
+/**
+ * Build PostCreditFundingDeps from the container.
+ * Returns undefined when provider funding is not configured (no-op at service layer).
+ */
+function buildPostCreditFundingDeps(
+  container: Container,
+  log: PostCreditFundingDeps["log"]
+): PostCreditFundingDeps | undefined {
+  // Only build deps when at least one downstream port is available
+  if (
+    !container.treasurySettlement &&
+    !container.financialLedger &&
+    !container.providerFunding
+  ) {
+    return undefined;
+  }
+
+  const pricingConfig = (() => {
+    if (!container.providerFunding) return undefined;
+    const env = serverEnv();
+    return {
+      markupFactor: env.USER_PRICE_MARKUP_FACTOR,
+      revenueShare: env.SYSTEM_TENANT_REVENUE_SHARE,
+      cryptoFee: env.OPENROUTER_CRYPTO_FEE,
+    };
+  })();
+
+  return {
+    treasurySettlement: container.treasurySettlement,
+    financialLedger: container.financialLedger,
+    providerFunding: container.providerFunding,
+    log,
+    pricingConfig,
+  };
+}
 
 /**
  * Creates payment intent facade
@@ -209,7 +247,8 @@ export async function submitPaymentTxHashFacade(
       billingAccountId: billingAccount.id,
       defaultVirtualKeyId: billingAccount.defaultVirtualKeyId,
       txHash: params.txHash,
-    }
+    },
+    buildPostCreditFundingDeps(container, enrichedCtx.log)
   );
 
   // Log domain event (state transition)
@@ -327,7 +366,8 @@ export async function getPaymentStatusFacade(
       attemptId: params.attemptId,
       billingAccountId: billingAccount.id,
       defaultVirtualKeyId: billingAccount.defaultVirtualKeyId,
-    }
+    },
+    buildPostCreditFundingDeps(container, enrichedCtx.log)
   );
 
   // Log domain event (read operation)

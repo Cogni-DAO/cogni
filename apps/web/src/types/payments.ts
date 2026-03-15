@@ -5,7 +5,7 @@
  * Module: `@types/payments`
  * Purpose: Payment flow types shared across all layers (bottom of dependency hierarchy).
  * Scope: Type-only exports; defines UI state, backend status enums, and error codes. Does not contain runtime code or functions.
- * Invariants: All exports are types or interfaces; no values or functions.
+ * Invariants: All exports are types, interfaces, or domain constants (amount bounds).
  * Side-effects: none
  * Notes: Single source of truth for payment types; prevents circular dependencies.
  * Links: docs/spec/payments-design.md
@@ -87,3 +87,13 @@ export type PaymentErrorCode =
   | "RECEIPT_NOT_FOUND"
   | "INTENT_EXPIRED"
   | "RPC_ERROR";
+
+// ============================================================================
+// Payment Amount Bounds
+// ============================================================================
+
+/** Minimum payment amount in USD cents ($2.00) — matches operator wallet floor */
+export const MIN_PAYMENT_CENTS = 200;
+
+/** Maximum payment amount in USD cents ($10,000.00) */
+export const MAX_PAYMENT_CENTS = 1_000_000;

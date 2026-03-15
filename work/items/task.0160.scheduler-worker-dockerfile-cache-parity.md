@@ -2,7 +2,7 @@
 id: task.0160
 type: task
 title: Scheduler-worker Dockerfile cache parity with app
-status: needs_merge
+status: done
 priority: 1
 rank: 1
 estimate: 2

@@ -18,6 +18,12 @@ services:
       - internal
     labels:
       - "autoheal=true"
+    # seccomp=unconfined: required for tigerbeetle-node (N-API client) which uses
+    # io_uring for I/O. GitHub Actions runners disable io_uring via seccomp, causing
+    # a native thread panic at client init. Not needed in production compose — real
+    # hosts have io_uring enabled at the kernel level.
+    security_opt:
+      - "seccomp=unconfined"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/livez"]
       interval: 10s
@@ -62,6 +68,13 @@ services:
       - LANGFUSE_SECRET_KEY
       - LANGFUSE_BASE_URL
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
+      # TigerBeetle (Financial Ledger) — optional, native client requires IP (no DNS).
+      # Static IP assigned via ipam on internal network.
+      - TIGERBEETLE_ADDRESS=10.100.0.100:3002
+      # Privy (Operator Wallet) — optional, silently skipped if missing
+      - PRIVY_APP_ID
+      - PRIVY_APP_SECRET
+      - PRIVY_SIGNING_KEY
       # Prometheus query (for analytics/AI tools) - read-only credentials
       - PROMETHEUS_REMOTE_WRITE_URL
       - PROMETHEUS_QUERY_URL
@@ -613,6 +626,45 @@ services:
       git-sync:
         condition: service_completed_successfully
 
+  # =============================================================================
+  # TigerBeetle (Financial Ledger)
+  # Per financial-ledger-spec: double-entry ledger engine
+  # Self-initializing: formats data file on first boot, then starts.
+  # =============================================================================
+
+  tigerbeetle:
+    image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
+    container_name: tigerbeetle
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    security_opt:
+      - "seccomp=unconfined"
+    labels:
+      - "autoheal=true"
+    networks:
+      internal:
+        ipv4_address: 10.100.0.100
+    ports:
+      - "127.0.0.1:3002:3002"
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        if [ ! -f /data/0_0.tigerbeetle ]; then
+          echo "TigerBeetle: formatting data file (first boot)..."
+          /tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/0_0.tigerbeetle
+        fi
+        exec /tigerbeetle start --addresses=0.0.0.0:3002 --cache-grid=256MiB --development /data/0_0.tigerbeetle
+    volumes:
+      - tigerbeetle_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 3002"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 15s
+
 networks:
   cogni-edge:
     name: cogni-edge
@@ -620,6 +672,9 @@ networks:
   internal:
     name: internal
     external: false
+    ipam:
+      config:
+        - subnet: 10.100.0.0/24
   sandbox-internal:
     name: sandbox-internal
     internal: true # KEY: No external gateway - prevents internet egress
@@ -643,5 +698,7 @@ volumes:
     name: repo_data
   pnpm_store:
     name: pnpm_store
+  tigerbeetle_data:
+    name: tigerbeetle_data
   cogni_workspace:
     name: cogni_workspace

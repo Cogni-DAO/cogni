@@ -20,8 +20,12 @@ import type {
 } from "@cogni/ai-tools";
 import type { AttributionStore } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
+import type { FinancialLedgerPort } from "@cogni/financial-ledger";
+import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
+import { numberToPpm } from "@cogni/operator-wallet";
+import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { WorkItemQueryPort } from "@cogni/work-items";
 import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
@@ -56,10 +60,13 @@ import {
 import { ServiceDrizzleAccountService } from "@/adapters/server/accounts/drizzle.adapter";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { ServiceDrizzlePaymentAttemptRepository } from "@/adapters/server/payments/drizzle-payment-attempt.adapter";
+import { OpenRouterFundingAdapter } from "@/adapters/server/treasury/openrouter-funding.adapter";
+import { SplitTreasurySettlementAdapter } from "@/adapters/server/treasury/split-treasury-settlement.adapter";
 import {
   FakeMetricsAdapter,
   getTestEvmOnchainClient,
   getTestOnChainVerifier,
+  getTestOperatorWallet,
 } from "@/adapters/test";
 import { createToolBindings } from "@/bootstrap/ai/tool-bindings";
 import { createBoundToolSource } from "@/bootstrap/ai/tool-source.factory";
@@ -80,11 +87,14 @@ import type {
   LlmService,
   MetricsQueryPort,
   OnChainVerifier,
+  OperatorWalletPort,
   PaymentAttemptServiceRepository,
   PaymentAttemptUserRepository,
+  ProviderFundingPort,
   ServiceAccountService,
   ThreadPersistencePort,
   TreasuryReadPort,
+  TreasurySettlementPort,
 } from "@/ports";
 import type {
   ExecutionGrantUserPort,
@@ -94,10 +104,16 @@ import type {
   ScheduleUserPort,
 } from "@/ports/server";
 import { initAnalytics, shutdownAnalytics } from "@/shared/analytics";
-import { getScopeId } from "@/shared/config";
+import {
+  getDaoTreasuryAddress,
+  getOperatorWalletConfig,
+  getPaymentConfig,
+  getScopeId,
+} from "@/shared/config";
 import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
+import { USDC_TOKEN_ADDRESS } from "@/shared/web3";
 import type { EvmOnchainClient } from "@/shared/web3/onchain/evm-onchain-client.interface";
 
 export type UnhandledErrorPolicy = "rethrow" | "respond_500";
@@ -153,6 +169,14 @@ export interface Container {
   workItemQuery: WorkItemQueryPort;
   /** Webhook source registrations — normalizers for webhook ingestion */
   webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
+  /** Financial ledger — undefined when TIGERBEETLE_ADDRESS not set */
+  financialLedger: FinancialLedgerPort | undefined;
+  /** Operator wallet — undefined when PRIVY_APP_ID not set */
+  operatorWallet: OperatorWalletPort | undefined;
+  /** Treasury settlement — undefined when operator wallet not configured */
+  treasurySettlement: TreasurySettlementPort | undefined;
+  /** Provider funding — undefined when OPENROUTER_API_KEY not set */
+  providerFunding: ProviderFundingPort | undefined;
 }
 
 // Feature-specific dependency types
@@ -304,10 +328,31 @@ function createContainer(): Container {
         return new MimirMetricsAdapter(mimirConfig);
       })();
 
+  // FinancialLedger: optional — only when TIGERBEETLE_ADDRESS is configured
+  // @cogni/financial-ledger/adapters is in serverExternalPackages (N-API addon, not bundleable)
+  const financialLedger: FinancialLedgerPort | undefined = (() => {
+    if (!env.TIGERBEETLE_ADDRESS) return undefined;
+    try {
+      const adapter = createTigerBeetleAdapter(env.TIGERBEETLE_ADDRESS);
+      log.info(
+        { address: env.TIGERBEETLE_ADDRESS },
+        "TigerBeetle financial ledger connected"
+      );
+      return adapter;
+    } catch (err) {
+      log.warn(
+        { err },
+        "TigerBeetle client failed to initialize — financial ledger disabled"
+      );
+      return undefined;
+    }
+  })();
+
   // Always use real database adapters
   // Testing strategy: unit tests mock the port, integration tests use real DB
   const serviceAccountService = new ServiceDrizzleAccountService(
-    getServiceDb()
+    getServiceDb(),
+    financialLedger
   );
   // TreasuryReadPort: always uses ViemTreasuryAdapter (no test fake needed - mocked at port level in tests)
   const treasuryReadPort = new ViemTreasuryAdapter(evmOnchainClient);
@@ -410,12 +455,82 @@ function createContainer(): Container {
     DEPLOY_ENVIRONMENT: env.DEPLOY_ENVIRONMENT ?? "local",
   };
 
+  // OperatorWallet: test uses fake, production uses Privy (optional — only when configured)
+  const operatorWalletConfig = getOperatorWalletConfig();
+  const operatorWallet: OperatorWalletPort | undefined = env.isTestMode
+    ? getTestOperatorWallet()
+    : (() => {
+        if (
+          !env.PRIVY_APP_ID ||
+          !env.PRIVY_APP_SECRET ||
+          !env.PRIVY_SIGNING_KEY
+        ) {
+          return undefined;
+        }
+        if (!operatorWalletConfig) {
+          log.warn(
+            "PRIVY_APP_ID set but operator_wallet missing from repo-spec — skipping operator wallet"
+          );
+          return undefined;
+        }
+        const treasuryAddress = getDaoTreasuryAddress();
+        if (!treasuryAddress) {
+          log.warn(
+            "operator_wallet configured but cogni_dao.dao_contract missing — skipping operator wallet"
+          );
+          return undefined;
+        }
+        const paymentConfig = getPaymentConfig();
+        if (!env.EVM_RPC_URL) {
+          log.warn(
+            "PRIVY_APP_ID set but EVM_RPC_URL missing — operator wallet requires RPC for tx confirmation"
+          );
+          return undefined;
+        }
+        return new PrivyOperatorWalletAdapter({
+          appId: env.PRIVY_APP_ID,
+          appSecret: env.PRIVY_APP_SECRET,
+          signingKey: env.PRIVY_SIGNING_KEY,
+          expectedAddress: operatorWalletConfig.address,
+          splitAddress: paymentConfig.receivingAddress,
+          treasuryAddress,
+          markupPpm: numberToPpm(env.USER_PRICE_MARKUP_FACTOR),
+          revenueSharePpm: numberToPpm(env.SYSTEM_TENANT_REVENUE_SHARE),
+          maxTopUpUsd: env.OPERATOR_MAX_TOPUP_USD,
+          rpcUrl: env.EVM_RPC_URL,
+        });
+      })();
+
+  // ProviderFunding: optional — only when OPENROUTER_API_KEY is configured + operator wallet available
+  // Per MARGIN_PRESERVED: fail fast if pricing constants don't preserve positive margin
+  const providerFunding: ProviderFundingPort | undefined = (() => {
+    if (!env.OPENROUTER_API_KEY || !operatorWallet) return undefined;
+
+    // MARGIN_PRESERVED: markup × (1 - fee) must be > 1 + revenueShare
+    const effectiveMarkup =
+      env.USER_PRICE_MARKUP_FACTOR * (1 - env.OPENROUTER_CRYPTO_FEE);
+    if (effectiveMarkup <= 1 + env.SYSTEM_TENANT_REVENUE_SHARE) {
+      throw new Error(
+        `MARGIN_PRESERVED violation: markup(${env.USER_PRICE_MARKUP_FACTOR}) × (1 - fee(${env.OPENROUTER_CRYPTO_FEE})) ` +
+          `must be > 1 + revenueShare(${env.SYSTEM_TENANT_REVENUE_SHARE}). ` +
+          "DAO would lose money on every purchase."
+      );
+    }
+
+    return new OpenRouterFundingAdapter(
+      getServiceDb(),
+      operatorWallet,
+      { apiKey: env.OPENROUTER_API_KEY },
+      log.child({ component: "OpenRouterFundingAdapter" })
+    );
+  })();
+
   return {
     log,
     config,
     llmService,
     accountsForUser: (userId: UserId) =>
-      new UserDrizzleAccountService(db, userId),
+      new UserDrizzleAccountService(db, userId, financialLedger),
     serviceAccountService,
     clock,
     paymentAttemptsForUser: (userId: UserId) =>
@@ -448,6 +563,12 @@ function createContainer(): Container {
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },
+    financialLedger,
+    operatorWallet,
+    treasurySettlement: operatorWallet
+      ? new SplitTreasurySettlementAdapter(operatorWallet, USDC_TOKEN_ADDRESS)
+      : undefined,
+    providerFunding,
   };
 }
 

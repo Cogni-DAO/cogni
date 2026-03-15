@@ -14,6 +14,8 @@ const nextConfig: NextConfig = {
     "cpu-features",
     "pino",
     "pino-pretty",
+    "tigerbeetle-node",
+    "@cogni/financial-ledger",
   ],
   // WalletConnect pulls pino@7 → thread-stream@0.15 which ships test files
   // requiring 'tape'. outputFileTracingRoot broadens tracing to monorepo root,

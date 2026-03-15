@@ -45,6 +45,7 @@ export const EVENT_NAMES = {
   PAYMENTS_VERIFIED: "payments.verified",
   PAYMENTS_CONFIRMED: "payments.confirmed",
   PAYMENTS_STATUS_READ: "payments.status_read",
+  PAYMENTS_FUNDING_COMPLETE: "payments.funding_complete",
 
   // Payments Domain - Client
   CLIENT_PAYMENTS_CREDITS_SUMMARY_HTTP_ERROR:
@@ -72,6 +73,7 @@ export const EVENT_NAMES = {
   ADAPTER_RIPGREP_SEARCH: "adapter.ripgrep.search",
   ADAPTER_RIPGREP_OPEN: "adapter.ripgrep.open",
   ADAPTER_OPENCLAW_GATEWAY_ERROR: "adapter.openclaw_gateway.error",
+  ADAPTER_TIGERBEETLE_ERROR: "adapter.tigerbeetle.error",
 
   // Ledger Domain
   LEDGER_ALLOCATIONS_UPDATED: "ledger.allocations_updated",

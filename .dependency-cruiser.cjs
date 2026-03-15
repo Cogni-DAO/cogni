@@ -284,7 +284,10 @@ module.exports = {
     },
 
     // Entry point enforcement: block internal module imports
-    // ports: must use @/ports (index.ts), not internal port files
+    // ports: must use @/ports (index.ts) or @/ports/server.ts, not internal port files.
+    // index.ts is the client-safe surface; server.ts re-exports @cogni/scheduler-core
+    // which transitively uses node:util and must not enter client bundles.
+    // See bug.0147 for the environment-safe split rationale.
     {
       name: "no-internal-ports-imports",
       severity: "error",

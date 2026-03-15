@@ -156,7 +156,8 @@ export async function siweLogin(
 
     // Step 3: POST to NextAuth credentials callback
     // CRITICAL: Must send CSRF cookie back (behave like a browser)
-    const callbackUrl = `${params.baseUrl}/api/auth/callback/siwe`;
+    // Provider ID is "credentials" (not "siwe") — matches auth.ts Credentials({ id: "credentials" })
+    const callbackUrl = `${params.baseUrl}/api/auth/callback/credentials`;
 
     const body = new URLSearchParams({
       csrfToken,

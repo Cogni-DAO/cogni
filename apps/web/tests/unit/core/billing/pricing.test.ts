@@ -14,7 +14,9 @@ import { describe, expect, it } from "vitest";
 import {
   CREDITS_PER_USD,
   calculateLlmUserCharge,
+  calculateOpenRouterTopUp,
   calculateRevenueShareBonus,
+  isMarginPreserved,
   usdCentsToCredits,
   usdToCredits,
 } from "@/core/billing/pricing";
@@ -121,6 +123,83 @@ describe("Pricing Logic", () => {
       expect(result.userCostUsd).toBeCloseTo(0.0015, 10);
       // Credits: ceil(0.0015 * 10_000_000) = 15000
       expect(result.chargedCredits).toBe(15000n);
+    });
+  });
+
+  describe("calculateOpenRouterTopUp", () => {
+    // Default constants: markup=2.0, revenueShare=0.75, cryptoFee=0.05
+    const MARKUP = 2.0;
+    const REVENUE_SHARE = 0.75;
+    const CRYPTO_FEE = 0.05;
+
+    it("computes top-up from $1.00 purchase with default constants", () => {
+      // topUp = (100/100) × (1 + 0.75) / (2.0 × 0.95) = 1.75 / 1.90 ≈ $0.9211
+      const topUp = calculateOpenRouterTopUp(
+        100,
+        MARKUP,
+        REVENUE_SHARE,
+        CRYPTO_FEE
+      );
+      expect(topUp).toBeCloseTo(0.9211, 3);
+    });
+
+    it("scales linearly with payment amount", () => {
+      const topUp1 = calculateOpenRouterTopUp(
+        100,
+        MARKUP,
+        REVENUE_SHARE,
+        CRYPTO_FEE
+      );
+      const topUp10 = calculateOpenRouterTopUp(
+        1000,
+        MARKUP,
+        REVENUE_SHARE,
+        CRYPTO_FEE
+      );
+      expect(topUp10).toBeCloseTo(topUp1 * 10, 8);
+    });
+
+    it("returns 0 for zero payment", () => {
+      expect(
+        calculateOpenRouterTopUp(0, MARKUP, REVENUE_SHARE, CRYPTO_FEE)
+      ).toBe(0);
+    });
+
+    it("returns 0 when denominator is zero or negative", () => {
+      // cryptoFee=1.0 → denominator = markup × 0 = 0
+      expect(calculateOpenRouterTopUp(100, MARKUP, REVENUE_SHARE, 1.0)).toBe(0);
+    });
+
+    it("top-up is less than user payment (margin preserved)", () => {
+      const topUp = calculateOpenRouterTopUp(
+        100,
+        MARKUP,
+        REVENUE_SHARE,
+        CRYPTO_FEE
+      );
+      expect(topUp).toBeLessThan(1.0); // $1.00 payment → < $1.00 top-up
+    });
+  });
+
+  describe("isMarginPreserved", () => {
+    it("returns true with default constants (2.0, 0.75, 0.05)", () => {
+      // 2.0 × 0.95 = 1.90 > 1.75 = 1 + 0.75
+      expect(isMarginPreserved(2.0, 0.75, 0.05)).toBe(true);
+    });
+
+    it("returns false when markup too low", () => {
+      // 1.5 × 0.95 = 1.425 < 1.75
+      expect(isMarginPreserved(1.5, 0.75, 0.05)).toBe(false);
+    });
+
+    it("returns false when fee too high", () => {
+      // 2.0 × 0.10 = 0.2 < 1.75
+      expect(isMarginPreserved(2.0, 0.75, 0.9)).toBe(false);
+    });
+
+    it("returns true with no revenue share", () => {
+      // 2.0 × 0.95 = 1.90 > 1.0
+      expect(isMarginPreserved(2.0, 0, 0.05)).toBe(true);
     });
   });
 

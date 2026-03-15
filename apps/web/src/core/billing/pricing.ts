@@ -101,6 +101,45 @@ export function calculateRevenueShareBonus(
   return (purchasedCredits * shareScaled) / REVENUE_SHARE_SCALE;
 }
 
+/**
+ * Calculate how much USDC to top up to the AI provider after a credit purchase.
+ * Derives the gross top-up from the user's payment in USD cents, accounting for
+ * markup, DAO revenue share, and crypto provider fee.
+ *
+ * Formula: topUpUsd = (amountUsdCents / 100) × (1 + revenueShare) / (markup × (1 - cryptoFee))
+ *
+ * @param amountUsdCents - User payment amount in USD cents (integer)
+ * @param markupFactor - Price markup multiplier (e.g. 2.0 = 100% markup)
+ * @param revenueShare - Fraction of credits minted as DAO bonus (0–1, e.g. 0.75)
+ * @param cryptoFee - Provider's crypto payment fee (0–1, e.g. 0.05 = 5%)
+ * @returns Top-up amount in USD (float, for charge creation)
+ */
+export function calculateOpenRouterTopUp(
+  amountUsdCents: number,
+  markupFactor: number,
+  revenueShare: number,
+  cryptoFee: number
+): number {
+  const paymentUsd = amountUsdCents / 100;
+  const denominator = markupFactor * (1 - cryptoFee);
+  if (denominator <= 0) return 0;
+  return (paymentUsd * (1 + revenueShare)) / denominator;
+}
+
+/**
+ * Check that pricing constants preserve positive margin for the DAO.
+ * If markup × (1 - fee) <= (1 + revenueShare), the DAO loses money on every purchase.
+ *
+ * @returns true if margin is preserved (DAO profitable)
+ */
+export function isMarginPreserved(
+  markupFactor: number,
+  revenueShare: number,
+  cryptoFee: number
+): boolean {
+  return markupFactor * (1 - cryptoFee) > 1 + revenueShare;
+}
+
 export function calculateLlmUserCharge(
   providerCostUsd: number,
   markupFactor: number

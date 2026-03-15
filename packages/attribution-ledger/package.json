@@ -7,15 +7,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./epoch-window": {
       "types": "./dist/epoch-window.d.ts",
-      "import": "./dist/epoch-window.js"
+      "import": "./dist/epoch-window.js",
+      "default": "./dist/epoch-window.js"
     },
     "./allocation": {
       "types": "./dist/allocation.d.ts",
-      "import": "./dist/allocation.js"
+      "import": "./dist/allocation.js",
+      "default": "./dist/allocation.js"
     }
   },
   "types": "./dist/index.d.ts",

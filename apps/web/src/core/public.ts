@@ -60,8 +60,10 @@ export {
 export {
   CREDITS_PER_USD,
   calculateLlmUserCharge,
+  calculateOpenRouterTopUp,
   calculateRevenueShareBonus,
   creditsToUsd,
+  isMarginPreserved,
   usdCentsToCredits,
   usdToCredits,
 } from "./billing/pricing";

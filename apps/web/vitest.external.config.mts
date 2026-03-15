@@ -35,7 +35,12 @@ export default defineConfig({
     // External tests mutate shared state (GitHub repo main branch, testcontainers DB).
     // Run one file at a time to avoid merge races and epoch collisions.
     pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
+    poolOptions: {
+      forks: {
+        singleFork: true,
+        execArgv: ["--dns-result-order=ipv4first"],
+      },
+    },
     sequence: { concurrent: false },
     testTimeout: 30_000,
     hookTimeout: 30_000,

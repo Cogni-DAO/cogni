@@ -7,6 +7,7 @@
  * Scope: Implements AccountService and ServiceAccountService ports with ledger-based credit accounting and virtual key management. Does not compute pricing.
  * Invariants:
  * - Atomic ops; ledger source of truth; balance cached; UUID v4 validated
+ * - CO_WRITE_NON_BLOCKING: TigerBeetle co-writes fire after PG tx commits; failures logged, never thrown
  * - IDEMPOTENT_CHARGES: (source_system, source_reference) is idempotency key per GRAPH_EXECUTION.md
  * - Persists chargeReason, sourceSystem, runId to charge_receipts (required fields)
  * - listChargeReceipts returns sourceSystem for Activity UI join
@@ -15,13 +16,20 @@
  * - ServiceDrizzleAccountService uses serviceDb directly (BYPASSRLS)
  * Side-effects: IO (database operations)
  * Notes: Uses transactions for consistency; recordChargeReceipt is non-blocking (never throws InsufficientCredits per ACTIVITY_METRICS.md)
- * Links: Implements AccountService port, uses shared database schema, docs/spec/activity-metrics.md, docs/spec/graph-execution.md, types/billing.ts
+ * Links: Implements AccountService port, uses shared database schema, docs/spec/activity-metrics.md, docs/spec/graph-execution.md, docs/spec/financial-ledger.md, types/billing.ts
  * @public
  */
 
 import { randomUUID } from "node:crypto";
 import type { GraphId } from "@cogni/ai-core";
 import { withTenantScope } from "@cogni/db-client";
+import type { FinancialLedgerPort } from "@cogni/financial-ledger";
+import {
+  ACCOUNT,
+  LEDGER,
+  TRANSFER_CODE,
+  uuidToBigInt,
+} from "@cogni/financial-ledger";
 import { type ActorId, type UserId, userActor } from "@cogni/ids";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
@@ -45,6 +53,7 @@ import {
 } from "@/shared/db";
 import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
+import { EVENT_NAMES } from "@/shared/observability/events";
 import { isValidUuid } from "@/shared/util/uuid";
 import type { SourceSystem } from "@/types/billing";
 
@@ -189,7 +198,8 @@ export class UserDrizzleAccountService implements AccountService {
 
   constructor(
     private readonly db: Database,
-    userId: UserId
+    userId: UserId,
+    private readonly financialLedger?: FinancialLedgerPort
   ) {
     this.actorId = userActor(userId);
   }
@@ -352,6 +362,8 @@ export class UserDrizzleAccountService implements AccountService {
   }
 
   async recordChargeReceipt(params: ChargeReceiptParams): Promise<void> {
+    let committedReceiptId: string | undefined;
+
     await withTenantScope(this.db, this.actorId, async (tx) => {
       // Idempotency check: (source_system, source_reference) per GRAPH_EXECUTION.md
       // This prevents double-debits on retries
@@ -380,9 +392,11 @@ export class UserDrizzleAccountService implements AccountService {
       );
 
       // Insert charge receipt (unique constraint on source_system, source_reference ensures no duplicates)
+      const receiptId = randomUUID();
       const [receipt] = await tx
         .insert(chargeReceipts)
         .values({
+          id: receiptId,
           billingAccountId: params.billingAccountId,
           virtualKeyId: params.virtualKeyId,
           runId: params.runId,
@@ -455,7 +469,35 @@ export class UserDrizzleAccountService implements AccountService {
           "inv_post_call_negative_balance: Charge receipt recorded with negative balance"
         );
       }
+
+      committedReceiptId = receipt?.id;
     });
+
+    // CO_WRITE_NON_BLOCKING: TigerBeetle co-write AFTER Postgres tx commits.
+    // Fires only if PG succeeded — avoids orphaned TB transfers on PG rollback.
+    if (this.financialLedger && committedReceiptId) {
+      this.financialLedger
+        .transfer({
+          id: uuidToBigInt(committedReceiptId),
+          debitAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
+          creditAccountId: ACCOUNT.REVENUE_AI_USAGE,
+          amount: BigInt(params.chargedCredits),
+          ledger: LEDGER.CREDIT,
+          code: TRANSFER_CODE.AI_USAGE,
+          userData128: uuidToBigInt(committedReceiptId),
+        })
+        .catch(() => {
+          logger.error(
+            {
+              event: EVENT_NAMES.ADAPTER_TIGERBEETLE_ERROR,
+              dep: "tigerbeetle",
+              reasonCode: "co_write_charge_receipt",
+              receiptId: committedReceiptId,
+            },
+            EVENT_NAMES.ADAPTER_TIGERBEETLE_ERROR
+          );
+        });
+    }
   }
 
   async creditAccount({
@@ -473,7 +515,10 @@ export class UserDrizzleAccountService implements AccountService {
     virtualKeyId?: string;
     metadata?: Record<string, unknown>;
   }): Promise<{ newBalance: number }> {
-    return withTenantScope(this.db, this.actorId, async (tx) => {
+    const ledgerEntryId = randomUUID();
+    let committedAmount: bigint | undefined;
+
+    const result = await withTenantScope(this.db, this.actorId, async (tx) => {
       await ensureBillingAccountExists(tx, billingAccountId);
       const resolvedVirtualKeyId =
         virtualKeyId ?? (await findDefaultKey(tx, billingAccountId)).id;
@@ -496,6 +541,7 @@ export class UserDrizzleAccountService implements AccountService {
       const newBalance = toNumber(updatedAccount.balanceCredits);
 
       await tx.insert(creditLedger).values({
+        id: ledgerEntryId,
         billingAccountId,
         virtualKeyId: resolvedVirtualKeyId,
         amount: amountBigInt,
@@ -505,8 +551,36 @@ export class UserDrizzleAccountService implements AccountService {
         metadata: metadata ?? null,
       });
 
+      committedAmount = amountBigInt;
       return { newBalance };
     });
+
+    // CO_WRITE_NON_BLOCKING: TigerBeetle co-write AFTER Postgres tx commits.
+    if (this.financialLedger && reason === "deposit" && committedAmount) {
+      this.financialLedger
+        .transfer({
+          id: uuidToBigInt(ledgerEntryId),
+          debitAccountId: ACCOUNT.EQUITY_CREDIT_ISSUANCE,
+          creditAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
+          amount: committedAmount,
+          ledger: LEDGER.CREDIT,
+          code: TRANSFER_CODE.CREDIT_DEPOSIT,
+          userData128: uuidToBigInt(ledgerEntryId),
+        })
+        .catch(() => {
+          logger.error(
+            {
+              event: EVENT_NAMES.ADAPTER_TIGERBEETLE_ERROR,
+              dep: "tigerbeetle",
+              reasonCode: "co_write_credit_deposit",
+              ledgerEntryId,
+            },
+            EVENT_NAMES.ADAPTER_TIGERBEETLE_ERROR
+          );
+        });
+    }
+
+    return result;
   }
 
   async listCreditLedgerEntries({
@@ -654,7 +728,10 @@ export class UserDrizzleAccountService implements AccountService {
 // --- ServiceDrizzleAccountService (serviceDb, BYPASSRLS) ---
 
 export class ServiceDrizzleAccountService implements ServiceAccountService {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly financialLedger?: FinancialLedgerPort
+  ) {}
 
   async getBillingAccountById(
     billingAccountId: string
@@ -755,7 +832,10 @@ export class ServiceDrizzleAccountService implements ServiceAccountService {
     virtualKeyId?: string;
     metadata?: Record<string, unknown>;
   }): Promise<{ newBalance: number }> {
-    return await this.db.transaction(async (tx) => {
+    const ledgerEntryId = randomUUID();
+    let committedAmount: bigint | undefined;
+
+    const result = await this.db.transaction(async (tx) => {
       await ensureBillingAccountExists(tx, billingAccountId);
       const resolvedVirtualKeyId =
         virtualKeyId ?? (await findDefaultKey(tx, billingAccountId)).id;
@@ -778,6 +858,7 @@ export class ServiceDrizzleAccountService implements ServiceAccountService {
       const newBalance = toNumber(updatedAccount.balanceCredits);
 
       await tx.insert(creditLedger).values({
+        id: ledgerEntryId,
         billingAccountId,
         virtualKeyId: resolvedVirtualKeyId,
         amount: amountBigInt,
@@ -787,8 +868,36 @@ export class ServiceDrizzleAccountService implements ServiceAccountService {
         metadata: metadata ?? null,
       });
 
+      committedAmount = amountBigInt;
       return { newBalance };
     });
+
+    // CO_WRITE_NON_BLOCKING: TigerBeetle co-write AFTER Postgres tx commits.
+    if (this.financialLedger && reason === "deposit" && committedAmount) {
+      this.financialLedger
+        .transfer({
+          id: uuidToBigInt(ledgerEntryId),
+          debitAccountId: ACCOUNT.EQUITY_CREDIT_ISSUANCE,
+          creditAccountId: ACCOUNT.LIABILITY_USER_CREDITS,
+          amount: committedAmount,
+          ledger: LEDGER.CREDIT,
+          code: TRANSFER_CODE.CREDIT_DEPOSIT,
+          userData128: uuidToBigInt(ledgerEntryId),
+        })
+        .catch(() => {
+          logger.error(
+            {
+              event: EVENT_NAMES.ADAPTER_TIGERBEETLE_ERROR,
+              dep: "tigerbeetle",
+              reasonCode: "co_write_credit_deposit",
+              ledgerEntryId,
+            },
+            EVENT_NAMES.ADAPTER_TIGERBEETLE_ERROR
+          );
+        });
+    }
+
+    return result;
   }
 
   async findCreditLedgerEntryByReference({

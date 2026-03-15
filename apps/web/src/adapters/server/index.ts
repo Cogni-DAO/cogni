@@ -120,3 +120,5 @@ export {
   type TemporalScheduleControlConfig,
 } from "./temporal";
 export { SystemClock } from "./time/system.adapter";
+// NOTE: PrivyOperatorWalletAdapter lives in @cogni/operator-wallet/adapters/privy.
+// @privy-io/node is heavy — lazy-import in container.ts only.

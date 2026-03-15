@@ -2,19 +2,19 @@
 id: proj.financial-ledger
 type: project
 primary_charter:
-title: "Financial Ledger — Beancount Treasury + MerkleDistributor Settlement"
+title: "Financial Ledger — TigerBeetle Treasury + MerkleDistributor Settlement"
 state: Active
 priority: 1
 estimate: 5
-summary: "All money I/O in one place. Beancount as canonical double-entry ledger. Signed attribution statements become auditable Merkle claim manifests and DAO-controlled token distributions. Attribution is governance truth; distribution is financial truth."
-outcome: "Every dollar in and every token out has a Beancount journal entry and an auditable settlement manifest. Finalized attribution statements produce DAO-controlled Merkle claims that contributors can actually claim on-chain."
+summary: "All money I/O in one place. TigerBeetle as the double-entry transaction engine, Postgres for metadata. LedgerPort is the write path for all money-movement. Signed attribution statements become auditable Merkle claim manifests and DAO-controlled token distributions."
+outcome: "Every dollar in and every token out has a TigerBeetle double-entry transfer and an auditable settlement manifest. Finalized attribution statements produce DAO-controlled Merkle claims that contributors can actually claim on-chain."
 assignees: derekg1729
 created: 2026-02-28
-updated: 2026-03-03
+updated: 2026-03-09
 labels: [governance, payments, web3, treasury]
 ---
 
-# Financial Ledger — Beancount Treasury + MerkleDistributor Settlement
+# Financial Ledger — TigerBeetle Treasury + MerkleDistributor Settlement
 
 > Spec: [financial-ledger](../../docs/spec/financial-ledger.md)
 > Ingestion: [data-ingestion-pipelines](../../docs/spec/data-ingestion-pipelines.md)
@@ -37,7 +37,7 @@ Build the money side of the DAO. The Attribution Ledger answers "who did what an
 3. **User claims on-chain** — liability reduction via MerkleDistributor claim (equity tokens).
 4. **Governance-voted USDC distribution** (future) — separate proposal + vote + execution path. Not automated by the attribution pipeline.
 
-Beancount is the canonical ledger and must be capable of tracking ALL instrument types (equity tokens, USDC, future instruments). Postgres stores operational state. Rotki enriches crypto tx history and tax lots but is NOT the canonical ledger.
+TigerBeetle is the transaction engine enforcing double-entry at the database level. Postgres stores operational metadata. Separate TigerBeetle ledger IDs per instrument type (USDC, COGNI, EUR, CREDIT). Rotki enriches crypto tx history and tax lots but is NOT the canonical ledger.
 
 > **Design input:** [tokenomics spec](../../docs/spec/tokenomics.md) — budget policy, emission schedules, settlement handoff. Crawl phase (budget policy + UI) lives in `proj.transparent-credit-payouts`; Walk + Run (token distribution and settlement hardening) lives here.
 
@@ -53,7 +53,7 @@ Beancount is the canonical ledger and must be capable of tracking ALL instrument
 
 | Deliverable                                                                                                                                            | Status      | Est | Work Item         |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ----------------- |
-| Beancount accounts hierarchy (multi-instrument: equity tokens + USDC)                                                                                  | Not Started | 1   | (create at start) |
+| TigerBeetle ledger + FinancialLedgerPort — 5-account MVP (credits + USDC), co-writes for AI spend + credit deposits                                    | In Review   | 3   | `task.0145`       |
 | Node formation update: mint fixed `GovernanceERC20` supply to a DAO-controlled emissions holder instead of founder bootstrap mint                      | Not Started | 2   | `task.0135`       |
 | `computeMerkleTree(statement)` pure function — takes finalized statement `credit_amount` entitlements + settlement policy → root + proofs per claimant | Not Started | 2   | (create at start) |
 | Settlement manifest store/view — persist `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, `publishedAt`          | Not Started | 2   | (create at start) |
@@ -71,12 +71,11 @@ Beancount is the canonical ledger and must be capable of tracking ALL instrument
 | Distributor choice spike — only adopt audited multi-epoch variant if operational need is proven                                                            | Not Started | 1   | (create at P1 start) |
 | Settlement port interface (`SettlementStore`) — publish root, record funding tx, track claims                                                              | Not Started | 2   | (create at P1 start) |
 | Operator Port integration for treasury signing (Safe/manual publish + fund)                                                                                | Not Started | 2   | (create at P1 start) |
-| Temporal workflow: `SettleEpochWorkflow` — reads finalized statement, computes Merkle tree, publishes manifest, funds distributor, records Beancount entry | Not Started | 2   | (create at P1 start) |
-| Journal generation: Temporal workflow validates Beancount entries with `bean-check` before/after distributor funding                                       | Not Started | 2   | (create at P1 start) |
-| On-chain receipt adapter: USDC inbound payments → Beancount journal entries                                                                                | Not Started | 2   | (create at P1 start) |
+| Temporal workflow: `SettleEpochWorkflow` — reads finalized statement, computes Merkle tree, publishes manifest, funds distributor, records ledger transfer | Not Started | 2   | (create at P1 start) |
+| On-chain receipt adapter: USDC inbound payments → TigerBeetle ledger transfers                                                                             | Not Started | 2   | (create at P1 start) |
 | Claim flow UI — contributor connects wallet, sees unclaimed epochs, submits Merkle claim transaction                                                       | Not Started | 2   | (create at P1 start) |
 | Holdings view — token balance, claim history, and claimed/unclaimed epoch status                                                                           | Not Started | 2   | (create at P1 start) |
-| Treasury read API: settlement history + manifest lookup (queries Beancount + settlement store)                                                             | Not Started | 2   | (create at P1 start) |
+| Treasury read API: settlement history + manifest lookup (queries TigerBeetle + settlement store)                                                           | Not Started | 2   | (create at P1 start) |
 
 ### Run (P2+) — On-Chain Enforcement + Multi-Instrument Hardening
 
@@ -90,8 +89,8 @@ Beancount is the canonical ledger and must be capable of tracking ALL instrument
 | Halvening emissions / richer budget policy after live usage                                         | Not Started | 2   | (create at P2 start) |
 | Governance-voted USDC distribution path (proposal → vote → execute via Operator Port)               | Not Started | 2   | (create at P2 start) |
 | Multi-instrument `computeSettlement()` — splits each user's share across instruments                | Not Started | 2   | (create at P2 start) |
-| Member capital sub-accounts in Beancount: `Liability:MemberEquity:{userId}`                         | Not Started | 2   | (create at P2 start) |
-| Reserve fund Beancount account: `Equity:Reserves:Collective`                                        | Not Started | 1   | (create at P2 start) |
+| Member capital sub-accounts in TigerBeetle: `Liability:MemberEquity:{userId}`                       | Not Started | 2   | (create at P2 start) |
+| Reserve fund account: `Equity:Reserves:Collective`                                                  | Not Started | 1   | (create at P2 start) |
 | Git-canonical `bundle.v1.json` — finalized statement + settlement + hash chain (`prev_bundle_hash`) | Not Started | 3   | (create at P2 start) |
 | Bundle commit bot: PR flow, Postgres becomes index keyed by `(bundle_hash, commit_sha)`             | Not Started | 2   | (create at P2 start) |
 | Equity redemption workflow — convert retained equity to USDC claim (governance-gated)               | Not Started | 2   | (create at P2 start) |
@@ -107,8 +106,8 @@ Beancount is the canonical ledger and must be capable of tracking ALL instrument
 - **Equity tokens are the primary distribution instrument** — USDC payouts are a separate, governance-voted action
 - **Signed statement is the settlement input** — settlement consumes the finalized `AttributionStatement`; no second approval signature is introduced at settlement time
 - **V0 settlement requires fully wallet-resolved claimants** — unresolved identity claimants remain in the signed statement but block on-chain settlement for that epoch
-- **Multi-instrument capable** — Beancount must track equity tokens, USDC, and future instruments
-- Beancount is the canonical financial ledger; Postgres stores operational state
+- **Multi-instrument capable** — separate TigerBeetle ledger IDs per asset type (USDC, COGNI, EUR, CREDIT)
+- TigerBeetle is the canonical transaction engine; Postgres stores operational metadata
 - Rotki for crypto tx enrichment/tax lots only — NOT the canonical ledger
 - All monetary math uses BIGINT (inherits `ALL_MATH_BIGINT` from attribution-ledger spec)
 - MerkleDistributor (Uniswap pattern) for on-chain claims — user-initiated, not push distribution
@@ -132,7 +131,7 @@ Beancount is the canonical ledger and must be capable of tracking ALL instrument
 - [ ] Operator Port operational (signing + policy boundary for treasury actions)
 - [ ] `task.0135` — rewards-ready token formation decisions and implementation completed
 - [ ] Stock per-epoch MerkleDistributor path selected and deployed on Base
-- [ ] Beancount tooling integrated (journal generation + `bean-check` validation)
+- [ ] TigerBeetle deployed + LedgerPort wired (task.0145)
 
 **Crawl handoff into this project:**
 
@@ -177,7 +176,7 @@ An attribution statement says: "User A earned 40%, User B earned 35%, User C ear
 **V1+ (Run):** Settlement policy (governance-controlled) may split across instruments:
 
 - **Equity tokens**: Primary instrument. Claimable from MerkleDistributor (automated per epoch).
-- **Retained equity**: Credited to member capital account in Beancount (redeemable later, not on-chain).
+- **Retained equity**: Credited to member capital account in TigerBeetle (redeemable later, not on-chain).
 - **USDC (governance-voted)**: Separate from automated attribution. Governance proposal → vote → operator executes. Can be pro-rata to token holders or per-statement.
 
 ### Equity token = governance + ownership
@@ -193,7 +192,7 @@ Retained equity (P1) is par-value member capital — redeemable at face value on
 ### OSS reference implementations
 
 - **Uniswap MerkleDistributor** — battle-tested per-epoch claim contract. Our default MVP on-chain settlement primitive.
-- **Beancount** — double-entry accounting language + `bean-check` validation. Our canonical ledger.
+- **TigerBeetle** — purpose-built financial transactions database (Apache 2.0, Jepsen-verified). Our canonical ledger engine.
 - **Rotki** — crypto bookkeeping/tax assistant. Enrichment + validation, not canonical.
 - **Open Collective** — transaction pairing/grouping, expense→approval→payout flows. Reference for the posting/settlement layer.
 - **SourceCred** — `data/ledger.json` in-repo pattern. Reference for P2 git-canonical bundles.
