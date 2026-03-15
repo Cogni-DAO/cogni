@@ -21,9 +21,12 @@ import { defineConfig } from "vitest/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env.test for DB + credential config
-const env = config({ path: ".env.test" });
-expand(env);
+// Load .env.test first (defaults), then .env.local (overrides with real dev values).
+// dotenv won't overwrite existing vars, so load .env.local first for priority.
+const local = config({ path: ".env.local" });
+expand(local);
+const test = config({ path: ".env.test" });
+expand(test);
 
 // Fail fast if required env vars are missing
 function requireEnv(name: string): string {

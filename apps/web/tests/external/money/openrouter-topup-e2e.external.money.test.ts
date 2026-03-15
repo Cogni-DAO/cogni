@@ -33,7 +33,7 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { CHAIN_ID } from "@/shared/web3/chain";
 import { MIN_PAYMENT_CENTS } from "@/types/payments";
 
@@ -145,7 +145,7 @@ async function pollUntilTerminal(
 describe("OpenRouter top-up e2e (live money)", () => {
   const db = createServiceDbClient(DATABASE_SERVICE_URL);
   const testWallet = privateKeyToAccount(TEST_WALLET_PRIVATE_KEY);
-  const testUserId = randomUUID();
+  let testUserId = randomUUID();
   let sessionCookie: NextAuthSessionCookie | null = null;
 
   function cookie(): string {
@@ -166,11 +166,22 @@ describe("OpenRouter top-up e2e (live money)", () => {
   // ── Setup ────────────────────────────────────────────────────────
 
   beforeAll(async () => {
-    await db.insert(users).values({
-      id: testUserId,
-      walletAddress: testWallet.address,
-      name: "Money Test User",
-    });
+    // Find existing user by wallet (previous run may have left it) or create new
+    const existing = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.walletAddress, testWallet.address))
+      .limit(1);
+
+    if (existing[0]) {
+      testUserId = existing[0].id;
+    } else {
+      await db.insert(users).values({
+        id: testUserId,
+        walletAddress: testWallet.address,
+        name: "Money Test User",
+      });
+    }
 
     const domain = new URL(TEST_BASE_URL).host;
     const loginResult = await siweLogin({
@@ -188,9 +199,8 @@ describe("OpenRouter top-up e2e (live money)", () => {
     sessionCookie = loginResult.sessionCookie;
   }, 30_000);
 
-  afterAll(async () => {
-    await db.delete(users).where(eq(users.id, testUserId));
-  });
+  // No cleanup — the test wallet user persists in the dev DB.
+  // SIWE login creates identity_events rows that prevent FK-cascaded deletion.
 
   // ── The test ─────────────────────────────────────────────────────
 
