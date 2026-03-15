@@ -882,6 +882,9 @@ importers:
       '@cogni/db-client':
         specifier: workspace:*
         version: link:../../packages/db-client
+      '@cogni/graph-execution-core':
+        specifier: workspace:*
+        version: link:../../packages/graph-execution-core
       '@cogni/ids':
         specifier: workspace:*
         version: link:../../packages/ids
