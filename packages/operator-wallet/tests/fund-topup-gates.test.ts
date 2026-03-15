@@ -42,6 +42,21 @@ vi.mock("@privy-io/node", () => ({
   PrivyClient: MockPrivyClient,
 }));
 
+// Mock viem's createPublicClient — unit tests should never hit a real RPC
+const mockWaitForTransactionReceipt = vi
+  .fn()
+  .mockResolvedValue({ status: "success" });
+
+vi.mock("viem", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("viem")>();
+  return {
+    ...actual,
+    createPublicClient: () => ({
+      waitForTransactionReceipt: mockWaitForTransactionReceipt,
+    }),
+  };
+});
+
 // Import after mock is set up
 const { PrivyOperatorWalletAdapter } = await import(
   "../src/adapters/privy/privy-operator-wallet.adapter.js"
@@ -98,11 +113,12 @@ function validIntent(overrides?: Partial<TransferIntent>): TransferIntent {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("fundOpenRouterTopUp validation gates", () => {
+describe("fundOpenRouterTopUp validation gates", { timeout: 10_000 }, () => {
   let adapter: InstanceType<typeof PrivyOperatorWalletAdapter>;
 
   beforeEach(() => {
     mockSendTransaction.mockClear();
+    mockWaitForTransactionReceipt.mockClear();
     adapter = makeAdapter();
   });
 
