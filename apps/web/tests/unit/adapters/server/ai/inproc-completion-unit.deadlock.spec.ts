@@ -13,9 +13,17 @@
 
 import { describe, expect, it } from "vitest";
 
+import { runInScope } from "@/adapters/server/ai/execution-scope";
 import { InProcCompletionUnitAdapter } from "@/adapters/server/ai/inproc-completion-unit.adapter";
 import type { ChatDeltaEvent } from "@/ports";
 import type { AiEvent } from "@/types/ai-events";
+
+const TEST_SCOPE = {
+  billing: {
+    billingAccountId: "billing-123",
+    virtualKeyId: "vk-123",
+  },
+};
 
 /**
  * Creates a fake completion stream that simulates LiteLLM behavior:
@@ -67,82 +75,58 @@ function createDeadlockProneCompletion() {
 
 describe("InProcCompletionUnitAdapter deadlock prevention", () => {
   it("executeCompletionUnit does not deadlock when final requires stream close (NO_AWAIT_FINAL_IN_LOOP)", async () => {
-    // This test FAILS with buggy code (deadlock) and PASSES with correct code.
-    //
-    // The bug: adapter awaits `final` inside the for-await loop when it sees `done`.
-    // But `final` only resolves when the iterator closes (in finally block).
-    // The iterator can't close because we're blocked on `await final`.
-    // Result: deadlock, stream never completes.
-    //
-    // Per COMPLETION_UNIT_NOT_PORT: InProcCompletionUnitAdapter provides
-    // executeCompletionUnit() for providers, not runGraph().
+    await runInScope(TEST_SCOPE, async () => {
+      const adapter = new InProcCompletionUnitAdapter(
+        {
+          llmService: {} as never,
+          accountService: {} as never,
+          clock: {} as never,
+          aiTelemetry: {} as never,
+          langfuse: undefined,
+        },
+        async () => createDeadlockProneCompletion()
+      );
 
-    const adapter = new InProcCompletionUnitAdapter(
-      {
-        llmService: {} as never, // Not used in this test
-        accountService: {} as never,
-        clock: {} as never,
-        aiTelemetry: {} as never,
-        langfuse: undefined,
-      },
-      async () => createDeadlockProneCompletion()
-    );
+      const result = adapter.executeCompletionUnit({
+        messages: [{ role: "user", content: "test" }],
+        model: "test-model",
+        runContext: {
+          runId: "run-123",
+          attempt: 0,
+          graphId: "langgraph:test" as import("@cogni/ai-core").GraphId,
+        },
+      });
 
-    const result = adapter.executeCompletionUnit({
-      messages: [{ role: "user", content: "test" }],
-      model: "test-model",
-      caller: {
-        billingAccountId: "billing-123",
-        virtualKeyId: "vk-123",
-        requestId: "req-123",
-        traceId: "trace-123",
-      },
-      runContext: {
-        runId: "run-123",
-        attempt: 0,
-        ingressRequestId: "req-123",
-      },
+      const collectedEvents: AiEvent[] = [];
+      const TIMEOUT_MS = 500;
+      const startMs = performance.now();
+
+      const consumePromise = (async () => {
+        for await (const event of result.stream) {
+          collectedEvents.push(event);
+        }
+        return "completed";
+      })();
+
+      const timeoutPromise = new Promise<"timeout">((r) =>
+        setTimeout(() => r("timeout"), TIMEOUT_MS)
+      );
+
+      const outcome = await Promise.race([consumePromise, timeoutPromise]);
+      const elapsedMs = performance.now() - startMs;
+
+      expect(outcome).toBe("completed");
+      expect(elapsedMs).toBeLessThan(TIMEOUT_MS);
+
+      const eventTypes = collectedEvents.map((e) => e.type);
+      expect(eventTypes).toContain("text_delta");
+      expect(eventTypes).not.toContain("done");
+
+      const usageIndex = eventTypes.indexOf("usage_report");
+      expect(usageIndex).toBeGreaterThan(-1);
+      expect(collectedEvents[collectedEvents.length - 1].type).toBe(
+        "usage_report"
+      );
     });
-
-    const collectedEvents: AiEvent[] = [];
-
-    // If deadlocked, this will timeout. 200ms is plenty for non-blocking code.
-    const TIMEOUT_MS = 500;
-    const startMs = performance.now();
-
-    const consumePromise = (async () => {
-      for await (const event of result.stream) {
-        collectedEvents.push(event);
-      }
-      return "completed";
-    })();
-
-    const timeoutPromise = new Promise<"timeout">((r) =>
-      setTimeout(() => r("timeout"), TIMEOUT_MS)
-    );
-
-    const outcome = await Promise.race([consumePromise, timeoutPromise]);
-    const elapsedMs = performance.now() - startMs;
-
-    // Assert: did not timeout (no deadlock)
-    expect(outcome).toBe("completed");
-    expect(elapsedMs).toBeLessThan(TIMEOUT_MS);
-
-    // Assert: received text_delta and usage_report events
-    const eventTypes = collectedEvents.map((e) => e.type);
-    expect(eventTypes).toContain("text_delta");
-
-    // Note: executeCompletionUnit does NOT emit "done" - caller handles that
-    // per COMPLETION_UNIT_NOT_PORT invariant. It only emits text_delta + usage_report.
-    expect(eventTypes).not.toContain("done");
-
-    // Assert: usage_report is emitted (billing flow)
-    const usageIndex = eventTypes.indexOf("usage_report");
-    expect(usageIndex).toBeGreaterThan(-1);
-
-    // Assert: usage_report is the last event (no done from completion unit)
-    expect(collectedEvents[collectedEvents.length - 1].type).toBe(
-      "usage_report"
-    );
   });
 });

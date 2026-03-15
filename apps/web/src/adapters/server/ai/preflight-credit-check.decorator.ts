@@ -15,7 +15,9 @@
  */
 
 import type { Logger } from "pino";
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import type {
+  ExecutionContext,
   GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
@@ -42,12 +44,13 @@ export class PreflightCreditCheckDecorator implements GraphExecutorPort {
     _log: Logger
   ) {}
 
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const result = this.inner.runGraph(req);
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    const result = this.inner.runGraph(req, ctx);
+    const scope = getExecutionScope();
 
     // Start credit check eagerly (runs in parallel with any sync setup)
     const checkPromise = this.checkFn(
-      req.caller.billingAccountId,
+      scope.billing.billingAccountId,
       req.model,
       req.messages
     );

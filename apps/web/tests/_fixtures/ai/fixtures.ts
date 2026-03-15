@@ -166,15 +166,8 @@ export function createTestGraphRunRequest(
 ): GraphRunRequest {
   return {
     runId: "test-run-id",
-    ingressRequestId: "test-ingress-id",
     messages: [],
     model: "test-model",
-    caller: {
-      billingAccountId: "test-billing",
-      virtualKeyId: "test-vkey",
-      requestId: "test-req",
-      traceId: "00000000000000000000000000000000",
-    },
     graphId: "langgraph:poet",
     ...overrides,
   };

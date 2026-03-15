@@ -90,7 +90,7 @@ export function createAiRuntime(deps: AiRuntimeDeps) {
     input: AiRuntimeInput,
     ctx: RequestContext
   ): AiRuntimeResult {
-    const { messages, model, caller, abortSignal, graphName, stateKey } = input;
+    const { messages, model, graphName, stateKey } = input;
     const log = ctx.log.child({ feature: "ai.runtime" });
 
     // Create run identity via factory (P0: runId = ingressRequestId = ctx.reqId)
@@ -114,11 +114,8 @@ export function createAiRuntime(deps: AiRuntimeDeps) {
     // Call graph executor (non-async: returns stream handle immediately)
     const { stream: graphStream, final: graphFinal } = graphExecutor.runGraph({
       runId,
-      ingressRequestId,
       messages,
       model,
-      caller,
-      ...(abortSignal && { abortSignal }),
       graphId: resolvedGraphId,
       ...(stateKey && { stateKey }),
     });

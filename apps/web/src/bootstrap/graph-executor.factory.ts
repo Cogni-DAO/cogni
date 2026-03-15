@@ -33,6 +33,7 @@ import {
 } from "@/adapters/server";
 import type {
   AiExecutionErrorCode,
+  ExecutionContext,
   GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
@@ -207,11 +208,11 @@ class LazySandboxGraphProvider implements GraphExecutorPort {
     );
   }
 
-  runGraph(req: GraphRunRequest): GraphRunResult {
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
     const delegate = this.delegate;
 
     // Shared promise: resolves to delegate's runGraph result once module loads
-    const innerResult = delegate.then((p) => p.runGraph(req));
+    const innerResult = delegate.then((p) => p.runGraph(req, ctx));
 
     const stream = (async function* () {
       let inner: GraphRunResult;
@@ -234,7 +235,7 @@ class LazySandboxGraphProvider implements GraphExecutorPort {
         ({
           ok: false,
           runId: req.runId,
-          requestId: req.ingressRequestId,
+          requestId: ctx?.requestId ?? req.runId,
           error: "internal",
         }) as const
     );

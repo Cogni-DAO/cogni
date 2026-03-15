@@ -150,7 +150,6 @@ describe("app/_facades/ai/completion.server", () => {
         .calls[0]?.[0] as GraphRunRequest;
       expect(runGraphCall).toBeDefined();
       expect(runGraphCall.runId).toBe("test-req-123"); // P0: runId = ctx.reqId
-      expect(runGraphCall.ingressRequestId).toBe("test-req-123");
       expect(runGraphCall.model).toBe(TEST_MODEL_ID);
       expect(runGraphCall.messages).toHaveLength(1);
 

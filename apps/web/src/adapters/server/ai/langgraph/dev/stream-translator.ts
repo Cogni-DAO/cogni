@@ -16,7 +16,7 @@
  */
 
 import type { GraphId } from "@cogni/ai-core";
-import type { LlmCaller } from "@/ports";
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import { makeLogger } from "@/shared/observability";
 import type {
   AiEvent,
@@ -50,7 +50,6 @@ export interface SdkStreamChunk {
 export interface StreamRunContext {
   readonly runId: string;
   readonly attempt: number;
-  readonly caller: LlmCaller;
   readonly graphId: GraphId;
 }
 
@@ -142,13 +141,14 @@ function extractMessageChunk(
  * Per MVP Known Limitations: no usageUnitId or costUsd available.
  */
 function buildUsageReport(ctx: StreamRunContext): UsageReportEvent {
+  const scope = getExecutionScope();
   const fact: UsageFact = {
     runId: ctx.runId,
     attempt: ctx.attempt,
     source: "litellm",
     executorType: "langgraph_server",
-    billingAccountId: ctx.caller.billingAccountId,
-    virtualKeyId: ctx.caller.virtualKeyId,
+    billingAccountId: scope.billing.billingAccountId,
+    virtualKeyId: scope.billing.virtualKeyId,
     graphId: ctx.graphId,
   };
   return { type: "usage_report", fact };

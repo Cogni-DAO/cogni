@@ -16,20 +16,30 @@
 
 import type { AiEvent } from "@cogni/ai-core";
 import { describe, expect, it, vi } from "vitest";
+import { runInScope } from "@/adapters/server/ai/execution-scope";
 import type { GatewayAgentEvent } from "@/adapters/server/sandbox/openclaw-gateway-client";
 import { SandboxGraphProvider } from "@/adapters/server/sandbox/sandbox-graph.provider";
 import type { GraphRunRequest, SandboxRunnerPort } from "@/ports";
+
+const TEST_SCOPE = {
+  billing: {
+    billingAccountId: "ba-acct-42",
+    virtualKeyId: "vk-1",
+  },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function drainStream(stream: AsyncIterable<AiEvent>): Promise<AiEvent[]> {
-  const events: AiEvent[] = [];
-  for await (const e of stream) {
-    events.push(e);
-  }
-  return events;
+  return runInScope(TEST_SCOPE, async () => {
+    const events: AiEvent[] = [];
+    for await (const e of stream) {
+      events.push(e);
+    }
+    return events;
+  });
 }
 
 const stubRunner: SandboxRunnerPort = {
@@ -43,18 +53,10 @@ function makeRequest(
 ): GraphRunRequest {
   return {
     runId: "run-test-123",
-    ingressRequestId: "run-test-123",
     graphId: "sandbox:openclaw",
     model: "cogni/test-model",
     messages: [{ role: "user", content: "Hello" }],
     stateKey: "thread-test-1",
-    caller: {
-      billingAccountId: "ba-acct-42",
-      virtualKeyId: "vk-1",
-      requestId: "run-test-123",
-      traceId: "trace-1",
-      userId: "user-1",
-    },
     ...overrides,
   } as GraphRunRequest;
 }
