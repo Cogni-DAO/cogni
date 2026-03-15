@@ -15,7 +15,8 @@ import { splitV2ABI } from "@0xsplits/splits-sdk/constants/abi";
 import type { AuthorizationContext } from "@privy-io/node";
 import { PrivyClient } from "@privy-io/node";
 import type { Address, Hex } from "viem";
-import { encodeFunctionData, getAddress } from "viem";
+import { createPublicClient, encodeFunctionData, getAddress, http } from "viem";
+import { base } from "viem/chains";
 
 import {
   calculateSplitAllocations,
@@ -76,6 +77,8 @@ export interface PrivyOperatorWalletConfig {
   revenueSharePpm: bigint;
   /** Max per-tx top-up in USD. Per OPERATOR_MAX_TOPUP_USD. */
   maxTopUpUsd: number;
+  /** Base RPC URL for on-chain confirmation polling (e.g., EVM_RPC_URL) */
+  rpcUrl: string;
 }
 
 /**
@@ -92,6 +95,7 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
   private readonly markupPpm: bigint;
   private readonly revenueSharePpm: bigint;
   private readonly maxTopUpUsd: number;
+  private readonly rpcClient: ReturnType<typeof createPublicClient>;
   private verifyPromise: Promise<void> | undefined;
   private walletId: string | undefined;
 
@@ -109,6 +113,10 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
     this.markupPpm = config.markupPpm;
     this.revenueSharePpm = config.revenueSharePpm;
     this.maxTopUpUsd = config.maxTopUpUsd;
+    this.rpcClient = createPublicClient({
+      chain: base,
+      transport: http(config.rpcUrl),
+    });
   }
 
   /**
@@ -215,6 +223,12 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
         authorization_context: this.authContext,
       });
 
+    // Wait for distribute to confirm on-chain so USDC is available for subsequent steps
+    await this.rpcClient.waitForTransactionReceipt({
+      hash: result.hash as Hex,
+      confirmations: 1,
+    });
+
     return result.hash;
   }
 
@@ -267,13 +281,15 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
     // If simulation is needed app-side, inject a publicClient in a future revision.
 
     // Step 1: ERC-20 approve USDC to Transfers contract
+    // Must wait for on-chain confirmation before submitting transferTokenPreApproved,
+    // otherwise Privy simulates the transfer against stale allowance and reverts.
     const approveData = encodeFunctionData({
       abi: ERC20_APPROVE_ABI,
       functionName: "approve",
       args: [contractAddress, totalUsdc],
     });
 
-    await this.client
+    const approveResult = await this.client
       .wallets()
       .ethereum()
       .sendTransaction(this.getWalletId(), {
@@ -283,6 +299,12 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
         },
         authorization_context: this.authContext,
       });
+
+    // Wait for approve to confirm on-chain before proceeding
+    await this.rpcClient.waitForTransactionReceipt({
+      hash: approveResult.hash as Hex,
+      confirmations: 1,
+    });
 
     // Step 2: Parse deadline — ISO 8601 string → unix timestamp
     const deadlineBigInt = /^\d+$/.test(intent.call_data.deadline)

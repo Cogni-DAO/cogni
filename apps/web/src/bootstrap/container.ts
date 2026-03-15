@@ -481,6 +481,12 @@ function createContainer(): Container {
           return undefined;
         }
         const paymentConfig = getPaymentConfig();
+        if (!env.EVM_RPC_URL) {
+          log.warn(
+            "PRIVY_APP_ID set but EVM_RPC_URL missing — operator wallet requires RPC for tx confirmation"
+          );
+          return undefined;
+        }
         return new PrivyOperatorWalletAdapter({
           appId: env.PRIVY_APP_ID,
           appSecret: env.PRIVY_APP_SECRET,
@@ -491,6 +497,7 @@ function createContainer(): Container {
           markupPpm: numberToPpm(env.USER_PRICE_MARKUP_FACTOR),
           revenueSharePpm: numberToPpm(env.SYSTEM_TENANT_REVENUE_SHARE),
           maxTopUpUsd: env.OPERATOR_MAX_TOPUP_USD,
+          rpcUrl: env.EVM_RPC_URL,
         });
       })();
 
