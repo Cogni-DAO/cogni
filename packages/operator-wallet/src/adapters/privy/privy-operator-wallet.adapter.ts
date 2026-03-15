@@ -16,7 +16,6 @@ import type { AuthorizationContext } from "@privy-io/node";
 import { PrivyClient } from "@privy-io/node";
 import type { Address, Hex } from "viem";
 import { createPublicClient, encodeFunctionData, getAddress, http } from "viem";
-import { base } from "viem/chains";
 
 import {
   calculateSplitAllocations,
@@ -114,7 +113,6 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
     this.revenueSharePpm = config.revenueSharePpm;
     this.maxTopUpUsd = config.maxTopUpUsd;
     this.rpcClient = createPublicClient({
-      chain: base,
       transport: http(config.rpcUrl),
     });
   }
