@@ -14,7 +14,7 @@
 import type { GateConfig, Rule } from "@cogni/repo-spec";
 import type { Logger } from "pino";
 
-import type { GraphExecutorPort, LlmCaller } from "@/ports";
+import type { GraphExecutorPort } from "@/ports";
 
 import { evaluateAiRule } from "./gates/ai-rule";
 import { evaluateReviewLimits } from "./gates/review-limits";
@@ -31,7 +31,6 @@ const DEFAULT_GATE_TIMEOUT_MS = 120_000;
 /** Dependencies injected into the orchestrator. */
 export interface OrchestratorDeps {
   readonly executor: GraphExecutorPort;
-  readonly caller: LlmCaller;
   readonly model: string;
   readonly log: Logger;
   /** Resolves a rule_file name to a parsed Rule. */
@@ -117,7 +116,6 @@ async function executeGate(
         rule,
         evidence,
         executor: deps.executor,
-        caller: deps.caller,
         model: deps.model,
       });
     }

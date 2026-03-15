@@ -33,10 +33,13 @@ import {
   LANGGRAPH_CATALOG,
   type ToolExecFn,
 } from "@cogni/langgraph-graphs";
+import { trace } from "@opentelemetry/api";
 import type { Logger } from "pino";
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import type {
   AiExecutionErrorCode,
   CompletionFinalResult,
+  ExecutionContext,
   GraphExecutorPort,
   GraphFinal,
   GraphRunRequest,
@@ -111,30 +114,24 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
     );
   }
 
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const {
-      runId,
-      ingressRequestId,
-      messages,
-      model,
-      caller,
-      abortSignal,
-      graphId,
-    } = req;
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    const { runId, messages, model, graphId } = req;
+    const scope = getExecutionScope();
+    const requestId = ctx?.requestId ?? req.runId;
 
     // Extract graph name from graphId (e.g., "langgraph:poet" → "poet")
     const graphName = this.extractGraphName(graphId);
     if (!graphName) {
       this.log.error({ runId, graphId }, "Invalid graphId format");
       // Client error: malformed graphId
-      return this.createErrorResult(runId, ingressRequestId, "invalid_request");
+      return this.createErrorResult(runId, requestId, "invalid_request");
     }
 
     const entry = this.catalog[graphName] as ProviderCatalogEntry | undefined;
     if (!entry) {
       this.log.error({ runId, graphName }, "Graph not found in catalog");
       // Client error: graph doesn't exist
-      return this.createErrorResult(runId, ingressRequestId, "not_found");
+      return this.createErrorResult(runId, requestId, "not_found");
     }
 
     this.log.debug(
@@ -201,12 +198,17 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
     // Build request for package runner
     // Use conditional spreads for exactOptionalPropertyTypes
     // Per UNIFIED_INVOKE_SIGNATURE: configurable has model + toolIds
+    const traceId =
+      trace.getActiveSpan()?.spanContext().traceId ??
+      "00000000000000000000000000000000";
     const runnerRequest: InProcGraphRequest = {
       runId,
       messages: messages as InProcGraphRequest["messages"],
-      ...(abortSignal !== undefined && { abortSignal }),
-      ...(caller.traceId !== undefined && { traceId: caller.traceId }),
-      ...(ingressRequestId !== undefined && { ingressRequestId }),
+      ...(scope.abortSignal !== undefined && {
+        abortSignal: scope.abortSignal,
+      }),
+      ...(traceId !== undefined && { traceId }),
+      ...(requestId !== undefined && { ingressRequestId: requestId }),
       configurable: { model, toolIds },
     };
 
@@ -226,7 +228,7 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
     const mappedFinal = this.mapToGraphFinal(
       final,
       runId,
-      ingressRequestId,
+      requestId,
       graphName
     );
 
@@ -252,7 +254,7 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
   private createCompletionFn(
     req: GraphRunRequest
   ): CompletionFn<LlmToolDefinition> {
-    const { caller, runId, ingressRequestId, graphId } = req;
+    const { runId, graphId } = req;
     const attempt = 0; // P0_ATTEMPT_FREEZE
 
     return (params: {
@@ -264,8 +266,7 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
       const result = this.adapter.executeCompletionUnit({
         messages: params.messages as GraphRunRequest["messages"],
         model: params.model,
-        caller,
-        runContext: { runId, attempt, ingressRequestId, graphId },
+        runContext: { runId, attempt, graphId },
         ...(params.abortSignal && { abortSignal: params.abortSignal }),
         ...(params.tools?.length && { tools: [...params.tools] }),
       });

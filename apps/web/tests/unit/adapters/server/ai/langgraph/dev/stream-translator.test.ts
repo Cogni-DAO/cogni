@@ -12,12 +12,20 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { runInScope } from "@/adapters/server/ai/execution-scope";
 import {
   type SdkStreamChunk,
   type StreamRunContext,
   translateDevServerStream,
 } from "@/adapters/server/ai/langgraph/dev/stream-translator";
 import type { AiEvent } from "@/types/ai-events";
+
+const TEST_SCOPE = {
+  billing: {
+    billingAccountId: "account-123",
+    virtualKeyId: "vkey-123",
+  },
+};
 
 /**
  * Helper to create mock stream run context.
@@ -26,11 +34,6 @@ function mockContext(): StreamRunContext {
   return {
     runId: "run-123",
     attempt: 1,
-    caller: {
-      billingAccountId: "account-123",
-      virtualKeyId: "vkey-123",
-      traceId: "trace-123",
-    },
   };
 }
 
@@ -51,11 +54,13 @@ async function* mockStream(
 async function collectEvents(
   stream: AsyncIterable<AiEvent>
 ): Promise<AiEvent[]> {
-  const events: AiEvent[] = [];
-  for await (const event of stream) {
-    events.push(event);
-  }
-  return events;
+  return runInScope(TEST_SCOPE, async () => {
+    const events: AiEvent[] = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+    return events;
+  });
 }
 
 /**

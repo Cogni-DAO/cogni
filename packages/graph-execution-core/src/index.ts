@@ -19,7 +19,6 @@ export type {
   GraphFinal,
   GraphRunRequest,
   GraphRunResult,
-  PreflightCreditCheckFn,
 } from "./graph-executor.port";
 export type { RunStreamEntry, RunStreamPort } from "./run-stream.port";
 // Run stream port

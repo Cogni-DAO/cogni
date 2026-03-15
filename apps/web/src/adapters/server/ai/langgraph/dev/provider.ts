@@ -21,9 +21,10 @@ import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 // biome-ignore lint/style/noRestrictedImports: SDK allowed in langgraph dev adapter per OFFICIAL_SDK_ONLY invariant
 import type { Client } from "@langchain/langgraph-sdk";
 import type { Logger } from "pino";
-
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import type {
   AiExecutionErrorCode,
+  ExecutionContext,
   GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
@@ -88,8 +89,10 @@ export class LangGraphDevProvider implements GraphExecutorPort {
    * Per THREAD_KEY_REQUIRED: stateKey must be provided.
    * Per STATEFUL_ONLY: send only last user message; server owns thread state.
    */
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const { runId, ingressRequestId, graphId, caller, stateKey } = req;
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    const { runId, graphId, stateKey } = req;
+    const scope = getExecutionScope();
+    const requestId = ctx?.requestId ?? req.runId;
 
     // Per THREAD_KEY_REQUIRED: fail fast if not provided
     if (!stateKey) {
@@ -97,19 +100,19 @@ export class LangGraphDevProvider implements GraphExecutorPort {
         { runId, graphId },
         "stateKey required for LangGraph Server"
       );
-      return this.createErrorResult(runId, ingressRequestId, "invalid_request");
+      return this.createErrorResult(runId, requestId, "invalid_request");
     }
 
     // Extract graph name from graphId
     const graphName = this.extractGraphName(graphId);
     if (!graphName) {
       this.log.error({ runId, graphId }, "Invalid graphId format");
-      return this.createErrorResult(runId, ingressRequestId, "invalid_request");
+      return this.createErrorResult(runId, requestId, "invalid_request");
     }
 
     if (!this.availableGraphs.has(graphName)) {
       this.log.error({ runId, graphName }, "Graph not found");
-      return this.createErrorResult(runId, ingressRequestId, "not_found");
+      return this.createErrorResult(runId, requestId, "not_found");
     }
 
     this.log.debug(
@@ -118,9 +121,9 @@ export class LangGraphDevProvider implements GraphExecutorPort {
     );
 
     // Derive thread ID (UUIDv5) from (billingAccountId, stateKey)
-    const threadId = deriveThreadUuid(caller.billingAccountId, stateKey);
+    const threadId = deriveThreadUuid(scope.billing.billingAccountId, stateKey);
     const threadMetadata = buildThreadMetadata(
-      caller.billingAccountId,
+      scope.billing.billingAccountId,
       stateKey
     );
 
@@ -129,7 +132,8 @@ export class LangGraphDevProvider implements GraphExecutorPort {
       req,
       graphName,
       threadId,
-      threadMetadata
+      threadMetadata,
+      requestId
     );
 
     return { stream, final };
@@ -145,17 +149,10 @@ export class LangGraphDevProvider implements GraphExecutorPort {
     req: GraphRunRequest,
     graphName: string,
     threadId: string,
-    threadMetadata: { billingAccountId: string; stateKey: string }
+    threadMetadata: { billingAccountId: string; stateKey: string },
+    requestId: string
   ): GraphRunResult {
-    const {
-      runId,
-      ingressRequestId,
-      messages,
-      caller,
-      toolIds,
-      model,
-      graphId,
-    } = req;
+    const { runId, messages, toolIds, model, graphId } = req;
     const attempt = 0; // P0_ATTEMPT_FREEZE
 
     // P0 Contract: undefined => catalog default, [] => deny-all, [...] => exact
@@ -199,10 +196,10 @@ export class LangGraphDevProvider implements GraphExecutorPort {
       threadId,
       threadMetadata,
       messages,
-      { runId, attempt, caller, graphId },
+      { runId, attempt, graphId },
       state,
       runId,
-      ingressRequestId,
+      requestId,
       resolvedToolIds,
       model
     );
@@ -227,7 +224,6 @@ export class LangGraphDevProvider implements GraphExecutorPort {
     ctx: {
       runId: string;
       attempt: number;
-      caller: GraphRunRequest["caller"];
       graphId: GraphRunRequest["graphId"];
     },
     state: {

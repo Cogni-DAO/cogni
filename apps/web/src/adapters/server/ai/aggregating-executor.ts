@@ -19,6 +19,7 @@ import type { Logger } from "pino";
 
 import type {
   AiExecutionErrorCode,
+  ExecutionContext,
   GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
@@ -69,7 +70,7 @@ export class NamespaceGraphRouter implements GraphExecutorPort {
    * Per UNIFIED_GRAPH_EXECUTOR: all execution flows through this method.
    * Per ROUTING_BY_NAMESPACE_ONLY: deterministic Map lookup, no per-provider logic.
    */
-  runGraph(req: GraphRunRequest): GraphRunResult {
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
     const { runId, graphId } = req;
 
     this.log.debug({ runId, graphId }, "NamespaceGraphRouter.runGraph routing");
@@ -81,7 +82,11 @@ export class NamespaceGraphRouter implements GraphExecutorPort {
         { runId, graphId },
         "Invalid graphId format: missing namespace separator"
       );
-      return this.createErrorResult(runId, req.ingressRequestId, "internal");
+      return this.createErrorResult(
+        runId,
+        ctx?.requestId ?? req.runId,
+        "internal"
+      );
     }
 
     const namespace = graphId.slice(0, colonIndex);
@@ -89,7 +94,7 @@ export class NamespaceGraphRouter implements GraphExecutorPort {
 
     if (provider) {
       this.log.debug({ runId, graphId, namespace }, "Routing to provider");
-      return provider.runGraph(req);
+      return provider.runGraph(req, ctx);
     }
 
     // No provider found - server configuration issue
@@ -102,7 +107,11 @@ export class NamespaceGraphRouter implements GraphExecutorPort {
       },
       "No provider found for namespace"
     );
-    return this.createErrorResult(runId, req.ingressRequestId, "internal");
+    return this.createErrorResult(
+      runId,
+      ctx?.requestId ?? req.runId,
+      "internal"
+    );
   }
 
   /**

@@ -29,9 +29,10 @@ import { join } from "node:path";
 
 import type { AiEvent, UsageFact } from "@cogni/ai-core";
 import type { Logger } from "pino";
-
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import type {
   AiExecutionErrorCode,
+  ExecutionContext,
   GraphExecutorPort,
   GraphFinal,
   GraphRunRequest,
@@ -145,21 +146,22 @@ export class SandboxGraphProvider implements GraphExecutorPort {
     );
   }
 
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const { runId, ingressRequestId, graphId } = req;
+  runGraph(req: GraphRunRequest, _ctx?: ExecutionContext): GraphRunResult {
+    const { runId, graphId } = req;
+    const requestId = _ctx?.requestId ?? req.runId;
 
     const agentName = graphId.slice(this.providerId.length + 1);
     const agent = SANDBOX_AGENTS[agentName];
     if (!agent) {
       this.log.error({ runId, graphId, agentName }, "Unknown sandbox agent");
-      return this.createErrorResult(runId, ingressRequestId, "not_found");
+      return this.createErrorResult(runId, requestId, "not_found");
     }
 
     this.log.info(
       {
         event: EVENT_NAMES.SANDBOX_EXECUTION_STARTED,
         runId,
-        ingressRequestId,
+        requestId,
         agentName,
         executionMode: agent.executionMode ?? "ephemeral",
         model: req.model,
@@ -169,9 +171,9 @@ export class SandboxGraphProvider implements GraphExecutorPort {
     );
 
     if (agent.executionMode === "gateway") {
-      return this.createGatewayExecution(req, agent);
+      return this.createGatewayExecution(req, agent, requestId);
     }
-    return this.createContainerExecution(req, agent);
+    return this.createContainerExecution(req, agent, requestId);
   }
 
   /**
@@ -181,7 +183,8 @@ export class SandboxGraphProvider implements GraphExecutorPort {
    */
   private createContainerExecution(
     req: GraphRunRequest,
-    agent: SandboxAgentEntry
+    agent: SandboxAgentEntry,
+    requestId: string
   ): GraphRunResult {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -193,7 +196,8 @@ export class SandboxGraphProvider implements GraphExecutorPort {
     });
 
     const stream = (async function* (): AsyncIterable<AiEvent> {
-      const { runId, ingressRequestId, messages, model, caller, graphId } = req;
+      const { runId, messages, model, graphId } = req;
+      const scope = getExecutionScope();
       const attempt = 0; // P0_ATTEMPT_FREEZE
       const execStartTime = Date.now();
 
@@ -256,7 +260,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           llmProxy: {
             enabled: true,
             attempt,
-            billingAccountId: caller.billingAccountId,
+            billingAccountId: scope.billing.billingAccountId,
             env: proxyEnv,
           },
         });
@@ -271,7 +275,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
             {
               event: EVENT_NAMES.SANDBOX_EXECUTION_COMPLETE,
               runId,
-              ingressRequestId,
+              requestId,
               executionMode: "ephemeral",
               outcome: "error",
               durationMs: Date.now() - execStartTime,
@@ -287,7 +291,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
             state.resolve({
               ok: false,
               runId,
-              requestId: ingressRequestId,
+              requestId,
               error: "internal",
             });
           }
@@ -312,8 +316,8 @@ export class SandboxGraphProvider implements GraphExecutorPort {
               attempt,
               source: "litellm",
               executorType: "sandbox",
-              billingAccountId: caller.billingAccountId,
-              virtualKeyId: caller.virtualKeyId,
+              billingAccountId: scope.billing.billingAccountId,
+              virtualKeyId: scope.billing.virtualKeyId,
               graphId,
               model,
               usageUnitId: entry.litellmCallId,
@@ -339,7 +343,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           {
             event: EVENT_NAMES.SANDBOX_EXECUTION_COMPLETE,
             runId,
-            ingressRequestId,
+            requestId,
             executionMode: "ephemeral",
             outcome: "success",
             durationMs: Date.now() - execStartTime,
@@ -355,7 +359,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           state.resolve({
             ok: true,
             runId,
-            requestId: ingressRequestId,
+            requestId,
             finishReason: "stop",
             ...(content ? { content } : {}),
           });
@@ -365,7 +369,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           {
             event: EVENT_NAMES.SANDBOX_EXECUTION_COMPLETE,
             runId,
-            ingressRequestId,
+            requestId,
             executionMode: "ephemeral",
             outcome: "error",
             durationMs: Date.now() - execStartTime,
@@ -380,7 +384,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           state.resolve({
             ok: false,
             runId,
-            requestId: ingressRequestId,
+            requestId,
             error: "internal",
           });
         }
@@ -403,7 +407,8 @@ export class SandboxGraphProvider implements GraphExecutorPort {
    */
   private createGatewayExecution(
     req: GraphRunRequest,
-    agent: SandboxAgentEntry
+    agent: SandboxAgentEntry,
+    requestId: string
   ): GraphRunResult {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -415,20 +420,13 @@ export class SandboxGraphProvider implements GraphExecutorPort {
     });
 
     const stream = (async function* (): AsyncIterable<AiEvent> {
-      const {
-        runId,
-        ingressRequestId,
-        messages,
-        model,
-        caller,
-        graphId,
-        stateKey,
-      } = req;
+      const { runId, messages, model, graphId, stateKey } = req;
+      const scope = getExecutionScope();
       const execStartTime = Date.now();
       const callLog = self.log.child({
         runId,
         agentName: agent.name,
-        ingressRequestId,
+        requestId,
       });
 
       if (!self.gatewayClient) {
@@ -449,7 +447,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           state.resolve({
             ok: false,
             runId,
-            requestId: ingressRequestId,
+            requestId,
             error: "internal",
           });
         }
@@ -464,12 +462,12 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           "stateKey is required for gateway execution (route must always provide one)"
         );
       }
-      const sessionKey = `agent:main:${caller.billingAccountId}:${stateKey}`;
+      const sessionKey = `agent:main:${scope.billing.billingAccountId}:${stateKey}`;
 
       try {
         // Build outbound headers for billing (OpenClaw includes these on LLM calls)
         const outboundHeaders: Record<string, string> = {
-          "x-litellm-end-user-id": caller.billingAccountId,
+          "x-litellm-end-user-id": scope.billing.billingAccountId,
           "x-litellm-spend-logs-metadata": JSON.stringify({
             run_id: runId,
             graph_id: graphId,
@@ -548,7 +546,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           state.resolve({
             ok: true,
             runId,
-            requestId: ingressRequestId,
+            requestId,
             finishReason: "stop",
             ...(content ? { content } : {}),
           });
@@ -571,7 +569,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
           state.resolve({
             ok: false,
             runId,
-            requestId: ingressRequestId,
+            requestId,
             error: "internal",
           });
         }

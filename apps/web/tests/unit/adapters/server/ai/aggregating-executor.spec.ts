@@ -73,7 +73,10 @@ describe("NamespaceGraphRouter", () => {
       // Route to langgraph provider
       const request1 = createTestGraphRunRequest({ graphId: "langgraph:poet" });
       router.runGraph(request1);
-      expect(langGraphProvider.runGraph).toHaveBeenCalledWith(request1);
+      expect(langGraphProvider.runGraph).toHaveBeenCalledWith(
+        request1,
+        undefined
+      );
       expect(claudeProvider.runGraph).not.toHaveBeenCalled();
 
       // Reset mocks
@@ -84,7 +87,7 @@ describe("NamespaceGraphRouter", () => {
         graphId: "claude_sdk:planner",
       });
       router.runGraph(request2);
-      expect(claudeProvider.runGraph).toHaveBeenCalledWith(request2);
+      expect(claudeProvider.runGraph).toHaveBeenCalledWith(request2, undefined);
       expect(langGraphProvider.runGraph).not.toHaveBeenCalled();
     });
 
@@ -98,7 +101,7 @@ describe("NamespaceGraphRouter", () => {
       });
       router.runGraph(request);
 
-      expect(provider.runGraph).toHaveBeenCalledWith(request);
+      expect(provider.runGraph).toHaveBeenCalledWith(request, undefined);
     });
   });
 });
