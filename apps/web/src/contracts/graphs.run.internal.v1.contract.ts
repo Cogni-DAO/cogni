@@ -39,7 +39,7 @@ export const InternalGraphRunInputSchema = z.object({
 
 /**
  * Internal graph run response schema.
- * Aligns with GraphFinal shape from graph-executor.port.ts.
+ * Aligns with GraphFinal shape from @cogni/graph-execution-core.
  *
  * HTTP errors handled separately:
  * - 401: Missing/invalid SCHEDULER_API_TOKEN
