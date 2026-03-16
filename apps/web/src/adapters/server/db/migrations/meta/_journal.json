@@ -148,6 +148,13 @@
       "when": 1773619200000,
       "tag": "0020_provider_funding_attempts",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1773693795072,
+      "tag": "0021_broadcasting_tables",
+      "breakpoints": true
     }
   ]
 }
