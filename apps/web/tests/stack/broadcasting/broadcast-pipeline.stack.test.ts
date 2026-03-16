@@ -98,33 +98,11 @@ describe("[broadcasting] full pipeline: draft → optimize → review → publis
     expect(discordPost).toBeDefined();
     expect(xPost.optimizedBody).toContain("[x]");
     expect(discordPost.optimizedBody).toContain("[discord]");
-    // Short body, 2 platforms = low risk → approved (auto-approved, skips review)
+    // Short body, 2 platforms = low risk → auto-approved (skips review)
     expect(xPost.status).toBe("approved");
+    expect(discordPost.status).toBe("approved");
 
-    // 3. Approve a post → triggers echo publish
-    const reviewRequest = new NextRequest(
-      `http://localhost:3000/api/v1/broadcasting/${messageId}/posts/${xPost.id}/review`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: "approved" }),
-      }
-    );
-
-    const reviewResponse = await POST_REVIEW(reviewRequest, {
-      params: Promise.resolve({ messageId, postId: xPost.id }),
-    });
-
-    // Low-risk posts are auto-approved — review on already-approved post
-    // should fail since status is 'approved' not 'pending_review'
-    // This is expected behavior: low-risk posts skip review
-    if (reviewResponse.status === 200) {
-      const reviewed = await reviewResponse.json();
-      expect(reviewed.externalId).toBeTruthy();
-      expect(reviewed.externalUrl).toBeTruthy();
-    }
-
-    // 4. List broadcasts — should show the message
+    // 3. List broadcasts — should show the message
     const listRequest = new NextRequest(
       "http://localhost:3000/api/v1/broadcasting",
       { method: "GET" }
