@@ -2,7 +2,7 @@
 id: task.0167
 type: task
 title: "Node activation: payments.status in repo-spec + pnpm node:activate-payments"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 15
 estimate: 2
