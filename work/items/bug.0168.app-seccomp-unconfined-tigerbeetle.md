@@ -2,14 +2,14 @@
 id: bug.0168
 type: bug
 title: "App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile"
-status: ready
+status: needs_implement
 priority: 2
 rank: 30
 estimate: 1
 summary: "seccomp=unconfined on app container disables all syscall filtering. Only 3 io_uring syscalls are needed. Create a custom seccomp profile extending Docker's default."
 outcome: "App container runs with Docker default seccomp + only io_uring_setup, io_uring_enter, io_uring_register added. No other syscall restrictions removed."
 spec_refs: operator-wallet
-assignees:
+assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
 branch:
@@ -35,6 +35,7 @@ This disables **all** ~44 blocked syscalls (including `bpf`, `mount`, `kexec_loa
 ## Fix
 
 Create a custom seccomp profile JSON that copies Docker's default and adds only:
+
 - `io_uring_setup`
 - `io_uring_enter`
 - `io_uring_register`
@@ -42,10 +43,19 @@ Create a custom seccomp profile JSON that copies Docker's default and adds only:
 Reference: https://docs.docker.com/engine/security/seccomp/
 
 Apply via:
+
 ```yaml
 security_opt:
   - "seccomp=./configs/seccomp-app.json"
 ```
+
+## Validation
+
+```bash
+docker compose -f infra/compose/runtime/docker-compose.dev.yml config | grep -A2 seccomp
+```
+
+**Expected:** `seccomp=./configs/seccomp-app.json` (not `unconfined`)
 
 ## Affected files
 
