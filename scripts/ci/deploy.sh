@@ -618,21 +618,23 @@ fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 2.5: Disk cleanup gate (before any image pulls)
-# Dual gate: free < 15GB OR used > 70% triggers cleanup
+# Prune when free < 7GB — only enough headroom for new app/migrator images (~2-3GB).
+# Previous threshold of 15GB caused a prune-every-deploy death loop on the 40GB VM
+# (10GB free < 15GB → prune → re-pull all images → back to 10GB → repeat).
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 AVAIL_GB=$(df -BG / | tail -1 | awk '{print $4}' | tr -d G)
 USED_PCT=$(df / | tail -1 | awk '{print $5}' | tr -d %)
 log_info "Disk: ${AVAIL_GB}GB free, ${USED_PCT}% used"
 
-if [ "$AVAIL_GB" -lt 15 ] || [ "$USED_PCT" -gt 70 ]; then
-  log_warn "Disk pressure (${AVAIL_GB}GB free, ${USED_PCT}% used). Running cleanup..."
+if [ "$AVAIL_GB" -lt 7 ]; then
+  log_warn "Disk pressure (${AVAIL_GB}GB free). Running cleanup..."
   docker system prune -af || true
   journalctl --vacuum-time=3d || true
 
   AVAIL_GB=$(df -BG / | tail -1 | awk '{print $4}' | tr -d G)
   log_info "Free space after cleanup: ${AVAIL_GB}GB"
 
-  if [ "$AVAIL_GB" -lt 15 ]; then
+  if [ "$AVAIL_GB" -lt 5 ]; then
     log_error "Insufficient disk after cleanup (${AVAIL_GB}GB free)."
     exit 1
   fi
