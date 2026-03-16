@@ -6,7 +6,7 @@ title: "Knowledge Store — Structured Domain Expertise for Node-Template"
 state: Active
 priority: 2
 estimate: 4
-summary: "One new package (packages/knowledge-store/) providing entity, relation, and observation tables with provenance, two ports, and a Drizzle adapter. Structured-first; semantic index in Walk. Reuses existing ingestion-core as Layer 0."
+summary: "One new package (packages/knowledge-store/) providing domain types, ports, query logic, and Zod validation for a structured knowledge store. Drizzle table definitions live in db-schema (single schema authority). Structured-first; semantic index in Walk. Reuses existing ingestion-core as Layer 0."
 outcome: "Every cogni-template fork ships with a structured knowledge store that agents query via tools, that accumulates domain expertise through ingestion pipelines, and that improves coherence over time."
 assignees: derekg1729
 created: 2026-03-16
@@ -20,7 +20,7 @@ labels: [infrastructure, knowledge, data, node-template]
 
 ## Goal
 
-Provide a generic, reusable knowledge store that any niche node fork inherits. A specialized AI company accumulates domain expertise in structured form — entities with attributes, typed relationships between them, and temporal observations that reveal trajectory. This project builds that foundation as `packages/knowledge-store/`, following the capability package shape (port + domain + adapters in one package).
+Provide a generic, reusable knowledge store that any niche node fork inherits. A specialized AI company accumulates domain expertise in structured form — entities with attributes, typed relationships between them, and temporal observations that reveal trajectory. This project builds that foundation as `packages/knowledge-store/` (domain types, ports, query logic, Zod validation) with Drizzle table definitions in `packages/db-schema/` (single schema authority).
 
 The knowledge store is **structured-first**: agents access it via tools that return structured records, not by having embeddings stuffed into context. Semantic search (pgvector) arrives in Walk as a secondary access pattern — an index into the structured store, not the store itself.
 
@@ -42,41 +42,44 @@ The knowledge store is **structured-first**: agents access it via tools that ret
 
 **Goal:** A working `packages/knowledge-store/` that services and graphs can write to and query. Entity + relation + observation tables in Postgres. Simple exact-match dedup. One agent tool for structured queries. No embeddings, no claims, no entity resolution subsystem.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Package scaffold: types, Drizzle schema (`entity`, `relation`, `observation`), `source_record_id` provenance, Zod validation for string-typed `entity_type`/`relation_type`/`signal_type` | Not Started | 2 | — |
-| `KnowledgeWritePort` + Drizzle adapter: write entities (exact-match dedup), observations, relations. Contract tests. | Not Started | 2 | — |
-| `KnowledgeReadPort` + Drizzle adapter: query entities by type/attributes, traverse relations (recursive CTE), get observation timelines. Contract tests. | Not Started | 2 | — |
-| `knowledge_query` tool contract in `ai-tools`: first agent access to knowledge store, wired to `KnowledgeReadPort` | Not Started | 1 | — |
+| Deliverable                                                                                                                                                                                                                                                                         | Status      | Est | Work Item |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Package scaffold (`packages/knowledge-store/`): domain types, Zod schemas for `entity_type`/`relation_type`/`signal_type` validation. Drizzle tables (`entity`, `relation`, `observation`) in `packages/db-schema/knowledge.ts` with `source_record_id` FK to `ingestion_receipts`. | Not Started | 2   | task.0167 |
+| `KnowledgeWritePort` + Drizzle adapter: write entities (exact-match dedup), observations, relations. Contract tests.                                                                                                                                                                | Not Started | 2   | —         |
+| `KnowledgeReadPort` + Drizzle adapter: query entities by type/attributes, traverse relations (recursive CTE), get observation timelines. Contract tests.                                                                                                                            | Not Started | 2   | —         |
+| `knowledge_query` tool contract in `ai-tools`: first agent access to knowledge store, wired to `KnowledgeReadPort`                                                                                                                                                                  | Not Started | 1   | —         |
 
 ### Walk (P1) — Evidence Layer + Semantic Index + Entity Resolution
 
 **Goal:** Multi-source corroboration via claims layer. Fuzzy entity resolution. pgvector semantic index for "I need something that does X" queries. AI-based extraction from raw records. Confidence scoring.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Claims layer: `claim` table (append-only), `activity_run` table, update entities to derive `confidence` + `source_count` from claims | Not Started | 3 | (create at P1 start) |
-| Entity resolution: `entity_alias` table, candidate matching, merge/split operations, fuzzy matching | Not Started | 2 | (create at P1 start) |
-| pgvector semantic index: `embedding` table, HNSW index, embed entity summaries via LiteLLM, `knowledge_search` tool | Not Started | 2 | (create at P1 start) |
-| Hybrid retrieval: FTS (tsvector) + vector similarity + Reciprocal Rank Fusion in read adapter | Not Started | 2 | (create at P1 start) |
-| AI extraction graph: LangGraph graph that reads source records and produces claims via LLM | Not Started | 2 | (create at P1 start) |
-| Confidence scoring + decay: batch Temporal activity, recompute from claims, staleness decay | Not Started | 2 | (create at P1 start) |
-| `knowledge_evidence` tool: "Why do we believe X?" — entity → claims → source records | Not Started | 1 | (create at P1 start) |
+| Deliverable                                                                                                                          | Status      | Est | Work Item            |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --- | -------------------- |
+| Claims layer: `claim` table (append-only), `activity_run` table, update entities to derive `confidence` + `source_count` from claims | Not Started | 3   | (create at P1 start) |
+| Entity resolution: `entity_alias` table, candidate matching, merge/split operations, fuzzy matching                                  | Not Started | 2   | (create at P1 start) |
+| pgvector semantic index: `embedding` table, HNSW index, embed entity summaries via LiteLLM, `knowledge_search` tool                  | Not Started | 2   | (create at P1 start) |
+| Hybrid retrieval: FTS (tsvector) + vector similarity + Reciprocal Rank Fusion in read adapter                                        | Not Started | 2   | (create at P1 start) |
+| AI extraction graph: LangGraph graph that reads source records and produces claims via LLM                                           | Not Started | 2   | (create at P1 start) |
+| Confidence scoring + decay: batch Temporal activity, recompute from claims, staleness decay                                          | Not Started | 2   | (create at P1 start) |
+| `knowledge_evidence` tool: "Why do we believe X?" — entity → claims → source records                                                 | Not Started | 1   | (create at P1 start) |
 
 ### Run (P2+) — Quality + Scale + Sharing
 
 **Goal:** Production-grade retrieval quality. Cross-node knowledge sharing. Eval framework.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Reranker integration: Cohere/ColBERT as optional retrieval stage | Not Started | 2 | (create at P2 start) |
-| Cross-node knowledge sharing: trust model for shared entities between nodes | Not Started | 3 | (create at P2 start) |
-| Knowledge quality eval framework: known-answer test harness, retrieval precision metrics | Not Started | 2 | (create at P2 start) |
-| Apache AGE: graph queries if recursive CTEs prove insufficient | Not Started | 2 | (create at P2 start) |
+| Deliverable                                                                              | Status      | Est | Work Item            |
+| ---------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Reranker integration: Cohere/ColBERT as optional retrieval stage                         | Not Started | 2   | (create at P2 start) |
+| Cross-node knowledge sharing: trust model for shared entities between nodes              | Not Started | 3   | (create at P2 start) |
+| Knowledge quality eval framework: known-answer test harness, retrieval precision metrics | Not Started | 2   | (create at P2 start) |
+| Apache AGE: graph queries if recursive CTEs prove insufficient                           | Not Started | 2   | (create at P2 start) |
 
 ## Constraints
 
-- One new package only: `packages/knowledge-store/` following capability package shape (port + domain + adapters)
+- One new package: `packages/knowledge-store/` following capability package shape (port + domain + adapters)
+- **DB_SCHEMA_OWNS_TABLES**: Drizzle table definitions live in `packages/db-schema/knowledge.ts`, not in the knowledge-store package. `db-schema` is the single schema authority — packages may propose schema modules, but only `db-schema` publishes runtime DB schema and migrations until a proven monorepo migration framework exists. The knowledge-store package imports table types from `@cogni/db-schema/knowledge` for adapter use.
+- **HARD_FK_TO_RECEIPTS**: `source_record_id` uses a hard FK to `ingestion_receipts` — safe because both tables live in the same `db-schema` package with deterministic migration ordering.
+- **ATTRIBUTE_REGISTRY_IN_PACKAGE**: Per-entity-type Zod schemas are a runtime registry in `packages/knowledge-store/`, not in `db-schema`. The adapter constructor accepts a schema map; wiring layer injects fork-specific schemas.
 - No new database. Postgres tables in the existing DB, behind existing RLS
 - `entity_type`, `relation_type`, `signal_type` are strings validated by Zod in app code, not Postgres enums — fork-heavy systems hate enum migrations
 - Entity `attributes` are JSONB validated by Zod schemas per `entity_type`, not DB column constraints
@@ -88,8 +91,7 @@ The knowledge store is **structured-first**: agents access it via tools that ret
 ## Dependencies
 
 - [x] `spike.0137` — research findings (done)
-- [ ] `ingestion-core` + `ingestion_receipts` table — Layer 0 raw archive (exists, but verify schema compatibility for `source_record_id` FK)
-- [ ] `packages/db-schema` or `packages/db-client` — Drizzle table definition pattern for new package to follow
+- [ ] `packages/db-schema` — owns knowledge Drizzle tables; verify `ingestion_receipts` PK shape for `source_record_id` FK
 - [ ] pgvector Postgres extension — needed for Walk P1 (not Crawl)
 
 ## As-Built Specs
@@ -98,18 +100,24 @@ The knowledge store is **structured-first**: agents access it via tools that ret
 
 ## Design Notes
 
+> Full research findings: [data-management-specialized-agents](../../docs/research/data-management-specialized-agents.md)
+
+### Schema ownership: db-schema as single authority
+
+Drizzle table definitions live in `packages/db-schema/knowledge.ts`, not in the knowledge-store package. Rationale: schema/migration ownership gets expensive when it fragments. A single DB authority gives deterministic migration ordering, simpler FK management, and fewer circular package dependencies. `packages/knowledge-store/` owns domain types, ports, adapters, query logic, and Zod validation — but not the physical DB schema. This keeps the door open for per-package schema ownership later, but doesn't standardize that pain yet.
+
 ### Why not claims in Crawl?
 
-Claims (append-only evidence with provenance) are the right target architecture for corroboration, contradiction detection, and re-extraction replay. But they add schema complexity, write amplification, and a resolution step that Crawl doesn't need yet. In Crawl, entities get a simple `source_record_id` FK pointing to the raw record they came from. Temporal run metadata covers "who extracted this and when." The concrete trigger for introducing claims: when a second data source ingests facts about the same entity and you need to compare assertions.
+Claims add schema complexity, write amplification, and a resolution step that Crawl doesn't need yet. In Crawl, entities get a simple `source_record_id` FK pointing to the raw record they came from. Temporal run metadata covers "who extracted this and when." Concrete trigger for claims: when a second data source ingests facts about the same entity and you need to compare assertions.
 
 ### Why strings instead of enums for type fields?
 
-Every niche fork defines its own entity types, relation types, and signal types. Postgres enums require migrations to add values. In a fork-heavy ecosystem, that creates merge conflicts and migration ordering headaches. String columns validated by Zod at the app layer are more forgiving — forks add types without coordinating schema migrations.
+Every niche fork defines its own entity types. Postgres enums require migrations to add values — merge conflicts and migration ordering headaches in a fork-heavy ecosystem. String columns validated by Zod at the app layer are more forgiving.
 
 ### Relationship to ingestion-core
 
-`ingestion-core` owns Layer 0: `ActivityEvent`, `PollAdapter`, `WebhookNormalizer`, cursor-based sync. `knowledge-store` is a downstream consumer. The link between layers is `source_record_id` — a FK from canonical knowledge rows back to `ingestion_receipts`. This mirrors how `attribution-ledger` also consumes from `ingestion_receipts` independently.
+`ingestion-core` owns Layer 0 domain types (`ActivityEvent`, `PollAdapter`, `WebhookNormalizer`). The `ingestion_receipts` table itself is defined in `db-schema/attribution.ts`. `knowledge-store` is a downstream consumer. The link between layers is `source_record_id` — a hard FK from canonical knowledge rows back to `ingestion_receipts` (both in `db-schema`).
 
-### Package boundary: why not in db-schema?
+### Attribute schema registry
 
-The knowledge store is a capability package (port + domain + adapters), not just a schema. It contains query logic (recursive CTE traversal, timeline aggregation), dedup rules, and type validation. `db-schema` is a pure schema package with no business logic. Keeping them separate preserves the boundary.
+Per-entity-type Zod schemas live in `packages/knowledge-store/` as a runtime registry. The adapter constructor accepts a `Map<string, ZodSchema>` — the wiring layer (app bootstrap or service startup) injects fork-specific schemas. This keeps the package generic while the db-schema stays schema-only.

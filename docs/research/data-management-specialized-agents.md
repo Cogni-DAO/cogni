@@ -55,12 +55,13 @@ Layer 2: Canonical Knowledge (live)  — resolved entities, relations, observati
 
 ### Layer 0: Raw Archive — ALREADY EXISTS
 
-`ingestion-core` provides this today:
+`ingestion-core` provides domain types and ports:
 
 - `ActivityEvent` — deterministic IDs, provenance hash, source metadata
 - `PollAdapter` / `WebhookNormalizer` — source connector ports
 - `StreamCursor` — incremental sync state
-- `ingestion_receipts` table — domain-agnostic archive
+
+The `ingestion_receipts` table is defined in `packages/db-schema/attribution.ts` (the single schema authority). Adapters live in `services/scheduler-worker` and `src/adapters/server`.
 
 The ingestion spec adds Singer tap ABI + Temporal orchestration. Both Singer taps and TS adapters write to the same `ingestion_receipts` table. Downstream consumers (attribution, treasury, knowledge) select independently. **No changes needed to Layer 0.**
 
@@ -70,17 +71,17 @@ An extractor reads raw records and produces typed assertions. For Crawl MVP, ext
 
 **`claim`** — one extracted assertion with full provenance:
 
-| Field | Purpose |
-|---|---|
-| `id` | Deterministic from content |
-| `source_record_id` | FK to `ingestion_receipts` — which raw record this came from |
-| `activity_run_id` | FK to `activity_run` — which extraction run produced this |
-| `claim_type` | `entity_attribute`, `relation`, `observation` |
-| `subject_hint` | Best-guess entity reference (pre-resolution) |
-| `predicate` | What's being asserted (e.g., `license`, `star_count`, `alternative_to`) |
-| `object` | The asserted value (JSONB) |
-| `confidence` | 0.0–1.0, set by extractor |
-| `extractor_name`, `extractor_version` | Which extractor produced this |
+| Field                                 | Purpose                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| `id`                                  | Deterministic from content                                              |
+| `source_record_id`                    | FK to `ingestion_receipts` — which raw record this came from            |
+| `activity_run_id`                     | FK to `activity_run` — which extraction run produced this               |
+| `claim_type`                          | `entity_attribute`, `relation`, `observation`                           |
+| `subject_hint`                        | Best-guess entity reference (pre-resolution)                            |
+| `predicate`                           | What's being asserted (e.g., `license`, `star_count`, `alternative_to`) |
+| `object`                              | The asserted value (JSONB)                                              |
+| `confidence`                          | 0.0–1.0, set by extractor                                               |
+| `extractor_name`, `extractor_version` | Which extractor produced this                                           |
 
 Append-only. Claims are never mutated, only superseded by newer claims from re-extraction.
 
@@ -90,62 +91,62 @@ The resolved, current-best understanding. Mutable, but every mutation traces to 
 
 **`entity`** — one row per real-world thing:
 
-| Field | Purpose |
-|---|---|
-| `id` | Stable identifier |
-| `entity_type` | Niche-defined enum (each fork defines its domain types) |
-| `canonical_name` | Best-known name |
-| `attributes` | JSONB, niche-extensible (validated by Zod schemas per entity_type) |
-| `confidence` | Derived from supporting claims |
-| `source_count` | How many independent sources confirm this entity |
-| `first_seen_at`, `last_corroborated_at` | Temporal bounds |
-| `resolved_by_run_id` | Which resolution run created/updated this |
-| `tenant_id` | `'global'` for shared domain knowledge, `billing_account_id` for private |
+| Field                                   | Purpose                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------ |
+| `id`                                    | Stable identifier                                                        |
+| `entity_type`                           | Niche-defined enum (each fork defines its domain types)                  |
+| `canonical_name`                        | Best-known name                                                          |
+| `attributes`                            | JSONB, niche-extensible (validated by Zod schemas per entity_type)       |
+| `confidence`                            | Derived from supporting claims                                           |
+| `source_count`                          | How many independent sources confirm this entity                         |
+| `first_seen_at`, `last_corroborated_at` | Temporal bounds                                                          |
+| `resolved_by_run_id`                    | Which resolution run created/updated this                                |
+| `tenant_id`                             | `'global'` for shared domain knowledge, `billing_account_id` for private |
 
 **`entity_alias`** — entity resolution subsystem:
 
-| Field | Purpose |
-|---|---|
-| `entity_id` | FK to canonical entity |
-| `alias_type` | `source_id`, `name_variant`, `url` |
-| `alias_value` | The alternative identifier |
-| `source` | Which source uses this identifier |
+| Field          | Purpose                              |
+| -------------- | ------------------------------------ |
+| `entity_id`    | FK to canonical entity               |
+| `alias_type`   | `source_id`, `name_variant`, `url`   |
+| `alias_value`  | The alternative identifier           |
+| `source`       | Which source uses this identifier    |
 | `match_status` | `confirmed`, `candidate`, `rejected` |
 
 This is how "lodash" on npm, "lodash/lodash" on GitHub, and "Lo-Dash" in a blog post link to the same entity. Entity resolution is its own subsystem — not a dedup step in a pipeline.
 
 **`relation`** — typed directed edge between entities:
 
-| Field | Purpose |
-|---|---|
-| `source_entity_id`, `target_entity_id` | The two entities |
-| `relation_type` | Niche-defined enum (`alternative_to`, `depends_on`, `authored_by`) |
-| `attributes` | JSONB for edge metadata |
-| `confidence` | Independent from entity confidence |
-| `supporting_claim_ids[]` | Which claims assert this relationship |
-| `tenant_id` | RLS scope |
+| Field                                  | Purpose                                                            |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| `source_entity_id`, `target_entity_id` | The two entities                                                   |
+| `relation_type`                        | Niche-defined enum (`alternative_to`, `depends_on`, `authored_by`) |
+| `attributes`                           | JSONB for edge metadata                                            |
+| `confidence`                           | Independent from entity confidence                                 |
+| `supporting_claim_ids[]`               | Which claims assert this relationship                              |
+| `tenant_id`                            | RLS scope                                                          |
 
 **`observation`** — temporal signal (time-series fact about an entity):
 
-| Field | Purpose |
-|---|---|
-| `entity_id` | FK to entity |
-| `signal_type` | Niche-defined (`star_count`, `commit_frequency`, `citation_count`) |
-| `value` | JSONB (numeric or structured) |
-| `observed_at` | When measured |
-| `source_claim_id` | Provenance |
-| `tenant_id` | RLS scope |
+| Field             | Purpose                                                            |
+| ----------------- | ------------------------------------------------------------------ |
+| `entity_id`       | FK to entity                                                       |
+| `signal_type`     | Niche-defined (`star_count`, `commit_frequency`, `citation_count`) |
+| `value`           | JSONB (numeric or structured)                                      |
+| `observed_at`     | When measured                                                      |
+| `source_claim_id` | Provenance                                                         |
+| `tenant_id`       | RLS scope                                                          |
 
 Observations accumulate. An entity's "current" star count is the latest observation; its trajectory is computed from the series.
 
 **`embedding`** — semantic index (pgvector):
 
-| Field | Purpose |
-|---|---|
-| `entity_id` | FK to entity |
-| `embedding` | `vector(1536)`, HNSW-indexed |
+| Field          | Purpose                                     |
+| -------------- | ------------------------------------------- |
+| `entity_id`    | FK to entity                                |
+| `embedding`    | `vector(1536)`, HNSW-indexed                |
 | `content_text` | The text that was embedded (entity summary) |
-| `content_hash` | sha256 for idempotent re-embedding |
+| `content_hash` | sha256 for idempotent re-embedding          |
 
 One embedding per entity. This is a **search index into the structured store**, not the knowledge itself. Secondary access pattern for fuzzy intent → entity mapping.
 
@@ -153,14 +154,14 @@ One embedding per entity. This is a **search index into the structured store**, 
 
 **`activity_run`** — lineage for everything above Layer 0:
 
-| Field | Purpose |
-|---|---|
-| `id` | Run identifier |
-| `activity_type` | `extraction`, `resolution`, `enrichment`, `scoring`, `pruning` |
-| `runner_name`, `runner_version` | What code ran |
-| `model_version` | If AI was involved, which model |
-| `started_at`, `completed_at`, `status` | Lifecycle |
-| `parent_run_id` | For nested workflows |
+| Field                                  | Purpose                                                        |
+| -------------------------------------- | -------------------------------------------------------------- |
+| `id`                                   | Run identifier                                                 |
+| `activity_type`                        | `extraction`, `resolution`, `enrichment`, `scoring`, `pruning` |
+| `runner_name`, `runner_version`        | What code ran                                                  |
+| `model_version`                        | If AI was involved, which model                                |
+| `started_at`, `completed_at`, `status` | Lifecycle                                                      |
+| `parent_run_id`                        | For nested workflows                                           |
 
 Every claim, entity mutation, resolution decision, and confidence re-score traces to an activity_run.
 
@@ -181,16 +182,16 @@ Every claim, entity mutation, resolution decision, and confidence re-score trace
 
 ## Execution Model: What Runs Where
 
-| Activity | Runtime | Why |
-|---|---|---|
-| **Ingestion** (source → raw records) | Temporal activities | Mechanical ETL. Singer taps are subprocesses. Already designed. |
-| **Extraction** (raw records → claims) | Temporal activities (Crawl MVP) | Rule-based parsing of structured API responses. No AI needed for Crawl. |
-| **Extraction** (raw records → claims) | LangGraph graph (Walk+) | AI-based: LLM reads a README/doc and extracts structured facts. |
-| **Entity resolution** (claims → entities) | Temporal activities (Crawl MVP) | Deterministic matching rules (exact name, URL normalization). |
-| **Entity resolution** | LangGraph graph (Walk+) | Fuzzy matching, judgment calls on merge/split candidates. |
-| **Enrichment** (fill gaps in entities) | LangGraph graph | AI research: "find the license for this project" requires reasoning. |
-| **Agent queries** (user asks a question) | LangGraph graph | Always AI — this is the product interface. |
-| **Scoring / pruning** | Temporal activities | Batch recomputation of confidence, staleness decay. Mechanical. |
+| Activity                                  | Runtime                         | Why                                                                     |
+| ----------------------------------------- | ------------------------------- | ----------------------------------------------------------------------- |
+| **Ingestion** (source → raw records)      | Temporal activities             | Mechanical ETL. Singer taps are subprocesses. Already designed.         |
+| **Extraction** (raw records → claims)     | Temporal activities (Crawl MVP) | Rule-based parsing of structured API responses. No AI needed for Crawl. |
+| **Extraction** (raw records → claims)     | LangGraph graph (Walk+)         | AI-based: LLM reads a README/doc and extracts structured facts.         |
+| **Entity resolution** (claims → entities) | Temporal activities (Crawl MVP) | Deterministic matching rules (exact name, URL normalization).           |
+| **Entity resolution**                     | LangGraph graph (Walk+)         | Fuzzy matching, judgment calls on merge/split candidates.               |
+| **Enrichment** (fill gaps in entities)    | LangGraph graph                 | AI research: "find the license for this project" requires reasoning.    |
+| **Agent queries** (user asks a question)  | LangGraph graph                 | Always AI — this is the product interface.                              |
+| **Scoring / pruning**                     | Temporal activities             | Batch recomputation of confidence, staleness decay. Mechanical.         |
 
 **Key principle**: LangGraph is for workflows where AI judgment is involved. Mechanical ETL, rule-based extraction, and batch scoring are Temporal activities. Don't use an LLM to parse JSON.
 
@@ -200,12 +201,12 @@ Every claim, entity mutation, resolution decision, and confidence re-score trace
 
 How agents use the knowledge store. This section carries forward from the first iteration.
 
-| Strategy | When | How |
-|---|---|---|
-| **Write** | Agent produces intermediate results | Write to state fields or tool-accessible storage. Don't keep in context. |
-| **Select** | Agent needs domain knowledge | Knowledge tools query structured store + semantic index. Returns structured records. |
-| **Compress** | Long-running multi-turn agents | Rolling summary of older turns. Keep last N messages verbatim + summary of rest. |
-| **Isolate** | Multi-agent workflows | Each sub-agent gets only its required context via LangGraph state schema. |
+| Strategy     | When                                | How                                                                                  |
+| ------------ | ----------------------------------- | ------------------------------------------------------------------------------------ |
+| **Write**    | Agent produces intermediate results | Write to state fields or tool-accessible storage. Don't keep in context.             |
+| **Select**   | Agent needs domain knowledge        | Knowledge tools query structured store + semantic index. Returns structured records. |
+| **Compress** | Long-running multi-turn agents      | Rolling summary of older turns. Keep last N messages verbatim + summary of rest.     |
+| **Isolate**  | Multi-agent workflows               | Each sub-agent gets only its required context via LangGraph state schema.            |
 
 **Key insight from Manus AI**: KV-cache hit rate is the #1 performance metric. Mask unavailable tools via logits (don't remove from system prompt). Task recitation (rewriting current plan into recent context) combats "lost in the middle."
 
@@ -228,55 +229,60 @@ Extends existing `database-rls.md` spec unchanged.
 
 ## How Syntropy Emerges
 
-| Mechanism | How |
-|---|---|
-| **Corroboration** | Multiple claims from different sources assert the same fact → entity `confidence` increases, `source_count` increments |
-| **Re-extraction** | Run a better extractor on old raw records → new claims supersede old ones → entities re-scored. Raw archive untouched. |
-| **Entity resolution** | Discover that two entities are the same → merge via alias system → relations and observations consolidate. Reversible (split). |
-| **Trajectory** | Observations accumulate → agents compute growth/decline from the time series, not from a snapshot |
-| **Contradiction** | Conflicting claims flagged (same subject + predicate, different object, both high confidence) → resolution activity investigates |
-| **Decay** | Entities not corroborated within a type-specific TTL lose confidence. Stale knowledge naturally deprioritizes. |
-| **Replay** | Change extraction logic → re-run on all raw records → regenerate claims → re-resolve entities. History preserved. |
+| Mechanism             | How                                                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Corroboration**     | Multiple claims from different sources assert the same fact → entity `confidence` increases, `source_count` increments           |
+| **Re-extraction**     | Run a better extractor on old raw records → new claims supersede old ones → entities re-scored. Raw archive untouched.           |
+| **Entity resolution** | Discover that two entities are the same → merge via alias system → relations and observations consolidate. Reversible (split).   |
+| **Trajectory**        | Observations accumulate → agents compute growth/decline from the time series, not from a snapshot                                |
+| **Contradiction**     | Conflicting claims flagged (same subject + predicate, different object, both high confidence) → resolution activity investigates |
+| **Decay**             | Entities not corroborated within a type-specific TTL lose confidence. Stale knowledge naturally deprioritizes.                   |
+| **Replay**            | Change extraction logic → re-run on all raw records → regenerate claims → re-resolve entities. History preserved.                |
 
 ---
 
 ## Package Design
 
-**One new package**: `packages/knowledge-store/` following the capability package shape.
+**One new package**: `packages/knowledge-store/` following the capability package shape. **Drizzle table definitions** live in `packages/db-schema/knowledge.ts` (single schema authority) — the knowledge-store package owns domain types, ports, query logic, and Zod validation but not the physical schema.
 
 ```
 packages/knowledge-store/
 ├── src/
 │   ├── port/              # KnowledgeReadPort, KnowledgeWritePort
-│   ├── domain/            # Entity, Claim, Relation, Observation types + Zod schemas
-│   │                      # Confidence computation, staleness rules, merge logic
-│   ├── adapters/          # Drizzle/pgvector adapter implementing ports
+│   ├── domain/            # Entity, Relation, Observation types + Zod schemas
+│   │                      # Attribute schema registry, dedup rules, merge logic
+│   ├── adapters/          # Drizzle adapter implementing ports (imports @cogni/db-schema/knowledge)
 │   └── index.ts           # Public exports
 ├── tests/
 ├── package.json
 ├── tsconfig.json
 └── tsup.config.ts
+
+packages/db-schema/
+└── src/
+    └── knowledge.ts       # Drizzle tables: entity, relation, observation (Crawl)
+                           # Walk adds: claim, entity_alias, embedding, activity_run
 ```
 
 **Ports (2–3 max, split only when real adapters diverge)**:
 
-| Port | Responsibility |
-|---|---|
-| `KnowledgeReadPort` | Query entities, traverse relations, get timelines, semantic search, get evidence trail |
-| `KnowledgeWritePort` | Append claims, resolve entities (merge/split/alias), write observations, upsert embeddings |
-| `IngestionArchivePort` | _Maybe_ — source runs, raw records, checkpoints. Might stay in `ingestion-core` instead. |
+| Port                   | Responsibility                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------ |
+| `KnowledgeReadPort`    | Query entities, traverse relations, get timelines, semantic search, get evidence trail     |
+| `KnowledgeWritePort`   | Append claims, resolve entities (merge/split/alias), write observations, upsert embeddings |
+| `IngestionArchivePort` | _Maybe_ — source runs, raw records, checkpoints. Might stay in `ingestion-core` instead.   |
 
-**Schema**: Lives inside `packages/knowledge-store/src/domain/` as Drizzle table definitions. Separate tables per concept (`claim`, `entity`, `entity_alias`, `relation`, `observation`, `embedding`, `activity_run`) — NOT one generic table. Different lifecycles, different invariants, different indexes.
+**Schema**: Separate tables per concept (`entity`, `relation`, `observation` in Crawl; `claim`, `entity_alias`, `embedding`, `activity_run` in Walk) — NOT one generic table. Different lifecycles, different invariants, different indexes. All defined in `db-schema/knowledge.ts` with hard FKs to `ingestion_receipts`.
 
 **Knowledge tools**: Added to existing `packages/ai-tools/` catalog. Not a new package.
 
-| Tool | What it does |
-|---|---|
-| `knowledge_query` | Filter entities by type, attributes, category → structured records |
-| `knowledge_traverse` | Follow relations from an entity N hops → entity subgraph |
-| `knowledge_timeline` | Get observation series for an entity + signal type → time series |
-| `knowledge_search` | Semantic search via embedding similarity → ranked entities |
-| `knowledge_evidence` | "Why do we believe X?" → supporting claims + source records |
+| Tool                 | What it does                                                       |
+| -------------------- | ------------------------------------------------------------------ |
+| `knowledge_query`    | Filter entities by type, attributes, category → structured records |
+| `knowledge_traverse` | Follow relations from an entity N hops → entity subgraph           |
+| `knowledge_timeline` | Get observation series for an entity + signal type → time series   |
+| `knowledge_search`   | Semantic search via embedding similarity → ranked entities         |
+| `knowledge_evidence` | "Why do we believe X?" → supporting claims + source records        |
 
 ---
 
@@ -305,41 +311,4 @@ Ship canonical knowledge tables with one new `packages/knowledge-store/` package
 
 ## Proposed Layout
 
-### Project
-
-`proj.knowledge-store` — Structured knowledge store for node-template
-
-**Goal**: Every cogni-template fork ships with a structured knowledge store that accumulates domain expertise and improves over time.
-
-**Phases**:
-
-- **Crawl**: `packages/knowledge-store/` with schema, ports, Drizzle adapter. `entity` + `relation` + `observation` tables with `source_record_id` provenance. `KnowledgeReadPort` + `KnowledgeWritePort`. One `knowledge_query` tool in `ai-tools`. No embeddings, no claims, no entity resolution subsystem.
-- **Walk**: Claims layer (`claim` table, append-only evidence). Entity resolution (`entity_alias`, candidate matching). pgvector semantic index + hybrid retrieval. AI-based extraction (LangGraph). `activity_run` table for non-ingestion lineage. Confidence scoring + staleness decay. `knowledge_evidence` tool.
-- **Run**: Reranker. Cross-node knowledge sharing. Eval framework for knowledge quality. Apache AGE if graph queries needed.
-
-### Specs
-
-| Spec | Status | Key Invariants |
-|---|---|---|
-| `docs/spec/knowledge-store.md` | New | CANONICAL_TABLES (entity/relation/observation, separate tables, not one generic row), PROVENANCE_REQUIRED (every row traces to source_record_id), TYPES_ARE_STRINGS (no DB enums), TENANT_SCOPED (RLS on canonical tables) |
-| `docs/spec/database-rls.md` | Update | Add knowledge tables, global tenant pattern |
-| `docs/spec/data-ingestion-pipelines.md` | Update | Clarify Layer 0 role, link to knowledge-store as downstream consumer |
-
-### Tasks (rough sequence)
-
-**Crawl:**
-
-1. **task: knowledge-store package scaffold** — Package structure, domain types, Drizzle schema for `entity`, `relation`, `observation`. Simple `source_record_id` FK for provenance. Zod schemas for type validation.
-2. **task: KnowledgeWritePort + adapter** — Write entities (dedup by exact match), write observations, write relations. Drizzle adapter. Contract tests.
-3. **task: KnowledgeReadPort + adapter** — Query entities by type/attributes, traverse relations, get observation timelines. Drizzle adapter.
-4. **task: knowledge_query tool** — Tool contract in `ai-tools`, wired to `KnowledgeReadPort`. First agent access to knowledge store.
-
-**Walk:**
-
-5. **task: claims layer** — `claim` table (append-only), `activity_run` table, update entities to track `confidence` + `source_count` derived from claims.
-6. **task: entity resolution** — `entity_alias` table, candidate matching, merge/split operations. Fuzzy matching.
-7. **task: pgvector + semantic index** — `embedding` table, HNSW index, embed via LiteLLM, `knowledge_search` tool.
-8. **task: hybrid retrieval** — FTS (tsvector) + vector + RRF fusion in read adapter.
-9. **task: AI extraction graph** — LangGraph graph that reads source records and produces claims via LLM.
-10. **task: confidence scoring + decay** — Batch Temporal activity that recomputes entity confidence from claims, applies staleness decay.
-11. **task: knowledge_evidence tool** — "Why do we believe X?" — trace from entity → claims → source records.
+> See [proj.knowledge-store](../../work/projects/proj.knowledge-store.md) for the project roadmap, task breakdown, and phasing derived from these findings.
