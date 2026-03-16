@@ -1,213 +1,302 @@
 ---
 id: research-data-management-specialized-agents
 type: research
-title: "Data Management & Context Engineering for Specialized AI Nodes"
+title: "Knowledge Store Architecture for Specialized AI Nodes"
 status: active
 trust: draft
-summary: Research spike on OSS data management primitives (pgvector, hybrid retrieval, RLS, context engineering) for the node-template architecture.
-read_when: Planning data/retrieval features, building specialized niche nodes, or extending the node-template
+summary: "Three-layer knowledge architecture (raw archive → claims/evidence → canonical knowledge) with lineage, entity resolution, and semantic index. Postgres-native, one new package, minimal ports."
+read_when: Planning knowledge store features, building specialized niche nodes, or extending the node-template
 owner: derekg1729
 created: 2026-03-16
 verified: 2026-03-16
-tags: [research, data, rag, pgvector, context-engineering, node-template]
+tags: [research, data, knowledge-store, context-engineering, node-template]
 ---
 
-# Research: Data Management & Context Engineering for Specialized AI Nodes
+# Research: Knowledge Store Architecture for Specialized AI Nodes
 
 > spike: spike.0137 | date: 2026-03-16
 
 ## Question
 
-What are the best practices for managing shared + RLS-protected personal data, growing specialized datasets, and configuring agents with proper context engineering and layered retrieval — and what's the simplest OSS stack to adopt into our LangGraph graph-building architecture as a core building block for the "node-template"?
+What are the core building blocks for a node-template knowledge store that enables specialized AI companies to accumulate domain expertise, serve it to agents with proper context engineering, and improve coherence over time (syntropy)?
 
 ## Context
 
 Cogni-template already has:
 
-- **Hexagonal architecture** with ports/adapters for all infra concerns
-- **LangGraph graph packages** (`packages/langgraph-graphs/`) with a catalog, factory pattern, and tool system
+- **`packages/ingestion-core/`** — `ActivityEvent` with deterministic IDs, provenance hashing (`payloadHash`), cursor-based incremental sync, poll/webhook adapter ports. This IS the raw archive layer.
+- **`docs/spec/data-ingestion-pipelines.md`** — Singer taps (ABI standard, not Meltano runtime) orchestrated by Temporal. Domain-agnostic `ingestion_receipts` archive.
 - **PostgreSQL + Drizzle** with a designed-but-unimplemented RLS spec (`docs/spec/database-rls.md`)
 - **Multi-tenant isolation** via `billing_account_id` FK chains and `SET LOCAL app.current_user_id`
-- **Tenant connections** with encrypted credential brokering (tools get `connectionId`, never raw tokens)
-- **Graph executor** with unified `GraphExecutorPort`, billing decorators, and event relay
-- **No vector/embedding/RAG infrastructure yet** — flagged as P1 in `ai-governance-data.md`
-
-The goal is to define the data primitives that every "niche node" (a fork of cogni-template specialized for a domain) needs to grow its knowledge base and serve specialized agents.
+- **LangGraph graph packages** with catalog, factory pattern, and tool system in `packages/ai-tools/`
+- **Capability package pattern** (`packages/<name>/src/{port/, domain/, adapters/}`) per `packages-architecture.md`
+- **No claims/evidence layer, no entity resolution, no semantic index yet**
 
 ## Findings
 
-### Option A: Postgres-native stack (pgvector + FTS + Apache AGE)
+### Why Not Just Entities?
 
-**What**: Keep everything in PostgreSQL. Add `pgvector` for embeddings, use built-in full-text search (tsvector) for keyword retrieval, and optionally add Apache AGE for graph queries. All behind RLS.
+The first iteration of this research proposed a flat model: ingest data → store as entities → embed for search. That's how you build a database, not a syntropic knowledge system.
 
-**Pros**:
+The critical insight from modern data platforms (and how top AI companies manage knowledge): **separate raw records from extracted claims from canonical knowledge**. This is the bronze/silver/gold pattern, and it's what enables:
 
-- **Single database** — one backup, one migration path, one connection pool, one set of RLS policies
-- **RLS covers embeddings too** — `SELECT` with `<=>` (cosine distance) respects row-level policies automatically
-- **pgvectorscale** benchmarks: 471 QPS at 99% recall on 50M vectors (HNSW index)
-- **Hybrid search is trivial**: `ts_rank()` + `<=>` in same query, fuse with Reciprocal Rank Fusion (RRF)
-- **Apache AGE** adds openCypher graph queries without a new database
-- **Drizzle supports pgvector** via `drizzle-orm/pg-core` vector column type
-- **Matches our hex architecture**: new `EmbeddingPort` + `RetrievalPort`, implemented by Drizzle adapters
+- **Replayability** — re-run extraction on old data with better models, without losing history
+- **Corroboration** — multiple claims from different sources strengthen confidence
+- **Contradiction detection** — conflicting claims from different sources get flagged
+- **Auditability** — every canonical fact traces to evidence traces to raw source data
 
-**Cons**:
+### Three-Layer Architecture
 
-- pgvector HNSW index rebuild on large inserts (mitigated by `pgvectorscale` StreamingDiskANN)
-- Apache AGE is less mature than Neo4j for complex graph traversals
-- No built-in reranking (need external model or Cohere API)
-- At 10M+ vectors with sub-10ms latency requirements, may need dedicated vector DB
+```
+Layer 0: Raw Archive (immutable)     — already exists: ingestion-core + ingestion_receipts
+Layer 1: Claims / Evidence (append)  — extracted assertions with provenance
+Layer 2: Canonical Knowledge (live)  — resolved entities, relations, observations, semantic index
+```
 
-**OSS tools**: `pgvector` (MIT), `pgvectorscale` (PostgreSQL License), `pg_trgm` (built-in), Apache AGE (Apache 2.0)
+### Layer 0: Raw Archive — ALREADY EXISTS
 
-**Fit with our system**: Direct extension of existing Postgres + Drizzle. New schema tables in `packages/db-schema/`, new ports in `src/ports/`, Drizzle adapters in `src/adapters/server/`. RLS policies from `database-rls.md` spec apply unchanged.
+`ingestion-core` provides this today:
 
-### Option B: Dedicated vector DB (Qdrant) + Postgres
+- `ActivityEvent` — deterministic IDs, provenance hash, source metadata
+- `PollAdapter` / `WebhookNormalizer` — source connector ports
+- `StreamCursor` — incremental sync state
+- `ingestion_receipts` table — domain-agnostic archive
 
-**What**: Postgres for relational data + RLS. Qdrant for vector similarity search with metadata filtering for tenant isolation.
+The ingestion spec adds Singer tap ABI + Temporal orchestration. Both Singer taps and TS adapters write to the same `ingestion_receipts` table. Downstream consumers (attribution, treasury, knowledge) select independently. **No changes needed to Layer 0.**
 
-**Pros**:
+### Layer 1: Claims / Evidence — NEW
 
-- Purpose-built vector operations (filtering + search in one pass)
-- 45K inserts/sec, sub-5ms p99 at scale
-- Built-in payload filtering acts as "RLS equivalent" (filter by `tenant_id`)
-- Better for 50M+ vector workloads
+An extractor reads raw records and produces typed assertions. For Crawl MVP, extractors are rule-based Temporal activities (e.g., parse GitHub API response → structured fields). AI-based extraction (LLM reads a README and extracts structured facts) comes later.
 
-**Cons**:
+**`claim`** — one extracted assertion with full provenance:
 
-- **Two databases** — two backup strategies, two connection pools, two points of failure
-- Tenant isolation is application-enforced (payload filter), not database-enforced (RLS)
-- Adds Docker service to `infra/compose/`
-- Data consistency between Postgres and Qdrant requires sync logic (eventual consistency risk)
-- Overkill below 10M vectors
+| Field | Purpose |
+|---|---|
+| `id` | Deterministic from content |
+| `source_record_id` | FK to `ingestion_receipts` — which raw record this came from |
+| `activity_run_id` | FK to `activity_run` — which extraction run produced this |
+| `claim_type` | `entity_attribute`, `relation`, `observation` |
+| `subject_hint` | Best-guess entity reference (pre-resolution) |
+| `predicate` | What's being asserted (e.g., `license`, `star_count`, `alternative_to`) |
+| `object` | The asserted value (JSONB) |
+| `confidence` | 0.0–1.0, set by extractor |
+| `extractor_name`, `extractor_version` | Which extractor produced this |
 
-**OSS tools**: Qdrant (Apache 2.0), `qdrant-js` client
+Append-only. Claims are never mutated, only superseded by newer claims from re-extraction.
 
-**Fit with our system**: New `VectorStorePort` with Qdrant adapter. Requires sync adapter to keep embeddings consistent with Postgres source data. Adds operational complexity our current infra doesn't need yet.
+### Layer 2: Canonical Knowledge — NEW
 
-### Option C: LlamaIndex as retrieval framework + Postgres
+The resolved, current-best understanding. Mutable, but every mutation traces to an `activity_run`.
 
-**What**: Use LlamaIndex's document processing and retrieval pipeline on top of pgvector, gaining its connector ecosystem and query engine abstractions.
+**`entity`** — one row per real-world thing:
 
-**Pros**:
+| Field | Purpose |
+|---|---|
+| `id` | Stable identifier |
+| `entity_type` | Niche-defined enum (each fork defines its domain types) |
+| `canonical_name` | Best-known name |
+| `attributes` | JSONB, niche-extensible (validated by Zod schemas per entity_type) |
+| `confidence` | Derived from supporting claims |
+| `source_count` | How many independent sources confirm this entity |
+| `first_seen_at`, `last_corroborated_at` | Temporal bounds |
+| `resolved_by_run_id` | Which resolution run created/updated this |
+| `tenant_id` | `'global'` for shared domain knowledge, `billing_account_id` for private |
 
-- 160+ data source connectors (GitHub, Notion, Confluence, etc.)
-- Built-in chunking, embedding, and query pipelines
-- 40% faster retrieval than raw LangChain retrieval in benchmarks
-- Good for document-heavy domains
+**`entity_alias`** — entity resolution subsystem:
 
-**Cons**:
+| Field | Purpose |
+|---|---|
+| `entity_id` | FK to canonical entity |
+| `alias_type` | `source_id`, `name_variant`, `url` |
+| `alias_value` | The alternative identifier |
+| `source` | Which source uses this identifier |
+| `match_status` | `confirmed`, `candidate`, `rejected` |
 
-- **Python-only** — our stack is TypeScript end-to-end
-- Would require a sidecar service or Python subprocess
-- Framework coupling for retrieval logic (hard to swap later)
-- Overlaps with LangGraph's tool-based retrieval pattern
+This is how "lodash" on npm, "lodash/lodash" on GitHub, and "Lo-Dash" in a blog post link to the same entity. Entity resolution is its own subsystem — not a dedup step in a pipeline.
 
-**Fit with our system**: Poor. Would break our TypeScript-only constraint and add a Python dependency. Better to implement the same patterns natively.
+**`relation`** — typed directed edge between entities:
+
+| Field | Purpose |
+|---|---|
+| `source_entity_id`, `target_entity_id` | The two entities |
+| `relation_type` | Niche-defined enum (`alternative_to`, `depends_on`, `authored_by`) |
+| `attributes` | JSONB for edge metadata |
+| `confidence` | Independent from entity confidence |
+| `supporting_claim_ids[]` | Which claims assert this relationship |
+| `tenant_id` | RLS scope |
+
+**`observation`** — temporal signal (time-series fact about an entity):
+
+| Field | Purpose |
+|---|---|
+| `entity_id` | FK to entity |
+| `signal_type` | Niche-defined (`star_count`, `commit_frequency`, `citation_count`) |
+| `value` | JSONB (numeric or structured) |
+| `observed_at` | When measured |
+| `source_claim_id` | Provenance |
+| `tenant_id` | RLS scope |
+
+Observations accumulate. An entity's "current" star count is the latest observation; its trajectory is computed from the series.
+
+**`embedding`** — semantic index (pgvector):
+
+| Field | Purpose |
+|---|---|
+| `entity_id` | FK to entity |
+| `embedding` | `vector(1536)`, HNSW-indexed |
+| `content_text` | The text that was embedded (entity summary) |
+| `content_hash` | sha256 for idempotent re-embedding |
+
+One embedding per entity. This is a **search index into the structured store**, not the knowledge itself. Secondary access pattern for fuzzy intent → entity mapping.
+
+### Cross-cutting: Activity Run
+
+**`activity_run`** — lineage for everything above Layer 0:
+
+| Field | Purpose |
+|---|---|
+| `id` | Run identifier |
+| `activity_type` | `extraction`, `resolution`, `enrichment`, `scoring`, `pruning` |
+| `runner_name`, `runner_version` | What code ran |
+| `model_version` | If AI was involved, which model |
+| `started_at`, `completed_at`, `status` | Lifecycle |
+| `parent_run_id` | For nested workflows |
+
+Every claim, entity mutation, resolution decision, and confidence re-score traces to an activity_run.
 
 ---
 
-## Core Primitives (Framework-Independent)
+## Infrastructure Decision: Postgres-Native
 
-Regardless of which option, every specialized node needs these five primitives:
+**Postgres + pgvector** is the clear winner. Not re-evaluated — the reasoning from the first iteration holds:
 
-### 1. Embedding Pipeline
+1. Already on Postgres with Drizzle + RLS. pgvector = `CREATE EXTENSION`.
+2. Below 10M vectors for foreseeable future. pgvector handles this.
+3. Single database = single RLS policy set. `tenant_id IN (current, 'global')`.
+4. TypeScript end-to-end. No Python sidecar.
+5. Hybrid search (FTS + vector) in one query. No cross-database sync.
+6. Graduate to Qdrant if/when a node demonstrably needs >10M vectors with sub-10ms latency.
 
-**Purpose**: Ingest domain documents → chunk → embed → store with metadata.
+---
 
-**Recommendation**:
+## Execution Model: What Runs Where
 
-- **Chunking**: Recursive character splitting at 512 tokens, 10-20% overlap. Prepend contextual headers (document title + section path + one-line summary) to each chunk before embedding. Benchmarks show this simple strategy (69% accuracy) beats "semantic chunking" (54%).
-- **Embedding model**: OpenAI `text-embedding-3-small` (1536d) via LiteLLM for cost efficiency, or `text-embedding-3-large` (3072d) for precision. Model-agnostic via LiteLLM proxy means we can swap to open-source (e.g., `nomic-embed-text`) without code changes.
-- **Storage**: `embeddings` table in Postgres with pgvector `vector(1536)` column, HNSW index, plus `tenant_id`, `source_type`, `source_id`, `chunk_index`, `content`, `metadata JSONB`.
+| Activity | Runtime | Why |
+|---|---|---|
+| **Ingestion** (source → raw records) | Temporal activities | Mechanical ETL. Singer taps are subprocesses. Already designed. |
+| **Extraction** (raw records → claims) | Temporal activities (Crawl MVP) | Rule-based parsing of structured API responses. No AI needed for Crawl. |
+| **Extraction** (raw records → claims) | LangGraph graph (Walk+) | AI-based: LLM reads a README/doc and extracts structured facts. |
+| **Entity resolution** (claims → entities) | Temporal activities (Crawl MVP) | Deterministic matching rules (exact name, URL normalization). |
+| **Entity resolution** | LangGraph graph (Walk+) | Fuzzy matching, judgment calls on merge/split candidates. |
+| **Enrichment** (fill gaps in entities) | LangGraph graph | AI research: "find the license for this project" requires reasoning. |
+| **Agent queries** (user asks a question) | LangGraph graph | Always AI — this is the product interface. |
+| **Scoring / pruning** | Temporal activities | Batch recomputation of confidence, staleness decay. Mechanical. |
 
-### 2. Hybrid Retrieval
+**Key principle**: LangGraph is for workflows where AI judgment is involved. Mechanical ETL, rule-based extraction, and batch scoring are Temporal activities. Don't use an LLM to parse JSON.
 
-**Purpose**: Combine keyword search (high recall) + vector similarity (semantic understanding) for robust retrieval.
+---
 
-**Recommendation**:
+## Context Engineering (Unchanged)
 
-- **Stage 1 — Broad recall**: Run BM25 (Postgres `ts_rank` on `tsvector` column) and pgvector cosine similarity in parallel. Top-K from each (K=20).
-- **Stage 2 — Fusion**: Reciprocal Rank Fusion (RRF) to merge ranked lists. Simple formula: `score = Σ 1/(k + rank_i)` where k=60.
-- **Stage 3 — Rerank** (optional P1): Cross-encoder reranker (Cohere Rerank API or open-source ColBERT via LiteLLM). Up to 48% retrieval quality improvement. Not needed for MVP.
-- **Stage 4 — Context assembly**: Token-budget-aware selection. Fill context window front-to-back by relevance score, stop at budget.
+How agents use the knowledge store. This section carries forward from the first iteration.
 
-### 3. Multi-Tenant Data Model
+| Strategy | When | How |
+|---|---|---|
+| **Write** | Agent produces intermediate results | Write to state fields or tool-accessible storage. Don't keep in context. |
+| **Select** | Agent needs domain knowledge | Knowledge tools query structured store + semantic index. Returns structured records. |
+| **Compress** | Long-running multi-turn agents | Rolling summary of older turns. Keep last N messages verbatim + summary of rest. |
+| **Isolate** | Multi-agent workflows | Each sub-agent gets only its required context via LangGraph state schema. |
 
-**Purpose**: Shared domain knowledge + per-tenant/per-user private data, enforced at the database layer.
+**Key insight from Manus AI**: KV-cache hit rate is the #1 performance metric. Mask unavailable tools via logits (don't remove from system prompt). Task recitation (rewriting current plan into recent context) combats "lost in the middle."
 
-**Recommendation**:
+**Key insight from Anthropic**: Context engineering > prompt engineering. The right data in context matters more than clever instructions.
 
-- **Pattern**: Pool model with metadata filter. Single table, `tenant_id` column on every row.
-- **Shared data**: `tenant_id = 'global'` (or NULL). Domain knowledge curated by the node operator.
-- **Per-tenant data**: `tenant_id = billing_account_id`. User-uploaded or user-generated data.
-- **Query pattern**: `WHERE tenant_id IN ($current_tenant, 'global')` — automatic via RLS policy.
-- **Implementation**: Extends our existing `database-rls.md` spec. Same `SET LOCAL app.current_user_id` pattern, same dual-role system (`app_user` vs `app_service`).
+---
 
-### 4. Context Engineering Discipline
+## Multi-Tenant Data Model
 
-**Purpose**: Build the right context window for each agent call — not too much, not too little.
+- **Shared domain knowledge**: `tenant_id = 'global'`. Curated by the node operator. Visible to all tenants.
+- **Per-tenant knowledge**: `tenant_id = billing_account_id`. User-uploaded or user-generated data.
+- **RLS policy**: `WHERE tenant_id IN ($current_tenant, 'global')` — automatic via Postgres RLS.
+- **Raw archive** (`ingestion_receipts`, `claim`): No tenant_id. Domain-agnostic. Available to all downstream pipelines.
+- **Canonical knowledge** (`entity`, `relation`, `observation`, `embedding`): Tenant-scoped.
 
-**Recommendation** (from Anthropic + Manus AI production lessons):
+Extends existing `database-rls.md` spec unchanged.
 
-| Strategy     | When                                | How                                                                                                           |
-| ------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Write**    | Agent produces intermediate results | Write to state fields or tool-accessible storage (files, DB). Don't keep in context.                          |
-| **Select**   | Agent needs domain knowledge        | Retrieval tool node queries embeddings + FTS. Returns top-K chunks.                                           |
-| **Compress** | Long-running multi-turn agents      | Rolling summary of older turns. Keep last N messages verbatim + summary of rest.                              |
-| **Isolate**  | Multi-agent workflows               | Each sub-agent gets only its required context via LangGraph state schema. Parent orchestrator sees summaries. |
+---
 
-**Key insight from Manus AI**: KV-cache hit rate is the #1 performance metric. Architectural decisions should preserve cache — e.g., mask unavailable tools via logits rather than removing them from system prompt (which invalidates cache). Task recitation (rewriting current plan into recent context) combats "lost in the middle" attention decay.
+## How Syntropy Emerges
 
-### 5. Data Growth Pipeline
+| Mechanism | How |
+|---|---|
+| **Corroboration** | Multiple claims from different sources assert the same fact → entity `confidence` increases, `source_count` increments |
+| **Re-extraction** | Run a better extractor on old raw records → new claims supersede old ones → entities re-scored. Raw archive untouched. |
+| **Entity resolution** | Discover that two entities are the same → merge via alias system → relations and observations consolidate. Reversible (split). |
+| **Trajectory** | Observations accumulate → agents compute growth/decline from the time series, not from a snapshot |
+| **Contradiction** | Conflicting claims flagged (same subject + predicate, different object, both high confidence) → resolution activity investigates |
+| **Decay** | Entities not corroborated within a type-specific TTL lose confidence. Stale knowledge naturally deprioritizes. |
+| **Replay** | Change extraction logic → re-run on all raw records → regenerate claims → re-resolve entities. History preserved. |
 
-**Purpose**: Continuously grow the node's specialized knowledge base.
+---
 
-**Recommendation**:
+## Package Design
 
-- **Ingestion graph**: A LangGraph graph (not a cron job) that discovers, fetches, chunks, embeds, and stores new domain content. Runs on schedule or event trigger.
-- **Source connectors**: Start with 1-2 sources per niche (e.g., GitHub API + npm registry for an OSS node). Implement as tools the ingestion graph calls.
-- **Deduplication**: Content hash (`sha256(content)`) stored alongside chunks. Skip re-embedding identical content.
-- **Freshness**: `last_synced_at` per source. Incremental updates (fetch since last sync), not full rebuilds.
-- **Quality gate**: After embedding, run a validation step (does the chunk retrieve correctly for a known query?). Log quality metrics to telemetry.
+**One new package**: `packages/knowledge-store/` following the capability package shape.
+
+```
+packages/knowledge-store/
+├── src/
+│   ├── port/              # KnowledgeReadPort, KnowledgeWritePort
+│   ├── domain/            # Entity, Claim, Relation, Observation types + Zod schemas
+│   │                      # Confidence computation, staleness rules, merge logic
+│   ├── adapters/          # Drizzle/pgvector adapter implementing ports
+│   └── index.ts           # Public exports
+├── tests/
+├── package.json
+├── tsconfig.json
+└── tsup.config.ts
+```
+
+**Ports (2–3 max, split only when real adapters diverge)**:
+
+| Port | Responsibility |
+|---|---|
+| `KnowledgeReadPort` | Query entities, traverse relations, get timelines, semantic search, get evidence trail |
+| `KnowledgeWritePort` | Append claims, resolve entities (merge/split/alias), write observations, upsert embeddings |
+| `IngestionArchivePort` | _Maybe_ — source runs, raw records, checkpoints. Might stay in `ingestion-core` instead. |
+
+**Schema**: Lives inside `packages/knowledge-store/src/domain/` as Drizzle table definitions. Separate tables per concept (`claim`, `entity`, `entity_alias`, `relation`, `observation`, `embedding`, `activity_run`) — NOT one generic table. Different lifecycles, different invariants, different indexes.
+
+**Knowledge tools**: Added to existing `packages/ai-tools/` catalog. Not a new package.
+
+| Tool | What it does |
+|---|---|
+| `knowledge_query` | Filter entities by type, attributes, category → structured records |
+| `knowledge_traverse` | Follow relations from an entity N hops → entity subgraph |
+| `knowledge_timeline` | Get observation series for an entity + signal type → time series |
+| `knowledge_search` | Semantic search via embedding similarity → ranked entities |
+| `knowledge_evidence` | "Why do we believe X?" → supporting claims + source records |
 
 ---
 
 ## Recommendation
 
-**Option A (Postgres-native)** is the clear winner for our current scale and architecture.
-
-**Rationale**:
-
-1. **We're already on Postgres with Drizzle + RLS** — pgvector is a `CREATE EXTENSION`, not a new database
-2. **Below 10M vectors** for any niche node's foreseeable future — pgvector handles this comfortably
-3. **Single database = single RLS policy set** — the Pool model with `tenant_id IN (current, 'global')` extends our existing spec trivially
-4. **TypeScript end-to-end** — no Python sidecar, no framework coupling
-5. **Hybrid search (FTS + vector) in one query** — no cross-database joins or sync logic
-6. **Apache AGE available if we need graph queries** — same Postgres instance, additive not disruptive
+Ship the three-layer architecture (raw → claims → canonical) with one new `packages/knowledge-store/` package. Layer 0 already exists. Postgres-native, pgvector for semantic index, RLS for multi-tenancy. Mechanical workflows in Temporal, AI workflows in LangGraph.
 
 **Trade-offs accepted**:
 
-- We accept pgvector's HNSW rebuild cost on bulk inserts (mitigate with batched background jobs)
-- We skip dedicated reranking in MVP (add Cohere/ColBERT when retrieval quality plateaus)
-- We skip Apache AGE initially (add when a niche node needs relationship traversal)
-- We'll graduate to Qdrant if/when a node demonstrably needs >10M vectors with sub-10ms latency
-
-**The "node-template" building block**:
-Every niche node fork gets these primitives out of the box:
-
-1. `EmbeddingPort` + `pgvector` adapter — embed and store domain content
-2. `RetrievalPort` + hybrid search adapter — BM25 + vector + RRF fusion
-3. `IngestionGraphFactory` — template graph for domain-specific data pipelines
-4. RLS-enforced `embeddings` table with `tenant_id` — shared + personal data from day one
-5. `RetrieverToolContract` — LangGraph tool node that any graph can use for retrieval
+- JSONB `attributes` on entities instead of per-niche columns. Validated by Zod schemas, not DB constraints. Simpler to extend, slightly harder to query. Acceptable for Crawl. Add typed columns when query patterns stabilize.
+- No reranker in Crawl. Structured queries are primary; semantic search is secondary. Add when retrieval quality plateaus.
+- No Apache AGE. Recursive CTEs handle relationship traversal. Add when a niche demonstrates complex graph query needs.
+- Entity resolution starts simple (exact match + URL normalization). Fuzzy/AI matching in Walk.
 
 ## Open Questions
 
-- **Embedding model cost**: At what ingestion volume does embedding cost become a concern? Need to model token costs for typical niche domains (e.g., 10K docs, 100 chunks each = 1M chunks to embed).
-- **Chunking for code**: The 512-token recursive strategy works for prose. Code may need AST-aware chunking (e.g., function-level boundaries). Needs experimentation per niche.
-- **Reranker necessity**: Can we skip reranking entirely if our domain is narrow enough that hybrid search precision is sufficient? Need eval framework to measure.
-- **Apache AGE maturity**: Is AGE production-ready for our use cases, or should we wait and use simple Postgres recursive CTEs for relationship queries?
-- **Cache-aware context engineering**: Manus AI's KV-cache optimization is model-provider-specific. How does this interact with our LiteLLM proxy and OpenRouter routing?
+- **Attribute schema validation**: Zod schemas per `entity_type` — where do niche forks register their schemas? Package config? Convention-based discovery?
+- **Embedding model cost**: At what ingestion volume does embedding cost become a concern? Model token costs for typical niches.
+- **Observation granularity**: How often to sample time-series signals? Per-source cadence config vs global schedule?
+- **Claim supersession**: When a re-extraction produces a new claim, how exactly does the old claim get marked superseded? Explicit `superseded_by` FK, or implicit via `activity_run_id` ordering?
+- **Cross-node knowledge sharing**: Can nodes share canonical entities with each other? What's the trust model? (Probably a Run+ concern.)
 
 ---
 
@@ -215,33 +304,32 @@ Every niche node fork gets these primitives out of the box:
 
 ### Project
 
-`proj.data-retrieval-primitives` — Add data management building blocks to node-template
+`proj.knowledge-store` — Three-layer knowledge architecture for node-template
 
-**Goal**: Every cogni-template fork ships with embedding, retrieval, and ingestion primitives that work behind RLS out of the box.
+**Goal**: Every cogni-template fork ships with a structured knowledge store that accumulates domain expertise and improves over time.
 
 **Phases**:
 
-- **Crawl**: pgvector extension + `embeddings` schema + `EmbeddingPort` + Drizzle adapter. Basic vector similarity search. No hybrid, no ingestion pipeline.
-- **Walk**: Hybrid retrieval (FTS + vector + RRF). `RetrievalPort` with tool contract. Ingestion graph template. Context compression utilities for long-running agents.
-- **Run**: Reranker integration. Apache AGE for graph queries. Eval framework for retrieval quality. Multi-source ingestion with quality gates.
+- **Crawl**: `packages/knowledge-store/` with schema, ports, Drizzle adapter. Entity + relation + observation tables. Basic entity resolution (exact match). One knowledge query tool in `ai-tools`. No embeddings, no AI extraction.
+- **Walk**: pgvector semantic index. Hybrid retrieval (FTS + vector). AI-based extraction (LangGraph graph). Fuzzy entity resolution. Evidence trail tool. Confidence scoring + staleness decay.
+- **Run**: Reranker. Cross-node knowledge sharing. Eval framework for knowledge quality. Apache AGE if graph queries needed.
 
 ### Specs
 
-| Spec                           | Status | Key Invariants                                                                                                                                                                        |
-| ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docs/spec/embeddings.md`      | New    | EMBEDDING_VIA_PORT (never direct pgvector calls from features), TENANT_SCOPED (all embeddings have tenant_id), IDEMPOTENT_EMBED (content hash dedup)                                  |
-| `docs/spec/retrieval.md`       | New    | HYBRID_BY_DEFAULT (FTS + vector), RRF_FUSION (deterministic merge), TOKEN_BUDGET_AWARE (never exceed caller's budget), RETRIEVAL_IS_A_TOOL (LangGraph tool contract, not inline code) |
-| `docs/spec/database-rls.md`    | Update | Add embeddings table policies, global tenant pattern                                                                                                                                  |
-| `docs/spec/graph-execution.md` | Update | Add retriever tool node pattern, context engineering guidelines                                                                                                                       |
+| Spec | Status | Key Invariants |
+|---|---|---|
+| `docs/spec/knowledge-store.md` | New | THREE_LAYER_ARCHITECTURE, CLAIMS_APPEND_ONLY, ENTITY_RESOLUTION_SUBSYSTEM, LINEAGE_REQUIRED (every canonical fact traces to activity_run → claim → source_record) |
+| `docs/spec/database-rls.md` | Update | Add knowledge tables, global tenant pattern |
+| `docs/spec/data-ingestion-pipelines.md` | Update | Clarify Layer 0 role, link to knowledge-store as downstream consumer |
 
 ### Tasks (rough sequence)
 
-1. **task: pgvector setup** — Enable extension, add `embeddings` table to `db-schema`, migration. (Crawl)
-2. **task: EmbeddingPort + adapter** — Port interface, Drizzle+pgvector adapter, contract tests. Embedding via LiteLLM proxy. (Crawl)
-3. **task: basic vector retrieval** — Simple cosine similarity search behind port. Tool contract for LangGraph graphs. (Crawl)
-4. **task: hybrid retrieval** — Add tsvector column, BM25 scoring, RRF fusion in retrieval adapter. (Walk)
-5. **task: RetrievalPort + tool contract** — Unified retrieval port, LangGraph `RetrieverTool` in `ai-tools` catalog. (Walk)
-6. **task: ingestion graph template** — Factory graph in `langgraph-graphs` for domain content ingestion. Source connector interface. (Walk)
-7. **task: context compression** — Rolling summary utility for long-running agents. Integration with graph state. (Walk)
-8. **task: retrieval eval framework** — Known-answer test harness for measuring retrieval quality. (Run)
-9. **task: reranker integration** — Cohere/ColBERT reranker as optional stage in retrieval pipeline. (Run)
+1. **task: knowledge-store package scaffold** — Package structure, types, Drizzle schema for entity/relation/observation/claim/entity_alias/activity_run. (Crawl)
+2. **task: KnowledgeWritePort + adapter** — Append claims, resolve entities (exact match), write observations. Drizzle adapter. Contract tests. (Crawl)
+3. **task: KnowledgeReadPort + adapter** — Query entities, traverse relations, get timelines. Drizzle adapter. (Crawl)
+4. **task: knowledge_query tool** — Tool contract in `ai-tools`, wired to KnowledgeReadPort. First agent access to knowledge store. (Crawl)
+5. **task: pgvector + semantic index** — Embedding table, HNSW index, embed via LiteLLM, `knowledge_search` tool. (Walk)
+6. **task: hybrid retrieval** — FTS (tsvector) + vector + RRF fusion in read adapter. (Walk)
+7. **task: AI extraction graph** — LangGraph graph that reads source records and produces claims via LLM. (Walk)
+8. **task: confidence scoring + decay** — Batch Temporal activity that recomputes entity confidence from claims, applies staleness decay. (Walk)
+9. **task: knowledge_evidence tool** — "Why do we believe X?" — trace from entity → claims → source records. (Walk)
