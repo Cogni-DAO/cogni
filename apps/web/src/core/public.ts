@@ -113,3 +113,23 @@ export {
   toClientVisibleStatus,
   usdCentsToRawUsdc,
 } from "./payments/public";
+// Reservation domain
+export type {
+  BookingAttempt,
+  BookingAttemptStatus,
+  ReservationPlatform,
+  WatchEvent,
+  WatchEventSource,
+  WatchEventType,
+  WatchRequest,
+  WatchRequestStatus,
+} from "./reservations/public";
+export {
+  assertValidDateRange,
+  assertValidPartySize,
+  InvalidDateRangeError,
+  InvalidPartySizeError,
+  InvalidStatusTransitionError,
+  isValidStatusTransition,
+  isWatchable,
+} from "./reservations/public";

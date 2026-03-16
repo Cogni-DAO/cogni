@@ -39,6 +39,7 @@ import {
   DrizzleExecutionGrantWorkerAdapter,
   DrizzleExecutionRequestAdapter,
   DrizzleGovernanceStatusAdapter,
+  DrizzleReservationStoreAdapter,
   DrizzleScheduleRunAdapter,
   DrizzleScheduleUserAdapter,
   DrizzleThreadPersistenceAdapter,
@@ -50,6 +51,7 @@ import {
   LiteLlmAdapter,
   type MimirAdapterConfig,
   MimirMetricsAdapter,
+  ResyProviderAdapter,
   SystemClock,
   TemporalScheduleControlAdapter,
   UserDrizzleAccountService,
@@ -91,6 +93,8 @@ import type {
   PaymentAttemptServiceRepository,
   PaymentAttemptUserRepository,
   ProviderFundingPort,
+  ReservationProviderPort,
+  ReservationStorePort,
   ServiceAccountService,
   ThreadPersistencePort,
   TreasuryReadPort,
@@ -177,6 +181,10 @@ export interface Container {
   treasurySettlement: TreasurySettlementPort | undefined;
   /** Provider funding — undefined when OPENROUTER_API_KEY not set */
   providerFunding: ProviderFundingPort | undefined;
+  /** Reservation store — watch requests, events, booking attempts */
+  reservationStore: ReservationStorePort;
+  /** Reservation providers — platform-specific adapters (resy, opentable, etc.) */
+  reservationProviders: Map<string, ReservationProviderPort>;
 }
 
 // Feature-specific dependency types
@@ -569,6 +577,10 @@ function createContainer(): Container {
       ? new SplitTreasurySettlementAdapter(operatorWallet, USDC_TOKEN_ADDRESS)
       : undefined,
     providerFunding,
+    reservationStore: new DrizzleReservationStoreAdapter(db),
+    reservationProviders: new Map<string, ReservationProviderPort>([
+      ["resy", new ResyProviderAdapter()],
+    ]),
   };
 }
 
