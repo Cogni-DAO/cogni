@@ -4,72 +4,69 @@ type: handoff
 work_item_id: proj.transparent-credit-payouts
 status: active
 created: 2026-02-21
-updated: 2026-02-21
-branch: feat/ledger-v0
-last_commit: "cd9fdcbb"
+updated: 2026-03-01
+branch: feat/claimant-share-ownership
+last_commit: "07441340"
 ---
 
-# Handoff: Weekly Activity Pipeline for Credit Payouts
+# Handoff: Attribution Pipeline Plugin Architecture
 
 ## Context
 
 - CogniDAO needs transparent credit payouts replacing SourceCred's opaque algorithmic scoring
-- The system is an **activity-to-payout pipeline**: source adapters collect contribution activity (GitHub PRs/reviews, Discord messages) every week, propose credit allocations via weight policy, and an admin finalizes the distribution
-- **P0 was revised on 2026-02-21** from per-receipt wallet signing to automated activity ingestion — the receipt-signing model is deferred to P1
-- Core payout math (BIGINT, largest-remainder rounding) is already implemented and reusable
-- Schema foundation (task.0093) is done; 5 tasks remain for port/adapters/workflows/routes
+- The system is an **activity-to-statement pipeline**: source adapters collect contribution activity, enrichers produce typed evaluations, allocators distribute credits, an admin finalizes
+- The core pipeline (ingest → select → enrich → evaluate → allocate → finalize) is **working on staging** with two enrichers (echo, claimant-shares) and one allocator (weight-sum-v0)
+- A new **plugin architecture spec** was just written to support rapid iteration on new enrichers/allocators and future customer extensibility (customers bring their own pipeline config via `.cogni/attribution/`)
+- A separate branch has in-progress work on a **work-item-budget-v0** allocation algorithm and LLM scoring research
 
 ## Current State
 
-- **Spec revised**: [epoch-ledger.md](../../docs/spec/epoch-ledger.md) — 18 invariants, activity-ingestion model, 2 workflows, 9 routes
-- **Project revised**: [proj.transparent-credit-payouts.md](../projects/proj.transparent-credit-payouts.md) — P0 = activity pipeline, P1 = wallet signing + UI
-- **task.0093 (Done)**: Foundation schema (epochs, pool_components, payout_statements) + `computePayouts()` in `packages/ledger-core/` + 31 unit tests. Needs PR to staging.
-- **task.0089 (Not Started)**: Identity bindings (`user_bindings` table) — **dependency** for activity attribution
-- **task.0094 (Not Started)**: `ActivityLedgerStore` port + Drizzle adapter + schema migration for new tables (`activity_events`, `epoch_allocations`, `source_cursors`) + epochs modifications
-- **task.0097 (Not Started)**: GitHub + Discord source adapters using `@octokit/graphql` and `discord.js`
-- **task.0095 (Not Started)**: 2 Temporal workflows (CollectEpochWorkflow + FinalizeEpochWorkflow) + weekly cron
-- **task.0096 (Not Started)**: Zod contracts + 9 API routes + stack tests
-- **Old receipt-signing tables** (`work_receipts`, `receipt_events`, `ledger_issuers`) exist in DB but are superseded — not deleted (append-only principle), reactivated in P1
+- **Plugin pipeline spec (just committed)**: [`docs/spec/plugin-attribution-pipeline.md`](../../docs/spec/plugin-attribution-pipeline.md) — draft, 12 invariants, profile-based dispatch, `EnricherAdapter` port interface, `AllocatorDescriptor`, user config via `.cogni/attribution/`. Design-reviewed and iterated in this session.
+- **`feat/claimant-share-ownership` branch (current)**: Claimant-shares rename pass is done (`claims.ts` → `claimant-shares.ts`, `subjectType` enum → open `subjectKind: string`, store method renamed to `getSelectedReceiptsForAttribution()`). Work-item-linker moved from `packages/attribution-ledger/src/enrichers/` to `services/scheduler-worker/src/enrichers/` (boundary fix). New claimant ownership API routes + facade + tests. **Not yet merged to staging.**
+- **Worktree at `.claude/worktrees/attribution-scoring`** (branch `claude/attribution-scoring-design-w1bzy`): Contains task.0114 work-item-budget-v0 allocation algorithm implementation + research doc on attribution scoring design. Rebased onto staging. **Has a known bug: priority multipliers are inverted** (`P0=0, P3=4000` — should be opposite). This work is pre-plugin-architecture and needs refactoring to fit the new plugin model.
+- **Attribution ledger spec**: [`docs/spec/attribution-ledger.md`](../../docs/spec/attribution-ledger.md) — active, ~30 invariants, covers the full epoch lifecycle
 
 ## Decisions Made
 
-- **Activity ingestion over receipt signing** — automated collection replaces manual per-PR wallet-signed receipts ([spec revision commit cd9fdcbb](../../docs/spec/epoch-ledger.md))
-- **Integer milli-unit weights** — `8000` not `8.0`, enforces ALL_MATH_BIGINT ([spec: Weight Policy](../../docs/spec/epoch-ledger.md#weight-policy))
-- **Cursor state from day 1** — `source_cursors` table for incremental sync, avoids full-window rescans ([spec: CURSOR_STATE_PERSISTED](../../docs/spec/epoch-ledger.md#core-invariants))
-- **3-field identity split** — `source` + `platform_user_id` (numeric) + `platform_login` (display name), not a single overloaded field
-- **Epoch window uniqueness** — `UNIQUE(period_start, period_end)` prevents re-collect conflicts
-- **Adapters out of ledger-core** — pure domain in `packages/ledger-core/`, adapters in `services/scheduler-worker/`
-- **Verification = recompute from stored data** — not re-fetch from GitHub/Discord (may be private)
-- **All writes via Temporal** — Next.js returns 202, scheduler-worker executes
+- **Plugin package owns everything** — `packages/plugin-attribution-pipeline/` owns all contracts (port interfaces), built-in implementations (adapters), profiles, and dispatch logic. The executor (scheduler-worker) is generic — zero plugin-specific code. See `PLUGIN_PACKAGE_OWNS_ALL` and `EXECUTOR_IS_GENERIC` invariants.
+- **Profiles resolve live, lock at review** — `profile_id` is stored on epoch at creation for provenance, but re-resolved at each pipeline stage. Enricher set and allocator are live during `open`, locked at `closeIngestion`. Consistent treatment — no special pinning rules. See `PROFILE_RESOLVED_NOT_HARDCODED`.
+- **User-provided config** — Profiles declare a `configSchema` (Zod). Executor loads `.cogni/attribution/<profileId>.yaml`, validates, passes to plugins via `profileConfig` on `EnricherContext` and `AllocationContext`. See `CONFIG_VALIDATED_AT_CREATION`.
+- **`epoch_kind` is plain TEXT** — no DB CHECK constraint. Application-validated so new kinds don't require migrations.
+- **Async allocator signature** — `compute()` returns `Promise<ProposedAllocation[]>` to support future LLM-scored allocation.
+- **`EnricherAdapter` is a port in the package** — not in scheduler-worker. This is the stable interface customers implement against.
 
 ## Next Actions
 
-- [ ] Create PR for task.0093 to `staging` (schema + domain logic already done, needs merge)
-- [ ] Implement task.0089 — `user_bindings` + `identity_events` tables (blocks adapter identity resolution)
-- [ ] Implement task.0094 — `ActivityLedgerStore` port + adapter + schema migration (new tables + epochs mods)
-- [ ] Implement task.0097 — GitHub + Discord source adapters (blocked by task.0089 + task.0094)
-- [ ] Implement task.0095 — 2 Temporal workflows + weekly Schedule (blocked by task.0094 + task.0097)
-- [ ] Implement task.0096 — Zod contracts + API routes + stack tests (blocked by task.0095)
+- [ ] Create `packages/plugin-attribution-pipeline/` package (scaffold from spec's package structure)
+- [ ] Implement `EnricherAdapter` port interface, `AllocatorDescriptor`, `PipelineProfile`, `resolveProfile()`, `dispatchAllocator()`
+- [ ] Extract echo enricher into plugin: descriptor + adapter from current `enrichment.ts`
+- [ ] Extract claimant-shares enricher into plugin: descriptor + adapter
+- [ ] Create `cogni-v0.0` profile definition
+- [ ] Refactor `scheduler-worker/src/activities/enrichment.ts` to generic dispatch loop
+- [ ] Refactor `scheduler-worker/src/activities/ledger.ts` to call `dispatchAllocator()`
+- [ ] Add `profile_id` and `epoch_kind` columns to epochs table (migration)
+- [ ] Merge `feat/claimant-share-ownership` to staging (run `pnpm check` first)
+- [ ] Fix priority multiplier bug in worktree branch, then refactor task.0114 as a plugin
 
 ## Risks / Gotchas
 
-- **task.0089 is a cross-project dependency** — identity bindings live in `proj.decentralized-identity`, not this project, but adapters can't resolve `platform_user_id` → `user_id` without it
-- **Old receipt-signing schema coexists** — `work_receipts`, `receipt_events`, `ledger_issuers` tables remain in migrations. New migration must add tables alongside, not drop existing ones
-- **`packages/ledger-core` must be built** before tests — `pnpm packages:build` after source changes
-- **Discord rate limits** — paginated (100 msgs/call), cursor-based sync essential; `discord.js` bot token already configured via OpenClaw
-- **`signing.ts` still in ledger-core** — exported but not used in P0 workflows. Don't delete; P1 reactivates it
+- **Two active branches**: `feat/claimant-share-ownership` (main workspace) has the claimant-shares rename. `.claude/worktrees/attribution-scoring` has task.0114 budget algorithm. The budget work predates the plugin spec and needs refactoring to fit the new model.
+- **work-item-linker boundary violation**: Currently in `services/scheduler-worker/src/enrichers/` — needs to move into the plugin package as `plugins/work-item-links/`.
+- **`packages/attribution-ledger` must stay pure**: The boundary violation that caused this whole redesign was plugin-specific code leaking into `attribution-ledger`. The `PLUGIN_NO_LEDGER_CORE_LEAK` invariant prevents this — dependency direction is `plugin-pipeline → attribution-ledger`, never reverse.
+- **Customer plugin loading is deferred**: The spec supports user config files, but customer-authored _code_ plugins (bring-your-own enricher implementation) require a trust/sandbox model that isn't designed yet.
+- **`pnpm packages:build` required**: After modifying any package source, build before running tests.
 
 ## Pointers
 
-| File / Resource                                    | Why it matters                                                          |
-| -------------------------------------------------- | ----------------------------------------------------------------------- |
-| `docs/spec/epoch-ledger.md`                        | Authoritative spec — 18 invariants, schema, API, workflows              |
-| `docs/research/epoch-event-ingestion-pipeline.md`  | Research: SourceCred patterns, OSS tooling choices, adapter design      |
-| `work/projects/proj.transparent-credit-payouts.md` | Roadmap, P0/P1/P2 phases, definition of done                            |
-| `packages/ledger-core/src/rules.ts`                | `computePayouts()` — reused unchanged for payout math                   |
-| `packages/ledger-core/src/model.ts`                | `ApprovedReceipt`, `PayoutLineItem` types                               |
-| `packages/db-schema/src/ledger.ts`                 | Existing Drizzle tables (epochs, pool, statements + old receipt tables) |
-| `work/items/task.0089.user-identity-bindings.md`   | Cross-project dependency for identity resolution                        |
-| `work/items/task.0094.ledger-port-adapter.md`      | Next implementation task — port + adapter + migration                   |
-| `work/items/task.0097.ledger-source-adapters.md`   | GitHub + Discord adapter task                                           |
-| `tests/unit/core/ledger/`                          | 31 existing tests — rules.test.ts + signing.test.ts                     |
+| File / Resource                                          | Why it matters                                                                   |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `docs/spec/plugin-attribution-pipeline.md`               | **Start here** — the plugin architecture spec with all invariants and interfaces |
+| `docs/spec/attribution-ledger.md`                        | Core domain spec — epoch lifecycle, store port, evaluation invariants            |
+| `packages/attribution-ledger/src/store.ts`               | `AttributionStore` port interface consumed by enricher adapters                  |
+| `packages/attribution-ledger/src/allocation.ts`          | Existing `computeProposedAllocations()` — to be wrapped by allocator descriptors |
+| `packages/attribution-ledger/src/claimant-shares.ts`     | Claimant-share domain types — referenced by claimant-shares plugin descriptor    |
+| `services/scheduler-worker/src/activities/enrichment.ts` | Current enrichment logic — to be refactored into generic dispatch loop           |
+| `.cogni/repo-spec.yaml`                                  | `credit_estimate_algo: cogni-v0.0` — profile selection entry point               |
+| `.claude/worktrees/attribution-scoring/`                 | Worktree with task.0114 budget algo + scoring research (needs plugin refactor)   |
+| `docs/research/attribution-scoring-design.md`            | LLM evaluation design, quarterly review model (in worktree)                      |
+| `work/projects/proj.transparent-credit-payouts.md`       | Project roadmap                                                                  |

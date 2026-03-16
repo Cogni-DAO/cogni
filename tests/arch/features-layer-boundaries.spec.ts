@@ -49,7 +49,9 @@ function runDepCruise(probeDirs: string[]): {
 
 describe("Features layer boundaries", () => {
   it("allows features to import from shared", () => {
-    const { exitCode, stderr } = runDepCruise(["src/features/__arch_probes__"]);
+    const { exitCode, stderr } = runDepCruise([
+      "apps/web/src/features/__arch_probes__",
+    ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
     }
@@ -57,7 +59,9 @@ describe("Features layer boundaries", () => {
   });
 
   it("allows features to import from components", () => {
-    const { exitCode, stderr } = runDepCruise(["src/features/__arch_probes__"]);
+    const { exitCode, stderr } = runDepCruise([
+      "apps/web/src/features/__arch_probes__",
+    ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
     }
@@ -66,8 +70,8 @@ describe("Features layer boundaries", () => {
 
   it("blocks features from importing adapters", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/features/__arch_probes__",
-      "src/adapters/__arch_probes__",
+      "apps/web/src/features/__arch_probes__",
+      "apps/web/src/adapters/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -78,8 +82,8 @@ describe("Features layer boundaries", () => {
 
   it("blocks features from importing bootstrap", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/features/__arch_probes__",
-      "src/bootstrap/__arch_probes__",
+      "apps/web/src/features/__arch_probes__",
+      "apps/web/src/bootstrap/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -90,8 +94,8 @@ describe("Features layer boundaries", () => {
 
   it("blocks features from importing styles", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/features/__arch_probes__",
-      "src/styles/__arch_probes__",
+      "apps/web/src/features/__arch_probes__",
+      "apps/web/src/styles/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);

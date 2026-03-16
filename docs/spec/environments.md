@@ -210,13 +210,13 @@ Docker Dev Stack modes expose PostgreSQL on `55432` for debugging and test acces
 
 ### File Pointers
 
-| File                                                     | Role                         |
-| -------------------------------------------------------- | ---------------------------- |
-| `platform/infra/services/runtime/docker-compose.dev.yml` | Dev/test Docker Compose      |
-| `platform/infra/services/runtime/docker-compose.yml`     | Production Docker Compose    |
-| `.env.local.example`                                     | Base env template            |
-| `.env.test`                                              | Test overrides               |
-| `src/shared/env/server.ts`                               | Env validation (Zod schemas) |
+| File                                           | Role                         |
+| ---------------------------------------------- | ---------------------------- |
+| `infra/compose/runtime/docker-compose.dev.yml` | Dev/test Docker Compose      |
+| `infra/compose/runtime/docker-compose.yml`     | Production Docker Compose    |
+| `.env.local.example`                           | Base env template            |
+| `.env.test`                                    | Test overrides               |
+| `src/shared/env/server.ts`                     | Env validation (Zod schemas) |
 
 ## Acceptance Checks
 

@@ -292,12 +292,12 @@ env:
 ```yaml
 - name: Run migrations
   run: |
-    docker compose -f platform/infra/services/runtime/docker-compose.yml \
+    docker compose -f infra/compose/runtime/docker-compose.yml \
       --profile bootstrap run --rm db-migrate
 
 - name: Start application
   run: |
-    docker compose -f platform/infra/services/runtime/docker-compose.yml \
+    docker compose -f infra/compose/runtime/docker-compose.yml \
       up -d app
 ```
 

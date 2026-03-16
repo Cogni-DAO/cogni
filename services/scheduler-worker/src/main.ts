@@ -15,10 +15,10 @@
  * @public
  */
 
-import { createLedgerContainer } from "./bootstrap/container.js";
+import { createAttributionContainer } from "./bootstrap/container.js";
 import { env } from "./bootstrap/env.js";
 import { type HealthState, startHealthServer } from "./health.js";
-import { startLedgerWorker } from "./ledger-worker.js";
+import { startAttributionWorker } from "./ledger-worker.js";
 import {
   flushLogger,
   logWorkerEvent,
@@ -55,9 +55,9 @@ async function main(): Promise<void> {
   shutdownHandles.push(schedulerWorker);
 
   // Start ledger worker (optional — requires NODE_ID + SCOPE_ID)
-  const ledgerContainer = createLedgerContainer(config, logger);
+  const ledgerContainer = createAttributionContainer(config, logger);
   if (ledgerContainer) {
-    const ledgerWorker = await startLedgerWorker({
+    const ledgerWorker = await startAttributionWorker({
       env: config,
       logger,
       container: ledgerContainer,
@@ -71,11 +71,27 @@ async function main(): Promise<void> {
   // Mark ready after all workers start
   healthState.ready = true;
   workerInfo.set({ task_queue: config.TEMPORAL_TASK_QUEUE }, 1);
-  logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_READY, {
-    namespace: config.TEMPORAL_NAMESPACE,
-    taskQueue: config.TEMPORAL_TASK_QUEUE,
-    ledgerEnabled: !!ledgerContainer,
-  });
+  // Log adapter coverage for diagnostics (P0 visibility)
+  if (ledgerContainer) {
+    const registeredSources = [...ledgerContainer.sourceRegistrations.keys()];
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_READY, {
+      namespace: config.TEMPORAL_NAMESPACE,
+      taskQueue: config.TEMPORAL_TASK_QUEUE,
+      ledgerEnabled: true,
+      ledgerTaskQueue: "ledger-tasks",
+      nodeId: ledgerContainer.nodeId,
+      scopeId: ledgerContainer.scopeId,
+      chainId: ledgerContainer.chainId,
+      registeredSources,
+      registeredSourceCount: registeredSources.length,
+    });
+  } else {
+    logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_READY, {
+      namespace: config.TEMPORAL_NAMESPACE,
+      taskQueue: config.TEMPORAL_TASK_QUEUE,
+      ledgerEnabled: false,
+    });
+  }
 
   // Graceful shutdown
   let shuttingDown = false;

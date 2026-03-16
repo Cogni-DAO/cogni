@@ -12,7 +12,7 @@ Use that path sparingly — voting is reserved for meaningful exceptions or gove
 **First time setup:**
 
 ```bash
-platform/bootstrap/bootstrap  # installs Node, pnpm, OpenTofu, Docker + all project dependencies
+scripts/bootstrap/bootstrap  # installs Node, pnpm, OpenTofu, Docker + all project dependencies
 ```
 
 ## Database Setup

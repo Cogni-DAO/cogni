@@ -24,6 +24,20 @@ jobs:
       scheduler_worker_image: ${{ steps.push.outputs.scheduler_worker_image }}
     env:
       NEXT_TELEMETRY_DISABLED: 1
+      # Required by serverEnv() Zod schema for pnpm check / test
+      LITELLM_MASTER_KEY: build-key
+      AUTH_SECRET: tNf5lFM9yMhdgwS5yeQB8Y2kmigblBqobkvI2XN2brg=
+      SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
+      BILLING_INGEST_TOKEN: test-billing-ingest-token-for-ci-min32ch
+      INTERNAL_OPS_TOKEN: test-internal-ops-token-for-ci-min32
+      OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
+      OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
+      DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
+      POSTHOG_API_KEY: phc_test_key_for_ci
+      POSTHOG_HOST: http://localhost:18000
+      TEMPORAL_ADDRESS: localhost:7233
+      TEMPORAL_NAMESPACE: cogni-test
+      TEMPORAL_TASK_QUEUE: scheduler-tasks
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,20 +88,20 @@ jobs:
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
           PLATFORM: linux/amd64
           NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
-        run: platform/ci/scripts/build.sh
+        run: scripts/ci/build.sh
 
       - name: Test image
         env:
           IMAGE_NAME: ${{ steps.meta.outputs.image_name }}
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
-        run: platform/ci/scripts/test-image.sh
+        run: scripts/ci/test-image.sh
 
       - name: Build scheduler-worker image
         env:
           IMAGE_NAME: ${{ steps.meta.outputs.image_name }}
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
           PLATFORM: linux/amd64
-        run: platform/ci/scripts/build-service.sh
+        run: scripts/ci/build-service.sh
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -101,7 +115,7 @@ jobs:
         env:
           IMAGE_NAME: ${{ steps.meta.outputs.image_name }}
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
-        run: platform/ci/scripts/push.sh
+        run: scripts/ci/push.sh
 
       - name: CI Telemetry
         if: always()
@@ -146,7 +160,6 @@ jobs:
       EVM_RPC_URL: ${{ secrets.EVM_RPC_URL }}
       TEMPORAL_DB_USER: ${{ secrets.TEMPORAL_DB_USER }}
       TEMPORAL_DB_PASSWORD: ${{ secrets.TEMPORAL_DB_PASSWORD }}
-      SOURCECRED_GITHUB_TOKEN: ${{ secrets.SOURCECRED_GITHUB_TOKEN }}
       VM_HOST: ${{ secrets.VM_HOST }}
       GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
       GHCR_USERNAME: Cogni-1729
@@ -170,12 +183,23 @@ jobs:
       OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
       OPENCLAW_GITHUB_RW_TOKEN: ${{ secrets.OPENCLAW_GITHUB_RW_TOKEN }}
       DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      GH_OAUTH_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+      GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+      DISCORD_OAUTH_CLIENT_ID: ${{ secrets.DISCORD_OAUTH_CLIENT_ID }}
+      DISCORD_OAUTH_CLIENT_SECRET: ${{ secrets.DISCORD_OAUTH_CLIENT_SECRET }}
+      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
       GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
       GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
-      GITHUB_REVIEW_APP_ID: ${{ secrets.GITHUB_REVIEW_APP_ID }}
-      GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64 }}
-      GITHUB_REVIEW_INSTALLATION_ID: ${{ secrets.GITHUB_REVIEW_INSTALLATION_ID }}
-      GITHUB_REPOS: ${{ vars.GITHUB_REPOS }}
+      GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
+      GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
+      GH_REPOS: ${{ vars.GH_REPOS }}
+      GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+      PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+      PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+      PRIVY_SIGNING_KEY: ${{ secrets.PRIVY_SIGNING_KEY }}
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
       NEXT_TELEMETRY_DISABLED: 1
     steps:
       - name: Checkout
@@ -208,10 +232,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_SERVICE_URL: ${{ secrets.DATABASE_SERVICE_URL }}
-        run: platform/ci/scripts/validate-dsns.sh
+        run: scripts/ci/validate-dsns.sh
 
       - name: Deploy to preview
-        run: platform/ci/scripts/deploy.sh
+        run: scripts/ci/deploy.sh
 
       - name: Upload deployment artifacts
         if: always()

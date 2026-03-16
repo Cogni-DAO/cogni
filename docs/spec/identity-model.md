@@ -5,7 +5,7 @@ title: "Identity Model: System Identity Primitives"
 status: draft
 spec_state: proposed
 trust: draft
-summary: "Single source of truth for all identity primitives in the Cogni system: node_id (deployment), scope_id (governance domain), user_id (person), billing_account_id (tenancy), dao_address (on-chain). Defines relationships, scoping rules, and prohibited overloading."
+summary: "Single source of truth for all identity primitives in the Cogni system: node_id (deployment), scope_id (governance domain), user_id (person), billing_account_id (tenancy), dao_address (on-chain), actor_id (economic subject). Defines relationships, scoping rules, and prohibited overloading."
 read_when: Working on identity, scoping, multi-project, ledger attribution, node-operator boundaries, or any code that references node_id, scope_id, user_id, or billing_account_id.
 owner: derekg1729
 created: 2026-02-22
@@ -15,14 +15,14 @@ tags: [identity, architecture, governance]
 
 # Identity Model: System Identity Primitives
 
-> The system uses five orthogonal identity keys. Each has a single, non-overlapping purpose. This spec is the canonical reference for what each key means, where it lives, and what it must never be used for.
+> The system uses six orthogonal identity keys. Each has a single, non-overlapping purpose. This spec is the canonical reference for what each key means, where it lives, and what it must never be used for.
 
 ## Key References
 
 |          |                                                                      |                                          |
 | -------- | -------------------------------------------------------------------- | ---------------------------------------- |
 | **Spec** | [Node vs Operator Contract](./node-operator-contract.md)             | Node/Operator boundaries, scope_id intro |
-| **Spec** | [Epoch Ledger](./epoch-ledger.md)                                    | Ledger scoping by (node_id, scope_id)    |
+| **Spec** | [Attribution Ledger](./attribution-ledger.md)                        | Ledger scoping by (node_id, scope_id)    |
 | **Spec** | [User Identity + Account Bindings](./decentralized-user-identity.md) | user_id, user_bindings, identity_events  |
 | **Spec** | [Accounts Design](./accounts-design.md)                              | billing_account_id, credit ledger        |
 | **Spec** | [DAO Enforcement](./dao-enforcement.md)                              | dao_address, payment rails               |
@@ -74,6 +74,21 @@ tags: [identity, architecture, governance]
 │    └──────────────────────────────────────────────────────────┘     │
 │                                                                     │
 │    ┌──────────────────────────────────────────────────────────┐     │
+│    │                   ECONOMIC LAYER                         │     │
+│    │                                                          │     │
+│    │  actor_id (UUID)                       per-node          │     │
+│    │  ─ Economic subject (earns, spends, attributed)          │     │
+│    │  ─ Kinds: user | agent | system | org                    │     │
+│    │  ─ user actors: 1:1 FK to users.id                       │     │
+│    │  ─ agent actors: parent_actor_id for hierarchy            │     │
+│    │  ─ Lives in: actors.id, charge_receipts, epoch_allocs    │     │
+│    │  ─ Bindings: actor_bindings (wallets, OAuth, ext refs)   │     │
+│    │                                                          │     │
+│    │  Orthogonal to governance: economic attribution does      │     │
+│    │  not imply voting rights or political participation      │     │
+│    └──────────────────────────────────────────────────────────┘     │
+│                                                                     │
+│    ┌──────────────────────────────────────────────────────────┐     │
 │    │                    PERSON LAYER                           │     │
 │    │                                                          │     │
 │    │  user_id (UUID)                         cross-node       │     │
@@ -88,14 +103,15 @@ tags: [identity, architecture, governance]
 
 ## Definitions
 
-| Key                  | Type | Minted When              | Mutable | Purpose                            | Canonical Location                        |
-| -------------------- | ---- | ------------------------ | ------- | ---------------------------------- | ----------------------------------------- |
-| `node_id`            | UUID | Node formation           | No      | Deployment/instance identity       | `.cogni/repo-spec.yaml`                   |
-| `scope_id`           | UUID | Project manifest created | No      | Governance/payout domain (project) | `.cogni/projects/*.yaml`                  |
-| `scope_key`          | TEXT | Project manifest created | No      | Human-readable scope slug          | `.cogni/projects/*.yaml`, repo-spec.yaml  |
-| `user_id`            | UUID | First user contact       | No      | Person identity                    | `users.id`                                |
-| `billing_account_id` | UUID | Account creation         | No      | Payment/subscription tenancy       | `billing_accounts.id`                     |
-| `dao_address`        | TEXT | DAO contract deployed    | No      | On-chain contract identity         | `.cogni/projects/*.yaml` → `dao.contract` |
+| Key                  | Type | Minted When              | Mutable | Purpose                                    | Canonical Location                        |
+| -------------------- | ---- | ------------------------ | ------- | ------------------------------------------ | ----------------------------------------- |
+| `node_id`            | UUID | Node formation           | No      | Deployment/instance identity               | `.cogni/repo-spec.yaml`                   |
+| `scope_id`           | UUID | Project manifest created | No      | Governance/payout domain (project)         | `.cogni/projects/*.yaml`                  |
+| `scope_key`          | TEXT | Project manifest created | No      | Human-readable scope slug                  | `.cogni/projects/*.yaml`, repo-spec.yaml  |
+| `user_id`            | UUID | First user contact       | No      | Person identity                            | `users.id`                                |
+| `actor_id`           | UUID | Actor creation           | No      | Economic subject (earns/spends/attributed) | `actors.id`                               |
+| `billing_account_id` | UUID | Account creation         | No      | Payment/subscription tenancy               | `billing_accounts.id`                     |
+| `dao_address`        | TEXT | DAO contract deployed    | No      | On-chain contract identity                 | `.cogni/projects/*.yaml` → `dao.contract` |
 
 ## Relationships
 
@@ -107,6 +123,10 @@ user_id (1) ──── (1) billing_account_id Each user has one billing accoun
 user_id (1) ──── (N) user_bindings      A user has multiple auth methods
 user_id (N) ──── (N) scope_id           Users contribute to multiple projects
                                          (via activity_events + epoch_allocations)
+actor_id (1) ──── (1) user_id           For human actors (kind=user)
+actor_id (1) ──── (0..1) parent_actor_id Agent hierarchy (kind=agent)
+actor_id (1) ──── (N) actor_bindings    Wallets, external refs
+actor_id (N) ──── (1) billing_account_id Multiple actors per tenant
 ```
 
 **Orthogonality:** `scope_id` and `billing_account_id` are independent dimensions. A user's billing account is for paying for AI service consumption. A scope's DAO is for paying contributors. These never intersect — contributing to a project does not require a billing account, and using the AI service does not require contributing to a project.
@@ -115,29 +135,32 @@ user_id (N) ──── (N) scope_id           Users contribute to multiple pro
 
 ### Where Each Key Appears
 
-| Table / Context            | `node_id` | `scope_id`  | `user_id` | `billing_account_id` |
-| -------------------------- | --------- | ----------- | --------- | -------------------- |
-| `epochs`                   | PK part   | PK part     | —         | —                    |
-| `activity_events`          | PK part   | Column      | —         | —                    |
-| `activity_curation`        | Column    | (via epoch) | Column    | —                    |
-| `epoch_allocations`        | Column    | (via epoch) | Column    | —                    |
-| `payout_statements`        | Column    | (via epoch) | —         | —                    |
-| `source_cursors`           | PK part   | PK part     | —         | —                    |
-| `billing_accounts`         | —         | —           | FK        | PK                   |
-| `credit_ledger`            | —         | —           | —         | FK                   |
-| `charge_receipts`          | —         | —           | —         | FK                   |
-| `ai_threads`               | —         | —           | FK        | FK                   |
-| Runtime: `tenantId`        | —         | —           | —         | = billing_account_id |
-| Runtime: `GraphRunContext` | Available | Available   | Available | Available            |
+| Table / Context            | `node_id` | `scope_id`  | `user_id` | `actor_id`       | `billing_account_id` |
+| -------------------------- | --------- | ----------- | --------- | ---------------- | -------------------- |
+| `epochs`                   | PK part   | PK part     | —         | —                | —                    |
+| `activity_events`          | PK part   | Column      | —         | —                | —                    |
+| `activity_curation`        | Column    | (via epoch) | Column    | —                | —                    |
+| `epoch_allocations`        | Column    | (via epoch) | Column    | Column (planned) | —                    |
+| `payout_statements`        | Column    | (via epoch) | —         | —                | —                    |
+| `source_cursors`           | PK part   | PK part     | —         | —                | —                    |
+| `actors`                   | —         | —           | FK (user) | PK               | FK (tenant)          |
+| `budget_allocations`       | —         | —           | —         | FK               | —                    |
+| `actor_bindings`           | —         | —           | —         | FK               | —                    |
+| `billing_accounts`         | —         | —           | FK        | —                | PK                   |
+| `credit_ledger`            | —         | —           | —         | —                | FK                   |
+| `charge_receipts`          | —         | —           | —         | Column (planned) | FK                   |
+| `ai_threads`               | —         | —           | FK        | —                | FK                   |
+| Runtime: `tenantId`        | —         | —           | —         | —                | = billing_account_id |
+| Runtime: `GraphRunContext` | Available | Available   | Available | Available        | Available            |
 
 ### Composite Keys
 
-| Invariant           | Composite Key                                       | Spec Reference  |
-| ------------------- | --------------------------------------------------- | --------------- |
-| ONE_OPEN_EPOCH      | `(node_id, scope_id, status) WHERE status='open'`   | epoch-ledger.md |
-| EPOCH_WINDOW_UNIQUE | `(node_id, scope_id, period_start, period_end)`     | epoch-ledger.md |
-| ACTIVITY_IDEMPOTENT | `(node_id, id)` on activity_events                  | epoch-ledger.md |
-| CURSOR_PK           | `(node_id, scope_id, source, stream, source_scope)` | epoch-ledger.md |
+| Invariant           | Composite Key                                       | Spec Reference        |
+| ------------------- | --------------------------------------------------- | --------------------- |
+| ONE_OPEN_EPOCH      | `(node_id, scope_id, status) WHERE status='open'`   | attribution-ledger.md |
+| EPOCH_WINDOW_UNIQUE | `(node_id, scope_id, period_start, period_end)`     | attribution-ledger.md |
+| ACTIVITY_IDEMPOTENT | `(node_id, id)` on activity_events                  | attribution-ledger.md |
+| CURSOR_PK           | `(node_id, scope_id, source, stream, source_scope)` | attribution-ledger.md |
 
 ## Invariants
 
@@ -145,15 +168,16 @@ user_id (N) ──── (N) scope_id           Users contribute to multiple pro
 
 These are hard constraints. Violating any of them is a design error.
 
-| Key                  | Must Never Be Used For                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------------------- |
-| `node_id`            | Governance domain, epoch scoping, project identity, DAO ownership. It is infrastructure only.   |
-| `scope_id`           | Deployment identity, infra routing, DB tenancy. It is governance only.                          |
-| `user_id`            | Replaced by `wallet_address`, Discord snowflake, GitHub numeric ID, or DID. Those are bindings. |
-| `billing_account_id` | Governance scoping, contribution attribution, deployment identity. It is payment tenancy only.  |
-| `dao_address`        | Database primary key, tenant scoping, deployment routing. It is an on-chain attribute only.     |
+| Key                  | Must Never Be Used For                                                                                           |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `node_id`            | Governance domain, epoch scoping, project identity, DAO ownership. It is infrastructure only.                    |
+| `scope_id`           | Deployment identity, infra routing, DB tenancy. It is governance only.                                           |
+| `user_id`            | Replaced by `wallet_address`, Discord snowflake, GitHub numeric ID, or DID. Those are bindings.                  |
+| `billing_account_id` | Governance scoping, contribution attribution, deployment identity. It is payment tenancy only.                   |
+| `actor_id`           | Auth/login identity, payment tenancy, governance voting rights, wallet address. It is economic attribution only. |
+| `dao_address`        | Database primary key, tenant scoping, deployment routing. It is an on-chain attribute only.                      |
 
-**Synonym prohibition:** Do not introduce `org_id`, `account_id`, `tenant_id` (DB column), `project_id` (DB column), or `contributor_id` as new terms. The five keys above are the complete set. External provider IDs (e.g., WalletConnect project ID, Terraform workspace ID) must be namespaced (e.g., `walletconnect_project_id`) to avoid collision with `scope_id`.
+**Synonym prohibition:** Do not introduce `org_id`, `account_id`, `tenant_id` (DB column), `project_id` (DB column), or `contributor_id` as new terms. The six keys above are the complete set. External provider IDs (e.g., WalletConnect project ID, Terraform workspace ID) must be namespaced (e.g., `walletconnect_project_id`) to avoid collision with `scope_id`.
 
 ## V0 Defaults
 
@@ -181,7 +205,7 @@ Provide a single, unambiguous reference for every identity primitive in the syst
 ## Related
 
 - [Node vs Operator Contract](./node-operator-contract.md) — Node/Operator boundaries, scope_id in definitions
-- [Epoch Ledger](./epoch-ledger.md) — Ledger scoping by (node_id, scope_id)
+- [Attribution Ledger](./attribution-ledger.md) — Ledger scoping by (node_id, scope_id)
 - [User Identity + Account Bindings](./decentralized-user-identity.md) — user_id, bindings, identity_events
 - [Accounts Design](./accounts-design.md) — billing_account_id, credit ledger
 - [DAO Enforcement](./dao-enforcement.md) — dao_address, repo-spec authority, payment rails

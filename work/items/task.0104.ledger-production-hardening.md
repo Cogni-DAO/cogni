@@ -28,8 +28,8 @@ external_refs:
 
 ## Requirements
 
-- `upsertAllocations` in `DrizzleLedgerAdapter` batches inserts instead of one-at-a-time loop (N sequential round-trips → single batch or chunked batch)
-- Finalize API route (`src/app/api/v1/ledger/epochs/[id]/finalize/route.ts`) uses a pooled/shared Temporal `Connection` + `Client` instead of creating + closing per request
+- `upsertAllocations` in `DrizzleAttributionAdapter` batches inserts instead of one-at-a-time loop (N sequential round-trips → single batch or chunked batch)
+- Finalize API route (`src/app/api/v1/attribution/epochs/[id]/finalize/route.ts`) uses a pooled/shared Temporal `Connection` + `Client` instead of creating + closing per request
 - Activity-level unit tests for `computeAllocations`, `ensurePoolComponents`, `autoCloseIngestion`, and `finalizeEpoch` covering key code paths (empty inputs, idempotency, error cases)
 - Extract duplicated `zBigint` Zod helper from two contract files into a shared utility
 
@@ -37,15 +37,15 @@ external_refs:
 
 These items were identified during the task.0102 implementation review as non-blocking V0 pragmatism that should be addressed before production load:
 
-1. **Upsert batching** (`drizzle-ledger.adapter.ts:568-591`): Currently iterates allocations one-by-one. For epochs with many contributors this becomes a performance bottleneck.
+1. **Upsert batching** (`drizzle-attribution.adapter.ts:568-591`): Currently iterates allocations one-by-one. For epochs with many contributors this becomes a performance bottleneck.
 2. **Temporal connection pooling** (`finalize/route.ts:79-111`): Creates a new `Connection.connect()` + `Client` per HTTP request, then closes in `finally`. Should use a container-scoped singleton (same pattern as `ScheduleControlAdapter`).
 3. **Activity unit tests**: The compound activities (`finalizeEpoch` especially) have many code paths but are only tested indirectly via stack tests. Need isolated unit tests with mocked store.
 4. **`zBigint` duplication**: Same helper in `ledger.record-pool-component.v1.contract.ts` and `ledger.update-allocations.v1.contract.ts`. Extract to `src/contracts/_lib/zod-bigint.ts`.
 
 ## Allowed Changes
 
-- `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — batch upsert
-- `src/app/api/v1/ledger/epochs/[id]/finalize/route.ts` — connection pooling
+- `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — batch upsert
+- `src/app/api/v1/attribution/epochs/[id]/finalize/route.ts` — connection pooling
 - `src/bootstrap/` — Temporal client singleton if needed
 - `src/contracts/_lib/` — shared zBigint helper (new)
 - `src/contracts/ledger.*.contract.ts` — import from shared

@@ -40,6 +40,7 @@ export const WORKER_EVENT_NAMES = {
   CONFIG_WEIGHT_DRIFT: "worker.config.weight_drift",
   CONFIG_ADAPTER_SKIPPED: "worker.config.adapter_skipped",
   CONFIG_LEDGER_DISABLED: "worker.config.ledger_disabled",
+  CONFIG_SOURCE_NO_ADAPTER: "worker.config.source_no_adapter",
 } as const;
 
 export type WorkerEventName =

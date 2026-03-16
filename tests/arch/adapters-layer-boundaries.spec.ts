@@ -49,7 +49,9 @@ function runDepCruise(probeDirs: string[]): {
 
 describe("Adapters layer boundaries", () => {
   it("allows adapters to import from ports", () => {
-    const { exitCode, stderr } = runDepCruise(["src/adapters/__arch_probes__"]);
+    const { exitCode, stderr } = runDepCruise([
+      "apps/web/src/adapters/__arch_probes__",
+    ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
     }
@@ -57,7 +59,9 @@ describe("Adapters layer boundaries", () => {
   });
 
   it("allows adapters to import from core", () => {
-    const { exitCode, stderr } = runDepCruise(["src/adapters/__arch_probes__"]);
+    const { exitCode, stderr } = runDepCruise([
+      "apps/web/src/adapters/__arch_probes__",
+    ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
     }
@@ -65,7 +69,9 @@ describe("Adapters layer boundaries", () => {
   });
 
   it("allows adapters to import from shared", () => {
-    const { exitCode, stderr } = runDepCruise(["src/adapters/__arch_probes__"]);
+    const { exitCode, stderr } = runDepCruise([
+      "apps/web/src/adapters/__arch_probes__",
+    ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
     }
@@ -74,8 +80,8 @@ describe("Adapters layer boundaries", () => {
 
   it("blocks adapters from importing features", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/adapters/__arch_probes__",
-      "src/features/__arch_probes__",
+      "apps/web/src/adapters/__arch_probes__",
+      "apps/web/src/features/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -86,8 +92,8 @@ describe("Adapters layer boundaries", () => {
 
   it("blocks adapters from importing app", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/adapters/__arch_probes__",
-      "src/app/__arch_probes__",
+      "apps/web/src/adapters/__arch_probes__",
+      "apps/web/src/app/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -98,8 +104,8 @@ describe("Adapters layer boundaries", () => {
 
   it("blocks adapters from importing components", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/adapters/__arch_probes__",
-      "src/components/__arch_probes__",
+      "apps/web/src/adapters/__arch_probes__",
+      "apps/web/src/components/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -110,8 +116,8 @@ describe("Adapters layer boundaries", () => {
 
   it("blocks adapters from importing bootstrap", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/adapters/__arch_probes__",
-      "src/bootstrap/__arch_probes__",
+      "apps/web/src/adapters/__arch_probes__",
+      "apps/web/src/bootstrap/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);

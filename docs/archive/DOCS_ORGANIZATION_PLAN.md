@@ -327,7 +327,7 @@ work/_templates/{project,issue}.md
 | `CI-CD.md`                            | `spec/ci-cd.md`                    | spec  |
 | `STYLE.md`                            | `spec/style.md`                    | spec  |
 | `archive/PAYMENTS_WIDGET_DECISION.md` | `decisions/adr/payments-widget.md` | adr   |
-| `platform/runbooks/*`                 | `guides/*` + stubs                 | guide |
+| `docs/runbooks/*`                     | `guides/*` + stubs                 | guide |
 
 **Redirect stub format:**
 
@@ -375,7 +375,7 @@ work/_templates/{project,issue}.md
 **PR 2:**
 
 - [ ] Top 15 docs migrated with properties
-- [ ] `platform/runbooks/` canonicalized under `docs/guides/`
+- [ ] `docs/runbooks/` canonicalized under `docs/guides/`
 - [ ] Redirect stubs with `REDIRECT::` at old paths
 - [ ] `rg` finds docs via paths and headings
 

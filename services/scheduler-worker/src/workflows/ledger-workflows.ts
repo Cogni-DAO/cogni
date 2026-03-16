@@ -7,9 +7,11 @@
  * Scope: Re-exports only. No logic.
  * Invariants: Per TEMPORAL_DETERMINISM: only re-exports deterministic workflow functions.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md
+ * Links: docs/spec/attribution-ledger.md
  * @internal
  */
 
 export { CollectEpochWorkflow } from "./collect-epoch.workflow.js";
 export { FinalizeEpochWorkflow } from "./finalize-epoch.workflow.js";
+export { CollectSourcesWorkflow } from "./stages/collect-sources.workflow.js";
+export { EnrichAndAllocateWorkflow } from "./stages/enrich-and-allocate.workflow.js";

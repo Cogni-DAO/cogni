@@ -27,9 +27,9 @@ Automated staging→release→main workflow with fork-safe CI/CD and E2E-trigger
 
 **P1 - Optimization and Maintainability**:
 
-- [ ] **Edge routing CI validation**: Add CI job that starts full stack (including SourceCred) and validates edge Caddyfile routes via smoke tests: `/health`, `/api/v1/public/*`, `/sourcecred/`. Prevents edge config drift from breaking local/CI.
+- [ ] **Edge routing CI validation**: Add CI job that starts full stack and validates edge Caddyfile routes via smoke tests: `/health`, `/api/v1/public/*`. Prevents edge config drift from breaking local/CI.
 - [ ] **Config as code validation**: Enforce env schema validation in CI (type-check + required keys), block deploy if invalid, surface staging/prod config diffs during release promotion.
-- [ ] **Refactor `deploy.sh`**: Split 600+ line monolith into composable modules (edge, runtime, sourcecred, cleanup functions).
+- [ ] **Refactor `deploy.sh`**: Split 600+ line monolith into composable modules (edge, runtime, cleanup functions).
 - [ ] **Complete migrator fingerprinting**:
   - [x] `compute_migrator_fingerprint.sh`: Generates stable 12-char content hash
   - [x] `ci.yaml` (stack-test): Pull by fingerprint, build only if missing
@@ -148,15 +148,6 @@ push to main → build-prod.yml (build → test → push) → deploy-production.
 - `prod-${GITHUB_SHA}-${SERVICE}` (e.g., `prod-abc123-scheduler-worker`)
 - Future: Content fingerprinting like migrator
 
-**SourceCred** (manual image release, auto-deployed via deploy.sh):
-
-- Immutable image: `ghcr.io/cogni-dao/cogni-sourcecred-runner:sc0.11.2-node18-2025-12-07`
-- Image built from Dockerfile with `CMD ["yarn", "start"]` (invokes sourcecred via node_modules)
-- Deployed automatically during `deploy.sh` runs (not gated by app build workflow)
-- Image release process: `platform/infra/services/sourcecred/release.sh`
-- Version: v0 (prototype)
-- Long-term: Planned deprecation
-
 ## Branch Management
 
 ### Auto-cleanup
@@ -212,6 +203,6 @@ push to main → build-prod.yml (build → test → push) → deploy-production.
 ## Related Documentation
 
 - [Application Architecture](architecture.md) - Hexagonal design and code organization
-- [Deployment Architecture](../platform/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
+- [Deployment Architecture](../docs/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
 - [CI/CD Services Roadmap](CICD_SERVICES_ROADMAP.md) - Service build/deploy integration plan (GitOps migration)
-- [CI/CD Conflict Recovery](../platform/runbooks/CICD_CONFLICT_RECOVERY.md) - How to resolve release→main conflicts without polluting history
+- [CI/CD Conflict Recovery](../docs/runbooks/CICD_CONFLICT_RECOVERY.md) - How to resolve release→main conflicts without polluting history

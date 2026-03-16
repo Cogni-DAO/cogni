@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-09
 - **Status:** draft
 
 ## Purpose
@@ -32,14 +31,6 @@ Staging-only tests including write operations and complex workflows.
 - **Exports:** none
 - **Routes (if any):** Tests all routes externally
 - **CLI (if any):** pnpm e2e
-- **Env/Config keys:** none
-- **Files considered API:** none
-
-## Ports (optional)
-
-- **Uses ports:** none
-- **Implements ports:** none
-- **Contracts (required if implementing):** none
 
 ## Responsibilities
 

@@ -3,50 +3,73 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/activities/ledger`
- * Purpose: Temporal Activities for the full ledger pipeline — ingestion, curation, allocation, pool, auto-close, and finalization.
- * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-191 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
+ * Purpose: Temporal Activities for the full ledger pipeline — ingestion, selection, allocation, pool, epoch transition, and finalization.
+ * Scope: Plain async functions that perform I/O (DB, GitHub API, EIP-712 verification). Called by CollectEpochWorkflow and FinalizeEpochWorkflow. Does not contain deterministic orchestration logic.
  * Invariants:
- *   - Per ACTIVITY_IDEMPOTENT: All activities idempotent via PK constraints or upsert
+ *   - NO_DOMAIN_LOGIC_HERE: this file must never contain selection policies, allocation formulas, enrichment logic, or source-specific branching (e.g. `if eventType === "pr_merged"`). It loads data, dispatches to contracts/plugins, and writes results.
+ *   - Per RECEIPT_IDEMPOTENT: All activities idempotent via PK constraints or upsert
  *   - Per CURSOR_STATE_PERSISTED: Cursors saved after each collect() call
  *   - Per NODE_SCOPED: All operations pass nodeId + scopeId from deps
  *   - Per TEMPORAL_DETERMINISM: Activities contain all I/O; workflows call only these proxies
- *   - Per CURATION_AUTO_POPULATE: curateAndResolve inserts new curations (DO NOTHING on conflict), updates only userId on unresolved rows
- *   - Per IDENTITY_BEST_EFFORT: Unresolved events get userId=null in curation rows, never dropped
- *   - Per ALLOCATION_PRESERVES_OVERRIDES: upsertAllocations never touches admin-set final_units
- *   - Per CONFIG_LOCKED_AT_REVIEW: autoCloseIngestion pins allocationAlgoRef + weightConfigHash
+ *   - Per SOURCE_NO_ADAPTER: collectFromSource and resolveStreams throw if no poll adapter registered for a configured source (fail loud, not silent skip)
+ *   - Per SELECTION_AUTO_POPULATE: materializeSelection inserts new selections (DO NOTHING on conflict), updates only userId on unresolved rows
+ *   - Per SELECTION_POLICY_DELEGATED: materializeSelection resolves selection policy from the pipeline profile and dispatches via dispatchSelectionPolicy — zero hardcoded inclusion logic
+ *   - Per IDENTITY_BEST_EFFORT: Unresolved receipts get userId=null in selection rows, never dropped
+ *   - Per USER_PROJECTIONS_RECOMPUTABLE: upsertUserProjections persists recomputable user projections only
+ *   - Per CONFIG_LOCKED_AT_REVIEW: transitionEpochForWindow pins allocationAlgoRef + weightConfigHash when closing stale epoch
+ *   - Per EVALUATION_FINAL_ATOMIC: transitionEpochForWindow passes evaluations to store.transitionEpochForWindow for atomic close + create
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: finalizeEpoch returns existing statement if already finalized
- * Side-effects: IO (database, GitHub API, viem EIP-191 verification)
- * Links: docs/spec/epoch-ledger.md, docs/spec/temporal-patterns.md
+ *   - Per FINALIZE_CLAIMANT_AWARE: finalizeEpoch loads locked claimant rows from epoch_receipt_claimants, dispatches the pinned allocator, explodes to claimant allocations, and stores claimant metadata in attribution statement lines
+ * Side-effects: IO (database, GitHub API, viem EIP-712 verification)
+ * Links: docs/spec/attribution-ledger.md, docs/spec/temporal-patterns.md
  * @internal
  */
 
-import type { ActivityEvent } from "@cogni/ingestion-core";
-import type { UncuratedEvent } from "@cogni/ledger-core";
+import type {
+  CloseIngestionWithEvaluationsParams,
+  UnselectedReceipt,
+} from "@cogni/attribution-ledger";
 import {
-  buildCanonicalMessage,
-  computeAllocationSetHash,
+  applyReceiptWeightOverrides,
+  buildEIP712TypedData,
+  buildReceiptWeightOverrideSnapshots,
+  claimantKey,
   computeApproverSetHash,
-  computePayouts,
-  computeProposedAllocations,
+  computeAttributionStatementLines,
+  computeFinalClaimantAllocationSetHash,
   computeWeightConfigHash,
-  deriveAllocationAlgoRef,
   estimatePoolComponentsV0,
+  explodeToClaimants,
+  sha256OfCanonicalJson,
+  toReviewSubjectOverrides,
   validateWeightConfig,
-} from "@cogni/ledger-core";
+} from "@cogni/attribution-ledger";
+import {
+  dispatchAllocator,
+  dispatchSelectionPolicy,
+  resolveProfile,
+} from "@cogni/attribution-pipeline-contracts";
+import type { DefaultRegistries } from "@cogni/attribution-pipeline-plugins";
+import type { ActivityEvent } from "@cogni/ingestion-core";
 
-import { verifyMessage } from "viem";
+import { verifyTypedData } from "viem";
 
 import type { Logger } from "../observability/logger.js";
-import type { ActivityLedgerStore, SourceAdapter } from "../ports/index.js";
+import type {
+  AttributionStore,
+  DataSourceRegistration,
+} from "../ports/index.js";
 
 /**
  * Dependencies injected into ledger activities at worker creation.
  */
-export interface LedgerActivityDeps {
-  readonly ledgerStore: ActivityLedgerStore;
-  readonly sourceAdapters: ReadonlyMap<string, SourceAdapter>;
+export interface AttributionActivityDeps {
+  readonly attributionStore: AttributionStore;
+  readonly sourceRegistrations: ReadonlyMap<string, DataSourceRegistration>;
+  readonly registries: DefaultRegistries;
   readonly nodeId: string;
   readonly scopeId: string;
+  readonly chainId: number;
   readonly logger: Logger;
 }
 
@@ -101,9 +124,9 @@ export interface CollectFromSourceOutput {
 }
 
 /**
- * Input for insertEvents activity.
+ * Input for insertReceipts activity.
  */
-export interface InsertEventsInput {
+export interface InsertReceiptsInput {
   readonly events: ActivityEvent[];
   readonly producerVersion: string;
 }
@@ -119,19 +142,21 @@ export interface SaveCursorInput {
 }
 
 /**
- * Input for curateAndResolve activity.
- * epochId is the sole input — activity loads epoch row for period dates.
+ * Input for materializeSelection activity.
+ * epochId + attributionPipeline — activity loads epoch row for period dates,
+ * then resolves the selection policy from the pipeline profile.
  */
-export interface CurateAndResolveInput {
+export interface MaterializeSelectionInput {
   readonly epochId: string; // bigint serialized as string for Temporal
+  readonly attributionPipeline: string;
 }
 
 /**
- * Output from curateAndResolve activity.
+ * Output from materializeSelection activity.
  */
-export interface CurateAndResolveOutput {
-  readonly totalEvents: number;
-  readonly newCurations: number;
+export interface MaterializeSelectionOutput {
+  readonly totalReceipts: number;
+  readonly newSelections: number;
   readonly resolved: number;
   readonly unresolved: number;
 }
@@ -141,7 +166,7 @@ export interface CurateAndResolveOutput {
  */
 export interface ComputeAllocationsInput {
   readonly epochId: string; // bigint serialized
-  readonly algorithmId: string;
+  readonly attributionPipeline: string;
   readonly weightConfig: Record<string, number>;
 }
 
@@ -169,23 +194,80 @@ export interface EnsurePoolComponentsOutput {
 }
 
 /**
- * Input for autoCloseIngestion activity.
+ * Input for resolveStreams activity.
  */
-export interface AutoCloseIngestionInput {
-  readonly epochId: string; // bigint serialized
-  readonly periodEnd: string; // ISO date
-  readonly gracePeriodMs: number;
-  readonly weightConfig: Record<string, number>;
-  readonly creditEstimateAlgo: string;
-  readonly approvers: string[];
+export interface ResolveStreamsInput {
+  readonly source: string;
 }
 
 /**
- * Output from autoCloseIngestion activity.
+ * Output from resolveStreams activity.
  */
-export interface AutoCloseIngestionOutput {
-  readonly closed: boolean;
-  readonly reason: string;
+export interface ResolveStreamsOutput {
+  readonly streams: string[];
+}
+
+/**
+ * Input for findStaleOpenEpoch activity.
+ * Detects if an open epoch exists for a DIFFERENT window than the requested one.
+ */
+export interface FindStaleOpenEpochInput {
+  readonly periodStart: string; // ISO date — current window start
+  readonly periodEnd: string; // ISO date — current window end
+}
+
+/**
+ * Output from findStaleOpenEpoch activity.
+ * Returns stale epoch info if found, null otherwise.
+ */
+export interface FindStaleOpenEpochOutput {
+  readonly staleEpoch: {
+    readonly epochId: string; // bigint serialized
+    readonly weightConfig: Record<string, number>;
+    readonly periodStart: string; // ISO date
+    readonly periodEnd: string; // ISO date
+  } | null;
+}
+
+/**
+ * Input for transitionEpochForWindow activity.
+ * Atomically closes stale open epoch + creates epoch for a new window.
+ * Only called when findStaleOpenEpoch detected a stale epoch.
+ * Hash computation happens inside the activity (not safe in Temporal workflow code).
+ */
+export interface TransitionEpochForWindowInput {
+  readonly periodStart: string; // ISO date
+  readonly periodEnd: string; // ISO date
+  readonly weightConfig: Record<string, number>;
+  /** Close payload for the stale epoch — always required. */
+  readonly closeParams: {
+    readonly staleEpochId: string; // bigint serialized
+    readonly staleWeightConfig: Record<string, number>; // pinned config from stale epoch
+    readonly approvers: string[];
+    readonly attributionPipeline: string; // needed to resolve allocatorRef
+    readonly evaluations: ReadonlyArray<{
+      readonly nodeId: string;
+      readonly epochId: string; // bigint as decimal string for Temporal wire format
+      readonly evaluationRef: string;
+      readonly status: "draft" | "locked";
+      readonly algoRef: string;
+      readonly inputsHash: string;
+      readonly payloadHash: string;
+      readonly payloadJson: Record<string, unknown>;
+    }>;
+    readonly artifactsHash: string;
+  };
+}
+
+/**
+ * Output from transitionEpochForWindow activity.
+ */
+export interface TransitionEpochForWindowOutput {
+  readonly epochId: string; // bigint serialized
+  readonly status: string;
+  readonly isNew: boolean;
+  readonly weightConfig: Record<string, number>;
+  readonly closedStaleEpochId: string; // always set — this method only called for stale transitions
 }
 
 /**
@@ -193,9 +275,8 @@ export interface AutoCloseIngestionOutput {
  */
 export interface FinalizeEpochInput {
   readonly epochId: string; // bigint serialized
-  readonly signature: string; // EIP-191 hex
+  readonly signature: string; // EIP-712 hex
   readonly signerAddress: string; // from SIWE session
-  readonly approvers: string[]; // EVM addresses (lowercased)
 }
 
 /**
@@ -204,16 +285,39 @@ export interface FinalizeEpochInput {
 export interface FinalizeEpochOutput {
   readonly statementId: string;
   readonly poolTotalCredits: string; // bigint serialized
-  readonly allocationSetHash: string;
-  readonly payoutCount: number;
+  readonly finalAllocationSetHash: string;
+  readonly statementLineCount: number;
 }
 
 /**
  * Creates ledger activity functions with injected dependencies.
  * Follows the same DI pattern as createActivities() in activities/index.ts.
  */
-export function createLedgerActivities(deps: LedgerActivityDeps) {
-  const { ledgerStore, sourceAdapters, nodeId, scopeId, logger } = deps;
+export function createAttributionActivities(deps: AttributionActivityDeps) {
+  const {
+    attributionStore,
+    sourceRegistrations,
+    registries,
+    nodeId,
+    scopeId,
+    chainId,
+    logger,
+  } = deps;
+
+  function toEvaluationPayloadMap(
+    evaluations: ReadonlyArray<{
+      readonly evaluationRef: string;
+      readonly payloadJson: Record<string, unknown> | null;
+    }>
+  ): ReadonlyMap<string, Record<string, unknown>> {
+    const payloads = new Map<string, Record<string, unknown>>();
+    for (const evaluation of evaluations) {
+      if (evaluation.payloadJson) {
+        payloads.set(evaluation.evaluationRef, evaluation.payloadJson);
+      }
+    }
+    return payloads;
+  }
 
   /**
    * Creates or returns an existing epoch for the given time window.
@@ -230,7 +334,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     );
 
     // Check if an epoch already exists for this window (any status)
-    const existing = await ledgerStore.getEpochByWindow(
+    const existing = await attributionStore.getEpochByWindow(
       nodeId,
       scopeId,
       new Date(periodStart),
@@ -267,7 +371,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     // Race: another worker may create the same epoch between our read and write.
     // On unique constraint violation, re-query and return the existing epoch.
     try {
-      const epoch = await ledgerStore.createEpoch({
+      const epoch = await attributionStore.createEpoch({
         nodeId,
         scopeId,
         periodStart: new Date(periodStart),
@@ -288,7 +392,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       };
     } catch (err) {
       // Unique constraint violation — another worker created the epoch concurrently
-      const raceEpoch = await ledgerStore.getEpochByWindow(
+      const raceEpoch = await attributionStore.getEpochByWindow(
         nodeId,
         scopeId,
         new Date(periodStart),
@@ -319,7 +423,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     const { source, stream, sourceRef } = input;
     logger.info({ source, stream, sourceRef }, "Loading cursor");
 
-    const cursor = await ledgerStore.getCursor(
+    const cursor = await attributionStore.getCursor(
       nodeId,
       scopeId,
       source,
@@ -352,18 +456,14 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       "Collecting from source"
     );
 
-    const adapter = sourceAdapters.get(source);
-    if (!adapter) {
-      logger.warn({ source }, "No adapter found for source, skipping");
-      return {
-        events: [],
-        nextCursorValue: cursorValue ?? new Date(periodStart).toISOString(),
-        nextCursorStreamId: streams[0] ?? source,
-        producerVersion: "unknown",
-      };
+    const registration = sourceRegistrations.get(source);
+    if (!registration?.poll) {
+      throw new Error(
+        `[SOURCE_NO_ADAPTER] No poll adapter registered for source "${source}" — check env vars (GH_REVIEW_APP_ID, GH_REVIEW_APP_PRIVATE_KEY_BASE64, GH_REPOS)`
+      );
     }
 
-    const result = await adapter.collect({
+    const result = await registration.poll.collect({
       streams,
       cursor: cursorValue
         ? {
@@ -388,24 +488,23 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       events: result.events as ActivityEvent[],
       nextCursorValue: result.nextCursor.value,
       nextCursorStreamId: result.nextCursor.streamId,
-      producerVersion: adapter.version,
+      producerVersion: registration.version,
     };
   }
 
   /**
-   * Stores events via ledgerStore. Idempotent via onConflictDoNothing on PK.
+   * Stores receipts via attributionStore. Idempotent via onConflictDoNothing on PK.
    */
-  async function insertEvents(input: InsertEventsInput): Promise<void> {
+  async function insertReceipts(input: InsertReceiptsInput): Promise<void> {
     const { events, producerVersion } = input;
     if (events.length === 0) return;
 
-    logger.info({ count: events.length }, "Inserting activity events");
+    logger.info({ count: events.length }, "Inserting ingestion receipts");
 
-    await ledgerStore.insertActivityEvents(
+    await attributionStore.insertIngestionReceipts(
       events.map((e) => ({
-        id: e.id,
+        receiptId: e.id,
         nodeId,
-        scopeId,
         source: e.source,
         eventType: e.eventType,
         platformUserId: e.platformUserId,
@@ -415,12 +514,13 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         payloadHash: e.payloadHash,
         producer: e.source,
         producerVersion,
-        eventTime: e.eventTime,
+        // eventTime crosses Temporal serialization boundary as ISO string, not Date
+        eventTime: new Date(e.eventTime),
         retrievedAt: new Date(),
       }))
     );
 
-    logger.info({ count: events.length }, "Events inserted");
+    logger.info({ count: events.length }, "Receipts inserted");
   }
 
   /**
@@ -432,7 +532,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     logger.info({ source, stream, cursorValue }, "Saving cursor");
 
     // Load existing to enforce monotonic advancement
-    const existing = await ledgerStore.getCursor(
+    const existing = await attributionStore.getCursor(
       nodeId,
       scopeId,
       source,
@@ -447,7 +547,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         ? existing.cursorValue
         : cursorValue;
 
-    await ledgerStore.upsertCursor(
+    await attributionStore.upsertCursor(
       nodeId,
       scopeId,
       source,
@@ -463,82 +563,105 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
   }
 
   /**
-   * Curates events and resolves platform identities for an epoch.
-   * Two-phase writes: INSERT new curation rows, UPDATE userId on existing unresolved rows.
-   * CURATION_AUTO_POPULATE: never overwrites admin-set included/weight_override_milli/note.
-   * IDENTITY_BEST_EFFORT: unresolved events get userId=null, never dropped.
+   * Materializes selection rows and resolves platform identities for an epoch.
+   *
+   * Delegates inclusion decisions to the selection policy from the pipeline profile.
+   * Two-phase writes: INSERT new selection rows, UPDATE userId on existing unresolved rows.
+   * SELECTION_AUTO_POPULATE: never overwrites admin-set included/weight_override_milli/note.
+   * IDENTITY_BEST_EFFORT: unresolved receipts get userId=null, never dropped.
    */
-  async function curateAndResolve(
-    input: CurateAndResolveInput
-  ): Promise<CurateAndResolveOutput> {
+  async function materializeSelection(
+    input: MaterializeSelectionInput
+  ): Promise<MaterializeSelectionOutput> {
     const epochId = BigInt(input.epochId);
 
-    // 1. Load epoch → get period dates
-    const epoch = await ledgerStore.getEpoch(epochId);
-    if (!epoch) {
-      throw new Error(`curateAndResolve: epoch ${input.epochId} not found`);
-    }
-
-    // 2. Get uncurated events (delta: only events needing work)
-    const uncurated: UncuratedEvent[] = await ledgerStore.getUncuratedEvents(
-      nodeId,
-      epochId,
-      epoch.periodStart,
-      epoch.periodEnd
+    // 1. Resolve selection policy from the pipeline profile
+    const profile = resolveProfile(
+      registries.profiles,
+      input.attributionPipeline
     );
 
-    if (uncurated.length === 0) {
-      logger.info({ epochId: input.epochId }, "No uncurated events — skipping");
-      return { totalEvents: 0, newCurations: 0, resolved: 0, unresolved: 0 };
+    // 2. Load epoch → get period dates
+    const epoch = await attributionStore.getEpoch(epochId);
+    if (!epoch) {
+      throw new Error(`materializeSelection: epoch ${input.epochId} not found`);
     }
 
-    // 3. Collect unique platformUserIds by source
+    // 3. Get selection candidates (delta: only receipts needing work)
+    const unselected: UnselectedReceipt[] =
+      await attributionStore.getSelectionCandidates(nodeId, epochId);
+
+    if (unselected.length === 0) {
+      logger.info(
+        { epochId: input.epochId },
+        "No unselected receipts — skipping"
+      );
+      return { totalReceipts: 0, newSelections: 0, resolved: 0, unresolved: 0 };
+    }
+
+    // 4. Load all receipts for cross-referencing (full history for cross-epoch promotion matching)
+    const allReceipts = await attributionStore.getAllReceipts(nodeId);
+    const receiptsToSelect = unselected.map((u) => u.receipt);
+    const decisions = dispatchSelectionPolicy(
+      registries.selectionPolicies,
+      profile.selectionPolicyRef,
+      { receiptsToSelect, allReceipts }
+    );
+    const inclusionMap = new Map(
+      decisions.map((d) => [d.receiptId, d.included])
+    );
+
+    logger.info(
+      {
+        epochId: input.epochId,
+        policyRef: profile.selectionPolicyRef,
+        included: decisions.filter((d) => d.included).length,
+        excluded: decisions.filter((d) => !d.included).length,
+      },
+      "Selection policy applied"
+    );
+
+    // 5. Collect unique platformUserIds by source for identity resolution
     const idsBySource = new Map<string, Set<string>>();
-    for (const { event } of uncurated) {
-      const ids = idsBySource.get(event.source) ?? new Set();
-      ids.add(event.platformUserId);
-      idsBySource.set(event.source, ids);
+    for (const { receipt } of unselected) {
+      const ids = idsBySource.get(receipt.source) ?? new Set();
+      ids.add(receipt.platformUserId);
+      idsBySource.set(receipt.source, ids);
     }
 
-    // 4. Batch resolve identities per source
-    // V0: only github provider supported
+    // 6. Batch resolve identities per source
     const resolvedMap = new Map<string, string>();
     for (const [source, ids] of idsBySource) {
-      if (source === "github") {
-        const result = await ledgerStore.resolveIdentities("github", [...ids]);
-        for (const [extId, userId] of result) {
-          resolvedMap.set(extId, userId);
-        }
+      const result = await attributionStore.resolveIdentities(source, [...ids]);
+      for (const [extId, userId] of result) {
+        resolvedMap.set(extId, userId);
       }
-      // TODO: add discord etc. when sources expand
     }
 
-    // 5. Two-phase writes
-    let newCurations = 0;
+    // 7. Write selection rows and claimants
+    let newSelections = 0;
     let resolved = 0;
     let unresolved = 0;
 
-    for (const { event, hasExistingCuration } of uncurated) {
-      const resolvedUserId = resolvedMap.get(event.platformUserId) ?? null;
+    for (const { receipt, hasExistingSelection } of unselected) {
+      const resolvedUserId = resolvedMap.get(receipt.platformUserId) ?? null;
+      const included = inclusionMap.get(receipt.receiptId) ?? false;
 
-      if (!hasExistingCuration) {
-        // Phase 1: INSERT new curation row (ON CONFLICT DO NOTHING for race safety)
-        // Uses insertCurationDoNothing — NOT upsertCuration which overwrites all fields
-        await ledgerStore.insertCurationDoNothing([
+      if (!hasExistingSelection) {
+        await attributionStore.insertSelectionDoNothing([
           {
             nodeId,
             epochId,
-            eventId: event.id,
+            receiptId: receipt.receiptId,
             userId: resolvedUserId,
-            included: true,
+            included,
           },
         ]);
-        newCurations++;
+        newSelections++;
       } else if (resolvedUserId) {
-        // Phase 2: UPDATE userId on existing unresolved row
-        await ledgerStore.updateCurationUserId(
+        await attributionStore.updateSelectionUserId(
           epochId,
-          event.id,
+          receipt.receiptId,
           resolvedUserId
         );
       }
@@ -548,90 +671,183 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       } else {
         unresolved++;
       }
+
+      // Write default-author claimant only for included receipts
+      if (included) {
+        const ck = resolvedUserId
+          ? `user:${resolvedUserId}`
+          : `identity:${receipt.source}:${receipt.platformUserId}`;
+        const claimantInputsHash = await sha256OfCanonicalJson({
+          receiptId: receipt.receiptId,
+          userId: resolvedUserId,
+          platformUserId: receipt.platformUserId,
+        });
+        await attributionStore.upsertDraftClaimants({
+          nodeId,
+          epochId,
+          receiptId: receipt.receiptId,
+          resolverRef: "cogni.default-author.v0",
+          algoRef: "default-author-v0",
+          inputsHash: claimantInputsHash,
+          claimantKeys: [ck],
+          createdBy: "system",
+        });
+      }
     }
 
     logger.info(
       {
         epochId: input.epochId,
-        totalEvents: uncurated.length,
-        newCurations,
+        totalReceipts: unselected.length,
+        newSelections,
         resolved,
         unresolved,
       },
-      "Curation and identity resolution complete"
+      "Selection materialization and identity resolution complete"
     );
 
     return {
-      totalEvents: uncurated.length,
-      newCurations,
+      totalReceipts: unselected.length,
+      newSelections,
       resolved,
       unresolved,
     };
   }
 
   /**
-   * Compute proposed allocations from curated events.
-   * Upserts results (ALLOCATION_PRESERVES_OVERRIDES) and removes stale allocations.
+   * Compute receipt-weight allocations and aggregate into user projections.
+   * Uses profile-driven allocator dispatch for per-receipt output.
+   * Upserts user projections (recomputable, unsigned) and removes stale ones.
    */
   async function computeAllocations(
     input: ComputeAllocationsInput
   ): Promise<ComputeAllocationsOutput> {
     const epochId = BigInt(input.epochId);
-    const { algorithmId, weightConfig } = input;
+    const { attributionPipeline, weightConfig } = input;
+    const profile = resolveProfile(registries.profiles, attributionPipeline);
 
     logger.info(
-      { epochId: input.epochId, algorithmId },
+      { epochId: input.epochId, allocatorRef: profile.allocatorRef },
       "Computing allocations"
     );
 
-    // 1. Load curated events (resolved users only)
-    const events = await ledgerStore.getCuratedEventsForAllocation(epochId);
+    // 1. Load selected receipts (resolved users only)
+    const receipts =
+      await attributionStore.getSelectedReceiptsForAllocation(epochId);
 
-    if (events.length === 0) {
-      logger.info({ epochId: input.epochId }, "No curated events — skipping");
+    if (receipts.length === 0) {
+      logger.info(
+        { epochId: input.epochId },
+        "No selected receipts — skipping"
+      );
       return { totalAllocations: 0, totalProposedUnits: "0" };
     }
 
-    // 2. Compute proposed allocations (pure)
-    const proposed = computeProposedAllocations(
-      algorithmId,
-      events,
-      weightConfig
+    // 2. Compute per-receipt weights (pure)
+    const evaluations = toEvaluationPayloadMap(
+      await attributionStore.getEvaluationsForEpoch(epochId, "draft")
+    );
+    const receiptWeights = await dispatchAllocator(
+      registries.allocators,
+      profile.allocatorRef,
+      {
+        receipts,
+        weightConfig,
+        evaluations,
+        profileConfig: null,
+      }
     );
 
-    // 3. Upsert allocations (preserves admin final_units)
-    await ledgerStore.upsertAllocations(
-      proposed.map((p) => ({
-        nodeId,
-        epochId,
-        userId: p.userId,
-        proposedUnits: p.proposedUnits,
-        activityCount: p.activityCount,
-      }))
+    // 3. Aggregate into user projections for the review UI
+    //    Group by userId from selection rows (existing pattern for projections)
+    const weightByReceipt = new Map(
+      receiptWeights.map((w) => [w.receiptId, w])
     );
-
-    // 4. Remove stale allocations (guard: skip if proposed is empty)
-    if (proposed.length > 0) {
-      const activeUserIds = proposed.map((p) => p.userId);
-      await ledgerStore.deleteStaleAllocations(epochId, activeUserIds);
+    const userUnits = new Map<string, { units: bigint; count: number }>();
+    for (const receipt of receipts) {
+      if (!receipt.included) continue;
+      if (!receipt.userId) continue;
+      const weight = weightByReceipt.get(receipt.receiptId);
+      if (!weight) continue;
+      const existing = userUnits.get(receipt.userId) ?? {
+        units: 0n,
+        count: 0,
+      };
+      existing.units += weight.units;
+      existing.count += 1;
+      userUnits.set(receipt.userId, existing);
     }
 
-    const totalProposedUnits = proposed.reduce(
-      (acc, p) => acc + p.proposedUnits,
+    const projections = [...userUnits.entries()].map(
+      ([userId, { units, count }]) => ({
+        nodeId,
+        epochId,
+        userId,
+        projectedUnits: units,
+        receiptCount: count,
+      })
+    );
+
+    const totalProposedUnits = receiptWeights.reduce(
+      (acc, w) => acc + w.units,
       0n
     );
+
+    // 4. Check if projections have actually changed before writing.
+    // Avoids unnecessary DB writes when the same daily run produces identical results.
+    const existingProjections =
+      await attributionStore.getUserProjectionsForEpoch(epochId);
+    const existingMap = new Map(
+      existingProjections.map((p) => [
+        p.userId,
+        { units: p.projectedUnits, count: p.receiptCount },
+      ])
+    );
+
+    const projectionsChanged =
+      projections.length !== existingMap.size ||
+      projections.some((p) => {
+        const existing = existingMap.get(p.userId);
+        return (
+          !existing ||
+          existing.units !== p.projectedUnits ||
+          existing.count !== p.receiptCount
+        );
+      });
+
+    if (!projectionsChanged) {
+      logger.info(
+        {
+          epochId: input.epochId,
+          totalAllocations: receiptWeights.length,
+          totalProposedUnits: totalProposedUnits.toString(),
+        },
+        "Projections unchanged — skipping writes"
+      );
+      return {
+        totalAllocations: receiptWeights.length,
+        totalProposedUnits: totalProposedUnits.toString(),
+      };
+    }
+
+    // 5. Upsert user projections (recomputable, unsigned)
+    if (projections.length > 0) {
+      await attributionStore.upsertUserProjections(projections);
+      const activeUserIds = projections.map((p) => p.userId);
+      await attributionStore.deleteStaleUserProjections(epochId, activeUserIds);
+    }
 
     logger.info(
       {
         epochId: input.epochId,
-        totalAllocations: proposed.length,
+        totalAllocations: receiptWeights.length,
         totalProposedUnits: totalProposedUnits.toString(),
       },
       "Allocations computed"
     );
 
     return {
-      totalAllocations: proposed.length,
+      totalAllocations: receiptWeights.length,
       totalProposedUnits: totalProposedUnits.toString(),
     };
   }
@@ -655,7 +871,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     );
 
     // Check epoch is open before attempting inserts
-    const epoch = await ledgerStore.getEpoch(epochId);
+    const epoch = await attributionStore.getEpoch(epochId);
     if (!epoch) {
       throw new Error(`ensurePoolComponents: epoch ${input.epochId} not found`);
     }
@@ -671,31 +887,23 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     let ensured = 0;
 
     for (const estimate of estimates) {
-      try {
-        await ledgerStore.insertPoolComponent({
-          nodeId,
-          epochId,
-          componentId: estimate.componentId,
-          algorithmVersion: estimate.algorithmVersion,
-          inputsJson: estimate.inputsJson,
-          amountCredits: estimate.amountCredits,
-          evidenceRef: estimate.evidenceRef,
-        });
+      // insertPoolComponent is idempotent (ON CONFLICT DO NOTHING + SELECT)
+      const { created } = await attributionStore.insertPoolComponent({
+        nodeId,
+        epochId,
+        componentId: estimate.componentId,
+        algorithmVersion: estimate.algorithmVersion,
+        inputsJson: estimate.inputsJson,
+        amountCredits: estimate.amountCredits,
+        evidenceRef: estimate.evidenceRef,
+      });
+      if (created) {
         ensured++;
-      } catch (err) {
-        // Idempotent: PK conflict means component already exists — skip
-        const msg = err instanceof Error ? err.message : String(err);
-        if (
-          msg.includes("duplicate key") ||
-          msg.includes("unique constraint")
-        ) {
-          logger.info(
-            { componentId: estimate.componentId },
-            "Pool component already exists — skipping"
-          );
-        } else {
-          throw err;
-        }
+      } else {
+        logger.info(
+          { componentId: estimate.componentId },
+          "Pool component already exists — skipping"
+        );
       }
     }
 
@@ -708,58 +916,128 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
   }
 
   /**
-   * Auto-close ingestion if epoch period has passed + grace period.
-   * Locks config at review: pins allocationAlgoRef, weightConfigHash, approverSetHash.
+   * Detect a stale open epoch that would block creation of a new epoch for the given window.
+   * Returns stale epoch info (serialized for Temporal wire) or null if no stale epoch exists.
    */
-  async function autoCloseIngestion(
-    input: AutoCloseIngestionInput
-  ): Promise<AutoCloseIngestionOutput> {
-    const epochId = BigInt(input.epochId);
-    const periodEnd = new Date(input.periodEnd);
-    const now = new Date();
-
-    // Check if grace period has elapsed
-    const graceDeadline = new Date(periodEnd.getTime() + input.gracePeriodMs);
-    if (now < graceDeadline) {
-      logger.info(
-        {
-          epochId: input.epochId,
-          periodEnd: input.periodEnd,
-          graceDeadline: graceDeadline.toISOString(),
-        },
-        "Grace period not elapsed — skipping auto-close"
-      );
-      return { closed: false, reason: "grace_period_not_elapsed" };
+  async function findStaleOpenEpoch(
+    input: FindStaleOpenEpochInput
+  ): Promise<FindStaleOpenEpochOutput> {
+    const openEpoch = await attributionStore.getOpenEpoch(nodeId, scopeId);
+    if (!openEpoch) {
+      return { staleEpoch: null };
     }
 
-    // Validate and compute config hashes
-    validateWeightConfig(input.weightConfig);
-    const weightConfigHash = await computeWeightConfigHash(input.weightConfig);
-    const allocationAlgoRef = deriveAllocationAlgoRef(input.creditEstimateAlgo);
-    const approverSetHash = computeApproverSetHash(input.approvers);
+    // Same window → not stale (rerun within current epoch period)
+    if (
+      openEpoch.periodStart.toISOString() ===
+        new Date(input.periodStart).toISOString() &&
+      openEpoch.periodEnd.toISOString() ===
+        new Date(input.periodEnd).toISOString()
+    ) {
+      return { staleEpoch: null };
+    }
 
     logger.info(
       {
-        epochId: input.epochId,
-        allocationAlgoRef,
-        weightConfigHash: `${weightConfigHash.slice(0, 12)}...`,
+        staleEpochId: openEpoch.id.toString(),
+        staleWindow: `${openEpoch.periodStart.toISOString()}..${openEpoch.periodEnd.toISOString()}`,
+        newWindow: `${input.periodStart}..${input.periodEnd}`,
       },
-      "Auto-closing ingestion"
+      "Found stale open epoch blocking new window"
     );
 
-    const epoch = await ledgerStore.closeIngestion(
-      epochId,
-      approverSetHash,
-      allocationAlgoRef,
-      weightConfigHash
+    return {
+      staleEpoch: {
+        epochId: openEpoch.id.toString(),
+        weightConfig: openEpoch.weightConfig,
+        periodStart: openEpoch.periodStart.toISOString(),
+        periodEnd: openEpoch.periodEnd.toISOString(),
+      },
+    };
+  }
+
+  /**
+   * Atomic epoch transition: close stale open epoch (if any) + get-or-create epoch for the given window.
+   * Single DB transaction — no race window between close and create.
+   * Computes config hashes internally (crypto not safe in Temporal workflow code).
+   * Locks claimant rows for stale epoch before transition.
+   */
+  async function transitionEpochForWindow(
+    input: TransitionEpochForWindowInput
+  ): Promise<TransitionEpochForWindowOutput> {
+    const { closeParams: inputClose } = input;
+
+    // Lock claimants for stale epoch before the atomic transition
+    const staleEpochId = BigInt(inputClose.staleEpochId);
+    const lockedCount =
+      await attributionStore.lockClaimantsForEpoch(staleEpochId);
+    logger.info(
+      {
+        staleEpochId: inputClose.staleEpochId,
+        lockedClaimants: lockedCount,
+      },
+      "Claimant rows locked for stale epoch"
     );
+
+    // Compute hashes from raw values (crypto happens here, not in workflow)
+    validateWeightConfig(inputClose.staleWeightConfig);
+    const weightConfigHash = await computeWeightConfigHash(
+      inputClose.staleWeightConfig
+    );
+    const approverSetHash = await computeApproverSetHash(inputClose.approvers);
+    const profile = resolveProfile(
+      registries.profiles,
+      inputClose.attributionPipeline
+    );
+    const allocationAlgoRef = profile.allocatorRef;
 
     logger.info(
-      { epochId: input.epochId, status: epoch.status },
-      "Ingestion auto-closed"
+      {
+        staleEpochId: inputClose.staleEpochId,
+        allocationAlgoRef,
+        weightConfigHash: `${weightConfigHash.slice(0, 12)}...`,
+        evaluationCount: inputClose.evaluations.length,
+      },
+      "Closing stale epoch during transition"
     );
 
-    return { closed: true, reason: "auto_closed" };
+    const closeParams: CloseIngestionWithEvaluationsParams = {
+      epochId: staleEpochId,
+      approvers: inputClose.approvers,
+      approverSetHash,
+      allocationAlgoRef,
+      weightConfigHash,
+      evaluations: inputClose.evaluations.map((e) => ({
+        ...e,
+        epochId: BigInt(e.epochId),
+      })),
+      artifactsHash: inputClose.artifactsHash,
+    };
+
+    const result = await attributionStore.transitionEpochForWindow({
+      nodeId,
+      scopeId,
+      periodStart: new Date(input.periodStart),
+      periodEnd: new Date(input.periodEnd),
+      weightConfig: input.weightConfig,
+      closeParams,
+    });
+
+    logger.info(
+      {
+        closedStaleEpochId: result.closedStaleEpochId.toString(),
+        newEpochId: result.epoch.id.toString(),
+      },
+      "Epoch transition complete — stale epoch closed, new epoch created"
+    );
+
+    return {
+      epochId: result.epoch.id.toString(),
+      status: result.epoch.status,
+      isNew: result.isNew,
+      weightConfig: result.epoch.weightConfig,
+      closedStaleEpochId: result.closedStaleEpochId.toString(),
+    };
   }
 
   /**
@@ -778,7 +1056,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     );
 
     // 1. Load epoch — verify exists and is review (or finalized for idempotency)
-    const epoch = await ledgerStore.getEpoch(epochId);
+    const epoch = await attributionStore.getEpoch(epochId);
     if (!epoch) {
       throw new Error(`finalizeEpoch: epoch ${input.epochId} not found`);
     }
@@ -789,7 +1067,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         { epochId: input.epochId },
         "Epoch already finalized — repairing via finalizeEpochAtomic"
       );
-      const existing = await ledgerStore.getStatementForEpoch(epochId);
+      const existing = await attributionStore.getStatementForEpoch(epochId);
       if (!existing) {
         throw new Error(
           `finalizeEpoch: epoch ${input.epochId} is finalized but no statement found`
@@ -797,14 +1075,26 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       }
 
       // Repair: ensure this signer's signature exists via atomic method
-      await ledgerStore.finalizeEpochAtomic({
+      await attributionStore.finalizeEpochAtomic({
         epochId,
         poolTotal: existing.poolTotalCredits,
+        finalClaimantAllocations: await attributionStore
+          .getFinalClaimantAllocationsForEpoch(epochId)
+          .then((allocations) =>
+            allocations.map((allocation) => ({
+              nodeId: allocation.nodeId,
+              epochId: allocation.epochId,
+              claimantKey: allocation.claimantKey,
+              claimant: allocation.claimant,
+              finalUnits: allocation.finalUnits,
+              receiptIds: allocation.receiptIds,
+            }))
+          ),
         statement: {
           nodeId,
-          allocationSetHash: existing.allocationSetHash,
+          finalAllocationSetHash: existing.finalAllocationSetHash,
           poolTotalCredits: existing.poolTotalCredits,
-          payoutsJson: existing.payoutsJson,
+          statementLines: existing.statementLines,
         },
         signature: {
           nodeId,
@@ -812,14 +1102,14 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
           signature: input.signature,
           signedAt: new Date(),
         },
-        expectedAllocationSetHash: existing.allocationSetHash,
+        expectedFinalAllocationSetHash: existing.finalAllocationSetHash,
       });
 
       return {
         statementId: existing.id,
         poolTotalCredits: existing.poolTotalCredits.toString(),
-        allocationSetHash: existing.allocationSetHash,
-        payoutCount: existing.payoutsJson.length,
+        finalAllocationSetHash: existing.finalAllocationSetHash,
+        statementLineCount: existing.statementLines.length,
       };
     }
 
@@ -836,36 +1126,30 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       );
     }
 
-    // 3. Verify signer is in approvers and matches pinned approverSetHash
+    // 3. Verify signer is in pinned approvers (APPROVERS_PINNED_AT_REVIEW)
+    if (!epoch.approvers || epoch.approvers.length === 0) {
+      throw new Error(
+        `finalizeEpoch: epoch ${input.epochId} has no pinned approvers (APPROVERS_PINNED_AT_REVIEW violated)`
+      );
+    }
     const signerLower = input.signerAddress.toLowerCase();
-    const approversLower = input.approvers.map((a) => a.toLowerCase());
+    const approversLower = epoch.approvers.map((a) => a.toLowerCase());
     if (!approversLower.includes(signerLower)) {
       throw new Error(
         `finalizeEpoch: signer ${input.signerAddress} not in approvers`
       );
     }
-    const currentApproverSetHash = computeApproverSetHash(input.approvers);
-    if (epoch.approverSetHash !== currentApproverSetHash) {
+    // Self-consistent integrity check: recompute hash from pinned list
+    const pinnedApproverSetHash = await computeApproverSetHash(epoch.approvers);
+    if (epoch.approverSetHash !== pinnedApproverSetHash) {
       throw new Error(
-        `finalizeEpoch: approver set hash mismatch — epoch has ${epoch.approverSetHash}, current is ${currentApproverSetHash}`
+        `finalizeEpoch: approver set hash integrity failure — stored hash ${epoch.approverSetHash} does not match recomputed ${pinnedApproverSetHash}`
       );
     }
 
-    // 4. Load allocations — use final_units where set, fall back to proposed_units
-    const allocations = await ledgerStore.getAllocationsForEpoch(epochId);
-    if (allocations.length === 0) {
-      throw new Error(
-        `finalizeEpoch: epoch ${input.epochId} has no allocations`
-      );
-    }
-
-    const finalizedAllocations = allocations.map((a) => ({
-      userId: a.userId,
-      valuationUnits: a.finalUnits ?? a.proposedUnits,
-    }));
-
-    // 5. Load pool components → pool_total = SUM(amount_credits)
-    const poolComponents = await ledgerStore.getPoolComponentsForEpoch(epochId);
+    // 4. Load pool components → pool_total = SUM(amount_credits)
+    const poolComponents =
+      await attributionStore.getPoolComponentsForEpoch(epochId);
     if (poolComponents.length === 0) {
       throw new Error(
         `finalizeEpoch: epoch ${input.epochId} has no pool components (POOL_REQUIRES_BASE)`
@@ -885,25 +1169,78 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
       0n
     );
 
-    // 6. Compute payouts (pure, deterministic)
-    const payouts = computePayouts(finalizedAllocations, poolTotal);
+    // 5. Load locked claimants + receipt weights + overrides → explode to claimant allocations
+    const lockedClaimants = await attributionStore.loadLockedClaimants(epochId);
+    if (lockedClaimants.length === 0) {
+      throw new Error(
+        `finalizeEpoch: epoch ${input.epochId} has no locked claimant rows`
+      );
+    }
+
+    const [selections, overrideRecords] = await Promise.all([
+      attributionStore.getSelectedReceiptsForAllocation(epochId),
+      attributionStore.getReviewSubjectOverridesForEpoch(epochId),
+    ]);
+    const rawWeights = await dispatchAllocator(
+      registries.allocators,
+      epoch.allocationAlgoRef,
+      {
+        receipts: selections,
+        weightConfig: epoch.weightConfig,
+        evaluations: toEvaluationPayloadMap(
+          await attributionStore.getEvaluationsForEpoch(epochId, "locked")
+        ),
+        profileConfig: null,
+      }
+    );
+    const overrides = toReviewSubjectOverrides(overrideRecords);
+    const receiptWeights = applyReceiptWeightOverrides(rawWeights, overrides);
+
+    const finalClaimantAllocations = explodeToClaimants(
+      receiptWeights,
+      lockedClaimants,
+      overrides
+    );
+    if (finalClaimantAllocations.length === 0) {
+      throw new Error(
+        `finalizeEpoch: epoch ${input.epochId} has no claimant allocations`
+      );
+    }
+
+    // Build override audit trail for statement persistence
+    const reviewOverrideSnapshots = buildReceiptWeightOverrideSnapshots(
+      rawWeights,
+      lockedClaimants,
+      overrides
+    );
+
+    // 6. Compute statement lines from final allocations
+    const statementLines = computeAttributionStatementLines(
+      finalClaimantAllocations,
+      poolTotal
+    );
 
     // 7. Compute allocation set hash (deterministic)
-    const allocationSetHash =
-      await computeAllocationSetHash(finalizedAllocations);
+    const finalAllocationSetHash = await computeFinalClaimantAllocationSetHash(
+      finalClaimantAllocations
+    );
 
-    // 8. Build canonical message and verify signature
-    const canonicalMessage = buildCanonicalMessage({
+    // 8. Build EIP-712 typed data and verify signature
+    const typedData = buildEIP712TypedData({
       nodeId,
       scopeId,
       epochId: input.epochId,
-      allocationSetHash,
+      finalAllocationSetHash,
       poolTotalCredits: poolTotal.toString(),
+      chainId,
     });
 
-    const isValid = await verifyMessage({
+    const isValid = await verifyTypedData({
       address: input.signerAddress as `0x${string}`,
-      message: canonicalMessage,
+      domain: typedData.domain,
+      types: typedData.types,
+      primaryType: typedData.primaryType,
+      message: typedData.message,
       signature: input.signature as `0x${string}`,
     });
     if (!isValid) {
@@ -914,19 +1251,33 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
 
     // 9. Atomic finalize — epoch transition + statement + signature in one transaction
     const { epoch: finalizedEpoch, statement } =
-      await ledgerStore.finalizeEpochAtomic({
+      await attributionStore.finalizeEpochAtomic({
         epochId,
         poolTotal,
+        finalClaimantAllocations: finalClaimantAllocations.map(
+          (allocation) => ({
+            nodeId,
+            epochId,
+            claimantKey: claimantKey(allocation.claimant),
+            claimant: allocation.claimant,
+            finalUnits: allocation.finalUnits,
+            receiptIds: [...(allocation.receiptIds ?? [])],
+          })
+        ),
         statement: {
           nodeId,
-          allocationSetHash,
+          finalAllocationSetHash,
           poolTotalCredits: poolTotal,
-          payoutsJson: payouts.map((p) => ({
-            user_id: p.userId,
-            total_units: p.totalUnits.toString(),
-            share: p.share,
-            amount_credits: p.amountCredits.toString(),
+          statementLines: statementLines.map((line) => ({
+            claimant_key: line.claimantKey,
+            claimant: line.claimant,
+            final_units: line.finalUnits.toString(),
+            pool_share: line.poolShare,
+            credit_amount: line.creditAmount.toString(),
+            receipt_ids: [...line.receiptIds],
           })),
+          reviewOverrides:
+            reviewOverrideSnapshots.length > 0 ? reviewOverrideSnapshots : null,
         },
         signature: {
           nodeId,
@@ -934,7 +1285,7 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
           signature: input.signature,
           signedAt: new Date(),
         },
-        expectedAllocationSetHash: allocationSetHash,
+        expectedFinalAllocationSetHash: finalAllocationSetHash,
       });
 
     logger.info(
@@ -942,8 +1293,8 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
         epochId: input.epochId,
         statementId: statement.id,
         poolTotalCredits: poolTotal.toString(),
-        allocationSetHash: `${allocationSetHash.slice(0, 12)}...`,
-        payoutCount: payouts.length,
+        finalAllocationSetHash: `${finalAllocationSetHash.slice(0, 12)}...`,
+        statementLineCount: statementLines.length,
         status: finalizedEpoch.status,
       },
       "Epoch finalized"
@@ -952,24 +1303,46 @@ export function createLedgerActivities(deps: LedgerActivityDeps) {
     return {
       statementId: statement.id,
       poolTotalCredits: poolTotal.toString(),
-      allocationSetHash,
-      payoutCount: payouts.length,
+      finalAllocationSetHash,
+      statementLineCount: statementLines.length,
     };
+  }
+
+  /**
+   * Resolve stream IDs for a source by querying the adapter's self-declared streams.
+   */
+  async function resolveStreams(
+    input: ResolveStreamsInput
+  ): Promise<ResolveStreamsOutput> {
+    const registration = sourceRegistrations.get(input.source);
+    if (!registration?.poll) {
+      throw new Error(
+        `[SOURCE_NO_ADAPTER] No poll adapter registered for source "${input.source}" — check env vars (GH_REVIEW_APP_ID, GH_REVIEW_APP_PRIVATE_KEY_BASE64, GH_REPOS)`
+      );
+    }
+    const streams = registration.poll.streams().map((s) => s.id);
+    logger.info(
+      { source: input.source, streams },
+      "Resolved streams from adapter"
+    );
+    return { streams };
   }
 
   return {
     ensureEpochForWindow,
     loadCursor,
     collectFromSource,
-    insertEvents,
+    insertReceipts,
     saveCursor,
-    curateAndResolve,
+    materializeSelection,
     computeAllocations,
     ensurePoolComponents,
-    autoCloseIngestion,
+    findStaleOpenEpoch,
+    transitionEpochForWindow,
     finalizeEpoch,
+    resolveStreams,
   };
 }
 
 /** Type alias for workflow proxy usage */
-export type LedgerActivities = ReturnType<typeof createLedgerActivities>;
+export type LedgerActivities = ReturnType<typeof createAttributionActivities>;

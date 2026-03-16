@@ -16,11 +16,13 @@
  * @public
  */
 
+import type { InferSelectModel } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import {
   check,
   index,
   jsonb,
+  pgPolicy,
   pgTable,
   text,
   timestamp,
@@ -60,6 +62,41 @@ export const userBindings = pgTable(
     index("user_bindings_user_id_idx").on(table.userId),
   ]
 ).enableRLS();
+
+/**
+ * Link transactions — server-side records for fail-closed account linking.
+ * Created when a user initiates an OAuth link, consumed atomically in the
+ * NextAuth callback. If consumption fails (expired, already consumed, tampered),
+ * the link is rejected — never silently falls through to new-user creation.
+ */
+export const linkTransactions = pgTable(
+  "link_transactions",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    provider: text("provider").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "link_transactions_provider_check",
+      sql`${table.provider} IN ('github', 'discord', 'google')`
+    ),
+    index("link_transactions_user_id_idx").on(table.userId),
+    pgPolicy("tenant_isolation", {
+      using: sql`${table.userId} = current_setting('app.current_user_id', true)`,
+      withCheck: sql`${table.userId} = current_setting('app.current_user_id', true)`,
+    }),
+  ]
+).enableRLS();
+
+export type LinkTransaction = InferSelectModel<typeof linkTransactions>;
 
 /**
  * Identity events — append-only audit trail for binding lifecycle.

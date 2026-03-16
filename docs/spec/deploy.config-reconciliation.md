@@ -114,13 +114,13 @@ Eliminate silent config drift. When a bind-mounted config file changes between d
 
 ### File Pointers
 
-| File                                                                 | Purpose                                   |
-| -------------------------------------------------------------------- | ----------------------------------------- |
-| `platform/ci/scripts/deploy.sh`                                      | Implementation target (remote heredoc)    |
-| `platform/infra/services/runtime/docker-compose.yml`                 | Base compose — services with config files |
-| `platform/infra/services/runtime/configs/litellm.config.yaml`        | LiteLLM model routing config              |
-| `platform/infra/services/runtime/configs/alloy-config.metrics.alloy` | Alloy log collection config               |
-| `platform/infra/services/edge/configs/Caddyfile.tmpl`                | Caddy TLS/proxy config                    |
+| File                                               | Purpose                                   |
+| -------------------------------------------------- | ----------------------------------------- |
+| `scripts/ci/deploy.sh`                             | Implementation target (remote heredoc)    |
+| `infra/compose/runtime/docker-compose.yml`         | Base compose — services with config files |
+| `infra/compose/configs/litellm.config.yaml`        | LiteLLM model routing config              |
+| `infra/compose/configs/alloy-config.metrics.alloy` | Alloy log collection config               |
+| `infra/compose/configs/Caddyfile.tmpl`             | Caddy TLS/proxy config                    |
 
 ## Acceptance Checks
 

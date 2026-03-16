@@ -3,21 +3,22 @@
 
 /**
  * Module: `@cogni/scheduler-worker-service/ledger-worker`
- * Purpose: Temporal Worker for the ledger-tasks queue — epoch collection workflows.
- * Scope: Creates Temporal Worker with ledger activities and CollectEpochWorkflow. Does not contain business logic.
+ * Purpose: Temporal Worker for the ledger-tasks queue — epoch collection and enrichment workflows.
+ * Scope: Creates Temporal Worker with ledger + enrichment activities and CollectEpochWorkflow. Does not contain business logic.
  * Invariants:
  *   - Separate task queue (ledger-tasks) from scheduler-tasks
- *   - All dependencies injected via LedgerContainer from bootstrap/container.ts
+ *   - All dependencies injected via AttributionContainer from bootstrap/container.ts
  *   - Per TEMPORAL_DETERMINISM: Workflows are bundled separately from activities
  * Side-effects: IO (connects to Temporal, starts worker)
- * Links: docs/spec/epoch-ledger.md, docs/spec/temporal-patterns.md
+ * Links: docs/spec/attribution-ledger.md, docs/spec/temporal-patterns.md
  * @internal
  */
 
 import { NativeConnection, Worker } from "@temporalio/worker";
 
-import { createLedgerActivities } from "./activities/ledger.js";
-import type { LedgerContainer } from "./bootstrap/container.js";
+import { createEnrichmentActivities } from "./activities/enrichment.js";
+import { createAttributionActivities } from "./activities/ledger.js";
+import type { AttributionContainer } from "./bootstrap/container.js";
 import type { Env } from "./bootstrap/env.js";
 import type { Logger } from "./observability/logger.js";
 
@@ -27,14 +28,14 @@ export const LEDGER_TASK_QUEUE = "ledger-tasks";
 export interface LedgerWorkerConfig {
   env: Env;
   logger: Logger;
-  container: LedgerContainer;
+  container: AttributionContainer;
 }
 
 /**
  * Starts the Temporal ledger worker for epoch collection workflows.
  * Returns a cleanup function to stop the worker gracefully.
  */
-export async function startLedgerWorker(
+export async function startAttributionWorker(
   config: LedgerWorkerConfig
 ): Promise<{ shutdown: () => Promise<void> }> {
   const { env, logger, container } = config;
@@ -54,13 +55,24 @@ export async function startLedgerWorker(
     address: env.TEMPORAL_ADDRESS,
   });
 
-  const activities = createLedgerActivities({
-    ledgerStore: container.ledgerStore,
-    sourceAdapters: container.sourceAdapters,
+  const ledgerActivities = createAttributionActivities({
+    attributionStore: container.attributionStore,
+    sourceRegistrations: container.sourceRegistrations,
+    registries: container.registries,
     nodeId: container.nodeId,
     scopeId: container.scopeId,
+    chainId: container.chainId,
     logger: container.logger,
   });
+
+  const enrichmentActivities = createEnrichmentActivities({
+    attributionStore: container.attributionStore,
+    nodeId: container.nodeId,
+    logger: container.logger,
+    registries: container.registries,
+  });
+
+  const activities = { ...ledgerActivities, ...enrichmentActivities };
 
   const worker = await Worker.create({
     connection,

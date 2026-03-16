@@ -14,7 +14,7 @@ last_commit: e2ac1b60
 ## Context
 
 - The ledger system tracks epoch-based credit payouts scoped to (node_id, scope_id) pairs
-- Before this task, `DrizzleLedgerAdapter` methods that took `epochId` only checked `WHERE id = $epochId` — no scope enforcement, enabling cross-tenant data access
+- Before this task, `DrizzleAttributionAdapter` methods that took `epochId` only checked `WHERE id = $epochId` — no scope enforcement, enabling cross-tenant data access
 - This is a security fix: scope mismatches now throw `EpochNotFoundError` (indistinguishable from non-existent epoch)
 - The port interface (`ActivityLedgerStore`) is unchanged — scope is an adapter-internal concern via constructor injection
 - This task is a blocker for task.0100 (3-phase state machine) and transitively task.0102 (finalize workflow)
@@ -53,13 +53,13 @@ last_commit: e2ac1b60
 
 ## Pointers
 
-| File / Resource                                             | Why it matters                                                                              |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` | Core change: constructor, `resolveEpochScoped()`, `validateEpochIds()`, all patched methods |
-| `src/shared/config/repoSpec.server.ts`                      | New `getScopeId()` accessor                                                                 |
-| `src/bootstrap/container.ts:389`                            | App container passes `getScopeId()` to adapter                                              |
-| `services/scheduler-worker/src/bootstrap/container.ts:103`  | Worker container passes `config.SCOPE_ID`                                                   |
-| `tests/component/db/drizzle-ledger.adapter.int.test.ts`     | 40 tests including 12 new scope-isolation tests                                             |
-| `work/items/task.0103.scope-gated-queries-retrofit.md`      | Full design doc with method-by-method audit                                                 |
-| `work/items/task.0100.epoch-signing-state-machine.md`       | Next task: 3-phase state machine (design complete)                                          |
-| `docs/spec/epoch-ledger.md`                                 | Governing spec for the ledger system                                                        |
+| File / Resource                                                  | Why it matters                                                                              |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` | Core change: constructor, `resolveEpochScoped()`, `validateEpochIds()`, all patched methods |
+| `src/shared/config/repoSpec.server.ts`                           | New `getScopeId()` accessor                                                                 |
+| `src/bootstrap/container.ts:389`                                 | App container passes `getScopeId()` to adapter                                              |
+| `services/scheduler-worker/src/bootstrap/container.ts:103`       | Worker container passes `config.SCOPE_ID`                                                   |
+| `tests/component/db/drizzle-attribution.adapter.int.test.ts`     | 40 tests including 12 new scope-isolation tests                                             |
+| `work/items/task.0103.scope-gated-queries-retrofit.md`           | Full design doc with method-by-method audit                                                 |
+| `work/items/task.0100.epoch-signing-state-machine.md`            | Next task: 3-phase state machine (design complete)                                          |
+| `docs/spec/attribution-ledger.md`                                | Governing spec for the ledger system                                                        |

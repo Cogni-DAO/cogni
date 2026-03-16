@@ -18,7 +18,7 @@
   "references": [
     { "path": "../db-schema" },
     { "path": "../ids" },
-    { "path": "../ledger-core" },
+    { "path": "../attribution-ledger" },
     { "path": "../scheduler-core" }
   ]
 }

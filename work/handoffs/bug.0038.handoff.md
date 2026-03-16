@@ -33,7 +33,7 @@ Branch pushed with 2 commits:
 2. **fd107d73** — Refinement:
    - Added `PNPM_STORE_IMAGE` pull to main pull block (5th targeted pull)
    - `seed-pnpm-store.sh` changed from self-contained pull to `${PNPM_STORE_IMAGE:?}` (requires caller)
-   - `platform/ci/AGENTS.md` updated with targeted-pull and SSH keepalive notes
+   - `scripts/ci/AGENTS.md` updated with targeted-pull and SSH keepalive notes
 
 ## Decisions Made
 
@@ -58,10 +58,10 @@ Branch pushed with 2 commits:
 
 | File / Resource                                          | Why it matters                                                |
 | -------------------------------------------------------- | ------------------------------------------------------------- |
-| `platform/ci/scripts/deploy.sh:643-671`                  | Targeted pull block + pnpm seed (the core change)             |
-| `platform/ci/scripts/deploy.sh:153-166`                  | SSH_OPTS with keepalive (both code paths)                     |
-| `platform/ci/scripts/deploy.sh:5-18`                     | Header invariants (TARGETED_PULL, SSH_KEEPALIVE)              |
-| `platform/ci/scripts/seed-pnpm-store.sh`                 | Changed from self-contained to caller-dependent               |
-| `platform/infra/services/runtime/docker-compose.yml:200` | busybox pinned to 1.37                                        |
+| `scripts/ci/deploy.sh:643-671`                           | Targeted pull block + pnpm seed (the core change)             |
+| `scripts/ci/deploy.sh:153-166`                           | SSH_OPTS with keepalive (both code paths)                     |
+| `scripts/ci/deploy.sh:5-18`                              | Header invariants (TARGETED_PULL, SSH_KEEPALIVE)              |
+| `scripts/ci/seed-pnpm-store.sh`                          | Changed from self-contained to caller-dependent               |
+| `infra/compose/docker-compose.yml:200`                   | busybox pinned to 1.37                                        |
 | `work/items/bug.0038.deploy-blanket-pull-ssh-timeout.md` | Full investigation, image inventory table, reproduction steps |
 | `.github/workflows/deploy-production.yml`                | GH Actions workflow that calls deploy.sh                      |

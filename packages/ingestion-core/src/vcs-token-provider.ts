@@ -8,7 +8,7 @@
  * Invariants:
  * - ADAPTERS_NOT_IN_CORE: Only types here. No I/O, no deps.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md, services/scheduler-worker/src/adapters/ingestion/github-auth.ts
+ * Links: docs/spec/attribution-ledger.md, services/scheduler-worker/src/adapters/ingestion/github-auth.ts
  * @public
  */
 

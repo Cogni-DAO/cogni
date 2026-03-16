@@ -133,7 +133,7 @@ runs:
           GITHUB_RUN_ID="${{ github.run_id }}" \
           GITHUB_RUN_ATTEMPT="${{ github.run_attempt }}" \
           GITHUB_JOB="${{ github.job }}" \
-          platform/ci/scripts/fetch_github_job_logs.sh || true
+          scripts/ci/fetch_github_job_logs.sh || true
 
         # Append job logs to generic context
         cat "$TEMP_JOB_LOGS" >> "$TEMP_GENERIC"

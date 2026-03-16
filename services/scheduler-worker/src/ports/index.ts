@@ -11,16 +11,18 @@
  * @public
  */
 
+// Ledger ports from @cogni/attribution-ledger
+export type { AttributionStore } from "@cogni/attribution-ledger";
 // Ingestion ports from @cogni/ingestion-core
 export type {
   CollectParams,
   CollectResult,
+  DataSourceRegistration,
+  PollAdapter,
   SourceAdapter,
   StreamCursor,
+  WebhookNormalizer,
 } from "@cogni/ingestion-core";
-
-// Ledger ports from @cogni/ledger-core
-export type { ActivityLedgerStore } from "@cogni/ledger-core";
 // Scheduling ports from @cogni/scheduler-core
 export type {
   ExecutionGrantWorkerPort,

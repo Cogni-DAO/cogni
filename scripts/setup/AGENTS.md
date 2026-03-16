@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-15
 - **Status:** draft
 
 ## Purpose
@@ -31,7 +30,6 @@
 ## Public Surface
 
 - **Exports:** none (no implementation yet)
-- **Routes (if any):** none
 - **CLI (if any):** Planned: `pnpm setup local|infra|github|dao`
 - **Env/Config keys:** none currently
 - **Files considered API:** none (planning phase)
@@ -60,7 +58,7 @@ pnpm setup dao       # DAO contract deployment
 
 ## Standards
 
-- Follow existing script conventions in `platform/bootstrap/install/*`
+- Follow existing script conventions in `scripts/bootstrap/install/*`
 - Use TypeScript for complex logic, bash for simple wrappers
 - All operations must be idempotent (safe to re-run)
 - Clear error messages with actionable next steps
@@ -68,7 +66,7 @@ pnpm setup dao       # DAO contract deployment
 ## Dependencies
 
 - **Current:** None
-- **Future:** Will use existing `platform/infra/providers/cherry/base/` Terraform configs
+- **Future:** Will use existing `infra/tofu/cherry/base/` Terraform configs
 
 ## Change Protocol
 

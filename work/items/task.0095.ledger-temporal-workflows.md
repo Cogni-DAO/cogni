@@ -34,14 +34,14 @@ Admin (or daily cron) triggers activity collection for an epoch time window; the
 
 ### Approach
 
-**Solution**: Two Temporal workflows + one `createLedgerActivities(deps)` factory, following the exact pattern of existing `createActivities`. A new pure function `computeProposedAllocations` in `@cogni/ledger-core/rules` handles the aggregation math. A new `resolveIdentities` method on `ActivityLedgerStore` queries `user_bindings` for batch identity resolution.
+**Solution**: Two Temporal workflows + one `createLedgerActivities(deps)` factory, following the exact pattern of existing `createActivities`. A new pure function `computeProposedAllocations` in `@cogni/attribution-ledger/rules` handles the aggregation math. A new `resolveIdentities` method on `ActivityLedgerStore` queries `user_bindings` for batch identity resolution.
 
 **Reuses**:
 
 - Existing `createActivities(deps)` DI pattern (closure factory with injected adapters)
-- Existing `DrizzleLedgerAdapter` for all DB operations
+- Existing `DrizzleAttributionAdapter` for all DB operations
 - Existing `GitHubSourceAdapter` for activity collection
-- Existing `computePayouts()` + `computeAllocationSetHash()` from `@cogni/ledger-core`
+- Existing `computeStatementItems()` + `computeAllocationSetHash()` from `@cogni/attribution-ledger`
 - Existing `createServiceDbClient` for worker DB access
 - `node_id` from `repo-spec.yaml` (already in env via `NODE_ID`)
 - `scope_id` from repo-spec or project manifests (V0: `'default'`; multi-scope: from `.cogni/projects/*.yaml`)
@@ -70,7 +70,7 @@ activity_ledger:
 
 The workflow reads `epoch_length_days` to compute `periodStart`/`periodEnd`. `activity_sources` declares which adapters to run. `credit_estimate_algo` is a named reference to the weight config version — V0 hardcodes `cogni-v0.0` weights in code; vNext loads scoring schemas from repo-spec.
 
-**Scope parameter:** Workflows accept `scope_id` (V0: always `'default'`). Deterministic workflow IDs include scope: `ledger-collect-{scopeId}-{periodStart}-{periodEnd}`. Epoch invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are composite on `(node_id, scope_id)`. See [epoch-ledger.md §Project Scoping](../../docs/spec/epoch-ledger.md#project-scoping).
+**Scope parameter:** Workflows accept `scope_id` (V0: always `'default'`). Deterministic workflow IDs include scope: `ledger-collect-{scopeId}-{periodStart}-{periodEnd}`. Epoch invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are composite on `(node_id, scope_id)`. See [attribution-ledger.md §Project Scoping](../../docs/spec/attribution-ledger.md#project-scoping).
 
 **Collection cadence** is a Temporal Schedule concern (daily cron `0 6 * * *`), not repo-spec. Daily runs let admins track epoch progress throughout the week. Each run is additive — cursor-based sync picks up where the last run left off.
 
@@ -90,7 +90,7 @@ All activities created via `createLedgerActivities(deps)` factory:
 
 ```
 LedgerActivityDeps {
-  ledgerStore: ActivityLedgerStore;  // DrizzleLedgerAdapter
+  ledgerStore: ActivityLedgerStore;  // DrizzleAttributionAdapter
   adapters: SourceAdapter[];         // [GitHubSourceAdapter, ...]
   nodeId: string;                    // from NODE_ID env
   logger: Logger;
@@ -143,7 +143,7 @@ Deterministic ID: ledger-finalize-{epochId}
      b. If closed → return existing statement (EPOCH_CLOSE_IDEMPOTENT)
      c. getPoolComponentsForEpoch(epochId) — verify POOL_REQUIRES_BASE
      d. getAllocationsForEpoch(epochId) — build FinalizedAllocation[]
-     e. computePayouts(allocations, poolTotal)
+     e. computeStatementItems(allocations, poolTotal)
      f. computeAllocationSetHash(allocations)
      g. Atomic: closeEpoch + insertPayoutStatement
      h. Return statement
@@ -153,7 +153,7 @@ Deterministic ID: ledger-finalize-{epochId}
 
 ### New pure function: `computeProposedAllocations`
 
-Added to `packages/ledger-core/src/rules.ts`:
+Added to `packages/attribution-ledger/src/rules.ts`:
 
 ```typescript
 interface CuratedEventForAllocation {
@@ -189,7 +189,7 @@ resolveIdentities(
 ): Promise<Map<string, string>>  // externalId → userId
 ```
 
-Implementation in `DrizzleLedgerAdapter`: queries `user_bindings` table with `WHERE provider = $1 AND external_id = ANY($2)`.
+Implementation in `DrizzleAttributionAdapter`: queries `user_bindings` table with `WHERE provider = $1 AND external_id = ANY($2)`.
 
 ### Invariants
 
@@ -198,7 +198,7 @@ Implementation in `DrizzleLedgerAdapter`: queries `user_bindings` table with `WH
 - [ ] WRITES_VIA_TEMPORAL: Both workflows execute all writes in Temporal activities (spec: epoch-ledger-spec)
 - [ ] EPOCH_CLOSE_IDEMPOTENT: Closing a closed epoch returns existing statement (spec: epoch-ledger-spec)
 - [ ] POOL_REQUIRES_BASE: Finalize rejects if no `base_issuance` pool component (spec: epoch-ledger-spec)
-- [ ] PAYOUT_DETERMINISTIC: `computePayouts` used — same inputs produce byte-identical output (spec: epoch-ledger-spec)
+- [ ] PAYOUT_DETERMINISTIC: `computeStatementItems` used — same inputs produce byte-identical output (spec: epoch-ledger-spec)
 - [ ] CURSOR_STATE_PERSISTED: Cursors saved after each adapter.collect() call (spec: epoch-ledger-spec)
 - [ ] ACTIVITY_IDEMPOTENT: All activities idempotent via PK constraints or upsert (spec: epoch-ledger-spec)
 - [ ] ALL_MATH_BIGINT: `computeProposedAllocations` uses bigint throughout (spec: epoch-ledger-spec)
@@ -219,10 +219,10 @@ Implementation in `DrizzleLedgerAdapter`: queries `user_bindings` table with `WH
 
 **Modify:**
 
-- `packages/ledger-core/src/rules.ts` — add `computeProposedAllocations()` pure function
-- `packages/ledger-core/src/store.ts` — add `resolveIdentities()` to port interface
-- `packages/ledger-core/src/index.ts` — re-export new types
-- `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — implement `resolveIdentities()`
+- `packages/attribution-ledger/src/rules.ts` — add `computeProposedAllocations()` pure function
+- `packages/attribution-ledger/src/store.ts` — add `resolveIdentities()` to port interface
+- `packages/attribution-ledger/src/index.ts` — re-export new types
+- `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — implement `resolveIdentities()`
 - `services/scheduler-worker/src/main.ts` — start ledger worker alongside scheduler worker
 - `services/scheduler-worker/src/config.ts` — add `NODE_ID` env var (required)
 
@@ -250,7 +250,7 @@ Implementation in `DrizzleLedgerAdapter`: queries `user_bindings` table with `WH
     3. Verify POOL_REQUIRES_BASE (at least one `base_issuance`)
     4. Read `epoch_allocations` — use `final_units` where set, fall back to `proposed_units`
     5. Read pool components → `pool_total_credits = SUM(amount_credits)`
-    6. `computePayouts(allocations, pool_total)` — BIGINT, largest-remainder
+    6. `computeStatementItems(allocations, pool_total)` — BIGINT, largest-remainder
     7. Compute `allocation_set_hash`
     8. Atomic: set `pool_total_credits`, close epoch, insert `payout_statement`
 
@@ -260,7 +260,7 @@ Implementation in `DrizzleLedgerAdapter`: queries `user_bindings` table with `WH
 
 - Activity functions in `services/scheduler-worker/src/activities/ledger.ts` following `createLedgerActivities(deps)` pattern
 
-- Activities import pure domain logic from `@cogni/ledger-core` and DB operations from `@cogni/db-client` (`DrizzleLedgerAdapter`)
+- Activities import pure domain logic from `@cogni/attribution-ledger` and DB operations from `@cogni/db-client` (`DrizzleAttributionAdapter`)
 
 - Register workflows + activities on `ledger-tasks` task queue via `ledger-worker.ts`
 
@@ -272,10 +272,10 @@ Implementation in `DrizzleLedgerAdapter`: queries `user_bindings` table with `WH
 - `services/scheduler-worker/src/ledger-worker.ts` (new)
 - `services/scheduler-worker/src/main.ts` (start ledger worker)
 - `services/scheduler-worker/src/config.ts` (add NODE_ID)
-- `packages/ledger-core/src/rules.ts` (add computeProposedAllocations)
-- `packages/ledger-core/src/store.ts` (add resolveIdentities)
-- `packages/ledger-core/src/index.ts` (re-export)
-- `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` (implement resolveIdentities)
+- `packages/attribution-ledger/src/rules.ts` (add computeProposedAllocations)
+- `packages/attribution-ledger/src/store.ts` (add resolveIdentities)
+- `packages/attribution-ledger/src/index.ts` (re-export)
+- `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` (implement resolveIdentities)
 
 ## Plan
 
@@ -288,8 +288,8 @@ Implementation in `DrizzleLedgerAdapter`: queries `user_bindings` table with `WH
 - [x] Extend `CreateScheduleParams` with optional `workflowType` + `taskQueueOverride`
 - [x] Extend `syncGovernanceSchedules` for LEDGER_INGEST → CollectEpochWorkflow on `ledger-tasks` queue
 - [x] Add LEDGER_INGEST schedule to governance schedules in repo-spec
-- [ ] Add `computeProposedAllocations()` to `packages/ledger-core/src/rules.ts` + unit tests → moved to task.0102
-- [ ] Add `resolveIdentities()` to store port + implement in DrizzleLedgerAdapter → moved to task.0101
+- [ ] Add `computeProposedAllocations()` to `packages/attribution-ledger/src/rules.ts` + unit tests → moved to task.0102
+- [ ] Add `resolveIdentities()` to store port + implement in DrizzleAttributionAdapter → moved to task.0101
 - [x] Create `services/scheduler-worker/src/activities/ledger.ts` with `createLedgerActivities(deps)`
 - [x] Implement `CollectEpochWorkflow` — create epoch, collect from sources, insert events, save cursors
 - [ ] Implement `FinalizeEpochWorkflow` — read allocations + pool, compute payouts, atomic close → moved to task.0102

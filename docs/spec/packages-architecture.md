@@ -43,7 +43,7 @@ Provide a shared-library layer (`@cogni/*` workspace packages) with strict isola
 
 6. **DIST_EXPORTS**: Package `exports` field points to `dist/` for runtime resolution. App resolves `@cogni/*` via `package.json` exports, not tsconfig path aliases.
 
-7. **PURE_LIBRARY**: A package has no process lifecycle — no ports, no worker loops, no Docker images, no env vars, no health checks. If it needs any of these, it's a service.
+7. **PURE_LIBRARY**: A package has no process lifecycle — no listening network ports, no worker loops, no Docker images, no env vars, no health checks. If it needs any of these, it's a service. (Note: port _interfaces_ like `OperatorWalletPort` belong in packages — this rule is about network ports.)
 
 ## Design
 
@@ -51,11 +51,34 @@ Provide a shared-library layer (`@cogni/*` workspace packages) with strict isola
 
 Create a package when code is:
 
-1. **Pure logic** — No I/O, no framework deps, no `src/` imports
+1. **No runtime lifecycle** — No env loading, no process signals, no framework deps, no `src/` imports
 2. **Shared across boundaries** — Used by both `src/` and potential future CLI/services
 3. **Isolation-critical** — Must never depend on app internals (e.g., protocol encodings, domain constants)
 
-**Do NOT create a package for:** UI components, feature services, adapters, or anything importing from `src/`.
+**Do NOT create a package for:** UI components, feature services, or anything importing from `src/`.
+
+### Capability Package Shape
+
+For packages representing a business capability (wallet, ledger, payments), use one package per capability with internal subfolders:
+
+```
+packages/<capability>/
+├── src/
+│   ├── port/           # Port interface + domain error types
+│   ├── domain/         # Pure types, validation, policy, math
+│   ├── adapters/       # Domain-level adapter implementations (optional)
+│   └── index.ts        # Public exports (barrel file)
+├── tests/
+├── package.json
+├── tsconfig.json
+└── tsup.config.ts
+```
+
+**Domain adapters vs runtime wiring:** A package may contain adapters that implement the port using a specific technology (e.g., TigerBeetle adapter for ledger, Privy intent encoder for wallet). These are pure implementations that take dependencies as constructor args — no env loading, no process lifecycle. The app or service provides the client instance and config at startup.
+
+Do NOT split into separate `*-adapters` packages — keep port + domain + adapters together until there's a concrete reason to split.
+
+**Reference example:** `packages/scheduler-core/src/ports/schedule-control.port.ts` — defines `ScheduleControlPort` interface with custom error classes (`ScheduleControlConflictError`, `ScheduleControlNotFoundError`) and type guards. Adapters live in `packages/db-client/src/adapters/drizzle-schedule.adapter.ts` (split across packages because db-client serves multiple ports — for new capability packages, keep adapters co-located).
 
 ### Packages vs Services — Smell Test
 

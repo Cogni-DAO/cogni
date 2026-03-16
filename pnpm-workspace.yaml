@@ -5,6 +5,8 @@
 # See: https://pnpm.io/workspaces
 
 packages:
+  # Deployable applications
+  - "apps/*"
   # Shared packages (Node-owned, pure libraries)
   - "packages/*"
   # Operator services (future: git-review-daemon, git-admin-daemon)

@@ -166,19 +166,19 @@ Worker services (like `scheduler-worker`) don't need contracts — job payloads 
 Enforced by dependency-cruiser:
 
 ```javascript
-// services/ cannot import from src/
+// services/ cannot import from apps/web/src/
 {
   name: "no-services-to-src",
   severity: "error",
   from: { path: "^services/" },
-  to: { path: "^src/" }
+  to: { path: "^apps/web/src/" }
 }
 
-// src/ cannot import from services/
+// apps/web/src/ cannot import from services/
 {
   name: "no-src-to-services",
   severity: "error",
-  from: { path: "^src/" },
+  from: { path: "^apps/web/src/" },
   to: { path: "^services/" }
 }
 ```
@@ -191,15 +191,15 @@ Enforced by dependency-cruiser:
 
 ### File Pointers
 
-| File                               | Purpose                            |
-| ---------------------------------- | ---------------------------------- |
-| `services/*/package.json`          | Service workspace declarations     |
-| `services/*/Dockerfile`            | Multi-stage Docker build           |
-| `services/*/src/main.ts`           | Entry point with signal handling   |
-| `services/*/src/config.ts`         | Zod env schema                     |
-| `services/*/src/health.ts`         | Health endpoint handlers           |
-| `.dependency-cruiser.cjs`          | Import boundary enforcement        |
-| `platform/infra/services/runtime/` | Docker Compose service definitions |
+| File                       | Purpose                            |
+| -------------------------- | ---------------------------------- |
+| `services/*/package.json`  | Service workspace declarations     |
+| `services/*/Dockerfile`    | Multi-stage Docker build           |
+| `services/*/src/main.ts`   | Entry point with signal handling   |
+| `services/*/src/config.ts` | Zod env schema                     |
+| `services/*/src/health.ts` | Health endpoint handlers           |
+| `.dependency-cruiser.cjs`  | Import boundary enforcement        |
+| `infra/compose/`           | Docker Compose service definitions |
 
 ## Acceptance Checks
 

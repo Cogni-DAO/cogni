@@ -31,7 +31,7 @@ rank: 99
 The existing specs are slightly misguided in opposite directions:
 
 - **ai-governance-data.md**: Over-engineered CloudEvents → brief → agent pipeline with too many bespoke types
-- **epoch-ledger.md**: Manual-only receipt issuance — no automated event ingestion
+- **attribution-ledger.md**: Manual-only receipt issuance — no automated event ingestion
 
 This spike surveys SourceCred's plugin architecture and OSS tooling to design a unified ingestion pipeline that feeds the epoch ledger with minimal bespoke code.
 

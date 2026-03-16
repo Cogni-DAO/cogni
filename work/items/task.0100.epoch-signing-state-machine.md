@@ -99,35 +99,35 @@ uniqueIndex("epochs_one_open_per_node")
 
 Dev databases that ran old migrations: `pnpm db:reset` (drop + re-migrate).
 
-#### 2. Model type update (`packages/ledger-core/src/model.ts`)
+#### 2. Model type update (`packages/attribution-ledger/src/model.ts`)
 
 ```typescript
 export const EPOCH_STATUSES = ["open", "review", "finalized"] as const;
 export type EpochStatus = (typeof EPOCH_STATUSES)[number];
 ```
 
-#### 3. Store port: add `closeIngestion`, rename `closeEpoch` → `finalizeEpoch` (`packages/ledger-core/src/store.ts`)
+#### 3. Store port: add `closeIngestion`, rename `closeEpoch` → `finalizeEpoch` (`packages/attribution-ledger/src/store.ts`)
 
 ```typescript
 /** Transition epoch open → review (INGESTION_CLOSED_ON_REVIEW).
  *  Pins approverSetHash — SHA-256 of sorted, lowercased approver addresses. */
-closeIngestion(epochId: bigint, approverSetHash: string): Promise<LedgerEpoch>;
+closeIngestion(epochId: bigint, approverSetHash: string): Promise<AttributionEpoch>;
 
 /** Transition epoch review → finalized (was closeEpoch). */
-finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<LedgerEpoch>;
+finalizeEpoch(epochId: bigint, poolTotal: bigint): Promise<AttributionEpoch>;
 ```
 
 Note: `closeIngestion` matches existing `closeEpoch` pattern — epochId only, no nodeId (epoch PK is sufficient). Rename `closeEpoch` → `finalizeEpoch` since it now transitions review→finalized, not open→closed.
 
 No new methods needed for signatures — `insertStatementSignature()` and `getSignaturesForStatement()` already exist on the port and adapter.
 
-#### 4. Store adapter: implement `closeIngestion`, rename + update `closeEpoch` → `finalizeEpoch` (`packages/db-client/src/adapters/drizzle-ledger.adapter.ts`)
+#### 4. Store adapter: implement `closeIngestion`, rename + update `closeEpoch` → `finalizeEpoch` (`packages/db-client/src/adapters/drizzle-attribution.adapter.ts`)
 
 **`closeIngestion(epochId, approverSetHash)`**: UPDATE epochs SET status='review', approver_set_hash=approverSetHash WHERE id=epochId AND status='open'. Idempotent: if already review, return as-is. If finalized, throw. If not found, throw.
 
 **`finalizeEpoch(epochId, poolTotal)`** (renamed from `closeEpoch`): Change WHERE from `status='open'` to `status='review'`. Same idempotent pattern — already-finalized returns existing. This method is the review→finalized transition used by FinalizeEpochWorkflow (task.0102).
 
-#### 5. Signing module (`packages/ledger-core/src/signing.ts`)
+#### 5. Signing module (`packages/attribution-ledger/src/signing.ts`)
 
 ```typescript
 export interface CanonicalMessageParams {
@@ -164,7 +164,7 @@ export function computeApproverSetHash(approvers: readonly string[]): string {
 }
 ```
 
-Zero runtime deps (uses Node `crypto`). Shared between frontend (wallet signing) and backend (verification in task.0102). Export from `packages/ledger-core/src/index.ts`.
+Zero runtime deps (uses Node `crypto`). Shared between frontend (wallet signing) and backend (verification in task.0102). Export from `packages/attribution-ledger/src/index.ts`.
 
 #### 6. Approvers config
 
@@ -220,7 +220,7 @@ export const closeIngestionOperation = {
 
 If task.0096 contracts are not yet merged, define a minimal inline `EpochDtoSchema` (id, status, periodStart, periodEnd) and replace with the shared one later.
 
-**Route**: `src/app/api/v1/ledger/epochs/[id]/close-ingestion/route.ts`
+**Route**: `src/app/api/v1/attribution/epochs/[id]/close-ingestion/route.ts`
 
 POST handler (no request body — epochId from URL path param):
 
@@ -231,7 +231,7 @@ POST handler (no request body — epochId from URL path param):
 5. Call `store.closeIngestion(BigInt(epochId), approverSetHash)`
 6. Return epoch DTO
 
-Uses `wrapRouteHandlerWithLogging({ auth: { mode: "required" } })`. Route lives under `/api/v1/ledger/` (SIWE-protected namespace).
+Uses `wrapRouteHandlerWithLogging({ auth: { mode: "required" } })`. Route lives under `/api/v1/attribution/` (SIWE-protected namespace).
 
 ### What This Does NOT Include (deferred)
 
@@ -248,22 +248,22 @@ Uses `wrapRouteHandlerWithLogging({ auth: { mode: "required" } })`. Route lives 
 
 <!-- High-level scope -->
 
-- Create: `packages/ledger-core/src/signing.ts` — `buildCanonicalMessage()` pure function
+- Create: `packages/attribution-ledger/src/signing.ts` — `buildCanonicalMessage()` pure function
 - Create: `src/contracts/ledger.close-ingestion.v1.contract.ts` — Zod contract
-- Create: `src/app/api/v1/ledger/epochs/[id]/close-ingestion/route.ts` — SIWE + approver route
+- Create: `src/app/api/v1/attribution/epochs/[id]/close-ingestion/route.ts` — SIWE + approver route
 - Modify: `packages/db-schema/src/ledger.ts` — 3-phase CHECK + partial unique index
 - Modify: `src/adapters/server/db/migrations/0010_shallow_paibok.sql` — match Drizzle schema (edit in place, never deployed)
 - Modify: `src/adapters/server/db/migrations/0011_triggers_and_backfill.sql` — rename trigger to `curation_freeze_on_finalize`, check `'finalized'`
-- Modify: `packages/ledger-core/src/model.ts` — `EPOCH_STATUSES = ["open", "review", "finalized"]`
-- Modify: `packages/ledger-core/src/store.ts` — add `closeIngestion()` to port
-- Modify: `packages/ledger-core/src/index.ts` — export signing module
-- Modify: `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — implement `closeIngestion()`, rename + update `closeEpoch()` → `finalizeEpoch()`
+- Modify: `packages/attribution-ledger/src/model.ts` — `EPOCH_STATUSES = ["open", "review", "finalized"]`
+- Modify: `packages/attribution-ledger/src/store.ts` — add `closeIngestion()` to port
+- Modify: `packages/attribution-ledger/src/index.ts` — export signing module
+- Modify: `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — implement `closeIngestion()`, rename + update `closeEpoch()` → `finalizeEpoch()`
 - Modify: `src/shared/config/repoSpec.schema.ts` — add `ledger.approvers` schema
 - Modify: `src/shared/config/repoSpec.server.ts` — add `getLedgerApprovers()`
 - Modify: `src/shared/config/index.ts` — export `getLedgerApprovers`
 - Modify: `.cogni/repo-spec.yaml` — add `ledger.approvers` section
 - Test: `services/scheduler-worker/tests/ledger-activities.test.ts` — state transition tests
-- Test: `tests/unit/packages/ledger-core/signing.test.ts` — canonical message format
+- Test: `tests/unit/packages/attribution-ledger/signing.test.ts` — canonical message format
 - Test: `tests/stack/ledger/close-ingestion.stack.test.ts` — API route + approver check
 
 ## Plan
@@ -276,29 +276,29 @@ Uses `wrapRouteHandlerWithLogging({ auth: { mode: "required" } })`. Route lives 
     - [x] Edit `0010_shallow_paibok.sql` — match Drizzle schema
     - [x] Edit `0012_add_scope_id.sql` — index matches new status
     - [x] Edit `0011_triggers_and_backfill.sql` — rename trigger to curation_freeze_on_finalize, check 'finalized'
-    - [x] Edit `packages/ledger-core/src/model.ts` — EPOCH_STATUSES = ["open", "review", "finalized"]
-    - [x] Edit `packages/ledger-core/src/store.ts` — add closeIngestion, rename closeEpoch→finalizeEpoch, add approverSetHash to LedgerEpoch
-    - [x] Edit `packages/ledger-core/src/errors.ts` — update EpochAlreadyClosedError → EpochAlreadyFinalizedError
+    - [x] Edit `packages/attribution-ledger/src/model.ts` — EPOCH_STATUSES = ["open", "review", "finalized"]
+    - [x] Edit `packages/attribution-ledger/src/store.ts` — add closeIngestion, rename closeEpoch→finalizeEpoch, add approverSetHash to AttributionEpoch
+    - [x] Edit `packages/attribution-ledger/src/errors.ts` — update EpochAlreadyClosedError → EpochAlreadyFinalizedError
   - Validation: `pnpm check` passes (types + lint)
 
 - [x] **Checkpoint 2 — Adapter + Signing + Tests**
   - Milestone: Adapter implements new methods, signing module exists, unit tests pass
   - Invariants: SCOPE_GATED_QUERIES, SIGNATURE_SCOPE_BOUND, CURATION_FREEZE_ON_FINALIZE
   - Todos:
-    - [x] Edit `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — implement closeIngestion, rename+update closeEpoch→finalizeEpoch
-    - [x] Create `packages/ledger-core/src/signing.ts` — buildCanonicalMessage + computeApproverSetHash
-    - [x] Edit `packages/ledger-core/src/index.ts` — export signing module
-    - [x] Create `tests/unit/packages/ledger-core/signing.test.ts` — exact bytes, version header, newlines
+    - [x] Edit `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — implement closeIngestion, rename+update closeEpoch→finalizeEpoch
+    - [x] Create `packages/attribution-ledger/src/signing.ts` — buildCanonicalMessage + computeApproverSetHash
+    - [x] Edit `packages/attribution-ledger/src/index.ts` — export signing module
+    - [x] Create `tests/unit/packages/attribution-ledger/signing.test.ts` — exact bytes, version header, newlines
     - [x] Update all callers of closeEpoch → finalizeEpoch (seed-ledger, integration tests, mock store, external tests)
     - [x] Update all references to "closed" status → "finalized" (contracts, routes, tests)
-  - Validation: `pnpm check` + `pnpm test -- tests/unit/packages/ledger-core/signing`
+  - Validation: `pnpm check` + `pnpm test -- tests/unit/packages/attribution-ledger/signing`
 
 - [x] **Checkpoint 3 — API Route + Contract**
   - Milestone: review route works, all tests green
   - Invariants: WRITE_ROUTES_APPROVER_GATED, APPROVERS_PER_SCOPE
   - Todos:
     - [x] Create `src/contracts/ledger.review-epoch.v1.contract.ts`
-    - [x] Create `src/app/api/v1/ledger/epochs/[id]/review/route.ts`
+    - [x] Create `src/app/api/v1/attribution/epochs/[id]/review/route.ts`
   - Validation: `pnpm check` passes
 
 ## Validation
@@ -308,7 +308,7 @@ Uses `wrapRouteHandlerWithLogging({ auth: { mode: "required" } })`. Route lives 
 ```bash
 pnpm check
 pnpm packages:build
-pnpm test -- tests/unit/packages/ledger-core/signing
+pnpm test -- tests/unit/packages/attribution-ledger/signing
 pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/stack/ledger/
 ```
 
@@ -318,9 +318,9 @@ pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/st
 
 ### Blocking Issues
 
-1. **`finalizeEpoch` fallback silently returns wrong-state epoch.** In `drizzle-ledger.adapter.ts`, when `finalizeEpoch` is called on an `open` epoch (skipping review), the WHERE clause `status = 'review'` matches no rows, fallback finds the open epoch via `getEpoch()`, and returns it silently. The caller may proceed thinking finalization succeeded. **Fix:** In the fallback branch after `getEpoch()`, check `if (existing.status === 'open') throw new EpochNotOpenError(epochId.toString())`. Apply same pattern to `closeIngestion` — if `existing.status === 'finalized'`, throw `EpochAlreadyFinalizedError`.
+1. **`finalizeEpoch` fallback silently returns wrong-state epoch.** In `drizzle-attribution.adapter.ts`, when `finalizeEpoch` is called on an `open` epoch (skipping review), the WHERE clause `status = 'review'` matches no rows, fallback finds the open epoch via `getEpoch()`, and returns it silently. The caller may proceed thinking finalization succeeded. **Fix:** In the fallback branch after `getEpoch()`, check `if (existing.status === 'open') throw new EpochNotOpenError(epochId.toString())`. Apply same pattern to `closeIngestion` — if `existing.status === 'finalized'`, throw `EpochAlreadyFinalizedError`.
 
-2. **Spec/impl mismatch: ONE_OPEN_EPOCH.** `docs/spec/epoch-ledger.md` L50 and L83 say `WHERE status != 'finalized'` but the actual DB index is `WHERE status = 'open'`. The design review deliberately changed this. **Fix:** Update spec L50 description to say "at most one epoch with `status = 'open'`" and L83 composite invariant to `WHERE status = 'open'`. Rename invariant to `ONE_OPEN_EPOCH` for clarity.
+2. **Spec/impl mismatch: ONE_OPEN_EPOCH.** `docs/spec/attribution-ledger.md` L50 and L83 say `WHERE status != 'finalized'` but the actual DB index is `WHERE status = 'open'`. The design review deliberately changed this. **Fix:** Update spec L50 description to say "at most one epoch with `status = 'open'`" and L83 composite invariant to `WHERE status = 'open'`. Rename invariant to `ONE_OPEN_EPOCH` for clarity.
 
 3. **Spec/impl mismatch: INGESTION_CLOSED_ON_REVIEW.** Spec L45 says "DB trigger rejects INSERT on activity_events" but no such trigger exists — enforcement is app-level (workflow skips when `status != 'open'`). **Fix:** Update spec to say "App-level enforcement — CollectEpochWorkflow exits when status != 'open'. No DB trigger on activity_events (V0)."
 
@@ -330,7 +330,7 @@ pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/st
 - Add test for `closeIngestion` on finalized epoch and `finalizeEpoch` on open epoch
 - `toEpochDto` doesn't include `approverSetHash` — consider adding
 - Rename variable `closedEpochs` → `finalizedEpochs` in `epochs/route.ts`
-- Alphabetize signing exports in `packages/ledger-core/src/index.ts`
+- Alphabetize signing exports in `packages/attribution-ledger/src/index.ts`
 
 ## Review Checklist
 

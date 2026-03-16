@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2026-02-23
 - **Status:** draft
 
 ## Purpose
@@ -29,8 +28,10 @@ src/
 │   └── index.ts     # ExecutionGrantWorkerPort, ScheduleRunRepository
 ├── activities/      # Temporal activities (I/O via injected ports)
 ├── workflows/       # Temporal workflows (deterministic, no I/O)
+│   ├── stages/      # Child workflows for pipeline stage composition (CollectSources, EnrichAndAllocate)
+│   └── activity-profiles.ts  # Shared proxyActivities timeout/retry config profiles
 ├── adapters/        # Concrete implementations (Octokit, GitHub App auth)
-│   └── ingestion/   # GitHub source adapter + token provider
+│   └── ingestion/   # GitHub poll adapter + webhook normalizer + token provider
 ├── observability/   # Logger factory (sole pino importer), redaction
 ├── main.ts          # Entry point: env() → makeLogger() → startSchedulerWorker() + startLedgerWorker()
 ├── worker.ts        # Temporal Worker lifecycle: createContainer() → createActivities()
@@ -40,10 +41,12 @@ src/
 
 ### Hard rules (enforced by dep-cruiser)
 
+- **WORKER_IS_DUMB**: scheduler-worker is a thin orchestration layer. It loads data, dispatches to contracts/plugins, and writes results. It contains zero domain-specific logic (no selection policies, no allocation formulas, no enrichment logic). All pipeline intelligence lives in `@cogni/attribution-pipeline-plugins`.
 - **activities/ and workflows/ import ports only** — never adapters/, bootstrap/, or @cogni/db-client
 - **bootstrap/container.ts is the only place** that instantiates concrete adapters
 - **observability/logger.ts is the only file** that imports pino directly
 - **ports/ contains no implementations** — pure type re-exports from packages
+- **worker allocation stays generic** — activities/workflows dispatch allocators and selection policies through `@cogni/attribution-pipeline-contracts`, never hardcoded domain logic
 
 ## Boundaries
 
@@ -74,13 +77,13 @@ src/
 
 - **Exports:** none (standalone service, not a library)
 - **CLI:** `pnpm --filter @cogni/scheduler-worker-service dev|build|start`
-- **Env:** Validated in `src/bootstrap/env.ts` via Zod. Required: `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE`, `DATABASE_URL`, `SCHEDULER_API_TOKEN` (secret), `APP_BASE_URL`, `NODE_ID`, `SCOPE_ID`, `SCOPE_KEY`. Optional: `GITHUB_REVIEW_APP_ID`, `GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64`, `GITHUB_REVIEW_INSTALLATION_ID`, `GITHUB_REPOS`, `LOG_LEVEL`, `SERVICE_NAME`, `HEALTH_PORT`.
+- **Env:** Validated in `src/bootstrap/env.ts` via Zod. Required: `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE`, `DATABASE_URL`, `SCHEDULER_API_TOKEN` (secret), `APP_BASE_URL`. Optional: `GH_REVIEW_APP_ID`, `GH_REVIEW_APP_PRIVATE_KEY_BASE64`, `GH_REPOS`, `LOG_LEVEL`, `SERVICE_NAME`, `HEALTH_PORT`. Identity (`node_id`, `scope_id`, `chain_id`) read from `.cogni/repo-spec.yaml` via `@cogni/repo-spec` at bootstrap (baked into Docker image).
 - **Files considered API:** `src/main.ts` (entry point), `Dockerfile`
 
 ## Responsibilities
 
-- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow, execute scheduler activities (validateGrant, executeGraph, updateRun, createRun) and ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertEvents, saveCursor, curateAndResolve, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), handle SIGTERM/SIGINT
-- This directory **does not**: Import from src/, create/modify/delete schedules (CRUD is authority), define port interfaces (those live in packages)
+- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow + CollectSourcesWorkflow + EnrichAndAllocateWorkflow (child workflows), execute scheduler activities (validateGrant, executeGraph, updateRun, createRun), ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertReceipts, saveCursor, materializeSelection, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), dispatch enrichment and allocation via profile/allocator registries from `@cogni/attribution-pipeline-plugins` and `@cogni/attribution-pipeline-contracts`, resolve receipt claimants during materializeSelection (draft) and lock them at autoCloseIngestion, and produce claimant-aware finalized statements from locked claimant records × allocator output via explodeToClaimants()
+- This directory **does not**: Import from src/, create/modify/delete schedules (CRUD is authority), define port interfaces (those live in packages), change ledger core contracts for plugin-specific payloads
 
 ## Usage
 
@@ -101,8 +104,8 @@ docker build -f services/scheduler-worker/Dockerfile -t scheduler-worker .
 
 ## Dependencies
 
-- **Internal:** `@cogni/scheduler-core` (ports), `@cogni/ingestion-core` (ports), `@cogni/ledger-core` (domain logic + epoch window), `@cogni/db-client` (adapters, bootstrap only), `@cogni/ids`
-- **External:** `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/activity`, `pino`, `viem` (EIP-191 verification), `zod`
+- **Internal:** `@cogni/scheduler-core` (ports), `@cogni/ingestion-core` (ports), `@cogni/attribution-ledger` (domain logic + epoch window), `@cogni/attribution-pipeline-contracts` (enricher validation, profile resolution, allocator dispatch), `@cogni/attribution-pipeline-plugins` (built-in registries), `@cogni/db-client` (adapters, bootstrap only), `@cogni/repo-spec` (identity from `.cogni/repo-spec.yaml`), `@cogni/ids`
+- **External:** `@temporalio/worker`, `@temporalio/workflow`, `@temporalio/activity`, `@octokit/webhooks-methods` (GitHub webhook HMAC-SHA256 verification), `pino`, `viem` (EIP-712 verification), `zod`
 
 ## Change Protocol
 

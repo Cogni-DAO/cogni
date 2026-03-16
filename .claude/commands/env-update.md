@@ -21,13 +21,12 @@ Use this checklist to verify you haven't missed anything.
 
 If the variable is needed by the main application container:
 
-- [ ] **`platform/infra/services/runtime/docker-compose.dev.yml`**: Add it to the `environment` section of the `app` service.
-- [ ] **`platform/infra/services/runtime/docker-compose.yml`**: Add it to the `environment` section of the `app` service.
+- [ ] **`infra/compose/runtime/docker-compose.dev.yml`**: Add it to the `environment` section of the `app` service.
+- [ ] **`infra/compose/runtime/docker-compose.yml`**: Add it to the `environment` section of the `app` service.
 
 If the variable is needed by other services:
 
-- [ ] **`platform/infra/services/sourcecred/docker-compose.sourcecred.yml`**: For SourceCred service variables.
-- [ ] **`platform/infra/services/edge/docker-compose.yml`**: For Caddy/Edge variables (rare).
+- [ ] **`infra/compose/runtime/docker-compose.yml`**: For Caddy/Edge variables (rare).
 
 ## 4. CI Pipeline (Tests)
 
@@ -46,7 +45,7 @@ To get the variable from GitHub Secrets into the VM:
 
 **CRITICAL**: Missing any one of these causes silent empty values in production.
 
-- [ ] **`platform/ci/scripts/deploy.sh`**:
+- [ ] **`scripts/ci/deploy.sh`**:
   1.  Add it to `REQUIRED_SECRETS` (if it's a secret), `OPTIONAL_SECRETS` (if optional), or `REQUIRED_ENV_VARS` (if it's a config).
   2.  Add it to the `cat > "$RUNTIME_ENV"` heredoc (required vars) or via `append_env_if_set` (optional vars) in the Step 1 block.
   3.  Add it to the `ssh ... bash /tmp/deploy-remote.sh` command at the **bottom** of the file to pass it into the remote script's environment. Use `'${VAR:-}'` quoting for optional vars.
@@ -55,14 +54,13 @@ To get the variable from GitHub Secrets into the VM:
 
 - [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add the variable to the relevant secrets list so future fresh-clone setups know to provision it. Without this, new environments will silently miss the variable.
 
-## 7. Special Cases: Isolated Services (e.g., SourceCred)
+## 7. Special Cases: Isolated Services
 
-If the variable is for a standalone service running in its own Docker Compose project (like SourceCred):
+If the variable is for a standalone service running in its own Docker Compose project:
 
-- [ ] **Docker Compose**: Update the service's compose file (e.g., `platform/infra/services/sourcecred/docker-compose.sourcecred.yml`).
-- [ ] **`deploy.sh` (Step 1)**: Add the variable to the _specific_ `.env` file generation block for that service (e.g., `/opt/cogni-template-sourcecred/.env`).
+- [ ] **Docker Compose**: Update the service's compose file.
+- [ ] **`deploy.sh` (Step 1)**: Add the variable to the _specific_ `.env` file generation block for that service.
 - [ ] **`deploy.sh` (Compose Command)**: **CRITICAL**: Ensure the `docker compose` command for that service explicitly uses `--env-file /path/to/service/.env`.
-  - _Example_: `docker compose --project-name cogni-sourcecred --env-file /opt/cogni-template-sourcecred/.env -f ...`
   - _Reason_: Isolated services often run from a shared script context and won't automatically find their `.env` file unless explicitly told.
 
 ## Reference

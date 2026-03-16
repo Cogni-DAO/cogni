@@ -4,17 +4,19 @@
 /**
  * Module: `scheduler-worker/adapters/ingestion/github`
  * Purpose: GitHub source adapter — collects merged PRs, submitted reviews, and closed issues via GraphQL.
- * Scope: Implements SourceAdapter from @cogni/ingestion-core. Lives in scheduler-worker per ADAPTERS_NOT_IN_CORE.
+ * Scope: Implements PollAdapter from @cogni/ingestion-core. Lives in scheduler-worker per ADAPTERS_NOT_IN_CORE.
  * Invariants:
  * - ACTIVITY_IDEMPOTENT: Deterministic event IDs from source data.
  * - PROVENANCE_REQUIRED: payloadHash (SHA-256), producer, version on every event.
  * - Uses repo-scoped GraphQL connections (authoritative), NOT search() (best-effort index).
  * - Client-side time-window filtering with updatedAt early-stop optimization.
+ * - PR metadata includes baseBranch, mergeCommitSha, and commitShas for production-promotion selection.
+ * - Review metadata includes prBaseBranch and prMergeCommitSha for cross-referencing.
  * - platformUserId = GitHub numeric databaseId (stable), not login (mutable).
  * - Bot authors skipped (no databaseId on Bot/Mannequin actors).
  * - Rate limiting handled by @octokit/plugin-retry + @octokit/plugin-throttling.
  * Side-effects: HTTP (GitHub GraphQL API)
- * Links: docs/spec/epoch-ledger.md, docs/research/epoch-event-ingestion-pipeline.md
+ * Links: docs/spec/attribution-ledger.md, docs/research/epoch-event-ingestion-pipeline.md
  * @internal
  */
 
@@ -22,11 +24,15 @@ import type {
   ActivityEvent,
   CollectParams,
   CollectResult,
-  SourceAdapter,
+  PollAdapter,
   StreamDefinition,
   VcsTokenProvider,
 } from "@cogni/ingestion-core";
-import { buildEventId, hashCanonicalPayload } from "@cogni/ingestion-core";
+import {
+  buildEventId,
+  GITHUB_ADAPTER_VERSION,
+  hashCanonicalPayload,
+} from "@cogni/ingestion-core";
 
 import type { GitHubClient } from "./octokit-client.js";
 import { createGitHubClient } from "./octokit-client.js";
@@ -59,16 +65,26 @@ interface GitHubActor {
   databaseId?: number; // Only on User, not Bot/Mannequin
 }
 
+interface PrCommitNode {
+  commit: { oid: string };
+}
+
 interface PrNode {
   number: number;
   title: string;
+  body: string;
   mergedAt: string;
   updatedAt: string;
   url: string;
   author: GitHubActor | null;
+  baseRefName: string;
+  headRefName: string;
+  mergeCommit: { oid: string } | null;
   additions: number;
   deletions: number;
   changedFiles: number;
+  labels: { nodes: Array<{ name: string }> };
+  commits: { nodes: PrCommitNode[] };
 }
 
 interface ReviewNode {
@@ -81,8 +97,10 @@ interface ReviewNode {
 interface PrWithReviewsNode {
   number: number;
   url: string;
+  baseRefName: string;
   mergedAt: string;
   updatedAt: string;
+  mergeCommit: { oid: string } | null;
   reviews: { nodes: ReviewNode[] };
 }
 
@@ -128,13 +146,19 @@ const MERGED_PRS_QUERY = /* GraphQL */ `
         nodes {
           number
           title
+          body
           mergedAt
           updatedAt
           url
           author { __typename login ... on User { databaseId } }
+          baseRefName
+          headRefName
+          mergeCommit { oid }
           additions
           deletions
           changedFiles
+          labels(first: 20) { nodes { name } }
+          commits(first: 250) { nodes { commit { oid } } }
         }
       }
     }
@@ -149,8 +173,10 @@ const REVIEWS_QUERY = /* GraphQL */ `
         nodes {
           number
           url
+          baseRefName
           mergedAt
           updatedAt
+          mergeCommit { oid }
           reviews(first: 100) {
             nodes {
               databaseId
@@ -190,9 +216,9 @@ const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 // Adapter
 // ---------------------------------------------------------------------------
 
-export class GitHubSourceAdapter implements SourceAdapter {
+export class GitHubSourceAdapter implements PollAdapter {
   readonly source = "github" as const;
-  readonly version = "0.3.0" as const;
+  readonly version = GITHUB_ADAPTER_VERSION;
 
   private readonly tokenProvider: VcsTokenProvider;
   private readonly repos: readonly string[];
@@ -349,12 +375,12 @@ export class GitHubSourceAdapter implements SourceAdapter {
     let reachedEarlyStop = false;
 
     do {
-      const response = await this.executeQuery<RepoConnectionResponse<PrNode>>(
-        MERGED_PRS_QUERY,
-        { owner, name: repoName, cursor: pageCursor }
-      );
+      const response: RepoConnectionResponse<PrNode> = await this.executeQuery<
+        RepoConnectionResponse<PrNode>
+      >(MERGED_PRS_QUERY, { owner, name: repoName, cursor: pageCursor });
 
-      const connection = response.repository.pullRequests;
+      const connection: RepoConnectionResponse<PrNode>["repository"]["pullRequests"] =
+        response.repository.pullRequests;
       if (!connection) break;
 
       for (const pr of connection.nodes) {
@@ -418,6 +444,12 @@ export class GitHubSourceAdapter implements SourceAdapter {
       artifactUrl: pr.url,
       metadata: {
         title: pr.title,
+        body: pr.body,
+        baseBranch: pr.baseRefName,
+        branch: pr.headRefName,
+        mergeCommitSha: pr.mergeCommit?.oid ?? null,
+        commitShas: pr.commits.nodes.map((c) => c.commit.oid),
+        labels: pr.labels.nodes.map((l) => l.name),
         additions: pr.additions,
         deletions: pr.deletions,
         changedFiles: pr.changedFiles,
@@ -446,11 +478,14 @@ export class GitHubSourceAdapter implements SourceAdapter {
     let reachedEarlyStop = false;
 
     do {
-      const response = await this.executeQuery<
-        RepoConnectionResponse<PrWithReviewsNode>
-      >(REVIEWS_QUERY, { owner, name: repoName, cursor: pageCursor });
+      const response: RepoConnectionResponse<PrWithReviewsNode> =
+        await this.executeQuery<RepoConnectionResponse<PrWithReviewsNode>>(
+          REVIEWS_QUERY,
+          { owner, name: repoName, cursor: pageCursor }
+        );
 
-      const connection = response.repository.pullRequests;
+      const connection: RepoConnectionResponse<PrWithReviewsNode>["repository"]["pullRequests"] =
+        response.repository.pullRequests;
       if (!connection) break;
 
       for (const pr of connection.nodes) {
@@ -475,7 +510,9 @@ export class GitHubSourceAdapter implements SourceAdapter {
             owner,
             repoName,
             pr.number,
-            review
+            review,
+            pr.baseRefName,
+            pr.mergeCommit?.oid ?? null
           );
           if (event) events.push(event);
         }
@@ -494,7 +531,9 @@ export class GitHubSourceAdapter implements SourceAdapter {
     owner: string,
     repoName: string,
     prNumber: number,
-    review: ReviewNode
+    review: ReviewNode,
+    prBaseBranch: string,
+    prMergeCommitSha: string | null
   ): Promise<ActivityEvent | null> {
     if (
       !review.author ||
@@ -532,6 +571,8 @@ export class GitHubSourceAdapter implements SourceAdapter {
       artifactUrl: `https://github.com/${owner}/${repoName}/pull/${prNumber}#pullrequestreview-${review.databaseId}`,
       metadata: {
         prNumber,
+        prBaseBranch: prBaseBranch,
+        prMergeCommitSha: prMergeCommitSha,
         state: review.state,
         repo: `${owner}/${repoName}`,
       },
@@ -558,11 +599,14 @@ export class GitHubSourceAdapter implements SourceAdapter {
     let reachedEarlyStop = false;
 
     do {
-      const response = await this.executeQuery<
-        RepoConnectionResponse<IssueNode>
-      >(CLOSED_ISSUES_QUERY, { owner, name: repoName, cursor: pageCursor });
+      const response: RepoConnectionResponse<IssueNode> =
+        await this.executeQuery<RepoConnectionResponse<IssueNode>>(
+          CLOSED_ISSUES_QUERY,
+          { owner, name: repoName, cursor: pageCursor }
+        );
 
-      const connection = response.repository.issues;
+      const connection: RepoConnectionResponse<IssueNode>["repository"]["issues"] =
+        response.repository.issues;
       if (!connection) break;
 
       for (const issue of connection.nodes) {

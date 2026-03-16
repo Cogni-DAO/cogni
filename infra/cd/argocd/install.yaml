@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Argo CD non-HA install for single-node k3s.
+# Applied during task.0149 cluster bootstrap, not by Argo itself.
+#
+# Usage:
+#   kubectl create namespace argocd
+#   kubectl apply -n argocd -f install.yaml
+#
+# Pin to a specific release for reproducibility:
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  # Pin to Argo CD v2.13 (latest stable as of 2026-03).
+  # Non-HA is appropriate for single-node k3s crawl; HA is a P2 concern.
+  - https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml

@@ -61,7 +61,7 @@ last_commit: 52e47abb
 | `work/items/bug.0009.openclaw-v2026.2.4-empty-payloads.md`             | Full bug report with evidence matrix and disproven hypotheses                                |
 | `tests/stack/sandbox/sandbox-openclaw.stack.test.ts`                   | Stack test with tightened assertions and skipped content test                                |
 | `services/sandbox-openclaw/openclaw-gateway.json`                      | Gateway config — model, provider, agent defaults                                             |
-| `platform/infra/services/runtime/configs/litellm.test.config.yaml`     | LiteLLM test routing — must match gateway model names                                        |
+| `infra/compose/configs/litellm.test.config.yaml`                       | LiteLLM test routing — must match gateway model names                                        |
 | `docs/research/openclaw-gateway-integration-handoff.md`                | Prior research: protocol corrections, params divergence analysis (lines 440-530)             |
 | `~/dev/openclaw/src/agents/pi-embedded-subscribe.handlers.messages.ts` | OpenClaw subscription handler — event filtering, `stripBlockTags`, `shouldSkipAssistantText` |
 | `~/dev/openclaw/src/agents/pi-embedded-subscribe.ts`                   | `enforceFinalTag`, `recordAssistantUsage`, deduplication logic                               |

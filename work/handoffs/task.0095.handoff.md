@@ -69,4 +69,4 @@ last_commit: fd71bcae
 | [Unit tests](../../services/scheduler-worker/tests/ledger-activities.test.ts)                        | 12 tests — add missing coverage per feedback #9                 |
 | [External tests](../../tests/external/ingestion/ledger-collection.external.test.ts)                  | 10 tests — **unvalidated**, needs GitHub App creds              |
 | [Stack test](../../tests/stack/ledger/collect-epoch-workflow-id.stack.test.ts)                       | Workflow-ID semantics — 3 tests, passing                        |
-| [epoch-ledger spec](../../docs/spec/epoch-ledger.md)                                                 | Invariants, state machine, schema                               |
+| [epoch-ledger spec](../../docs/spec/attribution-ledger.md)                                           | Invariants, state machine, schema                               |

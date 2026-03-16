@@ -46,10 +46,11 @@ export type CreateGraphOptions = CreateReactAgentGraphOptions;
 /**
  * Minimal structural interface for compiled graphs.
  * Alias to shared InvokableGraph with message-based I/O.
+ * Extended output allows `structuredResponse` when responseFormat is used.
  */
 export type CompiledGraph = InvokableGraph<
   MessageGraphInput,
-  MessageGraphOutput
+  MessageGraphOutput & { structuredResponse?: unknown }
 >;
 
 /**
@@ -113,6 +114,15 @@ export interface InProcRunnerOptions<TTool = unknown> {
 
   /** Graph execution request */
   readonly request: InProcGraphRequest;
+
+  /**
+   * Optional structured output format passed to graph factory.
+   * When set, graph uses LangGraph's responseFormat for parsed JSON output.
+   */
+  readonly responseFormat?: {
+    readonly prompt?: string;
+    readonly schema: unknown;
+  };
 }
 
 /**
@@ -133,4 +143,6 @@ export interface GraphResult {
   readonly errorMessage?: string;
   /** Final assistant response content (for trace output) */
   readonly content?: string;
+  /** Parsed structured output (when graph uses responseFormat) */
+  readonly structuredOutput?: Record<string, unknown>;
 }

@@ -50,6 +50,7 @@ Before designing anything:
 1. **Search the codebase** — how have we solved similar problems? What patterns exist?
 2. **Check OSS first** — does a well-maintained library already solve this?
 3. **Identify reuse** — what existing utilities, services, patterns can we leverage?
+4. **Decide boundary placement** — shared package or app/service-local? (See Phase 3a)
 
 **The best code is code you don't write.**
 
@@ -59,6 +60,24 @@ Consider at least 2 approaches. Prefer the one with:
 - ✅ Most reuse of existing patterns/OSS
 - ✅ Simplest architecture
 - ✅ Lowest maintenance burden
+
+### Phase 3a — Boundary Placement
+
+For every port, type, or domain logic file, ask:
+
+1. **Runtime count**: Will >1 runtime (app, scheduler-worker, Temporal activities) use this? If yes → shared package.
+2. **Purity**: Domain logic or runtime wiring? Pure domain → shared package. Runtime wiring → app/service code.
+3. **Vendor containment**: Does this interface shield callers from SDK churn? If yes → shared package.
+4. **Extractability**: Will keeping this in app/service code now splinter imports when extracted later? If yes → shared package now.
+
+See [Packages Architecture](docs/spec/packages-architecture.md) for the full spec and capability package shape.
+
+| Shared package (`packages/`)                               | App/service runtime code                                  |
+| ---------------------------------------------------------- | --------------------------------------------------------- |
+| Port interfaces for business capabilities                  | Runtime wiring (container, env loading, config)           |
+| Domain types (intents, entries, decisions, error taxonomy) | Next.js routes, server actions, session/request context   |
+| Pure policy/validation/math logic                          | Orchestration depending on runtime-specific context       |
+| Domain adapters (deps via constructor, no env/lifecycle)   | Client creation, credential loading, lifecycle management |
 
 ---
 

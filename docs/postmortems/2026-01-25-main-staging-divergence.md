@@ -16,7 +16,7 @@ tags: [deployment, incident]
 **Date**: 2026-01-25
 **Severity**: High (blocked releases for 4+ days)
 **Status**: Resolved
-**Related**: [CI/CD Conflict Recovery Runbook](../../platform/runbooks/CICD_CONFLICT_RECOVERY.md)
+**Related**: [CI/CD Conflict Recovery Runbook](../../docs/runbooks/CICD_CONFLICT_RECOVERY.md)
 
 ---
 

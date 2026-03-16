@@ -67,10 +67,10 @@ tags: []
 **Step 4: Deployment wiring**
 
 - [x] Install `ripgrep` + `git` in Dockerfile runner stage (`Dockerfile`)
-- [x] Add `git-sync` service (bootstrap profile, `--one-time`, `--link=current`) to runtime compose (`platform/infra/services/runtime/docker-compose.yml`)
+- [x] Add `git-sync` service (bootstrap profile, `--one-time`, `--link=current`) to runtime compose (`infra/compose/runtime/docker-compose.yml`)
 - [x] Add `repo_data` shared volume: rw in git-sync, ro in app at `/repo`
 - [x] Set `COGNI_REPO_PATH=/repo/current` in app service environment (runtime + dev compose)
-- [x] Wire `COGNI_REPO_URL` + `COGNI_REPO_REF` (pinned SHA) through deploy script `.env` + SSH env line (`platform/ci/scripts/deploy.sh`)
+- [x] Wire `COGNI_REPO_URL` + `COGNI_REPO_REF` (pinned SHA) through deploy script `.env` + SSH env line (`scripts/ci/deploy.sh`)
 - [x] Run git-sync bootstrap step before db-provision in remote deploy script
 - [x] Add `COGNI_REPO_URL` + `COGNI_REPO_REF` to CI workflows (`staging-preview.yml`, `deploy-production.yml`)
 - [x] Smoke test: app boots with `COGNI_REPO_PATH=/repo/current`, `repo.open(package.json)` returns sha
@@ -102,28 +102,28 @@ tags: []
 
 ## File Pointers (P0 Scope)
 
-| File                                                     | Change                                      |
-| -------------------------------------------------------- | ------------------------------------------- |
-| `packages/ai-tools/src/capabilities/repo.ts`             | RepoCapability interface + citation helpers |
-| `src/adapters/server/repo/ripgrep.adapter.ts`            | RipgrepAdapter impl (in-process rg + git)   |
-| `src/adapters/test/repo/fake-repo.adapter.ts`            | FakeRepoAdapter for deterministic tests     |
-| `src/bootstrap/capabilities/repo.ts`                     | RepoCapability factory (test/real/stub)     |
-| `src/bootstrap/ai/tool-bindings.ts`                      | Wire repo tool implementations              |
-| `src/bootstrap/container.ts`                             | Add repoCapability to DI container          |
-| `src/shared/env/server.ts`                               | COGNI_REPO_PATH, COGNI_REPO_SHA env vars    |
-| `packages/ai-tools/src/tools/repo-search.ts`             | core\_\_repo_search tool contract           |
-| `packages/ai-tools/src/tools/repo-open.ts`               | core\_\_repo_open tool contract             |
-| `packages/ai-tools/src/catalog.ts`                       | Add repo tools to TOOL_CATALOG              |
-| `src/shared/ai/guards/citation.guard.ts`                 | Citation enforcement (pure validation)      |
-| `packages/langgraph-graphs/src/graphs/brain/graph.ts`    | Brain ReAct agent graph factory             |
-| `packages/langgraph-graphs/src/graphs/brain/prompts.ts`  | Brain system prompt                         |
-| `packages/langgraph-graphs/src/graphs/brain/tools.ts`    | Brain tool IDs (repo_search, repo_open)     |
-| `Dockerfile`                                             | Install ripgrep + git in runner stage       |
-| `platform/infra/services/runtime/docker-compose.yml`     | git-sync service + repo_data volume         |
-| `platform/infra/services/runtime/docker-compose.dev.yml` | HTTPS git-sync clone (same path as prod)    |
-| `platform/ci/scripts/deploy.sh`                          | COGNI_REPO_URL/BRANCH env + bootstrap step  |
-| `.github/workflows/staging-preview.yml`                  | Pass repo URL + branch to deploy            |
-| `.github/workflows/deploy-production.yml`                | Pass repo URL + branch to deploy            |
+| File                                                    | Change                                      |
+| ------------------------------------------------------- | ------------------------------------------- |
+| `packages/ai-tools/src/capabilities/repo.ts`            | RepoCapability interface + citation helpers |
+| `src/adapters/server/repo/ripgrep.adapter.ts`           | RipgrepAdapter impl (in-process rg + git)   |
+| `src/adapters/test/repo/fake-repo.adapter.ts`           | FakeRepoAdapter for deterministic tests     |
+| `src/bootstrap/capabilities/repo.ts`                    | RepoCapability factory (test/real/stub)     |
+| `src/bootstrap/ai/tool-bindings.ts`                     | Wire repo tool implementations              |
+| `src/bootstrap/container.ts`                            | Add repoCapability to DI container          |
+| `src/shared/env/server.ts`                              | COGNI_REPO_PATH, COGNI_REPO_SHA env vars    |
+| `packages/ai-tools/src/tools/repo-search.ts`            | core\_\_repo_search tool contract           |
+| `packages/ai-tools/src/tools/repo-open.ts`              | core\_\_repo_open tool contract             |
+| `packages/ai-tools/src/catalog.ts`                      | Add repo tools to TOOL_CATALOG              |
+| `src/shared/ai/guards/citation.guard.ts`                | Citation enforcement (pure validation)      |
+| `packages/langgraph-graphs/src/graphs/brain/graph.ts`   | Brain ReAct agent graph factory             |
+| `packages/langgraph-graphs/src/graphs/brain/prompts.ts` | Brain system prompt                         |
+| `packages/langgraph-graphs/src/graphs/brain/tools.ts`   | Brain tool IDs (repo_search, repo_open)     |
+| `Dockerfile`                                            | Install ripgrep + git in runner stage       |
+| `infra/compose/runtime/docker-compose.yml`              | git-sync service + repo_data volume         |
+| `infra/compose/runtime/docker-compose.dev.yml`          | HTTPS git-sync clone (same path as prod)    |
+| `scripts/ci/deploy.sh`                                  | COGNI_REPO_URL/BRANCH env + bootstrap step  |
+| `.github/workflows/staging-preview.yml`                 | Pass repo URL + branch to deploy            |
+| `.github/workflows/deploy-production.yml`               | Pass repo URL + branch to deploy            |
 
 ---
 

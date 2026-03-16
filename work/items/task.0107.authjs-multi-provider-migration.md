@@ -2,7 +2,7 @@
 id: task.0107
 type: task
 title: Multi-provider auth — GitHub + Discord + Google OAuth on NextAuth v4
-status: needs_merge
+status: done
 priority: 1
 rank: 10
 estimate: 3
@@ -116,7 +116,7 @@ Authenticated user → hits /api/auth/link/discord (requires existing session)
 - `src/app/_facades/payments/credits.server.ts` — conditional spreads for walletAddress
 - `src/app/api/v1/payments/intents/route.ts` — `WalletRequiredError` → 403 handler
 - `src/app/api/v1/governance/activity/route.ts` — system principal: `walletAddress: null`
-- `src/app/api/v1/ledger/_lib/approver-guard.ts` — accept `string | null | undefined`
+- `src/app/api/v1/attribution/_lib/approver-guard.ts` — accept `string | null | undefined`
 - `src/app/api/auth/[...nextauth]/route.ts` — wrapped with `AsyncLocalStorage.run()` for link_intent cookie propagation
 - `src/app/_lib/auth/session.ts` — doc comment update
 - `.env.local.example` — `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`

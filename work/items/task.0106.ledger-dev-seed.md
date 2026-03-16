@@ -6,9 +6,9 @@ status: needs_merge
 priority: 1
 rank: 99
 estimate: 2
-summary: "Create a dev seed script that populates the ledger database with realistic, multi-state epoch data so the governance UI (/gov/epoch, /gov/history, /gov/holdings) renders meaningful content during local development."
-outcome: "Running `pnpm dev:seed:ledger` populates the dev DB with realistic epoch data across all 3 states. All governance UI pages render correctly against this data."
-spec_refs: epoch-ledger-spec
+summary: "Populate the dev database with realistic, claimant-aware attribution data so the governance UI (/gov/epoch, /gov/history, /gov/holdings) and ownership reads render meaningful local state."
+outcome: "Running `pnpm dev:setup` seeds realistic open and finalized epochs, linked and unlinked claimants, and claimant-aware statements so the governance UI and `/users/me/ownership` render against representative local data."
+spec_refs: attribution-ledger-spec
 assignees: derekg1729
 credit:
 project: proj.transparent-credit-payouts
@@ -19,7 +19,7 @@ revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-02-24
-updated: 2026-02-24
+updated: 2026-03-01
 labels: [governance, dx, seed]
 external_refs:
 ---
@@ -28,17 +28,16 @@ external_refs:
 
 ## Context
 
-The governance UI hooks now fetch from the real ledger API (`/api/v1/ledger/epochs`, allocations, activity, statements). An empty dev database renders blank pages. We need a seed script that populates realistic data so developers can visually verify all 3 governance pages.
+The governance UI hooks now fetch from the real attribution API (`/api/v1/attribution/epochs`, activity, claimants, statements) plus `/api/v1/users/me/ownership`. An empty dev database renders blank pages. We need seed data that exercises linked humans, unlinked GitHub identities, finalized claimant-aware statements, and an open epoch with mixed attribution states.
 
-The existing test fixture (`tests/_fixtures/ledger/seed-ledger.ts`) provides factory functions and a `seedClosedEpoch()` composite — this seed script should reuse those building blocks but compose richer, more realistic scenarios modeled after real GitHub/Discord contribution patterns.
+The existing attribution fixtures provide canonical row shapes, but the dev seed now lives in `scripts/db/seed.mts` and composes richer, claimant-aware scenarios modeled after real GitHub contribution patterns.
 
 ## Requirements
 
-- **R1:** Script is runnable via `pnpm dev:seed:ledger` (package.json script entry)
+- **R1:** Seed runs via the normal local bootstrap flow (`pnpm dev:setup`)
 - **R2:** Seeds at least 3 epochs covering all states:
   - 1 epoch with `status = 'open'` (current, no statement) — drives `/gov/epoch`
-  - 1 epoch with `status = 'finalized'` with payout statement — drives `/gov/history`
-  - 1 epoch with `status = 'finalized'` with payout statement (different contributors) — drives `/gov/holdings` aggregation
+  - 2 epochs with `status = 'finalized'` and claimant-aware statements — drive `/gov/history` and `/gov/holdings`
 - **R3:** Each epoch has realistic activity events modeled after real patterns:
   - GitHub: `pr_merged`, `review_submitted`, `commit_pushed`, `comment_created` with plausible `platformLogin`, `artifactUrl`, `eventTime` values
   - At least 3-5 contributors per epoch with varying activity counts
@@ -46,47 +45,25 @@ The existing test fixture (`tests/_fixtures/ledger/seed-ledger.ts`) provides fac
 - **R4:** Open epoch has allocations (proposed_units) but no statement
 - **R5:** Finalized epochs have:
   - Pool component (`base_issuance`) with realistic credit amounts
-  - Payout statement with `payouts_json` containing per-user share/credits
-  - Activity curation rows linking events to resolved user IDs
+  - Statement items containing claimant metadata (`claimant_key`, `claimant`, `receipt_ids`)
+  - A mix of linked humans and unlinked GitHub identities
 - **R6:** Script is idempotent — re-running doesn't fail (deletes existing seed data or skips on conflict)
-- **R7:** Script uses the existing `ActivityLedgerStore` port + factories from `tests/_fixtures/ledger/seed-ledger.ts`
+- **R7:** Seed uses the existing `AttributionStore` port and canonical schema shapes
 - **R8:** Epochs use non-overlapping date windows (use `epochWindow()` helper with offsets)
 
 ## Allowed Changes
 
-- `scripts/dev-seed-ledger.ts` — new seed script
-- `package.json` — add `dev:seed:ledger` script entry
-- `tests/_fixtures/ledger/seed-ledger.ts` — extend with new factories if needed (e.g., `seedOpenEpoch()`)
+- `scripts/db/seed.mts`
+- `tests/_fixtures/attribution/seed-attribution.ts`
+- claimant-aware read models or contracts only where required to keep seeded data visible in UI
 
 ## Plan
 
-- [ ] **Step 1: Create seed script** at `scripts/dev-seed-ledger.ts`
-  - Import store factory from bootstrap/DI container (same pattern as migration scripts)
-  - Import fixture factories from `tests/_fixtures/ledger/seed-ledger.ts`
-  - Define seed data constants:
-    - 4-5 contributor user IDs with GitHub-style platformLogins
-    - 2-3 epoch windows (offset 0 = open, offset -1/-2 = finalized)
-    - Varied activity event counts per contributor (2-8 events each)
-    - Weight config matching `TEST_WEIGHT_CONFIG`
-
-- [ ] **Step 2: Implement epoch seeding functions**
-  - `seedOpenEpoch(store)` — creates epoch + activity events + curations + allocations (no close/finalize)
-  - Reuse existing `seedClosedEpoch(store)` for finalized epochs, or extend it for richer data
-  - Each function generates deterministic event IDs (so re-runs are idempotent via `ON CONFLICT DO NOTHING`)
-
-- [ ] **Step 3: Compose the full seed**
-  - Seed 2 finalized epochs (different contributor mixes, different credit pools)
-  - Seed 1 open epoch (current week, in-progress activity)
-  - Log progress to stdout
-
-- [ ] **Step 4: Add package.json script**
-  - `"dev:seed:ledger": "pnpm dotenv -e .env.development -- tsx scripts/dev-seed-ledger.ts"`
-
-- [ ] **Step 5: Verify visually**
-  - Run `pnpm dev:seed:ledger` against running dev DB
-  - Navigate to `/gov/epoch` — current epoch with contributors renders
-  - Navigate to `/gov/history` — 2 finalized epochs with expandable details render
-  - Navigate to `/gov/holdings` — aggregated holdings across both finalized epochs render
+- [x] Seed deterministic linked humans (`derekg1729`, `alice-vector`, `ben-rivera`) and unlinked GitHub identities (`Cogni-1729`, `mira-stone`)
+- [x] Seed 2 finalized epochs with claimant-aware statement items and 1 open epoch with mixed linked/unlinked contributors
+- [x] Reuse real `node-template` PR/review identifiers where practical so local UI resembles repo history
+- [x] Keep the seed idempotent by skipping attribution seeding when epochs already exist
+- [x] Validate visually through `pnpm dev:setup` against `/gov/epoch`, `/gov/history`, `/gov/holdings`, and `/profile`
 
 ## Data Shape Reference
 
@@ -97,7 +74,7 @@ The existing test fixture (`tests/_fixtures/ledger/seed-ledger.ts`) provides fac
 | `id`               | `github:pr_merged:cogni-dao/cogni-template:142`        |
 | `source`           | `github`                                               |
 | `event_type`       | `pr_merged` / `review_submitted` / `commit_pushed`     |
-| `platform_user_id` | `gh-12345`                                             |
+| `platform_user_id` | `12345`                                                |
 | `platform_login`   | `alice-dev`                                            |
 | `artifact_url`     | `https://github.com/cogni-dao/cogni-template/pull/142` |
 | `event_time`       | Within epoch window                                    |
@@ -112,23 +89,24 @@ The existing test fixture (`tests/_fixtures/ledger/seed-ledger.ts`) provides fac
 
 ### Payout Statement (finalized epochs only)
 
-| Field                           | Example Value |
-| ------------------------------- | ------------- |
-| `pool_total_credits`            | `10000n`      |
-| `payouts_json[].user_id`        | `user-alice`  |
-| `payouts_json[].total_units`    | `"8000"`      |
-| `payouts_json[].share`          | `"0.400000"`  |
-| `payouts_json[].amount_credits` | `"4000"`      |
+| Field                                   | Example Value                      |
+| --------------------------------------- | ---------------------------------- |
+| `pool_total_credits`                    | `10000n`                           |
+| `statement_items_json[].user_id`        | `user-alice`                       |
+| `statement_items_json[].total_units`    | `"8000"`                           |
+| `statement_items_json[].share`          | `"0.400000"`                       |
+| `statement_items_json[].amount_credits` | `"4000"`                           |
+| `statement_items_json[].claimant_key`   | `github:12345` / `user:user-alice` |
 
 ## Validation
 
 **Command:**
 
 ```bash
-pnpm dev:seed:ledger
+pnpm dev:setup
 ```
 
-**Expected:** Script completes without error, logs seeded epoch IDs. Running twice is safe (idempotent).
+**Expected:** Setup completes without error and seeds deterministic attribution data. Running again against a fresh dev DB is safe.
 
 **Manual verification:**
 
@@ -142,7 +120,7 @@ pnpm dev
 ## Review Checklist
 
 - [ ] **Work Item:** `task.0106` linked in PR body
-- [ ] **Spec:** epoch-ledger-spec invariants upheld (ALL_MATH_BIGINT, ONE_OPEN_EPOCH, deterministic IDs)
+- [ ] **Spec:** attribution-ledger-spec invariants upheld (ALL_MATH_BIGINT, ONE_OPEN_EPOCH, deterministic IDs)
 - [ ] **Tests:** seed script is its own validation (visual + idempotent re-run)
 - [ ] **Reviewer:** assigned and approved
 

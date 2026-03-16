@@ -31,7 +31,7 @@ Provide dynamic, validated model selection where `litellm.config.yaml` is the si
 
 ## Core Invariants
 
-1. **LITELLM_CONFIG_IS_SOURCE_OF_TRUTH**: All model metadata comes from `platform/infra/services/runtime/configs/litellm.config.yaml`. No hardcoded model lists in application code.
+1. **LITELLM_CONFIG_IS_SOURCE_OF_TRUTH**: All model metadata comes from `infra/compose/configs/litellm.config.yaml`. No hardcoded model lists in application code.
 
 2. **SERVER_SIDE_VALIDATION**: Server checks the requested model against a cached allowlist on every chat request. Invalid model returns 409 + `defaultModelId`.
 
@@ -91,20 +91,20 @@ Server (409 if invalid) → LiteLLM Adapter
 
 ### File Pointers
 
-| File                                                          | Role                                                            |
-| ------------------------------------------------------------- | --------------------------------------------------------------- |
-| `platform/infra/services/runtime/configs/litellm.config.yaml` | Model definitions with model_info metadata (source of truth)    |
-| `src/contracts/ai.models.v1.contract.ts`                      | Models contract (id, name, isFree, providerKey, defaultModelId) |
-| `src/app/_lib/models-cache.ts`                                | Fetches from LiteLLM /model/info, 1h cache with SWR             |
-| `src/app/api/v1/ai/models/route.ts`                           | Auth-protected endpoint returning cached models                 |
-| `src/contracts/ai.chat.v1.contract.ts:58`                     | Chat contract with REQUIRED `model` field                       |
-| `src/app/api/v1/ai/chat/route.ts:162-179`                     | Validation with 409 retry response                              |
-| `src/features/ai/public.ts`                                   | Feature barrel (stable import surface)                          |
-| `src/features/ai/components/ModelPicker.tsx`                  | Dialog+ScrollArea picker with search                            |
-| `src/features/ai/components/ChatComposerExtras.tsx`           | Composer toolbar integration                                    |
-| `src/features/ai/config/provider-icons.ts`                    | Provider key → Lucide icon mapping                              |
-| `src/components/kit/chat/Thread.tsx`                          | Slot-based wrapper (`composerLeft` prop)                        |
-| `src/app/(app)/chat/page.tsx:59-89`                           | State management                                                |
+| File                                                | Role                                                            |
+| --------------------------------------------------- | --------------------------------------------------------------- |
+| `infra/compose/configs/litellm.config.yaml`         | Model definitions with model_info metadata (source of truth)    |
+| `src/contracts/ai.models.v1.contract.ts`            | Models contract (id, name, isFree, providerKey, defaultModelId) |
+| `src/app/_lib/models-cache.ts`                      | Fetches from LiteLLM /model/info, 1h cache with SWR             |
+| `src/app/api/v1/ai/models/route.ts`                 | Auth-protected endpoint returning cached models                 |
+| `src/contracts/ai.chat.v1.contract.ts:58`           | Chat contract with REQUIRED `model` field                       |
+| `src/app/api/v1/ai/chat/route.ts:162-179`           | Validation with 409 retry response                              |
+| `src/features/ai/public.ts`                         | Feature barrel (stable import surface)                          |
+| `src/features/ai/components/ModelPicker.tsx`        | Dialog+ScrollArea picker with search                            |
+| `src/features/ai/components/ChatComposerExtras.tsx` | Composer toolbar integration                                    |
+| `src/features/ai/config/provider-icons.ts`          | Provider key → Lucide icon mapping                              |
+| `src/components/kit/chat/Thread.tsx`                | Slot-based wrapper (`composerLeft` prop)                        |
+| `src/app/(app)/chat/page.tsx:59-89`                 | State management                                                |
 
 ## Acceptance Checks
 

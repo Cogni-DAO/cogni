@@ -5,6 +5,7 @@ Your job is to find problems, not confirm quality. Assume the design has flaws u
 Read these before starting:
 
 - [Architecture](docs/spec/architecture.md) — system architecture and design principles
+- [Packages Architecture](docs/spec/packages-architecture.md) — package boundaries and capability package shape
 - [Style & Lint Rules](docs/spec/style.md) — coding standards
 - [Feature Development Guide](docs/guides/feature-development.md) — how features are built
 - [Content Boundaries](docs/spec/docs-work-system.md#content-boundaries) — ownership rules
@@ -45,6 +46,14 @@ Score each dimension (PASS / CONCERN / FAIL) with a one-line rationale:
 - Does it respect module boundaries, contract-first design, and the adapter pattern?
 - Does it follow the data flow conventions (Zod contracts, Pino logging, etc.)?
 
+### Boundary Placement
+
+- Are ports for business capabilities in shared packages (`packages/`), not app/service code?
+- Are domain types and pure policy/math logic co-located with the port package?
+- Are domain adapters (deps via constructor, no env/lifecycle) in the package, not in app/service code?
+- Is runtime wiring (client creation, env/credential loading, lifecycle) kept out of packages?
+- If >1 runtime (app, scheduler-worker, Temporal activities) will use this capability, is it in a shared package?
+
 ### Content Boundaries
 
 - Do specs contain only contracts, invariants, and design?
@@ -82,6 +91,7 @@ Output a structured review:
 | Simplicity             | PASS    | ...                        |
 | OSS-First              | CONCERN | ...                        |
 | Architecture Alignment | PASS    | ...                        |
+| Boundary Placement     | PASS    | ...                        |
 | Content Boundaries     | PASS    | ...                        |
 | Scope Discipline       | PASS    | ...                        |
 | Risk Surface           | FAIL    | ...                        |

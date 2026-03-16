@@ -37,6 +37,8 @@ jobs:
       OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
       OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
       DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
+      POSTHOG_API_KEY: phc_test_key_for_ci
+      POSTHOG_HOST: http://localhost:18000
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
@@ -82,6 +84,8 @@ jobs:
       OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
       OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
       DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
+      POSTHOG_API_KEY: phc_test_key_for_ci
+      POSTHOG_HOST: http://localhost:18000
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
@@ -156,6 +160,8 @@ jobs:
       OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
       OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
       DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
+      POSTHOG_API_KEY: phc_test_key_for_ci
+      POSTHOG_HOST: http://localhost:18000
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
@@ -273,6 +279,8 @@ jobs:
       OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
       OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
       DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
+      POSTHOG_API_KEY: phc_test_key_for_ci
+      POSTHOG_HOST: http://localhost:18000
       # LiteLLM test config routes to mock-openai-api (no real provider keys)
       LITELLM_CONFIG: litellm.test.config.yaml
       # OpenClaw gateway config with test models matching litellm.test.config.yaml
@@ -328,7 +336,7 @@ jobs:
 
       - name: Compute migrator fingerprint and tag
         run: |
-          FINGERPRINT=$(platform/ci/scripts/compute_migrator_fingerprint.sh)
+          FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh)
           echo "MIGRATOR_FINGERPRINT=$FINGERPRINT" >> $GITHUB_ENV
           # Content-addressed migrator tag (decoupled from app commit, lowercase for GHCR)
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -360,6 +368,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
+          file: ./apps/web/Dockerfile
           target: runner
           tags: ${{ env.APP_IMAGE }}
           load: true
@@ -378,6 +387,7 @@ jobs:
         if: steps.pull_migrator.outcome != 'success'
         with:
           context: .
+          file: ./apps/web/Dockerfile
           target: migrator
           tags: ${{ env.MIGRATOR_IMAGE }}
           load: true
@@ -404,27 +414,28 @@ jobs:
           cache-from: type=gha,scope=sandbox-runtime
           cache-to: type=gha,mode=max,scope=sandbox-runtime
 
-      - name: Start app + DB + Temporal stack
+      - name: Start app + DB + Temporal + TigerBeetle stack
         run: |
           docker network create cogni-edge || true
           # Images pre-built with GHA cache; no --build needed
           # Temporal services required for schedule CRUD + execution tests
           # scheduler-worker required for workflow execution tests
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml \
+          # tigerbeetle required for financial ledger stack tests
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile sandbox-openclaw \
-            up -d app postgres litellm mock-llm caddy temporal-postgres temporal temporal-ui scheduler-worker git-sync llm-proxy-openclaw openclaw-gateway
+            up -d app postgres litellm mock-llm caddy temporal-postgres temporal temporal-ui scheduler-worker git-sync llm-proxy-openclaw openclaw-gateway tigerbeetle
 
       - name: Probe container-boundary (git-sync volume)
-        run: platform/ci/scripts/probe-repo-volume.sh
+        run: scripts/ci/probe-repo-volume.sh
 
       - name: Provision database roles
         run: |
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml \
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile bootstrap run --rm db-provision
 
       - name: Run migrations
         run: |
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml \
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile bootstrap run --rm db-migrate
 
       - name: Run stack tests
@@ -436,6 +447,8 @@ jobs:
           # Vitest runs on host, connects via port-forwarded localhost:55432
           DATABASE_URL: postgresql://user:password@localhost:55432/cogni_template_test
           DATABASE_SERVICE_URL: postgresql://user_service:service_password@localhost:55432/cogni_template_test
+          # TigerBeetle (host-side vitest, port-forwarded)
+          TIGERBEETLE_ADDRESS: 127.0.0.1:3002
         # Note: wait-for-probes.ts globalSetup polls /livez then /readyz before tests run
 
       - name: CI Telemetry
@@ -446,7 +459,14 @@ jobs:
           loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
-          compose_file: platform/infra/services/runtime/docker-compose.dev.yml
+          compose_file: infra/compose/runtime/docker-compose.dev.yml
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml \
+            --profile sandbox-openclaw \
+            logs --tail=300 2>&1 | tee ${{ runner.temp }}/ci-job.log
 
       - name: Upload failure context artifact
         if: failure()
@@ -460,4 +480,4 @@ jobs:
       - name: Teardown stack
         if: always()
         run: |
-          docker compose -f platform/infra/services/runtime/docker-compose.dev.yml down -v
+          docker compose -f infra/compose/runtime/docker-compose.dev.yml down -v

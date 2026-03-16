@@ -85,7 +85,7 @@
 
 > Replace YAML+bash with pipelines-as-code. Avoids GitHub Actions vendor lock-in.
 
-- [ ] Spike: Audit all `.github/workflows/*.yml` and `platform/ci/scripts/*.sh`; identify core logic to extract into Dagger modules
+- [ ] Spike: Audit all `.github/workflows/*.yml` and `scripts/ci/*.sh`; identify core logic to extract into Dagger modules
 - [ ] Refactor build logic (app, migrator, services) into Dagger
 - [ ] Refactor test/lint/typecheck into Dagger
 - [ ] Dagger step: Auto-PR image digest to deployments repo
@@ -112,9 +112,9 @@
 
 | File                                      | Change                                                                         |
 | ----------------------------------------- | ------------------------------------------------------------------------------ |
-| `platform/ci/scripts/build-service.sh`    | New: build scheduler-worker Dockerfile                                         |
-| `platform/ci/scripts/push.sh`             | Push scheduler-worker, capture digest via inspect                              |
-| `platform/ci/scripts/deploy.sh`           | Accept SCHEDULER_WORKER_IMAGE env var, wire into compose                       |
+| `scripts/ci/build-service.sh`             | New: build scheduler-worker Dockerfile                                         |
+| `scripts/ci/push.sh`                      | Push scheduler-worker, capture digest via inspect                              |
+| `scripts/ci/deploy.sh`                    | Accept SCHEDULER_WORKER_IMAGE env var, wire into compose                       |
 | `.github/workflows/build-prod.yml`        | Add scheduler-worker build+push, output digest ref                             |
 | `.github/workflows/deploy-production.yml` | Accept SCHEDULER_WORKER_IMAGE digest input                                     |
 | `services/scheduler-worker/src/health.ts` | Add `/version` endpoint                                                        |

@@ -117,7 +117,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DATABASE_SERVICE_URL: ${{ secrets.DATABASE_SERVICE_URL }}
-        run: platform/ci/scripts/validate-dsns.sh
+        run: scripts/ci/validate-dsns.sh
 
       - name: Deploy to Cherry Servers
         env:
@@ -147,7 +147,6 @@ jobs:
           EVM_RPC_URL: ${{ secrets.EVM_RPC_URL }}
           TEMPORAL_DB_USER: ${{ secrets.TEMPORAL_DB_USER }}
           TEMPORAL_DB_PASSWORD: ${{ secrets.TEMPORAL_DB_PASSWORD }}
-          SOURCECRED_GITHUB_TOKEN: ${{ secrets.SOURCECRED_GITHUB_TOKEN }}
           VM_HOST: ${{ secrets.VM_HOST }}
           GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
           GHCR_USERNAME: Cogni-1729
@@ -170,13 +169,24 @@ jobs:
           OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
           OPENCLAW_GITHUB_RW_TOKEN: ${{ secrets.OPENCLAW_GITHUB_RW_TOKEN }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GH_OAUTH_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+          GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+          DISCORD_OAUTH_CLIENT_ID: ${{ secrets.DISCORD_OAUTH_CLIENT_ID }}
+          DISCORD_OAUTH_CLIENT_SECRET: ${{ secrets.DISCORD_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
           GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
-          GITHUB_REVIEW_APP_ID: ${{ secrets.GITHUB_REVIEW_APP_ID }}
-          GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64 }}
-          GITHUB_REVIEW_INSTALLATION_ID: ${{ secrets.GITHUB_REVIEW_INSTALLATION_ID }}
-          GITHUB_REPOS: ${{ vars.GITHUB_REPOS }}
-        run: platform/ci/scripts/deploy.sh
+          GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
+          GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
+          GH_REPOS: ${{ vars.GH_REPOS }}
+          GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+          PRIVY_SIGNING_KEY: ${{ secrets.PRIVY_SIGNING_KEY }}
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+        run: scripts/ci/deploy.sh
 
       - name: Upload deployment artifacts
         if: always()

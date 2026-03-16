@@ -59,15 +59,15 @@ last_commit: 568b391e
 
 ## Pointers
 
-| File / Resource                                                     | Why it matters                                                     |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `src/adapters/server/sandbox/proxy-billing-reader.ts`               | Core rewrite — tail-read JSONL, no dockerode                       |
-| `src/bootstrap/graph-executor.factory.ts`                           | Factory wiring — `OPENCLAW_BILLING_DIR` required                   |
-| `src/shared/env/server.ts`                                          | Env schema — default path for host mode                            |
-| `platform/infra/services/sandbox-proxy/nginx-gateway.conf.template` | Nginx JSONL log format + `/billing/` path                          |
-| `platform/infra/services/runtime/docker-compose.yml`                | Prod: named volume `openclaw_billing`                              |
-| `platform/infra/services/runtime/docker-compose.dev.yml`            | Dev: bind mount with `OPENCLAW_BILLING_HOST_DIR`                   |
-| `tests/stack/sandbox/sandbox-openclaw.stack.test.ts`                | Stack tests — billing + model override assertions                  |
-| `tests/setup.ts`                                                    | Global test env setup                                              |
-| `vitest.stack.config.mts`                                           | Stack test config — where billing dir constant should live         |
-| `docs/spec/unified-graph-launch.md`                                 | Spec context — dual billing path is the deeper architectural issue |
+| File / Resource                                       | Why it matters                                                     |
+| ----------------------------------------------------- | ------------------------------------------------------------------ |
+| `src/adapters/server/sandbox/proxy-billing-reader.ts` | Core rewrite — tail-read JSONL, no dockerode                       |
+| `src/bootstrap/graph-executor.factory.ts`             | Factory wiring — `OPENCLAW_BILLING_DIR` required                   |
+| `src/shared/env/server.ts`                            | Env schema — default path for host mode                            |
+| `infra/compose/nginx-gateway.conf.template`           | Nginx JSONL log format + `/billing/` path                          |
+| `infra/compose/docker-compose.yml`                    | Prod: named volume `openclaw_billing`                              |
+| `infra/compose/docker-compose.dev.yml`                | Dev: bind mount with `OPENCLAW_BILLING_HOST_DIR`                   |
+| `tests/stack/sandbox/sandbox-openclaw.stack.test.ts`  | Stack tests — billing + model override assertions                  |
+| `tests/setup.ts`                                      | Global test env setup                                              |
+| `vitest.stack.config.mts`                             | Stack test config — where billing dir constant should live         |
+| `docs/spec/unified-graph-launch.md`                   | Spec context — dual billing path is the deeper architectural issue |

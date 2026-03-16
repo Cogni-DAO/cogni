@@ -2,7 +2,7 @@
 id: task.0102
 type: task
 title: "Allocation computation, epoch auto-close, and FinalizeEpochWorkflow"
-status: needs_merge
+status: done
 priority: 1
 rank: 8
 estimate: 3
@@ -39,7 +39,7 @@ The pipeline goes from raw events to payout statements. Three frameworks ship: (
 
 **Reuses**:
 
-- Existing `computePayouts()` in `ledger-core/rules.ts` — unchanged
+- Existing `computeStatementItems()` in `ledger-core/rules.ts` — unchanged
 - Existing `insertAllocations` store method — changed to upsert (ON CONFLICT UPDATE proposed_units, activity_count; never touch final_units)
 - Existing `insertPoolComponent` store method — idempotent via POOL_UNIQUE_PER_TYPE
 - Existing `closeIngestion` store method (task.0100) — status transition
@@ -58,7 +58,7 @@ The pipeline goes from raw events to payout statements. Three frameworks ship: (
 
 The allocation algorithm is a pure function identified by a version string. The version is **pinned at `closeIngestion` (open→review), not at epoch creation**. During `open`, the algorithm can iterate as repo-spec changes; at review the ref locks and becomes the reproducibility anchor (CONFIG_LOCKED_AT_REVIEW).
 
-**`packages/ledger-core/src/allocation.ts`:**
+**`packages/attribution-ledger/src/allocation.ts`:**
 
 ```typescript
 /** Input: joined curation + activity_events data (only resolved, included events) */
@@ -136,7 +136,7 @@ activity_ledger:
     base_issuance_credits: "10000" # string → bigint (100.000 units at milli-unit scale)
 ```
 
-**`packages/ledger-core/src/pool.ts`:**
+**`packages/attribution-ledger/src/pool.ts`:**
 
 ```typescript
 export interface PoolComponentEstimate {
@@ -191,12 +191,12 @@ closeIngestion(
   approverSetHash: string,
   allocationAlgoRef: string,
   weightConfigHash: string
-): Promise<LedgerEpoch>;
+): Promise<AttributionEpoch>;
 ```
 
 Sets `approver_set_hash` (task.0100), `allocation_algo_ref`, and `weight_config_hash` on the epoch row atomically. All three are NULL while open, immutable after review.
 
-5. **`insertPoolComponent` enforcement** — port signature unchanged. Adapter (`DrizzleLedgerAdapter`) checks epoch status internally via `resolveEpochScoped` and rejects if `status != 'open'` (POOL_LOCKED_AT_REVIEW). Consistent with existing scope-gating pattern.
+5. **`insertPoolComponent` enforcement** — port signature unchanged. Adapter (`DrizzleAttributionAdapter`) checks epoch status internally via `resolveEpochScoped` and rejects if `status != 'open'` (POOL_LOCKED_AT_REVIEW). Consistent with existing scope-gating pattern.
 
 **`computeAllocations` activity:**
 
@@ -263,7 +263,7 @@ The auto-close check (step 8) uses Option A — no new workflow, no new schedule
 
 ### `computeAllocationSetHash()` Pure Function
 
-**`packages/ledger-core/src/hashing.ts`** (or add to existing `hashing.ts` if it exists):
+**`packages/attribution-ledger/src/hashing.ts`** (or add to existing `hashing.ts` if it exists):
 
 ```typescript
 export function computeAllocationSetHash(
@@ -303,7 +303,7 @@ Deterministic ID: ledger-finalize-{scopeId}-{epochId}
    → Read epoch_allocations — use final_units where set, fall back to proposed_units.
    → Read pool components → pool_total = SUM(amount_credits).
    → Verify ≥1 base_issuance component (POOL_REQUIRES_BASE).
-   → computePayouts(allocations, pool_total) — BIGINT, largest-remainder.
+   → computeStatementItems(allocations, pool_total) — BIGINT, largest-remainder.
    → computeAllocationSetHash(allocations).
    → Atomic transaction:
      - finalizeEpoch(epochId, pool_total)
@@ -314,7 +314,7 @@ Deterministic ID: ledger-finalize-{scopeId}-{epochId}
 
 Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_FINALIZE_IDEMPOTENT. V0 is sign-at-finalize — no separate `/sign` route (deferred to V1 for multi-approver quorum).
 
-**Finalize API route**: `POST /api/v1/ledger/epochs/:id/finalize`
+**Finalize API route**: `POST /api/v1/attribution/epochs/:id/finalize`
 
 ```typescript
 // Input: { signature: string } (EIP-191 hex)
@@ -334,7 +334,7 @@ Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_F
 - [ ] POOL_AUTO_POPULATED: `ensurePoolComponents` activity inserts `base_issuance` from config. Idempotent via POOL_UNIQUE_PER_TYPE. Admin can add additional components via API while epoch is open. (spec: epoch-ledger POOL_REQUIRES_BASE)
 - [ ] POOL_LOCKED_AT_REVIEW: No pool component inserts after `closeIngestion`. `insertPoolComponent` rejects if epoch status != 'open'. `component_id` validated against V0 allowlist (`base_issuance`, `kpi_bonus_v0`, `top_up`). (spec: epoch-ledger)
 - [ ] POOL_REPRODUCIBLE: Each pool component stores `algorithm_version + inputs_json + amount_credits`. `estimatePoolComponentsV0` is a pure function. (spec: epoch-ledger)
-- [ ] PAYOUT_DETERMINISTIC: `computePayouts` + `computeAllocationSetHash` are pure functions. Same allocations + pool → identical statement + hash. (spec: epoch-ledger)
+- [ ] PAYOUT_DETERMINISTIC: `computeStatementItems` + `computeAllocationSetHash` are pure functions. Same allocations + pool → identical statement + hash. (spec: epoch-ledger)
 - [ ] ALL_MATH_BIGINT: All weight, unit, credit, and pool values use BigInt. No floating point. (spec: epoch-ledger)
 - [ ] IDENTITY_BEST_EFFORT: `getCuratedEventsForAllocation` returns only resolved events (`userId IS NOT NULL`). Unresolved events excluded from allocation, not silently dropped. (spec: epoch-ledger)
 - [ ] EPOCH_FINALIZE_IDEMPOTENT: FinalizeEpochWorkflow returns existing statement if epoch already finalized. No error, no mutation. (spec: epoch-ledger)
@@ -347,26 +347,26 @@ Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_F
 
 <!-- High-level scope -->
 
-- Create: `packages/ledger-core/src/allocation.ts` — `computeProposedAllocations()` + types + V0 algorithm
-- Create: `packages/ledger-core/src/pool.ts` — `estimatePoolComponentsV0()` pure function
+- Create: `packages/attribution-ledger/src/allocation.ts` — `computeProposedAllocations()` + types + V0 algorithm
+- Create: `packages/attribution-ledger/src/pool.ts` — `estimatePoolComponentsV0()` pure function
 - Create: `services/scheduler-worker/src/workflows/finalize-epoch.workflow.ts` — FinalizeEpochWorkflow
 - Create: `src/contracts/ledger.finalize-epoch.v1.contract.ts` — Zod contract for finalize route
-- Create: `src/app/api/v1/ledger/epochs/[id]/finalize/route.ts` — finalize API route (202 → workflow)
-- Modify: `packages/ledger-core/src/hashing.ts` — add `computeAllocationSetHash()`
-- Modify: `packages/ledger-core/src/index.ts` — export allocation + pool modules
-- Modify: `packages/ledger-core/src/store.ts` — add `getCuratedEventsForAllocation()`, rename `insertAllocations` → `upsertAllocations`, add `deleteStaleAllocations()`, update `closeIngestion` signature (accepts `allocationAlgoRef` + `weightConfigHash`), update `insertPoolComponent` (reject if epoch != open)
-- Modify: `packages/ledger-core/src/model.ts` — add `allocationAlgoRef` and `weightConfigHash` to model, add `CuratedEventForAllocation` and `ProposedAllocation` types
+- Create: `src/app/api/v1/attribution/epochs/[id]/finalize/route.ts` — finalize API route (202 → workflow)
+- Modify: `packages/attribution-ledger/src/hashing.ts` — add `computeAllocationSetHash()`
+- Modify: `packages/attribution-ledger/src/index.ts` — export allocation + pool modules
+- Modify: `packages/attribution-ledger/src/store.ts` — add `getCuratedEventsForAllocation()`, rename `insertAllocations` → `upsertAllocations`, add `deleteStaleAllocations()`, update `closeIngestion` signature (accepts `allocationAlgoRef` + `weightConfigHash`), update `insertPoolComponent` (reject if epoch != open)
+- Modify: `packages/attribution-ledger/src/model.ts` — add `allocationAlgoRef` and `weightConfigHash` to model, add `CuratedEventForAllocation` and `ProposedAllocation` types
 - Modify: `packages/db-schema/src/ledger.ts` — add `allocation_algo_ref` and `weight_config_hash` nullable columns to epochs table
-- Modify: `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — implement new/changed store methods, pool freeze enforcement, updated `closeIngestion` with config locking
+- Modify: `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — implement new/changed store methods, pool freeze enforcement, updated `closeIngestion` with config locking
 - Modify: `services/scheduler-worker/src/activities/ledger.ts` — add `computeAllocations`, `ensurePoolComponents`, `finalizeEpoch` activities
 - Modify: `services/scheduler-worker/src/workflows/collect-epoch.workflow.ts` — add steps 6-8 (allocate, pool, auto-close)
 - Modify: `.cogni/repo-spec.yaml` — add `pool_config.base_issuance_credits`
 - Modify: `src/shared/config/repoSpec.schema.ts` — add `pool_config` schema
 - Modify: `src/shared/config/repoSpec.server.ts` — add `getLedgerPoolConfig()` accessor
 - Modify: migration SQL files — add `allocation_algo_ref` and `weight_config_hash` columns (edit in place, never deployed)
-- Test: `tests/unit/packages/ledger-core/allocation.test.ts` — weight-sum-v0, deterministic ordering, weight overrides, empty inputs
-- Test: `tests/unit/packages/ledger-core/pool.test.ts` — estimatePoolComponentsV0
-- Test: `tests/unit/packages/ledger-core/hashing.test.ts` — allocation set hash determinism
+- Test: `tests/unit/packages/attribution-ledger/allocation.test.ts` — weight-sum-v0, deterministic ordering, weight overrides, empty inputs
+- Test: `tests/unit/packages/attribution-ledger/pool.test.ts` — estimatePoolComponentsV0
+- Test: `tests/unit/packages/attribution-ledger/hashing.test.ts` — allocation set hash determinism
 - Test: `services/scheduler-worker/tests/ledger-allocations.test.ts` — computeAllocations activity, upsert preserves overrides
 - Test: `tests/stack/ledger/finalize-epoch.stack.test.ts` — full pipeline: collect → allocate → close → finalize → verify
 
@@ -376,15 +376,15 @@ Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_F
   - Milestone: allocation, pool, hash, and validation functions exist and pass unit tests
   - Invariants: ALLOCATION_ALGO_VERSIONED, POOL_REPRODUCIBLE, PAYOUT_DETERMINISTIC, ALL_MATH_BIGINT, WEIGHTS_VALIDATED
   - Todos:
-    - [ ] Create `packages/ledger-core/src/allocation.ts` — types + `computeProposedAllocations` + `weightSumV0`
-    - [ ] Create `packages/ledger-core/src/pool.ts` — `estimatePoolComponentsV0`
-    - [ ] Add `computeAllocationSetHash` to `packages/ledger-core/src/hashing.ts`
-    - [ ] Add `validateWeightConfig(config)` to `packages/ledger-core/src/allocation.ts` — rejects floats, NaN, Infinity, unsafe integers
-    - [ ] Add `computeWeightConfigHash(config)` to `packages/ledger-core/src/hashing.ts` — SHA-256 of canonical JSON
-    - [ ] Update `packages/ledger-core/src/model.ts` — add types, add `allocationAlgoRef` to model
-    - [ ] Update `packages/ledger-core/src/index.ts` — export new modules
+    - [ ] Create `packages/attribution-ledger/src/allocation.ts` — types + `computeProposedAllocations` + `weightSumV0`
+    - [ ] Create `packages/attribution-ledger/src/pool.ts` — `estimatePoolComponentsV0`
+    - [ ] Add `computeAllocationSetHash` to `packages/attribution-ledger/src/hashing.ts`
+    - [ ] Add `validateWeightConfig(config)` to `packages/attribution-ledger/src/allocation.ts` — rejects floats, NaN, Infinity, unsafe integers
+    - [ ] Add `computeWeightConfigHash(config)` to `packages/attribution-ledger/src/hashing.ts` — SHA-256 of canonical JSON
+    - [ ] Update `packages/attribution-ledger/src/model.ts` — add types, add `allocationAlgoRef` to model
+    - [ ] Update `packages/attribution-ledger/src/index.ts` — export new modules
     - [ ] Unit tests: allocation algo, pool estimation, allocation set hash, weight validation, weight config hash
-  - Validation: `pnpm check` + `pnpm test -- tests/unit/packages/ledger-core/`
+  - Validation: `pnpm check` + `pnpm test -- tests/unit/packages/attribution-ledger/`
 
 - [ ] **Checkpoint 2 — Store Port + Schema + Adapter**
   - Milestone: store port has new methods, adapter implements them, schema updated with nullable config columns
@@ -392,13 +392,13 @@ Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_F
   - Todos:
     - [ ] Edit `packages/db-schema/src/ledger.ts` — add `allocation_algo_ref TEXT` (nullable) and `weight_config_hash TEXT` (nullable) columns to epochs
     - [ ] Edit migration SQL in place — add both nullable columns (no default, NULL while open)
-    - [ ] Update `packages/ledger-core/src/store.ts`:
+    - [ ] Update `packages/attribution-ledger/src/store.ts`:
       - Add `getCuratedEventsForAllocation(epochId)` — joined query, resolved users only
       - Rename `insertAllocations` → `upsertAllocations` — ON CONFLICT preserves `final_units`
       - Add `deleteStaleAllocations(epochId, activeUserIds)` — skips admin-overridden rows
       - Update `closeIngestion` signature — accepts `allocationAlgoRef` and `weightConfigHash`, sets both on epoch row
       - Update `insertPoolComponent` — reject if epoch status != 'open' (POOL_LOCKED_AT_REVIEW)
-    - [ ] Implement all changes in `packages/db-client/src/adapters/drizzle-ledger.adapter.ts`
+    - [ ] Implement all changes in `packages/db-client/src/adapters/drizzle-attribution.adapter.ts`
     - [ ] Update mock store in test fakes
   - Validation: `pnpm check` + `pnpm packages:build`
 
@@ -432,7 +432,7 @@ Single compound activity wrapping the atomic transaction. Idempotent via EPOCH_F
 ```bash
 pnpm check
 pnpm packages:build
-pnpm test -- tests/unit/packages/ledger-core/
+pnpm test -- tests/unit/packages/attribution-ledger/
 pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/stack/ledger/
 ```
 
@@ -451,7 +451,7 @@ pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/st
 
 2. **Missing component tests for new adapter methods**: `upsertAllocations`, `deleteStaleAllocations`, `getCuratedEventsForAllocation`, and POOL_LOCKED_AT_REVIEW (insertPoolComponent rejected after closeIngestion) have zero component test coverage. These methods have DB-level semantics (ON CONFLICT DO UPDATE, NOT IN, JOIN, epoch status check) that need real database verification. Especially critical: ALLOCATION_PRESERVES_OVERRIDES — verify that `final_units` survives an upsert against real Postgres.
 
-3. **Brittle error detection in finalize route** (`src/app/api/v1/ledger/epochs/[id]/finalize/route.ts:L102-103`): Error message string matching for `WorkflowExecutionAlreadyStartedError` is fragile. Use `instanceof` with the exported error class from `@temporalio/client`.
+3. **Brittle error detection in finalize route** (`src/app/api/v1/attribution/epochs/[id]/finalize/route.ts:L102-103`): Error message string matching for `WorkflowExecutionAlreadyStartedError` is fragile. Use `instanceof` with the exported error class from `@temporalio/client`.
 
 ### Suggestions (Non-blocking)
 

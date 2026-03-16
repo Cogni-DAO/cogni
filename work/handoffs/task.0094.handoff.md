@@ -21,7 +21,7 @@ last_commit: 9906517c
 
 ## Current State
 
-- **Done:** Port interface (`ActivityLedgerStore`), Drizzle schema (8 tables), adapter (`DrizzleLedgerAdapter`), migrations (0010 DDL + 0011 triggers), container wiring, node_id in repo-spec (`getNodeId()` from `@/shared/config`), spec update, all re-exports, AGENTS.md updates
+- **Done:** Port interface (`ActivityLedgerStore`), Drizzle schema (8 tables), adapter (`DrizzleAttributionAdapter`), migrations (0010 DDL + 0011 triggers), container wiring, node_id in repo-spec (`getNodeId()` from `@/shared/config`), spec update, all re-exports, AGENTS.md updates
 - **Done:** All 1028 unit tests pass, typecheck passes, arch:check passes, packages build + validate
 - **Not done:** Drizzle snapshot files (`meta/0010_snapshot.json`, `meta/0011_snapshot.json`) — `pnpm db:generate` requires interactive prompts to resolve table renames vs creates. Must be run manually.
 - **Not done:** Contract test (`tests/contract/ledger-store.contract.ts`) — deferred to next dev
@@ -29,9 +29,9 @@ last_commit: 9906517c
 
 ## Decisions Made
 
-- No `user_id` on `activity_events` — identity resolution lands in `activity_curation.user_id` (Layer 2). See [epoch-ledger spec](../../docs/spec/epoch-ledger.md)
+- No `user_id` on `activity_events` — identity resolution lands in `activity_curation.user_id` (Layer 2). See [epoch-ledger spec](../../docs/spec/attribution-ledger.md)
 - No `epoch_id` on `activity_events` — raw log is epoch-agnostic; epoch membership assigned in `activity_curation`
-- Single `DrizzleLedgerAdapter` in `@cogni/db-client` shared by app + worker (no duplication)
+- Single `DrizzleAttributionAdapter` in `@cogni/db-client` shared by app + worker (no duplication)
 - Old migrations 0010/0011 deleted (never shipped) and replaced
 - `ApprovedReceipt` renamed to `FinalizedAllocation` throughout
 - `signing.ts` replaced by `hashing.ts` (`computeAllocationSetHash`)
@@ -56,11 +56,11 @@ last_commit: 9906517c
 
 | File / Resource                                                    | Why it matters                                        |
 | ------------------------------------------------------------------ | ----------------------------------------------------- |
-| `docs/spec/epoch-ledger.md`                                        | Canonical spec — schema tables, invariants, lifecycle |
-| `packages/ledger-core/src/store.ts`                                | Port interface (`ActivityLedgerStore`) + all types    |
-| `packages/ledger-core/src/hashing.ts`                              | `computeAllocationSetHash()`                          |
+| `docs/spec/attribution-ledger.md`                                  | Canonical spec — schema tables, invariants, lifecycle |
+| `packages/attribution-ledger/src/store.ts`                         | Port interface (`ActivityLedgerStore`) + all types    |
+| `packages/attribution-ledger/src/hashing.ts`                       | `computeAllocationSetHash()`                          |
 | `packages/db-schema/src/ledger.ts`                                 | Drizzle schema — all 8 tables                         |
-| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts`        | Adapter implementation                                |
+| `packages/db-client/src/adapters/drizzle-attribution.adapter.ts`   | Adapter implementation                                |
 | `src/bootstrap/container.ts`                                       | Container wiring (`activityLedgerStore`)              |
 | `src/shared/config/repoSpec.server.ts`                             | `getNodeId()` — node identity from repo-spec          |
 | `src/adapters/server/db/migrations/0010_ledger_activity_model.sql` | DDL migration                                         |

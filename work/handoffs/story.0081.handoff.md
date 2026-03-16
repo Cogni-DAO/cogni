@@ -68,5 +68,5 @@ last_commit: cb70eb61
 | `packages/db-schema/src/billing.ts`                           | Existing `charge_receipts` + `credit_ledger` patterns to mirror  |
 | `src/features/governance/services/`                           | Governance feature service pattern (DI via ports, no DB imports) |
 | `src/ports/governance-status.port.ts`                         | Port naming convention template                                  |
-| `platform/infra/services/sourcecred/instance/config/`         | Current SourceCred config (weights, grain policies)              |
+| `infra/compose/sourcecred/instance/config/`                   | Current SourceCred config (weights, grain policies)              |
 | `docs/spec/sourcecred.md`                                     | SourceCred as-built spec (remains valid during transition)       |

@@ -62,8 +62,8 @@ Missing: a boot-time step that populates `/workspace/repo` as a writable checkou
 | `services/sandbox-openclaw/Dockerfile.pnpm-store`               | Store builder (pnpm fetch)     |
 | `services/sandbox-openclaw/seed-pnpm-store.sh`                  | Seeds pnpm_store Docker volume |
 | `services/sandbox-openclaw/openclaw-gateway.json`               | Agent config (workspace CWD)   |
-| `platform/infra/services/runtime/docker-compose.dev.yml`        | Dev compose (gateway service)  |
-| `platform/infra/services/runtime/docker-compose.yml`            | Prod compose (GHCR image)      |
+| `infra/compose/docker-compose.dev.yml`                          | Dev compose (gateway service)  |
+| `infra/compose/docker-compose.yml`                              | Prod compose (GHCR image)      |
 | `tests/stack/sandbox/sandbox-openclaw-pnpm-smoke.stack.test.ts` | pnpm store smoke tests         |
 | `tests/_fixtures/sandbox/fixtures.ts`                           | `execInContainer()` helper     |
 | `docs/spec/openclaw-sandbox-spec.md`                            | Invariants 26-27, OQ-9         |

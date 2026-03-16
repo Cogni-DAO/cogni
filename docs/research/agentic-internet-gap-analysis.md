@@ -118,7 +118,7 @@ Three protocols are crystallizing into the agent communication stack:
 | **Scheduling**         | Temporal workflows, execution grants, governance schedule reconciliation                                       | Production                 |
 | **Identity**           | `user_bindings` table (wallet/Discord/GitHub), `identity_events` audit trail, branded `UserId`/`ActorId` types | In Review                  |
 | **Billing**            | `billing_accounts`, `credit_ledger`, `charge_receipts`, LiteLLM proxy audit, `BillingGraphExecutorDecorator`   | Production (with bug.0037) |
-| **Ledger**             | Epoch-based payouts, `ActivityLedgerStore`, `computePayouts()` rules                                           | Active development         |
+| **Ledger**             | Epoch-based payouts, `ActivityLedgerStore`, `computeStatementItems()` rules                                    | Active development         |
 | **Ingestion**          | `SourceAdapter` port, GitHub adapter with App auth, cursor-based collection                                    | Active development         |
 | **Thread persistence** | `ai_threads` table, port+adapter, UI thread list                                                               | P0 done, P1 partial        |
 | **Architecture**       | Hexagonal (57 boundary tests), dep-cruiser enforcement                                                         | Mature                     |

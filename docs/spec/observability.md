@@ -70,10 +70,10 @@ src/shared/observability/
 
 **Infrastructure:**
 
-- `platform/infra/services/runtime/configs/alloy-config.alloy` - Logs only (local dev)
-- `platform/infra/services/runtime/configs/alloy-config.metrics.alloy` - Logs + metrics (preview/prod)
-- `platform/infra/services/runtime/docker-compose.yml` - Prod stack (uses metrics config)
-- `platform/infra/services/runtime/docker-compose.dev.yml` - Dev stack (uses logs-only config)
+- `infra/compose/configs/alloy-config.alloy` - Logs only (local dev)
+- `infra/compose/configs/alloy-config.metrics.alloy` - Logs + metrics (preview/prod)
+- `infra/compose/runtime/docker-compose.yml` - Prod stack (uses metrics config)
+- `infra/compose/runtime/docker-compose.dev.yml` - Dev stack (uses logs-only config)
 - `.mcp.json` - Grafana MCP servers for log querying
 
 ---

@@ -103,9 +103,9 @@ No shared kit. Each node owns its workflows directly. `ci.yaml` runs the same ch
 | ------------------------------------ | -------------------- |
 | `.github/actions/loki-ci-telemetry/` | CI telemetry capture |
 | `.github/actions/loki-push/`         | Loki push            |
-| `platform/ci/scripts/build.sh`       | Docker build         |
-| `platform/ci/scripts/push.sh`        | GHCR push            |
-| `platform/ci/scripts/test-image.sh`  | Image liveness test  |
+| `scripts/ci/build.sh`                | Docker build         |
+| `scripts/ci/push.sh`                 | GHCR push            |
+| `scripts/ci/test-image.sh`           | Image liveness test  |
 
 **Ownership split:** Nodes own scripts and policy configs. Kit owns invocation conventions (when to call, how to parallelize, what to cache).
 

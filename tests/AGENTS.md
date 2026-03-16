@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-11
 - **Status:** stable
 
 ## Purpose
@@ -30,9 +29,7 @@ Provide fast, reliable verification per layer. Enforce port contracts so any ada
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** pnpm test, pnpm test:component
-- **Env/Config keys:** none
 - **Files considered API:** contract/ports/\*_/_.contract.ts (test-only API for adapters)
 
 ## Ports (optional)

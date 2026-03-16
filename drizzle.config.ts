@@ -15,7 +15,10 @@
 
 import { defineConfig } from "drizzle-kit";
 
-import { buildDatabaseUrl, type DbEnvInput } from "./src/shared/db/db-url";
+import {
+  buildDatabaseUrl,
+  type DbEnvInput,
+} from "./apps/web/src/shared/db/db-url";
 
 function getDatabaseUrl(): string {
   const directUrl = process.env.DATABASE_URL?.trim();
@@ -36,7 +39,7 @@ export default defineConfig({
   // All schema lives in @cogni/db-schema package (ESM-only, no CJS build)
   // drizzle-kit runs via tsx which handles ESM + TS natively
   schema: "./packages/db-schema/src/**/*.ts",
-  out: "./src/adapters/server/db/migrations",
+  out: "./apps/web/src/adapters/server/db/migrations",
   dialect: "postgresql",
   dbCredentials: {
     url: getDatabaseUrl(),

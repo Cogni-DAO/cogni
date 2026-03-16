@@ -133,6 +133,10 @@ This spec owns:
 1. Verify `billing_accounts` row created with correct `owner_user_id` after first SIWE login
 2. Verify `credit_ledger` entries are append-only and `balance_after` is consistent
 
+### Actor Model (Planned)
+
+The owner/actor semantics above will be formalized as a first-class `actors` table in [proj.operator-plane](../../work/projects/proj.operator-plane.md). The existing `actor_type`/`actor_id` metadata fields become FK references to `actors.id`. `billing_account_id` remains the tenancy/RLS boundary — `actor_id` is economic attribution, not tenancy. See [identity-model.md](./identity-model.md) for the full `actor_id` primitive definition.
+
 ## Open Questions
 
 _(none)_

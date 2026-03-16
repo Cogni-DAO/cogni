@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Last reviewed:** 2025-11-27
 - **Status:** stable
 
 ## Purpose
@@ -31,10 +30,7 @@ Enforces hexagonal architecture boundaries via dependency-cruiser. Tests validat
 ## Public Surface
 
 - **Exports:** none
-- **Routes:** none
 - **CLI:** `pnpm arch:check`, `pnpm arch:graph`
-- **Env/Config keys:** none
-- **Files considered API:** none
 
 ## Arch Probe Pattern
 

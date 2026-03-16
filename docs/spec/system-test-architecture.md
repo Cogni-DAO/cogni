@@ -47,7 +47,7 @@ Deprecate `FakeLlmAdapter` in container wiring so stack tests exercise the real 
 
 ### LiteLLM Test Config
 
-New file: `platform/infra/services/runtime/configs/litellm.test.config.yaml`
+New file: `infra/compose/configs/litellm.test.config.yaml`
 
 Routes all model requests to `mock-openai-api`. No real provider keys needed.
 

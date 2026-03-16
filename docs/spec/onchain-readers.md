@@ -75,7 +75,7 @@ Define the read-only on-chain data ports, adapter contracts, and UI integration 
 
 **Port:** `TokenOwnershipReadPort.getOwnershipSnapshot({ chainId, tokenAddress, limitTopN? })`
 
-- **Current:** SourceCred grain ledger → ownership distribution (pre-token)
+- **Current:** Attribution ledger → ownership distribution (pre-token)
 - **Future:** On-chain holder tracking when token launches (via Ponder or similar)
 
 ### Ports
@@ -106,7 +106,7 @@ interface TokenOwnershipReadPort {
 }
 ```
 
-Returns token holder distribution. Phase 2: SourceCred adapter. Future: on-chain indexer adapter when token launches.
+Returns token holder distribution. Phase 2: attribution ledger adapter. Future: on-chain indexer adapter when token launches.
 
 ### Adapters & Infra
 

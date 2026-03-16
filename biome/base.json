@@ -73,6 +73,10 @@
               {
                 "group": ["**/__arch_probes__/**", "@/__arch_probes__/**"],
                 "message": "Architecture probe imports are forbidden outside of tests - probes are test-only fixtures"
+              },
+              {
+                "group": ["@/shared/util"],
+                "message": "Import from specific modules (e.g. @/shared/util/cn) not the barrel. The barrel re-exports server-only code (node:crypto) that breaks client component bundling."
               }
             ]
           }
@@ -113,7 +117,7 @@
   },
   "overrides": [
     {
-      "includes": ["src/infra/**", "packages/langgraph-graphs/**"],
+      "includes": ["apps/web/src/infra/**", "packages/langgraph-graphs/**"],
       "linter": {
         "rules": {
           "style": {
@@ -124,13 +128,14 @@
     },
     {
       "includes": [
-        "src/shared/env/**/*.ts",
-        "src/shared/env/**/*.tsx",
-        "src/auth.ts",
-        "src/shared/observability/clientLogger.ts",
+        "apps/web/src/shared/env/**/*.ts",
+        "apps/web/src/shared/env/**/*.tsx",
+        "apps/web/src/auth.ts",
+        "apps/web/src/shared/observability/clientLogger.ts",
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.ts",
+        "apps/web/tests/**/*.ts",
         "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "docs/templates/**/*.ts",
         "services/**/*.ts",
@@ -153,6 +158,7 @@
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.{ts,tsx}",
+        "apps/web/tests/**/*.{ts,tsx}",
         "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "services/**/*.ts",
         "**/*.config.ts",
@@ -160,8 +166,8 @@
         "**/*.config.cjs",
         "**/*.config.mts",
         "drizzle.config.ts",
-        "src/shared/observability/logging/logger.ts",
-        "src/shared/observability/clientLogger.ts"
+        "apps/web/src/shared/observability/logging/logger.ts",
+        "apps/web/src/shared/observability/clientLogger.ts"
       ],
       "linter": {
         "rules": {
@@ -182,7 +188,7 @@
       "formatter": { "enabled": false }
     },
     {
-      "includes": ["src/**/__arch_probes__/**"],
+      "includes": ["apps/web/src/**/__arch_probes__/**"],
       "linter": {
         "rules": {
           "style": {
@@ -208,12 +214,24 @@
         "packages/ids/vitest.config.ts",
         "packages/db-schema/tsup.config.ts",
         "packages/ingestion-core/tsup.config.ts",
-        "packages/ledger-core/tsup.config.ts",
+        "packages/attribution-ledger/tsup.config.ts",
+        "packages/repo-spec/tsup.config.ts",
+        "packages/attribution-pipeline-contracts/tsup.config.ts",
+        "packages/attribution-pipeline-contracts/vitest.config.ts",
+        "packages/attribution-pipeline-plugins/tsup.config.ts",
+        "packages/operator-wallet/tsup.config.ts",
+        "packages/operator-wallet/vitest.config.ts",
+        "packages/attribution-pipeline-plugins/vitest.config.ts",
+        "packages/financial-ledger/tsup.config.ts",
+        "packages/financial-ledger/vitest.config.ts",
+        "packages/work-items/tsup.config.ts",
+        "packages/work-items/vitest.config.ts",
         "services/scheduler-worker/tsup.config.ts",
         "services/scheduler-worker/vitest.config.ts",
         "vitest.workspace.ts",
-        "vitest.component.config.mts",
-        "vitest.external.config.mts"
+        "apps/web/vitest.component.config.mts",
+        "apps/web/vitest.external.config.mts",
+        "apps/web/vitest.stack.config.mts"
       ],
       "linter": {
         "rules": {

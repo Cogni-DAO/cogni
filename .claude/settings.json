@@ -1,0 +1,29 @@
+{
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true
+  },
+  "env": {
+    "ENABLE_LSP_TOOL": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ \"$CLAUDE_CODE_REMOTE\" = 'true' ]; then [ -z \"$GIT_AUTHOR_NAME\" ] && echo 'FATAL: GIT_AUTHOR_NAME not set. Configure it in your Claude Code environment at claude.ai/code.' && exit 1; [ -z \"$GIT_AUTHOR_EMAIL\" ] && echo 'FATAL: GIT_AUTHOR_EMAIL not set. Configure it in your Claude Code environment at claude.ai/code.' && exit 1; git config user.name \"$GIT_AUTHOR_NAME\" && git config user.email \"$GIT_AUTHOR_EMAIL\"; fi"
+          },
+          {
+            "type": "command",
+            "command": "if [ \"$CLAUDE_CODE_REMOTE\" = 'true' ]; then if ! command -v gh >/dev/null 2>&1; then echo 'Installing gh CLI...'; curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null && echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main' | sudo tee /etc/apt/sources.list.d/github-cli.list >/dev/null && sudo apt-get update -qq && sudo apt-get install -y -qq gh >/dev/null 2>&1 && echo 'gh CLI installed successfully'; else echo 'gh CLI already installed'; fi; if [ -z \"$GITHUB_TOKEN\" ]; then echo 'WARNING: GITHUB_TOKEN not set — gh pr create will fail. Set it at claude.ai/code environment settings.'; fi; fi"
+          },
+          {
+            "type": "command",
+            "command": "if [ ! -f node_modules/.modules.yaml ]; then echo 'pnpm store not linked — running install...'; pnpm install --frozen-lockfile; else echo 'node_modules already linked — skipping install'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

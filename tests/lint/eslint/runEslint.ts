@@ -139,7 +139,7 @@ export async function lintFixture(
       {
         compilerOptions: {
           baseUrl: ".",
-          paths: { "@/*": ["src/*"] },
+          paths: { "@/*": ["apps/web/src/*"] },
         },
       },
       null,
@@ -155,12 +155,12 @@ export async function lintFixture(
   writeFileSync(path.join(root, "next-env.d.ts"), ""); // silence Next typings
 
   // Copy CSS fixture for no-raw-tailwind rule token validation
-  mkdirSync(path.join(root, "src/styles"), { recursive: true });
+  mkdirSync(path.join(root, "apps/web/src/styles"), { recursive: true });
   const cssFixture = readFileSync(
     path.resolve("tests/lint/fixtures/styles/tailwind.css"),
     "utf8"
   );
-  const cssFixturePath = path.join(root, "src/styles/tailwind.css");
+  const cssFixturePath = path.join(root, "apps/web/src/styles/tailwind.css");
   writeFileSync(cssFixturePath, cssFixture, {
     encoding: "utf8",
   });

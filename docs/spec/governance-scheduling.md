@@ -130,7 +130,7 @@ Repo-spec is source of truth for governance schedules. Temporal is derived state
 | `src/app/api/internal/ops/governance/schedules/sync/route.ts`     | Internal trigger endpoint        |
 | `src/bootstrap/jobs/syncGovernanceSchedules.job.ts`               | Job module (lock + wiring)       |
 | `src/app/api/internal/graphs/[graphId]/runs/route.ts`             | Input normalization + state key  |
-| `platform/ci/scripts/deploy.sh`                                   | Deploy integration (Step 10.1)   |
+| `scripts/ci/deploy.sh`                                            | Deploy integration (Step 10.1)   |
 | `packages/scheduler-core/src/ports/schedule-control.port.ts`      | `listScheduleIds`                |
 | `packages/scheduler-core/src/ports/execution-grant.port.ts`       | `ensureGrant`                    |
 

@@ -10,7 +10,7 @@ read_when: Working on identity, auth, account linking, RBAC actor types, user co
 implements: proj.decentralized-identity
 owner: derekg1729
 created: 2026-02-19
-verified: 2026-02-26
+verified: 2026-02-28
 tags: [identity, auth, web3]
 ---
 
@@ -99,13 +99,17 @@ NextAuth OAuth → signIn callback → user_bindings lookup(provider, providerAc
   → JWT { id, walletAddress: null }
 ```
 
-**Account linking (authenticated user adds provider):**
+**Account linking (authenticated user adds provider, DB-backed fail-closed):**
 
 ```
-GET /api/auth/link/{provider} → set signed link_intent cookie (5min TTL)
-  → redirect to /api/auth/signin/{provider}
-  → signIn callback reads linkIntentStore (AsyncLocalStorage)
-  → createBinding(provider, externalId) for existing user
+POST /api/auth/link/{provider}
+  → INSERT linkTransactions row (txId, userId, provider, expiresAt)
+  → Set signed JWT cookie { txId, userId, purpose: "link_intent" } (Path=/api/auth/callback, 5min TTL)
+  → Return { ok: true }; client calls signIn(provider) to start OAuth
+  → [...nextauth] route decodes JWT → pending or failed intent via AsyncLocalStorage
+  → signIn callback: atomic consume (UPDATE WHERE consumedAt IS NULL AND expiresAt > now())
+  → IF row returned → createBinding(provider, externalId) for existing user
+  → IF no row → reject → /profile?error=link_failed (LINK_IS_FAIL_CLOSED)
   → IF UNIQUE violation for different user → reject (NO_AUTO_MERGE)
 ```
 
@@ -187,6 +191,19 @@ Provide a stable, auth-method-agnostic identity for every user. `users.id` works
 
 **Trigger:** `reject_identity_events_mutation` — rejects UPDATE/DELETE on `identity_events` (same pattern as ledger append-only triggers).
 
+**Table:** `link_transactions` (server-side, fail-closed account linking)
+
+| Column        | Type        | Constraints                                        | Description                                         |
+| ------------- | ----------- | -------------------------------------------------- | --------------------------------------------------- |
+| `id`          | TEXT        | PK                                                 | UUID v4                                             |
+| `user_id`     | TEXT        | FK → users.id, NOT NULL                            | User initiating the link                            |
+| `provider`    | TEXT        | NOT NULL, CHECK IN ('github', 'discord', 'google') | Target provider (wallet excluded — linked via SIWE) |
+| `expires_at`  | TIMESTAMPTZ | NOT NULL                                           | 5-minute TTL from creation                          |
+| `consumed_at` | TIMESTAMPTZ |                                                    | NULL = pending, set = consumed                      |
+| `created_at`  | TIMESTAMPTZ | NOT NULL, DEFAULT NOW()                            | When the transaction was created                    |
+
+**Consume pattern:** Single atomic `UPDATE ... SET consumed_at = now() WHERE id = $txId AND user_id = $userId AND provider = $provider AND consumed_at IS NULL AND expires_at > now() RETURNING *`. The `provider` match prevents cross-provider replay. No separate SELECT — no TOCTOU race. Uses `getServiceDb()` (BYPASSRLS) because the session is not settled during OAuth callback.
+
 **Table:** `user_profiles` (1:1 with users)
 
 | Column         | Type        | Constraints             | Description                  |
@@ -211,19 +228,20 @@ Implemented in `src/app/_facades/users/profile.server.ts:resolveDisplayName()`.
 
 ### File Pointers
 
-| File                                             | Purpose                                                           |
-| ------------------------------------------------ | ----------------------------------------------------------------- |
-| `packages/db-schema/src/identity.ts`             | `user_bindings` + `identity_events` table definitions             |
-| `packages/db-schema/src/profile.ts`              | `user_profiles` table definition                                  |
-| `src/app/_facades/users/profile.server.ts`       | Profile read/update facade, display name fallback chain           |
-| `src/contracts/users.profile.v1.contract.ts`     | Zod contracts for `/api/v1/users/me`                              |
-| `src/auth.ts`                                    | SIWE + OAuth providers, signIn callback (binding resolution)      |
-| `src/adapters/server/identity/create-binding.ts` | Atomic binding + identity_event insert (idempotent)               |
-| `src/shared/auth/session.ts`                     | `SessionUser` type (id + nullable walletAddress)                  |
-| `src/shared/auth/link-intent-store.ts`           | AsyncLocalStorage for account linking intent propagation          |
-| `src/app/api/auth/[...nextauth]/route.ts`        | Route handler with link_intent cookie → AsyncLocalStorage wrapper |
-| `src/app/api/auth/link/[provider]/route.ts`      | Account linking initiation endpoint                               |
-| `src/lib/auth/server.ts`                         | `getServerSessionUser()` — requires only `id`                     |
+| File                                             | Purpose                                                                    |
+| ------------------------------------------------ | -------------------------------------------------------------------------- |
+| `packages/db-schema/src/identity.ts`             | `user_bindings` + `identity_events` + `linkTransactions` table definitions |
+| `packages/db-schema/src/profile.ts`              | `user_profiles` table definition                                           |
+| `src/app/_facades/users/profile.server.ts`       | Profile read/update facade, display name fallback chain                    |
+| `src/contracts/users.profile.v1.contract.ts`     | Zod contracts for `/api/v1/users/me`                                       |
+| `src/auth.ts`                                    | NextAuth config, signIn callback, link tx create/consume helpers           |
+| `src/proxy.ts`                                   | Server-side auth routing (single authority for redirects)                  |
+| `src/adapters/server/identity/create-binding.ts` | Atomic binding + identity_event insert (idempotent)                        |
+| `src/shared/auth/session.ts`                     | `SessionUser` type (id + nullable walletAddress)                           |
+| `src/shared/auth/link-intent-store.ts`           | Discriminated union types + AsyncLocalStorage for link intent              |
+| `src/app/api/auth/[...nextauth]/route.ts`        | JWT decode → pending/failed intent via AsyncLocalStorage                   |
+| `src/app/api/auth/link/[provider]/route.ts`      | Link initiation: DB insert + signed JWT cookie + redirect                  |
+| `src/lib/auth/server.ts`                         | `getServerSessionUser()` — requires only `id`                              |
 
 ## DID Readiness (P2)
 

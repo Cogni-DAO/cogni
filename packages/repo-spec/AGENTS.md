@@ -1,0 +1,91 @@
+# repo-spec · AGENTS.md
+
+> Scope: this directory only. Keep ≤150 lines. Do not restate root policies.
+
+## Metadata
+
+- **Owners:** @Cogni-DAO
+- **Status:** stable
+
+## Purpose
+
+Pure parsing and typed extraction for `.cogni/repo-spec.yaml` — the governance-managed configuration for a Cogni node. Shared between the Next.js app (`src/`) and the Temporal `scheduler-worker` service. Contains Zod schemas, a pure `parseRepoSpec()` function, and typed accessor functions for extracting config sections.
+
+## Pointers
+
+- [Node vs Operator Contract](../../docs/spec/node-operator-contract.md)
+- [Packages Architecture](../../docs/spec/packages-architecture.md)
+
+## Boundaries
+
+```json
+{
+  "layer": "packages",
+  "may_import": [],
+  "must_not_import": [
+    "app",
+    "features",
+    "ports",
+    "core",
+    "adapters",
+    "shared",
+    "services"
+  ]
+}
+```
+
+**External deps:** `zod` (schema validation), `yaml` (YAML parsing).
+
+## Public Surface
+
+- **Exports:**
+  - `parseRepoSpec(input: string | unknown): RepoSpec` — Pure parse function (accepts YAML string or pre-parsed object)
+  - `extractPaymentConfig(spec, chainId)` — Maps payment config with chain validation
+  - `extractGovernanceConfig(spec)` — Maps governance schedules + ledger config
+  - `extractLedgerConfig(spec)` — Extracts ledger config (requires scope identity)
+  - `extractLedgerApprovers(spec)` — Lowercased EVM approver addresses
+  - `extractNodeId(spec)` — Node identity UUID
+  - `extractScopeId(spec)` — Scope identity UUID (throws if missing)
+  - `extractChainId(spec)` — Numeric chain ID from cogni_dao section
+  - Zod schemas: `repoSpecSchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, etc.
+  - Types: `RepoSpec`, `InboundPaymentConfig`, `GovernanceConfig`, `GovernanceSchedule`, `LedgerConfig`, `LedgerPoolConfig`
+
+## Ports
+
+- **Uses ports:** none
+- **Implements ports:** none
+- **Defines ports:** none
+
+## Responsibilities
+
+- This directory **does**: Define repo-spec Zod schemas, parse YAML or objects, extract typed config sections
+- This directory **does not**: Perform file I/O, cache results, import from `src/` or `services/`, access `process.cwd()` or `process.env`
+
+## Usage
+
+```bash
+pnpm --filter @cogni/repo-spec typecheck
+pnpm --filter @cogni/repo-spec build
+```
+
+## Standards
+
+- Pure functions only — no I/O, no side effects, no caching
+- REPO_SPEC_AUTHORITY: Single canonical parser for Node and Operator code
+- NO_CROSS_IMPORTS: Cannot import from `src/` or `services/`
+
+## Dependencies
+
+- **Internal:** none (standalone package)
+- **External:** `zod`, `yaml`
+
+## Change Protocol
+
+- Update this file when public exports change
+- Coordinate with node-operator-contract.md spec invariants
+
+## Notes
+
+- `src/shared/config/repoSpec.schema.ts` re-exports from this package so app code uses `@/shared/config` unchanged
+- `src/shared/config/repoSpec.server.ts` is a thin I/O wrapper that delegates to this package
+- Per PACKAGES_NO_SRC_IMPORTS: This package cannot import from `src/**`

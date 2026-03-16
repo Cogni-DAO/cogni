@@ -75,7 +75,7 @@ The system uses several orthogonal identity keys. Each has a single, non-overlap
 
 **`node_id` = deployment identity only.** One node = one database, one set of infrastructure, one `docker compose up`. Multiple projects (scope_ids) can exist within a single node. `node_id` is never overloaded for governance semantics.
 
-**`scope_id` = governance domain.** Identifies which project an epoch, its activity, and its payouts belong to. V0 default: `scope_id = 'default'` (single-project nodes). Multi-scope activates when `.cogni/projects/*.yaml` manifests are added. All epoch-level invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are composite on `(node_id, scope_id)`. See [Epoch Ledger spec](./epoch-ledger.md#project-scoping).
+**`scope_id` = governance domain.** Identifies which project an epoch, its activity, and its payouts belong to. V0 default: `scope_id = 'default'` (single-project nodes). Multi-scope activates when `.cogni/projects/*.yaml` manifests are added. All epoch-level invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are composite on `(node_id, scope_id)`. See [Attribution Ledger spec](./attribution-ledger.md#project-scoping).
 
 ### Operator Architecture
 
@@ -121,9 +121,9 @@ The system uses several orthogonal identity keys. Each has a single, non-overlap
 | Operator | Node DB           | **NO**         | Never direct access          |
 | Operator | Node wallet       | **NO**         | Never custody                |
 
-**Operator Node Registry:** Operator maintains a derived `node_registry_nodes` table for control-plane routing. This is rebuildable from on-chain receipts + repo-spec snapshots. `node_id` (UUID) is the Operator's federation/deployment identity — it identifies a deployed Node instance, not a tenant within the Node. Within a Node's own DB, tenant isolation uses `billing_account_id` (= `billing_accounts.id`); `node_id` is never used for RLS or tenant scoping inside the Node repo. A `node_id` may map to one or many `billing_account_id`s. See [Node Formation Spec §9](node-formation.md#9-operator-node-registry-p1) and [ROADMAP.md Terminology](../../ROADMAP.md#terminology--id-mapping).
+**Operator Node Registry:** Operator maintains a derived `operator_node_registrations` table for control-plane routing, with per-scope config cached in `operator_node_scopes`. This is rebuildable from repo-spec snapshots (fetched via VCS API). `node_id` (UUID) is the Operator's federation/deployment identity — it identifies a deployed Node instance, not a tenant within the Node. Within a Node's own DB, tenant isolation uses `billing_account_id` (= `billing_accounts.id`); `node_id` is never used for RLS or tenant scoping inside the Node repo. A `node_id` may map to one or many `billing_account_id`s. See [VCS Integration §Node Registration Lifecycle](./vcs-integration.md#node-registration-lifecycle) for the registration schema and reconciliation model, and [Node Formation Spec §9](node-formation.md#9-operator-node-registry-p1) for the formation trigger.
 
-**Scope within a Node:** A single Node deployment (`node_id`) can host multiple governance domains (`scope_id`). Each scope has its own DAO address, weight policy, epoch stream, and payment rails — declared via `.cogni/projects/*.yaml`. The Operator sees scopes as sub-resources of a Node: `node_id` for routing, `scope_id` for governance granularity. Ledger invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are always composite on `(node_id, scope_id)`. See [Epoch Ledger §Project Scoping](./epoch-ledger.md#project-scoping).
+**Scope within a Node:** A single Node deployment (`node_id`) can host multiple governance domains (`scope_id`). Each scope has its own DAO address, weight policy, epoch stream, and payment rails — declared via `.cogni/projects/*.yaml`. The Operator sees scopes as sub-resources of a Node: `node_id` for routing, `scope_id` for governance granularity. Ledger invariants (`ONE_OPEN_EPOCH`, `EPOCH_WINDOW_UNIQUE`) are always composite on `(node_id, scope_id)`. See [Attribution Ledger §Project Scoping](./attribution-ledger.md#project-scoping).
 
 ### Deployment Portability
 
@@ -165,9 +165,9 @@ smart-contracts/          # Per-node DAO contracts
   src/                    # Token.sol, Governor.sol, PaymentReceiver.sol
   deploy/                 # Deploy scripts + config
   addresses/              # Deployed addresses (env-scoped)
-platform/                 # Deployment + CD infrastructure
-  infra/services/runtime/ # Docker Compose (postgres, litellm, langgraph-server)
-  opentofu/               # IaC for cloud deployment
+infra/                    # Deployment + CD infrastructure
+  compose/                # Docker Compose (postgres, litellm, langgraph-server)
+  tofu/                   # IaC for cloud deployment
 evals/                    # AI evaluation datasets + regression harness
 tests/                    # Test suites
 e2e/                      # End-to-end tests
@@ -201,10 +201,10 @@ packages/
   core-primitives/          # Logging, env, tracing
 smart-contracts/            # Operator-level contracts (vNext)
   src/                      # Registry.sol, Factory.sol
-platform/
+infra/
   docker/                   # App + services containers
   k8s/                      # Helm charts (Operator-owned)
-  opentofu/                 # Operator infrastructure
+  tofu/                     # Operator infrastructure
 evals/                      # Control plane + service evals
 tests/
 e2e/
@@ -225,12 +225,12 @@ Operator shares CI/CD, observability, deploy invariants, and hex architecture wi
 
 ### File Pointers
 
-| File                                                 | Purpose                            |
-| ---------------------------------------------------- | ---------------------------------- |
-| `.cogni/repo-spec.yml`                               | Node's declarative policy          |
-| `src/`                                               | Next.js app (Node-owned)           |
-| `packages/`                                          | Shared pure libraries              |
-| `platform/infra/services/runtime/docker-compose.yml` | Docker Compose deployment baseline |
+| File                                       | Purpose                            |
+| ------------------------------------------ | ---------------------------------- |
+| `.cogni/repo-spec.yml`                     | Node's declarative policy          |
+| `src/`                                     | Next.js app (Node-owned)           |
+| `packages/`                                | Shared pure libraries              |
+| `infra/compose/runtime/docker-compose.yml` | Docker Compose deployment baseline |
 
 ## Acceptance Checks
 
@@ -252,6 +252,6 @@ _(none)_
 ## Related
 
 - [Node CI/CD Contract](../NODE_CI_CD_CONTRACT.md) — CI/CD invariants, portability, Jenkins path
-- [Deployment Architecture](../../platform/runbooks/DEPLOYMENT_ARCHITECTURE.md) — VM provisioning, Docker Compose stack
+- [Deployment Architecture](../../docs/runbooks/DEPLOYMENT_ARCHITECTURE.md) — VM provisioning, Docker Compose stack
 - [Packages Architecture](./packages-architecture.md) — Pure library boundaries
 - [Services Architecture](./services-architecture.md) — Deployable service contracts

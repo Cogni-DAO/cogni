@@ -271,6 +271,39 @@ export const paymentAttempts = pgTable(
   })
 ).enableRLS();
 
+/**
+ * Provider funding attempts — durable state for crash recovery of provider top-ups.
+ * Keyed by paymentIntentId (one-to-one with credit purchase).
+ * Status machine: pending → charge_created → funded | failed
+ * Per task.0086: DURABLE_FUNDING_ROW invariant.
+ */
+export const providerFundingAttempts = pgTable(
+  "provider_funding_attempts",
+  {
+    id: uuid("id").primaryKey(), // deterministic from paymentIntentId
+    paymentIntentId: text("payment_intent_id").notNull().unique(),
+    status: text("status").notNull().default("pending"), // pending | charge_created | funded | failed
+    provider: text("provider").notNull().default("openrouter"),
+    chargeId: text("charge_id"),
+    chargeExpiresAt: timestamp("charge_expires_at", { withTimezone: true }),
+    amountUsdcMicro: bigint("amount_usdc_micro", { mode: "bigint" }),
+    fundingTxHash: text("funding_tx_hash"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    statusIdx: index("provider_funding_attempts_status_idx").on(
+      table.status,
+      table.createdAt
+    ),
+  })
+).enableRLS();
+
 export const paymentEvents = pgTable(
   "payment_events",
   {

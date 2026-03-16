@@ -30,7 +30,7 @@ last_commit: 74fb7e00
 
 ## Decisions Made
 
-- **Sign-at-finalize (V0)**: Single `POST /finalize` with `{ signature }` — `signerAddress` from SIWE session. No separate `/sign` route (deferred to V1 for multi-approver quorum). See [spec](../../docs/spec/epoch-ledger.md)
+- **Sign-at-finalize (V0)**: Single `POST /finalize` with `{ signature }` — `signerAddress` from SIWE session. No separate `/sign` route (deferred to V1 for multi-approver quorum). See [spec](../../docs/spec/attribution-ledger.md)
 - **Pin config at closeIngestion, not creation**: `allocation_algo_ref` and `weight_config_hash` are NULL while open, set and locked at closeIngestion
 - **Weights stay `Record<string, number>` in JSONB**: Validated as safe integers at write time, converted to `BigInt()` at computation boundary
 - **Pool components are governance, not per-adapter**: `base_issuance` auto-populated from repo-spec config
@@ -60,14 +60,14 @@ last_commit: 74fb7e00
 | File / Resource                                                                                                                                  | Why it matters                                                                              |
 | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | [task.0102 design](../items/task.0102.allocation-computation-epoch-close.md)                                                                     | Full design with invariants, checkpoint plan, code sketches                                 |
-| [epoch-ledger spec](../../docs/spec/epoch-ledger.md)                                                                                             | Canonical invariants, schema, API routes, workflow descriptions                             |
-| [`packages/ledger-core/src/allocation.ts`](../../packages/ledger-core/src/allocation.ts)                                                         | `computeProposedAllocations()`, `validateWeightConfig()`, `deriveAllocationAlgoRef()`       |
-| [`packages/ledger-core/src/pool.ts`](../../packages/ledger-core/src/pool.ts)                                                                     | `estimatePoolComponentsV0()`, `POOL_COMPONENT_ALLOWLIST`                                    |
-| [`packages/ledger-core/src/hashing.ts`](../../packages/ledger-core/src/hashing.ts)                                                               | `computeAllocationSetHash()`, `computeWeightConfigHash()`                                   |
-| [`packages/db-client/src/adapters/drizzle-ledger.adapter.ts`](../../packages/db-client/src/adapters/drizzle-ledger.adapter.ts)                   | Adapter — upsertAllocations, deleteStaleAllocations, pool freeze, closeIngestion            |
+| [epoch-ledger spec](../../docs/spec/attribution-ledger.md)                                                                                       | Canonical invariants, schema, API routes, workflow descriptions                             |
+| [`packages/attribution-ledger/src/allocation.ts`](../../packages/attribution-ledger/src/allocation.ts)                                           | `computeProposedAllocations()`, `validateWeightConfig()`, `deriveAllocationAlgoRef()`       |
+| [`packages/attribution-ledger/src/pool.ts`](../../packages/attribution-ledger/src/pool.ts)                                                       | `estimatePoolComponentsV0()`, `POOL_COMPONENT_ALLOWLIST`                                    |
+| [`packages/attribution-ledger/src/hashing.ts`](../../packages/attribution-ledger/src/hashing.ts)                                                 | `computeAllocationSetHash()`, `computeWeightConfigHash()`                                   |
+| [`packages/db-client/src/adapters/drizzle-attribution.adapter.ts`](../../packages/db-client/src/adapters/drizzle-attribution.adapter.ts)         | Adapter — upsertAllocations, deleteStaleAllocations, pool freeze, closeIngestion            |
 | [`services/scheduler-worker/src/activities/ledger.ts`](../../services/scheduler-worker/src/activities/ledger.ts)                                 | All activities: computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch |
 | [`services/scheduler-worker/src/workflows/collect-epoch.workflow.ts`](../../services/scheduler-worker/src/workflows/collect-epoch.workflow.ts)   | Steps 6-8: allocate → pool → auto-close                                                     |
 | [`services/scheduler-worker/src/workflows/finalize-epoch.workflow.ts`](../../services/scheduler-worker/src/workflows/finalize-epoch.workflow.ts) | FinalizeEpochWorkflow — sign-at-finalize V0                                                 |
-| [`src/app/api/v1/ledger/epochs/[id]/finalize/route.ts`](../../src/app/api/v1/ledger/epochs/%5Bid%5D/finalize/route.ts)                           | Finalize API route (202 → workflow)                                                         |
+| [`src/app/api/v1/attribution/epochs/[id]/finalize/route.ts`](../../src/app/api/v1/attribution/epochs/%5Bid%5D/finalize/route.ts)                 | Finalize API route (202 → workflow)                                                         |
 | [`src/contracts/ledger.finalize-epoch.v1.contract.ts`](../../src/contracts/ledger.finalize-epoch.v1.contract.ts)                                 | Zod contract for finalize endpoint                                                          |
 | [`.cogni/repo-spec.yaml`](../../.cogni/repo-spec.yaml)                                                                                           | `pool_config.base_issuance_credits` added                                                   |

@@ -32,7 +32,7 @@ last_commit: fb2f9991
 
 ## Decisions Made
 
-- **Writable config pattern**: OpenClaw's `writeConfigFile()` uses atomic write (temp file + rename). Container is `read_only: true`, so config is mounted as `:ro` to `/opt/openclaw-config-source.json`, then copied to `/workspace/.openclaw-config/openclaw.json` (on the writable `cogni_workspace` volume) via entrypoint wrapper. See [docker-compose.yml:440](../../platform/infra/services/runtime/docker-compose.yml) and [docker-compose.dev.yml:539](../../platform/infra/services/runtime/docker-compose.dev.yml)
+- **Writable config pattern**: OpenClaw's `writeConfigFile()` uses atomic write (temp file + rename). Container is `read_only: true`, so config is mounted as `:ro` to `/opt/openclaw-config-source.json`, then copied to `/workspace/.openclaw-config/openclaw.json` (on the writable `cogni_workspace` volume) via entrypoint wrapper. See [docker-compose.yml:440](../../infra/compose/docker-compose.yml) and [docker-compose.dev.yml:539](../../infra/compose/docker-compose.dev.yml)
 - **groupPolicy "open"**: allows bot to respond in all channels without per-channel allowlisting
 - **plugins.entries.discord.enabled: true**: must be explicit — OpenClaw's `doctor` command defaults this to `false` and the auto-enable flow fails silently if it can't persist
 - **Discord install link**: the default "Discord Provided Link" (`/oauth2/authorize?client_id=...`) does NOT include `scope=bot` — you must use URL Generator or manually append `&scope=bot&permissions=85056`
@@ -58,8 +58,8 @@ last_commit: fb2f9991
 | File / Resource                                                           | Why it matters                                              |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `services/sandbox-openclaw/openclaw-gateway.json`                         | Source gateway config — channels, plugins, tools deny list  |
-| `platform/infra/services/runtime/docker-compose.dev.yml:526-588`          | Dev compose gateway service — entrypoint, env, volumes      |
-| `platform/infra/services/runtime/docker-compose.yml:427-489`              | Prod compose gateway service (same pattern)                 |
+| `infra/compose/docker-compose.dev.yml:526-588`                            | Dev compose gateway service — entrypoint, env, volumes      |
+| `infra/compose/docker-compose.yml:427-489`                                | Prod compose gateway service (same pattern)                 |
 | `docs/guides/discord-bot-setup.md`                                        | Human-facing setup guide (needs install link fix)           |
 | `docs/spec/messenger-channels.md`                                         | Multi-tenant channel management spec (future scope)         |
 | `work/items/task.0041.discord-channel-proof-of-life.md`                   | Work item with full requirements and plan                   |

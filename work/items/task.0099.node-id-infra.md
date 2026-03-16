@@ -82,7 +82,7 @@ updated: 2026-02-22
 
 `scope_id` is **governance/payout domain** — it identifies which project an epoch belongs to. V0: always `'default'`. Multi-scope activates when `.cogni/projects/*.yaml` manifests are added.
 
-See [identity-model.md](../../docs/spec/identity-model.md) for the full taxonomy and [epoch-ledger.md §Project Scoping](../../docs/spec/epoch-ledger.md#project-scoping) for composite invariants.
+See [identity-model.md](../../docs/spec/identity-model.md) for the full taxonomy and [attribution-ledger.md §Project Scoping](../../docs/spec/attribution-ledger.md#project-scoping) for composite invariants.
 
 ## Validation
 

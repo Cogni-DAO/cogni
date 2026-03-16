@@ -22,8 +22,9 @@ import {
 } from "@temporalio/workflow";
 
 import type { Activities } from "../activities/index.js";
+import { GRAPH_EXECUTION_ACTIVITY_OPTIONS } from "./activity-profiles.js";
 
-// Proxy short activities with 1 minute timeout
+// Intentionally shorter timeout (1 min) — grant validation is fast-fail.
 const {
   validateGrantActivity,
   createScheduleRunActivity,
@@ -43,12 +44,9 @@ const {
 // maximumAttempts: 1 because retrying while the first attempt is still
 // running causes a 409 idempotency collision — the run will succeed or
 // timeout on its own, and the idempotency key prevents duplicate work.
-const { executeGraphActivity } = proxyActivities<Activities>({
-  startToCloseTimeout: "15 minutes",
-  retry: {
-    maximumAttempts: 1,
-  },
-});
+const { executeGraphActivity } = proxyActivities<Activities>(
+  GRAPH_EXECUTION_ACTIVITY_OPTIONS
+);
 
 /**
  * Input for GovernanceScheduledRunWorkflow.

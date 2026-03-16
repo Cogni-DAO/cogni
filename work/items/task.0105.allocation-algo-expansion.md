@@ -49,7 +49,7 @@ This task makes the framework extensible for real governance use.
 - `.cogni/repo-spec.yaml` — extended weight config schema
 - `src/shared/config/repoSpec.schema.ts` — weight config schema
 - `src/shared/config/repoSpec.server.ts` — weight config mapping
-- `packages/ledger-core/src/allocation.ts` — new algorithm versions
+- `packages/attribution-ledger/src/allocation.ts` — new algorithm versions
 - `services/scheduler-worker/src/workflows/collect-epoch.workflow.ts` — per-source algo handling
 - `packages/scheduler-core/src/services/syncGovernanceSchedules.ts` — schedule payload changes
 - Tests for new algorithms and derivation

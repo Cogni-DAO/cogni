@@ -1,0 +1,299 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+//
+// Alloy configuration with logs + metrics shipping (preview/production only)
+// Requires: PROMETHEUS_REMOTE_WRITE_URL, PROMETHEUS_USERNAME, PROMETHEUS_PASSWORD, METRICS_TOKEN
+// Use alloy-config.alloy for logs-only (local dev)
+
+// =============================================================================
+// Docker Container Discovery & Log Collection (same as base config)
+// =============================================================================
+
+discovery.docker "containers" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "10s"
+}
+
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(app|litellm|caddy|scheduler-worker|temporal|openclaw-gateway|llm-proxy-openclaw|autoheal)"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(.*)"
+    replacement   = "${1}"
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+
+  rule {
+    target_label = "app"
+    replacement  = "cogni-template"
+  }
+
+  rule {
+    target_label = "env"
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")
+  }
+
+  rule {
+    source_labels = ["env"]
+    regex         = "^(local|preview|production)$"
+    action        = "keep"
+  }
+}
+
+loki.source.docker "default" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.relabel.docker_logs.output
+  forward_to    = [loki.process.docker_logs.receiver]
+  relabel_rules = discovery.relabel.docker_logs.rules
+}
+
+// =============================================================================
+// Log Processing with Health-Check Noise Suppression
+// =============================================================================
+// Fail-safe: only drops when JSON parses AND required fields exist AND conditions
+// match. Unparseable lines, missing fields, failures, and slow responses pass through.
+
+loki.process "docker_logs" {
+  stage.docker {}
+
+  stage.timestamp {
+    source = "time"
+    format = "RFC3339Nano"
+  }
+
+  // Extract JSON fields from app logs (fail-safe: non-JSON lines get no extracted fields)
+  stage.json {
+    expressions = {
+      route       = "route",
+      status_code = "status",
+      duration_ms = "durationMs",
+      log_msg     = "msg",
+    }
+  }
+
+  // Drop "request received" lines for health/metrics probe routes.
+  // These are pure noise — the "request complete" line has all the useful info.
+  // Fail-safe: all fields must be present and match for drop to fire.
+  stage.template {
+    source   = "drop_probe_start"
+    template = "{{ if and .route .log_msg (or (eq .route \"meta.readyz\") (eq .route \"meta.metrics\")) (eq .log_msg \"request received\") }}true{{ end }}"
+  }
+
+  stage.drop {
+    source              = "drop_probe_start"
+    value               = "true"
+    drop_counter_reason = "probe_start_noise"
+  }
+
+  // Drop successful metrics scrape completions (status=200, any duration).
+  // Fail-safe: route and status_code must both be present and match.
+  stage.template {
+    source   = "drop_metrics_ok"
+    template = "{{ if and .route .status_code (eq .route \"meta.metrics\") (eq .status_code \"200\") }}true{{ end }}"
+  }
+
+  stage.drop {
+    source              = "drop_metrics_ok"
+    value               = "true"
+    drop_counter_reason = "metrics_scrape_ok"
+  }
+
+  // Drop successful fast readyz probe completions (status=200, duration < 1000ms).
+  // Keeps: failures (non-200), slow responses (>= 1s), and lines with missing fields.
+  // Fail-safe: route, status_code, and duration_ms must all be present and match.
+  // int() truncates float strings ("4.567" → 4); empty/missing duration_ms is
+  // guarded by the .duration_ms truthiness check (empty string = falsy).
+  stage.template {
+    source   = "drop_readyz_ok"
+    template = "{{ if and .route .status_code .duration_ms (eq .route \"meta.readyz\") (eq .status_code \"200\") }}{{ if lt (int .duration_ms) 1000 }}true{{ end }}{{ end }}"
+  }
+
+  stage.drop {
+    source              = "drop_readyz_ok"
+    value               = "true"
+    drop_counter_reason = "readyz_probe_ok"
+  }
+
+  forward_to = [loki.write.loki.receiver]
+}
+
+loki.write "loki" {
+  endpoint {
+    url = sys.env("LOKI_WRITE_URL")
+
+    basic_auth {
+      username = sys.env("LOKI_USERNAME")
+      password = sys.env("LOKI_PASSWORD")
+    }
+  }
+}
+
+// =============================================================================
+// Prometheus Metrics: App Scraping
+// =============================================================================
+// Scrapes /api/metrics from app and ships to Grafana Cloud Mimir.
+// Only use this config when PROMETHEUS_* and METRICS_TOKEN are deployed.
+
+prometheus.scrape "app_metrics" {
+  targets = [
+    {"__address__" = "app:3000"},
+  ]
+  forward_to      = [prometheus.relabel.app_metrics.receiver]
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+  metrics_path    = "/api/metrics"
+  bearer_token    = sys.env("METRICS_TOKEN")
+}
+
+prometheus.relabel "app_metrics" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  // Add env label so deadman alerts can scope to preview|production
+  rule {
+    target_label = "env"
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")
+  }
+
+  // Add service label for consistent querying across app + infra metrics
+  rule {
+    target_label = "service"
+    replacement  = "app"
+  }
+}
+
+// =============================================================================
+// Prometheus Metrics: Scheduler-Worker Scraping
+// =============================================================================
+// Scrapes /metrics from scheduler-worker health server (port 9000, no auth).
+// Worker exposes Temporal activity duration/errors + Node.js process metrics.
+
+prometheus.scrape "worker_metrics" {
+  targets         = [{"__address__" = "scheduler-worker:9000"}]
+  forward_to      = [prometheus.relabel.worker_metrics.receiver]
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+  metrics_path    = "/metrics"
+}
+
+prometheus.relabel "worker_metrics" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  rule {
+    target_label = "env"
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")
+  }
+
+  rule {
+    target_label = "service"
+    replacement  = "scheduler-worker"
+  }
+}
+
+// =============================================================================
+// Prometheus Metrics: Container (cAdvisor) + Host (node) Exporters
+// =============================================================================
+// Uses Alloy's built-in exporters — no additional containers needed.
+// Strict metric allowlist + label policy to control cardinality.
+// Requires host mounts: /proc:/host/proc:ro, /sys:/host/sys:ro, /:/host/root:ro
+
+prometheus.exporter.cadvisor "default" {
+  docker_host                  = "unix:///var/run/docker.sock"
+  store_container_labels       = true
+  allowlisted_container_labels = ["com.docker.compose.service"]
+  storage_duration             = "2m"
+}
+
+prometheus.exporter.unix "default" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/host/root"
+}
+
+prometheus.scrape "cadvisor" {
+  targets         = prometheus.exporter.cadvisor.default.targets
+  forward_to      = [prometheus.relabel.infra_metrics.receiver]
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  job_name        = "cadvisor"
+}
+
+prometheus.scrape "node" {
+  targets         = prometheus.exporter.unix.default.targets
+  forward_to      = [prometheus.relabel.infra_metrics.receiver]
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  job_name        = "node"
+}
+
+// =============================================================================
+// Metric Allowlist + Label Policy
+// =============================================================================
+// Only keep metrics we actually alert on or dashboard. Drop everything else
+// before remote_write to control Grafana Cloud series count.
+
+prometheus.relabel "infra_metrics" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  // Keep only allowlisted metric names (+ up for deadman alerts)
+  rule {
+    source_labels = ["__name__"]
+    regex         = "(container_memory_working_set_bytes|container_memory_rss|container_spec_memory_limit_bytes|container_cpu_usage_seconds_total|container_oom_events_total|container_network_receive_bytes_total|container_network_transmit_bytes_total|container_network_receive_errors_total|container_network_transmit_errors_total|container_network_receive_packets_dropped_total|container_network_transmit_packets_dropped_total|container_fs_reads_bytes_total|container_fs_writes_bytes_total|node_filesystem_avail_bytes|node_memory_MemAvailable_bytes|node_cpu_seconds_total|node_network_receive_bytes_total|node_network_transmit_bytes_total|up)"
+    action        = "keep"
+  }
+
+  // Drop node_filesystem_avail_bytes for virtual/pseudo filesystems (reduce series)
+  rule {
+    source_labels = ["__name__", "fstype"]
+    regex         = "node_filesystem_avail_bytes;(tmpfs|overlay|proc|sysfs|devtmpfs|squashfs)"
+    action        = "drop"
+  }
+
+  // Map compose service label → "service" for consistent querying
+  rule {
+    source_labels = ["container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  // Add env label for alert scoping
+  rule {
+    target_label = "env"
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")
+  }
+
+  // Drop high-cardinality labels to keep series count low
+  rule {
+    regex  = "(id|image|name)"
+    action = "labeldrop"
+  }
+
+  rule {
+    regex  = "container_label_.*"
+    action = "labeldrop"
+  }
+}
+
+// =============================================================================
+// Remote Write (shared by app_metrics + infra_metrics)
+// =============================================================================
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("PROMETHEUS_REMOTE_WRITE_URL")
+    basic_auth {
+      username = sys.env("PROMETHEUS_USERNAME")
+      password = sys.env("PROMETHEUS_PASSWORD")
+    }
+  }
+}

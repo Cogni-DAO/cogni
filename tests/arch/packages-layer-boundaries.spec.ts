@@ -60,7 +60,7 @@ describe("Packages layer isolation (monorepo boundaries)", () => {
     it("blocks importing from src/", () => {
       const { exitCode, stdout } = runDepCruise([
         "packages/aragon-osx/__arch_probes__",
-        "src/shared",
+        "apps/web/src/shared",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);
@@ -84,7 +84,7 @@ describe("Packages layer isolation (monorepo boundaries)", () => {
     it("blocks importing from src/", () => {
       const { exitCode, stdout } = runDepCruise([
         "packages/cogni-contracts/__arch_probes__",
-        "src/shared",
+        "apps/web/src/shared",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);
@@ -94,10 +94,10 @@ describe("Packages layer isolation (monorepo boundaries)", () => {
     });
   });
 
-  describe("src/ deep imports", () => {
+  describe("apps/web/src/ deep imports", () => {
     it("blocks deep-importing package internals", () => {
       const { exitCode, stdout } = runDepCruise([
-        "src/features/__arch_probes__/illegal-deep-package-import.ts",
+        "apps/web/src/features/__arch_probes__/illegal-deep-package-import.ts",
         "packages/aragon-osx/src",
       ]);
       if (exitCode === 0) {

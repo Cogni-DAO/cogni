@@ -6,17 +6,20 @@
 .gitignore
 .gitattributes
 
-# Node / build artifacts
-node_modules
-.next
-build
-coverage
-out
-.nyc_output
+# Node / build artifacts (** matches nested paths in monorepo context)
+**/node_modules
+**/.next
+**/build
+**/coverage
+**/out
+**/.nyc_output
 
-# Build outputs (** required for nested paths in monorepo)
+# Build outputs
 **/dist
 **/*.tsbuildinfo
+
+# Claude Code worktrees (can be 30GB+)
+.claude
 
 # Env (don’t bake secrets into images)
 .env*
@@ -68,5 +71,12 @@ eslint/
 .yarn
 .npm
 
-# Docs
+# Infra / IaC (not needed in app images)
+infra
+scripts/ci
+scripts/bootstrap
+
+# Work items / docs (not needed in images)
+work
+docs
 *.md

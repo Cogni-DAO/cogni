@@ -30,15 +30,6 @@ const EnvSchema = z.object({
   /** Temporal task queue (required) */
   TEMPORAL_TASK_QUEUE: z.string().min(1, "TEMPORAL_TASK_QUEUE is required"),
 
-  /** Unique node identity UUID — scopes all ledger tables */
-  NODE_ID: z.string().uuid("NODE_ID must be a valid UUID").optional(),
-
-  /** Stable opaque scope UUID — DB FK for ledger scope */
-  SCOPE_ID: z.string().uuid("SCOPE_ID must be a valid UUID").optional(),
-
-  /** Human-friendly scope slug — for display, logs, schedule IDs */
-  SCOPE_KEY: z.string().min(1).default("default"),
-
   /** Scheduler API token for internal API calls (required, treat as secret - never log) */
   SCHEDULER_API_TOKEN: z
     .string()
@@ -48,29 +39,21 @@ const EnvSchema = z.object({
   APP_BASE_URL: z.string().url("APP_BASE_URL must be a valid URL"),
 
   /** GitHub App ID (optional — required only when GitHub ingestion is enabled) */
-  GITHUB_REVIEW_APP_ID: z
+  GH_REVIEW_APP_ID: z
     .string()
     .min(1)
     .optional()
     .or(z.literal("").transform(() => undefined)),
 
   /** GitHub App private key, base64-encoded PEM (optional — required only when GitHub ingestion is enabled) */
-  GITHUB_REVIEW_APP_PRIVATE_KEY_BASE64: z
+  GH_REVIEW_APP_PRIVATE_KEY_BASE64: z
     .string()
     .min(1)
     .optional()
     .or(z.literal("").transform(() => undefined)),
 
-  /** GitHub App installation ID — optional override, resolved dynamically if omitted */
-  GITHUB_REVIEW_INSTALLATION_ID: z.coerce
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .or(z.literal("").transform(() => undefined)),
-
-  /** Comma-separated repos for GitHub activity collection (e.g., "cogni-dao/cogni-template") */
-  GITHUB_REPOS: z
+  /** Comma-separated repos for GitHub activity collection (e.g., "Cogni-DAO/node-template") */
+  GH_REPOS: z
     .string()
     .min(1)
     .optional()

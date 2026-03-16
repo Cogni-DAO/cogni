@@ -8,7 +8,7 @@ You are updating the free models in the LiteLLM proxy configuration. Free models
 
 ## Context
 
-- Config file: `platform/infra/services/runtime/configs/litellm.config.yaml`
+- Config file: `infra/compose/configs/litellm.config.yaml`
 - Provider icons: `src/features/ai/config/provider-icons.ts`
 - Icon components: `src/features/ai/icons/providers/`
 - Icon SVGs: `src/assets/icons/providers/`
@@ -67,7 +67,7 @@ Select ~6 free models with these priorities:
 
 ## Step 5: Update Config
 
-Edit `platform/infra/services/runtime/configs/litellm.config.yaml`:
+Edit `infra/compose/configs/litellm.config.yaml`:
 
 ```yaml
 # ===== FREE MODELS =====

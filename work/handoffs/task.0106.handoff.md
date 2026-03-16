@@ -23,8 +23,8 @@ last_commit: e4b9d37d
 
 - **Done:** `scripts/db/seed.mts` seeds 2 finalized epochs + 1 open epoch with activity, curations, allocations, pool components, and payout statements
 - **Done:** `pnpm db:seed` command works via `node --import tsx/esm` (ESM loader required for `@cogni/*` subpath exports)
-- **Done:** `GET /api/v1/ledger/epochs/:id/allocations` route added (was PATCH-only, returning 405)
-- **Done:** `GET /api/v1/ledger/epochs/:id/statement` route created (didn't exist at all)
+- **Done:** `GET /api/v1/attribution/epochs/:id/allocations` route added (was PATCH-only, returning 405)
+- **Done:** `GET /api/v1/attribution/epochs/:id/statement` route created (didn't exist at all)
 - **Done:** All 3 governance UI pages render against seeded data
 - **MVP quality:** UI is functional but needs polish — placeholder avatars, no profile system, basic layout
 - **Not done:** `pnpm check` not run after latest commit; doc headers on new route files may need validation
@@ -57,14 +57,14 @@ last_commit: e4b9d37d
 
 ## Pointers
 
-| File / Resource                                             | Why it matters                                                    |
-| ----------------------------------------------------------- | ----------------------------------------------------------------- |
-| `scripts/db/seed.mts`                                       | The seed script — all epoch/event/allocation data definitions     |
-| `scripts/_seed-reference-data.json`                         | Real GitHub data from Cogni-DAO/node-template used to model seed  |
-| `src/app/api/v1/ledger/epochs/[id]/allocations/route.ts`    | GET + PATCH handlers for epoch allocations                        |
-| `src/app/api/v1/ledger/epochs/[id]/statement/route.ts`      | GET handler for epoch payout statements                           |
-| `src/features/governance/hooks/useCurrentEpoch.ts`          | Hook showing exact API endpoints the UI fetches                   |
-| `src/features/governance/lib/compose-epoch.ts`              | Composition functions joining API data into view models           |
-| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` | `DrizzleLedgerAdapter` — the store used by seed + routes          |
-| `services/scheduler-worker/src/activities/ledger.ts`        | `ensureEpochForWindow()` — how Temporal coexists with seeded data |
-| `work/items/task.0106.ledger-dev-seed.md`                   | Full requirements and data shape reference                        |
+| File / Resource                                                  | Why it matters                                                    |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `scripts/db/seed.mts`                                            | The seed script — all epoch/event/allocation data definitions     |
+| `scripts/_seed-reference-data.json`                              | Real GitHub data from Cogni-DAO/node-template used to model seed  |
+| `src/app/api/v1/attribution/epochs/[id]/allocations/route.ts`    | GET + PATCH handlers for epoch allocations                        |
+| `src/app/api/v1/attribution/epochs/[id]/statement/route.ts`      | GET handler for epoch payout statements                           |
+| `src/features/governance/hooks/useCurrentEpoch.ts`               | Hook showing exact API endpoints the UI fetches                   |
+| `src/features/governance/lib/compose-epoch.ts`                   | Composition functions joining API data into view models           |
+| `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` | `DrizzleAttributionAdapter` — the store used by seed + routes     |
+| `services/scheduler-worker/src/activities/ledger.ts`             | `ensureEpochForWindow()` — how Temporal coexists with seeded data |
+| `work/items/task.0106.ledger-dev-seed.md`                        | Full requirements and data shape reference                        |

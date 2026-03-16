@@ -50,6 +50,8 @@ Enable any founder to create a fully-verified Cogni DAO node via a 3-field web f
 
 2. **ARAGON_MINTED_TOKEN**: Use Aragon's GovernanceERC20 minted during DAO creation. No custom NonTransferableVotes deployment. Tokens are transferable.
 
+   Forward note: the Financial Ledger reward-distribution path reuses this same `GovernanceERC20` as the rewards token. The current founder bootstrap mint is acceptable for formation testing, but it is NOT the final rewards-ready setup. Before live contributor distributions, formation must mint a fixed supply to a DAO-controlled emissions holder and the server verification path must validate that holder and total supply.
+
 3. **NO_PRIVATE_KEY_ENV_VARS**: All transactions signed via wallet UI (wagmi/rainbowkit), never by script-loaded secrets.
 
 4. **SERVER_VERIFICATION_BOUNDARY**: Browser is untrusted. Server derives ALL addresses from tx receipts. Request contains only `{ chainId, daoTxHash, signalTxHash, initialHolder }`.

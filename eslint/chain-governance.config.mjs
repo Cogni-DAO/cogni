@@ -17,9 +17,9 @@ export default [
   // CHAIN CONFIG SAFETY: Ban hardcoded chain IDs in production code
   // ========================================
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["apps/web/src/**/*.{ts,tsx}"],
     // Exclude tests (fixtures may need literals) and styles (cannot influence runtime chain selection)
-    ignores: ["**/*.{test,spec}.{ts,tsx}", "src/styles/**"],
+    ignores: ["**/*.{test,spec}.{ts,tsx}", "apps/web/src/styles/**"],
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -41,7 +41,7 @@ export default [
   // Note: This disables ALL no-restricted-syntax rules in chain.ts, which is acceptable
   // given the file's narrow scope as the single source of truth for chain config.
   {
-    files: ["src/shared/web3/chain.ts"],
+    files: ["apps/web/src/shared/web3/chain.ts"],
     rules: {
       "no-restricted-syntax": "off",
     },

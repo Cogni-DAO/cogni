@@ -14,9 +14,8 @@
  */
 
 /* eslint-env node */
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-
-import fg from "fast-glob";
 
 const REQ_HEADINGS = [
   "Metadata",
@@ -25,14 +24,8 @@ const REQ_HEADINGS = [
   "Boundaries",
   "Public Surface",
   "Responsibilities",
-  "Usage",
-  "Standards",
-  "Dependencies",
-  "Change Protocol",
   "Notes",
 ];
-
-const OPTIONAL_HEADINGS = ["Ports (optional)"];
 
 const ROOT_REQ_HEADINGS = [
   "Mission",
@@ -99,7 +92,6 @@ const LAYER_FROM_PATH = [
   { re: /^e2e\//, layer: "e2e" },
   { re: /^scripts\//, layer: "scripts" },
   { re: /^infra\//, layer: "infra" },
-  { re: /^platform\//, layer: "infra" },
   { re: /^packages\//, layer: "packages" },
   { re: /^services\//, layer: "services" },
 ];
@@ -179,9 +171,13 @@ function validateMetadata(block) {
   ) {
     errors.push("Metadata: missing Owner");
   }
-  const date = block.match(/\*\*Last reviewed:\*\*\s*([0-9-]+)/i)?.[1] ?? "";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    errors.push("Metadata: invalid date");
+  // Last reviewed date is optional — git blame is the source of truth
+  const dateMatch = block.match(/\*\*Last reviewed:\*\*\s*([0-9-]+)/i);
+  if (dateMatch) {
+    const date = dateMatch[1];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      errors.push("Metadata: invalid date format (must be YYYY-MM-DD)");
+    }
   }
   if (!/\*\*Status:\*\*\s*(stable|draft|deprecated)/i.test(block)) {
     errors.push("Metadata: invalid Status");
@@ -288,13 +284,19 @@ function validateBoundaries(block, filePathRaw) {
     }
   }
 
-  // src/** layers may not import platform/**
+  // src/** layers may not import infra/** or scripts/**
   if (
     filePath.startsWith("src/") &&
-    j.may_import.some((x) => x === "platform" || x.startsWith("platform/"))
+    j.may_import.some(
+      (x) =>
+        x === "infra" ||
+        x.startsWith("infra/") ||
+        x === "scripts" ||
+        x.startsWith("scripts/")
+    )
   ) {
     errors.push(
-      `Boundaries: src layers cannot import platform/** (CI/IaC not runtime dependency)`
+      `Boundaries: src layers cannot import infra/** or scripts/** (CI/IaC not runtime dependency)`
     );
   }
 
@@ -361,15 +363,13 @@ function validateSubdirAgents(file, content) {
     }
   }
 
-  // Check optional headings for proper positioning
-  for (const opt of OPTIONAL_HEADINGS) {
-    const i = headings.indexOf(opt);
-    if (i !== -1) {
-      const publicSurfaceIdx = headings.indexOf("Public Surface");
-      const responsibilitiesIdx = headings.indexOf("Responsibilities");
-      if (i <= publicSurfaceIdx || i >= responsibilitiesIdx) {
-        errors.push(`"${opt}" out of order`);
-      }
+  // Check "Ports (optional)" for proper positioning (between Public Surface and Responsibilities)
+  const portsIdx = headings.indexOf("Ports (optional)");
+  if (portsIdx !== -1) {
+    const publicSurfaceIdx = headings.indexOf("Public Surface");
+    const responsibilitiesIdx = headings.indexOf("Responsibilities");
+    if (portsIdx <= publicSurfaceIdx || portsIdx >= responsibilitiesIdx) {
+      errors.push(`"Ports (optional)" out of order`);
     }
   }
 
@@ -403,13 +403,13 @@ function validate(file) {
   return fileErrors.map((e) => `${file}: ${e}`);
 }
 
-// Find all AGENTS.md files including the root one
-const files = await fg([
-  "**/AGENTS.md",
-  "AGENTS.md",
-  "!**/node_modules/**",
-  "!**/gateway-workspace/**",
-]);
+// Find all tracked AGENTS.md files (git ls-files is ~2000x faster than filesystem glob)
+const files = execSync("git ls-files '*/AGENTS.md' 'AGENTS.md'", {
+  encoding: "utf8",
+})
+  .trim()
+  .split("\n")
+  .filter((f) => f && !f.includes("gateway-workspace/"));
 const allErrors = [];
 for (const f of files) {
   try {

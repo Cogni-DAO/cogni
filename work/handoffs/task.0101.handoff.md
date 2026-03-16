@@ -47,8 +47,8 @@ These four rules are non-negotiable — the design review specifically required 
 
 ### Store Port + Adapter
 
-- `packages/ledger-core/src/store.ts` — `ActivityLedgerStore` interface
-- `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — `DrizzleLedgerAdapter`
+- `packages/attribution-ledger/src/store.ts` — `ActivityLedgerStore` interface
+- `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — `DrizzleAttributionAdapter`
 - Currently does NOT import identity tables — you add `import { userBindings } from "@cogni/db-schema/identity"`
 
 ### Existing Curation Methods (DO NOT use for auto-population)
@@ -93,7 +93,7 @@ Add `curateAndResolve` to the existing default `proxyActivities` call (2-minute 
 
 ## Gotchas
 
-- `DrizzleLedgerAdapter` currently imports only from `@cogni/db-schema/ledger`. You add `import { userBindings } from "@cogni/db-schema/identity"` — run `pnpm check` to verify dep-cruiser allows it
+- `DrizzleAttributionAdapter` currently imports only from `@cogni/db-schema/ledger`. You add `import { userBindings } from "@cogni/db-schema/identity"` — run `pnpm check` to verify dep-cruiser allows it
 - `epochId` is serialized as string in Temporal (bigint doesn't serialize). Parse back with `BigInt(input.epochId)`
 - The LEFT JOIN in `getUncuratedEvents` needs to distinguish "no curation row" from "curation with null userId" — use `isNull(activityCuration.id)` for the former
 - `getActivityForWindow` queries by `(nodeId, eventTime)` without scopeId. V0: single scope, not an issue. Add a `// TODO: scopeId filter for multi-scope` comment
@@ -103,8 +103,8 @@ Add `curateAndResolve` to the existing default `proxyActivities` call (2-minute 
 
 | File                                                                | Action | What                                       |
 | ------------------------------------------------------------------- | ------ | ------------------------------------------ |
-| `packages/ledger-core/src/store.ts`                                 | Modify | Add 3 methods to `ActivityLedgerStore`     |
-| `packages/db-client/src/adapters/drizzle-ledger.adapter.ts`         | Modify | Import `userBindings`, implement 3 methods |
+| `packages/attribution-ledger/src/store.ts`                          | Modify | Add 3 methods to `ActivityLedgerStore`     |
+| `packages/db-client/src/adapters/drizzle-attribution.adapter.ts`    | Modify | Import `userBindings`, implement 3 methods |
 | `services/scheduler-worker/src/activities/ledger.ts`                | Modify | Add `curateAndResolve` + types             |
 | `services/scheduler-worker/src/workflows/collect-epoch.workflow.ts` | Modify | Add step 5, add to proxyActivities         |
 | `services/scheduler-worker/tests/ledger-activities.test.ts`         | Modify | Add 5+ tests                               |
@@ -120,7 +120,7 @@ pnpm test -- services/scheduler-worker/tests/ledger-activities
 ## Pointers
 
 - **Work item (full design)**: `work/items/task.0101.identity-resolution-curation.md`
-- **Spec (curation rules)**: `docs/spec/epoch-ledger.md` — see CURATION_AUTO_POPULATE invariant + CollectEpochWorkflow step 6
+- **Spec (curation rules)**: `docs/spec/attribution-ledger.md` — see CURATION_AUTO_POPULATE invariant + CollectEpochWorkflow step 6
 - Project: `work/projects/proj.transparent-credit-payouts.md`
 - Identity spec: `docs/spec/decentralized-identity.md`
 - Next task: `task.0102` (allocation computation + epoch close + finalize)

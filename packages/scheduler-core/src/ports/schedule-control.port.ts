@@ -158,6 +158,7 @@ export function isScheduleControlNotFoundError(
  * | pauseSchedule    | Yes         | Throw ScheduleControlNotFound   | No-op if already paused        |
  * | resumeSchedule   | Yes         | Throw ScheduleControlNotFound   | No-op if already running       |
  * | deleteSchedule   | Yes         | No-op (success)                 | N/A                            |
+ * | triggerSchedule  | Yes         | Throw ScheduleControlNotFound   | N/A (triggers immediately)     |
  * | describeSchedule | Yes         | Return null                     | N/A                            |
  */
 export interface ScheduleControlPort {
@@ -221,6 +222,16 @@ export interface ScheduleControlPort {
    * @throws ScheduleControlUnavailableError if backend unavailable
    */
   describeSchedule(scheduleId: string): Promise<ScheduleDescription | null>;
+
+  /**
+   * Triggers an immediate run of a schedule.
+   * Uses the schedule's existing config (workflow type, input, task queue).
+   *
+   * @param scheduleId - Schedule to trigger
+   * @throws ScheduleControlNotFoundError if schedule doesn't exist
+   * @throws ScheduleControlUnavailableError if backend unavailable
+   */
+  triggerSchedule(scheduleId: string): Promise<void>;
 
   /**
    * Lists schedule IDs matching a prefix.

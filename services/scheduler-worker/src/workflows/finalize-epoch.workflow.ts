@@ -11,7 +11,7 @@
  *   - Per EPOCH_FINALIZE_IDEMPOTENT: Returns existing statement if epoch already finalized
  *   - Per CONFIG_LOCKED_AT_REVIEW: Verifies allocation_algo_ref and weight_config_hash are set
  * Side-effects: none (deterministic orchestration only)
- * Links: docs/spec/epoch-ledger.md, docs/spec/temporal-patterns.md
+ * Links: docs/spec/attribution-ledger.md, docs/spec/temporal-patterns.md
  * @internal
  */
 
@@ -19,6 +19,8 @@ import { proxyActivities } from "@temporalio/workflow";
 
 import type { LedgerActivities } from "../activities/ledger.js";
 
+// Intentionally lower retry count (3 vs standard 5) — finalization should fail fast
+// rather than retry excessively on signature verification or config lock errors.
 const { finalizeEpoch } = proxyActivities<LedgerActivities>({
   startToCloseTimeout: "2 minutes",
   retry: {
@@ -32,9 +34,8 @@ const { finalizeEpoch } = proxyActivities<LedgerActivities>({
 /** Input for FinalizeEpochWorkflow */
 export interface FinalizeEpochWorkflowInput {
   readonly epochId: string; // bigint serialized
-  readonly signature: string; // EIP-191 hex
+  readonly signature: string; // EIP-712 hex
   readonly signerAddress: string; // from SIWE session
-  readonly approvers: string[]; // EVM addresses (from repo-spec, lowercased)
 }
 
 /**
@@ -53,7 +54,6 @@ export async function FinalizeEpochWorkflow(
     epochId: input.epochId,
     signature: input.signature,
     signerAddress: input.signerAddress,
-    approvers: input.approvers,
   });
 
   return { statementId: result.statementId };

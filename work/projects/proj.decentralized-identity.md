@@ -33,7 +33,7 @@ Provide a stable, auth-method-agnostic identity for every user. The canonical id
 | Multi-provider auth: GitHub + Discord + Google OAuth on NextAuth v4 via user_bindings | In Review   | 3   | task.0107  |
 | Backfill: existing `users.wallet_address` → `user_bindings`                           | In Review   | 1   | task.0089  |
 | Profile + identity DB correctness: RLS, constraints, type tightening                  | In Review   | 2   | task.0110  |
-| Auth UX: /sign-in page, middleware guards, account linking buttons, profile polish    | Not Started | 3   | task.0111  |
+| Auth UX: SignInDialog, proxy auth routing, fail-closed linking, profile wiring        | In Review   | 3   | task.0111  |
 | SIWE zero-flash: immediate post-sign navigation                                       | Not Started | 1   | task.0112  |
 
 **Exit criteria:** You can attribute work + messages to a user, deterministically, with `user_id` as the single stable ID that the ledger references.

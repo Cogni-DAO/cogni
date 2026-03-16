@@ -3,13 +3,14 @@
 
 /**
  * Module: `@cogni/ingestion-core/port`
- * Purpose: Port interface for activity source adapters.
- * Scope: Pure interface. Does not contain implementations — those live in services/scheduler-worker/src/adapters/ingestion/.
+ * Purpose: Port interfaces for activity source adapters — poll and webhook capabilities.
+ * Scope: Pure interfaces. Does not contain implementations — those live in services/scheduler-worker/src/adapters/ingestion/.
  * Invariants:
- * - ADAPTERS_NOT_IN_CORE: This file defines the PORT (interface), not implementations.
+ * - ADAPTERS_NOT_IN_CORE: This file defines PORTs (interfaces), not implementations.
  * - All adapter deps (octokit, discord.js) live in the adapter, never in this package.
+ * - CAPABILITY_REQUIRED: DataSourceRegistration must have at least one of poll or webhook.
  * Side-effects: none
- * Links: docs/spec/epoch-ledger.md#source-adapter-interface
+ * Links: docs/spec/attribution-ledger.md#source-adapter-interface
  * @public
  */
 
@@ -21,21 +22,30 @@ import type {
 } from "./model";
 
 /**
- * Port interface for source adapters that collect activity from external platforms.
- *
- * Each adapter connects to one external system (GitHub, Discord, etc.), fetches events
- * since the last cursor, normalizes them to ActivityEvent, and returns the events + next cursor.
- *
- * Adapters are stateless — cursor persistence is handled by the calling workflow via
- * ActivityLedgerStore.upsertCursor().
+ * Registration record binding a source's ingestion capabilities.
+ * A source may support poll, webhook, or both.
+ * At least one capability must be present (validated at container bootstrap).
+ * Not a port itself — a capability manifest containing ports.
  */
-export interface SourceAdapter {
+export interface DataSourceRegistration {
   /** Source platform identifier: "github", "discord" */
   readonly source: string;
 
   /** Adapter version — bump on schema changes that affect payloadHash */
   readonly version: string;
 
+  /** Poll capability — runs inside Temporal activities. */
+  readonly poll?: PollAdapter;
+
+  /** Webhook capability — runs inside feature services via HTTP request handlers. */
+  readonly webhook?: WebhookNormalizer;
+}
+
+/**
+ * Poll capability — runs inside Temporal activities.
+ * Cursor-based incremental sync over a time window.
+ */
+export interface PollAdapter {
   /** Available streams this adapter can collect from */
   streams(): StreamDefinition[];
 
@@ -46,10 +56,49 @@ export interface SourceAdapter {
    * @returns Events collected + updated cursor for next call
    */
   collect(params: CollectParams): Promise<CollectResult>;
+}
+
+/**
+ * Webhook capability — runs inside feature services via HTTP request handlers.
+ * Normalizes platform webhook payloads to ActivityEvent[].
+ * Verification uses platform-specific OSS: @octokit/webhooks-methods (GitHub),
+ * discord-interactions (Discord), etc.
+ */
+export interface WebhookNormalizer {
+  /** Platform event types this normalizer handles (e.g., ["pull_request", "issues"]) */
+  readonly supportedEvents: readonly string[];
 
   /**
-   * Optional real-time webhook handler for fast-path ingestion.
-   * Deferred to P1 — not required for V0.
+   * Verify webhook signature. Must be called before normalize().
+   * Implementation uses platform OSS — not bespoke crypto.
+   * Async because @octokit/webhooks-methods uses Web Crypto API.
    */
-  handleWebhook?(payload: unknown): Promise<ActivityEvent[]>;
+  verify(
+    headers: Record<string, string>,
+    body: Buffer,
+    secret: string
+  ): Promise<boolean>;
+
+  /**
+   * Parse and normalize webhook payload to ActivityEvent[].
+   * Returns empty array for events we don't care about.
+   * Should not perform network I/O — all data comes from the payload.
+   */
+  normalize(
+    headers: Record<string, string>,
+    body: unknown
+  ): Promise<ActivityEvent[]>;
 }
+
+/**
+ * @deprecated Use DataSourceRegistration with poll capability instead.
+ * Backward-compat type alias during migration.
+ */
+export type SourceAdapter = DataSourceRegistration & { poll: PollAdapter } & {
+  /** @deprecated Access via registration.poll.streams() */
+  streams(): StreamDefinition[];
+  /** @deprecated Access via registration.poll.collect() */
+  collect(params: CollectParams): Promise<CollectResult>;
+  /** @deprecated Removed in favor of WebhookNormalizer */
+  handleWebhook?(payload: unknown): Promise<ActivityEvent[]>;
+};

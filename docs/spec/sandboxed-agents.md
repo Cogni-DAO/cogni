@@ -305,9 +305,9 @@ See [Git-Sync Repo Mount](./git-sync-repo-mount.md) for the full git-sync boot s
 | `services/sandbox-runtime/Dockerfile`                           | Sandbox container image (node:22-slim + socat + agent) |
 | `services/sandbox-runtime/entrypoint.sh`                        | socat bridge + exec agent command                      |
 | `services/sandbox-runtime/agent/run.mjs`                        | Minimal agent script (reads messages, calls LLM)       |
-| `platform/infra/services/sandbox-proxy/nginx.conf.template`     | Proxy config template (header injection, forwarding)   |
-| `platform/infra/services/sandbox-proxy/README.md`               | Proxy documentation                                    |
-| `platform/infra/services/runtime/docker-compose.dev.yml`        | sandbox-internal network config                        |
+| `infra/compose/nginx.conf.template`                             | Proxy config template (header injection, forwarding)   |
+| `infra/compose/README.md`                                       | Proxy documentation                                    |
+| `infra/compose/runtime/docker-compose.dev.yml`                  | sandbox-internal network config                        |
 | `src/ports/sandbox-runner.port.ts`                              | SandboxRunnerPort + SandboxProgramContract types       |
 | `src/ports/index.ts`                                            | Port barrel exports                                    |
 | `src/adapters/server/sandbox/sandbox-runner.adapter.ts`         | Dockerode-based container lifecycle                    |

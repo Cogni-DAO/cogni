@@ -3,6 +3,7 @@
   "files": [],
   "include": [],
   "references": [
+    { "path": "./apps/web/tsconfig.app.json" },
     { "path": "./packages/ai-core" },
     { "path": "./packages/ai-tools" },
     { "path": "./packages/aragon-osx" },
@@ -11,8 +12,14 @@
     { "path": "./packages/db-client" },
     { "path": "./packages/ids" },
     { "path": "./packages/db-schema" },
+    { "path": "./packages/financial-ledger" },
     { "path": "./packages/ingestion-core" },
-    { "path": "./packages/ledger-core" },
-    { "path": "./packages/scheduler-core" }
+    { "path": "./packages/attribution-ledger" },
+    { "path": "./packages/attribution-pipeline-contracts" },
+    { "path": "./packages/attribution-pipeline-plugins" },
+    { "path": "./packages/operator-wallet" },
+    { "path": "./packages/scheduler-core" },
+    { "path": "./packages/repo-spec" },
+    { "path": "./packages/work-items" }
   ]
 }

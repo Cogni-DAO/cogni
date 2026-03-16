@@ -5,7 +5,6 @@
 ## Metadata
 
 - **Owners:** @Cogni-DAO
-- **Last reviewed:** 2025-12-16
 - **Status:** draft
 
 ## Purpose
@@ -42,8 +41,6 @@ Pure TypeScript package for Cogni-owned contract ABIs, bytecode, and addresses. 
 - **Exports:**
   - `COGNI_SIGNAL_ABI` - CogniSignal contract ABI
   - `COGNI_SIGNAL_BYTECODE` - CogniSignal deployment bytecode (deployed fresh at setup time)
-- **CLI:** none
-- **Env/Config keys:** none
 - **Files considered API:** `index.ts`, `cogni-signal/abi.ts`, `cogni-signal/bytecode.ts`
 
 ## Ports

@@ -235,4 +235,4 @@ _(none — on-chain reconciliation and multi-provider routing tracked in proj.pa
 - [Authentication](./authentication.md)
 - [Billing Evolution](./billing-evolution.md)
 - [Identity Model](./identity-model.md) — node_id, scope_id definitions
-- [Epoch Ledger](./epoch-ledger.md) — scope_id in ledger invariants
+- [Attribution Ledger](./attribution-ledger.md) — scope_id in ledger invariants

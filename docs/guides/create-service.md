@@ -120,6 +120,10 @@ This is a Node.js ESM requirement when using `bundle: false`. TypeScript resolve
 
 > **Note:** `HEALTH_PORT` can be the same value (e.g., 9000) across all services; only host port publishing (`ports:` in Compose) must be unique if exposing externally.
 
+### 3b. Repo-Spec Identity (if needed)
+
+If the service needs node identity (`node_id`, `scope_id`, `chain_id`) or governance config: add `@cogni/repo-spec` as a workspace dependency, bake `.cogni/repo-spec.yaml` into the Dockerfile runner stage, and read it at bootstrap. See [`packages/repo-spec/AGENTS.md`](../../packages/repo-spec/AGENTS.md) for the public API and [`services/scheduler-worker/src/bootstrap/container.ts`](../../services/scheduler-worker/src/bootstrap/container.ts) for the reference implementation.
+
 ### 4. Health Endpoints
 
 - [ ] Create `src/health.ts` using minimal `node:http` (no framework):
@@ -316,6 +320,9 @@ Workers must stop claiming new jobs immediately on SIGTERM regardless of orchest
   COPY --from=builder --chown=worker:nodejs /app/packages/<dep2>/dist ./packages/<dep2>/dist
   COPY --from=builder --chown=worker:nodejs /app/packages/<dep2>/package.json ./packages/<dep2>/
 
+  # If service needs repo-spec identity (see Step 3b):
+  # COPY --chown=worker:nodejs .cogni/repo-spec.yaml ./.cogni/repo-spec.yaml
+
   WORKDIR /app/services/<name>
   ENV NODE_ENV=production
 
@@ -412,7 +419,7 @@ volumes:
 ### 10. Deployment Criticality
 
 - [ ] Classify: **critical** (deploy fails if unhealthy) or **optional** (best-effort)
-- [ ] If critical: add a post-deploy health gate in `platform/ci/scripts/` and wire it into `deploy.sh` after `compose up`
+- [ ] If critical: add a post-deploy health gate in `scripts/ci/` and wire it into `deploy.sh` after `compose up`
 - [ ] If using compose profiles: add a profile guardrail asserting the service resolves in `compose config --services` — compose silently ignores profiles for missing services
 
 ### 11. Documentation

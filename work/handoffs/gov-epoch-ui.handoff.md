@@ -16,7 +16,7 @@ last_commit: 78fcd87c
 - The `/gov` route previously only showed system AI activity (credit balance, usage charts, recent runs)
 - We need 3 new pages for the epoch ledger: **Current Epoch**, **Epoch History**, and **Holdings & Ownership**
 - Mockups were provided (dark theme, purple accents, contributor cards with emoji avatars, countdown timers, progress bars)
-- No backend API routes exist for the ledger yet — pages use mock data shaped to match the `activity_events` model from the [epoch-ledger spec](../../docs/spec/epoch-ledger.md)
+- No backend API routes exist for the ledger yet — pages use mock data shaped to match the `activity_events` model from the [epoch-ledger spec](../../docs/spec/attribution-ledger.md)
 - Branch `feat/gov-epoch-ui` was cut from `feat/activity-ledger-v0`
 
 ## Current State
@@ -65,5 +65,5 @@ last_commit: 78fcd87c
 | `src/features/governance/mock/epoch-mock-data.ts`  | All mock data; shaped to match contracts                |
 | `src/features/governance/hooks/use*.ts`            | Three React Query hooks with USE_MOCK flags             |
 | `src/features/governance/components/`              | 6 feature components (ContributorCard, EpochCard, etc.) |
-| `docs/spec/epoch-ledger.md`                        | Authoritative spec for data model and invariants        |
+| `docs/spec/attribution-ledger.md`                  | Authoritative spec for data model and invariants        |
 | `.claude/plans/wise-marinating-steele.md`          | Approved implementation plan                            |

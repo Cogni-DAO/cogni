@@ -45,7 +45,7 @@ pnpm dev  # You're ready!
 3. Prompt for `OPENROUTER_API_KEY`
 4. Prompt for `EVM_RPC_URL` (Sepolia RPC from alchemy.com or infura.io)
 5. Prompt for `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (optional, from cloud.walletconnect.com)
-6. Run `platform/bootstrap/install/install-pnpm.sh`
+6. Run `scripts/bootstrap/install/install-pnpm.sh`
 7. `pnpm install` and setup git hooks
 
 **No SSH keys, no Docker, no Cherry VMs, no GitHub secrets.**
@@ -80,7 +80,7 @@ pnpm setup github --env production
 
 1. **Generate SSH keypair:**
    - `ssh-keygen -t ed25519 -f ~/.ssh/<repo-name>_<env>_deploy`
-   - Copy public key → `platform/infra/providers/cherry/base/keys/`
+   - Copy public key → `infra/tofu/cherry/base/keys/`
    - **Manual:** User commits public key to repo
 
 2. **Update Terraform vars:**
@@ -123,8 +123,28 @@ pnpm setup github --env production
      - `OPENCLAW_GATEWAY_TOKEN` (generated random, ≥32 chars — gateway WS auth)
      - `OPENCLAW_GITHUB_RW_TOKEN` (GitHub PAT with Contents:Write + Pull requests:Write — host-side git relay)
      - `DISCORD_BOT_TOKEN` (Discord bot token — from discord.com/developers/applications → Bot → Reset Token)
+     - **OAuth providers (optional — provider silently skipped if missing):**
+       - `GH_OAUTH_CLIENT_ID` + `GH_OAUTH_CLIENT_SECRET` (from github.com/settings/developers → OAuth Apps)
+       - `DISCORD_OAUTH_CLIENT_ID` + `DISCORD_OAUTH_CLIENT_SECRET` (from discord.com/developers/applications → OAuth2)
+       - `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` (from console.cloud.google.com/apis/credentials)
+       - See [OAuth App Setup Guide](../../docs/guides/oauth-app-setup.md) for step-by-step
+     - `SCHEDULER_API_TOKEN` (generated random, ≥32 chars — scheduler-worker → app API bearer auth)
      - `BILLING_INGEST_TOKEN` (generated random, ≥32 chars — LiteLLM callback → billing ingest bearer auth)
      - `INTERNAL_OPS_TOKEN` (generated random, ≥32 chars — deploy-time bearer auth for `/api/internal/ops/governance/schedules/sync`)
+     - **GitHub App for attribution ingestion (optional — skipped if missing):**
+       - `GH_REVIEW_APP_ID` + `GH_REVIEW_APP_PRIVATE_KEY_BASE64` (from github.com/organizations → Developer settings → GitHub Apps)
+       - `GH_WEBHOOK_SECRET` (from the GitHub App's webhook settings page — the secret used for HMAC-SHA256 payload verification)
+       - **Webhook URL must be set in the GitHub App** to `https://<domain>/api/internal/webhooks/github` (e.g. `https://preview.cognidao.org/api/internal/webhooks/github`)
+       - See [VCS Integration Spec](../../docs/spec/vcs-integration.md) for app permissions and setup
+     - **GitHub repos for ingestion:**
+       - `GH_REPOS` (comma-separated, e.g. `Cogni-DAO/node-template` — set as GitHub Actions **variable**, not secret)
+     - **Grafana (optional):**
+       - `GRAFANA_URL` (Grafana instance URL)
+       - `GRAFANA_SERVICE_ACCOUNT_TOKEN` (service account token with viewer+ role)
+     - **Privy — Operator Wallet (optional — skipped if missing):**
+       - `PRIVY_APP_ID` (from privy.io → App Settings)
+       - `PRIVY_APP_SECRET` (from privy.io → App Settings)
+       - `PRIVY_SIGNING_KEY` (PKCS8 PEM, multi-line — from privy.io → App Settings → Signing Key)
    - **Deployment secrets:** From previous steps
      - `SSH_DEPLOY_KEY` (from `~/.ssh/cogni_template_<env>_deploy`)
      - `VM_HOST` (from `.env.<env>` file)
@@ -153,7 +173,7 @@ pnpm setup github --env production
          - `PROMETHEUS_READ_PASSWORD` (Grafana Access Policy token with metrics:read scope)
            Create at: https://grafana.com/orgs/<org>/access-policies → Add policy → metrics:read → Add token
 
-For current manual process, see [DEPLOY.md](../../platform/runbooks/DEPLOY.md).
+For current manual process, see [DEPLOY.md](../../docs/runbooks/DEPLOY.md).
 
 3. **Apply branch protection rules:**
    - `main`: 2 required reviews, required checks, enforce for admins
@@ -161,7 +181,6 @@ For current manual process, see [DEPLOY.md](../../platform/runbooks/DEPLOY.md).
    - **Note:** SonarCloud creates two separate checks: `sonar` (GitHub Action job) and `SonarCloud Code Analysis` (Quality Gate). Both should be added to required checks.
 
 4. **Print GitHub Apps checklist:**
-   - Install URLs for: `cogni-git-review`, `cogni-git-admin`, `sonarcloud`
    - **SonarCloud setup:**
      1. Create SonarCloud project for your repo and organization
      2. Update `sonar-project.properties` with your organization and project key

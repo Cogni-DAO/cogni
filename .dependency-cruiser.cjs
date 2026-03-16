@@ -1,33 +1,33 @@
 // .dependency-cruiser.cjs
 // Hexagonal architecture boundaries enforced via dependency-cruiser.
 // Pure policy config - scope controlled via CLI --include-only flag.
-// Production: depcruise src packages --include-only '^(src|packages)' --output-type err-long
-// Arch probes: depcruise src/__arch_probes__ --include-only '^src/__arch_probes__' --output-type err
+// Production: depcruise apps/web/src packages services --include-only '^(apps/web/src|packages|services)' --output-type err-long
+// Arch probes: depcruise apps/web/src/__arch_probes__ --include-only '^apps/web/src/__arch_probes__' --output-type err
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 
 // src/ hexagonal layers
 const srcLayers = {
-  core: "^src/core",
-  ports: "^src/ports",
-  features: "^src/features",
-  app: "^src/app",
-  adapters: "^src/adapters",
-  adaptersServer: "^src/adapters/server",
-  adaptersTest: "^src/adapters/test",
+  core: "^apps/web/src/core",
+  ports: "^apps/web/src/ports",
+  features: "^apps/web/src/features",
+  app: "^apps/web/src/app",
+  adapters: "^apps/web/src/adapters",
+  adaptersServer: "^apps/web/src/adapters/server",
+  adaptersTest: "^apps/web/src/adapters/test",
   // adaptersWorker, adaptersCli: add when implemented
-  shared: "^src/shared",
-  bootstrap: "^src/bootstrap",
-  lib: "^src/lib",
-  auth: "^src/auth\\.ts$",
-  proxy: "^src/proxy\\.ts$",
-  components: "^src/components",
-  styles: "^src/styles",
-  types: "^src/types",
-  assets: "^src/assets",
-  contracts: "^src/contracts",
-  mcp: "^src/mcp",
-  scripts: "^src/scripts",
+  shared: "^apps/web/src/shared",
+  bootstrap: "^apps/web/src/bootstrap",
+  lib: "^apps/web/src/lib",
+  auth: "^apps/web/src/auth\\.ts$",
+  proxy: "^apps/web/src/proxy\\.ts$",
+  components: "^apps/web/src/components",
+  styles: "^apps/web/src/styles",
+  types: "^apps/web/src/types",
+  assets: "^apps/web/src/assets",
+  contracts: "^apps/web/src/contracts",
+  mcp: "^apps/web/src/mcp",
+  scripts: "^apps/web/src/scripts",
 };
 
 // Monorepo boundary layers (packages/)
@@ -235,7 +235,7 @@ module.exports = {
 
     // src/ can import from packages/ (consumption)
     {
-      from: { path: "^src/" },
+      from: { path: "^apps/web/src/" },
       to: { path: "^packages/" },
     },
 
@@ -253,8 +253,8 @@ module.exports = {
 
     // scripts → bootstrap (CLI wrappers that call job modules)
     {
-      from: { path: "^src/scripts" },
-      to: { path: ["^src/bootstrap"] },
+      from: { path: "^apps/web/src/scripts" },
+      to: { path: ["^apps/web/src/bootstrap"] },
     },
 
     // Files not in a known layer are caught by the forbidden `no-unknown-layer` rule below.
@@ -266,7 +266,7 @@ module.exports = {
       name: "no-unknown-src-layer",
       severity: "error",
       from: {
-        path: "^src",
+        path: "^apps/web/src",
         pathNot: knownSrcLayerPatterns,
       },
       to: {},
@@ -276,7 +276,7 @@ module.exports = {
     {
       severity: "error",
       from: {
-        path: "^src",
+        path: "^apps/web/src",
       },
       to: {
         path: "\\.\\./",
@@ -284,17 +284,21 @@ module.exports = {
     },
 
     // Entry point enforcement: block internal module imports
-    // ports: must use @/ports (index.ts), not internal port files
+    // ports: must use @/ports (index.ts) or @/ports/server.ts, not internal port files.
+    // index.ts is the client-safe surface; server.ts re-exports @cogni/scheduler-core
+    // which transitively uses node:util and must not enter client bundles.
+    // See bug.0147 for the environment-safe split rationale.
     {
       name: "no-internal-ports-imports",
       severity: "error",
       from: {
-        path: "^src/(?!ports/)",
+        path: "^apps/web/src/(?!ports/)",
       },
       to: {
-        path: "^src/ports/(?!index\\.ts$).*\\.ts$",
+        path: "^apps/web/src/ports/(?!index\\.ts$|server\\.ts$).*\\.ts$",
       },
-      comment: "Import from @/ports (index.ts), not internal port files",
+      comment:
+        "Import from @/ports (index.ts) or @/ports/server (server-only scheduler ports), not internal port files",
     },
 
     // core: must use @/core (public.ts), not internal core files
@@ -302,10 +306,10 @@ module.exports = {
       name: "no-internal-core-imports",
       severity: "error",
       from: {
-        path: "^src/(?!core/)",
+        path: "^apps/web/src/(?!core/)",
       },
       to: {
-        path: "^src/core/(?!public\\.ts$).*\\.ts$",
+        path: "^apps/web/src/core/(?!public\\.ts$).*\\.ts$",
       },
       comment: "Import from @/core (public.ts), not internal core files",
     },
@@ -320,16 +324,17 @@ module.exports = {
       name: "no-internal-adapter-imports",
       severity: "error",
       from: {
-        path: "^src/(?!adapters/server/)(?!auth\\.ts$)(?!bootstrap/container\\.ts$)(?!bootstrap/graph-executor\\.factory\\.ts$)(?!bootstrap/agent-discovery\\.ts$)(?!bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts$)",
+        path: "^apps/web/src/(?!adapters/server/)(?!auth\\.ts$)(?!bootstrap/container\\.ts$)(?!bootstrap/graph-executor\\.factory\\.ts$)(?!bootstrap/review-adapter\\.factory\\.ts$)(?!bootstrap/agent-discovery\\.ts$)(?!bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts$)",
       },
       to: {
-        path: "^src/adapters/server/(?!index\\.ts$).*\\.ts$",
+        path: "^apps/web/src/adapters/server/(?!index\\.ts$).*\\.ts$",
       },
       comment:
         "Import from @/adapters/server (index.ts), not internal adapter files. " +
         "Exempt: auth.ts (bootstrap), container.ts (trust boundaries), " +
         "graph-executor.factory.ts + agent-discovery.ts (sandbox subpath imports " +
         "to avoid Turbopack bundling dockerode native addon chain), " +
+        "review-adapter.factory.ts (wires review GitHub adapters), " +
         "syncGovernanceSchedules.job.ts (needs serviceDb for advisory lock).",
     },
 
@@ -338,10 +343,10 @@ module.exports = {
       name: "no-internal-test-adapter-imports",
       severity: "error",
       from: {
-        path: "^src/(?!adapters/test/)",
+        path: "^apps/web/src/(?!adapters/test/)",
       },
       to: {
-        path: "^src/adapters/test/(?!index\\.ts$).*\\.ts$",
+        path: "^apps/web/src/adapters/test/(?!index\\.ts$).*\\.ts$",
       },
       comment:
         "Import from @/adapters/test (index.ts), not internal test adapter files",
@@ -352,10 +357,10 @@ module.exports = {
       name: "no-internal-features-imports",
       severity: "error",
       from: {
-        path: "^src/(?!features/)",
+        path: "^apps/web/src/(?!features/)",
       },
       to: {
-        path: "^src/features/[^/]+/(mappers|utils|constants)/",
+        path: "^apps/web/src/features/[^/]+/(mappers|utils|constants)/",
       },
       comment:
         "Only import from features/*/services or features/*/components subdirectories",
@@ -368,10 +373,10 @@ module.exports = {
       name: "no-ai-facades-to-feature-services",
       severity: "error",
       from: {
-        path: "^src/app/_facades/ai/",
+        path: "^apps/web/src/app/_facades/ai/",
       },
       to: {
-        path: "^src/features/ai/services/",
+        path: "^apps/web/src/features/ai/services/",
       },
       comment:
         "AI app facades must import from features/ai/public.ts, not internal services",
@@ -389,7 +394,7 @@ module.exports = {
         path: "^packages/",
       },
       to: {
-        path: ["^src/", "^services/"],
+        path: ["^apps/web/src/", "^services/"],
       },
       comment:
         "packages/ must be standalone; cannot depend on src/ or services/",
@@ -403,7 +408,7 @@ module.exports = {
         path: "^services/",
       },
       to: {
-        path: "^src/",
+        path: "^apps/web/src/",
       },
       comment: "services/ cannot depend on Next.js app code in src/",
     },
@@ -413,7 +418,7 @@ module.exports = {
       name: "no-src-to-services",
       severity: "error",
       from: {
-        path: "^src/",
+        path: "^apps/web/src/",
       },
       to: {
         path: "^services/",
@@ -427,7 +432,7 @@ module.exports = {
       name: "no-deep-package-imports",
       severity: "error",
       from: {
-        path: "^src/",
+        path: "^apps/web/src/",
       },
       to: {
         path: "^packages/[^/]+/src/(?!index\\.ts$)",
@@ -511,7 +516,7 @@ module.exports = {
       name: "db-client-server-only",
       severity: "error",
       from: {
-        path: "^src/(features|components|core|styles|assets)/",
+        path: "^apps/web/src/(features|components|core|styles|assets)/",
       },
       to: {
         path: "^packages/db-client/",
@@ -526,8 +531,9 @@ module.exports = {
       name: "no-service-db-package-import",
       severity: "error",
       from: {
-        path: "^src/",
-        pathNot: "^src/adapters/server/db/drizzle\\.service-client\\.ts$",
+        path: "^apps/web/src/",
+        pathNot:
+          "^apps/web/src/adapters/server/db/drizzle\\.service-client\\.ts$",
       },
       to: {
         path: "^packages/db-client/(src|dist)/service\\.(ts|js)$",
@@ -542,12 +548,12 @@ module.exports = {
       name: "no-service-db-adapter-import",
       severity: "error",
       from: {
-        path: "^src/",
+        path: "^apps/web/src/",
         pathNot:
-          "^src/(auth\\.ts|bootstrap/container\\.ts|bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts)$",
+          "^apps/web/src/(auth\\.ts|bootstrap/container\\.ts|bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts)$",
       },
       to: {
-        path: "^src/adapters/server/db/drizzle\\.service-client\\.ts$",
+        path: "^apps/web/src/adapters/server/db/drizzle\\.service-client\\.ts$",
       },
       comment:
         "Only auth.ts, container.ts, and governance job may import the service-db adapter (BYPASSRLS singleton)",
@@ -640,6 +646,21 @@ module.exports = {
       },
       comment:
         "Per WORKER_NEVER_CONTROLS_SCHEDULES: worker executes workflows only, CRUD endpoints are schedule authority",
+    },
+
+    // scheduler-worker activities/workflows must dispatch allocators through
+    // attribution-pipeline-contracts, not import allocation.ts directly.
+    {
+      name: "no-worker-direct-ledger-allocation-subpath",
+      severity: "error",
+      from: {
+        path: "^services/scheduler-worker/src/(activities|workflows)/",
+      },
+      to: {
+        path: "^packages/attribution-ledger/src/allocation\\.ts$",
+      },
+      comment:
+        "Worker allocation must go through plugin registry dispatch, not direct ledger allocation imports",
     },
   ],
 };

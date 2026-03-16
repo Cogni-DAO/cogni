@@ -60,16 +60,16 @@ last_commit: 2a08b4e8
 
 ## Pointers
 
-| File / Resource                                   | Why it matters                                      |
-| ------------------------------------------------- | --------------------------------------------------- |
-| `work/items/task.0096.ledger-contracts-routes.md` | Full design, invariants, review feedback            |
-| `src/contracts/ledger.*.v1.contract.ts` (6 files) | Zod schemas — single source of truth for all shapes |
-| `src/app/api/v1/public/ledger/`                   | 3 public read routes (closed-only)                  |
-| `src/app/api/v1/ledger/`                          | 2 auth reads + 2 approver-gated writes              |
-| `src/app/api/v1/public/ledger/_lib/ledger-dto.ts` | BigInt/Date → string DTO mappers                    |
-| `src/app/api/v1/ledger/_lib/approver-guard.ts`    | Shared approver check for write routes              |
-| `src/shared/config/repoSpec.server.ts`            | `getLedgerApprovers()` with caching                 |
-| `tests/_fixtures/ledger/seed-ledger.ts`           | Factories + `seedClosedEpoch()` composite seeder    |
-| `tests/contract/app/ledger.*.test.ts` (3 files)   | Contract shape validation tests                     |
-| `packages/ledger-core/src/store.ts`               | `ActivityLedgerStore` port interface                |
-| `docs/spec/epoch-ledger.md`                       | Epoch ledger spec (referenced by `spec_refs`)       |
+| File / Resource                                        | Why it matters                                      |
+| ------------------------------------------------------ | --------------------------------------------------- |
+| `work/items/task.0096.ledger-contracts-routes.md`      | Full design, invariants, review feedback            |
+| `src/contracts/ledger.*.v1.contract.ts` (6 files)      | Zod schemas — single source of truth for all shapes |
+| `src/app/api/v1/public/attribution/`                   | 3 public read routes (closed-only)                  |
+| `src/app/api/v1/attribution/`                          | 2 auth reads + 2 approver-gated writes              |
+| `src/app/api/v1/public/attribution/_lib/ledger-dto.ts` | BigInt/Date → string DTO mappers                    |
+| `src/app/api/v1/attribution/_lib/approver-guard.ts`    | Shared approver check for write routes              |
+| `src/shared/config/repoSpec.server.ts`                 | `getLedgerApprovers()` with caching                 |
+| `tests/_fixtures/ledger/seed-ledger.ts`                | Factories + `seedClosedEpoch()` composite seeder    |
+| `tests/contract/app/ledger.*.test.ts` (3 files)        | Contract shape validation tests                     |
+| `packages/attribution-ledger/src/store.ts`             | `ActivityLedgerStore` port interface                |
+| `docs/spec/attribution-ledger.md`                      | Epoch ledger spec (referenced by `spec_refs`)       |

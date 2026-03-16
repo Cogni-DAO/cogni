@@ -8,7 +8,7 @@ summary: "Analysis of SourceCred's plugin architecture and OSS event ingestion t
 read_when: Designing the contribution ingestion pipeline, choosing between automated vs manual receipt creation, or evaluating SourceCred replacement.
 owner: derekg1729
 created: 2026-02-21
-verified: 2026-02-21
+verified: 2026-03-01
 tags: [governance, transparency, ingestion, research]
 ---
 
@@ -26,22 +26,23 @@ How should we ingest contribution events (GitHub PRs, reviews, Discord activity)
 
 **ai-governance-data.md** designs a complex CloudEvents → GovernanceBrief → LLM agent → EDO pipeline. It has 28 invariants, 6 ports, 4 tables, and 3 Temporal workflows — all before any contribution reaches a human reviewer. It's an autonomous governance agent system, not a contribution ingestion pipeline. The signal_events table, SignalWritePort, and SourceAdapter interface are useful patterns, but they're buried in an architecture whose primary purpose (LLM-generated governance briefs) is orthogonal to contribution tracking.
 
-**epoch-ledger.md** is the opposite: manually issued, wallet-signed receipts. The schema is solid and already implemented (6 tables, DB triggers, `packages/ledger-core/`). But it assumes a human creates every receipt by hand — no automated event ingestion. The P1 "automated issuance hooks" item acknowledges the gap but doesn't design it.
+**attribution-ledger.md** is the opposite: an epoch-based attribution system with deterministic statements and strong schema invariants. It already implements the storage and workflow backbone, but it originally left automated event ingestion and claimant-aware pending attribution underspecified.
 
 **The missing piece:** A plugin-based event ingestion layer that watches GitHub/Discord, normalizes events, and either (a) auto-creates draft receipts for human approval, or (b) feeds a contribution record that informs manual valuation decisions.
 
 ### What exists today
 
-| Layer                               | Status      | Location                                             |
-| ----------------------------------- | ----------- | ---------------------------------------------------- |
-| Ledger schema (6 tables)            | Done        | `src/adapters/server/db/migrations/0010_*`, `0011_*` |
-| Core domain (model, rules, signing) | Done        | `packages/ledger-core/src/`                          |
-| Temporal worker infrastructure      | Done        | `services/scheduler-worker/`                         |
-| SourceCred instance (standalone)    | Running     | `platform/infra/services/sourcecred/`                |
-| Billing/credit system               | Done        | `packages/db-schema/src/billing.ts`                  |
-| Governance status API               | Done        | `src/ports/governance-status.port.ts`                |
-| Ledger APIs/routes                  | Not started | task.0094–0096                                       |
-| Event ingestion pipeline            | Not started | (this research)                                      |
+| Layer                             | Status                 | Location                                            |
+| --------------------------------- | ---------------------- | --------------------------------------------------- |
+| Ledger schema + statement storage | Done                   | `packages/db-schema/src/attribution.ts`             |
+| Core attribution domain           | Done                   | `packages/attribution-ledger/src/`                  |
+| Temporal worker infrastructure    | Done                   | `services/scheduler-worker/`                        |
+| SourceCred instance (standalone)  | Running                | `infra/compose/sourcecred/`                         |
+| Billing/credit system             | Done                   | `packages/db-schema/src/billing.ts`                 |
+| Governance status API             | Done                   | `src/ports/governance-status.port.ts`               |
+| Attribution APIs/routes           | Done                   | `src/app/api/v1/attribution/`                       |
+| Claimant-aware read models        | Done                   | `src/app/_facades/attribution/`, `users/`           |
+| Event ingestion pipeline          | Implemented for GitHub | `services/scheduler-worker/src/adapters/ingestion/` |
 
 ---
 
@@ -278,7 +279,7 @@ SourceCred solves cross-platform identity via `Identity` + `Alias`. We need the 
 
 The existing `user_identity_bindings` schema (from proj.decentralized-identity / task.0089) handles this. Each binding maps a platform identity (`github:username`, `discord:snowflake`) to a `user_id`. Adapters look up bindings to resolve `userId` on draft receipts.
 
-**Unknown contributors:** If a GitHub PR author has no binding, the adapter can either skip (log warning) or create a receipt with a placeholder identity that gets resolved when the user links their account.
+**Unknown contributors:** If a GitHub actor has a stable external identity (for GitHub, numeric `databaseId`), the adapter should ingest the receipt and preserve that identity as an unresolved claimant until the user links. Only actors without a stable external identifier should be skipped.
 
 ---
 
@@ -326,7 +327,7 @@ The epoch ledger schema is already done and well-designed. Build source adapters
 
 2. **Discord: what counts as a contribution?** Messages in specific channels? Reactions? Thread participation? Recommend: defer Discord to P1 — start with GitHub only.
 
-3. **Unresolved identities:** What happens when a GitHub user has no cogni account? Skip? Create pending? Recommend: skip + log warning; receipt creation requires known `user_id`.
+3. **Unresolved identities:** What happens when a GitHub user has no cogni account? Current implementation ingests the receipt when a stable external identity exists, then carries it forward as claimant-aware pending attribution. Recommendation: keep this behavior; do not require known `user_id` at ingestion time.
 
 4. **Backfill strategy:** Should opening an epoch trigger a historical backfill of recent activity? Or is it purely forward-looking from the webhook/poll cursor? Recommend: forward-looking only for V0; backfill as opt-in P1 feature.
 
@@ -344,9 +345,9 @@ No new project needed. This extends **proj.transparent-credit-payouts** as a P1 
 
 ### Spec Updates
 
-1. **epoch-ledger.md** — Add a section on automated receipt ingestion via source adapters. Define the adapter interface. Note that draft receipts have `valuation_units = 0`.
+1. **attribution-ledger.md** — Add a section on automated receipt ingestion via source adapters. Define the adapter interface. Document unresolved identities as preserved claimants, not skipped receipts.
 
-2. **ai-governance-data.md** — Add a note clarifying that this spec is for autonomous governance agents, not contribution ingestion. Cross-reference the epoch-ledger spec for the contribution pipeline.
+2. **ai-governance-data.md** — Add a note clarifying that this spec is for autonomous governance agents, not contribution ingestion. Cross-reference the attribution-ledger spec for the contribution pipeline.
 
 ### Likely Tasks (P1, after ledger APIs ship)
 
@@ -373,7 +374,7 @@ No new project needed. This extends **proj.transparent-credit-payouts** as a P1 
 
 ## Related
 
-- [epoch-ledger spec](../spec/epoch-ledger.md) — V0 ledger schema and invariants
+- [attribution-ledger spec](../spec/attribution-ledger.md) — V0 attribution schema and invariants
 - [ai-governance-data spec](../spec/ai-governance-data.md) — Autonomous governance agent pipeline (separate concern)
 - [proj.transparent-credit-payouts](../../work/projects/proj.transparent-credit-payouts.md) — Project roadmap
 - [transparency-log-receipt-design](./transparency-log-receipt-design.md) — Original spike.0082 research

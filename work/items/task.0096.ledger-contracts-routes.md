@@ -6,7 +6,7 @@ status: done
 priority: 1
 rank: 5
 estimate: 2
-summary: "Define 6 Zod contracts, implement 4 public read routes (under /api/v1/public/ledger/) and 2 SIWE-protected write routes (under /api/v1/ledger/), with stack tests. Deferred: collect trigger, finalize, verify, close-ingestion, sign."
+summary: "Define 6 Zod contracts, implement 4 public read routes (under /api/v1/public/attribution/) and 2 SIWE-protected write routes (under /api/v1/attribution/), with stack tests. Deferred: collect trigger, finalize, verify, close-ingestion, sign."
 outcome: "Frontend can display current epoch, past epochs with allocations, and payout statements. Admins can adjust allocations and record pool components via API."
 spec_refs: epoch-ledger-spec
 assignees: derekg1729
@@ -38,7 +38,7 @@ Public visitors can see finalized epoch results (closed epochs, allocations, sta
 
 ### Approach
 
-**Solution**: 6 Zod contracts defining ledger API shapes. 3 public read routes (closed-epoch data only, under `/api/v1/public/ledger/`), 1 authenticated read route (activity with PII, under `/api/v1/ledger/`), and 2 approver-gated write routes (under `/api/v1/ledger/`). Routes are thin HTTP handlers that validate with contracts, resolve `activityLedgerStore` from container, query with `getNodeId()`, and return validated output.
+**Solution**: 6 Zod contracts defining ledger API shapes. 3 public read routes (closed-epoch data only, under `/api/v1/public/attribution/`), 1 authenticated read route (activity with PII, under `/api/v1/attribution/`), and 2 approver-gated write routes (under `/api/v1/attribution/`). Routes are thin HTTP handlers that validate with contracts, resolve `activityLedgerStore` from container, query with `getNodeId()`, and return validated output.
 
 **Public vs Authenticated split** — Raw activity streams expose platformUserId/platformLogin/artifactUrl/metadata — PII-adjacent, scrapeable, harassment-bait. Transparency is satisfied by publishing closed-epoch allocations + statements.
 
@@ -60,7 +60,7 @@ Public visitors can see finalized epoch results (closed epochs, allocations, sta
 
 **Reuses**:
 
-- Existing `ActivityLedgerStore` port — all read methods already implemented in `DrizzleLedgerAdapter`
+- Existing `ActivityLedgerStore` port — all read methods already implemented in `DrizzleAttributionAdapter`
 - Existing `getContainer().activityLedgerStore` — wired in bootstrap
 - Existing `getNodeId()` from `@/shared/config` — provides node_id for all queries
 - Existing `wrapRouteHandlerWithLogging` — auth + logging + error handling
@@ -102,9 +102,9 @@ No stub files created for deferred routes. Contracts and route handlers are adde
 
 ### API Contracts
 
-#### Read Routes (public — under `/api/v1/public/ledger/`)
+#### Read Routes (public — under `/api/v1/public/attribution/`)
 
-**1. `GET /api/v1/public/ledger/epochs`** — List all epochs
+**1. `GET /api/v1/public/attribution/epochs`** — List all epochs
 
 ```typescript
 // ledger.list-epochs.v1.contract.ts
@@ -126,9 +126,9 @@ const EpochSchema = z.object({
 // Output: { epochs: EpochSchema[], total: number }
 ```
 
-Note: `status` enum matches the current `EpochStatus = "open" | "closed"` from `packages/ledger-core/src/model.ts`. When task.0100 implements 3-phase lifecycle, the model AND this contract are updated together.
+Note: `status` enum matches the current `EpochStatus = "open" | "closed"` from `packages/attribution-ledger/src/model.ts`. When task.0100 implements 3-phase lifecycle, the model AND this contract are updated together.
 
-**2. `GET /api/v1/public/ledger/epochs/[id]/activity`** — Activity events for epoch
+**2. `GET /api/v1/public/attribution/epochs/[id]/activity`** — Activity events for epoch
 
 ```typescript
 // ledger.epoch-activity.v1.contract.ts
@@ -157,7 +157,7 @@ const ActivityEventSchema = z.object({
 
 Implementation: Load epoch → `getActivityForWindow(nodeId, periodStart, periodEnd)` + `getCurationForEpoch(epochId)` → join by eventId in handler → apply `offset`/`limit` via `slice()`.
 
-**3. `GET /api/v1/public/ledger/epochs/[id]/allocations`** — Proposed + final allocations
+**3. `GET /api/v1/public/attribution/epochs/[id]/allocations`** — Proposed + final allocations
 
 ```typescript
 // ledger.epoch-allocations.v1.contract.ts
@@ -174,11 +174,11 @@ const AllocationSchema = z.object({
 // Output: { allocations: AllocationSchema[], epochId: z.string() }
 ```
 
-**4. `GET /api/v1/public/ledger/epochs/[id]/statement`** — Payout statement
+**4. `GET /api/v1/public/attribution/epochs/[id]/statement`** — Payout statement
 
 ```typescript
 // ledger.epoch-statement.v1.contract.ts
-const PayoutLineSchema = z.object({
+const StatementLineItemSchema = z.object({
   user_id: z.string(),
   total_units: z.string(),
   share: z.string(),
@@ -189,16 +189,16 @@ const StatementSchema = z.object({
   epochId: z.string(),
   allocationSetHash: z.string(),
   poolTotalCredits: z.string(),
-  payouts: z.array(PayoutLineSchema),
+  payouts: z.array(StatementLineItemSchema),
   supersedesStatementId: z.string().nullable(),
   createdAt: z.string().datetime(),
 });
 // Output: { statement: StatementSchema | null } (200 always, null = no statement yet)
 ```
 
-#### Write Routes (SIWE-protected — under `/api/v1/ledger/`)
+#### Write Routes (SIWE-protected — under `/api/v1/attribution/`)
 
-**5. `PATCH /api/v1/ledger/epochs/[id]/allocations`** — Adjust final_units
+**5. `PATCH /api/v1/attribution/epochs/[id]/allocations`** — Adjust final_units
 
 ```typescript
 // ledger.update-allocations.v1.contract.ts
@@ -216,7 +216,7 @@ const UpdateAllocationInputSchema = z.object({
 
 Implementation: Parse epoch ID from URL, call `updateAllocationFinalUnits()` for each adjustment. Verify epoch exists and is `open` (or `review` once task.0100 lands).
 
-**6. `POST /api/v1/ledger/epochs/[id]/pool-components`** — Record pool component
+**6. `POST /api/v1/attribution/epochs/[id]/pool-components`** — Record pool component
 
 ```typescript
 // ledger.record-pool-component.v1.contract.ts
@@ -271,14 +271,14 @@ Routes parse string → BigInt for store calls, and BigInt → string for respon
 - `src/contracts/ledger.epoch-statement.v1.contract.ts` — Payout statement output schema
 - `src/contracts/ledger.update-allocations.v1.contract.ts` — Allocation adjustment input schema
 - `src/contracts/ledger.record-pool-component.v1.contract.ts` — Pool component input/output schema
-- `src/app/api/v1/public/ledger/epochs/route.ts` — GET list (public, closed only)
-- `src/app/api/v1/public/ledger/epochs/[id]/allocations/route.ts` — GET allocations (public, closed only)
-- `src/app/api/v1/public/ledger/epochs/[id]/statement/route.ts` — GET statement (public)
-- `src/app/api/v1/ledger/epochs/route.ts` — GET list (authenticated, all epochs)
-- `src/app/api/v1/ledger/epochs/[id]/activity/route.ts` — GET activity (authenticated, PII)
-- `src/app/api/v1/ledger/epochs/[id]/allocations/route.ts` — PATCH allocations (approver-gated)
-- `src/app/api/v1/ledger/epochs/[id]/pool-components/route.ts` — POST pool component (approver-gated)
-- `src/app/api/v1/ledger/_lib/approver-guard.ts` — Shared approver check utility
+- `src/app/api/v1/public/attribution/epochs/route.ts` — GET list (public, closed only)
+- `src/app/api/v1/public/attribution/epochs/[id]/allocations/route.ts` — GET allocations (public, closed only)
+- `src/app/api/v1/public/attribution/epochs/[id]/statement/route.ts` — GET statement (public)
+- `src/app/api/v1/attribution/epochs/route.ts` — GET list (authenticated, all epochs)
+- `src/app/api/v1/attribution/epochs/[id]/activity/route.ts` — GET activity (authenticated, PII)
+- `src/app/api/v1/attribution/epochs/[id]/allocations/route.ts` — PATCH allocations (approver-gated)
+- `src/app/api/v1/attribution/epochs/[id]/pool-components/route.ts` — POST pool component (approver-gated)
+- `src/app/api/v1/attribution/_lib/approver-guard.ts` — Shared approver check utility
 
 **Test:**
 
@@ -298,7 +298,7 @@ Routes parse string → BigInt for store calls, and BigInt → string for respon
 Read routes use `wrapPublicRoute` (rate-limited, no auth, under `/api/v1/public/`). Write routes use `wrapRouteHandlerWithLogging({ auth: { mode: "required" } })` (under `/api/v1/`).
 
 ```typescript
-// src/app/api/v1/public/ledger/epochs/route.ts
+// src/app/api/v1/public/attribution/epochs/route.ts
 import { getContainer } from "@/bootstrap/container";
 import { wrapPublicRoute } from "@/bootstrap/http";
 import { getNodeId } from "@/shared/config";
@@ -333,7 +333,7 @@ export const GET = wrapPublicRoute(
 BigInt/Date → string conversion in a shared mapper (inline in route file or a small `_lib/ledger-dto.ts`):
 
 ```typescript
-function toEpochDto(e: LedgerEpoch) {
+function toEpochDto(e: AttributionEpoch) {
   return {
     id: e.id.toString(),
     status: e.status,
@@ -374,7 +374,7 @@ const enriched = events.map((e) => ({
 
 - [x] Define 6 Zod contract files in `src/contracts/ledger.*.v1.contract.ts`
 - [ ] Add `ledger.approvers` to repo-spec schema + yaml + `getLedgerApprovers()` helper
-- [ ] Create route directory structure under `src/app/api/v1/public/ledger/` (public closed reads) and `src/app/api/v1/ledger/` (auth reads + writes)
+- [ ] Create route directory structure under `src/app/api/v1/public/attribution/` (public closed reads) and `src/app/api/v1/attribution/` (auth reads + writes)
 - [ ] Implement 3 public read routes: list-epochs (closed only, paginated), allocations (closed only), statement
 - [ ] Implement 1 authenticated read route: activity (paginated, hard-cap 500)
 - [ ] Implement 1 authenticated read route: list-epochs (all, paginated)
@@ -398,7 +398,7 @@ pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts tests/st
 - [ ] **Spec:** NODE_SCOPED, ALL_MATH_BIGINT upheld
 - [ ] **Contracts:** 6 defined, shapes match spec schema + current EpochStatus model
 - [ ] **BigInt:** Serialized as strings in all JSON responses
-- [ ] **Auth namespace:** Read routes under `/api/v1/public/ledger/` (wrapPublicRoute), write routes under `/api/v1/ledger/` (SIWE)
+- [ ] **Auth namespace:** Read routes under `/api/v1/public/attribution/` (wrapPublicRoute), write routes under `/api/v1/attribution/` (SIWE)
 - [ ] **Pagination:** list-epochs and epoch-activity support `?limit=N&offset=M`
 - [ ] **No stubs:** No 501 route files — deferred features have no files
 - [ ] **Tests:** Stack test covers read routes with seeded data

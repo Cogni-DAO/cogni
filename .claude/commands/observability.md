@@ -34,7 +34,7 @@ Goal: add **minimal, high-signal** logging/metrics for the changes in this branc
 - Add a metric only if you will **alert/graph** it.
 - Default: do **not** add feature metrics if existing `http_*` already covers the endpoint.
 - Services with their own `/metrics` endpoint (e.g., scheduler-worker) define metrics in `src/observability/metrics.ts`. Check if the service already has a Prometheus registry before adding new metrics.
-- Verify the service's `/metrics` is scraped in `platform/infra/services/runtime/configs/alloy-config.metrics.alloy`. If not, add a `prometheus.scrape` block.
+- Verify the service's `/metrics` is scraped in `infra/compose/configs/alloy-config.metrics.alloy`. If not, add a `prometheus.scrape` block.
 - Allowed labels only: `route`, `method`, `statusBucket`, `env`, `provider`, `model_class`, `error_code`, `activity`, `task_queue`.
 - Forbidden labels: `reqId`, `userId`, wallet, API key, raw path/query, user agent, modelId.
 

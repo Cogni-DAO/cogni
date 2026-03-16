@@ -118,16 +118,16 @@ Compose `deploy.resources.limits` requires Swarm mode and is silently ignored by
 
 ### File Pointers
 
-| File                                                                 | Purpose                                                                   |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `src/shared/observability/server/metrics.ts`                         | Prometheus registry, process metrics, heartbeat gauge                     |
-| `platform/infra/services/runtime/docker-compose.yml`                 | Production resource limits, Alloy health check, host mounts for exporters |
-| `platform/infra/services/runtime/docker-compose.dev.yml`             | Dev resource limits, Alloy health check, host mounts for exporters        |
-| `platform/infra/services/runtime/configs/alloy-config.metrics.alloy` | cAdvisor + node exporter + metric allowlist + log noise suppression       |
-| `platform/infra/services/runtime/configs/alloy-config.alloy`         | Log noise suppression (dev parity)                                        |
-| `Dockerfile`                                                         | HEALTHCHECK timeout configuration                                         |
-| `src/app/(infra)/readyz/route.ts`                                    | Readiness probe with dependency checks                                    |
-| `src/app/(infra)/livez/route.ts`                                     | Liveness probe (dependency-free)                                          |
+| File                                               | Purpose                                                                   |
+| -------------------------------------------------- | ------------------------------------------------------------------------- |
+| `src/shared/observability/server/metrics.ts`       | Prometheus registry, process metrics, heartbeat gauge                     |
+| `infra/compose/runtime/docker-compose.yml`         | Production resource limits, Alloy health check, host mounts for exporters |
+| `infra/compose/runtime/docker-compose.dev.yml`     | Dev resource limits, Alloy health check, host mounts for exporters        |
+| `infra/compose/configs/alloy-config.metrics.alloy` | cAdvisor + node exporter + metric allowlist + log noise suppression       |
+| `infra/compose/configs/alloy-config.alloy`         | Log noise suppression (dev parity)                                        |
+| `Dockerfile`                                       | HEALTHCHECK timeout configuration                                         |
+| `src/app/(infra)/readyz/route.ts`                  | Readiness probe with dependency checks                                    |
+| `src/app/(infra)/livez/route.ts`                   | Liveness probe (dependency-free)                                          |
 
 ## Acceptance Checks
 

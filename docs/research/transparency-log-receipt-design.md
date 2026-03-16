@@ -32,7 +32,7 @@ CogniDAO currently uses SourceCred for contribution scoring (graph-based PageRan
 
 - **Billing schema** (`packages/db-schema/src/billing.ts`): `charge_receipts` table with FK to `billing_accounts`, run-level grouping via `run_id`, idempotency via `(source_system, source_reference)` UNIQUE index. `credit_ledger` is append-only with `balance_after` tracking.
 - **Governance runs**: Temporal-scheduled, OpenClaw-executed. Approval is via EDO (Executive Decision Object) records in `memory/EDO/`. System tenant (`cogni_system`) acts as the execution principal.
-- **SourceCred**: Config at `platform/infra/services/sourcecred/instance/config/`. Weights: PR=8, Review=2, Issue=1, Comment=0.5. Two allocation policies: RECENT (60% discount) + BALANCED. No on-chain distribution in template.
+- **SourceCred**: Config at `infra/compose/sourcecred/instance/config/`. Weights: PR=8, Review=2, Issue=1, Comment=0.5. Two allocation policies: RECENT (60% discount) + BALANCED. No on-chain distribution in template.
 - **Signing**: `viem` 2.39.3 and `ethers` 5.7.2 available. No signing utilities in `src/` yet — all payment verification is read-only RPC. Viem provides `signMessage()` (EIP-191) and `signTypedData()` (EIP-712).
 - **Identity**: Wallet address → user UUID → billing account UUID. DID migration planned (proj.decentralized-identity) but not blocking P0.
 

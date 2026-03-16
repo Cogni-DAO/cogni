@@ -23,17 +23,17 @@ Give OpenClaw gateway agent read-only access to the git-synced codebase (`repo_d
 
 ## Key Files
 
-| File                                                     | What changed / why it matters                                                     |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `platform/infra/services/runtime/docker-compose.dev.yml` | `openclaw-gateway` service — volumes, tmpfs, depends_on                           |
-| `services/sandbox-openclaw/openclaw-gateway.json`        | OpenClaw agent config — `workspace: "/repo/current"`                              |
-| `src/adapters/server/sandbox/sandbox-graph.provider.ts`  | Ephemeral mode `runOnce()` — `volumes` field now wired                            |
-| `src/ports/sandbox-runner.port.ts`                       | `SandboxVolumeMount` interface (lines 34-41), `SandboxRunSpec.volumes` (line 100) |
-| `src/adapters/server/sandbox/sandbox-runner.adapter.ts`  | Lines 170-178 — handles `spec.volumes` → Docker MountSettings                     |
-| `tests/stack/sandbox/sandbox-openclaw.stack.test.ts`     | Stack tests for repo mount + workspace                                            |
-| `tests/_fixtures/sandbox/fixtures.ts`                    | `execInContainer()` shared helper                                                 |
-| `work/items/task.0009.sandbox-repo-refresh.md`           | P1 task: on-demand git-sync refresh + port contract tightening                    |
-| `docs/spec/git-sync-repo-mount.md`                       | Git-sync spec (boot sequence, UID alignment)                                      |
+| File                                                    | What changed / why it matters                                                     |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `infra/compose/docker-compose.dev.yml`                  | `openclaw-gateway` service — volumes, tmpfs, depends_on                           |
+| `services/sandbox-openclaw/openclaw-gateway.json`       | OpenClaw agent config — `workspace: "/repo/current"`                              |
+| `src/adapters/server/sandbox/sandbox-graph.provider.ts` | Ephemeral mode `runOnce()` — `volumes` field now wired                            |
+| `src/ports/sandbox-runner.port.ts`                      | `SandboxVolumeMount` interface (lines 34-41), `SandboxRunSpec.volumes` (line 100) |
+| `src/adapters/server/sandbox/sandbox-runner.adapter.ts` | Lines 170-178 — handles `spec.volumes` → Docker MountSettings                     |
+| `tests/stack/sandbox/sandbox-openclaw.stack.test.ts`    | Stack tests for repo mount + workspace                                            |
+| `tests/_fixtures/sandbox/fixtures.ts`                   | `execInContainer()` shared helper                                                 |
+| `work/items/task.0009.sandbox-repo-refresh.md`          | P1 task: on-demand git-sync refresh + port contract tightening                    |
+| `docs/spec/git-sync-repo-mount.md`                      | Git-sync spec (boot sequence, UID alignment)                                      |
 
 ## Critical Context
 

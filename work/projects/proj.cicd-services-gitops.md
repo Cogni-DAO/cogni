@@ -29,10 +29,12 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 | Deliverable                                                               | Status | Est | Work Item |
 | ------------------------------------------------------------------------- | ------ | --- | --------- |
 | Canonical `pnpm packages:build` (tsup + tsc -b + validation)              | Done   | 1   | —         |
-| Manifest-first Docker layering for cache optimization                     | Done   | 1   | —         |
+| Manifest-first Docker layering for cache optimization (app)               | Done   | 1   | —         |
+| Manifest-first Docker layering for cache optimization (scheduler-worker)  | Done   | 2   | task.0160 |
 | `check:full` local CI-parity gate with trap-based cleanup                 | Done   | 1   | —         |
 | `validate-dsns.sh` for runtime DSN isolation                              | Done   | 1   | —         |
 | Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done   | 1   | —         |
+| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | Done   | 5   | task.0151 |
 
 ### Walk (P1) — DSN-Only Provisioning & Build Improvements
 
@@ -52,16 +54,18 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 
 **Goal:** 3 DSNs are the only database secrets; builds are graph-scoped; check:full is fully featured.
 
-| Deliverable                                                                                                                                                                                                                 | Status      | Est | Work Item            |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| Delete `APP_DB_*` secrets from GitHub                                                                                                                                                                                       | Not Started | 1   | (create at P2 start) |
-| Delete `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD` secrets from GitHub                                                                                                                                                   | Not Started | 1   | (create at P2 start) |
-| Update docs: "Only 3 DSNs exist"                                                                                                                                                                                            | Not Started | 1   | (create at P2 start) |
-| Add `DATABASE_ROOT_URL` to INFRASTRUCTURE_SETUP.md secret table                                                                                                                                                             | Not Started | 1   | (create at P2 start) |
-| Graph-scoped builds: adopt `turbo prune --docker` or `pnpm deploy` for minimal build context (currently builds all packages even if app doesn't depend on them — acceptable for 2 packages, revisit if package count grows) | Not Started | 3   | (create at P2 start) |
-| App as workspace package: move app to `apps/web` for proper filter targeting (`pnpm --filter web... build`)                                                                                                                 | Not Started | 2   | (create at P2 start) |
-| `check:full --watch`: re-run on file changes                                                                                                                                                                                | Not Started | 2   | (create at P2 start) |
-| Parallel test execution in check:full (once isolation is proven stable)                                                                                                                                                     | Not Started | 2   | (create at P2 start) |
+| Deliverable                                                                                                                                                                                                                                                                                                                                         | Status      | Est | Work Item                   |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------------------------- |
+| Delete `APP_DB_*` secrets from GitHub                                                                                                                                                                                                                                                                                                               | Not Started | 1   | (create at P2 start)        |
+| Delete `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD` secrets from GitHub                                                                                                                                                                                                                                                                           | Not Started | 1   | (create at P2 start)        |
+| Update docs: "Only 3 DSNs exist"                                                                                                                                                                                                                                                                                                                    | Not Started | 1   | (create at P2 start)        |
+| Add `DATABASE_ROOT_URL` to INFRASTRUCTURE_SETUP.md secret table                                                                                                                                                                                                                                                                                     | Not Started | 1   | (create at P2 start)        |
+| Graph-scoped builds: adopt `pnpm deploy` for service Dockerfiles — eliminates fragile multi-COPY symlink approach. Root `package.json` currently lists all `@cogni/*` workspace packages as deps to ensure pnpm creates root-level symlinks needed by the scheduler-worker Dockerfile (task.0151 workaround). `pnpm deploy` resolves this properly. | Not Started | 3   | (create at P2 start)        |
+| App as workspace package: move app to `apps/web` for proper filter targeting (`pnpm --filter web... build`)                                                                                                                                                                                                                                         | Not Started | 2   | — (superseded by task.0151) |
+| `check:full --watch`: re-run on file changes                                                                                                                                                                                                                                                                                                        | Not Started | 2   | (create at P2 start)        |
+| Parallel test execution in check:full (once isolation is proven stable)                                                                                                                                                                                                                                                                             | Not Started | 2   | (create at P2 start)        |
+
+| Test architecture: `tests/_fakes/` and `tests/_fixtures/` import `@/` app code — they're app-owned, not shared. Either move into `apps/web/tests/` or extract truly shared parts into a test utils package. Same coupling affects stack/external tests. Root `tests/` should be free of `@/` imports. | Not Started | 3 | (create at P2 start) |
 
 ### Future — IaC Lane
 
@@ -109,18 +113,20 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Deliverable                                                                    | Status      | Est | Work Item |
 | ------------------------------------------------------------------------------ | ----------- | --- | --------- |
 | Extend digest-driven deploy to app+migrator                                    | Not Started | 1   | —         |
-| Create `cogni-deployments` repo (or `deployments/` monorepo dir)               | Not Started | 2   | —         |
-| Write Kustomize base for scheduler-worker (`base/scheduler-worker/`)           | Not Started | 1   | —         |
-| Create overlays: `overlays/staging/`, `overlays/production/`                   | Not Started | 1   | —         |
-| OpenTofu: Provision k3s cluster (single node MVP)                              | Not Started | 2   | —         |
-| Install Argo CD on k3s                                                         | Not Started | 1   | —         |
-| Argo app-of-apps or ApplicationSet pattern for multi-service management        | Not Started | 2   | —         |
-| Promotion flow: PR to change image digest in overlay → Argo syncs              | Not Started | 1   | —         |
-| Kustomize images use `@sha256:` digests                                        | Not Started | 1   | —         |
-| Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Not Started | 2   | —         |
+| Create `infra/cd/` dir with Kustomize bases+overlays                           | Done        | 3   | task.0148 |
+| Write Kustomize base for scheduler-worker (`base/scheduler-worker/`)           | Done        | ↑   | task.0148 |
+| Create overlays: `overlays/staging/`, `overlays/production/`                   | Done        | ↑   | task.0148 |
+| Argo app-of-apps pattern for multi-service management                          | Done        | ↑   | task.0148 |
+| Kustomize images use `@sha256:` digests                                        | Done        | ↑   | task.0148 |
+| Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Done        | ↑   | task.0148 |
+| OpenTofu: k3s module extending Cherry Servers provider                         | Done        | ↑   | task.0148 |
+| OpenTofu: Provision k3s cluster (single node MVP)                              | Not Started | 3   | task.0149 |
+| Install Argo CD on k3s                                                         | Not Started | ↑   | task.0149 |
+| Migrate scheduler-worker from Compose to k3s                                   | Not Started | ↑   | task.0149 |
+| Promotion flow: PR to change image digest in overlay → Argo syncs              | Not Started | ↑   | task.0149 |
 | Storage plan: PVCs for stateful deps (postgres data), backup strategy          | Not Started | 2   | —         |
-| ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | 1   | —         |
-| Retire SSH deploy for services (keep for app until P2)                         | Not Started | 1   | —         |
+| ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | ↑   | task.0149 |
+| Retire SSH deploy for services (keep for app until P2)                         | Not Started | ↑   | task.0149 |
 
 #### P2: Supply Chain + Progressive Delivery
 
@@ -133,7 +139,61 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Optional: Argo Rollouts for canary/blue-green        | Not Started | 2   | —         |
 | Migrate Next.js app to k3s (retire Compose entirely) | Not Started | 3   | —         |
 
-#### P3: CI Portability (Dagger)
+#### P3: Scaling Infrastructure
+
+**Goal:** Escape hatches for hypergrowth. Move from single-node self-hosted to horizontally scalable managed infrastructure. **Trigger:** Do NOT build preemptively — activate when load signals hit thresholds below.
+
+| Deliverable                                                          | Status      | Est | Trigger                                           | Work Item |
+| -------------------------------------------------------------------- | ----------- | --- | ------------------------------------------------- | --------- |
+| Horizontal Pod Autoscaler (HPA) for scheduler-worker + app           | Not Started | 2   | >10 concurrent LLM requests per replica           | —         |
+| Multi-node k3s cluster (add worker nodes via OpenTofu)               | Not Started | 2   | Single-node CPU >70% sustained 30min              | —         |
+| Managed Postgres migration (Neon/RDS/Supabase)                       | Not Started | 3   | >100 concurrent DB connections OR backup pain     | —         |
+| LiteLLM horizontal scaling (multiple replicas behind K8s Service)    | Not Started | 2   | LLM queue depth >50 OR p99 latency >30s           | —         |
+| CDN + global load balancer (Cloudflare in front of k8s Ingress)      | Not Started | 2   | Geographic latency complaints OR >1000 req/s      | —         |
+| Managed Kubernetes migration (k3s → EKS/GKE)                         | Not Started | 3   | Multi-node k3s operational burden OR >5 nodes     | —         |
+| Temporal Cloud migration (self-hosted → Temporal Cloud)              | Not Started | 2   | >1000 workflows/day OR Temporal ops burden        | —         |
+| External Secrets Operator (ESO → Vault/GCP Secret Manager)           | Not Started | 2   | Multi-cluster OR secret rotation requirement      | —         |
+| Queue-based LLM decoupling (HTTP intake → queue → worker → callback) | Not Started | 3   | LLM calls >30s blocking HTTP connections at scale | —         |
+| **Ephemeral preview environments (per-branch)** — see below          | Not Started | 5   | >3 concurrent feature branches needing validation | —         |
+
+**Key principle:** Kustomize manifests written in P1 are portable — same bases work on k3s, EKS, and GKE. Argo CD works everywhere. No migration rewrites, only overlay changes.
+
+##### Ephemeral Preview Environments
+
+**Goal:** Every feature branch gets an isolated, short-lived deployment for both AI and human validation. Critical for rapid iteration at scale with multiple developers and AI agents working concurrently.
+
+**Current state:** Single `staging` preview environment. Feature branches are only validated in CI (static tests + stack tests). No live preview until merge to staging.
+
+**Target state:** `feat/xyz` push → CI builds image → Argo CD creates ephemeral namespace → live preview at `feat-xyz.preview.domain` → PR merged or closed → namespace garbage-collected.
+
+| Component               | Approach                                                                                     |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| **Namespace isolation** | Argo CD ApplicationSet with `pullRequest` generator — auto-creates apps per open PR          |
+| **Preview URL routing** | Wildcard DNS (`*.preview.domain`) + k8s Ingress per namespace (Caddy or nginx-ingress)       |
+| **Database isolation**  | Ephemeral Postgres per preview (Neon branching, or lightweight PG container per namespace)   |
+| **Shared infra**        | Temporal + LiteLLM shared across previews (namespaced by branch name)                        |
+| **Lifecycle**           | TTL-based cleanup — Argo CD prunes namespace when PR closes or after 48h inactivity          |
+| **AI validation**       | OpenClaw agent runs E2E/smoke tests against preview URL, posts results to PR                 |
+| **Human validation**    | PR comment with preview URL, deployed status badge, one-click access                         |
+| **Cost control**        | Resource quotas per namespace, auto-scale-to-zero after 30min idle (KEDA or kube-downscaler) |
+| **Branch management**   | Argo CD ApplicationSet handles fan-out; no manual branch→env mapping                         |
+
+**Why this matters for AI-driven development:** When AI agents are creating PRs at high velocity, each PR needs a live environment for validation — not just CI tests. The AI agent can hit the preview API, run behavioral checks, and self-approve or flag issues before human review. This closes the feedback loop from "code pushed" to "validated in production-like env" in minutes.
+
+**Scaling decision tree:**
+
+```
+Load increasing?
+  ├─ CPU bound → Add k3s worker nodes (OpenTofu) + HPA
+  ├─ DB bound  → Managed Postgres (connection pooling, read replicas)
+  ├─ LLM bound → LiteLLM replicas + request queue
+  ├─ Ops burden → Managed k8s (EKS/GKE) + Temporal Cloud
+  └─ Global    → Cloudflare + multi-region (only if latency matters)
+```
+
+#### P4: CI Portability (Dagger)
+
+> _Previously P3. Renumbered after P3 Scaling insertion._
 
 **Goal:** Pipelines-as-code. Avoids GitHub Actions vendor lock-in. **Scope:** Dagger = CI (build/test/push). ArgoCD = CD (state reconciliation). Do NOT use Dagger for push-based deploy.
 
@@ -146,7 +206,7 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Simplify GitHub Actions to thin wrappers (`dagger call build`, `dagger call test`)             | Not Started | 1   | —         |
 | Validate: Same pipeline runs locally and in CI                                                 | Not Started | 1   | —         |
 
-#### P4: CI Acceleration (NX)
+#### P5: CI Acceleration (NX)
 
 **Goal:** Optimize CI task selection/caching. Only after CD is stable. **Why deferred:** NX solves CI time/cost, not deployment correctness. GitOps must be stable first.
 

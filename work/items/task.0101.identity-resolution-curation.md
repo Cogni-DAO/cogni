@@ -6,7 +6,7 @@ status: done
 priority: 1
 rank: 7
 estimate: 2
-summary: "Implement curateAndResolve activity (auto-create curation rows from events, resolve GitHub platform_user_id → user_id via user_bindings), add resolveIdentities to store port + DrizzleLedgerAdapter, wire into CollectEpochWorkflow."
+summary: "Implement curateAndResolve activity (auto-create curation rows from events, resolve GitHub platform_user_id → user_id via user_bindings), add resolveIdentities to store port + DrizzleAttributionAdapter, wire into CollectEpochWorkflow."
 outcome: "After each collection run, curation rows exist for every activity event. GitHub platformUserId resolved to user_id via user_bindings (best-effort — unresolved events flagged with user_id=NULL). Allocation computation can read curated events."
 spec_refs: epoch-ledger-spec
 assignees: derekg1729
@@ -102,8 +102,8 @@ This requires a new store method (`updateCurationUserId`) or a targeted SQL upda
 
 **Modify:**
 
-- `packages/ledger-core/src/store.ts` — Add `resolveIdentities(provider, externalIds)` and `getUncuratedEvents(epochId, periodStart, periodEnd)` and `updateCurationUserId(epochId, eventId, userId)` to `ActivityLedgerStore` interface
-- `packages/db-client/src/adapters/drizzle-ledger.adapter.ts` — Implement all three: import `userBindings` from `@cogni/db-schema/identity`
+- `packages/attribution-ledger/src/store.ts` — Add `resolveIdentities(provider, externalIds)` and `getUncuratedEvents(epochId, periodStart, periodEnd)` and `updateCurationUserId(epochId, eventId, userId)` to `ActivityLedgerStore` interface
+- `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — Implement all three: import `userBindings` from `@cogni/db-schema/identity`
 - `services/scheduler-worker/src/activities/ledger.ts` — Add `curateAndResolve` activity + types
 - `services/scheduler-worker/src/workflows/collect-epoch.workflow.ts` — Add step 5: proxy + call `curateAndResolve`
 
@@ -116,7 +116,7 @@ This requires a new store method (`updateCurationUserId`) or a targeted SQL upda
 #### New Store Methods
 
 ```typescript
-// packages/ledger-core/src/store.ts — add to ActivityLedgerStore
+// packages/attribution-ledger/src/store.ts — add to ActivityLedgerStore
 
 /**
  * Cross-domain convenience: resolves platform IDs to user UUIDs via user_bindings.
@@ -157,7 +157,7 @@ updateCurationUserId(
 #### `resolveIdentities` Adapter Implementation
 
 ```typescript
-// packages/db-client/src/adapters/drizzle-ledger.adapter.ts
+// packages/db-client/src/adapters/drizzle-attribution.adapter.ts
 import { userBindings } from "@cogni/db-schema/identity";
 
 async resolveIdentities(
@@ -288,8 +288,8 @@ Note: `periodStart`/`periodEnd` are NOT passed — the activity loads the epoch 
   - Milestone: Port interface and Drizzle adapter have resolveIdentities, getUncuratedEvents, updateCurationUserId
   - Invariants: NODE_SCOPED, CURATION_AUTO_POPULATE, IDENTITY_BEST_EFFORT
   - Todos:
-    - [ ] Add `UncuratedEvent` type + 3 methods to `ActivityLedgerStore` in `packages/ledger-core/src/store.ts`
-    - [ ] Import `userBindings` from `@cogni/db-schema/identity` in `packages/db-client/src/adapters/drizzle-ledger.adapter.ts`
+    - [ ] Add `UncuratedEvent` type + 3 methods to `ActivityLedgerStore` in `packages/attribution-ledger/src/store.ts`
+    - [ ] Import `userBindings` from `@cogni/db-schema/identity` in `packages/db-client/src/adapters/drizzle-attribution.adapter.ts`
     - [ ] Implement `resolveIdentities()` — batch SELECT from user_bindings
     - [ ] Implement `getUncuratedEvents()` — LEFT JOIN activity_events with activity_curation
     - [ ] Implement `updateCurationUserId()` — conditional UPDATE where user_id IS NULL

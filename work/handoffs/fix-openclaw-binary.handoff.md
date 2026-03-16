@@ -23,7 +23,7 @@ last_commit: b28e683d119036e00177e38edd9b5c2bba45f6cb
 
 ### Done (unstaged)
 
-- `platform/infra/services/runtime/docker-compose.yml` — added `PATH=/app:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` to openclaw-gateway environment
+- `infra/compose/docker-compose.yml` — added `PATH=/app:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` to openclaw-gateway environment
 - Verified `/app/openclaw.mjs` exists and works: `node /app/openclaw.mjs --help` returns OpenClaw v2026.2.6-3
 
 ### Not Done
@@ -66,7 +66,7 @@ last_commit: b28e683d119036e00177e38edd9b5c2bba45f6cb
 
 | File / Resource                                                 | Why it matters                                                               |
 | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `platform/infra/services/runtime/docker-compose.yml:442`        | PATH env var for openclaw-gateway container                                  |
+| `infra/compose/docker-compose.yml:442`                          | PATH env var for openclaw-gateway container                                  |
 | `services/sandbox-openclaw/openclaw-gateway.json:210-221`       | Tool deny list (sessions_list, sessions_history denied)                      |
 | `services/sandbox-openclaw/gateway-workspace/BOOTSTRAP.md`      | Filesystem layout + memory bootstrap commands                                |
 | `services/sandbox-openclaw/gateway-workspace/memory-templates/` | Template files for governance memory initialization                          |

@@ -56,8 +56,8 @@ function runDepCruise(probeDirs: string[]): {
 describe("Test adapters entry point enforcement", () => {
   it("allows importing from adapters/test index", () => {
     const { exitCode, stderr } = runDepCruise([
-      "src/bootstrap/__arch_probes__/pass_entrypoint_imports_test_adapters_index.ts",
-      "src/adapters/test",
+      "apps/web/src/bootstrap/__arch_probes__/pass_entrypoint_imports_test_adapters_index.ts",
+      "apps/web/src/adapters/test",
     ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
@@ -67,8 +67,8 @@ describe("Test adapters entry point enforcement", () => {
 
   it("blocks internal test adapter file imports", () => {
     const { exitCode, stdout } = runDepCruise([
-      "src/bootstrap/__arch_probes__/fail_entrypoint_imports_test_adapters_internal.ts",
-      "src/adapters/test",
+      "apps/web/src/bootstrap/__arch_probes__/fail_entrypoint_imports_test_adapters_internal.ts",
+      "apps/web/src/adapters/test",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);

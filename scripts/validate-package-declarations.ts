@@ -67,6 +67,10 @@ function main(): void {
     const typesPath = pkgJson.exports?.["."]?.types ?? pkgJson.types;
 
     if (!typesPath) {
+      // Skip apps — they are workspace members but not publishable packages
+      if (ref.path.startsWith("./apps/")) {
+        continue;
+      }
       console.error(`✗ ${ref.path}: No types export defined in package.json`);
       failed = true;
       continue;

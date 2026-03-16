@@ -26,7 +26,7 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - Never modify outside assigned directories.
 - Keep context lean (<40% window); summarize often.
 - Purge incorrect info instead of propagating it.
-- If asked to install tools, run: `pnpm install --offline --frozen-lockfile`
+- If asked to install tools, run: `pnpm install --frozen-lockfile`
 
 ## Environment
 
@@ -45,56 +45,15 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 
 ## Pointers
 
-### Documentation & Work
-
-- [Documentation System Guide](docs/README.md) — How to navigate and create docs
-- [Work Management Guide](work/README.md) — Charters, projects, and work items
-- [Docs Organization Plan](docs/archive/DOCS_ORGANIZATION_PLAN.md) — Full system design
-- [Spec Index](docs/reference/SPEC_INDEX.md) — Index of all specifications
-
-### Core Architecture
-
-- [Technical Roadmap](ROADMAP.md)
-- [Node vs Operator Contract](docs/spec/node-operator-contract.md)
-- [MVP Deliverables](docs/archive/MVP_DELIVERABLES.md)
-- [Node Formation Spec](docs/spec/node-formation.md)
-- [Chain Deployment Refactor](work/projects/proj.chain-deployment-refactor.md)
-- [Architecture](docs/spec/architecture.md)
-- [Authorization (RBAC/ReBAC)](docs/spec/rbac.md)
-- [Tenant Connections](docs/spec/tenant-connections.md)
-- [Tool Use Spec](docs/spec/tool-use.md)
-- [Services Migration (project)](work/projects/proj.cicd-services-gitops.md)
-
-### AI & Evals
-
-- [AI Setup Spec](docs/spec/ai-setup.md)
-- [Prompt Registry Spec](docs/spec/prompt-registry.md)
-- [Tools Authoring](docs/guides/tools-authoring.md)
-- [Graph Execution](docs/spec/graph-execution.md)
-- [LangGraph Server](docs/spec/langgraph-server.md)
-- [LangGraph Patterns](docs/spec/langgraph-patterns.md)
-- [Claude SDK Adapter](docs/spec/claude-sdk-adapter.md)
-- [n8n Adapter](docs/spec/n8n-adapter.md)
-- [OpenClaw Sandbox Integration](docs/spec/openclaw-sandbox-spec.md)
-- [OpenClaw Sandbox Controls](docs/spec/openclaw-sandbox-controls.md)
-- [AI Evals](docs/spec/ai-evals.md)
-
-### Development
-
-- [Developer Setup](docs/guides/developer-setup.md)
-- [Environment & Stack Deployment Modes](docs/spec/environments.md)
-- [Database & Migration Architecture](docs/spec/databases.md)
-- [Database RLS Spec](docs/spec/database-rls.md)
-- [Testing Strategy](docs/guides/testing.md)
-- [Feature Development Guide](docs/guides/feature-development.md)
-- [UI Implementation Guide](docs/spec/ui-implementation.md)
-- [Style & Lint Rules](docs/spec/style.md)
-
-### Operations
-
-- [Observability](docs/spec/observability.md)
-- [Repo Specification](.cogni/repo-spec.yaml)
-- [Subdir AGENTS.md Policy](docs/templates/agents_subdir_template.md)
+- [Architecture](docs/spec/architecture.md) — Hexagonal layering, directory structure, enforcement rules
+- [Feature Development Guide](docs/guides/feature-development.md) — How to add features end-to-end
+- [Common Agent Mistakes](docs/guides/common-mistakes.md) — Top mistakes and troubleshooting
+- [Developer Setup](docs/guides/developer-setup.md) — Getting started locally
+- [Testing Strategy](docs/guides/testing.md) — Test types, when to use each
+- [Style & Lint Rules](docs/spec/style.md) — Code style and lint configuration
+- [AI Setup Spec](docs/spec/ai-setup.md) — AI correlation IDs, telemetry
+- [Work Management](work/README.md) — Charters, projects, and work items
+- [Subdir AGENTS.md Policy](docs/templates/agents_subdir_template.md) — Template for subdirectory files
 
 ## Usage
 

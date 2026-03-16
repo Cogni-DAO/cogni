@@ -3,7 +3,7 @@ id: proj.dao-dividends
 type: project
 primary_charter:
 title: DAO Dividend Distributions
-state: Paused
+state: Dropped
 priority: 3
 estimate: 2
 summary: DAO treasury USDC → on-chain distribution to contributors/token holders via a Splits contract, driven by payout statements from transparent-credit-payouts.
@@ -15,6 +15,8 @@ labels: [governance, payments, web3]
 ---
 
 # DAO Dividend Distributions
+
+> **Superseded by [proj.financial-ledger](proj.financial-ledger.md).** Splits-based push distribution replaced by MerkleDistributor (Uniswap pattern) user-initiated claims. See financial-ledger spec for the new settlement model.
 
 ## Goal
 
