@@ -107,6 +107,7 @@
     "test:smee": "dotenv -e .env.test -- bash -c 'smee -u \"$GH_WEBHOOK_PROXY_URL\" -t http://localhost:3000/api/internal/webhooks/github'",
     "test:external": "vitest run --config apps/web/vitest.external.config.mts",
     "test:external:money": "vitest run --config apps/web/vitest.external-money.config.mts",
+    "node:activate-payments": "tsx scripts/node-activate-payments.ts",
     "test:contract": "vitest run --config apps/web/vitest.config.mts apps/web/tests/contract",
     "test:meta": "vitest run --config apps/web/vitest.config.mts apps/web/tests/meta",
     "test:app": "vitest run --config apps/web/vitest.config.mts",
