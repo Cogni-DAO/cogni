@@ -42,14 +42,8 @@ export const setupVerifyOperation = {
         .positive()
         .describe("Block number where CogniSignal was deployed (from receipt)"),
       initialHolder: hexAddress.describe("Expected token recipient address"),
-      splitAddress: hexAddress.describe(
-        "Split contract address (deployed by client via 0xSplits factory)"
-      ),
-      operatorWalletAddress: hexAddress.describe(
-        "Privy-managed operator wallet address"
-      ),
     })
-    .strict(), // SECURITY: Reject any client-supplied addresses except Split + operator (deployed by client)
+    .strict(), // SECURITY: Reject any client-supplied addresses (must derive from receipts)
   output: z.discriminatedUnion("verified", [
     z.object({
       verified: z.literal(true),
@@ -58,7 +52,6 @@ export const setupVerifyOperation = {
         token: hexAddress,
         plugin: hexAddress,
         signal: hexAddress,
-        split: hexAddress,
       }),
       repoSpecYaml: z
         .string()

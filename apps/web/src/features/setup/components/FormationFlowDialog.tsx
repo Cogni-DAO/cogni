@@ -61,10 +61,6 @@ function getPhaseMessage(phase: FormationPhase): string {
       return "Confirm signal deployment in your wallet...";
     case "AWAITING_SIGNAL_CONFIRMATION":
       return "Confirming signal transaction...";
-    case "DEPLOYING_SPLIT":
-      return "Confirm revenue split deployment in your wallet...";
-    case "AWAITING_SPLIT_CONFIRMATION":
-      return "Confirming split transaction...";
     case "VERIFYING":
       return "Verifying on-chain results...";
     case "SUCCESS":

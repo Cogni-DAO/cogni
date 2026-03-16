@@ -21,8 +21,6 @@ export interface DAOFormationConfig {
   tokenName: string;
   tokenSymbol: string;
   initialHolder: HexAddress;
-  /** Privy-managed operator wallet address (from provision-operator-wallet.ts) */
-  operatorWalletAddress: HexAddress;
 }
 
 export interface VerifiedAddresses {
@@ -30,7 +28,6 @@ export interface VerifiedAddresses {
   token: HexAddress;
   plugin: HexAddress;
   signal: HexAddress;
-  split: HexAddress;
 }
 
 export type FormationPhase =
@@ -40,8 +37,6 @@ export type FormationPhase =
   | "AWAITING_DAO_CONFIRMATION"
   | "DEPLOYING_SIGNAL"
   | "AWAITING_SIGNAL_CONFIRMATION"
-  | "DEPLOYING_SPLIT"
-  | "AWAITING_SPLIT_CONFIRMATION"
   | "VERIFYING"
   | "SUCCESS"
   | "ERROR";
@@ -52,8 +47,6 @@ export interface FormationState {
   daoTxHash: HexAddress | null;
   signalTxHash: HexAddress | null;
   signalBlockNumber: number | null;
-  splitTxHash: HexAddress | null;
-  splitAddress: HexAddress | null;
   daoAddress: HexAddress | null;
   pluginAddress: HexAddress | null;
   addresses: VerifiedAddresses | null;
@@ -81,9 +74,6 @@ export type FormationAction =
   | { type: "SIGNAL_TX_SENT"; txHash: HexAddress }
   | { type: "SIGNAL_TX_CONFIRMED"; blockNumber: number }
   | { type: "SIGNAL_TX_FAILED"; error: string }
-  | { type: "SPLIT_TX_SENT"; txHash: HexAddress }
-  | { type: "SPLIT_TX_CONFIRMED"; splitAddress: HexAddress }
-  | { type: "SPLIT_TX_FAILED"; error: string }
   | {
       type: "VERIFY_SUCCESS";
       addresses: VerifiedAddresses;
@@ -102,8 +92,6 @@ export const initialFormationState: FormationState = {
   daoTxHash: null,
   signalTxHash: null,
   signalBlockNumber: null,
-  splitTxHash: null,
-  splitAddress: null,
   daoAddress: null,
   pluginAddress: null,
   addresses: null,
@@ -172,35 +160,12 @@ export function formationReducer(
     case "SIGNAL_TX_CONFIRMED":
       return {
         ...state,
-        phase: "DEPLOYING_SPLIT",
+        phase: "VERIFYING",
         signalBlockNumber: action.blockNumber,
       };
 
     case "SIGNAL_TX_FAILED":
       // DAO already created, manual recovery needed
-      return {
-        ...state,
-        phase: "ERROR",
-        errorMessage: action.error,
-        recoverable: false,
-      };
-
-    case "SPLIT_TX_SENT":
-      return {
-        ...state,
-        phase: "AWAITING_SPLIT_CONFIRMATION",
-        splitTxHash: action.txHash,
-      };
-
-    case "SPLIT_TX_CONFIRMED":
-      return {
-        ...state,
-        phase: "VERIFYING",
-        splitAddress: action.splitAddress,
-      };
-
-    case "SPLIT_TX_FAILED":
-      // DAO + Signal already created, manual recovery needed
       return {
         ...state,
         phase: "ERROR",

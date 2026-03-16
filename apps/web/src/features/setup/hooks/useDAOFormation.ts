@@ -13,7 +13,6 @@
 
 "use client";
 
-import { splitV2o2FactoryAbi } from "@0xsplits/splits-sdk/constants/abi";
 import {
   decodeDaoCreationReceipt,
   ReceiptDecodingError,
@@ -25,7 +24,6 @@ import {
   COGNI_SIGNAL_BYTECODE,
 } from "@cogni/cogni-contracts";
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { decodeEventLog } from "viem";
 import {
   useAccount,
   useChainId,
@@ -44,7 +42,6 @@ import {
 import {
   buildCreateDaoArgs,
   buildDeploySignalArgs,
-  buildDeploySplitArgs,
 } from "../daoFormation/txBuilders";
 
 // Re-export types for convenience
@@ -95,19 +92,6 @@ export function useDAOFormation(): UseDAOFormationReturn {
   const { data: signalReceipt, error: signalReceiptError } =
     useWaitForTransactionReceipt({
       hash: signalTxHash,
-    });
-
-  // Wagmi: Split deployment
-  const {
-    writeContract: writeDeploySplit,
-    data: splitTxHash,
-    error: splitWriteError,
-    reset: resetSplitWrite,
-  } = useWriteContract();
-
-  const { data: splitReceipt, error: splitReceiptError } =
-    useWaitForTransactionReceipt({
-      hash: splitTxHash,
     });
 
   // Attempt tracking to guard stale async
@@ -227,131 +211,16 @@ export function useDAOFormation(): UseDAOFormationReturn {
   }, [signalReceiptError, state.phase]);
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Effect: Auto-deploy Split when signal confirmed
+  // Effect: Auto-verify when signal confirmed
   // ──────────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (
-      state.phase === "DEPLOYING_SPLIT" &&
-      state.daoAddress &&
-      state.config?.operatorWalletAddress &&
-      !splitTxHash
-    ) {
-      // DAO address = treasury recipient, operator wallet = operator recipient
-      const txArgs = buildDeploySplitArgs(
-        state.config.operatorWalletAddress,
-        state.daoAddress
-      );
-      writeDeploySplit({
-        address: txArgs.address as `0x${string}`,
-        abi: splitV2o2FactoryAbi,
-        functionName: "createSplit",
-        args: txArgs.args,
-      });
-    }
-  }, [
-    state.phase,
-    state.daoAddress,
-    state.config?.operatorWalletAddress,
-    splitTxHash,
-    writeDeploySplit,
-  ]);
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Effect: Split tx hash received
-  // ──────────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (splitTxHash && state.phase === "DEPLOYING_SPLIT") {
-      dispatch({ type: "SPLIT_TX_SENT", txHash: splitTxHash });
-    }
-  }, [splitTxHash, state.phase]);
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Effect: Split tx confirmed — extract Split address from SplitCreated event
-  // ──────────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (splitReceipt && state.phase === "AWAITING_SPLIT_CONFIRMATION") {
-      // Factory creates the Split — address is in the SplitCreated event (indexed topic)
-      // The first log from the factory contains the Split address
-      try {
-        let splitAddress: string | undefined;
-        for (const log of splitReceipt.logs) {
-          try {
-            const decoded = decodeEventLog({
-              abi: splitV2o2FactoryAbi,
-              data: log.data,
-              topics: log.topics,
-            });
-            if (decoded.eventName === "SplitCreated") {
-              splitAddress = (decoded.args as { split: string }).split;
-              break;
-            }
-          } catch {
-            // Not our event, skip
-          }
-        }
-        if (splitAddress) {
-          dispatch({
-            type: "SPLIT_TX_CONFIRMED",
-            splitAddress: splitAddress as `0x${string}`,
-          });
-        } else {
-          dispatch({
-            type: "SPLIT_TX_FAILED",
-            error: "Could not extract Split address from SplitCreated event",
-          });
-        }
-      } catch (err) {
-        dispatch({
-          type: "SPLIT_TX_FAILED",
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to decode Split receipt",
-        });
-      }
-    }
-  }, [splitReceipt, state.phase]);
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Effect: Split tx errors
-  // ──────────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (splitWriteError && state.phase === "DEPLOYING_SPLIT") {
-      dispatch({
-        type: "SPLIT_TX_FAILED",
-        error: splitWriteError.message || "Split deployment failed",
-      });
-    }
-  }, [splitWriteError, state.phase]);
-
-  useEffect(() => {
-    if (splitReceiptError && state.phase === "AWAITING_SPLIT_CONFIRMATION") {
-      dispatch({
-        type: "SPLIT_TX_FAILED",
-        error: splitReceiptError.message || "Split transaction failed",
-      });
-    }
-  }, [splitReceiptError, state.phase]);
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // Effect: Auto-verify when Split confirmed
-  // ──────────────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const {
-      phase,
-      daoTxHash,
-      signalTxHash,
-      signalBlockNumber,
-      splitAddress,
-      config,
-    } = state;
+    const { phase, daoTxHash, signalTxHash, signalBlockNumber, config } = state;
 
     if (
       phase !== "VERIFYING" ||
       !daoTxHash ||
       !signalTxHash ||
       !signalBlockNumber ||
-      !splitAddress ||
       !config
     ) {
       return;
@@ -365,8 +234,6 @@ export function useDAOFormation(): UseDAOFormationReturn {
         daoTxHash,
         signalTxHash,
         signalBlockNumber,
-        splitAddress,
-        operatorWalletAddress: config.operatorWalletAddress,
         initialHolder: config.initialHolder,
       });
 
@@ -428,9 +295,8 @@ export function useDAOFormation(): UseDAOFormationReturn {
     attemptIdRef.current += 1;
     resetDaoWrite();
     resetSignalDeploy();
-    resetSplitWrite();
     dispatch({ type: "RESET" });
-  }, [resetDaoWrite, resetSignalDeploy, resetSplitWrite]);
+  }, [resetDaoWrite, resetSignalDeploy]);
 
   return {
     state,

@@ -37,7 +37,6 @@ export function DAOFormationPageClient(): ReactElement {
   const [tokenName, setTokenName] = useState("");
   const [tokenSymbol, setTokenSymbol] = useState("");
   const [initialHolder, setInitialHolder] = useState("");
-  const [operatorWalletAddress, setOperatorWalletAddress] = useState("");
 
   // Dialog state
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -50,14 +49,8 @@ export function DAOFormationPageClient(): ReactElement {
     tokenSymbol.length <= 10 &&
     /^[A-Z0-9]+$/.test(tokenSymbol);
   const isValidHolder = isAddress(effectiveHolder);
-  const isValidOperator =
-    operatorWalletAddress.length > 0 && isAddress(operatorWalletAddress);
   const canSubmit =
-    isValidName &&
-    isValidSymbol &&
-    isValidHolder &&
-    isValidOperator &&
-    formation.isSupported;
+    isValidName && isValidSymbol && isValidHolder && formation.isSupported;
 
   // Phase checks
   const isIdle = formation.state.phase === "IDLE";
@@ -75,7 +68,6 @@ export function DAOFormationPageClient(): ReactElement {
       tokenName,
       tokenSymbol,
       initialHolder: effectiveHolder as `0x${string}`,
-      operatorWalletAddress: operatorWalletAddress as `0x${string}`,
     });
     setIsDialogOpen(true);
   };
@@ -162,30 +154,6 @@ export function DAOFormationPageClient(): ReactElement {
             Defaults to your connected wallet if left empty
           </p>
           {initialHolder && !isValidHolder && (
-            <p className="text-destructive text-sm">Invalid Ethereum address</p>
-          )}
-        </div>
-
-        {/* Operator Wallet Address */}
-        <div className="space-y-2">
-          <label
-            htmlFor="operatorWallet"
-            className="font-medium text-foreground text-sm"
-          >
-            Operator Wallet Address
-          </label>
-          <Input
-            id="operatorWallet"
-            value={operatorWalletAddress}
-            onChange={(e) => setOperatorWalletAddress(e.target.value)}
-            placeholder="0x..."
-            disabled={!isIdle}
-          />
-          <p className="text-muted-foreground text-sm">
-            Server-managed wallet that receives operator share and tops up AI
-            providers. See setup guide for Privy wallet provisioning.
-          </p>
-          {operatorWalletAddress && !isValidOperator && (
             <p className="text-destructive text-sm">Invalid Ethereum address</p>
           )}
         </div>

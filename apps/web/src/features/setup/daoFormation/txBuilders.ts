@@ -22,13 +22,7 @@ import {
   type SupportedChainId,
   TOKEN_VOTING_VERSION_TAG,
 } from "@cogni/aragon-osx";
-import {
-  calculateSplitAllocations,
-  OPENROUTER_CRYPTO_FEE_PPM,
-  SPLIT_TOTAL_ALLOCATION,
-} from "@cogni/operator-wallet";
-import type { Address } from "viem";
-import { encodeAbiParameters, getAddress, parseAbiParameters } from "viem";
+import { encodeAbiParameters, parseAbiParameters } from "viem";
 
 import type { DAOFormationConfig } from "./formation.reducer";
 
@@ -148,78 +142,5 @@ export function buildDeploySignalArgs(
 ): DeploySignalTxArgs {
   return {
     args: [daoAddress] as const,
-  };
-}
-
-// ============================================================================
-// Split Deployment
-// ============================================================================
-
-/** 0xSplits Push Split V2o2 factory on Base. */
-export const SPLIT_FACTORY_ADDRESS: Address =
-  "0x8E8eB0cC6AE34A38B67D5Cf91ACa38f60bc3Ecf4";
-
-/** Default billing constants (PPM). Override via env in production. */
-const DEFAULT_MARKUP_PPM = 2_000_000n; // 2.0x
-const DEFAULT_REVENUE_SHARE_PPM = 750_000n; // 75%
-
-export interface DeploySplitTxArgs {
-  address: Address;
-  args: readonly [
-    splitParams: {
-      recipients: readonly Address[];
-      allocations: readonly bigint[];
-      totalAllocation: bigint;
-      distributionIncentive: number;
-    },
-    owner: Address,
-    creator: Address,
-  ];
-}
-
-/**
- * Build arguments for splitV2o2Factory.createSplit().
- * Recipients: operator wallet (from Privy) + DAO treasury (just deployed).
- * Allocations derived from billing constants via calculateSplitAllocations.
- * Owner: operator wallet (can update allocations if pricing changes).
- */
-export function buildDeploySplitArgs(
-  operatorWalletAddress: HexAddress,
-  daoTreasuryAddress: HexAddress
-): DeploySplitTxArgs {
-  const { operatorAllocation, treasuryAllocation } = calculateSplitAllocations(
-    DEFAULT_MARKUP_PPM,
-    DEFAULT_REVENUE_SHARE_PPM,
-    OPENROUTER_CRYPTO_FEE_PPM
-  );
-
-  // 0xSplits requires recipients sorted ascending by address
-  const entries = [
-    {
-      address: getAddress(operatorWalletAddress) as Address,
-      allocation: operatorAllocation,
-    },
-    {
-      address: getAddress(daoTreasuryAddress) as Address,
-      allocation: treasuryAllocation,
-    },
-  ].sort((a, b) =>
-    a.address.toLowerCase().localeCompare(b.address.toLowerCase())
-  );
-
-  const operatorAddress = getAddress(operatorWalletAddress) as Address;
-
-  return {
-    address: SPLIT_FACTORY_ADDRESS,
-    args: [
-      {
-        recipients: entries.map((e) => e.address),
-        allocations: entries.map((e) => e.allocation),
-        totalAllocation: SPLIT_TOTAL_ALLOCATION,
-        distributionIncentive: 0,
-      },
-      operatorAddress, // owner
-      operatorAddress, // creator
-    ] as const,
   };
 }
