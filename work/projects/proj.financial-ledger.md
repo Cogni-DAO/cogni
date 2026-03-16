@@ -10,7 +10,7 @@ summary: "All money I/O in one place. TigerBeetle as the double-entry transactio
 outcome: "Every dollar in and every token out has a TigerBeetle double-entry transfer and an auditable settlement manifest. Finalized attribution statements produce DAO-controlled Merkle claims that contributors can actually claim on-chain."
 assignees: derekg1729
 created: 2026-02-28
-updated: 2026-03-09
+updated: 2026-03-16
 labels: [governance, payments, web3, treasury]
 ---
 
@@ -45,59 +45,41 @@ TigerBeetle is the transaction engine enforcing double-entry at the database lev
 
 **proj.dao-dividends** (Superseded) — Splits-based push distribution replaced by MerkleDistributor user-initiated claims.
 
+### Scope Split: proj.on-chain-distributions
+
+Settlement-specific deliverables (Merkle tree generation, settlement manifests, recipient resolution, distributor deployment, claim UI, SettleEpochWorkflow) moved to [proj.on-chain-distributions](proj.on-chain-distributions.md). This project retains TigerBeetle accounting, USDC inbound receipts, treasury read APIs, and the double-entry transfer recording for settlement financial events.
+
 ## Roadmap
 
-### Crawl (P0) — Rewards-Ready Formation + Settlement Artifacts
+### Crawl (P0) — TigerBeetle Ledger + Rewards-Ready Formation
 
-**Goal:** Make the token and artifact model trustworthy before any live claims. Reuse the Aragon `GovernanceERC20` as the rewards token, update node formation to mint a fixed supply to a DAO-controlled emissions holder, and produce auditable settlement artifacts from finalized statements.
+**Goal:** Wire TigerBeetle as the double-entry transaction engine for existing money-movement operations. Update node formation for rewards-ready token supply. Settlement artifacts and Merkle claims are owned by proj.on-chain-distributions.
 
-| Deliverable                                                                                                                                            | Status      | Est | Work Item         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ----------------- |
-| TigerBeetle ledger + FinancialLedgerPort — 5-account MVP (credits + USDC), co-writes for AI spend + credit deposits                                    | In Review   | 3   | `task.0145`       |
-| Node formation update: mint fixed `GovernanceERC20` supply to a DAO-controlled emissions holder instead of founder bootstrap mint                      | Not Started | 2   | `task.0135`       |
-| `computeMerkleTree(statement)` pure function — takes finalized statement `credit_amount` entitlements + settlement policy → root + proofs per claimant | Not Started | 2   | (create at start) |
-| Settlement manifest store/view — persist `epochId`, `statementHash`, `merkleRoot`, `totalAmount`, `fundingTxHash`, `publisher`, `publishedAt`          | Not Started | 2   | (create at start) |
-| Recipient resolution gate — unresolved claimants block settlement eligibility                                                                          | Not Started | 2   | (create at start) |
-| Threat model + operational integrity controls for publish/fund flow                                                                                    | Not Started | 1   | (create at start) |
-| Compact lifecycle doc for token flow — formation mint → statement → manifest/root → funded distributor → claim                                         | Not Started | 1   | (create at start) |
+| Deliverable                                                                                                                       | Status      | Est | Work Item   |
+| --------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | ----------- |
+| TigerBeetle ledger + FinancialLedgerPort — 5-account MVP (credits + USDC), co-writes for AI spend + credit deposits               | In Review   | 3   | `task.0145` |
+| Node formation update: mint fixed `GovernanceERC20` supply to a DAO-controlled emissions holder instead of founder bootstrap mint | Not Started | 2   | `task.0135` |
 
 ### Walk (P1) — Trusted GovernanceERC20 Claims
 
-**Goal:** Ship the first community-respectable claim rail using boring, audited primitives and explicit trusted governance execution.
+**Goal:** Wire TigerBeetle accounting for settlement financial events. Settlement artifacts, distributor deployment, and claim UI are owned by proj.on-chain-distributions.
 
-| Deliverable                                                                                                                                                | Status      | Est | Work Item            |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| Stock per-epoch Uniswap `MerkleDistributor` deployment path (default)                                                                                      | Not Started | 2   | (create at P1 start) |
-| Distributor choice spike — only adopt audited multi-epoch variant if operational need is proven                                                            | Not Started | 1   | (create at P1 start) |
-| Settlement port interface (`SettlementStore`) — publish root, record funding tx, track claims                                                              | Not Started | 2   | (create at P1 start) |
-| Operator Port integration for treasury signing (Safe/manual publish + fund)                                                                                | Not Started | 2   | (create at P1 start) |
-| Temporal workflow: `SettleEpochWorkflow` — reads finalized statement, computes Merkle tree, publishes manifest, funds distributor, records ledger transfer | Not Started | 2   | (create at P1 start) |
-| On-chain receipt adapter: USDC inbound payments → TigerBeetle ledger transfers                                                                             | Not Started | 2   | (create at P1 start) |
-| Claim flow UI — contributor connects wallet, sees unclaimed epochs, submits Merkle claim transaction                                                       | Not Started | 2   | (create at P1 start) |
-| Holdings view — token balance, claim history, and claimed/unclaimed epoch status                                                                           | Not Started | 2   | (create at P1 start) |
-| Treasury read API: settlement history + manifest lookup (queries TigerBeetle + settlement store)                                                           | Not Started | 2   | (create at P1 start) |
+| Deliverable                                                                                                                         | Status      | Est | Work Item            |
+| ----------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| On-chain receipt adapter: USDC inbound payments → TigerBeetle ledger transfers                                                      | Not Started | 2   | (create at P1 start) |
+| Settlement financial events: distributor funding + claim → TigerBeetle transfers (consumes events from proj.on-chain-distributions) | Not Started | 2   | (create at P1 start) |
+| Treasury read API: settlement history + manifest lookup (queries TigerBeetle + settlement store)                                    | Not Started | 2   | (create at P1 start) |
 
-### Run (P2+) — On-Chain Enforcement + Multi-Instrument Hardening
+### Run (P2+) — Accounting Hardening + Multi-Instrument
 
-**Goal:** Harden release integrity only after live usage proves the shape. Add on-chain enforcement, richer settlement instruments, and git-canonical bundles.
+**Goal:** Richer accounting dimensions after live usage. On-chain enforcement and settlement primitives owned by proj.on-chain-distributions.
 
-| Deliverable                                                                                         | Status      | Est | Work Item            |
-| --------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| On-chain emissions controller — enforce release caps / epoch timing / authorized publication        | Not Started | 3   | (create at P2 start) |
-| Statement/root binding on-chain — published roots cryptographically tied to `statementHash`         | Not Started | 3   | (create at P2 start) |
-| Governor/Timelock-native authorization for publish/fund actions                                     | Not Started | 2   | (create at P2 start) |
-| Halvening emissions / richer budget policy after live usage                                         | Not Started | 2   | (create at P2 start) |
-| Governance-voted USDC distribution path (proposal → vote → execute via Operator Port)               | Not Started | 2   | (create at P2 start) |
-| Multi-instrument `computeSettlement()` — splits each user's share across instruments                | Not Started | 2   | (create at P2 start) |
-| Member capital sub-accounts in TigerBeetle: `Liability:MemberEquity:{userId}`                       | Not Started | 2   | (create at P2 start) |
-| Reserve fund account: `Equity:Reserves:Collective`                                                  | Not Started | 1   | (create at P2 start) |
-| Git-canonical `bundle.v1.json` — finalized statement + settlement + hash chain (`prev_bundle_hash`) | Not Started | 3   | (create at P2 start) |
-| Bundle commit bot: PR flow, Postgres becomes index keyed by `(bundle_hash, commit_sha)`             | Not Started | 2   | (create at P2 start) |
-| Equity redemption workflow — convert retained equity to USDC claim (governance-gated)               | Not Started | 2   | (create at P2 start) |
-| Federation `upstreams[]` — reference upstream bundles for fork-inheritable credit                   | Not Started | 2   | (create at P2 start) |
-| Foundation royalty pool component — enrolled nodes auto-insert upstream royalty into pool           | Not Started | 2   | (create at P2 start) |
-| Portable identity mapping — wallet addresses as cross-fork recipient identifiers                    | Not Started | 2   | (create at P2 start) |
-| On-chain Merkle root anchoring for settlement bundles                                               | Not Started | 2   | (create at P2 start) |
+| Deliverable                                                                           | Status      | Est | Work Item            |
+| ------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Halvening emissions / richer budget policy after live usage                           | Not Started | 2   | (create at P2 start) |
+| Member capital sub-accounts in TigerBeetle: `Liability:MemberEquity:{userId}`         | Not Started | 2   | (create at P2 start) |
+| Reserve fund account: `Equity:Reserves:Collective`                                    | Not Started | 1   | (create at P2 start) |
+| Equity redemption workflow — convert retained equity to USDC claim (governance-gated) | Not Started | 2   | (create at P2 start) |
 
 ## Constraints
 
