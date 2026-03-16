@@ -2,7 +2,7 @@
 id: task.0172
 type: task
 title: "Extract packages/graph-execution-core — decouple execution ports from Next.js"
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 3
@@ -86,11 +86,11 @@ interface GraphExecutorPort {
 
 ## Plan
 
-- [ ] **Checkpoint 1: Move Message to ai-core**
-- [ ] **Checkpoint 2: Create graph-execution-core package**
-- [ ] **Checkpoint 3: Port signature migration** (decorators, adapters, factory, facade)
-- [ ] **Checkpoint 4: Wire re-exports and consumers**
-- [ ] **Checkpoint 5: Clean up**
+- [x] **Checkpoint 1: Move Message to ai-core**
+- [x] **Checkpoint 2: Create graph-execution-core package**
+- [x] **Checkpoint 3: Port signature migration** (decorators, adapters, factory, facade)
+- [x] **Checkpoint 4: Wire scheduler-worker dep**
+- [x] **Checkpoint 5: Clean up** (AGENTS.md, spec pointers, task status)
 
 See plan file for detailed checkpoint breakdown.
 

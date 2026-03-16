@@ -619,7 +619,8 @@ packages/
 src/
 ├── ports/
 │   ├── agent-catalog.port.ts                 # AgentCatalogPort, AgentDescriptor ✓
-│   ├── graph-executor.port.ts                # GraphExecutorPort (runGraph only)
+│   ├── billing-context.ts                    # BillingContext, BillingResolver, PreflightCreditCheckFn (app-local)
+│   │   # GraphExecutorPort now in @cogni/graph-execution-core
 │   ├── tool-exec.port.ts                     # Re-export ToolExecFn from ai-core
 │   └── index.ts                              # Barrel export
 │
@@ -771,31 +772,33 @@ initChatModel + captured exec   CogniCompletionAdapter + ALS context
 
 ### File Pointers
 
-| File                                                               | Purpose                                                                  |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| `src/ports/graph-executor.port.ts`                                 | `GraphExecutorPort`, `GraphRunRequest`, `GraphRunResult`                 |
-| `src/ports/index.ts`                                               | Re-export `GraphExecutorPort`                                            |
-| `src/adapters/server/ai/inproc-completion-unit.adapter.ts`         | `InProcCompletionUnitAdapter`; emits `usage_report` before `done`        |
-| `src/types/usage.ts`                                               | `UsageFact` type                                                         |
-| `src/types/billing.ts`                                             | `SOURCE_SYSTEMS` enum                                                    |
-| `src/features/ai/types.ts`                                         | `UsageReportEvent` (contains `UsageFact`)                                |
-| `src/features/ai/services/completion.ts`                           | Returns usage in final (no AiEvent emission)                             |
-| `src/features/ai/services/billing.ts`                              | `commitUsageFact()`, `computeIdempotencyKey()`                           |
-| `src/adapters/server/ai/billing-executor.decorator.ts`             | `BillingGraphExecutorDecorator` (intercepts usage_report → commitFn)     |
-| `src/adapters/server/ai/preflight-credit-check.decorator.ts`       | `PreflightCreditCheckDecorator` (rejects runs with insufficient credits) |
-| `src/types/billing.ts`                                             | `BillingCommitFn` type (DI callback for decorator)                       |
-| `src/features/ai/services/ai_runtime.ts`                           | `RunEventRelay` (UI stream adapter; no billing responsibility)           |
-| `src/shared/db/schema.billing.ts`                                  | `run_id`, `attempt` columns; uniqueness constraints                      |
-| `src/bootstrap/container.ts`                                       | Wires `InProcCompletionUnitAdapter`                                      |
-| `src/bootstrap/graph-executor.factory.ts`                          | Factory for adapter creation                                             |
-| `.dependency-cruiser.cjs`                                          | ONE_LEDGER_WRITER rule                                                   |
-| `tests/stack/ai/one-ledger-writer.stack.test.ts`                   | Grep for `.recordChargeReceipt(` call sites                              |
-| `tests/stack/ai/billing-idempotency.stack.test.ts`                 | Replay usage_report twice, assert 1 row                                  |
-| `tests/stack/ai/billing-disconnect.stack.test.ts`                  | StreamDriver completes billing even if UI disconnects                    |
-| `tests/stack/ai/no-direct-completion-executestream.stack.test.ts`  | Grep test for BILLABLE_AI_THROUGH_EXECUTOR                               |
-| `tests/stack/ai/stream-drain-enforcement.stack.test.ts`            | Grep test for CALLER_DRAIN_OBLIGATION (all runGraph callers drain)       |
-| `tests/stack/internal/internal-runs-billing.stack.test.ts`         | Regression test: internal runs produce charge_receipts (bug.0005)        |
-| `tests/unit/adapters/server/ai/billing-executor-decorator.spec.ts` | Decorator unit tests (validation, error handling, stream wrapping)       |
+| File                                                               | Purpose                                                                      |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| `packages/graph-execution-core/src/graph-executor.port.ts`         | `GraphExecutorPort`, `GraphRunRequest`, `GraphRunResult`, `ExecutionContext` |
+| `packages/graph-execution-core/src/execution-context.ts`           | `ExecutionContext` — per-run metadata (actor, session, mask, requestId)      |
+| `src/adapters/server/ai/execution-scope.ts`                        | `ExecutionScope` via ALS — billing + abort for static providers              |
+| `src/ports/billing-context.ts`                                     | `BillingContext`, `BillingResolver`, `PreflightCreditCheckFn`                |
+| `src/adapters/server/ai/inproc-completion-unit.adapter.ts`         | `InProcCompletionUnitAdapter`; emits `usage_report` before `done`            |
+| `src/types/usage.ts`                                               | `UsageFact` type                                                             |
+| `src/types/billing.ts`                                             | `SOURCE_SYSTEMS` enum                                                        |
+| `src/features/ai/types.ts`                                         | `UsageReportEvent` (contains `UsageFact`)                                    |
+| `src/features/ai/services/completion.ts`                           | Returns usage in final (no AiEvent emission)                                 |
+| `src/features/ai/services/billing.ts`                              | `commitUsageFact()`, `computeIdempotencyKey()`                               |
+| `src/adapters/server/ai/billing-executor.decorator.ts`             | `BillingGraphExecutorDecorator` (intercepts usage_report → commitFn)         |
+| `src/adapters/server/ai/preflight-credit-check.decorator.ts`       | `PreflightCreditCheckDecorator` (rejects runs with insufficient credits)     |
+| `src/types/billing.ts`                                             | `BillingCommitFn` type (DI callback for decorator)                           |
+| `src/features/ai/services/ai_runtime.ts`                           | `RunEventRelay` (UI stream adapter; no billing responsibility)               |
+| `src/shared/db/schema.billing.ts`                                  | `run_id`, `attempt` columns; uniqueness constraints                          |
+| `src/bootstrap/container.ts`                                       | Wires `InProcCompletionUnitAdapter`                                          |
+| `src/bootstrap/graph-executor.factory.ts`                          | Factory for adapter creation                                                 |
+| `.dependency-cruiser.cjs`                                          | ONE_LEDGER_WRITER rule                                                       |
+| `tests/stack/ai/one-ledger-writer.stack.test.ts`                   | Grep for `.recordChargeReceipt(` call sites                                  |
+| `tests/stack/ai/billing-idempotency.stack.test.ts`                 | Replay usage_report twice, assert 1 row                                      |
+| `tests/stack/ai/billing-disconnect.stack.test.ts`                  | StreamDriver completes billing even if UI disconnects                        |
+| `tests/stack/ai/no-direct-completion-executestream.stack.test.ts`  | Grep test for BILLABLE_AI_THROUGH_EXECUTOR                                   |
+| `tests/stack/ai/stream-drain-enforcement.stack.test.ts`            | Grep test for CALLER_DRAIN_OBLIGATION (all runGraph callers drain)           |
+| `tests/stack/internal/internal-runs-billing.stack.test.ts`         | Regression test: internal runs produce charge_receipts (bug.0005)            |
+| `tests/unit/adapters/server/ai/billing-executor-decorator.spec.ts` | Decorator unit tests (validation, error handling, stream wrapping)           |
 
 ## Acceptance Checks
 
