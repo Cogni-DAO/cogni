@@ -69,22 +69,6 @@ on_fail() {
     echo "=== healthcheck history (all unhealthy/starting containers) ==="
     ssh $SSH_OPTS root@"$VM_HOST" 'for cid in $(docker ps -a --filter "label=com.docker.compose.project=cogni-runtime" --format "{{.ID}}"); do name=$(docker inspect --format="{{.Name}}" "$cid" | sed "s|^/||"); status=$(docker inspect --format="{{.State.Health.Status}}" "$cid" 2>/dev/null || echo "none"); if [ "$status" != "healthy" ] && [ "$status" != "none" ]; then echo "--- $name ($status) ---"; docker inspect --format="{{json .State.Health}}" "$cid" 2>&1; echo; fi; done' || true
 
-    echo ""
-    echo "=== VM memory state ==="
-    ssh $SSH_OPTS root@"$VM_HOST" "free -m 2>/dev/null || true" || true
-
-    echo ""
-    echo "=== docker stats (snapshot) ==="
-    ssh $SSH_OPTS root@"$VM_HOST" "docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}' 2>/dev/null || true" || true
-
-    echo ""
-    echo "=== litellm healthcheck endpoint (direct probe) ==="
-    ssh $SSH_OPTS root@"$VM_HOST" 'docker exec cogni-runtime-litellm-1 python3 -c "import urllib.request,json,sys; r=urllib.request.urlopen(\"http://127.0.0.1:4000/health/readiness\", timeout=5); print(json.dumps(json.loads(r.read()), indent=2))" 2>&1 || echo "PROBE FAILED: litellm not responding on :4000/health/readiness"' || true
-
-    echo ""
-    echo "=== docker events (last 5 min) ==="
-    ssh $SSH_OPTS root@"$VM_HOST" "docker events --since 5m --until 0s --filter 'type=container' --format '{{.Time}} {{.Action}} {{.Actor.Attributes.name}}' 2>/dev/null | tail -50 || true" || true
-
   fi
 
   exit "$code"
