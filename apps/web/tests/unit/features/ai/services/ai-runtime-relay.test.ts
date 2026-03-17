@@ -47,16 +47,19 @@ const createTestCtx = (): RequestContext => ({
   clock: new FakeClock("2025-01-01T12:00:00.000Z"),
 });
 
-const defaultInput = (ctx: RequestContext) => ({
+const TEST_BILLING = {
+  billingAccountId: "billing-123",
+  virtualKeyId: "vk-123",
+};
+
+/** Passthrough runGraphWithScope for tests — no ALS, just calls executor.runGraph */
+const testRunGraphWithScope: typeof import("@/bootstrap/graph-executor.factory").runGraphWithScope =
+  (params) => params.executor.runGraph(params.req, params.ctx);
+
+const defaultInput = (_ctx: RequestContext) => ({
   messages: [createUserMessage("Test")],
   model: TEST_MODEL_ID,
   graphName: "langgraph:poet",
-  caller: {
-    billingAccountId: "billing-123",
-    virtualKeyId: "vk-123",
-    requestId: ctx.reqId,
-    traceId: ctx.traceId,
-  },
 });
 
 /** Collect all events from stream with a timeout to detect hangs. */
@@ -96,7 +99,11 @@ describe("RunEventRelay race conditions", () => {
     // Upstream delays 500ms after done before returning (pumpDone not set yet)
     const graphExecutor = createDelayedReturnGraphExecutor(events, 500);
 
-    const runtime = createAiRuntime({ graphExecutor });
+    const runtime = createAiRuntime({
+      graphExecutor,
+      billing: TEST_BILLING,
+      runGraphWithScope: testRunGraphWithScope,
+    });
     const ctx = createTestCtx();
 
     const { stream } = runtime.runChatStream(defaultInput(ctx), ctx);
@@ -128,7 +135,11 @@ describe("RunEventRelay race conditions", () => {
 
     const graphExecutor = createImmediateGraphExecutor(events);
 
-    const runtime = createAiRuntime({ graphExecutor });
+    const runtime = createAiRuntime({
+      graphExecutor,
+      billing: TEST_BILLING,
+      runGraphWithScope: testRunGraphWithScope,
+    });
     const ctx = createTestCtx();
 
     const { stream } = runtime.runChatStream(defaultInput(ctx), ctx);
@@ -159,7 +170,11 @@ describe("RunEventRelay race conditions", () => {
 
     const graphExecutor = createImmediateGraphExecutor(events);
 
-    const runtime = createAiRuntime({ graphExecutor });
+    const runtime = createAiRuntime({
+      graphExecutor,
+      billing: TEST_BILLING,
+      runGraphWithScope: testRunGraphWithScope,
+    });
     const ctx = createTestCtx();
 
     const { stream, final } = runtime.runChatStream(defaultInput(ctx), ctx);
@@ -203,7 +218,11 @@ describe("RunEventRelay race conditions", () => {
 
     const graphExecutor = createImmediateGraphExecutor(events);
 
-    const runtime = createAiRuntime({ graphExecutor });
+    const runtime = createAiRuntime({
+      graphExecutor,
+      billing: TEST_BILLING,
+      runGraphWithScope: testRunGraphWithScope,
+    });
     const ctx = createTestCtx();
 
     const { stream } = runtime.runChatStream(defaultInput(ctx), ctx);
@@ -223,7 +242,11 @@ describe("RunEventRelay race conditions", () => {
 
     const graphExecutor = createImmediateGraphExecutor(events);
 
-    const runtime = createAiRuntime({ graphExecutor });
+    const runtime = createAiRuntime({
+      graphExecutor,
+      billing: TEST_BILLING,
+      runGraphWithScope: testRunGraphWithScope,
+    });
     const ctx = createTestCtx();
 
     const { stream } = runtime.runChatStream(defaultInput(ctx), ctx);
@@ -272,7 +295,11 @@ describe("RunEventRelay terminal guard", () => {
       },
     };
 
-    const runtime = createAiRuntime({ graphExecutor });
+    const runtime = createAiRuntime({
+      graphExecutor,
+      billing: TEST_BILLING,
+      runGraphWithScope: testRunGraphWithScope,
+    });
     const ctx = createTestCtx();
 
     const { stream } = runtime.runChatStream(defaultInput(ctx), ctx);
@@ -323,7 +350,11 @@ describe("RunEventRelay terminal guard", () => {
       },
     };
 
-    const runtime = createAiRuntime({ graphExecutor });
+    const runtime = createAiRuntime({
+      graphExecutor,
+      billing: TEST_BILLING,
+      runGraphWithScope: testRunGraphWithScope,
+    });
     const ctx = createTestCtx();
 
     const { stream } = runtime.runChatStream(defaultInput(ctx), ctx);
