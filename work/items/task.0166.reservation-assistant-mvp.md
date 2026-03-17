@@ -15,11 +15,11 @@ project:
 branch: claude/reservation-assistant-mvp-Sy4le
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-16
-updated: 2026-03-16
+updated: 2026-03-17
 labels: [mvp, reservations]
 external_refs:
 ---
@@ -149,6 +149,28 @@ pnpm typecheck && pnpm lint && pnpm format --check
 - [ ] **Spec:** all invariants upheld (NO_SCRAPING, USER_APPROVAL_GATE, OFFICIAL_CHANNELS_ONLY)
 - [ ] **Tests:** contract tests cover API shapes
 - [ ] **Reviewer:** assigned and approved
+
+## Review Feedback
+
+### Revision 1 — Blocking Issues
+
+1. **Authorization (CRITICAL)**: All watch mutation/query operations (`updateWatchStatus`, `getWatchTimeline`, `getWatchBookings`, `ingestAlert`, `approveBooking`) lack ownership validation. Add `userId` param and verify `watch.userId === userId` before proceeding; return 403 on mismatch.
+
+2. **Unsafe non-null assertions (HIGH)**: `drizzle-reservation-store.adapter.ts:129,181` — `updateWatchRequestStatus()` and `updateBookingAttemptStatus()` use `row!` after `.returning()`. If no row matches, `row` is undefined. Throw `WatchRequestNotFoundError` if empty.
+
+3. **Temporal workflow not registered (HIGH)**: `ReservationWatchWorkflow` defined but never added to worker's workflow bundle. Worker only loads `scheduled-run.workflow.js`.
+
+4. **Missing error handling in workflow (HIGH)**: No try-catch around activity calls in `reservation-watch.workflow.ts:116-230`. Failed activities produce no audit events — violates AUDIT_TRAIL invariant.
+
+5. **Activity error classification (HIGH)**: `reservation.ts:74-181` throws generic `Error` for all failures. Must use `ApplicationFailure.nonRetryable()` for 4xx client errors so Temporal doesn't retry them.
+
+### Non-Blocking Suggestions
+
+- Add contract tests for `ReservationStorePort` and `ReservationProviderPort`
+- Use narrower enum types in `core/reservations/model.ts` instead of `string`
+- Add correlation logging (workflowId, temporalRunId) to activities
+- Move signal handler registration to top of workflow before any async ops
+- Validate watch status before booking approval to prevent race conditions
 
 ## PR / Links
 
