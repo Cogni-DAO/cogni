@@ -70,13 +70,13 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 
 | Deliverable                                                                                          | Status      | Est | Work Item |
 | ---------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| **Infrastructure: Redis 7** — docker-compose, `ioredis` dep, env config                              | Done        | 1   | task.0167 |
-| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                 | Done        | 2   | task.0168 |
-| **Extract `graph-execution-core` package** — decouple execution ports from Next.js                   | Done        | 3   | task.0172 |
-| **GraphRunWorkflow + promote `schedule_runs` → `graph_runs`** — single run ledger, Temporal workflow | In Review   | 5   | task.0169 |
-| **Neutral usage facts** — remove billing identity from inner providers (ALS cleanup)                 | Not Started | 2   | task.0173 |
-| **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency               | Not Started | 5   | task.0170 |
-| **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs   | Not Started | 3   | task.0171 |
+| **Infrastructure: Redis 7** — docker-compose, `ioredis` dep, env config                              | Done        | 1   | task.0174 |
+| **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                 | Done        | 2   | task.0175 |
+| **Extract `graph-execution-core` package** — decouple execution ports from Next.js                   | Done        | 3   | task.0179 |
+| **GraphRunWorkflow + promote `schedule_runs` → `graph_runs`** — single run ledger, Temporal workflow | In Review   | 5   | task.0176 |
+| **Neutral usage facts** — remove billing identity from inner providers (ALS cleanup)                 | Not Started | 2   | task.0180 |
+| **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency               | Not Started | 5   | task.0177 |
+| **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs   | Not Started | 3   | task.0178 |
 
 **Note:** When `graph_runs` exists, reconciler can optionally switch reference-set from LiteLLM spend/logs to `graph_runs`, but it is not required. The LiteLLM API approach remains valid long-term.
 

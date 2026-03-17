@@ -1,5 +1,5 @@
 ---
-id: task.0169
+id: task.0176
 type: task
 title: "GraphRunWorkflow + promote schedule_runs → graph_runs"
 status: needs_implement
@@ -13,8 +13,8 @@ spec_refs:
 assignees: []
 project: proj.unified-graph-launch
 blocked_by:
-  - task.0168
-  - task.0172
+  - task.0175
+  - task.0179
 created: 2026-03-13
 updated: 2026-03-13
 branch: claude/unified-graph-launch-mmXvl
@@ -64,7 +64,7 @@ labels:
 - [x] **Checkpoint 1: Promote schedule_runs → graph_runs** (schema rename + columns)
   - Validation: `pnpm check` passes ✓
 
-- [ ] **Checkpoint 2: GraphRunWorkflow + activities** (UNBLOCKED — task.0172 done)
+- [ ] **Checkpoint 2: GraphRunWorkflow + activities** (UNBLOCKED — task.0179 done)
   - Build `GraphRunWorkflow` in scheduler-worker with activities: `validateGrantActivity`, `createRunRecordActivity`, `executeAndStreamActivity`, `finalizeRunActivity`
   - `executeAndStreamActivity` calls `GraphExecutorPort.runGraph()`, pumps events to Redis via `RunStreamPort.publish()`
   - Delete `GovernanceScheduledRunWorkflow` — zero users, no migration, just replace
@@ -85,7 +85,7 @@ pnpm test
 
 ## Review Checklist
 
-- [ ] **Work Item:** task.0169 linked in PR body
+- [ ] **Work Item:** task.0176 linked in PR body
 - [ ] **Spec:** ONE_RUN_EXECUTION_PATH, IDEMPOTENT_RUN_START, PUMP_TO_COMPLETION_VIA_REDIS, STREAM_PUBLISH_IN_ACTIVITY invariants upheld
 - [ ] **Design Decision:** Single run ledger — no second table, no idempotency_key on run table
 - [ ] **Tests:** new/updated tests cover the change

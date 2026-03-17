@@ -62,6 +62,10 @@ on_fail() {
     ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs --tail 80 litellm 2>&1 || true" || true
 
     echo ""
+    echo "=== healthcheck: litellm ==="
+    ssh $SSH_OPTS root@"$VM_HOST" "docker inspect --format='{{json .State.Health}}' cogni-runtime-litellm-1 2>&1 || true" || true
+
+    echo ""
     echo "=== logs: scheduler-worker ==="
     ssh $SSH_OPTS root@"$VM_HOST" "docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs --tail 80 scheduler-worker 2>&1 || true" || true
 

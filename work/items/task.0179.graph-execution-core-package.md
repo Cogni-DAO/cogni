@@ -1,5 +1,5 @@
 ---
-id: task.0172
+id: task.0179
 type: task
 title: "Extract packages/graph-execution-core — decouple execution ports from Next.js"
 status: needs_closeout
@@ -26,7 +26,7 @@ labels:
 
 ## Context
 
-task.0169 checkpoint 2 (GraphRunWorkflow) is blocked: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/` — dep-cruiser enforces `PACKAGES_NO_SRC_IMPORTS`.
+task.0176 checkpoint 2 (GraphRunWorkflow) is blocked: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/` — dep-cruiser enforces `PACKAGES_NO_SRC_IMPORTS`.
 
 ## Design (finalized 2026-03-14, after 3 rounds of architect review)
 

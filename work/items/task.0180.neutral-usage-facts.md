@@ -1,5 +1,5 @@
 ---
-id: task.0173
+id: task.0180
 type: task
 title: "Emit neutral usage facts from providers — remove billing identity from inner executor"
 status: needs_design
@@ -13,7 +13,7 @@ spec_refs:
 assignees: []
 project: proj.unified-graph-launch
 blocked_by:
-  - task.0172
+  - task.0179
 created: 2026-03-16
 updated: 2026-03-16
 branch:
@@ -26,7 +26,7 @@ labels:
 
 ## Context
 
-task.0172 introduced `AsyncLocalStorage<ExecutionScope>` to carry billing context to static inner providers that emit `usage_report` events with `billingAccountId` + `virtualKeyId`. This is a known boundary smell — providers in the pure execution layer shouldn't know about billing identity.
+task.0179 introduced `AsyncLocalStorage<ExecutionScope>` to carry billing context to static inner providers that emit `usage_report` events with `billingAccountId` + `virtualKeyId`. This is a known boundary smell — providers in the pure execution layer shouldn't know about billing identity.
 
 ## Requirements
 

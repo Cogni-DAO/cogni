@@ -1,19 +1,19 @@
 ---
-id: task.0171
+id: task.0178
 type: task
 title: "Delete old scheduled run path + observability + documentation finish"
 status: needs_triage
 priority: 1
 rank: 5
 estimate: 3
-summary: Delete GovernanceScheduledRunWorkflow (replaced by GraphRunWorkflow in task.0169); delete old dual-path code; add observability instrumentation; update documentation
+summary: Delete GovernanceScheduledRunWorkflow (replaced by GraphRunWorkflow in task.0176); delete old dual-path code; add observability instrumentation; update documentation
 outcome: Zero old execution paths remain; all runs go through GraphRunWorkflow; observability traces unified runs; docs reflect as-built state
 spec_refs:
   - spec.unified-graph-launch
 assignees: []
 project: proj.unified-graph-launch
 blocked_by:
-  - task.0170
+  - task.0177
 created: 2026-03-13
 updated: 2026-03-13
 labels:
@@ -25,7 +25,7 @@ labels:
 
 ## Context
 
-Zero users — no migration needed. `GraphRunWorkflow` replaces `GovernanceScheduledRunWorkflow` (done in task.0169). This task deletes the old path, adds observability, and updates docs.
+Zero users — no migration needed. `GraphRunWorkflow` replaces `GovernanceScheduledRunWorkflow` (done in task.0176). This task deletes the old path, adds observability, and updates docs.
 
 ## Requirements
 
@@ -72,7 +72,7 @@ pnpm test
 
 ## Review Checklist
 
-- [ ] **Work Item:** task.0171 linked in PR body
+- [ ] **Work Item:** task.0178 linked in PR body
 - [ ] **Spec:** ONE_RUN_EXECUTION_PATH invariant upheld for scheduled path
 - [ ] **Tests:** new/updated tests cover the change
 - [ ] **Reviewer:** assigned and approved

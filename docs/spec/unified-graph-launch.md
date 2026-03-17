@@ -305,7 +305,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 
 ### File Pointers
 
-**Implemented (task.0167, task.0168):**
+**Implemented (task.0174, task.0175):**
 
 | File                                                  | Purpose                                          |
 | ----------------------------------------------------- | ------------------------------------------------ |
@@ -318,7 +318,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 | `infra/compose/runtime/docker-compose.dev.yml`        | Redis 7 service (dev, port 6379 exposed)         |
 | `tests/unit/adapters/server/ai/redis-run-stream.*.ts` | Unit tests with mocked ioredis (11 tests)        |
 
-**Implemented (task.0169):**
+**Implemented (task.0176):**
 
 | File                                                                | Purpose                                                               |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -329,7 +329,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 | `services/scheduler-worker/src/activities/index.ts`                 | `createGraphRunActivity`, `updateGraphRunActivity` activities         |
 | `services/scheduler-worker/src/workflows/scheduled-run.workflow.ts` | Passes trigger provenance to `graph_runs`                             |
 
-**Planned: Package extraction (task.0172)**
+**Planned: Package extraction (task.0179)**
 
 Prerequisite for `GraphRunWorkflow`: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/` (dep-cruiser `PACKAGES_NO_SRC_IMPORTS`). Extract execution contracts to shared packages:
 
