@@ -1,31 +1,34 @@
 ---
 id: operator-wallet-setup-guide
 type: guide
-title: Operator Wallet Setup
+title: Payment Activation
 status: draft
 trust: draft
-summary: One-time setup for Privy operator wallet and Split contract deployment on Base.
-read_when: Setting up operator wallet infrastructure for the first time.
+summary: Activate payment rails for a Cogni node — Privy operator wallet + Split contract on Base.
+read_when: Setting up payment infrastructure for a new node after formation.
 owner: derekg1729
 created: 2026-03-11
 ---
 
-# Operator Wallet Setup
+# Payment Activation
 
-One-time setup for the Privy operator wallet and Split contract.
+Activate payment rails for a Cogni node. This runs in your own fork after DAO formation.
 
 ## Prerequisites
 
+- DAO formation complete (`.cogni/repo-spec.yaml` has `cogni_dao` section)
 - Privy account at [privy.io](https://privy.io)
-- A wallet with ~$0.02 ETH on Base (for deploying the Split contract)
+- A funded wallet on Base (~$0.02 ETH for Split deployment gas)
 
-## 1. Privy Credentials
+## Quick Start
+
+### 1. Privy Credentials
 
 In the Privy dashboard:
 
 1. **Settings → Basics** — copy the **App ID**
 2. **Settings → Basics** — click **New secret**, copy the app secret
-3. **Settings → Authorization** — click **New key**. This gives you a **key ID** and a **private key** (format: `wallet-auth:MIGHAgEA...`)
+3. **Settings → Authorization** — click **New key** (format: `wallet-auth:MIGHAgEA...`)
 
 Add to `.env.local`:
 
@@ -33,63 +36,61 @@ Add to `.env.local`:
 PRIVY_APP_ID=<app-id>
 PRIVY_APP_SECRET=<app-secret>
 PRIVY_SIGNING_KEY=<wallet-auth:...>
+DEPLOYER_PRIVATE_KEY=<funded-wallet-private-key>
 ```
 
-The signing key is NOT the app secret. It's a separate P-256 authorization key used to sign wallet operations (transactions).
+The signing key is NOT the app secret. It's a separate P-256 authorization key for wallet operations.
 
-## 2. Provision Operator Wallet
+### 2. Activate Payments
 
 ```bash
-pnpm dotenv -e .env.local -- tsx scripts/provision-operator-wallet.ts
+pnpm dotenv -e .env.local -- pnpm node:activate-payments
 ```
 
-Outputs a wallet address + wallet ID. Update `.cogni/repo-spec.yaml`:
+This single command:
 
-```yaml
-operator_wallet:
-  address: "<wallet address from output>"
-```
+- Provisions an operator wallet via Privy (or finds an existing one)
+- Deploys a Split contract on Base (operator + DAO treasury recipients)
+- Validates the deployment on-chain
+- Writes `operator_wallet`, `payments_in`, and `payments.status: active` to `.cogni/repo-spec.yaml`
 
-## 3. Deploy Split Contract
+### 3. Fund the Operator Wallet
 
-Fund a deployer wallet with ~$0.02 ETH on Base, then:
+Send ~$0.02 ETH on Base to the operator wallet address (printed by the script). This covers gas for `distributeSplit()` and `fundOpenRouterTopUp()` calls.
+
+### 4. Commit and Deploy
 
 ```bash
-OPERATOR_WALLET_ADDRESS=<from step 2> \
-DEPLOYER_PRIVATE_KEY=<deployer-private-key> \
-pnpm dotenv -e .env.local -- tsx scripts/deploy-split.ts
+git add .cogni/repo-spec.yaml
+git commit -m "chore: activate payment rails"
 ```
 
-Deploys a Push Split V2o2 on Base (currently 92.1% operator / 7.9% DAO). Update `.cogni/repo-spec.yaml`:
+Remove `DEPLOYER_PRIVATE_KEY` from `.env.local` — it's only needed for this one-time deployment.
 
-```yaml
-payments_in:
-  credits_topup:
-    receiving_address: "<split address from output>"
-```
+## Advanced: Individual Scripts
 
-Delete `DEPLOYER_PRIVATE_KEY` from `.env.local` after — it's only needed for this one deployment.
+For recovery or manual control, the underlying primitives are available:
 
-## 4. Fund the Privy Wallet
+- `scripts/provision-operator-wallet.ts` — create Privy wallet standalone
+- `scripts/deploy-split.ts` — deploy Split contract standalone
+- `scripts/distribute-split.ts` — trigger Split distribution manually
 
-Send ~$0.02 ETH on Base to the operator wallet address (from step 2). This covers gas for `distributeSplit()` calls.
+## Environment Variables
 
-## 5. Validate
-
-```bash
-pnpm dotenv -e .env.local -- pnpm test:external
-```
-
-Validates: Privy wallet verification, Split address lookup, and `distributeSplit(USDC)` as a real transaction on Base.
-
-## Current Limitations
-
-- **No automatic distribution.** `distribute()` must be called manually or via the adapter.
-- **`fundOpenRouterTopUp()` is not implemented** — see task.0086.
-- **Scripts are one-off CLIs**, not part of the setup wizard (future: `src/features/setup/daoFormation/` pattern).
+| Variable                   | Required | Purpose                                         |
+| -------------------------- | -------- | ----------------------------------------------- |
+| `PRIVY_APP_ID`             | Yes      | Privy application identifier                    |
+| `PRIVY_APP_SECRET`         | Yes      | Privy application secret                        |
+| `PRIVY_SIGNING_KEY`        | Yes      | Privy signed-requests key                       |
+| `DEPLOYER_PRIVATE_KEY`     | Yes      | Funded EOA for Split deployment gas             |
+| `EVM_RPC_URL`              | No       | Base RPC (defaults to public endpoint)          |
+| `SPLIT_CONTROLLER_ADDRESS` | No       | Split admin (defaults to deployer with warning) |
+| `OPERATOR_WALLET_ADDRESS`  | No       | Disambiguate when multiple Privy wallets exist  |
 
 ## Troubleshooting
 
 **Privy SDK connection timeout:** IPv6 issue with Cloudflare. Run with `node --dns-result-order=ipv4first`.
 
-**`deploy-split.ts` "No exports main defined":** Run `pnpm packages:build` first.
+**"No exports main defined":** Run `pnpm packages:build` first.
+
+**Multiple Privy wallets:** Set `OPERATOR_WALLET_ADDRESS` to the address you want to use.

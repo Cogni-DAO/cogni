@@ -175,6 +175,26 @@ pnpm setup github --env production
 
 For current manual process, see [DEPLOY.md](../../docs/runbooks/DEPLOY.md).
 
+### Step 4: Payment Activation (`pnpm node:activate-payments`)
+
+**Activates the USDC payment → AI provider top-up pipeline.**
+
+Prerequisites:
+
+- Privy account (App ID + Secret + Signing Key in `.env.local`)
+- A funded EOA on Base (~$0.02 ETH for Split deployment gas)
+- DAO treasury address from `.cogni/repo-spec.yaml` (from formation)
+
+What it does:
+
+1. Verifies Privy credentials are configured
+2. Provisions operator wallet via Privy API (or finds existing)
+3. Deploys Push Split V2o2 on Base (operator + DAO treasury recipients)
+4. Validates the Split on-chain
+5. Writes `operator_wallet`, `payments_in`, `payments.status: active` to repo-spec
+
+See [Payment Activation Guide](../../docs/guides/operator-wallet-setup.md) for details.
+
 3. **Apply branch protection rules:**
    - `main`: 2 required reviews, required checks, enforce for admins
    - `staging`: 1 required review, required checks

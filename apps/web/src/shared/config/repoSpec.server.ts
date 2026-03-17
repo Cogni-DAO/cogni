@@ -71,10 +71,10 @@ function loadRepoSpec(): RepoSpec {
 // Cached accessors (delegate to @cogni/repo-spec pure functions)
 // ---------------------------------------------------------------------------
 
-let cachedPaymentConfig: InboundPaymentConfig | null = null;
+let cachedPaymentConfig: InboundPaymentConfig | undefined | null = null;
 
-export function getPaymentConfig(): InboundPaymentConfig {
-  if (cachedPaymentConfig) return cachedPaymentConfig;
+export function getPaymentConfig(): InboundPaymentConfig | undefined {
+  if (cachedPaymentConfig !== null) return cachedPaymentConfig;
 
   const spec = loadRepoSpec();
   cachedPaymentConfig = extractPaymentConfig(spec, CHAIN_ID);

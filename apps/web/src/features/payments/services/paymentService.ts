@@ -123,6 +123,11 @@ export async function createIntent(
   }
 
   const paymentConfig = getPaymentConfig();
+  if (!paymentConfig) {
+    throw new Error(
+      "Payment rails not activated. Run `pnpm node:activate-payments` first."
+    );
+  }
   const { chainId, receivingAddress } = paymentConfig;
   const token = USDC_TOKEN_ADDRESS;
   const amountRaw = usdCentsToRawUsdc(input.amountUsdCents);

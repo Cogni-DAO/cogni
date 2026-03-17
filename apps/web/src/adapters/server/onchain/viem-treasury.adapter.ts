@@ -33,6 +33,9 @@ export class ViemTreasuryAdapter implements TreasuryReadPort {
   }): Promise<TreasurySnapshot> {
     // Validate chainId against canonical config
     const config = getPaymentConfig();
+    if (!config) {
+      throw new Error("[ViemTreasuryAdapter] Payment rails not activated");
+    }
 
     if (params.chainId !== config.chainId) {
       throw new Error(

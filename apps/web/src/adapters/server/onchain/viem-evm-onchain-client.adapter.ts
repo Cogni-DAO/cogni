@@ -43,6 +43,9 @@ export class ViemEvmOnchainClient implements EvmOnchainClient {
 
     const env = serverEnv();
     const config = getPaymentConfig();
+    if (!config) {
+      throw new Error("[ViemEvmOnchainClient] Payment rails not activated");
+    }
 
     // Validate chain ID matches repo-spec
     if (config.chainId !== CHAIN.id) {

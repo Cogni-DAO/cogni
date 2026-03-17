@@ -481,6 +481,12 @@ function createContainer(): Container {
           return undefined;
         }
         const paymentConfig = getPaymentConfig();
+        if (!paymentConfig) {
+          log.warn(
+            "PRIVY_APP_ID set but payments_in missing from repo-spec — run `pnpm node:activate-payments`"
+          );
+          return undefined;
+        }
         if (!env.EVM_RPC_URL) {
           log.warn(
             "PRIVY_APP_ID set but EVM_RPC_URL missing — operator wallet requires RPC for tx confirmation"
