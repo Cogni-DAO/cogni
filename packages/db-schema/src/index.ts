@@ -19,5 +19,4 @@ export * from "./billing";
 export * from "./identity";
 export * from "./profile";
 export * from "./refs";
-export * from "./reservations";
 export * from "./scheduling";

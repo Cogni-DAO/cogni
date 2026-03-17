@@ -13,14 +13,7 @@
 
 "use client";
 
-import {
-  Activity,
-  Briefcase,
-  CreditCard,
-  Github,
-  UtensilsCrossed,
-  Vote,
-} from "lucide-react";
+import { Activity, Briefcase, CreditCard, Github, Vote } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -43,7 +36,6 @@ import { ChatThreadsSidebarGroup } from "@/features/ai/chat/components/ChatThrea
 const NAV_ITEMS = [
   { href: "/work", label: "Work", icon: Briefcase },
   { href: "/activity", label: "Activity", icon: Activity },
-  { href: "/reservations", label: "Reservations", icon: UtensilsCrossed },
   { href: "/gov", label: "Gov", icon: Vote },
   { href: "/credits", label: "Credits", icon: CreditCard },
 ] as const;
