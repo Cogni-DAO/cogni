@@ -2,7 +2,7 @@
 id: task.0167
 type: task
 title: "Node activation: payments.status in repo-spec + pnpm node:activate-payments"
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 15
 estimate: 2
@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.ai-operator-wallet
 branch: feat/setup-dao-script
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/583
 reviewer:
 revision: 5
 blocked_by:
