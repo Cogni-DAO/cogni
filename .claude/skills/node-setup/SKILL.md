@@ -23,8 +23,8 @@ Verify: `gh auth status`, `tofu --version`, `pnpm --version`. Detect repo name f
 ## Node Lifecycle State Machine
 
 ```
-clone → formation → activation → infra → deploy
-         (pending)    (active)
+clone → formation → local env → activation → infra → deploy
+         (pending)    (dev:infra)   (active)
 ```
 
 Check `payments.status` in `.cogni/repo-spec.yaml` to determine current state.
@@ -52,18 +52,9 @@ Derive `REPO_SLUG` (e.g., `cogni-resy-helper`) and `REPO_SNAKE` (e.g., `cogni_re
 
 **Gate:** `pnpm check` passes.
 
-### Phase 2: Payment Activation (`payments.status: pending`)
+### Phase 2: Local Environment
 
-**Goal:** Operator wallet provisioned, Split contract deployed, payments active.
-
-1. Follow [Payment Activation Guide](../../../docs/guides/operator-wallet-setup.md)
-2. User provides Privy credentials + funded deployer wallet
-3. Run `pnpm dotenv -e .env.local -- pnpm node:activate-payments`
-4. **Gate:** `payments.status: active` in repo-spec, `operator_wallet.address` and `payments_in` populated
-
-### Phase 3: Local Environment
-
-**Goal:** `.env.local` configured with all required credentials.
+**Goal:** `.env.local` configured, dev stack running, database provisioned.
 
 1. Copy `.env.local.example` → `.env.local`, update DB names and `COGNI_REPO_URL`
 2. Prompt user for credentials they must create (see [SETUP_DESIGN.md](../../../scripts/setup/SETUP_DESIGN.md) for full list):
@@ -78,8 +69,22 @@ Derive `REPO_SLUG` (e.g., `cogni-resy-helper`) and `REPO_SNAKE` (e.g., `cogni_re
    | `OPENCLAW_GITHUB_RW_TOKEN` | https://github.com/settings/tokens/new — Classic PAT, `repo` scope                      |
 
 3. Auto-generate: `LITELLM_MASTER_KEY`, `AUTH_SECRET`, `OPENCLAW_GATEWAY_TOKEN` via `openssl rand`
+4. Start dev infrastructure: `pnpm dev:infra`
+5. Provision database + run migrations: `pnpm dev:setup`
+6. Start dev server: `pnpm dev`
 
-**Gate:** `pnpm check` passes.
+**Gate:** `pnpm check` passes. App boots at http://localhost:3000 without DB errors.
+
+### Phase 3: Payment Activation (`payments.status: pending_activation`)
+
+**Goal:** Split contract deployed, payments active.
+
+1. User adds `operator_wallet.address` to repo-spec (provision via Privy if needed — see [Payment Activation Guide](../../../docs/guides/operator-wallet-setup.md))
+2. Restart dev server to pick up repo-spec changes
+3. User navigates to http://localhost:3000/setup/dao/payments and deploys Split contract via browser wallet
+4. User pastes the output `payments_in` + `payments.status: active` into repo-spec
+
+**Gate:** `payments.status: active` in repo-spec, `payments_in.credits_topup.receiving_address` populated.
 
 ### Phase 4: Infrastructure (preview first, then production)
 

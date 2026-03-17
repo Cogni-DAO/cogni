@@ -5,11 +5,11 @@ schema_version: "0.1.4"
 
 # Unique identity for this node deployment (infrastructure only).
 # Generated fresh for this fork — never reuse cogni-template's node_id.
-node_id: "2eae883d-9e9a-4290-adb1-f5ba6762ac8d"
+node_id: "304d5f22-7abe-4929-98d2-9e7a2b7a4af9"
 
 # Governance domain (project). V0 default: 'default' (single-project node).
 # Derived: uuidv5(node_id, "default")
-scope_id: "8ea21575-5904-58a3-a432-5989b5d2abb3"
+scope_id: "f8b672c9-5953-5fe6-8b83-8f5c2ceadae3"
 scope_key: "default"
 
 # Activity ledger ingestion configuration
@@ -36,22 +36,21 @@ fail_on_error: true
 operator_wallet:
   address: "0xdCCa8D85603C2CC47dc6974a790dF846f8695056"
 
-# DAO contracts — will be populated by formation wizard (/setup/dao)
+# DAO contracts — deployed via formation wizard (/setup/dao)
 cogni_dao:
+  dao_contract: "0x4bed2ccba15eb7c457843267c6c90852744ca5f3"
+  plugin_contract: "0xd4f3dc8b56cab333899caa66ec4bc6ec119cf376"
+  signal_contract: "0x98a1be8eecdee7f91f38e14f4c92feb41099b512"
   chain_id: "8453"
-  dao_contract: "0x0000000000000000000000000000000000000000"
-  plugin_contract: "0x0000000000000000000000000000000000000000"
 
-# Payments status — will be set to 'active' by `pnpm node:activate-payments`
+# Payment rails — activated via /setup/dao/payments
 payments:
-  status: pending
+  status: active
 
-# DAO Financial Rails Configuration
-# Will be populated by `pnpm node:activate-payments`
 payments_in:
   credits_topup:
     provider: cogni-usdc-backend-v1
-    receiving_address: "0x0000000000000000000000000000000000000000"
+    receiving_address: "0x1A6143d8D8B90Ef1b9246f240a2d7D8AB54F473B"
     allowed_chains:
       - Base
     allowed_tokens:
