@@ -133,6 +133,19 @@ export type {
   ProviderFundingOutcome,
   ProviderFundingPort,
 } from "./provider-funding.port";
+// Reservation ports
+export {
+  type AlertSetupResult,
+  type BookingAssistParams,
+  type BookingAssistResult,
+  type BookingAttempt,
+  type CreateWatchRequestParams,
+  type ReservationProviderPort,
+  type ReservationStorePort,
+  type WatchEvent,
+  type WatchRequest,
+  WatchRequestNotFoundError,
+} from "./reservation.port";
 export type {
   ProxyBillingEntry,
   SandboxErrorCode,
