@@ -35,7 +35,7 @@ resource "cherryservers_server" "server" {
 }
 
 resource "cherryservers_ssh_key" "key" {
-    name       = "cogni-${var.environment}-deploy"
+    name       = "${var.vm_name_prefix}-${var.environment}-deploy"
     public_key = file("${path.module}/${var.public_key_path}")
 }
 

@@ -217,9 +217,6 @@ REQUIRED_SECRETS=(
     # OpenClaw gateway auth (must match openclaw-gateway.json gateway.auth.token)
     "OPENCLAW_GATEWAY_TOKEN"
     "OPENCLAW_GITHUB_RW_TOKEN"
-    # Grafana observability (for grafana-health skill + MCP)
-    "GRAFANA_URL"
-    "GRAFANA_SERVICE_ACCOUNT_TOKEN"
     # Internal ops auth (deploy-time governance sync trigger)
     "INTERNAL_OPS_TOKEN"
     # PostHog product analytics (required — app fails to start without these)
