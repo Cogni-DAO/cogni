@@ -5,6 +5,10 @@
   "env": {
     "ENABLE_LSP_TOOL": "1"
   },
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "hooks": {
     "SessionStart": [
       {
