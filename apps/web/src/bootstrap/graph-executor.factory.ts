@@ -18,6 +18,11 @@
  * @public
  */
 
+import type {
+  ExecutionContext,
+  GraphRunRequest,
+  GraphRunResult,
+} from "@cogni/graph-execution-core";
 import type { UserId } from "@cogni/ids";
 import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 import {
@@ -31,12 +36,11 @@ import {
   ObservabilityGraphExecutorDecorator,
   PreflightCreditCheckDecorator,
 } from "@/adapters/server";
+import { runInScope } from "@/adapters/server/ai/execution-scope";
 import type {
   AiExecutionErrorCode,
-  ExecutionContext,
+  BillingContext,
   GraphExecutorPort,
-  GraphRunRequest,
-  GraphRunResult,
   PreflightCreditCheckFn,
 } from "@/ports";
 import { serverEnv } from "@/shared/env";
@@ -118,6 +122,32 @@ export function createGraphExecutor(
   );
 
   return decorated;
+}
+
+/**
+ * Run a graph within an execution scope.
+ *
+ * This is the ONLY app-local launch entrypoint. Every launcher (chat, schedule,
+ * webhook, review) calls this — never executor.runGraph() directly.
+ *
+ * Sets AsyncLocalStorage scope so static inner providers can read billing context.
+ * abortSignal is chat-only temporary tech debt — scheduled runs omit it.
+ */
+export function runGraphWithScope(params: {
+  readonly executor: GraphExecutorPort;
+  readonly req: GraphRunRequest;
+  readonly ctx?: ExecutionContext;
+  readonly billing: BillingContext;
+  readonly abortSignal?: AbortSignal;
+}): GraphRunResult {
+  const { executor, req, ctx, billing } = params;
+  return runInScope(
+    {
+      billing,
+      ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
+    },
+    () => executor.runGraph(req, ctx)
+  );
 }
 
 /**
