@@ -20,9 +20,13 @@
  */
 
 import { createHash } from "node:crypto";
+import type { ExecutionContext } from "@cogni/graph-execution-core";
 import { toUserId } from "@cogni/ids";
 import { resolveAiAdapterDeps } from "@/bootstrap/container";
-import { createGraphExecutor } from "@/bootstrap/graph-executor.factory";
+import {
+  createGraphExecutor,
+  runGraphWithScope,
+} from "@/bootstrap/graph-executor.factory";
 import type {
   ChatCompletionOutput,
   ChatMessage,
@@ -39,7 +43,7 @@ import {
   toCoreMessages,
 } from "@/features/ai/public.server";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { LlmCaller, PreflightCreditCheckFn } from "@/ports";
+import type { BillingContext, PreflightCreditCheckFn } from "@/ports";
 import {
   isBillingAccountNotFoundPortError,
   isInsufficientCreditsPortError,
@@ -355,17 +359,17 @@ export async function completionStream(
     }
   );
 
-  const caller: LlmCaller = {
+  const billing: BillingContext = {
     billingAccountId: billingAccount.id,
     virtualKeyId: billingAccount.defaultVirtualKeyId,
+  };
+
+  const executionContext: ExecutionContext = {
+    actorUserId: input.sessionUser.id,
     requestId: ctx.reqId,
-    traceId: ctx.traceId,
-    userId: input.sessionUser.id,
-    // Derive sessionId from stateKey for Langfuse session grouping
-    // Hash ensures deterministic, bounded, log-safe output; truncation at sink
-    ...(input.stateKey && {
-      sessionId: deriveSessionId(billingAccount.id, input.stateKey),
-    }),
+    ...(input.stateKey
+      ? { sessionId: deriveSessionId(billingAccount.id, input.stateKey) }
+      : {}),
   };
 
   const enrichedCtx: RequestContext = {
@@ -379,14 +383,18 @@ export async function completionStream(
   const timestamp = clock.now();
   const coreMessages = toCoreMessages(input.messages, timestamp);
 
-  const aiRuntime = createAiRuntime({ graphExecutor });
+  const aiRuntime = createAiRuntime({
+    graphExecutor,
+    billing,
+    runGraphWithScope,
+  });
 
   // runChatStream is now synchronous (returns immediately with stream handle)
   const { stream, final } = aiRuntime.runChatStream(
     {
       messages: coreMessages,
       model: input.model,
-      caller,
+      executionContext,
       ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
       graphName: input.graphName,
       ...(input.stateKey ? { stateKey: input.stateKey } : {}),

@@ -14,7 +14,10 @@
 import type { Logger } from "pino";
 
 import { getContainer } from "@/bootstrap/container";
-import { createGraphExecutor } from "@/bootstrap/graph-executor.factory";
+import {
+  createGraphExecutor,
+  runGraphWithScope,
+} from "@/bootstrap/graph-executor.factory";
 import { createReviewAdapterDeps } from "@/bootstrap/review-adapter.factory";
 import { executeStream } from "@/features/ai/public.server";
 import { handlePrReview } from "@/features/review/public.server";
@@ -116,6 +119,22 @@ function dispatchAsync(
         async () => {}
       );
 
+      // Wrap executor with system tenant billing scope
+      const billing = {
+        billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+        virtualKeyId: billingAccount.defaultVirtualKeyId,
+      };
+      const scopedExecutor: typeof executor = {
+        runGraph(req, execCtx) {
+          return runGraphWithScope({
+            executor,
+            req,
+            ...(execCtx ? { ctx: execCtx } : {}),
+            billing,
+          });
+        },
+      };
+
       // Create adapter deps via bootstrap factory (spread flat into handler deps)
       const adapterDeps = createReviewAdapterDeps(
         ctx.installationId,
@@ -124,7 +143,7 @@ function dispatchAsync(
       );
 
       await handlePrReview(ctx, {
-        executor,
+        executor: scopedExecutor,
         log,
         virtualKeyId: billingAccount.defaultVirtualKeyId,
         ...adapterDeps,

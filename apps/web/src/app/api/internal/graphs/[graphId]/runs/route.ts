@@ -21,7 +21,10 @@ import { toUserId } from "@cogni/ids";
 import { SYSTEM_ACTOR } from "@cogni/ids/system";
 import { NextResponse } from "next/server";
 import { getContainer } from "@/bootstrap/container";
-import { createGraphExecutor } from "@/bootstrap/graph-executor.factory";
+import {
+  createGraphExecutor,
+  runGraphWithScope,
+} from "@/bootstrap/graph-executor.factory";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   InternalGraphRunInputSchema,
@@ -403,15 +406,27 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       toUserId(grant.userId),
       preflightCheckFn
     );
-    const result = executor.runGraph({
-      runId,
-      graphId,
-      messages: messages.map((m) => ({
-        role: m.role as "user" | "assistant" | "system",
-        content: m.content,
-      })),
-      model,
-      stateKey,
+    const result = runGraphWithScope({
+      executor,
+      req: {
+        runId,
+        graphId,
+        messages: messages.map((m) => ({
+          role: m.role as "user" | "assistant" | "system",
+          content: m.content,
+        })),
+        model,
+        stateKey,
+      },
+      ctx: {
+        actorUserId: grant.userId,
+        requestId: runId,
+        sessionId,
+      },
+      billing: {
+        billingAccountId: grant.billingAccountId,
+        virtualKeyId: billingAccount.defaultVirtualKeyId,
+      },
     });
 
     // Consume stream and wait for final result.
