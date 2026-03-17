@@ -13,6 +13,9 @@ services:
       context: ../../..
       dockerfile: ./apps/web/Dockerfile
     restart: always
+    # TigerBeetle native client uses io_uring — blocked by default seccomp profile
+    security_opt:
+      - "seccomp=unconfined"
     networks:
       - cogni-edge
       - internal
@@ -155,9 +158,9 @@ services:
           'python3 -c "import urllib.request,sys; r=urllib.request.urlopen(''http://127.0.0.1:4000/health/readiness'', timeout=1); sys.exit(0 if r.status==200 else 1)"',
         ]
       interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: 60s
+      timeout: 5s
+      retries: 8
+      start_period: 120s
 
   postgres:
     image: postgres:15
