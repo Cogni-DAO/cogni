@@ -3,39 +3,18 @@
 
 /**
  * Module: `@scripts/node-activate-payments`
- * Purpose: Activate payment rails for a child node — provision operator wallet, deploy Split, write repo-spec.
- * Scope: CLI entrypoint that provisions Privy wallet, deploys Split, validates on-chain, and writes repo-spec. Does not modify app runtime code or deployment infrastructure.
- * Invariants: CHILD_OWNS_OPERATOR_WALLET, SPLIT_CONTROLLER_IS_ADMIN, PAYMENTS_ACTIVE_REQUIRES_ALL.
- * Side-effects: IO (Privy API, Base RPC, filesystem write to .cogni/repo-spec.yaml)
+ * Purpose: Provision operator wallet via Privy and write operator_wallet.address to repo-spec.
+ * Scope: CLI entrypoint for Privy wallet provisioning only. Does not deploy Split contracts (use /setup/dao/payments UI for that).
+ * Invariants: CHILD_OWNS_OPERATOR_WALLET — wallet owned by child node's Privy app credentials.
+ * Side-effects: IO (Privy API, filesystem write to .cogni/repo-spec.yaml)
  * Links: docs/spec/node-formation.md, docs/guides/operator-wallet-setup.md
  * @public
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { createInterface } from "node:readline/promises";
 
-import { PUSH_SPLIT_V2o2_FACTORY_ADDRESS } from "@0xsplits/splits-sdk/constants";
-import {
-  splitV2ABI,
-  splitV2o2FactoryAbi,
-} from "@0xsplits/splits-sdk/constants/abi";
-import {
-  calculateSplitAllocations,
-  numberToPpm,
-  OPENROUTER_CRYPTO_FEE_PPM,
-  SPLIT_TOTAL_ALLOCATION,
-} from "@cogni/operator-wallet";
 import { PrivyClient } from "@privy-io/node";
-import type { Address } from "viem";
-import {
-  createPublicClient,
-  createWalletClient,
-  decodeEventLog,
-  getAddress,
-  http,
-} from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { base } from "viem/chains";
+import { getAddress } from "viem";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,43 +29,20 @@ function requireEnv(key: string): string {
   return val;
 }
 
-function loadRepoSpecRaw(): string {
-  const path = ".cogni/repo-spec.yaml";
-  try {
-    return readFileSync(path, "utf-8");
-  } catch {
-    console.error(`Cannot read ${path}. Run node formation first.`);
-    process.exit(1);
-  }
-}
-
-function extractDaoContract(yaml: string): string {
-  const match = yaml.match(/dao_contract:\s*"(0x[a-fA-F0-9]{40})"/);
-  if (!match?.[1]) {
-    console.error(
-      "Cannot find cogni_dao.dao_contract in .cogni/repo-spec.yaml. Run node formation first."
-    );
-    process.exit(1);
-  }
-  return match[1];
-}
-
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-
   console.log("═══════════════════════════════════════════════════");
-  console.log(" Activate Payment Rails");
+  console.log(" Provision Operator Wallet");
   console.log("═══════════════════════════════════════════════════\n");
 
   // --- Step 1: Verify Privy env ---
   console.log("Step 1: Checking Privy credentials...");
   const appId = requireEnv("PRIVY_APP_ID");
   const appSecret = requireEnv("PRIVY_APP_SECRET");
-  requireEnv("PRIVY_SIGNING_KEY"); // Validated but not used directly (Privy SDK reads from env)
+  requireEnv("PRIVY_SIGNING_KEY"); // Validated but not used directly
   console.log("  ✓ PRIVY_APP_ID, PRIVY_APP_SECRET, PRIVY_SIGNING_KEY set\n");
 
   // --- Step 2: Resolve operator wallet ---
@@ -124,218 +80,49 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // --- Step 3: Read DAO treasury from repo-spec ---
-  const repoSpecRaw = loadRepoSpecRaw();
-  const treasuryAddress = getAddress(extractDaoContract(repoSpecRaw));
-  console.log(`Step 3: DAO treasury from repo-spec: ${treasuryAddress}`);
+  // --- Step 3: Write operator_wallet to repo-spec ---
+  console.log("Step 3: Writing operator_wallet to repo-spec...");
 
-  // --- Step 4: Derive allocations ---
-  const markupPpm = numberToPpm(
-    Number(process.env.USER_PRICE_MARKUP_FACTOR ?? "2.0")
-  );
-  const revenueSharePpm = numberToPpm(
-    Number(process.env.SYSTEM_TENANT_REVENUE_SHARE ?? "0.75")
-  );
-  const { operatorAllocation, treasuryAllocation } = calculateSplitAllocations(
-    markupPpm,
-    revenueSharePpm,
-    OPENROUTER_CRYPTO_FEE_PPM
-  );
-
-  // --- Step 5: Split controller ---
-  const rawKey = requireEnv("DEPLOYER_PRIVATE_KEY");
-  const privateKey = (
-    rawKey.startsWith("0x") ? rawKey : `0x${rawKey}`
-  ) as `0x${string}`;
-  const account = privateKeyToAccount(privateKey);
-
-  const splitController = process.env.SPLIT_CONTROLLER_ADDRESS
-    ? getAddress(process.env.SPLIT_CONTROLLER_ADDRESS)
-    : account.address;
-
-  if (!process.env.SPLIT_CONTROLLER_ADDRESS) {
-    console.log(
-      "\n  ⚠ WARNING: SPLIT_CONTROLLER_ADDRESS not set. Using deployer as Split controller."
-    );
-    console.log(
-      "  For production, set SPLIT_CONTROLLER_ADDRESS to a multisig or governance admin.\n"
-    );
-  }
-
-  // --- Step 6: Confirm ---
-  const rpcUrl = process.env.EVM_RPC_URL ?? "https://mainnet.base.org";
-
-  console.log("\n  Configuration:");
-  console.log(
-    `    Operator (${Number(operatorAllocation) / 1e4}%): ${operatorAddress}`
-  );
-  console.log(
-    `    Treasury (${Number(treasuryAllocation) / 1e4}%): ${treasuryAddress}`
-  );
-  console.log(`    Split controller: ${splitController}`);
-  console.log(`    Deployer: ${account.address}`);
-  console.log(`    RPC: ${rpcUrl}\n`);
-
-  const answer = await rl.question("  Deploy Split to Base mainnet? [y/N] ");
-  if (answer.toLowerCase() !== "y") {
-    console.log("Aborted.");
-    rl.close();
-    return;
-  }
-
-  // --- Step 7: Deploy Split ---
-  console.log("\n  Deploying Split contract...");
-
-  const publicClient = createPublicClient({
-    chain: base,
-    transport: http(rpcUrl),
-  });
-  const walletClient = createWalletClient({
-    account,
-    chain: base,
-    transport: http(rpcUrl),
-  });
-
-  // Sort recipients ascending (0xSplits requirement)
-  const entries = [
-    {
-      address: getAddress(operatorAddress) as Address,
-      allocation: operatorAllocation,
-    },
-    {
-      address: getAddress(treasuryAddress) as Address,
-      allocation: treasuryAllocation,
-    },
-  ].sort((a, b) =>
-    a.address.toLowerCase().localeCompare(b.address.toLowerCase())
-  );
-
-  const splitParams = {
-    recipients: entries.map((e) => e.address) as readonly Address[],
-    allocations: entries.map((e) => e.allocation) as readonly bigint[],
-    totalAllocation: SPLIT_TOTAL_ALLOCATION,
-    distributionIncentive: 0,
-  };
-
-  const factoryAddress = getAddress(PUSH_SPLIT_V2o2_FACTORY_ADDRESS) as Address;
-
-  const deployHash = await walletClient.writeContract({
-    address: factoryAddress,
-    abi: splitV2o2FactoryAbi,
-    functionName: "createSplit",
-    args: [splitParams, splitController as Address, splitController as Address],
-  });
-
-  const receipt = await publicClient.waitForTransactionReceipt({
-    hash: deployHash,
-  });
-
-  // Extract Split address from SplitCreated event
-  let splitAddress: string | undefined;
-  for (const log of receipt.logs) {
-    try {
-      const decoded = decodeEventLog({
-        abi: splitV2o2FactoryAbi,
-        data: log.data,
-        topics: log.topics,
-      });
-      if (decoded.eventName === "SplitCreated") {
-        splitAddress = (decoded.args as { split: Address }).split;
-        break;
-      }
-    } catch {
-      // Not our event
-    }
-  }
-
-  if (!splitAddress) {
-    console.error(
-      "  ERROR: Could not extract Split address from SplitCreated event"
-    );
+  const repoSpecPath = ".cogni/repo-spec.yaml";
+  let repoSpec: string;
+  try {
+    repoSpec = readFileSync(repoSpecPath, "utf-8");
+  } catch {
+    console.error(`  Cannot read ${repoSpecPath}. Run node formation first.`);
     process.exit(1);
   }
 
-  console.log(`  ✓ Split deployed: ${splitAddress}`);
-  console.log(`    Tx: ${receipt.transactionHash}`);
-  console.log(`    Gas: ${receipt.gasUsed}`);
-
-  // --- Step 8: Validate on-chain ---
-  console.log("\n  Validating deployed Split...");
-
-  const onChainHash = await publicClient.readContract({
-    address: splitAddress as Address,
-    abi: splitV2ABI,
-    functionName: "splitHash",
-  });
-
-  if (!onChainHash) {
-    console.error("  ERROR: Could not read splitHash from deployed contract");
-    process.exit(1);
-  }
-  console.log(
-    `  ✓ Split contract verified on-chain (splitHash: ${(onChainHash as string).substring(0, 18)}...)`
-  );
-
-  // --- Step 9: Write repo-spec ---
-  console.log("\n  Writing repo-spec...");
-
-  let updatedSpec = repoSpecRaw;
-
-  // Add or update operator_wallet
-  if (updatedSpec.includes("operator_wallet:")) {
-    updatedSpec = updatedSpec.replace(
+  if (repoSpec.includes("operator_wallet:")) {
+    repoSpec = repoSpec.replace(
       /operator_wallet:\s*\n\s*address:\s*"[^"]*"/,
       `operator_wallet:\n  address: "${operatorAddress}"`
     );
   } else {
     // Insert before cogni_dao
-    updatedSpec = updatedSpec.replace(
+    repoSpec = repoSpec.replace(
       /cogni_dao:/,
       `operator_wallet:\n  address: "${operatorAddress}"\n\ncogni_dao:`
     );
   }
 
-  // Add or update payments_in
-  if (updatedSpec.includes("payments_in:")) {
-    updatedSpec = updatedSpec.replace(
-      /payments_in:\s*\n\s*credits_topup:\s*\n\s*provider:[^\n]*\n\s*receiving_address:[^\n]*/,
-      `payments_in:\n  credits_topup:\n    provider: cogni-usdc-backend-v1\n    receiving_address: "${splitAddress}"`
-    );
-  } else {
-    updatedSpec += `\npayments_in:\n  credits_topup:\n    provider: cogni-usdc-backend-v1\n    receiving_address: "${splitAddress}"\n    allowed_chains:\n      - Base\n    allowed_tokens:\n      - USDC\n`;
-  }
-
-  // Add or update payments.status — written last, only after validation succeeded
-  if (updatedSpec.includes("payments:")) {
-    updatedSpec = updatedSpec.replace(
-      /payments:\s*\n\s*status:\s*\S+/,
-      "payments:\n  status: active"
-    );
-  } else {
-    updatedSpec += `\npayments:\n  status: active\n`;
-  }
-
-  writeFileSync(".cogni/repo-spec.yaml", updatedSpec);
-  console.log("  ✓ .cogni/repo-spec.yaml updated");
+  writeFileSync(repoSpecPath, repoSpec);
+  console.log(`  ✓ operator_wallet.address: ${operatorAddress}\n`);
 
   // --- Done ---
-  console.log("\n═══════════════════════════════════════════════════");
-  console.log(" PAYMENT RAILS ACTIVATED");
   console.log("═══════════════════════════════════════════════════");
-  console.log(`  Operator wallet: ${operatorAddress}`);
-  console.log(`  Split contract:  ${splitAddress}`);
-  console.log(`  Split controller: ${splitController}`);
-  console.log(`  payments.status: active`);
+  console.log(" OPERATOR WALLET PROVISIONED");
+  console.log("═══════════════════════════════════════════════════");
+  console.log(`  Address: ${operatorAddress}`);
   console.log();
   console.log("Next steps:");
-  console.log(`  1. Fund operator wallet with ~$0.02 ETH on Base for gas`);
-  console.log(`  2. Commit .cogni/repo-spec.yaml`);
-  console.log(`  3. Deploy your node`);
-
-  rl.close();
+  console.log(
+    "  1. Go to /setup/dao/payments in your app to deploy the Split contract"
+  );
+  console.log("  2. Fund operator wallet with ~$0.02 ETH on Base for gas");
+  console.log("  3. Commit .cogni/repo-spec.yaml");
 }
 
 main().catch((err) => {
-  console.error("Failed to activate payments:", err);
+  console.error("Failed to provision operator wallet:", err);
   process.exit(1);
 });
