@@ -36,13 +36,13 @@ Check `payments.status` in `.cogni/repo-spec.yaml` to determine current state.
 1. Direct user to https://cognidao.org/setup/dao
 2. User copies generated YAML into `.cogni/repo-spec.yaml`
 3. Follow [Node Formation Guide](../../../docs/guides/node-formation-guide.md) for details
-4. **Gate:** `.cogni/repo-spec.yaml` has valid `cogni_dao.chain_id` and `payments.status: pending`
+4. **Gate:** `.cogni/repo-spec.yaml` has valid `cogni_dao.chain_id` and `payments.status: pending_activation`
 
 ### Phase 1: Repo Identity
 
 **Goal:** All template references point to this fork.
 
-Derive `REPO_SLUG` (e.g., `cogni-resy-helper`) and `REPO_SNAKE` (e.g., `cogni_resy_helper`) from the repo name. Update:
+Derive `REPO_SLUG` (e.g., `my-cogni-node`) and `REPO_SNAKE` (e.g., `my_cogni_node`) from the repo name. Update:
 
 - `package.json` → `name`
 - `.cogni/repo-spec.yaml` → `intent.name`, `activity_sources.github.source_refs`

@@ -1,15 +1,19 @@
-# Cogni Resy Helper — Repository Specification
-# Node identity and configuration for the reservation assistant
+# Cogni Git Review Repository Specification Template
+# Copy this file to .cogni/repo-spec.yaml and customize for your repository
 
 schema_version: "0.1.4"
 
 # Unique identity for this node deployment (infrastructure only).
-# Generated fresh for this fork — never reuse cogni-template's node_id.
-node_id: "304d5f22-7abe-4929-98d2-9e7a2b7a4af9"
+# Scopes ledger tables alongside scope_id. Never used for governance domain.
+# Generated once at init; must never change for an existing deployment.
+# See: docs/spec/identity-model.md
+node_id: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d"
 
 # Governance domain (project). V0 default: 'default' (single-project node).
-# Derived: uuidv5(node_id, "default")
-scope_id: "f8b672c9-5953-5fe6-8b83-8f5c2ceadae3"
+# Multi-scope: declare named scopes in .cogni/projects/*.yaml instead.
+# scope_id is the canonical DB key (stable UUID FK); scope_key is the human-friendly slug.
+# Derived: uuidv5(node_id, "default") — deterministic per deployment
+scope_id: "a28a8b1e-1f9d-5cd5-9329-569e4819feda"
 scope_key: "default"
 
 # Activity ledger ingestion configuration
@@ -22,35 +26,39 @@ activity_ledger:
   activity_sources:
     github:
       attribution_pipeline: cogni-v0.0
-      source_refs: ["Cogni-DAO/cogni-resy-helper"]
+      source_refs: ["Cogni-DAO/node-template"]
       excluded_logins: ["Cogni-1729"]
 
 intent:
-  name: cogni-resy-helper
+  name: cogni-template
 
 # Control GitHub check conclusion behavior for gate errors/timeouts
+# false (default): errors/timeouts result in 'neutral' conclusion (non-blocking)
+# true: errors/timeouts result in 'failure' conclusion (blocks merge)
 fail_on_error: true
 
 # Operator wallet configuration (Privy-managed)
-# Will be populated by `pnpm node:activate-payments`
+# address: Privy-managed EOA that receives operator share from Split
+# Split contract address lives in payments_in.credits_topup.receiving_address
 operator_wallet:
-  address: "0xdCCa8D85603C2CC47dc6974a790dF846f8695056"
+  address: "0xdCCa8D85603C2CC47dc6974a790dF846f8695056" # Privy-managed operator wallet
 
-# DAO contracts — deployed via formation wizard (/setup/dao)
 cogni_dao:
-  dao_contract: "0x4bed2ccba15eb7c457843267c6c90852744ca5f3"
-  plugin_contract: "0xd4f3dc8b56cab333899caa66ec4bc6ec119cf376"
-  signal_contract: "0x98a1be8eecdee7f91f38e14f4c92feb41099b512"
-  chain_id: "8453"
+  dao_contract: "0xF61c3fafD4D34b4568e7a500d92b28Ac175e83C6" # Current Cogni parent DAO Contract Address
+  plugin_contract: "0x609B427f04C1C42De3e28898cb7b9Bad329e6b77" # DAO's Aragon Voting Plugin Address
+  signal_contract: "0x590FC79B9c925C377fA63F4AaF54cdbF4Ee273A1" # DAO's CogniSignal Contract Address
+  chain_id: "8453" # Chain ID: Eth Sepolia testnet
+  base_url: "https://proposal.cognidao.org" # v0 Base URL: cogni-proposal-launcher service
 
-# Payment rails — activated via /setup/dao/payments
+# DAO Financial Rails Configuration
+# Inbound payment configuration for USDC credits top-up
 payments:
   status: active
 
 payments_in:
   credits_topup:
     provider: cogni-usdc-backend-v1
-    receiving_address: "0x1A6143d8D8B90Ef1b9246f240a2d7D8AB54F473B"
+    receiving_address: "0xDe4dE5e40f7215E4606c3e422D28cf01f97C8c66" # Push Split V2o2 — 92.1% operator / 7.9% DAO
     allowed_chains:
       - Base
     allowed_tokens:
@@ -60,6 +68,9 @@ providers:
   openrouter:
     api_host: https://openrouter.ai/api/v1
     api_key_env: OPENROUTER_API_KEY
+  # cherryservers:
+  #   api_host: https://api.cherryservers.com/v1
+  #   api_key_env: CHERRY_API_TOKEN
 
 llm_proxy:
   host_env: LITELLM_PROXY_URL
@@ -71,11 +82,19 @@ secrets:
 
 # Gates run in the order they appear below.
 gates:
+  # Built-in gates (run directly in bot process)
   - type: review-limits
     id: review_limits
     with:
       max_changed_files: 50
       max_total_diff_kb: 1500
+
+  # Ensure */*/AGENTS.md files are updated when code changes
+  # - type: agents-md-sync
+  #   id: agents_md_sync
+  # with:  # Optional configuration
+  #   code_patterns: ["src/**/*.js", "lib/**/*.ts"]  # Files that require doc updates
+  #   doc_pattern: "CLAUDE.md"                       # Documentation file to check. Default is AGENTS.md
 
   - type: ai-rule
     with:
@@ -87,14 +106,21 @@ gates:
     with:
       rule_file: repo-goal-alignment.yaml
 
-# Governance schedule definitions
+  ## template for adding a new rule.
+  # - type: ai-rule
+  #   with:
+  #     rule_file: ai-rule-template.yaml
+
+# Governance schedule definitions (charter-scoped per governance-council.md)
+# Each schedule triggers an OpenClaw gateway run with a 1-word entrypoint.
+# Cron Format syntax: https://crontab.guru/
 governance:
   schedules:
     - charter: HEARTBEAT
-      cron: "0 * * * *"
+      cron: "0 * * * *" # once per hour — git delta check + Discord status
       timezone: UTC
       entrypoint: HEARTBEAT
     - charter: LEDGER_INGEST
-      cron: "0 6 * * *"
+      cron: "0 6 * * *" # daily at 6am UTC
       timezone: UTC
       entrypoint: LEDGER_INGEST

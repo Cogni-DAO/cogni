@@ -55,11 +55,6 @@
       "types": "./dist/profile.d.ts",
       "import": "./dist/profile.js",
       "default": "./dist/profile.js"
-    },
-    "./reservations": {
-      "types": "./dist/reservations.d.ts",
-      "import": "./dist/reservations.js",
-      "default": "./dist/reservations.js"
     }
   },
   "files": [
