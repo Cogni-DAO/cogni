@@ -2,7 +2,7 @@
 id: task.0167
 type: task
 title: "Settlement Package: Pure Functions + Domain Types + Ownership Model"
-status: needs_closeout
+status: done
 priority: 1
 rank: 5
 estimate: 3
@@ -19,7 +19,7 @@ revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-03-16
-updated: 2026-03-16
+updated: 2026-03-17
 labels: [governance, web3, settlement, merkle]
 external_refs:
 ---
