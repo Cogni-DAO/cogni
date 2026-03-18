@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@app/(app)/dashboard/_api/fetchRuns`
+ * Purpose: Client-side fetch for graph run list. Calls GET /api/v1/ai/runs when available, stubs with empty array for now.
+ * Scope: Data fetching only. Does not implement business logic.
+ * Invariants: Returns RunCardData[] matching the RunCard component props.
+ * Side-effects: IO (HTTP fetch)
+ * Links: [RunCard](../../../../components/kit/data-display/RunCard.tsx)
+ * @public
+ */
+
+import type { RunCardData } from "@/components/kit/data-display/RunCard";
+
+interface FetchRunsParams {
+  tab: "user" | "system";
+  limit?: number;
+}
+
+interface FetchRunsResponse {
+  runs: RunCardData[];
+}
+
+/**
+ * Fetch graph runs for the dashboard.
+ * TODO(task.0183): Replace with real API call to GET /api/v1/ai/runs once implemented.
+ */
+export async function fetchRuns(
+  params: FetchRunsParams
+): Promise<FetchRunsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params.tab === "system") {
+    searchParams.set("runKind", "system_scheduled");
+  } else {
+    searchParams.set("runKind", "user_immediate");
+  }
+  if (params.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+
+  // Attempt real API — gracefully degrade to empty if not yet deployed
+  try {
+    const res = await fetch(`/api/v1/ai/runs?${searchParams.toString()}`);
+    if (res.ok) {
+      return res.json() as Promise<FetchRunsResponse>;
+    }
+  } catch {
+    // API not available yet — return empty
+  }
+
+  return { runs: [] };
+}
