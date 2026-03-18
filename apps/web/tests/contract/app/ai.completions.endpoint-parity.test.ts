@@ -58,15 +58,12 @@ vi.mock("@/bootstrap/container", () => ({
 }));
 
 // Mock graph executor factory
-vi.mock("@/bootstrap/graph-executor.factory", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/bootstrap/graph-executor.factory")>();
-  return {
-    createGraphExecutor: vi.fn(),
-    createScopedGraphExecutor: vi.fn((params) => params.executor),
-    runGraphWithScope: original.runGraphWithScope,
-  };
-});
+vi.mock("@/bootstrap/graph-executor.factory", () => ({
+  createGraphExecutor: vi.fn(),
+  createScopedGraphExecutor: vi.fn(
+    (params: { executor: unknown }) => params.executor
+  ),
+}));
 
 // Mock preflight credit check
 vi.mock("@/features/ai/public.server", async (importOriginal) => {

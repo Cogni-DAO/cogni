@@ -41,15 +41,12 @@ vi.mock("@/bootstrap/container", () => ({
 }));
 
 // Mock the graph executor factory (stable boundary per UNIFIED_GRAPH_EXECUTOR)
-vi.mock("@/bootstrap/graph-executor.factory", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/bootstrap/graph-executor.factory")>();
-  return {
-    createGraphExecutor: vi.fn(),
-    createScopedGraphExecutor: vi.fn((params) => params.executor),
-    runGraphWithScope: original.runGraphWithScope,
-  };
-});
+vi.mock("@/bootstrap/graph-executor.factory", () => ({
+  createGraphExecutor: vi.fn(),
+  createScopedGraphExecutor: vi.fn(
+    (params: { executor: unknown }) => params.executor
+  ),
+}));
 
 // Mock preflightCreditCheck to avoid serverEnv access in contract tests
 // Preserves other exports from public.server.ts (createAiRuntime, toCoreMessages, etc.)
