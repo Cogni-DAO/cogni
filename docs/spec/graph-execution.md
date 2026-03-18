@@ -55,6 +55,8 @@ Provide a single execution interface (`GraphExecutorPort.runGraph()`) that all g
 
 8b. **CREDITS_ENFORCED_AT_EXECUTION_PORT**: `PreflightCreditCheckDecorator` wraps `GraphExecutorPort` between observability (outer) and billing (inner). Credit check runs eagerly in `runGraph()` and gates both stream consumption and `final` resolution. Call sites create a `PreflightCreditCheckFn` closure and pass it to `createGraphExecutor()`. Rejected runs never reach the billing decorator.
 
+8c. **BILLING_IDENTITY_OUTSIDE_INNER_EXECUTOR**: Inner providers and stream translators emit neutral `usage_report` facts without `billingAccountId` or `virtualKeyId`. Billing identity is attached by a per-run enrichment decorator in the bootstrap wrapper layer before receipt validation/commit. AsyncLocalStorage must not be required to carry billing identity.
+
 9. **P0_ATTEMPT_FREEZE**: In P0, `attempt` is always 0. No code path increments attempt. Full attempt/retry semantics require run persistence (P1). The `attempt` field exists in schema and `UsageFact` for forward compatibility but is frozen at 0.
 
 10. **RUNID_IS_CANONICAL**: `runId` is the canonical execution identity. `ingressRequestId` is optional delivery-layer correlation (HTTP/SSE/worker/queue). P0: they coincidentally equal (no run persistence). P1: many `ingressRequestId`s per `runId` (reconnect/resume). No business logic relies on `ingressRequestId == runId`. Never use `ingressRequestId` for idempotency.

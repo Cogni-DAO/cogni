@@ -74,7 +74,7 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 | **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                 | Done              | 2   | task.0175 |
 | **Extract `graph-execution-core` package** — decouple execution ports from Next.js                   | Done (PR #574)    | 3   | task.0179 |
 | **GraphRunWorkflow + promote `schedule_runs` → `graph_runs`** — single run ledger, Temporal workflow | Checkpoint 1 done | 5   | task.0176 |
-| **Neutral usage facts** — remove billing identity from inner providers (ALS cleanup)                 | Not Started       | 2   | task.0180 |
+| **Neutral usage facts** — remove billing identity from inner providers (ALS cleanup)                 | Needs Implement   | 2   | task.0180 |
 | **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency               | Not Started       | 5   | task.0177 |
 | **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs   | Not Started       | 3   | task.0178 |
 
