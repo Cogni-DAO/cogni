@@ -2,7 +2,8 @@
 id: task.0177
 type: task
 title: "Unified streaming API: chat endpoint → Temporal + Redis + idempotency"
-status: needs_closeout
+status: done
+revision: 1
 priority: 0
 rank: 4
 estimate: 5
@@ -15,7 +16,7 @@ project: proj.unified-graph-launch
 blocked_by:
   - task.0176
 created: 2026-03-13
-updated: 2026-03-18
+updated: 2026-03-19
 labels:
   - ai-graphs
 ---
@@ -131,6 +132,17 @@ pnpm test
 - [ ] **No inline execution:** both chat and completions routes go through Temporal via facade
 - [ ] **Tests:** new/updated tests cover the change
 - [ ] **Reviewer:** assigned and approved
+
+## Review Feedback (revision 1)
+
+**Blocking:**
+
+1. **Race condition in `getTemporalWorkflowClient()`** (`apps/web/src/bootstrap/container.ts:245-258`): Two concurrent callers during startup both see `_workflowClient === null`, both call `Connection.connect()`, first connection is overwritten and leaked. On the chat hot path, this WILL happen under load. Fix: store the pending promise so concurrent callers coalesce on the same connection.
+
+**Non-blocking:**
+
+2. Facade file header (`completion.server.ts:9`) still says `UNIFIED_GRAPH_EXECUTOR: Both chatCompletion() and completionStream() use GraphExecutorPort` — stale, should reference Temporal.
+3. Hardcoded `"scheduler-tasks"` in `completion.server.ts:342` — consider reading from `TEMPORAL_TASK_QUEUE` env var.
 
 ## PR / Links
 

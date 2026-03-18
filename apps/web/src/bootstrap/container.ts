@@ -212,6 +212,7 @@ export type ActivityDeps = {
 let _container: Container | null = null;
 let _temporalConnection: TemporalConnection | null = null;
 let _workflowClient: WorkflowClient | null = null;
+let _workflowClientPromise: Promise<WorkflowClient> | null = null;
 
 /**
  * Get the singleton container instance.
@@ -236,6 +237,7 @@ export function resetContainer(): void {
   }
   _temporalConnection = null;
   _workflowClient = null;
+  _workflowClientPromise = null;
 }
 
 /**
@@ -244,17 +246,22 @@ export function resetContainer(): void {
  */
 export async function getTemporalWorkflowClient(): Promise<WorkflowClient> {
   if (_workflowClient) return _workflowClient;
-  const env = serverEnv();
-  const connection = await TemporalConnection.connect({
-    address: env.TEMPORAL_ADDRESS,
-  });
-  const client = new TemporalClient({
-    connection,
-    namespace: env.TEMPORAL_NAMESPACE,
-  });
-  _temporalConnection = connection;
-  _workflowClient = client.workflow;
-  return _workflowClient;
+  if (!_workflowClientPromise) {
+    _workflowClientPromise = (async () => {
+      const env = serverEnv();
+      const connection = await TemporalConnection.connect({
+        address: env.TEMPORAL_ADDRESS,
+      });
+      const client = new TemporalClient({
+        connection,
+        namespace: env.TEMPORAL_NAMESPACE,
+      });
+      _temporalConnection = connection;
+      _workflowClient = client.workflow;
+      return _workflowClient;
+    })();
+  }
+  return _workflowClientPromise;
 }
 
 /** Lazy singleton for webhook registrations (avoids import cost at container init). */

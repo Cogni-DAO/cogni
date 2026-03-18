@@ -6,7 +6,7 @@
  * Purpose: App-layer coordinator for AI completion - session → billing account, delegates to feature layer.
  * Scope: Resolves session user to billing account + virtual key, creates LlmCaller, maps DTOs, normalizes errors. Does not contain business logic or HTTP concerns.
  * Invariants:
- *   - UNIFIED_GRAPH_EXECUTOR: Both chatCompletion() and completionStream() use GraphExecutorPort
+ *   - ONE_RUN_EXECUTION_PATH: Both chatCompletion() and completionStream() start GraphRunWorkflow via Temporal
  *   - Only app layer imports this; routes call this, not features/* directly
  *   - Must import features via public.ts ONLY (never import from services subdirectories)
  *   - NEVER import adapters (use bootstrap factories instead)
