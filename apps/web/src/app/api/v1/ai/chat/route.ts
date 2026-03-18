@@ -295,6 +295,8 @@ export const POST = wrapRouteHandlerWithLogging(
       const messageDtos = uiMessagesToMessageDtos(threadWithUser);
 
       const streamStartMs = performance.now();
+      const idempotencyKey =
+        request.headers.get("idempotency-key") ?? undefined;
 
       const { stream: deltaStream, final } = await completionStream(
         {
@@ -304,6 +306,7 @@ export const POST = wrapRouteHandlerWithLogging(
           abortSignal: request.signal,
           graphName: input.graphName,
           stateKey,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         },
         ctx
       );

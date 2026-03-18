@@ -2,7 +2,7 @@
 id: task.0177
 type: task
 title: "Unified streaming API: chat endpoint → Temporal + Redis + idempotency"
-status: needs_design
+status: needs_closeout
 priority: 0
 rank: 4
 estimate: 5
@@ -90,7 +90,7 @@ The current chat route has ~120 lines of accumulator logic (text_delta, tool par
 
 ## Plan
 
-- [ ] **Checkpoint 1: Temporal client + workflow unblock**
+- [x] **Checkpoint 1: Temporal client + workflow unblock**
   - Add lazy `WorkflowClient` singleton to apps/web container
   - Remove NotImplemented guard in `GraphRunWorkflow` for non-scheduled runs
   - Make `temporalScheduleId` optional in `ExecuteGraphInput`; derive idempotency key as `api:{runId}` when absent
@@ -98,7 +98,7 @@ The current chat route has ~120 lines of accumulator logic (text_delta, tool par
   - Generalize internal API route for API-originated inputs (conditional schedule logic in `extractScheduleId`, stateKey passthrough)
   - Validation: `pnpm check` passes, scheduled runs still work
 
-- [ ] **Checkpoint 2: Chat endpoint refactor**
+- [x] **Checkpoint 2: Chat endpoint refactor**
   - Replace inline `GraphExecutorPort` call with `workflowClient.start(GraphRunWorkflow)`
   - Subscribe to Redis Stream `run:{runId}` and pipe events through `createUIMessageStream` → SSE
   - Preserve thread persistence lifecycle (Phase 1: save user msg, Phase 2: save assistant msg after stream)
@@ -107,7 +107,7 @@ The current chat route has ~120 lines of accumulator logic (text_delta, tool par
   - Duplicate requests → same runId (Temporal `WorkflowExecutionAlreadyStarted` → subscribe to existing stream)
   - Validation: `pnpm check` passes, chat works end-to-end via Temporal + Redis
 
-- [ ] **Checkpoint 3: Integration tests + cleanup**
+- [x] **Checkpoint 3: Integration tests + cleanup**
   - Stack test: chat POST → SSE stream → tokens arrive
   - Idempotency test: duplicate key → same runId
   - Delete RunEventRelay (dead: both routes use Redis-backed stream via facade)

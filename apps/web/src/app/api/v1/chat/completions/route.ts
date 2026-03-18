@@ -415,6 +415,8 @@ export const POST = wrapRouteHandlerWithLogging(
 
       const isStreaming = input.stream === true;
       const graphName = input.graph_name;
+      const idempotencyKey =
+        request.headers.get("idempotency-key") ?? undefined;
 
       if (isStreaming) {
         // ── Streaming path ──────────────────────────────────────────────
@@ -425,6 +427,7 @@ export const POST = wrapRouteHandlerWithLogging(
             sessionUser,
             ...(graphName ? { graphName } : {}),
             abortSignal: request.signal,
+            ...(idempotencyKey ? { idempotencyKey } : {}),
           },
           ctx
         );
@@ -461,6 +464,7 @@ export const POST = wrapRouteHandlerWithLogging(
           model: input.model,
           sessionUser,
           ...(graphName ? { graphName } : {}),
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         },
         ctx
       );

@@ -33,7 +33,7 @@ import {
   InternalGraphRunInputSchema,
   type InternalGraphRunOutput,
 } from "@/contracts/graphs.run.internal.v1.contract";
-import { executeStream } from "@/features/ai/public.server";
+import { executeStream, toCoreMessages } from "@/features/ai/public.server";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
 import { isInsufficientCreditsPortError } from "@/ports";
@@ -194,7 +194,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       );
     }
 
-    const { executionGrantId, input, runId: providedRunId } = parseResult.data;
+    const {
+      executionGrantId = null,
+      input,
+      runId: providedRunId,
+    } = parseResult.data;
+    const runId = providedRunId ?? randomUUID();
 
     // --- 5. Compute request hash for idempotency ---
     const requestHash = computeRequestHash(graphId, input);
@@ -270,63 +275,108 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       );
     }
 
-    // --- 7. Validate grant (defense-in-depth) ---
-    let grant: Awaited<
-      ReturnType<
-        typeof container.executionGrantWorkerPort.validateGrantForGraph
-      >
-    >;
-    try {
-      grant = await container.executionGrantWorkerPort.validateGrantForGraph(
-        SYSTEM_ACTOR,
-        executionGrantId,
-        graphId
-      );
-    } catch (error) {
-      if (isGrantNotFoundError(error)) {
-        log.warn({ executionGrantId }, "Grant not found");
-        return NextResponse.json({ error: "Grant not found" }, { status: 403 });
+    // --- 7/8. Resolve execution identity ---
+    let actorUserId: string;
+    let billingAccountId: string;
+    let virtualKeyId: string;
+    let stateKey: string;
+    let sessionId: string | undefined;
+
+    if (executionGrantId) {
+      // Scheduled / grant-backed runs: validate grant (defense-in-depth)
+      let grant: Awaited<
+        ReturnType<
+          typeof container.executionGrantWorkerPort.validateGrantForGraph
+        >
+      >;
+      try {
+        grant = await container.executionGrantWorkerPort.validateGrantForGraph(
+          SYSTEM_ACTOR,
+          executionGrantId,
+          graphId
+        );
+      } catch (error) {
+        if (isGrantNotFoundError(error)) {
+          log.warn({ executionGrantId }, "Grant not found");
+          return NextResponse.json(
+            { error: "Grant not found" },
+            { status: 403 }
+          );
+        }
+        if (isGrantExpiredError(error)) {
+          log.warn({ executionGrantId }, "Grant expired");
+          return NextResponse.json({ error: "Grant expired" }, { status: 403 });
+        }
+        if (isGrantRevokedError(error)) {
+          log.warn({ executionGrantId }, "Grant revoked");
+          return NextResponse.json({ error: "Grant revoked" }, { status: 403 });
+        }
+        if (isGrantScopeMismatchError(error)) {
+          log.warn({ executionGrantId, graphId }, "Grant scope mismatch");
+          return NextResponse.json(
+            { error: "Grant scope mismatch" },
+            { status: 403 }
+          );
+        }
+        throw error;
       }
-      if (isGrantExpiredError(error)) {
-        log.warn({ executionGrantId }, "Grant expired");
-        return NextResponse.json({ error: "Grant expired" }, { status: 403 });
-      }
-      if (isGrantRevokedError(error)) {
-        log.warn({ executionGrantId }, "Grant revoked");
-        return NextResponse.json({ error: "Grant revoked" }, { status: 403 });
-      }
-      if (isGrantScopeMismatchError(error)) {
-        log.warn({ executionGrantId, graphId }, "Grant scope mismatch");
+
+      const billingAccount =
+        await container.serviceAccountService.getBillingAccountById(
+          grant.billingAccountId
+        );
+      if (!billingAccount) {
+        log.error(
+          { billingAccountId: grant.billingAccountId },
+          "Billing account not found"
+        );
         return NextResponse.json(
-          { error: "Grant scope mismatch" },
-          { status: 403 }
+          { error: "Billing account not found" },
+          { status: 500 }
         );
       }
-      throw error;
-    }
 
-    // --- 8. Resolve billing account for virtualKeyId ---
-    const billingAccount =
-      await container.serviceAccountService.getBillingAccountById(
-        grant.billingAccountId
-      );
+      actorUserId = grant.userId;
+      billingAccountId = grant.billingAccountId;
+      virtualKeyId = billingAccount.defaultVirtualKeyId;
 
-    if (!billingAccount) {
-      log.error(
-        { billingAccountId: grant.billingAccountId },
-        "Billing account not found"
-      );
-      return NextResponse.json(
-        { error: "Billing account not found" },
-        { status: 500 }
-      );
+      const scheduleId = extractScheduleId(idempotencyKey);
+      stateKey = createHash("sha256").update(scheduleId, "utf8").digest("hex");
+      sessionId = `gov:${billingAccountId}:s:${stateKey.slice(0, 32)}`;
+    } else {
+      // API-triggered runs: execution context is provided in payload.
+      const inputUserId =
+        typeof input.actorUserId === "string" ? input.actorUserId : null;
+      const inputBillingAccountId =
+        typeof input.billingAccountId === "string"
+          ? input.billingAccountId
+          : null;
+      const inputVirtualKeyId =
+        typeof input.virtualKeyId === "string" ? input.virtualKeyId : null;
+      if (!inputUserId || !inputBillingAccountId || !inputVirtualKeyId) {
+        return NextResponse.json(
+          {
+            error:
+              "API-originated run requires actorUserId, billingAccountId, and virtualKeyId in payload",
+          },
+          { status: 400 }
+        );
+      }
+
+      actorUserId = inputUserId;
+      billingAccountId = inputBillingAccountId;
+      virtualKeyId = inputVirtualKeyId;
+      stateKey =
+        typeof input.stateKey === "string" && input.stateKey.length > 0
+          ? input.stateKey
+          : runId;
+      sessionId = `ba:${billingAccountId}:s:${createHash("sha256")
+        .update(stateKey, "utf8")
+        .digest("hex")
+        .slice(0, 32)}`;
     }
 
     // --- 9. Execute graph ---
-    // Use provided runId (from scheduler-worker) or generate if not provided
-    // Per SCHEDULER_SPEC.md: Canonical runId shared with graph_runs and charge_receipts
-    const runId = providedRunId ?? randomUUID();
-
     // Use OTel trace ID (same one passed to executor, used by Langfuse decorator)
     const traceId = ctx.traceId;
 
@@ -344,23 +394,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       traceId
     );
 
-    // Extract scheduleId (stable) from idempotencyKey so runs of the same
-    // schedule share conversation state and Langfuse session grouping.
-    const scheduleId = extractScheduleId(idempotencyKey);
-
-    const stateKey = createHash("sha256")
-      .update(scheduleId, "utf8")
-      .digest("hex");
-
-    // gov: prefix distinguishes governance sessions from user sessions (ba:) in Langfuse
-    const sessionId = `gov:${grant.billingAccountId}:s:${stateKey.slice(0, 32)}`;
-
     capture({
       event: AnalyticsEvents.AGENT_RUN_REQUESTED,
       identity: {
-        userId: grant.userId,
-        sessionId,
-        tenantId: grant.billingAccountId,
+        userId: actorUserId,
+        sessionId: sessionId ?? runId,
+        tenantId: billingAccountId,
         traceId,
       },
       properties: {
@@ -371,8 +410,8 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     });
 
     // Parse input for graph execution
-    const messages = Array.isArray(input.messages)
-      ? (input.messages as { role: string; content: string }[])
+    const messageDtos = Array.isArray(input.messages)
+      ? input.messages
       : typeof input.message === "string"
         ? [{ role: "user", content: input.message }]
         : [];
@@ -387,7 +426,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     }
     const model = input.model;
 
-    const accountService = container.accountsForUser(toUserId(grant.userId));
+    const accountService = container.accountsForUser(toUserId(actorUserId));
 
     // Create preflight credit check closure
     // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: decorator handles all execution paths
@@ -404,30 +443,32 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       });
 
     // Create graph executor and run
-    const executor = createGraphExecutor(executeStream, toUserId(grant.userId));
+    const executor = createGraphExecutor(executeStream, toUserId(actorUserId));
     const scopedExecutor = createScopedGraphExecutor({
       executor,
       preflightCheckFn,
       billing: {
-        billingAccountId: grant.billingAccountId,
-        virtualKeyId: billingAccount.defaultVirtualKeyId,
+        billingAccountId,
+        virtualKeyId,
       },
     });
+    const timestamp = container.clock.now();
+    const messages = toCoreMessages(
+      messageDtos as Parameters<typeof toCoreMessages>[0],
+      timestamp
+    );
     const result = scopedExecutor.runGraph(
       {
         runId,
         graphId,
-        messages: messages.map((m) => ({
-          role: m.role as "user" | "assistant" | "system",
-          content: m.content,
-        })),
+        messages,
         model,
         stateKey,
       },
       {
-        actorUserId: grant.userId,
+        actorUserId,
         requestId: runId,
-        sessionId,
+        ...(sessionId ? { sessionId } : {}),
       }
     );
 
@@ -473,9 +514,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       capture({
         event: AnalyticsEvents.AGENT_RUN_FAILED,
         identity: {
-          userId: grant.userId,
-          sessionId: sessionId,
-          tenantId: grant.billingAccountId,
+          userId: actorUserId,
+          sessionId: sessionId ?? runId,
+          tenantId: billingAccountId,
           traceId,
         },
         properties: {
@@ -512,9 +553,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       capture({
         event: AnalyticsEvents.AGENT_RUN_COMPLETED,
         identity: {
-          userId: grant.userId,
-          sessionId: sessionId,
-          tenantId: grant.billingAccountId,
+          userId: actorUserId,
+          sessionId: sessionId ?? runId,
+          tenantId: billingAccountId,
           traceId,
         },
         properties: {
@@ -537,9 +578,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       capture({
         event: AnalyticsEvents.AGENT_RUN_FAILED,
         identity: {
-          userId: grant.userId,
-          sessionId: sessionId,
-          tenantId: grant.billingAccountId,
+          userId: actorUserId,
+          sessionId: sessionId ?? runId,
+          tenantId: billingAccountId,
           traceId,
         },
         properties: {

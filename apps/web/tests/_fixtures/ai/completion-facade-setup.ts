@@ -71,8 +71,27 @@ export function createMockAiAdapterDeps(
  * @returns Mock module shape for @/bootstrap/container
  */
 export function createContainerMock(deps: AiAdapterDeps) {
+  const runStream = {
+    subscribe: async function* () {
+      yield {
+        id: "1-0",
+        event: { type: "text_delta" as const, delta: "Test response" },
+      };
+      yield {
+        id: "2-0",
+        event: { type: "assistant_final" as const, content: "Test response" },
+      };
+      yield { id: "3-0", event: { type: "done" as const } };
+    },
+  };
   return {
     resolveAiAdapterDeps: () => deps,
+    getTemporalWorkflowClient: async () => ({
+      start: vi.fn().mockResolvedValue({}),
+    }),
+    getContainer: () => ({
+      runStream,
+    }),
   };
 }
 

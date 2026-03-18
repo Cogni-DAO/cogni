@@ -29,6 +29,11 @@ import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/priv
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { WorkItemQueryPort } from "@cogni/work-items";
 import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
+import {
+  Client as TemporalClient,
+  Connection as TemporalConnection,
+  type WorkflowClient,
+} from "@temporalio/client";
 import Redis from "ioredis";
 import type { Logger } from "pino";
 import {
@@ -205,6 +210,8 @@ export type ActivityDeps = {
 
 // Module-level singleton
 let _container: Container | null = null;
+let _temporalConnection: TemporalConnection | null = null;
+let _workflowClient: WorkflowClient | null = null;
 
 /**
  * Get the singleton container instance.
@@ -224,6 +231,30 @@ export function getContainer(): Container {
 export function resetContainer(): void {
   _container = null;
   _webhookRegistrations = null;
+  if (_temporalConnection) {
+    void _temporalConnection.close();
+  }
+  _temporalConnection = null;
+  _workflowClient = null;
+}
+
+/**
+ * Get a process-wide Temporal WorkflowClient singleton.
+ * Avoids per-request Connection.connect() overhead on hot paths.
+ */
+export async function getTemporalWorkflowClient(): Promise<WorkflowClient> {
+  if (_workflowClient) return _workflowClient;
+  const env = serverEnv();
+  const connection = await TemporalConnection.connect({
+    address: env.TEMPORAL_ADDRESS,
+  });
+  const client = new TemporalClient({
+    connection,
+    namespace: env.TEMPORAL_NAMESPACE,
+  });
+  _temporalConnection = connection;
+  _workflowClient = client.workflow;
+  return _workflowClient;
 }
 
 /** Lazy singleton for webhook registrations (avoids import cost at container init). */

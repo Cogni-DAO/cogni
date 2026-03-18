@@ -73,9 +73,9 @@ export interface CreateGraphRunInput {
  * Input for executeGraphActivity.
  */
 export interface ExecuteGraphInput {
-  temporalScheduleId: string;
+  temporalScheduleId?: string;
   graphId: string;
-  executionGrantId: string;
+  executionGrantId: string | null;
   input: Record<string, unknown>;
   scheduledFor: string; // ISO string - used for idempotency key
   runId: string; // Canonical runId shared with graph_runs and charge_receipts
@@ -226,7 +226,8 @@ export function createActivities(deps: ActivityDeps) {
   /**
    * Calls internal API to execute graph.
    * Per EXECUTION_VIA_SERVICE_API: Worker NEVER imports graph execution code.
-   * Per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS: Uses temporalScheduleId:scheduledFor as idempotency key.
+   * Per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS: scheduled runs use temporalScheduleId:scheduledFor.
+   * API runs use api:{runId}.
    */
   async function executeGraphActivity(
     input: ExecuteGraphInput
@@ -242,8 +243,9 @@ export function createActivities(deps: ActivityDeps) {
     const correlation = getWorkflowCorrelation();
     const start = performance.now();
 
-    // Per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS
-    const idempotencyKey = `${temporalScheduleId}:${scheduledFor}`;
+    const idempotencyKey = temporalScheduleId
+      ? `${temporalScheduleId}:${scheduledFor}`
+      : `api:${runId}`;
 
     const url = `${config.appBaseUrl}/api/internal/graphs/${graphId}/runs`;
 

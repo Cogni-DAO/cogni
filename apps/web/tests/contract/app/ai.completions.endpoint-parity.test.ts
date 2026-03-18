@@ -27,14 +27,8 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
-import type {
-  GraphExecutorPort,
-  GraphRunRequest,
-  GraphRunResult,
-} from "@/ports";
 import { LlmError } from "@/ports";
 import { ChatErrorCode, ChatValidationError } from "@/shared/errors";
-import type { AiEvent } from "@/types/ai-events";
 
 // Mock auth
 vi.mock("@/app/_lib/auth/session", () => ({
@@ -44,6 +38,7 @@ vi.mock("@/app/_lib/auth/session", () => ({
 // Mock bootstrap container (getContainer needed by wrapRouteHandlerWithLogging)
 vi.mock("@/bootstrap/container", () => ({
   resolveAiAdapterDeps: vi.fn(),
+  getTemporalWorkflowClient: vi.fn(),
   getContainer: vi.fn().mockReturnValue({
     config: { unhandledErrorPolicy: "throw" },
     log: {
@@ -54,15 +49,16 @@ vi.mock("@/bootstrap/container", () => ({
       child: vi.fn().mockReturnThis(),
     },
     clock: { now: () => new Date("2025-01-15T12:00:00.000Z") },
+    runStream: {
+      subscribe: async function* () {
+        yield {
+          id: "1-0",
+          event: { type: "text_delta" as const, delta: "hello" },
+        };
+        yield { id: "2-0", event: { type: "done" as const } };
+      },
+    },
   }),
-}));
-
-// Mock graph executor factory
-vi.mock("@/bootstrap/graph-executor.factory", () => ({
-  createGraphExecutor: vi.fn(),
-  createScopedGraphExecutor: vi.fn(
-    (params: { executor: unknown }) => params.executor
-  ),
 }));
 
 // Mock preflight credit check
@@ -76,13 +72,16 @@ vi.mock("@/features/ai/public.server", async (importOriginal) => {
 });
 
 import { getSessionUser } from "@/app/_lib/auth/session";
-import { getContainer, resolveAiAdapterDeps } from "@/bootstrap/container";
-import { createGraphExecutor } from "@/bootstrap/graph-executor.factory";
+import {
+  getContainer,
+  getTemporalWorkflowClient,
+  resolveAiAdapterDeps,
+} from "@/bootstrap/container";
 
 const mockGetSessionUser = vi.mocked(getSessionUser);
 const mockGetContainer = vi.mocked(getContainer);
+const mockGetTemporalWorkflowClient = vi.mocked(getTemporalWorkflowClient);
 const mockResolveAiAdapterDeps = vi.mocked(resolveAiAdapterDeps);
-const mockCreateGraphExecutor = vi.mocked(createGraphExecutor);
 
 function setupMocks(
   options: {
@@ -118,6 +117,70 @@ function setupMocks(
       child: vi.fn().mockReturnThis(),
     },
     clock: fakeClock,
+    runStream: {
+      subscribe: async function* () {
+        if (options.statusEvents) {
+          for (const se of options.statusEvents) {
+            yield {
+              id: "s-1",
+              event: {
+                type: "status" as const,
+                phase: se.phase,
+                ...(se.label ? { label: se.label } : {}),
+              },
+            };
+          }
+        }
+        if (options.toolCalls) {
+          for (const tc of options.toolCalls) {
+            yield {
+              id: "t-1",
+              event: {
+                type: "tool_call_start" as const,
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                args: tc.args,
+              },
+            };
+          }
+        }
+        if (responseContent) {
+          yield {
+            id: "m-1",
+            event: { type: "text_delta" as const, delta: responseContent },
+          };
+          yield {
+            id: "a-1",
+            event: {
+              type: "assistant_final" as const,
+              content: responseContent,
+            },
+          };
+        }
+        yield {
+          id: "u-1",
+          event: {
+            type: "usage_report" as const,
+            fact: {
+              inputTokens: 15,
+              outputTokens: 25,
+              usageUnitId: "unit-1",
+              occurredAt: new Date().toISOString(),
+              runId: "run-1",
+              billingAccountId: "acct-1",
+              virtualKeyId: "vk-1",
+              model: TEST_MODEL_ID,
+              provider: "test",
+              source: "litellm",
+            },
+          },
+        };
+        yield { id: "d-1", event: { type: "done" as const } };
+      },
+    },
+  } as never);
+  mockGetTemporalWorkflowClient.mockResolvedValue({
+    start: vi.fn().mockResolvedValue({}),
   } as never);
 
   mockGetSessionUser.mockResolvedValue(TEST_SESSION_USER_1);
@@ -130,60 +193,7 @@ function setupMocks(
     langfuse: undefined,
   });
 
-  const executor: GraphExecutorPort = {
-    runGraph(req: GraphRunRequest): GraphRunResult {
-      async function* createStream(): AsyncIterable<AiEvent> {
-        if (options.statusEvents) {
-          for (const se of options.statusEvents) {
-            yield {
-              type: "status" as const,
-              phase: se.phase,
-              ...(se.label ? { label: se.label } : {}),
-            };
-          }
-        }
-        if (options.toolCalls) {
-          for (const tc of options.toolCalls) {
-            yield {
-              type: "tool_call_start",
-              toolCallId: tc.toolCallId,
-              toolName: tc.toolName,
-              args: tc.args,
-            };
-          }
-        }
-        if (responseContent) {
-          yield { type: "text_delta", delta: responseContent };
-        }
-        yield { type: "done" };
-      }
-
-      return {
-        stream: createStream(),
-        final: Promise.resolve({
-          ok: true as const,
-          runId: req.runId,
-          requestId: "req-parity-test",
-          usage: { promptTokens: 15, completionTokens: 25 },
-          finishReason,
-          ...(options.toolCalls
-            ? {
-                toolCalls: options.toolCalls.map((tc) => ({
-                  id: tc.toolCallId,
-                  type: "function" as const,
-                  function: {
-                    name: tc.toolName,
-                    arguments: JSON.stringify(tc.args),
-                  },
-                })),
-              }
-            : {}),
-        }),
-      };
-    },
-  };
-
-  mockCreateGraphExecutor.mockReturnValue(executor);
+  void finishReason;
 }
 
 /**
@@ -203,6 +213,11 @@ function setupMocksWithError(error: Error) {
       child: vi.fn().mockReturnThis(),
     },
     clock: fakeClock,
+    runStream: {
+      subscribe: async function* () {
+        yield { id: "x-1", event: { type: "done" as const } };
+      },
+    },
   } as never);
 
   mockGetSessionUser.mockResolvedValue(TEST_SESSION_USER_1);
@@ -215,13 +230,9 @@ function setupMocksWithError(error: Error) {
     langfuse: undefined,
   });
 
-  const executor: GraphExecutorPort = {
-    runGraph(_req: GraphRunRequest): GraphRunResult {
-      throw error;
-    },
-  };
-
-  mockCreateGraphExecutor.mockReturnValue(executor);
+  mockGetTemporalWorkflowClient.mockResolvedValue({
+    start: vi.fn().mockRejectedValue(error),
+  } as never);
 }
 
 /**

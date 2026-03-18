@@ -20,13 +20,13 @@
  */
 
 import { createHash } from "node:crypto";
-import type { ExecutionContext } from "@cogni/graph-execution-core";
 import { toUserId } from "@cogni/ids";
-import { resolveAiAdapterDeps } from "@/bootstrap/container";
+import { WorkflowExecutionAlreadyStartedError } from "@temporalio/client";
 import {
-  createGraphExecutor,
-  createScopedGraphExecutor,
-} from "@/bootstrap/graph-executor.factory";
+  getContainer,
+  getTemporalWorkflowClient,
+  resolveAiAdapterDeps,
+} from "@/bootstrap/container";
 import type {
   ChatCompletionOutput,
   ChatMessage,
@@ -35,15 +35,8 @@ import { mapAccountsPortErrorToFeature } from "@/features/accounts/public";
 // Types from client-safe barrel (types only, no runtime)
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 // Import from public.server.ts - never from services/* directly (dep-cruiser enforced)
-import {
-  createAiRuntime,
-  executeStream,
-  type MessageDto,
-  preflightCreditCheck,
-  toCoreMessages,
-} from "@/features/ai/public.server";
+import type { MessageDto } from "@/features/ai/public.server";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { BillingContext, PreflightCreditCheckFn } from "@/ports";
 import {
   isBillingAccountNotFoundPortError,
   isInsufficientCreditsPortError,
@@ -110,24 +103,22 @@ export interface CompletionInput {
   graphName: string;
   /** Conversation state key for multi-turn conversations */
   stateKey?: string;
+  /** Idempotency key for workflow start dedupe */
+  idempotencyKey?: string;
 }
 
-/**
- * Derive Langfuse sessionId from billingAccountId + stateKey.
- * Uses SHA-256 hash to ensure:
- * - Deterministic: same inputs → same sessionId (stable grouping)
- * - Bounded: fixed output length regardless of stateKey length
- * - Safe: no PII or log-injection risk from raw stateKey
- *
- * Format: `ba:{billingAccountId}:s:{sha256(stateKey)[0:32]}`
- * Truncation to 200 chars happens at Langfuse sink boundary.
- */
-function deriveSessionId(billingAccountId: string, stateKey: string): string {
-  const stateKeyHash = createHash("sha256")
-    .update(stateKey)
-    .digest("hex")
-    .slice(0, 32);
-  return `ba:${billingAccountId}:s:${stateKeyHash}`;
+function toDeterministicRunId(seed: string): string {
+  const hex = createHash("sha256").update(seed).digest("hex");
+  const p1 = hex.slice(0, 8);
+  const p2 = hex.slice(8, 12);
+  const p3 = `4${hex.slice(13, 16)}`;
+  const variantNibble = (
+    (parseInt(hex.slice(16, 17), 16) & 0x3) |
+    0x8
+  ).toString(16);
+  const p4 = `${variantNibble}${hex.slice(17, 20)}`;
+  const p5 = hex.slice(20, 32);
+  return `${p1}-${p2}-${p3}-${p4}-${p5}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,12 +157,14 @@ export interface ChatCompletionInput {
   graphName?: string;
   /** Conversation state key for multi-turn conversations */
   stateKey?: string;
+  /** Idempotency key for workflow start dedupe */
+  idempotencyKey?: string;
 }
 
 /**
  * Non-streaming AI completion returning OpenAI ChatCompletion format.
  * Per UNIFIED_GRAPH_EXECUTOR: delegates to completionStream() and collects response server-side.
- * This ensures billing flows through GraphExecutorPort → RunEventRelay → commitUsageFact().
+ * This ensures billing flows through the unified Temporal execution path.
  */
 export async function chatCompletion(
   input: ChatCompletionInput,
@@ -188,6 +181,7 @@ export async function chatCompletion(
       sessionUser: input.sessionUser,
       graphName,
       ...(input.stateKey ? { stateKey: input.stateKey } : {}),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     },
     ctx
   );
@@ -201,7 +195,7 @@ export async function chatCompletion(
       }
     }
 
-    // Await final to ensure billing completed via RunEventRelay
+    // Await final to ensure terminal event received
     const result = await final;
 
     if (!result.ok) {
@@ -272,6 +266,8 @@ export interface ChatCompletionStreamInput {
   graphName?: string;
   /** Conversation state key for multi-turn conversations */
   stateKey?: string;
+  /** Idempotency key for workflow start dedupe */
+  idempotencyKey?: string;
   /** Abort signal for cancellation */
   abortSignal?: AbortSignal;
 }
@@ -297,6 +293,7 @@ export async function chatCompletionStream(
       sessionUser: input.sessionUser,
       graphName,
       ...(input.stateKey ? { stateKey: input.stateKey } : {}),
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
     },
     ctx
@@ -319,31 +316,8 @@ export async function completionStream(
   stream: AsyncIterable<AiEvent>;
   final: Promise<StreamFinalResult>;
 }> {
-  // Parse once at edge — single branded UserId for all downstream calls
   const userId = toUserId(input.sessionUser.id);
-
-  // Per UNIFIED_GRAPH_EXECUTOR: use bootstrap factory (app → bootstrap → adapters)
-  // Facade CANNOT import adapters - architecture boundary enforced by depcruise
-  // Per ROUTING_BY_NAMESPACE_ONLY: NamespaceGraphRouter routes by graphId namespace to providers
-  const { accountService, clock } = resolveAiAdapterDeps(userId);
-
-  // Create preflight credit check closure (app layer → features DI boundary)
-  // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: decorator handles all execution paths
-  const preflightCheckFn: PreflightCreditCheckFn = (
-    billingAccountId,
-    model,
-    messages
-  ) =>
-    preflightCreditCheck({
-      billingAccountId,
-      messages: [...messages],
-      model,
-      accountService,
-    });
-
-  // Create graph executor via bootstrap factory
-  // Routing is handled by NamespaceGraphRouter - facade is graph-agnostic
-  const graphExecutor = createGraphExecutor(executeStream, userId);
+  const { accountService } = resolveAiAdapterDeps(userId);
 
   const billingAccount = await getOrCreateBillingAccountForUser(
     accountService,
@@ -355,52 +329,108 @@ export async function completionStream(
     }
   );
 
-  const billing: BillingContext = {
-    billingAccountId: billingAccount.id,
-    virtualKeyId: billingAccount.defaultVirtualKeyId,
-  };
+  const graphId = input.graphName.includes(":")
+    ? input.graphName
+    : `langgraph:${input.graphName}`;
+  const idempotencyKey = input.idempotencyKey ?? `api:${ctx.reqId}`;
+  const workflowId = `graph-run:${billingAccount.id}:${idempotencyKey}`;
+  const runId = toDeterministicRunId(`${workflowId}:${graphId}`);
 
-  const executionContext: ExecutionContext = {
-    actorUserId: input.sessionUser.id,
-    requestId: ctx.reqId,
-    ...(input.stateKey
-      ? { sessionId: deriveSessionId(billingAccount.id, input.stateKey) }
-      : {}),
-  };
+  const workflowClient = await getTemporalWorkflowClient();
+  try {
+    await workflowClient.start("GraphRunWorkflow", {
+      taskQueue: "scheduler-tasks",
+      workflowId,
+      args: [
+        {
+          graphId,
+          executionGrantId: null,
+          input: {
+            messages: input.messages,
+            model: input.model,
+            stateKey: input.stateKey,
+            actorUserId: input.sessionUser.id,
+            billingAccountId: billingAccount.id,
+            virtualKeyId: billingAccount.defaultVirtualKeyId,
+          },
+          runKind: "user_immediate" as const,
+          triggerSource: "api",
+          triggerRef: idempotencyKey,
+          requestedBy: input.sessionUser.id,
+          runId,
+        },
+      ],
+    });
+  } catch (error) {
+    if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+      throw error;
+    }
+  }
 
-  const enrichedCtx: RequestContext = {
-    ...ctx,
-    log: ctx.log.child({
-      userId: input.sessionUser.id,
-      billingAccountId: billingAccount.id,
-    }),
-  };
-
-  const timestamp = clock.now();
-  const coreMessages = toCoreMessages(input.messages, timestamp);
-
-  const scopedGraphExecutor = createScopedGraphExecutor({
-    executor: graphExecutor,
-    billing,
-    preflightCheckFn,
-    ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+  let resolveFinal: ((value: StreamFinalResult) => void) | undefined;
+  const final = new Promise<StreamFinalResult>((resolve) => {
+    resolveFinal = resolve;
   });
 
-  const aiRuntime = createAiRuntime({
-    graphExecutor: scopedGraphExecutor,
-  });
-
-  // runChatStream is now synchronous (returns immediately with stream handle)
-  const { stream, final } = aiRuntime.runChatStream(
-    {
-      messages: coreMessages,
-      model: input.model,
-      executionContext,
-      graphName: input.graphName,
-      ...(input.stateKey ? { stateKey: input.stateKey } : {}),
-    },
-    enrichedCtx
-  );
+  const runStream = getContainer().runStream;
+  const stream = (async function* (): AsyncIterable<AiEvent> {
+    const usage = { promptTokens: 0, completionTokens: 0 };
+    const toolCalls: Array<{
+      id: string;
+      type: "function";
+      function: { name: string; arguments: string };
+    }> = [];
+    try {
+      for await (const entry of runStream.subscribe(
+        runId,
+        input.abortSignal ?? new AbortController().signal
+      )) {
+        const event = entry.event;
+        if (event.type === "usage_report") {
+          usage.promptTokens += event.fact.inputTokens ?? 0;
+          usage.completionTokens += event.fact.outputTokens ?? 0;
+          continue;
+        }
+        if (event.type === "tool_call_start") {
+          toolCalls.push({
+            id: event.toolCallId,
+            type: "function",
+            function: {
+              name: event.toolName,
+              arguments: JSON.stringify(event.args),
+            },
+          });
+        }
+        if (event.type === "done") {
+          resolveFinal?.({
+            ok: true,
+            requestId: runId,
+            usage,
+            finishReason: toolCalls.length > 0 ? "tool_calls" : "stop",
+            ...(toolCalls.length > 0 ? { toolCalls } : {}),
+          });
+        } else if (event.type === "error") {
+          resolveFinal?.({
+            ok: false,
+            requestId: runId,
+            error: event.error,
+          });
+        }
+        yield event;
+      }
+      resolveFinal?.({
+        ok: false,
+        requestId: runId,
+        error: "internal",
+      });
+    } catch {
+      resolveFinal?.({
+        ok: false,
+        requestId: runId,
+        error: "internal",
+      });
+    }
+  })();
 
   return { stream, final };
 }
