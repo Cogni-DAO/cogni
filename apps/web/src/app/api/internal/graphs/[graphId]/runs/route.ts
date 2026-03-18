@@ -33,7 +33,7 @@ import {
   InternalGraphRunInputSchema,
   type InternalGraphRunOutput,
 } from "@/contracts/graphs.run.internal.v1.contract";
-import { executeStream, toCoreMessages } from "@/features/ai/public.server";
+import { executeStream } from "@/features/ai/public.server";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
 import { isInsufficientCreditsPortError } from "@/ports";
@@ -452,11 +452,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         virtualKeyId,
       },
     });
-    const timestamp = container.clock.now();
-    const messages = toCoreMessages(
-      messageDtos as Parameters<typeof toCoreMessages>[0],
-      timestamp
-    );
+    const messages = (
+      messageDtos as Array<{ role: string; content: string }>
+    ).map((m) => ({
+      role: m.role as "user" | "assistant" | "system",
+      content: m.content,
+    }));
     const result = scopedExecutor.runGraph(
       {
         runId,
