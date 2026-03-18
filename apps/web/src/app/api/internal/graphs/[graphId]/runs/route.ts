@@ -441,12 +441,21 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     let final: Awaited<typeof result.final>;
     try {
       for await (const event of result.stream) {
-        // Publish each event to Redis Stream for SSE subscribers
-        await runStream.publish(runId, event);
+        // Publish each event to Redis Stream for SSE subscribers.
+        // Per REDIS_IS_STREAM_PLANE: Redis loss = stream interruption, not data loss.
+        // Publish failures are logged, not thrown — execution must complete for billing safety.
+        try {
+          await runStream.publish(runId, event);
 
-        // Expire stream after terminal event (auto-cleanup)
-        if (event.type === "done" || event.type === "error") {
-          await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+          // Expire stream after terminal event (auto-cleanup)
+          if (event.type === "done" || event.type === "error") {
+            await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+          }
+        } catch (publishErr) {
+          log.warn(
+            { runId, eventType: event.type, err: publishErr },
+            "Redis stream publish failed — stream degraded, execution continues"
+          );
         }
       }
 
