@@ -8,7 +8,7 @@
  * Invariants:
  *   - Per ACTIVITY_IDEMPOTENCY: All activities must be idempotent or rely on downstream idempotency
  *   - Per EXECUTION_VIA_SERVICE_API: executeGraphActivity calls internal API, never imports graph code
- *   - Per GRANT_VALIDATED_TWICE: Worker validates grant before calling API (fail-fast)
+ *   - Per GRANT_VALIDATED_TWICE: Worker validates grant before calling API (fail-fast, scheduled runs only)
  *   - Per SINGLE_RUN_LEDGER: all run records written to graph_runs table
  *   - SCHEDULER_API_TOKEN treated as secret (never logged)
  * Side-effects: IO (database, HTTP to internal API)

@@ -3,8 +3,8 @@
 
 /**
  * Module: `@app/api/internal/graphs/[graphId]/runs`
- * Purpose: Internal API endpoint for scheduled graph execution.
- * Scope: Auth-protected POST endpoint for scheduler-worker. Does not contain graph execution logic.
+ * Purpose: Internal API endpoint for graph execution (scheduled and API-triggered).
+ * Scope: Auth-protected POST endpoint called by scheduler-worker (via Temporal activity). Handles both grant-backed scheduled runs and API-triggered runs with billing context in payload. Does not contain graph execution logic.
  * Invariants:
  *   - INTERNAL_API_SHARED_SECRET: Requires Bearer SCHEDULER_API_TOKEN
  *   - EXECUTION_IDEMPOTENCY_PERSISTED: Uses execution_requests table for deduplication

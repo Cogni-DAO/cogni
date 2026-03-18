@@ -7,9 +7,10 @@
  * Scope: Defines AiEvent union used by all GraphExecutorPort adapters. Does NOT implement functions.
  * Invariants:
  *   - SINGLE_SOURCE_OF_TRUTH: This is the canonical definition; src/types re-exports
- *   - AiEvents are the ONLY streaming output type from ai_runtime
+ *   - AiEvents are the ONLY streaming output type from graph execution
  *   - toolCallId must be stable across start→result lifecycle
  *   - UsageReportEvent carries UsageFact for billing subscriber (never to UI)
+ *   - DoneEvent extends RunFinalSummary (optional usage + finishReason, populated by execution layer)
  * Side-effects: none (types only)
  * Links: graph-executor.port.ts, GRAPH_EXECUTION.md, LANGGRAPH_SERVER.md
  * @public

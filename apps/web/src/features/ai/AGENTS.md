@@ -66,7 +66,6 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
     - `billing.ts` - Non-blocking charge receipt recording (commitUsageFact — strict ledger writer, COST_AUTHORITY_IS_LITELLM)
     - `telemetry.ts` - DB + Langfuse writes (ai_invocation_summaries)
     - `metrics.ts` - Prometheus metric recording
-    - `run-id-factory.ts` - Run identity factory (P0: runId = reqId)
     - `llmPricingPolicy.ts` - Pricing markup calculation
     - `secrets-redaction.ts` - Best-effort credential redaction for persisted messages
 - **Env/Config keys:** `LITELLM_BASE_URL`, `DEFAULT_MODEL` (via serverEnv)
@@ -74,7 +73,7 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
 
 ## Ports
 
-- **Uses ports:** GraphExecutorPort (runGraph with GraphId), AccountService (recordChargeReceipt), LlmService (completion, completionStream), AiTelemetryPort (recordInvocation), LangfusePort (createTrace, recordGeneration)
+- **Uses ports:** AccountService (recordChargeReceipt), LlmService (completion, completionStream), AiTelemetryPort (recordInvocation), LangfusePort (createTrace, recordGeneration), GraphExecutorPort (runGraph — used by internal execution route, not facade)
 - **Implements ports:** none
 - **Contracts:** chat.completions.v1, ai.chat.v1, ai.threads.v1, ai.models.v1, ai.activity.v1
 
