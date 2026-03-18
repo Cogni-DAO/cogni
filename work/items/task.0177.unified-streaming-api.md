@@ -2,7 +2,7 @@
 id: task.0177
 type: task
 title: "Unified streaming API: chat endpoint → Temporal + Redis + idempotency"
-status: done
+status: needs_merge
 revision: 1
 priority: 0
 rank: 4
