@@ -27,6 +27,7 @@ export type {
   AssistantFinalEvent,
   DoneEvent,
   ErrorEvent,
+  RunFinalSummary,
   StatusEvent,
   TextDeltaEvent,
   ToolCallResultEvent,

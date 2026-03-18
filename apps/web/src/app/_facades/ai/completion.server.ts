@@ -375,7 +375,6 @@ export async function completionStream(
 
   const runStream = getContainer().runStream;
   const stream = (async function* (): AsyncIterable<AiEvent> {
-    const usage = { promptTokens: 0, completionTokens: 0 };
     const toolCalls: Array<{
       id: string;
       type: "function";
@@ -387,11 +386,9 @@ export async function completionStream(
         input.abortSignal ?? new AbortController().signal
       )) {
         const event = entry.event;
-        if (event.type === "usage_report") {
-          usage.promptTokens += event.fact.inputTokens ?? 0;
-          usage.completionTokens += event.fact.outputTokens ?? 0;
-          continue;
-        }
+        // usage_report events are consumed by BillingDecorator and never reach Redis.
+        // Defensive skip in case any leak through.
+        if (event.type === "usage_report") continue;
         if (event.type === "tool_call_start") {
           toolCalls.push({
             id: event.toolCallId,
@@ -403,11 +400,14 @@ export async function completionStream(
           });
         }
         if (event.type === "done") {
+          // Enriched done carries RunFinalSummary (usage, finishReason) from GraphFinal.
           resolveFinal?.({
             ok: true,
             requestId: runId,
-            usage,
-            finishReason: toolCalls.length > 0 ? "tool_calls" : "stop",
+            usage: event.usage ?? { promptTokens: 0, completionTokens: 0 },
+            finishReason:
+              event.finishReason ??
+              (toolCalls.length > 0 ? "tool_calls" : "stop"),
             ...(toolCalls.length > 0 ? { toolCalls } : {}),
           });
         } else if (event.type === "error") {

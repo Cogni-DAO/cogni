@@ -486,11 +486,25 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         // Per REDIS_IS_STREAM_PLANE: Redis loss = stream interruption, not data loss.
         // Publish failures are logged, not thrown — execution must complete for billing safety.
         try {
-          await runStream.publish(runId, event);
-
-          // Expire stream after terminal event (auto-cleanup)
-          if (event.type === "done" || event.type === "error") {
+          if (event.type === "done") {
+            // Buffer done — enrich with GraphFinal summary (usage, finishReason)
+            // before publishing. Subscribers read the terminal event as canonical source
+            // for usage data since BillingDecorator filters usage_report from the stream.
+            const f = await result.final;
+            const enriched = {
+              ...event,
+              ...(f.ok && f.usage ? { usage: f.usage } : {}),
+              ...(f.ok && f.finishReason
+                ? { finishReason: f.finishReason }
+                : {}),
+            };
+            await runStream.publish(runId, enriched);
             await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+          } else {
+            await runStream.publish(runId, event);
+            if (event.type === "error") {
+              await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+            }
           }
         } catch (publishErr) {
           log.warn(

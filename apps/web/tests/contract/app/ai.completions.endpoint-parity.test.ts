@@ -59,7 +59,14 @@ vi.mock("@/bootstrap/container", () => ({
           id: "1-0",
           event: { type: "text_delta" as const, delta: "hello" },
         };
-        yield { id: "2-0", event: { type: "done" as const } };
+        yield {
+          id: "2-0",
+          event: {
+            type: "done" as const,
+            usage: { promptTokens: 5, completionTokens: 10 },
+            finishReason: "stop",
+          },
+        };
       },
     },
   }),

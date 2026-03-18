@@ -156,7 +156,23 @@ export function createRunStreamMock(options: RunStreamMockOptions = {}) {
           event: { type: "error" as const, error: options.emitError },
         };
       } else {
-        yield { id: "d-1", event: { type: "done" as const } };
+        yield {
+          id: "d-1",
+          event: {
+            type: "done" as const,
+            ...(options.usageReport
+              ? {
+                  usage: {
+                    promptTokens: options.usageReport.inputTokens,
+                    completionTokens: options.usageReport.outputTokens,
+                  },
+                  finishReason: options.toolCalls?.length
+                    ? "tool_calls"
+                    : "stop",
+                }
+              : {}),
+          },
+        };
       }
     },
   };

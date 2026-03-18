@@ -101,10 +101,24 @@ export interface StatusEvent {
 }
 
 /**
+ * Canonical terminal summary — usage + finish metadata available at run completion.
+ * Shared shape between GraphFinal, Redis terminal event, and facade accumulator.
+ * Populated by the execution layer (internal API route) from GraphFinal.
+ */
+export interface RunFinalSummary {
+  readonly usage?: {
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+  };
+  readonly finishReason?: string;
+}
+
+/**
  * Stream completed.
  * Emitted by runtime when the entire response is done.
+ * Optionally carries RunFinalSummary when enriched by the execution layer.
  */
-export interface DoneEvent {
+export interface DoneEvent extends RunFinalSummary {
   readonly type: "done";
 }
 
