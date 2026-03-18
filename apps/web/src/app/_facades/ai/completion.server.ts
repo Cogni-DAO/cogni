@@ -437,6 +437,19 @@ export async function completionStream(
     processEvent(firstEvent);
     yield firstEvent;
 
+    function failStream(errorCode: string) {
+      ctx.log.warn(
+        {
+          event: EVENT_NAMES.AI_RELAY_PUMP_ERROR,
+          reqId: ctx.reqId,
+          runId,
+          errorCode,
+        },
+        EVENT_NAMES.AI_RELAY_PUMP_ERROR
+      );
+      resolveFinal?.({ ok: false, requestId: runId, error: "internal" });
+    }
+
     // Continue with remaining events
     try {
       let next = await iterator.next();
@@ -450,35 +463,9 @@ export async function completionStream(
         yield event;
         next = await iterator.next();
       }
-      ctx.log.warn(
-        {
-          event: EVENT_NAMES.AI_RELAY_PUMP_ERROR,
-          reqId: ctx.reqId,
-          runId,
-          errorCode: "stream_ended_no_terminal",
-        },
-        EVENT_NAMES.AI_RELAY_PUMP_ERROR
-      );
-      resolveFinal?.({
-        ok: false,
-        requestId: runId,
-        error: "internal",
-      });
+      failStream("stream_ended_no_terminal");
     } catch {
-      ctx.log.warn(
-        {
-          event: EVENT_NAMES.AI_RELAY_PUMP_ERROR,
-          reqId: ctx.reqId,
-          runId,
-          errorCode: "stream_subscribe_error",
-        },
-        EVENT_NAMES.AI_RELAY_PUMP_ERROR
-      );
-      resolveFinal?.({
-        ok: false,
-        requestId: runId,
-        error: "internal",
-      });
+      failStream("stream_subscribe_error");
     }
   })();
 
