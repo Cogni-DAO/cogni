@@ -522,8 +522,22 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
 
       log.warn(
         { runId, graphId, errorCode },
-        "Scheduled graph execution rejected before start"
+        "Graph execution rejected before start"
       );
+
+      // Publish error to Redis so facade subscribers don't hang.
+      try {
+        await runStream.publish(runId, {
+          type: "error",
+          error: errorCode,
+        });
+        await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+      } catch (publishErr) {
+        log.warn(
+          { runId, err: publishErr },
+          "Redis error publish failed after preflight rejection"
+        );
+      }
 
       capture({
         event: AnalyticsEvents.AGENT_RUN_FAILED,
