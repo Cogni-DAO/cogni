@@ -10,7 +10,7 @@ read_when: Adding new graph trigger types, modifying execution paths, or impleme
 implements: proj.unified-graph-launch
 owner: cogni-dev
 created: 2026-02-03
-verified: 2026-03-17
+verified: 2026-03-18
 tags:
   - ai-graphs
   - scheduler
@@ -331,7 +331,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 
 **Implemented (task.0179):**
 
-Scheduler-worker can now import shared execution contracts without violating `PACKAGES_NO_SRC_IMPORTS`. The shared package keeps billing and tracing out of the public graph execution surface; the current app runtime seeds billing via `runGraphWithScope()` until task.0180 removes that bridge.
+Scheduler-worker can now import shared execution contracts without violating `PACKAGES_NO_SRC_IMPORTS`. The shared package keeps billing and tracing out of the public graph execution surface. The app runtime now composes per-run wrappers in bootstrap so launchers stop building scoped executors, while ALS remains for tenant-scoped provider behavior that is still outside the shared contract.
 
 | Package                             | Receives                                                                                                                      | Notes                                                        |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
