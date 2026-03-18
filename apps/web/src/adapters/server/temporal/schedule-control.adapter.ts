@@ -47,8 +47,8 @@ export interface TemporalScheduleControlConfig {
   taskQueue: string;
 }
 
-/** Workflow type name for scheduled graph execution (defined in scheduler-temporal-worker) */
-const SCHEDULED_RUN_WORKFLOW_TYPE = "GovernanceScheduledRunWorkflow";
+/** Workflow type name for unified graph execution (defined in scheduler-temporal-worker) */
+const GRAPH_RUN_WORKFLOW_TYPE = "GraphRunWorkflow";
 
 /** Map port-level overlap hint to Temporal SDK enum */
 function toTemporalOverlapPolicy(
@@ -128,19 +128,21 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
         },
         action: {
           type: "startWorkflow",
-          workflowType: params.workflowType ?? SCHEDULED_RUN_WORKFLOW_TYPE,
+          workflowType: params.workflowType ?? GRAPH_RUN_WORKFLOW_TYPE,
           // Per WORKFLOW_ID_INCLUDES_TIMESTAMP: workflowId includes schedule time
           // Temporal appends timestamp automatically for scheduled workflows
           workflowId: params.scheduleId,
           args: [
             {
-              // Legacy compatibility: keep scheduleId for already-deployed workers.
-              scheduleId: params.scheduleId,
-              temporalScheduleId: params.scheduleId,
-              dbScheduleId: params.dbScheduleId ?? null,
               graphId: params.graphId,
               executionGrantId: params.executionGrantId,
               input: params.input,
+              runKind: "system_scheduled" as const,
+              triggerSource: "temporal_schedule",
+              triggerRef: params.scheduleId,
+              requestedBy: "cogni_system",
+              dbScheduleId: params.dbScheduleId ?? null,
+              temporalScheduleId: params.scheduleId,
             },
           ],
           taskQueue: params.taskQueueOverride ?? this.config.taskQueue,
@@ -231,16 +233,19 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
         },
         action: {
           type: "startWorkflow" as const,
-          workflowType: params.workflowType ?? SCHEDULED_RUN_WORKFLOW_TYPE,
+          workflowType: params.workflowType ?? GRAPH_RUN_WORKFLOW_TYPE,
           workflowId: params.scheduleId,
           args: [
             {
-              scheduleId: params.scheduleId,
-              temporalScheduleId: params.scheduleId,
-              dbScheduleId: params.dbScheduleId ?? null,
               graphId: params.graphId,
               executionGrantId: params.executionGrantId,
               input: params.input,
+              runKind: "system_scheduled" as const,
+              triggerSource: "temporal_schedule",
+              triggerRef: params.scheduleId,
+              requestedBy: "cogni_system",
+              dbScheduleId: params.dbScheduleId ?? null,
+              temporalScheduleId: params.scheduleId,
             },
           ],
           taskQueue: params.taskQueueOverride ?? this.config.taskQueue,

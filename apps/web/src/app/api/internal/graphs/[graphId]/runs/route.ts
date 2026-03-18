@@ -11,12 +11,15 @@
  *   - GRANT_VALIDATED_TWICE: Re-validates grant (defense-in-depth)
  *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: preflight credit check via decorator (DI closure)
  *   - Uses AiExecutionErrorCode from ai-core (no parallel error system)
- * Side-effects: IO (HTTP request/response, database, graph execution)
+ *   - Per PUMP_TO_COMPLETION_VIA_REDIS: publishes AiEvents to Redis Stream as it drains the executor stream
+ *   - Per STREAM_PUBLISH_IN_EXECUTION_LAYER: Redis publishing happens here, not in Temporal activity
+ * Side-effects: IO (HTTP request/response, database, graph execution, Redis stream publishing)
  * Links: docs/spec/scheduler.md, graphs.run.internal.v1.contract
  * @internal
  */
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import { RUN_STREAM_DEFAULT_TTL_SECONDS } from "@cogni/graph-execution-core";
 import { toUserId } from "@cogni/ids";
 import { SYSTEM_ACTOR } from "@cogni/ids/system";
 import { NextResponse } from "next/server";
@@ -428,14 +431,23 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       }
     );
 
-    // Consume stream and wait for final result.
+    // Consume stream, publish events to Redis, and wait for final result.
+    // Per PUMP_TO_COMPLETION_VIA_REDIS: events reach Redis regardless of SSE subscribers.
+    // Per STREAM_PUBLISH_IN_EXECUTION_LAYER: Redis publishing happens here, not in Temporal activity.
     // Wrapped in try/catch so preflight credit failures (thrown during stream
     // iteration by PreflightCreditCheckDecorator) finalize the idempotency
     // record cleanly instead of leaving it "pending" forever.
+    const { runStream } = container;
     let final: Awaited<typeof result.final>;
     try {
-      for await (const _event of result.stream) {
-        // Drain stream to completion
+      for await (const event of result.stream) {
+        // Publish each event to Redis Stream for SSE subscribers
+        await runStream.publish(runId, event);
+
+        // Expire stream after terminal event (auto-cleanup)
+        if (event.type === "done" || event.type === "error") {
+          await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+        }
       }
 
       final = await result.final;

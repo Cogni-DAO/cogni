@@ -2,7 +2,7 @@
 id: task.0176
 type: task
 title: "GraphRunWorkflow + promote schedule_runs → graph_runs"
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 3
 estimate: 5
@@ -15,7 +15,7 @@ project: proj.unified-graph-launch
 blocked_by:
   - task.0175
 created: 2026-03-13
-updated: 2026-03-18
+updated: 2026-03-19
 branch: claude/unified-graph-launch-mmXvl
 labels:
   - ai-graphs
@@ -55,22 +55,54 @@ labels:
 - `apps/web` composition root unchanged
 - `@cogni/graph-execution-core` stays contracts-only
 
+## Design Feedback (2026-03-18): Codebase audit + review notes
+
+Feedback items analyzed against existing code to avoid unnecessary rebuilds:
+
+| Feedback                              | Existing Code                                                                                   | Action                                                                                                                                                                                                                      |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workflow ID conflict/reuse policy     | No custom workflow IDs today — `GovernanceScheduledRunWorkflow` uses Temporal auto-assigned IDs | New: define format, document conflict policy                                                                                                                                                                                |
+| Heartbeat for long-running activities | Zero heartbeat usage in scheduler-worker                                                        | Deferred: `executeGraphActivity` does a single blocking `await fetch()` — can't heartbeat mid-call. `maximumAttempts: 1` + 15-min timeout is sufficient. Heartbeat relevant only if we switch to chunked/streaming response |
+| No Redis consumer groups for SSE      | `RedisRunStreamAdapter.subscribe()` already uses `XRANGE` + `XREAD` offset-based replay         | No change — already correct                                                                                                                                                                                                 |
+| Single finalize step                  | `finalizeRequest()` and `markRunCompleted()` already exist as separate port methods             | Compose into one `finalizeRunActivity` that calls both                                                                                                                                                                      |
+| Standardize status vocabulary         | `GRAPH_RUN_STATUSES` already defined in `db-schema/scheduling.ts`                               | No rename — already standardized                                                                                                                                                                                            |
+| Add monotonic seq                     | `markRunStarted(WHERE pending)` and `markRunCompleted(WHERE pending                             | running)` already enforce monotonic transitions                                                                                                                                                                             | Defer `seq` column — Redis Stream entry IDs (`XADD` auto-assigned) are the canonical cursor for replay. `RunStreamPort.subscribe(fromId)` already uses this contract. No app-level seq needed |
+
 ## Requirements
 
+**Schema (checkpoint 1 — done):**
+
 - `schedule_runs` renamed to `graph_runs` via migration (single canonical run ledger)
-- New columns on `graph_runs`: `run_kind` (user_immediate | system_scheduled | system_webhook), `trigger_source`, `trigger_ref`, `requested_by`, `graph_id`
-- `schedule_id` made nullable (API/webhook runs have no schedule)
-- `schedule_slot_unique` constraint relaxed to `WHERE schedule_id IS NOT NULL`
-- Zero users — no data to backfill, no migration needed
-- Status enum extended: `pending`, `running`, `success`/`completed`, `error`/`failed`, `skipped`, `cancelled`
-- `attempt` column supports real attempt semantics (unfreeze from hardcoded 0)
-- `GraphRunWorkflow` Temporal workflow exists with activities: `validateGrantActivity`, `createRunRecordActivity`, `executeGraphActivity`, `finalizeRunActivity`
-- `executeGraphActivity` calls internal API via HTTP; the internal API route publishes events to Redis via `RunStreamPort.publish()` and calls `expire()` after terminal event
-- Activity publishes events to Redis regardless of subscriber count (PUMP_TO_COMPLETION_VIA_REDIS — enforced in the internal API route, not the activity)
-- Workflow ID format: `graph-run:{tenantId}:{idempotencyKey}` (IDEMPOTENT_RUN_START — key comes from `execution_requests`, not the run table)
-- All scheduler-worker code references `graph_runs` (already done in checkpoint 1)
+- New columns on `graph_runs`: `run_kind`, `trigger_source`, `trigger_ref`, `requested_by`, `graph_id`
+- `schedule_id` made nullable; `schedule_slot_unique` constraint relaxed to `WHERE schedule_id IS NOT NULL`
+- Status enum: reuse existing `GRAPH_RUN_STATUSES` (`pending`, `running`, `success`, `error`, `skipped`, `cancelled`) — no rename
+- `attemptCount` column already exists (was hardcoded 0) — unfreeze for real attempt tracking
+
+**Workflow (checkpoint 2a):**
+
+- `GraphRunWorkflow` Temporal workflow with activities: `validateGrantActivity`, `createRunRecordActivity`, `executeGraphActivity`, `finalizeRunActivity`
+- Workflow ID format: `graph-run:{billingAccountId}:{idempotencyKey}` — `billingAccountId` is not PII; visible in Temporal UI/logs is acceptable. Conflict policy: Temporal rejects duplicate workflow start with `WorkflowExecutionAlreadyStarted` — caller treats as idempotent success
+- `executeGraphActivity` calls internal API via HTTP (existing pattern, existing idempotency via `execution_requests`). Single blocking `await fetch()` — no heartbeat (can't heartbeat mid-call; `maximumAttempts: 1` + 15-min timeout is sufficient)
+- Workflow ID conflict policy set explicitly in code: `workflowIdConflictPolicy: USE_EXISTING` (running duplicate = idempotent no-op), `workflowIdReusePolicy: REJECT_DUPLICATE` (completed duplicate = already ran, don't re-run)
+- `finalizeRunActivity` converges ALL terminal paths (success, error, timeout) into a single activity that calls both `markRunCompleted()` on `graph_runs` AND `finalizeRequest()` on `execution_requests`
+- `createRunRecordActivity` always creates a `graph_runs` record (no `dbScheduleId` gate — SINGLE_RUN_LEDGER)
 - `GovernanceScheduledRunWorkflow` replaced by `GraphRunWorkflow` (zero users, no migration)
-- `graph_runs` record created for ALL runs (no `dbScheduleId` gate — SINGLE_RUN_LEDGER)
+
+**Redis pump (checkpoint 2b):**
+
+- Internal API route publishes events to Redis via `RunStreamPort.publish()` as it drains the executor stream
+- Calls `RunStreamPort.expire()` after terminal event
+- PUMP_TO_COMPLETION_VIA_REDIS enforced in the internal API route, not the activity
+- No Redis consumer groups — `RunStreamPort.subscribe()` already uses offset-based `XRANGE` + `XREAD` (confirmed by codebase audit)
+- **Cursor contract:** Redis Stream entry IDs (auto-assigned by `XADD`) are the canonical cursor for replay semantics. `RunStreamPort.subscribe(runId, signal, fromId?)` uses these IDs directly. No app-level `seq` column needed — this is why we defer it
+
+**Reused infrastructure (NOT rebuilt):**
+
+- `execution_requests` table + `ExecutionRequestPort` (checkIdempotency/createPending/finalize) — unchanged
+- `GRAPH_RUN_STATUSES` enum — unchanged
+- `markRunStarted()` / `markRunCompleted()` monotonic guards — unchanged
+- `RedisRunStreamAdapter` publish/subscribe — unchanged
+- `GRAPH_EXECUTION_ACTIVITY_OPTIONS` (`maximumAttempts: 1`, 15-min timeout) — unchanged
 
 ## Allowed Changes
 
@@ -90,22 +122,26 @@ labels:
 - [x] **Checkpoint 1: Promote schedule_runs → graph_runs** (schema rename + columns)
   - Validation: `pnpm check` passes ✓
 
-- [ ] **Checkpoint 2a: GraphRunWorkflow + unified orchestration** (UNBLOCKED — task.0179, task.0180 done)
+- [x] **Checkpoint 2a: GraphRunWorkflow + unified orchestration** (UNBLOCKED — task.0179, task.0180 done)
   - Build `GraphRunWorkflow` in scheduler-worker replacing `GovernanceScheduledRunWorkflow`
-  - Workflow shape: `validateGrantActivity` → `createRunRecordActivity` → `executeGraphActivity` → `finalizeRunActivity`
-  - `executeGraphActivity` uses existing internal API call (HTTP to apps/web)
+  - Workflow shape: try { validate → createRecord → execute → finalize(success) } catch { finalize(error) }
+  - `executeGraphActivity` reuses existing HTTP call to internal API + existing `execution_requests` idempotency (no heartbeat — single blocking fetch, maximumAttempts: 1)
   - `createRunRecordActivity` always creates a `graph_runs` record (no `dbScheduleId` gate)
-  - Delete `GovernanceScheduledRunWorkflow` — zero users, no migration, just replace
+  - `finalizeRunActivity` = single converged terminal step: calls `markRunCompleted()` + `finalizeRequest()`
+  - Workflow ID: `graph-run:{billingAccountId}:{idempotencyKey}` with explicit conflict policy in code (`USE_EXISTING` for running, `REJECT_DUPLICATE` for completed)
+  - Delete `GovernanceScheduledRunWorkflow` — zero users, just replace
   - Validation: `pnpm check` passes, scheduled runs use new workflow
 
-- [ ] **Checkpoint 2b: Redis pump in internal API route**
+- [x] **Checkpoint 2b: Redis pump in internal API route**
   - Modify `POST /api/internal/graphs/{graphId}/runs` to publish `AiEvent`s to Redis via `RunStreamPort.publish()` as it drains the executor stream
   - Call `RunStreamPort.expire()` after terminal event
+  - No consumer groups — reuse existing offset-based `XRANGE`/`XREAD` in `RedisRunStreamAdapter.subscribe()`
   - This is the PUMP_TO_COMPLETION_VIA_REDIS implementation — events reach Redis regardless of SSE subscribers
   - Validation: `pnpm check` passes, Redis Stream populated during execution
 
-- [ ] **Checkpoint 3: Integration test**
+- [ ] **Checkpoint 3: Integration test** (requires `pnpm dev:stack:test` — deferred to stack validation)
   - Stack test: start workflow → verify run record in `graph_runs` → verify events in Redis Stream
+  - Existing stack tests updated to reference `GraphRunWorkflow` (workflow type name change)
 
 ## Validation
 

@@ -72,10 +72,8 @@ export async function startSchedulerWorker(
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: env.TEMPORAL_TASK_QUEUE,
-    workflowsPath: new URL(
-      "./workflows/scheduled-run.workflow.js",
-      import.meta.url
-    ).pathname,
+    workflowsPath: new URL("./workflows/graph-run.workflow.js", import.meta.url)
+      .pathname,
     activities,
   });
 

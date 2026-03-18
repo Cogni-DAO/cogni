@@ -52,7 +52,7 @@ export interface CreateScheduleParams {
   readonly overlapPolicy?: ScheduleOverlapPolicyHint;
   /** Catchup window in milliseconds. Default: 60_000 (1m). Governance passes 0. */
   readonly catchupWindowMs?: number;
-  /** Workflow type to start (default: GovernanceScheduledRunWorkflow) */
+  /** Workflow type to start (default: GraphRunWorkflow) */
   readonly workflowType?: string;
   /** Task queue override (default: uses adapter's configured queue) */
   readonly taskQueueOverride?: string;
