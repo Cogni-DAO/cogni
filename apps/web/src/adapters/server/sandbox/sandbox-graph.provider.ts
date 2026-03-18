@@ -316,8 +316,6 @@ export class SandboxGraphProvider implements GraphExecutorPort {
               attempt,
               source: "litellm",
               executorType: "sandbox",
-              billingAccountId: scope.billing.billingAccountId,
-              virtualKeyId: scope.billing.virtualKeyId,
               graphId,
               model,
               usageUnitId: entry.litellmCallId,

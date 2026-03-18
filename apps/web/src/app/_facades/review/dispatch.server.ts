@@ -16,7 +16,7 @@ import type { Logger } from "pino";
 import { getContainer } from "@/bootstrap/container";
 import {
   createGraphExecutor,
-  runGraphWithScope,
+  createScopedGraphExecutor,
 } from "@/bootstrap/graph-executor.factory";
 import { createReviewAdapterDeps } from "@/bootstrap/review-adapter.factory";
 import { executeStream } from "@/features/ai/public.server";
@@ -114,26 +114,19 @@ function dispatchAsync(
         executeStream,
         COGNI_SYSTEM_PRINCIPAL_USER_ID as ReturnType<
           typeof import("@cogni/ids").toUserId
-        >,
-        // No preflight credit check for system tenant
-        async () => {}
+        >
       );
 
-      // Wrap executor with system tenant billing scope
       const billing = {
         billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
         virtualKeyId: billingAccount.defaultVirtualKeyId,
       };
-      const scopedExecutor: typeof executor = {
-        runGraph(req, execCtx) {
-          return runGraphWithScope({
-            executor,
-            req,
-            ...(execCtx ? { ctx: execCtx } : {}),
-            billing,
-          });
-        },
-      };
+      const scopedExecutor = createScopedGraphExecutor({
+        executor,
+        billing,
+        // No preflight credit check for system tenant
+        preflightCheckFn: async () => {},
+      });
 
       // Create adapter deps via bootstrap factory (spread flat into handler deps)
       const adapterDeps = createReviewAdapterDeps(

@@ -25,7 +25,7 @@ import { toUserId } from "@cogni/ids";
 import { resolveAiAdapterDeps } from "@/bootstrap/container";
 import {
   createGraphExecutor,
-  runGraphWithScope,
+  createScopedGraphExecutor,
 } from "@/bootstrap/graph-executor.factory";
 import type {
   ChatCompletionOutput,
@@ -343,11 +343,7 @@ export async function completionStream(
 
   // Create graph executor via bootstrap factory
   // Routing is handled by NamespaceGraphRouter - facade is graph-agnostic
-  const graphExecutor = createGraphExecutor(
-    executeStream,
-    userId,
-    preflightCheckFn
-  );
+  const graphExecutor = createGraphExecutor(executeStream, userId);
 
   const billingAccount = await getOrCreateBillingAccountForUser(
     accountService,
@@ -383,10 +379,15 @@ export async function completionStream(
   const timestamp = clock.now();
   const coreMessages = toCoreMessages(input.messages, timestamp);
 
-  const aiRuntime = createAiRuntime({
-    graphExecutor,
+  const scopedGraphExecutor = createScopedGraphExecutor({
+    executor: graphExecutor,
     billing,
-    runGraphWithScope,
+    preflightCheckFn,
+    ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
+  });
+
+  const aiRuntime = createAiRuntime({
+    graphExecutor: scopedGraphExecutor,
   });
 
   // runChatStream is now synchronous (returns immediately with stream handle)
@@ -395,7 +396,6 @@ export async function completionStream(
       messages: coreMessages,
       model: input.model,
       executionContext,
-      ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
       graphName: input.graphName,
       ...(input.stateKey ? { stateKey: input.stateKey } : {}),
     },

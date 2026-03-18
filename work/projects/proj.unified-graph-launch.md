@@ -11,7 +11,7 @@ outcome: All graph runs flow through GraphRunWorkflow; no inline execution in HT
 assignees:
   - derekg1729
 created: 2026-02-07
-updated: 2026-03-17
+updated: 2026-03-18
 labels:
   - ai-graphs
   - scheduler
@@ -74,21 +74,22 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 | **RunStreamPort + RedisRunStreamAdapter** — hexagonal port/adapter for Redis Streams                 | Done              | 2   | task.0175 |
 | **Extract `graph-execution-core` package** — decouple execution ports from Next.js                   | Done (PR #574)    | 3   | task.0179 |
 | **GraphRunWorkflow + promote `schedule_runs` → `graph_runs`** — single run ledger, Temporal workflow | Checkpoint 1 done | 5   | task.0176 |
-| **Neutral usage facts** — remove billing identity from inner providers (ALS cleanup)                 | Not Started       | 2   | task.0180 |
+| **Neutral usage facts** — split wrapper composition and remove billing identity from usage facts     | Done              | 2   | task.0180 |
 | **Unified streaming API** — chat endpoint refactor, reconnection endpoint, idempotency               | Not Started       | 5   | task.0177 |
 | **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs   | Not Started       | 3   | task.0178 |
 
 **Note:** When `graph_runs` exists, reconciler can optionally switch reference-set from LiteLLM spend/logs to `graph_runs`, but it is not required. The LiteLLM API approach remains valid long-term.
 
-### Run (P2): Webhook Triggers (Conditional)
+### Run (P2): Webhook Triggers + Execution Host Evolution (Conditional)
 
-**Goal:** Webhook-triggered graph runs via same unified path.
+**Goal:** Webhook-triggered graph runs via same unified path. Evaluate worker-local execution.
 
 | Deliverable                                                                   | Status      | Est | Work Item |
 | ----------------------------------------------------------------------------- | ----------- | --- | --------- |
 | Evaluate: Is there a high-value webhook trigger (CI failure, deploy failure)? | Not Started | 1   | —         |
 | If yes: Implement single webhook handler using same workflow path             | Not Started | 2   | —         |
 | Do NOT build generic webhook/event system preemptively                        | Not Started | 0   | —         |
+| **Spike: Worker-local execution** — evaluate eliminating internal API hop     | Not Started | 2   | task.0181 |
 
 ## Constraints
 

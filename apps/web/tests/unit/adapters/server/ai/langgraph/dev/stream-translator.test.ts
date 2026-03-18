@@ -336,4 +336,33 @@ describe("translateDevServerStream", () => {
       });
     });
   });
+
+  it("emits a neutral usage_report event without billing identity", async () => {
+    const chunks: SdkStreamChunk[] = [
+      messagesChunk({
+        type: "ai",
+        id: "msg-1",
+        content: "done",
+      }),
+    ];
+
+    const events = await collectEvents(
+      translateDevServerStream(mockStream(chunks), {
+        ...mockContext(),
+        graphId: "langgraph:poet",
+      })
+    );
+
+    const usageEvent = events.find((event) => event.type === "usage_report");
+    expect(usageEvent).toEqual({
+      type: "usage_report",
+      fact: {
+        runId: "run-123",
+        attempt: 1,
+        source: "litellm",
+        executorType: "langgraph_server",
+        graphId: "langgraph:poet",
+      },
+    });
+  });
 });

@@ -10,7 +10,7 @@ read_when: Adding new graph trigger types, modifying execution paths, or impleme
 implements: proj.unified-graph-launch
 owner: cogni-dev
 created: 2026-02-03
-verified: 2026-03-17
+verified: 2026-03-18
 tags:
   - ai-graphs
   - scheduler
@@ -49,9 +49,9 @@ Define the invariants, schema, and architecture for routing all graph execution 
 
 7. **REDIS_IS_STREAM_PLANE**: Redis holds only ephemeral stream data (events in-flight). PostgreSQL is the durable source of truth for all persisted state. Redis loss = stream interruption, not data loss.
 
-8. **STREAM_PUBLISH_IN_ACTIVITY**: The Temporal activity (not the workflow) publishes events to Redis. Activities are non-deterministic I/O — Redis calls belong here.
+8. **STREAM_PUBLISH_IN_EXECUTION_LAYER**: The execution layer (internal API route in `apps/web`) publishes events to Redis as it drains the executor stream. The scheduler-worker activity triggers execution via HTTP but does not publish to Redis directly. This keeps the full execution stack (providers, decorators, factory) in `apps/web` per `EXECUTION_VIA_SERVICE_API`.
 
-9. **PUMP_TO_COMPLETION_VIA_REDIS**: The activity pumps `AsyncIterable<AiEvent>` to completion and publishes each event to Redis, regardless of subscriber count. Same billing safety guarantee as today's `RunEventRelay`.
+9. **PUMP_TO_COMPLETION_VIA_REDIS**: The internal API route drains `AsyncIterable<AiEvent>` to completion and publishes each event to Redis, regardless of subscriber count. Same billing safety guarantee as today's `RunEventRelay`.
 
 10. **SSE_FROM_REDIS_NOT_MEMORY**: SSE endpoints read from Redis Streams (not in-process memory). This enables cross-process streaming and reconnection.
 
@@ -188,15 +188,25 @@ Rename `schedule_runs` to `graph_runs` and extend with trigger provenance column
 └────────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌─ ORCHESTRATION (Temporal Worker) ──────────────────────────────────────┐
+┌─ ORCHESTRATION (Temporal Worker = scheduler-worker) ─────────────────┐
 │ GraphRunWorkflow                                                       │
-│   1. validateGrantActivity(grantRef)                                   │
-│   2. createRunRecordActivity(runId, triggerContext)                     │
-│   3. executeAndStreamActivity(runId, graphId, input)                   │
-│      └─ GraphExecutorPort.runGraph() → pump AsyncIterable<AiEvent>     │
-│      └─ Each event → XADD run:{runId} MAXLEN ~10000 * data <json>     │
-│      └─ On done/error → XADD terminal event + EXPIRE key 3600s        │
-│   4. finalizeRunActivity(runId, result)                                │
+│   1. Activity: validateGrantActivity(grantRef)                         │
+│   2. Activity: createRunRecordActivity(runId, triggerContext)           │
+│   3. Activity: executeGraphActivity(runId, graphId, input)             │
+│      └─► POST /api/internal/graphs/{graphId}/runs (apps/web)           │
+│   4. Activity: finalizeRunActivity(runId, result)                      │
+└────────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─ EXECUTION LAYER (apps/web internal API) ────────────────────────────┐
+│ POST /api/internal/graphs/{graphId}/runs                               │
+│   • Validates grant (defense-in-depth)                                 │
+│   • Calls GraphExecutorPort.runGraph()                                 │
+│   • Drains stream, publishing each AiEvent to Redis Stream:            │
+│     XADD run:{runId} MAXLEN ~10000 * data <json>                       │
+│   • On done/error → XADD terminal event + EXPIRE key 3600s            │
+│   • Billing via decorator stack (existing)                             │
+│   • Returns { runId, traceId, ok, errorCode? }                         │
 └────────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -209,13 +219,15 @@ Rename `schedule_runs` to `graph_runs` and extend with trigger provenance column
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
+**Execution host decision (2026-03-18):** The full `GraphExecutorPort` composition root (providers, decorators, factory) lives in `apps/web`. The scheduler-worker remains a lean Temporal worker per `EXECUTION_VIA_SERVICE_API`. Redis publishing happens in the internal API route (execution layer), not in the Temporal activity (orchestration layer). This keeps the three-plane separation clean: Temporal orchestrates, apps/web executes and publishes to Redis, Redis delivers to SSE endpoints.
+
 **Why Redis Streams (not Pub/Sub):** Redis Pub/Sub is fire-and-forget (at-most-once). Streams are an append-log with cursor-based reads — supports replay from any position, enabling reconnection after browser close.
 
 **Reconnection:** New `GET /api/v1/ai/runs/{runId}/stream` endpoint. Accepts `Last-Event-ID` header (SSE spec). Does `XRANGE` from that ID to catch up, then `XREAD BLOCK` for new events. Runs are reconnectable for as long as the Redis Stream exists (TTL ≤1h after completion).
 
 **Multiple concurrent runs:** Each run has its own Redis Stream key. UI can open multiple SSE connections to different runIds simultaneously.
 
-**Billing safety:** `executeAndStreamActivity` pumps `AsyncIterable<AiEvent>` to completion regardless of Redis subscriber count. `BillingGraphExecutorDecorator` intercepts `usage_report` events in the decorator stack before they reach the activity's publish loop. Same PUMP_TO_COMPLETION invariant as today's `RunEventRelay`.
+**Billing safety:** The internal API route drains `AsyncIterable<AiEvent>` to completion regardless of Redis subscriber count. `BillingGraphExecutorDecorator` intercepts `usage_report` events in the decorator stack before they reach the Redis publish loop. Same PUMP_TO_COMPLETION invariant as today's `RunEventRelay`.
 
 **What stays the same:**
 
@@ -229,10 +241,11 @@ Rename `schedule_runs` to `graph_runs` and extend with trigger provenance column
 **What changes:**
 
 - `POST /api/v1/ai/chat` → starts workflow, subscribes to Redis Stream, returns SSE
-- New `executeAndStreamActivity` → publishes events to Redis Stream as it pumps
+- `POST /api/internal/graphs/{graphId}/runs` → publishes events to Redis Stream as it drains the executor stream
 - `RunEventRelay` → replaced by Redis Stream subscribe in SSE endpoints
 - New `GET /api/v1/ai/runs/{runId}/stream` endpoint for reconnection
 - New `RunStreamPort` + `RedisRunStreamAdapter` (hexagonal port/adapter)
+- `GovernanceScheduledRunWorkflow` → replaced by `GraphRunWorkflow`
 - Docker compose: add Redis 7
 - New dependency: `ioredis`
 
@@ -331,7 +344,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 
 **Implemented (task.0179):**
 
-Scheduler-worker can now import shared execution contracts without violating `PACKAGES_NO_SRC_IMPORTS`. The shared package keeps billing and tracing out of the public graph execution surface; the current app runtime seeds billing via `runGraphWithScope()` until task.0180 removes that bridge.
+Scheduler-worker can now import shared execution contracts without violating `PACKAGES_NO_SRC_IMPORTS`. The shared package keeps billing and tracing out of the public graph execution surface. The app runtime now composes per-run wrappers in bootstrap so launchers stop building scoped executors, while ALS remains for tenant-scoped provider behavior that is still outside the shared contract.
 
 | Package                             | Receives                                                                                                                      | Notes                                                        |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -342,13 +355,13 @@ Scheduler-worker can now import shared execution contracts without violating `PA
 
 **Planned (future tasks):**
 
-| File                                                                 | Purpose                                                |
-| -------------------------------------------------------------------- | ------------------------------------------------------ |
-| `services/scheduler-worker/src/workflows/graph-run.workflow.ts`      | GraphRunWorkflow (unified execution path)              |
-| `services/scheduler-worker/src/activities/execute-graph.activity.ts` | executeAndStreamActivity (pumps + publishes to Redis)  |
-| `apps/web/src/app/api/v1/ai/chat/route.ts`                           | API trigger (starts workflow → subscribes Redis → SSE) |
-| `apps/web/src/app/api/v1/ai/runs/[runId]/stream/route.ts`            | Reconnection SSE endpoint                              |
-| `apps/web/src/features/ai/services/ai_runtime.ts`                    | AI runtime (workflow start + Redis subscribe)          |
+| File                                                            | Purpose                                                                     | Task      |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------- | --------- |
+| `services/scheduler-worker/src/workflows/graph-run.workflow.ts` | GraphRunWorkflow (replaces GovernanceScheduledRunWorkflow)                  | task.0176 |
+| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts`  | Add Redis Stream publishing as stream drains (PUMP_TO_COMPLETION_VIA_REDIS) | task.0176 |
+| `apps/web/src/app/api/v1/ai/chat/route.ts`                      | API trigger (starts workflow → subscribes Redis → SSE)                      | task.0177 |
+| `apps/web/src/app/api/v1/ai/runs/[runId]/stream/route.ts`       | Reconnection SSE endpoint                                                   | task.0177 |
+| `apps/web/src/features/ai/services/ai_runtime.ts`               | AI runtime (workflow start + Redis subscribe)                               | task.0177 |
 
 ## Acceptance Checks
 

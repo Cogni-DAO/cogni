@@ -97,6 +97,36 @@ describe("RECEIPT_WRITES_REQUIRE_CALL_ID_AND_COST", () => {
     expect(call.responseCostUsd).toBe(0);
   });
 
+  it("missing billingAccountId → no receipt (missing_billing_identity)", async () => {
+    const accountService = makeMockAccountService();
+    const log = makeNoopLogger();
+
+    const fact = buildInprocUsageFact({
+      billingAccountId: undefined,
+      virtualKeyId: "vk-1",
+      costUsd: 0.005,
+    });
+
+    await commitUsageFact(fact, baseContext, accountService, log);
+
+    expect(accountService.recordChargeReceipt).not.toHaveBeenCalled();
+  });
+
+  it("missing virtualKeyId → no receipt (missing_billing_identity)", async () => {
+    const accountService = makeMockAccountService();
+    const log = makeNoopLogger();
+
+    const fact = buildInprocUsageFact({
+      billingAccountId: "billing-acct-1",
+      virtualKeyId: undefined,
+      costUsd: 0.005,
+    });
+
+    await commitUsageFact(fact, baseContext, accountService, log);
+
+    expect(accountService.recordChargeReceipt).not.toHaveBeenCalled();
+  });
+
   it("costUsd > 0 → receipt written with charge", async () => {
     const accountService = makeMockAccountService();
     const log = makeNoopLogger();

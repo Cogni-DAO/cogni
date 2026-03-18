@@ -254,7 +254,6 @@ export class InProcCompletionUnitAdapter {
     }
   ): AsyncIterable<AiEvent> {
     const { runId, attempt, graphId } = runContext;
-    const scope = getExecutionScope();
     const completionResult = await getCompletionPromise();
     const { stream, final } = completionResult;
 
@@ -300,8 +299,6 @@ export class InProcCompletionUnitAdapter {
         attempt,
         source: "litellm",
         executorType: "inproc",
-        billingAccountId: scope.billing.billingAccountId,
-        virtualKeyId: scope.billing.virtualKeyId,
         graphId, // For per-agent analytics
         inputTokens: result.usage.promptTokens,
         outputTokens: result.usage.completionTokens,

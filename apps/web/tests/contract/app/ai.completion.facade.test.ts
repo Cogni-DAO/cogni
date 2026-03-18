@@ -41,14 +41,12 @@ vi.mock("@/bootstrap/container", () => ({
 }));
 
 // Mock the graph executor factory (stable boundary per UNIFIED_GRAPH_EXECUTOR)
-vi.mock("@/bootstrap/graph-executor.factory", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("@/bootstrap/graph-executor.factory")>();
-  return {
-    createGraphExecutor: vi.fn(),
-    runGraphWithScope: original.runGraphWithScope,
-  };
-});
+vi.mock("@/bootstrap/graph-executor.factory", () => ({
+  createGraphExecutor: vi.fn(),
+  createScopedGraphExecutor: vi.fn(
+    (params: { executor: unknown }) => params.executor
+  ),
+}));
 
 // Mock preflightCreditCheck to avoid serverEnv access in contract tests
 // Preserves other exports from public.server.ts (createAiRuntime, toCoreMessages, etc.)
@@ -62,10 +60,14 @@ vi.mock("@/features/ai/public.server", async (importOriginal) => {
 });
 
 import { resolveAiAdapterDeps } from "@/bootstrap/container";
-import { createGraphExecutor } from "@/bootstrap/graph-executor.factory";
+import {
+  createGraphExecutor,
+  createScopedGraphExecutor,
+} from "@/bootstrap/graph-executor.factory";
 
 const mockResolveAiAdapterDeps = vi.mocked(resolveAiAdapterDeps);
 const mockCreateGraphExecutor = vi.mocked(createGraphExecutor);
+const mockCreateScopedGraphExecutor = vi.mocked(createScopedGraphExecutor);
 
 /**
  * Create a fake GraphExecutorPort for testing.
@@ -273,14 +275,20 @@ describe("app/_facades/ai/completion.server", () => {
       // Act
       await chatCompletion(input, testCtx);
 
-      // Assert - Factory must be called with (streamFn, userId, billingCommitFn)
+      // Assert - bootstrap owns both the static executor factory and per-run wrapper composition
       expect(mockCreateGraphExecutor).toHaveBeenCalledTimes(1);
-      const [streamFn, userId, billingCommitFn] =
-        mockCreateGraphExecutor.mock.calls[0] ?? [];
+      const [streamFn, userId] = mockCreateGraphExecutor.mock.calls[0] ?? [];
       expect(typeof streamFn).toBe("function");
       expect(typeof userId).toBe("string");
-      // CRITICAL: billingCommitFn must be provided (task.0007 — decorator requires it)
-      expect(typeof billingCommitFn).toBe("function");
+
+      expect(mockCreateScopedGraphExecutor).toHaveBeenCalledTimes(1);
+      const [scopedParams] = mockCreateScopedGraphExecutor.mock.calls[0] ?? [];
+      expect(scopedParams?.executor).toBe(fakeExecutor);
+      expect(scopedParams?.billing).toEqual({
+        billingAccountId: "billing-test-account-id",
+        virtualKeyId: "virtual-key-1",
+      });
+      expect(typeof scopedParams?.preflightCheckFn).toBe("function");
     });
 
     it("should return valid created timestamp", async () => {

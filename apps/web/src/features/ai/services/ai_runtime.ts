@@ -18,28 +18,15 @@
  */
 
 import type { GraphId } from "@cogni/ai-core";
-import type {
-  ExecutionContext,
-  GraphRunRequest,
-  GraphRunResult,
-} from "@cogni/graph-execution-core";
+import type { ExecutionContext } from "@cogni/graph-execution-core";
 import type { Logger } from "pino";
 import type { Message } from "@/core";
-import type { BillingContext, GraphExecutorPort } from "@/ports";
+import type { GraphExecutorPort } from "@/ports";
 import { EVENT_NAMES, type RequestContext } from "@/shared/observability";
 import type { AiRelayPumpErrorEvent } from "@/shared/observability/events/ai";
 import type { RunContext } from "@/types/run-context";
 import type { AiEvent, StreamFinalResult } from "../types";
 import { createRunIdentity } from "./run-id-factory";
-
-/** Function type for the bootstrap-layer launch entrypoint. */
-export type RunGraphWithScopeFn = (params: {
-  readonly executor: GraphExecutorPort;
-  readonly req: GraphRunRequest;
-  readonly ctx?: ExecutionContext;
-  readonly billing: BillingContext;
-  readonly abortSignal?: AbortSignal;
-}) => GraphRunResult;
 
 /**
  * Input for AI runtime operations.
@@ -51,8 +38,6 @@ export interface AiRuntimeInput {
   readonly model: string;
   /** Execution context (actor, session, requestId) — built by launcher */
   readonly executionContext?: ExecutionContext;
-  /** Abort signal for cancellation (chat-only temp tech debt) */
-  readonly abortSignal?: AbortSignal;
   /** Graph name or fully-qualified graphId to execute (required) */
   readonly graphName: string;
   /**
@@ -64,12 +49,10 @@ export interface AiRuntimeInput {
 
 /**
  * Dependencies for AI runtime.
- * Per UNIFIED_GRAPH_EXECUTOR: uses runGraphWithScope, not direct executor.runGraph().
+ * Per UNIFIED_GRAPH_EXECUTOR: uses GraphExecutorPort only.
  */
 export interface AiRuntimeDeps {
   readonly graphExecutor: GraphExecutorPort;
-  readonly billing: BillingContext;
-  readonly runGraphWithScope: RunGraphWithScopeFn;
 }
 
 /**
@@ -90,11 +73,11 @@ export interface AiRuntimeResult {
  * @returns Runtime with runChatStream method
  */
 export function createAiRuntime(deps: AiRuntimeDeps) {
-  const { graphExecutor, billing, runGraphWithScope } = deps;
+  const { graphExecutor } = deps;
 
   /**
    * Run a chat stream as AiEvents.
-   * Per UNIFIED_GRAPH_EXECUTOR: delegates via runGraphWithScope (sets ALS billing scope).
+   * Per UNIFIED_GRAPH_EXECUTOR: delegates via GraphExecutorPort.
    * Per BILLING_INDEPENDENT_OF_CLIENT: uses RunEventRelay for pump+fanout.
    *
    * @param input - Chat input (messages, model, graphName)
@@ -105,14 +88,7 @@ export function createAiRuntime(deps: AiRuntimeDeps) {
     input: AiRuntimeInput,
     ctx: RequestContext
   ): AiRuntimeResult {
-    const {
-      messages,
-      model,
-      graphName,
-      stateKey,
-      abortSignal,
-      executionContext,
-    } = input;
+    const { messages, model, graphName, stateKey, executionContext } = input;
     const log = ctx.log.child({ feature: "ai.runtime" });
 
     // Create run identity via factory (P0: runId = ingressRequestId = ctx.reqId)
@@ -133,20 +109,16 @@ export function createAiRuntime(deps: AiRuntimeDeps) {
       "runChatStream starting"
     );
 
-    // Call via runGraphWithScope — sets ALS billing scope for inner providers
-    const { stream: graphStream, final: graphFinal } = runGraphWithScope({
-      executor: graphExecutor,
-      req: {
+    const { stream: graphStream, final: graphFinal } = graphExecutor.runGraph(
+      {
         runId,
         messages,
         model,
         graphId: resolvedGraphId,
         ...(stateKey && { stateKey }),
       },
-      ...(executionContext ? { ctx: executionContext } : {}),
-      billing,
-      ...(abortSignal ? { abortSignal } : {}),
-    });
+      executionContext
+    );
 
     // Create RunEventRelay for pump+fanout pattern (UI stream adapter)
     const relay = new RunEventRelay(graphStream, runContext, log);

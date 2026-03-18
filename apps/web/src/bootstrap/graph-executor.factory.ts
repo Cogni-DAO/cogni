@@ -26,6 +26,7 @@ import type {
 import type { UserId } from "@cogni/ids";
 import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 import {
+  BillingEnrichmentGraphExecutorDecorator,
   BillingGraphExecutorDecorator,
   type CompletionStreamFn,
   createLangGraphDevClient,
@@ -60,21 +61,18 @@ import {
  * Architecture boundary: Facade calls this factory (app → bootstrap),
  * factory creates router (bootstrap → adapters). Facade never imports adapters.
  *
- * Decorator stack (outer → inner):
- *   ObservabilityGraphExecutorDecorator → PreflightCreditCheckDecorator → BillingGraphExecutorDecorator → NamespaceGraphRouter
+ * Static inner executor:
+ *   NamespaceGraphRouter
  *
  * @param completionStreamFn - Feature function for LLM streaming (from features/ai)
  * @param userId - User ID for adapter dependency resolution
- * @param preflightCheckFn - Required preflight credit check function (created in app layer as closure)
- * @returns GraphExecutorPort implementation with observability + preflight + billing validation
+ * @returns GraphExecutorPort implementation with routing only
  */
 export function createGraphExecutor(
   completionStreamFn: CompletionStreamFn,
-  userId: UserId,
-  preflightCheckFn: PreflightCreditCheckFn
+  userId: UserId
 ): GraphExecutorPort {
   const deps = resolveAiAdapterDeps(userId);
-  const container = getContainer();
 
   // Per MUTUAL_EXCLUSION: choose provider based on LANGGRAPH_DEV_URL env
   const devUrl = serverEnv().LANGGRAPH_DEV_URL;
@@ -99,29 +97,59 @@ export function createGraphExecutor(
   // Create namespace router with all configured providers
   const router = new NamespaceGraphRouter(providers);
 
-  // Wrap with billing validation decorator (intercepts + validates usage_report events)
-  // Per CALLBACK_IS_SOLE_WRITER: decorator validates only; LiteLLM callback writes receipts
-  const billed = new BillingGraphExecutorDecorator(router, container.log);
+  return router;
+}
+
+/**
+ * Compose a per-run scoped executor.
+ *
+ * Bootstrap owns per-run wrapper composition so launchers do not construct ad hoc
+ * scoped executors in facades or routes.
+ */
+export function createScopedGraphExecutor(params: {
+  readonly executor: GraphExecutorPort;
+  readonly billing: BillingContext;
+  readonly preflightCheckFn: PreflightCreditCheckFn;
+  readonly abortSignal?: AbortSignal;
+}): GraphExecutorPort {
+  const container = getContainer();
+
+  const enriched = new BillingEnrichmentGraphExecutorDecorator(
+    params.executor,
+    params.billing
+  );
+
+  // Validate enriched usage_report events before they reach the runtime relay.
+  const billed = new BillingGraphExecutorDecorator(enriched, container.log);
 
   // Wrap with preflight credit check (rejects runs with insufficient credits)
-  // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: all execution paths get credit check automatically
   const preflighted = new PreflightCreditCheckDecorator(
     billed,
-    preflightCheckFn,
+    params.preflightCheckFn,
+    params.billing.billingAccountId,
     container.log
   );
 
   // Wrap with observability decorator for Langfuse traces (outermost)
-  // Per OBSERVABILITY.md#langfuse-integration: creates trace with I/O, handles terminal states
-  // Note: Observability doesn't need usage_report events — billing consumes them before this layer
-  const decorated = new ObservabilityGraphExecutorDecorator(
+  const observed = new ObservabilityGraphExecutorDecorator(
     preflighted,
     container.langfuse,
     { finalizationTimeoutMs: 15_000 },
-    container.log
+    container.log,
+    params.billing.billingAccountId
   );
 
-  return decorated;
+  return {
+    runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+      return runGraphWithScope({
+        executor: observed,
+        req,
+        ...(ctx ? { ctx } : {}),
+        billing: params.billing,
+        ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
+      });
+    },
+  };
 }
 
 /**

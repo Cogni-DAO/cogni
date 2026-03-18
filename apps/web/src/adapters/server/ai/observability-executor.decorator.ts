@@ -20,7 +20,6 @@
 import { randomUUID } from "node:crypto";
 import { trace } from "@opentelemetry/api";
 import type { Logger } from "pino";
-import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import {
   type ExecutionContext,
   type GraphExecutorPort,
@@ -75,7 +74,8 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
     private readonly inner: GraphExecutorPort,
     private readonly langfuse: LangfusePort | undefined,
     config: ObservabilityDecoratorConfig,
-    private readonly log: Logger
+    private readonly log: Logger,
+    private readonly billingAccountId: string
   ) {
     this.finalizationTimeoutMs = config.finalizationTimeoutMs ?? 15_000;
   }
@@ -86,7 +86,6 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
    */
   runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
     const { runId, graphId, messages, model } = req;
-    const scope = getExecutionScope();
     const requestId = ctx?.requestId ?? req.runId;
     const maskContent = ctx?.maskContent ?? false;
 
@@ -133,7 +132,7 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
             graphId,
             providerId,
             model,
-            billingAccountId: scope.billing.billingAccountId,
+            billingAccountId: this.billingAccountId,
             ...(otelTraceIdForMetadata && {
               otelTraceId: otelTraceIdForMetadata,
             }),

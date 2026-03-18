@@ -94,6 +94,17 @@ export async function commitUsageFact(
     return;
   }
 
+  if (!billingAccountId || !virtualKeyId) {
+    billingInvariantViolationTotal.inc({
+      type: "missing_billing_identity",
+    });
+    log.error(
+      { runId, executorType: fact.executorType, fact },
+      "Skipping billing commit: billing identity missing from usage fact"
+    );
+    return;
+  }
+
   try {
     // COST_AUTHORITY_IS_LITELLM: costUsd must be provided by LiteLLM (0 allowed)
     const model = fact.model ?? "unknown";

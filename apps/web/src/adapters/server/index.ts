@@ -31,6 +31,7 @@ export type { AgentCatalogProvider } from "./ai/agent-catalog.provider";
 export { AggregatingAgentCatalog } from "./ai/aggregating-agent-catalog";
 // Graph execution infrastructure
 export { NamespaceGraphRouter } from "./ai/aggregating-executor";
+export { BillingEnrichmentGraphExecutorDecorator } from "./ai/billing-enrichment.decorator";
 // Billing decorator for automatic billing enforcement at port level
 export { BillingGraphExecutorDecorator } from "./ai/billing-executor.decorator";
 export {

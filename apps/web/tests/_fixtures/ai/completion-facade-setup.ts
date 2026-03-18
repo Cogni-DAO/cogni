@@ -87,13 +87,9 @@ export function createContainerMock(deps: AiAdapterDeps) {
  */
 export function createGraphExecutorFactoryMock() {
   return {
-    // Minimal runGraphWithScope: just calls executor.runGraph(req, ctx)
-    // Real version also sets ALS scope, but tests that need billing use runInScope directly
-    runGraphWithScope: (params: {
+    createScopedGraphExecutor: (params: {
       executor: { runGraph: (req: unknown, ctx?: unknown) => unknown };
-      req: unknown;
-      ctx?: unknown;
-    }) => params.executor.runGraph(params.req, params.ctx),
+    }) => params.executor,
     createGraphExecutor: () => ({
       runGraph: () => {
         const stream = (async function* () {

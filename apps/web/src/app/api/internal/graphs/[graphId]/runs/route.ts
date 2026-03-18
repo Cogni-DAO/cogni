@@ -23,7 +23,7 @@ import { NextResponse } from "next/server";
 import { getContainer } from "@/bootstrap/container";
 import {
   createGraphExecutor,
-  runGraphWithScope,
+  createScopedGraphExecutor,
 } from "@/bootstrap/graph-executor.factory";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
@@ -401,14 +401,17 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       });
 
     // Create graph executor and run
-    const executor = createGraphExecutor(
-      executeStream,
-      toUserId(grant.userId),
-      preflightCheckFn
-    );
-    const result = runGraphWithScope({
+    const executor = createGraphExecutor(executeStream, toUserId(grant.userId));
+    const scopedExecutor = createScopedGraphExecutor({
       executor,
-      req: {
+      preflightCheckFn,
+      billing: {
+        billingAccountId: grant.billingAccountId,
+        virtualKeyId: billingAccount.defaultVirtualKeyId,
+      },
+    });
+    const result = scopedExecutor.runGraph(
+      {
         runId,
         graphId,
         messages: messages.map((m) => ({
@@ -418,16 +421,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         model,
         stateKey,
       },
-      ctx: {
+      {
         actorUserId: grant.userId,
         requestId: runId,
         sessionId,
-      },
-      billing: {
-        billingAccountId: grant.billingAccountId,
-        virtualKeyId: billingAccount.defaultVirtualKeyId,
-      },
-    });
+      }
+    );
 
     // Consume stream and wait for final result.
     // Wrapped in try/catch so preflight credit failures (thrown during stream
