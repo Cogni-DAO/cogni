@@ -2,7 +2,7 @@
 id: task.0176
 type: task
 title: "GraphRunWorkflow + promote schedule_runs → graph_runs"
-status: needs_closeout
+status: done
 priority: 0
 rank: 3
 estimate: 5
@@ -15,7 +15,7 @@ project: proj.unified-graph-launch
 blocked_by:
   - task.0175
 created: 2026-03-13
-updated: 2026-03-19
+updated: 2026-03-18
 branch: claude/unified-graph-launch-mmXvl
 labels:
   - ai-graphs
