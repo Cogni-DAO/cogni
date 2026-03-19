@@ -14,6 +14,7 @@ spec_refs:
 assignees: []
 project: proj.live-dashboard
 branch: worktree-live-dashboard
+pr: https://github.com/Cogni-DAO/node-template/pull/602
 blocked_by:
   - task.0183
 created: 2026-03-18
