@@ -32,8 +32,13 @@ const TEST_SCOPE = {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function drainStream(stream: AsyncIterable<AiEvent>): Promise<AiEvent[]> {
+/** Run graph + drain stream within ALS scope (required for billing context). */
+async function runAndDrain(
+  provider: SandboxGraphProvider,
+  req: GraphRunRequest
+): Promise<AiEvent[]> {
   return runInScope(TEST_SCOPE, async () => {
+    const { stream } = provider.runGraph(req);
     const events: AiEvent[] = [];
     for await (const e of stream) {
       events.push(e);
@@ -95,8 +100,7 @@ describe("Gateway agent events → StatusEvent mapping", () => {
       { type: "chat_final", text: "done" },
     ]);
 
-    const { stream } = provider.runGraph(makeRequest());
-    const events = await drainStream(stream);
+    const events = await runAndDrain(provider, makeRequest());
 
     const statusEvents = events.filter((e) => e.type === "status");
     expect(statusEvents).toHaveLength(1);
@@ -110,8 +114,7 @@ describe("Gateway agent events → StatusEvent mapping", () => {
       { type: "chat_final", text: "result" },
     ]);
 
-    const { stream } = provider.runGraph(makeRequest());
-    const events = await drainStream(stream);
+    const events = await runAndDrain(provider, makeRequest());
 
     const statusEvents = events.filter((e) => e.type === "status");
     expect(statusEvents).toHaveLength(1);
@@ -130,8 +133,7 @@ describe("Gateway agent events → StatusEvent mapping", () => {
       { type: "chat_final", text: "Hi" },
     ]);
 
-    const { stream } = provider.runGraph(makeRequest());
-    const events = await drainStream(stream);
+    const events = await runAndDrain(provider, makeRequest());
 
     const statusEvents = events.filter((e) => e.type === "status");
     expect(statusEvents).toHaveLength(2);
@@ -145,8 +147,7 @@ describe("Gateway agent events → StatusEvent mapping", () => {
       { type: "chat_final", text: "Hi" },
     ]);
 
-    const { stream } = provider.runGraph(makeRequest());
-    const events = await drainStream(stream);
+    const events = await runAndDrain(provider, makeRequest());
 
     const statusEvents = events.filter((e) => e.type === "status");
     expect(statusEvents).toHaveLength(0);
@@ -165,8 +166,7 @@ describe("Gateway agent events → StatusEvent mapping", () => {
       { type: "chat_final", text: "done" },
     ]);
 
-    const { stream } = provider.runGraph(makeRequest());
-    const events = await drainStream(stream);
+    const events = await runAndDrain(provider, makeRequest());
 
     const statusEvents = events.filter((e) => e.type === "status");
     for (const event of statusEvents) {
