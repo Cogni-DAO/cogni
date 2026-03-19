@@ -47,9 +47,11 @@ AI feature owns all LLM interaction endpoints, runtimes, and services. Provides 
   - `createToolRunner` (tool execution factory; owns toolCallId; emits tool lifecycle AiEvents)
   - `uiMessagesToMessageDtos` (UIMessage[] → MessageDto[] bridge for thread persistence pipeline)
   - `redactSecretsInMessages` (best-effort credential redaction before persistence)
+  - `assembleAssistantMessage` (AiEvent[] → UIMessage; deterministic ID `assistant-{runId}` for idempotent thread persistence)
 - **Routes:**
   - `/api/v1/chat/completions` (POST) - OpenAI-compatible chat completions (streaming + non-streaming, `cogni_status` extension)
-  - `/api/v1/ai/chat` (POST) - chat endpoint (AI SDK Data Stream Protocol, server-authoritative thread persistence)
+  - `/api/v1/ai/chat` (POST) - chat endpoint (AI SDK Data Stream Protocol, pure SSE pipe — assistant persistence in execution layer)
+  - `/api/v1/ai/runs/[runId]/stream` (GET) - SSE reconnection endpoint (Last-Event-ID replay from Redis Stream)
   - `/api/v1/ai/threads` (GET) - list threads for authenticated user (paginated, recency-ordered)
   - `/api/v1/ai/threads/[stateKey]` (GET) - load thread messages
   - `/api/v1/ai/threads/[stateKey]` (DELETE) - soft-delete thread

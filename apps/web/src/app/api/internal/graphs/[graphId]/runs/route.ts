@@ -13,7 +13,9 @@
  *   - Uses AiExecutionErrorCode from ai-core (no parallel error system)
  *   - Per PUMP_TO_COMPLETION_VIA_REDIS: publishes AiEvents to Redis Stream as it drains the executor stream
  *   - Per STREAM_PUBLISH_IN_EXECUTION_LAYER: Redis publishing happens here, not in Temporal activity
- * Side-effects: IO (HTTP request/response, database, graph execution, Redis stream publishing)
+ *   - Per PERSIST_AFTER_PUMP: persists assistant message to thread after full stream drain (disconnect-safe)
+ *   - Per IDEMPOTENT_THREAD_PERSIST: assistant message ID = `assistant-{runId}` — skips if already persisted
+ * Side-effects: IO (HTTP request/response, database, graph execution, Redis stream publishing, thread persistence)
  * Links: docs/spec/scheduler.md, graphs.run.internal.v1.contract
  * @internal
  */
