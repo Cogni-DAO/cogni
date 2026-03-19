@@ -95,6 +95,7 @@ services:
       # Override via env for test:stack:dev where app runs on host
       - SCHEDULER_WORKER_HEALTH_URL=${SCHEDULER_WORKER_HEALTH_URL:-http://scheduler-worker:9000}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
+      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL:-http://openclaw-gateway:18789}
       - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
       # Redis (stream plane — ephemeral only)
       - REDIS_URL=redis://redis:6379
