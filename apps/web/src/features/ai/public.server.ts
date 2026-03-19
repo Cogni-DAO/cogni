@@ -23,14 +23,6 @@ export type {
 export { createToolRunner } from "@cogni/ai-core";
 // Activity validation (for app facade)
 export { validateActivityRange } from "./services/activity";
-// AI runtime (P1: single AI entrypoint for streaming)
-export type {
-  AiRuntime,
-  AiRuntimeDeps,
-  AiRuntimeInput,
-  AiRuntimeResult,
-} from "./services/ai_runtime";
-export { createAiRuntime } from "./services/ai_runtime";
 // Billing commit (for app-layer closure injection into BillingGraphExecutorDecorator)
 export { commitUsageFact } from "./services/billing";
 // Non-streaming completion (for app facade)

@@ -63,16 +63,152 @@ export function createMockAiAdapterDeps(
   };
 }
 
+/** Options for configuring the mock Redis run stream. */
+export interface RunStreamMockOptions {
+  responseContent?: string;
+  toolCalls?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+  }>;
+  statusEvents?: Array<{
+    phase: "thinking" | "tool_use" | "compacting";
+    label?: string;
+  }>;
+  usageReport?: {
+    inputTokens: number;
+    outputTokens: number;
+    model: string;
+  };
+  /** If true, emit an error event instead of done. */
+  emitError?: string;
+}
+
+/**
+ * Create a mock RunStreamPort.subscribe generator with configurable events.
+ * Order: status → tool_calls → text_delta + assistant_final → usage_report → done/error.
+ */
+export function createRunStreamMock(options: RunStreamMockOptions = {}) {
+  const { responseContent = "Test response" } = options;
+  return {
+    subscribe: async function* () {
+      if (options.statusEvents) {
+        for (const se of options.statusEvents) {
+          yield {
+            id: "s-1",
+            event: {
+              type: "status" as const,
+              phase: se.phase,
+              ...(se.label ? { label: se.label } : {}),
+            },
+          };
+        }
+      }
+      if (options.toolCalls) {
+        for (const tc of options.toolCalls) {
+          yield {
+            id: "t-1",
+            event: {
+              type: "tool_call_start" as const,
+              toolCallId: tc.toolCallId,
+              toolName: tc.toolName,
+              args: tc.args,
+            },
+          };
+        }
+      }
+      if (responseContent) {
+        yield {
+          id: "m-1",
+          event: { type: "text_delta" as const, delta: responseContent },
+        };
+        yield {
+          id: "a-1",
+          event: {
+            type: "assistant_final" as const,
+            content: responseContent,
+          },
+        };
+      }
+      if (options.usageReport) {
+        yield {
+          id: "u-1",
+          event: {
+            type: "usage_report" as const,
+            fact: {
+              inputTokens: options.usageReport.inputTokens,
+              outputTokens: options.usageReport.outputTokens,
+              usageUnitId: "unit-1",
+              occurredAt: new Date().toISOString(),
+              runId: "run-1",
+              billingAccountId: "acct-1",
+              virtualKeyId: "vk-1",
+              model: options.usageReport.model,
+              provider: "test",
+              source: "litellm",
+            },
+          },
+        };
+      }
+      if (options.emitError) {
+        yield {
+          id: "e-1",
+          event: { type: "error" as const, error: options.emitError },
+        };
+      } else {
+        yield {
+          id: "d-1",
+          event: {
+            type: "done" as const,
+            ...(options.usageReport
+              ? {
+                  usage: {
+                    promptTokens: options.usageReport.inputTokens,
+                    completionTokens: options.usageReport.outputTokens,
+                  },
+                  finishReason: options.toolCalls?.length
+                    ? "tool_calls"
+                    : "stop",
+                }
+              : {}),
+          },
+        };
+      }
+    },
+  };
+}
+
+/**
+ * Create a mock getTemporalWorkflowClient return value.
+ * Single source of truth for the { client, taskQueue } shape.
+ */
+export function createTemporalClientMock(overrides?: {
+  start?: ReturnType<typeof vi.fn>;
+}) {
+  return {
+    client: { start: overrides?.start ?? vi.fn().mockResolvedValue({}) },
+    taskQueue: "scheduler-tasks",
+  };
+}
+
 /**
  * Create the mock object for vi.doMock("@/bootstrap/container", ...).
  * Returns an object with resolveAiAdapterDeps that returns the provided deps.
  *
  * @param deps - AiAdapterDeps to return from resolveAiAdapterDeps
+ * @param streamOptions - Optional RunStreamMockOptions for configurable stream
  * @returns Mock module shape for @/bootstrap/container
  */
-export function createContainerMock(deps: AiAdapterDeps) {
+export function createContainerMock(
+  deps: AiAdapterDeps,
+  streamOptions?: RunStreamMockOptions
+) {
   return {
     resolveAiAdapterDeps: () => deps,
+    getTemporalWorkflowClient: async () => createTemporalClientMock(),
+    getContainer: () => ({
+      runStream: createRunStreamMock(streamOptions),
+    }),
   };
 }
 

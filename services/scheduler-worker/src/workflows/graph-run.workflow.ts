@@ -10,18 +10,15 @@
  *   - Per SINGLE_RUN_LEDGER: always creates graph_runs record (no dbScheduleId gate)
  *   - Per EXECUTION_VIA_SERVICE_API: executeGraphActivity calls internal API, not GraphExecutorPort
  *   - Per IDEMPOTENT_RUN_START: Workflow ID = graph-run:{billingAccountId}:{idempotencyKey}
+ *   - CALLER_PROVIDED_RUN_ID: accepts optional runId from caller for cross-system correlation (falls back to uuid4)
+ *   - CONDITIONAL_GRANT_VALIDATION: skips validateGrantActivity when executionGrantId is null (API-triggered runs)
  *   - CONVERGED_FINALIZE: all terminal paths go through updateGraphRunActivity
  * Side-effects: none (deterministic orchestration only)
  * Links: docs/spec/unified-graph-launch.md, docs/spec/temporal-patterns.md
  * @internal
  */
 
-import {
-  ApplicationFailure,
-  proxyActivities,
-  uuid4,
-  workflowInfo,
-} from "@temporalio/workflow";
+import { proxyActivities, uuid4, workflowInfo } from "@temporalio/workflow";
 
 import type { Activities } from "../activities/index.js";
 import { GRAPH_EXECUTION_ACTIVITY_OPTIONS } from "./activity-profiles.js";
@@ -53,8 +50,8 @@ const { executeGraphActivity } = proxyActivities<Activities>(
 export interface GraphRunWorkflowInput {
   /** Graph ID to execute (format: provider:name, e.g. "langgraph:poet") */
   graphId: string;
-  /** Execution grant ID for authorization */
-  executionGrantId: string;
+  /** Execution grant ID for authorization (scheduled/webhook). Null for API-triggered runs. */
+  executionGrantId?: string | null;
   /** Graph input payload */
   input: Record<string, unknown>;
   /** How the run was triggered */
@@ -71,6 +68,8 @@ export interface GraphRunWorkflowInput {
   temporalScheduleId?: string;
   /** Intended execution time — only for scheduled runs (ISO string) */
   scheduledFor?: string;
+  /** Optional caller-provided run ID for cross-system correlation */
+  runId?: string;
 }
 
 /**
@@ -99,6 +98,7 @@ export async function GraphRunWorkflow(
     dbScheduleId,
     temporalScheduleId,
     scheduledFor: inputScheduledFor,
+    runId: providedRunId,
   } = input;
 
   // For scheduled runs, derive scheduledFor from Temporal search attribute.
@@ -113,33 +113,36 @@ export async function GraphRunWorkflow(
     }
   }
 
-  // Generate run ID (deterministic via Temporal's uuid4)
-  const runId = uuid4();
+  // Generate run ID if caller did not provide one.
+  const runId = providedRunId ?? uuid4();
 
   // Note: idempotency key is derived inside executeGraphActivity as
   // `${temporalScheduleId}:${scheduledFor}` per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS.
 
-  // 1. Validate grant (fail-fast)
-  try {
-    await validateGrantActivity({ grantId: executionGrantId, graphId });
-  } catch {
-    // Grant invalid — create record and mark skipped (CONVERGED_FINALIZE)
-    await createGraphRunActivity({
-      runId,
-      graphId,
-      runKind,
-      triggerSource,
-      triggerRef,
-      requestedBy,
-      dbScheduleId,
-      scheduledFor,
-    });
-    await updateGraphRunActivity({
-      runId,
-      status: "skipped",
-      errorMessage: "Grant validation failed",
-    });
-    return;
+  // 1. Validate grant for non-API runs (fail-fast).
+  // API-triggered runs skip grant validation; billing/preflight decorators enforce auth/credits.
+  if (executionGrantId) {
+    try {
+      await validateGrantActivity({ grantId: executionGrantId, graphId });
+    } catch {
+      // Grant invalid — create record and mark skipped (CONVERGED_FINALIZE)
+      await createGraphRunActivity({
+        runId,
+        graphId,
+        runKind,
+        triggerSource,
+        triggerRef,
+        requestedBy,
+        dbScheduleId,
+        scheduledFor,
+      });
+      await updateGraphRunActivity({
+        runId,
+        status: "skipped",
+        errorMessage: "Grant validation failed",
+      });
+      return;
+    }
   }
 
   // 2. Create graph_runs record — ALWAYS (per SINGLE_RUN_LEDGER, no dbScheduleId gate)
@@ -159,21 +162,12 @@ export async function GraphRunWorkflow(
 
   // 4. Execute graph via internal API
   try {
-    if (!temporalScheduleId) {
-      // Non-scheduled runs: temporalScheduleId is required by executeGraphActivity.
-      // Use a synthetic value derived from runId for the idempotency key.
-      throw ApplicationFailure.nonRetryable(
-        "Non-scheduled GraphRunWorkflow execution not yet supported (task.0177)",
-        "NotImplemented"
-      );
-    }
-
     const result = await executeGraphActivity({
       temporalScheduleId,
       graphId,
-      executionGrantId,
+      executionGrantId: executionGrantId ?? null,
       input: graphInput,
-      scheduledFor: scheduledFor ?? new Date().toISOString(),
+      scheduledFor: scheduledFor ?? workflowInfo().startTime.toISOString(),
       runId,
     });
 

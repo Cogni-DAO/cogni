@@ -82,7 +82,7 @@ src/
 
 ## Responsibilities
 
-- This directory **does**: Connect to Temporal, register GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow + CollectSourcesWorkflow + EnrichAndAllocateWorkflow (child workflows), execute scheduler activities (validateGrant, executeGraph, updateRun, createRun), ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertReceipts, saveCursor, materializeSelection, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), dispatch enrichment and allocation via profile/allocator registries from `@cogni/attribution-pipeline-plugins` and `@cogni/attribution-pipeline-contracts`, resolve receipt claimants during materializeSelection (draft) and lock them at autoCloseIngestion, and produce claimant-aware finalized statements from locked claimant records × allocator output via explodeToClaimants()
+- This directory **does**: Connect to Temporal, register GraphRunWorkflow (unified: scheduled + API + webhook) + GovernanceScheduledRunWorkflow + CollectEpochWorkflow + FinalizeEpochWorkflow + CollectSourcesWorkflow + EnrichAndAllocateWorkflow (child workflows), execute scheduler activities (validateGrant, executeGraph, updateRun, createRun), ledger activities (ensureEpochForWindow, loadCursor, collectFromSource, insertReceipts, saveCursor, materializeSelection, computeAllocations, ensurePoolComponents, autoCloseIngestion, finalizeEpoch), dispatch enrichment and allocation via profile/allocator registries from `@cogni/attribution-pipeline-plugins` and `@cogni/attribution-pipeline-contracts`, resolve receipt claimants during materializeSelection (draft) and lock them at autoCloseIngestion, and produce claimant-aware finalized statements from locked claimant records × allocator output via explodeToClaimants()
 - This directory **does not**: Import from src/, create/modify/delete schedules (CRUD is authority), define port interfaces (those live in packages), change ledger core contracts for plugin-specific payloads
 
 ## Usage
@@ -117,5 +117,5 @@ docker build -f services/scheduler-worker/Dockerfile -t scheduler-worker .
 
 - Per NO_WORKER_RECONCILIATION: Temporal handles scheduling natively
 - Per SCHEDULED_TIMESTAMP_FROM_TEMPORAL: scheduledFor comes from Schedule action
-- Per EXECUTION_VIA_SERVICE_API: executeGraphActivity calls internal API with Idempotency-Key (`temporalScheduleId:scheduledFor`)
+- Per EXECUTION_VIA_SERVICE_API: executeGraphActivity calls internal API with Idempotency-Key (`temporalScheduleId:scheduledFor` for scheduled runs, `api:{runId}` for API-triggered runs)
 - **Cleanup:** `VcsTokenProvider` in `@cogni/ingestion-core` should be renamed to `VcsTokenProviderPort` for consistency

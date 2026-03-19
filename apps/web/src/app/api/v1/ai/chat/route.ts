@@ -18,11 +18,13 @@
  * @public
  */
 
+import { isAiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { executionErrorToHttpStatus } from "@/app/_facades/ai/execution-error-mapper";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
@@ -86,6 +88,13 @@ function handleRouteError(
       { error: "Insufficient credits" },
       { status: 402 }
     );
+  }
+
+  // Execution errors from Temporal+Redis boundary (serialization-safe error codes)
+  if (isAiExecutionError(error)) {
+    const status = executionErrorToHttpStatus(error.code);
+    logRequestWarn(ctx.log, error, error.code.toUpperCase());
+    return NextResponse.json({ error: error.code }, { status });
   }
 
   // Chat validation errors (structured via ChatValidationError)
@@ -295,6 +304,8 @@ export const POST = wrapRouteHandlerWithLogging(
       const messageDtos = uiMessagesToMessageDtos(threadWithUser);
 
       const streamStartMs = performance.now();
+      const idempotencyKey =
+        request.headers.get("idempotency-key") ?? undefined;
 
       const { stream: deltaStream, final } = await completionStream(
         {
@@ -304,6 +315,7 @@ export const POST = wrapRouteHandlerWithLogging(
           abortSignal: request.signal,
           graphName: input.graphName,
           stateKey,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         },
         ctx
       );

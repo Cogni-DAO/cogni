@@ -195,9 +195,12 @@ export class SandboxGraphProvider implements GraphExecutorPort {
       state.resolve = resolve;
     });
 
+    // Capture ALS scope synchronously at runGraph() call time — before entering
+    // the async generator. ALS context may not propagate through generator iteration
+    // in production builds (Node async_hooks + webpack boundary issue).
+    const scope = getExecutionScope();
     const stream = (async function* (): AsyncIterable<AiEvent> {
       const { runId, messages, model, graphId } = req;
-      const scope = getExecutionScope();
       const attempt = 0; // P0_ATTEMPT_FREEZE
       const execStartTime = Date.now();
 
@@ -417,9 +420,10 @@ export class SandboxGraphProvider implements GraphExecutorPort {
       state.resolve = resolve;
     });
 
+    // Capture ALS scope synchronously — same pattern as ephemeral path above.
+    const scope = getExecutionScope();
     const stream = (async function* (): AsyncIterable<AiEvent> {
       const { runId, messages, model, graphId, stateKey } = req;
-      const scope = getExecutionScope();
       const execStartTime = Date.now();
       const callLog = self.log.child({
         runId,

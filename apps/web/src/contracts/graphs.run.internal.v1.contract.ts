@@ -25,8 +25,8 @@ import { z } from "zod";
  * Per SCHEDULER_SPEC.md: Worker calls with executionGrantId and input.
  */
 export const InternalGraphRunInputSchema = z.object({
-  /** Execution grant ID for authorization (not user session) */
-  executionGrantId: z.string().uuid(),
+  /** Execution grant ID for authorization (null for API-triggered runs) */
+  executionGrantId: z.string().uuid().nullable().optional(),
   /** Graph input payload (messages, model, etc.) */
   input: z.record(z.string(), z.unknown()),
   /**
