@@ -25,7 +25,7 @@
  * @public
  */
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -47,6 +47,13 @@ import {
 } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
+import {
+  aiInvocationSummaries,
+  executionGrants,
+  graphRuns,
+  schedules,
+} from "@cogni/db-schema";
+import { eq } from "drizzle-orm";
 import { identityEvents, userBindings } from "@cogni/db-schema/identity";
 import { users } from "@cogni/db-schema/refs";
 import { extractNodeId, extractScopeId, parseRepoSpec } from "@cogni/repo-spec";
@@ -724,6 +731,301 @@ async function seedLinkedUsersAndBindings(
   }
 }
 
+// ── Governance AI Activity ───────────────────────────────────────
+
+const SYSTEM_USER_ID = "00000000-0000-4000-a000-000000000001";
+const SYSTEM_BILLING_ACCOUNT_ID = "00000000-0000-4000-b000-000000000000";
+const GOVERNANCE_GRAPH_ID = "sandbox:openclaw";
+const GOVERNANCE_MODEL = "kimi-k2.5";
+
+/** Heartbeat: ~3-8s, 800-2000 tokens in, 200-600 out, $0.001-0.005 */
+interface RunProfile {
+  graphId: string;
+  model: string;
+  provider: string;
+  minLatencyMs: number;
+  maxLatencyMs: number;
+  minTokensIn: number;
+  maxTokensIn: number;
+  minTokensOut: number;
+  maxTokensOut: number;
+  costPerKTokenIn: number;
+  costPerKTokenOut: number;
+  /** Fraction of runs that fail (0.0-1.0) */
+  errorRate: number;
+}
+
+const HEARTBEAT_PROFILE: RunProfile = {
+  graphId: GOVERNANCE_GRAPH_ID,
+  model: GOVERNANCE_MODEL,
+  provider: "openrouter",
+  minLatencyMs: 3000,
+  maxLatencyMs: 8000,
+  minTokensIn: 800,
+  maxTokensIn: 2000,
+  minTokensOut: 200,
+  maxTokensOut: 600,
+  costPerKTokenIn: 0.002,
+  costPerKTokenOut: 0.006,
+  errorRate: 0.05,
+};
+
+const LEDGER_INGEST_PROFILE: RunProfile = {
+  graphId: GOVERNANCE_GRAPH_ID,
+  model: GOVERNANCE_MODEL,
+  provider: "openrouter",
+  minLatencyMs: 8000,
+  maxLatencyMs: 25000,
+  minTokensIn: 2000,
+  maxTokensIn: 6000,
+  minTokensOut: 400,
+  maxTokensOut: 1500,
+  costPerKTokenIn: 0.002,
+  costPerKTokenOut: 0.006,
+  errorRate: 0.08,
+};
+
+function randInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function generateScheduledRuns(params: {
+  scheduleId: string;
+  cron: string;
+  profile: RunProfile;
+  startDate: Date;
+  endDate: Date;
+  temporalScheduleId: string;
+}): {
+  runs: (typeof graphRuns.$inferInsert)[];
+  invocations: (typeof aiInvocationSummaries.$inferInsert)[];
+} {
+  const runs: (typeof graphRuns.$inferInsert)[] = [];
+  const invocations: (typeof aiInvocationSummaries.$inferInsert)[] = [];
+
+  // Parse simple cron: "0 * * * *" (hourly) or "0 6 * * *" (daily at 6)
+  const cronParts = params.cron.split(" ");
+  const cronMinute = Number.parseInt(cronParts[0] ?? "0", 10);
+  const cronHour = cronParts[1] === "*" ? null : Number.parseInt(cronParts[1] ?? "0", 10);
+
+  const cursor = new Date(params.startDate);
+  // Align to first slot
+  cursor.setUTCMinutes(cronMinute, 0, 0);
+  if (cronHour !== null) {
+    cursor.setUTCHours(cronHour);
+    if (cursor < params.startDate) cursor.setUTCDate(cursor.getUTCDate() + 1);
+  } else {
+    if (cursor < params.startDate) cursor.setUTCHours(cursor.getUTCHours() + 1);
+  }
+
+  while (cursor <= params.endDate) {
+    const scheduledFor = new Date(cursor);
+    const runId = randomUUID();
+    const isError = Math.random() < params.profile.errorRate;
+    const latencyMs = randInt(params.profile.minLatencyMs, params.profile.maxLatencyMs);
+    const startedAt = new Date(scheduledFor.getTime() + randInt(500, 3000));
+    const completedAt = new Date(startedAt.getTime() + latencyMs);
+
+    const tokensIn = isError ? null : randInt(params.profile.minTokensIn, params.profile.maxTokensIn);
+    const tokensOut = isError ? null : randInt(params.profile.minTokensOut, params.profile.maxTokensOut);
+
+    runs.push({
+      scheduleId: params.scheduleId,
+      runId,
+      graphId: params.profile.graphId,
+      runKind: "system_scheduled",
+      triggerSource: "temporal_schedule",
+      triggerRef: params.temporalScheduleId,
+      requestedBy: SYSTEM_USER_ID,
+      scheduledFor,
+      startedAt,
+      completedAt,
+      status: isError ? "error" : "success",
+      attemptCount: 1,
+      errorCode: isError ? "provider_5xx" : null,
+      errorMessage: isError ? "Upstream provider returned 502 Bad Gateway" : null,
+      stateKey: null,
+    });
+
+    // One LLM invocation per run (governance runs are single-turn)
+    if (!isError) {
+      const costUsd =
+        (tokensIn! / 1000) * params.profile.costPerKTokenIn +
+        (tokensOut! / 1000) * params.profile.costPerKTokenOut;
+
+      invocations.push({
+        invocationId: randomUUID(),
+        requestId: runId,
+        traceId: randomUUID(),
+        promptHash: sha256(`${runId}:prompt`),
+        routerPolicyVersion: "0.1.0",
+        graphRunId: runId,
+        graphName: params.profile.graphId,
+        provider: params.profile.provider,
+        model: params.profile.model,
+        tokensIn: tokensIn!,
+        tokensOut: tokensOut!,
+        tokensTotal: tokensIn! + tokensOut!,
+        providerCostUsd: costUsd.toFixed(6),
+        latencyMs,
+        status: "success",
+        createdAt: completedAt,
+      });
+    }
+
+    // Advance cursor
+    if (cronHour !== null) {
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    } else {
+      cursor.setUTCHours(cursor.getUTCHours() + 1);
+    }
+  }
+
+  return { runs, invocations };
+}
+
+async function seedGovernanceActivity(
+  db: ReturnType<typeof createServiceDbClient>
+): Promise<void> {
+  // Check for existing governance runs
+  const existing = await db
+    .select({ id: graphRuns.id })
+    .from(graphRuns)
+    .where(eq(graphRuns.runKind, "system_scheduled"))
+    .limit(1);
+
+  if (existing.length > 0) {
+    console.log("⚠️  Existing governance runs found. Skipping activity seed.");
+    return;
+  }
+
+  // Reuse existing governance schedules (created by governance:schedules:sync)
+  // or create them if they don't exist yet.
+  const existingSchedules = await db
+    .select({ id: schedules.id, temporalScheduleId: schedules.temporalScheduleId })
+    .from(schedules)
+    .where(eq(schedules.ownerUserId, SYSTEM_USER_ID));
+
+  let heartbeatScheduleId = existingSchedules.find(
+    (s) => s.temporalScheduleId === "governance:heartbeat"
+  )?.id;
+  let ledgerScheduleId = existingSchedules.find(
+    (s) => s.temporalScheduleId === "governance:ledger_ingest"
+  )?.id;
+
+  if (!heartbeatScheduleId || !ledgerScheduleId) {
+    // Create execution grant + schedules from scratch
+    const grantId = randomUUID();
+    await db.insert(executionGrants).values({
+      id: grantId,
+      userId: SYSTEM_USER_ID,
+      billingAccountId: SYSTEM_BILLING_ACCOUNT_ID,
+      scopes: ["graph:execute:sandbox:openclaw"],
+    });
+
+    if (!heartbeatScheduleId) {
+      heartbeatScheduleId = randomUUID();
+      await db.insert(schedules).values({
+        id: heartbeatScheduleId,
+        ownerUserId: SYSTEM_USER_ID,
+        executionGrantId: grantId,
+        graphId: GOVERNANCE_GRAPH_ID,
+        input: { message: "HEARTBEAT", model: GOVERNANCE_MODEL },
+        cron: "0 * * * *",
+        timezone: "UTC",
+        temporalScheduleId: "governance:heartbeat",
+        enabled: true,
+      });
+    }
+
+    if (!ledgerScheduleId) {
+      ledgerScheduleId = randomUUID();
+      await db.insert(schedules).values({
+        id: ledgerScheduleId,
+        ownerUserId: SYSTEM_USER_ID,
+        executionGrantId: grantId,
+        graphId: GOVERNANCE_GRAPH_ID,
+        input: {
+          message: "LEDGER_INGEST",
+          model: GOVERNANCE_MODEL,
+          version: 1,
+          scopeId: SCOPE_ID,
+          scopeKey: "default",
+          epochLengthDays: 7,
+        },
+        cron: "0 6 * * *",
+        timezone: "UTC",
+        temporalScheduleId: "governance:ledger_ingest",
+        enabled: true,
+      });
+    }
+  }
+
+  // Generate 4 weeks of runs
+  const seedStart = new Date(Date.now() - 28 * 86_400_000);
+  const seedEnd = new Date();
+
+  const heartbeatData = generateScheduledRuns({
+    scheduleId: heartbeatScheduleId,
+    cron: "0 * * * *",
+    profile: HEARTBEAT_PROFILE,
+    startDate: seedStart,
+    endDate: seedEnd,
+    temporalScheduleId: "governance:heartbeat",
+  });
+
+  const ledgerData = generateScheduledRuns({
+    scheduleId: ledgerScheduleId,
+    cron: "0 6 * * *",
+    profile: LEDGER_INGEST_PROFILE,
+    startDate: seedStart,
+    endDate: seedEnd,
+    temporalScheduleId: "governance:ledger_ingest",
+  });
+
+  // Insert runs in batches
+  const allRuns = [...heartbeatData.runs, ...ledgerData.runs];
+  const allInvocations = [...heartbeatData.invocations, ...ledgerData.invocations];
+
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < allRuns.length; i += BATCH_SIZE) {
+    await db.insert(graphRuns).values(allRuns.slice(i, i + BATCH_SIZE));
+  }
+  for (let i = 0; i < allInvocations.length; i += BATCH_SIZE) {
+    await db.insert(aiInvocationSummaries).values(allInvocations.slice(i, i + BATCH_SIZE));
+  }
+
+  // Update schedule last_run_at
+  const lastHeartbeat = heartbeatData.runs.at(-1);
+  const lastLedger = ledgerData.runs.at(-1);
+
+  if (lastHeartbeat?.scheduledFor) {
+    await db
+      .update(schedules)
+      .set({ lastRunAt: lastHeartbeat.scheduledFor })
+      .where(eq(schedules.id, heartbeatScheduleId));
+  }
+  if (lastLedger?.scheduledFor) {
+    await db
+      .update(schedules)
+      .set({ lastRunAt: lastLedger.scheduledFor })
+      .where(eq(schedules.id, ledgerScheduleId));
+  }
+
+  const successRuns = allRuns.filter((r) => r.status === "success").length;
+  const errorRuns = allRuns.filter((r) => r.status === "error").length;
+  const totalCost = allInvocations.reduce(
+    (sum, inv) => sum + Number.parseFloat(inv.providerCostUsd as string),
+    0
+  );
+
+  console.log(`  Schedules: HEARTBEAT (${heartbeatScheduleId}), LEDGER_INGEST (${ledgerScheduleId})`);
+  console.log(`  Graph runs: ${allRuns.length} total (${successRuns} success, ${errorRuns} error)`);
+  console.log(`    Heartbeat: ${heartbeatData.runs.length} runs`);
+  console.log(`    Ledger ingest: ${ledgerData.runs.length} runs`);
+  console.log(`  AI invocations: ${allInvocations.length} (total cost: $${totalCost.toFixed(4)})`);
+}
+
 // ── Main ────────────────────────────────────────────────────────
 
 async function seedFinalizedEpoch(
@@ -1008,49 +1310,48 @@ async function main(): Promise<void> {
   const db = createServiceDbClient(dbUrl);
   const store = new DrizzleAttributionAdapter(db, SCOPE_ID);
 
-  const existingEpochs = await store.listEpochs(NODE_ID);
-  if (existingEpochs.length > 0) {
-    const openEpoch = existingEpochs.find((epoch) => epoch.status === "open");
-    console.log(
-      `⚠️  Existing attribution epochs found for node ${NODE_ID}. Skipping seed to avoid duplicate dev history.`
-    );
-    if (openEpoch) {
-      console.log(
-        `   Existing open epoch: ${openEpoch.id}. Finalize or delete it before reseeding.`
-      );
-    }
-    console.log(
-      "   To re-seed from scratch, reset the dev database and rerun `pnpm dev:setup`."
-    );
-    await db.$client.end();
-    return;
-  }
-
   try {
-    console.log("👤 Seeding linked contributor accounts...");
-    await seedLinkedUsersAndBindings(db);
-    console.log(
-      `  Inserted ${LINKED_CONTRIBUTORS.length} linked users with GitHub bindings`
-    );
-    console.log(
-      `  Unlinked GitHub identities remain receipt-only: ${DEREK.login}, ${COGNI.login}, ${MIRA.login}`
-    );
-    console.log();
+    const existingEpochs = await store.listEpochs(NODE_ID);
+    if (existingEpochs.length > 0) {
+      const openEpoch = existingEpochs.find((epoch) => epoch.status === "open");
+      console.log(
+        `⚠️  Existing attribution epochs found for node ${NODE_ID}. Skipping epoch seed.`
+      );
+      if (openEpoch) {
+        console.log(
+          `   Existing open epoch: ${openEpoch.id}. Finalize or delete it before reseeding.`
+        );
+      }
+    } else {
+      console.log("👤 Seeding linked contributor accounts...");
+      await seedLinkedUsersAndBindings(db);
+      console.log(
+        `  Inserted ${LINKED_CONTRIBUTORS.length} linked users with GitHub bindings`
+      );
+      console.log(
+        `  Unlinked GitHub identities remain receipt-only: ${DEREK.login}, ${COGNI.login}, ${MIRA.login}`
+      );
+      console.log();
 
-    console.log("📦 Epoch 1 (finalized):");
-    await seedFinalizedEpoch(store, EPOCH_1);
-    console.log();
+      console.log("📦 Epoch 1 (finalized):");
+      await seedFinalizedEpoch(store, EPOCH_1);
+      console.log();
 
-    console.log("📦 Epoch 2 (finalized):");
-    await seedFinalizedEpoch(store, EPOCH_2);
-    console.log();
+      console.log("📦 Epoch 2 (finalized):");
+      await seedFinalizedEpoch(store, EPOCH_2);
+      console.log();
 
-    console.log("📦 Epoch 3 (review):");
-    await seedReviewEpoch(store, EPOCH_3);
-    console.log();
+      console.log("📦 Epoch 3 (review):");
+      await seedReviewEpoch(store, EPOCH_3);
+      console.log();
 
-    console.log("📦 Epoch 4 (open):");
-    await seedOpenEpoch(store, EPOCH_4);
+      console.log("📦 Epoch 4 (open):");
+      await seedOpenEpoch(store, EPOCH_4);
+      console.log();
+    }
+
+    console.log("🤖 Governance AI activity (4 weeks):");
+    await seedGovernanceActivity(db);
     console.log();
 
     console.log(
