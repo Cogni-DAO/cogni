@@ -2,7 +2,7 @@
 id: task.0183
 type: task
 title: "Run list API: GET /api/v1/ai/runs — query graph_runs with filtering"
-status: needs_closeout
+status: done
 branch: feat/task.0183-run-list-api
 revision: 0
 priority: 1
