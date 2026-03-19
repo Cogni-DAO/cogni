@@ -20,8 +20,9 @@ import type {
   GraphRun,
   GraphRunKind,
   GraphRunRepository,
+  GraphRunStatus,
 } from "@cogni/scheduler-core";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import type { Database, LoggerLike } from "../client";
 import { withTenantScope } from "../tenant-scope";
 
@@ -203,6 +204,42 @@ export class DrizzleGraphRunAdapter implements GraphRunRepository {
         .limit(1);
 
       return row ? this.toRun(row) : null;
+    });
+  }
+
+  async listRunsByUser(
+    actorId: ActorId,
+    userId: string,
+    opts?: {
+      status?: GraphRunStatus;
+      runKind?: GraphRunKind;
+      limit?: number;
+      cursor?: string;
+    }
+  ): Promise<GraphRun[]> {
+    const pageSize = Math.min(opts?.limit ?? 20, 100);
+
+    return withTenantScope(this.db, actorId, async (tx) => {
+      const conditions = [eq(graphRuns.requestedBy, userId)];
+
+      if (opts?.status) {
+        conditions.push(eq(graphRuns.status, opts.status));
+      }
+      if (opts?.runKind) {
+        conditions.push(eq(graphRuns.runKind, opts.runKind));
+      }
+      if (opts?.cursor) {
+        conditions.push(lt(graphRuns.startedAt, new Date(opts.cursor)));
+      }
+
+      const rows = await tx
+        .select()
+        .from(graphRuns)
+        .where(and(...conditions))
+        .orderBy(desc(graphRuns.startedAt))
+        .limit(pageSize + 1); // fetch one extra to detect next page
+
+      return rows.map((row) => this.toRun(row));
     });
   }
 

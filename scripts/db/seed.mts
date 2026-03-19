@@ -26,6 +26,8 @@
  */
 
 import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import {
   type AttributionStatementLineRecord,
   computeApproverSetHash,
@@ -47,12 +49,20 @@ import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
 import { identityEvents, userBindings } from "@cogni/db-schema/identity";
 import { users } from "@cogni/db-schema/refs";
+import { extractNodeId, extractScopeId, parseRepoSpec } from "@cogni/repo-spec";
 
 // ── Configuration ───────────────────────────────────────────────
 
+const repoRoot = path.resolve(import.meta.dirname, "../..");
+const repoSpecContent = fs.readFileSync(
+  path.join(repoRoot, ".cogni", "repo-spec.yaml"),
+  "utf8"
+);
+const repoSpec = parseRepoSpec(repoSpecContent);
+
 const REPO_REF = "Cogni-DAO/node-template";
-const NODE_ID = "538b4da2-bd59-4c3a-928a-8a40b6627205";
-const SCOPE_ID = "cdea48f9-d223-5b5c-a1a3-9ffdd42c3f83";
+const NODE_ID = extractNodeId(repoSpec);
+const SCOPE_ID = extractScopeId(repoSpec);
 // Must match cogni-v0.0 profile defaultWeightConfig
 const WEIGHT_CONFIG: Record<string, number> = {
   "github:pr_merged": 1000,

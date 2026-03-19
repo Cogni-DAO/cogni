@@ -218,6 +218,11 @@ export const graphRuns = pgTable(
     runKindIdx: index("graph_runs_run_kind_idx").on(table.runKind),
     /** For thread↔run correlation (join graph_runs to ai_threads by stateKey) */
     stateKeyIdx: index("graph_runs_state_key_idx").on(table.stateKey),
+    /** For user-scoped run listing: WHERE requested_by = ? ORDER BY started_at DESC */
+    requestedByStartedAtIdx: index("graph_runs_requested_by_started_at_idx").on(
+      table.requestedBy,
+      table.startedAt
+    ),
   })
 ).enableRLS();
 

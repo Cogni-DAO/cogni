@@ -29,7 +29,7 @@ export type {
 } from "../types";
 
 // Import for local use in interface
-import type { GraphRun, GraphRunKind } from "../types";
+import type { GraphRun, GraphRunKind, GraphRunStatus } from "../types";
 
 /**
  * Graph run repository — persistence for the canonical run ledger.
@@ -89,6 +89,24 @@ export interface GraphRunRepository {
    * @param actorId - Actor performing the operation (for RLS SET LOCAL / audit trail)
    */
   getRunByRunId: (actorId: ActorId, runId: string) => Promise<GraphRun | null>;
+
+  /**
+   * Lists runs for a user, ordered by started_at DESC with cursor-based pagination.
+   * @param actorId - Actor performing the operation (for RLS SET LOCAL / audit trail)
+   * @param userId - Filter to runs where requested_by = userId
+   * @param opts - Filtering and pagination options
+   */
+  listRunsByUser: (
+    actorId: ActorId,
+    userId: string,
+    opts?: {
+      status?: GraphRunStatus;
+      runKind?: GraphRunKind;
+      limit?: number;
+      /** ISO string cursor — returns runs with started_at < cursor */
+      cursor?: string;
+    }
+  ) => Promise<GraphRun[]>;
 }
 
 /** @deprecated Use GraphRunRepository */
