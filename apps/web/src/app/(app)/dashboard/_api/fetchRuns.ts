@@ -39,15 +39,22 @@ export async function fetchRuns(
     searchParams.set("limit", String(params.limit));
   }
 
-  // Attempt real API — gracefully degrade to empty if not yet deployed
+  // Attempt real API — gracefully degrade to empty only if endpoint doesn't exist yet
   try {
     const res = await fetch(`/api/v1/ai/runs?${searchParams.toString()}`);
     if (res.ok) {
       return res.json() as Promise<FetchRunsResponse>;
     }
-  } catch {
-    // API not available yet — return empty
+    // 404 = API not deployed yet — return empty. Other errors should surface.
+    if (res.status === 404) {
+      return { runs: [] };
+    }
+    throw new Error(`Failed to fetch runs: ${res.status} ${res.statusText}`);
+  } catch (err) {
+    // Network error (fetch itself failed) = API not available
+    if (err instanceof TypeError) {
+      return { runs: [] };
+    }
+    throw err;
   }
-
-  return { runs: [] };
 }

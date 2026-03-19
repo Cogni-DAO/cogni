@@ -26,6 +26,11 @@ export interface RunCardData {
   graphId: string | null;
   runKind: "user_immediate" | "system_scheduled" | "system_webhook" | null;
   status: "pending" | "running" | "success" | "error" | "skipped" | "cancelled";
+  /** Human-friendly status label. When set, overrides the default STATUS_CONFIG label.
+   *  V0: null (uses defaults like "Running", "Completed").
+   *  V0.1: deterministic phase copy ("Thinking", "Using tools").
+   *  V1: AI-generated summary from stream content. */
+  statusLabel: string | null;
   requestedBy: string | null;
   startedAt: string | null;
   completedAt: string | null;
@@ -148,6 +153,7 @@ function StaticDuration({
 
 export function RunCard({ run, className }: RunCardProps): ReactElement {
   const config = STATUS_CONFIG[run.status];
+  const displayLabel = run.statusLabel ?? config.label;
 
   return (
     <Card
@@ -164,7 +170,7 @@ export function RunCard({ run, className }: RunCardProps): ReactElement {
           <span
             className={cn("size-2.5 shrink-0 rounded-full", config.dotClass)}
             role="img"
-            aria-label={config.label}
+            aria-label={displayLabel}
           />
           <span className="min-w-0 flex-1 truncate font-semibold text-sm">
             {formatGraphName(run.graphId)}
@@ -172,18 +178,14 @@ export function RunCard({ run, className }: RunCardProps): ReactElement {
           {run.status === "running" && run.startedAt && (
             <ElapsedTimer startedAt={run.startedAt} />
           )}
-          {run.status === "success" && run.startedAt && run.completedAt && (
-            <StaticDuration
-              startedAt={run.startedAt}
-              completedAt={run.completedAt}
-            />
-          )}
-          {run.status === "error" && run.startedAt && run.completedAt && (
-            <StaticDuration
-              startedAt={run.startedAt}
-              completedAt={run.completedAt}
-            />
-          )}
+          {(run.status === "success" || run.status === "error") &&
+            run.startedAt &&
+            run.completedAt && (
+              <StaticDuration
+                startedAt={run.startedAt}
+                completedAt={run.completedAt}
+              />
+            )}
         </div>
 
         {/* Meta row: kind badge + status badge + error */}
@@ -192,7 +194,7 @@ export function RunCard({ run, className }: RunCardProps): ReactElement {
             {formatRunKind(run.runKind)}
           </Badge>
           <Badge intent={config.badgeIntent} size="sm">
-            {config.label}
+            {displayLabel}
           </Badge>
           {run.errorCode && (
             <Badge intent="destructive" size="sm">
