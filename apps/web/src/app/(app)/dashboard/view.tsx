@@ -25,12 +25,17 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   TimeRangeSelector,
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components";
 import { ActivityChart } from "@/components/kit/data-display/ActivityChart";
-import { ActivityTable } from "@/components/kit/data-display/ActivityTable";
 import {
   buildAggregateChartData,
   buildGroupedChartData,
@@ -137,6 +142,19 @@ function badgeIntent(status: string): "destructive" | "default" | "secondary" {
   return "secondary";
 }
 
+/** Deduplicate runs by stateKey (or graphId for runs without stateKey).
+ *  Keeps the most recent run per conversation thread. */
+function dedupeByThread(runs: RunCardData[]): RunCardData[] {
+  const seen = new Map<string, RunCardData>();
+  for (const run of runs) {
+    const key = run.stateKey ?? `graph:${run.graphId ?? run.id}`;
+    if (!seen.has(key)) {
+      seen.set(key, run);
+    }
+  }
+  return [...seen.values()];
+}
+
 /* ─── data fetchers ─── */
 
 async function fetchWorkItems(): Promise<{ items: WorkItemDto[] }> {
@@ -188,7 +206,7 @@ export function DashboardView(): ReactElement {
   });
 
   const runs = runsData?.runs ? sortRuns(runsData.runs) : [];
-  const heroRun = runs[0] ?? null;
+  const agents = dedupeByThread(runs);
   const activeCount = runs.filter((r) => r.status === "running").length;
 
   const workItems = (workData?.items ?? [])
@@ -265,61 +283,69 @@ export function DashboardView(): ReactElement {
         </ToggleGroup>
       </div>
 
-      {/* Two-column top section: Agent status + Work */}
+      {/* Two-column top section: Agents + Work */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Left — Live Agent Status */}
+        {/* Left — Agents */}
         <Card>
           <CardHeader className="px-5 py-3">
             <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-              {tab === "system" ? "Cogni Live" : "Latest Agent"}
+              {tab === "system" ? "Cogni Live" : "Agents"}
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-5 pt-0 pb-5">
+          <CardContent className="p-0">
             {runsLoading ? (
-              <div className="animate-pulse">
-                <div className="h-14 rounded-lg bg-muted" />
+              <div className="animate-pulse space-y-px px-5 pb-4">
+                <div className="h-10 rounded bg-muted" />
+                <div className="h-10 rounded bg-muted" />
               </div>
-            ) : heroRun ? (
-              <div
-                className={cn(
-                  "flex items-center gap-4 rounded-lg border p-4",
-                  heroRun.status === "running" && "border-primary/40",
-                  heroRun.status === "error" && "border-destructive/40"
-                )}
-              >
-                <span
-                  className={cn(
-                    "size-3 shrink-0 rounded-full",
-                    STATUS_DOT[heroRun.status] ?? "bg-muted-foreground"
-                  )}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm">
-                      {formatGraphName(heroRun.graphId)}
-                    </span>
-                    <Badge intent={badgeIntent(heroRun.status)} size="sm">
-                      {heroRun.statusLabel ??
-                        STATUS_LABEL[heroRun.status] ??
-                        heroRun.status}
-                    </Badge>
-                  </div>
-                  {heroRun.startedAt && (
-                    <span className="text-muted-foreground text-xs">
-                      {timeAgo(heroRun.startedAt)}
-                      {heroRun.completedAt &&
-                        ` · ${formatDuration(heroRun.startedAt, heroRun.completedAt)}`}
-                    </span>
-                  )}
-                  {heroRun.errorMessage && (
-                    <p className="mt-1 line-clamp-1 text-destructive text-xs">
-                      {heroRun.errorMessage}
-                    </p>
-                  )}
-                </div>
-              </div>
+            ) : agents.length > 0 ? (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead>Agent</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Duration</TableHead>
+                    <TableHead className="text-right">When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {agents.map((run) => (
+                    <TableRow key={run.stateKey ?? run.id}>
+                      <TableCell className="pr-0">
+                        <span
+                          className={cn(
+                            "inline-block size-2 rounded-full",
+                            STATUS_DOT[run.status] ?? "bg-muted-foreground"
+                          )}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium text-sm">
+                        {formatGraphName(run.graphId)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge intent={badgeIntent(run.status)} size="sm">
+                          {run.statusLabel ??
+                            STATUS_LABEL[run.status] ??
+                            run.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground text-sm tabular-nums">
+                        {run.startedAt && run.completedAt
+                          ? formatDuration(run.startedAt, run.completedAt)
+                          : run.status === "running"
+                            ? "..."
+                            : "—"}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground text-sm">
+                        {run.startedAt ? timeAgo(run.startedAt) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : (
-              <p className="py-4 text-center text-muted-foreground text-sm">
+              <p className="px-5 py-6 text-center text-muted-foreground text-sm">
                 {tab === "system"
                   ? "No system runs yet. Create a schedule to watch Cogni work."
                   : "No recent runs. Start a conversation to see agents here."}
@@ -423,33 +449,29 @@ export function DashboardView(): ReactElement {
             <div className="h-48 rounded-lg bg-muted" />
           </div>
         ) : spend && tokens && requests && activityData ? (
-          <>
-            <div className="grid gap-4 md:grid-cols-3">
-              <ActivityChart
-                title="Spend"
-                description={`$${activityData.totals.spend.total}`}
-                data={spend.data}
-                config={spend.config}
-                effectiveStep={activityData.effectiveStep}
-              />
-              <ActivityChart
-                title="Tokens"
-                description={activityData.totals.tokens.total.toLocaleString()}
-                data={tokens.data}
-                config={tokens.config}
-                effectiveStep={activityData.effectiveStep}
-              />
-              <ActivityChart
-                title="Requests"
-                description={activityData.totals.requests.total.toLocaleString()}
-                data={requests.data}
-                config={requests.config}
-                effectiveStep={activityData.effectiveStep}
-              />
-            </div>
-
-            <ActivityTable logs={activityData.rows} />
-          </>
+          <div className="grid gap-4 md:grid-cols-3">
+            <ActivityChart
+              title="Spend"
+              description={`$${activityData.totals.spend.total}`}
+              data={spend.data}
+              config={spend.config}
+              effectiveStep={activityData.effectiveStep}
+            />
+            <ActivityChart
+              title="Tokens"
+              description={activityData.totals.tokens.total.toLocaleString()}
+              data={tokens.data}
+              config={tokens.config}
+              effectiveStep={activityData.effectiveStep}
+            />
+            <ActivityChart
+              title="Requests"
+              description={activityData.totals.requests.total.toLocaleString()}
+              data={requests.data}
+              config={requests.config}
+              effectiveStep={activityData.effectiveStep}
+            />
+          </div>
         ) : null}
       </div>
     </div>
