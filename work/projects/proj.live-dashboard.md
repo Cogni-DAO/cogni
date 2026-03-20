@@ -84,12 +84,20 @@ The governance visibility dashboard (story.0063) becomes the "System" tab of thi
 
 **Goal:** See your recent and active runs as cards. No live streaming yet — just status, timing, graph name from DB.
 
-| Deliverable                                                                          | Status      | Est | Work Item |
-| ------------------------------------------------------------------------------------ | ----------- | --- | --------- |
-| Run list API: `GET /api/v1/ai/runs` — query `graph_runs`, filter by user/status/kind | Not Started | 2   | task.0183 |
-| Dashboard page: `/dashboard` with agents table, work panel, activity charts          | In Review   | 3   | task.0184 |
+| Deliverable                                                                          | Status    | Est | Work Item |
+| ------------------------------------------------------------------------------------ | --------- | --- | --------- |
+| Run list API: `GET /api/v1/ai/runs` — query `graph_runs`, filter by user/status/kind | Done      | 2   | task.0183 |
+| Dashboard page: `/dashboard` with agents table, work panel, activity charts          | In Review | 3   | task.0184 |
 
-**P0 delivers:** Static card grid showing runs from `graph_runs` table. Cards show graph name, status badge, started_at, duration, error message if failed. Polling at 5s. Admin tab shows system-scheduled runs.
+**P0 delivers:** Agents table (deduplicated by stateKey) with status dots, duration, relative time. Active work items panel. Activity charts (spend/tokens/requests). Polling at 5s. Cogni Live tab shows system-scheduled runs.
+
+### Bridge (P0→P1): Cleanup + Public View
+
+**Goal:** Thread linking, page consolidation, public Cogni Live, streaming status labels.
+
+| Deliverable                                                                            | Status      | Est | Work Item |
+| -------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Thread deep-linking, /activity consolidation, public Cogni Live, streaming statusLabel | Not Started | 5   | task.0189 |
 
 ### Walk (P1): Live Streaming Cards
 
@@ -101,7 +109,7 @@ The governance visibility dashboard (story.0063) becomes the "System" tab of thi
 | Content preview on collapsed cards — last `text_delta` snippet                        | Not Started | 1   | (create at P1 start) |
 | Phase badges on cards — "thinking", "tool_use", "compacting" from StatusEvent         | Not Started | 1   | (create at P1 start) |
 
-**Depends on:** task.0182 (run stream reconnection endpoint) being complete.
+**Depends on:** task.0182 (done).
 
 ### Run (P2): Operational Intelligence
 
@@ -179,8 +187,8 @@ ErrorEvent        → card transitions to "error"
 
 - [x] `graph_runs` table (task.0176)
 - [x] `RunStreamPort` + `RedisRunStreamAdapter` (task.0175)
-- [ ] Chat → Temporal + Redis (task.0177, in progress)
-- [ ] Run reconnection endpoint (task.0182, not started) — required for P1 streaming cards
+- [x] Chat → Temporal + Redis (task.0177)
+- [x] Run reconnection endpoint (task.0182)
 - [ ] RBAC admin role check — required for System tab
 
 ## Design Notes
