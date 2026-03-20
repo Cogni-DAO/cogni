@@ -3,11 +3,15 @@
 
 /**
  * Module: `@app/(app)/dashboard/view`
- * Purpose: Unified operations dashboard — live agent status, active work, and activity metrics in one view.
+ * Purpose: Unified operations dashboard — agents table (deduplicated by thread), active work items, and activity charts.
  * Scope: Client-side view managing data fetching via React Query. Does not implement business logic.
- * Invariants: Polls runs at 5s; work items at 30s; activity at 30s. "Cogni Live" tab shows system runs.
+ * Invariants:
+ *   - Polls runs at 5s, work items at 30s, activity at 30s
+ *   - Runs deduplicated by stateKey (one row per conversation thread)
+ *   - "Cogni Live" tab filters to system_scheduled runs
+ *   - Activity charts reuse fetchActivity from /activity/_api
  * Side-effects: IO (via React Query)
- * Links: [fetchRuns](./_api/fetchRuns.ts), [ActivityChart](../../../components/kit/data-display/ActivityChart.tsx)
+ * Links: [fetchRuns](./_api/fetchRuns.ts), [fetchActivity](../activity/_api/fetchActivity.ts), [ActivityChart](../../../components/kit/data-display/ActivityChart.tsx)
  * @public
  */
 

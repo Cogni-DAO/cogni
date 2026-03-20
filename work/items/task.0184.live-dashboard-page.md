@@ -1,14 +1,14 @@
 ---
 id: task.0184
 type: task
-title: "Live dashboard page: /dashboard with run card grid and tab switcher"
+title: "Live dashboard page: unified operations view with agents table, work items, and activity charts"
 status: needs_merge
-revision: 0
+revision: 1
 priority: 1
 rank: 7
 estimate: 3
-summary: New /dashboard page showing agent runs as cards with status dots, elapsed timers, and My Runs / System tabs
-outcome: /dashboard renders a card grid of recent and active runs from the run list API; cards show graph name, status badge, timing; admin sees System tab
+summary: Unified /dashboard showing agents table (deduplicated by thread), active work items, and activity charts — replaces original card grid with operational overview
+outcome: /dashboard renders agents table with status dots and duration (deduplicated by stateKey), active work items panel, and spend/tokens/requests activity charts; Cogni Live tab shows system runs
 spec_refs:
   - spec.unified-graph-launch
 assignees: []
@@ -18,7 +18,7 @@ pr: https://github.com/Cogni-DAO/node-template/pull/602
 blocked_by:
   - task.0183
 created: 2026-03-18
-updated: 2026-03-19
+updated: 2026-03-20
 labels:
   - ui
   - ai-graphs

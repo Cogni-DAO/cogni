@@ -11,7 +11,7 @@ outcome: Users see live agent runs as cards with streaming content, status indic
 assignees:
   - derekg1729
 created: 2026-03-18
-updated: 2026-03-18
+updated: 2026-03-20
 labels:
   - ui
   - ai-graphs
@@ -87,7 +87,7 @@ The governance visibility dashboard (story.0063) becomes the "System" tab of thi
 | Deliverable                                                                          | Status      | Est | Work Item |
 | ------------------------------------------------------------------------------------ | ----------- | --- | --------- |
 | Run list API: `GET /api/v1/ai/runs` — query `graph_runs`, filter by user/status/kind | Not Started | 2   | task.0183 |
-| Dashboard page: `/dashboard` with card grid, tab switcher (My Runs / System)         | In Review   | 3   | task.0184 |
+| Dashboard page: `/dashboard` with agents table, work panel, activity charts          | In Review   | 3   | task.0184 |
 
 **P0 delivers:** Static card grid showing runs from `graph_runs` table. Cards show graph name, status badge, started_at, duration, error message if failed. Polling at 5s. Admin tab shows system-scheduled runs.
 
