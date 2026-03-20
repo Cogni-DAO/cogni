@@ -451,6 +451,7 @@ export async function completionStream(
     }
 
     // Continue with remaining events
+    let sawTerminal = false;
     try {
       let next = await iterator.next();
       while (!next.done) {
@@ -459,11 +460,16 @@ export async function completionStream(
           next = await iterator.next();
           continue;
         }
+        if (event.type === "done" || event.type === "error") {
+          sawTerminal = true;
+        }
         processEvent(event);
         yield event;
         next = await iterator.next();
       }
-      failStream("stream_ended_no_terminal");
+      if (!sawTerminal) {
+        failStream("stream_ended_no_terminal");
+      }
     } catch {
       failStream("stream_subscribe_error");
     }

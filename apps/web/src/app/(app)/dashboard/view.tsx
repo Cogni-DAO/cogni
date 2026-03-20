@@ -3,11 +3,11 @@
 
 /**
  * Module: `@app/(app)/dashboard/view`
- * Purpose: Live operations dashboard showing agent runs as cards with status indicators and elapsed timers.
- * Scope: Client-side view managing tab state and data fetching via React Query. Does not implement business logic.
- * Invariants: Polls at 5s interval; running runs pinned to top; My Runs tab default.
+ * Purpose: Unified operations dashboard — live agent status, active work, and activity metrics in one view.
+ * Scope: Client-side view managing data fetching via React Query. Does not implement business logic.
+ * Invariants: Polls runs at 5s; work items at 30s; activity at 30s. "Cogni Live" tab shows system runs.
  * Side-effects: IO (via React Query)
- * Links: [RunCard](../../../components/kit/data-display/RunCard.tsx), [fetchRuns](./_api/fetchRuns.ts)
+ * Links: [fetchRuns](./_api/fetchRuns.ts), [ActivityChart](../../../components/kit/data-display/ActivityChart.tsx)
  * @public
  */
 
@@ -19,12 +19,98 @@ import Link from "next/link";
 import type { ReactElement } from "react";
 import { useState } from "react";
 
-import { Button, ToggleGroup, ToggleGroupItem } from "@/components";
+import {
+  Badge,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  TimeRangeSelector,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/components";
+import { ActivityChart } from "@/components/kit/data-display/ActivityChart";
+import { ActivityTable } from "@/components/kit/data-display/ActivityTable";
+import {
+  buildAggregateChartData,
+  buildGroupedChartData,
+} from "@/components/kit/data-display/activity-chart-utils";
 import type { RunCardData } from "@/components/kit/data-display/RunCard";
-import { RunCard } from "@/components/kit/data-display/RunCard";
+import type {
+  ActivityGroupBy,
+  TimeRange,
+} from "@/contracts/ai.activity.v1.contract";
+import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
+import { cn } from "@/shared/util/cn";
+import { fetchActivity } from "../activity/_api/fetchActivity";
 import { fetchRuns } from "./_api/fetchRuns";
 
 type Tab = "user" | "system";
+
+/* ─── helpers ─── */
+
+function formatGraphName(graphId: string | null): string {
+  if (!graphId) return "Unknown";
+  const name = graphId.includes(":") ? graphId.split(":").pop() : graphId;
+  if (!name) return graphId;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function formatDuration(startedAt: string, completedAt: string): string {
+  const seconds = Math.max(
+    0,
+    Math.floor(
+      (new Date(completedAt).getTime() - new Date(startedAt).getTime()) / 1000
+    )
+  );
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
+const STATUS_DOT: Record<string, string> = {
+  running: "bg-success animate-pulse",
+  pending: "bg-muted-foreground animate-pulse",
+  success: "bg-success",
+  error: "bg-destructive",
+  skipped: "bg-muted-foreground",
+  cancelled: "bg-muted-foreground",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  running: "Running",
+  pending: "Queued",
+  success: "Completed",
+  error: "Failed",
+  skipped: "Skipped",
+  cancelled: "Cancelled",
+};
+
+const WORK_STATUS_PILL: Record<string, string> = {
+  needs_merge: "bg-primary/15 text-primary-foreground",
+  needs_closeout: "bg-primary/15 text-primary-foreground",
+  needs_implement: "bg-warning/15 text-warning",
+  needs_design: "bg-warning/15 text-warning",
+  needs_research: "bg-warning/15 text-warning",
+  needs_triage: "bg-muted text-muted-foreground",
+  blocked: "bg-destructive/15 text-destructive",
+  done: "bg-success/15 text-success",
+  cancelled: "bg-muted text-muted-foreground",
+};
 
 function sortRuns(runs: RunCardData[]): RunCardData[] {
   const statusOrder: Record<string, number> = {
@@ -39,26 +125,115 @@ function sortRuns(runs: RunCardData[]): RunCardData[] {
     const aOrder = statusOrder[a.status] ?? 99;
     const bOrder = statusOrder[b.status] ?? 99;
     if (aOrder !== bOrder) return aOrder - bOrder;
-    // Within same status, most recent first
     const aTime = a.startedAt ? new Date(a.startedAt).getTime() : 0;
     const bTime = b.startedAt ? new Date(b.startedAt).getTime() : 0;
     return bTime - aTime;
   });
 }
 
+function badgeIntent(status: string): "destructive" | "default" | "secondary" {
+  if (status === "error") return "destructive";
+  if (status === "running") return "default";
+  return "secondary";
+}
+
+/* ─── data fetchers ─── */
+
+async function fetchWorkItems(): Promise<{ items: WorkItemDto[] }> {
+  try {
+    const res = await fetch("/api/v1/work/items");
+    if (res.ok) return res.json();
+    if (res.status === 404) return { items: [] };
+    throw new Error(`Failed to fetch work items: ${res.status}`);
+  } catch (err) {
+    if (err instanceof TypeError) return { items: [] };
+    throw err;
+  }
+}
+
+/* ─── main view ─── */
+
 export function DashboardView(): ReactElement {
   const [tab, setTab] = useState<Tab>("user");
+  const [activityRange, setActivityRange] = useState<TimeRange>("1d");
+  const [activityGroupBy, setActivityGroupBy] = useState<
+    ActivityGroupBy | undefined
+  >("model");
 
-  const { data, isLoading, error } = useQuery({
+  const { data: runsData, isLoading: runsLoading } = useQuery({
     queryKey: ["dashboard-runs", tab],
-    queryFn: () => fetchRuns({ tab, limit: 50 }),
+    queryFn: () => fetchRuns({ tab, limit: 5 }),
     refetchInterval: 5_000,
     staleTime: 3_000,
     gcTime: 60_000,
   });
 
-  const runs = data?.runs ? sortRuns(data.runs) : [];
+  const { data: workData, isLoading: workLoading } = useQuery({
+    queryKey: ["dashboard-work"],
+    queryFn: fetchWorkItems,
+    staleTime: 30_000,
+    gcTime: 60_000,
+  });
+
+  const { data: activityData, isLoading: activityLoading } = useQuery({
+    queryKey: ["dashboard-activity", activityRange, activityGroupBy],
+    queryFn: () =>
+      fetchActivity({
+        range: activityRange,
+        ...(activityGroupBy && { groupBy: activityGroupBy }),
+      }),
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 2,
+  });
+
+  const runs = runsData?.runs ? sortRuns(runsData.runs) : [];
+  const heroRun = runs[0] ?? null;
   const activeCount = runs.filter((r) => r.status === "running").length;
+
+  const workItems = (workData?.items ?? [])
+    .filter((i) => i.status !== "done" && i.status !== "cancelled")
+    .slice(0, 5);
+
+  // Activity chart data
+  const hasActivity = activityData && !activityLoading;
+  const hasGrouped =
+    hasActivity &&
+    activityData.groupedSeries &&
+    activityData.groupedSeries.length > 0;
+
+  const spend = hasActivity
+    ? hasGrouped
+      ? buildGroupedChartData(activityData.groupedSeries!, "spend")
+      : buildAggregateChartData(
+          activityData.chartSeries,
+          "spend",
+          "Spend ($)",
+          "hsl(var(--chart-1))"
+        )
+    : null;
+
+  const tokens = hasActivity
+    ? hasGrouped
+      ? buildGroupedChartData(activityData.groupedSeries!, "tokens")
+      : buildAggregateChartData(
+          activityData.chartSeries,
+          "tokens",
+          "Tokens",
+          "hsl(var(--chart-2))"
+        )
+    : null;
+
+  const requests = hasActivity
+    ? hasGrouped
+      ? buildGroupedChartData(activityData.groupedSeries!, "requests")
+      : buildAggregateChartData(
+          activityData.chartSeries,
+          "requests",
+          "Requests",
+          "hsl(var(--chart-3))"
+        )
+    : null;
 
   return (
     <div className="flex flex-col gap-6 p-5 md:p-6">
@@ -85,62 +260,198 @@ export function DashboardView(): ReactElement {
             My Runs
           </ToggleGroupItem>
           <ToggleGroupItem value="system" className="px-3 text-xs">
-            System
+            Cogni Live
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
 
-      {/* Error state */}
-      {error && (
-        <div className="rounded-lg border border-destructive bg-destructive/10 p-6">
-          <h2 className="font-semibold text-destructive text-lg">
-            Error loading runs
+      {/* Two-column top section: Agent status + Work */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Left — Live Agent Status */}
+        <Card>
+          <CardHeader className="px-5 py-3">
+            <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+              {tab === "system" ? "Cogni Live" : "Latest Agent"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-5 pt-0 pb-5">
+            {runsLoading ? (
+              <div className="animate-pulse">
+                <div className="h-14 rounded-lg bg-muted" />
+              </div>
+            ) : heroRun ? (
+              <div
+                className={cn(
+                  "flex items-center gap-4 rounded-lg border p-4",
+                  heroRun.status === "running" && "border-primary/40",
+                  heroRun.status === "error" && "border-destructive/40"
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-3 shrink-0 rounded-full",
+                    STATUS_DOT[heroRun.status] ?? "bg-muted-foreground"
+                  )}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm">
+                      {formatGraphName(heroRun.graphId)}
+                    </span>
+                    <Badge intent={badgeIntent(heroRun.status)} size="sm">
+                      {heroRun.statusLabel ??
+                        STATUS_LABEL[heroRun.status] ??
+                        heroRun.status}
+                    </Badge>
+                  </div>
+                  {heroRun.startedAt && (
+                    <span className="text-muted-foreground text-xs">
+                      {timeAgo(heroRun.startedAt)}
+                      {heroRun.completedAt &&
+                        ` · ${formatDuration(heroRun.startedAt, heroRun.completedAt)}`}
+                    </span>
+                  )}
+                  {heroRun.errorMessage && (
+                    <p className="mt-1 line-clamp-1 text-destructive text-xs">
+                      {heroRun.errorMessage}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="py-4 text-center text-muted-foreground text-sm">
+                {tab === "system"
+                  ? "No system runs yet. Create a schedule to watch Cogni work."
+                  : "No recent runs. Start a conversation to see agents here."}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Right — Work Items */}
+        <Card>
+          <CardHeader className="px-5 py-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+                Active Work
+              </CardTitle>
+              <Link
+                href="/work"
+                className="text-muted-foreground text-xs hover:text-foreground"
+              >
+                View all
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {workLoading ? (
+              <div className="animate-pulse space-y-px px-5 pb-4">
+                <div className="h-9 rounded bg-muted" />
+                <div className="h-9 rounded bg-muted" />
+                <div className="h-9 rounded bg-muted" />
+              </div>
+            ) : workItems.length > 0 ? (
+              <div className="divide-y divide-border">
+                {workItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 px-5 py-2.5"
+                  >
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 rounded px-1.5 py-0.5 font-medium text-xs",
+                        WORK_STATUS_PILL[item.status] ??
+                          "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {item.status.replace("needs_", "")}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {item.title}
+                    </span>
+                    {item.priority !== undefined && (
+                      <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
+                        P{item.priority}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="px-5 py-4 text-center text-muted-foreground text-sm">
+                No active work items
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Activity Section */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+            Activity
           </h2>
-          <p className="text-muted-foreground text-sm">
-            {error instanceof Error ? error.message : "Unknown error"}
-          </p>
+          <div className="flex items-center gap-3">
+            <ToggleGroup
+              type="single"
+              value={activityGroupBy ?? ""}
+              onValueChange={(v) =>
+                setActivityGroupBy((v as ActivityGroupBy) || undefined)
+              }
+              className="rounded-lg border"
+            >
+              <ToggleGroupItem value="model" className="px-3 text-xs">
+                By Model
+              </ToggleGroupItem>
+              <ToggleGroupItem value="graphId" className="px-3 text-xs">
+                By Agent
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <TimeRangeSelector
+              value={activityRange}
+              onValueChange={setActivityRange}
+              className="w-40 rounded-lg"
+            />
+          </div>
         </div>
-      )}
 
-      {/* Loading skeleton */}
-      {isLoading && (
-        <div className="grid animate-pulse gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="h-32 rounded-lg bg-muted" />
-          <div className="h-32 rounded-lg bg-muted" />
-          <div className="h-32 rounded-lg bg-muted" />
-          <div className="h-32 rounded-lg bg-muted" />
-          <div className="h-32 rounded-lg bg-muted" />
-          <div className="h-32 rounded-lg bg-muted" />
-        </div>
-      )}
+        {activityLoading ? (
+          <div className="grid animate-pulse gap-4 md:grid-cols-3">
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+            <div className="h-48 rounded-lg bg-muted" />
+          </div>
+        ) : spend && tokens && requests && activityData ? (
+          <>
+            <div className="grid gap-4 md:grid-cols-3">
+              <ActivityChart
+                title="Spend"
+                description={`$${activityData.totals.spend.total}`}
+                data={spend.data}
+                config={spend.config}
+                effectiveStep={activityData.effectiveStep}
+              />
+              <ActivityChart
+                title="Tokens"
+                description={activityData.totals.tokens.total.toLocaleString()}
+                data={tokens.data}
+                config={tokens.config}
+                effectiveStep={activityData.effectiveStep}
+              />
+              <ActivityChart
+                title="Requests"
+                description={activityData.totals.requests.total.toLocaleString()}
+                data={requests.data}
+                config={requests.config}
+                effectiveStep={activityData.effectiveStep}
+              />
+            </div>
 
-      {/* Card grid */}
-      {!isLoading && !error && runs.length > 0 && (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {runs.map((run) => (
-            <RunCard key={run.id} run={run} />
-          ))}
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!isLoading && !error && runs.length === 0 && (
-        <div className="rounded-lg border bg-card p-12 text-center">
-          <p className="text-muted-foreground">
-            {tab === "user" ? "No recent runs" : "No system runs"}
-          </p>
-          <p className="mt-2 text-muted-foreground text-sm">
-            {tab === "user"
-              ? "Start a conversation to see your agent runs here."
-              : "System-scheduled runs will appear here when they execute."}
-          </p>
-          {tab === "user" && (
-            <Button asChild className="mt-4">
-              <Link href="/chat">Start a Chat</Link>
-            </Button>
-          )}
-        </div>
-      )}
+            <ActivityTable logs={activityData.rows} />
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

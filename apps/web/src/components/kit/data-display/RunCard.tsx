@@ -36,6 +36,7 @@ export interface RunCardData {
   completedAt: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  stateKey: string | null;
 }
 
 interface RunCardProps {
