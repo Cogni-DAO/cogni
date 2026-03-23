@@ -48,12 +48,15 @@ import {
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
 import {
-  aiInvocationSummaries,
+  billingAccounts,
+  chargeReceipts,
   executionGrants,
   graphRuns,
+  llmChargeDetails,
   schedules,
+  virtualKeys,
 } from "@cogni/db-schema";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { identityEvents, userBindings } from "@cogni/db-schema/identity";
 import { users } from "@cogni/db-schema/refs";
 import { extractNodeId, extractScopeId, parseRepoSpec } from "@cogni/repo-spec";
@@ -735,6 +738,8 @@ async function seedLinkedUsersAndBindings(
 
 const SYSTEM_USER_ID = "00000000-0000-4000-a000-000000000001";
 const SYSTEM_BILLING_ACCOUNT_ID = "00000000-0000-4000-b000-000000000000";
+/** Must match the literal used by scheduled-run.workflow.ts — NOT the UUID */
+const SYSTEM_REQUESTED_BY = "cogni_system";
 const GOVERNANCE_GRAPH_ID = "sandbox:openclaw";
 const GOVERNANCE_MODEL = "kimi-k2.5";
 
@@ -785,8 +790,74 @@ const LEDGER_INGEST_PROFILE: RunProfile = {
   errorRate: 0.08,
 };
 
+// ── User AI Activity Profiles ──────────────────────────────────
+
+const USER_AGENT_PROFILES: RunProfile[] = [
+  {
+    graphId: "langgraph:poet",
+    model: "claude-sonnet-4-20250514",
+    provider: "anthropic",
+    minLatencyMs: 4000,
+    maxLatencyMs: 15000,
+    minTokensIn: 1500,
+    maxTokensIn: 8000,
+    minTokensOut: 500,
+    maxTokensOut: 3000,
+    costPerKTokenIn: 0.003,
+    costPerKTokenOut: 0.015,
+    errorRate: 0.03,
+  },
+  {
+    graphId: "langgraph:ponderer",
+    model: "claude-sonnet-4-20250514",
+    provider: "anthropic",
+    minLatencyMs: 6000,
+    maxLatencyMs: 30000,
+    minTokensIn: 3000,
+    maxTokensIn: 12000,
+    minTokensOut: 1000,
+    maxTokensOut: 5000,
+    costPerKTokenIn: 0.003,
+    costPerKTokenOut: 0.015,
+    errorRate: 0.05,
+  },
+  {
+    graphId: "codex:poet",
+    model: "gpt-4o-mini",
+    provider: "openai",
+    minLatencyMs: 2000,
+    maxLatencyMs: 8000,
+    minTokensIn: 800,
+    maxTokensIn: 4000,
+    minTokensOut: 300,
+    maxTokensOut: 1500,
+    costPerKTokenIn: 0.00015,
+    costPerKTokenOut: 0.0006,
+    errorRate: 0.02,
+  },
+  {
+    graphId: "codex:spark",
+    model: "gpt-4o-mini",
+    provider: "openai",
+    minLatencyMs: 1500,
+    maxLatencyMs: 6000,
+    minTokensIn: 500,
+    maxTokensIn: 3000,
+    minTokensOut: 200,
+    maxTokensOut: 1200,
+    costPerKTokenIn: 0.00015,
+    costPerKTokenOut: 0.0006,
+    errorRate: 0.04,
+  },
+];
+
 function randInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+interface SeedChargeReceipt {
+  receipt: typeof chargeReceipts.$inferInsert;
+  detail: Omit<typeof llmChargeDetails.$inferInsert, "chargeReceiptId">;
 }
 
 function generateScheduledRuns(params: {
@@ -796,17 +867,19 @@ function generateScheduledRuns(params: {
   startDate: Date;
   endDate: Date;
   temporalScheduleId: string;
+  virtualKeyId: string;
 }): {
   runs: (typeof graphRuns.$inferInsert)[];
-  invocations: (typeof aiInvocationSummaries.$inferInsert)[];
+  charges: SeedChargeReceipt[];
 } {
   const runs: (typeof graphRuns.$inferInsert)[] = [];
-  const invocations: (typeof aiInvocationSummaries.$inferInsert)[] = [];
+  const charges: SeedChargeReceipt[] = [];
 
   // Parse simple cron: "0 * * * *" (hourly) or "0 6 * * *" (daily at 6)
   const cronParts = params.cron.split(" ");
   const cronMinute = Number.parseInt(cronParts[0] ?? "0", 10);
-  const cronHour = cronParts[1] === "*" ? null : Number.parseInt(cronParts[1] ?? "0", 10);
+  const cronHour =
+    cronParts[1] === "*" ? null : Number.parseInt(cronParts[1] ?? "0", 10);
 
   const cursor = new Date(params.startDate);
   // Align to first slot
@@ -822,12 +895,19 @@ function generateScheduledRuns(params: {
     const scheduledFor = new Date(cursor);
     const runId = randomUUID();
     const isError = Math.random() < params.profile.errorRate;
-    const latencyMs = randInt(params.profile.minLatencyMs, params.profile.maxLatencyMs);
+    const latencyMs = randInt(
+      params.profile.minLatencyMs,
+      params.profile.maxLatencyMs
+    );
     const startedAt = new Date(scheduledFor.getTime() + randInt(500, 3000));
     const completedAt = new Date(startedAt.getTime() + latencyMs);
 
-    const tokensIn = isError ? null : randInt(params.profile.minTokensIn, params.profile.maxTokensIn);
-    const tokensOut = isError ? null : randInt(params.profile.minTokensOut, params.profile.maxTokensOut);
+    const tokensIn = isError
+      ? null
+      : randInt(params.profile.minTokensIn, params.profile.maxTokensIn);
+    const tokensOut = isError
+      ? null
+      : randInt(params.profile.minTokensOut, params.profile.maxTokensOut);
 
     runs.push({
       scheduleId: params.scheduleId,
@@ -836,40 +916,52 @@ function generateScheduledRuns(params: {
       runKind: "system_scheduled",
       triggerSource: "temporal_schedule",
       triggerRef: params.temporalScheduleId,
-      requestedBy: SYSTEM_USER_ID,
+      requestedBy: SYSTEM_REQUESTED_BY,
       scheduledFor,
       startedAt,
       completedAt,
       status: isError ? "error" : "success",
       attemptCount: 1,
       errorCode: isError ? "provider_5xx" : null,
-      errorMessage: isError ? "Upstream provider returned 502 Bad Gateway" : null,
+      errorMessage: isError
+        ? "Upstream provider returned 502 Bad Gateway"
+        : null,
       stateKey: null,
     });
 
-    // One LLM invocation per run (governance runs are single-turn)
+    // One charge receipt per successful run (governance runs are single-turn)
     if (!isError) {
       const costUsd =
         (tokensIn! / 1000) * params.profile.costPerKTokenIn +
         (tokensOut! / 1000) * params.profile.costPerKTokenOut;
+      const chargedCredits = BigInt(Math.ceil(costUsd * 1_000_000)); // 1 credit = $0.000001
 
-      invocations.push({
-        invocationId: randomUUID(),
-        requestId: runId,
-        traceId: randomUUID(),
-        promptHash: sha256(`${runId}:prompt`),
-        routerPolicyVersion: "0.1.0",
-        graphRunId: runId,
-        graphName: params.profile.graphId,
-        provider: params.profile.provider,
-        model: params.profile.model,
-        tokensIn: tokensIn!,
-        tokensOut: tokensOut!,
-        tokensTotal: tokensIn! + tokensOut!,
-        providerCostUsd: costUsd.toFixed(6),
-        latencyMs,
-        status: "success",
-        createdAt: completedAt,
+      charges.push({
+        receipt: {
+          billingAccountId: SYSTEM_BILLING_ACCOUNT_ID,
+          virtualKeyId: params.virtualKeyId,
+          runId,
+          attempt: 0,
+          ingressRequestId: runId,
+          litellmCallId: randomUUID(),
+          chargedCredits,
+          responseCostUsd: costUsd.toFixed(6),
+          provenance: "response",
+          chargeReason: "llm_usage",
+          sourceSystem: "litellm",
+          sourceReference: `${runId}/0/${randomUUID()}`,
+          receiptKind: "llm",
+          createdAt: completedAt,
+        },
+        detail: {
+          providerCallId: randomUUID(),
+          model: params.profile.model,
+          provider: params.profile.provider,
+          tokensIn: tokensIn!,
+          tokensOut: tokensOut!,
+          latencyMs,
+          graphId: params.profile.graphId,
+        },
       });
     }
 
@@ -881,28 +973,19 @@ function generateScheduledRuns(params: {
     }
   }
 
-  return { runs, invocations };
+  return { runs, charges };
 }
 
 async function seedGovernanceActivity(
   db: ReturnType<typeof createServiceDbClient>
 ): Promise<void> {
-  // Check for existing governance runs
-  const existing = await db
-    .select({ id: graphRuns.id })
-    .from(graphRuns)
-    .where(eq(graphRuns.runKind, "system_scheduled"))
-    .limit(1);
-
-  if (existing.length > 0) {
-    console.log("⚠️  Existing governance runs found. Skipping activity seed.");
-    return;
-  }
-
   // Reuse existing governance schedules (created by governance:schedules:sync)
   // or create them if they don't exist yet.
   const existingSchedules = await db
-    .select({ id: schedules.id, temporalScheduleId: schedules.temporalScheduleId })
+    .select({
+      id: schedules.id,
+      temporalScheduleId: schedules.temporalScheduleId,
+    })
     .from(schedules)
     .where(eq(schedules.ownerUserId, SYSTEM_USER_ID));
 
@@ -961,6 +1044,17 @@ async function seedGovernanceActivity(
     }
   }
 
+  // Look up system tenant virtual key for charge_receipts FK
+  const [systemVk] = await db
+    .select({ id: virtualKeys.id })
+    .from(virtualKeys)
+    .where(eq(virtualKeys.billingAccountId, SYSTEM_BILLING_ACCOUNT_ID))
+    .limit(1);
+  if (!systemVk) {
+    console.log("⚠️  No virtual key for system tenant. Skipping activity seed.");
+    return;
+  }
+
   // Generate 4 weeks of runs
   const seedStart = new Date(Date.now() - 28 * 86_400_000);
   const seedEnd = new Date();
@@ -972,6 +1066,7 @@ async function seedGovernanceActivity(
     startDate: seedStart,
     endDate: seedEnd,
     temporalScheduleId: "governance:heartbeat",
+    virtualKeyId: systemVk.id,
   });
 
   const ledgerData = generateScheduledRuns({
@@ -981,18 +1076,117 @@ async function seedGovernanceActivity(
     startDate: seedStart,
     endDate: seedEnd,
     temporalScheduleId: "governance:ledger_ingest",
+    virtualKeyId: systemVk.id,
   });
 
-  // Insert runs in batches
   const allRuns = [...heartbeatData.runs, ...ledgerData.runs];
-  const allInvocations = [...heartbeatData.invocations, ...ledgerData.invocations];
+  const allCharges = [...heartbeatData.charges, ...ledgerData.charges];
 
+  // Insert runs — skip slots already occupied by real Temporal runs
   const BATCH_SIZE = 100;
+  let insertedRuns = 0;
   for (let i = 0; i < allRuns.length; i += BATCH_SIZE) {
-    await db.insert(graphRuns).values(allRuns.slice(i, i + BATCH_SIZE));
+    const result = await db
+      .insert(graphRuns)
+      .values(allRuns.slice(i, i + BATCH_SIZE))
+      .onConflictDoNothing()
+      .returning({ id: graphRuns.id });
+    insertedRuns += result.length;
   }
-  for (let i = 0; i < allInvocations.length; i += BATCH_SIZE) {
-    await db.insert(aiInvocationSummaries).values(allInvocations.slice(i, i + BATCH_SIZE));
+
+  // Insert charge_receipts for ALL successful system runs (seeded + real)
+  // that don't already have a charge receipt. This fills in billing data for
+  // real Temporal runs where the billing pipeline didn't capture costs.
+  const allSuccessRuns = await db
+    .select({
+      runId: graphRuns.runId,
+      completedAt: graphRuns.completedAt,
+      graphId: graphRuns.graphId,
+    })
+    .from(graphRuns)
+    .where(
+      and(
+        eq(graphRuns.runKind, "system_scheduled"),
+        eq(graphRuns.status, "success")
+      )
+    );
+
+  const existingChargeRunIds = new Set(
+    (
+      await db
+        .select({ runId: chargeReceipts.runId })
+        .from(chargeReceipts)
+        .where(eq(chargeReceipts.billingAccountId, SYSTEM_BILLING_ACCOUNT_ID))
+    ).map((r) => r.runId)
+  );
+
+  // Merge seed-generated charges with synthetic charges for real runs missing billing
+  const chargesByRunId = new Map(allCharges.map((c) => [c.receipt.runId, c]));
+  const chargesToInsert: SeedChargeReceipt[] = [];
+
+  for (const run of allSuccessRuns) {
+    if (existingChargeRunIds.has(run.runId)) continue;
+
+    const seedCharge = chargesByRunId.get(run.runId);
+    if (seedCharge) {
+      chargesToInsert.push(seedCharge);
+    } else {
+      // Real run without billing data — synthesize a charge
+      const profile =
+        run.graphId === GOVERNANCE_GRAPH_ID
+          ? HEARTBEAT_PROFILE
+          : HEARTBEAT_PROFILE;
+      const tokensIn = randInt(profile.minTokensIn, profile.maxTokensIn);
+      const tokensOut = randInt(profile.minTokensOut, profile.maxTokensOut);
+      const costUsd =
+        (tokensIn / 1000) * profile.costPerKTokenIn +
+        (tokensOut / 1000) * profile.costPerKTokenOut;
+      const chargedCredits = BigInt(Math.ceil(costUsd * 1_000_000));
+
+      chargesToInsert.push({
+        receipt: {
+          billingAccountId: SYSTEM_BILLING_ACCOUNT_ID,
+          virtualKeyId: systemVk.id,
+          runId: run.runId,
+          attempt: 0,
+          ingressRequestId: run.runId,
+          litellmCallId: randomUUID(),
+          chargedCredits,
+          responseCostUsd: costUsd.toFixed(6),
+          provenance: "response",
+          chargeReason: "llm_usage",
+          sourceSystem: "litellm",
+          sourceReference: `${run.runId}/0/${randomUUID()}`,
+          receiptKind: "llm",
+          createdAt: run.completedAt ?? new Date(),
+        },
+        detail: {
+          providerCallId: randomUUID(),
+          model: profile.model,
+          provider: profile.provider,
+          tokensIn,
+          tokensOut,
+          latencyMs: randInt(profile.minLatencyMs, profile.maxLatencyMs),
+          graphId: run.graphId ?? GOVERNANCE_GRAPH_ID,
+        },
+      });
+    }
+  }
+
+  let insertedCharges = 0;
+  for (const charge of chargesToInsert) {
+    const [inserted] = await db
+      .insert(chargeReceipts)
+      .values(charge.receipt)
+      .onConflictDoNothing()
+      .returning({ id: chargeReceipts.id });
+    if (inserted) {
+      await db.insert(llmChargeDetails).values({
+        chargeReceiptId: inserted.id,
+        ...charge.detail,
+      });
+      insertedCharges++;
+    }
   }
 
   // Update schedule last_run_at
@@ -1012,18 +1206,181 @@ async function seedGovernanceActivity(
       .where(eq(schedules.id, ledgerScheduleId));
   }
 
-  const successRuns = allRuns.filter((r) => r.status === "success").length;
-  const errorRuns = allRuns.filter((r) => r.status === "error").length;
-  const totalCost = allInvocations.reduce(
-    (sum, inv) => sum + Number.parseFloat(inv.providerCostUsd as string),
+  const totalCost = chargesToInsert.reduce(
+    (sum, c) => sum + Number.parseFloat(c.receipt.responseCostUsd as string),
     0
   );
+  const skipped = allRuns.length - insertedRuns;
 
-  console.log(`  Schedules: HEARTBEAT (${heartbeatScheduleId}), LEDGER_INGEST (${ledgerScheduleId})`);
-  console.log(`  Graph runs: ${allRuns.length} total (${successRuns} success, ${errorRuns} error)`);
-  console.log(`    Heartbeat: ${heartbeatData.runs.length} runs`);
-  console.log(`    Ledger ingest: ${ledgerData.runs.length} runs`);
-  console.log(`  AI invocations: ${allInvocations.length} (total cost: $${totalCost.toFixed(4)})`);
+  console.log(
+    `  Schedules: HEARTBEAT (${heartbeatScheduleId}), LEDGER_INGEST (${ledgerScheduleId})`
+  );
+  console.log(
+    `  Graph runs: ${insertedRuns} inserted (${skipped} skipped — slots filled by real runs)`
+  );
+  console.log(
+    `  Charge receipts: ${insertedCharges} (total seed cost: $${totalCost.toFixed(4)})`
+  );
+}
+
+async function seedUserActivity(
+  db: ReturnType<typeof createServiceDbClient>
+): Promise<void> {
+  // Find user accounts (non-system users with billing accounts)
+  const userAccounts = await db
+    .select({
+      userId: billingAccounts.ownerUserId,
+      billingAccountId: billingAccounts.id,
+    })
+    .from(billingAccounts)
+    .where(eq(billingAccounts.isSystemTenant, false));
+
+  if (userAccounts.length === 0) {
+    console.log(
+      "⚠️  No user billing accounts found. Skipping user activity seed."
+    );
+    return;
+  }
+
+  // Check for existing seeded user runs (look for our seed marker in triggerRef)
+  const existingSeedRuns = await db
+    .select({ id: graphRuns.id })
+    .from(graphRuns)
+    .where(eq(graphRuns.triggerSource, "dev-seed"))
+    .limit(1);
+
+  if (existingSeedRuns.length > 0) {
+    console.log("⚠️  Existing user activity seed found. Skipping.");
+    return;
+  }
+
+  let totalRuns = 0;
+  let totalCharges = 0;
+  let totalCost = 0;
+
+  for (const account of userAccounts) {
+    // Get virtual key for this account
+    const [vk] = await db
+      .select({ id: virtualKeys.id })
+      .from(virtualKeys)
+      .where(eq(virtualKeys.billingAccountId, account.billingAccountId))
+      .limit(1);
+    if (!vk) continue;
+
+    // Generate 2-6 runs per day over the last 14 days, spread across agents
+    const runs: (typeof graphRuns.$inferInsert)[] = [];
+    const charges: SeedChargeReceipt[] = [];
+    const seedDays = 14;
+
+    for (let daysAgo = seedDays; daysAgo >= 0; daysAgo--) {
+      const dayBase = new Date(Date.now() - daysAgo * 86_400_000);
+      const runsToday = randInt(2, 6);
+
+      for (let r = 0; r < runsToday; r++) {
+        const profile =
+          USER_AGENT_PROFILES[randInt(0, USER_AGENT_PROFILES.length - 1)]!;
+        const runId = randomUUID();
+        const isError = Math.random() < profile.errorRate;
+        const hourOffset = randInt(8, 22); // runs during waking hours
+        const minuteOffset = randInt(0, 59);
+        const startedAt = new Date(dayBase);
+        startedAt.setUTCHours(hourOffset, minuteOffset, randInt(0, 59));
+        const latencyMs = randInt(profile.minLatencyMs, profile.maxLatencyMs);
+        const completedAt = new Date(startedAt.getTime() + latencyMs);
+
+        runs.push({
+          runId,
+          graphId: profile.graphId,
+          runKind: "user_immediate",
+          triggerSource: "dev-seed",
+          requestedBy: account.userId,
+          startedAt,
+          completedAt,
+          status: isError ? "error" : "success",
+          attemptCount: 1,
+          errorCode: isError ? "provider_5xx" : null,
+          errorMessage: isError ? "Upstream provider returned 502" : null,
+          stateKey: `seed-${runId.slice(0, 8)}`,
+        });
+
+        if (!isError) {
+          const tokensIn = randInt(profile.minTokensIn, profile.maxTokensIn);
+          const tokensOut = randInt(profile.minTokensOut, profile.maxTokensOut);
+          const costUsd =
+            (tokensIn / 1000) * profile.costPerKTokenIn +
+            (tokensOut / 1000) * profile.costPerKTokenOut;
+          const chargedCredits = BigInt(Math.ceil(costUsd * 1_000_000));
+
+          charges.push({
+            receipt: {
+              billingAccountId: account.billingAccountId,
+              virtualKeyId: vk.id,
+              runId,
+              attempt: 0,
+              ingressRequestId: runId,
+              litellmCallId: randomUUID(),
+              chargedCredits,
+              responseCostUsd: costUsd.toFixed(6),
+              provenance: "response",
+              chargeReason: "llm_usage",
+              sourceSystem: "litellm",
+              sourceReference: `${runId}/0/${randomUUID()}`,
+              receiptKind: "llm",
+              createdAt: completedAt,
+            },
+            detail: {
+              providerCallId: randomUUID(),
+              model: profile.model,
+              provider: profile.provider,
+              tokensIn,
+              tokensOut,
+              latencyMs,
+              graphId: profile.graphId,
+            },
+          });
+        }
+      }
+    }
+
+    // Insert runs
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < runs.length; i += BATCH_SIZE) {
+      await db.insert(graphRuns).values(runs.slice(i, i + BATCH_SIZE));
+    }
+
+    // Insert charges one-by-one for the FK chain
+    for (const charge of charges) {
+      const [inserted] = await db
+        .insert(chargeReceipts)
+        .values(charge.receipt)
+        .onConflictDoNothing()
+        .returning({ id: chargeReceipts.id });
+      if (inserted) {
+        await db.insert(llmChargeDetails).values({
+          chargeReceiptId: inserted.id,
+          ...charge.detail,
+        });
+      }
+    }
+
+    const userCost = charges.reduce(
+      (sum, c) => sum + Number.parseFloat(c.receipt.responseCostUsd as string),
+      0
+    );
+    totalRuns += runs.length;
+    totalCharges += charges.length;
+    totalCost += userCost;
+
+    console.log(
+      `  User ${account.userId.slice(0, 8)}...: ${runs.length} runs, ${charges.length} charges ($${userCost.toFixed(4)})`
+    );
+  }
+
+  console.log(
+    `  Total: ${totalRuns} runs, ${totalCharges} charges ($${totalCost.toFixed(4)})`
+  );
+  const agentBreakdown = USER_AGENT_PROFILES.map((p) => p.graphId).join(", ");
+  console.log(`  Agents: ${agentBreakdown}`);
 }
 
 // ── Main ────────────────────────────────────────────────────────
@@ -1352,6 +1709,10 @@ async function main(): Promise<void> {
 
     console.log("🤖 Governance AI activity (4 weeks):");
     await seedGovernanceActivity(db);
+    console.log();
+
+    console.log("👤 User AI activity (2 weeks, 4 agents):");
+    await seedUserActivity(db);
     console.log();
 
     console.log(
