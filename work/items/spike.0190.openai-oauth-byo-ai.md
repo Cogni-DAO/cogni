@@ -10,7 +10,7 @@ outcome: "Complete mapping of OpenClaw OAuth flow (client ID, endpoints, JWT acc
 spec_refs: []
 assignees: [derekg1729]
 credit:
-project:
+project: proj.byo-ai
 branch: spike/openai-oauth-byo-ai
 pr:
 reviewer:

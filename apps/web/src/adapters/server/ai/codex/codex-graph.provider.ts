@@ -76,7 +76,7 @@ export class CodexGraphProvider implements GraphExecutorPort {
       : prompt;
 
     // Track final state
-    let finalResolve: (value: GraphFinal) => void;
+    let finalResolve: ((value: GraphFinal) => void) | undefined;
     const finalPromise = new Promise<GraphFinal>((resolve) => {
       finalResolve = resolve;
     });
@@ -87,6 +87,7 @@ export class CodexGraphProvider implements GraphExecutorPort {
       runId: req.runId,
       requestId: ctx?.requestId ?? req.runId,
       log,
+      // biome-ignore lint/style/noNonNullAssertion: resolve is assigned synchronously in Promise constructor
       onFinal: (final) => finalResolve!(final),
     });
 

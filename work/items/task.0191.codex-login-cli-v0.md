@@ -1,18 +1,18 @@
 ---
 id: task.0191
 type: task
-title: "v0: CLI Codex login script for dev environment"
-status: needs_triage
-priority: 2
+title: "v0: Codex-native graph executor with ChatGPT subscription auth"
+status: done
+priority: 1
 rank: 10
-estimate: 2
-summary: "Create scripts/codex-login.ts using @mariozechner/pi-ai to run OpenAI Codex PKCE OAuth flow locally. Stores access/refresh tokens in .env.local. Add LiteLLM model config for Codex models. Include token refresh check at dev startup."
-outcome: "Developer with ChatGPT Plus/Pro can run pnpm codex:login, authenticate via browser, and use Codex models through LiteLLM proxy at $0 marginal cost"
+estimate: 3
+summary: "CodexGraphProvider implementing GraphExecutorPort via @openai/codex-sdk. OAuth login script, Codex graphs in UI, credit check bypass for subscription-backed runs. Full unified graph executor path (Temporal, Redis, Langfuse)."
+outcome: "Developer selects Codex Poet/Spark graph in chat UI, authenticates via pnpm codex:login, and executes graph runs powered by ChatGPT subscription at $0 marginal cost through the unified graph execution pipeline."
 spec_refs: []
-assignees: []
+assignees: [derekg1729]
 credit:
-project:
-branch:
+project: proj.byo-ai
+branch: spike/openai-oauth-byo-ai
 pr:
 reviewer:
 created: 2026-03-22
