@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Seed OpenClaw gateway with Codex OAuth credentials
  *
@@ -9,13 +10,14 @@
  * Usage: pnpm codex:seed
  */
 
-import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const ENV_FILE = resolve(import.meta.dirname, "../../.env.local");
 const CONTAINER = "openclaw-gateway";
-const PROFILE_PATH = "/workspace/.openclaw-state/agents/main/agent/auth-profiles.json";
+const PROFILE_PATH =
+  "/workspace/.openclaw-state/agents/main/agent/auth-profiles.json";
 
 function readEnv(key: string): string | undefined {
   const content = readFileSync(ENV_FILE, "utf-8");
@@ -57,21 +59,23 @@ try {
     stdio: "pipe",
   });
 } catch {
-  console.error(`Container '${CONTAINER}' is not running. Start dev:stack first.`);
+  console.error(
+    `Container '${CONTAINER}' is not running. Start dev:stack first.`
+  );
   process.exit(1);
 }
 
 // Ensure the directory exists and write the file
 execSync(
   `docker exec ${CONTAINER} mkdir -p /workspace/.openclaw-state/agents/main/agent`,
-  { stdio: "inherit" },
+  { stdio: "inherit" }
 );
 
 // Write via stdin to avoid shell escaping issues
-execSync(
-  `docker exec -i ${CONTAINER} sh -c 'cat > ${PROFILE_PATH}'`,
-  { input: json, stdio: ["pipe", "inherit", "inherit"] },
-);
+execSync(`docker exec -i ${CONTAINER} sh -c 'cat > ${PROFILE_PATH}'`, {
+  input: json,
+  stdio: ["pipe", "inherit", "inherit"],
+});
 
 console.log(`Codex auth profile seeded into ${CONTAINER}`);
 console.log(`  Profile ID: ${profileId}`);

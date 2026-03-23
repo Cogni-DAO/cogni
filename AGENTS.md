@@ -62,6 +62,9 @@ pnpm dev                      # start dev server
 pnpm dev:stack                # start dev server + infrastructure (main dev workflow)
 pnpm dev:stack:test           # start dev server + infrastructure for testing
 pnpm dev:stack:test:setup     # first time: create test DB + run migrations
+pnpm codex:login              # authenticate Codex via OpenAI OAuth into .env.local
+pnpm codex:seed               # seed Codex auth into the local OpenClaw gateway
+pnpm codex:refresh            # refresh stored Codex OAuth tokens
 pnpm docker:dev:stack         # start all services containerized (with build)
 pnpm docker:dev:stack:fast    # start all services containerized (skip build for speed)
 pnpm docker:test:stack        # start all services containerized in test mode (with build)

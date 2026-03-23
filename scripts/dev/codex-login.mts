@@ -9,18 +9,14 @@
  * Usage: pnpm codex:login
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { loginOpenAICodex, refreshOpenAICodexToken } from "@mariozechner/pi-ai/oauth";
+import {
+  loginOpenAICodex,
+  refreshOpenAICodexToken,
+} from "@mariozechner/pi-ai/oauth";
 
 const ENV_FILE = resolve(import.meta.dirname, "../../.env.local");
-
-const CODEX_KEYS = [
-  "CODEX_ACCESS_TOKEN",
-  "CODEX_REFRESH_TOKEN",
-  "CODEX_EXPIRES_AT",
-  "CODEX_ACCOUNT_ID",
-] as const;
 
 function readEnvFile(): string {
   if (!existsSync(ENV_FILE)) return "";
@@ -35,7 +31,7 @@ function upsertEnvVars(content: string, vars: Record<string, string>): string {
     if (regex.test(result)) {
       result = result.replace(regex, line);
     } else {
-      result = result.trimEnd() + "\n" + line + "\n";
+      result = `${result.trimEnd()}\n${line}\n`;
     }
   }
   return result;
@@ -85,7 +81,9 @@ async function tryRefresh(): Promise<boolean> {
   // Still valid? (with 5min buffer)
   if (stored.expires && Date.now() < stored.expires - 5 * 60 * 1000) {
     const remaining = Math.round((stored.expires - Date.now()) / 60000);
-    console.log(`Token still valid (${remaining}min remaining). Use --force to re-login.`);
+    console.log(
+      `Token still valid (${remaining}min remaining). Use --force to re-login.`
+    );
     return true;
   }
 
@@ -96,7 +94,9 @@ async function tryRefresh(): Promise<boolean> {
       access: refreshed.access,
       refresh: refreshed.refresh,
       expires: refreshed.expires,
-      accountId: (refreshed as Record<string, unknown>).accountId as string | undefined,
+      accountId: (refreshed as Record<string, unknown>).accountId as
+        | string
+        | undefined,
     });
     console.log("Token refreshed successfully.");
     return true;
@@ -106,19 +106,40 @@ async function tryRefresh(): Promise<boolean> {
   }
 }
 
+async function openBrowser(url: string): Promise<boolean> {
+  const { execFile } = await import("node:child_process");
+  const candidates: Array<{ command: string; args: string[] }> =
+    process.platform === "darwin"
+      ? [{ command: "open", args: [url] }]
+      : process.platform === "win32"
+        ? [{ command: "cmd", args: ["/c", "start", "", url] }]
+        : [
+            { command: "xdg-open", args: [url] },
+            { command: "open", args: [url] },
+          ];
+
+  for (const candidate of candidates) {
+    const ok = await new Promise<boolean>((resolve) => {
+      execFile(candidate.command, candidate.args, (err) => resolve(!err));
+    });
+    if (ok) return true;
+  }
+
+  return false;
+}
+
 async function fullLogin() {
   console.log("\nStarting OpenAI Codex OAuth flow...");
-  console.log("A browser window will open. Sign in with your ChatGPT account.\n");
-
-  const { exec } = await import("node:child_process");
+  console.log(
+    "A browser window will open. Sign in with your ChatGPT account.\n"
+  );
 
   const creds = await loginOpenAICodex({
-    onAuth: ({ url }) => {
+    onAuth: async ({ url }) => {
       console.log("Opening browser for authentication...");
-      // macOS native open; falls back to printing URL
-      exec(`open "${url}"`, (err) => {
-        if (err) console.log(`\nOpen this URL in your browser:\n\n  ${url}\n`);
-      });
+      const opened = await openBrowser(url);
+      if (!opened)
+        console.log(`\nOpen this URL in your browser:\n\n  ${url}\n`);
     },
     onPrompt: async ({ message }) => {
       // Simple stdin prompt
@@ -140,13 +161,17 @@ async function fullLogin() {
     access: creds.access,
     refresh: creds.refresh,
     expires: creds.expires,
-    accountId: (creds as Record<string, unknown>).accountId as string | undefined,
+    accountId: (creds as Record<string, unknown>).accountId as
+      | string
+      | undefined,
   });
 
   const expiresIn = Math.round((creds.expires - Date.now()) / 60000);
   console.log(`\nLogin successful!`);
   console.log(`  Token expires in: ${expiresIn} minutes`);
-  console.log(`  Account ID: ${(creds as Record<string, unknown>).accountId ?? "unknown"}`);
+  console.log(
+    `  Account ID: ${(creds as Record<string, unknown>).accountId ?? "unknown"}`
+  );
   console.log(`  Stored in: .env.local`);
   console.log(`\nRestart your dev:stack to pick up the new token.`);
 }

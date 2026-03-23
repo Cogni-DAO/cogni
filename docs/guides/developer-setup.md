@@ -60,6 +60,18 @@ You are setting up the Cogni-Template repo for the first time, or need a referen
 pnpm dev:stack          # Start app + infrastructure (main workflow)
 ```
 
+### Codex via OpenClaw (optional)
+
+If you have a ChatGPT subscription with Codex access, you can wire it into the local OpenClaw gateway:
+
+```bash
+pnpm codex:login        # OAuth login, stores tokens in .env.local
+pnpm codex:seed         # writes auth profile into the running openclaw-gateway container
+pnpm codex:refresh      # refresh stored tokens without full re-login
+```
+
+After seeding, restart the OpenClaw gateway if needed and select an `openai-codex/*` model in the app.
+
 ## Testing
 
 **Host Stack Tests:**
