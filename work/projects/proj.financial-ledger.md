@@ -53,6 +53,7 @@ TigerBeetle is the transaction engine enforcing double-entry at the database lev
 
 | Deliverable                                                                                                                                            | Status      | Est | Work Item         |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ----------------- |
+| **BUG: TB unreachable all envs — native client floods ~72M garbage lines/day to Grafana Cloud**                                                        | In Progress | 3   | `bug.0195`        |
 | TigerBeetle ledger + FinancialLedgerPort — 5-account MVP (credits + USDC), co-writes for AI spend + credit deposits                                    | In Review   | 3   | `task.0145`       |
 | Node formation update: mint fixed `GovernanceERC20` supply to a DAO-controlled emissions holder instead of founder bootstrap mint                      | Not Started | 2   | `task.0135`       |
 | `computeMerkleTree(statement)` pure function — takes finalized statement `credit_amount` entitlements + settlement policy → root + proofs per claimant | Not Started | 2   | (create at start) |

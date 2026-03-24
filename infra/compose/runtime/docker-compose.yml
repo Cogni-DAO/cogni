@@ -69,7 +69,9 @@ services:
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
       # TigerBeetle (Financial Ledger) — optional, native client requires IP (no DNS).
       # Static IP assigned via ipam on internal network.
-      - TIGERBEETLE_ADDRESS=10.100.0.100:3002
+      # DISABLED: TB OOM-crashes on low-memory VMs; native client floods ~36M stderr lines/day to Loki (bug.0195)
+      # Re-enable when TB is provisioned with ≥2GiB and confirmed healthy.
+      # - TIGERBEETLE_ADDRESS=10.100.0.100:3002
       # Privy (Operator Wallet) — optional, silently skipped if missing
       - PRIVY_APP_ID
       - PRIVY_APP_SECRET
@@ -559,11 +561,14 @@ services:
   # Per financial-ledger-spec: double-entry ledger engine
   # Self-initializing: formats data file on first boot, then starts.
   # Optional — app gracefully handles absence (FinancialLedgerPort | undefined).
+  # Opt-in via --profile tigerbeetle (requires ≥2GiB RAM for journal mmap). See bug.0195.
   # =============================================================================
 
   tigerbeetle:
     image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
+    profiles: [tigerbeetle]
     restart: unless-stopped
+    mem_limit: 2g
     cap_add:
       - IPC_LOCK
     security_opt:
