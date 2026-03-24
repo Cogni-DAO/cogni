@@ -18,6 +18,7 @@
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { createActivities } from "./activities/index.js";
+import { createReviewActivities } from "./activities/review.js";
 import { createContainer } from "./bootstrap/container.js";
 import type { Env } from "./bootstrap/env.js";
 import { logWorkerEvent, WORKER_EVENT_NAMES } from "./observability/index.js";
@@ -58,7 +59,7 @@ export async function startSchedulerWorker(
   const container = createContainer(env, logger);
 
   // Create activities with injected deps (typed against ports)
-  const activities = createActivities({
+  const graphActivities = createActivities({
     grantAdapter: container.grantAdapter,
     runAdapter: container.runAdapter,
     config: container.config,
@@ -66,15 +67,31 @@ export async function startSchedulerWorker(
       container.logger.child?.({ component: "activities" }) ?? container.logger,
   });
 
+  // Create review activities (GitHub API for PR review workflow)
+  const reviewActivities =
+    env.GH_REVIEW_APP_ID && env.GH_REVIEW_APP_PRIVATE_KEY_BASE64
+      ? createReviewActivities({
+          ghAppId: env.GH_REVIEW_APP_ID,
+          ghPrivateKey: Buffer.from(
+            env.GH_REVIEW_APP_PRIVATE_KEY_BASE64,
+            "base64"
+          ).toString("utf-8"),
+          logger:
+            container.logger.child?.({ component: "review-activities" }) ??
+            container.logger,
+        })
+      : {};
+
   // Create Temporal Worker
-  // Note: workflowsPath points to the compiled workflow file
   const worker = await Worker.create({
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: env.TEMPORAL_TASK_QUEUE,
-    workflowsPath: new URL("./workflows/graph-run.workflow.js", import.meta.url)
-      .pathname,
-    activities,
+    workflowsPath: new URL(
+      "./workflows/scheduler-workflows.js",
+      import.meta.url
+    ).pathname,
+    activities: { ...graphActivities, ...reviewActivities },
   });
 
   logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {

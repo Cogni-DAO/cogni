@@ -697,6 +697,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         ok: true,
         runId,
         traceId,
+        ...(final.structuredOutput !== undefined && {
+          structuredOutput: final.structuredOutput,
+        }),
       };
       return NextResponse.json(successResponse, { status: 200 });
     } else {

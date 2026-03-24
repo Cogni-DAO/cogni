@@ -13,6 +13,7 @@
  *   - CALLER_PROVIDED_RUN_ID: accepts optional runId from caller for cross-system correlation (falls back to uuid4)
  *   - CONDITIONAL_GRANT_VALIDATION: skips validateGrantActivity when executionGrantId is null (API-triggered runs)
  *   - CONVERGED_FINALIZE: all terminal paths go through updateGraphRunActivity
+ *   - TYPED_TERMINAL_ARTIFACT: returns small typed result {ok, runId, structuredOutput} for parent workflow composition
  * Side-effects: none (deterministic orchestration only)
  * Links: docs/spec/unified-graph-launch.md, docs/spec/temporal-patterns.md
  * @internal
@@ -22,6 +23,18 @@ import { proxyActivities, uuid4, workflowInfo } from "@temporalio/workflow";
 
 import type { Activities } from "../activities/index.js";
 import { GRAPH_EXECUTION_ACTIVITY_OPTIONS } from "./activity-profiles.js";
+
+/**
+ * Terminal artifact returned by GraphRunWorkflow.
+ * Small typed result for parent workflow composition — NOT raw stream/transcript data.
+ * Redis/SSE remain the observability transport.
+ */
+export interface GraphRunResult {
+  ok: boolean;
+  runId: string;
+  /** Structured output from graph (when responseFormat was provided). */
+  structuredOutput?: unknown;
+}
 
 // Short timeout for metadata activities (grant validation, run record CRUD).
 const {
@@ -86,7 +99,7 @@ export interface GraphRunWorkflowInput {
  */
 export async function GraphRunWorkflow(
   input: GraphRunWorkflowInput
-): Promise<void> {
+): Promise<GraphRunResult> {
   const {
     graphId,
     executionGrantId,
@@ -140,7 +153,7 @@ export async function GraphRunWorkflow(
         triggerSource,
         triggerRef,
         requestedBy,
-        dbScheduleId,
+        dbScheduleId: dbScheduleId ?? undefined,
         scheduledFor,
         stateKey,
       });
@@ -149,7 +162,7 @@ export async function GraphRunWorkflow(
         status: "skipped",
         errorMessage: "Grant validation failed",
       });
-      return;
+      return { ok: false, runId };
     }
   }
 
@@ -161,7 +174,7 @@ export async function GraphRunWorkflow(
     triggerSource,
     triggerRef,
     requestedBy,
-    dbScheduleId,
+    dbScheduleId: dbScheduleId ?? undefined,
     scheduledFor,
     stateKey,
   });
@@ -187,6 +200,13 @@ export async function GraphRunWorkflow(
         status: "success",
         traceId: result.traceId,
       });
+      return {
+        ok: true,
+        runId,
+        ...(result.structuredOutput !== undefined && {
+          structuredOutput: result.structuredOutput,
+        }),
+      };
     } else {
       await updateGraphRunActivity({
         runId,
@@ -195,6 +215,7 @@ export async function GraphRunWorkflow(
         errorMessage: result.errorCode ?? "Graph execution failed",
         errorCode: result.errorCode,
       });
+      return { ok: false, runId };
     }
   } catch (error) {
     // Activity threw — CONVERGED_FINALIZE: mark as error
