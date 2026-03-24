@@ -2,7 +2,7 @@
 id: task.0191
 type: task
 title: "PR review webhook → Temporal parent workflow with durable GitHub writes"
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 2
 estimate: 5
@@ -14,7 +14,7 @@ spec_refs:
 assignees: []
 project: proj.unified-graph-launch
 branch: task-0191-webhook-temporal-alignment
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/618
 reviewer:
 revision: 2
 blocked_by: []
