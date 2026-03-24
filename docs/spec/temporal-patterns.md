@@ -275,10 +275,10 @@ The boundary between LangGraph and Temporal is **durability**, not intelligence.
 
 #### Rule of thumb
 
-| Step type | Owner |
-|---|---|
-| Thinking, evaluating, gathering | LangGraph |
-| Committing, notifying, mutating, coordinating | Temporal |
+| Step type                                     | Owner     |
+| --------------------------------------------- | --------- |
+| Thinking, evaluating, gathering               | LangGraph |
+| Committing, notifying, mutating, coordinating | Temporal  |
 
 **Hard rule:** Reads may live in graphs. Writes that matter live behind Temporal unless explicitly best-effort and disposable.
 
@@ -296,6 +296,7 @@ webhook route (fire-and-forget)
 ```
 
 **Key constraints:**
+
 - Webhook handler starts the workflow and exits immediately — no blocking Next.js on Redis/SSE
 - Graph returns a **pure structured decision artifact**, not side effects
 - The write activity (post comment, create issue, send notification) is a Temporal activity with idempotency key (e.g., `${repo}/${pr}/${headSha}/${reviewType}`)

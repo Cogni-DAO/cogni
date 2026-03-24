@@ -1,13 +1,13 @@
 ---
 id: task.0178
 type: task
-title: "Unified graph execution: delete old workflow, align webhook path, prune deprecated aliases"
-status: needs_implement
+title: "Delete old scheduled workflow, prune deprecated aliases, document LangGraph/Temporal boundary"
+status: needs_closeout
 priority: 0
 rank: 1
-estimate: 5
-summary: "BLOCKER: Delete GovernanceScheduledRunWorkflow (crashes scheduler-worker), refactor PR review webhook to use Temporal/GraphRunWorkflow (inline execution violates ONE_RUN_EXECUTION_PATH), remove deprecated schedule_runs aliases."
-outcome: Zero inline execution paths remain; all graph runs (chat, scheduled, webhook) go through GraphRunWorkflow via Temporal; deprecated aliases pruned; docs reflect as-built state
+estimate: 3
+summary: "Fix scheduler-worker crash — delete GovernanceScheduledRunWorkflow, remove 6 deprecated schedule_runs aliases, add LangGraph vs Temporal boundary guide to spec. Webhook alignment deferred to separate task."
+outcome: Scheduler-worker stops crashing; deprecated aliases removed; LangGraph/Temporal boundary documented; webhook alignment scoped as follow-up
 spec_refs:
   - spec.unified-graph-launch
 assignees: []
