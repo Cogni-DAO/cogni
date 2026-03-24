@@ -62,6 +62,17 @@ export interface GraphRunRequest {
     readonly prompt?: string;
     readonly schema: unknown;
   };
+  /**
+   * BYO-AI model connection — when set, the BYOExecutorDecorator routes this run
+   * through the user's own LLM subscription (e.g. ChatGPT) instead of platform LiteLLM.
+   * Graph identity stays the same; only the LLM backend changes.
+   */
+  readonly modelConnectionId?: string;
+  /**
+   * Tool connection references for grant intersection (future — tenant-connections P0).
+   * Not consumed by any adapter yet.
+   */
+  readonly toolConnectionIds?: readonly string[];
 }
 
 /**

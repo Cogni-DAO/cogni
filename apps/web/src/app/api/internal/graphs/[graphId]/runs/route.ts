@@ -493,10 +493,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       content: m.content,
     }));
     // Forward responseFormat if provided (enables structuredOutput in GraphRunResult).
-    // Zod schemas are not JSON-serializable, so callers pass responseFormat as a
-    // serializable { prompt, schema } object. The schema is passed through as-is
-    // to the graph executor which handles both Zod and plain objects.
     const responseFormat = resolveResponseFormat(input);
+    // Extract optional BYO-AI model connection from the opaque input payload
+    const modelConnectionId =
+      typeof input.modelConnectionId === "string"
+        ? input.modelConnectionId
+        : undefined;
 
     const result = scopedExecutor.runGraph(
       {
@@ -506,6 +508,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         model,
         ...(stateKey !== undefined && { stateKey }),
         ...(responseFormat !== undefined && { responseFormat }),
+        ...(modelConnectionId ? { modelConnectionId } : {}),
       },
       {
         actorUserId,

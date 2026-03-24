@@ -28,7 +28,7 @@ import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 import {
   BillingEnrichmentGraphExecutorDecorator,
   BillingGraphExecutorDecorator,
-  CodexGraphProvider,
+  BYOExecutorDecorator,
   type CompletionStreamFn,
   createLangGraphDevClient,
   InProcCompletionUnitAdapter,
@@ -42,6 +42,7 @@ import { runInScope } from "@/adapters/server/ai/execution-scope";
 import type {
   AiExecutionErrorCode,
   BillingContext,
+  ConnectionBrokerPort,
   GraphExecutorPort,
   PreflightCreditCheckFn,
 } from "@/ports";
@@ -93,7 +94,6 @@ export function createGraphExecutor(
         env.OPENCLAW_GATEWAY_TOKEN
       ),
     ],
-    ["codex", new CodexGraphProvider()],
   ]);
 
   // Create namespace router with all configured providers
@@ -113,11 +113,24 @@ export function createScopedGraphExecutor(params: {
   readonly billing: BillingContext;
   readonly preflightCheckFn: PreflightCreditCheckFn;
   readonly abortSignal?: AbortSignal;
+  readonly broker?: ConnectionBrokerPort;
 }): GraphExecutorPort {
   const container = getContainer();
 
+  // BYO decorator wraps the inner executor — if modelConnectionId is present,
+  // routes to ChatGPT backend; otherwise passes through to inner (LangGraph/LiteLLM).
+  // Stack ordering: BYO runs never reach the inner executor → no platform billing.
+  const innerWithByo = params.broker
+    ? new BYOExecutorDecorator(
+        params.executor,
+        params.broker,
+        params.billing.billingAccountId,
+        container.log
+      )
+    : params.executor;
+
   const enriched = new BillingEnrichmentGraphExecutorDecorator(
-    params.executor,
+    innerWithByo,
     params.billing
   );
 

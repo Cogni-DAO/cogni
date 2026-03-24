@@ -44,40 +44,6 @@ export const GET = wrapRouteHandlerWithLogging(
         providerKey: m.providerKey,
       }));
 
-      // Append Codex models (routed via OpenClaw gateway, not LiteLLM).
-      // Available when developer runs: pnpm codex:login && pnpm codex:seed
-      const codexModels: Model[] = [
-        {
-          id: "openai-codex/gpt-5.3-codex",
-          name: "Codex GPT-5.3",
-          isFree: false,
-          isZdr: false,
-          providerKey: "openai-codex",
-        },
-        {
-          id: "openai-codex/gpt-5.3-codex-spark",
-          name: "Codex GPT-5.3 Spark",
-          isFree: false,
-          isZdr: false,
-          providerKey: "openai-codex",
-        },
-        {
-          id: "openai-codex/gpt-4o",
-          name: "Codex GPT-4o",
-          isFree: false,
-          isZdr: false,
-          providerKey: "openai-codex",
-        },
-        {
-          id: "openai-codex/o4-mini",
-          name: "Codex o4-mini",
-          isFree: false,
-          isZdr: false,
-          providerKey: "openai-codex",
-        },
-      ];
-      contractModels.push(...codexModels);
-
       const responseData = {
         models: contractModels,
         defaultPreferredModelId: defaults.defaultPreferredModelId,

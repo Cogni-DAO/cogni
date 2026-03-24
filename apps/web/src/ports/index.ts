@@ -74,6 +74,10 @@ export type {
 } from "./billing-context";
 export type { Clock } from "./clock.port";
 export type {
+  ConnectionBrokerPort,
+  ResolvedConnection,
+} from "./connection-broker.port";
+export type {
   GovernanceRun,
   GovernanceStatusPort,
   UpcomingRun,

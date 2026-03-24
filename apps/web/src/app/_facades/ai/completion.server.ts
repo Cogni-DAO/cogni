@@ -109,6 +109,8 @@ export interface CompletionInput {
   stateKey?: string;
   /** Idempotency key for workflow start dedupe */
   idempotencyKey?: string;
+  /** BYO-AI model connection — routes LLM calls through user's subscription */
+  modelConnectionId?: string;
 }
 
 function toDeterministicRunId(seed: string): string {
@@ -359,6 +361,9 @@ export async function completionStream(
             actorUserId: input.sessionUser.id,
             billingAccountId: billingAccount.id,
             virtualKeyId: billingAccount.defaultVirtualKeyId,
+            ...(input.modelConnectionId
+              ? { modelConnectionId: input.modelConnectionId }
+              : {}),
           },
           runKind: "user_immediate" as const,
           triggerSource: "api",

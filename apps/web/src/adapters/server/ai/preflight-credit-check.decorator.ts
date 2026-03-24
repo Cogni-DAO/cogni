@@ -47,13 +47,11 @@ export class PreflightCreditCheckDecorator implements GraphExecutorPort {
   runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
     const result = this.inner.runGraph(req, ctx);
 
-    // Skip credit check for Codex graphs — they use the user's ChatGPT subscription,
-    // not platform credits. Codex billing is handled by OpenAI, not our ledger.
-    if (req.graphId.startsWith("codex:")) {
-      return result;
-    }
-
     // Start credit check eagerly (runs in parallel with any sync setup)
+    // Note: BYO-AI runs with modelConnectionId are handled by BYOExecutorDecorator
+    // inside this decorator's inner chain — they never reach the platform executor,
+    // so no usage_report events are emitted and no credits are consumed.
+    // No explicit bypass needed — stack ordering handles BYO billing naturally.
     const checkPromise = this.checkFn(
       this.billingAccountId,
       req.model,

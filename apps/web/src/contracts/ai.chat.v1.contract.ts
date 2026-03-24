@@ -86,6 +86,11 @@ export const AssistantUiInputSchema = z.object({
     .max(MAX_STATE_KEY_CHARS)
     .regex(STATE_KEY_SAFE_PATTERN, "stateKey must contain only safe characters")
     .optional(),
+  /**
+   * BYO-AI model connection — when set, the run uses the user's own LLM subscription
+   * (e.g. ChatGPT) instead of platform LiteLLM/OpenRouter. UUID of a connections row.
+   */
+  modelConnectionId: z.string().uuid().optional(),
 });
 
 export const aiChatOperation = {

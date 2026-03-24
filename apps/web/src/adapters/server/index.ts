@@ -33,8 +33,8 @@ export { NamespaceGraphRouter } from "./ai/aggregating-executor";
 export { BillingEnrichmentGraphExecutorDecorator } from "./ai/billing-enrichment.decorator";
 // Billing decorator for automatic billing enforcement at port level
 export { BillingGraphExecutorDecorator } from "./ai/billing-executor.decorator";
-// Codex-native provider (ChatGPT subscription via SDK)
-export { CODEX_PROVIDER_ID, CodexGraphProvider } from "./ai/codex";
+// BYO-AI executor decorator — routes to user's LLM subscription when modelConnectionId present
+export { BYOExecutorDecorator } from "./ai/byo-executor.decorator";
 export {
   type CompletionStreamFn,
   type CompletionStreamParams,
@@ -84,6 +84,14 @@ export {
   type LangfuseAdapterConfig,
   type LangfuseSpanHandle,
 } from "./ai-telemetry/langfuse.adapter";
+// Connection broker adapter
+export {
+  ConnectionDecryptionError,
+  ConnectionNotFoundError,
+  DrizzleConnectionBrokerAdapter,
+  type DrizzleConnectionBrokerConfig,
+  type TokenRefreshFn,
+} from "./connections/drizzle-broker.adapter";
 export { type Database, getAppDb } from "./db/client";
 export { DrizzleGovernanceStatusAdapter } from "./governance/drizzle-governance-status.adapter";
 export {
