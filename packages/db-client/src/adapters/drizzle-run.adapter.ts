@@ -265,6 +265,3 @@ export class DrizzleGraphRunAdapter implements GraphRunRepository {
     };
   }
 }
-
-/** @deprecated Use DrizzleGraphRunAdapter */
-export const DrizzleScheduleRunAdapter = DrizzleGraphRunAdapter;

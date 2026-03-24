@@ -77,20 +77,18 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 | **Neutral usage facts** — split wrapper composition and remove billing identity from usage facts     | Done           | 2   | task.0180 |
 | **Unified streaming API** — chat endpoint → Temporal + Redis + idempotency                           | In Review      | 5   | task.0177 |
 | **Run stream reconnection** — GET /api/v1/ai/runs/{runId}/stream with Last-Event-ID replay           | In Review      | 2   | task.0182 |
-| **Scheduled run migration + observability + docs** — migrate scheduled runs, instrumentation, docs   | Not Started    | 3   | task.0178 |
+| **Delete old workflow + prune aliases + LangGraph/Temporal boundary doc**                            | In Review      | 3   | task.0178 |
 
 **Note:** When `graph_runs` exists, reconciler can optionally switch reference-set from LiteLLM spend/logs to `graph_runs`, but it is not required. The LiteLLM API approach remains valid long-term.
 
-### Run (P2): Webhook Triggers + Execution Host Evolution (Conditional)
+### Run (P2): Webhook Alignment + Execution Host Evolution
 
-**Goal:** Webhook-triggered graph runs via same unified path. Evaluate worker-local execution.
+**Goal:** Webhook-triggered graph runs via Temporal parent workflow pattern. Evaluate worker-local execution.
 
-| Deliverable                                                                   | Status      | Est | Work Item |
-| ----------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Evaluate: Is there a high-value webhook trigger (CI failure, deploy failure)? | Not Started | 1   | —         |
-| If yes: Implement single webhook handler using same workflow path             | Not Started | 2   | —         |
-| Do NOT build generic webhook/event system preemptively                        | Not Started | 0   | —         |
-| **Spike: Worker-local execution** — evaluate eliminating internal API hop     | Not Started | 2   | task.0181 |
+| Deliverable                                                                 | Status      | Est | Work Item |
+| --------------------------------------------------------------------------- | ----------- | --- | --------- |
+| **PR review webhook → Temporal parent workflow** with durable GitHub writes | Not Started | 5   | task.0191 |
+| **Spike: Worker-local execution** — evaluate eliminating internal API hop   | Not Started | 2   | task.0181 |
 
 ## Constraints
 

@@ -18,15 +18,7 @@
 import type { ActorId } from "@cogni/ids";
 
 // Re-export types for adapter convenience
-/** @deprecated Use GraphRun */
-/** @deprecated Use GraphRunStatus */
-export type {
-  GraphRun,
-  GraphRunKind,
-  GraphRunStatus,
-  ScheduleRun,
-  ScheduleRunStatus,
-} from "../types";
+export type { GraphRun, GraphRunKind, GraphRunStatus } from "../types";
 
 // Import for local use in interface
 import type { GraphRun, GraphRunKind, GraphRunStatus } from "../types";
@@ -108,6 +100,3 @@ export interface GraphRunRepository {
     }
   ) => Promise<GraphRun[]>;
 }
-
-/** @deprecated Use GraphRunRepository */
-export type ScheduleRunRepository = GraphRunRepository;

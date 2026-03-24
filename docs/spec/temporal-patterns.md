@@ -5,11 +5,11 @@ title: Temporal Patterns
 status: active
 spec_state: draft
 trust: draft
-summary: Temporal workflow/activity patterns — determinism rules, schedule configuration, anti-patterns, and infrastructure layout for governance and scheduler namespaces.
+summary: Temporal workflow/activity patterns — determinism rules, LangGraph vs Temporal boundary, schedule configuration, anti-patterns, and infrastructure layout.
 read_when: Writing Temporal workflows or activities, configuring schedules, or debugging replay issues.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-03-09
+verified: 2026-03-24
 tags: [ai-graphs, infra]
 ---
 
@@ -254,6 +254,65 @@ export const EXTERNAL_API_ACTIVITY_OPTIONS: ActivityOptions = {
   },
 };
 ```
+
+### LangGraph vs Temporal Boundary
+
+The boundary between LangGraph and Temporal is **durability**, not intelligence.
+
+#### LangGraph owns: in-run intelligence and dataflow
+
+- LLM calls, tool usage, nested graphs, branching
+- Retries local to the reasoning loop
+- State transforms, read-side API fetches
+- Anything safely recomputable
+
+#### Temporal owns: durable orchestration boundaries
+
+- Webhook/schedule/user triggers (entry points)
+- Long waits, cross-step coordination, human approval
+- Idempotency keys, resume-after-crash
+- Externally visible writes that must not be lost or duplicated
+
+#### Rule of thumb
+
+| Step type                                     | Owner     |
+| --------------------------------------------- | --------- |
+| Thinking, evaluating, gathering               | LangGraph |
+| Committing, notifying, mutating, coordinating | Temporal  |
+
+**Hard rule:** Reads may live in graphs. Writes that matter live behind Temporal unless explicitly best-effort and disposable.
+
+#### Pattern: Webhook → Parent Workflow → Graph Child → Write Activity
+
+For webhook-triggered graph execution (e.g., PR review, deploy analysis):
+
+```
+webhook route (fire-and-forget)
+  → start PrReviewWorkflow (Temporal parent)
+    → Activity: fetch_pr_context (read — could be in graph, but Temporal gives retry)
+    → executeChild: GraphRunWorkflow(pr-review) (LangGraph decision)
+      → graph returns structured artifact: {verdict, summary, fileComments}
+    → Activity: post_review_comment (durable write — idempotent via repo/pr/sha key)
+```
+
+**Key constraints:**
+
+- Webhook handler starts the workflow and exits immediately — no blocking Next.js on Redis/SSE
+- Graph returns a **pure structured decision artifact**, not side effects
+- The write activity (post comment, create issue, send notification) is a Temporal activity with idempotency key (e.g., `${repo}/${pr}/${headSha}/${reviewType}`)
+- `graph_runs` records the child GraphRunWorkflow for dashboard observability
+- Retries on the write activity do not double-post
+
+#### Anti-pattern: inline graph execution in HTTP handlers
+
+```typescript
+// BAD: webhook handler runs graph inline, posts comment inline
+const result = executor.runGraph({ graphId: "pr-review", ... });
+for await (const _event of result.stream) { /* drain */ }
+await postComment(result); // no idempotency, no crash recovery
+```
+
+This violates ONE_RUN_EXECUTION_PATH. The graph run is invisible to the dashboard, has no `graph_runs` record, and the write has no crash recovery or idempotency.
 
 ### Anti-Patterns
 

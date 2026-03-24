@@ -62,7 +62,4 @@ export type {
   GraphRunKind,
   GraphRunRepository,
   GraphRunStatus,
-  ScheduleRun,
-  ScheduleRunRepository,
-  ScheduleRunStatus,
 } from "./schedule-run.port";

@@ -51,12 +51,6 @@ export const GRAPH_RUN_STATUSES = [
 
 export type GraphRunStatus = (typeof GRAPH_RUN_STATUSES)[number];
 
-/** @deprecated Use GRAPH_RUN_STATUSES — alias kept for migration period */
-export const SCHEDULE_RUN_STATUSES = GRAPH_RUN_STATUSES;
-
-/** @deprecated Use GraphRunStatus — alias kept for migration period */
-export type ScheduleRunStatus = GraphRunStatus;
-
 /**
  * Graph run kind — how the run was triggered.
  * Per SINGLE_RUN_LEDGER: all triggers produce the same run record shape.
@@ -225,9 +219,6 @@ export const graphRuns = pgTable(
     ),
   })
 ).enableRLS();
-
-/** @deprecated Use graphRuns — alias kept for migration period */
-export const scheduleRuns = graphRuns;
 
 /**
  * Execution requests - idempotency layer for graph execution via internal API.
