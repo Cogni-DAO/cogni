@@ -112,7 +112,7 @@ const MAX_TOTAL_PATCH_BYTES = 500_000;
 const MAX_FILES_WITH_PATCHES = 30;
 
 // ---------------------------------------------------------------------------
-// Octokit factory
+// Octokit factory + helpers
 // ---------------------------------------------------------------------------
 
 function createOctokit(
@@ -127,6 +127,32 @@ function createOctokit(
       installationId,
     },
   });
+}
+
+/** Fetch a file from a GitHub repo as raw text. Handles both raw and base64 responses. */
+async function fetchRepoFile(
+  octokit: Octokit,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string
+): Promise<string> {
+  const response = await octokit.request(
+    "GET /repos/{owner}/{repo}/contents/{path}",
+    {
+      owner,
+      repo,
+      path,
+      ref,
+      headers: { accept: "application/vnd.github.raw+json" },
+    }
+  );
+  return typeof response.data === "string"
+    ? response.data
+    : Buffer.from(
+        (response.data as { content?: string }).content ?? "",
+        "base64"
+      ).toString("utf-8");
 }
 
 // ---------------------------------------------------------------------------
@@ -220,25 +246,13 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
     // Fetch repo-spec from target repo (base branch)
     let repoSpecYaml: string;
     try {
-      const specResponse = await octokit.request(
-        "GET /repos/{owner}/{repo}/contents/{path}",
-        {
-          owner: input.owner,
-          repo: input.repo,
-          path: ".cogni/repo-spec.yaml",
-          ref: pr.base.ref,
-          headers: { accept: "application/vnd.github.raw+json" },
-        }
+      repoSpecYaml = await fetchRepoFile(
+        octokit,
+        input.owner,
+        input.repo,
+        ".cogni/repo-spec.yaml",
+        pr.base.ref
       );
-      // With raw accept header, data is the file content as string
-      repoSpecYaml =
-        typeof specResponse.data === "string"
-          ? specResponse.data
-          : // Fallback: if returned as object with content field (base64-encoded)
-            Buffer.from(
-              (specResponse.data as { content?: string }).content ?? "",
-              "base64"
-            ).toString("utf-8");
     } catch {
       // No repo-spec — return empty gates
       return {
@@ -274,23 +288,13 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
         const ruleFile = gate.with.rule_file as string;
         if (!rules[ruleFile]) {
           try {
-            const ruleResponse = await octokit.request(
-              "GET /repos/{owner}/{repo}/contents/{path}",
-              {
-                owner: input.owner,
-                repo: input.repo,
-                path: `.cogni/rules/${ruleFile}`,
-                ref: pr.base.ref,
-                headers: { accept: "application/vnd.github.raw+json" },
-              }
+            const ruleYaml = await fetchRepoFile(
+              octokit,
+              input.owner,
+              input.repo,
+              `.cogni/rules/${ruleFile}`,
+              pr.base.ref
             );
-            const ruleYaml =
-              typeof ruleResponse.data === "string"
-                ? ruleResponse.data
-                : Buffer.from(
-                    (ruleResponse.data as { content?: string }).content ?? "",
-                    "base64"
-                  ).toString("utf-8");
             rules[ruleFile] = parseRule(ruleYaml);
           } catch (error) {
             logger.warn(
