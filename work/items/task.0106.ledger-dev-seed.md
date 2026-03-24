@@ -2,7 +2,7 @@
 id: task.0106
 type: task
 title: "Dev seed script for governance epoch UI visual testing"
-status: needs_merge
+status: done
 priority: 1
 rank: 99
 estimate: 2
@@ -19,7 +19,7 @@ revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-02-24
-updated: 2026-03-01
+updated: 2026-03-24
 labels: [governance, dx, seed]
 external_refs:
 ---

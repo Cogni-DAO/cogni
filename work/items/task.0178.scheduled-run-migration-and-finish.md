@@ -2,7 +2,7 @@
 id: task.0178
 type: task
 title: "Delete old scheduled run path, prune dead tables, observability + documentation finish"
-status: needs_design
+status: done
 priority: 0
 rank: 1
 estimate: 3

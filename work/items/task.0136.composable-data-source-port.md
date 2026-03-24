@@ -2,7 +2,7 @@
 id: task.0136
 type: task
 title: "Composable DataSource registration: unified poll + webhook ingestion"
-status: needs_merge
+status: done
 priority: 1
 rank: 10
 estimate: 3
@@ -20,7 +20,7 @@ revision: 5
 blocked_by:
 deploy_verified: false
 created: 2026-03-05
-updated: 2026-03-07
+updated: 2026-03-24
 labels: [architecture, attribution, ingestion]
 external_refs:
 ---

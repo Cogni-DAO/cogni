@@ -2,7 +2,7 @@
 id: bug.0146
 type: bug
 title: "Epoch transition deadlock: grace period prevents new epoch creation, halting all collection"
-status: needs_merge
+status: done
 priority: 0
 rank: 1
 estimate: 2
@@ -20,7 +20,7 @@ revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-09
-updated: 2026-03-10
+updated: 2026-03-24
 labels: [attribution, scheduler, p0-outage]
 external_refs:
 ---

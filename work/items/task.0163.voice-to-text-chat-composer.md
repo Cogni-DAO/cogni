@@ -2,7 +2,7 @@
 id: task.0163
 type: task
 title: Add voice-to-text input to chat composer
-status: needs_merge
+status: done
 priority: 1
 rank: 99
 estimate: 3
@@ -19,7 +19,7 @@ revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-13
-updated: 2026-03-13
+updated: 2026-03-24
 labels: [ai, ui]
 external_refs:
 ---
