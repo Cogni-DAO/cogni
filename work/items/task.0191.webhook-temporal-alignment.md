@@ -2,7 +2,7 @@
 id: task.0191
 type: task
 title: "PR review webhook → Temporal parent workflow with durable GitHub writes"
-status: needs_closeout
+status: needs_implement
 priority: 1
 rank: 2
 estimate: 5
@@ -16,7 +16,7 @@ project: proj.unified-graph-launch
 branch: task-0191-webhook-temporal-alignment
 pr:
 reviewer:
-revision: 1
+revision: 2
 blocked_by: []
 deploy_verified: false
 created: 2026-03-24
@@ -172,6 +172,21 @@ pnpm test
 - [ ] **Spec:** LangGraph/Temporal boundary per temporal-patterns guide
 - [ ] **Tests:** workflow, activities, and webhook dispatch tested
 - [ ] **Reviewer:** assigned and approved
+
+## Review Feedback (revision 2)
+
+**Blocking — must fix before merge:**
+
+1. **`route.ts:468-475` — `responseFormat` not forwarded to `runGraph()`**. The internal API route does not pass `responseFormat` from the input payload to the graph executor. Without this, `structuredOutput` will always be `undefined`, making parent-child workflow composition non-functional. Fix: add `responseFormat` parsing + forwarding in the `runGraph()` call.
+
+2. **`review.ts:301-326` — JSON Schema vs Zod schema format**. The activity builds `responseFormat` as a raw JSON Schema object, but the existing inline path (`ai-rule.ts:85-90`) passes a Zod schema. Verify the executor accepts both, or use the same Zod schema approach (import `EvaluationOutputSchema` from the feature layer or duplicate in domain module).
+
+**Non-blocking suggestions:**
+
+- Remove dead IIFE at `review.ts:370-377` (DAO config extraction always returns undefined)
+- Cache Octokit per installationId in activity factory closure
+- Add test for `evaluateGraphResult` bridge function
+- Remove env var check in `dispatch.server.ts:44-50` (worker owns cred validation now)
 
 ## PR / Links
 
