@@ -1,14 +1,14 @@
 ---
 id: task.0192
 type: task
-title: "v1: Per-tenant BYO-AI — connectionId + credential broker + app-server"
+title: "v1: Per-tenant BYO-AI — ConnectionBrokerPort + BYO completion backend"
 status: needs_implement
 priority: 2
 rank: 15
 estimate: 5
-summary: "Profile page 'Connect ChatGPT' button triggers OAuth PKCE flow, stores encrypted tokens in provider_credentials table. Credential broker resolves connectionId to tokens. Codex app-server sidecar with chatgptAuthTokens for multi-tenant execution."
-outcome: "Any authenticated user can link their ChatGPT account on the profile page, select Codex graphs in chat, and run AI at $0 using their own subscription. connectionId abstraction keeps the graph executor storage-agnostic."
-spec_refs: []
+summary: "Profile page 'Connect ChatGPT' OAuth stores credentials in connections table. ConnectionBrokerPort resolves credentials. BYOExecutorDecorator intercepts graph execution when modelConnectionId is present, routing LLM completions through user's ChatGPT subscription instead of LiteLLM."
+outcome: "Any Cogni graph can run on the user's ChatGPT subscription instead of platform LiteLLM/OpenRouter. Graph identity orthogonal to LLM backend. ConnectionBrokerPort is the unified credential resolution path for BYO provider auth and future tool auth."
+spec_refs: [spec.tenant-connections]
 assignees: [derekg1729]
 credit:
 project: proj.byo-ai
@@ -16,11 +16,11 @@ branch: feat/byo-ai-per-tenant
 pr:
 reviewer:
 created: 2026-03-23
-updated: 2026-03-22
+updated: 2026-03-24
 labels: [ai, oauth, byo-ai, codex, multi-tenant]
 external_refs:
   - docs/research/openai-oauth-byo-ai.md
-revision: 2
+revision: 5
 blocked_by: [task.0191]
 deploy_verified: false
 ---
@@ -29,153 +29,238 @@ deploy_verified: false
 
 ### Outcome
 
-Authenticated users can connect their ChatGPT subscription via a "Link" button on the profile page, then select Codex graphs in the chat UI and execute AI using their own subscription at $0 marginal cost.
+Any Cogni graph can run on either the platform LLM backend (LiteLLM/OpenRouter) or the user's own ChatGPT subscription. The user links their ChatGPT account on the profile page; when they chat, LLM completions route through their subscription at $0 platform cost.
+
+### Important Distinction: LLM Provider vs External Agent Runtime
+
+**"Codex" means two different things:**
+
+| Concept                            | What it is                                                                                   | BYO-AI scope?         |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- | --------------------- |
+| **Codex as LLM OAuth provider**    | ChatGPT subscription tokens powering LLM completions (GPT-5.x models via Responses API)      | Yes — this task       |
+| **Codex as external coding agent** | Full Codex agent runtime (sandbox, CLI, file changes, approvals, MCP) spawned as a container | No — separate problem |
+
+BYO-AI is about the first one: using ChatGPT subscription tokens as an alternative LLM completion backend for Cogni's own graphs. The graph logic (nodes, tools, state) still runs in our LangGraph runtime — only the LLM calls route differently.
+
+Spawning external Codex agent containers is a separate capability (like `sandbox:` graphs with OpenClaw). Not in scope here.
+
+### Solution: Typed Connection References + BYO Decorator
+
+```
+User selects graph "poet"
+  |
+  +-- modelConnectionId in request? ──YES──> BYOExecutorDecorator
+  |                                           |
+  |                                           v
+  |                                    broker.resolve(modelConnectionId)
+  |                                           |
+  |                                           v
+  |                                    ChatGPT completion backend
+  |                                    (Codex Responses API, user's sub)
+  |                                    $0 platform cost
+  |
+  +-- no modelConnectionId ──────────> Standard executor
+                                        |
+                                        v
+                                       LiteLLM -> OpenRouter
+                                       Platform credits consumed
+```
+
+### Typed Connection References (not plural connectionIds)
+
+Per external review: `connectionIds: string[]` is under-specified. A run may need a **model connection** (which LLM backend) AND **tool connections** (GitHub token for code search). These are different types with different resolution semantics.
+
+```ts
+interface GraphRunRequest {
+  // ...existing fields...
+  readonly modelConnectionId?: string; // BYO LLM backend
+  readonly toolConnectionIds?: readonly string[]; // tool credentials (future, for grant intersection)
+}
+```
+
+- `BYOExecutorDecorator` reads `modelConnectionId` for backend selection
+- `toolRunner` reads `toolConnectionIds` for grant intersection (future)
+- No ambiguity between "which LLM" and "which tool credentials"
+
+### Credit Check: No Bypass Needed
+
+The decorator stack order eliminates the need for special BYO bypass logic:
+
+```
+ObservabilityDecorator
+  -> BillingDecorator
+    -> PreflightCreditCheckDecorator
+      -> BYOExecutorDecorator              <-- if BYO, handles here
+        -> inner executor (LangGraph)      <-- only reached for platform runs
+```
+
+If the BYOExecutorDecorator handles the run, it never reaches the inner platform executor. No platform `usage_report` events are emitted, so no credits are consumed. The credit check still validates the user has an account (good), but billing only charges when the inner executor actually runs. No bypass flag, no prefix check — just stack ordering.
+
+### Execution Backend: `codex exec` Subprocess (Proven)
+
+v0 proved `codex exec` subprocess works end-to-end. The app-server `chatgptAuthTokens` mode is unvalidated, marked `[UNSTABLE]`, and adds sidecar lifecycle complexity. Skip it for v1.
+
+**Per-request `codex exec` subprocess**: The `BYOExecutorDecorator` resolves credentials via broker, writes a temp `auth.json` in a temp dir (adapter-internal detail behind the broker port), sets `CODEX_HOME` env var, spawns `codex exec`, streams events, cleans up. Naturally isolated per-request — no shared state, no multiplexing concerns.
+
+**~2s cold start** per execution. Acceptable for v1. If it becomes a bottleneck, the adapter can be swapped to app-server or a pool — same broker, same decorator, same port. Adapter-internal change only.
 
 ### Approach
 
-**Solution**: Three-layer architecture — (1) OAuth + encrypted credential storage, (2) credential broker that resolves a `connectionId` to live tokens, (3) Codex app-server sidecar using `chatgptAuthTokens` auth mode for runtime execution.
-
-The graph executor receives a `connectionId` (opaque reference to a `provider_credentials` row), never raw tokens. The credential broker handles decryption and refresh. The Codex adapter receives resolved tokens from the broker and supplies them to the app-server via the `account/login/start` JSON-RPC method with `type: "chatgptAuthTokens"`. When the app-server needs a token refresh (401), it sends a `chatgptAuthTokens/refresh` request — the host (our adapter) responds by refreshing via `@mariozechner/pi-ai/oauth` and persisting the new tokens.
+**Solution**: (1) `connections` table + AEAD cipher (spec.tenant-connections). (2) `ConnectionBrokerPort` with typed `ResolvedConnection`. (3) `BYOExecutorDecorator` intercepts when `modelConnectionId` present, routes through `codex exec` subprocess with user's credentials. (4) Remove `codex:` namespace. (5) Profile page OAuth linking.
 
 **Reuses**:
 
-- Profile page `SettingRow` + `ConnectedBadge` components (same UX as GitHub/Discord/Google linking)
-- `@mariozechner/pi-ai/oauth` — `refreshOpenAICodexToken()` for token refresh (already a dependency)
-- OpenAI PKCE OAuth constants/flow from `scripts/dev/codex-login.mts` (same client ID, endpoints, scope)
-- Codex app-server protocol — `chatgptAuthTokens` auth mode (host-supplied tokens, in-memory only, host handles refresh)
-- Drizzle schema patterns from `packages/db-schema` (pgTable, RLS, check constraints)
+- `connections` table from spec.tenant-connections
+- Profile page `SettingRow` + `ConnectedBadge` (same UX as GitHub/Discord/Google)
+- `@mariozechner/pi-ai/oauth` — `refreshOpenAICodexToken()`
+- Existing decorator pattern (billing, observability, credit check)
+- v0-proven `codex exec` subprocess path (`@openai/codex-sdk`)
 
 **Rejected**:
 
-- **Temp auth.json + SDK env injection**: v0 hack. Writing per-user auth.json files and manipulating HOME is filesystem-based credential routing, not a real auth boundary. Doesn't scale to concurrent users. OpenAI's auth.json is for trusted private runners only.
-- **LiteLLM virtual keys**: Codex uses non-standard transport (WebSocket + Responses API to `chatgpt.com`), not OpenAI API. LiteLLM can't route Codex traffic.
-- **Token paste UX**: Poor UX, exposes raw tokens to clipboard, requires CLI access.
+- **Codex-specific graphs (`codex:poet`)**: Graph identity orthogonal to LLM backend. Killed.
+- **Untyped `connectionIds: string[]`**: Ambiguous. Use `modelConnectionId` + `toolConnectionIds` (typed, separate concerns).
+- **Credit bypass flag/prefix**: Stack ordering handles it. No special logic.
+- **App-server sidecar (`chatgptAuthTokens`)**: Unvalidated, marked `[UNSTABLE]`, adds sidecar lifecycle. `codex exec` subprocess is proven and naturally isolated. App-server is a future performance optimization, not v1.
+- **Adapter-inlined credential resolution**: Broker's job, not the executor adapter's.
 
-### Architecture
-
-```
-Profile (OAuth)          Credential Broker              Codex Adapter
-┌──────────────┐    ┌─────────────────────┐    ┌──────────────────────────┐
-│ Connect      │    │ CredentialBroker     │    │  CodexGraphProvider      │
-│ ChatGPT      │    │                     │    │                          │
-│   [Link]     │    │ resolve(connId):    │    │ 1. broker.resolve(connId)│
-│     │        │    │   → decrypt tokens  │    │ 2. app-server login      │
-│     ▼        │    │   → check expiry    │    │    { type: "chatgpt-     │
-│ OAuth PKCE   │    │   → refresh if stale│    │      AuthTokens",       │
-│ → callback   │    │   → persist refresh │    │      accessToken,       │
-│ → encrypt    │    │   → return tokens   │    │      chatgptAccountId } │
-│ → store row  │    │                     │    │ 3. turn/start(prompt)    │
-│ → connId     │    │ connectionId = row  │    │ 4. on 401 → broker      │
-│              │    │   ID in provider_   │    │    .refresh(connId)      │
-│              │    │   credentials table │    │    → respond to server   │
-└──────────────┘    └─────────────────────┘    └──────────────────────────┘
-                                                        │
-                                                        ▼
-                                                ┌──────────────────┐
-                                                │ codex app-server │
-                                                │ (WS sidecar)     │
-                                                │                  │
-                                                │ chatgptAuthTokens│
-                                                │ mode: host owns  │
-                                                │ tokens, in-memory│
-                                                │ only             │
-                                                └──────────────────┘
-```
-
-### Key Abstractions
-
-**`connectionId`**: Opaque string (the `provider_credentials.id`). Passed through `ExecutionContext` to the graph executor. The executor never sees raw tokens — it asks the broker.
-
-**`CredentialBrokerPort`**: Interface in `ports/`:
+### ConnectionBrokerPort
 
 ```ts
-interface CredentialBrokerPort {
-  resolve(connectionId: string): Promise<ResolvedCredential | null>;
-  refresh(connectionId: string): Promise<ResolvedCredential>;
+// src/ports/connection-broker.port.ts
+interface ConnectionBrokerPort {
+  resolve(
+    connectionId: string,
+    billingAccountId: string
+  ): Promise<ResolvedConnection>;
 }
 
-interface ResolvedCredential {
-  accessToken: string;
-  accountId: string;
-  expiresAt: Date;
+interface ResolvedConnection {
+  readonly connectionId: string;
+  readonly provider: string; // "openai-chatgpt", future: "anthropic", "google"
+  readonly credentialType: string; // "oauth2", "api_key", "app_password"
+  readonly credentials: {
+    readonly accessToken: string;
+    readonly refreshToken?: string;
+    readonly accountId?: string;
+  };
+  readonly expiresAt: Date | null;
+  readonly scopes: readonly string[];
 }
 ```
 
-**Codex app-server lifecycle**: Long-running WebSocket sidecar (`codex app-server --listen ws://127.0.0.1:PORT`). Per-user auth supplied via `account/login/start` JSON-RPC with `type: "chatgptAuthTokens"`. When the server gets a 401, it sends `chatgptAuthTokens/refresh` → our adapter calls `broker.refresh(connId)` → responds with fresh tokens.
+Used by:
 
-**Note on `chatgptAuthTokens` stability**: The protocol schema marks this as `[UNSTABLE] FOR OPENAI INTERNAL USE ONLY`. This is the same mode the VS Code extension uses. Risk accepted: we pin the Codex CLI version and can fall back to the v0 `codex exec` subprocess path per-invocation if this mode breaks. The fallback would use `CODEX_HOME` env var per-invocation (contained adapter detail, not product architecture).
+- `BYOExecutorDecorator` (this task) — model backend selection
+- `toolRunner.exec()` (future) — tool auth with grant intersection
+- Multi-provider BYO (future) — same port, different providers
 
-### Pre-Implementation Gates
+Adapter (`DrizzleConnectionBrokerAdapter`): SELECT -> tenant verify -> AEAD decrypt -> expiry check -> refresh if needed -> return. Provider-specific refresh logic (openai-chatgpt uses `refreshOpenAICodexToken`, future providers use their own refresh).
 
-1. **Redirect URI validation**: Test whether the public OAuth client ID (`app_EMoamEEZ73f0CkXaXp7hrann`) accepts non-localhost redirect URIs. If blocked:
-   - **Fallback A**: Device Code flow (`codex login --device-auth`) — requires user to enable in ChatGPT settings (beta)
-   - **Fallback B**: Popup relay — localhost callback + postMessage. Requires local Codex CLI.
+### Pre-Implementation Gate
 
-2. **App-server multi-session**: Verify that a single app-server instance can handle sequential `account/login/start` calls with different user tokens (one turn at a time, different users). If not, we need a pool of app-server instances or fall back to per-request `codex exec` subprocess.
+1. **Redirect URI**: Test public OAuth client ID with `redirect_uri=https://<our-domain>/api/v1/auth/openai-codex/callback`. If rejected, switch to Device Code flow. 30-minute spike — write a script, test, report.
+
+### Cleanup: Remove codex: Namespace
+
+- Remove `codex:poet` and `codex:spark` from graph catalog/picker
+- Remove `codex` namespace from `NamespaceGraphRouter`
+- Remove model validation skip for `codex:` in chat route
+- Remove `codex:` prefix check from `PreflightCreditCheckDecorator` (stack ordering replaces it)
 
 ### Invariants
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] CONNECTION_ID_ABSTRACTION: Graph executor receives `connectionId` via `ExecutionContext`, never raw tokens. Broker is the only component that decrypts.
-- [ ] TOKENS_ENCRYPTED_AT_REST: Access/refresh tokens in `provider_credentials` encrypted with AES-256-GCM using `PROVIDER_CREDENTIAL_KEY` env var. Never stored plaintext.
-- [ ] TOKENS_NEVER_LOGGED: Token values must never appear in logs, error messages, or API responses. Log `accountId` and `expiresAt` only.
-- [ ] HOST_MANAGED_REFRESH: Token refresh is host-driven — broker handles it on demand (pre-execution expiry check) and reactively (app-server `chatgptAuthTokens/refresh` request on 401).
-- [ ] CREDIT_CHECK_BYPASS_PRESERVED: `codex:` namespace continues to skip platform credit check (v0).
-- [ ] SAME_UX_PATTERN: Profile page "Connect ChatGPT" uses the same `SettingRow` + `ConnectedBadge` pattern as GitHub/Discord/Google.
-- [ ] ADAPTER_INTERNALS_CONTAINED: The choice of app-server vs subprocess is an adapter implementation detail. Product code deals only with `connectionId` and `CredentialBrokerPort`.
-- [ ] ARCHITECTURE_ALIGNMENT: Follows hexagonal patterns — broker is a port+adapter, graph executor depends on port only.
+- [ ] GRAPH_BACKEND_ORTHOGONAL: No codex-specific graphs. Any Cogni graph runs on any LLM backend. Backend = connection, not graph name.
+- [ ] LLM_PROVIDER_NOT_AGENT_RUNTIME: BYO-AI = ChatGPT subscription powering LLM completions. NOT spawning external Codex agent containers (that's a separate capability).
+- [ ] TYPED_CONNECTION_REFS: `modelConnectionId` for LLM backend, `toolConnectionIds` for tool auth. Not an untyped `connectionIds[]`.
+- [ ] BROKER_RESOLVES_ALL: ConnectionBrokerPort is the single credential resolution path. Adapters never do direct DB reads + decrypt.
+- [ ] CONNECTIONS_TABLE: Use `connections` table from spec.tenant-connections. (spec: spec.tenant-connections)
+- [ ] ENCRYPTED_AT_REST: AEAD encrypted JSON blob with AAD binding. (spec: spec.tenant-connections, invariant 4)
+- [ ] NO_CREDIT_BYPASS: Stack ordering handles BYO billing — no bypass flag or prefix check needed.
+- [ ] SUBPROCESS_PER_REQUEST: v1 uses `codex exec` subprocess (proven). Naturally isolated. App-server is a future optimization.
+- [ ] TOKENS_NEVER_LOGGED: Token values never in logs, error messages, or API responses.
+- [ ] TENANT_SCOPED: Connection rows belong to `billing_account_id`. (spec: spec.tenant-connections, invariant 3)
+- [ ] CONTRACT_FIRST: New API endpoints have Zod contracts. (spec: architecture)
+- [ ] DECORATOR_PATTERN: BYO backend selection is a decorator, not namespace routing.
 
 ### Files
 
-#### DB Schema & Migration
+#### connections table + AEAD cipher
 
-- Create: `packages/db-schema/src/provider-credentials.ts` — `provider_credentials` table: `id` (text PK), `user_id` (FK → users), `provider` (text, CHECK IN ('openai-codex')), `access_token_enc` (bytea), `refresh_token_enc` (bytea), `expires_at` (timestamp), `account_id` (text), `encryption_key_id` (text), `created_at`, `updated_at`. RLS enabled. UNIQUE(user_id, provider).
-- Modify: `packages/db-schema/src/index.ts` — export new table
-- Create: `scripts/migrations/XXXX_add_provider_credentials.sql` — DDL + RLS policies
+- Create: `packages/db-schema/src/connections.ts` — `connections` table per spec.tenant-connections schema. RLS enabled.
+- Modify: `packages/db-schema/src/index.ts` — export `connections`
+- Create: `scripts/migrations/XXXX_add_connections.sql` — DDL + RLS policies
+- Create: `apps/web/src/shared/crypto/aead.ts` — AEAD encrypt/decrypt (AES-256-GCM, nonce prepended, AAD binding)
 
-#### Credential Broker (Port + Adapter)
+#### ConnectionBrokerPort + Adapter
 
-- Create: `apps/web/src/ports/credential-broker.port.ts` — `CredentialBrokerPort` interface + `ResolvedCredential` type
-- Create: `apps/web/src/adapters/server/crypto/credential-cipher.ts` — AES-256-GCM encrypt/decrypt via Node.js `crypto`
-- Create: `apps/web/src/adapters/server/credential-broker.adapter.ts` — Implements `CredentialBrokerPort`. Reads `provider_credentials`, decrypts, checks expiry (5min buffer), refreshes via `refreshOpenAICodexToken()`, persists refreshed tokens, returns `ResolvedCredential`.
+- Create: `apps/web/src/ports/connection-broker.port.ts` — `ConnectionBrokerPort`, `ResolvedConnection`
+- Modify: `apps/web/src/ports/index.ts` — export
+- Create: `apps/web/src/adapters/server/connections/drizzle-broker.adapter.ts` — SELECT, tenant verify, AEAD decrypt, expiry check, provider-specific refresh, persist
+- Modify: `apps/web/src/adapters/server/index.ts` — export
+
+#### BYOExecutorDecorator
+
+- Create: `apps/web/src/adapters/server/ai/byo-executor.decorator.ts` — If `req.modelConnectionId` present: resolve via broker, route to ChatGPT completion backend. Otherwise: delegate to inner executor.
+- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — Insert in decorator stack (inside credit check). Wire broker from container.
+
+#### ChatGPT Completion Backend (adapter-internal)
+
+- Modify: `apps/web/src/adapters/server/ai/codex/codex-graph.provider.ts` — Refactor to `ChatGPTCompletionBackend`. Accepts resolved credentials. Writes temp `auth.json` in temp dir, sets `CODEX_HOME`, spawns `codex exec` via SDK, streams events as AiEvents, cleans up temp dir in `finally`. No DB reads, no decrypt — broker handles that.
+
+#### Remove codex: namespace
+
+- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — Remove `codex` from namespace router
+- Modify: `apps/web/src/features/ai/components/ChatComposerExtras.tsx` — Remove `codex:poet`, `codex:spark` from picker
+- Modify: `apps/web/src/adapters/server/ai/preflight-credit-check.decorator.ts` — Remove `codex:` prefix check entirely
+- Modify: `apps/web/src/app/api/v1/ai/chat/route.ts` — Remove model validation skip for `codex:`
+
+#### GraphRunRequest extension
+
+- Modify: `packages/graph-execution-core/src/graph-executor.port.ts` — Add `modelConnectionId?: string` and `toolConnectionIds?: readonly string[]`
+
+#### Chat Route -> Temporal pipeline
+
+- Modify: `apps/web/src/contracts/ai-chat.v1.contract.ts` — Add optional `modelConnectionId?: string`
+- Modify: `apps/web/src/features/ai/services/completion.server.ts` — Pass modelConnectionId to Temporal
+- Modify: `services/scheduler-worker/src/workflows/graph-run.workflow.ts` — Add to workflow input, map to GraphRunRequest
 
 #### OAuth Routes
 
-- Create: `apps/web/src/app/api/v1/auth/openai-codex/authorize/route.ts` — GET. PKCE verifier/challenge, httpOnly cookie, redirect to `auth.openai.com/oauth/authorize`.
-- Create: `apps/web/src/app/api/v1/auth/openai-codex/callback/route.ts` — GET. Exchange code → tokens, decrypt JWT for accountId, encrypt tokens, upsert `provider_credentials`, redirect to `/profile?linked=openai-codex`.
-- Create: `apps/web/src/app/api/v1/auth/openai-codex/disconnect/route.ts` — POST. Delete `provider_credentials` row, redirect to `/profile`.
+- Create: `apps/web/src/app/api/v1/auth/openai-codex/authorize/route.ts` — PKCE flow initiation
+- Create: `apps/web/src/app/api/v1/auth/openai-codex/callback/route.ts` — Token exchange, AEAD encrypt, INSERT connection
+- Create: `apps/web/src/app/api/v1/auth/openai-codex/disconnect/route.ts` — Soft-delete
 
-#### Codex App-Server Adapter
+#### Profile Page
 
-- Create: `apps/web/src/adapters/server/ai/codex/codex-app-server.adapter.ts` — Manages app-server lifecycle. Spawns `codex app-server --listen ws://127.0.0.1:PORT`. JSON-RPC client: `initialize`, `account/login/start` (chatgptAuthTokens), `turn/start`, handles `chatgptAuthTokens/refresh` requests from server by calling the credential broker.
-- Modify: `apps/web/src/adapters/server/ai/codex/codex-graph.provider.ts` — Accept `connectionId` from `ExecutionContext`. Call `broker.resolve(connectionId)`. Use app-server adapter for execution. Falls back to v0 `codex exec` subprocess path when no connectionId (developer mode / file-backed auth).
+- Modify: `apps/web/src/app/(app)/profile/view.tsx` — "AI Providers" section with ChatGPT SettingRow
+- Create: `apps/web/src/components/kit/data-display/OpenAIIcon.tsx` — OpenAI logomark SVG
+- Modify: `apps/web/src/components/index.ts` — export
 
-#### Profile Page UI
+#### API: Connection Status
 
-- Modify: `apps/web/src/app/(app)/profile/view.tsx` — Add "AI Providers" section with ChatGPT `SettingRow`, "Connect" button / `ConnectedBadge`.
-- Create: `apps/web/src/components/kit/data-display/OpenAIIcon.tsx` — OpenAI logomark SVG (same pattern as `GitHubIcon`).
-- Modify: `apps/web/src/components/index.ts` — export `OpenAIIcon`
-
-#### API: User Credentials Status
-
-- Create: `apps/web/src/app/api/v1/users/me/ai-providers/route.ts` — GET. Returns `{ providers: [{ provider, connected, accountId, expiresAt }] }`. No tokens.
+- Create: `apps/web/src/contracts/ai-providers.v1.contract.ts` — Zod schemas
+- Create: `apps/web/src/app/api/v1/users/me/ai-providers/route.ts` — GET (connectionId, provider, expiresAt — no tokens)
 
 #### Tests
 
-- Test: `tests/unit/adapters/credential-cipher.test.ts` — encrypt/decrypt roundtrip, wrong key fails
-- Test: `tests/unit/adapters/credential-broker.test.ts` — resolve, refresh on expiry, null when not connected
-- Test: `tests/contract/provider-credentials.test.ts` — DB schema contract
-- Test: `tests/stack/byo-ai-profile-link.stack.test.ts` — full flow: OAuth → stored → connected → execution
+- Test: `tests/unit/shared/aead.test.ts` — encrypt/decrypt roundtrip, wrong key/AAD, tampered ciphertext
+- Test: `tests/unit/adapters/drizzle-broker.test.ts` — resolve, tenant mismatch, revoked, refresh
+- Test: `tests/unit/adapters/byo-executor-decorator.test.ts` — routes to BYO when modelConnectionId present, passthrough when absent
+- Test: `tests/contract/connections.test.ts` — DB schema contract
+- Test: `tests/stack/byo-ai-profile-link.stack.test.ts` — full flow
 
 ## Validation
 
-- [ ] User connects ChatGPT account via browser OAuth on profile page
-- [ ] Tokens encrypted at rest in provider_credentials (AES-256-GCM)
-- [ ] Codex graphs execute using the user's own subscription
-- [ ] Token refresh works: pre-execution expiry check + reactive 401 refresh
-- [ ] Multiple concurrent users with different subscriptions work
-- [ ] Graph executor only sees connectionId, never raw tokens
-- [ ] Disconnecting removes credentials from DB
-- [ ] No tokens appear in logs or API responses
-- [ ] Falls back to v0 codex exec subprocess when no connectionId (dev mode)
+- [ ] Any Cogni graph executes on user's ChatGPT subscription when modelConnectionId present
+- [ ] Same graph executes on platform LiteLLM/OpenRouter when no modelConnectionId
+- [ ] No `codex:` prefixed graphs in catalog or UI
+- [ ] ConnectionBrokerPort resolves credentials — adapters never decrypt directly
+- [ ] Credentials stored as AEAD encrypted blob with AAD binding
+- [ ] Token refresh works: pre-execution expiry check via broker
+- [ ] Multiple concurrent users work (subprocess per request, naturally isolated)
+- [ ] No special credit bypass — stack ordering handles billing naturally
+- [ ] No tokens in logs or API responses
+- [ ] Disconnecting soft-deletes connection
