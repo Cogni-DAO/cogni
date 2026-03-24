@@ -73,7 +73,7 @@ export interface FetchPrContextOutput {
   gatesConfig: GatesConfig;
   rules: Record<string, Rule>;
   graphMessages: Array<{ role: string; content: string }>;
-  responseFormat: { prompt: string; schema: unknown };
+  responseFormat: { prompt: string; schemaId: string };
   model: string;
 }
 
@@ -298,32 +298,14 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
           })
         : "";
 
+    // Use schemaId for Zod schema resolution in the internal API route.
+    // Zod schemas are not JSON-serializable; the route resolves "evaluation-output"
+    // to the matching Zod schema at runtime.
     const responseFormat = {
       prompt:
         "Respond with a JSON object containing a `metrics` array and a `summary` string. " +
         "Each metric entry must have: `metric` (name), `value` (0.0-1.0), `observations` (string array).",
-      schema: {
-        type: "object" as const,
-        properties: {
-          metrics: {
-            type: "array" as const,
-            items: {
-              type: "object" as const,
-              properties: {
-                metric: { type: "string" as const },
-                value: { type: "number" as const },
-                observations: {
-                  type: "array" as const,
-                  items: { type: "string" as const },
-                },
-              },
-              required: ["metric", "value", "observations"],
-            },
-          },
-          summary: { type: "string" as const },
-        },
-        required: ["metrics", "summary"],
-      },
+      schemaId: "evaluation-output",
     };
 
     return {
@@ -368,17 +350,7 @@ export function createReviewActivities(deps: ReviewActivityDeps) {
     const reviewResult: ReviewResult = { conclusion, gateResults };
 
     // Format markdown
-    const repoSpec = input.evidence
-      ? (() => {
-          // Try to extract DAO config for check run link
-          // This is best-effort — if it fails, no link
-          return undefined;
-        })()
-      : undefined;
-
-    const checkRunSummary = formatCheckRunSummary(reviewResult, {
-      daoBaseUrl: repoSpec,
-    });
+    const checkRunSummary = formatCheckRunSummary(reviewResult);
 
     const checkRunUrl = input.checkRunId
       ? `https://github.com/${input.owner}/${input.repo}/runs/${input.checkRunId}`

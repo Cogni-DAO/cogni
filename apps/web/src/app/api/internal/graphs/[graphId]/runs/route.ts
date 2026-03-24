@@ -465,6 +465,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       role: m.role as "user" | "assistant" | "system",
       content: m.content,
     }));
+    // Forward responseFormat if provided (enables structuredOutput in GraphRunResult).
+    // Zod schemas are not JSON-serializable, so callers pass responseFormat as a
+    // serializable { prompt, schema } object. The schema is passed through as-is
+    // to the graph executor which handles both Zod and plain objects.
+    const responseFormat = resolveResponseFormat(input);
+
     const result = scopedExecutor.runGraph(
       {
         runId,
@@ -472,6 +478,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         messages,
         model,
         stateKey,
+        ...(responseFormat !== undefined && { responseFormat }),
       },
       {
         actorUserId,
@@ -731,3 +738,62 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     }
   }
 );
+
+// ---------------------------------------------------------------------------
+// Response format resolution
+// ---------------------------------------------------------------------------
+
+import { z } from "zod";
+
+/** Known response format schemas, keyed by schemaId. */
+const RESPONSE_FORMAT_SCHEMAS: Record<string, z.ZodType> = {
+  "evaluation-output": z.object({
+    metrics: z.array(
+      z.object({
+        metric: z.string(),
+        value: z.number().min(0).max(1),
+        observations: z.array(z.string()),
+      })
+    ),
+    summary: z.string(),
+  }),
+};
+
+/**
+ * Resolve responseFormat from graph input.
+ * Supports two modes:
+ * 1. schemaId: resolves to a known Zod schema (for Temporal/HTTP callers that can't serialize Zod)
+ * 2. schema: pass-through (for in-process callers that can provide Zod directly)
+ */
+function resolveResponseFormat(
+  input: Record<string, unknown>
+): { prompt?: string; schema: unknown } | undefined {
+  if (
+    input.responseFormat == null ||
+    typeof input.responseFormat !== "object"
+  ) {
+    return undefined;
+  }
+
+  const rf = input.responseFormat as Record<string, unknown>;
+
+  // Mode 1: schemaId lookup (Temporal/HTTP callers)
+  if (typeof rf.schemaId === "string") {
+    const schema = RESPONSE_FORMAT_SCHEMAS[rf.schemaId];
+    if (!schema) return undefined;
+    return {
+      ...(typeof rf.prompt === "string" ? { prompt: rf.prompt } : {}),
+      schema,
+    };
+  }
+
+  // Mode 2: schema pass-through (in-process callers)
+  if (rf.schema !== undefined) {
+    return {
+      ...(typeof rf.prompt === "string" ? { prompt: rf.prompt } : {}),
+      schema: rf.schema,
+    };
+  }
+
+  return undefined;
+}
