@@ -2,7 +2,7 @@
 id: task.0191
 type: task
 title: "PR review webhook → Temporal parent workflow with durable GitHub writes"
-status: needs_merge
+status: done
 priority: 1
 rank: 2
 estimate: 5
