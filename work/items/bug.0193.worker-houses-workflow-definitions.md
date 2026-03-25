@@ -2,7 +2,7 @@
 id: bug.0193
 type: bug
 title: "scheduler-worker houses workflow definitions — should be thin composition root"
-status: needs_closeout
+status: done
 priority: 3
 rank: 50
 estimate: 3
@@ -12,7 +12,7 @@ spec_refs: [temporal-patterns-spec, packages-architecture-spec]
 assignees: []
 project: proj.unified-graph-launch
 branch: bug-0193-extract-temporal-workflows
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/624
 reviewer:
 revision: 1
 blocked_by: []
