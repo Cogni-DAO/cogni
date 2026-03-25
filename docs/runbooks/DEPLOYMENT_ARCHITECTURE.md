@@ -2,54 +2,53 @@
 
 - ## Goal
 
-  Set up VMs once, continuous CI/CD after.
+  Single VM per environment. Set up once via OpenTofu, continuous CI/CD after.
 
-  Split between immutable infrastructure (OpenTofu) and mutable application deployment (Docker Compose).
+  Two runtimes on the same host:
+  - **Docker Compose** — infrastructure services (postgres, temporal, litellm, app, caddy)
+  - **k3s + Argo CD** — application services from `services/` (scheduler-worker, sandbox-openclaw)
 
-  Build once. Push to GHCR. Deploy via GitHub Actions + Docker Compose to Cherry VMs. Gate on HTTPS health validation.
+  Compose services deploy via SSH + `docker compose up`. k3s services deploy via GitOps: CI pushes image → updates overlay digest → Argo CD syncs.
 
-- ## Three-Layer Architecture
+- ## Architecture Layers
 - ### Base Infrastructure (`infra/tofu/cherry/base/`)
 - **Purpose**: VM provisioning with Cherry Servers API
-- **Environment separation**: `terraform.preview.tfvars`, `terraform.production.tfvars`
-- **Creates**: `preview-cogni`, `production-cogni` VMs with SSH deploy keys
-- **Authentication**: SSH public keys only, VM host output to GitHub secrets
-- **Bootstrap**: Creates `cogni-edge` network, deployment directories
-- ### Edge Infrastructure (`infra/compose/`)
+- **Bootstrap**: Docker + k3s + Argo CD installed via cloud-init
+- **Creates**: Single VM per environment with SSH deploy keys, k3s cluster, Argo CD
+- **Authentication**: SSH for Compose deploys; GHCR PAT for k3s image pulls; SOPS/age for k8s secrets
+- ### Edge Infrastructure (`infra/compose/edge/`)
 - **Purpose**: Always-on TLS termination layer (Caddy)
-- **Lifecycle**: Started once at bootstrap, rarely touched
-- **Deploys**: Caddy container only via separate compose project
-- **Key invariant**: **Never stopped during app deployments** - prevents ERR_CONNECTION_RESET
-- ### App Deployment (`infra/compose/`)
-- **Purpose**: Docker Compose stack for mutable app containers
-- **Environment separation**: GitHub Environment Secrets
-- **Deploys**: App + Postgres + LiteLLM + Alloy containers via `docker-compose.yml`
-- **Deployment**: SSH from GitHub Actions, pull-while-running, no `compose down`
-- **Network**: Shares `cogni-edge` external network with edge stack
-- **Disk gate**: Requires ≥10GB free before pull; if low, runs `docker system prune -af` then fails if still insufficient (image extraction can spike ~2× pull size)
+- **Key invariant**: **Never stopped during app deployments** — prevents ERR_CONNECTION_RESET
+- ### Compose Infrastructure (`infra/compose/runtime/`)
+- **Purpose**: Infrastructure services (postgres, temporal, litellm, app, alloy, autoheal)
+- **Deployment**: SSH from GitHub Actions, pull-while-running
+- **Network**: `cogni-edge` (external), `internal`, `sandbox-internal`
+- ### k3s Services (`infra/cd/`)
+- **Purpose**: Application services from `services/` (scheduler-worker, sandbox-openclaw)
+- **Deployment**: Argo CD watches `infra/cd/overlays/{env}/{service}/` — digest change triggers sync
+- **Pattern**: ApplicationSet generates one Application per managed service
+- **Secrets**: SOPS/age encrypted in repo, decrypted by ksops CMP sidecar at apply time
+- **Connectivity**: k3s pods reach Compose services via localhost EndpointSlices (127.0.0.1)
 - ## File Structure
 
   ```
   infra/
-  ├── providers/cherry/base/          # VM provisioning (OpenTofu only)
-  │   ├── keys/                       # SSH public keys (committed)
-  │   │   ├── cogni_preview_deploy.pub
-  │   │   └── cogni_prod_deploy.pub
-  │   ├── main.tf                     # Cherry provider + VM resources + outputs
-  │   ├── variables.tf                # environment, vm_name_prefix, plan, region, public_key_path
-  │   ├── terraform.preview.tfvars   # Preview VM config (create from example)
-  │   ├── terraform.production.tfvars # Production VM config (create from example)
-  │   └── bootstrap.yaml             # Cloud-init VM setup (creates cogni-edge network)
-  └── services/
-    ├── edge/                       # TLS termination (immutable, rarely touched)
-    │   ├── docker-compose.yml     # Caddy only
-    │   └── configs/
-    │       └── Caddyfile.tmpl     # Caddy configuration
-    └── runtime/                    # Container stack (mutable, updated each deploy)
-        ├── docker-compose.yml     # App + Postgres + LiteLLM + Alloy
-        └── configs/               # Service configuration files
-            ├── litellm.config.yaml
-            └── alloy-config.alloy
+  ├── tofu/cherry/base/              # VM provisioning (OpenTofu)
+  │   ├── main.tf                    # Cherry provider + VM + health check
+  │   ├── variables.tf               # VM config + GHCR + SOPS + repo vars
+  │   ├── bootstrap.yaml             # Cloud-init: Docker + k3s + Argo CD
+  │   └── terraform.tfvars.example   # All required variables documented
+  ├── compose/
+  │   ├── edge/                      # TLS termination (Caddy, immutable)
+  │   └── runtime/                   # Infrastructure services (Compose)
+  │       ├── docker-compose.yml     # Production: app + postgres + temporal + litellm
+  │       └── docker-compose.dev.yml # Dev/CI: adds scheduler-worker + openclaw for testing
+  └── cd/                            # GitOps manifests (k3s / Argo CD)
+      ├── base/{service}/            # Kustomize base per service
+      ├── overlays/{env}/{service}/  # Per-service, per-env patches
+      ├── argocd/                    # Argo CD install + ApplicationSet
+      ├── secrets/                   # SOPS-encrypted K8s Secrets
+      └── gitops-service-catalog.json
   ```
 
 - ## Container Stack
@@ -63,15 +62,20 @@
 
 - `caddy`: HTTPS termination and routing - **never stopped during app deploys**
 
-  **Runtime containers** (project: `cogni-runtime`, updated each deploy):
+  **Compose runtime** (project: `cogni-runtime`, updated each deploy):
 
-- `app`: Next.js application with environment-specific runtime config (lean, includes `ripgrep` + `git` for brain repo tools)
+- `app`: Next.js application
 - `postgres`: Database server
-- `litellm`: AI proxy service
+- `temporal` + `temporal-postgres`: Workflow orchestration
+- `litellm` + `redis`: AI proxy service
 - `alloy`: Log collection and forwarding
-- `git-sync`: Clones repo at pinned SHA into `repo_data` volume (bootstrap profile, `--one-time`). App reads via `/repo/current` symlink.
-- `db-provision`: Database user/schema provisioning (bootstrap profile)
-- `db-migrate`: Database migrations via dedicated migrator image (bootstrap profile)
+- `autoheal`: Container auto-restart
+- `git-sync`, `db-provision`, `db-migrate`: Bootstrap profile (one-time setup)
+
+  **k3s services** (managed by Argo CD, deployed via GitOps):
+
+- `scheduler-worker`: Temporal worker for scheduled graph execution
+- `sandbox-openclaw`: OpenClaw gateway + nginx auth proxy
   **Registry Authentication**:
 
   For private GHCR images, VMs authenticate using bot account credentials:

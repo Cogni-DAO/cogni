@@ -2,7 +2,7 @@
 id: task.0149
 type: task
 title: "GitOps k3s provisioning + scheduler-worker migration"
-status: in_progress
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 3

@@ -87,11 +87,41 @@ export CHERRY_PROJECT_ID="<your-project-id>"
 
 > **Important**: Each environment has its own SSH keypair. The `TF_VAR_ssh_private_key` variable must match the public key in your tfvars file. If mismatched, the health check will fail with "SSH authentication failed".
 
+### Step 2b: Generate SOPS Age Keypair (Once Per Environment)
+
+```bash
+# Install age if not present
+brew install age  # macOS
+
+# Generate keypair — one per environment
+age-keygen -o ~/.cogni/preview-age-key.txt
+# Output: public key: age1abc123...
+# Save the public key — it goes in infra/cd/secrets/.sops.yaml
+# Save the file — the private key goes in TF_VAR_sops_age_private_key
+```
+
+Update `infra/cd/secrets/.sops.yaml` with the public key for the environment, then encrypt secrets:
+
+```bash
+# Fill real values in the secret template, then encrypt
+sops --encrypt --in-place infra/cd/secrets/staging/scheduler-worker.enc.yaml
+sops --encrypt --in-place infra/cd/secrets/staging/sandbox-openclaw.enc.yaml
+git add infra/cd/secrets/ && git commit -m "chore(infra): encrypt staging secrets"
+```
+
+---
+
 ### Preview Environment
 
 ```bash
 # Set private key for health check (must match public_key_path in tfvars)
 export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_preview_deploy)"
+
+# Set SOPS age private key for Argo CD secret decryption
+export TF_VAR_sops_age_private_key="$(grep 'AGE-SECRET-KEY' ~/.cogni/preview-age-key.txt)"
+
+# Set GHCR token for k3s private image pulls
+export TF_VAR_ghcr_deploy_token="<github-pat-with-packages-read>"
 
 # Create tfvars file
 cat > terraform.preview.tfvars << EOF

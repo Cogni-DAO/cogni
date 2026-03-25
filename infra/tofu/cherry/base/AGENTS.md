@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Immutable VM provisioning with SSH deploy key management, Docker/Docker Compose installation, and swap configuration for Cherry Servers infrastructure.
+Immutable VM provisioning: Docker + k3s + Argo CD on a single Cherry Servers VM. Cloud-init installs Docker Compose (for infrastructure services) and k3s with Argo CD (for application services managed via GitOps).
 
 ## Pointers
 
@@ -29,13 +29,13 @@ Immutable VM provisioning with SSH deploy key management, Docker/Docker Compose 
 ## Public Surface
 
 - **Exports:** none
-- **Env/Config keys:** `CHERRY_AUTH_TOKEN`, SSH key paths
+- **Env/Config keys:** `CHERRY_AUTH_TOKEN`, SSH key paths, `ghcr_deploy_token`, `sops_age_private_key`, `cogni_repo_ref`
 - **Files considered API:** `variables.tf`, `terraform.tfvars.example`
 
 ## Responsibilities
 
-- This directory **does**: VM provisioning, SSH deploy key installation, Docker/Docker Compose bootstrap, swap provisioning via cloud-init, VM host output to GitHub secrets
-- This directory **does not**: Application deployment (handled by SSH + Docker Compose from GitHub Actions)
+- This directory **does**: VM provisioning, SSH deploy key installation, Docker + k3s + Argo CD bootstrap via cloud-init, GHCR registry auth for k3s, SOPS age key injection
+- This directory **does not**: Application deployment (Compose infra via SSH from GitHub Actions; services via Argo CD GitOps)
 
 ## Usage
 
@@ -66,6 +66,8 @@ tofu apply
 
 ## Notes
 
-- OpenTofu-only layer (no application concerns)
-- Outputs VM host IP to GitHub Environment Secrets for SSH deployment
+- Single-VM architecture: Docker (containerd via dockerd) and k3s (containerd) coexist
+- bootstrap.yaml is a `templatefile()` — uses `${var}` for Terraform interpolation, `$$` for bash `$`
+- k3s pinned to v1.31.4+k3s1, Argo CD pinned to v2.13.4
+- SOPS age private key injected from Terraform variable, never generated on-host
 - See runbooks/ for setup and architecture details
