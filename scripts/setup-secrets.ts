@@ -1102,6 +1102,36 @@ function printSecretHeader(
 async function main() {
   const args = process.argv.slice(2);
   const showAll = args.includes("--all");
+
+  if (showAll) {
+    console.log("");
+    console.log(
+      `  ${RED}${BOLD}⚠️  WARNING: --all walks through ALL secrets including already-set ones.${RESET}`
+    );
+    console.log(
+      `  ${RED}${BOLD}   Regenerating agent secrets (DB passwords, tokens, SSH keys) will${RESET}`
+    );
+    console.log(
+      `  ${RED}${BOLD}   BREAK running deployments that use the current values.${RESET}`
+    );
+    console.log(
+      `  ${RED}${BOLD}   Only use --all for FRESH deployments or if you know what you're doing.${RESET}`
+    );
+    console.log("");
+    const rl0 = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const confirm = await prompt(
+      rl0,
+      `  ${YELLOW}Type "yes" to continue, anything else to abort: ${RESET}`
+    );
+    rl0.close();
+    if (confirm.trim().toLowerCase() !== "yes") {
+      console.log("  Aborted.");
+      process.exit(0);
+    }
+  }
   const filterRequired = args.includes("--required");
   // --only DISCORD,SONAR  or  --only DISCORD_OAUTH_CLIENT_ID
   const onlyArg =
