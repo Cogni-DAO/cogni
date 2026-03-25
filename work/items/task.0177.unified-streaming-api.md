@@ -2,7 +2,7 @@
 id: task.0177
 type: task
 title: "Unified streaming API: chat endpoint → Temporal + Redis + idempotency"
-status: needs_merge
+status: done
 revision: 1
 priority: 0
 rank: 4
@@ -16,7 +16,7 @@ project: proj.unified-graph-launch
 blocked_by:
   - task.0176
 created: 2026-03-13
-updated: 2026-03-19
+updated: 2026-03-24
 labels:
   - ai-graphs
 ---

@@ -55,6 +55,8 @@ export const InternalGraphRunOutputSchema = z.discriminatedUnion("ok", [
     runId: z.string(),
     /** Langfuse trace ID (null if Langfuse not configured) */
     traceId: z.string().nullable(),
+    /** Structured output from graph (when responseFormat was provided). Typed by caller. */
+    structuredOutput: z.unknown().optional(),
   }),
   // Execution failed (graph ran but errored)
   z.object({

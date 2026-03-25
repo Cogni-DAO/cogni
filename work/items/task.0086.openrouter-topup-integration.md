@@ -2,7 +2,7 @@
 id: task.0086
 type: task
 title: OpenRouter credit top-up via operator wallet
-status: needs_merge
+status: done
 priority: 0
 estimate: 2
 summary: "Wire OpenRouter top-up into credit purchase flow — `runPostCreditFunding()` extracted and invoked from `verifyAndSettle()` (the canonical CREDITED transition). Composes TreasurySettlementPort + ProviderFundingPort + FinancialLedgerPort. Durable funding attempt row, deterministic TB transfer IDs, correct asset-swap accounting."
@@ -15,7 +15,7 @@ branch: feat/operator-wallet-e2e
 pr: https://github.com/Cogni-DAO/node-template/pull/576
 reviewer:
 created: 2026-02-17
-updated: 2026-03-14
+updated: 2026-03-24
 labels: [wallet, web3, billing, openrouter]
 external_refs:
 revision: 3

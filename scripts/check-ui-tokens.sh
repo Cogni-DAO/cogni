@@ -4,7 +4,7 @@
 #
 # UI Token Enforcement Checks
 # Purpose: Ban raw typography utilities and arbitrary values without var(--token)
-# Runs: Part of pnpm check (see scripts/check-fast.sh)
+# Runs: Part of pnpm check (see scripts/check-all.sh)
 # Scope: src/** excluding styles/kit/vendor directories
 # Links: docs/spec/ui-implementation.md Phase 2, docs/spec/ui-implementation.md
 

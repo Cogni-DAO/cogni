@@ -2,7 +2,7 @@
 id: task.0167
 type: task
 title: "Node activation: payments.status in repo-spec + pnpm node:activate-payments"
-status: needs_merge
+status: done
 priority: 1
 rank: 15
 estimate: 2
@@ -19,7 +19,7 @@ revision: 5
 blocked_by:
 deploy_verified: false
 created: 2026-03-15
-updated: 2026-03-16
+updated: 2026-03-24
 labels: [wallet, web3, tooling, setup]
 external_refs:
 ---

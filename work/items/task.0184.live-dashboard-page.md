@@ -2,7 +2,7 @@
 id: task.0184
 type: task
 title: "Live dashboard page: unified operations view with agents table, work items, and activity charts"
-status: needs_merge
+status: done
 revision: 1
 priority: 1
 rank: 7
@@ -18,7 +18,7 @@ pr: https://github.com/Cogni-DAO/node-template/pull/602
 blocked_by:
   - task.0183
 created: 2026-03-18
-updated: 2026-03-20
+updated: 2026-03-24
 labels:
   - ui
   - ai-graphs

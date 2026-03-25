@@ -17,6 +17,7 @@ import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { listRunsOperation } from "@/contracts/ai.runs.v1.contract";
+import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
@@ -61,10 +62,17 @@ export const GET = wrapRouteHandlerWithLogging(
       });
 
       const container = getContainer();
-      const actorId = userActor(toUserId(sessionUser.id));
+
+      // scope=system: query as system tenant (same pattern as governance activity route)
+      const isSystemScope = searchParams.get("scope") === "system";
+      const queryUserId = isSystemScope
+        ? COGNI_SYSTEM_PRINCIPAL_USER_ID
+        : sessionUser.id;
+      const actorId = userActor(toUserId(queryUserId));
+
       const runs = await container.graphRunRepository.listRunsByUser(
         actorId,
-        sessionUser.id,
+        queryUserId,
         {
           ...(input.status ? { status: input.status } : {}),
           ...(input.runKind ? { runKind: input.runKind } : {}),

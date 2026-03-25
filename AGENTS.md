@@ -13,12 +13,14 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 ## Workflow Guiding Principles
 
 - **Spec first:** Write the plan before code. Confirm the plan with the user.
+- **Port, don't rewrite:** When refactoring, copy existing working logic verbatim and change only the boundary (I/O layer, calling convention). Never rewrite business logic from scratch — it introduces bugs that the original code already solved.
 - **Compact progress:** Summarize after each step.
 - **Prune aggressively:** Delete noise, keep signal.
 - **Delegate cleanly:** Use subagents with narrow scopes.
-- **Validate early:** Run `pnpm check` before proposing commits.
+- **Validate early:** Run `pnpm check:fast` during iteration (auto-fixes lint/format). Run targeted tests for what you changed.
+- **Validate once before commit:** Run `pnpm check` once as the pre-commit gate. Never run it more than once per session.
 - **Update docs:** Reflect any surface changes in AGENTS.md.
-- **Full Validation:** `pnpm check:full` is long running, but has CI parity. Use as last required feature validation gate.
+- **Full Validation:** `pnpm check:full` runs in CI (~20 min). Check CI status on the PR after push — stack test success is the required gate.
 
 ## Agent Behavior
 
@@ -34,7 +36,7 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - **Infra:** Docker + OpenTofu → Spheron (managed Akash)
 - **Toolchain:** pnpm, Biome, ESLint, Prettier, Vitest, Playwright, SonarQube
 - **Observability:** Pino JSON → Alloy → local Loki (dev) or Grafana Cloud (preview/prod). MCP via grafana-local/grafana.
-- **CI entrypoint:** `pnpm check`
+- **CI entrypoint:** `pnpm check` (static) → `pnpm check:full` (stack tests)
 
 ## API Contracts are the Single Source of Truth
 
@@ -71,8 +73,9 @@ pnpm docker:stack:fast        # start full stack locally (skip build)
 pnpm build                    # build for production
 pnpm packages:build           # build workspace packages (tsup JS + tsc declarations)
 pnpm packages:clean           # clean package dist/ and .tsbuildinfo
-pnpm check                    # lint + type + format + arch + all static test validation (expensive)
-pnpm check:full               # CI-parity gate: full docker build, stack launch + all test suites. (prohibitively Expensive)
+pnpm check:fast               # typecheck + lint/format fix + unit tests (use during iteration)
+pnpm check                    # ALL static checks: type + lint + format + arch + docs + tests (once before commit)
+pnpm check:full               # CI-parity: docker build + stack launch + all test suites (~20 min, runs in CI)
 pnpm check:full:fast          # Same as check:full but skip Docker rebuild
 pnpm test                     # run unit tests (no server required)
 pnpm test:external            # external API tests (requires GITHUB_TOKEN, not in CI)

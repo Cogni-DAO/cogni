@@ -2,7 +2,7 @@
 id: bug.0147
 type: bug
 title: "Next.js 16.0.7 build fails: Turbopack scans thread-stream test fixtures via RainbowKit dep chain, webpack fallback blocked by node: barrel leaks"
-status: needs_merge
+status: done
 priority: 1
 rank: 5
 estimate: 3
@@ -20,7 +20,7 @@ revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-09
-updated: 2026-03-10
+updated: 2026-03-24
 labels: [build, dependencies, rainbowkit, turbopack, p1-blocked]
 external_refs:
   - https://github.com/Cogni-DAO/node-template/pull/138

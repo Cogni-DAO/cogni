@@ -151,7 +151,8 @@ function badgeIntent(status: string): "destructive" | "default" | "secondary" {
 function dedupeByThread(runs: RunCardData[]): RunCardData[] {
   const seen = new Map<string, RunCardData>();
   for (const run of runs) {
-    const key = run.stateKey ?? `graph:${run.graphId ?? run.id}`;
+    // Chat runs: dedup by thread (stateKey). System/webhook runs: each run is unique.
+    const key = run.stateKey ?? run.runId ?? run.id;
     if (!seen.has(key)) {
       seen.set(key, run);
     }

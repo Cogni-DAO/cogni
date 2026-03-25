@@ -31,9 +31,7 @@ export async function fetchRuns(
 ): Promise<FetchRunsResponse> {
   const searchParams = new URLSearchParams();
   if (params.tab === "system") {
-    searchParams.set("runKind", "system_scheduled");
-  } else {
-    searchParams.set("runKind", "user_immediate");
+    searchParams.set("scope", "system");
   }
   if (params.limit) {
     searchParams.set("limit", String(params.limit));

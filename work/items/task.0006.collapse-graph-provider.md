@@ -2,7 +2,7 @@
 id: task.0006
 type: task
 title: "Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing"
-status: needs_merge
+status: done
 priority: 1
 estimate: 3
 summary: Delete GraphProvider interface; providers implement GraphExecutorPort directly. Replace canHandle() with deterministic namespace prefix routing in the aggregator. Same cleanup for AgentCatalogProvider.
@@ -15,7 +15,7 @@ branch: claude/unified-graph-launch-mmXvl
 pr:
 reviewer:
 created: 2026-02-09
-updated: 2026-03-12
+updated: 2026-03-24
 labels: [ai-graphs, refactoring]
 external_refs:
 revision: 0

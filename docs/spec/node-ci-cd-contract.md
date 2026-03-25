@@ -78,10 +78,11 @@ No shared kit. Each node owns its workflows directly. `ci.yaml` runs the same ch
 
 ### Local Gates
 
-| Command           | Script                  | Purpose                                                                 |
-| ----------------- | ----------------------- | ----------------------------------------------------------------------- |
-| `pnpm check`      | `scripts/check-fast.sh` | Fast gate: typecheck + lint + format + unit/contract/meta + docs + arch |
-| `pnpm check:full` | `scripts/check-full.sh` | CI parity: Docker build + stack + all test suites                       |
+| Command           | Script                  | Purpose                                                                  |
+| ----------------- | ----------------------- | ------------------------------------------------------------------------ |
+| `pnpm check:fast` | `scripts/check-fast.sh` | Iteration gate: typecheck + lint/format fix + unit tests                 |
+| `pnpm check`      | `scripts/check-all.sh`  | Pre-commit gate: typecheck + lint + format + unit/contract + docs + arch |
+| `pnpm check:full` | `scripts/check-full.sh` | CI parity: Docker build + stack + all test suites (~20 min)              |
 
 ### File Ownership Classification
 
@@ -135,7 +136,8 @@ Centralizing lint/depcruise configs causes fork friction, policy fights, and los
 | File                        | Purpose                          |
 | --------------------------- | -------------------------------- |
 | `.github/workflows/ci.yaml` | CI entrypoint                    |
-| `scripts/check-fast.sh`     | `pnpm check` implementation      |
+| `scripts/check-fast.sh`     | `pnpm check:fast` implementation |
+| `scripts/check-all.sh`      | `pnpm check` implementation      |
 | `scripts/check-full.sh`     | `pnpm check:full` implementation |
 
 ## Acceptance Checks

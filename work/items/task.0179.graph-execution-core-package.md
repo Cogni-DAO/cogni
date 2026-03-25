@@ -2,7 +2,7 @@
 id: task.0179
 type: task
 title: "Extract packages/graph-execution-core — decouple execution ports from Next.js"
-status: needs_merge
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 3
@@ -15,7 +15,7 @@ project: proj.unified-graph-launch
 credit:
 blocked_by: []
 created: 2026-03-13
-updated: 2026-03-17
+updated: 2026-03-24
 branch: claude/unified-graph-launch-mmXvl
 pr: https://github.com/Cogni-DAO/node-template/pull/574
 reviewer:

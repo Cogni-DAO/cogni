@@ -29,11 +29,6 @@ export type GraphRunStatus = _GraphRunStatus;
 export const GRAPH_RUN_KINDS = _GRAPH_RUN_KINDS;
 export type GraphRunKind = _GraphRunKind;
 
-/** @deprecated Use GRAPH_RUN_STATUSES */
-export const SCHEDULE_RUN_STATUSES = _GRAPH_RUN_STATUSES;
-/** @deprecated Use GraphRunStatus */
-export type ScheduleRunStatus = _GraphRunStatus;
-
 /**
  * Grant scope action types.
  * P0: Only graph:execute is supported.
@@ -101,10 +96,3 @@ export interface GraphRun {
   /** Thread state key for conversation correlation — null for headless runs */
   readonly stateKey: string | null;
 }
-
-/**
- * @deprecated Use GraphRun — alias kept for migration period.
- * Note: GraphRun has additional nullable fields (graphId, runKind, etc.)
- * that ScheduleRun did not have.
- */
-export type ScheduleRun = GraphRun;

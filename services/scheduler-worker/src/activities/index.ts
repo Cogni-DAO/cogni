@@ -85,12 +85,16 @@ export interface ExecuteGraphInput {
 
 /**
  * Output from executeGraphActivity.
+ * Per WORKFLOW_TOP_LEVEL_VISIBILITY: small typed terminal artifact only.
+ * Redis/SSE remain the observability transport — this is parent-child control data.
  */
 export interface ExecuteGraphOutput {
   ok: boolean;
   runId: string;
   traceId: string | null;
   errorCode?: string;
+  /** Structured output from graph (when responseFormat was provided). Typed by caller. */
+  structuredOutput?: unknown;
 }
 
 /**
