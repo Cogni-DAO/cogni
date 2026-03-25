@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/workflows/stages/collect-sources`
+ * Module: `@cogni/temporal-workflows/workflows/stages/collect-sources`
  * Purpose: Child workflow for source collection — the triple-nested collection loop (sources × sourceRefs × streams).
- * Scope: Deterministic orchestration only. All I/O happens in Activities.
+ * Scope: Deterministic orchestration only. Does not perform I/O — all external calls happen in Activities.
  * Invariants:
  *   - Per TEMPORAL_DETERMINISM: No I/O — only proxyActivities calls and deterministic logic
  *   - Per STAGE_IO_COLOCATED: Input type defined here, not in a separate barrel

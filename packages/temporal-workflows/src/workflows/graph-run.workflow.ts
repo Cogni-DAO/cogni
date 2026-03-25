@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/workflows/graph-run`
+ * Module: `@cogni/temporal-workflows/workflows/graph-run`
  * Purpose: Unified Temporal Workflow for all graph execution (scheduled, API, webhook).
- * Scope: Deterministic orchestration only. All I/O happens in Activities.
+ * Scope: Deterministic orchestration only. Does not perform I/O — all external calls happen in Activities.
  * Invariants:
  *   - Per TEMPORAL_DETERMINISM: No I/O, network calls, or LLM calls in workflow code
  *   - Per SINGLE_RUN_LEDGER: always creates graph_runs record (no dbScheduleId gate)

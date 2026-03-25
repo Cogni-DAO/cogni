@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/domain/review`
+ * Module: `@cogni/temporal-workflows/domain/review`
  * Purpose: Pure domain logic for PR review — criteria evaluation and markdown formatting.
- * Scope: Zero I/O, zero side effects. Deterministic functions over serializable data.
+ * Scope: Deterministic functions over serializable data. Does not perform I/O or side effects.
  * Invariants:
  *   - Per WORKER_IS_DUMB: domain logic lives here, not in activities
  *   - All inputs/outputs are plain serializable objects

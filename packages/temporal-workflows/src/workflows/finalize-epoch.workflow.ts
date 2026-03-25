@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/workflows/finalize-epoch`
+ * Module: `@cogni/temporal-workflows/workflows/finalize-epoch`
  * Purpose: Temporal Workflow for epoch finalization — sign-at-finalize V0.
- * Scope: Deterministic orchestration only. All I/O happens in Activities.
+ * Scope: Deterministic orchestration only. Does not perform I/O — all external calls happen in Activities.
  * Invariants:
  *   - Per TEMPORAL_DETERMINISM: No I/O, network calls, or direct imports of adapters
  *   - Per WRITES_VIA_TEMPORAL: All writes execute in Temporal activities

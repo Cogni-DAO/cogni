@@ -4,8 +4,8 @@
 /**
  * Module: `@cogni/temporal-workflows/activity-types`
  * Purpose: Explicit activity interface definitions consumed by workflows via proxyActivities<T>().
- * Scope: Type-only — no implementations, no I/O. Input/output types mirror the worker's activity
- *   factories but live here so the package has no import dependency on the worker service.
+ * Scope: Type-only — does not contain implementations or I/O. Input/output types mirror the worker's
+ *   activity factories but live here so the package has no import dependency on the worker service.
  * Invariants:
  *   - Per ACTIVITY_TYPES_EXPLICIT: interfaces defined here, not inferred from factories
  *   - All input/output types are plain serializable objects (JSON-safe for Temporal wire format)

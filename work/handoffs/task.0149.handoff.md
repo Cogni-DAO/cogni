@@ -53,15 +53,15 @@ last_commit: 9aa3f712
 
 ## Pointers
 
-| File / Resource | Why it matters |
-| --- | --- |
-| `work/items/task.0149.gitops-k3s-provisioning-migration.md` | Work item with rev 1 review + TODOs |
-| `work/projects/proj.cicd-services-gitops.md` | P1/P2 roadmap with updated outcomes |
-| PR #573 (`feat/gitops-k3s-provisioning`) | Current implementation to rework |
-| `infra/tofu/cherry/base/bootstrap.yaml` | Target: merge k3s install here |
-| `infra/tofu/cherry/k3s/` | Source: k3s cloud-init to port, then delete module |
-| `infra/cd/` | Kustomize manifests + Argo CD config (task.0148, keep as-is) |
-| `infra/cd/overlays/staging/inventory.env` | Cross-VM IPs → change to localhost |
-| `scripts/ci/promote-k8s-image.sh` | Image digest promotion script |
-| `scripts/ci/deploy.sh` | Compose deploy script (reads `COMPOSE_PROFILES`) |
-| `docs/runbooks/INFRASTRUCTURE_SETUP.md` | Provisioning runbook to update |
+| File / Resource                                             | Why it matters                                               |
+| ----------------------------------------------------------- | ------------------------------------------------------------ |
+| `work/items/task.0149.gitops-k3s-provisioning-migration.md` | Work item with rev 1 review + TODOs                          |
+| `work/projects/proj.cicd-services-gitops.md`                | P1/P2 roadmap with updated outcomes                          |
+| PR #573 (`feat/gitops-k3s-provisioning`)                    | Current implementation to rework                             |
+| `infra/tofu/cherry/base/bootstrap.yaml`                     | Target: merge k3s install here                               |
+| `infra/tofu/cherry/k3s/`                                    | Source: k3s cloud-init to port, then delete module           |
+| `infra/cd/`                                                 | Kustomize manifests + Argo CD config (task.0148, keep as-is) |
+| `infra/cd/overlays/staging/inventory.env`                   | Cross-VM IPs → change to localhost                           |
+| `scripts/ci/promote-k8s-image.sh`                           | Image digest promotion script                                |
+| `scripts/ci/deploy.sh`                                      | Compose deploy script (reads `COMPOSE_PROFILES`)             |
+| `docs/runbooks/INFRASTRUCTURE_SETUP.md`                     | Provisioning runbook to update                               |

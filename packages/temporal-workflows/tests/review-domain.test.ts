@@ -2,9 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker/tests/review-domain.test`
+ * Module: `@cogni/temporal-workflows/tests/review-domain.test`
  * Purpose: Unit tests for PR review domain logic (pure functions).
- * Scope: Criteria evaluation, status aggregation, markdown formatting.
+ * Scope: Criteria evaluation, status aggregation, markdown formatting. Does not test activities or I/O.
+ * Invariants: none
+ * Side-effects: none
+ * Links: packages/temporal-workflows/src/domain/review.ts
  * @internal
  */
 

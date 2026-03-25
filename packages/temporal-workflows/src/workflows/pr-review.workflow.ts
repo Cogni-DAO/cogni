@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/workflows/pr-review`
+ * Module: `@cogni/temporal-workflows/workflows/pr-review`
  * Purpose: Temporal parent workflow for webhook-triggered PR review.
- * Scope: Deterministic orchestration only. All I/O in Activities, LLM in GraphRunWorkflow child.
+ * Scope: Deterministic orchestration only. Does not perform I/O — all external calls in Activities, LLM in GraphRunWorkflow child.
  * Invariants:
  *   - Per TEMPORAL_DETERMINISM: No I/O in workflow code
  *   - Per NORMATIVE_WEBHOOK_PATTERN: webhook starts workflow, exits immediately

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/workflows/collect-epoch`
+ * Module: `@cogni/temporal-workflows/workflows/collect-epoch`
  * Purpose: Temporal Workflow orchestrator for epoch ingestion — delegates to child workflows for collection, enrichment, and allocation.
  * Scope: Deterministic orchestration only. All I/O happens in Activities (via child workflows). Steps: compute window → transition epoch (close stale + create) → CollectSourcesWorkflow → EnrichAndAllocateWorkflow → ensure pool. Does not handle finalization (see FinalizeEpochWorkflow).
  * Invariants:

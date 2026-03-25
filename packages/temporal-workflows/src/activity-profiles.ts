@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/workflows/activity-profiles`
+ * Module: `@cogni/temporal-workflows/activity-profiles`
  * Purpose: Shared proxyActivities timeout/retry config profiles.
- * Scope: Config constants only — no I/O, no imports of adapters.
+ * Scope: Config constants only — does not contain I/O or adapter imports.
  * Invariants:
  *   - Per PROXY_CONFIGS_DRY: Deduplicate configs that appear 2+ times across workflows.
  *   - Workflow-specific configs stay inline with rationale comments.

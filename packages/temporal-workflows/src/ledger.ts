@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/scheduler-worker-service/workflows/ledger-workflows`
+ * Module: `@cogni/temporal-workflows/ledger`
  * Purpose: Barrel file for ledger workflows — Temporal Worker bundles all exports from this file.
- * Scope: Re-exports only. No logic.
+ * Scope: Re-exports only. Does not contain logic.
  * Invariants: Per TEMPORAL_DETERMINISM: only re-exports deterministic workflow functions.
  * Side-effects: none
  * Links: docs/spec/attribution-ledger.md
