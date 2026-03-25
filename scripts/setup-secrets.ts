@@ -1,10 +1,13 @@
 #!/usr/bin/env npx tsx
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
 /**
- * Interactive secret setup for new Cogni node formation.
- *
- * Walks through every GitHub Actions secret needed for preview and production
- * deploys. Agent-rotatable secrets are auto-generated; human-provided secrets
- * show a URL to visit and prompt for the value.
+ * Module: `@scripts/setup-secrets`
+ * Purpose: Interactive secret provisioning for Cogni node formation.
+ * Scope: Walks through all GitHub Actions secrets (preview + production), auto-generates agent-rotatable values, prompts for human-provided ones with dashboard URLs; does not modify code or deploy.
+ * Invariants: Secrets set per-env only. Agent secrets use openssl rand.
+ * Side-effects: IO (sets GitHub Actions secrets via gh secret set)
+ * Links: docs/runbooks/SECRET_ROTATION.md
  *
  * Usage:
  *   pnpm setup:secrets                # walk through missing secrets
