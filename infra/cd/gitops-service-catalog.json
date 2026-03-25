@@ -1,0 +1,28 @@
+{
+  "services": [
+    {
+      "name": "scheduler-worker",
+      "purpose": "Temporal worker for scheduled graph execution and ingestion",
+      "gitops_managed": true,
+      "reason": "Temporal worker with explicit /livez and /readyz contract.",
+      "probe_plan": "Already implemented via HTTP /livez and /readyz in Deployment probes.",
+      "k3s_path": "Apply existing Argo app + staging/production overlays and promote by digest."
+    },
+    {
+      "name": "sandbox-openclaw",
+      "purpose": "Long-running OpenClaw gateway for sandboxed agent execution",
+      "gitops_managed": true,
+      "reason": "Long-lived network service with Deployment + Service + probes now defined under infra/cd/base/sandbox-openclaw.",
+      "probe_plan": "Implemented with startupProbe/livenessProbe/readinessProbe using tcpSocket on port 18789.",
+      "k3s_path": "Managed via Argo Application infra/cd/argocd/applications/sandbox-openclaw.yaml and staging/production overlays."
+    },
+    {
+      "name": "sandbox-runtime",
+      "purpose": "Ephemeral per-command sandbox runtime image",
+      "gitops_managed": false,
+      "reason": "Not a long-running service; executed as short-lived runtime containers.",
+      "probe_plan": "No Deployment probes; model as Job/Pod template health via completion and timeout policies.",
+      "k3s_path": "Define a Job template/controller contract (TTLSecondsAfterFinished, activeDeadlineSeconds, network policy), then manage template via Argo."
+    }
+  ]
+}

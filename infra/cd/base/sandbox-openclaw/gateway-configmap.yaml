@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sandbox-openclaw-gateway-config
+data:
+  openclaw.json: |
+    {
+      "model": "openrouter/openai/gpt-4.1-mini",
+      "allowShell": true,
+      "allowBrowser": true,
+      "allowReadRepo": true
+    }

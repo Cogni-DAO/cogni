@@ -31,27 +31,3 @@ patches:
       - op: replace
         path: /data/IMAGE_DIGEST
         value: "production-placeholder-scheduler-worker"
-
-  # Patch EndpointSlice IPs to point at production Compose VM
-  # Replace 10.0.0.1 with actual production VM internal IP during task.0149
-  - target:
-      kind: EndpointSlice
-      name: temporal-1
-    patch: |
-      - op: replace
-        path: /endpoints/0/addresses
-        value: ["10.0.0.1"]
-  - target:
-      kind: EndpointSlice
-      name: postgres-1
-    patch: |
-      - op: replace
-        path: /endpoints/0/addresses
-        value: ["10.0.0.1"]
-  - target:
-      kind: EndpointSlice
-      name: app-1
-    patch: |
-      - op: replace
-        path: /endpoints/0/addresses
-        value: ["10.0.0.1"]

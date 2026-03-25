@@ -39,7 +39,7 @@ jobs:
       TEMPORAL_NAMESPACE: cogni-test
       TEMPORAL_TASK_QUEUE: scheduler-tasks
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           fetch-depth: 0
 
@@ -54,12 +54,12 @@ jobs:
           echo "migrator_image=$MIGRATOR_IMAGE" >> $GITHUB_OUTPUT
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@c5ba7f7862a0f64c1b1a05fbac13e0b8e86ba08c # v4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -75,9 +75,6 @@ jobs:
 
       - name: Lint + unit + API tests (mocked LLM)
         run: pnpm check
-
-      - name: Run unit tests
-        run: pnpm test
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -203,7 +200,7 @@ jobs:
       NEXT_TELEMETRY_DISABLED: 1
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
       - name: Setup SSH deploy key
         run: |
@@ -265,15 +262,15 @@ jobs:
       TEST_BASE_URL: https://${{ vars.DOMAIN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@c5ba7f7862a0f64c1b1a05fbac13e0b8e86ba08c # v4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -318,7 +315,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           fetch-depth: 0
           ref: staging

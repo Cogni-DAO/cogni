@@ -41,15 +41,18 @@ GitOps deployment manifests for Kubernetes (k3s). Kustomize bases define service
 
 ```
 cd/
-├── base/                    # Kustomize bases (one per service)
-│   └── scheduler-worker/    # First service — deployment, service, configmap, external-services
-├── overlays/                # Environment-specific patches
-│   ├── staging/             # Staging image digests, namespace, EndpointSlice IPs
-│   └── production/          # Production image digests, namespace, EndpointSlice IPs
+├── base/                    # Kustomize bases (one per GitOps-managed service)
+│   ├── scheduler-worker/    # Temporal worker service
+│   └── sandbox-openclaw/    # Long-lived sandbox gateway service
+├── overlays/                # Environment-specific overlays
+│   ├── staging/             # Namespace + per-service overlays
+│   └── production/          # Namespace + per-service overlays
 ├── argocd/                  # Argo CD configuration
 │   ├── install.yaml         # Non-HA Argo CD install (Kustomize remote base)
-│   ├── app-of-apps.yaml     # Root Application managing all service Applications
-│   └── applications/        # Per-service Argo Application manifests
+│   ├── app-of-apps.yaml     # Legacy root Application pattern
+│   ├── services-applicationset.yaml # Preferred service app generation
+│   └── applications/        # Per-service Argo Application manifests (compatibility)
+├── gitops-service-catalog.json  # Declares managed vs deferred services
 └── secrets/                 # SOPS/age encrypted K8s Secrets
     ├── .sops.yaml           # Encryption rules (age public keys per env)
     ├── staging/             # Encrypted secrets for staging
@@ -66,12 +69,13 @@ cd/
 
 ## Notes
 
-- Placeholder IPs (10.0.0.1) in EndpointSlices replaced with real Compose VM IPs during task.0149
+- EndpointSlices use loopback (127.0.0.1) for single-VM k3s+Compose coexistence during task.0149
 - Secret template files (.enc.yaml) contain placeholder values — encrypt with `sops` after filling real secrets
 - Argo CD install is a Kustomize remote base pinned to v2.13.4 — update version deliberately
+- ApplicationSet is preferred for service fan-out; app-of-apps remains for compatibility during migration
 
 ## Change Protocol
 
 - Update this file when **directory structure changes**
-- Adding a new service: create `base/<service>/`, add overlay patches, create Argo Application
+- Adding a new service: create `base/<service>/`, create staging/production service overlays, create Argo Application
 - Promoting an image: update overlay `images:` section with new digest, create PR

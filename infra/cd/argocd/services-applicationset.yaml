@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ApplicationSet for service Applications (staging).
+# Preferred over manually curating many Application manifests.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cogni-services
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: scheduler-worker
+            path: infra/cd/overlays/staging/scheduler-worker
+          - name: sandbox-openclaw
+            path: infra/cd/overlays/staging/sandbox-openclaw
+  template:
+    metadata:
+      name: "{{name}}"
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        targetRevision: staging
+        path: "{{path}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cogni-staging
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

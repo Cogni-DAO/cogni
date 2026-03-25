@@ -6,6 +6,7 @@ packages:
   - curl
   - gnupg
   - lsb-release
+  - age
 
 swap:
   filename: /swapfile
@@ -83,6 +84,17 @@ write_files:
       # Restart journald for updated log config
       systemctl restart systemd-journald
 
+      # Install k3s (containerd) for GitOps-managed services
+      # Coexists with Docker Compose (dockerd) on the same host.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing k3s..."
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sh -
+
+      # Validate k3s installation
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Validating k3s installation..."
+      command -v k3s >/dev/null || { echo "FATAL: k3s binary not found"; exit 1; }
+      k3s --version || { echo "FATAL: k3s --version failed"; exit 1; }
+      kubectl get nodes >/dev/null || { echo "FATAL: kubectl cannot reach k3s"; exit 1; }
+
       # Create shared Docker network
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Creating cogni-edge network..."
       docker network create cogni-edge || true
@@ -98,6 +110,8 @@ write_files:
         echo "BOOTSTRAP_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "DOCKER_VERSION=$(docker --version)"
         echo "COMPOSE_VERSION=$(docker compose version)"
+        echo "K3S_VERSION=$(k3s --version | head -1)"
+        echo "AGE_VERSION=$(age --version 2>/dev/null || true)"
       } > "$MARKER_OK"
 
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Bootstrap complete!"

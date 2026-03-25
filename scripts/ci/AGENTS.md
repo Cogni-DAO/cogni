@@ -29,7 +29,7 @@ CI/CD automation scripts and configuration documentation for multiple pipeline s
 ## Public Surface
 
 - **Exports:** none
-- **CLI (if any):** `scripts/build.sh`, `scripts/push.sh`, `scripts/deploy.sh`, `scripts/test-image.sh`, `scripts/loki_push.sh`, `scripts/fetch_github_job_logs.sh`, `scripts/healthcheck-openclaw.sh`, `scripts/seed-pnpm-store.sh`
+- **CLI (if any):** `scripts/build.sh`, `scripts/push.sh`, `scripts/deploy.sh`, `scripts/test-image.sh`, `scripts/loki_push.sh`, `scripts/fetch_github_job_logs.sh`, `scripts/healthcheck-openclaw.sh`, `scripts/seed-pnpm-store.sh`, `scripts/ci/check-gitops-service-coverage.sh`, `scripts/ci/check-gitops-manifests.sh`
 - **Env/Config keys:** `IMAGE_NAME`, `IMAGE_TAG`, `APP_IMAGE`, `MIGRATOR_IMAGE`, `COGNI_REPO_URL`, `COGNI_REPO_REF`, `PLATFORM`, `GHCR_PAT`, `CHERRY_AUTH_TOKEN`, `TF_VAR_*`, `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_NAME`, `LOKI_URL`, `LOKI_USER`, `LOKI_TOKEN`, `INTERNAL_OPS_TOKEN`, `LOG_FILE`, `JOB_NAME`, `LABELS`, `GITHUB_TOKEN`, `GITHUB_REPOSITORY`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT`, `GITHUB_JOB`, `OUTPUT_FILE`
 - **Files considered API:** `scripts/*.sh`
 
@@ -79,4 +79,6 @@ scripts/fetch_github_job_logs.sh  # Fetch job logs from GitHub Actions API (requ
 - `deploy.sh` sources `seed-pnpm-store.sh` (Step 7.5) to idempotently seed the `pnpm_store` Docker volume from a GHCR store image
 - `deploy.sh` uses targeted pulls: only per-deploy images (app, migrator, scheduler-worker) and sandbox `:latest` images (cogni-sandbox-openclaw, pnpm-store) are explicitly pulled. The `:latest` pulls do a manifest check (~2s) and skip download if unchanged. Static/pinned images (postgres, litellm, alloy, temporal, autoheal, nginx, git-sync, busybox) use local Docker cache and are pulled by `compose up -d` only when missing.
 - `deploy.sh` SSH connections use `ServerAliveInterval=15 ServerAliveCountMax=12` to prevent broken pipe on long operations
+- `check-gitops-service-coverage.sh` enforces `infra/cd/gitops-service-catalog.json`: managed services must have base+Argo+staging/production overlays; every service directory must be cataloged
+- `check-gitops-manifests.sh` renders each managed service overlay (staging+production) via kustomize (kubectl or dockerized kubectl fallback)
 - `COGNI_REPO_URL`, `COGNI_REPO_REF`, `GIT_READ_TOKEN`, and `GIT_READ_USERNAME` are required env vars for deploy.sh, set by CI workflows

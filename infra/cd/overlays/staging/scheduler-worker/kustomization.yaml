@@ -6,7 +6,7 @@ kind: Kustomization
 namespace: cogni-staging
 
 resources:
-  - namespace.yaml
+  - ../namespace.yaml
   - ../../base/scheduler-worker
 
 # Image digest — update this on promotion (IMAGE_IMMUTABILITY invariant)

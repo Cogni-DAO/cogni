@@ -13,7 +13,7 @@ Cherry Servers cloud provider configurations split between immutable VM provisio
 
 ## Pointers
 
-- [base/](base/): VM provisioning and static bootstrap (Docker + Compose)
+- [base/](base/): VM provisioning and static bootstrap (Docker + Compose + k3s coexistence)
 - [k3s/](k3s/): VM provisioning with k3s + age for GitOps deployment
 
 ## Boundaries
@@ -67,6 +67,6 @@ cd k3s && tofu init && tofu validate
 
 ## Notes
 
-- Base creates VM with static OS bootstrap only (Docker + Compose)
-- k3s creates VM with k3s, age, and GHCR registry auth (Argo CD install deferred to task.0149)
+- Base creates VM with static OS bootstrap and runtime bootstrap (Docker + Compose + k3s)
+- k3s module remains legacy from early split-VM design; prefer base/ single-VM path for task.0149
 - App handles container deployment over SSH with health validation

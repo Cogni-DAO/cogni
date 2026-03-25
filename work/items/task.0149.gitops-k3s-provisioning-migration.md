@@ -15,11 +15,11 @@ project: proj.cicd-services-gitops
 branch: feat/gitops-k3s-provisioning
 pr: 573
 reviewer:
-revision: 1
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-09
-updated: 2026-03-20
+updated: 2026-03-24
 labels: [deployment, infra, ci-cd, gitops]
 external_refs:
 ---
@@ -48,12 +48,12 @@ PR #573 provisions a **separate k3s VM** via `infra/tofu/cherry/k3s/main.tf`. Th
 
 ### TODOs for rev 1
 
-- [ ] Merge k3s install into `base/bootstrap.yaml` cloud-init (remove `infra/tofu/cherry/k3s/` module)
-- [ ] Update `inventory.env` overlays: service addresses → `127.0.0.1` / localhost
-- [ ] Remove cross-VM firewall rules from provisioning
+- [x] Merge k3s install into `base/bootstrap.yaml` cloud-init (single VM path now primary)
+- [x] Update scheduler-worker external service endpoints to `127.0.0.1` / localhost
+- [x] Remove cross-VM addressing assumptions from GitOps manifests (same-host loopback)
 - [ ] Keep: Argo CD install, SOPS/age, app-of-apps, ksops sidecar, profile gating, `promote-k8s-image.sh`
 - [ ] Keep: `COMPOSE_PROFILES` gating for scheduler-worker migration
-- [ ] Update `INFRASTRUCTURE_SETUP.md` runbook: remove "provision k3s VM" step, add "k3s installed via cloud-init on Compose VM"
+- [x] Update `INFRASTRUCTURE_SETUP.md` runbook with single-VM k3s-on-Compose bootstrap notes
 - [ ] Verify k3s + Docker Compose coexistence (k3s uses containerd, Compose uses dockerd — no conflict)
 
 ## Validation
@@ -65,3 +65,16 @@ PR #573 provisions a **separate k3s VM** via `infra/tofu/cherry/k3s/main.tf`. Th
 - [ ] Billing attribution flowing (scheduler-worker → app billing ingest)
 - [ ] Rollback test: revert manifest PR → Argo syncs previous image
 - [ ] scheduler-worker removed from Docker Compose runtime stack
+
+## Progress Notes (rev 2)
+
+- Single-VM direction is now reflected in manifests via loopback EndpointSlices (`127.0.0.1`) and removal of overlay IP patch drift.
+- Base VM cloud-init now installs both Docker Compose and k3s, enabling coexistence on one host per environment.
+- Remaining MVP work is operational execution: apply tofu in preview/prod, install Argo CD components on cluster, switch scheduler-worker Compose profile off where k3s worker is healthy.
+
+## Deferred Services Inventory
+
+- `sandbox-openclaw` — now treated as long-lived service with GitOps base/overlay/app + probes; validate runtime secret wiring and gateway behavior in-cluster.
+- `sandbox-runtime` — deferred from Deployment model because it is ephemeral execution runtime; planned k3s target is Job template/controller, not long-running Deployment.
+
+Source of truth: `infra/cd/gitops-service-catalog.json`.

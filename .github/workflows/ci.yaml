@@ -62,6 +62,11 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: GitOps manifest checks
+        run: |
+          pnpm check:gitops:coverage
+          pnpm check:gitops:manifests
+
       - name: CI Telemetry
         if: always()
         uses: ./.github/actions/loki-ci-telemetry

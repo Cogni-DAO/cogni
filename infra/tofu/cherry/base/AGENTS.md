@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Immutable VM provisioning with SSH deploy key management, Docker/Docker Compose installation, and swap configuration for Cherry Servers infrastructure.
+Immutable VM provisioning with SSH deploy key management, Docker/Docker Compose + k3s installation, and swap configuration for Cherry Servers infrastructure.
 
 ## Pointers
 
@@ -34,7 +34,7 @@ Immutable VM provisioning with SSH deploy key management, Docker/Docker Compose 
 
 ## Responsibilities
 
-- This directory **does**: VM provisioning, SSH deploy key installation, Docker/Docker Compose bootstrap, swap provisioning via cloud-init, VM host output to GitHub secrets
+- This directory **does**: VM provisioning, SSH deploy key installation, Docker/Docker Compose + k3s bootstrap, swap provisioning via cloud-init, VM host output to GitHub secrets
 - This directory **does not**: Application deployment (handled by SSH + Docker Compose from GitHub Actions)
 
 ## Usage
@@ -50,6 +50,7 @@ tofu apply
 ## Standards
 
 - No application logic in cloud-init
+- Base bootstrap installs Docker and k3s on the same VM (single-node coexistence)
 - Use lifecycle ignore_changes for user_data stability
 - Require SSH key configuration
 

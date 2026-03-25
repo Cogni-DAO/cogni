@@ -148,6 +148,50 @@ echo "Production VM IP: $PROD_IP"
 
 ---
 
+## Step 3b: Verify k3s Bootstrap on the Same VM
+
+`infra/tofu/cherry/base/bootstrap.yaml` now installs both Docker and k3s on the same host (single VM per environment). After each `tofu apply`, verify both runtimes are healthy:
+
+```bash
+# On your laptop
+ssh -i ~/.ssh/cogni_template_preview_deploy root@$PREVIEW_IP
+
+# On VM
+k3s --version
+kubectl get nodes
+test -f /var/lib/cogni/bootstrap.ok && cat /var/lib/cogni/bootstrap.ok
+```
+
+Expected: node shows `Ready` and bootstrap marker includes both Docker and k3s versions.
+
+## Step 3c: Install Argo CD + GitOps ApplicationSet
+
+After k3s is up on the Compose VM, install Argo CD and apply the repo-managed ApplicationSet resources:
+
+```bash
+# On VM
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+kubectl -n argocd wait --for=condition=Available deployment/argocd-server --timeout=300s
+
+# From repo root (local machine with kubectl context set to VM k3s)
+kubectl apply -f infra/cd/argocd/install.yaml
+kubectl apply -f infra/cd/argocd/services-applicationset.yaml
+```
+
+Then verify `scheduler-worker` and `sandbox-openclaw` Applications appear and sync.
+
+### Deferred Services (Current State)
+
+Current deferred services and migration path are tracked in `infra/cd/gitops-service-catalog.json`.
+
+- `sandbox-openclaw`: managed as long-lived service in GitOps with startup/liveness/readiness probes; ensure `OPENCLAW_GATEWAY_TOKEN`, `GITHUB_TOKEN`, and `LITELLM_MASTER_KEY` are populated in encrypted secrets before sync.
+- `sandbox-runtime`: ephemeral execution image, deferred from Deployment model; migrate as Job template/controller with timeout/completion policies.
+
+Do **not** mark these as GitOps-managed by adding placeholder Deployments. Promote only after real runtime contracts are implemented and validated.
+
+---
+
 ## Step 4: Configure DNS
 
 Update A records at your domain registrar (e.g., Namecheap → Advanced DNS):

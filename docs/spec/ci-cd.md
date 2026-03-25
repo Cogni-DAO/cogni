@@ -8,7 +8,7 @@ summary: Automated staging→release→main workflow with fork-safe CI/CD and E2
 read_when: Understanding deployment pipelines, release workflow, or CI configuration
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-05
+verified: 2026-03-25
 tags: []
 ---
 
@@ -17,6 +17,22 @@ tags: []
 ## Overview
 
 Automated staging→release→main workflow with fork-safe CI/CD and E2E-triggered promotions.
+
+## TL;DR (Dev → CI → Preview CD → Production CD)
+
+```mermaid
+flowchart LR
+  A[Local dev\npnpm dev:stack / pnpm check:fast] --> B[PR to staging\nci.yaml]
+  B --> C[Merge to staging\nstaging-preview.yml]
+  C --> D[E2E pass\nAuto create release/* PR to main]
+  D --> E[Merge release/* to main\nci.yaml + build-prod.yml]
+  E --> F[Manual workflow_dispatch\ndeploy-production.yml]
+```
+
+1. **Local development (dev)** uses `pnpm dev:stack` for runtime iteration and `pnpm check:fast` for rapid static/unit validation before pushing.
+2. **PR CI (staging/main PRs)** runs `ci.yaml`, including static checks and GitOps validation (`check:gitops:coverage`, `check:gitops:manifests`) so catalog and manifests stay synchronized.
+3. **Preview CD (staging branch)** runs `staging-preview.yml`: build image → container smoke checks → deploy to preview → run E2E → auto-promote by creating a `release/*` PR when E2E passes.
+4. **Production CD (main branch)** is split in two workflows: `build-prod.yml` builds/tests/pushes immutable `prod-<sha>` image tags, then `deploy-production.yml` deploys that image on manual dispatch after approval.
 
 ## Critical TODOs
 

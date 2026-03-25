@@ -131,7 +131,9 @@
     "validate:chain": "tsx --no-cache --tsconfig tsconfig.scripts.json scripts/validate-chain-config.ts",
     "governance:schedules:sync": "pnpm dotenv -e .env.local -- sh -lc 'curl -fsS -X POST http://localhost:3000/api/internal/ops/governance/schedules/sync -H \"Authorization: Bearer ${INTERNAL_OPS_TOKEN:?INTERNAL_OPS_TOKEN is required}\"'",
     "knip": "dotenv -e .env.local -- knip --include files,exports,dependencies",
-    "prepare": "husky"
+    "prepare": "husky",
+    "check:gitops:coverage": "bash scripts/ci/check-gitops-service-coverage.sh",
+    "check:gitops:manifests": "bash scripts/ci/check-gitops-manifests.sh"
   },
   "engines": {
     "node": "22.x"

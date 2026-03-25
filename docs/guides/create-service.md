@@ -414,7 +414,28 @@ volumes:
   - Build: `pnpm --filter @cogni/<name>-service build`
   - Test: `pnpm --filter @cogni/<name>-service test`
   - Docker build and push to GHCR with immutable SHA tags
-  - Wire into deploy workflow (P0 stopgap: extend existing scripts; P1+: GitOps)
+  - Wire into deploy workflow based on service criticality
+
+### 9b. GitOps Onboarding Checklist (Kubernetes-managed services)
+
+Use this checklist when the service is GitOps-managed under `infra/cd/` (recommended default for long-lived services).
+
+- [ ] Add base manifests in `infra/cd/base/<name>/`:
+  - [ ] `deployment.yaml` with `livenessProbe` and `readinessProbe`
+  - [ ] `service.yaml` (or equivalent networking resources)
+  - [ ] `kustomization.yaml`
+- [ ] Add Argo app manifest in `infra/cd/argocd/applications/<name>.yaml`
+- [ ] Add service entry in `infra/cd/gitops-service-catalog.json` with `gitops_managed: true`
+- [ ] Add overlays:
+  - [ ] `infra/cd/overlays/staging/<name>/kustomization.yaml`
+  - [ ] `infra/cd/overlays/production/<name>/kustomization.yaml`
+- [ ] Add encrypted env secrets:
+  - [ ] `infra/cd/secrets/staging/<name>.enc.yaml`
+  - [ ] `infra/cd/secrets/production/<name>.enc.yaml`
+- [ ] Confirm local and CI GitOps checks pass:
+  - [ ] `pnpm check:gitops:coverage`
+  - [ ] `pnpm check:gitops:manifests`
+- [ ] If this service should deploy in preview/prod, ensure workflow/build scripts produce and publish its image tag in the same format consumed by deploy automation.
 
 ### 10. Deployment Criticality
 

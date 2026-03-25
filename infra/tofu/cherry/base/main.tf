@@ -66,7 +66,7 @@ resource "null_resource" "bootstrap_health_check" {
 
   provisioner "remote-exec" {
     inline = [
-      "bash -lc 'set -euo pipefail; echo \"Waiting for cloud-init...\"; cloud-init status --wait; echo \"Checking bootstrap marker...\"; test -f /var/lib/cogni/bootstrap.ok || { echo \"FAIL: missing bootstrap.ok\"; cat /var/lib/cogni/bootstrap.fail 2>/dev/null || true; tail -n 200 /var/log/cloud-init-output.log || true; tail -n 200 /var/log/cogni-bootstrap.log || true; exit 1; }; echo \"Checking Docker...\"; docker version; docker compose version; echo \"Bootstrap health check passed\"'"
+      "bash -lc 'set -euo pipefail; echo \"Waiting for cloud-init...\"; cloud-init status --wait; echo \"Checking bootstrap marker...\"; test -f /var/lib/cogni/bootstrap.ok || { echo \"FAIL: missing bootstrap.ok\"; cat /var/lib/cogni/bootstrap.fail 2>/dev/null || true; tail -n 200 /var/log/cloud-init-output.log || true; tail -n 200 /var/log/cogni-bootstrap.log || true; exit 1; }; echo \"Checking Docker...\"; docker version; docker compose version; echo \"Checking k3s...\"; k3s --version; kubectl get nodes; echo \"Bootstrap health check passed\"'"
     ]
   }
 }
