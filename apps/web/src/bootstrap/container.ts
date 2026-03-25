@@ -4,8 +4,8 @@
 /**
  * Module: `@bootstrap/container`
  * Purpose: Dependency injection container for application composition root with environment-based adapter selection.
- * Scope: Wire adapters to ports for runtime dependency injection. Provides webhookRegistrations for ingestion route. Does not handle request-scoped lifecycle.
- * Invariants: All ports wired; single container instance per process; config.unhandledErrorPolicy set by env; webhookRegistrations lazy-initialized.
+ * Scope: Wire adapters to ports for runtime dependency injection. Provides webhookRegistrations for ingestion route, Temporal WorkflowClient singleton. Does not handle request-scoped lifecycle.
+ * Invariants: All ports wired; single container instance per process; config.unhandledErrorPolicy set by env; webhookRegistrations lazy-initialized; Temporal connection singleton with race-safe init.
  * Side-effects: IO (initializes logger and emits startup log on first access)
  * Notes: LLM always uses LiteLlmAdapter; stack tests route to mock-openai-api. ContainerConfig controls wrapper behavior.
  * Links: Used by API routes and other entry points; configure adapters here for DI.
@@ -29,6 +29,12 @@ import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/priv
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { WorkItemQueryPort } from "@cogni/work-items";
 import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
+import {
+  Client as TemporalClient,
+  Connection as TemporalConnection,
+  type WorkflowClient,
+} from "@temporalio/client";
+import Redis from "ioredis";
 import type { Logger } from "pino";
 import {
   ALCHEMY_ADAPTER_VERSION,
@@ -39,7 +45,7 @@ import {
   DrizzleExecutionGrantWorkerAdapter,
   DrizzleExecutionRequestAdapter,
   DrizzleGovernanceStatusAdapter,
-  DrizzleScheduleRunAdapter,
+  DrizzleGraphRunAdapter,
   DrizzleScheduleUserAdapter,
   DrizzleThreadPersistenceAdapter,
   EvmRpcOnChainVerifierAdapter,
@@ -50,6 +56,7 @@ import {
   LiteLlmAdapter,
   type MimirAdapterConfig,
   MimirMetricsAdapter,
+  RedisRunStreamAdapter,
   SystemClock,
   TemporalScheduleControlAdapter,
   UserDrizzleAccountService,
@@ -91,6 +98,7 @@ import type {
   PaymentAttemptServiceRepository,
   PaymentAttemptUserRepository,
   ProviderFundingPort,
+  RunStreamPort,
   ServiceAccountService,
   ThreadPersistencePort,
   TreasuryReadPort,
@@ -100,7 +108,7 @@ import type {
   ExecutionGrantUserPort,
   ExecutionGrantWorkerPort,
   ExecutionRequestPort,
-  ScheduleRunRepository,
+  GraphRunRepository,
   ScheduleUserPort,
 } from "@/ports/server";
 import { initAnalytics, shutdownAnalytics } from "@/shared/analytics";
@@ -149,7 +157,7 @@ export interface Container {
   executionGrantPort: ExecutionGrantUserPort;
   executionGrantWorkerPort: ExecutionGrantWorkerPort;
   executionRequestPort: ExecutionRequestPort;
-  scheduleRunRepository: ScheduleRunRepository;
+  graphRunRepository: GraphRunRepository;
   scheduleManager: ScheduleUserPort;
   /** Metrics capability for AI tools - requires PROMETHEUS_URL to be configured */
   metricsCapability: MetricsCapability;
@@ -167,6 +175,8 @@ export interface Container {
   attributionStore: AttributionStore;
   /** Work item queries — reads from markdown files via WorkItemQueryPort */
   workItemQuery: WorkItemQueryPort;
+  /** Run event streaming — publish/subscribe via Redis Streams */
+  runStream: RunStreamPort;
   /** Webhook source registrations — normalizers for webhook ingestion */
   webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
   /** Financial ledger — undefined when TIGERBEETLE_ADDRESS not set */
@@ -200,6 +210,12 @@ export type ActivityDeps = {
 
 // Module-level singleton
 let _container: Container | null = null;
+let _temporalConnection: TemporalConnection | null = null;
+let _workflowClient: WorkflowClient | null = null;
+let _workflowClientPromise: Promise<{
+  client: WorkflowClient;
+  taskQueue: string;
+}> | null = null;
 
 /**
  * Get the singleton container instance.
@@ -219,6 +235,45 @@ export function getContainer(): Container {
 export function resetContainer(): void {
   _container = null;
   _webhookRegistrations = null;
+  if (_temporalConnection) {
+    void _temporalConnection.close();
+  }
+  _temporalConnection = null;
+  _workflowClient = null;
+  _workflowClientPromise = null;
+}
+
+/**
+ * Get a process-wide Temporal WorkflowClient singleton + task queue.
+ * Avoids per-request Connection.connect() overhead on hot paths.
+ * Returns both client and taskQueue so callers never need serverEnv() directly.
+ */
+export async function getTemporalWorkflowClient(): Promise<{
+  client: WorkflowClient;
+  taskQueue: string;
+}> {
+  if (_workflowClient) {
+    return {
+      client: _workflowClient,
+      taskQueue: serverEnv().TEMPORAL_TASK_QUEUE,
+    };
+  }
+  if (!_workflowClientPromise) {
+    _workflowClientPromise = (async () => {
+      const env = serverEnv();
+      const connection = await TemporalConnection.connect({
+        address: env.TEMPORAL_ADDRESS,
+      });
+      const temporalClient = new TemporalClient({
+        connection,
+        namespace: env.TEMPORAL_NAMESPACE,
+      });
+      _temporalConnection = connection;
+      _workflowClient = temporalClient.workflow;
+      return { client: _workflowClient, taskQueue: env.TEMPORAL_TASK_QUEUE };
+    })();
+  }
+  return _workflowClientPromise;
 }
 
 /** Lazy singleton for webhook registrations (avoids import cost at container init). */
@@ -413,9 +468,9 @@ function createContainer(): Container {
     serviceDb,
     log.child({ component: "DrizzleExecutionGrantWorkerAdapter" })
   );
-  const scheduleRunRepository = new DrizzleScheduleRunAdapter(
+  const graphRunRepository = new DrizzleGraphRunAdapter(
     serviceDb,
-    log.child({ component: "DrizzleScheduleRunAdapter" })
+    log.child({ component: "DrizzleGraphRunAdapter" })
   );
 
   // Execution request port (not user-scoped — exempt from RLS)
@@ -531,6 +586,14 @@ function createContainer(): Container {
     );
   })();
 
+  // Redis client for run event streaming (ephemeral stream plane)
+  // Per REDIS_IS_STREAM_PLANE: only transient data, no durable state
+  const redisClient = new Redis(env.REDIS_URL, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 3,
+  });
+  const runStream = new RedisRunStreamAdapter(redisClient);
+
   return {
     log,
     config,
@@ -552,7 +615,7 @@ function createContainer(): Container {
     executionGrantPort,
     executionGrantWorkerPort,
     executionRequestPort,
-    scheduleRunRepository,
+    graphRunRepository,
     scheduleManager,
     metricsCapability,
     webSearchCapability,
@@ -566,6 +629,7 @@ function createContainer(): Container {
     ),
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
     workItemQuery: new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT),
+    runStream,
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },
@@ -609,7 +673,7 @@ export type SchedulingDeps = Pick<
   | "scheduleControl"
   | "executionGrantPort"
   | "executionGrantWorkerPort"
-  | "scheduleRunRepository"
+  | "graphRunRepository"
   | "scheduleManager"
 >;
 
@@ -619,7 +683,7 @@ export function resolveSchedulingDeps(): SchedulingDeps {
     scheduleControl: container.scheduleControl,
     executionGrantPort: container.executionGrantPort,
     executionGrantWorkerPort: container.executionGrantWorkerPort,
-    scheduleRunRepository: container.scheduleRunRepository,
+    graphRunRepository: container.graphRunRepository,
     scheduleManager: container.scheduleManager,
   };
 }

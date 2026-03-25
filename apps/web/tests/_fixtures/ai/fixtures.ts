@@ -151,8 +151,11 @@ export function createModelsMultipleFree(): ModelsOutput {
 import { vi } from "vitest";
 
 import type { AgentCatalogProvider } from "@/adapters/server/ai/agent-catalog.provider";
-import type { GraphProvider } from "@/adapters/server/ai/graph-provider";
-import type { AgentDescriptor, GraphRunRequest } from "@/ports";
+import type {
+  AgentDescriptor,
+  GraphExecutorPort,
+  GraphRunRequest,
+} from "@/ports";
 
 /**
  * Create a minimal GraphRunRequest for testing.
@@ -163,33 +166,19 @@ export function createTestGraphRunRequest(
 ): GraphRunRequest {
   return {
     runId: "test-run-id",
-    ingressRequestId: "test-ingress-id",
     messages: [],
     model: "test-model",
-    caller: {
-      billingAccountId: "test-billing",
-      virtualKeyId: "test-vkey",
-      requestId: "test-req",
-      traceId: "00000000000000000000000000000000",
-    },
     graphId: "langgraph:poet",
     ...overrides,
   };
 }
 
 /**
- * Create a mock GraphProvider for execution tests.
- * Note: GraphProvider no longer has listGraphs - discovery is in AgentCatalogProvider.
+ * Create a mock GraphExecutorPort for execution tests.
+ * Per SINGLE_EXECUTION_INTERFACE: only GraphExecutorPort owns runGraph().
  */
-export function createMockGraphProvider(
-  providerId: string,
-  graphNames: string[]
-): GraphProvider {
+export function createMockGraphExecutor(): GraphExecutorPort {
   return {
-    providerId,
-    canHandle: (graphId: string) =>
-      graphId.startsWith(`${providerId}:`) &&
-      graphNames.some((name) => graphId === `${providerId}:${name}`),
     runGraph: vi.fn().mockReturnValue({
       stream: (async function* () {
         yield { type: "done" };
@@ -206,7 +195,7 @@ export function createMockGraphProvider(
 /**
  * Create a mock AgentCatalogProvider for discovery tests.
  * Per P0_AGENT_GRAPH_IDENTITY: agentId === graphId.
- * Per LANGGRAPH_SERVER_ALIGNED: uses 'name' field (not displayName).
+ * Per DISCOVERY_SEPARATION: no canHandle — discovery is pure listAgents() fanout.
  */
 export function createMockAgentCatalogProvider(
   providerId: string,
@@ -225,8 +214,5 @@ export function createMockAgentCatalogProvider(
   return {
     providerId,
     listAgents: () => agentDescriptors,
-    canHandle: (graphId: string) =>
-      graphId.startsWith(`${providerId}:`) &&
-      agentNames.some((agentName) => graphId === `${providerId}:${agentName}`),
   };
 }

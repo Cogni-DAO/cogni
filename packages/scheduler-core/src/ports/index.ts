@@ -58,7 +58,8 @@ export {
   type UpdateScheduleInput,
 } from "./schedule-manager.port";
 export type {
-  ScheduleRun,
-  ScheduleRunRepository,
-  ScheduleRunStatus,
+  GraphRun,
+  GraphRunKind,
+  GraphRunRepository,
+  GraphRunStatus,
 } from "./schedule-run.port";

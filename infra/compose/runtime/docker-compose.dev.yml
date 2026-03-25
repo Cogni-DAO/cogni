@@ -70,7 +70,8 @@ services:
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
       # TigerBeetle (Financial Ledger) — optional, native client requires IP (no DNS).
       # Static IP assigned via ipam on internal network.
-      - TIGERBEETLE_ADDRESS=10.100.0.100:3002
+      # Opt-in: set TIGERBEETLE_ADDRESS in .env.local and run `pnpm dev:infra:tb` (bug.0195)
+      # - TIGERBEETLE_ADDRESS=10.100.0.100:3002
       # Privy (Operator Wallet) — optional, silently skipped if missing
       - PRIVY_APP_ID
       - PRIVY_APP_SECRET
@@ -95,13 +96,18 @@ services:
       # Override via env for test:stack:dev where app runs on host
       - SCHEDULER_WORKER_HEALTH_URL=${SCHEDULER_WORKER_HEALTH_URL:-http://scheduler-worker:9000}
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
+      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL:-http://openclaw-gateway:18789}
       - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
+      # Redis (stream plane — ephemeral only)
+      - REDIS_URL=redis://redis:6379
     volumes:
       - repo_data:/repo:ro
     depends_on:
       postgres:
         condition: service_healthy
       litellm:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       temporal:
         condition: service_healthy
@@ -201,6 +207,35 @@ services:
     depends_on:
       - app
       - litellm
+
+  # =============================================================================
+  # Redis 7 — ephemeral stream plane (no persistence, no volume)
+  # Per unified-graph-launch spec: REDIS_IS_STREAM_PLANE
+  # =============================================================================
+  redis:
+    image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
+    container_name: redis
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - cogni-edge
+    ports:
+      - "6379:6379"
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--maxmemory"
+      - "128mb"
+      - "--maxmemory-policy"
+      - "noeviction"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
 
   postgres:
     image: postgres:15
@@ -630,12 +665,15 @@ services:
   # TigerBeetle (Financial Ledger)
   # Per financial-ledger-spec: double-entry ledger engine
   # Self-initializing: formats data file on first boot, then starts.
+  # Opt-in via --profile tigerbeetle (requires ~1.2GiB RAM for journal mmap).
   # =============================================================================
 
   tigerbeetle:
     image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
     container_name: tigerbeetle
+    profiles: [tigerbeetle]
     restart: unless-stopped
+    mem_limit: 2g
     cap_add:
       - IPC_LOCK
     security_opt:
@@ -655,7 +693,7 @@ services:
           echo "TigerBeetle: formatting data file (first boot)..."
           /tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/0_0.tigerbeetle
         fi
-        exec /tigerbeetle start --addresses=0.0.0.0:3002 --cache-grid=256MiB --development /data/0_0.tigerbeetle
+        exec /tigerbeetle start --addresses=0.0.0.0:3002 --cache-grid=128MiB --development /data/0_0.tigerbeetle
     volumes:
       - tigerbeetle_data:/data
     healthcheck:

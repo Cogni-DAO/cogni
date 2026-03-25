@@ -17,9 +17,17 @@ import type { AiEvent, ToolSourcePort } from "@cogni/ai-core";
 import { TOOL_CATALOG, toBoundToolRuntime } from "@cogni/ai-tools";
 import { describe, expect, it, vi } from "vitest";
 
+import { runInScope } from "@/adapters/server/ai/execution-scope";
 import type { CompletionUnitAdapter } from "@/adapters/server/ai/langgraph/inproc.provider";
 import { LangGraphInProcProvider } from "@/adapters/server/ai/langgraph/inproc.provider";
 import type { GraphRunRequest } from "@/ports";
+
+const TEST_SCOPE = {
+  billing: {
+    billingAccountId: "test-billing",
+    virtualKeyId: "test-vkey",
+  },
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test Helpers
@@ -31,11 +39,13 @@ import type { GraphRunRequest } from "@/ports";
 async function collectEvents(
   stream: AsyncIterable<AiEvent>
 ): Promise<AiEvent[]> {
-  const events: AiEvent[] = [];
-  for await (const event of stream) {
-    events.push(event);
-  }
-  return events;
+  return runInScope(TEST_SCOPE, async () => {
+    const events: AiEvent[] = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+    return events;
+  });
 }
 
 /**
@@ -105,15 +115,8 @@ function createTestRequest(
 ): GraphRunRequest {
   return {
     runId: "test-run-id",
-    ingressRequestId: "test-ingress-id",
     messages: [{ role: "user", content: "Hello" }],
     model: "test-model",
-    caller: {
-      billingAccountId: "test-billing",
-      virtualKeyId: "test-vkey",
-      requestId: "test-req",
-      traceId: "00000000000000000000000000000000",
-    },
     graphId: "langgraph:poet",
     ...overrides,
   };
@@ -126,106 +129,121 @@ function createTestRequest(
 describe("LangGraphInProcProvider", () => {
   describe("valid graphId", () => {
     it("calls adapter.executeCompletionUnit and emits events reflecting adapter stream", async () => {
-      const adapterEvents: AiEvent[] = [
-        { type: "text_delta", delta: "Hello " },
-        { type: "text_delta", delta: "World" },
-      ];
-      const mockAdapter = createMockAdapter({ events: adapterEvents });
-      const mockToolSource = createMockToolSource();
-      const provider = new LangGraphInProcProvider(mockAdapter, mockToolSource);
+      await runInScope(TEST_SCOPE, async () => {
+        const adapterEvents: AiEvent[] = [
+          { type: "text_delta", delta: "Hello " },
+          { type: "text_delta", delta: "World" },
+        ];
+        const mockAdapter = createMockAdapter({ events: adapterEvents });
+        const mockToolSource = createMockToolSource();
+        const provider = new LangGraphInProcProvider(
+          mockAdapter,
+          mockToolSource
+        );
 
-      const request = createTestRequest({ graphId: "langgraph:poet" });
-      const { stream, final } = provider.runGraph(request);
+        const request = createTestRequest({ graphId: "langgraph:poet" });
+        const { stream, final } = provider.runGraph(request);
 
-      const events = await collectEvents(stream);
-      const result = await final;
+        const events = await collectEvents(stream);
+        const result = await final;
 
-      // Adapter should be called
-      expect(mockAdapter.executeCompletionUnit).toHaveBeenCalled();
+        // Adapter should be called
+        expect(mockAdapter.executeCompletionUnit).toHaveBeenCalled();
 
-      // Events should flow from adapter through runner
-      // Note: runner adds assistant_final and done
-      const textDeltas = events.filter((e) => e.type === "text_delta");
-      expect(textDeltas.length).toBeGreaterThan(0);
+        // Events should flow from adapter through runner
+        // Note: runner adds assistant_final and done
+        const textDeltas = events.filter((e) => e.type === "text_delta");
+        expect(textDeltas.length).toBeGreaterThan(0);
 
-      // Terminal events present
-      const assistantFinals = events.filter(
-        (e) => e.type === "assistant_final"
-      );
-      const dones = events.filter((e) => e.type === "done");
-      expect(assistantFinals).toHaveLength(1);
-      expect(dones).toHaveLength(1);
+        // Terminal events present
+        const assistantFinals = events.filter(
+          (e) => e.type === "assistant_final"
+        );
+        const dones = events.filter((e) => e.type === "done");
+        expect(assistantFinals).toHaveLength(1);
+        expect(dones).toHaveLength(1);
 
-      // done is last
-      expect(events[events.length - 1]).toEqual({ type: "done" });
+        // done is last
+        expect(events[events.length - 1]).toEqual({ type: "done" });
 
-      // Result reflects success
-      expect(result.ok).toBe(true);
+        // Result reflects success
+        expect(result.ok).toBe(true);
+      });
     });
   });
 
   describe("invalid graphId", () => {
     it("emits not_found error then done for unknown graph (REQ1)", async () => {
-      const mockAdapter = createMockAdapter();
-      const mockToolSource = createMockToolSource();
-      const provider = new LangGraphInProcProvider(mockAdapter, mockToolSource);
+      await runInScope(TEST_SCOPE, async () => {
+        const mockAdapter = createMockAdapter();
+        const mockToolSource = createMockToolSource();
+        const provider = new LangGraphInProcProvider(
+          mockAdapter,
+          mockToolSource
+        );
 
-      // Request with graph not in catalog
-      const request = createTestRequest({
-        graphId: "langgraph:nonexistent_graph",
+        // Request with graph not in catalog
+        const request = createTestRequest({
+          graphId: "langgraph:nonexistent_graph",
+        });
+        const { stream, final } = provider.runGraph(request);
+
+        const events = await collectEvents(stream);
+        const result = await final;
+
+        // Should NOT call adapter
+        expect(mockAdapter.executeCompletionUnit).not.toHaveBeenCalled();
+
+        // Should emit error (client error, not 'internal')
+        const errors = events.filter((e) => e.type === "error");
+        expect(errors).toHaveLength(1);
+        // Per REQ1: assert client error code, not 'internal'
+        expect(errors[0]).toEqual({ type: "error", error: "not_found" });
+
+        // done must be last
+        const dones = events.filter((e) => e.type === "done");
+        expect(dones).toHaveLength(1);
+        expect(events[events.length - 1]).toEqual({ type: "done" });
+
+        // Result reflects failure
+        expect(result.ok).toBe(false);
+        expect(result.error).toBe("not_found");
       });
-      const { stream, final } = provider.runGraph(request);
-
-      const events = await collectEvents(stream);
-      const result = await final;
-
-      // Should NOT call adapter
-      expect(mockAdapter.executeCompletionUnit).not.toHaveBeenCalled();
-
-      // Should emit error (client error, not 'internal')
-      const errors = events.filter((e) => e.type === "error");
-      expect(errors).toHaveLength(1);
-      // Per REQ1: assert client error code, not 'internal'
-      expect(errors[0]).toEqual({ type: "error", error: "not_found" });
-
-      // done must be last
-      const dones = events.filter((e) => e.type === "done");
-      expect(dones).toHaveLength(1);
-      expect(events[events.length - 1]).toEqual({ type: "done" });
-
-      // Result reflects failure
-      expect(result.ok).toBe(false);
-      expect(result.error).toBe("not_found");
     });
 
     it("emits invalid_request error for malformed graphId", async () => {
-      const mockAdapter = createMockAdapter();
-      const mockToolSource = createMockToolSource();
-      const provider = new LangGraphInProcProvider(mockAdapter, mockToolSource);
+      await runInScope(TEST_SCOPE, async () => {
+        const mockAdapter = createMockAdapter();
+        const mockToolSource = createMockToolSource();
+        const provider = new LangGraphInProcProvider(
+          mockAdapter,
+          mockToolSource
+        );
 
-      // Request with wrong provider prefix
-      const request = createTestRequest({
-        graphId: "wrong_provider:poet",
+        // Request with wrong provider prefix
+        const request = createTestRequest({
+          graphId: "wrong_provider:poet",
+        });
+        const { stream, final } = provider.runGraph(request);
+
+        const events = await collectEvents(stream);
+        const result = await final;
+
+        // Should NOT call adapter
+        expect(mockAdapter.executeCompletionUnit).not.toHaveBeenCalled();
+
+        // Should emit error
+        const errors = events.filter((e) => e.type === "error");
+        expect(errors).toHaveLength(1);
+        // Per REQ1: client error for malformed input
+        expect(errors[0]).toEqual({ type: "error", error: "invalid_request" });
+
+        // done must be last
+        expect(events[events.length - 1]).toEqual({ type: "done" });
+
+        // Result reflects failure
+        expect(result.ok).toBe(false);
       });
-      const { stream, final } = provider.runGraph(request);
-
-      const events = await collectEvents(stream);
-      const result = await final;
-
-      // Should NOT call adapter
-      expect(mockAdapter.executeCompletionUnit).not.toHaveBeenCalled();
-
-      // Should emit error
-      const errors = events.filter((e) => e.type === "error");
-      expect(errors).toHaveLength(1);
-      // Per REQ1: client error for malformed input
-      expect(errors[0]).toEqual({ type: "error", error: "invalid_request" });
-
-      // done must be last
-      expect(events[events.length - 1]).toEqual({ type: "done" });
-
-      // Result reflects failure
-      expect(result.ok).toBe(false);
     });
   });
 });

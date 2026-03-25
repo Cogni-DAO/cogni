@@ -4,7 +4,7 @@
 /**
  * Module: `@app/api/v1/ai/chat`
  * Purpose: HTTP endpoint for chat API using AI SDK Data Stream Protocol with server-authoritative thread persistence.
- * Scope: Accepts user message string, loads thread from DB, executes graph, streams via createUIMessageStream, accumulates response UIMessage for persistence. Does not implement business logic.
+ * Scope: Accepts user message string, loads thread from DB, starts graph workflow, pipes SSE from Redis via createUIMessageStream. Does not persist assistant messages (execution layer handles that). Does not implement business logic.
  * Invariants:
  *   - CLIENT_SENDS_USER_ONLY: client sends single message string; server loads authoritative thread from DB
  *   - OPTIMISTIC_APPEND: two-phase save (user before execute, assistant after pump) with expectedMessageCount guard
@@ -13,16 +13,18 @@
  *   - Per ASSISTANT_FINAL_REQUIRED: reconciles truncated text_delta events with assistant_final
  *   - Per STATUS_IS_EPHEMERAL: StatusEvent maps to transient data-status chunk, never persisted
  * Side-effects: IO (HTTP request/response, DB persistence)
- * Notes: P1 wire format — createUIMessageStream + createUIMessageStreamResponse (SSE). UIMessage accumulator is persistence-only.
+ * Notes: P1 wire format — createUIMessageStream + createUIMessageStreamResponse (SSE). Pure pipe — no persistence accumulator.
  * Links: Uses ai.chat.v1 contract, completion.server facade, AI SDK streaming, ThreadPersistencePort
  * @public
  */
 
+import { isAiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { nanoid } from "nanoid";
 import { NextResponse } from "next/server";
+import { executionErrorToHttpStatus } from "@/app/_facades/ai/execution-error-mapper";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
@@ -86,6 +88,13 @@ function handleRouteError(
       { error: "Insufficient credits" },
       { status: 402 }
     );
+  }
+
+  // Execution errors from Temporal+Redis boundary (serialization-safe error codes)
+  if (isAiExecutionError(error)) {
+    const status = executionErrorToHttpStatus(error.code);
+    logRequestWarn(ctx.log, error, error.code.toUpperCase());
+    return NextResponse.json({ error: error.code }, { status });
   }
 
   // Chat validation errors (structured via ChatValidationError)
@@ -295,6 +304,8 @@ export const POST = wrapRouteHandlerWithLogging(
       const messageDtos = uiMessagesToMessageDtos(threadWithUser);
 
       const streamStartMs = performance.now();
+      const idempotencyKey =
+        request.headers.get("idempotency-key") ?? undefined;
 
       const { stream: deltaStream, final } = await completionStream(
         {
@@ -304,6 +315,7 @@ export const POST = wrapRouteHandlerWithLogging(
           abortSignal: request.signal,
           graphName: input.graphName,
           stateKey,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         },
         ctx
       );
@@ -318,22 +330,12 @@ export const POST = wrapRouteHandlerWithLogging(
         "ai.chat_response_started"
       );
 
-      // --- Persistence accumulator (outer scope — survives stream lifecycle) ---
-      // Per PERSIST_AFTER_PUMP: written by stream callback, read by detached persist.
+      // --- SSE reconciliation state (display only, NOT for persistence) ---
+      // Per PERSIST_AFTER_PUMP: assistant persistence moved to execution layer (internal API route).
+      // These variables track text_delta accumulation solely for SSE reconciliation:
+      // if assistant_final has more content than deltas delivered, append the remainder to the SSE stream.
       let accumulatedText = "";
       let assistantFinalContent: string | undefined;
-      const accToolParts: Array<{
-        toolCallId: string;
-        toolName: string;
-        input: unknown;
-        output?: unknown;
-        state: "input-available" | "output-available";
-      }> = [];
-      const toolPartIndexByCallId = new Map<string, number>();
-      let resolvePumpDone!: () => void;
-      const pumpDone = new Promise<void>((r) => {
-        resolvePumpDone = r;
-      });
 
       // --- Stream response via AI SDK Data Stream Protocol (SSE) ---
       const textPartId = nanoid();
@@ -395,16 +397,6 @@ export const POST = wrapRouteHandlerWithLogging(
                     input: event.args,
                   } as UIMessageChunk);
                 }
-
-                // Accumulator: track tool call for persistence
-                const idx = accToolParts.length;
-                accToolParts.push({
-                  toolCallId: event.toolCallId,
-                  toolName: event.toolName,
-                  input: event.args ?? {},
-                  state: "input-available",
-                });
-                toolPartIndexByCallId.set(event.toolCallId, idx);
               } else if (event.type === "tool_call_result") {
                 writer.write({
                   type: "tool-output-available",
@@ -416,15 +408,6 @@ export const POST = wrapRouteHandlerWithLogging(
                   { toolCallId: event.toolCallId },
                   "tool_call_result completed"
                 );
-
-                // Accumulator: update tool part with result
-                const partIdx = toolPartIndexByCallId.get(event.toolCallId);
-                if (partIdx !== undefined) {
-                  const part = accToolParts[partIdx];
-                  if (!part) continue;
-                  part.output = event.result;
-                  part.state = "output-available";
-                }
               } else if (event.type === "status") {
                 // STATUS_IS_EPHEMERAL: transient data part, never persisted in UIMessage
                 // STATUS_BEST_EFFORT: safe to skip if stream is backpressured
@@ -553,88 +536,13 @@ export const POST = wrapRouteHandlerWithLogging(
               { reqId: ctx.reqId, streamMs },
               "ai.chat_stream_closed"
             );
-            resolvePumpDone();
           }
         },
       });
 
-      // --- Phase 2: persist assistant message after pump (disconnect-safe) ---
-      // Detached from stream lifecycle — client disconnect cannot prevent this.
-      const persistAfterPump = pumpDone.then(async () => {
-        const finalText = assistantFinalContent ?? accumulatedText;
-        if (!finalText && accToolParts.length === 0) {
-          ctx.log.warn({ stateKey }, "ai.thread_persist_skipped — no content");
-          return;
-        }
-
-        const responseParts: UIMessage["parts"] = [];
-        if (finalText) {
-          responseParts.push({ type: "text" as const, text: finalText });
-        }
-        for (const tp of accToolParts) {
-          responseParts.push({
-            type: "dynamic-tool",
-            toolCallId: tp.toolCallId,
-            toolName: tp.toolName,
-            state: tp.state,
-            input: tp.input,
-            ...(tp.output !== undefined ? { output: tp.output } : {}),
-          } as UIMessage["parts"][number]);
-        }
-
-        const assistantUIMessage: UIMessage = {
-          id: nanoid(),
-          role: "assistant",
-          parts: responseParts,
-        };
-
-        try {
-          const fullThread = [...threadWithUser, assistantUIMessage];
-          await threadPersistence.saveThread(
-            sessionUser.id,
-            stateKey,
-            redactSecretsInMessages(fullThread),
-            expectedLenAfterUser
-          );
-          ctx.log.info(
-            { stateKey, messageCount: fullThread.length },
-            "ai.thread_persisted"
-          );
-        } catch (persistErr) {
-          if (persistErr instanceof ThreadConflictError) {
-            try {
-              const reloaded = await threadPersistence.loadThread(
-                sessionUser.id,
-                stateKey
-              );
-              const retryThread = [...reloaded, assistantUIMessage];
-              await threadPersistence.saveThread(
-                sessionUser.id,
-                stateKey,
-                redactSecretsInMessages(retryThread),
-                reloaded.length
-              );
-              ctx.log.info(
-                { stateKey, messageCount: retryThread.length },
-                "ai.thread_persisted (retry)"
-              );
-            } catch (retryErr) {
-              ctx.log.error(
-                { err: retryErr, stateKey },
-                "ai.thread_persist_retry_failed"
-              );
-            }
-          } else {
-            ctx.log.error(
-              { err: persistErr, stateKey },
-              "ai.thread_persist_failed"
-            );
-          }
-        }
-      });
-      persistAfterPump.catch((err) =>
-        ctx.log.error({ err, stateKey }, "ai.thread_persist_unhandled")
-      );
+      // --- Phase 2 (assistant persistence) moved to execution layer ---
+      // Per PERSIST_AFTER_PUMP: the internal API route persists the assistant message
+      // after draining the full executor stream. This route is a pure SSE pipe.
 
       // Return SSE response with stateKey header for thread continuity
       // Wrap in NextResponse: createUIMessageStreamResponse returns Response,

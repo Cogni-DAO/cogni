@@ -3,24 +3,15 @@
 
 /**
  * Module: `@app/(app)/activity/page`
- * Purpose: Activity dashboard page shell.
- * Scope: Auth check only. Does not fetch activity data or implement business logic.
- * Invariants: Protected route (server-side auth check).
- * Side-effects: IO
- * Links: [ActivityView](./view.tsx)
+ * Purpose: Permanent redirect — activity is now part of the dashboard.
+ * Scope: Redirect only. No data fetching or rendering.
+ * Invariants: 308 permanent redirect to /dashboard.
+ * Side-effects: none
  * @public
  */
 
-import { redirect } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 
-import { getServerSessionUser } from "@/lib/auth/server";
-import { ActivityView } from "./view";
-
-export default async function ActivityPage() {
-  const user = await getServerSessionUser();
-  if (!user) {
-    redirect("/");
-  }
-
-  return <ActivityView />;
+export default function ActivityPage() {
+  permanentRedirect("/dashboard");
 }

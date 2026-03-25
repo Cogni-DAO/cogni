@@ -64,7 +64,7 @@ describe("ScheduleControlPort.listScheduleIds (Contract)", () => {
       },
       action: {
         type: "startWorkflow",
-        workflowType: "GovernanceScheduledRunWorkflow",
+        workflowType: "GraphRunWorkflow",
         workflowId: scheduleId,
         args: [{ scheduleId, input: { message: "TEST" } }],
         taskQueue: "scheduler-worker",

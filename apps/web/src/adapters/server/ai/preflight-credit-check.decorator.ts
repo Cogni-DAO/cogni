@@ -16,6 +16,7 @@
 
 import type { Logger } from "pino";
 import type {
+  ExecutionContext,
   GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
@@ -39,15 +40,16 @@ export class PreflightCreditCheckDecorator implements GraphExecutorPort {
   constructor(
     private readonly inner: GraphExecutorPort,
     private readonly checkFn: PreflightCreditCheckFn,
+    private readonly billingAccountId: string,
     _log: Logger
   ) {}
 
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const result = this.inner.runGraph(req);
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    const result = this.inner.runGraph(req, ctx);
 
     // Start credit check eagerly (runs in parallel with any sync setup)
     const checkPromise = this.checkFn(
-      req.caller.billingAccountId,
+      this.billingAccountId,
       req.model,
       req.messages
     );

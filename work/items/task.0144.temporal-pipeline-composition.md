@@ -1,7 +1,7 @@
 ---
 id: task.0144
 type: task
-status: needs_merge
+status: done
 title: "Typed Temporal pipeline composition — shared proxy configs, child workflows, stage I/O types"
 priority: 1
 rank: 5
@@ -21,7 +21,7 @@ revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-09
-updated: 2026-03-09
+updated: 2026-03-24
 labels: [attribution, temporal, architecture, dx]
 external_refs:
 ---

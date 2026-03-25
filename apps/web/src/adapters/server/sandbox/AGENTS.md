@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Sandbox adapter for AI agent execution — two modes: **ephemeral** containers (`network=none`, CLI invocation via dockerode) and **gateway** (long-running OpenClaw service on `sandbox-internal`, WS protocol). Both route LLM calls through nginx proxy to LiteLLM. Implements `SandboxRunnerPort`, `GraphProvider`, `AgentCatalogProvider`.
+Sandbox adapter for AI agent execution — two modes: **ephemeral** containers (`network=none`, CLI invocation via dockerode) and **gateway** (long-running OpenClaw service on `sandbox-internal`, WS protocol). Both route LLM calls through nginx proxy to LiteLLM. Implements `SandboxRunnerPort`, `GraphExecutorPort`, `AgentCatalogProvider`.
 
 ## Active Priority (2026-02-12)
 
@@ -44,7 +44,7 @@ Sandbox adapter for AI agent execution — two modes: **ephemeral** containers (
 ## Ports
 
 - **Uses ports:** none (SandboxGraphProvider uses SandboxRunnerPort internally)
-- **Implements ports:** `SandboxRunnerPort` (adapter), `GraphProvider` (sandbox-graph.provider), `AgentCatalogProvider` (sandbox-agent-catalog.provider)
+- **Implements ports:** `SandboxRunnerPort` (adapter), `GraphExecutorPort` (sandbox-graph.provider), `AgentCatalogProvider` (sandbox-agent-catalog.provider)
 - **Contracts:** tests/component/sandbox/, tests/stack/sandbox/
 
 ## Responsibilities

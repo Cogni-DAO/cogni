@@ -250,6 +250,7 @@ export async function syncGovernanceSchedules(
     const desiredParams: CreateScheduleParams = {
       scheduleId,
       dbScheduleId,
+      ownerUserId: deps.systemUserId,
       cron: schedule.cron,
       timezone: schedule.timezone,
       graphId,

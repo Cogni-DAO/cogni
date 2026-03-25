@@ -47,8 +47,4 @@ export class SandboxAgentCatalogProvider implements AgentCatalogProvider {
   listAgents(): readonly AgentDescriptor[] {
     return SANDBOX_AGENT_DESCRIPTORS;
   }
-
-  canHandle(graphId: string): boolean {
-    return graphId.startsWith(`${this.providerId}:`);
-  }
 }

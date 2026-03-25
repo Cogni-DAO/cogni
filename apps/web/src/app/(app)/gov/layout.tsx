@@ -25,10 +25,10 @@ import { NavigationLink } from "@/components";
 
 const GOV_TABS = [
   {
-    href: "/gov",
-    label: "System",
-    icon: LayoutDashboard,
-    match: "exact" as const,
+    href: "/gov/holdings",
+    label: "Ownership",
+    icon: PieChart,
+    match: "prefix" as const,
   },
   {
     href: "/gov/epoch",
@@ -37,15 +37,15 @@ const GOV_TABS = [
     match: "prefix" as const,
   },
   {
-    href: "/gov/holdings",
-    label: "Ownership",
-    icon: PieChart,
-    match: "prefix" as const,
-  },
-  {
     href: "/gov/review",
     label: "Review",
     icon: FileSignature,
+    match: "prefix" as const,
+  },
+  {
+    href: "/gov/system",
+    label: "System",
+    icon: LayoutDashboard,
     match: "prefix" as const,
   },
 ];

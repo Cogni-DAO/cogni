@@ -2,7 +2,7 @@
 id: bug.0129
 type: bug
 title: "Finalization fails on approver set hash mismatch — approver check is scattered and fragile"
-status: needs_merge
+status: done
 priority: 0
 rank: 10
 estimate: 3
@@ -22,7 +22,7 @@ revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-03-02
-updated: 2026-03-03
+updated: 2026-03-24
 labels: [governance, attribution, finalization]
 external_refs:
 ---

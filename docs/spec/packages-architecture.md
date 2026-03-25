@@ -9,7 +9,7 @@ summary: Internal @cogni/* packages — pure TypeScript libraries with strict is
 read_when: Creating a new package, debugging package builds, or working with @cogni/* imports.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-06
+verified: 2026-03-17
 tags: [infra, meta]
 ---
 
@@ -219,16 +219,17 @@ TypeScript project references build packages incrementally using `.tsbuildinfo` 
 
 ### Existing Packages
 
-| Package                  | Target     | Purpose                                                |
-| ------------------------ | ---------- | ------------------------------------------------------ |
-| `@cogni/ai-core`         | isomorphic | AI event types, UsageFact, ExecutorType for billing    |
-| `@cogni/ai-tools`        | isomorphic | Pure tool contracts and implementations (NO LangChain) |
-| `@cogni/aragon-osx`      | isomorphic | Aragon OSx encoding, addresses, receipt decoders       |
-| `@cogni/cogni-contracts` | isomorphic | Cogni-owned contract ABI and bytecode constants        |
-| `@cogni/ids`             | isomorphic | Branded ID types (UserId, ActorId) for RLS enforcement |
-| `@cogni/scheduler-core`  | node       | Scheduling types, port interfaces, payload schemas     |
-| `@cogni/db-schema`       | node       | Drizzle schema with subpath exports per domain slice   |
-| `@cogni/db-client`       | node       | Drizzle client factory + scheduling adapters           |
+| Package                       | Target     | Purpose                                                         |
+| ----------------------------- | ---------- | --------------------------------------------------------------- |
+| `@cogni/ai-core`              | isomorphic | AI event types, UsageFact, ExecutorType for billing             |
+| `@cogni/ai-tools`             | isomorphic | Pure tool contracts and implementations (NO LangChain)          |
+| `@cogni/aragon-osx`           | isomorphic | Aragon OSx encoding, addresses, receipt decoders                |
+| `@cogni/cogni-contracts`      | isomorphic | Cogni-owned contract ABI and bytecode constants                 |
+| `@cogni/ids`                  | isomorphic | Branded ID types (UserId, ActorId) for RLS enforcement          |
+| `@cogni/graph-execution-core` | neutral    | Shared graph execution contracts: executor, context, run stream |
+| `@cogni/scheduler-core`       | node       | Scheduling types, port interfaces, payload schemas              |
+| `@cogni/db-schema`            | node       | Drizzle schema with subpath exports per domain slice            |
+| `@cogni/db-client`            | node       | Drizzle client factory + scheduling adapters                    |
 
 ### File Pointers
 

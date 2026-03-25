@@ -16,7 +16,9 @@
  */
 
 import type { GraphId } from "@cogni/ai-core";
+import { trace } from "@opentelemetry/api";
 import type { Logger } from "pino";
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import {
   type AccountService,
   type AiTelemetryPort,
@@ -68,7 +70,7 @@ export interface CompletionStreamParams {
   llmService: LlmService;
   accountService: AccountService;
   clock: Clock;
-  caller: GraphRunRequest["caller"];
+  caller: import("@/ports").LlmCaller;
   ctx: RequestContext;
   aiTelemetry: AiTelemetryPort;
   langfuse: LangfusePort | undefined;
@@ -88,11 +90,9 @@ export interface CompletionStreamParams {
 export interface CompletionUnitParams {
   messages: GraphRunRequest["messages"];
   model: string;
-  caller: GraphRunRequest["caller"];
   runContext: {
     runId: string;
     attempt: number;
-    ingressRequestId: string;
     graphId: GraphId;
   };
   abortSignal?: AbortSignal;
@@ -125,7 +125,7 @@ export type CompletionStreamFn = (
  * Per COMPLETION_UNIT_NOT_PORT: This is a CompletionUnitAdapter, NOT a GraphExecutorPort.
  * Provides executeCompletionUnit() for LangGraphInProcProvider and other graph providers.
  *
- * Per PROVIDER_AGGREGATION: Graph routing is handled by AggregatingGraphExecutor.
+ * Per ROUTING_BY_NAMESPACE_ONLY: Graph routing is handled by NamespaceGraphRouter.
  * This adapter provides the completion unit execution that providers use internally.
  */
 export class InProcCompletionUnitAdapter {
@@ -147,19 +147,16 @@ export class InProcCompletionUnitAdapter {
    * Runners orchestrate; this method handles transformation + billing events.
    */
   executeCompletionUnit(params: CompletionUnitParams): CompletionUnitResult {
-    const {
-      messages,
-      model,
-      caller,
-      runContext,
-      abortSignal,
-      tools,
-      toolChoice,
-    } = params;
-    const { runId, attempt, ingressRequestId, graphId } = runContext;
+    const { messages, model, runContext, abortSignal, tools, toolChoice } =
+      params;
+    const { runId, attempt, graphId } = runContext;
+    const scope = getExecutionScope();
+    const traceId =
+      trace.getActiveSpan()?.spanContext().traceId ??
+      "00000000000000000000000000000000";
 
-    // Per GENERATION_UNDER_EXISTING_TRACE: use caller.traceId for Langfuse correlation
-    const ctx = this.createRequestContext(ingressRequestId, caller.traceId);
+    // Per GENERATION_UNDER_EXISTING_TRACE: use OTel traceId for Langfuse correlation
+    const ctx = this.createRequestContext(runId, traceId);
 
     this.log.debug(
       {
@@ -181,6 +178,14 @@ export class InProcCompletionUnitAdapter {
 
     const getCompletionPromise = async () => {
       if (!completionPromiseHolder.promise) {
+        // Build LlmCaller from execution scope + OTel context
+        const caller: import("@/ports").LlmCaller = {
+          billingAccountId: scope.billing.billingAccountId,
+          virtualKeyId: scope.billing.virtualKeyId,
+          requestId: runId,
+          traceId,
+        };
+
         completionPromiseHolder.promise = this.completionStream({
           messages,
           model,
@@ -202,7 +207,7 @@ export class InProcCompletionUnitAdapter {
           // Classify at typed boundary: convert InsufficientCreditsPortError to typed result
           if (isInsufficientCreditsPortError(error)) {
             this.log.debug(
-              { runId, billingAccountId: caller.billingAccountId },
+              { runId, billingAccountId: scope.billing.billingAccountId },
               "Insufficient credits - returning typed error result"
             );
             // Return typed error result instead of throwing
@@ -211,7 +216,7 @@ export class InProcCompletionUnitAdapter {
             })();
             const errorFinal: Promise<CompletionFinalResult> = Promise.resolve({
               ok: false as const,
-              requestId: ingressRequestId,
+              requestId: runId,
               error: "insufficient_credits" as const,
             });
             return { stream: errorStream, final: errorFinal };
@@ -226,7 +231,6 @@ export class InProcCompletionUnitAdapter {
     const stream = this.createCompletionUnitStream(getCompletionPromise, {
       runId,
       attempt,
-      caller,
       graphId,
     });
 
@@ -246,11 +250,10 @@ export class InProcCompletionUnitAdapter {
     runContext: {
       runId: string;
       attempt: number;
-      caller: GraphRunRequest["caller"];
       graphId: GraphId;
     }
   ): AsyncIterable<AiEvent> {
-    const { runId, attempt, caller, graphId } = runContext;
+    const { runId, attempt, graphId } = runContext;
     const completionResult = await getCompletionPromise();
     const { stream, final } = completionResult;
 
@@ -296,8 +299,6 @@ export class InProcCompletionUnitAdapter {
         attempt,
         source: "litellm",
         executorType: "inproc",
-        billingAccountId: caller.billingAccountId,
-        virtualKeyId: caller.virtualKeyId,
         graphId, // For per-agent analytics
         inputTokens: result.usage.promptTokens,
         outputTokens: result.usage.completionTokens,
@@ -325,17 +326,14 @@ export class InProcCompletionUnitAdapter {
 
   /**
    * Create RequestContext for completion layer.
-   * Uses ingressRequestId as reqId (delivery-layer correlation).
-   * Uses caller's traceId for Langfuse correlation (GENERATION_UNDER_EXISTING_TRACE).
+   * Uses runId as reqId (delivery-layer correlation).
+   * Uses OTel traceId for Langfuse correlation (GENERATION_UNDER_EXISTING_TRACE).
    */
-  private createRequestContext(
-    ingressRequestId: string,
-    traceId: string
-  ): RequestContext {
+  private createRequestContext(runId: string, traceId: string): RequestContext {
     return {
-      log: this.log.child({ ingressRequestId }),
-      reqId: ingressRequestId,
-      traceId, // Use caller's traceId for Langfuse correlation
+      log: this.log.child({ runId }),
+      reqId: runId,
+      traceId, // Use OTel traceId for Langfuse correlation
       routeId: "graph.inproc",
       clock: this.deps.clock,
     };

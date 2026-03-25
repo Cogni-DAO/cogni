@@ -3,34 +3,50 @@
 
 /**
  * Module: `@app/api/internal/graphs/[graphId]/runs`
- * Purpose: Internal API endpoint for scheduled graph execution.
- * Scope: Auth-protected POST endpoint for scheduler-worker. Does not contain graph execution logic.
+ * Purpose: Internal API endpoint for graph execution (scheduled and API-triggered).
+ * Scope: Auth-protected POST endpoint called by scheduler-worker (via Temporal activity). Handles both grant-backed scheduled runs and API-triggered runs with billing context in payload. Does not contain graph execution logic.
  * Invariants:
  *   - INTERNAL_API_SHARED_SECRET: Requires Bearer SCHEDULER_API_TOKEN
  *   - EXECUTION_IDEMPOTENCY_PERSISTED: Uses execution_requests table for deduplication
  *   - GRANT_VALIDATED_TWICE: Re-validates grant (defense-in-depth)
  *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: preflight credit check via decorator (DI closure)
  *   - Uses AiExecutionErrorCode from ai-core (no parallel error system)
- * Side-effects: IO (HTTP request/response, database, graph execution)
+ *   - Per PUMP_TO_COMPLETION_VIA_REDIS: publishes AiEvents to Redis Stream as it drains the executor stream
+ *   - Per STREAM_PUBLISH_IN_EXECUTION_LAYER: Redis publishing happens here, not in Temporal activity
+ *   - Per PERSIST_AFTER_PUMP: persists assistant message to thread after full stream drain (disconnect-safe)
+ *   - Per IDEMPOTENT_THREAD_PERSIST: assistant message ID = `assistant-{runId}` — skips if already persisted
+ *   - Scheduled run stateKey = sha256(idempotencyKey) — one isolated thread per execution slot, not per schedule
+ * Side-effects: IO (HTTP request/response, database, graph execution, Redis stream publishing, thread persistence)
  * Links: docs/spec/scheduler.md, graphs.run.internal.v1.contract
  * @internal
  */
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
+import type { AiEvent } from "@cogni/ai-core";
+import { RUN_STREAM_DEFAULT_TTL_SECONDS } from "@cogni/graph-execution-core";
 import { toUserId } from "@cogni/ids";
 import { SYSTEM_ACTOR } from "@cogni/ids/system";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getContainer } from "@/bootstrap/container";
-import { createGraphExecutor } from "@/bootstrap/graph-executor.factory";
+import {
+  createGraphExecutor,
+  createScopedGraphExecutor,
+} from "@/bootstrap/graph-executor.factory";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   InternalGraphRunInputSchema,
   type InternalGraphRunOutput,
 } from "@/contracts/graphs.run.internal.v1.contract";
-import { executeStream } from "@/features/ai/public.server";
+import {
+  assembleAssistantMessage,
+  executeStream,
+  redactSecretsInMessages,
+} from "@/features/ai/public.server";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
-import { isInsufficientCreditsPortError } from "@/ports";
+
+import { isInsufficientCreditsPortError, ThreadConflictError } from "@/ports";
 import {
   isGrantExpiredError,
   isGrantNotFoundError,
@@ -188,7 +204,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       );
     }
 
-    const { executionGrantId, input, runId: providedRunId } = parseResult.data;
+    const {
+      executionGrantId = null,
+      input,
+      runId: providedRunId,
+    } = parseResult.data;
+    const runId = providedRunId ?? randomUUID();
 
     // --- 5. Compute request hash for idempotency ---
     const requestHash = computeRequestHash(graphId, input);
@@ -264,63 +285,113 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       );
     }
 
-    // --- 7. Validate grant (defense-in-depth) ---
-    let grant: Awaited<
-      ReturnType<
-        typeof container.executionGrantWorkerPort.validateGrantForGraph
-      >
-    >;
-    try {
-      grant = await container.executionGrantWorkerPort.validateGrantForGraph(
-        SYSTEM_ACTOR,
-        executionGrantId,
-        graphId
-      );
-    } catch (error) {
-      if (isGrantNotFoundError(error)) {
-        log.warn({ executionGrantId }, "Grant not found");
-        return NextResponse.json({ error: "Grant not found" }, { status: 403 });
+    // --- 7/8. Resolve execution identity ---
+    let actorUserId: string;
+    let billingAccountId: string;
+    let virtualKeyId: string;
+    let stateKey: string | undefined;
+    let sessionId: string | undefined;
+
+    if (executionGrantId) {
+      // Scheduled / grant-backed runs: validate grant (defense-in-depth)
+      let grant: Awaited<
+        ReturnType<
+          typeof container.executionGrantWorkerPort.validateGrantForGraph
+        >
+      >;
+      try {
+        grant = await container.executionGrantWorkerPort.validateGrantForGraph(
+          SYSTEM_ACTOR,
+          executionGrantId,
+          graphId
+        );
+      } catch (error) {
+        if (isGrantNotFoundError(error)) {
+          log.warn({ executionGrantId }, "Grant not found");
+          return NextResponse.json(
+            { error: "Grant not found" },
+            { status: 403 }
+          );
+        }
+        if (isGrantExpiredError(error)) {
+          log.warn({ executionGrantId }, "Grant expired");
+          return NextResponse.json({ error: "Grant expired" }, { status: 403 });
+        }
+        if (isGrantRevokedError(error)) {
+          log.warn({ executionGrantId }, "Grant revoked");
+          return NextResponse.json({ error: "Grant revoked" }, { status: 403 });
+        }
+        if (isGrantScopeMismatchError(error)) {
+          log.warn({ executionGrantId, graphId }, "Grant scope mismatch");
+          return NextResponse.json(
+            { error: "Grant scope mismatch" },
+            { status: 403 }
+          );
+        }
+        throw error;
       }
-      if (isGrantExpiredError(error)) {
-        log.warn({ executionGrantId }, "Grant expired");
-        return NextResponse.json({ error: "Grant expired" }, { status: 403 });
-      }
-      if (isGrantRevokedError(error)) {
-        log.warn({ executionGrantId }, "Grant revoked");
-        return NextResponse.json({ error: "Grant revoked" }, { status: 403 });
-      }
-      if (isGrantScopeMismatchError(error)) {
-        log.warn({ executionGrantId, graphId }, "Grant scope mismatch");
+
+      const billingAccount =
+        await container.serviceAccountService.getBillingAccountById(
+          grant.billingAccountId
+        );
+      if (!billingAccount) {
+        log.error(
+          { billingAccountId: grant.billingAccountId },
+          "Billing account not found"
+        );
         return NextResponse.json(
-          { error: "Grant scope mismatch" },
-          { status: 403 }
+          { error: "Billing account not found" },
+          { status: 500 }
         );
       }
-      throw error;
-    }
 
-    // --- 8. Resolve billing account for virtualKeyId ---
-    const billingAccount =
-      await container.serviceAccountService.getBillingAccountById(
-        grant.billingAccountId
-      );
+      actorUserId = grant.userId;
+      billingAccountId = grant.billingAccountId;
+      virtualKeyId = billingAccount.defaultVirtualKeyId;
 
-    if (!billingAccount) {
-      log.error(
-        { billingAccountId: grant.billingAccountId },
-        "Billing account not found"
-      );
-      return NextResponse.json(
-        { error: "Billing account not found" },
-        { status: 500 }
-      );
+      // Per bug.0197: hash the full idempotencyKey (scheduleId:scheduledFor) so each
+      // execution slot gets its own isolated thread instead of accumulating in one.
+      stateKey = createHash("sha256")
+        .update(idempotencyKey, "utf8")
+        .digest("hex");
+      sessionId = `sched:${billingAccountId}:s:${stateKey.slice(0, 32)}`;
+    } else {
+      // API-triggered runs: execution context is provided in payload.
+      const inputUserId =
+        typeof input.actorUserId === "string" ? input.actorUserId : null;
+      const inputBillingAccountId =
+        typeof input.billingAccountId === "string"
+          ? input.billingAccountId
+          : null;
+      const inputVirtualKeyId =
+        typeof input.virtualKeyId === "string" ? input.virtualKeyId : null;
+      if (!inputUserId || !inputBillingAccountId || !inputVirtualKeyId) {
+        return NextResponse.json(
+          {
+            error:
+              "API-originated run requires actorUserId, billingAccountId, and virtualKeyId in payload",
+          },
+          { status: 400 }
+        );
+      }
+
+      actorUserId = inputUserId;
+      billingAccountId = inputBillingAccountId;
+      virtualKeyId = inputVirtualKeyId;
+      stateKey =
+        typeof input.stateKey === "string" && input.stateKey.length > 0
+          ? input.stateKey
+          : undefined;
+      sessionId = stateKey
+        ? `ba:${billingAccountId}:s:${createHash("sha256")
+            .update(stateKey, "utf8")
+            .digest("hex")
+            .slice(0, 32)}`
+        : `run:${runId}`;
     }
 
     // --- 9. Execute graph ---
-    // Use provided runId (from scheduler-worker) or generate if not provided
-    // Per SCHEDULER_SPEC.md: Canonical runId shared with schedule_runs and charge_receipts
-    const runId = providedRunId ?? randomUUID();
-
     // Use OTel trace ID (same one passed to executor, used by Langfuse decorator)
     const traceId = ctx.traceId;
 
@@ -338,23 +409,31 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       traceId
     );
 
-    // Extract scheduleId (stable) from idempotencyKey so runs of the same
-    // schedule share conversation state and Langfuse session grouping.
-    const scheduleId = extractScheduleId(idempotencyKey);
-
-    const stateKey = createHash("sha256")
-      .update(scheduleId, "utf8")
-      .digest("hex");
-
-    // gov: prefix distinguishes governance sessions from user sessions (ba:) in Langfuse
-    const sessionId = `gov:${grant.billingAccountId}:s:${stateKey.slice(0, 32)}`;
+    // --- 9b. Patch stateKey onto graph_runs record (bug.0197) ---
+    // stateKey is derived here (internal API) but graph_runs was created by
+    // createGraphRunActivity before this route is called. Patch it so dashboard
+    // can link runs to their threads.
+    if (stateKey && executionGrantId) {
+      try {
+        await container.graphRunRepository.patchRunStateKey(
+          SYSTEM_ACTOR,
+          runId,
+          stateKey
+        );
+      } catch (patchErr) {
+        log.warn(
+          { runId, stateKey, err: patchErr },
+          "Failed to patch stateKey on graph_runs — non-fatal"
+        );
+      }
+    }
 
     capture({
       event: AnalyticsEvents.AGENT_RUN_REQUESTED,
       identity: {
-        userId: grant.userId,
-        sessionId,
-        tenantId: grant.billingAccountId,
+        userId: actorUserId,
+        sessionId: sessionId ?? runId,
+        tenantId: billingAccountId,
         traceId,
       },
       properties: {
@@ -364,19 +443,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       },
     });
 
-    // Build caller from grant + billing account
-    const caller = {
-      billingAccountId: grant.billingAccountId,
-      virtualKeyId: billingAccount.defaultVirtualKeyId,
-      requestId: ctx.reqId,
-      traceId: ctx.traceId,
-      userId: grant.userId,
-      sessionId,
-    };
-
     // Parse input for graph execution
-    const messages = Array.isArray(input.messages)
-      ? (input.messages as { role: string; content: string }[])
+    const messageDtos = Array.isArray(input.messages)
+      ? input.messages
       : typeof input.message === "string"
         ? [{ role: "user", content: input.message }]
         : [];
@@ -391,7 +460,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     }
     const model = input.model;
 
-    const accountService = container.accountsForUser(toUserId(grant.userId));
+    const accountService = container.accountsForUser(toUserId(actorUserId));
 
     // Create preflight credit check closure
     // Per CREDITS_ENFORCED_AT_EXECUTION_PORT: decorator handles all execution paths
@@ -408,51 +477,209 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       });
 
     // Create graph executor and run
-    const executor = createGraphExecutor(
-      executeStream,
-      toUserId(grant.userId),
-      preflightCheckFn
-    );
-    const result = executor.runGraph({
-      runId,
-      ingressRequestId: runId,
-      graphId,
-      messages: messages.map((m) => ({
-        role: m.role as "user" | "assistant" | "system",
-        content: m.content,
-      })),
-      model,
-      caller,
-      stateKey,
+    const executor = createGraphExecutor(executeStream, toUserId(actorUserId));
+    const scopedExecutor = createScopedGraphExecutor({
+      executor,
+      preflightCheckFn,
+      billing: {
+        billingAccountId,
+        virtualKeyId,
+      },
     });
+    const messages = (
+      messageDtos as Array<{ role: string; content: string }>
+    ).map((m) => ({
+      role: m.role as "user" | "assistant" | "system",
+      content: m.content,
+    }));
+    // Forward responseFormat if provided (enables structuredOutput in GraphRunResult).
+    // Zod schemas are not JSON-serializable, so callers pass responseFormat as a
+    // serializable { prompt, schema } object. The schema is passed through as-is
+    // to the graph executor which handles both Zod and plain objects.
+    const responseFormat = resolveResponseFormat(input);
 
-    // Consume stream and wait for final result.
+    const result = scopedExecutor.runGraph(
+      {
+        runId,
+        graphId,
+        messages,
+        model,
+        ...(stateKey !== undefined && { stateKey }),
+        ...(responseFormat !== undefined && { responseFormat }),
+      },
+      {
+        actorUserId,
+        requestId: runId,
+        ...(sessionId ? { sessionId } : {}),
+      }
+    );
+
+    // Consume stream, publish events to Redis, and wait for final result.
+    // Per PUMP_TO_COMPLETION_VIA_REDIS: events reach Redis regardless of SSE subscribers.
+    // Per STREAM_PUBLISH_IN_EXECUTION_LAYER: Redis publishing happens here, not in Temporal activity.
     // Wrapped in try/catch so preflight credit failures (thrown during stream
     // iteration by PreflightCreditCheckDecorator) finalize the idempotency
     // record cleanly instead of leaving it "pending" forever.
+    const { runStream } = container;
     let final: Awaited<typeof result.final>;
+    // Hold back the done event — we enrich it with GraphFinal data after stream drain.
+    let pendingDone: { type: "done" } | null = null;
+    // Accumulate persistence-relevant events only (SHARED_EVENT_ASSEMBLER).
+    // text_delta not needed — assembler uses assistant_final for full content.
+    const PERSIST_EVENT_TYPES = new Set([
+      "assistant_final",
+      "tool_call_start",
+      "tool_call_result",
+    ]);
+    const accumulatedEvents: AiEvent[] = [];
     try {
-      for await (const _event of result.stream) {
-        // Drain stream to completion
+      for await (const event of result.stream) {
+        if (PERSIST_EVENT_TYPES.has(event.type)) {
+          accumulatedEvents.push(event);
+        }
+        // Publish each event to Redis Stream for SSE subscribers.
+        // Per REDIS_IS_STREAM_PLANE: Redis loss = stream interruption, not data loss.
+        // Publish failures are logged, not thrown — execution must complete for billing safety.
+        try {
+          if (event.type === "done") {
+            // Buffer done — enrich after stream drain when result.final resolves.
+            pendingDone = event;
+          } else {
+            await runStream.publish(runId, event);
+            if (event.type === "error") {
+              await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+            }
+          }
+        } catch (publishErr) {
+          log.warn(
+            { runId, eventType: event.type, err: publishErr },
+            "Redis stream publish failed — stream degraded, execution continues"
+          );
+        }
       }
 
       final = await result.final;
+
+      // Enrich and publish the buffered done event with usage from GraphFinal.
+      if (pendingDone) {
+        try {
+          const enriched = {
+            ...pendingDone,
+            ...(final.ok && final.usage ? { usage: final.usage } : {}),
+            ...(final.ok && final.finishReason
+              ? { finishReason: final.finishReason }
+              : {}),
+          };
+          await runStream.publish(runId, enriched);
+          await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+        } catch (publishErr) {
+          log.warn(
+            { runId, err: publishErr },
+            "Redis publish of enriched done failed"
+          );
+        }
+      }
+
+      // --- Thread persistence (PERSIST_AFTER_PUMP) ---
+      // Per STATEKEY_NULLABLE: only persist when stateKey + user context present.
+      // Per TERMINAL_ONLY_PERSIST: assembler returns null if no assistant_final.
+      // Per IDEMPOTENT_THREAD_PERSIST: message ID = assistant-{runId}, skip if already in thread.
+      if (stateKey && actorUserId) {
+        try {
+          const assistantMsg = assembleAssistantMessage(
+            runId,
+            accumulatedEvents
+          );
+          if (assistantMsg) {
+            const threadPersistence = container.threadPersistenceForUser(
+              toUserId(actorUserId)
+            );
+            const existing = await threadPersistence.loadThread(
+              actorUserId,
+              stateKey
+            );
+
+            // Idempotent guard: skip if this run's assistant message is already persisted
+            const alreadyPersisted = existing.some(
+              (m) => m.id === assistantMsg.id
+            );
+            if (!alreadyPersisted) {
+              const thread = [...existing, assistantMsg];
+              try {
+                await threadPersistence.saveThread(
+                  actorUserId,
+                  stateKey,
+                  redactSecretsInMessages(thread),
+                  existing.length
+                );
+                log.info(
+                  { runId, stateKey, messageCount: thread.length },
+                  "Thread persisted by execution layer"
+                );
+              } catch (persistErr) {
+                if (persistErr instanceof ThreadConflictError) {
+                  // Retry once with fresh load (concurrent write from chat route Phase 1)
+                  const reloaded = await threadPersistence.loadThread(
+                    actorUserId,
+                    stateKey
+                  );
+                  if (!reloaded.some((m) => m.id === assistantMsg.id)) {
+                    await threadPersistence.saveThread(
+                      actorUserId,
+                      stateKey,
+                      redactSecretsInMessages([...reloaded, assistantMsg]),
+                      reloaded.length
+                    );
+                    log.info(
+                      { runId, stateKey },
+                      "Thread persisted (retry after conflict)"
+                    );
+                  }
+                } else {
+                  throw persistErr;
+                }
+              }
+            }
+          }
+        } catch (threadErr) {
+          // Thread persistence failure must not block execution result.
+          // Billing + run record are more critical; log and continue.
+          log.error(
+            { runId, stateKey, err: threadErr },
+            "Thread persistence failed — execution result unaffected"
+          );
+        }
+      }
     } catch (error) {
       const errorCode = isInsufficientCreditsPortError(error)
         ? "insufficient_credits"
         : "internal";
 
       log.warn(
-        { runId, graphId, errorCode },
-        "Scheduled graph execution rejected before start"
+        { runId, graphId, errorCode, err: error },
+        "Graph execution rejected before start"
       );
+
+      // Publish error to Redis so facade subscribers don't hang.
+      try {
+        await runStream.publish(runId, {
+          type: "error",
+          error: errorCode,
+        });
+        await runStream.expire(runId, RUN_STREAM_DEFAULT_TTL_SECONDS);
+      } catch (publishErr) {
+        log.warn(
+          { runId, err: publishErr },
+          "Redis error publish failed after preflight rejection"
+        );
+      }
 
       capture({
         event: AnalyticsEvents.AGENT_RUN_FAILED,
         identity: {
-          userId: grant.userId,
-          sessionId: sessionId,
-          tenantId: grant.billingAccountId,
+          userId: actorUserId,
+          sessionId: sessionId ?? runId,
+          tenantId: billingAccountId,
           traceId,
         },
         properties: {
@@ -489,9 +716,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       capture({
         event: AnalyticsEvents.AGENT_RUN_COMPLETED,
         identity: {
-          userId: grant.userId,
-          sessionId: sessionId,
-          tenantId: grant.billingAccountId,
+          userId: actorUserId,
+          sessionId: sessionId ?? runId,
+          tenantId: billingAccountId,
           traceId,
         },
         properties: {
@@ -504,6 +731,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         ok: true,
         runId,
         traceId,
+        ...(final.structuredOutput !== undefined && {
+          structuredOutput: final.structuredOutput,
+        }),
       };
       return NextResponse.json(successResponse, { status: 200 });
     } else {
@@ -514,9 +744,9 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       capture({
         event: AnalyticsEvents.AGENT_RUN_FAILED,
         identity: {
-          userId: grant.userId,
-          sessionId: sessionId,
-          tenantId: grant.billingAccountId,
+          userId: actorUserId,
+          sessionId: sessionId ?? runId,
+          tenantId: billingAccountId,
           traceId,
         },
         properties: {
@@ -535,3 +765,60 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     }
   }
 );
+
+// ---------------------------------------------------------------------------
+// Response format resolution
+// ---------------------------------------------------------------------------
+
+/** Known response format schemas, keyed by schemaId. */
+const RESPONSE_FORMAT_SCHEMAS: Record<string, z.ZodType> = {
+  "evaluation-output": z.object({
+    metrics: z.array(
+      z.object({
+        metric: z.string(),
+        value: z.number().min(0).max(1),
+        observations: z.array(z.string()),
+      })
+    ),
+    summary: z.string(),
+  }),
+};
+
+/**
+ * Resolve responseFormat from graph input.
+ * Supports two modes:
+ * 1. schemaId: resolves to a known Zod schema (for Temporal/HTTP callers that can't serialize Zod)
+ * 2. schema: pass-through (for in-process callers that can provide Zod directly)
+ */
+function resolveResponseFormat(
+  input: Record<string, unknown>
+): { prompt?: string; schema: unknown } | undefined {
+  if (
+    input.responseFormat == null ||
+    typeof input.responseFormat !== "object"
+  ) {
+    return undefined;
+  }
+
+  const rf = input.responseFormat as Record<string, unknown>;
+
+  // Mode 1: schemaId lookup (Temporal/HTTP callers)
+  if (typeof rf.schemaId === "string") {
+    const schema = RESPONSE_FORMAT_SCHEMAS[rf.schemaId];
+    if (!schema) return undefined;
+    return {
+      ...(typeof rf.prompt === "string" ? { prompt: rf.prompt } : {}),
+      schema,
+    };
+  }
+
+  // Mode 2: schema pass-through (in-process callers)
+  if (rf.schema !== undefined) {
+    return {
+      ...(typeof rf.prompt === "string" ? { prompt: rf.prompt } : {}),
+      schema: rf.schema,
+    };
+  }
+
+  return undefined;
+}

@@ -108,7 +108,7 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 
 #### P1: GitOps Foundation
 
-**Goal:** Decouple deploy from app repo. Manifest-driven promotion.
+**Goal:** Decouple deploy from app repo. Manifest-driven promotion. AI-accessible production debugging (no SSH).
 
 | Deliverable                                                                    | Status      | Est | Work Item |
 | ------------------------------------------------------------------------------ | ----------- | --- | --------- |
@@ -127,24 +127,29 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Storage plan: PVCs for stateful deps (postgres data), backup strategy          | Not Started | 2   | —         |
 | ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | ↑   | task.0149 |
 | Retire SSH deploy for services (keep for app until P2)                         | Not Started | ↑   | task.0149 |
+| K8s API read-only service account for AI agent debugging                       | Not Started | 1   | task.0187 |
+| Argo CD API token for sync status / rollback by AI agents                      | Not Started | 1   | task.0187 |
 
-#### P2: Supply Chain + Progressive Delivery
+#### P2: Preview Environments for AI Dev-Lifecycle
 
-**Goal:** Signed images + optional canary deployment.
+**Goal:** Per-branch preview environments (~5 simultaneous) enabling AI dev-lifecycle agents to deploy, view, interact with, and validate their own work. Retire Compose entirely.
 
-| Deliverable                                          | Status      | Est | Work Item |
-| ---------------------------------------------------- | ----------- | --- | --------- |
-| Enable cosign keyless signing in CI                  | Not Started | 2   | —         |
-| Argo CD: Require signature verification before sync  | Not Started | 2   | —         |
-| Optional: Argo Rollouts for canary/blue-green        | Not Started | 2   | —         |
-| Migrate Next.js app to k3s (retire Compose entirely) | Not Started | 3   | —         |
+| Deliverable                                                                  | Status      | Est | Work Item |
+| ---------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Auto-create preview app per PR (ApplicationSet + wildcard DNS + Ingress)     | Not Started | 3   | task.0188 |
+| Share heavy infra (Temporal, LiteLLM, PG), only per-branch app + worker pods | Not Started | 2   | task.0188 |
+| Cleanup on PR close / 48h TTL                                                | Not Started | 1   | task.0188 |
+| Migrate Next.js app to k3s (retire Compose entirely)                         | Not Started | 3   | —         |
 
 #### P3: Scaling Infrastructure
 
-**Goal:** Escape hatches for hypergrowth. Move from single-node self-hosted to horizontally scalable managed infrastructure. **Trigger:** Do NOT build preemptively — activate when load signals hit thresholds below.
+**Goal:** Supply chain security + escape hatches for hypergrowth. **Trigger:** Do NOT build preemptively — activate when load signals hit thresholds below.
 
 | Deliverable                                                          | Status      | Est | Trigger                                           | Work Item |
 | -------------------------------------------------------------------- | ----------- | --- | ------------------------------------------------- | --------- |
+| Enable cosign keyless signing in CI                                  | Not Started | 2   | Before first external user                        | —         |
+| Argo CD: Require signature verification before sync                  | Not Started | 2   | After cosign enabled                              | —         |
+| Optional: Argo Rollouts for canary/blue-green                        | Not Started | 2   | >1 production incident from bad deploy            | —         |
 | Horizontal Pod Autoscaler (HPA) for scheduler-worker + app           | Not Started | 2   | >10 concurrent LLM requests per replica           | —         |
 | Multi-node k3s cluster (add worker nodes via OpenTofu)               | Not Started | 2   | Single-node CPU >70% sustained 30min              | —         |
 | Managed Postgres migration (Neon/RDS/Supabase)                       | Not Started | 3   | >100 concurrent DB connections OR backup pain     | —         |
@@ -154,42 +159,8 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Temporal Cloud migration (self-hosted → Temporal Cloud)              | Not Started | 2   | >1000 workflows/day OR Temporal ops burden        | —         |
 | External Secrets Operator (ESO → Vault/GCP Secret Manager)           | Not Started | 2   | Multi-cluster OR secret rotation requirement      | —         |
 | Queue-based LLM decoupling (HTTP intake → queue → worker → callback) | Not Started | 3   | LLM calls >30s blocking HTTP connections at scale | —         |
-| **Ephemeral preview environments (per-branch)** — see below          | Not Started | 5   | >3 concurrent feature branches needing validation | —         |
 
 **Key principle:** Kustomize manifests written in P1 are portable — same bases work on k3s, EKS, and GKE. Argo CD works everywhere. No migration rewrites, only overlay changes.
-
-##### Ephemeral Preview Environments
-
-**Goal:** Every feature branch gets an isolated, short-lived deployment for both AI and human validation. Critical for rapid iteration at scale with multiple developers and AI agents working concurrently.
-
-**Current state:** Single `staging` preview environment. Feature branches are only validated in CI (static tests + stack tests). No live preview until merge to staging.
-
-**Target state:** `feat/xyz` push → CI builds image → Argo CD creates ephemeral namespace → live preview at `feat-xyz.preview.domain` → PR merged or closed → namespace garbage-collected.
-
-| Component               | Approach                                                                                     |
-| ----------------------- | -------------------------------------------------------------------------------------------- |
-| **Namespace isolation** | Argo CD ApplicationSet with `pullRequest` generator — auto-creates apps per open PR          |
-| **Preview URL routing** | Wildcard DNS (`*.preview.domain`) + k8s Ingress per namespace (Caddy or nginx-ingress)       |
-| **Database isolation**  | Ephemeral Postgres per preview (Neon branching, or lightweight PG container per namespace)   |
-| **Shared infra**        | Temporal + LiteLLM shared across previews (namespaced by branch name)                        |
-| **Lifecycle**           | TTL-based cleanup — Argo CD prunes namespace when PR closes or after 48h inactivity          |
-| **AI validation**       | OpenClaw agent runs E2E/smoke tests against preview URL, posts results to PR                 |
-| **Human validation**    | PR comment with preview URL, deployed status badge, one-click access                         |
-| **Cost control**        | Resource quotas per namespace, auto-scale-to-zero after 30min idle (KEDA or kube-downscaler) |
-| **Branch management**   | Argo CD ApplicationSet handles fan-out; no manual branch→env mapping                         |
-
-**Why this matters for AI-driven development:** When AI agents are creating PRs at high velocity, each PR needs a live environment for validation — not just CI tests. The AI agent can hit the preview API, run behavioral checks, and self-approve or flag issues before human review. This closes the feedback loop from "code pushed" to "validated in production-like env" in minutes.
-
-**Scaling decision tree:**
-
-```
-Load increasing?
-  ├─ CPU bound → Add k3s worker nodes (OpenTofu) + HPA
-  ├─ DB bound  → Managed Postgres (connection pooling, read replicas)
-  ├─ LLM bound → LiteLLM replicas + request queue
-  ├─ Ops burden → Managed k8s (EKS/GKE) + Temporal Cloud
-  └─ Global    → Cloudflare + multi-region (only if latency matters)
-```
 
 #### P4: CI Portability (Dagger)
 

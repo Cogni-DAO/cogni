@@ -7,9 +7,10 @@
  * Scope: Defines AiEvent union used by all GraphExecutorPort adapters. Does NOT implement functions.
  * Invariants:
  *   - SINGLE_SOURCE_OF_TRUTH: This is the canonical definition; src/types re-exports
- *   - AiEvents are the ONLY streaming output type from ai_runtime
+ *   - AiEvents are the ONLY streaming output type from graph execution
  *   - toolCallId must be stable across start→result lifecycle
  *   - UsageReportEvent carries UsageFact for billing subscriber (never to UI)
+ *   - DoneEvent extends RunFinalSummary (optional usage + finishReason, populated by execution layer)
  * Side-effects: none (types only)
  * Links: graph-executor.port.ts, GRAPH_EXECUTION.md, LANGGRAPH_SERVER.md
  * @public
@@ -101,10 +102,24 @@ export interface StatusEvent {
 }
 
 /**
+ * Canonical terminal summary — usage + finish metadata available at run completion.
+ * Shared shape between GraphFinal, Redis terminal event, and facade accumulator.
+ * Populated by the execution layer (internal API route) from GraphFinal.
+ */
+export interface RunFinalSummary {
+  readonly usage?: {
+    readonly promptTokens: number;
+    readonly completionTokens: number;
+  };
+  readonly finishReason?: string;
+}
+
+/**
  * Stream completed.
  * Emitted by runtime when the entire response is done.
+ * Optionally carries RunFinalSummary when enriched by the execution layer.
  */
-export interface DoneEvent {
+export interface DoneEvent extends RunFinalSummary {
   readonly type: "done";
 }
 

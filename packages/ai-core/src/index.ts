@@ -27,6 +27,7 @@ export type {
   AssistantFinalEvent,
   DoneEvent,
   ErrorEvent,
+  RunFinalSummary,
   StatusEvent,
   TextDeltaEvent,
   ToolCallResultEvent,
@@ -51,6 +52,12 @@ export {
 } from "./execution/llm-errors";
 // Graph types
 export type { GraphId } from "./graph/graph-id";
+// Message types (canonical LLM input/output)
+export type {
+  Message,
+  MessageRole,
+  MessageToolCall,
+} from "./message/types";
 // Span types (observability)
 export type { AiSpanHandle, AiSpanPort } from "./tooling/ai-span";
 // Tool source port

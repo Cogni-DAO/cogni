@@ -2,7 +2,7 @@
 id: story.0063
 type: story
 title: Governance visibility dashboard — real-time AI council activity
-status: needs_triage
+status: done
 priority: 1
 estimate: 3
 summary: Users can see when the next governance run happens, what the AI council is doing right now, and recent governance decisions across all charters
@@ -15,7 +15,7 @@ branch:
 pr:
 reviewer:
 created: 2026-02-15
-updated: 2026-02-16
+updated: 2026-03-18
 labels: [governance, ui, observability]
 external_refs:
 revision: 0

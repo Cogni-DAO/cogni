@@ -195,10 +195,15 @@ describeIfReady("PR Review E2E (external)", () => {
     expect(reviewComment?.body).toMatch(/Blockers|Gates/i);
 
     // Governance deep link lives on Check Run "View Details" page, not PR comment
+    // DAO vote link only appears on failures — verify conditionally
     const checkRunSummary = checkRun?.output?.summary ?? "";
-    expect(checkRunSummary).toContain("Propose DAO Vote to Merge");
-    expect(checkRunSummary).toMatch(
-      /action=merge.*target=change.*resource=\d+.*vcs=github/
-    );
+    if (checkRun?.conclusion === "failure") {
+      expect(checkRunSummary).toContain("Propose DAO Vote to Merge");
+      expect(checkRunSummary).toMatch(
+        /action=merge.*target=change.*resource=\d+.*vcs=github/
+      );
+    }
+    // Always: summary contains gate results
+    expect(checkRunSummary).toMatch(/passed.*failed.*neutral/);
   }, 210_000);
 });

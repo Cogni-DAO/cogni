@@ -7,9 +7,9 @@
  * Scope: Validates input via contract, delegates to ActivityFacade. Does not implement business logic.
  * Invariants:
  * - Requires authenticated user.
+ * - scope=system queries system tenant billing account; scope=user (default) queries the session user's.
  * - Returns 400 for invalid cursor or input.
  * - Returns 400 for InvalidRangeError.
- * - Returns 401 for unauthorized access.
  * Side-effects: IO
  * Links: [ActivityFacade](../../../_facades/ai/activity.server.ts)
  * @public
@@ -21,7 +21,16 @@ import { getActivity } from "@/app/_facades/ai/activity.server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { aiActivityOperation } from "@/contracts/ai.activity.v1.contract";
 import { getServerSessionUser } from "@/lib/auth/server";
+import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { deriveTimeRange } from "@/shared/time/time-range";
+
+/** Synthetic session user for system-scoped activity queries. */
+const SYSTEM_SESSION_USER = {
+  id: COGNI_SYSTEM_PRINCIPAL_USER_ID,
+  walletAddress: null,
+  displayName: null,
+  avatarColor: null,
+} as const;
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +44,7 @@ export const GET = wrapRouteHandlerWithLogging(
 
     // Parse and validate input
     const inputResult = aiActivityOperation.input.safeParse({
+      scope: searchParams.get("scope") || undefined,
       range: searchParams.get("range") || undefined,
       from: searchParams.get("from") || undefined,
       to: searchParams.get("to") || undefined,
@@ -79,6 +89,9 @@ export const GET = wrapRouteHandlerWithLogging(
         to = inputResult.data.to;
       }
 
+      const isSystemScope = inputResult.data.scope === "system";
+      const effectiveUser = isSystemScope ? SYSTEM_SESSION_USER : sessionUser;
+
       const data = await getActivity({
         from,
         to,
@@ -86,7 +99,8 @@ export const GET = wrapRouteHandlerWithLogging(
         ...(inputResult.data.groupBy && { groupBy: inputResult.data.groupBy }),
         ...(inputResult.data.cursor && { cursor: inputResult.data.cursor }),
         ...(inputResult.data.limit && { limit: inputResult.data.limit }),
-        sessionUser,
+        sessionUser: effectiveUser,
+        scope: isSystemScope ? "system" : "user",
         reqId: ctx.reqId,
       });
 

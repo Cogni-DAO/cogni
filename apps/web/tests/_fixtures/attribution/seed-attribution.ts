@@ -64,6 +64,9 @@ export const TEST_WEIGHT_CONFIG: Record<string, number> = {
   "discord:message_sent": 500,
 };
 
+/** Stable pinned approvers for review/finalized epoch fixtures */
+const TEST_PINNED_APPROVERS = [`0x${"a1".repeat(20)}`, `0x${"b2".repeat(20)}`];
+
 /** Build an ingestion receipt insert param with sensible defaults */
 export function makeIngestionReceipt(
   overrides: Partial<InsertReceiptParams> & { receiptId: string }
@@ -339,7 +342,7 @@ export async function seedClosedEpoch(
   const poolTotal = 10000n;
   await store.closeIngestion(
     epoch.id,
-    [],
+    TEST_PINNED_APPROVERS,
     "test-approver-set-hash",
     "weight-sum-v0",
     "test-weight-config-hash"
@@ -463,7 +466,7 @@ export async function seedReviewEpoch(
   // Transition open → review (stop here — do NOT finalize)
   const reviewEpoch = await store.closeIngestion(
     epoch.id,
-    [],
+    TEST_PINNED_APPROVERS,
     "test-approver-set-hash",
     "weight-sum-v0",
     "test-weight-config-hash"

@@ -69,14 +69,14 @@ describe("createActivities", () => {
     });
 
     expect(activities).toHaveProperty("validateGrantActivity");
-    expect(activities).toHaveProperty("createScheduleRunActivity");
+    expect(activities).toHaveProperty("createGraphRunActivity");
     expect(activities).toHaveProperty("executeGraphActivity");
-    expect(activities).toHaveProperty("updateScheduleRunActivity");
+    expect(activities).toHaveProperty("updateGraphRunActivity");
 
     expect(typeof activities.validateGrantActivity).toBe("function");
-    expect(typeof activities.createScheduleRunActivity).toBe("function");
+    expect(typeof activities.createGraphRunActivity).toBe("function");
     expect(typeof activities.executeGraphActivity).toBe("function");
-    expect(typeof activities.updateScheduleRunActivity).toBe("function");
+    expect(typeof activities.updateGraphRunActivity).toBe("function");
   });
 });
 
@@ -134,7 +134,7 @@ describe("validateGrantActivity", () => {
   });
 });
 
-describe("createScheduleRunActivity", () => {
+describe("createGraphRunActivity", () => {
   it("calls runAdapter.createRun with correct args", async () => {
     const mockRunAdapter = {
       createRun: vi.fn().mockResolvedValue(undefined),
@@ -156,21 +156,29 @@ describe("createScheduleRunActivity", () => {
 
     const scheduledFor = "2025-01-15T10:00:00.000Z";
 
-    await activities.createScheduleRunActivity({
+    await activities.createGraphRunActivity({
       dbScheduleId: FIXED_IDS.scheduleId,
       runId: FIXED_IDS.runId,
       scheduledFor,
+      graphId: FIXED_IDS.graphId,
+      runKind: "system_scheduled",
+      triggerSource: "temporal_schedule",
     });
 
     expect(mockRunAdapter.createRun).toHaveBeenCalledWith(SYSTEM_ACTOR, {
-      scheduleId: FIXED_IDS.scheduleId,
       runId: FIXED_IDS.runId,
+      graphId: FIXED_IDS.graphId,
+      runKind: "system_scheduled",
+      triggerSource: "temporal_schedule",
+      triggerRef: undefined,
+      requestedBy: undefined,
+      scheduleId: FIXED_IDS.scheduleId,
       scheduledFor: new Date(scheduledFor),
     });
   });
 });
 
-describe("updateScheduleRunActivity", () => {
+describe("updateGraphRunActivity", () => {
   it("calls markRunStarted for running status", async () => {
     const mockRunAdapter = {
       createRun: vi.fn(),
@@ -190,7 +198,7 @@ describe("updateScheduleRunActivity", () => {
       logger: mockLogger,
     });
 
-    await activities.updateScheduleRunActivity({
+    await activities.updateGraphRunActivity({
       runId: FIXED_IDS.runId,
       status: "running",
       traceId: "trace-123",
@@ -222,7 +230,7 @@ describe("updateScheduleRunActivity", () => {
       logger: mockLogger,
     });
 
-    await activities.updateScheduleRunActivity({
+    await activities.updateGraphRunActivity({
       runId: FIXED_IDS.runId,
       status: "success",
     });
@@ -231,6 +239,7 @@ describe("updateScheduleRunActivity", () => {
       SYSTEM_ACTOR,
       FIXED_IDS.runId,
       "success",
+      undefined,
       undefined
     );
   });
@@ -254,7 +263,7 @@ describe("updateScheduleRunActivity", () => {
       logger: mockLogger,
     });
 
-    await activities.updateScheduleRunActivity({
+    await activities.updateGraphRunActivity({
       runId: FIXED_IDS.runId,
       status: "error",
       errorMessage: "Something went wrong",
@@ -264,7 +273,8 @@ describe("updateScheduleRunActivity", () => {
       SYSTEM_ACTOR,
       FIXED_IDS.runId,
       "error",
-      "Something went wrong"
+      "Something went wrong",
+      undefined
     );
   });
 });

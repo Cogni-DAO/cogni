@@ -11,6 +11,7 @@
  *   - runId + attempt + usageUnitId form the idempotency key (computed by billing.ts)
  *   - source identifies the adapter system (litellm, anthropic_sdk, etc.)
  *   - executorType is REQUIRED for executor-agnostic billing/history
+ *   - billingAccountId / virtualKeyId may be attached upstream by a wrapper; schemas enforce them at billing ingestion
  * Side-effects: none (types only)
  * Links: billing.ts (computeIdempotencyKey, commitUsageFact), GRAPH_EXECUTION.md, LANGGRAPH_SERVER.md
  * @public
@@ -61,9 +62,9 @@ export interface UsageFact {
    */
   readonly executorType: ExecutorType;
 
-  // Required billing context
-  readonly billingAccountId: string;
-  readonly virtualKeyId: string;
+  // Billing identity may be attached upstream by a wrapper before validation.
+  readonly billingAccountId?: string;
+  readonly virtualKeyId?: string;
 
   // Graph identifier for per-agent analytics (required)
   readonly graphId: GraphId;

@@ -38,6 +38,8 @@ export interface CreateScheduleParams {
    * Set null/undefined only for legacy Temporal-only schedules.
    */
   readonly dbScheduleId?: string | null;
+  /** User ID of the schedule owner — written as requestedBy on produced runs. */
+  readonly ownerUserId: string;
   /** Cron expression (5-field) */
   readonly cron: string;
   /** IANA timezone */
@@ -52,7 +54,7 @@ export interface CreateScheduleParams {
   readonly overlapPolicy?: ScheduleOverlapPolicyHint;
   /** Catchup window in milliseconds. Default: 60_000 (1m). Governance passes 0. */
   readonly catchupWindowMs?: number;
-  /** Workflow type to start (default: GovernanceScheduledRunWorkflow) */
+  /** Workflow type to start (default: GraphRunWorkflow) */
   readonly workflowType?: string;
   /** Task queue override (default: uses adapter's configured queue) */
   readonly taskQueueOverride?: string;

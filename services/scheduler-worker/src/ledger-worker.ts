@@ -14,13 +14,15 @@
  * @internal
  */
 
+import { createRequire } from "node:module";
 import { NativeConnection, Worker } from "@temporalio/worker";
-
 import { createEnrichmentActivities } from "./activities/enrichment.js";
 import { createAttributionActivities } from "./activities/ledger.js";
 import type { AttributionContainer } from "./bootstrap/container.js";
 import type { Env } from "./bootstrap/env.js";
 import type { Logger } from "./observability/logger.js";
+
+const require = createRequire(import.meta.url);
 
 /** Task queue for ledger workflows — separate from scheduler-tasks */
 export const LEDGER_TASK_QUEUE = "ledger-tasks";
@@ -78,8 +80,7 @@ export async function startAttributionWorker(
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: LEDGER_TASK_QUEUE,
-    workflowsPath: new URL("./workflows/ledger-workflows.js", import.meta.url)
-      .pathname,
+    workflowsPath: require.resolve("@cogni/temporal-workflows/ledger"),
     activities,
   });
 

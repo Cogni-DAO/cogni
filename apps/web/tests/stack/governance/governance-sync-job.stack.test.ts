@@ -167,7 +167,7 @@ describe("Governance Schedule Sync Job (Stack)", () => {
       },
       action: {
         type: "startWorkflow",
-        workflowType: "GovernanceScheduledRunWorkflow",
+        workflowType: "GraphRunWorkflow",
         workflowId: "governance:old-charter",
         args: [
           { scheduleId: "governance:old-charter", input: { message: "OLD" } },

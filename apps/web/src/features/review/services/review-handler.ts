@@ -22,11 +22,7 @@ import {
 } from "@cogni/repo-spec";
 import type { Logger } from "pino";
 
-import type { GraphExecutorPort, LlmCaller } from "@/ports";
-import {
-  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
-  COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@/shared/constants/system-tenant";
+import type { GraphExecutorPort } from "@/ports";
 import { EVENT_NAMES } from "@/shared/observability/events";
 import { logEvent } from "@/shared/observability/server/logEvent";
 
@@ -142,18 +138,8 @@ export async function handlePrReview(
       return;
     }
 
-    // 4. Build system tenant caller
-    const runId = randomUUID();
+    // 4. Build run identity
     const model = deps.reviewModel ?? DEFAULT_REVIEW_MODEL;
-
-    const caller: LlmCaller = {
-      billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
-      virtualKeyId: deps.virtualKeyId,
-      requestId: runId,
-      traceId: runId,
-      userId: COGNI_SYSTEM_PRINCIPAL_USER_ID,
-      sessionId: `review:${owner}/${repo}:${prNumber}`,
-    };
 
     // 5. Rule loader
     const ruleCache = new Map<string, Rule>();
@@ -170,7 +156,6 @@ export async function handlePrReview(
     // 6. Run gate orchestrator
     const result = await runGates(gatesConfig.gates, evidence, {
       executor: deps.executor,
-      caller,
       model,
       log,
       loadRule,

@@ -123,8 +123,8 @@ CREATE POLICY tenant_isolation ON payment_events
     )
   ));
 
--- schedule_runs: scheduleId → schedules → users
-CREATE POLICY tenant_isolation ON schedule_runs
+-- graph_runs: scheduleId → schedules → users
+CREATE POLICY tenant_isolation ON graph_runs
   USING (schedule_id IN (
     SELECT id FROM schedules
     WHERE owner_user_id = current_setting('app.current_user_id', true)
@@ -311,13 +311,13 @@ Methods that touch user-scoped tables and need `withTenantScope` / `setTenantCon
 | `updateLastRunAt(actorId: ActorId, …)`      | `schedules` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
 | `findStaleSchedules(actorId: ActorId)`      | `schedules` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
 
-#### `DrizzleScheduleRunAdapter` (`packages/db-client/…/drizzle-run.adapter.ts`)
+#### `DrizzleGraphRunAdapter` (`packages/db-client/…/drizzle-run.adapter.ts`)
 
-| Method                                         | Tables          | Txn? | userId source          | Wired? |
-| ---------------------------------------------- | --------------- | ---- | ---------------------- | ------ |
-| `createRun(actorId: ActorId, { … })`           | `schedule_runs` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
-| `markRunStarted(actorId: ActorId, runId, …)`   | `schedule_runs` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
-| `markRunCompleted(actorId: ActorId, runId, …)` | `schedule_runs` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
+| Method                                         | Tables       | Txn? | userId source          | Wired? |
+| ---------------------------------------------- | ------------ | ---- | ---------------------- | ------ |
+| `createRun(actorId: ActorId, { … })`           | `graph_runs` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
+| `markRunStarted(actorId: ActorId, runId, …)`   | `graph_runs` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
+| `markRunCompleted(actorId: ActorId, runId, …)` | `graph_runs` | No   | ActorId (SYSTEM_ACTOR) | [x]    |
 
 #### Special: SIWE Auth Callback (`src/auth.ts`)
 

@@ -187,6 +187,11 @@ export const serverSchema = z.object({
   // Required for research graph web search capability
   TAVILY_API_KEY: z.string().min(1).optional(),
 
+  // Redis (stream plane — ephemeral only)
+  // Per unified-graph-launch spec: REDIS_IS_STREAM_PLANE
+  // Default: localhost for host-mode dev; docker-compose overrides to redis://redis:6379
+  REDIS_URL: z.string().url().default("redis://localhost:6379"),
+
   // Temporal (Schedule orchestration) - Required
   // Per SCHEDULER_SPEC.md: Temporal is required infrastructure, no fallback
   // Start Temporal with: pnpm dev:infra

@@ -41,8 +41,9 @@
 - **Exports:**
   - `AiEvent` - Union of streaming event types (text_delta, usage_report, assistant_final, done, error)
   - `TextDeltaEvent`, `UsageReportEvent`, `AssistantFinalEvent`, `DoneEvent`, `ErrorEvent` - Individual event types
+  - `RunFinalSummary` - Terminal usage + finishReason shape (shared by DoneEvent, Redis terminal event, facade accumulator)
   - `ToolCallStartEvent`, `ToolCallResultEvent` - Tool execution events
-  - `UsageFact` - Billing fact emitted per LLM call (includes graphId)
+  - `UsageFact` - Billing fact emitted per LLM call; inner executors may emit neutral facts and wrapper layers attach billing identity before validation
   - `UsageFactStrictSchema` - Zod schema for billing-authoritative executors (inproc/sandbox; usageUnitId required)
   - `UsageFactHintsSchema` - Zod schema for external/telemetry executors (usageUnitId optional)
   - `ExecutorType` - Executor discriminator ("langgraph_server" | "claude_sdk" | "inproc" | "sandbox")

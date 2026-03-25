@@ -2,7 +2,7 @@
 id: bug.0151
 type: bug
 title: "ensurePoolComponents crashes on duplicate key — Drizzle wraps PostgresError, catch block misses it"
-status: needs_merge
+status: done
 priority: 0
 rank: 5
 estimate: 1
@@ -20,7 +20,7 @@ revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-03-10
-updated: 2026-03-11
+updated: 2026-03-24
 labels: [attribution, preview, production-blocker]
 external_refs:
 ---

@@ -9,6 +9,7 @@
     { "path": "./packages/aragon-osx" },
     { "path": "./packages/cogni-contracts" },
     { "path": "./packages/langgraph-graphs/tsconfig.build.json" },
+    { "path": "./packages/graph-execution-core" },
     { "path": "./packages/db-client" },
     { "path": "./packages/ids" },
     { "path": "./packages/db-schema" },
@@ -19,6 +20,7 @@
     { "path": "./packages/attribution-pipeline-plugins" },
     { "path": "./packages/operator-wallet" },
     { "path": "./packages/scheduler-core" },
+    { "path": "./packages/temporal-workflows" },
     { "path": "./packages/repo-spec" },
     { "path": "./packages/work-items" }
   ]

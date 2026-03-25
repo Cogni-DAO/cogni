@@ -23,6 +23,7 @@ import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { POST } from "@/app/api/internal/graphs/[graphId]/runs/route";
+import { getContainer } from "@/bootstrap/container";
 import { executionGrants, executionRequests, users } from "@/shared/db/schema";
 
 // Token from env (matches METRICS_TOKEN pattern in metrics-endpoint.stack.test.ts)
@@ -249,6 +250,50 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
       expect(response2.status).toBe(422);
       const body = await response2.json();
       expect(body.error).toContain("Idempotency conflict");
+    });
+  });
+
+  describe("redis stream publishing (PUMP_TO_COMPLETION_VIA_REDIS)", () => {
+    it("publishes AiEvents to Redis Stream during execution", async () => {
+      const idempotencyKey = `${randomUUID()}:2025-01-21T09:00:00Z`;
+      const input = {
+        messages: [{ role: "user", content: "Hello" }],
+        model: TEST_MODEL_ID,
+      };
+
+      const request = createRequest(
+        TEST_GRAPH_ID,
+        { executionGrantId: grantId, input },
+        { token: SCHEDULER_TOKEN, idempotencyKey }
+      );
+
+      const response = await POST(request, {
+        params: Promise.resolve({ graphId: TEST_GRAPH_ID }),
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.ok).toBe(true);
+
+      // Verify events were published to Redis Stream
+      const container = getContainer();
+      const ac = new AbortController();
+      const events: { type: string }[] = [];
+
+      for await (const entry of container.runStream.subscribe(
+        body.runId,
+        ac.signal
+      )) {
+        events.push({ type: entry.event.type });
+        // subscribe() terminates on done/error terminal events
+      }
+
+      // Must have at least one event and a terminal event
+      expect(events.length).toBeGreaterThan(0);
+      const lastEvent = events[events.length - 1];
+      expect(lastEvent?.type === "done" || lastEvent?.type === "error").toBe(
+        true
+      );
     });
   });
 

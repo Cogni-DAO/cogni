@@ -41,7 +41,12 @@ import { fetchSchedules } from "./_api/fetchSchedules";
 import { updateSchedule } from "./_api/updateSchedule";
 
 const SCHEDULE_PRESETS = [
+  { label: "Every minute", value: "* * * * *" },
+  { label: "Every 2 minutes", value: "*/2 * * * *" },
+  { label: "Every 5 minutes", value: "*/5 * * * *" },
+  { label: "Every 10 minutes", value: "*/10 * * * *" },
   { label: "Every 15 minutes", value: "*/15 * * * *" },
+  { label: "Every 30 minutes", value: "*/30 * * * *" },
   { label: "Hourly", value: "0 * * * *" },
   { label: "Daily at 9:00 AM", value: "0 9 * * *" },
   { label: "Daily at 6:00 PM", value: "0 18 * * *" },

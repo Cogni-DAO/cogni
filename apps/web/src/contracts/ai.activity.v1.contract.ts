@@ -69,6 +69,14 @@ export type TimeRange = z.infer<typeof TimeRangeSchema>;
 export const ActivityGroupBySchema = z.enum(["model", "graphId"]);
 export type ActivityGroupBy = z.infer<typeof ActivityGroupBySchema>;
 
+/**
+ * Scope determines which billing account to query.
+ * - "user": authenticated user's billing account (default)
+ * - "system": system tenant billing account (Cogni DAO)
+ */
+export const ActivityScopeSchema = z.enum(["user", "system"]);
+export type ActivityScope = z.infer<typeof ActivityScopeSchema>;
+
 export const aiActivityOperation = {
   id: "ai.activity.v1",
   summary: "Fetch AI activity statistics and logs",
@@ -76,6 +84,9 @@ export const aiActivityOperation = {
     "Returns usage statistics (spend, tokens, requests) grouped by time, and a paginated list of usage logs. Server derives optimal bucket step from range size.",
   input: z
     .object({
+      scope: ActivityScopeSchema.optional().describe(
+        "Billing scope: 'user' (default) or 'system' (Cogni DAO treasury)"
+      ),
       range: TimeRangeSchema.optional().describe(
         "Preset time range (1d/1w/1m). Server derives from/to using server time."
       ),

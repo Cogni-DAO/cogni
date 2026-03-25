@@ -21,7 +21,7 @@ import {
   createModelsPaidOnly,
   createModelsWithFree,
 } from "@tests/_fixtures/ai/fixtures";
-import ChatPage from "@/app/(app)/chat/page";
+import { ChatView as ChatPage } from "@/app/(app)/chat/view";
 
 // Mock components and localStorage utilities (use real hooks with seeded QueryClient)
 vi.mock("@/features/ai/public", async () => {

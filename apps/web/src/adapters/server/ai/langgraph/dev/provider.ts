@@ -4,7 +4,7 @@
 /**
  * Module: `@adapters/server/ai/langgraph/dev/provider`
  * Purpose: LangGraph dev server execution provider.
- * Scope: Implements GraphProvider for langgraph dev. Uses SDK Client.runs.stream(). Does NOT handle production server (P1).
+ * Scope: Implements GraphExecutorPort for langgraph dev. Uses SDK Client.runs.stream(). Does NOT handle production server (P1).
  * Invariants:
  *   - STABLE_GRAPH_IDS: providerId = "langgraph" (same as InProc)
  *   - MUTUAL_EXCLUSION: Either this or InProc registered, never both
@@ -13,7 +13,7 @@
  *   - STATEFUL_ONLY: Always send only last user message; server owns thread state
  *   - TOOL_CATALOG_IS_CANONICAL: Reads entry.toolIds for default catalog tools
  * Side-effects: IO (network calls to langgraph dev server)
- * Links: LANGGRAPH_SERVER.md (MVP section), graph-provider.ts
+ * Links: LANGGRAPH_SERVER.md (MVP section)
  * @internal
  */
 
@@ -21,16 +21,16 @@ import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 // biome-ignore lint/style/noRestrictedImports: SDK allowed in langgraph dev adapter per OFFICIAL_SDK_ONLY invariant
 import type { Client } from "@langchain/langgraph-sdk";
 import type { Logger } from "pino";
-
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import type {
   AiExecutionErrorCode,
+  ExecutionContext,
+  GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
 } from "@/ports";
 import { makeLogger } from "@/shared/observability";
 import type { AiEvent } from "@/types/ai-events";
-
-import type { GraphProvider } from "../../graph-provider";
 
 import {
   type SdkStreamChunk,
@@ -61,7 +61,7 @@ export interface LangGraphDevProviderConfig {
  *
  * Connects to langgraph dev server (port 2024) for graph execution.
  */
-export class LangGraphDevProvider implements GraphProvider {
+export class LangGraphDevProvider implements GraphExecutorPort {
   readonly providerId = LANGGRAPH_PROVIDER_ID;
   private readonly log: Logger;
   private readonly availableGraphs: Set<string>;
@@ -83,26 +83,16 @@ export class LangGraphDevProvider implements GraphProvider {
   }
 
   /**
-   * Check if this provider handles the given graphId.
-   * Per GRAPH_ID_NAMESPACED: graphId format is "langgraph:{graphName}"
-   */
-  canHandle(graphId: string): boolean {
-    if (!graphId.startsWith(`${this.providerId}:`)) {
-      return false;
-    }
-    const graphName = graphId.slice(this.providerId.length + 1);
-    return this.availableGraphs.has(graphName);
-  }
-
-  /**
    * Execute a graph run via langgraph dev server.
    *
    * Per OFFICIAL_SDK_ONLY: uses Client.runs.stream().
    * Per THREAD_KEY_REQUIRED: stateKey must be provided.
    * Per STATEFUL_ONLY: send only last user message; server owns thread state.
    */
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const { runId, ingressRequestId, graphId, caller, stateKey } = req;
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    const { runId, graphId, stateKey } = req;
+    const scope = getExecutionScope();
+    const requestId = ctx?.requestId ?? req.runId;
 
     // Per THREAD_KEY_REQUIRED: fail fast if not provided
     if (!stateKey) {
@@ -110,19 +100,19 @@ export class LangGraphDevProvider implements GraphProvider {
         { runId, graphId },
         "stateKey required for LangGraph Server"
       );
-      return this.createErrorResult(runId, ingressRequestId, "invalid_request");
+      return this.createErrorResult(runId, requestId, "invalid_request");
     }
 
     // Extract graph name from graphId
     const graphName = this.extractGraphName(graphId);
     if (!graphName) {
       this.log.error({ runId, graphId }, "Invalid graphId format");
-      return this.createErrorResult(runId, ingressRequestId, "invalid_request");
+      return this.createErrorResult(runId, requestId, "invalid_request");
     }
 
     if (!this.availableGraphs.has(graphName)) {
       this.log.error({ runId, graphName }, "Graph not found");
-      return this.createErrorResult(runId, ingressRequestId, "not_found");
+      return this.createErrorResult(runId, requestId, "not_found");
     }
 
     this.log.debug(
@@ -131,9 +121,9 @@ export class LangGraphDevProvider implements GraphProvider {
     );
 
     // Derive thread ID (UUIDv5) from (billingAccountId, stateKey)
-    const threadId = deriveThreadUuid(caller.billingAccountId, stateKey);
+    const threadId = deriveThreadUuid(scope.billing.billingAccountId, stateKey);
     const threadMetadata = buildThreadMetadata(
-      caller.billingAccountId,
+      scope.billing.billingAccountId,
       stateKey
     );
 
@@ -142,7 +132,8 @@ export class LangGraphDevProvider implements GraphProvider {
       req,
       graphName,
       threadId,
-      threadMetadata
+      threadMetadata,
+      requestId
     );
 
     return { stream, final };
@@ -158,17 +149,10 @@ export class LangGraphDevProvider implements GraphProvider {
     req: GraphRunRequest,
     graphName: string,
     threadId: string,
-    threadMetadata: { billingAccountId: string; stateKey: string }
+    threadMetadata: { billingAccountId: string; stateKey: string },
+    requestId: string
   ): GraphRunResult {
-    const {
-      runId,
-      ingressRequestId,
-      messages,
-      caller,
-      toolIds,
-      model,
-      graphId,
-    } = req;
+    const { runId, messages, toolIds, model, graphId } = req;
     const attempt = 0; // P0_ATTEMPT_FREEZE
 
     // P0 Contract: undefined => catalog default, [] => deny-all, [...] => exact
@@ -212,10 +196,10 @@ export class LangGraphDevProvider implements GraphProvider {
       threadId,
       threadMetadata,
       messages,
-      { runId, attempt, caller, graphId },
+      { runId, attempt, graphId },
       state,
       runId,
-      ingressRequestId,
+      requestId,
       resolvedToolIds,
       model
     );
@@ -240,7 +224,6 @@ export class LangGraphDevProvider implements GraphProvider {
     ctx: {
       runId: string;
       attempt: number;
-      caller: GraphRunRequest["caller"];
       graphId: GraphRunRequest["graphId"];
     },
     state: {

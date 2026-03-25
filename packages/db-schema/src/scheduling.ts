@@ -3,16 +3,16 @@
 
 /**
  * Module: `@shared/db/schema.scheduling`
- * Purpose: Scheduling tables schema for scheduled graph execution.
- * Scope: Defines execution_grants, schedules, schedule_runs tables. Does not contain queries or logic.
+ * Purpose: Scheduling and graph execution tables schema.
+ * Scope: Defines execution_grants, schedules, graph_runs tables. Does not contain queries or logic.
  * Invariants:
  * - execution_grants: Durable authorization for scheduled runs (not user sessions)
  * - schedules: Cron-based graph execution definitions
- * - schedule_runs: Execution ledger for auditability (P0 requirement)
+ * - graph_runs: Single canonical run ledger for all execution types (SINGLE_RUN_LEDGER)
  * - Per SCHEDULER_SPEC.md: job_key = scheduleId:scheduledFor for Graphile Worker
- * - UNIQUE(schedule_id, scheduled_for) on schedule_runs prevents duplicate run records per slot
+ * - UNIQUE(schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL on graph_runs prevents duplicate run records per slot
  * Side-effects: none (schema definitions only)
- * Links: docs/spec/scheduler.md, types/scheduling.ts
+ * Links: docs/spec/scheduler.md, docs/spec/unified-graph-launch.md, types/scheduling.ts
  * @public
  */
 
@@ -31,22 +31,37 @@ import {
 import { billingAccounts, users } from "./refs";
 
 /**
- * Schedule run status values (source of truth for DB enum).
- * - pending: Job enqueued, not yet started
+ * Graph run status values (source of truth for DB enum).
+ * Per SINGLE_RUN_LEDGER: single status enum for all run types.
+ * - pending: Run enqueued, not yet started
  * - running: Execution in progress
  * - success: Completed successfully
  * - error: Failed with error
  * - skipped: Skipped (disabled schedule or revoked grant)
+ * - cancelled: Cancelled by user or system
  */
-export const SCHEDULE_RUN_STATUSES = [
+export const GRAPH_RUN_STATUSES = [
   "pending",
   "running",
   "success",
   "error",
   "skipped",
+  "cancelled",
 ] as const;
 
-export type ScheduleRunStatus = (typeof SCHEDULE_RUN_STATUSES)[number];
+export type GraphRunStatus = (typeof GRAPH_RUN_STATUSES)[number];
+
+/**
+ * Graph run kind — how the run was triggered.
+ * Per SINGLE_RUN_LEDGER: all triggers produce the same run record shape.
+ */
+export const GRAPH_RUN_KINDS = [
+  "user_immediate",
+  "system_scheduled",
+  "system_webhook",
+] as const;
+
+export type GraphRunKind = (typeof GRAPH_RUN_KINDS)[number];
 
 /**
  * Execution grants - durable authorization for scheduled graph execution.
@@ -136,48 +151,72 @@ export const schedules = pgTable(
 ).enableRLS();
 
 /**
- * Schedule runs - execution ledger for auditability and governance.
- * Per P0 feedback: Minimal run persistence enables debugging and governance loops.
- * UNIQUE(schedule_id, scheduled_for) prevents duplicate run records per time slot.
+ * Graph runs — single canonical run ledger for all execution types.
+ * Per SINGLE_RUN_LEDGER: promoted from schedule_runs. One table for API, scheduled, and webhook runs.
+ * Per unified-graph-launch.md: trigger provenance stored per run.
+ * UNIQUE(schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL prevents duplicate scheduled run records.
  */
-export const scheduleRuns = pgTable(
-  "schedule_runs",
+export const graphRuns = pgTable(
+  "graph_runs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    scheduleId: uuid("schedule_id")
-      .notNull()
-      .references(() => schedules.id, { onDelete: "cascade" }),
+    /** Schedule FK — nullable, only set for scheduled runs */
+    scheduleId: uuid("schedule_id").references(() => schedules.id, {
+      onDelete: "cascade",
+    }),
     /** GraphExecutorPort runId for correlation with charge_receipts */
     runId: text("run_id").notNull(),
-    /** Intended execution time (the cron slot) */
-    scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+    /** Graph ID in format provider:name (e.g., "langgraph:poet") */
+    graphId: text("graph_id"),
+    /** How the run was triggered */
+    runKind: text("run_kind", { enum: GRAPH_RUN_KINDS }),
+    /** Trigger source identifier (api, temporal_schedule, webhook:{type}) */
+    triggerSource: text("trigger_source"),
+    /** Upstream delivery/schedule ID for provenance */
+    triggerRef: text("trigger_ref"),
+    /** User ID (UUID) of the principal who requested/owns this run */
+    requestedBy: text("requested_by"),
+    /** Intended execution time (the cron slot) — only for scheduled runs */
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
     /** Actual start time */
     startedAt: timestamp("started_at", { withTimezone: true }),
     /** Completion time */
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    /** Run status: pending, running, success, error, skipped */
-    status: text("status", { enum: SCHEDULE_RUN_STATUSES })
+    /** Run status: pending, running, success, error, skipped, cancelled */
+    status: text("status", { enum: GRAPH_RUN_STATUSES })
       .notNull()
       .default("pending"),
-    /** Retry attempt count (for future use) */
+    /** Retry attempt count */
     attemptCount: integer("attempt_count").notNull().default(0),
     /** Langfuse trace ID for observability correlation */
     langfuseTraceId: text("langfuse_trace_id"),
+    /** Error code if status is 'error' */
+    errorCode: text("error_code"),
     /** Error message if status is 'error' */
     errorMessage: text("error_message"),
+    /** Thread state key for conversation correlation — nullable (headless runs have none) */
+    stateKey: text("state_key"),
   },
   (table) => ({
-    scheduleIdx: index("schedule_runs_schedule_idx").on(table.scheduleId),
-    scheduledForIdx: index("schedule_runs_scheduled_for_idx").on(
+    scheduleIdx: index("graph_runs_schedule_idx").on(table.scheduleId),
+    scheduledForIdx: index("graph_runs_scheduled_for_idx").on(
       table.scheduledFor
     ),
-    /** Prevent duplicate run records for the same schedule slot */
-    scheduleSlotUnique: uniqueIndex("schedule_runs_schedule_slot_unique").on(
-      table.scheduleId,
-      table.scheduledFor
-    ),
+    /** Prevent duplicate run records for the same schedule slot (scheduled runs only) */
+    scheduleSlotUnique: uniqueIndex("graph_runs_schedule_slot_unique")
+      .on(table.scheduleId, table.scheduledFor)
+      .where(sql`schedule_id IS NOT NULL`),
     /** For querying runs by runId (correlation with charge_receipts) */
-    runIdIdx: index("schedule_runs_run_id_idx").on(table.runId),
+    runIdIdx: index("graph_runs_run_id_idx").on(table.runId),
+    /** For querying runs by kind */
+    runKindIdx: index("graph_runs_run_kind_idx").on(table.runKind),
+    /** For thread↔run correlation (join graph_runs to ai_threads by stateKey) */
+    stateKeyIdx: index("graph_runs_state_key_idx").on(table.stateKey),
+    /** For user-scoped run listing: WHERE requested_by = ? ORDER BY started_at DESC */
+    requestedByStartedAtIdx: index("graph_runs_requested_by_started_at_idx").on(
+      table.requestedBy,
+      table.startedAt
+    ),
   })
 ).enableRLS();
 

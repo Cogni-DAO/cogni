@@ -15,6 +15,21 @@
  */
 
 export type { GraphId } from "@cogni/ai-core";
+export type {
+  ExecutionContext,
+  GraphExecutorPort,
+  GraphFinal,
+  GraphRunRequest,
+  GraphRunResult,
+  RunStreamEntry,
+  RunStreamPort,
+} from "@cogni/graph-execution-core";
+export {
+  RUN_STREAM_BLOCK_MS,
+  RUN_STREAM_DEFAULT_TTL_SECONDS,
+  RUN_STREAM_KEY_PREFIX,
+  RUN_STREAM_MAXLEN,
+} from "@cogni/graph-execution-core";
 // Scheduling ports moved to @/ports/server — @cogni/scheduler-core uses node:util
 // and contaminates client bundles via barrel re-export. Server-only consumers
 // must import from "@/ports/server" instead.
@@ -52,23 +67,21 @@ export type {
   IngestionCursor,
   IngestionReceipt,
 } from "./attribution-store.port";
+export type {
+  BillingContext,
+  BillingResolver,
+  PreflightCreditCheckFn,
+} from "./billing-context";
 export type { Clock } from "./clock.port";
 export type {
   GovernanceRun,
   GovernanceStatusPort,
   UpcomingRun,
 } from "./governance-status.port";
-export type {
-  AiExecutionErrorCode,
-  GraphExecutorPort,
-  GraphFinal,
-  GraphRunRequest,
-  GraphRunResult,
-  PreflightCreditCheckFn,
-} from "./graph-executor.port";
 // LlmError types re-exported for adapters (adapters can only import from ports)
 // Features should import directly from @/core
 export {
+  type AiExecutionErrorCode,
   type ChatDeltaEvent,
   type CompletionFinalResult,
   type CompletionStreamParams,

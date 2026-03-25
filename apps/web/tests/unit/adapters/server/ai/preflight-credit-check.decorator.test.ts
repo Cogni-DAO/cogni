@@ -25,6 +25,8 @@ import type {
 import { InsufficientCreditsPortError } from "@/ports";
 import type { AiEvent } from "@/types/ai-events";
 
+const TEST_BILLING_ACCOUNT_ID = "ba-1";
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -32,15 +34,8 @@ import type { AiEvent } from "@/types/ai-events";
 function makeRequest(overrides?: Partial<GraphRunRequest>): GraphRunRequest {
   return {
     runId: "run-1",
-    ingressRequestId: "req-1",
     messages: [{ role: "user", content: "hello" }],
     model: "gpt-4o",
-    caller: {
-      billingAccountId: "ba-1",
-      virtualKeyId: "vk-1",
-      requestId: "req-1",
-      traceId: "00000000000000000000000000000001",
-    },
     graphId: "langgraph:test" as GraphRunRequest["graphId"],
     ...overrides,
   };
@@ -89,6 +84,7 @@ describe("PreflightCreditCheckDecorator", () => {
     const decorator = new PreflightCreditCheckDecorator(
       makeInner(events),
       checkFn,
+      TEST_BILLING_ACCOUNT_ID,
       log
     );
 
@@ -99,7 +95,7 @@ describe("PreflightCreditCheckDecorator", () => {
     }
 
     expect(collected).toEqual(events);
-    expect(checkFn).toHaveBeenCalledWith("ba-1", "gpt-4o", [
+    expect(checkFn).toHaveBeenCalledWith(TEST_BILLING_ACCOUNT_ID, "gpt-4o", [
       { role: "user", content: "hello" },
     ]);
     const final = await result.final;
@@ -122,7 +118,12 @@ describe("PreflightCreditCheckDecorator", () => {
       .fn()
       .mockRejectedValue(new InsufficientCreditsPortError("ba-1", 100, 0));
 
-    const decorator = new PreflightCreditCheckDecorator(inner, checkFn, log);
+    const decorator = new PreflightCreditCheckDecorator(
+      inner,
+      checkFn,
+      TEST_BILLING_ACCOUNT_ID,
+      log
+    );
     const result = decorator.runGraph(makeRequest());
 
     // Stream should throw on first iteration
@@ -143,13 +144,22 @@ describe("PreflightCreditCheckDecorator", () => {
   it("calls inner.runGraph synchronously (before check resolves)", () => {
     const innerRunGraph = vi.fn().mockReturnValue({
       stream: (async function* () {})(),
-      final: Promise.resolve({ ok: true, runId: "run-1", requestId: "req-1" }),
+      final: Promise.resolve({
+        ok: true,
+        runId: "run-1",
+        requestId: "req-1",
+      }),
     });
     const inner: GraphExecutorPort = { runGraph: innerRunGraph };
 
     // Check that never resolves (simulates slow network)
     const checkFn: PreflightCreditCheckFn = () => new Promise(() => {});
-    const decorator = new PreflightCreditCheckDecorator(inner, checkFn, log);
+    const decorator = new PreflightCreditCheckDecorator(
+      inner,
+      checkFn,
+      TEST_BILLING_ACCOUNT_ID,
+      log
+    );
 
     decorator.runGraph(makeRequest());
 

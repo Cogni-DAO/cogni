@@ -47,6 +47,8 @@ type ActivityInput = {
   sessionUser: SessionUser;
   /** Optional correlation ID - generated if not provided */
   reqId?: string;
+  /** Billing scope — "user" or "system". Used for observability logging. */
+  scope?: "user" | "system";
 };
 
 type ActivityOutput = z.infer<typeof aiActivityOperation.output>;
@@ -371,7 +373,7 @@ export async function getActivity(
     event: EVENT_NAMES.AI_ACTIVITY_QUERY_COMPLETED,
     reqId: effectiveReqId,
     routeId: "ai.activity.v1",
-    scope: "user",
+    scope: input.scope ?? "user",
     billingAccountId: billingAccount.id,
     effectiveStep,
     durationMs: performance.now() - startTime,

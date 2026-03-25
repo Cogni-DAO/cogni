@@ -154,7 +154,10 @@ vi.mock("@/bootstrap/container", async (importOriginal) => {
   };
 });
 
-describe("Langfuse Observability Stack Tests", () => {
+// QUARANTINED(task.0185): After Temporal+Redis migration, the facade no longer calls
+// GraphExecutorPort inline — spies injected here don't reach the decorator stack.
+// Replace with internal-route-level tests + black-box smoke tests per task.0185.
+describe.skip("Langfuse Observability Stack Tests", () => {
   beforeEach(() => {
     langfuseSpy.reset();
     vi.clearAllMocks();

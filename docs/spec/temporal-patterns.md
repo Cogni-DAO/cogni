@@ -5,15 +5,29 @@ title: Temporal Patterns
 status: active
 spec_state: draft
 trust: draft
-summary: Temporal workflow/activity patterns — determinism rules, schedule configuration, anti-patterns, and infrastructure layout for governance and scheduler namespaces.
+summary: Temporal workflow/activity patterns — determinism rules, LangGraph vs Temporal boundary, schedule configuration, anti-patterns, and infrastructure layout.
 read_when: Writing Temporal workflows or activities, configuring schedules, or debugging replay issues.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-03-09
+verified: 2026-03-24
 tags: [ai-graphs, infra]
 ---
 
 # Temporal Patterns
+
+## Terminology
+
+| Term             | Definition                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Workflow**     | A Temporal Workflow — the top-level durable execution unit. Deterministic, replay-safe.                                   |
+| **Workflow run** | One Temporal execution of a Workflow, plus any optional app-side run record if the product chooses to persist one.        |
+| **Graph**        | A LangGraph execution unit, typically invoked via `GraphRunWorkflow` and exposed as a workflow step in the product model. |
+| **Graph run**    | A `GraphRunWorkflow` child execution + its `graph_runs` record. Drill-down detail of a parent.                            |
+| **Activity**     | A Temporal Activity — all I/O lives here. Retryable, idempotent.                                                          |
+| **Agent**        | An app-level `AgentDefinition` — a named configuration that selects a graph + model + tools.                              |
+| **Tool**         | A callable capability exposed to graphs/agents (MCP tools, API calls, etc.).                                              |
+
+Both Workflows and Graphs can be DAGs. The distinction is **durability and runtime semantics** — Temporal provides replay-safe durable execution with crash recovery; LangGraph provides in-process intelligence and dataflow. Neither term implies "AI" or "non-AI."
 
 ## Context
 
@@ -21,7 +35,7 @@ Cogni uses Temporal for durable workflow execution — governance signal collect
 
 ## Goal
 
-Ensure all Temporal workflows are replay-safe, all I/O runs in Activities only, and schedules use consistent configuration patterns — so that deploys, restarts, and retries never break durable execution guarantees.
+Ensure all Temporal workflows are replay-safe, Workflow code performs no I/O directly (all external interactions cross approved durable boundaries — typically Activities, sometimes child workflows such as `GraphRunWorkflow`), and schedules use consistent configuration patterns — so that deploys, restarts, and retries never break durable execution guarantees.
 
 ## Non-Goals
 
@@ -33,7 +47,7 @@ Ensure all Temporal workflows are replay-safe, all I/O runs in Activities only, 
 
 1. **TEMPORAL_DETERMINISM**: No I/O, network calls, or LLM invocations inside Workflow code. All external calls (DB, LLM, APIs) run in Activities only. Violating this breaks replay on deploy/restart.
 
-2. **ACTIVITY_IDEMPOTENCY**: All Activities must be idempotent. Temporal retries Activities on failure. Use idempotency keys for side effects: `${workflowId}/${activityId}/${attempt}`.
+2. **ACTIVITY_IDEMPOTENCY**: All Activities must be idempotent. Temporal retries Activities on failure. Use idempotency keys for side effects derived from stable business keys. For **internal** side effects (DB upserts), `${workflowId}/${activityId}` is sufficient. For **externally visible** writes (GitHub comments, notifications), use business keys only (e.g., `${repo}/${pr}/${headSha}/${reviewType}`) — never include `attempt` in keys for external writes, as retries must produce the same external result.
 
 3. **SCHEDULES_OVER_CRON**: Use Temporal Schedules for recurring work. Not cron jobs, not external schedulers. Schedules provide pause/resume, backfill, and operational visibility.
 
@@ -46,6 +60,8 @@ Ensure all Temporal workflows are replay-safe, all I/O runs in Activities only, 
 7. **CATCHUP_WINDOW_ZERO**: P0 does not backfill missed runs. Set `catchupWindow: 0` to skip missed slots.
 
 8. **CRUD_AUTHORITY**: Schedule lifecycle (create/update/pause/delete) is owned by CRUD endpoints, not workers. Workers only execute workflows fired by Temporal.
+
+9. **WORKFLOW_TOP_LEVEL_VISIBILITY**: User/admin UI shows Workflow executions as the primary object. Graph runs are drill-down detail linked from Workflow steps. The dashboard's live view lists Workflow runs; expanding a run reveals its child graph run stream.
 
 ## Design
 
@@ -255,17 +271,79 @@ export const EXTERNAL_API_ACTIVITY_OPTIONS: ActivityOptions = {
 };
 ```
 
+### LangGraph vs Temporal Boundary
+
+The boundary between LangGraph and Temporal is **durability and runtime semantics**, not DAG shape or AI-vs-non-AI. Both systems can express DAGs; the question is whether a step needs crash recovery, idempotency, and cross-process coordination (Temporal) or in-process intelligence and dataflow (LangGraph).
+
+#### LangGraph owns: in-run intelligence and dataflow
+
+- LLM calls, tool usage, nested graphs, branching
+- Retries local to the reasoning loop
+- State transforms, recomputable read-side API fetches
+- Anything safely recomputable — graph loss = re-run, not data loss
+
+#### Temporal owns: durable orchestration boundaries
+
+- Webhook/schedule/user triggers (entry points)
+- Long waits, cross-step coordination, human approval
+- Idempotency keys, resume-after-crash
+- Externally visible writes that must not be lost or duplicated
+
+#### Rule of thumb
+
+| Step type                                     | Owner     |
+| --------------------------------------------- | --------- |
+| Thinking, evaluating, gathering               | LangGraph |
+| Committing, notifying, mutating, coordinating | Temporal  |
+
+**Hard rule:** Reads may live in graphs. Writes that matter live behind Temporal unless explicitly best-effort and disposable. Treating every external read/write as a Temporal concern is over-engineering — graphs may do recomputable reads and tooling, but material writes must cross a Temporal-owned durable boundary.
+
+#### Normative Pattern: Webhook → Parent Workflow → Graph Child → Write Activity
+
+All webhook-triggered graph execution **must** follow this pattern. It is the canonical template for PR review, deploy analysis, incident response, and any future webhook→graph flow.
+
+```
+webhook route (fire-and-forget)
+  → start ParentWorkflow (Temporal parent — exits immediately)
+    → Activity: fetch context (read — Temporal gives retry + timeout)
+    → executeChild: GraphRunWorkflow(graph-id) (LangGraph decision)
+      → graph returns structured decision artifact (pure data, no side effects)
+    → Activity: write result (durable write — idempotent via business key)
+```
+
+**Required constraints:**
+
+1. Webhook handler starts the Workflow and exits immediately — no blocking Next.js on Redis/SSE for completion
+2. Graph returns a **pure structured decision artifact**, not side effects. Required writes happen in Activities after the graph child completes
+3. Write Activities use idempotency keys derived from **stable business keys** (e.g., `${repo}/${pr}/${headSha}/${reviewType}`). Do not include `attempt` in idempotency keys for externally visible writes — retries must produce the same external result
+4. `graph_runs` records the child GraphRunWorkflow for dashboard observability (per WORKFLOW_TOP_LEVEL_VISIBILITY, the parent Workflow is the primary UI object; the graph run is drill-down detail)
+5. Retries on write Activities do not double-post
+
+#### Anti-pattern: inline graph execution in HTTP handlers
+
+```typescript
+// BAD: webhook handler runs graph inline, posts comment inline
+const result = executor.runGraph({ graphId: "pr-review", ... });
+for await (const _event of result.stream) { /* drain */ }
+await postComment(result); // no idempotency, no crash recovery
+```
+
+This violates ONE_RUN_EXECUTION_PATH. The graph run is invisible to the dashboard, has no `graph_runs` record, and the write has no crash recovery or idempotency.
+
 ### Anti-Patterns
 
-| Anti-Pattern                | Why Forbidden                                            |
-| --------------------------- | -------------------------------------------------------- |
-| I/O in Workflow code        | Breaks Temporal replay; all I/O must be in Activities    |
-| LLM calls in Workflow code  | Non-deterministic; LLM must run in Activities only       |
-| `Date.now()` in Workflow    | Non-deterministic; use `workflow.now()` or Activity      |
-| Random/UUID in Workflow     | Non-deterministic; generate in Activity or pass as input |
-| Worker modifies schedules   | CRUD endpoints are single authority                      |
-| Always-on reconciliation    | Creates authority split; use admin CLI                   |
-| Wall clock for scheduledFor | Use `TemporalScheduledStartTime` search attribute        |
+| Anti-Pattern                                                            | Why Forbidden                                                                   |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| I/O in Workflow code                                                    | Breaks Temporal replay; all I/O must be in Activities                           |
+| LLM calls in Workflow code                                              | Non-deterministic; LLM must run in Activities only                              |
+| `Date.now()` in Workflow                                                | Non-deterministic; use `workflow.now()` or Activity                             |
+| Random/UUID in Workflow                                                 | Non-deterministic; generate in Activity or pass as input                        |
+| Worker modifies schedules                                               | CRUD endpoints are single authority                                             |
+| Always-on reconciliation                                                | Creates authority split; use admin CLI                                          |
+| Wall clock for scheduledFor                                             | Use `TemporalScheduledStartTime` search attribute                               |
+| Inline `executor.runGraph()` in webhook/HTTP handlers for required work | Violates ONE_RUN_EXECUTION_PATH; invisible to dashboard, no crash recovery      |
+| `attempt` in idempotency keys for external writes                       | Retries must produce same external result; use stable business keys only        |
+| Vendor terminology (`assistant`) as core internal nouns                 | Use Terminology table above; vendor terms are external labels, not architecture |
 
 ### Infrastructure
 
@@ -293,10 +371,11 @@ export const EXTERNAL_API_ACTIVITY_OPTIONS: ActivityOptions = {
 
 ### File Pointers
 
-| File                         | Purpose                                            |
-| ---------------------------- | -------------------------------------------------- |
-| `services/scheduler-worker/` | Scheduler worker service (Temporal worker)         |
-| `packages/scheduler-core/`   | Scheduling types, port interfaces, payload schemas |
+| File                           | Purpose                                                      |
+| ------------------------------ | ------------------------------------------------------------ |
+| `packages/temporal-workflows/` | Workflow definitions, activity interfaces, activity profiles |
+| `services/scheduler-worker/`   | Thin composition root (activity wiring + worker lifecycle)   |
+| `packages/scheduler-core/`     | Scheduling types, port interfaces, payload schemas           |
 
 ## Acceptance Checks
 

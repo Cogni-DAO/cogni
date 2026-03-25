@@ -6,7 +6,7 @@
  * Purpose: Verify scheduler-worker executes workflows and creates ledger records.
  * Scope: Tests end-to-end flow: Schedule create → Temporal trigger → Worker runs → DB records created. Does not test CRUD operations (covered elsewhere).
  * Invariants:
- *   - Per RUN_LEDGER_FOR_GOVERNANCE: schedule_runs record created for each slot
+ *   - Per RUN_LEDGER_FOR_GOVERNANCE: graph_runs record created for each slot
  *   - Per EXECUTION_IDEMPOTENCY_PERSISTED: execution_requests record created
  *   - Per SLOT_IDEMPOTENCY_VIA_EXECUTION_REQUESTS: idempotency_key = scheduleId:scheduledFor
  * Side-effects: IO (database, Temporal, internal API via worker)
@@ -87,7 +87,7 @@ describe("[scheduling] scheduler-worker execution", () => {
     vi.clearAllMocks();
   });
 
-  it("creates schedule_runs and execution_requests when triggered", async () => {
+  it("creates graph_runs and execution_requests when triggered", async () => {
     // 1. Create schedule via CRUD API
     const payload = createSchedulePayload({
       graphId: "langgraph:poet",
@@ -119,16 +119,16 @@ describe("[scheduling] scheduler-worker execution", () => {
     // 2. Trigger schedule via Temporal (fires the workflow immediately)
     await triggerSchedule(createdScheduleId);
 
-    // 3. Wait for schedule_runs row to be created and reach terminal status
+    // 3. Wait for graph_runs row to be created and reach terminal status
     const scheduleRun = await waitForScheduleRunCompleted(createdScheduleId);
 
-    // 4. Assert schedule_runs record
+    // 4. Assert graph_runs record
     expect(scheduleRun.scheduleId).toBe(createdScheduleId);
     expect(scheduleRun.scheduledFor).toBeDefined();
     expect(["success", "error"]).toContain(scheduleRun.status);
     expect(scheduleRun.runId).toBeDefined();
 
-    // 5. Verify exactly 1 schedule_runs row for this schedule
+    // 5. Verify exactly 1 graph_runs row for this schedule
     const allRuns = await getScheduleRuns(createdScheduleId);
     expect(allRuns.length).toBe(1);
 

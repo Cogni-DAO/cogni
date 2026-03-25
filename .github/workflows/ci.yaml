@@ -423,6 +423,7 @@ jobs:
           # tigerbeetle required for financial ledger stack tests
           docker compose -f infra/compose/runtime/docker-compose.dev.yml \
             --profile sandbox-openclaw \
+            --profile tigerbeetle \
             up -d app postgres litellm mock-llm caddy temporal-postgres temporal temporal-ui scheduler-worker git-sync llm-proxy-openclaw openclaw-gateway tigerbeetle
 
       - name: Probe container-boundary (git-sync volume)

@@ -38,7 +38,10 @@ export function checkApprover(
 
   if (epoch && (!epoch.approvers || epoch.approvers.length === 0)) {
     logRequestWarn(ctx.log, {}, "LEDGER_NO_PINNED_APPROVERS");
-    throw new Error("Epoch passed to checkApprover has no pinned approvers");
+    return NextResponse.json(
+      { error: "Not authorized as ledger approver" },
+      { status: 403 }
+    );
   }
 
   const approvers = epoch?.approvers ?? getLedgerApprovers();
