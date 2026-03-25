@@ -54,6 +54,8 @@
     "db:setup": "pnpm db:provision && pnpm db:migrate && pnpm db:seed",
     "dev:setup": "pnpm db:setup && pnpm db:setup:test && pnpm governance:schedules:sync",
     "setup:secrets": "tsx scripts/setup-secrets.ts",
+    "setup:gitops": "bash scripts/bootstrap/setup-gitops-secrets.sh",
+    "setup:infra": "echo '── Step 1: GitHub Actions secrets ──' && pnpm setup:secrets --required && echo '── Step 2: GitOps age keypairs ──' && pnpm setup:gitops staging && echo '── Done. Follow the printed tofu apply steps. ──'",
     "db:setup:test": "pnpm db:provision:test && pnpm db:migrate:test",
     "db:drop:test": "pnpm tsx --tsconfig tsconfig.scripts.json scripts/db/drop-test-db.ts",
     "db:reset:test": "pnpm db:drop:test || true && pnpm db:setup:test",
