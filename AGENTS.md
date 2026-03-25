@@ -64,6 +64,7 @@ pnpm dev                      # start dev server
 pnpm dev:stack                # start dev server + infrastructure (main dev workflow)
 pnpm dev:stack:test           # start dev server + infrastructure for testing
 pnpm dev:stack:test:setup     # first time: create test DB + run migrations
+pnpm dev:infra:tb             # opt-in: start TigerBeetle (needs ~1.2GiB RAM)
 pnpm docker:dev:stack         # start all services containerized (with build)
 pnpm docker:dev:stack:fast    # start all services containerized (skip build for speed)
 pnpm docker:test:stack        # start all services containerized in test mode (with build)

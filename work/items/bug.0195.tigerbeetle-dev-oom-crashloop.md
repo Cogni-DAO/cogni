@@ -2,7 +2,7 @@
 id: bug.0195
 type: bug
 title: "TigerBeetle unreachable in all envs — native client floods ~72M garbage log lines/day to Grafana Cloud"
-status: needs_triage
+status: needs_merge
 priority: 1
 rank: 10
 estimate: 3
@@ -12,10 +12,10 @@ spec_refs: financial-ledger
 assignees: derekg1729
 credit:
 project: proj.financial-ledger
-branch:
-pr:
+branch: bug/0195-tigerbeetle-oom-log-flood
+pr: https://github.com/Cogni-DAO/node-template/pull/623
 reviewer:
-revision: 2
+revision: 3
 blocked_by:
 deploy_verified: false
 created: 2026-03-24
@@ -76,7 +76,7 @@ Local dev only — makes TB opt-in so the default dev experience is clean:
 
 ### P1: Decide on TB deployment strategy
 
-3. **Is TB actually deployed in preview/prod?** — Check docker-compose.yml (prod) and the Spheron/Akash deployment manifests. If TB isn't provisioned, the address config is just wrong.
+3. **Is TB actually deployed in preview/prod?** — Check docker-compose.yml (prod) on the Cherry Servers VMs. If TB isn't provisioned or OOM-killed, the address config is just wrong.
 4. **If TB should be deployed:** ensure it has adequate memory (≥2GiB container limit) and a healthcheck dependency so the app doesn't start its client until TB is ready.
 5. **If TB is not needed yet:** remove `TIGERBEETLE_ADDRESS` from all non-CI env configs and document when it should be re-enabled (e.g., when financial ledger features are user-facing).
 
@@ -111,4 +111,4 @@ pnpm dev 2>&1 | grep -c message_bus  # should be 0
 - `package.json` — dev:infra scripts, dev:infra:tb
 - `.github/workflows/ci.yaml` — --profile tigerbeetle
 - `.env.local` / `.env.local.example` — TIGERBEETLE_ADDRESS commented out
-- **TODO:** preview/prod env configs (Spheron? .env.production?)
+- `infra/compose/runtime/docker-compose.yml` — profile + mem_limit (prod compose, deployed via deploy.sh to Cherry Servers VMs)
