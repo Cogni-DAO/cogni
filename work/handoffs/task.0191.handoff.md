@@ -3,71 +3,67 @@ id: task.0191-handoff
 type: handoff
 work_item_id: task.0191
 status: active
-created: 2026-03-24
-updated: 2026-03-24
-branch: ""
-last_commit: 6cac8b6f
+created: 2026-03-25
+updated: 2026-03-25
+branch: task-0191-webhook-temporal-alignment
+last_commit: 6bce4988
 ---
 
-# Handoff: PR Review Webhook → Temporal Parent Workflow
+# Handoff: PR Review Webhook → Temporal (Post-Merge)
 
 ## Context
 
-- The "unified graph launch" project requires ALL graph execution to go through `GraphRunWorkflow` via Temporal — chat and scheduled runs already do, but **webhook-triggered PR review does not**
-- PR review currently runs the LLM inline in the Next.js process via `createGraphExecutor` → `executeStream`, bypassing Temporal, Redis, and `graph_runs` — the run is invisible to the dashboard
-- task.0178 (just merged) deleted the old `GovernanceScheduledRunWorkflow`, removed deprecated aliases, and documented the **LangGraph vs Temporal boundary** in `docs/spec/temporal-patterns.md` — that boundary guide is the design contract for this task
-- The boundary principle: LangGraph owns intelligence/dataflow (thinking, evaluating). Temporal owns durable orchestration (triggers, writes, idempotency, crash recovery)
-- This is the first webhook→graph flow and sets the canonical pattern for all future ones (deploy analysis, incident response, etc.)
+PR #618 moves PR review from inline Next.js execution to Temporal. The pipeline works end-to-end: webhook → PrReviewWorkflow → GraphRunWorkflow child → check run + PR comment on GitHub. Dashboard shows runs under "Cogni Live." External tests pass. CI stack tests pass.
+
+This handoff covers what's left after merge.
 
 ## Current State
 
-- **Work item:** `work/items/task.0191.webhook-temporal-alignment.md` — status `needs_design`, has full requirements and 4-checkpoint plan
-- **No branch created yet** — start from `staging` after task.0178 merges
-- **No code written** — design and requirements are complete, implementation not started
-- The current inline path works functionally (PR reviews do post to GitHub) but violates `ONE_RUN_EXECUTION_PATH` and is invisible to observability
+- **PR #618** — rebased on staging, CI running. 15 commits.
+- **Pipeline proven** — external E2E test creates real PRs on `derekg1729/test-repo`, LLM evaluates gates, check run + comment posted. Dashboard shows all 5 runs.
+- **RLS migration** — `0024_graph_runs_rls_requested_by.sql` widens `graph_runs` RLS to check `requested_by` OR `schedule_id`. Required because webhook runs have no schedule.
+- **stateKey fix** — internal API no longer conflates `stateKey` with `runId` for headless runs. Thread persistence skipped when no conversation context.
+
+## Follow-Up Work (Post-Merge)
+
+### Bugs to fix
+
+| Bug      | Summary                                                                        | Effort |
+| -------- | ------------------------------------------------------------------------------ | ------ |
+| bug.0193 | Worker houses workflow definitions — extract to `packages/temporal-workflows/` | 3      |
+| bug.0195 | TigerBeetle dev OOM crashloop (unrelated, blocks stack tests intermittently)   | 2      |
+
+### Dashboard improvements
+
+- **Run card detail**: clicking a Cogni Live run should drill into the graph run stream (Redis SSE). The `runId` is available — wire it to `/api/v1/ai/runs/{runId}/stream`.
+- **"My Runs" tab**: currently shows nothing for most users (no `user_immediate` runs yet). Will populate when chat uses the unified path.
+- **Old scheduled runs**: 700+ runs have `requested_by = "cogni_system"` (string slug, not UUID). They show under Cogni Live because they match via `schedule_id` RLS path. New runs use `COGNI_SYSTEM_PRINCIPAL_USER_ID` UUID. Consider a data backfill: `UPDATE graph_runs SET requested_by = '00000000-0000-4000-a000-000000000001' WHERE requested_by = 'cogni_system'`.
+
+### Architecture debt
+
+- **bug.0193**: `services/scheduler-worker/` is 66% business code. Workflows belong in `packages/temporal-workflows/`. Activities stay in the worker (need concrete deps). Domain logic (`domain/review.ts`) moves to the workflow package.
+- **`responseFormat` schemaId registry**: `RESPONSE_FORMAT_SCHEMAS` in the internal API route is a hardcoded map. Works for now (one schema). If more graphs need structured output, formalize the registry.
+- **task.0122 (operator node registration)**: remote repo-spec fetching is naive — lenient YAML parse fallback when target repo lacks `node_id`/`scope_id`. Proper fix is the operator registration lifecycle.
 
 ## Decisions Made
 
-- **Temporal parent + LangGraph child pattern** — documented in [temporal-patterns.md § Normative Pattern](../docs/spec/temporal-patterns.md). Webhook fires Temporal workflow; graph returns pure structured artifact; GitHub writes happen in Temporal activities with idempotency
-- **`system_webhook` runKind** — already exists in the `GRAPH_RUN_KINDS` enum (`packages/db-schema/src/scheduling.ts`). No schema migration needed
-- **Fire-and-forget from webhook handler** — `dispatchPrReview` starts the Temporal workflow and exits. No blocking Next.js on Redis/SSE
-- **Idempotency key**: `pr-review:${owner}/${repo}/${prNumber}/${headSha}` — prevents duplicate reviews on webhook retries
-- **Graph returns structured artifact, not side effects** — `{verdict, conclusion, gateResults, summary}`. GitHub API calls move to Temporal activities
-- **Gate orchestration stays in the graph** (design review decision) — activities are I/O-only. Domain logic (gates, criteria, formatting) stays in graph. No package extraction (WORKER_IS_DUMB)
-- **Split check run into two activities** (design review decision) — `createCheckRunActivity` runs first for immediate "in_progress" UX; `postReviewResultActivity` runs after graph for updates + comments
-- **Use existing `GitHubAppTokenProvider`** (design review decision) — worker bootstrap already creates it from env. Activities pass `installationId` from workflow input. Single-tenant, no multi-tenant abstraction
-- **Diff truncation** (design review decision) — `fetchPrContextActivity` truncates large diffs to stay within Temporal's ~2MB per-event payload limit
-
-## Next Actions
-
-- [x] Create feature branch from `staging` (task.0178 PR #616 merged)
-- [x] Design review — resolved credentials, check run timing, domain logic placement, diff truncation
-- [ ] Checkpoint 1: `PrReviewWorkflow` skeleton + installation-scoped Octokit bootstrap + register in worker bundle
-- [ ] Checkpoint 2: Implement 3 activities (createCheckRun, fetchPrContext, postReviewResult) + ensure graph returns structured artifact
-- [ ] Checkpoint 3: Refactor `dispatchPrReview` to start Temporal workflow; remove inline execution path
-- [ ] Checkpoint 4: Tests + docs + closeout
-- [ ] Verify PR reviews appear on dashboard Cogni Live tab as `system_webhook` runs
-
-## Risks / Gotchas
-
-- **GitHub App credentials** — currently resolved in the Next.js process (`dispatch.server.ts:50-57`). Activities must resolve creds from **worker env** (`GH_REVIEW_APP_ID`, `GH_REVIEW_APP_PRIVATE_KEY_BASE64` — already optional in `services/scheduler-worker/src/bootstrap/env.ts`). **Never pass private keys as workflow input** — they persist in Temporal event history. Workflow input passes only `installationId` (public)
-- **The review handler does more than LLM** — `handlePrReview` orchestrates: evidence gathering, gate config loading, rule parsing, AI evaluation, check run creation, comment posting. The Temporal workflow replaces this orchestration; individual steps become activities or stay in the graph
-- **Existing review adapters** — `apps/web/src/bootstrap/review-adapter.factory.ts` creates GitHub API adapters (Octokit). The worker already has Octokit setup in `container.ts:188-195`. Activity implementations can use the existing worker container GitHub adapter or create a new one per `installationId`
-- **`readRepoSpec` reads from local filesystem** — `review-adapter.factory.ts:62-65` uses `readFileSync` on the local repo. The worker has no checkout of the target repo. `fetchPrContext` activity must fetch repo-spec and rule files from the target repo via **GitHub API** (using the Octokit that fetches the diff). This is cleaner — reads the spec from the PR's head commit, not whatever's deployed locally
-- **`postPrComment` has a staleness guard** — it checks if the PR head SHA still matches before posting. This logic must survive the move to a Temporal activity
-- **Worker bundle path** — `services/scheduler-worker/src/worker.ts:75` currently points `workflowsPath` to only `graph-run.workflow.js`. The new `PrReviewWorkflow` needs its own bundle entry or must be co-located
+- **GraphRunWorkflow returns typed terminal artifact** — `{ok, runId, structuredOutput?}`. Redis/SSE remain observability transport, not parent-child control data.
+- **Domain logic extracted** — `evaluateCriteria()`, `formatCheckRunSummary()`, `formatPrComment()` in `domain/review.ts`. Activities do only GitHub I/O.
+- **Idempotency** — parent workflowId = `pr-review:{owner}/{repo}/{prNumber}/{headSha}`. Child workflowId = `graph-run:system:pr-review:{same key}`. Stable business keys, no `attempt` in external write keys.
+- **RLS via `requested_by`** — migration 0024 adds `requested_by = current_user` as alternative to `schedule_id` chain. Both paths coexist.
+- **System identity** — `COGNI_SYSTEM_PRINCIPAL_USER_ID` (UUID `...0001`) for all `requested_by` and `actorUserId` fields. `SYSTEM_ACTOR` (`...0000`) for RLS context only. `"cogni_system"` slug purged from all code paths.
 
 ## Pointers
 
-| File / Resource                                                    | Why it matters                                                                 |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| `docs/spec/temporal-patterns.md` § LangGraph vs Temporal Boundary  | The design contract — read this first                                          |
-| `work/items/task.0191.webhook-temporal-alignment.md`               | Full requirements, plan, allowed changes                                       |
-| `apps/web/src/app/_facades/review/dispatch.server.ts`              | Current inline dispatch — this gets simplified                                 |
-| `apps/web/src/features/review/services/review-handler.ts`          | Current orchestration pipeline — steps become activities                       |
-| `apps/web/src/features/review/gates/ai-rule.ts:78-98`              | Where `executor.runGraph()` runs inline — this moves to GraphRunWorkflow child |
-| `apps/web/src/app/_facades/ai/completion.server.ts:348-375`        | The Temporal start pattern to follow (chat path)                               |
-| `services/scheduler-worker/src/workflows/graph-run.workflow.ts`    | The unified workflow — PrReviewWorkflow calls this as child                    |
-| `services/scheduler-worker/src/worker.ts:75`                       | Worker bundle registration — add new workflow here                             |
-| `apps/web/src/app/api/internal/webhooks/[source]/route.ts:124-127` | Webhook entry point — where `dispatchPrReview` is called                       |
-| `work/projects/proj.unified-graph-launch.md` § P2                  | Project roadmap context                                                        |
+| File                                                                              | Why                                                      |
+| --------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `services/scheduler-worker/src/workflows/pr-review.workflow.ts`                   | Parent workflow — 4 steps                                |
+| `services/scheduler-worker/src/activities/review.ts`                              | GitHub I/O activities                                    |
+| `services/scheduler-worker/src/domain/review.ts`                                  | Pure domain logic (criteria eval, formatting)            |
+| `apps/web/src/app/_facades/review/dispatch.server.ts`                             | Webhook → Temporal dispatch                              |
+| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts`                    | responseFormat forwarding + stateKey fix                 |
+| `apps/web/src/app/api/v1/ai/runs/route.ts`                                        | Runs API with `scope=system` for Cogni Live              |
+| `apps/web/src/app/(app)/dashboard/_api/fetchRuns.ts`                              | Client fetch with scope param                            |
+| `apps/web/src/adapters/server/db/migrations/0024_graph_runs_rls_requested_by.sql` | RLS migration                                            |
+| `docs/spec/temporal-patterns.md`                                                  | Normative webhook pattern, terminology, invariants       |
+| `apps/web/tests/external/review/pr-review-e2e.external.test.ts`                   | E2E test — creates real PR, verifies check run + comment |
