@@ -288,7 +288,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     let actorUserId: string;
     let billingAccountId: string;
     let virtualKeyId: string;
-    let stateKey: string;
+    let stateKey: string | undefined;
     let sessionId: string | undefined;
 
     if (executionGrantId) {
@@ -378,11 +378,13 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       stateKey =
         typeof input.stateKey === "string" && input.stateKey.length > 0
           ? input.stateKey
-          : runId;
-      sessionId = `ba:${billingAccountId}:s:${createHash("sha256")
-        .update(stateKey, "utf8")
-        .digest("hex")
-        .slice(0, 32)}`;
+          : undefined;
+      sessionId = stateKey
+        ? `ba:${billingAccountId}:s:${createHash("sha256")
+            .update(stateKey, "utf8")
+            .digest("hex")
+            .slice(0, 32)}`
+        : `run:${runId}`;
     }
 
     // --- 9. Execute graph ---
@@ -479,7 +481,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         graphId,
         messages,
         model,
-        stateKey,
+        ...(stateKey !== undefined && { stateKey }),
         ...(responseFormat !== undefined && { responseFormat }),
       },
       {
