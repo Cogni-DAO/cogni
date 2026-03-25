@@ -85,6 +85,7 @@ COPY --from=builder --chown=worker:nodejs /app/packages/attribution-pipeline-plu
 COPY --from=builder --chown=worker:nodejs /app/packages/ingestion-core/dist ./packages/ingestion-core/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/repo-spec/dist ./packages/repo-spec/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/temporal-workflows/dist ./packages/temporal-workflows/dist
+COPY --from=builder --chown=worker:nodejs /app/packages/temporal-workflows/node_modules ./packages/temporal-workflows/node_modules
 # Copy package.json files for module resolution
 COPY --from=builder --chown=worker:nodejs /app/services/scheduler-worker/package.json ./services/scheduler-worker/
 COPY --from=builder --chown=worker:nodejs /app/packages/ids/package.json ./packages/ids/
