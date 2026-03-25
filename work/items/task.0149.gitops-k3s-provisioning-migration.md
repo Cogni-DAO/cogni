@@ -65,3 +65,8 @@ PR #573 provisions a **separate k3s VM** via `infra/tofu/cherry/k3s/main.tf`. Th
 - [ ] Billing attribution flowing (scheduler-worker → app billing ingest)
 - [ ] Rollback test: revert manifest PR → Argo syncs previous image
 - [ ] scheduler-worker removed from Docker Compose runtime stack
+
+## PR / Links
+
+- PR: [#573](https://github.com/Cogni-DAO/node-template/pull/573)
+- Handoff: [handoff](../handoffs/task.0149.handoff.md)
