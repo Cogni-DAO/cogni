@@ -349,9 +349,12 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       billingAccountId = grant.billingAccountId;
       virtualKeyId = billingAccount.defaultVirtualKeyId;
 
-      const scheduleId = extractScheduleId(idempotencyKey);
-      stateKey = createHash("sha256").update(scheduleId, "utf8").digest("hex");
-      sessionId = `gov:${billingAccountId}:s:${stateKey.slice(0, 32)}`;
+      // Per bug.0197: hash the full idempotencyKey (scheduleId:scheduledFor) so each
+      // execution slot gets its own isolated thread instead of accumulating in one.
+      stateKey = createHash("sha256")
+        .update(idempotencyKey, "utf8")
+        .digest("hex");
+      sessionId = `sched:${billingAccountId}:s:${stateKey.slice(0, 32)}`;
     } else {
       // API-triggered runs: execution context is provided in payload.
       const inputUserId =
@@ -404,6 +407,25 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       runId,
       traceId
     );
+
+    // --- 9b. Patch stateKey onto graph_runs record (bug.0197) ---
+    // stateKey is derived here (internal API) but graph_runs was created by
+    // createGraphRunActivity before this route is called. Patch it so dashboard
+    // can link runs to their threads.
+    if (stateKey && executionGrantId) {
+      try {
+        await container.graphRunRepository.patchRunStateKey(
+          SYSTEM_ACTOR,
+          runId,
+          stateKey
+        );
+      } catch (patchErr) {
+        log.warn(
+          { runId, stateKey, err: patchErr },
+          "Failed to patch stateKey on graph_runs — non-fatal"
+        );
+      }
+    }
 
     capture({
       event: AnalyticsEvents.AGENT_RUN_REQUESTED,

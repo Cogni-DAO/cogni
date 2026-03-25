@@ -99,4 +99,16 @@ export interface GraphRunRepository {
       cursor?: string;
     }
   ) => Promise<GraphRun[]>;
+
+  /**
+   * Patches the stateKey on a run record.
+   * Used when stateKey is derived after run creation (e.g., scheduled runs
+   * where stateKey is computed by the internal API, not the workflow).
+   * @param actorId - Actor performing the operation (for RLS SET LOCAL / audit trail)
+   */
+  patchRunStateKey: (
+    actorId: ActorId,
+    runId: string,
+    stateKey: string
+  ) => Promise<void>;
 }

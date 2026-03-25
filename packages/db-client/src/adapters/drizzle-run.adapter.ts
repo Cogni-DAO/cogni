@@ -207,6 +207,19 @@ export class DrizzleGraphRunAdapter implements GraphRunRepository {
     });
   }
 
+  async patchRunStateKey(
+    actorId: ActorId,
+    runId: string,
+    stateKey: string
+  ): Promise<void> {
+    await withTenantScope(this.db, actorId, async (tx) => {
+      await tx
+        .update(graphRuns)
+        .set({ stateKey })
+        .where(eq(graphRuns.runId, runId));
+    });
+  }
+
   async listRunsByUser(
     actorId: ActorId,
     userId: string,
