@@ -35,7 +35,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store,sharin
 COPY --parents packages/ids/ packages/ai-core/ packages/scheduler-core/ \
      packages/db-schema/ packages/db-client/ packages/attribution-ledger/ \
      packages/attribution-pipeline-contracts/ packages/attribution-pipeline-plugins/ \
-     packages/ingestion-core/ packages/repo-spec/ ./
+     packages/ingestion-core/ packages/repo-spec/ packages/temporal-workflows/ ./
 COPY --parents services/scheduler-worker/ ./
 
 # Build packages in dependency order (transpile-only for service)
@@ -48,6 +48,7 @@ RUN pnpm --filter @cogni/ids build && \
     pnpm --filter @cogni/attribution-pipeline-plugins build && \
     pnpm --filter @cogni/ingestion-core build && \
     pnpm --filter @cogni/repo-spec build && \
+    pnpm --filter @cogni/temporal-workflows build && \
     pnpm --filter @cogni/db-client build && \
     pnpm --filter @cogni/scheduler-worker-service build
 
@@ -83,6 +84,7 @@ COPY --from=builder --chown=worker:nodejs /app/packages/attribution-pipeline-con
 COPY --from=builder --chown=worker:nodejs /app/packages/attribution-pipeline-plugins/dist ./packages/attribution-pipeline-plugins/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/ingestion-core/dist ./packages/ingestion-core/dist
 COPY --from=builder --chown=worker:nodejs /app/packages/repo-spec/dist ./packages/repo-spec/dist
+COPY --from=builder --chown=worker:nodejs /app/packages/temporal-workflows/dist ./packages/temporal-workflows/dist
 # Copy package.json files for module resolution
 COPY --from=builder --chown=worker:nodejs /app/services/scheduler-worker/package.json ./services/scheduler-worker/
 COPY --from=builder --chown=worker:nodejs /app/packages/ids/package.json ./packages/ids/
@@ -95,6 +97,7 @@ COPY --from=builder --chown=worker:nodejs /app/packages/attribution-pipeline-con
 COPY --from=builder --chown=worker:nodejs /app/packages/attribution-pipeline-plugins/package.json ./packages/attribution-pipeline-plugins/
 COPY --from=builder --chown=worker:nodejs /app/packages/ingestion-core/package.json ./packages/ingestion-core/
 COPY --from=builder --chown=worker:nodejs /app/packages/repo-spec/package.json ./packages/repo-spec/
+COPY --from=builder --chown=worker:nodejs /app/packages/temporal-workflows/package.json ./packages/temporal-workflows/
 
 # Bake governance config for identity resolution (node_id, scope_id, chain_id)
 COPY --chown=worker:nodejs .cogni/repo-spec.yaml ./.cogni/repo-spec.yaml
