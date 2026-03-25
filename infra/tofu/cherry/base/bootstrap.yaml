@@ -146,18 +146,31 @@ write_files:
         --from-file=keys.txt=/tmp/age-key.txt
       rm -f /tmp/age-key.txt
 
-      # Apply kustomized Argo CD (base install + ksops sidecar patches).
-      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing Argo CD with ksops..."
-      kubectl kustomize /tmp/cogni-repo/infra/cd/argocd/ \
-        | kubectl apply -n argocd -f -
+      # Install Argo CD in stages:
+      # 1. Base install (remote manifest, pinned version)
+      # 2. Wait for server to be available (patches need running deployments)
+      # 3. Apply ksops CMP ConfigMap
+      # 4. Patch repo-server with ksops sidecar
+      # 5. Apply ApplicationSet for service management
+      #
+      # Cannot use kubectl kustomize in one shot — strategic merge patch
+      # on repo-server fails when base is a remote URL (ordering issue).
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing Argo CD base (v2.13.4)..."
+      kubectl apply -n argocd \
+        -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Waiting for Argo CD to be ready..."
       kubectl -n argocd wait --for=condition=Available \
         deployment/argocd-server --timeout=300s
 
-      # Apply ApplicationSet — Argo CD generates one Application per service
-      # from the list in services-applicationset.yaml, each pointing at its
-      # own per-service overlay. Standard Argo CD pattern for multi-service.
-      # Ref: https://argo-cd.readthedocs.io/en/stable/operator-manual/applicationset/
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Applying ksops CMP plugin..."
+      kubectl apply -n argocd \
+        -f /tmp/cogni-repo/infra/cd/argocd/ksops-cmp.yaml
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Patching repo-server with ksops sidecar..."
+      kubectl -n argocd patch deployment argocd-repo-server \
+        --patch-file /tmp/cogni-repo/infra/cd/argocd/repo-server-patch.yaml
+
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Applying Argo CD ApplicationSet..."
       kubectl apply -f /tmp/cogni-repo/infra/cd/argocd/services-applicationset.yaml
 
