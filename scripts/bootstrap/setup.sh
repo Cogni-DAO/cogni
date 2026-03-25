@@ -63,7 +63,7 @@ echo -e "${GREEN}╚════════════════════
 
 # Determine step count
 if [[ "$INSTALL_ALL" == "true" ]]; then
-    TOTAL_STEPS=6
+    TOTAL_STEPS=7
 else
     TOTAL_STEPS=4
 fi
@@ -102,6 +102,13 @@ if [[ "$INSTALL_ALL" == "true" ]]; then
     ((CURRENT_STEP++))
     log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing REUSE (License Compliance)"
     "$INSTALL_DIR/install-reuse.sh"
+fi
+
+# Optional: GitOps tools (age + sops for Argo CD secret management)
+if [[ "$INSTALL_ALL" == "true" ]]; then
+    ((CURRENT_STEP++))
+    log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing GitOps tools (age + sops)"
+    "$INSTALL_DIR/install-gitops-tools.sh"
 fi
 
 echo -e "\n${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
