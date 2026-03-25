@@ -17,7 +17,7 @@
 
 import { proxyActivities } from "@temporalio/workflow";
 
-import type { LedgerActivities } from "../activities/ledger.js";
+import type { LedgerActivities } from "../activity-types.js";
 
 // Intentionally lower retry count (3 vs standard 5) — finalization should fail fast
 // rather than retry excessively on signature verification or config lock errors.

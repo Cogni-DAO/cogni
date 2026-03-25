@@ -11,5 +11,5 @@
  * @internal
  */
 
-export { GraphRunWorkflow } from "./graph-run.workflow.js";
-export { PrReviewWorkflow } from "./pr-review.workflow.js";
+export { GraphRunWorkflow } from "./workflows/graph-run.workflow.js";
+export { PrReviewWorkflow } from "./workflows/pr-review.workflow.js";

@@ -15,6 +15,7 @@
  * @internal
  */
 
+import { createRequire } from "node:module";
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { createActivities } from "./activities/index.js";
@@ -23,6 +24,8 @@ import { createContainer } from "./bootstrap/container.js";
 import type { Env } from "./bootstrap/env.js";
 import { logWorkerEvent, WORKER_EVENT_NAMES } from "./observability/index.js";
 import type { Logger } from "./observability/logger.js";
+
+const require = createRequire(import.meta.url);
 
 /**
  * Configuration for starting the Temporal scheduler worker.
@@ -87,10 +90,7 @@ export async function startSchedulerWorker(
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: env.TEMPORAL_TASK_QUEUE,
-    workflowsPath: new URL(
-      "./workflows/scheduler-workflows.js",
-      import.meta.url
-    ).pathname,
+    workflowsPath: require.resolve("@cogni/temporal-workflows/scheduler"),
     activities: { ...graphActivities, ...reviewActivities },
   });
 

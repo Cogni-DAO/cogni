@@ -17,9 +17,8 @@
  */
 
 import { executeChild, proxyActivities, uuid4 } from "@temporalio/workflow";
-
-import type { ReviewActivities } from "../activities/review.js";
-import { EXTERNAL_API_ACTIVITY_OPTIONS } from "./activity-profiles.js";
+import { EXTERNAL_API_ACTIVITY_OPTIONS } from "../activity-profiles.js";
+import type { ReviewActivities } from "../activity-types.js";
 import type { GraphRunResult } from "./graph-run.workflow.js";
 
 // All review activities: GitHub API calls with 5-min timeout, 3 retries

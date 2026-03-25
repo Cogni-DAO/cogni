@@ -15,10 +15,11 @@
  */
 
 import { proxyActivities } from "@temporalio/workflow";
-
-import type { EnrichmentActivities } from "../../activities/enrichment.js";
-import type { LedgerActivities } from "../../activities/ledger.js";
-import { STANDARD_ACTIVITY_OPTIONS } from "../activity-profiles.js";
+import { STANDARD_ACTIVITY_OPTIONS } from "../../activity-profiles.js";
+import type {
+  EnrichmentActivities,
+  LedgerActivities,
+} from "../../activity-types.js";
 
 const { materializeSelection, computeAllocations } =
   proxyActivities<LedgerActivities>(STANDARD_ACTIVITY_OPTIONS);

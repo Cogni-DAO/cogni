@@ -371,10 +371,11 @@ This violates ONE_RUN_EXECUTION_PATH. The graph run is invisible to the dashboar
 
 ### File Pointers
 
-| File                         | Purpose                                            |
-| ---------------------------- | -------------------------------------------------- |
-| `services/scheduler-worker/` | Scheduler worker service (Temporal worker)         |
-| `packages/scheduler-core/`   | Scheduling types, port interfaces, payload schemas |
+| File                           | Purpose                                                      |
+| ------------------------------ | ------------------------------------------------------------ |
+| `packages/temporal-workflows/` | Workflow definitions, activity interfaces, activity profiles |
+| `services/scheduler-worker/`   | Thin composition root (activity wiring + worker lifecycle)   |
+| `packages/scheduler-core/`     | Scheduling types, port interfaces, payload schemas           |
 
 ## Acceptance Checks
 

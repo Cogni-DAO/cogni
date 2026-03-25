@@ -20,6 +20,7 @@
     { "path": "./packages/attribution-pipeline-plugins" },
     { "path": "./packages/operator-wallet" },
     { "path": "./packages/scheduler-core" },
+    { "path": "./packages/temporal-workflows" },
     { "path": "./packages/repo-spec" },
     { "path": "./packages/work-items" }
   ]

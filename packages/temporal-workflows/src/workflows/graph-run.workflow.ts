@@ -20,9 +20,8 @@
  */
 
 import { proxyActivities, uuid4, workflowInfo } from "@temporalio/workflow";
-
-import type { Activities } from "../activities/index.js";
-import { GRAPH_EXECUTION_ACTIVITY_OPTIONS } from "./activity-profiles.js";
+import { GRAPH_EXECUTION_ACTIVITY_OPTIONS } from "../activity-profiles.js";
+import type { SchedulerActivities } from "../activity-types.js";
 
 /**
  * Terminal artifact returned by GraphRunWorkflow.
@@ -41,7 +40,7 @@ const {
   validateGrantActivity,
   createGraphRunActivity,
   updateGraphRunActivity,
-} = proxyActivities<Activities>({
+} = proxyActivities<SchedulerActivities>({
   startToCloseTimeout: "1 minute",
   retry: {
     initialInterval: "1 second",
@@ -52,7 +51,7 @@ const {
 });
 
 // Graph execution: 15-min timeout, no retry (idempotency collision risk).
-const { executeGraphActivity } = proxyActivities<Activities>(
+const { executeGraphActivity } = proxyActivities<SchedulerActivities>(
   GRAPH_EXECUTION_ACTIVITY_OPTIONS
 );
 

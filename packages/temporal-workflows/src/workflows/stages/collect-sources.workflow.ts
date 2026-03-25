@@ -15,12 +15,11 @@
  */
 
 import { proxyActivities } from "@temporalio/workflow";
-
-import type { LedgerActivities } from "../../activities/ledger.js";
 import {
   EXTERNAL_API_ACTIVITY_OPTIONS,
   STANDARD_ACTIVITY_OPTIONS,
-} from "../activity-profiles.js";
+} from "../../activity-profiles.js";
+import type { LedgerActivities } from "../../activity-types.js";
 
 const { loadCursor, saveCursor, insertReceipts, resolveStreams } =
   proxyActivities<LedgerActivities>(STANDARD_ACTIVITY_OPTIONS);

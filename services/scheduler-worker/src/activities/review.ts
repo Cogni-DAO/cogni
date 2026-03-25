@@ -24,10 +24,7 @@ import {
   parseRule,
   type Rule,
 } from "@cogni/repo-spec";
-import { createAppAuth } from "@octokit/auth-app";
-import { Octokit } from "@octokit/core";
-import { parse as parseYaml } from "yaml";
-
+import type { GraphRunResult } from "@cogni/temporal-workflows";
 import {
   aggregateGateStatuses,
   buildReviewUserMessage,
@@ -40,9 +37,11 @@ import {
   type GateResult,
   type GateStatus,
   type ReviewResult,
-} from "../domain/review.js";
+} from "@cogni/temporal-workflows";
+import { createAppAuth } from "@octokit/auth-app";
+import { Octokit } from "@octokit/core";
+import { parse as parseYaml } from "yaml";
 import type { Logger } from "../observability/logger.js";
-import type { GraphRunResult } from "../workflows/graph-run.workflow.js";
 
 // ---------------------------------------------------------------------------
 // Types

@@ -2,7 +2,7 @@
 id: bug.0193
 type: bug
 title: "scheduler-worker houses workflow definitions — should be thin composition root"
-status: needs_implement
+status: needs_closeout
 priority: 3
 rank: 50
 estimate: 3
@@ -11,7 +11,7 @@ outcome: "packages/temporal-workflows/ owns all workflow definitions + activity 
 spec_refs: [temporal-patterns-spec, packages-architecture-spec]
 assignees: []
 project: proj.unified-graph-launch
-branch:
+branch: bug-0193-extract-temporal-workflows
 pr:
 reviewer:
 revision: 1
@@ -19,6 +19,7 @@ blocked_by: []
 deploy_verified: false
 created: 2026-03-24
 updated: 2026-03-25
+
 labels: [scheduler, architecture]
 ---
 

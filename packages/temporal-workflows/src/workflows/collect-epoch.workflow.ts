@@ -25,10 +25,11 @@ import {
   proxyActivities,
   workflowInfo,
 } from "@temporalio/workflow";
-
-import type { EnrichmentActivities } from "../activities/enrichment.js";
-import type { LedgerActivities } from "../activities/ledger.js";
-import { STANDARD_ACTIVITY_OPTIONS } from "./activity-profiles.js";
+import { STANDARD_ACTIVITY_OPTIONS } from "../activity-profiles.js";
+import type {
+  EnrichmentActivities,
+  LedgerActivities,
+} from "../activity-types.js";
 import { CollectSourcesWorkflow } from "./stages/collect-sources.workflow.js";
 import { EnrichAndAllocateWorkflow } from "./stages/enrich-and-allocate.workflow.js";
 
