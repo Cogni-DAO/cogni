@@ -29,10 +29,12 @@ interface Secret {
   source: "agent" | "human";
   /** URL to visit (human secrets) */
   url?: string;
-  /** Instructions shown to user */
-  instructions: string;
+  /** Step-by-step instructions (rendered as vertical list) */
+  steps: string[];
   /** Generator function for agent secrets */
   generate?: () => string;
+  /** true if preview and production typically have DIFFERENT values */
+  perEnv?: boolean;
 }
 
 // ── Generators ───────────────────────────────────────────────────────────────
@@ -45,16 +47,23 @@ function randHex(bytes = 32): string {
   return execSync(`openssl rand -hex ${bytes}`).toString().trim();
 }
 
-function generateSSHKey(): string {
-  const path = "/tmp/cogni-deploy-key-" + Date.now();
+function generateSSHKey(env: string): string {
+  const path = `/tmp/cogni-deploy-key-${env}-${Date.now()}`;
   execSync(
-    `ssh-keygen -t ed25519 -f ${path} -N "" -C "cogni-deploy-$(date +%Y%m%d)" -q`
+    `ssh-keygen -t ed25519 -f ${path} -N "" -C "cogni-deploy-${env}-$(date +%Y%m%d)" -q`
   );
   const privKey = execSync(`cat ${path}`).toString();
   const pubKey = execSync(`cat ${path}.pub`).toString().trim();
   execSync(`rm -f ${path} ${path}.pub`);
-  console.log("\n  Public key (add to server ~/.ssh/authorized_keys):");
-  console.log(`  ${pubKey}\n`);
+  console.log("");
+  console.log(`     Public key for ${env}:`);
+  console.log(`     ${pubKey}`);
+  console.log("");
+  console.log(
+    `     Save this to: infra/tofu/cherry/base/keys/cogni_template_${env}_deploy.pub`
+  );
+  console.log(`     Then run: tofu apply -var-file=terraform.${env}.tfvars`);
+  console.log("");
   return privKey;
 }
 
@@ -68,7 +77,7 @@ const SECRETS: Secret[] = [
     category: "Core App",
     source: "agent",
     description: "NextAuth session encryption key",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(32),
   },
   {
@@ -77,7 +86,7 @@ const SECRETS: Secret[] = [
     category: "Core App",
     source: "agent",
     description: "LiteLLM proxy master API key",
-    instructions: "Auto-generated sk-cogni-* key.",
+    steps: ["Auto-generated sk-cogni-* key"],
     generate: () => `sk-cogni-${randHex(24)}`,
   },
   {
@@ -86,7 +95,7 @@ const SECRETS: Secret[] = [
     category: "Core App",
     source: "agent",
     description: "OpenClaw gateway WS auth token",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(32),
   },
   {
@@ -95,7 +104,7 @@ const SECRETS: Secret[] = [
     category: "Internal Service",
     source: "agent",
     description: "scheduler-worker -> internal graph API auth",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(32),
   },
   {
@@ -104,7 +113,7 @@ const SECRETS: Secret[] = [
     category: "Internal Service",
     source: "agent",
     description: "LiteLLM callback -> billing ingest endpoint auth",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(32),
   },
   {
@@ -113,7 +122,7 @@ const SECRETS: Secret[] = [
     category: "Internal Service",
     source: "agent",
     description: "Deploy trigger -> governance schedule sync auth",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(32),
   },
   {
@@ -122,7 +131,7 @@ const SECRETS: Secret[] = [
     category: "Internal Service",
     source: "agent",
     description: "Prometheus scrape -> /api/metrics auth",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(32),
   },
   {
@@ -131,7 +140,7 @@ const SECRETS: Secret[] = [
     category: "Internal Service",
     source: "agent",
     description: "GitHub webhook HMAC verification secret",
-    instructions: "Auto-generated hex string.",
+    steps: ["Auto-generated hex string"],
     generate: () => randHex(32),
   },
   {
@@ -140,9 +149,13 @@ const SECRETS: Secret[] = [
     category: "Infrastructure",
     source: "agent",
     description: "SSH private key for deploy to server",
-    instructions:
-      "Auto-generated ed25519 keypair. You must add the public key to the server.",
-    generate: generateSSHKey,
+    perEnv: true,
+    steps: [
+      "Auto-generated ed25519 keypair (one per environment)",
+      "Save public key to infra/tofu/cherry/base/keys/",
+      "Run tofu apply to push key to Cherry Servers",
+    ],
+    // generate handled specially in main loop
   },
 
   // ── Required: Human-provided ───────────────────────────────────────────
@@ -153,7 +166,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "OpenRouter LLM API key",
     url: "https://openrouter.ai/keys",
-    instructions: "Create a new API key. Copy the full key (starts with sk-).",
+    steps: ["Create a new API key", "Copy the full key (starts with sk-)"],
   },
   {
     name: "EVM_RPC_URL",
@@ -162,8 +175,10 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Base mainnet RPC endpoint for on-chain verification",
     url: "https://dashboard.alchemy.com/",
-    instructions:
-      "Create a new app (chain: Base mainnet). Copy the full HTTPS URL including API key.",
+    steps: [
+      "Create a new app (chain: Base mainnet)",
+      "Copy the full HTTPS URL including API key",
+    ],
   },
   {
     name: "OPENCLAW_GITHUB_RW_TOKEN",
@@ -172,8 +187,14 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub PAT for OpenClaw git relay (push + PR)",
     url: "https://github.com/settings/tokens?type=beta",
-    instructions:
-      "Fine-grained PAT. Scopes: Contents:Write + Pull requests:Write. Scoped to Cogni-DAO repos.",
+    steps: [
+      "Create fine-grained personal access token",
+      "Resource owner: Cogni-DAO",
+      "Repository access: All repositories (or select repos)",
+      "Permissions:",
+      "  - Contents: Read and write",
+      "  - Pull requests: Read and write",
+    ],
   },
   {
     name: "POSTHOG_API_KEY",
@@ -182,7 +203,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "PostHog project API key",
     url: "https://us.posthog.com/settings/project#variables",
-    instructions: "Copy the Project API Key from project settings.",
+    steps: ["Copy the Project API Key from project settings"],
   },
   {
     name: "POSTHOG_HOST",
@@ -191,8 +212,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "PostHog instance URL",
     url: "https://us.posthog.com/settings/project#variables",
-    instructions:
-      'Your PostHog host URL (e.g. "https://us.i.posthog.com" for US Cloud).',
+    steps: ['e.g. "https://us.i.posthog.com" for US Cloud'],
   },
   {
     name: "GHCR_DEPLOY_TOKEN",
@@ -201,16 +221,21 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub PAT for docker pull from GHCR on deploy server",
     url: "https://github.com/settings/tokens?type=beta",
-    instructions:
-      "Fine-grained PAT. Scope: Packages:Read. Scoped to Cogni-DAO.",
+    steps: [
+      "Create fine-grained personal access token",
+      "Resource owner: Cogni-DAO",
+      "Permissions:",
+      "  - Packages: Read",
+    ],
   },
   {
     name: "DOMAIN",
     required: true,
     category: "Infrastructure",
     source: "human",
-    description: "Production server domain (e.g. app.cogni.dev)",
-    instructions: "Your server's public domain name.",
+    description: "Server domain name",
+    perEnv: true,
+    steps: ['e.g. "preview.cogni.dev" / "app.cogni.dev"'],
   },
   {
     name: "VM_HOST",
@@ -218,7 +243,8 @@ const SECRETS: Secret[] = [
     category: "Infrastructure",
     source: "human",
     description: "Deploy target IP or hostname",
-    instructions: "The IP address or hostname of your production server.",
+    perEnv: true,
+    steps: ["The IP address of your Cherry Server VM"],
   },
 
   // ── Required: Database (grouped) ───────────────────────────────────────
@@ -228,7 +254,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Postgres superuser name",
-    instructions: 'Convention: "postgres".',
+    steps: ['Convention: "postgres"'],
     generate: () => "postgres",
   },
   {
@@ -237,7 +263,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Postgres superuser password",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(24),
   },
   {
@@ -246,7 +272,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Application database name",
-    instructions: 'Convention: "cogni_template".',
+    steps: ['Convention: "cogni_template"'],
     generate: () => "cogni_template",
   },
   {
@@ -255,7 +281,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "App user (RLS enforced)",
-    instructions: 'Convention: "app_user".',
+    steps: ['Convention: "app_user"'],
     generate: () => "app_user",
   },
   {
@@ -264,7 +290,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "App user password",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(24),
   },
   {
@@ -273,7 +299,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Service user (BYPASSRLS)",
-    instructions: 'Convention: "app_service".',
+    steps: ['Convention: "app_service"'],
     generate: () => "app_service",
   },
   {
@@ -282,7 +308,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Service user password",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(24),
   },
   {
@@ -291,7 +317,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Temporal database user",
-    instructions: 'Convention: "temporal".',
+    steps: ['Convention: "temporal"'],
     generate: () => "temporal",
   },
   {
@@ -300,7 +326,7 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Temporal database password",
-    instructions: "Auto-generated random string.",
+    steps: ["Auto-generated random string"],
     generate: () => rand64(24),
   },
 
@@ -312,8 +338,13 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub PAT for cross-repo workflow dispatch and release PRs",
     url: "https://github.com/settings/tokens?type=beta",
-    instructions:
-      "Fine-grained PAT. Scopes: Actions:Write + Contents:Write + Pull requests:Write.",
+    steps: [
+      "Create fine-grained personal access token",
+      "Permissions:",
+      "  - Actions: Read and write",
+      "  - Contents: Read and write",
+      "  - Pull requests: Read and write",
+    ],
   },
   {
     name: "GIT_READ_TOKEN",
@@ -322,17 +353,21 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub PAT for git-sync container (repo clone)",
     url: "https://github.com/settings/tokens?type=beta",
-    instructions:
-      "Fine-grained PAT. Scope: Contents:Read. (Public repos work without token.)",
+    steps: [
+      "Create fine-grained personal access token",
+      "Permissions:",
+      "  - Contents: Read-only",
+      "(Public repos work without token)",
+    ],
   },
   {
     name: "SONAR_TOKEN",
     required: false,
     category: "CI / Automation",
     source: "human",
-    description: "SonarCloud analysis token",
+    description: "SonarCloud analysis token (repo-level, not per-env)",
     url: "https://sonarcloud.io/account/security",
-    instructions: "Generate a new token. Copy the full value.",
+    steps: ["Generate a new token", "Copy the full value"],
   },
 
   // ── Optional: GitHub App (PR Review Bot) ───────────────────────────────
@@ -343,7 +378,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub App numeric ID",
     url: "https://github.com/settings/apps",
-    instructions: "Your GitHub App -> General -> App ID.",
+    steps: ["Your GitHub App", "General tab", "Copy App ID"],
   },
   {
     name: "GH_REVIEW_APP_PRIVATE_KEY_BASE64",
@@ -352,8 +387,12 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub App private key (base64-encoded PEM)",
     url: "https://github.com/settings/apps",
-    instructions:
-      "GitHub App -> General -> Generate private key. Then: base64 -w0 < key.pem",
+    steps: [
+      "Your GitHub App",
+      "General tab -> Generate a private key",
+      "Then run: base64 -w0 < downloaded-key.pem",
+      "Paste the base64 output",
+    ],
   },
 
   // ── Optional: OAuth Providers ──────────────────────────────────────────
@@ -364,7 +403,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub OAuth App client ID",
     url: "https://github.com/settings/developers",
-    instructions: "OAuth Apps -> your app -> Client ID.",
+    steps: ["OAuth Apps", "Your app", "Copy Client ID"],
   },
   {
     name: "GH_OAUTH_CLIENT_SECRET",
@@ -373,7 +412,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "GitHub OAuth App client secret",
     url: "https://github.com/settings/developers",
-    instructions: "OAuth Apps -> your app -> Generate a new client secret.",
+    steps: ["OAuth Apps", "Your app", "Generate a new client secret"],
   },
   {
     name: "DISCORD_OAUTH_CLIENT_ID",
@@ -382,7 +421,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Discord OAuth2 client ID",
     url: "https://discord.com/developers/applications",
-    instructions: "Your app -> OAuth2 -> Client ID.",
+    steps: ["Your app", "OAuth2 tab", "Copy Client ID"],
   },
   {
     name: "DISCORD_OAUTH_CLIENT_SECRET",
@@ -391,7 +430,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Discord OAuth2 client secret",
     url: "https://discord.com/developers/applications",
-    instructions: "Your app -> OAuth2 -> Client Secret -> Reset.",
+    steps: ["Your app", "OAuth2 tab", "Reset Secret"],
   },
   {
     name: "GOOGLE_OAUTH_CLIENT_ID",
@@ -400,7 +439,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Google OAuth client ID",
     url: "https://console.cloud.google.com/apis/credentials",
-    instructions: "OAuth 2.0 Client IDs -> your client -> Client ID.",
+    steps: ["OAuth 2.0 Client IDs", "Your client", "Copy Client ID"],
   },
   {
     name: "GOOGLE_OAUTH_CLIENT_SECRET",
@@ -409,7 +448,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Google OAuth client secret",
     url: "https://console.cloud.google.com/apis/credentials",
-    instructions: "OAuth 2.0 Client IDs -> your client -> Client secret.",
+    steps: ["OAuth 2.0 Client IDs", "Your client", "Copy Client secret"],
   },
 
   // ── Optional: Discord Bot ──────────────────────────────────────────────
@@ -420,100 +459,118 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Discord bot token for OpenClaw gateway",
     url: "https://discord.com/developers/applications",
-    instructions: "Your app -> Bot -> Reset Token. Copy the new token.",
+    steps: ["Your app", "Bot tab", "Reset Token", "Copy the new token"],
   },
 
   // ── Optional: Observability (Grafana Cloud) ────────────────────────────
   {
     name: "GRAFANA_URL",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana instance URL",
-    instructions:
-      'Your Grafana URL (e.g. "https://your-org.grafana.net").',
+    url: "https://grafana.com/orgs",
+    steps: ['e.g. "https://your-org.grafana.net"'],
   },
   {
     name: "GRAFANA_SERVICE_ACCOUNT_TOKEN",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana service account token (Viewer role)",
-    instructions:
-      "Grafana -> Administration -> Service Accounts -> Add token (Viewer role).",
+    steps: [
+      "Grafana instance",
+      "Administration -> Service Accounts",
+      "Add service account (Viewer role)",
+      "Add token, copy it",
+    ],
   },
   {
     name: "GRAFANA_CLOUD_LOKI_URL",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana Cloud Loki write URL",
     url: "https://grafana.com/orgs",
-    instructions:
-      "Grafana Cloud -> your stack -> Loki -> Data source URL + /loki/api/v1/push.",
+    steps: [
+      "Your stack -> Loki",
+      "Copy Data source URL",
+      "Append /loki/api/v1/push",
+    ],
   },
   {
     name: "GRAFANA_CLOUD_LOKI_USER",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana Cloud Loki numeric user ID",
     url: "https://grafana.com/orgs",
-    instructions: "Grafana Cloud -> your stack -> Loki -> User.",
+    steps: ["Your stack -> Loki", "Copy User (numeric)"],
   },
   {
     name: "GRAFANA_CLOUD_LOKI_API_KEY",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana Cloud API key (logs:write scope)",
     url: "https://grafana.com/orgs",
-    instructions:
-      "Grafana Cloud -> Access Policies -> Create token with logs:write scope.",
+    steps: [
+      "Access Policies -> Create policy",
+      "Scope: logs:write",
+      "Create token, copy it",
+    ],
   },
   {
     name: "PROMETHEUS_REMOTE_WRITE_URL",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana Cloud Prometheus remote write URL",
     url: "https://grafana.com/orgs",
-    instructions: "Grafana Cloud -> your stack -> Prometheus -> Remote Write URL.",
+    steps: ["Your stack -> Prometheus", "Copy Remote Write URL"],
   },
   {
     name: "PROMETHEUS_USERNAME",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana Cloud Prometheus user (numeric)",
     url: "https://grafana.com/orgs",
-    instructions: "Grafana Cloud -> your stack -> Prometheus -> User.",
+    steps: ["Your stack -> Prometheus", "Copy User (numeric)"],
   },
   {
     name: "PROMETHEUS_PASSWORD",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana Cloud API key (metrics:write scope)",
     url: "https://grafana.com/orgs",
-    instructions: "Access Policies -> Create token with metrics:write scope.",
+    steps: [
+      "Access Policies -> Create policy",
+      "Scope: metrics:write",
+      "Create token, copy it",
+    ],
   },
   {
     name: "PROMETHEUS_READ_USERNAME",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Prometheus read user (same numeric ID is fine)",
-    instructions: "Same user ID as PROMETHEUS_USERNAME.",
+    steps: ["Same user ID as PROMETHEUS_USERNAME"],
   },
   {
     name: "PROMETHEUS_READ_PASSWORD",
     required: false,
-    category: "Observability",
+    category: "Observability (Grafana Cloud)",
     source: "human",
     description: "Grafana Cloud API key (metrics:read scope)",
     url: "https://grafana.com/orgs",
-    instructions: "Access Policies -> Create token with metrics:read scope.",
+    steps: [
+      "Access Policies -> Create policy",
+      "Scope: metrics:read",
+      "Create token, copy it",
+    ],
   },
 
   // ── Optional: Langfuse ─────────────────────────────────────────────────
@@ -524,7 +581,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Langfuse public key",
     url: "https://cloud.langfuse.com",
-    instructions: "Settings -> API Keys -> Public Key.",
+    steps: ["Settings -> API Keys", "Copy Public Key"],
   },
   {
     name: "LANGFUSE_SECRET_KEY",
@@ -533,7 +590,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Langfuse secret key",
     url: "https://cloud.langfuse.com",
-    instructions: "Settings -> API Keys -> Secret Key.",
+    steps: ["Settings -> API Keys", "Copy Secret Key"],
   },
   {
     name: "LANGFUSE_BASE_URL",
@@ -541,8 +598,10 @@ const SECRETS: Secret[] = [
     category: "AI Observability (Langfuse)",
     source: "human",
     description: "Langfuse instance URL",
-    instructions:
-      'Default: "https://cloud.langfuse.com". Set only for self-hosted.',
+    steps: [
+      'Default: "https://cloud.langfuse.com"',
+      "Set only for self-hosted",
+    ],
   },
 
   // ── Optional: Privy (Operator Wallet) ──────────────────────────────────
@@ -553,7 +612,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Privy application ID",
     url: "https://dashboard.privy.io",
-    instructions: "App Settings -> App ID.",
+    steps: ["App Settings", "Copy App ID"],
   },
   {
     name: "PRIVY_APP_SECRET",
@@ -562,7 +621,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Privy application secret",
     url: "https://dashboard.privy.io",
-    instructions: "App Settings -> App Secret.",
+    steps: ["App Settings", "Copy App Secret"],
   },
   {
     name: "PRIVY_SIGNING_KEY",
@@ -571,8 +630,11 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "Privy EC signing key (PEM)",
     url: "https://dashboard.privy.io",
-    instructions:
-      "App Settings -> Signing Key. Paste the full PEM (with newlines).",
+    steps: [
+      "App Settings",
+      "Copy Signing Key",
+      "Paste full PEM including newlines",
+    ],
   },
 
   // ── Optional: WalletConnect ────────────────────────────────────────────
@@ -583,7 +645,7 @@ const SECRETS: Secret[] = [
     source: "human",
     description: "WalletConnect Cloud project ID",
     url: "https://cloud.walletconnect.com",
-    instructions: "Your project -> Project ID.",
+    steps: ["Your project", "Copy Project ID"],
   },
 ];
 
@@ -593,35 +655,54 @@ const REPO = "Cogni-DAO/node-template";
 /** Deploy environments. Secrets are set per-env, not repo-level. */
 const ENVIRONMENTS = ["preview", "production"] as const;
 
-function getSetSecrets(env?: string): Set<string> {
+const DIM = "\x1b[2m";
+const RESET = "\x1b[0m";
+const BOLD = "\x1b[1m";
+const GREEN = "\x1b[32m";
+const RED = "\x1b[31m";
+const YELLOW = "\x1b[33m";
+const CYAN = "\x1b[36m";
+
+function envStatus(has: boolean): string {
+  return has ? `${GREEN}set${RESET}` : `${RED}missing${RESET}`;
+}
+
+function getSetSecrets(env: string): Set<string> {
   try {
-    const envFlag = env ? ` --env ${env}` : "";
-    const out = execSync(`gh secret list --repo ${REPO}${envFlag} 2>/dev/null`, {
-      encoding: "utf-8",
-    });
-    return new Set(out.split("\n").map((l) => l.split("\t")[0]).filter(Boolean));
+    const out = execSync(
+      `gh secret list --repo ${REPO} --env ${env} 2>/dev/null`,
+      {
+        encoding: "utf-8",
+      }
+    );
+    return new Set(
+      out
+        .split("\n")
+        .map((l) => l.split("\t")[0])
+        .filter(Boolean)
+    );
   } catch {
-    console.error(`Failed to list secrets${env ? ` for ${env}` : ""}. Is \`gh\` authenticated?`);
+    console.error(
+      `Failed to list secrets for ${env}. Is \`gh\` authenticated?`
+    );
     process.exit(1);
   }
 }
 
-function setSecret(name: string, value: string, env?: string): boolean {
+function setSecret(name: string, value: string, env: string): boolean {
   try {
-    const envFlag = env ? ` --env ${env}` : "";
-    execSync(`gh secret set ${name} --repo ${REPO}${envFlag}`, {
+    execSync(`gh secret set ${name} --repo ${REPO} --env ${env}`, {
       input: value,
       encoding: "utf-8",
     });
     return true;
   } catch (e) {
-    console.error(`  Failed to set ${name}${env ? ` (${env})` : ""}: ${e}`);
+    console.error(`  Failed to set ${name} (${env}): ${e}`);
     return false;
   }
 }
 
-/** Set a secret in both deploy environments (preview + production) */
-function setSecretEverywhere(name: string, value: string): boolean {
+function setSecretBoth(name: string, value: string): boolean {
   let ok = true;
   for (const env of ENVIRONMENTS) {
     if (!setSecret(name, value, env)) ok = false;
@@ -629,7 +710,10 @@ function setSecretEverywhere(name: string, value: string): boolean {
   return ok;
 }
 
-async function prompt(rl: readline.Interface, question: string): Promise<string> {
+async function prompt(
+  rl: readline.Interface,
+  question: string
+): Promise<string> {
   return new Promise((resolve) => rl.question(question, resolve));
 }
 
@@ -647,14 +731,75 @@ function buildDSNs(): void {
 
   if (appPw) {
     const url = `postgresql://${appUser}:${appPw}@${host}:5432/${dbName}`;
-    setSecretEverywhere("DATABASE_URL", url);
-    console.log("  -> DATABASE_URL set (preview + production)");
+    setSecretBoth("DATABASE_URL", url);
+    console.log(`  ${GREEN}DATABASE_URL${RESET} set (preview + production)`);
   }
   if (svcPw) {
     const url = `postgresql://${svcUser}:${svcPw}@${host}:5432/${dbName}`;
-    setSecretEverywhere("DATABASE_SERVICE_URL", url);
-    console.log("  -> DATABASE_SERVICE_URL set (preview + production)");
+    setSecretBoth("DATABASE_SERVICE_URL", url);
+    console.log(
+      `  ${GREEN}DATABASE_SERVICE_URL${RESET} set (preview + production)`
+    );
   }
+}
+
+// ── Display ──────────────────────────────────────────────────────────────────
+
+function printInventory(
+  previewSecrets: Set<string>,
+  prodSecrets: Set<string>
+): void {
+  console.log(`\n${BOLD}  Secret Inventory — ${REPO}${RESET}\n`);
+  console.log(
+    `  ${"SECRET".padEnd(42)} ${"PREVIEW".padEnd(10)} ${"PRODUCTION".padEnd(10)} ${"SOURCE"}`
+  );
+  console.log(
+    `  ${"─".repeat(42)} ${"─".repeat(10)} ${"─".repeat(10)} ${"─".repeat(8)}`
+  );
+
+  let lastCategory = "";
+  for (const s of SECRETS) {
+    if (s.category !== lastCategory) {
+      console.log(`\n  ${DIM}${s.category}${RESET}`);
+      lastCategory = s.category;
+    }
+    const req = s.required ? "" : `${DIM}(opt)${RESET} `;
+    const pStatus = envStatus(previewSecrets.has(s.name));
+    const dStatus = envStatus(prodSecrets.has(s.name));
+    const src =
+      s.source === "agent" ? `${DIM}auto${RESET}` : `${YELLOW}human${RESET}`;
+    console.log(
+      `  ${req}${s.name.padEnd(s.required ? 42 : 37)} ${pStatus.padEnd(19)} ${dStatus.padEnd(19)} ${src}`
+    );
+  }
+  console.log("");
+}
+
+function printSecretHeader(
+  secret: Secret,
+  previewSecrets: Set<string>,
+  prodSecrets: Set<string>
+): void {
+  const reqTag = secret.required
+    ? `${BOLD}[REQUIRED]${RESET}`
+    : `${DIM}[optional]${RESET}`;
+
+  console.log("");
+  console.log(
+    `  ${reqTag} ${BOLD}${secret.name}${RESET}  [preview: ${envStatus(previewSecrets.has(secret.name))}, production: ${envStatus(prodSecrets.has(secret.name))}]`
+  );
+  console.log(`  ${secret.description}`);
+
+  if (secret.url) {
+    console.log("");
+    console.log(`     ${CYAN}${secret.url}${RESET}`);
+    console.log("");
+  }
+
+  for (const step of secret.steps) {
+    console.log(`     ${step}`);
+  }
+  console.log("");
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -667,20 +812,29 @@ async function main() {
   const previewSecrets = getSetSecrets("preview");
   const prodSecrets = getSetSecrets("production");
 
+  // Always print full inventory first
+  printInventory(previewSecrets, prodSecrets);
+
   let filtered = SECRETS;
   if (filterRequired) {
     filtered = filtered.filter((s) => s.required);
   }
   if (!showAll) {
-    // Default: only show secrets missing from at least one environment
     filtered = filtered.filter(
       (s) => !previewSecrets.has(s.name) || !prodSecrets.has(s.name)
     );
   }
 
-  console.log(`\n  Secret Rotation — ${REPO}`);
-  console.log(`  Environments: preview, production`);
-  console.log(`  ${filtered.length} secrets to process\n`);
+  if (filtered.length === 0) {
+    console.log(`  ${GREEN}All secrets are set in both environments.${RESET}`);
+    console.log(`  Run with --all to walk through everything.\n`);
+    return;
+  }
+
+  console.log(
+    `  ${filtered.length} secret(s) to configure. Press Enter to skip any.\n`
+  );
+  console.log(`  ${"─".repeat(70)}`);
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -693,63 +847,113 @@ async function main() {
 
   for (const secret of filtered) {
     if (secret.category !== lastCategory) {
-      console.log(`\n── ${secret.category} ${"─".repeat(60 - secret.category.length)}`);
+      console.log(
+        `\n${"═".repeat(2)} ${BOLD}${secret.category}${RESET} ${"═".repeat(60 - secret.category.length)}`
+      );
       lastCategory = secret.category;
     }
 
-    const p = previewSecrets.has(secret.name) ? "P" : "-";
-    const d = prodSecrets.has(secret.name) ? "D" : "-";
-    const marker = ` [${p}${d}]`; // P=preview, D=production
-    const reqTag = secret.required ? "[REQUIRED]" : "[optional]";
+    printSecretHeader(secret, previewSecrets, prodSecrets);
 
-    console.log(`\n  ${reqTag} ${secret.name}${marker}`);
-    console.log(`  ${secret.description}`);
-    if (secret.url) {
-      console.log(`  URL: ${secret.url}`);
+    // SSH_DEPLOY_KEY is special — one key per environment
+    if (secret.name === "SSH_DEPLOY_KEY") {
+      const action = await prompt(
+        rl,
+        `  Generate SSH keys for both environments? [Y/n] `
+      );
+      if (action.toLowerCase() === "n") {
+        skipped++;
+        continue;
+      }
+      for (const env of ENVIRONMENTS) {
+        const privKey = generateSSHKey(env);
+        setSecret(secret.name, privKey, env);
+        console.log(`  ${GREEN}SSH_DEPLOY_KEY${RESET} set for ${env}`);
+      }
+      set++;
+      continue;
     }
-    console.log(`  ${secret.instructions}`);
 
     if (secret.source === "agent") {
       const action = await prompt(
         rl,
-        `  Generate and set? [Y/n/skip] `
+        `  Generate and set for both envs? [Y/n] `
       );
-      if (action.toLowerCase() === "n" || action.toLowerCase() === "skip") {
+      if (action.toLowerCase() === "n") {
         skipped++;
         continue;
       }
       const value = secret.generate!();
-      if (setSecretEverywhere(secret.name, value)) {
-        console.log(`  -> ${secret.name} set (preview + production)`);
+      if (setSecretBoth(secret.name, value)) {
+        console.log(
+          `  ${GREEN}${secret.name}${RESET} set (preview + production)`
+        );
         set++;
-        // Track DB passwords for DSN construction
         if (secret.category === "Database") {
           dbPasswords[secret.name] = value;
         }
       }
+    } else if (secret.perEnv) {
+      // Per-env human secrets (DOMAIN, VM_HOST) — ask for each env separately
+      for (const env of ENVIRONMENTS) {
+        const already =
+          env === "preview"
+            ? previewSecrets.has(secret.name)
+            : prodSecrets.has(secret.name);
+        if (already && !showAll) continue;
+        const value = await prompt(
+          rl,
+          `  Value for ${BOLD}${env}${RESET} (Enter to skip): `
+        );
+        if (!value.trim()) continue;
+        if (setSecret(secret.name, value.trim(), env)) {
+          console.log(`  ${GREEN}${secret.name}${RESET} set for ${env}`);
+          set++;
+        }
+      }
     } else {
-      const value = await prompt(
-        rl,
-        `  Paste value (or press Enter to skip): `
-      );
+      // Same value for both envs
+      const envHint = `[${BOLD}B${RESET}]oth / [${BOLD}P${RESET}]review / p[${BOLD}r${RESET}]od / [${BOLD}S${RESET}]kip`;
+      const value = await prompt(rl, `  Paste value (Enter to skip): `);
       if (!value.trim()) {
         skipped++;
         continue;
       }
-      if (setSecret(secret.name, value.trim())) {
-        console.log(`  -> ${secret.name} set`);
-        set++;
+      const target = await prompt(rl, `  Set for: ${envHint}: `);
+      const t = target.toLowerCase().trim() || "b";
+      if (t === "s") {
+        skipped++;
+        continue;
       }
+      const envs =
+        t === "p"
+          ? ["preview" as const]
+          : t === "r"
+            ? ["production" as const]
+            : [...ENVIRONMENTS];
+      for (const env of envs) {
+        if (setSecret(secret.name, value.trim(), env)) {
+          console.log(`  ${GREEN}${secret.name}${RESET} set for ${env}`);
+        }
+      }
+      set++;
     }
   }
 
   // Build DATABASE_URL and DATABASE_SERVICE_URL from collected passwords
-  if (dbPasswords["APP_DB_PASSWORD"] || dbPasswords["APP_DB_SERVICE_PASSWORD"]) {
-    console.log("\n── Derived Database URLs ──────────────────────────────────");
+  if (
+    dbPasswords["APP_DB_PASSWORD"] ||
+    dbPasswords["APP_DB_SERVICE_PASSWORD"]
+  ) {
+    console.log(
+      `\n${"═".repeat(2)} ${BOLD}Derived Database URLs${RESET} ${"═".repeat(41)}`
+    );
     buildDSNs();
   }
 
-  console.log(`\n  Done. ${set} set, ${skipped} skipped.\n`);
+  console.log(
+    `\n  Done. ${GREEN}${set} set${RESET}, ${DIM}${skipped} skipped${RESET}.\n`
+  );
   rl.close();
 }
 
