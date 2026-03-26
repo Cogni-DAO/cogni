@@ -6,14 +6,13 @@
  * Purpose: HTTP route utilities for bootstrapping.
  * Scope: Bootstrap-layer exports; creates bound wrapPublicRoute singleton lazily. Does NOT handle request-scoped lifecycle or business logic.
  * Invariants: All /api/v1/public/** routes MUST use wrapPublicRoute(); enforced by CI test.
- * Side-effects: global (lazy container init on first request, not module import)
+ * Side-effects: global (lazy container init on first request via dynamic import, not module import)
  * Notes: Container init deferred to first actual request to avoid build-time env validation.
  * Links: Re-exports from bootstrap/http/*; CI enforcement in tests/meta/public-route-enforcement.test.ts.
  * @public
  */
 
 import type { NextRequest } from "next/server";
-import { getContainer } from "@/bootstrap/container";
 import { publicApiLimiter } from "./rateLimiter";
 import { makeWrapPublicRoute, type PublicRouteConfig } from "./wrapPublicRoute";
 
@@ -55,6 +54,8 @@ export function wrapPublicRoute<TContext = unknown>(
     // Concurrency-safe lazy init
     if (!_wrapPublicRoute) {
       _initPromise ??= (async () => {
+        // Dynamic import: breaks Turbopack's per-route static module graph tracing (spike.0203)
+        const { getContainer } = await import("@/bootstrap/container");
         const container = getContainer();
         _wrapPublicRoute = makeWrapPublicRoute({
           rateLimitBypass: container.config.rateLimitBypass,

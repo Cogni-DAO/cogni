@@ -466,8 +466,8 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Postgres superuser password",
-    steps: ["Auto-generated random string"],
-    generate: () => rand64(24),
+    steps: ["Auto-generated hex string (URL-safe for DSN construction)"],
+    generate: () => randHex(24),
   },
   {
     name: "APP_DB_NAME",
@@ -493,8 +493,8 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "App user password",
-    steps: ["Auto-generated random string"],
-    generate: () => rand64(24),
+    steps: ["Auto-generated hex string (URL-safe for DSN construction)"],
+    generate: () => randHex(24),
   },
   {
     name: "APP_DB_SERVICE_USER",
@@ -511,8 +511,8 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Service user password",
-    steps: ["Auto-generated random string"],
-    generate: () => rand64(24),
+    steps: ["Auto-generated hex string (URL-safe for DSN construction)"],
+    generate: () => randHex(24),
   },
   {
     name: "TEMPORAL_DB_USER",
@@ -529,8 +529,8 @@ const SECRETS: Secret[] = [
     category: "Database",
     source: "agent",
     description: "Temporal database password",
-    steps: ["Auto-generated random string"],
-    generate: () => rand64(24),
+    steps: ["Auto-generated hex string (URL-safe for DSN construction)"],
+    generate: () => randHex(24),
   },
 
   // ── CI / Automation ────────────────────────────────────────────────────
