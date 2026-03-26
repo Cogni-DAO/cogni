@@ -111,6 +111,8 @@ run_check "test:services:local" "pnpm test:services:local"
 run_check "check:docs" "pnpm check:docs"
 run_check "check:root-layout" "pnpm check:root-layout"
 run_check "arch:check" "pnpm arch:check"
+run_check "gitops:coverage" "bash scripts/ci/check-gitops-service-coverage.sh"
+run_check "gitops:manifests" "bash scripts/ci/check-gitops-manifests.sh"
 
 if [ "$VERBOSE" = true ]; then
   echo ""

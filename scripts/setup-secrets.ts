@@ -73,6 +73,178 @@ function generateSSHKey(env: string): string {
   return privKey;
 }
 
+function setupSopsAge(env: string): void {
+  const keyDir = `${process.env.HOME}/.cogni`;
+  const keyFile = `${keyDir}/${env}-age-key.txt`;
+  const repoRoot = execSync("git rev-parse --show-toplevel").toString().trim();
+  const sopsConfig = `${repoRoot}/infra/cd/secrets/.sops.yaml`;
+
+  execSync(`mkdir -p ${keyDir}`);
+
+  // Generate keypair if it doesn't exist
+  let pubkey: string;
+  if (
+    (() => {
+      try {
+        require("fs").accessSync(keyFile);
+        return true;
+      } catch {
+        return false;
+      }
+    })()
+  ) {
+    console.log(`     Keypair already exists: ${keyFile}`);
+    pubkey = execSync(`grep 'public key:' ${keyFile} | awk '{print $NF}'`)
+      .toString()
+      .trim();
+  } else {
+    console.log(`     Generating age keypair...`);
+    const output = execSync(`age-keygen -o ${keyFile} 2>&1`).toString();
+    pubkey = output.match(/Public key: (age1\S+)/)?.[1] ?? "";
+    execSync(`chmod 600 ${keyFile}`);
+    if (!pubkey) {
+      console.log(`     ${RED}Failed to extract public key${RESET}`);
+      return;
+    }
+    console.log(`     Keypair saved: ${keyFile}`);
+  }
+  console.log(`     Public key: ${pubkey}`);
+
+  // Update .sops.yaml
+  const placeholder =
+    env === "staging"
+      ? "age1staging_placeholder_replace_with_real_public_key"
+      : "age1production_placeholder_replace_with_real_public_key";
+  const sopsContent = require("fs").readFileSync(sopsConfig, "utf-8");
+  if (sopsContent.includes(placeholder)) {
+    require("fs").writeFileSync(
+      sopsConfig,
+      sopsContent.replace(placeholder, pubkey)
+    );
+    console.log(`     Updated .sops.yaml with ${env} public key`);
+  } else if (sopsContent.includes(pubkey)) {
+    console.log(`     .sops.yaml already has ${env} public key`);
+  }
+
+  // Copy .enc.yaml.example → .enc.yaml (if .enc.yaml doesn't exist yet),
+  // fill REPLACE_WITH_ placeholders from collectedSecrets, then encrypt.
+  const envLabel = env === "staging" ? "STAGING" : "PRODUCTION";
+  const secretsDir = `${repoRoot}/infra/cd/secrets/${env}`;
+  const sopsFlag = `--config ${repoRoot}/infra/cd/secrets/.sops.yaml`;
+  const fs = require("fs");
+
+  try {
+    // Copy templates → .enc.yaml if not already present
+    const templates = fs
+      .readdirSync(secretsDir)
+      .filter((f: string) => f.endsWith(".enc.yaml.example"));
+    for (const tmpl of templates) {
+      const target = tmpl.replace(".example", "");
+      const targetPath = `${secretsDir}/${target}`;
+      if (!fs.existsSync(targetPath)) {
+        fs.copyFileSync(`${secretsDir}/${tmpl}`, targetPath);
+        console.log(`     Copied ${tmpl} → ${target}`);
+      }
+    }
+
+    const files = fs
+      .readdirSync(secretsDir)
+      .filter(
+        (f: string) => f.endsWith(".enc.yaml") && !f.endsWith(".example")
+      );
+    for (const file of files) {
+      const fullPath = `${secretsDir}/${file}`;
+      let content: string = fs.readFileSync(fullPath, "utf-8");
+
+      if (content.includes("sops:")) {
+        console.log(`     ${file} already encrypted`);
+        continue;
+      }
+
+      // Fill REPLACE_WITH_ placeholders from collectedSecrets
+      let replaced = 0;
+      const placeholderRe = new RegExp(`REPLACE_WITH_${envLabel}_(\\w+)`, "g");
+      content = content.replace(placeholderRe, (_match, secretName: string) => {
+        const val = collectedSecrets[secretName];
+        if (val) {
+          replaced++;
+          return val;
+        }
+        return _match;
+      });
+
+      if (content.includes("REPLACE_WITH_")) {
+        // Some placeholders remain — write what we have and warn
+        fs.writeFileSync(fullPath, content);
+        if (replaced > 0) {
+          console.log(
+            `     ${YELLOW}${file}: filled ${replaced} values, but some placeholders remain${RESET}`
+          );
+        } else {
+          console.log(
+            `     ${YELLOW}${file}: placeholders remain — run setup:secrets first to generate values${RESET}`
+          );
+        }
+      } else {
+        // All placeholders filled — write and encrypt
+        fs.writeFileSync(fullPath, content);
+        console.log(`     Encrypting ${file}...`);
+        execSync(`sops ${sopsFlag} --encrypt --in-place ${fullPath}`);
+        console.log(`     ${GREEN}${file} encrypted${RESET}`);
+      }
+    }
+  } catch {
+    // secrets dir may not exist yet
+  }
+
+  // Write terraform.auto.tfvars with all sensitive vars for this environment.
+  // tofu auto-loads *.auto.tfvars — no source/export needed.
+  const privKey = execSync(
+    `grep 'AGE-SECRET-KEY' ${keyFile} 2>/dev/null || true`
+  )
+    .toString()
+    .trim();
+  if (privKey) {
+    const tofuEnv = env === "staging" ? "preview" : "production";
+    const tfvarsPath = `${repoRoot}/infra/tofu/cherry/base/terraform.${tofuEnv}.auto.tfvars`;
+    const ghcrToken =
+      collectedSecrets["GHCR_DEPLOY_TOKEN"] || "<PASTE_GHCR_PAT>";
+
+    // Read SSH private key if it exists locally
+    const sshKeyPaths = [
+      `${process.env.HOME}/.ssh/cogni_template_${tofuEnv}_deploy`,
+      `${process.env.HOME}/.ssh/cogni_deploy_${tofuEnv}`,
+    ];
+    let sshKey = "";
+    for (const p of sshKeyPaths) {
+      try {
+        sshKey = require("fs").readFileSync(p, "utf-8");
+        break;
+      } catch {
+        /* try next */
+      }
+    }
+
+    const content = [
+      `# Auto-generated by pnpm setup:secrets — DO NOT COMMIT (gitignored via *.tfvars)`,
+      `# Environment: ${tofuEnv}`,
+      ``,
+      `sops_age_private_key = "${privKey}"`,
+      `ghcr_deploy_token    = "${ghcrToken}"`,
+      sshKey
+        ? `ssh_private_key      = <<-EOT\n${sshKey}EOT`
+        : `# ssh_private_key = "" # paste or set TF_VAR_ssh_private_key`,
+      ``,
+    ].join("\n");
+
+    require("fs").writeFileSync(tfvarsPath, content, { mode: 0o600 });
+    console.log(`     ${GREEN}Wrote ${tfvarsPath}${RESET}`);
+    console.log(
+      `     ${CYAN}tofu auto-loads this file — no source/export needed${RESET}`
+    );
+  }
+}
+
 // ── Secret Catalog ───────────────────────────────────────────────────────────
 
 const SECRETS: Secret[] = [
@@ -146,7 +318,10 @@ const SECRETS: Secret[] = [
     category: "Internal Service",
     source: "agent",
     description: "GitHub webhook HMAC verification secret",
-    steps: ["Auto-generated hex string"],
+    steps: [
+      "Auto-generated hex string",
+      "Must be synced to GitHub App → Webhook → Secret after generation",
+    ],
     generate: () => randHex(32),
   },
   {
@@ -165,6 +340,9 @@ const SECRETS: Secret[] = [
     ],
     // generate handled specially in main loop
   },
+
+  // SOPS_AGE_KEY is at the END of the catalog so collectedSecrets has all
+  // values when it runs (it populates k8s secret templates from them).
 
   // ── Infrastructure: repo-level ──────────────────────────────────────────
   {
@@ -682,6 +860,24 @@ const SECRETS: Secret[] = [
     url: "https://cloud.walletconnect.com",
     steps: ["Your project", "Copy Project ID"],
   },
+
+  // ── GitOps Infrastructure (MUST BE LAST — needs collectedSecrets) ──────
+  {
+    name: "SOPS_AGE_KEY",
+    required: true,
+    category: "GitOps (Argo CD)",
+    source: "agent",
+    description:
+      "SOPS/age keypair for Argo CD secret decryption — generates keys, populates + encrypts k8s secrets, writes tofu env file",
+    perEnv: true,
+    steps: [
+      "Auto-generated age keypair (one per environment)",
+      "Populates k8s secret templates from values collected above",
+      "Encrypts .enc.yaml files with SOPS",
+      "Writes ~/.cogni/tofu-{env}.env for tofu apply",
+    ],
+    // generate handled specially in main loop (like SSH_DEPLOY_KEY)
+  },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -689,6 +885,27 @@ const SECRETS: Secret[] = [
 const REPO = "Cogni-DAO/node-template";
 /** Deploy environments. Secrets are set per-env, not repo-level. */
 const ENVIRONMENTS = ["preview", "production"] as const;
+
+/** Collects all secret values set during this run (or loaded from cache).
+ *  Used by setupSopsAge to populate k8s secret templates.
+ *  Cached at ~/.cogni/secret-values.json (chmod 600) so SOPS_AGE_KEY
+ *  can populate templates even when run separately via --only. */
+const SECRET_CACHE = `${process.env.HOME}/.cogni/secret-values.json`;
+const collectedSecrets: Record<string, string> = (() => {
+  try {
+    return JSON.parse(require("fs").readFileSync(SECRET_CACHE, "utf-8"));
+  } catch {
+    return {};
+  }
+})();
+
+function saveSecretCache(): void {
+  const fs = require("fs");
+  fs.mkdirSync(`${process.env.HOME}/.cogni`, { recursive: true });
+  fs.writeFileSync(SECRET_CACHE, JSON.stringify(collectedSecrets, null, 2), {
+    mode: 0o600,
+  });
+}
 
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
@@ -801,13 +1018,15 @@ function buildDSNs(): void {
   const host = "postgres"; // Docker service name
 
   if (appPw) {
-    const url = `postgresql://${appUser}:${appPw}@${host}:5432/${dbName}`;
+    const url = `postgresql://${appUser}:${appPw}@${host}:5432/${dbName}?sslmode=disable`;
     setSecretBoth("DATABASE_URL", url);
+    collectedSecrets["DATABASE_URL"] = url;
     console.log(`  ${GREEN}DATABASE_URL${RESET} set (preview + production)`);
   }
   if (svcPw) {
-    const url = `postgresql://${svcUser}:${svcPw}@${host}:5432/${dbName}`;
+    const url = `postgresql://${svcUser}:${svcPw}@${host}:5432/${dbName}?sslmode=disable`;
     setSecretBoth("DATABASE_SERVICE_URL", url);
+    collectedSecrets["DATABASE_SERVICE_URL"] = url;
     console.log(
       `  ${GREEN}DATABASE_SERVICE_URL${RESET} set (preview + production)`
     );
@@ -889,6 +1108,34 @@ function printSecretHeader(
 async function main() {
   const args = process.argv.slice(2);
   const showAll = args.includes("--all");
+
+  console.log("");
+  console.log(
+    `  ${RED}${BOLD}╔══════════════════════════════════════════════════════════════╗${RESET}`
+  );
+  console.log(
+    `  ${RED}${BOLD}║  THIS OVERWRITES GITHUB ENVIRONMENT SECRETS. BE CAREFUL.    ║${RESET}`
+  );
+  console.log(
+    `  ${RED}${BOLD}╚══════════════════════════════════════════════════════════════╝${RESET}`
+  );
+  console.log("");
+
+  if (showAll) {
+    const rl0 = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    const confirm = await prompt(
+      rl0,
+      `  ${YELLOW}Type "yes" to continue, anything else to abort: ${RESET}`
+    );
+    rl0.close();
+    if (confirm.trim().toLowerCase() !== "yes") {
+      console.log("  Aborted.");
+      process.exit(0);
+    }
+  }
   const filterRequired = args.includes("--required");
   // --only DISCORD,SONAR  or  --only DISCORD_OAUTH_CLIENT_ID
   const onlyArg =
@@ -973,6 +1220,36 @@ async function main() {
       continue;
     }
 
+    // SOPS_AGE_KEY is special — local-only, not a GitHub secret.
+    // Runs LAST so collectedSecrets has all values from this session.
+    if (secret.name === "SOPS_AGE_KEY") {
+      // Build DSNs first — they're derived from DB passwords collected above
+      if (
+        dbPasswords["APP_DB_PASSWORD"] ||
+        dbPasswords["APP_DB_SERVICE_PASSWORD"]
+      ) {
+        console.log(
+          `\n${"═".repeat(2)} ${BOLD}Derived Database URLs${RESET} ${"═".repeat(41)}`
+        );
+        buildDSNs();
+      }
+
+      const action = await prompt(
+        rl,
+        `  Generate age keypairs + encrypt secrets? [Y/n] `
+      );
+      if (action.toLowerCase() === "n") {
+        skipped++;
+        continue;
+      }
+      for (const env of ENVIRONMENTS) {
+        console.log(`\n  ${BOLD}${env}${RESET}:`);
+        setupSopsAge(env === "preview" ? "staging" : "production");
+      }
+      set++;
+      continue;
+    }
+
     // Repo-level secrets (CI, not deploy)
     if (secret.repoLevel) {
       const value = await prompt(
@@ -985,6 +1262,7 @@ async function main() {
       }
       const final = applyTransform(secret, value);
       if (setSecretRepo(secret.name, final)) {
+        collectedSecrets[secret.name] = final;
         if (final !== value.trim())
           console.log(`  ${DIM}(transformed: ${final})${RESET}`);
         console.log(`  ${GREEN}${secret.name}${RESET} set (repo-level)`);
@@ -994,18 +1272,26 @@ async function main() {
     }
 
     if (secret.source === "agent") {
-      const action = await prompt(
-        rl,
-        `  Generate and set for both envs? [Y/n] `
-      );
-      if (action.toLowerCase() === "n") {
-        skipped++;
-        continue;
+      const alreadySet =
+        previewSecrets.has(secret.name) && prodSecrets.has(secret.name);
+
+      if (alreadySet && showAll) {
+        // --all on already-set agent secret: ask before overwriting
+        const action = await prompt(rl, `  Already set. Regenerate? [y/N] `);
+        if (action.toLowerCase() !== "y") {
+          // Not regenerating, but load from cache if available for SOPS templates
+          if (collectedSecrets[secret.name]) {
+            console.log(`  ${DIM}(using cached value)${RESET}`);
+          }
+          skipped++;
+          continue;
+        }
       }
       const value = secret.generate!();
       if (setSecretBoth(secret.name, value)) {
+        collectedSecrets[secret.name] = value;
         console.log(
-          `  ${GREEN}${secret.name}${RESET} set (preview + production)`
+          `  ${GREEN}${secret.name}${RESET} set (preview + production): ${DIM}${value}${RESET}`
         );
         set++;
         if (secret.category === "Database") {
@@ -1029,6 +1315,7 @@ async function main() {
         if (final !== value.trim())
           console.log(`  ${DIM}(transformed: ${final})${RESET}`);
         if (setSecret(secret.name, final, env)) {
+          collectedSecrets[secret.name] = final;
           console.log(`  ${GREEN}${secret.name}${RESET} set for ${env}`);
           set++;
         }
@@ -1071,6 +1358,7 @@ async function main() {
         if (final !== value.trim())
           console.log(`  ${DIM}(transformed: ${final})${RESET}`);
         if (setSecret(secret.name, final, env)) {
+          collectedSecrets[secret.name] = final;
           console.log(`  ${GREEN}${secret.name}${RESET} set for ${env}`);
           didSet = true;
         }
@@ -1080,15 +1368,9 @@ async function main() {
     }
   }
 
-  // Build DATABASE_URL and DATABASE_SERVICE_URL from collected passwords
-  if (
-    dbPasswords["APP_DB_PASSWORD"] ||
-    dbPasswords["APP_DB_SERVICE_PASSWORD"]
-  ) {
-    console.log(
-      `\n${"═".repeat(2)} ${BOLD}Derived Database URLs${RESET} ${"═".repeat(41)}`
-    );
-    buildDSNs();
+  // Persist collected values so --only SOPS_AGE can use them later
+  if (Object.keys(collectedSecrets).length > 0) {
+    saveSecretCache();
   }
 
   console.log(

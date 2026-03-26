@@ -409,18 +409,19 @@ volumes:
         condition: service_healthy
     # Add healthcheck once health endpoints exist
   ```
-- [ ] Add to production `docker-compose.yml` (when ready for deployment)
-- [ ] Add to CI/CD pipeline (see [CI/CD Services Roadmap](../../work/projects/proj.cicd-services-gitops.md)):
-  - Build: `pnpm --filter @cogni/<name>-service build`
-  - Test: `pnpm --filter @cogni/<name>-service test`
-  - Docker build and push to GHCR with immutable SHA tags
-  - Wire into deploy workflow (P0 stopgap: extend existing scripts; P1+: GitOps)
+- [ ] Create Kustomize base: `infra/cd/base/<name>/` with deployment.yaml, service.yaml, configmap.yaml, kustomization.yaml
+- [ ] Create overlays: `infra/cd/overlays/{staging,production}/<name>/kustomization.yaml`
+- [ ] Create encrypted secrets: `infra/cd/secrets/{staging,production}/<name>.enc.yaml`
+- [ ] Add to ApplicationSet: `infra/cd/argocd/services-applicationset.yaml` (add element to list)
+- [ ] Add Application file: `infra/cd/argocd/applications/<name>.yaml`
+- [ ] Add to service catalog: `infra/cd/gitops-service-catalog.json` with `gitops_managed: true`
+- [ ] Verify: `pnpm check:gitops:coverage && pnpm check:gitops:manifests`
 
-### 10. Deployment Criticality
+### 10. CI/CD Wiring
 
-- [ ] Classify: **critical** (deploy fails if unhealthy) or **optional** (best-effort)
-- [ ] If critical: add a post-deploy health gate in `scripts/ci/` and wire it into `deploy.sh` after `compose up`
-- [ ] If using compose profiles: add a profile guardrail asserting the service resolves in `compose config --services` — compose silently ignores profiles for missing services
+- [ ] Add image build step to `staging-preview.yml` and `build-prod.yml`
+- [ ] Add promote step (or extend `promote-k8s-image.sh` for multiple services)
+- [ ] Service deploys via Argo CD GitOps — no changes to `deploy.sh`
 
 ### 11. Documentation
 

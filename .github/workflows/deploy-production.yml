@@ -43,13 +43,11 @@ jobs:
           # Derive MIGRATOR_IMAGE from IMAGE_NAME + IMAGE_TAG (INV-COUPLED-TAGS-NO-GUESSING)
           MIGRATOR_IMAGE="${IMAGE_NAME}:${IMAGE_TAG}-migrate"
 
-          # Derive scheduler-worker tag (digest resolved after GHCR login)
-          SCHEDULER_WORKER_TAG="${IMAGE_NAME}:${IMAGE_TAG}-scheduler-worker"
+          # scheduler-worker is on k3s (Argo CD) — no Compose deploy needed.
 
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
           echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
           echo "MIGRATOR_IMAGE=${MIGRATOR_IMAGE}" >> $GITHUB_ENV
-          echo "SCHEDULER_WORKER_TAG=${SCHEDULER_WORKER_TAG}" >> $GITHUB_ENV
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
 
       - name: Setup SSH deploy key
@@ -95,23 +93,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve scheduler-worker digest
-        run: |
-          # Pull scheduler-worker image and resolve to digest ref
-          # INV: Deploy uses digest ref (ghcr.io/...@sha256:...) not tag
-          echo "Pulling scheduler-worker image: ${SCHEDULER_WORKER_TAG}"
-          docker pull "${SCHEDULER_WORKER_TAG}"
-
-          # Get digest ref from pulled image
-          SCHEDULER_WORKER_IMAGE=$(docker inspect --format='{{index .RepoDigests 0}}' "${SCHEDULER_WORKER_TAG}")
-
-          if [[ -z "$SCHEDULER_WORKER_IMAGE" ]]; then
-            echo "❌ Failed to resolve scheduler-worker digest"
-            exit 1
-          fi
-
-          echo "✅ Resolved scheduler-worker digest: ${SCHEDULER_WORKER_IMAGE}"
-          echo "SCHEDULER_WORKER_IMAGE=${SCHEDULER_WORKER_IMAGE}" >> $GITHUB_ENV
+      # scheduler-worker digest resolution removed — on k3s (Argo CD).
 
       - name: Validate DSN secrets
         env:
@@ -129,7 +111,7 @@ jobs:
           GIT_READ_TOKEN: ${{ secrets.GIT_READ_TOKEN }}
           APP_IMAGE: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           MIGRATOR_IMAGE: ${{ env.MIGRATOR_IMAGE }}
-          SCHEDULER_WORKER_IMAGE: ${{ env.SCHEDULER_WORKER_IMAGE }}
+          # scheduler-worker and sandbox-openclaw managed by Argo CD on k3s.
           DOMAIN: ${{ secrets.DOMAIN }}
           NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

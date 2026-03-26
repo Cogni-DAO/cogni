@@ -120,26 +120,35 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Kustomize images use `@sha256:` digests                                        | Done        | ↑   | task.0148 |
 | Secrets strategy: SOPS/age for encrypted secrets in repo (single-node k3s MVP) | Done        | ↑   | task.0148 |
 | OpenTofu: k3s module extending Cherry Servers provider                         | Done        | ↑   | task.0148 |
-| OpenTofu: Provision k3s cluster (single node MVP)                              | Not Started | 3   | task.0149 |
-| Install Argo CD on k3s                                                         | Not Started | ↑   | task.0149 |
-| Migrate scheduler-worker from Compose to k3s                                   | Not Started | ↑   | task.0149 |
-| Promotion flow: PR to change image digest in overlay → Argo syncs              | Not Started | ↑   | task.0149 |
+| OpenTofu: Provision k3s on existing Compose VM (single-VM)                     | Done        | 3   | task.0149 |
+| Install Argo CD + ksops CMP on k3s                                             | Done        | ↑   | task.0149 |
+| Migrate ALL services/ to k3s (scheduler-worker + sandbox-openclaw)             | Done        | ↑   | task.0149 |
+| Promotion flow: CI promote script → overlay digest → Argo syncs                | Done        | ↑   | task.0149 |
+| ApplicationSet for multi-service management                                    | Done        | ↑   | task.0149 |
+| CI gitops validation (coverage + manifest render checks)                       | Done        | ↑   | task.0149 |
+| Remove services from production Compose (k3s only)                             | Done        | ↑   | task.0149 |
+| Bootstrap automation (setup:secrets generates keys, encrypts, writes tfvars)   | Done        | ↑   | task.0149 |
 | Storage plan: PVCs for stateful deps (postgres data), backup strategy          | Not Started | 2   | —         |
-| ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | ↑   | task.0149 |
-| Retire SSH deploy for services (keep for app until P2)                         | Not Started | ↑   | task.0149 |
+| Retire SSH deploy for services                                                 | Done        | ↑   | task.0149 |
 | K8s API read-only service account for AI agent debugging                       | Not Started | 1   | task.0187 |
 | Argo CD API token for sync status / rollback by AI agents                      | Not Started | 1   | task.0187 |
 
-#### P2: Preview Environments for AI Dev-Lifecycle
+#### P2: Nx Targeted Builds + Preview Environments
 
-**Goal:** Per-branch preview environments (~5 simultaneous) enabling AI dev-lifecycle agents to deploy, view, interact with, and validate their own work. Retire Compose entirely.
+**Goal:** Affected-only CI via Nx, per-PR preview environments on shared k3s, agent-safe preview/test workflows. Build once, promote by digest. Agents interact through narrow APIs, no raw infra access.
 
-| Deliverable                                                                  | Status      | Est | Work Item |
-| ---------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Auto-create preview app per PR (ApplicationSet + wildcard DNS + Ingress)     | Not Started | 3   | task.0188 |
-| Share heavy infra (Temporal, LiteLLM, PG), only per-branch app + worker pods | Not Started | 2   | task.0188 |
-| Cleanup on PR close / 48h TTL                                                | Not Started | 1   | task.0188 |
-| Migrate Next.js app to k3s (retire Compose entirely)                         | Not Started | 3   | —         |
+| Deliverable                                                                      | Status      | Est | Work Item  |
+| -------------------------------------------------------------------------------- | ----------- | --- | ---------- |
+| Nx targets for build/test/lint per package/service                               | Not Started | 2   | task.0201  |
+| `nx affected` in CI — only build/test what changed                               | Not Started | 2   | task.0201  |
+| ApplicationSet generator for per-PR preview namespaces                           | Not Started | 3   | task.0201  |
+| Wildcard DNS + Ingress for preview URLs                                          | Not Started | 1   | task.0201  |
+| ResourceQuota + LimitRange per preview namespace                                 | Not Started | 1   | task.0201  |
+| TTL cleanup on PR close / 48h expiry                                             | Not Started | 1   | task.0201  |
+| Targeted smoke/integration tests against preview                                 | Not Started | 2   | task.0201  |
+| Report preview URL + test status to GitHub PR                                    | Not Started | 1   | task.0201  |
+| Migrate Next.js app to k3s (retire Compose entirely)                             | Not Started | 3   | —          |
+| Move runtime secrets to cluster-side management (ESO or equivalent)              | Not Started | 3   | task.0200  |
 
 #### P3: Scaling Infrastructure
 
@@ -157,7 +166,7 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | CDN + global load balancer (Cloudflare in front of k8s Ingress)      | Not Started | 2   | Geographic latency complaints OR >1000 req/s      | —         |
 | Managed Kubernetes migration (k3s → EKS/GKE)                         | Not Started | 3   | Multi-node k3s operational burden OR >5 nodes     | —         |
 | Temporal Cloud migration (self-hosted → Temporal Cloud)              | Not Started | 2   | >1000 workflows/day OR Temporal ops burden        | —         |
-| External Secrets Operator (ESO → Vault/GCP Secret Manager)           | Not Started | 2   | Multi-cluster OR secret rotation requirement      | —         |
+| External Secrets Operator (ESO → Vault/GCP Secret Manager)           | Not Started | 2   | Multi-cluster OR secret rotation requirement      | task.0200 (P2) |
 | Queue-based LLM decoupling (HTTP intake → queue → worker → callback) | Not Started | 3   | LLM calls >30s blocking HTTP connections at scale | —         |
 
 **Key principle:** Kustomize manifests written in P1 are portable — same bases work on k3s, EKS, and GKE. Argo CD works everywhere. No migration rewrites, only overlay changes.
@@ -179,15 +188,7 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 
 #### P5: CI Acceleration (NX)
 
-**Goal:** Optimize CI task selection/caching. Only after CD is stable. **Why deferred:** NX solves CI time/cost, not deployment correctness. GitOps must be stable first.
-
-| Deliverable                                                                   | Status      | Est | Work Item |
-| ----------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Spike: Evaluate NX vs Turborepo (NX preferred for structure + affected graph) | Not Started | 2   | —         |
-| Add NX targets for build/test/lint per package/service                        | Not Started | 2   | —         |
-| Implement affected-only task execution (`nx affected:build`)                  | Not Started | 2   | —         |
-| Add remote cache (NX Cloud or self-hosted)                                    | Not Started | 1   | —         |
-| Keep image builds explicit initially; integrate with Dagger later             | Not Started | 1   | —         |
+> **Merged into P2 as task.0201.** NX affected-only execution is now part of the preview environments task — they're interdependent (affected builds feed preview deploys).
 
 ## Constraints
 

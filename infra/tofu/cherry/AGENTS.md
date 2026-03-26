@@ -13,8 +13,7 @@ Cherry Servers cloud provider configurations split between immutable VM provisio
 
 ## Pointers
 
-- [base/](base/): VM provisioning and static bootstrap (Docker + Compose)
-- [k3s/](k3s/): VM provisioning with k3s + age for GitOps deployment
+- [base/](base/): VM provisioning — Docker + k3s + Argo CD (single-VM)
 
 ## Boundaries
 
@@ -30,7 +29,7 @@ Cherry Servers cloud provider configurations split between immutable VM provisio
 
 - **Exports:** none
 - **Env/Config keys:** `CHERRY_AUTH_TOKEN`
-- **Files considered API:** `base/variables.tf`, `app/variables.tf`, `k3s/variables.tf`
+- **Files considered API:** `base/variables.tf`
 
 ## Responsibilities
 
@@ -43,16 +42,14 @@ Minimal local commands:
 
 ```bash
 cd base && tofu init && tofu plan
-cd app && tofu apply
-cd k3s && tofu init && tofu validate
 ```
 
 ## Standards
 
-- Split between base/ (immutable VM + Docker), k3s/ (immutable VM + k3s), and app/ (mutable deployment)
-- Use SSH for app deployments, not cloud-init
+- Single VM: base/ provisions Docker + k3s + Argo CD via cloud-init
+- SSH deploy for Compose services, Argo CD GitOps for k3s services
 - Health gates required for all deployments
-- k3s module uses `templatefile()` for cloud-init with GHCR credentials
+- base/ uses `templatefile()` for cloud-init with GHCR credentials
 
 ## Dependencies
 
@@ -67,6 +64,6 @@ cd k3s && tofu init && tofu validate
 
 ## Notes
 
-- Base creates VM with static OS bootstrap only (Docker + Compose)
-- k3s creates VM with k3s, age, and GHCR registry auth (Argo CD install deferred to task.0149)
-- App handles container deployment over SSH with health validation
+- Base creates VM with Docker + k3s + Argo CD (single-VM, task.0149)
+- k3s module removed — merged into base/bootstrap.yaml
+- App handles Compose deployment over SSH with health validation

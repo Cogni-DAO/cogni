@@ -63,7 +63,7 @@ echo -e "${GREEN}╚════════════════════
 
 # Determine step count
 if [[ "$INSTALL_ALL" == "true" ]]; then
-    TOTAL_STEPS=6
+    TOTAL_STEPS=7
 else
     TOTAL_STEPS=4
 fi
@@ -71,37 +71,44 @@ fi
 CURRENT_STEP=0
 
 # Step 1: Node.js & pnpm (via Volta)
-((CURRENT_STEP++))
+CURRENT_STEP=$((CURRENT_STEP + 1))
 log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing Node.js & pnpm (via Volta)"
 "$INSTALL_DIR/install-pnpm.sh"
 
 # Step 2: Docker
-((CURRENT_STEP++))
+CURRENT_STEP=$((CURRENT_STEP + 1))
 log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing Docker"
 "$INSTALL_DIR/install-docker.sh"
 
 # Step 3: Ripgrep (required by brain repo search)
-((CURRENT_STEP++))
+CURRENT_STEP=$((CURRENT_STEP + 1))
 log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing ripgrep (brain repo search)"
 "$INSTALL_DIR/install-ripgrep.sh"
 
 # Step 4: Project dependencies and packages
-((CURRENT_STEP++))
+CURRENT_STEP=$((CURRENT_STEP + 1))
 log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing project dependencies"
 "$INSTALL_DIR/install-project.sh"
 
 # Optional: OpenTofu (infrastructure)
 if [[ "$INSTALL_ALL" == "true" ]]; then
-    ((CURRENT_STEP++))
+    CURRENT_STEP=$((CURRENT_STEP + 1))
     log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing OpenTofu (Infrastructure)"
     "$INSTALL_DIR/install-tofu.sh"
 fi
 
 # Optional: REUSE (license compliance)
 if [[ "$INSTALL_ALL" == "true" ]]; then
-    ((CURRENT_STEP++))
+    CURRENT_STEP=$((CURRENT_STEP + 1))
     log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing REUSE (License Compliance)"
     "$INSTALL_DIR/install-reuse.sh"
+fi
+
+# Optional: GitOps tools (age + sops for Argo CD secret management)
+if [[ "$INSTALL_ALL" == "true" ]]; then
+    CURRENT_STEP=$((CURRENT_STEP + 1))
+    log_step "Step ${CURRENT_STEP}/${TOTAL_STEPS}: Installing GitOps tools (age + sops)"
+    "$INSTALL_DIR/install-gitops-tools.sh"
 fi
 
 echo -e "\n${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"

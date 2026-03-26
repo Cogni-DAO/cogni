@@ -29,6 +29,7 @@ Adds OpenTofu (infrastructure) and REUSE (license compliance) for fork owners de
 | Docker Desktop | ✓       | ✓     | Container runtime with compose v2      |
 | OpenTofu       |         | ✓     | Infrastructure as Code                 |
 | REUSE          |         | ✓     | License compliance checking            |
+| age + sops     |         | ✓     | GitOps secret encryption (Argo CD)     |
 
 ## Individual Installers
 
@@ -45,7 +46,9 @@ scripts/bootstrap/install/install-reuse.sh    # REUSE tool
 Additional scripts:
 
 ```bash
-scripts/bootstrap/simple-local-env-setup.sh  # Copy .env.local.example → .env.local
+scripts/bootstrap/simple-local-env-setup.sh    # Copy .env.local.example → .env.local
+scripts/bootstrap/setup-gitops-secrets.sh      # Generate age keypairs + update .sops.yaml
+scripts/bootstrap/install/install-gitops-tools.sh  # Install age + sops
 ```
 
 ## Platform Support

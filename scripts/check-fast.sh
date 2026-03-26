@@ -81,6 +81,7 @@ run_check "format" "pnpm format"
 run_check "test:app" "pnpm vitest run --config apps/web/vitest.config.mts"
 run_check "test:packages:local" "pnpm test:packages:local"
 run_check "test:services:local" "pnpm test:services:local"
+run_check "gitops:coverage" "bash scripts/ci/check-gitops-service-coverage.sh"
 
 if [ "$VERBOSE" = true ]; then
   echo ""

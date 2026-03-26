@@ -1,21 +1,33 @@
-# Cherry Servers Configuration Example
-# Copy this to terraform.tfvars and fill in your values
+# Cherry Servers VM provisioning — example variable values.
+# Copy to terraform.tfvars and fill in real values.
+# NEVER commit terraform.tfvars (it contains secrets).
 
-# Required: Your Cherry Servers project ID
-project_id = "YOUR_PROJECT_ID"
+# ── Cherry Servers ──────────────────────────────────────
+environment    = "preview"
+vm_name_prefix = "cogni"
+project_id     = "YOUR_PROJECT_ID"
+plan           = "cloud_vps_3"
+region         = "eu_nord_1"
+public_key_path = "deploy_key.pub"
 
-# Required: Domain for HTTPS deployment
-domain = "canary.cognidao.org"
+# SSH private key for bootstrap health check (optional, empty to skip)
+# ssh_private_key = ""
 
-# Optional overrides (defaults are shown)
-# region = "LT-Siauliai"
-# image = "ubuntu_22_04"  
-# plan = "B1-4-4gb-80s-shared"
-# hostname = "cogni-canary"
-# public_key_path = "~/.ssh/id_rsa.pub"
+# ── GHCR registry auth ─────────────────────────────────
+# k3s uses this to pull private images from ghcr.io/cogni-dao/*.
+# Create a GitHub PAT with packages:read scope.
+ghcr_deploy_username = "Cogni-1729"
+ghcr_deploy_token    = "ghp_..."
 
-# Optional tags
-# tags = {
-#   Environment = "development"
-#   Project     = "cogni-template"
-# }
+# ── Argo CD bootstrap ──────────────────────────────────
+# Repo + branch to clone for manifests during cloud-init.
+cogni_repo_url = "https://github.com/Cogni-DAO/cogni-template.git"
+cogni_repo_ref = "staging"
+
+# ── SOPS/age secret decryption ─────────────────────────
+# Generate ONCE per environment (not per VM):
+#   age-keygen -o staging-age-key.txt
+# The output prints: public key: age1...
+# Put the public key in infra/cd/secrets/.sops.yaml
+# Put the private key (AGE-SECRET-KEY-...) here:
+sops_age_private_key = "AGE-SECRET-KEY-..."

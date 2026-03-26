@@ -117,6 +117,12 @@ jobs:
           IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
         run: scripts/ci/push.sh
 
+      - name: Promote scheduler-worker to k8s overlay
+        if: steps.push.outputs.scheduler_worker_image != ''
+        env:
+          SCHEDULER_WORKER_DIGEST: ${{ steps.push.outputs.scheduler_worker_image }}
+        run: scripts/ci/promote-k8s-image.sh
+
       - name: CI Telemetry
         if: always()
         uses: ./.github/actions/loki-ci-telemetry
@@ -137,7 +143,7 @@ jobs:
       IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
       APP_IMAGE: ${{ needs.build.outputs.image_name }}:${{ needs.build.outputs.image_tag }}
       MIGRATOR_IMAGE: ${{ needs.build.outputs.migrator_image }}
-      SCHEDULER_WORKER_IMAGE: ${{ needs.build.outputs.scheduler_worker_image }}
+      # scheduler-worker and sandbox-openclaw managed by Argo CD on k3s.
       DEPLOY_ENVIRONMENT: preview
       APP_ENV: production
       COGNI_REPO_URL: https://github.com/${{ github.repository }}.git

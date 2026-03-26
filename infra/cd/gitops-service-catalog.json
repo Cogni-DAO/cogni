@@ -1,0 +1,19 @@
+{
+  "services": [
+    {
+      "name": "scheduler-worker",
+      "gitops_managed": true,
+      "reason": "Temporal worker with /livez and /readyz — first service migrated to k3s."
+    },
+    {
+      "name": "sandbox-openclaw",
+      "gitops_managed": true,
+      "reason": "Long-running OpenClaw gateway with proxy sidecar. Managed via Argo CD."
+    },
+    {
+      "name": "sandbox-runtime",
+      "gitops_managed": false,
+      "reason": "Ephemeral per-command runtime, not a long-running service. Future: Job template."
+    }
+  ]
+}

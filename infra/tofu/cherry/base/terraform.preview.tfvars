@@ -1,0 +1,6 @@
+environment     = "preview"
+vm_name_prefix  = "cogni-template"
+project_id      = "254586"
+plan            = "B1-4-4gb-80s-shared"
+region          = "LT-Siauliai"
+public_key_path = "keys/cogni_template_preview_deploy.pub"

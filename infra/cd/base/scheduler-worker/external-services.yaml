@@ -33,7 +33,7 @@ metadata:
 addressType: IPv4
 endpoints:
   - addresses:
-      - "10.0.0.1"
+      - "127.0.0.1"
 ports:
   - port: 7233
     protocol: TCP
@@ -61,7 +61,7 @@ metadata:
 addressType: IPv4
 endpoints:
   - addresses:
-      - "10.0.0.1"
+      - "127.0.0.1"
 ports:
   - port: 5432
     protocol: TCP
@@ -89,7 +89,7 @@ metadata:
 addressType: IPv4
 endpoints:
   - addresses:
-      - "10.0.0.1"
+      - "127.0.0.1"
 ports:
   - port: 3000
     protocol: TCP

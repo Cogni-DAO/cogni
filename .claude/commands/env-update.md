@@ -2,67 +2,80 @@
 description: Guide for propagating environment variables across the stack
 ---
 
-You've just added a new environment variable. To ensure it propagates correctly across local development, testing, CI/CD, and production, you must update multiple files.
+You've just added a new environment variable. The propagation path depends on **which service consumes it**.
+
+Two runtimes exist on the same VM:
+- **Compose infrastructure** (app, postgres, temporal, litellm, caddy) — env vars via deploy.sh + SSH
+- **k3s services** (scheduler-worker, sandbox-openclaw) — env vars via Kustomize ConfigMap or SOPS Secret
 
 Use this checklist to verify you haven't missed anything.
 
-## 1. Validation & Types (The Source of Truth)
+## 1. Validation & Types (Source of Truth)
 
-- [ ] **`src/shared/env/server.ts`** (or `client.ts`): Add the variable to the Zod schema. This ensures type safety and runtime validation.
-- [ ] **`services/scheduler-worker/src/bootstrap/env.ts`**: If the variable is for the scheduler-worker (separate Zod schema from the app).
+- [ ] **`src/shared/env/server.ts`** (or `client.ts`): Add to Zod schema (app).
+- [ ] **`services/{service}/src/bootstrap/env.ts`**: Add to Zod schema (k3s services have separate schemas).
 
-## 2. Local Development & Documentation
+## 2. Local Development
 
-- [ ] **`.env.local`**: Add the variable with a real value for this local environment.
-- [ ] **`.env.test`**: Add the variable (often with a mock value) for this test environment.
-- [ ] **`.env.(local|test).example`**: Add the variable with a placeholder or default value. This is the public documentation for required env vars.
+- [ ] **`.env.local`**: Add with real local value.
+- [ ] **`.env.test`**: Add with mock/test value.
+- [ ] **`.env.(local|test).example`**: Add with placeholder — public documentation for required vars.
 
-## 3. Docker Compose (Runtime Stack)
+## 3. Docker Compose (Local Dev + CI)
 
-If the variable is needed by the main application container:
+- [ ] **`infra/compose/runtime/docker-compose.dev.yml`**: Add to `environment` of the relevant service. This is used by `pnpm dev:stack` and CI stack tests.
 
-- [ ] **`infra/compose/runtime/docker-compose.dev.yml`**: Add it to the `environment` section of the `app` service.
-- [ ] **`infra/compose/runtime/docker-compose.yml`**: Add it to the `environment` section of the `app` service.
+> **Note:** `docker-compose.yml` (production Compose) only has infrastructure services. Services in `services/` are on k3s — see section 5B.
 
-If the variable is needed by other services:
+## 4. CI Pipeline
 
-- [ ] **`infra/compose/runtime/docker-compose.yml`**: For Caddy/Edge variables (rare).
+- [ ] **`.github/workflows/ci.yaml`**: Add to **every** `env:` block (static, unit, component, stack-test). Missing one block → `serverEnv()` validation failure in that job.
 
-## 4. CI Pipeline (Tests)
+## 5. Deployment
 
-- [ ] **`.github/workflows/ci.yaml`**: Add the variable (with a test-safe value) to **every** `env:` block that already contains similar tokens (e.g. `SCHEDULER_API_TOKEN`). There are typically 4 blocks: `static`, `component`, `contract`, and `stack` jobs. Missing a single block will cause that CI job to fail on `serverEnv()` validation.
+### Which runtime?
 
-## 5. Deployment Pipeline (Production/Preview)
+**If the variable is for the app or Compose infrastructure** (app, litellm, postgres, temporal, caddy):
 
-To get the variable from GitHub Secrets into the VM:
+### 5A. Compose Deploy Path (SSH)
 
-### A. GitHub Workflows
+- [ ] **`.github/workflows/deploy-production.yml`**: Map secret to `env` block.
+- [ ] **`.github/workflows/staging-preview.yml`**: Map secret to `env` block.
+- [ ] **`scripts/ci/deploy.sh`** — 3 places:
+  1. Add to `REQUIRED_SECRETS` / `OPTIONAL_SECRETS` / `REQUIRED_ENV_VARS`
+  2. Add to the `.env` heredoc (required) or `append_env_if_set` (optional)
+  3. Add to the `ssh ... bash /tmp/deploy-remote.sh` env passthrough at bottom
 
-- [ ] **`.github/workflows/deploy-production.yml`**: Map the secret/var to the `env` block of the `deploy` job.
-- [ ] **`.github/workflows/staging-preview.yml`**: Map the secret/var to the `env` block of the `deploy` job.
+**If the variable is for a k3s service** (scheduler-worker, sandbox-openclaw, or new services):
 
-### B. Deployment Script (`deploy.sh`) — 3 places!
+### 5B. k3s / Argo CD Deploy Path (GitOps)
 
-**CRITICAL**: Missing any one of these causes silent empty values in production.
+Non-secret config:
+- [ ] **`infra/cd/base/{service}/configmap.yaml`**: Add key+value to ConfigMap data.
+- [ ] **`infra/cd/overlays/{env}/{service}/kustomization.yaml`**: Add overlay patch if value differs per environment.
 
-- [ ] **`scripts/ci/deploy.sh`**:
-  1.  Add it to `REQUIRED_SECRETS` (if it's a secret), `OPTIONAL_SECRETS` (if optional), or `REQUIRED_ENV_VARS` (if it's a config).
-  2.  Add it to the `cat > "$RUNTIME_ENV"` heredoc (required vars) or via `append_env_if_set` (optional vars) in the Step 1 block.
-  3.  Add it to the `ssh ... bash /tmp/deploy-remote.sh` command at the **bottom** of the file to pass it into the remote script's environment. Use `'${VAR:-}'` quoting for optional vars.
+Secret values:
+- [ ] **`infra/cd/secrets/{env}/{service}.enc.yaml.example`**: Add key with `REPLACE_WITH_{ENV}_{SECRET_NAME}` placeholder to the template.
+- [ ] **`infra/cd/secrets/{env}/{service}.enc.yaml`**: Fill real value, re-encrypt with `sops --config infra/cd/secrets/.sops.yaml --encrypt --in-place <file>`.
+- [ ] **`scripts/setup-secrets.ts`**: If it's an agent-generated secret, add to the SECRETS catalog so `setup:secrets` auto-generates and populates it. If human-provided, add with `source: "human"`.
 
-## 6. Setup Documentation (CRITICAL)
+> After changing any `infra/cd/` file, Argo CD auto-syncs on next commit to staging/main. No deploy.sh changes needed.
 
-- [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add the variable to the relevant secrets list so future fresh-clone setups know to provision it. Without this, new environments will silently miss the variable.
+## 6. Setup Documentation
 
-## 7. Special Cases: Isolated Services
+- [ ] **`scripts/setup-secrets.ts`**: Add to SECRETS catalog if it's a new secret (agent or human).
+- [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add to relevant secrets list for fresh-clone provisioning.
 
-If the variable is for a standalone service running in its own Docker Compose project:
+## 7. Validation
 
-- [ ] **Docker Compose**: Update the service's compose file.
-- [ ] **`deploy.sh` (Step 1)**: Add the variable to the _specific_ `.env` file generation block for that service.
-- [ ] **`deploy.sh` (Compose Command)**: **CRITICAL**: Ensure the `docker compose` command for that service explicitly uses `--env-file /path/to/service/.env`.
-  - _Reason_: Isolated services often run from a shared script context and won't automatically find their `.env` file unless explicitly told.
+```bash
+pnpm check:gitops:coverage   # services/ ↔ catalog ↔ manifests in sync
+pnpm check:gitops:manifests  # overlays render cleanly
+pnpm check:fast              # typecheck + lint + tests
+```
 
 ## Reference
 
-- [scripts/setup/SETUP_DESIGN.md](scripts/setup/SETUP_DESIGN.md): Full setup design including all secret provisioning lists.
+- [SETUP_DESIGN.md](scripts/setup/SETUP_DESIGN.md): Full setup design
+- [infra/cd/AGENTS.md](infra/cd/AGENTS.md): GitOps manifest structure
+- [Deployment Architecture](docs/runbooks/DEPLOYMENT_ARCHITECTURE.md): Compose vs k3s runtime split

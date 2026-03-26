@@ -143,9 +143,10 @@ push to main → build-prod.yml (build → test → push) → deploy-production.
 - `prod-${GITHUB_SHA}-migrate` (deploy consumption, legacy)
 - `migrate-${FINGERPRINT}` (content-addressed, CI caching - partial implementation)
 
-**Service images** (see [CI/CD Services Roadmap](CICD_SERVICES_ROADMAP.md)):
+**Service images** (deployed via Argo CD GitOps, not Compose):
 
-- `prod-${GITHUB_SHA}-${SERVICE}` (e.g., `prod-abc123-scheduler-worker`)
+- `preview-${GITHUB_SHA}-${SERVICE}` (e.g., `preview-abc123-scheduler-worker`)
+- Promotion: `scripts/ci/promote-k8s-image.sh` updates Kustomize overlay with `@sha256:` digest, commits to staging → Argo CD auto-syncs
 - Future: Content fingerprinting like migrator
 
 ## Branch Management
@@ -204,5 +205,6 @@ push to main → build-prod.yml (build → test → push) → deploy-production.
 
 - [Application Architecture](architecture.md) - Hexagonal design and code organization
 - [Deployment Architecture](../docs/runbooks/DEPLOYMENT_ARCHITECTURE.md) - Infrastructure and deployment details
-- [CI/CD Services Roadmap](CICD_SERVICES_ROADMAP.md) - Service build/deploy integration plan (GitOps migration)
-- [CI/CD Conflict Recovery](../docs/runbooks/CICD_CONFLICT_RECOVERY.md) - How to resolve release→main conflicts without polluting history
+- [GitOps Manifests](../../infra/cd/AGENTS.md) - Kustomize bases, overlays, Argo CD ApplicationSet
+- [CI/CD & Services GitOps Project](../../work/projects/proj.cicd-services-gitops.md) - Service deployment roadmap
+- [CI/CD Conflict Recovery](../runbooks/CICD_CONFLICT_RECOVERY.md) - How to resolve release→main conflicts without polluting history

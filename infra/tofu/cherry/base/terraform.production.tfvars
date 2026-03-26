@@ -1,0 +1,6 @@
+environment     = "production"
+vm_name_prefix  = "cogni-template"
+project_id      = "254821"
+plan            = "B1-4-4gb-80s-shared"
+region          = "LT-Siauliai"
+public_key_path = "keys/cogni_template_production_deploy.pub"

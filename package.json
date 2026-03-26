@@ -26,6 +26,8 @@
     "work:index": "node scripts/generate-work-index.mjs",
     "work:next-id": "node scripts/next-work-id.mjs",
     "arch:check": "depcruise apps/web/src packages services --config .dependency-cruiser.cjs --include-only '^(apps/web/src|packages|services)' --exclude '__arch_probes__' --output-type err-long",
+    "check:gitops:coverage": "bash scripts/ci/check-gitops-service-coverage.sh",
+    "check:gitops:manifests": "bash scripts/ci/check-gitops-manifests.sh",
     "arch:graph": "depcruise apps/web/src packages services --config .dependency-cruiser.cjs --include-only '^(apps/web/src|packages|services)' --output-type dot",
     "dev": "COGNI_REPO_PATH=$(pwd) dotenv -e .env.local -- pnpm --filter web dev",
     "dev:pretty": "pnpm dev | pino-pretty -S",

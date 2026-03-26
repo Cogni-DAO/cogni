@@ -3,56 +3,51 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: cogni-staging
+namespace: cogni-production
 
 resources:
-  - namespace.yaml
-  - ../../base/scheduler-worker
+  - ../../../base/scheduler-worker
 
-# Image digest — update this on promotion (IMAGE_IMMUTABILITY invariant)
-# CI creates a PR changing newTag to the new digest after image push.
+# Image digest — updated by manual PR for production promotion.
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    # Replace with @sha256: digest on first real deployment
-    newTag: "staging-placeholder-scheduler-worker"
+    newTag: "production-placeholder-scheduler-worker"
 
 patches:
-  # Patch ConfigMap with staging-specific values
   - target:
       kind: ConfigMap
       name: scheduler-worker-config
     patch: |
       - op: replace
         path: /data/TEMPORAL_NAMESPACE
-        value: "cogni-staging"
+        value: "cogni-production"
       - op: replace
         path: /data/APP_BASE_URL
         value: "http://app:3000"
       - op: replace
         path: /data/IMAGE_DIGEST
-        value: "staging-placeholder-scheduler-worker"
+        value: "production-placeholder-scheduler-worker"
 
-  # Patch EndpointSlice IPs to point at staging Compose VM
-  # Replace 10.0.0.1 with actual staging VM internal IP during task.0149
+  # EndpointSlice IPs — 127.0.0.1 (single-VM: k3s + Compose on same host)
   - target:
       kind: EndpointSlice
       name: temporal-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["10.0.0.1"]
+        value: ["127.0.0.1"]
   - target:
       kind: EndpointSlice
       name: postgres-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["10.0.0.1"]
+        value: ["127.0.0.1"]
   - target:
       kind: EndpointSlice
       name: app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["10.0.0.1"]
+        value: ["127.0.0.1"]

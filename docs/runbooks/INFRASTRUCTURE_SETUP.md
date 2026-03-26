@@ -87,11 +87,27 @@ export CHERRY_PROJECT_ID="<your-project-id>"
 
 > **Important**: Each environment has its own SSH keypair. The `TF_VAR_ssh_private_key` variable must match the public key in your tfvars file. If mismatched, the health check will fail with "SSH authentication failed".
 
+### Step 2b: Generate SOPS Age Keypairs + Encrypt Secrets
+
+```bash
+# Included in pnpm setup:secrets — generates age keypairs, updates .sops.yaml,
+# encrypts .enc.yaml files, and prints TF_VAR exports.
+pnpm setup:secrets --only SOPS_AGE
+```
+
+---
+
 ### Preview Environment
 
 ```bash
 # Set private key for health check (must match public_key_path in tfvars)
 export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_preview_deploy)"
+
+# Set SOPS age private key for Argo CD secret decryption
+export TF_VAR_sops_age_private_key="$(grep 'AGE-SECRET-KEY' ~/.cogni/preview-age-key.txt)"
+
+# Set GHCR token for k3s private image pulls
+export TF_VAR_ghcr_deploy_token="<github-pat-with-packages-read>"
 
 # Create tfvars file
 cat > terraform.preview.tfvars << EOF
@@ -123,6 +139,12 @@ echo "Preview VM IP: $PREVIEW_IP"
 ```bash
 # Set private key for health check (must match public_key_path in tfvars)
 export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_production_deploy)"
+
+# Set SOPS age private key for Argo CD secret decryption
+export TF_VAR_sops_age_private_key="$(grep 'AGE-SECRET-KEY' ~/.cogni/production-age-key.txt)"
+
+# Set GHCR token for k3s private image pulls
+export TF_VAR_ghcr_deploy_token="<github-pat-with-packages-read>"
 
 # Create tfvars file
 cat > terraform.production.tfvars << EOF
