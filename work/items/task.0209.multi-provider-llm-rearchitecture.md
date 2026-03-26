@@ -111,3 +111,8 @@ One authority per decision. `ModelCatalogPort` owns "what's selectable." `ModelR
 - [ ] `UsageFact.source` is `"codex"` for ChatGPT runs, `"litellm"` for platform runs
 - [ ] `pnpm check` passes
 - [ ] No `CHATGPT_MODEL_IDS` or `CHATGPT_MODELS` anywhere in codebase
+
+## PR / Links
+
+- PR: https://github.com/Cogni-DAO/node-template/pull/612
+- Handoff: [handoff](../handoffs/task.0209.handoff.md)
