@@ -317,6 +317,70 @@ const DATA_ANALYST_ROLE: Role = {
 };
 ```
 
+### Temporal Alignment (spec: temporal-patterns)
+
+The agent-roles design must align with `temporal-patterns-spec` invariants. The key tension: **mc-controller.ts is a CLI script doing I/O, not a Temporal workflow.**
+
+#### Crawl: OpenClaw as Runtime (no Temporal workflow changes)
+
+In crawl, the execution path stays:
+
+```
+Temporal Schedule → OpenClaw gateway → /mission-control SKILL.md → mc-controller.ts (CLI)
+```
+
+This is compatible with `SCHEDULES_OVER_CRON` (Temporal fires the schedule) but the controller itself is NOT a Temporal workflow — it's a shell-invoked CLI. Temporal provides the cron trigger; OpenClaw provides the agent runtime; mc-controller.ts provides the deterministic decision logic. No Temporal workflow code is needed.
+
+**Task queue**: Role schedules use `governance-tasks` queue (existing). The Temporal Schedule starts a thin `AgentHeartbeatWorkflow` that calls a single Activity: `runOpenClawSkillActivity(roleId, "/mission-control")`. This keeps Temporal as the authority while OpenClaw executes the actual logic.
+
+**Workflow ID convention**: `heartbeat:${roleId}:${timeBucket}` — follows `WORKFLOW_ID_STABILITY`.
+
+#### Walk: Decompose Controller into Temporal Activities
+
+When roles need webhook triggers and cross-role escalation, mc-controller.ts decomposes into proper Temporal activities:
+
+```typescript
+// Workflow: deterministic orchestration (TEMPORAL_DETERMINISM compliant)
+export async function RoleHeartbeatWorkflow(roleId: string) {
+  // Activity: load role config (I/O: file read)
+  const role = await loadRoleActivity(roleId);
+
+  // Activity: observe signals (I/O: Prometheus, Grafana, RPC)
+  const signals = await observeSignalsActivity(role.definition);
+
+  // Workflow: deterministic tier evaluation (NO I/O)
+  const tier = evaluateTier(signals, role.policy);
+  if (tier === "RED") return;
+
+  // Activity: filter work queue (I/O: file system read)
+  const items = await filterQueueActivity(role.queueFilter);
+
+  // Workflow: deterministic pick (NO I/O)
+  const picked = pickItem(items, role.policy);
+  if (!picked) return;
+
+  // Activity: persist snapshot (I/O: file write)
+  await persistSnapshotActivity({ roleId, tier, picked });
+
+  // Activity: dispatch skill via OpenClaw (I/O: HTTP/exec)
+  await dispatchSkillActivity(role, picked);
+
+  // Activity: log playbook outcome (I/O: file write)
+  await logOutcomeActivity(roleId, picked);
+}
+```
+
+This follows the `GovernanceAgentWorkflow` pattern from temporal-patterns: workflow does deterministic decisions, activities do all I/O.
+
+**Webhook fast-path**: Follows Pattern 3 (Router with Fast-Path Kick):
+
+```typescript
+// workflowId = `heartbeat:git-reviewer:${timeBucket}` for idempotency
+// Can be started by cron schedule OR webhook signal
+```
+
+**Schedule config**: `overlap: SKIP`, `catchupWindow: 0` per `OVERLAP_SKIP_DEFAULT` and `CATCHUP_WINDOW_ZERO`.
+
 ### Trigger Patterns
 
 Roles are triggered by **schedules in repo-spec.yaml**. Two trigger types:
@@ -416,6 +480,8 @@ The dashboard reads `AgentSnapshot` files — it never reruns signal providers. 
 - `SKILL_OWNS_OUTCOME`: The power of a role comes from its skill quality, not the Role schema. Invest in skill improvement, not schema complexity.
 - `CODE_FIRST_NO_YAML`: Role definitions are TypeScript constants with Zod schemas until 3+ roles prove the shape.
 - `NO_ROLE_PORT_YET`: No RoleQueryPort, no role CRUD, no role adapter until walk phase dashboard needs it.
+- `TEMPORAL_SCHEDULE_AUTHORITY`: Role schedules use Temporal Schedules on `governance-tasks` queue. WorkflowId = `heartbeat:${roleId}:${timeBucket}`. `overlap: SKIP`, `catchupWindow: 0`. (spec: temporal-patterns)
+- `CONTROLLER_IO_IN_ACTIVITIES`: When roles move to Temporal (walk), all controller I/O (signal observation, queue reads, snapshot writes) must be Activities. Tier evaluation and item picking are deterministic workflow code. (spec: temporal-patterns)
 
 ## Relationship to Existing Projects
 
