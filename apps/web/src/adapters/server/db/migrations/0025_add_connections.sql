@@ -24,3 +24,8 @@ CREATE UNIQUE INDEX connections_billing_account_provider_active_idx
   ON connections(billing_account_id, provider) WHERE revoked_at IS NULL;
 
 ALTER TABLE connections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connections FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY "tenant_isolation" ON "connections"
+  USING ("created_by_user_id" = current_setting('app.current_user_id', true))
+  WITH CHECK ("created_by_user_id" = current_setting('app.current_user_id', true));
