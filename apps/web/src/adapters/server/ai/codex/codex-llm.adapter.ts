@@ -224,8 +224,6 @@ async function* runCodexExec(params: {
       }
     }
 
-    yield { type: "done" } as ChatDeltaEvent;
-
     const durationMs = Date.now() - startMs;
     callLog.info(
       {
@@ -237,6 +235,8 @@ async function* runCodexExec(params: {
       "Codex LLM call complete"
     );
 
+    // Resolve final BEFORE yielding done — the consumer awaits final after
+    // seeing done, so the deferred must be resolved before the generator pauses.
     onResult({
       message: { role: "assistant", content: fullText },
       usage: usage
@@ -249,6 +249,8 @@ async function* runCodexExec(params: {
       finishReason: "stop",
       resolvedProvider: "openai-chatgpt",
     });
+
+    yield { type: "done" } as ChatDeltaEvent;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     callLog.error(
