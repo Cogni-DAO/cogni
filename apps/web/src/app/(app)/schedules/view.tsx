@@ -76,6 +76,9 @@ export function SchedulesView() {
   const [selectedCron, setSelectedCron] = useState("");
   const [selectedTimezone, setSelectedTimezone] = useState("UTC");
   const [selectedModel, setSelectedModel] = useState("");
+  const [modelConnectionId, setModelConnectionId] = useState<
+    string | undefined
+  >(undefined);
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   const {
@@ -162,6 +165,7 @@ export function SchedulesView() {
       input: {
         messages: [{ role: "user", content: prompt.trim() }],
         model: selectedModel,
+        ...(modelConnectionId ? { modelConnectionId } : {}),
       },
       cron: selectedCron,
       timezone: selectedTimezone,
@@ -297,6 +301,7 @@ export function SchedulesView() {
                 value={selectedModel || defaultModelId}
                 onValueChange={setSelectedModel}
                 disabled={!hasModels}
+                onModelConnectionChange={setModelConnectionId}
               />
             </div>
 
