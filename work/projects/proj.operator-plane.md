@@ -3,8 +3,8 @@ id: proj.operator-plane
 type: project
 primary_charter:
 title: "Operator Plane — Unified Actor Model, Multi-Tenant Gateway, and Economic Attribution"
-state: Active
-priority: 1
+state: Paused
+priority: 3
 estimate: 15
 summary: "Establish actor_id as the canonical economic primitive (earns/spends/attributed) across billing, rewards, and budget delegation. Multi-tenant the existing billing stack as an OpenAI-compatible gateway. Unify usage metering, contribution attribution, and epoch rewards under one actor identity."
 outcome: "External projects route LLM traffic through Cogni gateway, metered per-actor. Actors (human or agent) earn epoch rewards under the same actor_id that tracks their spend. Reward rollup policy keeps governance rights separate from economic attribution."
@@ -16,6 +16,8 @@ labels: [dao, billing, gateway, multi-tenant, agents]
 
 # Operator Plane — Unified Actor Model, Multi-Tenant Gateway, and Economic Attribution
 
+> **STATUS: PAUSED** — Gate: paying gateway customer exists (MDI or equivalent). Node registration (task.0122) moved to proj.node-formation-ui.
+>
 > Research: [dao-gateway-sdk](../../docs/research/dao-gateway-sdk.md) (spike.0115)
 > Launch customer: My Dead Internet (MDI) — 299+ AI agent collective (story.0118)
 

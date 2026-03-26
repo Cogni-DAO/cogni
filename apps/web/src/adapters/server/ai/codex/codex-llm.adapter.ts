@@ -130,7 +130,7 @@ async function* runCodexExec(params: {
           refresh_token: connection.credentials.refreshToken ?? "",
           account_id: connection.credentials.accountId ?? "",
         },
-        last_refresh: Date.now(),
+        last_refresh: new Date().toISOString(),
       }),
       { mode: 0o600 }
     );
