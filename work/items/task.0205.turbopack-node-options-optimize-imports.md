@@ -1,13 +1,13 @@
 ---
 id: task.0205
 type: task
-status: needs_triage
+status: cancelled
 title: "Add NODE_OPTIONS tuning + optimizePackageImports for workspace packages"
 priority: 1
-rank: 5
+rank: 99
 estimate: 1
-summary: "Set NODE_OPTIONS max-old-space-size for dev scripts and add experimental.optimizePackageImports for @cogni/* workspace packages."
-outcome: "Dev server has explicit memory ceiling; workspace barrel imports optimized by Turbopack."
+summary: "Pruned — symptom management. NODE_OPTIONS raises the ceiling without reducing usage. optimizePackageImports is broken for pnpm workspace symlinks (vercel/next.js#75148). Both superseded by task.0204 (root cause fix)."
+outcome: "N/A — pruned"
 spec_refs:
 project:
 assignees: derekg1729
@@ -15,7 +15,7 @@ credit:
 pr:
 reviewer:
 branch:
-revision: 0
+revision: 1
 deploy_verified: false
 created: 2026-03-26
 updated: 2026-03-26
@@ -24,35 +24,18 @@ external_refs:
   - docs/research/turbopack-dev-memory.md
 ---
 
-# NODE_OPTIONS Tuning + optimizePackageImports
+# NODE_OPTIONS Tuning + optimizePackageImports — PRUNED
 
-## Context
+Pruned during design review. Rationale:
 
-Per spike.0203: quick config-only wins for dev-server memory.
+- **NODE_OPTIONS**: Raises the GC ceiling without reducing actual memory usage. Masks the
+  problem instead of fixing it. Developers can set this locally if needed.
+- **optimizePackageImports**: Known broken for pnpm workspace symlinks (vercel/next.js#75148).
+  Our `@cogni/*` packages are workspace symlinks, so this won't help.
 
-## Plan
-
-1. **NODE_OPTIONS**: Add `NODE_OPTIONS="--max-old-space-size=8192"` to dev scripts in `package.json` or `.env.local.example` with documentation.
-
-2. **optimizePackageImports**: Add to `apps/web/next.config.ts`:
-
-   ```ts
-   experimental: {
-     optimizePackageImports: [
-       "@cogni/ai-core",
-       "@cogni/db-client",
-       "@cogni/graph-execution-core",
-       "@cogni/ids",
-       "@cogni/langgraph-graphs",
-     ],
-   },
-   ```
-
-3. **Test**: Verify build still succeeds and no import resolution errors.
+Both are superseded by task.0204 which addresses the root cause (static container import
+causing 36× module duplication).
 
 ## Validation
 
-```bash
-pnpm check:fast
-pnpm build
-```
+N/A — cancelled.

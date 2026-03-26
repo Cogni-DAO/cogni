@@ -43,7 +43,7 @@ explosion is severe.
 
 ### Root Cause 1: `container.ts` mega-import fan-out (CRITICAL)
 
-**42 of 46 routes** import `@/bootstrap/http` (via `wrapRouteHandlerWithLogging`).
+**36 of 46 routes** import `@/bootstrap/http` (via `wrapRouteHandlerWithLogging`).
 This module imports `@/bootstrap/container`, which is the DI composition root. The
 container file (`apps/web/src/bootstrap/container.ts`) directly imports:
 
@@ -60,8 +60,8 @@ container file (`apps/web/src/bootstrap/container.ts`) directly imports:
 | `@cogni/operator-wallet/adapters/privy` | ~3 MB  | Privy SDK                    |
 
 **Every route bundles ALL of these** even if it only needs auth + JSON response.
-Because Turbopack creates per-route module copies, 42 routes x ~40 MB transitive
-graph = potential for ~1.6 GB in duplicated modules before GC pressure even starts.
+Because Turbopack creates per-route module copies, 36 routes x ~40 MB transitive
+graph = potential for ~1.4 GB in duplicated modules before GC pressure even starts.
 
 **File**: `apps/web/src/bootstrap/container.ts` (lines 1-722)
 **File**: `apps/web/src/bootstrap/http/wrapRouteHandlerWithLogging.ts` (line 23: `import { getContainer } from "@/bootstrap/container"`)
