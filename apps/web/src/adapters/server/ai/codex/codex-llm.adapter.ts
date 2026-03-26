@@ -87,6 +87,7 @@ export class CodexLlmAdapter implements LlmService {
 
     const stream = runCodexExec({
       messages: params.messages,
+      ...(params.model ? { model: params.model } : {}),
       connection,
       log: callLog,
       onResult: deferred.resolve,
@@ -103,13 +104,21 @@ export class CodexLlmAdapter implements LlmService {
  */
 async function* runCodexExec(params: {
   messages: Message[];
+  model?: string;
   connection: ResolvedConnection;
   log: Logger;
   onResult: (r: LlmCompletionResult) => void;
   onError: (e: unknown) => void;
   abortSignal?: AbortSignal;
 }): AsyncIterable<ChatDeltaEvent> {
-  const { messages, connection, log: callLog, onResult, onError } = params;
+  const {
+    messages,
+    model,
+    connection,
+    log: callLog,
+    onResult,
+    onError,
+  } = params;
   const startMs = Date.now();
 
   // Create isolated temp dir for this call's auth
@@ -159,6 +168,7 @@ async function* runCodexExec(params: {
     });
 
     const thread = codex.startThread({
+      ...(model ? { model } : {}),
       sandboxMode: "read-only",
       approvalPolicy: "never",
       skipGitRepoCheck: true,

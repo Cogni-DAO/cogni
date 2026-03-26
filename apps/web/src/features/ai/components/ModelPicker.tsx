@@ -33,32 +33,51 @@ import { cn } from "@/shared/util/cn";
 
 export type LlmBackend = "openrouter" | "chatgpt";
 
-/** Models available via ChatGPT subscription (Codex transport) */
+/**
+ * Models available via ChatGPT subscription (Codex transport).
+ * Only Codex-specific models work with ChatGPT account auth.
+ * Standard models (gpt-4o-mini, o3, etc.) are NOT supported.
+ */
 const CHATGPT_MODELS = [
   {
     id: "gpt-5.4",
     name: "GPT-5.4",
-    description: "Most capable — 1M context",
+    description: "Most capable — 1M context, 128K output",
+  },
+  {
+    id: "gpt-5.4-mini",
+    name: "GPT-5.4 Mini",
+    description: "Fast and capable — best value",
   },
   {
     id: "gpt-5.3-codex",
     name: "GPT-5.3 Codex",
-    description: "Default Codex model",
-  },
-  {
-    id: "o3",
-    name: "o3",
-    description: "Reasoning model",
+    description: "Default — balanced performance",
   },
   {
     id: "gpt-5.3-codex-spark",
     name: "GPT-5.3 Spark",
-    description: "Fast and lightweight",
+    description: "Fast and lightweight — 128K context",
   },
   {
     id: "gpt-5.2-codex",
     name: "GPT-5.2 Codex",
     description: "Previous generation",
+  },
+  {
+    id: "gpt-5.1-codex",
+    name: "GPT-5.1 Codex",
+    description: "Older generation",
+  },
+  {
+    id: "gpt-5.1-codex-mini",
+    name: "GPT-5.1 Mini",
+    description: "Smallest and fastest",
+  },
+  {
+    id: "gpt-5.1-codex-max",
+    name: "GPT-5.1 Max",
+    description: "Maximum context — previous gen",
   },
 ] as const;
 
