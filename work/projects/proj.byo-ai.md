@@ -59,74 +59,92 @@ This means: 3 hardcoded `CHATGPT_MODEL_IDS` sets, 2 credit check paths, and the 
 
 ### Principle: One authority per decision
 
-| Decision                                  | Authority                                         | Where                                                               |
-| ----------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------- |
-| What models can this user select?         | `ModelCatalogPort`                                | Server — `/api/v1/ai/models` returns unified list from ALL backends |
-| Is this model free (no platform credits)? | `ModelCatalogPort` — `isFree` field on each model | Same unified list                                                   |
-| Which LLM backend handles this model?     | `ModelRef.provider` field                         | Set at selection time, carried on `GraphRunRequest`                 |
-| What credentials does this backend need?  | `ConnectionBrokerPort`                            | Resolves `connectionId` to provider-specific credentials            |
+| Decision                                  | Authority                                                          | Where                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| What models can this user select?         | `ModelCatalogPort`                                                 | Server — `/api/v1/ai/models` returns unified list from ALL backends |
+| Does this model require platform credits? | `ModelCatalogPort` — `requiresPlatformCredits` field on each model | Same unified list                                                   |
+| Which LLM backend handles this model?     | `ModelRef.providerKey` field (registry key)                        | Set at selection time, carried on `GraphRunRequest`                 |
+| What credentials does this backend need?  | `ConnectionBrokerPort`                                             | Resolves `connectionId` to provider-specific credentials            |
+| What can this model do?                   | `ModelOption.capabilities`                                         | Catalog declares streaming, tools, structuredOutput, vision         |
 
 ### ModelRef — typed model selection
 
 Replace `model: string` + `modelConnectionId?: string` with one typed reference:
 
 ```ts
+// Lives in @cogni/ai-core — shared across packages
 type ModelRef = {
-  provider: "platform" | "chatgpt" | "ollama";
+  providerKey: string; // registry key, NOT a fixed union
   modelId: string;
   connectionId?: string; // required for non-platform providers
 };
 ```
 
-`GraphRunRequest` carries `modelRef: ModelRef` instead of separate fields. The factory routes to the correct `LlmService` adapter based on `modelRef.provider`. No "override" — it's the configured provider.
+`GraphRunRequest` carries `modelRef: ModelRef` instead of separate fields. The factory routes to the correct `LlmService` adapter via a **provider registry** keyed by `providerKey`. No "override" — it's the configured provider. `providerKey` is an opaque string — adding a new provider means registering one factory, not editing a central union type.
+
+**MODELREF_FULLY_RESOLVED**: The `ModelRef` on `GraphRunRequest` is the exact selection from the user. No executor may infer, default, or rewrite it. Schedules persist the exact `ModelRef`, not "re-resolve whatever default is current."
 
 ### ModelCatalogPort — unified model authority
 
 ```ts
 interface ModelCatalogPort {
-  listModels(userId: string): Promise<ModelOption[]>;
+  listModels(params: {
+    userId: string;
+    billingAccountId: string;
+    requiredCapabilities?: Partial<ModelCapabilities>;
+  }): Promise<{ models: ModelOption[]; defaultRef: ModelRef | null }>;
 }
 
 type ModelOption = {
   ref: ModelRef;
   label: string;
-  isFree: boolean;
-  provider: string;
+  requiresPlatformCredits: boolean; // NOT "isFree" — BYO models are not free
+  providerLabel: string;
+  capabilities: ModelCapabilities;
+};
+
+type ModelCapabilities = {
+  streaming: boolean;
+  tools: boolean;
+  structuredOutput: boolean;
+  vision: boolean;
 };
 ```
 
 The `/api/v1/ai/models` endpoint calls `ModelCatalogPort.listModels()` which aggregates:
 
-- Platform models from LiteLLM `/model/info`
-- ChatGPT models (if user has active `openai-chatgpt` connection)
-- Ollama models (if user has connected Ollama endpoint — future)
+- Platform models from LiteLLM `/model/info` — `requiresPlatformCredits: true`
+- ChatGPT models (if user has active `openai-chatgpt` connection) — `requiresPlatformCredits: false`
+- Ollama models (if user has connected Ollama endpoint — future) — `requiresPlatformCredits: false`
 
 The UI renders what the server returns. **No hardcoded model arrays in React.**
 
-### LlmService adapters — one per provider
+### LlmService adapters — provider registry
 
 ```
-LlmService (port interface)
-  ├─ LiteLlmAdapter      — platform (OpenRouter via LiteLLM proxy)
-  ├─ CodexLlmAdapter     — ChatGPT subscription (codex exec subprocess)
-  └─ OllamaLlmAdapter    — user-hosted models (OpenAI-compatible HTTP, future)
+Provider Registry (Map<string, LlmServiceFactory | LlmService>)
+  "platform" → LiteLlmAdapter singleton
+  "chatgpt"  → (conn) => new CodexLlmAdapter(conn)
+  "ollama"   → (conn) => new OllamaLlmAdapter(conn)    (future)
 ```
 
-The factory creates the right adapter based on `modelRef.provider`:
+The factory resolves via registry lookup — no switch statement, open for extension:
 
 ```ts
-function resolveLlmService(
+async function resolveLlmService(
   ref: ModelRef,
-  broker: ConnectionBrokerPort
-): LlmService {
-  switch (ref.provider) {
-    case "platform":
-      return container.llmService; // LiteLlmAdapter singleton
-    case "chatgpt":
-      return new CodexLlmAdapter(await broker.resolve(ref.connectionId!));
-    case "ollama":
-      return new OllamaLlmAdapter(await broker.resolve(ref.connectionId!));
-  }
+  broker,
+  actorId,
+  billingAccountId
+): Promise<LlmService> {
+  const entry = providerRegistry.get(ref.providerKey);
+  if (!entry) throw new Error(`Unknown provider: ${ref.providerKey}`);
+  if (typeof entry !== "function") return entry; // singleton
+  const conn = await broker.resolve(ref.connectionId!, {
+    actorId,
+    billingAccountId,
+  });
+  return entry(conn);
 }
 ```
 
@@ -134,9 +152,9 @@ No `ExecutionScope.llmServiceOverride`. No special-case checks. The provider is 
 
 ### Credit check — one path
 
-The `PreflightCreditCheckDecorator` checks `modelRef.isFree` (set by the catalog). If free, skip. If paid, check credits. One check, one authority.
+The `PreflightCreditCheckDecorator` checks `requiresPlatformCredits` from the catalog. If `false`, skip. If `true`, check credits. One check, one authority.
 
-The schedule creation route uses the same `isFree` from the catalog response — no separate `isModelFree()` function call.
+The schedule creation route uses the same `requiresPlatformCredits` from the catalog response — no separate `isModelFree()` function call.
 
 ## Roadmap
 
@@ -151,16 +169,20 @@ The schedule creation route uses the same `isFree` from the catalog response —
 - [x] Chat + Schedules pass modelConnectionId
 - [x] connections table + AEAD + DrizzleConnectionBrokerAdapter
 
-### Next — Clean up split authority
+### Next — Clean up split authority (task.0209)
 
-- [ ] Implement `ModelCatalogPort` — server-side unified model list
+- [ ] Define `ModelRef` + `ModelCapabilities` in `@cogni/ai-core` (package-level type)
+- [ ] Implement `ModelCatalogPort` with capability filtering — server-side unified model list
 - [ ] `/api/v1/ai/models` aggregates platform + ChatGPT models (based on user connections)
 - [ ] Remove `CHATGPT_MODELS` const from ModelPicker — render from API only
 - [ ] Remove `CHATGPT_MODEL_IDS` set from model-catalog.server.ts
 - [ ] Replace `model: string` + `modelConnectionId?: string` with `ModelRef` on `GraphRunRequest`
-- [ ] Factory resolves LlmService from `ModelRef.provider` — no override pattern
-- [ ] One credit check path using catalog `isFree` field
+- [ ] Provider registry + `resolveLlmService` from `providerKey` — no override pattern, no switch
+- [ ] Rename `isFree` → `requiresPlatformCredits` everywhere
+- [ ] One credit check path using catalog `requiresPlatformCredits`
 - [ ] Remove schedule route inline credit check — use decorator only
+- [ ] Widen `ConnectionBrokerPort.resolve()` scope to `{ actorId, billingAccountId }`
+- [ ] MODELREF_FULLY_RESOLVED: schedules persist exact `ModelRef`, no re-resolution
 
 ### Future — Ollama / hosted OSS (task.0207)
 
@@ -176,7 +198,7 @@ The schedule creation route uses the same `isFree` from the catalog response —
 - [ ] Spend limits and usage dashboards per connection
 - [ ] Organization-level connection sharing
 
-## Execution Paths (as-built)
+## Execution Paths (as-built → target)
 
 ```
 Chat:      UI → chat/route → facade → Temporal → internal/route → factory → decorator stack → graph → LlmService
@@ -185,10 +207,17 @@ Schedule:  UI → schedules/route → Temporal schedule → workflow → interna
 Decorator stack (inside-out):
   BillingEnrichment → BillingValidator → PreflightCreditCheck → Observability
 
-LlmService dispatch:
+LlmService dispatch (as-built — BEING REPLACED):
   factory checks modelConnectionId → broker.resolve() → CodexLlmAdapter → codex exec
   OR
   factory no modelConnectionId → LiteLlmAdapter → LiteLLM → OpenRouter
+
+LlmService dispatch (target — task.0209):
+  factory reads modelRef.providerKey → providerRegistry.get(key)
+    → singleton (platform) → LiteLlmAdapter
+    → factory fn (chatgpt) → broker.resolve() → CodexLlmAdapter
+    → factory fn (ollama)  → broker.resolve() → OllamaLlmAdapter
+  No ambient llmServiceOverride. No switch. No inference.
 ```
 
 ## Constraints

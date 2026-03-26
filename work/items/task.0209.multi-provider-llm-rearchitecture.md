@@ -28,17 +28,17 @@ deploy_verified: false
 
 ### Outcome
 
-One authority per decision. `ModelCatalogPort` owns "what's selectable." `ModelRef` carries provider + model + connection as one typed value. Credit check reads `isFree` from catalog. Usage metrics reflect actual provider. No hardcoded model arrays in UI or server.
+One authority per decision. `ModelCatalogPort` owns "what's selectable." `ModelRef` carries providerKey + modelId + connectionId as one typed value. Credit check reads `requiresPlatformCredits` from catalog. Usage metrics reflect actual provider. No hardcoded model arrays in UI or server. Provider is a registry key, not a union — adding a provider never requires central type edits.
 
 ### Approach
 
-**Solution**: Introduce `ModelRef` type, `ModelCatalogPort` port, and `AggregatingModelCatalog` adapter. Propagate `ModelRef` through the full pipeline replacing `model: string` + `modelConnectionId?: string`. Delete all `CHATGPT_MODEL_IDS` hacks.
+**Solution**: Introduce `ModelRef` type (in `@cogni/ai-core`), `ModelCatalogPort` port, `ModelCapabilities` type, and `AggregatingModelCatalog` adapter with provider registry. Propagate `ModelRef` through the full pipeline replacing `model: string` + `modelConnectionId?: string`. Delete all `CHATGPT_MODEL_IDS` hacks. Rename `isFree` → `requiresPlatformCredits`.
 
 **Spec**: [multi-provider-llm](../../docs/spec/multi-provider-llm.md)
 
 **Reuses**:
 
-- Existing `ConnectionBrokerPort` for credential resolution
+- Existing `ConnectionBrokerPort` for credential resolution (widen scope to actor+tenant)
 - Existing `LlmService` adapters (LiteLlmAdapter, CodexLlmAdapter)
 - Existing `/api/v1/ai/models` route (modify, not replace)
 - Existing `PreflightCreditCheckDecorator` (simplify, not replace)
@@ -47,39 +47,49 @@ One authority per decision. `ModelCatalogPort` owns "what's selectable." `ModelR
 
 - [ ] ONE_CATALOG_AUTHORITY: `ModelCatalogPort` is the ONLY source for selectable models (spec: multi-provider-llm)
 - [ ] TYPED_MODEL_SELECTION: `ModelRef` replaces bare `model: string` on `GraphRunRequest` (spec: multi-provider-llm)
-- [ ] PROVIDER_ON_REQUEST: Factory resolves `LlmService` from `modelRef.provider` — no override pattern (spec: multi-provider-llm)
-- [ ] ONE_CREDIT_PATH: Credit check in decorator only, reads catalog `isFree` — no inline checks in routes (spec: multi-provider-llm)
-- [ ] PROVIDER_AWARE_USAGE: `UsageFact.source` reflects actual provider (spec: multi-provider-llm)
-- [ ] CATALOG_OWNS_FREE: No `CHATGPT_MODEL_IDS` sets anywhere (spec: multi-provider-llm)
+- [ ] MODELREF_FULLY_RESOLVED: `GraphRunRequest` carries exact `ModelRef` — no defaulting, inference, or rewriting at execution time. Schedules persist exact `ModelRef`. (spec: multi-provider-llm)
+- [ ] PROVIDER_KEY_IS_REGISTRY: `providerKey` is an opaque `string`, not a fixed union. Provider registry maps key → adapter factory. (spec: multi-provider-llm)
+- [ ] PROVIDER_ON_REQUEST: Factory resolves `LlmService` from `modelRef.providerKey` via provider registry — no override pattern (spec: multi-provider-llm)
+- [ ] ONE_CREDIT_PATH: Credit check in decorator only, reads catalog `requiresPlatformCredits` — no inline checks in routes (spec: multi-provider-llm)
+- [ ] BILLING_VOCABULARY: Use `requiresPlatformCredits`, never `isFree`. BYO models are not free — they have zero platform cost. (spec: multi-provider-llm)
+- [ ] CAPABILITY_AWARE_CATALOG: `ModelOption` declares capabilities (streaming, tools, structuredOutput, vision). Catalog can filter by required capabilities. (spec: multi-provider-llm)
+- [ ] PROVIDER_AWARE_USAGE: `UsageFact.source` reflects actual provider. BYO runs tracked for observability. (spec: multi-provider-llm)
+- [ ] CATALOG_OWNS_BILLING_MODE: No `CHATGPT_MODEL_IDS` sets anywhere (spec: multi-provider-llm)
 
 ### Files
 
 #### New
 
-- Create: `apps/web/src/ports/model-catalog.port.ts` — `ModelCatalogPort`, `ModelOption`, `ModelRef`
-- Create: `apps/web/src/adapters/server/ai/model-catalog/aggregating.adapter.ts` — combines LiteLLM + ChatGPT catalogs
+- Create: `packages/ai-core/src/model/model-ref.ts` — `ModelRef` type, `ModelCapabilities` type (shared across packages)
+- Create: `apps/web/src/ports/model-catalog.port.ts` — `ModelCatalogPort`, `ModelOption` (imports `ModelRef` from `@cogni/ai-core`)
+- Create: `apps/web/src/adapters/server/ai/model-catalog/aggregating.adapter.ts` — combines providers, applies capability filter
 - Create: `apps/web/src/adapters/server/ai/model-catalog/litellm.adapter.ts` — fetches from LiteLLM `/model/info`
 - Create: `apps/web/src/adapters/server/ai/model-catalog/chatgpt.adapter.ts` — returns ChatGPT models when connection exists
 
-#### Modify — core types
+#### Modify — core types (packages)
 
+- Modify: `packages/ai-core/src/index.ts` — export `ModelRef`, `ModelCapabilities`
 - Modify: `packages/graph-execution-core/src/graph-executor.port.ts` — `modelRef: ModelRef` replaces `model` + `modelConnectionId`
 - Modify: `packages/ai-core/src/billing/source-system.ts` — add `"codex" | "ollama"` to `SourceSystem`
-- Modify: `apps/web/src/contracts/ai.models.v1.contract.ts` — `ModelOption` with `ref: ModelRef`
+
+#### Modify — core types (app)
+
+- Modify: `apps/web/src/contracts/ai.models.v1.contract.ts` — `ModelOption` with `ref: ModelRef`, `requiresPlatformCredits`, `capabilities`
 - Modify: `apps/web/src/contracts/ai.chat.v1.contract.ts` — `modelRef` replaces `model` + `modelConnectionId`
 
 #### Modify — execution pipeline
 
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — resolve `LlmService` from `modelRef.provider`, delete override pattern
-- Modify: `apps/web/src/adapters/server/ai/execution-scope.ts` — `llmService: LlmService` (configured, not override)
-- Modify: `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — read configured `LlmService` from scope
-- Modify: `apps/web/src/adapters/server/ai/preflight-credit-check.decorator.ts` — check `modelRef.provider !== "platform"`
+- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — provider registry + `resolveLlmService` from `modelRef.providerKey`, delete override pattern
+- Modify: `apps/web/src/adapters/server/ai/execution-scope.ts` — `llmService: LlmService` (resolved, not override)
+- Modify: `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — receive resolved `LlmService` as param to `executeCompletionUnit()`
+- Modify: `apps/web/src/adapters/server/ai/preflight-credit-check.decorator.ts` — check `requiresPlatformCredits` from catalog, not provider key comparison
+- Modify: `apps/web/src/ports/connection-broker.port.ts` — widen `resolve()` scope to `{ actorId, billingAccountId }` instead of bare `billingAccountId`
 
 #### Modify — routes
 
 - Modify: `apps/web/src/app/api/v1/ai/models/route.ts` — call `ModelCatalogPort` instead of LiteLLM directly
 - Modify: `apps/web/src/app/api/v1/ai/chat/route.ts` — validate `modelRef` via catalog, remove `isModelAllowed` hack
-- Modify: `apps/web/src/app/api/v1/schedules/route.ts` — remove inline credit check, use catalog `isFree`
+- Modify: `apps/web/src/app/api/v1/schedules/route.ts` — remove inline credit check, use catalog `requiresPlatformCredits`
 - Modify: `apps/web/src/app/_facades/ai/completion.server.ts` — pass `modelRef` to Temporal
 - Modify: `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — extract `modelRef` from input
 
@@ -97,8 +107,8 @@ One authority per decision. `ModelCatalogPort` owns "what's selectable." `ModelR
 
 #### Tests
 
-- Test: `tests/unit/ports/model-catalog.test.ts` — aggregating catalog combines providers correctly
-- Test: `tests/unit/adapters/preflight-credit-check.test.ts` — platform checks credits, non-platform skips
+- Test: `tests/unit/ports/model-catalog.test.ts` — aggregating catalog combines providers, capability filtering works
+- Test: `tests/unit/adapters/preflight-credit-check.test.ts` — `requiresPlatformCredits: true` checks credits, `false` skips
 
 ## Validation
 
