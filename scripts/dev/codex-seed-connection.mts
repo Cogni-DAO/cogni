@@ -17,7 +17,7 @@ import { randomBytes, randomUUID, createCipheriv } from "node:crypto";
 import { existsSync, readFileSync, appendFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
-import pg from "pg";
+import postgres from "postgres";
 
 const ENV_FILE = resolve(import.meta.dirname, "../../.env.local");
 const AUTH_JSON = join(homedir(), ".codex", "auth.json");
@@ -50,7 +50,7 @@ function readEnvFile(): Record<string, string> {
   const result: Record<string, string> = {};
   for (const line of readFileSync(ENV_FILE, "utf-8").split("\n")) {
     const match = line.match(/^([A-Z_]+)=(.*)$/);
-    if (match) result[match[1]] = match[2].trim();
+    if (match) result[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
   }
   return result;
 }
@@ -79,43 +79,40 @@ async function main() {
     process.exit(1);
   }
 
-  const dbUrl = envVars.DATABASE_URL || process.env.DATABASE_URL;
+  // Use service URL for provisioning (RLS allows inserts for service role)
+  const dbUrl =
+    envVars.DATABASE_SERVICE_URL ||
+    process.env.DATABASE_SERVICE_URL ||
+    envVars.DATABASE_URL ||
+    process.env.DATABASE_URL;
   if (!dbUrl) {
-    console.error("DATABASE_URL not set in .env.local or environment");
+    console.error("DATABASE_SERVICE_URL or DATABASE_URL not set");
     process.exit(1);
   }
 
-  const pool = new pg.Pool({ connectionString: dbUrl });
+  const sql = postgres(dbUrl);
 
   try {
-    // Ensure connections table exists (run migration if needed)
-    const { rows: tableCheck } = await pool.query(
-      "SELECT to_regclass('public.connections') AS exists"
-    );
-    if (!tableCheck[0]?.exists) {
-      console.log("connections table missing — running db:migrate...\n");
-      const { execSync } = await import("node:child_process");
-      execSync("pnpm db:migrate", {
-        stdio: "inherit",
-        cwd: resolve(import.meta.dirname, "../.."),
-      });
-    }
-    // Find first user's billing account
-    const { rows: accounts } = await pool.query(
-      "SELECT id, owner_user_id FROM billing_accounts LIMIT 1"
-    );
+    // Find or create a user + billing account for local dev
+    let accounts = await sql`SELECT id, owner_user_id FROM billing_accounts WHERE is_system_tenant = false LIMIT 1`;
     if (accounts.length === 0) {
-      console.error("No billing accounts found. Sign in to the app first.");
-      process.exit(1);
+      console.log("No user billing accounts found — provisioning local dev user...");
+      const devUserId = `dev-${randomUUID().slice(0, 8)}`;
+      const devBaId = `ba-${randomUUID().slice(0, 8)}`;
+      await sql`INSERT INTO users (id, name, email) VALUES (${devUserId}, 'Local Dev', 'dev@localhost') ON CONFLICT DO NOTHING`;
+      await sql`INSERT INTO billing_accounts (id, owner_user_id, balance_credits) VALUES (${devBaId}, ${devUserId}, 0) ON CONFLICT DO NOTHING`;
+      accounts = await sql`SELECT id, owner_user_id FROM billing_accounts WHERE is_system_tenant = false LIMIT 1`;
+      console.log(`  Created user ${devUserId} + billing account ${devBaId}`);
     }
     const billingAccountId = accounts[0].id;
     const userId = accounts[0].owner_user_id;
 
     // Check for existing active connection
-    const { rows: existing } = await pool.query(
-      "SELECT id FROM connections WHERE billing_account_id = $1 AND provider = 'openai-chatgpt' AND revoked_at IS NULL",
-      [billingAccountId]
-    );
+    const existing = await sql`
+      SELECT id FROM connections
+      WHERE billing_account_id = ${billingAccountId}
+        AND provider = 'openai-chatgpt'
+        AND revoked_at IS NULL`;
 
     // Build credential blob (matches broker's CredentialBlob shape)
     const credBlob = JSON.stringify({
@@ -146,17 +143,15 @@ async function main() {
     const blob = Buffer.concat([nonce, encrypted, cipher.getAuthTag()]);
 
     if (isUpdate) {
-      await pool.query(
-        "UPDATE connections SET encrypted_credentials = $1, encryption_key_id = 'v1' WHERE id = $2",
-        [blob, connectionId]
-      );
+      await sql`
+        UPDATE connections
+        SET encrypted_credentials = ${blob}, encryption_key_id = 'v1'
+        WHERE id = ${connectionId}`;
       console.log(`\nUpdated connection: ${connectionId}`);
     } else {
-      await pool.query(
-        `INSERT INTO connections (id, billing_account_id, provider, credential_type, encrypted_credentials, encryption_key_id, scopes, created_by_user_id)
-         VALUES ($1, $2, 'openai-chatgpt', 'oauth2', $3, 'v1', ARRAY['openid','profile','email','offline_access'], $4)`,
-        [connectionId, billingAccountId, blob, userId]
-      );
+      await sql`
+        INSERT INTO connections (id, billing_account_id, provider, credential_type, encrypted_credentials, encryption_key_id, scopes, created_by_user_id)
+        VALUES (${connectionId}, ${billingAccountId}, 'openai-chatgpt', 'oauth2', ${blob}, 'v1', ${["openid", "profile", "email", "offline_access"]}, ${userId})`;
       console.log(`\nCreated connection: ${connectionId}`);
     }
 
@@ -165,7 +160,7 @@ async function main() {
     console.log(`  Account ID: ${auth.tokens.account_id ?? "unknown"}`);
     console.log(`\nBYO-AI ready. Restart dev:stack to activate.`);
   } finally {
-    await pool.end();
+    await sql.end();
   }
 }
 
