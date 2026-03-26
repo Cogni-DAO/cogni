@@ -3,20 +3,19 @@ id: task.0206
 type: task
 status: needs_triage
 title: "Incremental barrel import narrowing in ports/ and shared/observability"
-priority: 2
-rank: 20
+priority: 1
+rank: 10
 estimate: 3
-summary: "Replace export * chains in @/shared and broad barrel imports from @/ports with direct module imports to reduce Turbopack module duplication. Gated on task.0204 measurement."
+summary: "Replace export * chains in @/shared and broad barrel imports from @/ports with direct module imports to reduce Turbopack module duplication."
 outcome: "No export * in @/shared/index.ts. Routes import only the observability sub-modules they need. Dependency-cruiser rules updated if needed."
-spec_refs:
-  - docs/spec/architecture.md
+spec_refs: architecture-spec
 project:
 assignees: derekg1729
 credit:
 pr:
 reviewer:
 branch:
-revision: 1
+revision: 0
 deploy_verified: false
 created: 2026-03-26
 updated: 2026-03-26
@@ -29,29 +28,19 @@ external_refs:
 
 ## Context
 
-Secondary contributor to Turbopack dev memory. `@/shared/observability` barrel
-re-exports prom-client metrics (~1MB) into every route that uses the logging wrapper.
-`@/ports/index.ts` re-exports runtime error classes from 5+ port files.
+Per spike.0203: `@/shared/index.ts` uses `export *` cascading 5 sub-modules, and `@/shared/observability` re-exports prom-client + pino into all consumers. This is a secondary contributor to Turbopack module duplication.
 
-**Gated on task.0204**: Only pursue this if RSS is still > 3GB after the container
-coupling fix. The container graph (~40MB per route) is ~40× larger than the
-observability barrel (~1MB per route), so this is a secondary optimization.
+## Plan
 
-## Design sketch (if needed)
+1. **Replace `export *` in `@/shared/index.ts`** with named exports (or remove the barrel and have consumers import from specific sub-modules).
 
-1. **Replace `export *` in `@/shared/index.ts`** with named exports
-2. **Split `@/shared/observability` barrel**: routes needing only `RequestContext` /
-   `createRequestContext` import from `@/shared/observability/context`. Only the
-   metrics endpoint and route wrapper import from `@/shared/observability/server`.
-3. **Dep-cruiser rule change**: Current rules enforce `@/ports/index.ts` as the entry
-   point. Relaxing this for `type`-only imports from individual port files would
-   require a dep-cruiser rule update with an exemption pattern.
+2. **Split `@/shared/observability` imports**:
+   - Routes that only need `RequestContext` / `createRequestContext` should import from `@/shared/observability/context`.
+   - Only the metrics endpoint and the route wrapper should import from `@/shared/observability/server`.
 
-## Gate
+3. **Evaluate relaxing dep-cruiser `@/ports` entry-point rule**: Currently `@/ports` must use `index.ts`. If barrel elimination is blocked by this, add a carve-out for direct port file imports with `type` keyword.
 
-- [ ] task.0204 shipped and measured
-- [ ] RSS still > 3GB after task.0204 → proceed
-- [ ] RSS < 3GB → deprioritize to P3 tech debt
+4. **Gated on task.0204**: Only pursue this if memory is still > 3 GB after the container coupling fix.
 
 ## Validation
 
