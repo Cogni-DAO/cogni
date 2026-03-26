@@ -42,7 +42,6 @@ vi.mock("@/app/_lib/auth/session", () => ({
 // Mock bootstrap container (getContainer needed by wrapRouteHandlerWithLogging)
 vi.mock("@/bootstrap/container", () => ({
   resolveAiAdapterDeps: vi.fn(),
-  resolveDefaultModelConnection: vi.fn(async () => undefined),
   getTemporalWorkflowClient: vi.fn(),
   getContainer: vi.fn().mockReturnValue({
     config: { unhandledErrorPolicy: "throw" },

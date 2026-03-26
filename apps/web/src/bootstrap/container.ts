@@ -667,37 +667,6 @@ function createContainer(): Container {
 }
 
 /**
- * Resolve the default BYO-AI model connection for a billing account.
- * Returns the connectionId if the user has an active openai-chatgpt connection, else undefined.
- */
-export async function resolveDefaultModelConnection(
-  billingAccountId: string
-): Promise<string | undefined> {
-  const container = getContainer();
-  if (!container.connectionBroker) return undefined;
-
-  try {
-    const { connections } = await import("@cogni/db-schema");
-    const { and, eq, isNull } = await import("drizzle-orm");
-    const db = getAppDb();
-    const rows = await db
-      .select({ id: connections.id })
-      .from(connections)
-      .where(
-        and(
-          eq(connections.billingAccountId, billingAccountId),
-          eq(connections.provider, "openai-chatgpt"),
-          isNull(connections.revokedAt)
-        )
-      )
-      .limit(1);
-    return rows[0]?.id;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
  * Resolves dependencies for AI adapter construction.
  * Used by graph-executor.factory.ts.
  */

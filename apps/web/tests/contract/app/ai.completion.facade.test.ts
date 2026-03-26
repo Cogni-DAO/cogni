@@ -22,7 +22,6 @@ const startMock = vi.fn().mockResolvedValue({});
 // Keep inline; fixture used in non-hoisted test helpers.
 vi.mock("@/bootstrap/container", () => ({
   resolveAiAdapterDeps: vi.fn(),
-  resolveDefaultModelConnection: vi.fn(async () => undefined),
   getTemporalWorkflowClient: vi.fn(async () => ({
     client: { start: startMock },
     taskQueue: "scheduler-tasks",

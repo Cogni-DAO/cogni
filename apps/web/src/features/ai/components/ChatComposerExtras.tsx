@@ -58,16 +58,6 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     name: "OpenClaw",
     description: "Community-accessible OpenClaw container agent",
   },
-  {
-    graphId: "codex:poet" satisfies GraphId,
-    name: "Codex Poet",
-    description: "Poetic AI via Codex subscription",
-  },
-  {
-    graphId: "codex:spark" satisfies GraphId,
-    name: "Codex Spark",
-    description: "Fast Codex assistant (gpt-5.3-codex-spark)",
-  },
 ];
 
 /** Default graph ID - exported for page initialization */

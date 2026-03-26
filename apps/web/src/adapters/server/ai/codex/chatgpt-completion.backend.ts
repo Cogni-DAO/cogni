@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AiEvent, AiExecutionErrorCode } from "@cogni/ai-core";
+import type { AiEvent, AiExecutionErrorCode, Message } from "@cogni/ai-core";
 import type {
   ExecutionContext,
   GraphFinal,
@@ -83,15 +83,20 @@ async function* executeWithTempAuth(params: {
   const codexDir = join(tempDir, ".codex");
 
   try {
-    // Write temp auth.json for the Codex CLI
+    // Write temp auth.json matching Codex CLI's expected format
+    // (verified against ~/.codex/auth.json structure)
     await mkdir(codexDir, { recursive: true });
     await writeFile(
       join(codexDir, "auth.json"),
       JSON.stringify({
-        token: connection.credentials.accessToken,
-        refresh_token: connection.credentials.refreshToken ?? "",
-        expires_at: connection.expiresAt?.toISOString() ?? "",
-        account_id: connection.credentials.accountId ?? "",
+        auth_mode: "chatgpt",
+        OPENAI_API_KEY: null,
+        tokens: {
+          access_token: connection.credentials.accessToken,
+          refresh_token: connection.credentials.refreshToken ?? "",
+          account_id: connection.credentials.accountId ?? "",
+        },
+        last_refresh: Date.now(),
       }),
       { mode: 0o600 }
     );
@@ -109,10 +114,11 @@ async function* executeWithTempAuth(params: {
     // Build env for the subprocess — inherit current env + override HOME
     // for per-request auth isolation (Codex reads from $HOME/.codex/auth.json)
     const { env: currentEnv } = await import("node:process");
-    const envRecord: Record<string, string> = { HOME: tempDir };
+    const envRecord: Record<string, string> = {};
     for (const [k, v] of Object.entries(currentEnv)) {
       if (v != null) envRecord[k] = v;
     }
+    envRecord.HOME = tempDir; // Must be after loop to avoid being overwritten
     const codex = new Codex({
       codexPathOverride: codexBin,
       env: envRecord,
@@ -124,18 +130,10 @@ async function* executeWithTempAuth(params: {
       skipGitRepoCheck: true,
     });
 
-    // Build prompt from messages
-    const lastUserMsg = [...req.messages]
-      .reverse()
-      .find((m) => m.role === "user");
-    const prompt = lastUserMsg?.content ?? "";
-
-    // Include system messages if present
-    const systemMsgs = req.messages.filter((m) => m.role === "system");
-    const fullPrompt =
-      systemMsgs.length > 0
-        ? `${systemMsgs.map((m) => m.content).join("\n")}\n\nUser: ${prompt}`
-        : prompt;
+    // Build prompt from full conversation history.
+    // codex exec accepts a single string per turn — format the entire message
+    // array so the model sees the full multi-turn context.
+    const fullPrompt = formatMessagesAsPrompt(req.messages);
 
     runLog.info(
       { messageCount: req.messages.length },
@@ -279,4 +277,29 @@ async function* executeWithTempAuth(params: {
     // Cleanup temp auth dir
     rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+/**
+ * Format the full message history into a single prompt string.
+ * codex exec takes one string per turn — we serialize the entire
+ * conversation so the model has full multi-turn context.
+ */
+function formatMessagesAsPrompt(messages: Message[]): string {
+  const parts: string[] = [];
+  const systemParts: string[] = [];
+
+  for (const msg of messages) {
+    if (msg.role === "system") {
+      systemParts.push(msg.content);
+    } else if (msg.role === "user") {
+      parts.push(`User: ${msg.content}`);
+    } else if (msg.role === "assistant") {
+      parts.push(`Assistant: ${msg.content}`);
+    } else if (msg.role === "tool") {
+      parts.push(`Tool result: ${msg.content}`);
+    }
+  }
+
+  const system = systemParts.length > 0 ? systemParts.join("\n") + "\n\n" : "";
+  return system + parts.join("\n\n");
 }

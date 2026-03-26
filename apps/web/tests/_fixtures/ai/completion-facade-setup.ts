@@ -205,7 +205,6 @@ export function createContainerMock(
 ) {
   return {
     resolveAiAdapterDeps: () => deps,
-    resolveDefaultModelConnection: async () => undefined,
     getTemporalWorkflowClient: async () => createTemporalClientMock(),
     getContainer: () => ({
       runStream: createRunStreamMock(streamOptions),
