@@ -278,6 +278,144 @@ function ColorPickerSwatch({
   );
 }
 
+/* ─── ChatGPT Connect Flow ────────────────────────────────────────── */
+
+/**
+ * Two-path OAuth flow for ChatGPT BYO-AI:
+ * - Local dev: relay server on port 1455 catches the redirect automatically
+ * - Cloud: user pastes the redirect URL back into an input field
+ *
+ * The flow opens a popup to OpenAI auth. After authentication, OpenAI
+ * redirects to localhost:1455/auth/callback?code=...
+ * If the relay catches it, the callback route completes automatically.
+ * If not (cloud), the user copies the URL and pastes it here.
+ */
+function ChatGptConnectFlow({
+  onComplete,
+  onCancel,
+}: {
+  onComplete: () => void;
+  onCancel: () => void;
+}): ReactElement {
+  const [phase, setPhase] = useState<"starting" | "waiting" | "error">(
+    "starting"
+  );
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+
+  // Start the flow on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/v1/auth/openai-codex/authorize", {
+        method: "POST",
+      });
+      if (!res.ok || cancelled) {
+        if (!cancelled) setPhase("error");
+        return;
+      }
+      const data = await res.json();
+      if (data.url && !cancelled) {
+        window.open(data.url, "chatgpt_oauth", "width=600,height=700");
+        setPhase("waiting");
+      }
+    })().catch(() => {
+      if (!cancelled) setPhase("error");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Poll for connection status (catches the relay-based auto-complete)
+  useEffect(() => {
+    if (phase !== "waiting") return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/v1/auth/openai-codex/status");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.connected) {
+            clearInterval(interval);
+            onComplete();
+          }
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [phase, onComplete]);
+
+  const handlePaste = async () => {
+    if (!pasteUrl.trim()) return;
+    setSubmitting(true);
+    setErrorMsg("");
+    try {
+      const res = await fetch("/api/v1/auth/openai-codex/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: pasteUrl.trim() }),
+      });
+      if (res.ok) {
+        onComplete();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error || "Failed to connect");
+      }
+    } catch {
+      setErrorMsg("Request failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (phase === "starting") {
+    return (
+      <span className="text-muted-foreground text-sm">Opening OpenAI...</span>
+    );
+  }
+
+  if (phase === "error") {
+    return (
+      <Button variant="outline" size="sm" onClick={onCancel}>
+        Try again
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="text-muted-foreground text-xs">
+        Sign in at OpenAI in the popup. If it doesn&apos;t complete
+        automatically, copy the URL from the popup and paste it below.
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Paste redirect URL here..."
+          value={pasteUrl}
+          onChange={(e) => setPasteUrl(e.target.value)}
+          className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm"
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={submitting || !pasteUrl.trim()}
+          onClick={handlePaste}
+        >
+          {submitting ? "..." : "Submit"}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+      {errorMsg && <div className="text-destructive text-xs">{errorMsg}</div>}
+    </div>
+  );
+}
+
 /* ─── View ─────────────────────────────────────────────────────────── */
 
 export function ProfileView(): ReactElement {
@@ -516,26 +654,19 @@ export function ProfileView(): ReactElement {
               Disconnect
             </Button>
           </div>
+        ) : chatGptLoading ? (
+          <ChatGptConnectFlow
+            onComplete={() => {
+              setChatGptConnected(true);
+              setChatGptLoading(false);
+            }}
+            onCancel={() => setChatGptLoading(false)}
+          />
         ) : (
           <Button
             variant="outline"
             size="sm"
-            disabled={chatGptLoading}
-            onClick={async () => {
-              setChatGptLoading(true);
-              try {
-                const res = await fetch("/api/v1/auth/openai-codex/authorize", {
-                  method: "POST",
-                });
-                if (!res.ok) return;
-                const data = await res.json();
-                if (data.url) {
-                  window.location.href = data.url;
-                }
-              } finally {
-                setChatGptLoading(false);
-              }
-            }}
+            onClick={() => setChatGptLoading(true)}
           >
             Connect
           </Button>
