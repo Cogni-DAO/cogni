@@ -57,6 +57,8 @@ interface ChatRuntimeProviderProps {
   onError?: (error: ChatError) => void;
   /** Called after each assistant response finishes (for sidebar refresh, etc.). */
   onFinish?: () => void;
+  /** BYO-AI connection ID — when set, LLM calls route through user's ChatGPT subscription */
+  modelConnectionId?: string;
 }
 
 export function ChatRuntimeProvider({
@@ -69,10 +71,12 @@ export function ChatRuntimeProvider({
   onAuthExpired,
   onError,
   onFinish,
+  modelConnectionId,
 }: ChatRuntimeProviderProps) {
   const queryClient = useQueryClient();
   const selectedModelRef = useRef(selectedModel);
   const selectedGraphRef = useRef(selectedGraph);
+  const modelConnectionIdRef = useRef(modelConnectionId);
 
   // State key for multi-turn conversations
   // When initialStateKey is provided (existing thread), seed the map so stateKey is
@@ -88,6 +92,10 @@ export function ChatRuntimeProvider({
   useEffect(() => {
     selectedModelRef.current = selectedModel;
   }, [selectedModel]);
+
+  useEffect(() => {
+    modelConnectionIdRef.current = modelConnectionId;
+  }, [modelConnectionId]);
 
   useEffect(() => {
     selectedGraphRef.current = selectedGraph;
@@ -167,6 +175,9 @@ export function ChatRuntimeProvider({
           model: selectedModelRef.current,
           graphName: selectedGraphRef.current,
           ...(stateKeyRef.current ? { stateKey: stateKeyRef.current } : {}),
+          ...(modelConnectionIdRef.current
+            ? { modelConnectionId: modelConnectionIdRef.current }
+            : {}),
         },
       }),
       // Wrap fetch to intercept responses (stateKey capture + error handling).

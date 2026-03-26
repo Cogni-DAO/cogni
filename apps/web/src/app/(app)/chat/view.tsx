@@ -66,7 +66,11 @@ const ChatWelcomeWithHint = () => (
   </div>
 );
 
-export function ChatView(): ReactNode {
+export function ChatView({
+  chatGptConnectionId,
+}: {
+  chatGptConnectionId?: string;
+}): ReactNode {
   const modelsQuery = useModels();
   const { data: creditsData, isLoading: isCreditsLoading } =
     useCreditsSummary();
@@ -80,6 +84,9 @@ export function ChatView(): ReactNode {
   // State
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   const [selectedGraph, setSelectedGraph] = useState(DEFAULT_GRAPH_ID);
+  const [modelConnectionId, setModelConnectionId] = useState<
+    string | undefined
+  >(undefined);
   const [chatError, setChatError] = useState<ChatError | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
 
@@ -315,6 +322,7 @@ export function ChatView(): ReactNode {
           onAuthExpired={() => signOut()}
           onError={handleError}
           onFinish={handleThreadFinish}
+          modelConnectionId={modelConnectionId}
         >
           <Thread
             welcomeMessage={<ChatWelcomeWithHint />}
@@ -326,6 +334,8 @@ export function ChatView(): ReactNode {
                 balance={balance}
                 selectedGraph={selectedGraph}
                 onGraphChange={handleGraphChange}
+                chatGptConnectionId={chatGptConnectionId}
+                onModelConnectionChange={setModelConnectionId}
               />
             }
             errorMessage={

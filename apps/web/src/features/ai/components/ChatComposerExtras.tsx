@@ -20,7 +20,10 @@ import {
   type GraphOption,
   GraphPicker,
 } from "@/features/ai/components/GraphPicker";
-import { ModelPicker } from "@/features/ai/components/ModelPicker";
+import {
+  type LlmBackend,
+  ModelPicker,
+} from "@/features/ai/components/ModelPicker";
 import { useModels } from "@/features/ai/hooks/useModels";
 import {
   setPreferredModelId,
@@ -70,6 +73,10 @@ export interface ChatComposerExtrasProps {
   balance?: number;
   selectedGraph?: GraphId;
   onGraphChange?: (graphId: GraphId) => void;
+  /** Connection ID for BYO ChatGPT — undefined if no connection linked */
+  chatGptConnectionId?: string;
+  /** Called when BYO backend changes */
+  onModelConnectionChange?: (connectionId: string | undefined) => void;
 }
 
 export function ChatComposerExtras({
@@ -79,9 +86,12 @@ export function ChatComposerExtras({
   balance = 0,
   selectedGraph = DEFAULT_GRAPH_ID,
   onGraphChange,
+  chatGptConnectionId,
+  onModelConnectionChange,
 }: Readonly<ChatComposerExtrasProps>) {
   const modelsQuery = useModels();
   const [localModel, setLocalModel] = useState(selectedModel);
+  const [backend, setBackend] = useState<LlmBackend>("openrouter");
 
   // Initialize from localStorage on mount, validate against API models
   useEffect(() => {
@@ -101,6 +111,13 @@ export function ChatComposerExtras({
     onModelChange(modelId);
   };
 
+  const handleBackendChange = (newBackend: LlmBackend) => {
+    setBackend(newBackend);
+    onModelConnectionChange?.(
+      newBackend === "chatgpt" ? chatGptConnectionId : undefined
+    );
+  };
+
   const handleGraphChange = (graphId: GraphId) => {
     onGraphChange?.(graphId);
   };
@@ -113,6 +130,9 @@ export function ChatComposerExtras({
         onValueChange={handleModelChange}
         disabled={modelsQuery.isLoading || modelsQuery.isError}
         balance={balance}
+        backend={backend}
+        onBackendChange={handleBackendChange}
+        hasChatGptConnection={!!chatGptConnectionId}
       />
       <GraphPicker
         graphs={AVAILABLE_GRAPHS}
