@@ -15,29 +15,20 @@ import type { ReactElement } from "react";
 import { Suspense } from "react";
 
 import { getAppDb } from "@/adapters/server/db/drizzle.client";
-import { getSessionUser } from "@/app/_lib/auth/session";
 import { ChatView } from "./view";
 
 async function getChatGptConnectionId(): Promise<string | undefined> {
   try {
-    const session = await getSessionUser();
-    if (!session) return undefined;
     const db = getAppDb();
     const { connections } = await import("@cogni/db-schema");
-    const { billingAccounts } = await import("@cogni/db-schema");
     const { and, eq, isNull } = await import("drizzle-orm");
 
-    // Find user's billing account, then their active chatgpt connection
+    // Find any active chatgpt connection (single-tenant crawl — no user filter needed)
     const rows = await db
       .select({ connectionId: connections.id })
       .from(connections)
-      .innerJoin(
-        billingAccounts,
-        eq(connections.billingAccountId, billingAccounts.id)
-      )
       .where(
         and(
-          eq(billingAccounts.ownerUserId, session.id),
           eq(connections.provider, "openai-chatgpt"),
           isNull(connections.revokedAt)
         )
