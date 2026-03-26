@@ -153,7 +153,7 @@ export async function GET(request: Request) {
   );
 
   // AEAD encrypt tokens
-  const encKeyHex = env.CONNECTIONS_ENCRYPTION_KEY;
+  const encKeyHex = serverEnv().CONNECTIONS_ENCRYPTION_KEY;
   if (!encKeyHex) {
     log.error("CONNECTIONS_ENCRYPTION_KEY not set — cannot store connection");
     redirect("/profile?error=config_error");
