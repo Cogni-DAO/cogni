@@ -165,11 +165,38 @@ export function createScopedGraphExecutor(params: {
         resolveOuterFinal = r;
       });
 
+      // INVARIANT: outerFinal resolves only after stream is fully consumed.
+      // Consumers must drain stream before awaiting final.
       const stream = (async function* () {
-        const connection = await broker.resolve(
-          connectionId,
-          params.billing.billingAccountId
-        );
+        let connection: import("@/ports").ResolvedConnection;
+        try {
+          connection = await broker.resolve(
+            connectionId,
+            params.billing.billingAccountId
+          );
+        } catch (err) {
+          container.log.error(
+            {
+              connectionId,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            "BYO connection resolution failed"
+          );
+          yield {
+            type: "error" as const,
+            error: "internal" as import("@cogni/ai-core").AiExecutionErrorCode,
+          };
+          yield { type: "done" as const };
+          // biome-ignore lint/style/noNonNullAssertion: assigned synchronously in Promise constructor
+          resolveOuterFinal!({
+            ok: false,
+            runId: req.runId,
+            requestId: ctx?.requestId ?? req.runId,
+            error: "internal" as import("@cogni/ai-core").AiExecutionErrorCode,
+          });
+          return;
+        }
+
         container.log.info(
           { connectionId, provider: connection.provider },
           "BYO connection resolved, swapping LlmService for this run"
@@ -190,7 +217,6 @@ export function createScopedGraphExecutor(params: {
         });
 
         yield* innerResult.stream;
-        // Forward inner final to outer
         const f = await innerResult.final;
         // biome-ignore lint/style/noNonNullAssertion: assigned synchronously in Promise constructor
         resolveOuterFinal!(f);

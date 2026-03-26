@@ -48,10 +48,9 @@ export class PreflightCreditCheckDecorator implements GraphExecutorPort {
     const result = this.inner.runGraph(req, ctx);
 
     // Start credit check eagerly (runs in parallel with any sync setup)
-    // Note: BYO-AI runs with modelConnectionId are handled by BYOExecutorDecorator
-    // inside this decorator's inner chain — they never reach the platform executor,
-    // so no usage_report events are emitted and no credits are consumed.
-    // No explicit bypass needed — stack ordering handles BYO billing naturally.
+    // Note: BYO-AI runs swap LlmService via ExecutionScope.llmServiceOverride —
+    // the graph runs normally but LLM calls route through CodexLlmAdapter.
+    // No usage_report is emitted for BYO runs (no litellmCallId), so no credits consumed.
     const checkPromise = this.checkFn(
       this.billingAccountId,
       req.model,

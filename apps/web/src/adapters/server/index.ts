@@ -33,8 +33,6 @@ export { NamespaceGraphRouter } from "./ai/aggregating-executor";
 export { BillingEnrichmentGraphExecutorDecorator } from "./ai/billing-enrichment.decorator";
 // Billing decorator for automatic billing enforcement at port level
 export { BillingGraphExecutorDecorator } from "./ai/billing-executor.decorator";
-// BYO-AI executor decorator — routes to user's LLM subscription when modelConnectionId present
-export { BYOExecutorDecorator } from "./ai/byo-executor.decorator";
 export {
   type CompletionStreamFn,
   type CompletionStreamParams,
