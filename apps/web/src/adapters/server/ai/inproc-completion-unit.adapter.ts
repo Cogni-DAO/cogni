@@ -285,34 +285,38 @@ export class InProcCompletionUnitAdapter {
     // Emit usage_report (but NOT done - caller handles that)
     const result = await final;
     if (result.ok) {
-      // CRITICAL: Missing litellmCallId is a BUG - fail the run deterministically
-      if (!result.litellmCallId) {
+      // Platform billing requires litellmCallId as the idempotent billing key.
+      // BYO runs (CodexLlmAdapter via scope override) don't go through LiteLLM —
+      // litellmCallId is legitimately absent. Skip usage_report for those runs.
+      // When litellmCallId IS expected (platform runs) but missing, that's still a bug.
+      if (result.litellmCallId) {
+        const fact: UsageFact = {
+          runId,
+          attempt,
+          source: "litellm",
+          executorType: "inproc",
+          graphId,
+          inputTokens: result.usage.promptTokens,
+          outputTokens: result.usage.completionTokens,
+          usageUnitId: result.litellmCallId,
+          ...(result.model && { model: result.model }),
+          ...(result.providerCostUsd !== undefined && {
+            costUsd: result.providerCostUsd,
+          }),
+        };
+        const usageEvent: UsageReportEvent = { type: "usage_report", fact };
+        yield usageEvent;
+      } else if (!scope.llmServiceOverride) {
+        // Platform run without call ID — billing integrity violation
         this.log.error(
           { runId, model: result.model },
           "CRITICAL: LiteLLM response missing call ID - billing incomplete, failing run"
         );
-        // Throw to propagate error to final (fail run, prevent silent under-billing)
         throw new Error(
           "Billing failed: LiteLLM response missing call ID (x-litellm-call-id)"
         );
       }
-
-      const fact: UsageFact = {
-        runId,
-        attempt,
-        source: "litellm",
-        executorType: "inproc",
-        graphId, // For per-agent analytics
-        inputTokens: result.usage.promptTokens,
-        outputTokens: result.usage.completionTokens,
-        usageUnitId: result.litellmCallId, // Required, no fallback
-        ...(result.model && { model: result.model }),
-        ...(result.providerCostUsd !== undefined && {
-          costUsd: result.providerCostUsd,
-        }),
-      };
-      const usageEvent: UsageReportEvent = { type: "usage_report", fact };
-      yield usageEvent;
+      // BYO run without litellmCallId — expected, no usage_report emitted
     }
     // NO done event - caller emits done when all iterations complete
   }
