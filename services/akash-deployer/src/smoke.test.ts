@@ -3,30 +3,28 @@
 
 /**
  * Module: `@cogni/akash-deployer-service/smoke.test`
- * Purpose: Smoke tests for the akash-deployer HTTP service.
+ * Purpose: E2E smoke tests — start server, hit every endpoint, verify responses.
  * Scope: Tests only. Does NOT contain production code.
  * Invariants: none
- * Side-effects: io
+ * Side-effects: IO
  * Links: docs/spec/akash-deploy-service.md
  * @internal
  */
 
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import pino from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { MockClusterProvider } from "./provider/mock-provider.js";
+import { createDeployRoutes } from "./routes/deploy.js";
+import { handleLivez, handleReadyz } from "./routes/health.js";
 
-// Inline minimal server creation for testing (avoids env config dependency)
+const DEPLOY_PATTERN = /^\/api\/v1\/deployments\/([^/]+)$/;
+
 async function startTestServer(): Promise<{ server: Server; baseUrl: string }> {
-  const { MockAkashAdapter } = await import(
-    "@cogni/akash-client/adapters/mock"
-  );
-  const { handleLivez, handleReadyz } = await import("./routes/health.js");
-  const { createDeployRoutes } = await import("./routes/deploy.js");
-  const pino = (await import("pino")).default;
-
   const log = pino({ level: "silent" });
-  const deployer = new MockAkashAdapter();
-  const routes = createDeployRoutes(deployer, log);
+  const provider = new MockClusterProvider();
+  const routes = createDeployRoutes(provider, log);
 
   const server = createServer(async (req, res) => {
     const url = new URL(
@@ -38,12 +36,16 @@ async function startTestServer(): Promise<{ server: Server; baseUrl: string }> {
 
     if (path === "/livez") return handleLivez(req, res);
     if (path === "/readyz") return handleReadyz(req, res);
-    if (method === "POST" && path === "/api/v1/crews/deploy")
-      return routes.deployCrew(req, res);
-    if (method === "POST" && path === "/api/v1/crews/preview")
-      return routes.previewSdl(req, res);
-    if (method === "GET" && path === "/api/v1/mcp/registry")
-      return routes.listMcpServers(req, res);
+    if (method === "POST" && path === "/api/v1/deploy")
+      return routes.deploy(req, res);
+    if (method === "POST" && path === "/api/v1/preview")
+      return routes.preview(req, res);
+
+    const m = DEPLOY_PATTERN.exec(path);
+    if (m) {
+      if (method === "GET") return routes.getDeployment(req, res);
+      if (method === "DELETE") return routes.closeDeployment(req, res);
+    }
 
     res.writeHead(404);
     res.end(JSON.stringify({ error: "Not found" }));
@@ -56,6 +58,27 @@ async function startTestServer(): Promise<{ server: Server; baseUrl: string }> {
     });
   });
 }
+
+const SAMPLE_REQUEST = {
+  name: "test-deploy",
+  services: [
+    {
+      name: "mcp-memory",
+      image: "ghcr.io/modelcontextprotocol/server-memory:latest",
+      port: 3103,
+      cpu: 0.25,
+      memory: "256Mi",
+      storage: "512Mi",
+    },
+    {
+      name: "agent-research",
+      image: "ghcr.io/cogni-dao/openclaw:latest",
+      port: 8080,
+      exposeGlobal: true,
+      connectsTo: ["mcp-memory"],
+    },
+  ],
+};
 
 describe("akash-deployer service", () => {
   let server: Server;
@@ -71,118 +94,105 @@ describe("akash-deployer service", () => {
     server?.close();
   });
 
-  it("GET /livez returns 200", async () => {
+  it("GET /livez → 200", async () => {
     const res = await fetch(`${baseUrl}/livez`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { status: string };
-    expect(body.status).toBe("ok");
+    expect(((await res.json()) as { status: string }).status).toBe("ok");
   });
 
-  it("GET /readyz returns 200", async () => {
+  it("GET /readyz → 200", async () => {
     const res = await fetch(`${baseUrl}/readyz`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { status: string };
-    expect(body.status).toBe("ok");
   });
 
-  it("GET /api/v1/mcp/registry returns server list", async () => {
-    const res = await fetch(`${baseUrl}/api/v1/mcp/registry`);
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { servers: unknown[] };
-    expect(body.servers.length).toBeGreaterThanOrEqual(10);
-  });
-
-  it("POST /api/v1/crews/preview generates SDL without deploying", async () => {
-    const crew = {
-      name: "test-crew",
-      mission: "Test",
-      mcpServers: [],
-      agents: [
-        {
-          name: "agent-test",
-          image: "ghcr.io/cogni-dao/openclaw:latest",
-          mcpConnections: [],
-          env: {},
-          resources: { cpu: 1, memory: "1Gi", storage: "2Gi" },
-          exposeGlobal: true,
-        },
-      ],
-      region: "us-west",
-      maxBudgetUakt: "1000000",
-    };
-
-    const res = await fetch(`${baseUrl}/api/v1/crews/preview`, {
+  it("POST /api/v1/preview → SDL without deploying", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(crew),
+      body: JSON.stringify(SAMPLE_REQUEST),
     });
-
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { yaml: string; services: string[] };
-    expect(body.yaml).toContain("version:");
-    expect(body.services).toContain("agent-test");
+    const body = (await res.json()) as { sdl: string; services: string[] };
+    expect(body.sdl).toContain("version:");
+    expect(body.services).toContain("agent-research");
+    expect(body.services).toContain("mcp-memory");
   });
 
-  it("POST /api/v1/crews/deploy creates deployment with mock adapter", async () => {
-    const crew = {
-      name: "deploy-test",
-      mission: "Integration test",
-      mcpServers: [
-        {
-          name: "mcp-memory",
-          image: "ghcr.io/cogni-dao/mcp-golden/memory:latest",
-          transport: "stdio",
-          port: 3103,
-          env: {},
-          resources: { cpu: 0.25, memory: "256Mi", storage: "512Mi" },
-          requiredAuth: [],
-        },
-      ],
-      agents: [
-        {
-          name: "agent-deploy-test",
-          image: "ghcr.io/cogni-dao/openclaw:latest",
-          mcpConnections: ["mcp-memory"],
-          env: {},
-          resources: { cpu: 1, memory: "1Gi", storage: "2Gi" },
-          exposeGlobal: true,
-        },
-      ],
-      region: "us-west",
-      maxBudgetUakt: "1000000",
-    };
-
-    const res = await fetch(`${baseUrl}/api/v1/crews/deploy`, {
+  it("POST /api/v1/deploy → creates deployment", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/deploy`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(crew),
+      body: JSON.stringify(SAMPLE_REQUEST),
     });
-
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
-      status: string;
       deploymentId: string;
-      provider: string;
+      status: string;
       services: string[];
+      endpoints: Record<string, string>;
     };
     expect(body.status).toBe("active");
-    expect(body.deploymentId).toBeTruthy();
-    expect(body.provider).toContain("akash1provider");
-    expect(body.services).toContain("mcp-memory");
-    expect(body.services).toContain("agent-deploy-test");
+    expect(body.deploymentId).toMatch(/^mock-/);
+    expect(body.services).toContain("agent-research");
+    expect(body.endpoints["agent-research"]).toBeDefined();
   });
 
-  it("POST /api/v1/crews/deploy rejects invalid JSON", async () => {
-    const res = await fetch(`${baseUrl}/api/v1/crews/deploy`, {
+  it("GET /api/v1/deployments/:id → retrieves deployment", async () => {
+    // Deploy first
+    const deployRes = await fetch(`${baseUrl}/api/v1/deploy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "get-test",
+        services: [{ name: "svc", image: "alpine", port: 80 }],
+      }),
+    });
+    const { deploymentId } = (await deployRes.json()) as {
+      deploymentId: string;
+    };
+
+    const res = await fetch(`${baseUrl}/api/v1/deployments/${deploymentId}`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { deploymentId: string }).deploymentId).toBe(
+      deploymentId
+    );
+  });
+
+  it("DELETE /api/v1/deployments/:id → closes deployment", async () => {
+    const deployRes = await fetch(`${baseUrl}/api/v1/deploy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "close-test",
+        services: [{ name: "svc", image: "alpine", port: 80 }],
+      }),
+    });
+    const { deploymentId } = (await deployRes.json()) as {
+      deploymentId: string;
+    };
+
+    const res = await fetch(`${baseUrl}/api/v1/deployments/${deploymentId}`, {
+      method: "DELETE",
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { status: string }).status).toBe("closed");
+  });
+
+  it("GET /api/v1/deployments/nonexistent → 404", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/deployments/nonexistent`);
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /api/v1/deploy with bad JSON → 400", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/deploy`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: "not json",
     });
-
     expect(res.status).toBe(400);
   });
 
-  it("GET /unknown returns 404", async () => {
+  it("GET /unknown → 404", async () => {
     const res = await fetch(`${baseUrl}/unknown`);
     expect(res.status).toBe(404);
   });

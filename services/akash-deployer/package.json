@@ -12,10 +12,8 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@cogni/akash-client": "workspace:*",
-    "@cogni/cosmos-wallet": "workspace:*",
     "pino": "^9.6.0",
-    "pino-http": "^10.3.0",
+    "yaml": "^2.6.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
