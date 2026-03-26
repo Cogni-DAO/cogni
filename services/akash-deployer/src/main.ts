@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/akash-deployer-service/main`
- * Purpose: HTTP server entrypoint for the Akash deployer service.
- * Scope: Server bootstrap — wires config, provider, routes. Does NOT contain business logic.
+ * Purpose: HTTP server entrypoint. Wires ContainerRuntimePort adapter to routes.
+ * Scope: Server bootstrap only. Does NOT contain business logic.
  * Invariants:
  *   - HEALTH_FIRST: /livez and /readyz always available.
  *   - GRACEFUL_SHUTDOWN: SIGTERM triggers clean disconnect.
@@ -16,9 +16,9 @@ import crypto from "node:crypto";
 import { createServer } from "node:http";
 import pino from "pino";
 import { loadConfig } from "./config/env.js";
-import { MockClusterProvider } from "./provider/mock-provider.js";
 import { createDeployRoutes } from "./routes/deploy.js";
 import { handleLivez, handleReadyz } from "./routes/health.js";
+import { MockContainerRuntime } from "./runtime/mock.adapter.js";
 
 const config = loadConfig();
 
@@ -28,8 +28,9 @@ if (process.env.NODE_ENV !== "production") {
 }
 const log = pino(pinoOpts);
 
-const provider = new MockClusterProvider();
-const routes = createDeployRoutes(provider, log);
+// v0: mock runtime. P1: DockerAdapter or AkashAdapter.
+const runtime = new MockContainerRuntime();
+const routes = createDeployRoutes(runtime, log);
 
 function verifyToken(provided: string | null, expected: string): boolean {
   if (!provided) return false;
@@ -39,7 +40,7 @@ function verifyToken(provided: string | null, expected: string): boolean {
   return crypto.timingSafeEqual(a, b);
 }
 
-const DEPLOYMENT_ID_PATTERN = /^\/api\/v1\/deployments\/([^/]+)$/;
+const DEPLOYMENT_PATTERN = /^\/api\/v1\/deployments\/([^/]+)$/;
 
 const server = createServer(async (req, res) => {
   const url = new URL(
@@ -52,7 +53,6 @@ const server = createServer(async (req, res) => {
   if (path === "/livez") return handleLivez(req, res);
   if (path === "/readyz") return handleReadyz(req, res);
 
-  // Auth
   if (path.startsWith("/api/") && config.INTERNAL_OPS_TOKEN) {
     const token = req.headers.authorization?.startsWith("Bearer ")
       ? req.headers.authorization.slice(7)
@@ -64,16 +64,15 @@ const server = createServer(async (req, res) => {
     }
   }
 
-  // Routes
   if (method === "POST" && path === "/api/v1/deploy")
     return routes.deploy(req, res);
-  if (method === "POST" && path === "/api/v1/preview")
-    return routes.preview(req, res);
+  if (method === "GET" && path === "/api/v1/workloads")
+    return routes.listWorkloads(req, res);
 
-  const idMatch = DEPLOYMENT_ID_PATTERN.exec(path);
-  if (idMatch) {
+  const m = DEPLOYMENT_PATTERN.exec(path);
+  if (m) {
     if (method === "GET") return routes.getDeployment(req, res);
-    if (method === "DELETE") return routes.closeDeployment(req, res);
+    if (method === "DELETE") return routes.stopDeployment(req, res);
   }
 
   res.writeHead(404, { "Content-Type": "application/json" });

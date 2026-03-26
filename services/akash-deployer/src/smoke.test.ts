@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/akash-deployer-service/smoke.test`
- * Purpose: E2E smoke tests — start server, hit every endpoint, verify responses.
+ * Purpose: E2E smoke tests — full deploy lifecycle via HTTP.
  * Scope: Tests only. Does NOT contain production code.
  * Invariants: none
  * Side-effects: IO
@@ -15,16 +15,16 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import pino from "pino";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { MockClusterProvider } from "./provider/mock-provider.js";
 import { createDeployRoutes } from "./routes/deploy.js";
 import { handleLivez, handleReadyz } from "./routes/health.js";
+import { MockContainerRuntime } from "./runtime/mock.adapter.js";
 
-const DEPLOY_PATTERN = /^\/api\/v1\/deployments\/([^/]+)$/;
+const DEPLOYMENT_PATTERN = /^\/api\/v1\/deployments\/([^/]+)$/;
 
 async function startTestServer(): Promise<{ server: Server; baseUrl: string }> {
   const log = pino({ level: "silent" });
-  const provider = new MockClusterProvider();
-  const routes = createDeployRoutes(provider, log);
+  const runtime = new MockContainerRuntime();
+  const routes = createDeployRoutes(runtime, log);
 
   const server = createServer(async (req, res) => {
     const url = new URL(
@@ -38,13 +38,13 @@ async function startTestServer(): Promise<{ server: Server; baseUrl: string }> {
     if (path === "/readyz") return handleReadyz(req, res);
     if (method === "POST" && path === "/api/v1/deploy")
       return routes.deploy(req, res);
-    if (method === "POST" && path === "/api/v1/preview")
-      return routes.preview(req, res);
+    if (method === "GET" && path === "/api/v1/workloads")
+      return routes.listWorkloads(req, res);
 
-    const m = DEPLOY_PATTERN.exec(path);
+    const m = DEPLOYMENT_PATTERN.exec(path);
     if (m) {
       if (method === "GET") return routes.getDeployment(req, res);
-      if (method === "DELETE") return routes.closeDeployment(req, res);
+      if (method === "DELETE") return routes.stopDeployment(req, res);
     }
 
     res.writeHead(404);
@@ -59,35 +59,31 @@ async function startTestServer(): Promise<{ server: Server; baseUrl: string }> {
   });
 }
 
-const SAMPLE_REQUEST = {
-  name: "test-deploy",
-  services: [
+const TWO_WORKLOADS = {
+  name: "test-deployment",
+  workloads: [
     {
-      name: "mcp-memory",
-      image: "ghcr.io/modelcontextprotocol/server-memory:latest",
-      port: 3103,
-      cpu: 0.25,
-      memory: "256Mi",
-      storage: "512Mi",
+      name: "mcp-github",
+      image: "ghcr.io/modelcontextprotocol/server-github:latest",
+      ports: [{ container: 3101, expose: false }],
     },
     {
       name: "agent-research",
       image: "ghcr.io/cogni-dao/openclaw:latest",
-      port: 8080,
-      exposeGlobal: true,
-      connectsTo: ["mcp-memory"],
+      ports: [{ container: 8080, expose: true }],
+      connectsTo: ["mcp-github"],
     },
   ],
 };
 
-describe("akash-deployer service", () => {
+describe("akash-deployer smoke tests", () => {
   let server: Server;
   let baseUrl: string;
 
   beforeAll(async () => {
-    const result = await startTestServer();
-    server = result.server;
-    baseUrl = result.baseUrl;
+    const r = await startTestServer();
+    server = r.server;
+    baseUrl = r.baseUrl;
   });
 
   afterAll(() => {
@@ -105,46 +101,32 @@ describe("akash-deployer service", () => {
     expect(res.status).toBe(200);
   });
 
-  it("POST /api/v1/preview → SDL without deploying", async () => {
-    const res = await fetch(`${baseUrl}/api/v1/preview`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(SAMPLE_REQUEST),
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { sdl: string; services: string[] };
-    expect(body.sdl).toContain("version:");
-    expect(body.services).toContain("agent-research");
-    expect(body.services).toContain("mcp-memory");
-  });
-
-  it("POST /api/v1/deploy → creates deployment", async () => {
+  it("POST /api/v1/deploy → deploys workloads", async () => {
     const res = await fetch(`${baseUrl}/api/v1/deploy`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(SAMPLE_REQUEST),
+      body: JSON.stringify(TWO_WORKLOADS),
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
       deploymentId: string;
       status: string;
-      services: string[];
-      endpoints: Record<string, string>;
+      workloads: unknown[];
     };
     expect(body.status).toBe("active");
-    expect(body.deploymentId).toMatch(/^mock-/);
-    expect(body.services).toContain("agent-research");
-    expect(body.endpoints["agent-research"]).toBeDefined();
+    expect(body.deploymentId).toMatch(/^deploy-/);
+    expect(body.workloads).toHaveLength(2);
   });
 
   it("GET /api/v1/deployments/:id → retrieves deployment", async () => {
-    // Deploy first
     const deployRes = await fetch(`${baseUrl}/api/v1/deploy`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: "get-test",
-        services: [{ name: "svc", image: "alpine", port: 80 }],
+        workloads: [
+          { name: "svc", image: "alpine", ports: [{ container: 80 }] },
+        ],
       }),
     });
     const { deploymentId } = (await deployRes.json()) as {
@@ -153,18 +135,23 @@ describe("akash-deployer service", () => {
 
     const res = await fetch(`${baseUrl}/api/v1/deployments/${deploymentId}`);
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { deploymentId: string }).deploymentId).toBe(
-      deploymentId
-    );
+    const body = (await res.json()) as {
+      deploymentId: string;
+      workloads: Array<{ status: string }>;
+    };
+    expect(body.deploymentId).toBe(deploymentId);
+    expect(body.workloads[0]?.status).toBe("running");
   });
 
-  it("DELETE /api/v1/deployments/:id → closes deployment", async () => {
+  it("DELETE /api/v1/deployments/:id → stops workloads", async () => {
     const deployRes = await fetch(`${baseUrl}/api/v1/deploy`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "close-test",
-        services: [{ name: "svc", image: "alpine", port: 80 }],
+        name: "stop-test",
+        workloads: [
+          { name: "svc", image: "alpine", ports: [{ container: 80 }] },
+        ],
       }),
     });
     const { deploymentId } = (await deployRes.json()) as {
@@ -175,11 +162,17 @@ describe("akash-deployer service", () => {
       method: "DELETE",
     });
     expect(res.status).toBe(200);
-    expect(((await res.json()) as { status: string }).status).toBe("closed");
   });
 
-  it("GET /api/v1/deployments/nonexistent → 404", async () => {
-    const res = await fetch(`${baseUrl}/api/v1/deployments/nonexistent`);
+  it("GET /api/v1/workloads → lists all workloads", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/workloads`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { workloads: unknown[] };
+    expect(body.workloads.length).toBeGreaterThan(0);
+  });
+
+  it("GET /api/v1/deployments/bogus → 404", async () => {
+    const res = await fetch(`${baseUrl}/api/v1/deployments/bogus`);
     expect(res.status).toBe(404);
   });
 

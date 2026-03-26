@@ -1,157 +1,210 @@
 ---
 id: akash-deploy-service-spec
 type: spec
-title: Akash Deploy Service — Workload Deployment to Decentralized Cloud
+title: Akash Deploy Service — Container Runtime & Workload Orchestration
 status: draft
 spec_state: draft
 trust: draft
-summary: On-demand deployment of containerized workloads (MCP servers + AI agents) to Akash Network. Implements ClusterProvider from node-launch spec. ToolHive for MCP lifecycle on k8s. SDL generator as service-internal utility.
-read_when: Working on Akash deployments, MCP hosting, workload orchestration, or ClusterProvider adapters.
+summary: Layered architecture for deploying containerized workloads to any compute target. ContainerRuntimePort deploys containers (Docker, k8s, Akash). ClusterProvider wraps it for namespace-level provisioning. ToolHive manages MCP-specific lifecycle. LangGraph orchestrator converts NL to workload specs.
+read_when: Working on container deployment, Akash integration, MCP hosting, ClusterProvider adapters, or workload orchestration.
 implements: proj.akash-crew-deploy
 owner: derekg1729
 created: 2026-03-26
 verified:
-tags: [infra, akash, mcp, agents, deployment]
+tags: [infra, akash, mcp, agents, deployment, containers]
 ---
 
-# Akash Deploy Service — Workload Deployment to Decentralized Cloud
+# Akash Deploy Service — Container Runtime & Workload Orchestration
 
 ## Context
 
-The node-launch spec defines `ClusterProvider` — a 4-method interface abstracting where workloads deploy. Today only `CherryK3sProvider` exists. This spec adds `AkashSdlProvider` as a second adapter, enabling the same provisioning workflow to deploy to Akash's decentralized cloud.
+The node-launch spec defines `ClusterProvider` for namespace-level provisioning (create namespace, apply manifests, inject secrets). This works for the `provisionNode` workflow but is too high-level to describe what actually happens when containers deploy to Docker, k8s, or Akash.
 
-For MCP server management specifically, ToolHive (Apache 2.0, by Stacklok) provides a Kubernetes operator with a built-in registry, CRD-based definitions, and automatic RBAC/service discovery. We use ToolHive on k8s and translate its patterns to SDL for Akash.
+We need a lower-level primitive — a container runtime port that deploys images without knowing what's inside them. `ClusterProvider` wraps this for namespace-level orchestration. ToolHive sits above both as an MCP-aware lifecycle manager.
 
 ## Goal
 
-Implement `ClusterProvider` for Akash Network. A user describes workloads (MCP servers + agents), the system generates Akash SDL, and deploys via the standard provisioning workflow.
+Define a clean layered architecture where each layer has one job, the port doesn't know MCP vs agent vs anything else, and adapters for Docker/k8s/Akash are interchangeable.
 
 ## Non-Goals
 
-| Item                         | Reason                                                |
-| ---------------------------- | ----------------------------------------------------- |
-| Bespoke MCP registry         | ToolHive has a built-in registry of vetted servers    |
-| New port abstractions        | `ClusterProvider` from node-launch is the only port   |
-| Cosmos wallet in v0          | Defer to P1 when live Akash network is needed         |
-| Custom container builds      | Golden images or ToolHive registry only               |
-| New domain entities ("crew") | Workloads are just container specs — no new semantics |
+| Item                                | Reason                                           |
+| ----------------------------------- | ------------------------------------------------ |
+| ToolHive Akash runtime contribution | Evaluate at P1; Go contribution to external repo |
+| Custom MCP registry                 | ToolHive built-in registry handles this          |
+| Cosmos wallet in v0                 | No live Akash deployment yet                     |
+| New domain entities                 | Workloads are container specs, nothing more      |
 
 ## Core Invariants
 
-1. **ONE_PORT**: `ClusterProvider` is the only deployment port. No `AkashDeployPort`, no `CrewPort`. Akash is an adapter, not a capability.
+1. **CONTAINER_AGNOSTIC**: `ContainerRuntimePort` deploys container images. It does not know if the image is an MCP server, an AI agent, a database, or anything else.
 
-2. **TOOLHIVE_FOR_MCP**: MCP server discovery, lifecycle, and security use ToolHive on k8s. For Akash, we translate the same container specs to SDL.
+2. **RUNTIME_IS_PLUGGABLE**: Docker, k8s, and Akash are adapters behind the same port. Swapping runtime is a config change, not a redesign.
 
-3. **SDL_IS_INTERNAL**: SDL generation is an adapter-internal utility function. Not a package, not a port, not a public API.
+3. **CLUSTER_WRAPS_RUNTIME**: `ClusterProvider` from node-launch composes `ContainerRuntimePort` calls. `applyManifests` deploys N containers. `createSecret` injects env vars. The provisioning workflow doesn't call the runtime directly.
 
-4. **PACKAGES_ARE_PURE**: No packages needed for v0. `ClusterProvider` interface is defined in the node-launch spec. SDL generation lives in the service adapter.
+4. **TOOLHIVE_FOR_MCP**: MCP server discovery, transport proxying, secrets, and health checks use ToolHive. For non-MCP containers, ToolHive is bypassed.
 
-5. **GRAPH_VIA_DI**: The orchestrator graph receives all capabilities via dependency injection. No hard imports of deployment infrastructure.
+5. **SDL_IS_ADAPTER_INTERNAL**: Akash SDL generation is inside the Akash adapter. Not a port, not a package, not a public API.
 
 ## Design
 
-### Component Map (v0 crawl)
+### Layer Architecture
+
+```
+┌──────────────────────────────────────────────────────┐
+│  LAYER 4: ORCHESTRATION                              │
+│  LangGraph crew-orchestrator graph                   │
+│  NL → list of WorkloadSpec (image, env, ports)       │
+│  Calls Layer 3 for MCP servers, Layer 2 for agents   │
+└──────────────────┬───────────────────────────────────┘
+                   │
+┌──────────────────▼───────────────────────────────────┐
+│  LAYER 3: MCP LIFECYCLE (ToolHive)                   │
+│  Registry, transport proxy, secrets, health, RBAC    │
+│  OSS dependency — not our code                       │
+│  Pass-through for non-MCP containers                 │
+└──────────────────┬───────────────────────────────────┘
+                   │
+┌──────────────────▼───────────────────────────────────┐
+│  LAYER 2: CONTAINER RUNTIME (our port)               │
+│  ContainerRuntimePort                                │
+│    deploy(spec) → WorkloadInfo                       │
+│    stop(id) → void                                   │
+│    list() → WorkloadInfo[]                           │
+│    status(id) → WorkloadStatus                       │
+│  Adapters: Docker, K8s, Akash                        │
+└──────────────────┬───────────────────────────────────┘
+                   │
+┌──────────────────▼───────────────────────────────────┐
+│  LAYER 1: INFRASTRUCTURE                             │
+│  Docker daemon, k8s API, Akash provider network      │
+│  External systems — not our code                     │
+└──────────────────────────────────────────────────────┘
+```
+
+### ClusterProvider wraps ContainerRuntimePort
+
+```
+provisionNode workflow (from node-launch spec)
+  → ClusterProvider.ensureCluster(env)
+  → ClusterProvider.createNamespace(conn, name)
+  → ClusterProvider.applyManifests(conn, path)
+      → ContainerRuntimePort.deploy(container1)
+      → ContainerRuntimePort.deploy(container2)
+      → ContainerRuntimePort.deploy(containerN)
+  → ClusterProvider.createSecret(conn, ns, data)
+      → ContainerRuntimePort.deploy() with env injection
+```
+
+### ContainerRuntimePort
+
+```typescript
+interface ContainerRuntimePort {
+  deploy(spec: WorkloadSpec): Promise<WorkloadInfo>;
+  stop(id: string): Promise<void>;
+  list(): Promise<WorkloadInfo[]>;
+  status(id: string): Promise<WorkloadStatus>;
+}
+
+interface WorkloadSpec {
+  name: string; // DNS-safe identifier
+  image: string; // container image ref
+  env: Record<string, string>; // environment variables
+  ports: PortMapping[]; // container→host mappings
+  resources: ResourceLimits; // cpu, memory, storage
+  connectsTo: string[]; // service names for internal networking
+}
+
+interface PortMapping {
+  container: number; // port inside container
+  host?: number; // port on host (auto-assigned if omitted)
+  expose: boolean; // expose externally
+}
+
+interface ResourceLimits {
+  cpu: number; // CPU units (e.g., 0.5)
+  memory: string; // e.g., "512Mi"
+  storage: string; // e.g., "1Gi"
+}
+
+interface WorkloadInfo {
+  id: string; // runtime-specific ID
+  name: string;
+  status: WorkloadStatus;
+  endpoints: Record<string, string>; // port name → URL
+  startedAt: string;
+}
+
+type WorkloadStatus = "pending" | "running" | "stopped" | "failed";
+```
+
+### Adapters
+
+**DockerAdapter** — Calls Docker Engine API via `dockerode` or HTTP. For local dev. Maps `deploy()` to `docker run`, `stop()` to `docker stop`, etc. Networking via Docker bridge. This is what ToolHive uses under the hood for its Docker runtime.
+
+**K8sAdapter** — Creates k8s Deployment + Service + optional Ingress. For shared cluster (Cherry k3s). When deploying MCP servers, delegates to ToolHive's k8s operator. For non-MCP containers, creates raw k8s resources.
+
+**AkashAdapter** — Translates `WorkloadSpec[]` → Akash SDL, submits via `@akashnetwork/akashjs`. Handles bid selection, lease creation, manifest sending. SDL generation is internal to this adapter.
+
+**MockAdapter** — In-memory Map. For unit tests and API shape validation.
+
+### ToolHive Integration
+
+ToolHive sits at Layer 3. Two integration modes:
+
+**Local dev (v0):** `thv serve` runs alongside our service. Orchestrator calls ToolHive REST API (`POST /api/workloads`) for MCP servers. ToolHive uses Docker underneath. Non-MCP containers deploy via `ContainerRuntimePort` directly with DockerAdapter.
+
+**k8s (P1):** ToolHive operator runs in cluster. Orchestrator creates `MCPServer` CRDs for MCP servers. ToolHive operator handles lifecycle. Non-MCP containers deploy via K8sAdapter.
+
+**Akash (P1+):** Evaluate contributing Akash runtime to ToolHive (`pkg/container/runtime/akash/`). If viable, `thv run --runtime akash` deploys MCP servers to Akash natively. If not, our AkashAdapter handles all containers and we bypass ToolHive for Akash deployments.
+
+### Component Map (v0)
 
 ```
 services/akash-deployer/
   ├── src/
-  │   ├── provider/           ClusterProvider interface + MockProvider
-  │   ├── sdl/                SDL generator (internal utility)
-  │   ├── routes/             HTTP handlers
-  │   ├── config/             Env loading
-  │   └── main.ts             Server lifecycle
-  ├── Dockerfile
+  │   ├── runtime/
+  │   │   ├── container-runtime.port.ts    ContainerRuntimePort interface
+  │   │   ├── mock.adapter.ts              In-memory mock
+  │   │   └── docker.adapter.ts            Docker Engine API (stretch goal)
+  │   ├── sdl/
+  │   │   └── sdl-generator.ts             Pure fn for Akash adapter (internal)
+  │   ├── routes/
+  │   │   ├── deploy.ts                    HTTP handlers
+  │   │   └── health.ts                    /livez, /readyz
+  │   ├── config/env.ts
+  │   └── main.ts
   └── tests/
-
-packages/langgraph-graphs/
-  └── src/graphs/crew-orchestrator/   NL → workload specs → ClusterProvider (via DI)
-
-infra/cd/base/akash-deployer/        Kustomize manifests
 ```
-
-No standalone packages. The service owns all Akash-specific code.
-
-### ClusterProvider Interface (from node-launch spec)
-
-```typescript
-interface ClusterProvider {
-  ensureCluster(env: string): Promise<ClusterConnection>;
-  createNamespace(conn: ClusterConnection, name: string): Promise<void>;
-  applyManifests(conn: ClusterConnection, path: string): Promise<void>;
-  createSecret(
-    conn: ClusterConnection,
-    ns: string,
-    data: Record<string, string>
-  ): Promise<void>;
-}
-```
-
-Adapters:
-
-- `CherryK3sProvider` — kubectl + kustomize + ToolHive operator (existing)
-- `AkashSdlProvider` — @akashnetwork/akashjs + SDL (this spec, P1)
-- `MockClusterProvider` — in-memory, for v0 testing
-
-### SDL Generation (adapter-internal)
-
-Pure function: container specs → Akash SDL YAML. Lives inside `services/akash-deployer/src/sdl/`. Not exported. Not a package.
-
-```typescript
-function generateSdl(services: ServiceSpec[]): string;
-```
-
-### ToolHive Integration (P1 — k8s path)
-
-On k8s, MCP servers are `MCPServer` CRDs managed by ToolHive operator:
-
-```yaml
-apiVersion: toolhive.stacklok.dev/v1alpha1
-kind: MCPServer
-metadata:
-  name: mcp-github
-spec:
-  image: ghcr.io/modelcontextprotocol/server-github
-  transport: stdio
-  secrets:
-    - name: github-token
-      key: token
-      targetEnvName: GITHUB_TOKEN
-```
-
-ToolHive handles: registry lookup, container lifecycle, RBAC, service discovery, secrets injection. We don't rebuild any of this.
-
-For Akash (no k8s operator), the same container specs are translated to SDL by the adapter.
-
-### Orchestrator Graph
-
-React agent with tools that call `ClusterProvider` methods via DI. Accepts natural language workload descriptions, resolves to container specs, deploys.
-
-Tools receive all capabilities through `CrewOrchestratorToolDeps` — the graph package has zero deployment-infrastructure imports.
 
 ## Acceptance Checks
 
-1. `services/akash-deployer` starts and serves health, deploy, preview endpoints
-2. SDL generator produces valid YAML from container specs (unit tested)
-3. Mock provider handles full create → query → close lifecycle
-4. Orchestrator graph tools accept deps via DI (no hard imports)
-5. `pnpm check` passes — all 13 checks green
-6. Service responds correctly to curl (e2e proof)
+1. `ContainerRuntimePort` interface defined with deploy/stop/list/status
+2. MockAdapter passes full lifecycle test (deploy→status→stop)
+3. HTTP API accepts WorkloadSpec[], deploys via runtime port
+4. SDL generator produces valid YAML from WorkloadSpec[] (unit tested)
+5. Service starts, health endpoints respond, deploy lifecycle works e2e
+6. `pnpm check` — all checks green
+7. No MCP vs agent distinction in the runtime port
 
 ## Open Questions
 
-1. **ToolHive on Akash**: ToolHive is k8s-native. On Akash there's no operator. How much of ToolHive's registry data can we reuse for SDL generation?
-2. **Akash JS SDK maturity**: Is `@akashnetwork/akashjs` production-ready or do we need CLI fallback?
-3. **MCP transport on Akash**: ToolHive proxies stdio→HTTP. On Akash, should MCP servers run SSE/HTTP natively?
+1. **ToolHive Akash runtime**: Is the Go runtime interface clean enough for a community Akash adapter contribution? Needs source review.
+2. **Docker adapter in v0 or P1**: Should v0 ship with real Docker deployment, or is mock sufficient to prove the architecture?
+3. **ToolHive API stability**: `thv serve` API is undocumented beyond OpenAPI spec. Is it stable enough to depend on?
 
 ## Dependencies
 
-- node-launch spec (`ClusterProvider` interface)
+- node-launch spec (ClusterProvider interface)
 - task.0149 (k3s + ArgoCD foundation)
-- ToolHive operator (for k8s MCP management at P1)
-- @akashnetwork/akashjs (for live Akash at P1)
+- ToolHive (`brew install thv` for local dev)
+- @akashnetwork/akashjs (P1, for AkashAdapter)
+- dockerode or Docker Engine API (for DockerAdapter)
 
 ## Related
 
-- [Node Launch Spec](./node-launch.md) — `ClusterProvider` interface
-- [ToolHive Docs](https://docs.stacklok.com/toolhive/) — MCP server management
-- [Akash Crew Deploy Project](../../work/projects/proj.akash-crew-deploy.md) — Roadmap
+- [Node Launch Spec](./node-launch.md) — ClusterProvider interface
+- [ToolHive Docs](https://docs.stacklok.com/toolhive/) — MCP lifecycle
+- [ToolHive Runtime Interface](https://github.com/stacklok/toolhive/blob/main/pkg/container/runtime/types.go) — Go runtime port
+- [Akash Crew Deploy Project](../../work/projects/proj.akash-crew-deploy.md)

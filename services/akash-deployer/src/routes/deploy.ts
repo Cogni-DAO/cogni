@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/akash-deployer-service/routes/deploy`
- * Purpose: HTTP handlers for workload deployment.
- * Scope: Route handlers — delegates to MockClusterProvider. Does NOT contain business logic.
+ * Purpose: HTTP handlers for workload deployment via ContainerRuntimePort.
+ * Scope: Route handlers — delegates to runtime adapter. Does NOT contain business logic.
  * Invariants: none
  * Side-effects: IO
  * Links: docs/spec/akash-deploy-service.md
@@ -13,8 +13,11 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Logger } from "pino";
-import { deployRequestSchema } from "../provider/cluster-provider.js";
-import type { MockClusterProvider } from "../provider/mock-provider.js";
+import type {
+  ContainerRuntimePort,
+  DeploymentSummary,
+} from "../runtime/container-runtime.port.js";
+import { deployRequestSchema } from "../runtime/container-runtime.port.js";
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -30,8 +33,13 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-export function createDeployRoutes(provider: MockClusterProvider, log: Logger) {
+/** In-memory deployment index — maps deploymentId to workload IDs */
+const deployments = new Map<string, DeploymentSummary>();
+let deployCounter = 0;
+
+export function createDeployRoutes(runtime: ContainerRuntimePort, log: Logger) {
   return {
+    /** POST /api/v1/deploy — Deploy workloads */
     async deploy(req: IncomingMessage, res: ServerResponse): Promise<void> {
       try {
         const body = await readBody(req);
@@ -39,13 +47,28 @@ export function createDeployRoutes(provider: MockClusterProvider, log: Logger) {
         const request = deployRequestSchema.parse(parsed);
 
         log.info(
-          { name: request.name, serviceCount: request.services.length },
+          { name: request.name, count: request.workloads.length },
           "Deploying"
         );
-        const deployment = await provider.deploy(request);
-        log.info({ deploymentId: deployment.deploymentId }, "Active");
 
-        json(res, 201, deployment);
+        const results = await Promise.all(
+          request.workloads.map((spec) => runtime.deploy(spec))
+        );
+
+        const deploymentId = `deploy-${(++deployCounter).toString()}`;
+        const allRunning = results.every((r) => r.status === "running");
+
+        const summary: DeploymentSummary = {
+          deploymentId,
+          name: request.name,
+          workloads: results,
+          status: allRunning ? "active" : "partial",
+        };
+
+        deployments.set(deploymentId, summary);
+        log.info({ deploymentId, workloads: results.length }, "Deployed");
+
+        json(res, 201, summary);
       } catch (err) {
         log.error({ err }, "Deploy failed");
         if (err instanceof SyntaxError) {
@@ -60,27 +83,7 @@ export function createDeployRoutes(provider: MockClusterProvider, log: Logger) {
       }
     },
 
-    async preview(req: IncomingMessage, res: ServerResponse): Promise<void> {
-      try {
-        const body = await readBody(req);
-        const parsed = JSON.parse(body) as unknown;
-        const request = deployRequestSchema.parse(parsed);
-        const { generateSdl } = await import("../sdl/sdl-generator.js");
-        const sdl = generateSdl(request.services);
-
-        json(res, 200, {
-          name: request.name,
-          services: request.services.map((s) => s.name),
-          sdl,
-        });
-      } catch (err) {
-        log.error({ err }, "Preview failed");
-        json(res, 400, {
-          error: err instanceof Error ? err.message : "Invalid request",
-        });
-      }
-    },
-
+    /** GET /api/v1/deployments/:id — Get deployment status */
     async getDeployment(
       req: IncomingMessage,
       res: ServerResponse
@@ -95,15 +98,25 @@ export function createDeployRoutes(provider: MockClusterProvider, log: Logger) {
         return;
       }
 
-      const info = await provider.getDeployment(match[1]);
-      if (!info) {
+      const summary = deployments.get(match[1]);
+      if (!summary) {
         json(res, 404, { error: "Not found" });
         return;
       }
-      json(res, 200, info);
+
+      // Refresh statuses from runtime
+      const refreshed = await Promise.all(
+        summary.workloads.map(async (w) => {
+          const s = await runtime.status(w.id).catch(() => "failed" as const);
+          return { ...w, status: s };
+        })
+      );
+
+      json(res, 200, { ...summary, workloads: refreshed });
     },
 
-    async closeDeployment(
+    /** DELETE /api/v1/deployments/:id — Stop all workloads in a deployment */
+    async stopDeployment(
       req: IncomingMessage,
       res: ServerResponse
     ): Promise<void> {
@@ -117,13 +130,30 @@ export function createDeployRoutes(provider: MockClusterProvider, log: Logger) {
         return;
       }
 
-      const info = await provider.closeDeployment(match[1]);
-      if (!info) {
+      const summary = deployments.get(match[1]);
+      if (!summary) {
         json(res, 404, { error: "Not found" });
         return;
       }
-      log.info({ deploymentId: match[1] }, "Closed");
-      json(res, 200, info);
+
+      await Promise.all(
+        summary.workloads.map((w) => runtime.stop(w.id).catch(() => {}))
+      );
+
+      const stopped: DeploymentSummary = { ...summary, status: "failed" };
+      deployments.set(match[1], stopped);
+      log.info({ deploymentId: match[1] }, "Stopped");
+
+      json(res, 200, stopped);
+    },
+
+    /** GET /api/v1/workloads — List all workloads across all deployments */
+    async listWorkloads(
+      _req: IncomingMessage,
+      res: ServerResponse
+    ): Promise<void> {
+      const all = await runtime.list();
+      json(res, 200, { workloads: all });
     },
   };
 }
