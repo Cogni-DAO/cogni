@@ -2,114 +2,109 @@
 id: proj.agent-workforce
 type: project
 primary_charter: ENGINEERING
-title: Agent Workforce — Playbook-Driven Role Architecture
+title: Agent Workforce — LangGraph Roles on Temporal Schedules
 state: Active
 priority: 0
 estimate: 5
-summary: "Generalize the mission-control operator loop into a multi-role agent workforce with typed RoleDefinitions, queue-filtered dispatch, and playbook-driven execution"
-outcome: "Multiple AI agents run concurrently on independent schedules, each scoped to a typed Role (CEO, Git Reviewer, PM, Data Analyst). Roles filter work queues, map statuses to skills, and enforce policies. Playbook quality drives agent quality. Dashboard reads persisted snapshots."
+summary: "Multi-role agent workforce using configurable LangGraph graphs, one reusable Temporal workflow, and WorkItemPort queue filtering — replacing the OpenClaw-based mission-control operator loop"
+outcome: "Multiple AI agents run on independent Temporal schedules, each a LangGraph catalog entry with its own system prompt, tool set, and queue filter. CEO triages all work. Git Reviewer drives PRs to merge. Adding a role = adding a catalog entry, not writing code."
 assignees:
   - derekg1729
 created: 2026-03-26
 updated: 2026-03-26
-labels: [agents, governance, workforce, mission-control]
+labels: [agents, governance, workforce, langgraph, temporal]
 ---
 
-# Agent Workforce — Playbook-Driven Role Architecture
+# Agent Workforce — LangGraph Roles on Temporal Schedules
 
 ## Goal
 
-Evolve the single-agent mission-control operator loop (task.0162) into a multi-role agent workforce. Each role is a typed configuration binding an agent to a filtered work queue, a set of playbooks (skills), and an execution policy. The existing infrastructure (WorkItemPort, skills, Temporal schedules, OpenClaw gateway) remains unchanged — roles are a configuration layer on top.
+Replace the OpenClaw-based mission-control operator loop with LangGraph graphs running on Temporal schedules. Each role is a catalog entry (system prompt + tools + queue filter). One reusable `RoleHeartbeatWorkflow` orchestrates all roles.
 
 ## Context
 
-### What exists
+### What exists and works
 
-- **mc-controller.ts** (task.0162): Deterministic observe→gate→pick→snapshot→output loop for CEO agent
-- **WorkItemPort** (proj.agentic-project-management): Typed work item CRUD with query filtering
-- **Skills** (.openclaw/skills/): 40+ SKILL.md playbooks mapping to lifecycle statuses
-- **Temporal schedules**: HEARTBEAT fires hourly, triggers the operator loop
-- **OpenClaw gateway**: Agent runtime with SOUL.md persona, model routing, Discord reporting
-- **AgentSnapshot**: Persisted JSON state after every controller run
+- **5 LangGraph graphs** in `LANGGRAPH_CATALOG` — all using `createReactAgent`
+- **GraphRunWorkflow** — generic Temporal orchestration for any graph
+- **PrReviewWorkflow** — proven pattern: gather context → run graph → act on result
+- **GraphExecutorPort** — fully decorated (billing, observability, credit checks)
+- **WorkItemQueryPort** — typed work queue with filtering
+- **Temporal schedules** — governance heartbeat already fires hourly
 
-### What's missing
+### What's broken
 
-1. **Multiple agents** — only one heartbeat loop exists, processing one global queue
-2. **Queue scoping** — no way to say "this agent only handles PRs" or "this agent only triages"
-3. **Role-specific policies** — all items share the same status weights and tier rules
-4. **Escalation** — stale items rot silently (PR #562 sat for 2 weeks)
-5. **Outcome ownership** — the review agent comments but doesn't drive to merge/reject
+- Mission-control is a shell-script CLI (`mc-controller.ts` + `mc-status.sh`) invoked by OpenClaw
+- One agent, one global queue, no role specialization
+- PR #562 sat 2 weeks — no agent owns PR lifecycle
+- System prompts hardcoded per graph factory — can't create roles without new factory files
 
 ## As-Built Specs
 
-- [Agent Roles](../../docs/spec/agent-roles.md) — Role abstraction, type definitions, starter roles, invariants
+- [Agent Roles](../../docs/spec/agent-roles.md) — Full design: parameterized graphs, reusable workflow, catalog-as-registry
 
 ## Roadmap
 
-### Crawl (P0) — Generalize Controller + Git Reviewer Role
+### Crawl (P0) — Two Roles on LangGraph + Temporal
 
-**Goal:** mc-controller.ts accepts `--role <id>`. Two roles defined in code: CEO (existing logic, renamed) and Git Reviewer (new, scoped to `needs_merge`).
+**Goal:** CEO Operator and Git Reviewer running as LangGraph graphs on Temporal schedules.
 
-| Deliverable                                                                          | Status      | Est | Work Item |
-| ------------------------------------------------------------------------------------ | ----------- | --- | --------- |
-| Extract `RoleDefinition`, `WorkQueueFilter`, `PlaybookMap`, `RolePolicy` Zod schemas | Not Started | 1   | task.0207 |
-| Refactor mc-controller.ts to accept `--role <id>` parameter                          | Not Started | 1   | task.0207 |
-| Define `CEO_ROLE` constant (rename existing hardcoded logic)                         | Not Started | 0.5 | task.0207 |
-| Define `GIT_REVIEWER_ROLE` constant (filter: `needs_merge` only)                     | Not Started | 0.5 | task.0207 |
-| Add `roles` field to repo-spec.yaml schedule entries                                 | Not Started | 0.5 | task.0207 |
-| Add Git Reviewer schedule to repo-spec.yaml (cron: every 4h)                         | Not Started | 0.5 | task.0207 |
-| Enhance `/review-implementation` skill for outcome ownership (fix CI, merge/reject)  | Not Started | 2   | task.0208 |
+| Deliverable                                                                 | Status      | Est | Work Item |
+| --------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Add `systemPrompt` to `CreateReactAgentGraphOptions` + `CatalogEntry`       | Not Started | 0.5 | task.0207 |
+| Create `createOperatorGraph` generic factory                                | Not Started | 0.5 | task.0207 |
+| CEO Operator catalog entry + system prompt                                  | Not Started | 1   | task.0207 |
+| Git Reviewer catalog entry + system prompt                                  | Not Started | 1   | task.0207 |
+| Operator tools: `work_item_query`, `work_item_transition`, `discord_post`   | Not Started | 2   | task.0207 |
+| `RoleHeartbeatWorkflow` + activities (pick, build context, process outcome) | Not Started | 2   | task.0208 |
+| Wire `HEARTBEAT` schedule to `RoleHeartbeatWorkflow`                        | Not Started | 1   | task.0208 |
+| Add `PR_LIFECYCLE` schedule to repo-spec.yaml                               | Not Started | 0.5 | task.0208 |
 
-### Walk (P1) — Feedback Loop + PM/Analyst Roles + Dashboard
+### Walk (P1) — Feedback Loop + More Roles + Dashboard
 
-**Goal:** Playbook outcome logging, two additional roles, role-specific dashboard panels.
+**Goal:** Outcome logging, PM/Analyst roles, webhook triggers, dashboard.
 
-| Deliverable                                                                       | Status      | Est | Work Item            |
-| --------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| `PlaybookOutcome` logging after each dispatch                                     | Not Started | 1   | (create at P1 start) |
-| Define `PM_ROLE` (filter: `needs_triage`)                                         | Not Started | 1   | (create at P1 start) |
-| Define `DATA_ANALYST_ROLE` (filter: labels `metrics`/`observability`/`cost`)      | Not Started | 1   | (create at P1 start) |
-| API contract: `agent-roles.snapshot.v1.contract.ts`                               | Not Started | 1   | (create at P1 start) |
-| Dashboard: role overview panel (reads AgentSnapshot files)                        | Not Started | 2   | (create at P1 start) |
-| Escalation: stale item detection + Discord notification                           | Not Started | 1   | (create at P1 start) |
-| Webhook triggers for Git Reviewer (GitHub PR events → Temporal signal)            | Not Started | 2   | (create at P1 start) |
-| Playbook improvement: weekly metaprompt reviews failures, proposes SKILL.md edits | Not Started | 2   | (create at P1 start) |
+| Deliverable                                                           | Status      | Est | Work Item            |
+| --------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Outcome logging per role dispatch                                     | Not Started | 1   | (create at P1 start) |
+| PM Triage role (catalog entry + prompt + `needs_triage` filter)       | Not Started | 1   | (create at P1 start) |
+| Data Analyst role (catalog entry + prompt + metrics labels filter)    | Not Started | 1   | (create at P1 start) |
+| Webhook trigger for Git Reviewer (GitHub PR events → Temporal signal) | Not Started | 2   | (create at P1 start) |
+| Dashboard API: role snapshots from workflow results                   | Not Started | 2   | (create at P1 start) |
+| Prompt versioning and A/B testing                                     | Not Started | 2   | (create at P1 start) |
 
-### Run (P2) — Role Config Files + Cross-Role Orchestration
+### Run (P2) — Self-Improving + Cross-Role
 
-**Goal:** Roles move from code constants to config files. Roles can hand off items to each other.
+**Goal:** Prompts improve from feedback. Roles escalate to each other.
 
-| Deliverable                                                                          | Status      | Est | Work Item            |
-| ------------------------------------------------------------------------------------ | ----------- | --- | -------------------- |
-| Extract role definitions to `work/roles/role.*.yaml` files                           | Not Started | 1   | (create at P2 start) |
-| `RoleQueryPort` + markdown/YAML adapter for dashboard                                | Not Started | 2   | (create at P2 start) |
-| Cross-role handoff (reviewer → PM on reject, PM → CEO on escalation)                 | Not Started | 2   | (create at P2 start) |
-| Role performance dashboard (success rates, time-to-resolution, escalation frequency) | Not Started | 2   | (create at P2 start) |
-| Role definitions in repo-spec.yaml for fork-time customization                       | Not Started | 1   | (create at P2 start) |
+| Deliverable                                                          | Status      | Est | Work Item            |
+| -------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Self-improving prompts (metaprompt reviews failures, proposes edits) | Not Started | 2   | (create at P2 start) |
+| Cross-role escalation (reviewer → PM → CEO via work item creation)   | Not Started | 2   | (create at P2 start) |
+| Role performance dashboard (success rate, time-to-resolution)        | Not Started | 2   | (create at P2 start) |
 
 ## Constraints
 
-- `ROLE_IS_CONFIG` — Roles are typed constants (crawl) or config files (walk/run), never database entities
-- `SKILL_OWNS_OUTCOME` — Role quality comes from skill (playbook) quality, not schema sophistication
-- `CODE_FIRST_NO_YAML` — TypeScript + Zod until 3+ roles prove the shape
-- `REUSE_WORKQUERY` — Queue filtering maps directly to `WorkQuery` from `@cogni/work-items`
-- `CONTROLLER_NOT_REWRITTEN` — mc-controller.ts gains a `--role` param; the loop logic is unchanged
-- `SNAPSHOT_PER_ROLE` — Each role produces independent AgentSnapshot files
+- `CATALOG_IS_ROLE_REGISTRY` — Adding a role = adding a catalog entry (config, not code)
+- `ONE_WORKFLOW_ALL_ROLES` — `RoleHeartbeatWorkflow` is reusable across all roles
+- `REUSE_GRAPH_RUN_WORKFLOW` — Delegates to existing `GraphRunWorkflow` via `executeChild`
+- `PROMPT_IS_THE_PLAYBOOK` — System prompt IS the role's instructions
+- `EXISTING_FACTORIES_UNCHANGED` — Poet, brain, ponderer, research, pr-review keep their hardcoded prompts
 
 ## Dependencies
 
-- [x] `@cogni/work-items` WorkItemQueryPort (proj.agentic-project-management P0)
-- [x] mc-controller.ts + AgentSnapshot (task.0162)
-- [x] Temporal schedules (existing)
-- [x] OpenClaw gateway + SKILL.md system (existing)
-- [ ] task.0162 PR #562 merged (foundation)
+- [x] `@cogni/langgraph-graphs` — graph catalog and factories
+- [x] `@cogni/graph-execution-core` — GraphExecutorPort
+- [x] `@cogni/temporal-workflows` — GraphRunWorkflow
+- [x] `@cogni/work-items` — WorkItemQueryPort
+- [x] Temporal infrastructure (deployed)
 
 ## Design Notes
 
-**Why not a RolePort:** Roles are configuration, not application state. You don't CRUD roles at runtime — you define them in code (crawl) or config files (walk). A port implies storage, adapters, concurrency control — none of which roles need. If we ever need a `RoleQueryPort`, it's a walk-phase concern for the dashboard.
+**Why not a "Role" type/port:** A role IS a catalog entry + queue filter + schedule. These are configuration, not application state. No CRUD, no port, no adapter.
 
-**Why Role, not Agent:** "Agent" is overloaded — it means the LLM runtime (OpenClaw), the identity (AgentDescriptor), and the execution profile. "Role" is the execution profile specifically: what work you see, what skills you use, what rules you follow. An agent (OpenClaw) fulfills a role.
+**Why not per-role workflows:** All roles follow the same loop: pick item → build context → run graph → act on result. One parameterized workflow handles all roles.
 
-**Why not Temporal workflows per role:** The existing pattern (Temporal schedule → OpenClaw gateway → skill → mc-controller.ts) works. Adding a Temporal workflow per role would mean rewriting the dispatch in TypeScript instead of shell — unnecessary complexity for crawl. The controller IS the workflow logic, just invoked via OpenClaw rather than directly via Temporal activities. Walk phase may move dispatch into Temporal activities for better observability.
+**Why keep OpenClaw:** OpenClaw serves Discord-bound conversational agents (poet channel, ideas channel). Operator/governance agents move to LangGraph + Temporal because they need structured output, tool calling, and Temporal's durability guarantees.
 
-**Relationship to charters:** Charters define strategic direction. Roles operationalize it. The CEO role covers all charters. The Git Reviewer role operationalizes the ENGINEERING charter's PR quality goals. Future: `charter` field on Role for alignment tracking.
+**Relationship to task.0162:** task.0162 (mc-controller.ts) is superseded. The controller logic moves into `RoleHeartbeatWorkflow` activities. The typed pieces (signals, policy, snapshots) evolve into workflow input/output types.
