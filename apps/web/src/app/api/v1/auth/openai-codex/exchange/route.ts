@@ -3,16 +3,14 @@
 
 /**
  * Module: `@app/api/v1/auth/openai-codex/exchange`
- * Purpose: Accept a pasted redirect URL and complete the OAuth token exchange.
- * Scope: POST endpoint. Extracts code + state from the pasted URL, validates PKCE state,
- *   exchanges code for tokens, encrypts and stores connection. Used when the localhost:1455
- *   relay is not available (cloud deployments).
+ * Purpose: Accept a pasted redirect URL + PKCE verifier, exchange for tokens, store connection.
+ * Scope: POST endpoint. Client sends { url, verifier, state } from the authorize flow.
+ *   Validates state matches URL, exchanges code via PKCE, encrypts and stores connection.
  * Invariants:
- *   - PKCE_REQUIRED: Code exchange uses verifier from signed cookie
- *   - STATE_VALIDATED: State in URL must match cookie
+ *   - PKCE_REQUIRED: Code exchange uses verifier from client (held in React state, same as OpenClaw CLI memory)
  *   - ENCRYPTED_AT_REST: Tokens stored via AEAD with AAD binding
  *   - TOKENS_NEVER_LOGGED: No tokens in logs or responses
- * Side-effects: IO (HTTP token exchange, DB insert, cookie delete)
+ * Side-effects: IO (HTTP token exchange, DB insert)
  * Links: docs/research/openai-oauth-byo-ai.md
  * @public
  */
@@ -21,11 +19,8 @@ import { randomUUID } from "node:crypto";
 import { connections } from "@cogni/db-schema";
 import type { UserId } from "@cogni/ids";
 import { and, eq, isNull } from "drizzle-orm";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { decode } from "next-auth/jwt";
 
-import { authSecret } from "@/auth";
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 import { getServerSessionUser } from "@/lib/auth/server";
@@ -40,8 +35,6 @@ const log = makeLogger({ component: "openai-codex-exchange" });
 const OPENAI_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
 const OPENAI_TOKEN_URL = "https://auth.openai.com/oauth/token";
 const OPENAI_REDIRECT_URI = "http://localhost:1455/auth/callback";
-const PKCE_COOKIE = "codex_pkce";
-const PKCE_SALT = "codex-pkce";
 
 export async function POST(request: Request) {
   const session = await getServerSessionUser();
@@ -49,68 +42,51 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Parse the pasted URL from request body
+  // Parse request body: { url, verifier, state }
   let pastedUrl: string;
+  let verifier: string;
+  let expectedState: string;
   try {
     const body = await request.json();
     pastedUrl = body.url;
+    verifier = body.verifier;
+    expectedState = body.state;
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  if (!pastedUrl || typeof pastedUrl !== "string") {
-    return NextResponse.json({ error: "Missing url field" }, { status: 400 });
+  if (!pastedUrl || !verifier || !expectedState) {
+    return NextResponse.json(
+      { error: "Missing required fields" },
+      { status: 400 }
+    );
   }
 
   // Extract code and state from the pasted URL
   let code: string;
-  let state: string;
+  let urlState: string;
   try {
     const parsed = new URL(pastedUrl);
     code = parsed.searchParams.get("code") ?? "";
-    state = parsed.searchParams.get("state") ?? "";
+    urlState = parsed.searchParams.get("state") ?? "";
   } catch {
     return NextResponse.json({ error: "Invalid URL format" }, { status: 400 });
   }
 
-  if (!code || !state) {
+  if (!code) {
     return NextResponse.json(
-      { error: "URL missing code or state parameter" },
+      { error: "URL missing authorization code" },
       { status: 400 }
     );
   }
 
-  // Validate PKCE cookie
-  const cookieStore = await cookies();
-  const pkceCookie = cookieStore.get(PKCE_COOKIE);
-  if (!pkceCookie?.value) {
-    return NextResponse.json(
-      { error: "Session expired — please try connecting again" },
-      { status: 400 }
-    );
-  }
-
-  cookieStore.delete(PKCE_COOKIE);
-
-  const payload = await decode({
-    token: pkceCookie.value,
-    secret: authSecret,
-    salt: PKCE_SALT,
-  });
-
-  if (
-    !payload ||
-    payload.purpose !== "codex_pkce" ||
-    payload.userId !== session.id ||
-    payload.state !== state
-  ) {
+  // Validate state matches
+  if (urlState !== expectedState) {
     return NextResponse.json(
       { error: "State mismatch — please try connecting again" },
       { status: 400 }
     );
   }
-
-  const verifier = payload.verifier as string;
 
   // Exchange code for tokens
   let tokenData: {
@@ -213,6 +189,7 @@ export async function POST(request: Request) {
 
   const db = resolveAppDb();
   try {
+    // Revoke existing, insert new
     await db
       .update(connections)
       .set({ revokedAt: new Date(), revokedByUserId: session.id })
@@ -240,7 +217,7 @@ export async function POST(request: Request) {
 
     log.info(
       { connectionId, provider: "openai-chatgpt" },
-      "BYO-AI connection created via manual exchange"
+      "BYO-AI connection created"
     );
   } catch (err) {
     log.error(
