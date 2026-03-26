@@ -33,6 +33,35 @@ import { cn } from "@/shared/util/cn";
 
 export type LlmBackend = "openrouter" | "chatgpt";
 
+/** Models available via ChatGPT subscription (Codex transport) */
+const CHATGPT_MODELS = [
+  {
+    id: "gpt-5.4",
+    name: "GPT-5.4",
+    description: "Most capable — 1M context",
+  },
+  {
+    id: "gpt-5.3-codex",
+    name: "GPT-5.3 Codex",
+    description: "Default Codex model",
+  },
+  {
+    id: "o3",
+    name: "o3",
+    description: "Reasoning model",
+  },
+  {
+    id: "gpt-5.3-codex-spark",
+    name: "GPT-5.3 Spark",
+    description: "Fast and lightweight",
+  },
+  {
+    id: "gpt-5.2-codex",
+    name: "GPT-5.2 Codex",
+    description: "Previous generation",
+  },
+] as const;
+
 export interface ModelPickerProps {
   models: Model[];
   value: string;
@@ -121,67 +150,106 @@ export function ModelPicker({
           <DialogTitle>Select Model</DialogTitle>
         </DialogHeader>
 
-        {/* Provider toggle — OpenRouter vs ChatGPT */}
-        {hasChatGptConnection && (
-          <div className="flex gap-1 rounded-lg bg-muted p-1">
-            <button
-              type="button"
-              onClick={() => onBackendChange("openrouter")}
-              className={cn(
-                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-1.5 font-medium text-sm transition-colors",
-                backend === "openrouter"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
+        {/* Provider toggle — always visible */}
+        <div className="flex gap-1 rounded-lg bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => onBackendChange("openrouter")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-1.5 font-medium text-sm transition-colors",
+              backend === "openrouter"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <svg
+              className="size-4"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
             >
-              <svg
-                className="size-4"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-              </svg>
-              OpenRouter
-            </button>
-            <button
-              type="button"
-              onClick={() => onBackendChange("chatgpt")}
-              className={cn(
-                "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-1.5 font-medium text-sm transition-colors",
-                backend === "chatgpt"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <OpenAIIcon className="size-4" />
-              ChatGPT
-            </button>
-          </div>
-        )}
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+            </svg>
+            OpenRouter
+          </button>
+          <button
+            type="button"
+            onClick={() => onBackendChange("chatgpt")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-1.5 font-medium text-sm transition-colors",
+              backend === "chatgpt"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <OpenAIIcon className="size-4" />
+            ChatGPT
+          </button>
+        </div>
 
         {backend === "chatgpt" ? (
-          /* ChatGPT backend — single entry, no model selection needed */
-          <div className="-mx-6 px-6">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-              }}
-              className="flex w-full items-center gap-3 rounded-md bg-accent px-3 py-3 text-left"
-            >
-              <OpenAIIcon className="size-5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm">
-                  ChatGPT (Your Subscription)
-                </div>
-                <div className="text-muted-foreground text-xs">
-                  Uses your linked ChatGPT account — $0 platform cost
-                </div>
+          hasChatGptConnection ? (
+            /* ChatGPT connected — show available models */
+            <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">
+              <div className="space-y-1">
+                {CHATGPT_MODELS.map((model) => {
+                  const isSelected = value === model.id;
+                  return (
+                    <button
+                      key={model.id}
+                      type="button"
+                      onClick={() => {
+                        onValueChange(model.id);
+                        setOpen(false);
+                        setSearchQuery("");
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left",
+                        "transition-colors hover:bg-accent",
+                        isSelected && "bg-accent"
+                      )}
+                    >
+                      <OpenAIIcon className="size-5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium text-sm">
+                          {model.name}
+                        </div>
+                        {model.description && (
+                          <div className="text-muted-foreground text-xs">
+                            {model.description}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-medium text-sm text-success">
+                          $0
+                        </span>
+                        {isSelected && (
+                          <Check className="size-4 text-primary" />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-              <Check className="size-4 shrink-0 text-primary" />
-            </button>
-          </div>
+            </div>
+          ) : (
+            /* ChatGPT not connected — link to profile */
+            <div className="-mx-6 px-6">
+              <a
+                href="/profile"
+                className="flex w-full items-center gap-3 rounded-md border border-muted-foreground/30 border-dashed px-3 py-4 text-left transition-colors hover:bg-accent"
+              >
+                <OpenAIIcon className="size-5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm">Connect ChatGPT</div>
+                  <div className="text-muted-foreground text-xs">
+                    Link your ChatGPT subscription in Profile to unlock $0 AI
+                  </div>
+                </div>
+              </a>
+            </div>
+          )
         ) : (
           /* OpenRouter backend — full model list */
           <>
