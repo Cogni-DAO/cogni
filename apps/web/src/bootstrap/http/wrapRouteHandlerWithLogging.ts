@@ -18,7 +18,6 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 
-import { getContainer } from "@/bootstrap/container";
 import { withRootSpan } from "@/bootstrap/otel";
 import type { SessionUser } from "@/shared/auth";
 import {
@@ -122,6 +121,9 @@ export function wrapRouteHandlerWithLogging<TContext = unknown>(
     request: NextRequest,
     context?: TContext
   ): Promise<NextResponse> => {
+    // Dynamic import: breaks Turbopack's per-route static module graph tracing
+    // of the entire DI composition root (spike.0203 — was causing 6GB RSS in dev).
+    const { getContainer } = await import("@/bootstrap/container");
     const container = getContainer();
 
     // Fetch session based on auth mode

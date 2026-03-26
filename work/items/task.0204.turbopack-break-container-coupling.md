@@ -1,7 +1,7 @@
 ---
 id: task.0204
 type: task
-status: needs_implement
+status: needs_closeout
 title: "Turbopack dev memory: break container coupling + expand serverExternalPackages"
 priority: 0
 rank: 1
@@ -15,7 +15,7 @@ assignees: derekg1729
 credit:
 pr:
 reviewer:
-branch: feat/byo-ai-per-tenant
+branch: fix/turbopack-dev-memory
 revision: 1
 deploy_verified: false
 created: 2026-03-26

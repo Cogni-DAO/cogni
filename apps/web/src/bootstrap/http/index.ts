@@ -13,7 +13,6 @@
  */
 
 import type { NextRequest } from "next/server";
-import { getContainer } from "@/bootstrap/container";
 import { publicApiLimiter } from "./rateLimiter";
 import { makeWrapPublicRoute, type PublicRouteConfig } from "./wrapPublicRoute";
 
@@ -55,6 +54,8 @@ export function wrapPublicRoute<TContext = unknown>(
     // Concurrency-safe lazy init
     if (!_wrapPublicRoute) {
       _initPromise ??= (async () => {
+        // Dynamic import: breaks Turbopack's per-route static module graph tracing (spike.0203)
+        const { getContainer } = await import("@/bootstrap/container");
         const container = getContainer();
         _wrapPublicRoute = makeWrapPublicRoute({
           rateLimitBypass: container.config.rateLimitBypass,
