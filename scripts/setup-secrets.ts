@@ -1018,13 +1018,13 @@ function buildDSNs(): void {
   const host = "postgres"; // Docker service name
 
   if (appPw) {
-    const url = `postgresql://${appUser}:${appPw}@${host}:5432/${dbName}`;
+    const url = `postgresql://${appUser}:${appPw}@${host}:5432/${dbName}?sslmode=disable`;
     setSecretBoth("DATABASE_URL", url);
     collectedSecrets["DATABASE_URL"] = url;
     console.log(`  ${GREEN}DATABASE_URL${RESET} set (preview + production)`);
   }
   if (svcPw) {
-    const url = `postgresql://${svcUser}:${svcPw}@${host}:5432/${dbName}`;
+    const url = `postgresql://${svcUser}:${svcPw}@${host}:5432/${dbName}?sslmode=disable`;
     setSecretBoth("DATABASE_SERVICE_URL", url);
     collectedSecrets["DATABASE_SERVICE_URL"] = url;
     console.log(

@@ -2,7 +2,7 @@
 id: bug.0199
 type: bug
 title: "setup-secrets buildDSNs() omits ?sslmode=disable — app rejects generated DATABASE_URLs at boot"
-status: needs_implement
+status: done
 priority: 0
 rank: 1
 estimate: 1
