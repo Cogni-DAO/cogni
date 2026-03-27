@@ -85,6 +85,13 @@ export const EVENT_NAMES = {
   LEDGER_FINALIZE_NO_POLLERS: "ledger.finalize_no_pollers",
   LEDGER_COLLECT_TRIGGERED: "ledger.collect_triggered",
 
+  // x402 Payment Domain
+  X402_CHALLENGE_RETURNED: "x402.challenge_returned",
+  X402_PAYMENT_VERIFIED: "x402.payment_verified",
+  X402_SETTLEMENT_COMPLETE: "x402.settlement_complete",
+  X402_SETTLEMENT_FAILED: "x402.settlement_failed",
+  X402_EXECUTION_ERROR: "x402.execution_error",
+
   // BYO-AI Auth Domain
   BYO_AUTH_DEVICE_CODE_COMPLETE: "byo_auth.device_code.complete",
   BYO_AUTH_EXCHANGE_COMPLETE: "byo_auth.exchange.complete",

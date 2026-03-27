@@ -126,6 +126,11 @@ export const POST = wrapPublicRoute(
 
     // No payment header → return 402 challenge (SDK builds correct format)
     if (paymentResult.type === "payment-error") {
+      logEvent(ctx.log, EVENT_NAMES.X402_CHALLENGE_RETURNED, {
+        reqId: ctx.reqId,
+        routeId: "x402.chat.completions",
+        outcome: "challenge",
+      });
       const { status, headers, body } = paymentResult.response;
       const response = NextResponse.json(body, { status });
       for (const [key, value] of Object.entries(headers)) {
@@ -149,7 +154,11 @@ export const POST = wrapPublicRoute(
         ?.payload?.authorization?.from ??
       "0x0000000000000000000000000000000000000000";
 
-    ctx.log.info({ payer: payerAddress }, "x402: payment verified");
+    logEvent(ctx.log, EVENT_NAMES.X402_PAYMENT_VERIFIED, {
+      reqId: ctx.reqId,
+      routeId: "x402.chat.completions",
+      outcome: "success",
+    });
 
     // ── Step 3: Parse request body (OpenAI format) ──────────────────────
     let body: unknown;
@@ -202,7 +211,12 @@ export const POST = wrapPublicRoute(
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Internal server error";
-      ctx.log.error({ error, payer: payerAddress }, "x402: execution error");
+      logEvent(ctx.log, EVENT_NAMES.X402_EXECUTION_ERROR, {
+        reqId: ctx.reqId,
+        routeId: "x402.chat.completions",
+        outcome: "error",
+        errorCode: "execution_failed",
+      });
       // Return error WITHOUT settling — per x402 protocol, don't settle on errors
       return openAiError(message, "server_error", 500);
     }
@@ -217,10 +231,12 @@ export const POST = wrapPublicRoute(
     );
 
     if (!settleResult.success) {
-      ctx.log.error(
-        { payer: payerAddress, reason: settleResult.errorReason },
-        "x402: settlement failed — not returning completion"
-      );
+      logEvent(ctx.log, EVENT_NAMES.X402_SETTLEMENT_FAILED, {
+        reqId: ctx.reqId,
+        routeId: "x402.chat.completions",
+        outcome: "error",
+        errorCode: "settlement_failed",
+      });
       // Settlement failed → return 402, NOT the completion
       const { status, headers: settleHeaders, body: settleBody } = settleResult.response;
       const failResponse = NextResponse.json(settleBody, { status });
@@ -230,10 +246,11 @@ export const POST = wrapPublicRoute(
       return failResponse;
     }
 
-    ctx.log.info(
-      { payer: payerAddress, txHash: settleResult.transaction },
-      "x402: settled"
-    );
+    logEvent(ctx.log, EVENT_NAMES.X402_SETTLEMENT_COMPLETE, {
+      reqId: ctx.reqId,
+      routeId: "x402.chat.completions",
+      outcome: "success",
+    });
 
     logEvent(ctx.log, EVENT_NAMES.AI_COMPLETION, {
       reqId: ctx.reqId,
