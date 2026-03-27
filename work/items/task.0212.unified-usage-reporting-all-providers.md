@@ -51,31 +51,43 @@ Remove the `if (result.litellmCallId)` gate. Emit for all runs:
 ```ts
 // After awaiting final result:
 const usageSource = scope.usageSource; // NEW field on ExecutionScope
-const usageUnitId = result.litellmCallId ?? crypto.randomUUID();
+// DETERMINISTIC_BYO_USAGE_ID: BYO usageUnitId must be deterministic for retry
+// idempotency. crypto.randomUUID() would generate a new key per stream consumption,
+// defeating the DB unique constraint on (source_system, source_reference).
+const usageUnitId = result.litellmCallId ?? `${runId}/${attempt}/byo`;
 const fact: UsageFact = {
   runId, attempt, graphId,
   source: usageSource,          // from scope, not hardcoded "litellm"
   executorType: "inproc",
-  usageUnitId,                  // generated UUID for BYO
+  usageUnitId,                  // deterministic key for BYO
   inputTokens: result.usage?.promptTokens,
   outputTokens: result.usage?.completionTokens,
   ...(result.model && { model: result.model }),
-  costUsd: usageSource === "litellm" ? result.providerCostUsd : 0,
+  // Respect any cost the adapter reports (future pay-per-token providers),
+  // default to 0 when absent (BYO = zero platform cost).
+  costUsd: result.providerCostUsd ?? 0,
 };
 yield { type: "usage_report", fact };
 ```
 
-Platform runs with missing `litellmCallId` remain a CRITICAL error (existing behavior). BYO runs get a generated UUID — the strict Zod schema passes, idempotency works.
+Platform runs with missing `litellmCallId` remain a CRITICAL error (existing behavior). BYO runs get a deterministic key — the strict Zod schema passes, and the idempotency constraint survives retries.
 
 **Change 2 — ExecutionScope: carry `usageSource`**
 
 Add `usageSource: SourceSystem` to `ExecutionScope`. The factory sets it from `provider.usageSource` when creating the scope. The provider already declares this field (`ModelProviderPort.usageSource`).
 
-**Change 3 — Billing decorator: write receipts for non-platform sources**
+**Change 3 — Rename billing decorator to usage commit point**
 
-Currently the decorator validates and consumes `usage_report` events. For platform runs, the LiteLLM callback writes the receipt asynchronously. For BYO runs, no callback exists.
+The decorator's current contract says "validates but does not persist" — that contract is broken by this change, so we redefine it cleanly rather than sneaking in a side-effect.
 
-Add: after validation passes, if `fact.source !== "litellm"`, call `commitUsageFact()` directly. The decorator needs `accountService` injected (one new constructor parameter).
+Rename class: `BillingGraphExecutorDecorator` → `UsageCommitDecorator`. Update file header, class doc, and invariant comment to reflect the new contract: **"Validates usage_report events. For non-platform sources, commits receipts directly. For platform sources, defers to LiteLLM callback."**
+
+The decorator needs `accountService` and `RunContext` injected (two new constructor parameters).
+
+After validation passes:
+
+- `source !== "litellm"` → call `commitUsageFact()` directly (synchronous in stream — `BILLING_NEVER_THROWS` guarantees no exception). This adds ~<50ms DB write latency before the `done` event. Acceptable for BYO; if it becomes a problem, fire-and-forget with `.catch(log.error)`.
+- `source === "litellm"` → defer to callback (existing behavior, unchanged).
 
 ```
 Platform:  usage_report → validate → consume → (async) LiteLLM callback → commitUsageFact ✅
@@ -96,7 +108,8 @@ BYO:       usage_report → validate → commitUsageFact → consume ✅
 
 - **Separate BYO billing pipeline**: More moving parts, same outcome. The existing pipeline works — we just need to remove the LiteLLM-only gate.
 - **New UsageIngestPort abstraction**: Over-engineering. `commitUsageFact()` is already the universal writer. Adding a second caller (the decorator) is sufficient.
-- **BYO-specific Zod schema**: Unnecessary. Generated UUIDs satisfy the strict schema. Keep one validation path.
+- **BYO-specific Zod schema**: Unnecessary. Deterministic keys satisfy the strict schema. Keep one validation path.
+- **crypto.randomUUID() for BYO usageUnitId**: Breaks retry idempotency — a new UUID per stream consumption means the DB unique constraint can't dedup retries. Deterministic `${runId}/${attempt}/byo` is equally simple and survives Temporal retries.
 
 ### Invariants
 
@@ -107,7 +120,7 @@ BYO:       usage_report → validate → commitUsageFact → consume ✅
 - [ ] USAGE_ALWAYS_EMITTED: InProc adapter emits `usage_report` for every successful completion, regardless of provider. No conditional skip. (spec: multi-provider-llm — PROVIDER_AWARE_USAGE)
 - [ ] PLATFORM_CALLID_STILL_REQUIRED: Missing `litellmCallId` on platform runs remains a CRITICAL error (spec: billing-ingest — ONE_BILLING_PATH)
 - [ ] ONE_LEDGER_WRITER: `commitUsageFact()` remains the sole caller of `recordChargeReceipt()`. Two callers of commitUsageFact (ingest route for platform, decorator for BYO) is fine. (spec: billing-ingest)
-- [ ] IDEMPOTENT_BYO_RECEIPTS: Generated UUID as `usageUnitId` + DB unique constraint on `(source_system, source_reference)` prevents duplicates (spec: billing-ingest — CHARGE_RECEIPTS_IDEMPOTENT_BY_CALL_ID)
+- [ ] DETERMINISTIC_BYO_USAGE_ID: BYO `usageUnitId` is `${runId}/${attempt}/byo` — deterministic, survives retries. Never `crypto.randomUUID()`. (spec: billing-ingest — CHARGE_RECEIPTS_IDEMPOTENT_BY_CALL_ID)
 - [ ] SIMPLE_SOLUTION: Three surgical edits to existing files. No new services, tables, endpoints, or abstractions.
 - [ ] ARCHITECTURE_ALIGNMENT: Follows hexagonal pattern — scope carries provider metadata, decorator handles billing concern (spec: architecture)
 
@@ -115,7 +128,8 @@ BYO:       usage_report → validate → commitUsageFact → consume ✅
 
 Update `docs/spec/billing-ingest.md` invariant table:
 
-- **CALLBACK_IS_SOLE_WRITER** → rename to **CALLBACK_WRITES_PLATFORM_RECEIPTS**: "LiteLLM callback writes receipts for platform runs. BYO receipts are written directly by the billing decorator via `commitUsageFact()`. Both paths converge on the same idempotent writer."
+- **CALLBACK_IS_SOLE_WRITER** → rename to **CALLBACK_WRITES_PLATFORM_RECEIPTS**: "LiteLLM callback writes receipts for platform runs. BYO receipts are written directly by `UsageCommitDecorator` via `commitUsageFact()`. Both paths converge on the same idempotent writer."
+- **ADAPTERS_NEVER_BILL** — unchanged. Adapters emit usage events; the decorator commits. Adapters don't call commitUsageFact.
 
 Update `docs/spec/multi-provider-llm.md` — mark PROVIDER_AWARE_USAGE as implemented.
 
@@ -131,12 +145,12 @@ Update `docs/spec/multi-provider-llm.md` — mark PROVIDER_AWARE_USAGE as implem
 
 #### Modify — inproc adapter (always emit usage_report)
 
-- Modify: `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — remove `if (result.litellmCallId)` gate, read `usageSource` from scope, generate UUID when no `litellmCallId`, set `costUsd: 0` for non-litellm
+- Modify: `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — remove `if (result.litellmCallId)` gate, read `usageSource` from scope, deterministic `${runId}/${attempt}/byo` when no `litellmCallId`, `costUsd: result.providerCostUsd ?? 0`
 
-#### Modify — billing decorator (write BYO receipts)
+#### Modify — billing decorator → usage commit decorator
 
-- Modify: `apps/web/src/adapters/server/ai/billing-executor.decorator.ts` — inject `accountService`, after validation passes for non-litellm sources call `commitUsageFact()` directly
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — pass `accountService` to billing decorator constructor
+- Rename: `apps/web/src/adapters/server/ai/billing-executor.decorator.ts` → `usage-commit.decorator.ts` — redefine contract from "validate only" to "validate + commit for non-platform". Inject `accountService` + `RunContext`. Update file header, class doc, invariant comments.
+- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — pass `accountService` + `RunContext` to decorator constructor, update import
 
 #### Modify — specs
 
@@ -145,8 +159,8 @@ Update `docs/spec/multi-provider-llm.md` — mark PROVIDER_AWARE_USAGE as implem
 
 #### Test
 
-- Test: `apps/web/tests/unit/adapters/server/ai/inproc-completion-unit.test.ts` — verify usage_report emitted for codex/ollama sources with generated UUID and costUsd: 0
-- Test: `apps/web/tests/unit/adapters/server/ai/billing-executor.decorator.test.ts` — verify commitUsageFact called directly for non-litellm, deferred for litellm
+- Test: `apps/web/tests/unit/adapters/server/ai/inproc-completion-unit.test.ts` — verify usage_report emitted for codex/ollama sources with deterministic usageUnitId and costUsd: 0
+- Test: `apps/web/tests/unit/adapters/server/ai/usage-commit.decorator.test.ts` — verify commitUsageFact called directly for non-litellm, deferred for litellm
 
 ## Validation
 
@@ -155,10 +169,18 @@ Update `docs/spec/multi-provider-llm.md` — mark PROVIDER_AWARE_USAGE as implem
 - [ ] Platform run: unchanged behavior — callback writes receipt, `source_system='litellm'`
 - [ ] Platform run missing litellmCallId: still throws CRITICAL error
 - [ ] `/api/v1/activity`: BYO runs visible alongside platform runs
-- [ ] No duplicate receipts on retry (idempotency key works for generated UUIDs)
+- [ ] No duplicate receipts on retry (deterministic `${runId}/${attempt}/byo` key deduplicates)
 - [ ] `pnpm check` passes
 
 ## Notes
 
 - `OpenAiCompatibleModelProvider.usageSource` is currently `"ollama"` — semantically imprecise but pragmatically fine. Renaming `SourceSystem` values is a future concern, not a blocker.
 - This task implements the `PROVIDER_AWARE_USAGE` invariant from task.0209 / multi-provider-llm spec that was left unfinished.
+
+## Design Review Fixes (2026-03-27)
+
+Three issues caught in review, all addressed:
+
+1. **`crypto.randomUUID()` → deterministic key**: Random UUIDs break retry idempotency. Switched to `${runId}/${attempt}/byo` — stable across retries, deduplicates via DB unique constraint.
+2. **`costUsd: 0` hardcoded → `result.providerCostUsd ?? 0`**: Respects any cost the adapter reports (future pay-per-token providers), defaults to 0 when absent. Same behavior today, future-safe.
+3. **Decorator contract redefinition**: Renamed `BillingGraphExecutorDecorator` → `UsageCommitDecorator`. The old name and doc said "validates only, never persists" — adding writes without renaming would leave a half-broken contract. New name makes the responsibility explicit.
