@@ -61,7 +61,7 @@ describe("Chat Streaming", () => {
     const modelsRes = await modelsGET(modelsReq);
     expect(modelsRes.status).toBe(200);
     const modelsData = await modelsRes.json();
-    const { defaultPreferredModelId: defaultModelId } = modelsData;
+    const { defaultRef } = modelsData;
 
     // Act - Send streaming chat request with prompt that produces multiple tokens
     const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
@@ -73,7 +73,7 @@ describe("Chat Streaming", () => {
         createChatRequest({
           message:
             "Say hello in exactly 15 words or more, using complete sentences.",
-          model: defaultModelId,
+          modelRef: defaultRef,
           stateKey: randomUUID(),
         })
       ),
@@ -155,9 +155,12 @@ describe("Chat Streaming", () => {
     const modelsRes = await modelsGET(modelsReq);
     expect(modelsRes.status).toBe(200);
     const modelsData = await modelsRes.json();
-    // Use free default to avoid paid-model $0 cost guardrail / callback flake
-    const { defaultFreeModelId: defaultModelId } = modelsData;
-    expect(defaultModelId).toBeTruthy();
+    // Use free model to avoid paid-model $0 cost guardrail / callback flake
+    const freeModel = modelsData.models.find(
+      (m: { requiresPlatformCredits: boolean }) => !m.requiresPlatformCredits
+    );
+    expect(freeModel).toBeTruthy();
+    const freeModelRef = freeModel.ref;
 
     // Record receipts before (async callback appends a new row)
     const billingAccount = await db.query.billingAccounts.findFirst({
@@ -181,7 +184,7 @@ describe("Chat Streaming", () => {
       body: JSON.stringify(
         createChatRequest({
           message: "Hello",
-          model: defaultModelId,
+          modelRef: freeModelRef,
           stateKey: randomUUID(),
         })
       ),
@@ -237,7 +240,7 @@ describe("Chat Streaming", () => {
     const modelsRes = await modelsGET(modelsReq);
     expect(modelsRes.status).toBe(200);
     const modelsData = await modelsRes.json();
-    const { defaultPreferredModelId: defaultModelId } = modelsData;
+    const { defaultRef } = modelsData;
 
     const ac = new AbortController();
 
@@ -252,7 +255,7 @@ describe("Chat Streaming", () => {
         createChatRequest({
           message:
             "Write a very long detailed response with many sentences about the history of computers.",
-          model: defaultModelId,
+          modelRef: defaultRef,
           stateKey: randomUUID(),
         })
       ),

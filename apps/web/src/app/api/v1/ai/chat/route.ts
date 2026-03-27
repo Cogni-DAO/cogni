@@ -204,30 +204,8 @@ export const POST = wrapRouteHandlerWithLogging(
 
       const handlerStartMs = performance.now();
 
-      // Validate model against cached allowlist (MVP-004: PERF-001 fix)
-      const { isModelAllowed, getDefaults } = await import(
-        "@/shared/ai/model-catalog.server"
-      );
-      const modelIsValid = await isModelAllowed(input.model);
-
-      if (!modelIsValid) {
-        const defaults = await getDefaults();
-        logRequestWarn(
-          ctx.log,
-          {
-            model: input.model,
-            defaultModelId: defaults.defaultPreferredModelId,
-          },
-          "model_validation_failed"
-        );
-        return NextResponse.json(
-          {
-            error: "Invalid model",
-            defaultModelId: defaults.defaultPreferredModelId,
-          },
-          { status: 409 }
-        );
-      }
+      // modelRef validation is structural (Zod schema on contract).
+      // Catalog-based allowlist check is deferred to execution-time preflight.
 
       if (!sessionUser) throw new Error("sessionUser required");
 
@@ -254,7 +232,7 @@ export const POST = wrapRouteHandlerWithLogging(
       // Metadata (model, graphName) saved on INSERT only — first persist creates the thread row.
       const threadMetadata =
         expectedLen === 0
-          ? { model: input.model, graphName: input.graphName }
+          ? { model: input.modelRef.modelId, graphName: input.graphName }
           : undefined;
 
       let threadWithUser = [...existingThread, userUIMessage];
@@ -290,7 +268,7 @@ export const POST = wrapRouteHandlerWithLogging(
         {
           reqId: ctx.reqId,
           userId: sessionUser.id,
-          requestedModel: input.model,
+          requestedModel: input.modelRef.modelId,
           threadMessages: expectedLenAfterUser,
           stateKey,
         },
@@ -310,15 +288,12 @@ export const POST = wrapRouteHandlerWithLogging(
       const { stream: deltaStream, final } = await completionStream(
         {
           messages: messageDtos,
-          model: input.model,
+          modelRef: input.modelRef,
           sessionUser,
           abortSignal: request.signal,
           graphName: input.graphName,
           stateKey,
           ...(idempotencyKey ? { idempotencyKey } : {}),
-          ...(input.modelConnectionId
-            ? { modelConnectionId: input.modelConnectionId }
-            : {}),
         },
         ctx
       );
@@ -327,7 +302,7 @@ export const POST = wrapRouteHandlerWithLogging(
         {
           reqId: ctx.reqId,
           handlerMs: performance.now() - handlerStartMs,
-          resolvedModel: input.model,
+          resolvedModel: input.modelRef.modelId,
           stream: true,
         },
         "ai.chat_response_started"
@@ -559,7 +534,11 @@ export const POST = wrapRouteHandlerWithLogging(
         headers: sseResponse.headers,
       });
     } catch (error) {
-      const errorResponse = handleRouteError(ctx, error, input?.model);
+      const errorResponse = handleRouteError(
+        ctx,
+        error,
+        input?.modelRef?.modelId
+      );
       if (errorResponse) return errorResponse;
       throw error; // Unhandled → wrapper catches
     }

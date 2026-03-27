@@ -46,7 +46,7 @@ async function collectStream(
 const fakeRequest: GraphRunRequest = {
   runId: "run-123",
   messages: [{ role: "user", content: "test" }],
-  model: "test-model",
+  modelRef: { providerKey: "platform", modelId: "test-model" },
   graphId: "langgraph:poet",
 };
 

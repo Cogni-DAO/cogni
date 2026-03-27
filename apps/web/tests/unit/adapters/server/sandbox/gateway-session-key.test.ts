@@ -55,7 +55,7 @@ function makeRequest(
   return {
     runId: "run-test-123",
     graphId: "sandbox:openclaw",
-    model: "cogni/test-model",
+    modelRef: { providerKey: "platform", modelId: "cogni/test-model" },
     messages: [{ role: "user", content: "Hello" }],
     ...overrides,
   } as GraphRunRequest;

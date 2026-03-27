@@ -14,7 +14,8 @@
 
 "use client";
 
-import { Check, ChevronDown, ShieldCheck } from "lucide-react";
+import type { ModelRef } from "@cogni/ai-core";
+import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -24,10 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/kit/overlays/Dialog";
 import type { Model } from "@/contracts/ai.models.v1.contract";
-import {
-  getIconByProviderKey,
-  getProviderIcon,
-} from "@/features/ai/config/provider-icons";
+import { getIconByProviderKey } from "@/features/ai/config/provider-icons";
 import { OpenAIIcon } from "@/features/ai/icons/providers/OpenAIIcon";
 import { cn } from "@/shared/util/cn";
 
@@ -87,11 +85,9 @@ export const CHATGPT_MODELS = [
 export interface ModelPickerProps {
   models: Model[];
   value: string;
-  onValueChange: (modelId: string) => void;
+  onValueChange: (ref: ModelRef) => void;
   disabled?: boolean;
   balance?: number;
-  /** Called when BYO backend changes (modelConnectionId or undefined) */
-  onModelConnectionChange?: (connectionId: string | undefined) => void;
 }
 
 export function ModelPicker({
@@ -100,7 +96,6 @@ export function ModelPicker({
   onValueChange,
   disabled,
   balance = 0,
-  onModelConnectionChange,
 }: Readonly<ModelPickerProps>) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -126,31 +121,41 @@ export function ModelPicker({
 
   const handleBackendChange = (b: LlmBackend) => {
     setBackend(b);
-    onModelConnectionChange?.(b === "chatgpt" ? connectionId : undefined);
     if (b === "chatgpt") {
       setLastOpenRouterModel(value);
-      onValueChange(CHATGPT_MODELS[0].id);
+      onValueChange({
+        providerKey: "codex",
+        modelId: CHATGPT_MODELS[0].id,
+        connectionId,
+      });
     } else {
-      onValueChange(lastOpenRouterModel);
+      // Restore last OpenRouter model — find its ref from models list
+      const orModel = models.find((m) => m.ref.modelId === lastOpenRouterModel);
+      onValueChange(
+        orModel?.ref ?? {
+          providerKey: "platform",
+          modelId: lastOpenRouterModel,
+        }
+      );
     }
   };
 
   const isChatGptModel = CHATGPT_MODELS.some((m) => m.id === value);
-  const selectedOpenRouterModel = models.find((m) => m.id === value);
+  const selectedOpenRouterModel = models.find((m) => m.ref.modelId === value);
   const selectedChatGptModel = CHATGPT_MODELS.find((m) => m.id === value);
   const filteredModels = models.filter((model) => {
     const query = searchQuery.toLowerCase();
     return (
-      model.id.toLowerCase().includes(query) ||
-      model.name?.toLowerCase().includes(query)
+      model.ref.modelId.toLowerCase().includes(query) ||
+      model.label.toLowerCase().includes(query)
     );
   });
 
   const displayName =
     backend === "chatgpt" && isChatGptModel
       ? selectedChatGptModel!.name
-      : selectedOpenRouterModel?.name ||
-        selectedOpenRouterModel?.id ||
+      : selectedOpenRouterModel?.label ||
+        selectedOpenRouterModel?.ref.modelId ||
         "Select model";
 
   return (
@@ -248,7 +253,11 @@ export function ModelPicker({
                       key={model.id}
                       type="button"
                       onClick={() => {
-                        onValueChange(model.id);
+                        onValueChange({
+                          providerKey: "codex",
+                          modelId: model.id,
+                          connectionId,
+                        });
                         setOpen(false);
                         setSearchQuery("");
                       }}
@@ -320,20 +329,19 @@ export function ModelPicker({
                   </div>
                 ) : (
                   filteredModels.map((model) => {
-                    const Icon = model.providerKey
-                      ? getIconByProviderKey(model.providerKey)
-                      : getProviderIcon(model.id);
-                    const isSelected = model.id === value;
-                    const isPaidAndNoBalance = !model.isFree && balance <= 0;
+                    const Icon = getIconByProviderKey(model.ref.providerKey);
+                    const isSelected = model.ref.modelId === value;
+                    const isPaidAndNoBalance =
+                      model.requiresPlatformCredits && balance <= 0;
 
                     return (
                       <button
-                        key={model.id}
+                        key={model.ref.modelId}
                         type="button"
                         disabled={isPaidAndNoBalance}
                         onClick={() => {
                           if (!isPaidAndNoBalance) {
-                            onValueChange(model.id);
+                            onValueChange(model.ref);
                             setOpen(false);
                             setSearchQuery("");
                           }
@@ -348,25 +356,16 @@ export function ModelPicker({
                       >
                         <Icon className="size-5 shrink-0 text-muted-foreground" />
                         <div className="min-w-0 flex-1 truncate font-medium text-sm">
-                          {model.name || model.id}
+                          {model.label}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          {model.isZdr && (
-                            <span className="flex items-center gap-1 font-medium text-primary text-xs">
-                              <ShieldCheck className="size-3" />
-                              Private (ZDR)
-                            </span>
-                          )}
-                          {model.isFree && (
+                          {!model.requiresPlatformCredits && (
                             <span className="flex items-center gap-1.5 font-medium text-sm text-success">
                               {isSelected && <Check className="size-4" />}
                               Free
                             </span>
                           )}
-                          {!model.isFree && !model.isZdr && isSelected && (
-                            <Check className="size-4 text-primary" />
-                          )}
-                          {model.isZdr && isSelected && (
+                          {model.requiresPlatformCredits && isSelected && (
                             <Check className="size-4 text-primary" />
                           )}
                           {isPaidAndNoBalance && (

@@ -429,10 +429,14 @@ export const POST = wrapRouteHandlerWithLogging(
 
       if (isStreaming) {
         // ── Streaming path ──────────────────────────────────────────────
+        const modelRef = {
+          providerKey: "platform" as const,
+          modelId: input.model,
+        };
         const { stream, final } = await chatCompletionStream(
           {
             messages: input.messages,
-            model: input.model,
+            modelRef,
             sessionUser,
             ...(graphName ? { graphName } : {}),
             abortSignal: request.signal,
@@ -448,7 +452,7 @@ export const POST = wrapRouteHandlerWithLogging(
         const sseStream = createOpenAiSseStream(
           stream,
           final,
-          input.model,
+          modelRef.modelId,
           completionId,
           created,
           includeUsage,
@@ -467,10 +471,14 @@ export const POST = wrapRouteHandlerWithLogging(
       }
 
       // ── Non-streaming path ──────────────────────────────────────────
+      const modelRef = {
+        providerKey: "platform" as const,
+        modelId: input.model,
+      };
       const result = await chatCompletion(
         {
           messages: input.messages,
-          model: input.model,
+          modelRef,
           sessionUser,
           ...(graphName ? { graphName } : {}),
           ...(idempotencyKey ? { idempotencyKey } : {}),

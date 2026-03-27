@@ -438,7 +438,7 @@ function ChatGptConnectFlow({
         </a>
       </div>
       <div className="flex items-center gap-2">
-        <div className="size-3 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        <span className="animate-pulse text-muted-foreground">●</span>
         <span className="text-muted-foreground text-xs">
           Waiting for authorization...
         </span>

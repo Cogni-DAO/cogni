@@ -43,7 +43,7 @@ let completionStreamCalls: Array<{
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
     toolCallId?: string;
   }>;
-  model: string;
+  modelRef: { providerKey: string; modelId: string };
 }> = [];
 
 // Mock factory for completionStream
@@ -52,7 +52,7 @@ function createCompletionStreamMock() {
     // Record call for assertion
     completionStreamCalls.push({
       messages: input.messages,
-      model: input.model,
+      modelRef: input.modelRef,
     });
 
     // Create fake event stream with tool events
@@ -134,7 +134,7 @@ describe.skip("Chat Tool Replay", () => {
     const replayPayload = {
       stateKey: TEST_THREAD_ID,
       clientRequestId: TEST_CLIENT_REQUEST_ID,
-      model: TEST_MODEL,
+      modelRef: { providerKey: "platform", modelId: TEST_MODEL },
       graphName: TEST_GRAPH_NAME,
       stream: true,
       messages: [
@@ -305,7 +305,7 @@ describe.skip("Chat Tool Replay", () => {
     const invalidPayload = {
       stateKey: TEST_THREAD_ID,
       clientRequestId: TEST_CLIENT_REQUEST_ID,
-      model: TEST_MODEL,
+      modelRef: { providerKey: "platform", modelId: TEST_MODEL },
       graphName: TEST_GRAPH_NAME,
       stream: true,
       messages: [
@@ -351,7 +351,7 @@ describe.skip("Chat Tool Replay", () => {
     const duplicatePayload = {
       stateKey: TEST_THREAD_ID,
       clientRequestId: TEST_CLIENT_REQUEST_ID,
-      model: TEST_MODEL,
+      modelRef: { providerKey: "platform", modelId: TEST_MODEL },
       graphName: TEST_GRAPH_NAME,
       stream: true,
       messages: [

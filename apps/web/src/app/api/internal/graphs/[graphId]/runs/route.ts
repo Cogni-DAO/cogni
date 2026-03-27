@@ -450,15 +450,37 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         ? [{ role: "user", content: input.message }]
         : [];
 
-    // Model is required - no fallback
-    if (typeof input.model !== "string") {
-      log.error("Missing required model field");
+    // ModelRef is required - parse from workflow input
+    const modelRef = (() => {
+      // New format: modelRef object
+      if (input.modelRef && typeof input.modelRef === "object") {
+        const ref = input.modelRef as {
+          providerKey?: string;
+          modelId?: string;
+          connectionId?: string;
+        };
+        if (
+          typeof ref.providerKey === "string" &&
+          typeof ref.modelId === "string"
+        ) {
+          return {
+            providerKey: ref.providerKey,
+            modelId: ref.modelId,
+            ...(typeof ref.connectionId === "string"
+              ? { connectionId: ref.connectionId }
+              : {}),
+          };
+        }
+      }
+      log.error("Missing required modelRef field");
+      return null;
+    })();
+    if (!modelRef) {
       return NextResponse.json(
-        { error: "model field is required" },
+        { error: "modelRef field is required" },
         { status: 400 }
       );
     }
-    const model = input.model;
 
     const accountService = container.accountsForUser(toUserId(actorUserId));
 
@@ -485,6 +507,8 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         billingAccountId,
         virtualKeyId,
       },
+      resolver: container.providerResolver,
+      actorId: actorUserId,
       ...(container.connectionBroker
         ? { broker: container.connectionBroker }
         : {}),
@@ -497,21 +521,15 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     }));
     // Forward responseFormat if provided (enables structuredOutput in GraphRunResult).
     const responseFormat = resolveResponseFormat(input);
-    // Extract optional BYO-AI model connection from the opaque input payload
-    const modelConnectionId =
-      typeof input.modelConnectionId === "string"
-        ? input.modelConnectionId
-        : undefined;
 
     const result = scopedExecutor.runGraph(
       {
         runId,
         graphId,
         messages,
-        model,
+        modelRef,
         ...(stateKey !== undefined && { stateKey }),
         ...(responseFormat !== undefined && { responseFormat }),
-        ...(modelConnectionId ? { modelConnectionId } : {}),
       },
       {
         actorUserId,

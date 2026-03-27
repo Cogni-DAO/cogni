@@ -116,7 +116,7 @@ function createTestRequest(
   return {
     runId: "test-run-id",
     messages: [{ role: "user", content: "Hello" }],
-    model: "test-model",
+    modelRef: { providerKey: "platform", modelId: "test-model" },
     graphId: "langgraph:poet",
     ...overrides,
   };

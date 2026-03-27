@@ -61,7 +61,7 @@ function createTestRequest(
   return {
     runId: TEST_RUN_ID,
     graphId: TEST_GRAPH_ID,
-    model: "gpt-4o",
+    modelRef: { providerKey: "platform", modelId: "gpt-4o" },
     messages: [createUserMessage("Hello")],
     ...overrides,
   };
@@ -72,6 +72,10 @@ const TEST_SCOPE = {
     billingAccountId: TEST_BILLING_ACCOUNT_ID,
     virtualKeyId: TEST_VIRTUAL_KEY_ID,
   },
+  llmService: {
+    completion: vi.fn(),
+    completionStream: vi.fn(),
+  } as unknown as import("@/ports").LlmService,
 };
 
 /** Run fn within execution scope (needed for getExecutionScope() calls in provider). */

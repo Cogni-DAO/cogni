@@ -74,19 +74,17 @@ describe("/api/v1/ai/models component tests", () => {
     // Assert - Contract compliance
     const parsed = aiModelsOperation.output.parse(data);
 
-    // Assert - defaults come from catalog (computed from metadata tags)
-    expect(parsed.defaultPreferredModelId).toBe(
-      catalog.defaults.defaultPreferredModelId
-    );
-    expect(parsed.defaultFreeModelId).toBe(catalog.defaults.defaultFreeModelId);
+    // Assert - defaultRef is present
+    expect(parsed.defaultRef).toBeTruthy();
 
-    // Assert - defaults exist in returned models (if not null)
-    const modelIds = parsed.models.map((m) => m.id);
-    if (parsed.defaultPreferredModelId) {
-      expect(modelIds).toContain(parsed.defaultPreferredModelId);
-    }
-    if (parsed.defaultFreeModelId) {
-      expect(modelIds).toContain(parsed.defaultFreeModelId);
+    // Assert - defaultRef exists in returned models (if not null)
+    if (parsed.defaultRef) {
+      const match = parsed.models.find(
+        (m) =>
+          m.ref.providerKey === parsed.defaultRef!.providerKey &&
+          m.ref.modelId === parsed.defaultRef!.modelId
+      );
+      expect(match).toBeDefined();
     }
   });
 

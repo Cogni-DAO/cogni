@@ -93,7 +93,7 @@ describe("POST /api/v1/ai/chat - Paid Model Zero Credits", () => {
     });
 
     vi.mocked(completion).mockImplementation(async (input) => {
-      const isFree = input.model === "free-model";
+      const isFree = input.modelRef.modelId === "free-model";
 
       if (!isFree) {
         const error = new Error("Insufficient credits");
@@ -117,7 +117,7 @@ describe("POST /api/v1/ai/chat - Paid Model Zero Credits", () => {
     });
 
     vi.mocked(completionStream).mockImplementation(async (input) => {
-      const isFree = input.model === "free-model";
+      const isFree = input.modelRef.modelId === "free-model";
 
       if (!isFree) {
         const error = new Error("Insufficient credits");
@@ -160,7 +160,7 @@ describe("POST /api/v1/ai/chat - Paid Model Zero Credits", () => {
           method: "POST",
           body: JSON.stringify({
             message: "Hello",
-            model: "paid-model",
+            modelRef: { providerKey: "platform", modelId: "paid-model" },
             graphName: "langgraph:poet",
           }),
         });

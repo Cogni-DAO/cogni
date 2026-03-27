@@ -107,7 +107,7 @@ describe("Thread Persistence", () => {
       new NextRequest("http://localhost:3000/api/v1/ai/models")
     );
     expect(modelsRes.status).toBe(200);
-    const { defaultPreferredModelId } = await modelsRes.json();
+    const { defaultRef } = await modelsRes.json();
 
     // --- Turn 1 ---
     const stateKey = `test-thread-${randomUUID().slice(0, 8)}`;
@@ -117,7 +117,7 @@ describe("Thread Persistence", () => {
       body: JSON.stringify(
         createChatRequest({
           message: "Say exactly: TURN1_OK",
-          model: defaultPreferredModelId,
+          modelRef: defaultRef,
           stateKey,
         })
       ),
@@ -158,7 +158,7 @@ describe("Thread Persistence", () => {
       body: JSON.stringify(
         createChatRequest({
           message: "Say exactly: TURN2_OK",
-          model: defaultPreferredModelId,
+          modelRef: defaultRef,
           stateKey,
         })
       ),

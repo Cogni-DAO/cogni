@@ -63,7 +63,7 @@ describe("[internal] billing via BillingGraphExecutorDecorator (bug.0005 regress
           executionGrantId: grantId,
           input: {
             messages: [{ role: "user", content: "Say hello in one word." }],
-            model: TEST_MODEL_ID,
+            modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
           },
         }),
         headers: {

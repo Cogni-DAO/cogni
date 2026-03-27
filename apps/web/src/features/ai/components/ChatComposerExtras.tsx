@@ -14,7 +14,7 @@
 
 "use client";
 
-import type { GraphId } from "@cogni/ai-core";
+import type { GraphId, ModelRef } from "@cogni/ai-core";
 import { useEffect, useState } from "react";
 import {
   type GraphOption,
@@ -68,13 +68,11 @@ export const DEFAULT_GRAPH_ID: GraphId = "sandbox:openclaw";
 
 export interface ChatComposerExtrasProps {
   selectedModel: string;
-  onModelChange: (model: string) => void;
+  onModelChange: (ref: ModelRef) => void;
   defaultModelId: string;
   balance?: number;
   selectedGraph?: GraphId;
   onGraphChange?: (graphId: GraphId) => void;
-  /** Called when BYO backend changes */
-  onModelConnectionChange?: (connectionId: string | undefined) => void;
 }
 
 export function ChatComposerExtras({
@@ -84,7 +82,6 @@ export function ChatComposerExtras({
   balance = 0,
   selectedGraph = DEFAULT_GRAPH_ID,
   onGraphChange,
-  onModelConnectionChange,
 }: Readonly<ChatComposerExtrasProps>) {
   const modelsQuery = useModels();
   const [localModel, setLocalModel] = useState(selectedModel);
@@ -94,21 +91,27 @@ export function ChatComposerExtras({
     if (modelsQuery.data) {
       // Valid model IDs = OpenRouter models + ChatGPT subscription models
       const modelIds = [
-        ...modelsQuery.data.models.map((m) => m.id),
+        ...modelsQuery.data.models.map((m) => m.ref.modelId),
         ...CHATGPT_MODELS.map((m) => m.id),
       ];
       const validated = validatePreferredModel(modelIds, defaultModelId);
       if (validated !== localModel) {
         setLocalModel(validated);
-        onModelChange(validated);
+        // Find the matching ref from API models (defaults to platform provider)
+        const matchedModel = modelsQuery.data.models.find(
+          (m) => m.ref.modelId === validated
+        );
+        onModelChange(
+          matchedModel?.ref ?? { providerKey: "platform", modelId: validated }
+        );
       }
     }
   }, [modelsQuery.data, defaultModelId, localModel, onModelChange]);
 
-  const handleModelChange = (modelId: string) => {
-    setLocalModel(modelId);
-    setPreferredModelId(modelId);
-    onModelChange(modelId);
+  const handleModelChange = (ref: ModelRef) => {
+    setLocalModel(ref.modelId);
+    setPreferredModelId(ref.modelId);
+    onModelChange(ref);
   };
 
   const handleGraphChange = (graphId: GraphId) => {
@@ -123,7 +126,6 @@ export function ChatComposerExtras({
         onValueChange={handleModelChange}
         disabled={modelsQuery.isLoading || modelsQuery.isError}
         balance={balance}
-        {...(onModelConnectionChange ? { onModelConnectionChange } : {})}
       />
       <GraphPicker
         graphs={AVAILABLE_GRAPHS}

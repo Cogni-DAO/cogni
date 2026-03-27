@@ -47,8 +47,8 @@ export interface CompletionRequestOptions {
 export interface ChatRequestOptions {
   /** User message text (defaults to "Hello") */
   message?: string;
-  /** Model ID (defaults to TEST_MODEL_ID) */
-  model?: string;
+  /** Fully-resolved model reference (defaults to platform/TEST_MODEL_ID) */
+  modelRef?: { providerKey: string; modelId: string; connectionId?: string };
   /** Graph name or fully-qualified graphId (defaults to TEST_GRAPH_NAME) */
   graphName?: string;
   /** Optional state key for multi-turn conversations */
@@ -117,13 +117,16 @@ export function createCompletionRequest(
  */
 export function createChatRequest(options: ChatRequestOptions = {}): {
   message: string;
-  model: string;
+  modelRef: { providerKey: string; modelId: string; connectionId?: string };
   graphName: string;
   stateKey?: string;
 } {
   const base = {
     message: options.message ?? "Hello",
-    model: options.model ?? TEST_MODEL_ID,
+    modelRef: options.modelRef ?? {
+      providerKey: "platform",
+      modelId: TEST_MODEL_ID,
+    },
     graphName: options.graphName ?? TEST_GRAPH_NAME,
   };
 
