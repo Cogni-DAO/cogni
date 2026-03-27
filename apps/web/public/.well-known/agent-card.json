@@ -1,0 +1,104 @@
+{
+  "name": "Cogni Node",
+  "description": "DAO-governed AI node serving graph-based agents via x402 micropayments",
+  "description_for_model": "Cogni is an AI service node that runs specialized graph agents (poet, research, philosophical ponderer, code-aware brain). Pay per request with USDC on Base via x402 protocol. Send POST to the chat completions endpoint with a PAYMENT-SIGNATURE header. Use the graph_name field to select a specific agent personality.",
+  "url": "/api/v1/public/x402/chat/completions",
+  "version": "0.1.0",
+  "provider": {
+    "organization": "Cogni DAO",
+    "url": "https://cogni.dev"
+  },
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": ["text/plain", "application/json"],
+  "defaultOutputModes": ["text/plain", "application/json"],
+  "skills": [
+    {
+      "id": "langgraph:poet",
+      "name": "Poet",
+      "description": "Poetic AI assistant with structured verse responses, emojis, and uplifting tone",
+      "tags": ["creative", "poetry", "writing"],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/plain"],
+      "x402_payment": {
+        "scheme": "exact",
+        "network": "eip155:8453",
+        "asset": "USDC",
+        "maxAmountRequired": "100000",
+        "payTo": "0xdCCa8D85603C2CC47dc6974a790dF846f8695056"
+      }
+    },
+    {
+      "id": "langgraph:ponderer",
+      "name": "Ponderer",
+      "description": "Philosophical thinker giving concise, profound responses grounded in philosophical traditions",
+      "tags": ["philosophy", "thinking", "analysis"],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/plain"],
+      "x402_payment": {
+        "scheme": "exact",
+        "network": "eip155:8453",
+        "asset": "USDC",
+        "maxAmountRequired": "100000",
+        "payTo": "0xdCCa8D85603C2CC47dc6974a790dF846f8695056"
+      }
+    },
+    {
+      "id": "langgraph:brain",
+      "name": "Brain",
+      "description": "Code-aware assistant with repository search and file access for software engineering tasks",
+      "tags": ["coding", "engineering", "repository"],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/plain", "application/json"],
+      "x402_payment": {
+        "scheme": "exact",
+        "network": "eip155:8453",
+        "asset": "USDC",
+        "maxAmountRequired": "100000",
+        "payTo": "0xdCCa8D85603C2CC47dc6974a790dF846f8695056"
+      }
+    },
+    {
+      "id": "langgraph:research",
+      "name": "Research",
+      "description": "Deep research agent with web search, multi-step investigation, and structured report generation",
+      "tags": ["research", "web-search", "analysis", "reports"],
+      "inputModes": ["text/plain"],
+      "outputModes": ["text/plain", "application/json"],
+      "x402_payment": {
+        "scheme": "exact",
+        "network": "eip155:8453",
+        "asset": "USDC",
+        "maxAmountRequired": "100000",
+        "payTo": "0xdCCa8D85603C2CC47dc6974a790dF846f8695056"
+      }
+    }
+  ],
+  "securitySchemes": {
+    "x402": {
+      "type": "x402",
+      "description": "Pay per request with USDC on Base via x402 protocol",
+      "facilitator": "https://x402.org/facilitator",
+      "chains": ["eip155:8453"],
+      "tokens": ["USDC"]
+    }
+  },
+  "endpoints": {
+    "chat_completions": {
+      "url": "/api/v1/public/x402/chat/completions",
+      "method": "POST",
+      "description": "OpenAI-compatible chat completions (x402 gated)",
+      "content_type": "application/json",
+      "payment_required": true
+    },
+    "models": {
+      "url": "/api/v1/public/x402/models",
+      "method": "GET",
+      "description": "List available models and graphs (free, no payment required)",
+      "content_type": "application/json",
+      "payment_required": false
+    }
+  }
+}
