@@ -25,6 +25,7 @@ const TEST_SCOPE = {
     billingAccountId: "account-123",
     virtualKeyId: "vkey-123",
   },
+  usageSource: "litellm" as const,
 };
 
 /**

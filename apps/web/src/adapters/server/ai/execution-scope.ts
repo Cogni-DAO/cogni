@@ -16,6 +16,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 
+import type { SourceSystem } from "@cogni/ai-core";
 import type { BillingContext, LlmService } from "@/ports";
 
 /**
@@ -30,6 +31,8 @@ export interface ExecutionScope {
   readonly abortSignal?: AbortSignal;
   /** Resolved LlmService for this run (from ModelProviderPort.createLlmService). */
   readonly llmService: LlmService;
+  /** Billing source system for usage attribution (from ModelProviderPort.usageSource). */
+  readonly usageSource: SourceSystem;
 }
 
 const executionScopeStorage = new AsyncLocalStorage<ExecutionScope>();

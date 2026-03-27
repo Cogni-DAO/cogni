@@ -43,6 +43,7 @@ import {
   executeStream,
   redactSecretsInMessages,
 } from "@/features/ai/public.server";
+import { commitUsageFact } from "@/features/ai/services/billing";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
 
@@ -512,6 +513,18 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     const scopedExecutor = createScopedGraphExecutor({
       executor,
       preflightCheckFn,
+      commitByoUsage: async (fact, log) => {
+        await commitUsageFact(
+          fact,
+          {
+            runId: fact.runId,
+            attempt: fact.attempt,
+            ingressRequestId: fact.runId,
+          },
+          accountService,
+          log
+        );
+      },
       billing: {
         billingAccountId,
         virtualKeyId,

@@ -335,7 +335,7 @@ No conditional throw for missing `usageUnitId`. Platform runs that are missing i
 - [x] ~~Should `ModelRef.provider` be a fixed union or an open string?~~ **DECIDED: `providerKey: string` (registry key).** Fixed unions become central-edit tax as providers grow. The provider registry holds typed adapter factories; the string key is just a lookup key. Type safety comes from the registry, not the union.
 - [ ] Should the `OllamaLlmAdapter` use the OpenAI-compatible endpoint (`/v1/chat/completions`) or Ollama's native API (`/api/chat`)? The former is simpler; the latter supports Ollama-specific features.
 - [ ] How should the catalog handle disconnected providers? If a user's Ollama server is offline, should its models still appear (grayed out) or be hidden?
-- [x] ~~Should `UsageFact` track BYO runs at all?~~ **DECIDED: Yes.** Track for observability (token counts, latency). Platform cost is $0 but the data is valuable. `usageUnitId` is optional for BYO providers — `runId` is sufficient for correlation.
+- [x] ~~Should `UsageFact` track BYO runs at all?~~ **DECIDED: Yes.** Track for observability (token counts, latency). Platform cost is $0 but the data is valuable. BYO `usageUnitId` = deterministic `${runId}/${attempt}/byo` for idempotency. **Implemented in task.0212.**
 
 ## Related
 

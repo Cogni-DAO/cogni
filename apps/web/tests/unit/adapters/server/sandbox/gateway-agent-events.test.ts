@@ -26,6 +26,7 @@ const TEST_SCOPE = {
     billingAccountId: "ba-acct-42",
     virtualKeyId: "vk-1",
   },
+  usageSource: "litellm" as const,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

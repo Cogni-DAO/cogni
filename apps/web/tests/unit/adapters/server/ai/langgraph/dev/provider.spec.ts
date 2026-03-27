@@ -76,6 +76,7 @@ const TEST_SCOPE = {
     completion: vi.fn(),
     completionStream: vi.fn(),
   } as unknown as import("@/ports").LlmService,
+  usageSource: "litellm" as const,
 };
 
 /** Run fn within execution scope (needed for getExecutionScope() calls in provider). */
@@ -299,12 +300,14 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
           billingAccountId: "tenant-a",
           virtualKeyId: TEST_VIRTUAL_KEY_ID,
         },
+        usageSource: "litellm" as const,
       };
       const scopeB = {
         billing: {
           billingAccountId: "tenant-b",
           virtualKeyId: TEST_VIRTUAL_KEY_ID,
         },
+        usageSource: "litellm" as const,
       };
 
       // Run both with different billing scopes

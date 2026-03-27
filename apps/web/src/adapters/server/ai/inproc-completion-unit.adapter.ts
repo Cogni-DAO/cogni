@@ -283,32 +283,12 @@ export class InProcCompletionUnitAdapter {
       if (sawDone) break;
     }
 
-    // Emit usage_report (but NOT done - caller handles that)
+    // Emit usage_report for ALL providers (but NOT done - caller handles that)
     const result = await final;
     if (result.ok) {
-      // Platform billing requires litellmCallId as the idempotent billing key.
-      // BYO runs (CodexLlmAdapter via scope override) don't go through LiteLLM —
-      // litellmCallId is legitimately absent. Skip usage_report for those runs.
-      // When litellmCallId IS expected (platform runs) but missing, that's still a bug.
-      if (result.litellmCallId) {
-        const fact: UsageFact = {
-          runId,
-          attempt,
-          source: "litellm",
-          executorType: "inproc",
-          graphId,
-          inputTokens: result.usage.promptTokens,
-          outputTokens: result.usage.completionTokens,
-          usageUnitId: result.litellmCallId,
-          ...(result.model && { model: result.model }),
-          ...(result.providerCostUsd !== undefined && {
-            costUsd: result.providerCostUsd,
-          }),
-        };
-        const usageEvent: UsageReportEvent = { type: "usage_report", fact };
-        yield usageEvent;
-      } else if (scope.llmService === this.deps.llmService) {
-        // Platform run without call ID — billing integrity violation
+      const { usageSource } = scope;
+      // PLATFORM_CALLID_STILL_REQUIRED: platform runs without litellmCallId are a billing violation.
+      if (!result.litellmCallId && usageSource === "litellm") {
         this.log.error(
           { runId, model: result.model },
           "CRITICAL: LiteLLM response missing call ID - billing incomplete, failing run"
@@ -317,7 +297,25 @@ export class InProcCompletionUnitAdapter {
           "Billing failed: LiteLLM response missing call ID (x-litellm-call-id)"
         );
       }
-      // BYO run without litellmCallId — expected, no usage_report emitted
+
+      // DETERMINISTIC_BYO_USAGE_ID: BYO usageUnitId is deterministic for retry idempotency.
+      // Platform runs use litellmCallId (stable per-call). BYO runs use runId/attempt/byo.
+      const usageUnitId = result.litellmCallId ?? `${runId}/${attempt}/byo`;
+      const fact: UsageFact = {
+        runId,
+        attempt,
+        source: usageSource,
+        executorType: "inproc",
+        graphId,
+        usageUnitId,
+        inputTokens: result.usage?.promptTokens,
+        outputTokens: result.usage?.completionTokens,
+        ...(result.model && { model: result.model }),
+        // BYO_ZERO_PLATFORM_COST: respect any cost the adapter reports, default to 0.
+        costUsd: result.providerCostUsd ?? 0,
+      };
+      const usageEvent: UsageReportEvent = { type: "usage_report", fact };
+      yield usageEvent;
     }
     // NO done event - caller emits done when all iterations complete
   }

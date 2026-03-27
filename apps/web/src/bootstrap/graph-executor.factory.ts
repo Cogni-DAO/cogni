@@ -10,7 +10,7 @@
  *   - Per UNIFIED_GRAPH_EXECUTOR: all graph execution flows through GraphExecutorPort
  *   - Per ROUTING_BY_NAMESPACE_ONLY: NamespaceGraphRouter routes by graphId prefix via Map
  *   - Per LANGFUSE_INTEGRATION: ObservabilityGraphExecutorDecorator wraps for Langfuse traces
- *   - Per CALLBACK_IS_SOLE_WRITER: BillingGraphExecutorDecorator validates usage_report events (receipt writes via LiteLLM callback)
+ *   - Per CALLBACK_WRITES_PLATFORM_RECEIPTS: UsageCommitDecorator validates usage_report events. Platform receipts via LiteLLM callback; BYO receipts committed directly.
  *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: PreflightCreditCheckDecorator rejects runs with insufficient credits
  *   - LAZY_SANDBOX_IMPORT: Sandbox provider loaded via dynamic import() to defer dockerode native addon chain (SandboxRunnerAdapter)
  * Side-effects: global (module-scoped cached sandbox provider promise)
@@ -18,6 +18,7 @@
  * @public
  */
 
+import type { SourceSystem } from "@cogni/ai-core";
 import type {
   ExecutionContext,
   GraphFinal,
@@ -28,7 +29,6 @@ import type { UserId } from "@cogni/ids";
 import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 import {
   BillingEnrichmentGraphExecutorDecorator,
-  BillingGraphExecutorDecorator,
   type CompletionStreamFn,
   createLangGraphDevClient,
   InProcCompletionUnitAdapter,
@@ -37,6 +37,7 @@ import {
   NamespaceGraphRouter,
   ObservabilityGraphExecutorDecorator,
   PreflightCreditCheckDecorator,
+  UsageCommitDecorator,
 } from "@/adapters/server";
 import { runInScope } from "@/adapters/server/ai/execution-scope";
 import type {
@@ -118,6 +119,7 @@ export function createScopedGraphExecutor(params: {
   readonly executor: GraphExecutorPort;
   readonly billing: BillingContext;
   readonly preflightCheckFn: PreflightCreditCheckFn;
+  readonly commitByoUsage: import("@/adapters/server/ai/usage-commit.decorator").CommitUsageFactFn;
   readonly abortSignal?: AbortSignal;
   readonly broker?: ConnectionBrokerPort;
   readonly resolver: ModelProviderResolverPort;
@@ -130,8 +132,12 @@ export function createScopedGraphExecutor(params: {
     params.billing
   );
 
-  // Validate enriched usage_report events before they reach the runtime relay.
-  const billed = new BillingGraphExecutorDecorator(enriched, container.log);
+  // Validate usage_report events; commit BYO receipts directly, defer platform to callback.
+  const billed = new UsageCommitDecorator(
+    enriched,
+    container.log,
+    params.commitByoUsage
+  );
 
   // Wrap with preflight credit check — uses provider resolver for billing policy
   const preflighted = new PreflightCreditCheckDecorator(
@@ -225,6 +231,7 @@ export function createScopedGraphExecutor(params: {
             ...(ctx ? { ctx } : {}),
             billing: params.billing,
             llmService,
+            usageSource: provider.usageSource,
             ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
           });
 
@@ -245,6 +252,7 @@ export function createScopedGraphExecutor(params: {
         ...(ctx ? { ctx } : {}),
         billing: params.billing,
         llmService,
+        usageSource: provider.usageSource,
         ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
       });
     },
@@ -266,13 +274,15 @@ export function runGraphWithScope(params: {
   readonly ctx?: ExecutionContext;
   readonly billing: BillingContext;
   readonly llmService: LlmService;
+  readonly usageSource: SourceSystem;
   readonly abortSignal?: AbortSignal;
 }): GraphRunResult {
-  const { executor, req, ctx, billing, llmService } = params;
+  const { executor, req, ctx, billing, llmService, usageSource } = params;
   return runInScope(
     {
       billing,
       llmService,
+      usageSource,
       ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
     },
     () => executor.runGraph(req, ctx)
