@@ -9,7 +9,6 @@
 | Pri | Rank | Est | Status | ID | Title | Project | Project ID |
 | --- | ---- | --- | ------ | -- | ----- | ------- | ---------- |
 | 0 | 0 | 0 | needs_triage | bug.0091 | OpenClaw workspace path ≠ git repo path causes agent CWD mismatch | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
-| 0 | 0 | 0 | needs_triage | story.0221 | Agent KPI Observability — agents measure and optimize against their own KPIs |  |  |
 | 0 | 1 | 2 | needs_implement | bug.0157 | WalletConnect pino@7 pulls test-only deps into Turbopack Client Component SSR |  |  |
 | 0 | 1 | 3 | needs_merge | task.0161 | Governance signal executor: Alchemy webhook → on-chain verification → GitHub actions | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
@@ -52,6 +51,7 @@
 | 1 | 3 | 3 | needs_merge | bug.0196 | Scheduled runs attributed to system tenant instead of schedule owner |  |  |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
+| 1 | 4 | 2 | needs_implement | task.0212 | Unified usage reporting — emit usage_report for all LLM providers (platform, codex, openai-compatible) | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | 5 | 2 | needs_triage | bug.0044 | Gateway billing reader finds 0 entries in stale audit log — kills execution after graph switch | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 5 | 2 | needs_triage | bug.0069 | Stack tests flaky — all 5 waitForReceipts tests time out when run as full suite |  |  |
 | 1 | 5 | 2 | needs_design | bug.0200 | setup-secrets has no validation that generated secrets are deploy-safe | Database Operations | proj.database-ops |
@@ -117,6 +117,7 @@
 | 2 | 15 | 3 | needs_implement | task.0192 | Walk: Per-tenant BYO-AI — Profile page OAuth + DrizzleConnectionBroker | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 16 | 3 | needs_design | task.0003 | Sweep stale doc references across the codebase | Maximize OSS Tools | proj.maximize-oss-tools |
 | 2 | 17 | 1 | needs_research | spike.0037 | Research Tailscale/Headscale mesh VPN for Cogni infrastructure |  |  |
+| 2 | 20 | 3 | needs_design | task.0211 | BYO-AI ChatGPT — auth manager + Codex CLI in Docker image | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |
 | 2 | 50 | 2 | needs_implement | task.0134 | EIP-4824 daoURI v0 — lightweight DAOstar metadata endpoint | Financial Ledger | proj.financial-ledger |
 | 2 | 99 | 1 | needs_design | bug.0093 | Ownership facade N+1 — sequential DB queries per epoch | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -125,6 +126,7 @@
 | 2 | 99 | 3 | needs_implement | task.0126 | Fluence Provider Base — VM Provisioning via REST API |  |  |
 | 2 | 99 | 2 | needs_triage | spike.0146 | OtoCo testnet validation — verify Base Sepolia contracts, createSeries events, GovernanceERC20 token attachment | Node Formation & Launch | proj.node-formation-ui |
 | 2 | 99 | 2 | needs_triage | task.0181 | Spike: Worker-local graph execution — evaluate and design | Unified Graph Launch | proj.unified-graph-launch |
+| 2 | 99 | 2 | needs_triage | bug.0222 | Graph execution sends tools to models that declare capabilities.tools: false | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 30 | 3 | needs_implement | task.0207 | Run: BYO-AI hosted OSS provider — user connects their OpenAI-compatible endpoint | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 3 | 80 | 3 | needs_design | task.0146 | Extract payments application orchestration + billing ports into packages | AI Operator Wallet | proj.ai-operator-wallet |
@@ -242,6 +244,7 @@
 | 1 | spike.0190 | Research OpenAI Codex OAuth & BYO-AI integration | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | task.0191 | v0: Codex-native graph executor with ChatGPT subscription auth | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | task.0208 | PR review webhook → Temporal parent workflow with durable GitHub writes | Unified Graph Launch | proj.unified-graph-launch |
+| 1 | story.0221 | Agent KPI Observability — agents measure and optimize against their own KPIs | Governance Agents | proj.governance-agents |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
