@@ -5,16 +5,15 @@
  * Module: `@tests/component/ai/models-route.int`
  * Purpose: Validates /api/v1/ai/models HTTP endpoint behavior including auth and error handling.
  * Scope: Tests HTTP status codes and response schema compliance. Does not test cache implementation or upstream fetch logic.
- * Invariants: Route requires authentication; returns contract-valid response; handles errors gracefully; defaults computed from catalog metadata.
+ * Invariants: Route requires authentication; returns contract-valid response; handles errors gracefully; defaults computed from ModelCatalogPort.
  * Side-effects: none (fully mocked)
- * Notes: Uses mocked session and cache - no real HTTP server or database required. Defaults come from catalog metadata.cogni.* tags.
  * Links: /api/v1/ai/models route, ai.models.v1.contract
  * @internal
  */
 
 import {
-  loadModelsCatalogFixture,
-  loadModelsCatalogWithDefaultsFixture,
+  createModelsWithFree,
+  loadModelsFixture,
 } from "@tests/_fixtures/ai/fixtures";
 import { generateTestWallet } from "@tests/_fixtures/auth/db-helpers";
 import { NextRequest } from "next/server";
@@ -26,26 +25,48 @@ vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));
 
-vi.mock("@/shared/ai/model-catalog.server", () => ({
-  getCachedModels: vi.fn(),
+vi.mock("@cogni/ids", () => ({
+  toUserId: vi.fn((id: string) => id),
 }));
 
-vi.mock("@/shared/env", () => ({
-  serverEnv: vi.fn().mockReturnValue({
-    LITELLM_BASE_URL: "http://localhost:4000",
-    LITELLM_MASTER_KEY: "test-key",
-    // Required by container.ts for ScheduleControlPort
-    TEMPORAL_ADDRESS: "localhost:7233",
-    TEMPORAL_NAMESPACE: "test-namespace",
-    // Required by container.ts for RepoCapability (real RipgrepAdapter, not called in this test)
-    COGNI_REPO_ROOT: process.cwd(),
+const mockModelCatalog = {
+  listModels: vi.fn(),
+};
+
+const mockAccountService = {
+  getOrCreateBillingAccountForUser: vi.fn(),
+  getBalance: vi.fn(),
+  getBillingAccount: vi.fn(),
+  recordChargeReceipt: vi.fn(),
+  listChargeReceipts: vi.fn(),
+  getBalanceHistory: vi.fn(),
+};
+
+vi.mock("@/bootstrap/container", () => ({
+  getContainer: vi.fn(() => ({
+    log: {
+      child: vi.fn().mockReturnThis(),
+      info: vi.fn(),
+      error: vi.fn(),
+      warn: vi.fn(),
+    },
+    config: { unhandledErrorPolicy: "rethrow" },
+    accountsForUser: vi.fn(() => mockAccountService),
+    modelCatalog: mockModelCatalog,
+  })),
+}));
+
+vi.mock("@/lib/auth/mapping", () => ({
+  getOrCreateBillingAccountForUser: vi.fn().mockResolvedValue({
+    id: "ba-test",
+    ownerUserId: "test-user",
+    defaultVirtualKeyId: "vk-test",
   }),
 }));
 
 // Import after mocks
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { GET } from "@/app/api/v1/ai/models/route";
-import { getCachedModels } from "@/shared/ai/model-catalog.server";
 
 describe("/api/v1/ai/models component tests", () => {
   beforeEach(() => {
@@ -53,94 +74,70 @@ describe("/api/v1/ai/models component tests", () => {
   });
 
   it("should return 200 with contract-valid response when authenticated", async () => {
-    // Arrange - catalog with defaults computed from metadata tags
-    const catalog = loadModelsCatalogWithDefaultsFixture();
+    const catalogResult = loadModelsFixture();
 
     vi.mocked(getSessionUser).mockResolvedValue({
       id: "test-user",
       walletAddress: generateTestWallet("models-route-happy-path"),
     });
-    vi.mocked(getCachedModels).mockResolvedValue(catalog);
+    mockModelCatalog.listModels.mockResolvedValue(catalogResult);
 
     const req = new NextRequest("http://localhost:3000/api/v1/ai/models");
-
-    // Act
     const response = await GET(req);
     const data = await response.json();
 
-    // Assert - HTTP status
     expect(response.status).toBe(200);
 
-    // Assert - Contract compliance
     const parsed = aiModelsOperation.output.parse(data);
-
-    // Assert - defaultRef is present
     expect(parsed.defaultRef).toBeTruthy();
 
-    // Assert - defaultRef exists in returned models (if not null)
     if (parsed.defaultRef) {
       const match = parsed.models.find(
         (m) =>
-          m.ref.providerKey === parsed.defaultRef!.providerKey &&
-          m.ref.modelId === parsed.defaultRef!.modelId
+          m.ref.providerKey === parsed.defaultRef?.providerKey &&
+          m.ref.modelId === parsed.defaultRef?.modelId
       );
       expect(match).toBeDefined();
     }
   });
 
-  it("should return null defaults when catalog has no tagged models", async () => {
-    // Arrange - catalog without metadata tags (legacy format)
-    const catalog = loadModelsCatalogFixture();
+  it("should return 200 with null-safe defaults when catalog has no tagged models", async () => {
+    const catalogResult = createModelsWithFree();
 
     vi.mocked(getSessionUser).mockResolvedValue({
       id: "test-user",
       walletAddress: generateTestWallet("models-route-no-tags"),
     });
-    vi.mocked(getCachedModels).mockResolvedValue(catalog);
+    mockModelCatalog.listModels.mockResolvedValue(catalogResult);
 
     const req = new NextRequest("http://localhost:3000/api/v1/ai/models");
-
-    // Act
     const response = await GET(req);
     const data = await response.json();
 
-    // Assert - still 200, not 500 (never error on missing tags)
     expect(response.status).toBe(200);
-
-    // Assert - Contract compliance (nullable defaults are valid)
     const parsed = aiModelsOperation.output.parse(data);
-
-    // defaults should be deterministic fallback (first by id) or null
     expect(parsed.models.length).toBeGreaterThan(0);
   });
 
   it("should return 401 when not authenticated", async () => {
-    // Arrange
     vi.mocked(getSessionUser).mockResolvedValue(null);
 
     const req = new NextRequest("http://localhost:3000/api/v1/ai/models");
-
-    // Act
     const response = await GET(req);
 
-    // Assert
     expect(response.status).toBe(401);
   });
 
-  it("should return 503 when cache fails", async () => {
-    // Arrange
+  it("should return 503 when catalog fails", async () => {
     vi.mocked(getSessionUser).mockResolvedValue({
       id: "test-user",
       walletAddress: generateTestWallet("models-route-cache-fail"),
     });
-    vi.mocked(getCachedModels).mockRejectedValue(new Error("Cache error"));
+    mockModelCatalog.listModels.mockRejectedValue(new Error("Catalog error"));
 
     const req = new NextRequest("http://localhost:3000/api/v1/ai/models");
-
-    // Act
     const response = await GET(req);
 
-    // Assert
     expect(response.status).toBe(503);
   });
 });
