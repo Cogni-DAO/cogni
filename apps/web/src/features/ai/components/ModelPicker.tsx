@@ -99,11 +99,7 @@ export function ModelPicker({
 }: Readonly<ModelPickerProps>) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  // Initialize backend tab from current model value
-  const initialBackend = CHATGPT_MODELS.some((m) => m.id === value)
-    ? "chatgpt"
-    : "openrouter";
-  const [backend, setBackend] = useState<LlmBackend>(initialBackend);
+  const [backend, setBackend] = useState<LlmBackend>("openrouter");
   const [connectionId, setConnectionId] = useState<string | undefined>(
     undefined
   );
@@ -111,9 +107,7 @@ export function ModelPicker({
     string | undefined
   >(undefined);
 
-  // Fetch connection statuses once on mount.
-  // If current model is ChatGPT but missing connectionId (page reload),
-  // propagate it via onValueChange when the fetch completes.
+  // Fetch connection statuses once on mount
   useEffect(() => {
     fetch("/api/v1/auth/openai-codex/status")
       .then((res) => (res.ok ? res.json() : null))
@@ -133,15 +127,6 @@ export function ModelPicker({
       })
       .catch(() => {});
   }, []);
-
-  // When connectionId arrives and the active model is ChatGPT, patch the
-  // modelRef so the missing connectionId is filled in (page-reload scenario).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only fire when connectionId resolves, not on every value/onValueChange change
-  useEffect(() => {
-    if (connectionId && CHATGPT_MODELS.some((m) => m.id === value)) {
-      onValueChange({ providerKey: "codex", modelId: value, connectionId });
-    }
-  }, [connectionId]);
 
   // Track last-used model per backend so switching back restores selection
   const [lastOpenRouterModel, setLastOpenRouterModel] = useState(value);
