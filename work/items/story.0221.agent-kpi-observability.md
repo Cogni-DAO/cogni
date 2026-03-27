@@ -2,10 +2,10 @@
 id: story.0221
 type: story
 title: "Agent KPI Observability — agents measure and optimize against their own KPIs"
-status: needs_triage
-priority:
-rank:
-estimate:
+status: done
+priority: 1
+rank: 5
+estimate: 0
 summary: "Emit KPI-relevant metrics from agent runs to Grafana/Loki. Agents query their own KPI actuals vs targets via Grafana MCP and self-adjust. Not human dashboards — agent-consumable data."
 outcome: "Every agent role has measurable KPIs flowing through the observability stack. Agents can query their own performance and identify where they're off-target."
 spec_refs: []
@@ -17,6 +17,7 @@ pr:
 reviewer:
 created: 2026-03-27
 updated: 2026-03-27
+routing_note: "Novel multi-PR effort spanning governance agents + observability. Needs its own project. Recommend /project to create proj.agent-kpi-observability."
 labels: [observability, agents, kpi, grafana, mission-control]
 external_refs:
   - feat/mission-control-clean (agent-roles.md RoleSpec with KPIs)
@@ -54,17 +55,17 @@ But today these KPIs exist only as type definitions. No metrics pipeline emits t
 
 ## Existing Infrastructure
 
-| Component | Status | Location |
-|-----------|--------|----------|
-| Grafana Cloud | Prod | Connected via `GRAFANA_CLOUD_*` env vars |
-| Local Grafana + Loki | Dev | `docker-compose`, `infra/compose/configs/alloy-config.*.alloy` |
-| Alloy collector | Running | Scrapes Prometheus + ships logs to Loki |
-| Pino JSON logging | Active | All app logs → stdout → Alloy → Loki |
-| Prometheus `/metrics` | Active | `apps/web/src/shared/observability/server/metrics.ts` |
-| Grafana MCP server | Connected | `/mcp` reconnects, `query_prometheus`, `query_loki_logs` available |
-| RoleSpec + KPI types | Defined | `feat/mission-control-clean:docs/spec/agent-roles.md` |
-| `monitoring-expert` skill | Installed | `.claude/skills/monitoring-expert/` |
-| `grafana-dashboards` skill | Installed | `.claude/skills/grafana-dashboards/` |
+| Component                  | Status    | Location                                                           |
+| -------------------------- | --------- | ------------------------------------------------------------------ |
+| Grafana Cloud              | Prod      | Connected via `GRAFANA_CLOUD_*` env vars                           |
+| Local Grafana + Loki       | Dev       | `docker-compose`, `infra/compose/configs/alloy-config.*.alloy`     |
+| Alloy collector            | Running   | Scrapes Prometheus + ships logs to Loki                            |
+| Pino JSON logging          | Active    | All app logs → stdout → Alloy → Loki                               |
+| Prometheus `/metrics`      | Active    | `apps/web/src/shared/observability/server/metrics.ts`              |
+| Grafana MCP server         | Connected | `/mcp` reconnects, `query_prometheus`, `query_loki_logs` available |
+| RoleSpec + KPI types       | Defined   | `feat/mission-control-clean:docs/spec/agent-roles.md`              |
+| `monitoring-expert` skill  | Installed | `.claude/skills/monitoring-expert/`                                |
+| `grafana-dashboards` skill | Installed | `.claude/skills/grafana-dashboards/`                               |
 
 ## Requirements
 
