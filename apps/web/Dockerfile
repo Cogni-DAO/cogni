@@ -85,6 +85,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
+# Codex CLI for BYO-AI ChatGPT execution.
+# Standalone output tracing can't detect spawned binaries, so copy explicitly.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@openai/codex /opt/codex
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@openai/codex-sdk /opt/codex-sdk
+
 USER nextjs
 
 EXPOSE 3000

@@ -146,10 +146,13 @@ async function* runCodexExec(params: {
 
     // Dynamic import to avoid module-scope subprocess spawn
     const { Codex } = await import("@openai/codex-sdk");
-    // Resolve codex binary from the app's own node_modules (works in Docker
-    // where /repo/current doesn't have node_modules installed).
-    const codexPkg = require.resolve("@openai/codex/package.json");
-    const codexBin = join(codexPkg, "..", "bin", "codex.js");
+    const { existsSync } = await import("node:fs");
+    // Docker: /opt/codex/ (Dockerfile copies @openai/codex explicitly because
+    // Next.js standalone output tracing can't detect spawned binaries).
+    // Dev: pnpm hoists the binary to repo root node_modules/.bin/.
+    const dockerBin = "/opt/codex/bin/codex.js";
+    const devBin = join(process.cwd(), "node_modules", ".bin", "codex");
+    const codexBin = existsSync(dockerBin) ? dockerBin : devBin;
 
     // Build env — inherit current + override HOME for auth isolation
     const { env: currentEnv } = await import("node:process");
