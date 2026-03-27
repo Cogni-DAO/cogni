@@ -35,13 +35,13 @@ Three axes, independent:
 
 | Deliverable                                                              | Status      | Est | Work Item |
 | ------------------------------------------------------------------------ | ----------- | --- | --------- |
-| `systemPrompt` on graph options + CatalogEntry                           | Not Started | 0.5 | task.0207 |
-| `createOperatorGraph` factory behind seam                                | Not Started | 0.5 | task.0207 |
-| CEO + Git Reviewer catalog entries + prompts                             | Not Started | 1   | task.0207 |
-| Operator tools: `work_item_query`, `work_item_transition`                | Not Started | 2   | task.0207 |
-| `RoleSpec` type + 2 constants                                            | Not Started | 0.5 | task.0208 |
-| `ScheduledSweepWorkflow` + activities (claim, context, outcome, release) | Not Started | 2   | task.0208 |
-| Temporal schedules for CEO + Git Reviewer                                | Not Started | 0.5 | task.0208 |
+| `systemPrompt` on graph options + CatalogEntry                           | Not Started | 0.5 | task.0211 |
+| `createOperatorGraph` factory behind seam                                | Not Started | 0.5 | task.0211 |
+| CEO + Git Reviewer catalog entries + prompts                             | Not Started | 1   | task.0211 |
+| Operator tools: `work_item_query`, `work_item_transition`                | Not Started | 2   | task.0211 |
+| `RoleSpec` type + 2 constants                                            | Not Started | 0.5 | task.0212 |
+| `ScheduledSweepWorkflow` + activities (claim, context, outcome, release) | Not Started | 2   | task.0212 |
+| Temporal schedules for CEO + Git Reviewer                                | Not Started | 0.5 | task.0212 |
 
 ### Walk (P1) — Metrics + More Capabilities
 

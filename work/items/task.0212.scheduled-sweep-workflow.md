@@ -1,5 +1,5 @@
 ---
-id: task.0208
+id: task.0212
 type: task
 title: "ScheduledSweepWorkflow + RoleSpec + domain activities"
 status: needs_implement
@@ -18,7 +18,7 @@ branch:
 pr:
 reviewer:
 revision: 1
-blocked_by: task.0207
+blocked_by: task.0211
 deploy_verified: false
 created: 2026-03-26
 updated: 2026-03-26
