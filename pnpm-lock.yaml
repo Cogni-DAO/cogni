@@ -375,6 +375,12 @@ importers:
       '@octokit/webhooks-methods':
         specifier: ^6.0.0
         version: 6.0.0
+      '@openai/codex':
+        specifier: ^0.116.0
+        version: 0.116.0
+      '@openai/codex-sdk':
+        specifier: ^0.116.0
+        version: 0.116.0
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.0
