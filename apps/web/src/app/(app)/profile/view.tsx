@@ -446,10 +446,26 @@ function ChatGptConnectFlow({
         </span>
       </div>
 
-      {/* Step 1: Copy code */}
-      <div className="space-y-1.5">
+      {/* Step 1: Open OpenAI */}
+      <div className="space-y-2">
         <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-          Step 1 — Copy your code
+          Step 1 — Open OpenAI
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href={deviceAuth?.verificationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open OpenAI sign-in page &#8599;
+          </a>
+        </Button>
+      </div>
+
+      {/* Step 2: Copy & enter code */}
+      <div className="space-y-2">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Step 2 — Enter this code
         </div>
         <div className="flex items-center gap-3">
           <code className="rounded-md border border-border bg-muted px-4 py-2 font-mono text-xl tracking-widest">
@@ -469,21 +485,6 @@ function ChatGptConnectFlow({
             {codeCopied ? "Copied!" : "Copy"}
           </Button>
         </div>
-      </div>
-
-      {/* Step 2: Open OpenAI */}
-      <div className="space-y-1.5">
-        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-          Step 2 — Enter code at OpenAI
-        </div>
-        <a
-          href={deviceAuth?.verificationUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-primary text-sm underline underline-offset-2"
-        >
-          Open OpenAI sign-in page &#8599;
-        </a>
       </div>
 
       {/* Step 3: Waiting */}
