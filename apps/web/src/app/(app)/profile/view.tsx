@@ -278,14 +278,14 @@ function ColorPickerSwatch({
   );
 }
 
-/* ─── ChatGPT Connect Flow ────────────────────────────────────────── */
+/* ─── ChatGPT Connect Flow (Device Code) ─────────────────────────── */
 
 /**
- * ChatGPT OAuth connect flow.
+ * ChatGPT Device Code connect flow.
  *
- * Uses the same pattern as OpenClaw VPS auth: show instructions first,
- * user opens auth link, signs in, copies redirect URL, pastes it back.
- * Works on both local dev and cloud deployments — same flow everywhere.
+ * User clicks Connect → gets a code → enters it at OpenAI's website.
+ * Our server polls until authorized, then exchanges for tokens.
+ * Works on any deployment — no localhost, no redirects, no paste-back.
  */
 function ChatGptConnectFlow({
   onComplete,
@@ -294,82 +294,98 @@ function ChatGptConnectFlow({
   onComplete: () => void;
   onCancel: () => void;
 }): ReactElement {
-  const [phase, setPhase] = useState<"instructions" | "waiting" | "error">(
-    "instructions"
-  );
-  const [pasteUrl, setPasteUrl] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "code" | "error">("idle");
+  const [deviceAuth, setDeviceAuth] = useState<{
+    deviceAuthId: string;
+    userCode: string;
+    interval: number;
+    verificationUrl: string;
+  } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Fetch auth URL + set PKCE cookie on click (not on mount — strict mode double-mounts would overwrite the cookie)
-  const handleOpenAuth = async () => {
+  // Start device code flow
+  const handleConnect = async () => {
+    setErrorMsg("");
     try {
       const res = await fetch("/api/v1/auth/openai-codex/authorize", {
         method: "POST",
       });
       if (!res.ok) {
         setPhase("error");
+        setErrorMsg("Failed to start authentication");
         return;
       }
       const data = await res.json();
-      if (data?.url) {
-        window.open(data.url, "_blank");
-        setPhase("waiting");
-      }
+      setDeviceAuth(data);
+      setPhase("code");
     } catch {
       setPhase("error");
+      setErrorMsg("Failed to connect to server");
     }
   };
 
-  const handlePaste = async () => {
-    if (!pasteUrl.trim()) return;
-    setSubmitting(true);
-    setErrorMsg("");
-    try {
-      // Only send the pasted URL — verifier+state are in the server-side cookie
-      const res = await fetch("/api/v1/auth/openai-codex/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: pasteUrl.trim() }),
-      });
-      if (res.ok) {
-        onComplete();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setErrorMsg(data.error || "Failed to connect");
+  // Poll for authorization when in "code" phase
+  useEffect(() => {
+    if (phase !== "code" || !deviceAuth) return;
+
+    let cancelled = false;
+    const pollInterval = (deviceAuth.interval || 5) * 1000;
+    let elapsed = 0;
+    const maxWait = 15 * 60 * 1000; // 15 minutes
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/v1/auth/openai-codex/exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deviceAuthId: deviceAuth.deviceAuthId,
+            userCode: deviceAuth.userCode,
+          }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (data.status === "connected") {
+          onComplete();
+          return;
+        }
+        if (data.status === "pending") {
+          elapsed += pollInterval;
+          if (elapsed >= maxWait) {
+            setPhase("error");
+            setErrorMsg("Timed out waiting for authorization");
+            return;
+          }
+          timer = setTimeout(poll, pollInterval);
+          return;
+        }
+        // Error
+        setPhase("error");
+        setErrorMsg(data.error || "Authorization failed");
+      } catch {
+        if (!cancelled) {
+          setPhase("error");
+          setErrorMsg("Connection error");
+        }
       }
-    } catch {
-      setErrorMsg("Request failed");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    };
+
+    let timer: ReturnType<typeof setTimeout> = setTimeout(poll, pollInterval);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [phase, deviceAuth, onComplete]);
 
   if (phase === "error") {
     return (
-      <Button variant="outline" size="sm" onClick={onCancel}>
-        Try again
-      </Button>
-    );
-  }
-
-  if (phase === "instructions") {
-    return (
-      <div className="flex flex-col gap-3">
-        <div className="space-y-1 text-muted-foreground text-xs">
-          <p>To connect your ChatGPT subscription:</p>
-          <p>
-            1. Click <strong>Open OpenAI</strong> below to sign in
-          </p>
-          <p>
-            2. After signing in, copy the <strong>full URL</strong> from your
-            browser&apos;s address bar
-          </p>
-          <p>3. Paste it back here</p>
-        </div>
+      <div className="flex flex-col gap-2">
+        {errorMsg && <div className="text-destructive text-xs">{errorMsg}</div>}
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleOpenAuth}>
-            Open OpenAI
+          <Button variant="outline" size="sm" onClick={handleConnect}>
+            Try again
           </Button>
           <Button variant="ghost" size="sm" onClick={onCancel}>
             Cancel
@@ -379,36 +395,57 @@ function ChatGptConnectFlow({
     );
   }
 
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="text-muted-foreground text-xs">
-        Signed in? Copy the URL from your browser&apos;s address bar and paste
-        it here:
-      </div>
+  if (phase === "idle") {
+    return (
       <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="Paste URL here..."
-          value={pasteUrl}
-          onChange={(e) => setPasteUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handlePaste();
-          }}
-          className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm"
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={submitting || !pasteUrl.trim()}
-          onClick={handlePaste}
-        >
-          {submitting ? "..." : "Submit"}
+        <Button variant="outline" size="sm" onClick={handleConnect}>
+          Connect
         </Button>
+      </div>
+    );
+  }
+
+  // phase === "code"
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="space-y-2">
+        <div className="text-muted-foreground text-xs">
+          Enter this code at OpenAI:
+        </div>
+        <div className="flex items-center gap-2">
+          <code className="rounded-md bg-muted px-3 py-1.5 font-mono text-lg tracking-widest">
+            {deviceAuth?.userCode}
+          </code>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (deviceAuth?.userCode) {
+                navigator.clipboard.writeText(deviceAuth.userCode);
+              }
+            }}
+          >
+            Copy
+          </Button>
+        </div>
+        <a
+          href={deviceAuth?.verificationUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary text-xs underline"
+        >
+          Open OpenAI sign-in page
+        </a>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="size-3 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
+        <span className="text-muted-foreground text-xs">
+          Waiting for authorization...
+        </span>
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
       </div>
-      {errorMsg && <div className="text-destructive text-xs">{errorMsg}</div>}
     </div>
   );
 }

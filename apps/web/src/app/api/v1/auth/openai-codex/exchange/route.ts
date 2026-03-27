@@ -3,16 +3,15 @@
 
 /**
  * Module: `@app/api/v1/auth/openai-codex/exchange`
- * Purpose: Accept a pasted redirect URL, read PKCE verifier from server cookie, exchange for tokens, store connection.
- * Scope: POST endpoint. Client sends { url }. Verifier and state read from HttpOnly cookie set by /authorize.
- *   Validates state matches URL, exchanges code via PKCE, encrypts and stores connection.
+ * Purpose: Poll OpenAI device auth and exchange for tokens when authorized.
+ * Scope: POST endpoint called by client on interval. If user hasn't authorized yet, returns pending.
+ *   When authorized, exchanges code for tokens, encrypts and stores in connections table.
  * Invariants:
- *   - PKCE_REQUIRED: Code exchange uses verifier from server-side cookie (never sent to client)
- *   - STATE_SERVER_BOUND: State validated from cookie, not client body
  *   - ENCRYPTED_AT_REST: Tokens stored via AEAD with AAD binding
  *   - TOKENS_NEVER_LOGGED: No tokens in logs or responses
- * Side-effects: IO (HTTP token exchange, DB insert, cookie consumed)
- * Links: docs/research/openai-oauth-byo-ai.md
+ *   - TENANT_SCOPED: Connection belongs to authenticated user's billing account
+ * Side-effects: IO (HTTP token exchange, DB insert)
+ * Links: docs/research/openai-oauth-byo-ai.md, docs/spec/tenant-connections.md
  * @public
  */
 
@@ -20,11 +19,8 @@ import { randomUUID } from "node:crypto";
 import { connections } from "@cogni/db-schema";
 import type { UserId } from "@cogni/ids";
 import { and, eq, isNull } from "drizzle-orm";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { decode } from "next-auth/jwt";
 
-import { authSecret } from "@/auth";
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 import { getServerSessionUser } from "@/lib/auth/server";
@@ -32,15 +28,15 @@ import { aeadEncrypt } from "@/shared/crypto/aead";
 import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
 
-import { CODEX_PKCE_COOKIE } from "../authorize/route";
-
 export const runtime = "nodejs";
 
 const log = makeLogger({ component: "openai-codex-exchange" });
 
 const OPENAI_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+const OPENAI_DEVICE_TOKEN_URL =
+  "https://auth.openai.com/api/accounts/deviceauth/token";
 const OPENAI_TOKEN_URL = "https://auth.openai.com/oauth/token";
-const OPENAI_REDIRECT_URI = "http://localhost:1455/auth/callback";
+const OPENAI_DEVICE_CALLBACK = "https://auth.openai.com/deviceauth/callback";
 
 export async function POST(request: Request) {
   const session = await getServerSessionUser();
@@ -48,105 +44,79 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Read PKCE verifier + state from server-side cookie
-  const cookieStore = await cookies();
-  const pkceCookieValue = cookieStore.get(CODEX_PKCE_COOKIE)?.value;
-  if (!pkceCookieValue) {
-    return NextResponse.json(
-      { error: "OAuth session expired — please try connecting again" },
-      { status: 400 }
-    );
-  }
-
-  // Consume the cookie (single-use)
-  cookieStore.delete({
-    name: CODEX_PKCE_COOKIE,
-    path: "/api/v1/auth/openai-codex",
-  });
-
-  let verifier: string;
-  let expectedState: string;
-  try {
-    const decoded = await decode({
-      token: pkceCookieValue,
-      secret: authSecret,
-      salt: "codex-pkce",
-    });
-    if (
-      !decoded ||
-      decoded.purpose !== "codex_pkce" ||
-      decoded.userId !== session.id
-    ) {
-      return NextResponse.json(
-        { error: "Invalid OAuth session" },
-        { status: 400 }
-      );
-    }
-    verifier = decoded.verifier as string;
-    expectedState = decoded.state as string;
-  } catch {
-    return NextResponse.json(
-      { error: "OAuth session expired — please try connecting again" },
-      { status: 400 }
-    );
-  }
-
-  // Parse request body: { url }
-  let pastedUrl: string;
+  // Parse request body
+  let deviceAuthId: string;
+  let userCode: string;
   try {
     const body = await request.json();
-    pastedUrl = body.url;
+    deviceAuthId = body.deviceAuthId;
+    userCode = body.userCode;
   } catch {
     return NextResponse.json({ error: "Invalid body" }, { status: 400 });
   }
 
-  if (!pastedUrl) {
+  if (!deviceAuthId || !userCode) {
     return NextResponse.json(
-      { error: "Missing required fields" },
+      { error: "Missing deviceAuthId or userCode" },
       { status: 400 }
     );
   }
 
-  // Extract code and state from the pasted URL
-  let code: string;
-  let urlState: string;
-  try {
-    const parsed = new URL(pastedUrl);
+  // Step 1: Poll OpenAI device auth — check if user has authorized
+  let authResult: {
+    authorization_code: string;
+    code_verifier: string;
+  };
 
-    // Validate URL origin matches expected redirect URI
-    const expectedOriginPath = new URL(OPENAI_REDIRECT_URI);
-    if (
-      parsed.origin !== expectedOriginPath.origin ||
-      parsed.pathname !== expectedOriginPath.pathname
-    ) {
+  try {
+    const pollResponse = await fetch(OPENAI_DEVICE_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_auth_id: deviceAuthId,
+        user_code: userCode,
+      }),
+    });
+
+    // 403/404 = user hasn't authorized yet
+    if (pollResponse.status === 403 || pollResponse.status === 404) {
+      return NextResponse.json({ status: "pending" });
+    }
+
+    if (!pollResponse.ok) {
+      log.error(
+        { status: pollResponse.status },
+        "OpenAI device token poll failed"
+      );
       return NextResponse.json(
-        { error: "URL does not match expected redirect" },
-        { status: 400 }
+        { error: "Authorization check failed" },
+        { status: 502 }
       );
     }
 
-    code = parsed.searchParams.get("code") ?? "";
-    urlState = parsed.searchParams.get("state") ?? "";
-  } catch {
-    return NextResponse.json({ error: "Invalid URL format" }, { status: 400 });
-  }
-
-  if (!code) {
+    authResult = await pollResponse.json();
+  } catch (err) {
+    log.error(
+      { error: err instanceof Error ? err.message : String(err) },
+      "OpenAI device token poll error"
+    );
     return NextResponse.json(
-      { error: "URL missing authorization code" },
-      { status: 400 }
+      { error: "Failed to check authorization" },
+      { status: 502 }
     );
   }
 
-  // Validate state from URL matches server-stored state
-  if (urlState !== expectedState) {
+  if (!authResult.authorization_code || !authResult.code_verifier) {
+    log.error(
+      "Device auth response missing authorization_code or code_verifier"
+    );
     return NextResponse.json(
-      { error: "State mismatch — please try connecting again" },
-      { status: 400 }
+      { error: "Unexpected authorization response" },
+      { status: 502 }
     );
   }
 
-  // Exchange code for tokens
+  // Step 2: Exchange authorization code for tokens
   let tokenData: {
     access_token: string;
     refresh_token?: string;
@@ -161,9 +131,9 @@ export async function POST(request: Request) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         client_id: OPENAI_CLIENT_ID,
-        code,
-        code_verifier: verifier,
-        redirect_uri: OPENAI_REDIRECT_URI,
+        code: authResult.authorization_code,
+        code_verifier: authResult.code_verifier,
+        redirect_uri: OPENAI_DEVICE_CALLBACK,
       }),
     });
 
@@ -173,8 +143,8 @@ export async function POST(request: Request) {
         "OpenAI token exchange failed"
       );
       return NextResponse.json(
-        { error: "Token exchange failed — the code may have expired" },
-        { status: 400 }
+        { error: "Token exchange failed" },
+        { status: 502 }
       );
     }
 
@@ -182,15 +152,15 @@ export async function POST(request: Request) {
   } catch (err) {
     log.error(
       { error: err instanceof Error ? err.message : String(err) },
-      "OpenAI token exchange request failed"
+      "OpenAI token exchange error"
     );
     return NextResponse.json(
       { error: "Token exchange failed" },
-      { status: 500 }
+      { status: 502 }
     );
   }
 
-  // Extract account ID from JWT
+  // Step 3: Extract account ID from JWT
   let accountId: string | undefined;
   try {
     const [, payloadB64] = tokenData.access_token.split(".");
@@ -205,7 +175,7 @@ export async function POST(request: Request) {
     // Non-fatal
   }
 
-  // Resolve billing account
+  // Step 4: Resolve billing account
   const container = getContainer();
   const accountService = container.accountsForUser(session.id as UserId);
   const billingAccount = await getOrCreateBillingAccountForUser(
@@ -213,9 +183,10 @@ export async function POST(request: Request) {
     { userId: session.id }
   );
 
-  // Encrypt and store
+  // Step 5: Encrypt and store
   const encKeyHex = serverEnv().CONNECTIONS_ENCRYPTION_KEY;
   if (!encKeyHex) {
+    log.error("CONNECTIONS_ENCRYPTION_KEY not set");
     return NextResponse.json(
       { error: "Server configuration error" },
       { status: 500 }
@@ -275,7 +246,7 @@ export async function POST(request: Request) {
 
     log.info(
       { connectionId, provider: "openai-chatgpt" },
-      "BYO-AI connection created"
+      "BYO-AI connection created via device code"
     );
   } catch (err) {
     log.error(
@@ -288,5 +259,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ status: "connected" });
 }
