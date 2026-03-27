@@ -283,9 +283,8 @@ function ColorPickerSwatch({
 /**
  * ChatGPT Device Code connect flow.
  *
- * User clicks Connect → gets a code → enters it at OpenAI's website.
- * Our server polls until authorized, then exchanges for tokens.
- * Works on any deployment — no localhost, no redirects, no paste-back.
+ * Immediately starts the device code flow on mount (no idle phase).
+ * Shows a stepped walkthrough: get code → open OpenAI → enter code → wait.
  */
 function ChatGptConnectFlow({
   onComplete,
@@ -294,7 +293,7 @@ function ChatGptConnectFlow({
   onComplete: () => void;
   onCancel: () => void;
 }): ReactElement {
-  const [phase, setPhase] = useState<"idle" | "code" | "error">("idle");
+  const [phase, setPhase] = useState<"loading" | "code" | "error">("loading");
   const [deviceAuth, setDeviceAuth] = useState<{
     deviceAuthId: string;
     userCode: string;
@@ -302,10 +301,14 @@ function ChatGptConnectFlow({
     verificationUrl: string;
   } | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
+  const startedRef = useRef(false);
 
-  // Start device code flow
-  const handleConnect = async () => {
+  // Start device code flow immediately on mount
+  const startFlow = useCallback(async () => {
+    setPhase("loading");
     setErrorMsg("");
+    setCodeCopied(false);
     try {
       const res = await fetch("/api/v1/auth/openai-codex/authorize", {
         method: "POST",
@@ -322,7 +325,13 @@ function ChatGptConnectFlow({
       setPhase("error");
       setErrorMsg("Failed to connect to server");
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void startFlow();
+  }, [startFlow]);
 
   // Poll for authorization when in "code" phase
   useEffect(() => {
@@ -381,10 +390,17 @@ function ChatGptConnectFlow({
 
   if (phase === "error") {
     return (
-      <div className="flex flex-col gap-2">
-        {errorMsg && <div className="text-destructive text-xs">{errorMsg}</div>}
+      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+        {errorMsg && <div className="text-destructive text-sm">{errorMsg}</div>}
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={handleConnect}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              startedRef.current = false;
+              void startFlow();
+            }}
+          >
             Try again
           </Button>
           <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -395,53 +411,96 @@ function ChatGptConnectFlow({
     );
   }
 
-  if (phase === "idle") {
+  if (phase === "loading") {
     return (
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={handleConnect}>
-          Connect
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-4">
+        <span className="animate-pulse text-muted-foreground">●</span>
+        <span className="text-muted-foreground text-sm">
+          Starting authentication...
+        </span>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
         </Button>
       </div>
     );
   }
 
-  // phase === "code"
+  // phase === "code" — stepped walkthrough
   return (
-    <div className="flex flex-col gap-3">
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      {/* Warning */}
+      <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2">
+        <span className="shrink-0 text-warning">&#9888;</span>
+        <span className="text-muted-foreground text-sm">
+          You may need to enable <strong>Device Code Authorization</strong> in
+          your{" "}
+          <a
+            href="https://platform.openai.com/settings/authentication"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            OpenAI account settings
+          </a>{" "}
+          first.
+        </span>
+      </div>
+
+      {/* Step 1: Open OpenAI */}
       <div className="space-y-2">
-        <div className="text-muted-foreground text-xs">
-          Enter this code at OpenAI:
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Step 1 — Open OpenAI
         </div>
-        <div className="flex items-center gap-2">
-          <code className="rounded-md bg-muted px-3 py-1.5 font-mono text-lg tracking-widest">
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href={deviceAuth?.verificationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open OpenAI sign-in page &#8599;
+          </a>
+        </Button>
+      </div>
+
+      {/* Step 2: Copy & enter code */}
+      <div className="space-y-2">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Step 2 — Enter this code
+        </div>
+        <div className="flex items-center gap-3">
+          <code className="rounded-md border border-border bg-muted px-4 py-2 font-mono text-xl tracking-widest">
             {deviceAuth?.userCode}
           </code>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             onClick={() => {
               if (deviceAuth?.userCode) {
                 navigator.clipboard.writeText(deviceAuth.userCode);
+                setCodeCopied(true);
+                setTimeout(() => setCodeCopied(false), 2000);
               }
             }}
           >
-            Copy
+            {codeCopied ? "Copied!" : "Copy"}
           </Button>
         </div>
-        <a
-          href={deviceAuth?.verificationUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-primary text-xs underline"
-        >
-          Open OpenAI sign-in page
-        </a>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="animate-pulse text-muted-foreground">●</span>
-        <span className="text-muted-foreground text-xs">
-          Waiting for authorization...
-        </span>
+
+      {/* Step 3: Waiting */}
+      <div className="space-y-1.5">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Step 3 — Wait for confirmation
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="animate-pulse text-primary">●</span>
+          <span className="text-muted-foreground text-sm">
+            Waiting for authorization...
+          </span>
+        </div>
+      </div>
+
+      <div className="border-border border-t pt-3">
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
@@ -688,15 +747,7 @@ export function ProfileView(): ReactElement {
               Disconnect
             </Button>
           </div>
-        ) : chatGptLoading ? (
-          <ChatGptConnectFlow
-            onComplete={() => {
-              setChatGptConnected(true);
-              setChatGptLoading(false);
-            }}
-            onCancel={() => setChatGptLoading(false)}
-          />
-        ) : (
+        ) : !chatGptLoading ? (
           <Button
             variant="outline"
             size="sm"
@@ -704,8 +755,19 @@ export function ProfileView(): ReactElement {
           >
             Connect
           </Button>
-        )}
+        ) : null}
       </SettingRow>
+
+      {/* Expanded connect flow — renders below the setting row */}
+      {chatGptLoading && !chatGptConnected && (
+        <ChatGptConnectFlow
+          onComplete={() => {
+            setChatGptConnected(true);
+            setChatGptLoading(false);
+          }}
+          onCancel={() => setChatGptLoading(false)}
+        />
+      )}
 
       {/* ── Ownership ── */}
 

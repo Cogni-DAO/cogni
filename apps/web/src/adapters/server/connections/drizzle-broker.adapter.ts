@@ -15,7 +15,9 @@
  * @internal
  */
 
+import { withTenantScope } from "@cogni/db-client";
 import { connections } from "@cogni/db-schema";
+import type { ActorId } from "@cogni/ids";
 import { and, eq, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "pino";
@@ -74,14 +76,20 @@ export class DrizzleConnectionBrokerAdapter implements ConnectionBrokerPort {
     connectionId: string,
     scope: { actorId: string; tenantId: string }
   ): Promise<ResolvedConnection> {
-    // SELECT with tenant + active filters
-    const rows = await this.db
-      .select()
-      .from(connections)
-      .where(
-        and(eq(connections.id, connectionId), isNull(connections.revokedAt))
-      )
-      .limit(1);
+    // SELECT with tenant + active filters (withTenantScope sets RLS context)
+    const rows = await withTenantScope(
+      this
+        .db as unknown as import("drizzle-orm/postgres-js").PostgresJsDatabase,
+      scope.actorId as ActorId,
+      async (tx) =>
+        tx
+          .select()
+          .from(connections)
+          .where(
+            and(eq(connections.id, connectionId), isNull(connections.revokedAt))
+          )
+          .limit(1)
+    );
 
     const row = rows[0];
     if (!row) {
@@ -135,7 +143,8 @@ export class DrizzleConnectionBrokerAdapter implements ConnectionBrokerPort {
             row.billingAccountId,
             row.provider,
             blob,
-            refreshFn
+            refreshFn,
+            scope.actorId
           );
           this.refreshLocks.set(connectionId, refreshPromise);
           try {
@@ -147,13 +156,17 @@ export class DrizzleConnectionBrokerAdapter implements ConnectionBrokerPort {
       }
     }
 
-    // Update last_used_at (fire-and-forget)
-    this.db
-      .update(connections)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(connections.id, connectionId))
-      .then(() => {})
-      .catch(() => {});
+    // Update last_used_at (fire-and-forget, needs RLS context)
+    withTenantScope(
+      this
+        .db as unknown as import("drizzle-orm/postgres-js").PostgresJsDatabase,
+      scope.actorId as ActorId,
+      async (tx) =>
+        tx
+          .update(connections)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(connections.id, connectionId))
+    ).catch(() => {});
 
     const credentials: ResolvedConnection["credentials"] = {
       accessToken: blob.access_token,
@@ -177,7 +190,8 @@ export class DrizzleConnectionBrokerAdapter implements ConnectionBrokerPort {
     billingAccountId: string,
     provider: string,
     blob: CredentialBlob,
-    refreshFn: TokenRefreshFn
+    refreshFn: TokenRefreshFn,
+    actorId: string
   ): Promise<CredentialBlob> {
     this.log.info(
       { connectionId, provider },
@@ -210,14 +224,20 @@ export class DrizzleConnectionBrokerAdapter implements ConnectionBrokerPort {
         this.encryptionKey
       );
 
-      await this.db
-        .update(connections)
-        .set({
-          encryptedCredentials: encrypted,
-          encryptionKeyId: this.encryptionKeyId,
-          expiresAt: new Date(refreshed.expires),
-        })
-        .where(eq(connections.id, connectionId));
+      await withTenantScope(
+        this
+          .db as unknown as import("drizzle-orm/postgres-js").PostgresJsDatabase,
+        actorId as ActorId,
+        async (tx) =>
+          tx
+            .update(connections)
+            .set({
+              encryptedCredentials: encrypted,
+              encryptionKeyId: this.encryptionKeyId,
+              expiresAt: new Date(refreshed.expires),
+            })
+            .where(eq(connections.id, connectionId))
+      );
 
       return newBlob;
     } catch (error) {

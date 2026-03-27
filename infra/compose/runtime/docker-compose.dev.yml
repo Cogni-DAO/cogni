@@ -76,6 +76,8 @@ services:
       - PRIVY_APP_ID
       - PRIVY_APP_SECRET
       - PRIVY_SIGNING_KEY
+      # BYO-AI: Connection encryption (optional — BYO-AI disabled when unset)
+      - CONNECTIONS_ENCRYPTION_KEY
       # Prometheus query (for analytics/AI tools) - read-only credentials
       - PROMETHEUS_REMOTE_WRITE_URL
       - PROMETHEUS_QUERY_URL
