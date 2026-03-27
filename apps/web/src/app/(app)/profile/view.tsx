@@ -857,7 +857,15 @@ export function ProfileView(): ReactElement {
               >
                 Cloudflare Tunnel
               </a>{" "}
-              to expose your local server securely.
+              to expose your local server securely. Use{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                llama-server --api-key
+              </code>{" "}
+              or{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                vllm serve --api-key
+              </code>{" "}
+              for built-in auth.
             </p>
           </div>
           <div className="space-y-2">
@@ -865,10 +873,7 @@ export function ProfileView(): ReactElement {
               htmlFor="ollama-key"
               className="font-medium text-foreground text-sm"
             >
-              API Key{" "}
-              <span className="font-normal text-muted-foreground">
-                (optional)
-              </span>
+              API Key
             </label>
             <input
               id="ollama-key"
@@ -888,7 +893,7 @@ export function ProfileView(): ReactElement {
           <div className="flex gap-2">
             <Button
               size="sm"
-              disabled={ollamaLoading || !ollamaUrl}
+              disabled={ollamaLoading || !ollamaUrl || !ollamaApiKey}
               onClick={async () => {
                 setOllamaLoading(true);
                 setOllamaError("");
@@ -900,7 +905,7 @@ export function ProfileView(): ReactElement {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
                         endpointUrl: ollamaUrl,
-                        ...(ollamaApiKey ? { apiKey: ollamaApiKey } : {}),
+                        apiKey: ollamaApiKey,
                       }),
                     }
                   );

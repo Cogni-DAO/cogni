@@ -43,7 +43,7 @@ const ConnectInputSchema = z.object({
     .refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
       message: "Must be an HTTP or HTTPS URL",
     }),
-  apiKey: z.string().optional(),
+  apiKey: z.string().min(1, "API key is required for secure connections"),
 });
 
 export async function POST(request: Request) {
@@ -72,10 +72,9 @@ export async function POST(request: Request) {
   // Probe endpoint: GET /v1/models to verify reachability
   let modelCount = 0;
   try {
-    const headers: Record<string, string> = {};
-    if (input.apiKey) {
-      headers.Authorization = `Bearer ${input.apiKey}`;
-    }
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${input.apiKey}`,
+    };
     const probe = await fetch(`${baseUrl}/v1/models`, {
       headers,
       signal: AbortSignal.timeout(10_000),
