@@ -102,8 +102,9 @@ services/*/dist
 # Claude Code worktrees
 .claude/worktrees/
 
-# Spike/prototype code (experimental, not production)
-spikes/
+# Spike/experiment code — tracked in git as reference implementations
+# spikes/*/node_modules is ignored (deps installed locally per experiment)
+spikes/*/node_modules
 
 # Generated work index (derived from frontmatter — never hand-edit)
 work/items/_index.md

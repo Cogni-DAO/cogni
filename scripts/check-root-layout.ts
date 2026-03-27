@@ -123,6 +123,7 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "scripts",
   "services",
   "skills-lock.json",
+  "spikes",
   "sonar-project.properties",
   "tests",
   "tsconfig.base.json",
