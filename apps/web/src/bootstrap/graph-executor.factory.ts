@@ -156,6 +156,22 @@ export function createScopedGraphExecutor(params: {
       // Resolve LlmService from provider BEFORE execution
       const provider = params.resolver.resolve(req.modelRef.providerKey);
 
+      // Fail fast: connection-required providers must have connectionId + broker
+      if (provider.requiresConnection) {
+        if (!req.modelRef.connectionId) {
+          throw new Error(
+            `Provider "${req.modelRef.providerKey}" requires a connection but modelRef.connectionId is missing. ` +
+              `Ensure the model picker sends connectionId and the status endpoint returns it.`
+          );
+        }
+        if (!params.broker) {
+          throw new Error(
+            `Provider "${req.modelRef.providerKey}" requires a connection but ConnectionBroker is not configured. ` +
+              `Set CONNECTIONS_ENCRYPTION_KEY to enable BYO-AI.`
+          );
+        }
+      }
+
       if (
         provider.requiresConnection &&
         req.modelRef.connectionId &&
