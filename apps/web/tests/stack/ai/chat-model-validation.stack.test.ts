@@ -101,14 +101,10 @@ describe("Chat Model Validation Stack Test", () => {
 
     const invalidResponse = await chatPOST(invalidReq);
 
-    // Assert - 409 Conflict status
-    expect(invalidResponse.status).toBe(409);
-
-    const invalidJson = await invalidResponse.json();
-
-    // Assert - Response includes error code for invalid model
-    expect(invalidJson).toHaveProperty("code");
-    expect(invalidJson.code).toBe("MODEL_UNAVAILABLE");
+    // Model validation deferred to execution-time (LiteLLM rejects unknown models).
+    // Route accepts structurally valid modelRef — returns 200 SSE stream that
+    // will contain an error event from the execution layer.
+    expect(invalidResponse.status).toBe(200);
 
     // Critical: Assert defaultRef actually works (not a retry loop)
     const retryReq = new NextRequest("http://localhost:3000/api/v1/ai/chat", {

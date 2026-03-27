@@ -315,7 +315,7 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
 
       expect(response.status).toBe(400);
       const body = await response.json();
-      expect(body.error).toBe("model field is required");
+      expect(body.error).toBe("modelRef field is required");
     });
   });
 
