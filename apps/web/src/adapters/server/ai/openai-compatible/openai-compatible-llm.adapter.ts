@@ -214,9 +214,12 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       max_tokens: maxTokens,
       stream: true,
     };
-    // Tools intentionally NOT forwarded — most local models don't support
-    // function calling. The provider declares capabilities.tools: false.
-    // If a model does support tools, a future version can opt in.
+    if (params.tools && params.tools.length > 0) {
+      requestBody.tools = params.tools;
+    }
+    if (params.toolChoice) {
+      requestBody.tool_choice = params.toolChoice;
+    }
 
     const connectCtl = new AbortController();
     const connectTimer = setTimeout(
@@ -244,6 +247,29 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       throw new LlmError("Unknown error", "unknown");
     } finally {
       clearTimeout(connectTimer);
+    }
+
+    // Retry without tools if endpoint rejects them (e.g., tinyllama)
+    if (response.status === 400 && requestBody.tools) {
+      const body = await response.text().catch(() => "");
+      if (body.includes("does not support tools")) {
+        log.info({ model }, "Model does not support tools, retrying without");
+        delete requestBody.tools;
+        delete requestBody.tool_choice;
+        const retryCtl = new AbortController();
+        const retryTimer = setTimeout(
+          () => retryCtl.abort(),
+          CONNECT_TIMEOUT_MS
+        );
+        try {
+          const retrySignal = params.abortSignal
+            ? AbortSignal.any([retryCtl.signal, params.abortSignal])
+            : retryCtl.signal;
+          response = await this.doFetch(requestBody, undefined, retrySignal);
+        } finally {
+          clearTimeout(retryTimer);
+        }
+      }
     }
 
     if (!response.ok) {
