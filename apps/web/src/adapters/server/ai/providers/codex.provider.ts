@@ -3,9 +3,9 @@
 
 /**
  * Module: `@adapters/server/ai/providers/codex.provider`
- * Purpose: ModelProviderPort implementation for BYO ChatGPT/Codex models.
- * Scope: Lists hardcoded ChatGPT model IDs, creates CodexLlmAdapter from resolved connection.
- *   All Codex models are free (use user's own ChatGPT subscription, no platform credits).
+ * Purpose: ModelProviderPort implementation for BYO ChatGPT models.
+ * Scope: Lists hardcoded ChatGPT model IDs, creates OpenAiCompatibleLlmAdapter with user's
+ *   OAuth access token pointing at https://api.openai.com. No CLI binary required.
  * Invariants:
  *   - requiresPlatformCredits always false (user-funded)
  *   - requiresConnection always true (needs OAuth credentials)
@@ -22,7 +22,7 @@ import type {
   ProviderContext,
   ResolvedConnection,
 } from "@/ports";
-import { CodexLlmAdapter } from "../codex/codex-llm.adapter";
+import { OpenAiCompatibleLlmAdapter } from "../openai-compatible/openai-compatible-llm.adapter";
 
 /**
  * Known ChatGPT subscription model IDs available via Codex transport.
@@ -41,7 +41,7 @@ const CODEX_MODELS = [
 ] as const;
 
 /**
- * Codex model provider — backed by user's ChatGPT subscription via Codex SDK.
+ * Codex model provider — backed by user's ChatGPT subscription via OpenAI API.
  * Implements ModelProviderPort for the "codex" providerKey.
  */
 export class CodexModelProvider implements ModelProviderPort {
@@ -58,8 +58,8 @@ export class CodexModelProvider implements ModelProviderPort {
       requiresPlatformCredits: false,
       providerLabel: "ChatGPT",
       capabilities: {
-        streaming: false,
-        tools: false,
+        streaming: true,
+        tools: true,
         structuredOutput: false,
         vision: false,
       },
@@ -72,7 +72,13 @@ export class CodexModelProvider implements ModelProviderPort {
         "CodexModelProvider.createLlmService requires a resolved connection"
       );
     }
-    return new CodexLlmAdapter(connection);
+    // Use OpenAI-compatible HTTP adapter with the user's ChatGPT OAuth token.
+    // This replaces the Codex CLI subprocess approach which required @openai/codex
+    // in the production container — the CLI binary doesn't exist in the Docker image.
+    return new OpenAiCompatibleLlmAdapter({
+      baseUrl: "https://api.openai.com",
+      apiKey: connection.credentials.accessToken,
+    });
   }
 
   async requiresPlatformCredits(_ref: ModelRef): Promise<boolean> {
