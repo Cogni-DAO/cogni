@@ -13,7 +13,7 @@ assignees: [derekg1729]
 credit:
 project: proj.byo-ai
 branch: feat/byo-ai-openai-compatible
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/645
 reviewer:
 created: 2026-03-26
 updated: 2026-03-27
