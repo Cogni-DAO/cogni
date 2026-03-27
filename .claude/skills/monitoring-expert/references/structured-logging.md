@@ -3,28 +3,28 @@
 ## Pino (Node.js)
 
 ```typescript
-import pino from 'pino';
+import pino from "pino";
 
 const logger = pino({
-  level: process.env.LOG_LEVEL || 'info',
+  level: process.env.LOG_LEVEL || "info",
   formatters: {
     level: (label) => ({ level: label }),
   },
-  redact: ['password', 'token', 'authorization'],
+  redact: ["password", "token", "authorization"],
 });
 
 // Structured logging
 logger.info({
-  event: 'user.login',
+  event: "user.login",
   userId: user.id,
   ip: req.ip,
-  userAgent: req.headers['user-agent'],
+  userAgent: req.headers["user-agent"],
   duration: Date.now() - start,
 });
 
 // Error logging with context
 logger.error({
-  event: 'payment.failed',
+  event: "payment.failed",
   error: err.message,
   stack: err.stack,
   orderId: order.id,
@@ -36,23 +36,23 @@ logger.error({
 ## Request Logging Middleware
 
 ```typescript
-import { randomUUID } from 'crypto';
+import { randomUUID } from "crypto";
 
 app.use((req, res, next) => {
-  const requestId = req.headers['x-request-id'] || randomUUID();
+  const requestId = req.headers["x-request-id"] || randomUUID();
   const start = Date.now();
 
-  res.setHeader('x-request-id', requestId);
+  res.setHeader("x-request-id", requestId);
 
-  res.on('finish', () => {
+  res.on("finish", () => {
     logger.info({
-      event: 'http.request',
+      event: "http.request",
       requestId,
       method: req.method,
       path: req.path,
       status: res.statusCode,
       duration: Date.now() - start,
-      userAgent: req.headers['user-agent'],
+      userAgent: req.headers["user-agent"],
       ip: req.ip,
     });
   });
@@ -97,46 +97,46 @@ logger.error(
 
 ## Log Levels
 
-| Level | Use Case |
-|-------|----------|
+| Level   | Use Case                   |
+| ------- | -------------------------- |
 | `error` | Failures needing attention |
-| `warn` | Potential problems |
-| `info` | Business events, requests |
-| `debug` | Development details |
-| `trace` | Verbose debugging |
+| `warn`  | Potential problems         |
+| `info`  | Business events, requests  |
+| `debug` | Development details        |
+| `trace` | Verbose debugging          |
 
 ## Best Practices
 
 ```typescript
 // Good: Structured fields
-logger.info({ event: 'order.created', orderId: '123', total: 99.99 });
+logger.info({ event: "order.created", orderId: "123", total: 99.99 });
 
 // Bad: String interpolation
 logger.info(`Order 123 created with total 99.99`);
 
 // Good: Consistent event names
-logger.info({ event: 'user.registered' });
-logger.info({ event: 'user.login' });
-logger.info({ event: 'user.logout' });
+logger.info({ event: "user.registered" });
+logger.info({ event: "user.login" });
+logger.info({ event: "user.logout" });
 
 // Good: Include correlation ID
-logger.info({ event: 'request.processed', requestId, userId });
+logger.info({ event: "request.processed", requestId, userId });
 ```
 
 ## Quick Reference
 
-| Field | Purpose |
-|-------|---------|
-| `event` | Event name |
-| `requestId` | Correlation ID |
-| `userId` | User context |
-| `duration` | Timing info |
-| `error` / `stack` | Error details |
-| `timestamp` | When (auto-added) |
+| Field             | Purpose           |
+| ----------------- | ----------------- |
+| `event`           | Event name        |
+| `requestId`       | Correlation ID    |
+| `userId`          | User context      |
+| `duration`        | Timing info       |
+| `error` / `stack` | Error details     |
+| `timestamp`       | When (auto-added) |
 
-| Library | Language |
-|---------|----------|
-| pino | Node.js |
-| structlog | Python |
-| slog | Go |
-| logrus | Go |
+| Library   | Language |
+| --------- | -------- |
+| pino      | Node.js  |
+| structlog | Python   |
+| slog      | Go       |
+| logrus    | Go       |

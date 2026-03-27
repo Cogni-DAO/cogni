@@ -34,13 +34,13 @@ Users connect any OpenAI-compatible LLM endpoint (Ollama, vLLM, llama.cpp, LM St
 
 **No turnkey "BYO endpoint connector" exists.** Every platform builds this as custom integration. The pieces exist:
 
-| Layer | OSS solution | Status |
-|-------|-------------|--------|
-| User-side: expose local server | Cloudflare Tunnel (free, Ollama-recommended), Tailscale, frp | User handles this |
-| User-side: OpenAI-compatible API | Ollama, vLLM, llama.cpp, LM Studio all expose `/v1/chat/completions` | De facto standard |
-| Platform-side: credential storage | `tenant-connections` table with AEAD encryption | Already built |
-| Platform-side: provider routing | `ModelProviderPort` + `ModelProviderResolverPort` | Already built (task.0209) |
-| Platform-side: model discovery | Ollama `/api/tags`, vLLM `/v1/models` | Need to implement |
+| Layer                             | OSS solution                                                         | Status                    |
+| --------------------------------- | -------------------------------------------------------------------- | ------------------------- |
+| User-side: expose local server    | Cloudflare Tunnel (free, Ollama-recommended), Tailscale, frp         | User handles this         |
+| User-side: OpenAI-compatible API  | Ollama, vLLM, llama.cpp, LM Studio all expose `/v1/chat/completions` | De facto standard         |
+| Platform-side: credential storage | `tenant-connections` table with AEAD encryption                      | Already built             |
+| Platform-side: provider routing   | `ModelProviderPort` + `ModelProviderResolverPort`                    | Already built (task.0209) |
+| Platform-side: model discovery    | Ollama `/api/tags`, vLLM `/v1/models`                                | Need to implement         |
 
 **Wire protocol**: `/v1/chat/completions` is the universal standard. Every local LLM server supports it. The adapter should target this, not Ollama-specific `/api/chat`.
 
@@ -51,6 +51,7 @@ Users connect any OpenAI-compatible LLM endpoint (Ollama, vLLM, llama.cpp, LM St
 **Solution**: One new `OpenAiCompatibleLlmAdapter implements LlmService` that does `POST /v1/chat/completions` to the user's registered endpoint. One new `OpenAiCompatibleModelProvider implements ModelProviderPort` that discovers models via `GET /v1/models` from the user's endpoint. Connection model: `{ baseUrl, apiKey? }` stored in `connections` table via `ConnectionBrokerPort`.
 
 **Reuses**:
+
 - `ModelProviderPort` contract (task.0209) — register provider, zero execution/billing changes
 - `ConnectionBrokerPort` — encrypted credential storage and tenant-scoped resolution
 - `LiteLlmAdapter` — same HTTP + SSE parsing pattern, reuse `eventsource-parser`
@@ -58,6 +59,7 @@ Users connect any OpenAI-compatible LLM endpoint (Ollama, vLLM, llama.cpp, LM St
 - OpenAI SDK or raw fetch — `/v1/chat/completions` is a trivial HTTP POST
 
 **Rejected**:
+
 - ~~LiteLLM dynamic model registration (`/model/new` API)~~ — operator-managed gateway, not user-self-service. Adds complexity (per-user LiteLLM models) without benefit.
 - ~~Ollama-specific `/api/chat` format~~ — locks out vLLM, llama.cpp, LM Studio. The `/v1/chat/completions` standard works everywhere.
 - ~~Custom tunnel/proxy component~~ — user handles their own network exposure (Cloudflare Tunnel, Tailscale, etc.). Platform is a plain HTTP client.
@@ -66,10 +68,12 @@ Users connect any OpenAI-compatible LLM endpoint (Ollama, vLLM, llama.cpp, LM St
 ### Connection Model
 
 The connection form on profile page collects:
+
 - `endpoint_url`: `https://my-ollama.example.com/v1` (required)
 - `api_key`: optional Bearer token
 
 Stored in `connections` table as:
+
 - `provider: "openai-compatible"`
 - `credentialType: "api_endpoint"`
 - Encrypted credential blob: `{ base_url: "...", api_key: "..." }`

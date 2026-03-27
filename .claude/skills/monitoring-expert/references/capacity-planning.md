@@ -58,8 +58,8 @@ predict_linear(
 ```javascript
 // Current capacity
 const currentRPS = 1000;
-const currentCPU = 0.65;  // 65% utilization
-const targetCPU = 0.70;   // Target 70% max
+const currentCPU = 0.65; // 65% utilization
+const targetCPU = 0.7; // Target 70% max
 
 // Projected load
 const projectedRPS = 2500;
@@ -69,18 +69,21 @@ const cpuScalingFactor = projectedRPS / currentRPS;
 const requiredCPU = (currentCPU * cpuScalingFactor) / targetCPU;
 
 console.log(`Current: ${currentRPS} RPS @ ${currentCPU * 100}% CPU`);
-console.log(`Projected: ${projectedRPS} RPS requires ${requiredCPU.toFixed(2)}x CPU`);
+console.log(
+  `Projected: ${projectedRPS} RPS requires ${requiredCPU.toFixed(2)}x CPU`
+);
 ```
 
 ### Memory Requirements
 
 ```javascript
 // Memory per request (average)
-const avgMemoryPerRequest = 2048;  // bytes
+const avgMemoryPerRequest = 2048; // bytes
 const concurrentRequests = 500;
-const overhead = 1.3;  // 30% overhead for GC, OS, etc.
+const overhead = 1.3; // 30% overhead for GC, OS, etc.
 
-const requiredMemory = (avgMemoryPerRequest * concurrentRequests * overhead) / (1024 ** 3);
+const requiredMemory =
+  (avgMemoryPerRequest * concurrentRequests * overhead) / 1024 ** 3;
 console.log(`Required memory: ${requiredMemory.toFixed(2)} GB`);
 ```
 
@@ -123,7 +126,7 @@ function calculateInstances(targetRPS, instanceCapacity, bufferPercent = 20) {
   return Math.max(requiredInstances, minTotal);
 }
 
-console.log(calculateInstances(5000, 1000));  // 7 instances
+console.log(calculateInstances(5000, 1000)); // 7 instances
 ```
 
 ### Auto-scaling Configuration
@@ -216,24 +219,24 @@ spec:
 ```javascript
 const performanceBudget = {
   // Page load budgets
-  ttfb: 200,          // Time to First Byte (ms)
-  fcp: 1000,          // First Contentful Paint (ms)
-  lcp: 2500,          // Largest Contentful Paint (ms)
+  ttfb: 200, // Time to First Byte (ms)
+  fcp: 1000, // First Contentful Paint (ms)
+  lcp: 2500, // Largest Contentful Paint (ms)
 
   // API budgets
-  apiP50: 100,        // 50th percentile (ms)
-  apiP95: 500,        // 95th percentile (ms)
-  apiP99: 1000,       // 99th percentile (ms)
+  apiP50: 100, // 50th percentile (ms)
+  apiP95: 500, // 95th percentile (ms)
+  apiP99: 1000, // 99th percentile (ms)
 
   // Resource budgets
-  jsBundle: 200,      // JavaScript bundle size (KB)
-  cssBundle: 50,      // CSS bundle size (KB)
-  images: 500,        // Total images (KB)
+  jsBundle: 200, // JavaScript bundle size (KB)
+  cssBundle: 50, // CSS bundle size (KB)
+  images: 500, // Total images (KB)
 
   // Infrastructure budgets
-  cpuUtilization: 70,     // Max % during normal load
-  memoryUtilization: 80,  // Max % during normal load
-  errorRate: 0.01,        // Max 1% error rate
+  cpuUtilization: 70, // Max % during normal load
+  memoryUtilization: 80, // Max % during normal load
+  errorRate: 0.01, // Max 1% error rate
 };
 
 function checkBudget(actual, budget, metric) {
@@ -252,16 +255,16 @@ function checkBudget(actual, budget, metric) {
 ```javascript
 function optimizeInstanceSize(workload) {
   const instances = [
-    { type: 't3.small', vcpu: 2, memory: 2, cost: 0.0208 },
-    { type: 't3.medium', vcpu: 2, memory: 4, cost: 0.0416 },
-    { type: 't3.large', vcpu: 2, memory: 8, cost: 0.0832 },
-    { type: 'm5.large', vcpu: 2, memory: 8, cost: 0.096 },
-    { type: 'm5.xlarge', vcpu: 4, memory: 16, cost: 0.192 },
+    { type: "t3.small", vcpu: 2, memory: 2, cost: 0.0208 },
+    { type: "t3.medium", vcpu: 2, memory: 4, cost: 0.0416 },
+    { type: "t3.large", vcpu: 2, memory: 8, cost: 0.0832 },
+    { type: "m5.large", vcpu: 2, memory: 8, cost: 0.096 },
+    { type: "m5.xlarge", vcpu: 4, memory: 16, cost: 0.192 },
   ];
 
-  const filtered = instances.filter(i =>
-    i.vcpu >= workload.requiredVCPU &&
-    i.memory >= workload.requiredMemory
+  const filtered = instances.filter(
+    (i) =>
+      i.vcpu >= workload.requiredVCPU && i.memory >= workload.requiredMemory
   );
 
   // Sort by cost efficiency
@@ -277,7 +280,7 @@ const recommendation = optimizeInstanceSize({
   requiredMemory: 4,
 });
 
-console.log('Recommended instance:', recommendation);
+console.log("Recommended instance:", recommendation);
 ```
 
 ## Capacity Alerts
@@ -323,22 +326,22 @@ groups:
 
 ## Quick Reference
 
-| Metric | Buffer | Reasoning |
-|--------|--------|-----------|
-| CPU | 30% | Headroom for spikes |
-| Memory | 20% | GC and OS overhead |
-| Connections | 25% | Connection churn |
-| Storage | 40% | Growth + snapshots |
+| Metric      | Buffer | Reasoning           |
+| ----------- | ------ | ------------------- |
+| CPU         | 30%    | Headroom for spikes |
+| Memory      | 20%    | GC and OS overhead  |
+| Connections | 25%    | Connection churn    |
+| Storage     | 40%    | Growth + snapshots  |
 
 | Planning Horizon | Update Frequency |
-|------------------|------------------|
-| 3 months | Weekly |
-| 6 months | Bi-weekly |
-| 12 months | Monthly |
+| ---------------- | ---------------- |
+| 3 months         | Weekly           |
+| 6 months         | Bi-weekly        |
+| 12 months        | Monthly          |
 
-| Scaling Trigger | Action |
-|-----------------|--------|
-| 70% CPU | Start planning |
-| 80% CPU | Scale up |
-| 90% CPU | Emergency scaling |
-| 60% CPU for 24h | Scale down |
+| Scaling Trigger | Action            |
+| --------------- | ----------------- |
+| 70% CPU         | Start planning    |
+| 80% CPU         | Scale up          |
+| 90% CPU         | Emergency scaling |
+| 60% CPU for 24h | Scale down        |
