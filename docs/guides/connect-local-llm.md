@@ -22,6 +22,20 @@ Run your own AI models on your hardware and connect them to Cogni.
 - A GGUF model file (download from [HuggingFace](https://huggingface.co/models?sort=trending&search=gguf))
 - [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) for remote access (`brew install cloudflared`)
 
+## Recommended Models
+
+Cogni graphs use system prompts and may invoke tools (function calling). Smaller models struggle with instruction following and tool use. Recommended minimums:
+
+| Use case                  | Minimum size | Recommended models                                     |
+| ------------------------- | ------------ | ------------------------------------------------------ |
+| Basic chat (no tools)     | 3B+          | `llama3.2:3b`, `mistral:7b`                            |
+| Chat with tools           | 8B+          | `llama3.1:8b`, `mistral-nemo:12b`, `qwen2.5:7b`        |
+| Complex reasoning + tools | 14B+         | `llama3.1:70b`, `qwen2.5:32b`, `deepseek-coder-v2:16b` |
+
+**Models under 3B (e.g. tinyllama) are not recommended.** They ignore system prompts and produce incoherent output.
+
+**Models under 8B may loop on tool calls.** They technically support function calling but call tools repeatedly instead of responding. If you see tool call loops, use a larger model or switch to a graph without tools.
+
 ## Step 1: Start llama-server with API key
 
 ```bash
@@ -78,4 +92,6 @@ Any server that exposes `/v1/chat/completions` works:
 - **"No models found"** — Check that your server is running and the URL is correct
 - **"Endpoint returned 401"** — API key mismatch between server and Cogni profile
 - **"Cannot reach endpoint"** — Cloudflare Tunnel may have disconnected; restart `cloudflared`
+- **Tool call loops** — Model is too small for function calling. Use 8B+ or switch to a simpler graph
+- **Incoherent output** — Model is too small for instruction following. Use 3B+ minimum
 - **Slow responses** — Local inference depends on your hardware; GPU recommended
