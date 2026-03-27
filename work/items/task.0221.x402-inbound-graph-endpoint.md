@@ -13,7 +13,7 @@ assignees: []
 credit:
 project: proj.x402-e2e-migration
 branch: worktree-spike-0220-aimo-x402
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/646
 reviewer:
 created: 2026-03-27
 updated: 2026-03-27
