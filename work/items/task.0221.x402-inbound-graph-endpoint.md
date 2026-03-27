@@ -2,7 +2,7 @@
 id: task.0221
 type: task
 title: "x402 inbound payment gate — prototype public graph execution"
-status: needs_merge
+status: done
 priority: 1
 rank: 10
 estimate: 2
