@@ -11,13 +11,12 @@ outcome: "Every agent role has measurable KPIs flowing through the observability
 spec_refs: []
 assignees: []
 credit:
-project:
+project: proj.governance-agents
 branch: feat/agent-kpi-observability
 pr:
 reviewer:
 created: 2026-03-27
 updated: 2026-03-27
-routing_note: "Novel multi-PR effort spanning governance agents + observability. Needs its own project. Recommend /project to create proj.agent-kpi-observability."
 labels: [observability, agents, kpi, grafana, mission-control]
 external_refs:
   - feat/mission-control-clean (agent-roles.md RoleSpec with KPIs)
