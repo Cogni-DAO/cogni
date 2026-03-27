@@ -34,6 +34,19 @@ import { OpenAiCompatibleLlmAdapter } from "../openai-compatible/openai-compatib
 
 const log = makeLogger({ module: "openai-compatible-provider" });
 
+/**
+ * Make model IDs human-readable.
+ * llama-server uses GGUF filenames (sha256-...) as IDs.
+ * Ollama uses "model:tag" format. Keep those as-is.
+ */
+function humanizeModelId(id: string): string {
+  // SHA256 hash from llama-server GGUF path — show truncated
+  if (id.startsWith("sha256-")) {
+    return `Local Model (${id.slice(7, 15)}...)`;
+  }
+  return id;
+}
+
 /** Extract baseUrl and apiKey from a resolved connection's credential blob. */
 function connectionToEndpoint(conn: ResolvedConnection): {
   baseUrl: string;
@@ -120,7 +133,7 @@ export class OpenAiCompatibleModelProvider implements ModelProviderPort {
           modelId: m.id,
           connectionId,
         },
-        label: m.id,
+        label: humanizeModelId(m.id),
         requiresPlatformCredits: false,
         providerLabel: "Local LLM",
         capabilities: {
