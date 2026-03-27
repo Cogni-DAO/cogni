@@ -39,6 +39,8 @@ export interface LangGraphCatalogEntry<TFactory> {
   readonly toolIds: readonly string[];
   /** Graph factory function (opaque — only provider interprets this) */
   readonly graphFactory: TFactory;
+  /** Optional system prompt for operator graphs (catalog-driven, not hardcoded) */
+  readonly systemPrompt?: string;
 }
 
 /**

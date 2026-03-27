@@ -123,6 +123,12 @@ export interface InProcRunnerOptions<TTool = unknown> {
     readonly prompt?: string;
     readonly schema: unknown;
   };
+
+  /**
+   * Optional system prompt passed to graph factory.
+   * Used by operator graphs where the prompt is catalog-driven, not hardcoded.
+   */
+  readonly systemPrompt?: string;
 }
 
 /**

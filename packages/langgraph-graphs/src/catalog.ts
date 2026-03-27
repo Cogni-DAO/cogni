@@ -16,6 +16,19 @@
 
 import { BRAIN_GRAPH_NAME, createBrainGraph } from "./graphs/brain/graph";
 import { BRAIN_TOOL_IDS } from "./graphs/brain/tools";
+import {
+  CEO_OPERATOR_GRAPH_NAME,
+  createOperatorGraph,
+  GIT_REVIEWER_GRAPH_NAME,
+} from "./graphs/operator/graph";
+import {
+  CEO_OPERATOR_PROMPT,
+  GIT_REVIEWER_PROMPT,
+} from "./graphs/operator/prompts";
+import {
+  CEO_OPERATOR_TOOL_IDS,
+  GIT_REVIEWER_TOOL_IDS,
+} from "./graphs/operator/tools";
 import { createPoetGraph, POET_GRAPH_NAME } from "./graphs/poet/graph";
 import { POET_TOOL_IDS } from "./graphs/poet/tools";
 import {
@@ -46,6 +59,8 @@ interface CatalogEntry {
   /** Tool IDs this graph may use. Providers resolve from TOOL_CATALOG. */
   readonly toolIds: readonly string[];
   readonly graphFactory: CreateGraphFn;
+  /** Optional system prompt for operator graphs (catalog-driven, not hardcoded). */
+  readonly systemPrompt?: string;
 }
 
 /**
@@ -114,6 +129,32 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     toolIds: [],
     graphFactory: createPrReviewGraph,
   },
+
+  /**
+   * CEO Operator - strategic executive agent for work queue management.
+   * Uses createOperatorGraph with catalog-driven system prompt.
+   */
+  [CEO_OPERATOR_GRAPH_NAME]: {
+    displayName: "CEO Operator",
+    description:
+      "Strategic operator — triages, prioritizes, and dispatches work items",
+    toolIds: CEO_OPERATOR_TOOL_IDS as unknown as readonly string[],
+    graphFactory: createOperatorGraph,
+    systemPrompt: CEO_OPERATOR_PROMPT,
+  },
+
+  /**
+   * Git Reviewer - PR lifecycle owner driving PRs to merge or rejection.
+   * Uses createOperatorGraph with catalog-driven system prompt.
+   */
+  [GIT_REVIEWER_GRAPH_NAME]: {
+    displayName: "Git Reviewer",
+    description:
+      "Owns PR lifecycle — review, fix CI, merge or reject with rationale",
+    toolIds: GIT_REVIEWER_TOOL_IDS as unknown as readonly string[],
+    graphFactory: createOperatorGraph,
+    systemPrompt: GIT_REVIEWER_PROMPT,
+  },
 } as const;
 
 /**
@@ -136,6 +177,8 @@ export const LANGGRAPH_GRAPH_IDS = {
   ponderer: `${LANGGRAPH_PROVIDER_ID}:${PONDERER_GRAPH_NAME}`,
   research: `${LANGGRAPH_PROVIDER_ID}:${RESEARCH_GRAPH_NAME}`,
   "pr-review": `${LANGGRAPH_PROVIDER_ID}:${PR_REVIEW_GRAPH_NAME}`,
+  "ceo-operator": `${LANGGRAPH_PROVIDER_ID}:${CEO_OPERATOR_GRAPH_NAME}`,
+  "git-reviewer": `${LANGGRAPH_PROVIDER_ID}:${GIT_REVIEWER_GRAPH_NAME}`,
 } as const;
 
 /**

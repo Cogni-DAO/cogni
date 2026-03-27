@@ -2,7 +2,7 @@
 id: task.0211
 type: task
 title: "Parameterize LangGraph graphs for operator roles"
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 3
@@ -20,7 +20,7 @@ revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-26
-updated: 2026-03-26
+updated: 2026-03-27
 labels: [agents, langgraph, workforce]
 ---
 
@@ -57,6 +57,35 @@ Two new catalog entries using a shared `createOperatorGraph` factory behind a se
 - Create: `packages/langgraph-graphs/src/graphs/operator/prompts.ts` — CEO + Git Reviewer prompts
 - Create: `packages/langgraph-graphs/src/graphs/operator/tools.ts` — tool ID constants
 - Test: catalog entry validation
+
+## Plan
+
+- [x] **Checkpoint 1**: Parameterize graph types + factory
+  - Milestone: `systemPrompt` on types, `createOperatorGraph` factory compiles
+  - Invariants: EXISTING_FACTORIES_UNCHANGED, FACTORY_SEAM
+  - Todos:
+    - [x] Add `systemPrompt?: string` to `CreateReactAgentGraphOptions` in `types.ts`
+    - [x] Add `systemPrompt` spread in `runner.ts:133`
+    - [x] Create `graphs/operator/graph.ts` with `createOperatorGraph`
+  - Validation: `pnpm check:fast` passes, existing graphs unchanged
+
+- [x] **Checkpoint 2**: Catalog entries + prompts + tool IDs
+  - Milestone: `LANGGRAPH_CATALOG` has ceo-operator and git-reviewer entries
+  - Invariants: CATALOG_SINGLE_SOURCE_OF_TRUTH
+  - Todos:
+    - [x] Add `systemPrompt` to `CatalogEntry` interface in `catalog.ts`
+    - [x] Create `graphs/operator/prompts.ts` with CEO + Git Reviewer prompts
+    - [x] Create `graphs/operator/tools.ts` with tool ID constants
+    - [x] Add 2 catalog entries
+    - [x] Add to `LANGGRAPH_GRAPH_IDS`
+  - Validation: `pnpm check:fast` passes
+
+- [x] **Checkpoint 3**: Test + finalize
+  - Milestone: Tests prove catalog entries work, factory validates
+  - Todos:
+    - [x] Write test for createOperatorGraph + catalog entries
+    - [x] `pnpm check` passes
+  - Validation: All tests green, work item status → needs_closeout
 
 ## Validation
 
