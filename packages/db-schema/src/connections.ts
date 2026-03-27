@@ -37,6 +37,7 @@ const bytea = customType<{ data: Buffer; dpiType: string }>({
 
 const CONNECTION_PROVIDERS = [
   "openai-chatgpt",
+  "openai-compatible",
   "github",
   "google",
   "bluesky",

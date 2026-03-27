@@ -269,6 +269,8 @@ export const POST = wrapRouteHandlerWithLogging(
           reqId: ctx.reqId,
           userId: sessionUser.id,
           requestedModel: input.modelRef.modelId,
+          providerKey: input.modelRef.providerKey,
+          connectionId: input.modelRef.connectionId ?? null,
           threadMessages: expectedLenAfterUser,
           stateKey,
         },

@@ -72,6 +72,7 @@ import {
 } from "@/adapters/server/ai/catalog";
 import {
   CodexModelProvider,
+  OpenAiCompatibleModelProvider,
   PlatformModelProvider,
 } from "@/adapters/server/ai/providers";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
@@ -681,7 +682,15 @@ function createContainer(): Container {
     ...(() => {
       const platformProvider = new PlatformModelProvider(llmService);
       const codexProvider = new CodexModelProvider();
-      const providers = [platformProvider, codexProvider];
+      const openAiCompatibleProvider = new OpenAiCompatibleModelProvider(
+        connectionBroker,
+        resolveAppDb
+      );
+      const providers = [
+        platformProvider,
+        codexProvider,
+        openAiCompatibleProvider,
+      ];
       return {
         modelCatalog: new AggregatingModelCatalog(providers),
         providerResolver: new ProviderResolver(providers),

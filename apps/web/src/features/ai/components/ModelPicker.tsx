@@ -29,7 +29,7 @@ import { getIconByProviderKey } from "@/features/ai/config/provider-icons";
 import { OpenAIIcon } from "@/features/ai/icons/providers/OpenAIIcon";
 import { cn } from "@/shared/util/cn";
 
-export type LlmBackend = "openrouter" | "chatgpt";
+export type LlmBackend = "openrouter" | "chatgpt" | "local";
 
 /**
  * Models available via ChatGPT subscription (Codex transport).
@@ -103,8 +103,11 @@ export function ModelPicker({
   const [connectionId, setConnectionId] = useState<string | undefined>(
     undefined
   );
+  const [localConnectionId, setLocalConnectionId] = useState<
+    string | undefined
+  >(undefined);
 
-  // Fetch ChatGPT connection status once on mount
+  // Fetch connection statuses once on mount
   useEffect(() => {
     fetch("/api/v1/auth/openai-codex/status")
       .then((res) => (res.ok ? res.json() : null))
@@ -114,10 +117,27 @@ export function ModelPicker({
         }
       })
       .catch(() => {});
+
+    fetch("/api/v1/auth/openai-compatible/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { connected: boolean; connectionId?: string } | null) => {
+        if (data?.connected && data.connectionId) {
+          setLocalConnectionId(data.connectionId);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Track last-used model per backend so switching back restores selection
   const [lastOpenRouterModel, setLastOpenRouterModel] = useState(value);
+
+  // Split models by provider for tab rendering
+  const localModels = models.filter(
+    (m) => m.ref.providerKey === "openai-compatible"
+  );
+  const platformModels = models.filter(
+    (m) => m.ref.providerKey !== "openai-compatible"
+  );
 
   const handleBackendChange = (b: LlmBackend) => {
     setBackend(b);
@@ -128,6 +148,12 @@ export function ModelPicker({
         modelId: CHATGPT_MODELS[0].id,
         connectionId,
       });
+    } else if (b === "local") {
+      setLastOpenRouterModel(value);
+      const firstLocal = localModels[0];
+      if (firstLocal) {
+        onValueChange(firstLocal.ref);
+      }
     } else {
       // Restore last OpenRouter model — find its ref from models list
       const orModel = models.find((m) => m.ref.modelId === lastOpenRouterModel);
@@ -143,7 +169,7 @@ export function ModelPicker({
   const isChatGptModel = CHATGPT_MODELS.some((m) => m.id === value);
   const selectedOpenRouterModel = models.find((m) => m.ref.modelId === value);
   const selectedChatGptModel = CHATGPT_MODELS.find((m) => m.id === value);
-  const filteredModels = models.filter((model) => {
+  const filteredModels = platformModels.filter((model) => {
     const query = searchQuery.toLowerCase();
     return (
       model.ref.modelId.toLowerCase().includes(query) ||
@@ -239,9 +265,142 @@ export function ModelPicker({
             <OpenAIIcon className="size-4" />
             ChatGPT
           </button>
+          <button
+            type="button"
+            onClick={() => handleBackendChange("local")}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-1.5 font-medium text-sm transition-colors",
+              backend === "local"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <svg
+              className="size-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+              <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+              <line x1="6" x2="6.01" y1="6" y2="6" />
+              <line x1="6" x2="6.01" y1="18" y2="18" />
+            </svg>
+            Local
+          </button>
         </div>
 
-        {backend === "chatgpt" ? (
+        {backend === "local" ? (
+          localConnectionId ? (
+            localModels.length > 0 ? (
+              /* Local connected + models available */
+              <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">
+                <div className="space-y-1">
+                  {localModels.map((model) => {
+                    const isSelected = value === model.ref.modelId;
+                    return (
+                      <button
+                        key={model.ref.modelId}
+                        type="button"
+                        onClick={() => {
+                          onValueChange(model.ref);
+                          setOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left",
+                          "transition-colors hover:bg-accent",
+                          isSelected && "bg-accent"
+                        )}
+                      >
+                        <svg
+                          className="size-5 shrink-0 text-muted-foreground"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden="true"
+                        >
+                          <rect
+                            width="20"
+                            height="8"
+                            x="2"
+                            y="2"
+                            rx="2"
+                            ry="2"
+                          />
+                          <rect
+                            width="20"
+                            height="8"
+                            x="2"
+                            y="14"
+                            rx="2"
+                            ry="2"
+                          />
+                          <line x1="6" x2="6.01" y1="6" y2="6" />
+                          <line x1="6" x2="6.01" y1="18" y2="18" />
+                        </svg>
+                        <div className="min-w-0 flex-1 truncate font-medium text-sm">
+                          {model.label}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className="font-medium text-sm text-success">
+                            $0
+                          </span>
+                          {isSelected && (
+                            <Check className="size-4 text-primary" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              /* Local connected but no models */
+              <div className="-mx-6 px-6">
+                <div className="rounded-md border border-border px-3 py-4 text-center text-muted-foreground text-sm">
+                  No models found on your endpoint. Pull a model first.
+                </div>
+              </div>
+            )
+          ) : (
+            /* Local not connected */
+            <div className="-mx-6 px-6">
+              <a
+                href="/profile"
+                className="flex w-full items-center gap-3 rounded-md border border-border px-3 py-4 text-left transition-colors hover:bg-accent"
+              >
+                <svg
+                  className="size-5 shrink-0 text-muted-foreground"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+                  <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+                  <line x1="6" x2="6.01" y1="6" y2="6" />
+                  <line x1="6" x2="6.01" y1="18" y2="18" />
+                </svg>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-sm">Connect Local LLM</div>
+                  <div className="text-muted-foreground text-xs">
+                    Add your Ollama or vLLM endpoint in Profile
+                  </div>
+                </div>
+              </a>
+            </div>
+          )
+        ) : backend === "chatgpt" ? (
           connectionId ? (
             /* ChatGPT connected — show available models */
             <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">

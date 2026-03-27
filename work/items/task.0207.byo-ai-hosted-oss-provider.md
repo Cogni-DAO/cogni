@@ -2,7 +2,7 @@
 id: task.0207
 type: task
 title: "Run: BYO-AI hosted OSS provider — user connects their OpenAI-compatible endpoint"
-status: needs_implement
+status: needs_merge
 priority: 3
 rank: 30
 estimate: 3
@@ -12,8 +12,8 @@ spec_refs: [multi-provider-llm]
 assignees: [derekg1729]
 credit:
 project: proj.byo-ai
-branch:
-pr:
+branch: feat/byo-ai-openai-compatible
+pr: https://github.com/Cogni-DAO/node-template/pull/645
 reviewer:
 created: 2026-03-26
 updated: 2026-03-27

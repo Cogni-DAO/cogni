@@ -183,6 +183,13 @@
       "when": 1774684800000,
       "tag": "0025_add_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1774857600000,
+      "tag": "0026_add_openai_compatible_provider",
+      "breakpoints": true
     }
   ]
 }

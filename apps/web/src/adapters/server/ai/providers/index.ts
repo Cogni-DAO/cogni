@@ -10,4 +10,5 @@
  */
 
 export { CodexModelProvider } from "./codex.provider";
+export { OpenAiCompatibleModelProvider } from "./openai-compatible.provider";
 export { PlatformModelProvider } from "./platform.provider";

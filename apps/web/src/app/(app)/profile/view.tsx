@@ -14,7 +14,7 @@
 "use client";
 
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { Check } from "lucide-react";
+import { Check, Server as ServerIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import type { ReactElement, ReactNode } from "react";
@@ -525,6 +525,12 @@ export function ProfileView(): ReactElement {
   );
   const [chatGptConnected, setChatGptConnected] = useState(false);
   const [chatGptLoading, setChatGptLoading] = useState(false);
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+  const [ollamaLoading, setOllamaLoading] = useState(false);
+  const [ollamaExpanded, setOllamaExpanded] = useState(false);
+  const [ollamaUrl, setOllamaUrl] = useState("");
+  const [ollamaApiKey, setOllamaApiKey] = useState("");
+  const [ollamaError, setOllamaError] = useState("");
 
   // Read feedback query params and strip them to prevent re-display on refresh
   const linkedProvider = searchParams.get("linked");
@@ -582,9 +588,15 @@ export function ProfileView(): ReactElement {
       .then((data: { connected: boolean } | null) => {
         if (data) setChatGptConnected(data.connected);
       })
-      .catch(() => {
-        // Connection check failed — hide section
-      });
+      .catch(() => {});
+
+    // Check OpenAI-compatible endpoint connection status
+    fetch("/api/v1/auth/openai-compatible/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { connected: boolean } | null) => {
+        if (data) setOllamaConnected(data.connected);
+      })
+      .catch(() => {});
   }, []);
 
   const walletAddress = session?.user?.walletAddress ?? null;
@@ -767,6 +779,166 @@ export function ProfileView(): ReactElement {
           }}
           onCancel={() => setChatGptLoading(false)}
         />
+      )}
+
+      <SettingRow
+        icon={<ServerIcon className="size-5" />}
+        label="Local LLM"
+        description={
+          ollamaConnected
+            ? "Your endpoint is connected."
+            : "Connect Ollama, vLLM, or any OpenAI-compatible server."
+        }
+      >
+        {ollamaConnected ? (
+          <div className="flex items-center gap-2">
+            <ConnectedBadge login="Connected" />
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={ollamaLoading}
+              onClick={async () => {
+                setOllamaLoading(true);
+                try {
+                  const res = await fetch(
+                    "/api/v1/auth/openai-compatible/disconnect",
+                    { method: "POST" }
+                  );
+                  if (res.ok) {
+                    setOllamaConnected(false);
+                  }
+                } finally {
+                  setOllamaLoading(false);
+                }
+              }}
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOllamaExpanded(!ollamaExpanded)}
+          >
+            Connect
+          </Button>
+        )}
+      </SettingRow>
+
+      {/* Expanded connect form */}
+      {ollamaExpanded && !ollamaConnected && (
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div className="space-y-2">
+            <label
+              htmlFor="ollama-url"
+              className="font-medium text-foreground text-sm"
+            >
+              Endpoint URL
+            </label>
+            <input
+              id="ollama-url"
+              type="url"
+              placeholder="http://localhost:11434"
+              value={ollamaUrl}
+              onChange={(e) => {
+                setOllamaUrl(e.target.value);
+                setOllamaError("");
+              }}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-ring/50"
+            />
+            <p className="text-muted-foreground text-xs">
+              Use a{" "}
+              <a
+                href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Cloudflare Tunnel
+              </a>{" "}
+              for remote access.{" "}
+              <a
+                href="https://github.com/Cogni-DAO/node-template/blob/staging/docs/guides/connect-local-llm.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Setup guide
+              </a>
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label
+              htmlFor="ollama-key"
+              className="font-medium text-foreground text-sm"
+            >
+              API Key
+            </label>
+            <input
+              id="ollama-key"
+              type="password"
+              placeholder="sk-..."
+              value={ollamaApiKey}
+              onChange={(e) => {
+                setOllamaApiKey(e.target.value);
+                setOllamaError("");
+              }}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-ring/50"
+            />
+          </div>
+          {ollamaError && (
+            <p className="text-destructive text-sm">{ollamaError}</p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={ollamaLoading || !ollamaUrl || !ollamaApiKey}
+              onClick={async () => {
+                setOllamaLoading(true);
+                setOllamaError("");
+                try {
+                  const res = await fetch(
+                    "/api/v1/auth/openai-compatible/connect",
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        endpointUrl: ollamaUrl,
+                        apiKey: ollamaApiKey,
+                      }),
+                    }
+                  );
+                  const data = await res.json();
+                  if (res.ok) {
+                    setOllamaConnected(true);
+                    setOllamaExpanded(false);
+                    setOllamaUrl("");
+                    setOllamaApiKey("");
+                  } else {
+                    setOllamaError(data.error ?? "Connection failed");
+                  }
+                } catch {
+                  setOllamaError("Failed to connect");
+                } finally {
+                  setOllamaLoading(false);
+                }
+              }}
+            >
+              {ollamaLoading ? "Testing..." : "Test & Connect"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setOllamaExpanded(false);
+                setOllamaError("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* ── Ownership ── */}

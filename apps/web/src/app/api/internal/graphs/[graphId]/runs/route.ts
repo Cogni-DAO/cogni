@@ -482,6 +482,15 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       );
     }
 
+    log.info(
+      {
+        providerKey: modelRef.providerKey,
+        modelId: modelRef.modelId,
+        connectionId: modelRef.connectionId ?? null,
+      },
+      "Parsed modelRef for graph execution"
+    );
+
     const accountService = container.accountsForUser(toUserId(actorUserId));
 
     // Create preflight credit check closure

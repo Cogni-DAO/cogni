@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/api/v1/auth/openai-codex/status`
- * Purpose: Check if the authenticated user has an active ChatGPT BYO-AI connection.
- * Scope: GET endpoint. Returns { connected: boolean }. No tokens exposed.
+ * Module: `@app/api/v1/auth/openai-compatible/status`
+ * Purpose: Check if the authenticated user has an active OpenAI-compatible endpoint connection.
+ * Scope: GET endpoint. Returns { connected, connectionId? }. No credentials exposed.
  * Invariants:
- *   - TOKENS_NEVER_LOGGED: Only returns boolean, never credential data
+ *   - TOKENS_NEVER_LOGGED: Only returns boolean + ID, never credential data
  * Side-effects: IO (DB query)
  * Links: docs/spec/tenant-connections.md
  * @public
@@ -50,7 +50,7 @@ export async function GET() {
           .where(
             and(
               eq(connections.billingAccountId, billingAccount.id),
-              eq(connections.provider, "openai-chatgpt"),
+              eq(connections.provider, "openai-compatible"),
               isNull(connections.revokedAt)
             )
           )
