@@ -3,38 +3,38 @@
 ## Metric Types
 
 ```typescript
-import { Registry, Counter, Histogram, Gauge, Summary } from 'prom-client';
+import { Registry, Counter, Histogram, Gauge, Summary } from "prom-client";
 
 const register = new Registry();
 
 // Counter - cumulative, only increases
 const httpRequests = new Counter({
-  name: 'http_requests_total',
-  help: 'Total HTTP requests',
-  labelNames: ['method', 'path', 'status'],
+  name: "http_requests_total",
+  help: "Total HTTP requests",
+  labelNames: ["method", "path", "status"],
   registers: [register],
 });
 
 // Histogram - distribution with buckets
 const httpDuration = new Histogram({
-  name: 'http_request_duration_seconds',
-  help: 'HTTP request duration in seconds',
-  labelNames: ['method', 'path'],
+  name: "http_request_duration_seconds",
+  help: "HTTP request duration in seconds",
+  labelNames: ["method", "path"],
   buckets: [0.01, 0.05, 0.1, 0.5, 1, 5],
   registers: [register],
 });
 
 // Gauge - point-in-time value, can go up/down
 const activeConnections = new Gauge({
-  name: 'active_connections',
-  help: 'Number of active connections',
+  name: "active_connections",
+  help: "Number of active connections",
   registers: [register],
 });
 
 // Summary - similar to histogram with percentiles
 const responseSummary = new Summary({
-  name: 'http_response_size_bytes',
-  help: 'HTTP response size',
+  name: "http_response_size_bytes",
+  help: "HTTP response size",
   percentiles: [0.5, 0.9, 0.99],
   registers: [register],
 });
@@ -49,7 +49,7 @@ app.use((req, res, next) => {
     path: req.route?.path || req.path,
   });
 
-  res.on('finish', () => {
+  res.on("finish", () => {
     httpRequests.inc({
       method: req.method,
       path: req.route?.path || req.path,
@@ -62,8 +62,8 @@ app.use((req, res, next) => {
 });
 
 // Metrics endpoint
-app.get('/metrics', async (req, res) => {
-  res.set('Content-Type', register.contentType);
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", register.contentType);
   res.send(await register.metrics());
 });
 ```
@@ -73,26 +73,26 @@ app.get('/metrics', async (req, res) => {
 ```typescript
 // Orders
 const ordersCreated = new Counter({
-  name: 'orders_created_total',
-  help: 'Total orders created',
-  labelNames: ['status', 'payment_method'],
+  name: "orders_created_total",
+  help: "Total orders created",
+  labelNames: ["status", "payment_method"],
 });
 
 const orderValue = new Histogram({
-  name: 'order_value_dollars',
-  help: 'Order value in dollars',
+  name: "order_value_dollars",
+  help: "Order value in dollars",
   buckets: [10, 50, 100, 500, 1000],
 });
 
 // Usage
-ordersCreated.inc({ status: 'completed', payment_method: 'card' });
+ordersCreated.inc({ status: "completed", payment_method: "card" });
 orderValue.observe(order.total);
 ```
 
 ## Default Metrics
 
 ```typescript
-import { collectDefaultMetrics } from 'prom-client';
+import { collectDefaultMetrics } from "prom-client";
 
 // Collect Node.js metrics (memory, CPU, etc.)
 collectDefaultMetrics({ register });
@@ -122,15 +122,15 @@ def metrics():
 
 ## Quick Reference
 
-| Type | Use Case | Example |
-|------|----------|---------|
-| Counter | Cumulative totals | Requests, errors |
-| Gauge | Current value | Active users, queue size |
-| Histogram | Distributions | Response times |
-| Summary | Percentiles | Similar to histogram |
+| Type      | Use Case          | Example                  |
+| --------- | ----------------- | ------------------------ |
+| Counter   | Cumulative totals | Requests, errors         |
+| Gauge     | Current value     | Active users, queue size |
+| Histogram | Distributions     | Response times           |
+| Summary   | Percentiles       | Similar to histogram     |
 
-| Naming | Convention |
-|--------|------------|
-| Unit suffix | `_seconds`, `_bytes`, `_total` |
-| Base unit | Use seconds, bytes (not ms, KB) |
-| Prefix | App/service name |
+| Naming      | Convention                      |
+| ----------- | ------------------------------- |
+| Unit suffix | `_seconds`, `_bytes`, `_total`  |
+| Base unit   | Use seconds, bytes (not ms, KB) |
+| Prefix      | App/service name                |

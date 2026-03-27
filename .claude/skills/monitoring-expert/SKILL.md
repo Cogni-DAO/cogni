@@ -28,68 +28,78 @@ Observability and performance specialist implementing comprehensive monitoring, 
 ## Quick-Start Examples
 
 ### Structured Logging (Node.js / Pino)
-```js
-import pino from 'pino';
 
-const logger = pino({ level: 'info' });
+```js
+import pino from "pino";
+
+const logger = pino({ level: "info" });
 
 // Good — structured fields, includes correlation ID
-logger.info({ requestId: req.id, userId: req.user.id, durationMs: elapsed }, 'order.created');
+logger.info(
+  { requestId: req.id, userId: req.user.id, durationMs: elapsed },
+  "order.created"
+);
 
 // Bad — string interpolation, no correlation
 console.log(`Order created for user ${userId}`);
 ```
 
 ### Prometheus Metrics (Node.js)
+
 ```js
-import { Counter, Histogram, register } from 'prom-client';
+import { Counter, Histogram, register } from "prom-client";
 
 const httpRequests = new Counter({
-  name: 'http_requests_total',
-  help: 'Total HTTP requests',
-  labelNames: ['method', 'route', 'status'],
+  name: "http_requests_total",
+  help: "Total HTTP requests",
+  labelNames: ["method", "route", "status"],
 });
 
 const httpDuration = new Histogram({
-  name: 'http_request_duration_seconds',
-  help: 'HTTP request latency',
-  labelNames: ['method', 'route'],
+  name: "http_request_duration_seconds",
+  help: "HTTP request latency",
+  labelNames: ["method", "route"],
   buckets: [0.05, 0.1, 0.3, 0.5, 1, 2, 5],
 });
 
 // Instrument a route
 app.use((req, res, next) => {
   const end = httpDuration.startTimer({ method: req.method, route: req.path });
-  res.on('finish', () => {
-    httpRequests.inc({ method: req.method, route: req.path, status: res.statusCode });
+  res.on("finish", () => {
+    httpRequests.inc({
+      method: req.method,
+      route: req.path,
+      status: res.statusCode,
+    });
     end();
   });
   next();
 });
 
 // Expose scrape endpoint
-app.get('/metrics', async (req, res) => {
-  res.set('Content-Type', register.contentType);
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", register.contentType);
   res.end(await register.metrics());
 });
 ```
 
 ### OpenTelemetry Tracing (Node.js)
+
 ```js
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { trace } from '@opentelemetry/api';
+import { NodeSDK } from "@opentelemetry/sdk-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { trace } from "@opentelemetry/api";
 
 const sdk = new NodeSDK({
-  traceExporter: new OTLPTraceExporter({ url: 'http://jaeger:4318/v1/traces' }),
+  traceExporter: new OTLPTraceExporter({ url: "http://jaeger:4318/v1/traces" }),
 });
 sdk.start();
 
 // Manual span around a critical operation
-const tracer = trace.getTracer('order-service');
+const tracer = trace.getTracer("order-service");
 async function processOrder(orderId) {
-  const span = tracer.startSpan('order.process');
-  span.setAttribute('order.id', orderId);
+  const span = tracer.startSpan("order.process");
+  span.setAttribute("order.id", orderId);
   try {
     const result = await db.saveOrder(orderId);
     span.setStatus({ code: SpanStatusCode.OK });
@@ -105,6 +115,7 @@ async function processOrder(orderId) {
 ```
 
 ### Prometheus Alerting Rule
+
 ```yaml
 groups:
   - name: api.rules
@@ -121,25 +132,26 @@ groups:
 ```
 
 ### k6 Load Test
+
 ```js
-import http from 'k6/http';
-import { check, sleep } from 'k6';
+import http from "k6/http";
+import { check, sleep } from "k6";
 
 export const options = {
   stages: [
-    { duration: '1m', target: 50 },   // ramp up
-    { duration: '5m', target: 50 },   // sustained load
-    { duration: '1m', target: 0 },    // ramp down
+    { duration: "1m", target: 50 }, // ramp up
+    { duration: "5m", target: 50 }, // sustained load
+    { duration: "1m", target: 0 }, // ramp down
   ],
   thresholds: {
-    http_req_duration: ['p(95)<500'],  // 95th percentile < 500 ms
-    http_req_failed:   ['rate<0.01'],  // error rate < 1%
+    http_req_duration: ["p(95)<500"], // 95th percentile < 500 ms
+    http_req_failed: ["rate<0.01"], // error rate < 1%
   },
 };
 
 export default function () {
-  const res = http.get('https://api.example.com/orders');
-  check(res, { 'status is 200': (r) => r.status === 200 });
+  const res = http.get("https://api.example.com/orders");
+  check(res, { "status is 200": (r) => r.status === 200 });
   sleep(1);
 }
 ```
@@ -148,20 +160,21 @@ export default function () {
 
 Load detailed guidance based on context:
 
-| Topic | Reference | Load When |
-|-------|-----------|-----------|
-| Logging | `references/structured-logging.md` | Pino, JSON logging |
-| Metrics | `references/prometheus-metrics.md` | Counter, Histogram, Gauge |
-| Tracing | `references/opentelemetry.md` | OpenTelemetry, spans |
-| Alerting | `references/alerting-rules.md` | Prometheus alerts |
-| Dashboards | `references/dashboards.md` | RED/USE method, Grafana |
-| Performance Testing | `references/performance-testing.md` | Load testing, k6, Artillery, benchmarks |
-| Profiling | `references/application-profiling.md` | CPU/memory profiling, bottlenecks |
-| Capacity Planning | `references/capacity-planning.md` | Scaling, forecasting, budgets |
+| Topic               | Reference                             | Load When                               |
+| ------------------- | ------------------------------------- | --------------------------------------- |
+| Logging             | `references/structured-logging.md`    | Pino, JSON logging                      |
+| Metrics             | `references/prometheus-metrics.md`    | Counter, Histogram, Gauge               |
+| Tracing             | `references/opentelemetry.md`         | OpenTelemetry, spans                    |
+| Alerting            | `references/alerting-rules.md`        | Prometheus alerts                       |
+| Dashboards          | `references/dashboards.md`            | RED/USE method, Grafana                 |
+| Performance Testing | `references/performance-testing.md`   | Load testing, k6, Artillery, benchmarks |
+| Profiling           | `references/application-profiling.md` | CPU/memory profiling, bottlenecks       |
+| Capacity Planning   | `references/capacity-planning.md`     | Scaling, forecasting, budgets           |
 
 ## Constraints
 
 ### MUST DO
+
 - Use structured logging (JSON)
 - Include request IDs for correlation
 - Set up alerts for critical paths
@@ -170,6 +183,7 @@ Load detailed guidance based on context:
 - Implement health check endpoints
 
 ### MUST NOT DO
+
 - Log sensitive data (passwords, tokens, PII)
 - Alert on every error (alert fatigue)
 - Use string interpolation in logs (use structured fields)

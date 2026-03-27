@@ -375,7 +375,6 @@ resource "grafana_folder" "monitoring" {
   notify: restart grafana
 ```
 
-
 ## Related Skills
 
 - `prometheus-configuration` - For metric collection
