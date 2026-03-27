@@ -12,8 +12,9 @@
  * @public
  */
 
+import { withTenantScope } from "@cogni/db-client";
 import { connections } from "@cogni/db-schema";
-import type { UserId } from "@cogni/ids";
+import { type UserId, userActor } from "@cogni/ids";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -38,17 +39,22 @@ export async function GET() {
     );
 
     const db = resolveAppDb();
-    const rows = await db
-      .select({ id: connections.id })
-      .from(connections)
-      .where(
-        and(
-          eq(connections.billingAccountId, billingAccount.id),
-          eq(connections.provider, "openai-chatgpt"),
-          isNull(connections.revokedAt)
-        )
-      )
-      .limit(1);
+    const rows = await withTenantScope(
+      db,
+      userActor(session.id as UserId),
+      async (tx) =>
+        tx
+          .select({ id: connections.id })
+          .from(connections)
+          .where(
+            and(
+              eq(connections.billingAccountId, billingAccount.id),
+              eq(connections.provider, "openai-chatgpt"),
+              isNull(connections.revokedAt)
+            )
+          )
+          .limit(1)
+    );
 
     return NextResponse.json({
       connected: rows.length > 0,

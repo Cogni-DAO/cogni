@@ -92,4 +92,8 @@ Add a simple in-memory mutex map keyed by connectionId. Before refresh, acquire 
 - [ ] `/exchange` rejects pasted URLs with wrong origin
 - [ ] State mismatch between cookie and URL is rejected
 - [ ] Concurrent refresh calls don't invalidate each other's tokens
+
+## PR / Links
+
+- Handoff: [handoff](../handoffs/task.0210.handoff.md)
 - [ ] `pnpm check` passes

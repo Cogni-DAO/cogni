@@ -16,8 +16,9 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { withTenantScope } from "@cogni/db-client";
 import { connections } from "@cogni/db-schema";
-import type { UserId } from "@cogni/ids";
+import { type UserId, userActor } from "@cogni/ids";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -225,30 +226,32 @@ export async function POST(request: Request) {
 
   const db = resolveAppDb();
   try {
-    // Revoke existing, insert new
-    await db
-      .update(connections)
-      .set({ revokedAt: new Date(), revokedByUserId: session.id })
-      .where(
-        and(
-          eq(connections.billingAccountId, billingAccount.id),
-          eq(connections.provider, "openai-chatgpt"),
-          isNull(connections.revokedAt)
-        )
-      );
+    // withTenantScope sets SET LOCAL app.current_user_id for RLS
+    await withTenantScope(db, userActor(session.id as UserId), async (tx) => {
+      await tx
+        .update(connections)
+        .set({ revokedAt: new Date(), revokedByUserId: session.id })
+        .where(
+          and(
+            eq(connections.billingAccountId, billingAccount.id),
+            eq(connections.provider, "openai-chatgpt"),
+            isNull(connections.revokedAt)
+          )
+        );
 
-    await db.insert(connections).values({
-      id: connectionId,
-      billingAccountId: billingAccount.id,
-      provider: "openai-chatgpt",
-      credentialType: "oauth2",
-      encryptedCredentials: encrypted,
-      encryptionKeyId: "v1",
-      scopes: ["openid", "profile", "email", "offline_access"],
-      createdByUserId: session.id,
-      ...(tokenData.expires_in
-        ? { expiresAt: new Date(Date.now() + tokenData.expires_in * 1000) }
-        : {}),
+      await tx.insert(connections).values({
+        id: connectionId,
+        billingAccountId: billingAccount.id,
+        provider: "openai-chatgpt",
+        credentialType: "oauth2",
+        encryptedCredentials: encrypted,
+        encryptionKeyId: "v1",
+        scopes: ["openid", "profile", "email", "offline_access"],
+        createdByUserId: session.id,
+        ...(tokenData.expires_in
+          ? { expiresAt: new Date(Date.now() + tokenData.expires_in * 1000) }
+          : {}),
+      });
     });
 
     const durationMs = performance.now() - startMs;
@@ -274,10 +277,15 @@ export async function POST(request: Request) {
       { route: "exchange" },
       performance.now() - startMs
     );
-    log.error(
-      { error: err instanceof Error ? err.message : String(err) },
-      "Failed to store connection"
-    );
+    // Log the root cause (Postgres error), NOT the Drizzle wrapper which dumps
+    // encrypted credentials in query params — TOKENS_NEVER_LOGGED violation.
+    const cause =
+      err instanceof Error && err.cause instanceof Error
+        ? err.cause.message
+        : err instanceof Error
+          ? err.message.split("\n")[0]
+          : String(err);
+    log.error({ error: cause }, "Failed to store connection");
     return NextResponse.json(
       { error: "Failed to store connection" },
       { status: 500 }
