@@ -2,7 +2,7 @@
 id: task.0209
 type: task
 title: "Multi-provider LLM rearchitecture — ModelCatalogPort + ModelRef"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 5
 estimate: 3
@@ -16,7 +16,7 @@ branch: feat/byo-ai-per-tenant
 pr:
 reviewer:
 created: 2026-03-26
-updated: 2026-03-26
+updated: 2026-03-27
 labels: [ai, byo-ai, architecture, refactor]
 external_refs: []
 revision: 0
