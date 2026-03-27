@@ -845,7 +845,7 @@ export function ProfileView(): ReactElement {
                 setOllamaUrl(e.target.value);
                 setOllamaError("");
               }}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-ring/50"
             />
             <p className="text-muted-foreground text-xs">
               Use a{" "}
@@ -879,7 +879,7 @@ export function ProfileView(): ReactElement {
                 setOllamaApiKey(e.target.value);
                 setOllamaError("");
               }}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-ring/50"
             />
           </div>
           {ollamaError && (
