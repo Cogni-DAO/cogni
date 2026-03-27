@@ -63,6 +63,14 @@ payments_in:
       - Base
     allowed_tokens:
       - USDC
+  x402:
+    provider: x402-usdc-base-v1
+    receiving_address: "0xdCCa8D85603C2CC47dc6974a790dF846f8695056" # operator wallet — receives x402 settlements
+    facilitator_url: "https://x402.org/facilitator" # Coinbase-hosted (free ≤1k tx/mo, gas sponsored)
+    allowed_chains:
+      - Base
+    allowed_tokens:
+      - USDC
 
 providers:
   openrouter:

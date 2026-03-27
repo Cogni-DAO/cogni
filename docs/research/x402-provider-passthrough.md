@@ -1,9 +1,12 @@
 ---
 id: research.x402-provider-passthrough
-type: spec
-status: verified
-trust: measured
+type: research
+title: "x402 Provider Passthrough Research"
+status: draft
+trust: draft
 summary: "Research findings from spike.0220 — x402 E2E with Hyperbolic, AiMo evaluation, proxy architecture validation"
+read_when: Working on x402 integration, provider selection, or payment architecture
+owner: derekg1729
 created: 2026-03-27
 updated: 2026-03-27
 ---

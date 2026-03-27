@@ -102,6 +102,9 @@ services/*/dist
 # Claude Code worktrees
 .claude/worktrees/
 
+# Spike/prototype code (experimental, not production)
+spikes/
+
 # Generated work index (derived from frontmatter — never hand-edit)
 work/items/_index.md
 services/sandbox-openclaw/gateway-workspace/ideas/work/items/_index.md

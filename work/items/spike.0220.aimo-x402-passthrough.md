@@ -24,7 +24,7 @@ blocked_by: []
 deploy_verified: false
 ---
 
-## Results
+## Validation
 
 ### Validated (with working demo code in `spikes/x402-aimo-demo/`)
 
