@@ -213,6 +213,7 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       temperature,
       max_tokens: maxTokens,
       stream: true,
+      stream_options: { include_usage: true },
     };
     if (params.tools && params.tools.length > 0) {
       requestBody.tools = params.tools;
@@ -247,29 +248,6 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       throw new LlmError("Unknown error", "unknown");
     } finally {
       clearTimeout(connectTimer);
-    }
-
-    // Retry without tools if endpoint rejects them (e.g., tinyllama)
-    if (response.status === 400 && requestBody.tools) {
-      const body = await response.text().catch(() => "");
-      if (body.includes("does not support tools")) {
-        log.info({ model }, "Model does not support tools, retrying without");
-        delete requestBody.tools;
-        delete requestBody.tool_choice;
-        const retryCtl = new AbortController();
-        const retryTimer = setTimeout(
-          () => retryCtl.abort(),
-          CONNECT_TIMEOUT_MS
-        );
-        try {
-          const retrySignal = params.abortSignal
-            ? AbortSignal.any([retryCtl.signal, params.abortSignal])
-            : retryCtl.signal;
-          response = await this.doFetch(requestBody, undefined, retrySignal);
-        } finally {
-          clearTimeout(retryTimer);
-        }
-      }
     }
 
     if (!response.ok) {
