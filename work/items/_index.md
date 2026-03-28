@@ -12,6 +12,7 @@
 | 0 | 1 | 2 | needs_implement | bug.0157 | WalletConnect pino@7 pulls test-only deps into Turbopack Client Component SSR |  |  |
 | 0 | 1 | 3 | needs_merge | task.0161 | Governance signal executor: Alchemy webhook → on-chain verification → GitHub actions | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
+| 0 | 1 | 1 | needs_triage | bug.0224 | Codex binary MODULE_NOT_FOUND in Docker — standalone bundles pruned @openai/codex, bypasses global install | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 5 | 3 | needs_design | bug.0056 | Thread switch aborts in-flight stream — credits consumed, response lost to user | Thread Persistence | proj.thread-persistence |
