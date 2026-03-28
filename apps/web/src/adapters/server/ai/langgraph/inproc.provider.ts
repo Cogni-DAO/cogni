@@ -80,6 +80,7 @@ interface ProviderCatalogEntry {
   readonly toolIds: readonly string[];
   readonly mcpServerIds?: readonly string[];
   readonly graphFactory: CreateGraphFn;
+  readonly systemPrompt?: string;
 }
 
 /**
@@ -269,6 +270,9 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
         request: runnerRequest,
         ...(req.responseFormat !== undefined && {
           responseFormat: req.responseFormat,
+        }),
+        ...(entry.systemPrompt !== undefined && {
+          systemPrompt: entry.systemPrompt,
         }),
       });
     };
