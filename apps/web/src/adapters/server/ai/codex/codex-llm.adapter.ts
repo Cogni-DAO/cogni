@@ -146,11 +146,10 @@ async function* runCodexExec(params: {
 
     // Dynamic import to avoid module-scope subprocess spawn
     const { Codex } = await import("@openai/codex-sdk");
-    // Dev: binary in repo node_modules/.bin/codex (pnpm hoists it).
-    // Docker: globally installed (pnpm add -g in Dockerfile), on PATH.
-    const devBin = join(process.cwd(), "node_modules", ".bin", "codex");
-    const { existsSync } = await import("node:fs");
-    const codexBin = existsSync(devBin) ? devBin : "codex";
+    // SDK's findCodexPath() resolves the native binary via createRequire(import.meta.url).
+    // @openai/codex-sdk, @openai/codex, and @openai/codex-linux-x64 are in
+    // serverExternalPackages so standalone doesn't bundle/prune them.
+    // Dev: resolved from repo node_modules. Docker: resolved from global pnpm install.
 
     // Build env — inherit current + override HOME for auth isolation
     const { env: currentEnv } = await import("node:process");
@@ -161,7 +160,6 @@ async function* runCodexExec(params: {
     envRecord.HOME = tempDir;
 
     const codex = new Codex({
-      codexPathOverride: codexBin,
       env: envRecord,
     });
 
