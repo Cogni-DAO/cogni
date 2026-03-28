@@ -13,3 +13,4 @@
 
 export { GraphRunWorkflow } from "./workflows/graph-run.workflow.js";
 export { PrReviewWorkflow } from "./workflows/pr-review.workflow.js";
+export { ScheduledSweepWorkflow } from "./workflows/scheduled-sweep.workflow.js";
