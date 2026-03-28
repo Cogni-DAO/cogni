@@ -11,7 +11,10 @@
  * @internal
  */
 
+export { mcpToolToBoundRuntime } from "./bound-tool";
+export type { McpToolsResult } from "./client";
 export { loadMcpTools, parseMcpConfigFromEnv } from "./client";
+export { McpToolSource } from "./tool-source";
 export type {
   McpHttpServerConfig,
   McpServerConfig,

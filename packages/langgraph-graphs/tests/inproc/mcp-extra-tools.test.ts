@@ -2,188 +2,147 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/langgraph-graphs/tests/inproc/mcp-extra-tools`
- * Purpose: Verify that extraTools (MCP spike) are merged into the graph alongside contract tools.
- * Scope: Tests the runner's tool merging behavior. Does NOT test MCP client connectivity.
- * Invariants: none (unit tests)
+ * Module: `@cogni/langgraph-graphs/tests/inproc/mcp-tool-source`
+ * Purpose: Verify McpToolSource wraps MCP tools as BoundToolRuntime for toolRunner pipeline.
+ * Scope: Tests McpToolSource + McpBoundToolRuntime. Does NOT test MCP connectivity.
+ * Invariants:
+ *   - TOOLS_VIA_TOOLRUNNER: MCP tools execute through BoundToolRuntime.exec()
+ *   - TOOL_SOURCE_RETURNS_BOUND_TOOL: getBoundTool returns executable runtime
  * Side-effects: none (all mocked)
- * Links: {@link ../../src/inproc/runner.ts createInProcGraphRunner}
+ * Links: {@link ../../src/runtime/mcp/tool-source.ts McpToolSource}
  * @internal
  */
 
-import type { AiEvent } from "@cogni/ai-core";
-import { AIMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { mcpToolToBoundRuntime } from "../../src/runtime/mcp/bound-tool";
+import { McpToolSource } from "../../src/runtime/mcp/tool-source";
 
-import { createInProcGraphRunner } from "../../src/inproc/runner";
-import type {
-  CompletionFn,
-  CompletionResult,
-  CreateGraphFn,
-  InProcGraphRequest,
-  ToolExecFn,
-} from "../../src/inproc/types";
-
-async function collectEvents(
-  stream: AsyncIterable<AiEvent>
-): Promise<AiEvent[]> {
-  const events: AiEvent[] = [];
-  for await (const event of stream) {
-    events.push(event);
+describe("McpToolSource", () => {
+  function makeFakeTool(name: string, description: string) {
+    return new DynamicStructuredTool({
+      name,
+      description,
+      schema: z.object({ input: z.string() }),
+      func: async (args) => `result: ${args.input}`,
+    });
   }
-  return events;
-}
 
-function createFakeCompletionFn(): CompletionFn {
-  return () => {
-    const stream = (async function* (): AsyncIterable<AiEvent> {
-      yield { type: "text_delta", delta: "test" };
-    })();
-    const final: Promise<CompletionResult> = Promise.resolve({
-      ok: true,
-      content: "test",
-    });
-    return { stream, final };
-  };
-}
+  it("getBoundTool returns BoundToolRuntime for loaded tool", () => {
+    const tool = makeFakeTool("grafana__get_dashboard", "Get dashboard");
+    const source = new McpToolSource([tool]);
 
-describe("extraTools merge (MCP spike)", () => {
-  it("passes extra tools to graph factory alongside contract tools", async () => {
-    // Track which tools the graph factory receives
-    const receivedToolNames: string[] = [];
-
-    const fakeGraphFactory: CreateGraphFn = (opts) => {
-      for (const tool of opts.tools) {
-        receivedToolNames.push(tool.name);
-      }
-      return {
-        invoke: async () => ({
-          messages: [new AIMessage({ content: "done" })],
-        }),
-      };
-    };
-
-    // Create a fake MCP tool (mimicking what @langchain/mcp-adapters returns)
-    const fakeMcpTool = new DynamicStructuredTool({
-      name: "grafana__get_dashboard",
-      description: "Get a Grafana dashboard by UID",
-      schema: z.object({ uid: z.string() }),
-      func: async () => JSON.stringify({ title: "Test Dashboard" }),
-    });
-
-    const request: InProcGraphRequest = {
-      runId: "test-run-id",
-      messages: [{ role: "user", content: "Hello" }],
-      configurable: { model: "test-model" },
-    };
-
-    const { stream, final } = createInProcGraphRunner({
-      createGraph: fakeGraphFactory,
-      completionFn: createFakeCompletionFn(),
-      createToolExecFn: (): ToolExecFn => async () => ({ ok: true, value: {} }),
-      toolContracts: [],
-      request,
-      extraTools: [fakeMcpTool],
-    });
-
-    await collectEvents(stream);
-    const result = await final;
-
-    expect(result.ok).toBe(true);
-    expect(receivedToolNames).toContain("grafana__get_dashboard");
+    const runtime = source.getBoundTool("grafana__get_dashboard");
+    expect(runtime).toBeDefined();
+    expect(runtime?.id).toBe("grafana__get_dashboard");
+    expect(runtime?.effect).toBe("external_side_effect");
+    expect(runtime?.requiresConnection).toBe(false);
   });
 
-  it("works without extraTools (backward compatible)", async () => {
-    const receivedToolNames: string[] = [];
-
-    const fakeGraphFactory: CreateGraphFn = (opts) => {
-      for (const tool of opts.tools) {
-        receivedToolNames.push(tool.name);
-      }
-      return {
-        invoke: async () => ({
-          messages: [new AIMessage({ content: "done" })],
-        }),
-      };
-    };
-
-    const request: InProcGraphRequest = {
-      runId: "test-run-id",
-      messages: [{ role: "user", content: "Hello" }],
-      configurable: { model: "test-model" },
-    };
-
-    const { stream, final } = createInProcGraphRunner({
-      createGraph: fakeGraphFactory,
-      completionFn: createFakeCompletionFn(),
-      createToolExecFn: (): ToolExecFn => async () => ({ ok: true, value: {} }),
-      toolContracts: [],
-      request,
-      // no extraTools — backward compatible
-    });
-
-    await collectEvents(stream);
-    const result = await final;
-
-    expect(result.ok).toBe(true);
-    expect(receivedToolNames).toHaveLength(0);
+  it("getBoundTool returns undefined for unknown tool", () => {
+    const source = new McpToolSource([]);
+    expect(source.getBoundTool("nonexistent")).toBeUndefined();
   });
 
-  it("merges extra tools with contract-derived tools", async () => {
-    const receivedToolNames: string[] = [];
+  it("listToolSpecs returns specs for all loaded tools", () => {
+    const tools = [
+      makeFakeTool("server__tool_a", "Tool A"),
+      makeFakeTool("server__tool_b", "Tool B"),
+    ];
+    const source = new McpToolSource(tools);
 
-    const fakeGraphFactory: CreateGraphFn = (opts) => {
-      for (const tool of opts.tools) {
-        receivedToolNames.push(tool.name);
-      }
-      return {
-        invoke: async () => ({
-          messages: [new AIMessage({ content: "done" })],
-        }),
-      };
-    };
+    const specs = source.listToolSpecs();
+    expect(specs).toHaveLength(2);
+    expect(specs[0].name).toBe("server__tool_a");
+    expect(specs[1].name).toBe("server__tool_b");
+  });
 
-    const fakeMcpTool = new DynamicStructuredTool({
-      name: "mcp__fetch",
-      description: "Fetch a URL",
-      schema: z.object({ url: z.string() }),
-      func: async () => "fetched",
+  it("hasToolId returns true for loaded tools", () => {
+    const tool = makeFakeTool("playwright__navigate", "Navigate");
+    const source = new McpToolSource([tool]);
+
+    expect(source.hasToolId("playwright__navigate")).toBe(true);
+    expect(source.hasToolId("nonexistent")).toBe(false);
+  });
+
+  it("getToolIdsForServer filters by server prefix", () => {
+    const tools = [
+      makeFakeTool("grafana__get_dashboard", "Dashboard"),
+      makeFakeTool("grafana__query_loki", "Loki query"),
+      makeFakeTool("playwright__navigate", "Navigate"),
+    ];
+    const source = new McpToolSource(tools);
+
+    const grafanaTools = source.getToolIdsForServer("grafana");
+    expect(grafanaTools).toHaveLength(2);
+    expect(grafanaTools).toContain("grafana__get_dashboard");
+    expect(grafanaTools).toContain("grafana__query_loki");
+
+    const playwrightTools = source.getToolIdsForServer("playwright");
+    expect(playwrightTools).toHaveLength(1);
+    expect(playwrightTools).toContain("playwright__navigate");
+  });
+});
+
+describe("McpBoundToolRuntime", () => {
+  it("exec delegates to StructuredToolInterface.invoke()", async () => {
+    const tool = new DynamicStructuredTool({
+      name: "test__echo",
+      description: "Echo input",
+      schema: z.object({ message: z.string() }),
+      func: async (args) => `echo: ${args.message}`,
     });
 
-    // Create a minimal tool contract
-    const fakeContract = {
-      name: "core__get-current-time",
-      description: "Get current time",
-      inputSchema: z.object({}),
-      effect: "read_only" as const,
-    };
+    const runtime = mcpToolToBoundRuntime(tool);
 
-    const request: InProcGraphRequest = {
-      runId: "test-run-id",
-      messages: [{ role: "user", content: "Hello" }],
-      configurable: {
-        model: "test-model",
-        toolIds: ["core__get-current-time"],
-      },
-    };
+    const result = await runtime.exec(
+      { message: "hello" },
+      { runId: "run-1", toolCallId: "tc-1" },
+      {}
+    );
 
-    const { stream, final } = createInProcGraphRunner({
-      createGraph: fakeGraphFactory,
-      completionFn: createFakeCompletionFn(),
-      createToolExecFn: (): ToolExecFn => async () => ({ ok: true, value: {} }),
-      toolContracts: [fakeContract],
-      request,
-      extraTools: [fakeMcpTool],
+    expect(result).toBe("echo: hello");
+  });
+
+  it("validates input as passthrough", () => {
+    const tool = new DynamicStructuredTool({
+      name: "test__tool",
+      description: "Test",
+      schema: z.object({}),
+      func: async () => "ok",
     });
 
-    await collectEvents(stream);
-    const result = await final;
+    const runtime = mcpToolToBoundRuntime(tool);
+    const input = { foo: "bar" };
+    expect(runtime.validateInput(input)).toBe(input);
+  });
 
-    expect(result.ok).toBe(true);
-    expect(receivedToolNames).toContain("core__get-current-time");
-    expect(receivedToolNames).toContain("mcp__fetch");
-    expect(receivedToolNames).toHaveLength(2);
+  it("redacts output as passthrough", () => {
+    const tool = new DynamicStructuredTool({
+      name: "test__tool",
+      description: "Test",
+      schema: z.object({}),
+      func: async () => "ok",
+    });
+
+    const runtime = mcpToolToBoundRuntime(tool);
+    const output = { sensitive: "data" };
+    expect(runtime.redact(output)).toBe(output);
+  });
+
+  it("spec has correct effect and schema", () => {
+    const tool = new DynamicStructuredTool({
+      name: "mcp__server__my_tool",
+      description: "A useful tool",
+      schema: z.object({ query: z.string() }),
+      func: async () => "result",
+    });
+
+    const runtime = mcpToolToBoundRuntime(tool);
+
+    expect(runtime.spec.name).toBe("mcp__server__my_tool");
+    expect(runtime.spec.description).toBe("A useful tool");
+    expect(runtime.spec.effect).toBe("external_side_effect");
   });
 });

@@ -77,6 +77,7 @@ interface ProviderCatalogEntry {
   readonly displayName: string;
   readonly description: string;
   readonly toolIds: readonly string[];
+  readonly mcpServerIds?: readonly string[];
   readonly graphFactory: CreateGraphFn;
 }
 
@@ -99,7 +100,7 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
   constructor(
     private readonly adapter: CompletionUnitAdapter,
     private readonly toolSource: ToolSourcePort,
-    private readonly extraTools: readonly unknown[] = []
+    private readonly mcpToolSource?: ToolSourcePort
   ) {
     this.log = makeLogger({ component: "LangGraphInProcProvider" });
 
@@ -169,16 +170,43 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
       }
     }
 
+    // Resolve MCP tools if this graph declares mcpServerIds
+    const mcpServerIds = entry.mcpServerIds ?? [];
+    const mcpToolIds: string[] = [];
+    if (mcpServerIds.length > 0 && this.mcpToolSource) {
+      for (const serverId of mcpServerIds) {
+        // MCP tools are prefixed: "{serverName}__{toolName}" by @langchain/mcp-adapters
+        const serverTools = this.mcpToolSource.listToolSpecs();
+        for (const spec of serverTools) {
+          if (spec.name.startsWith(`${serverId}__`)) {
+            const runtime = this.mcpToolSource.getBoundTool(spec.name);
+            if (runtime) {
+              runtimeTools[spec.name] = runtime;
+              mcpToolIds.push(spec.name);
+            }
+          }
+        }
+      }
+      if (mcpToolIds.length > 0) {
+        this.log.debug(
+          { runId, graphName, mcpServerIds, mcpToolCount: mcpToolIds.length },
+          "Resolved MCP tools for graph"
+        );
+      }
+    }
+
+    // Combined tool IDs for allowlist: native catalog tools + MCP tools
+    const allToolIds = [...toolIds, ...mcpToolIds];
+
     // Get catalog tools for contract extraction (still from TOOL_CATALOG)
-    // Type predicate ensures catalogTools is CatalogBoundTool[] not (CatalogBoundTool | undefined)[]
     const catalogTools = catalogToolIds
       .map((id) => TOOL_CATALOG[id])
       .filter((bt): bt is NonNullable<typeof bt> => bt !== undefined);
 
     // Create tool execution function factory
-    // Uses same toolIds for ToolRunner policy as configurable
+    // Policy allowlist includes both native and MCP tool IDs
     const createToolExecFn = (emit: (e: AiEvent) => void): ToolExecFn => {
-      const policy = createToolAllowlistPolicy(toolIds);
+      const policy = createToolAllowlistPolicy(allToolIds);
       const source = createStaticToolSourceFromRecord(runtimeTools);
       const toolRunner = createToolRunner(source, emit, {
         policy,
@@ -224,7 +252,6 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
       ...(req.responseFormat !== undefined && {
         responseFormat: req.responseFormat,
       }),
-      ...(this.extraTools.length > 0 && { extraTools: this.extraTools }),
     });
 
     // Map package result to GraphFinal

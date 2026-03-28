@@ -18,7 +18,7 @@
  * @public
  */
 
-import type { SourceSystem } from "@cogni/ai-core";
+import type { SourceSystem, ToolSourcePort } from "@cogni/ai-core";
 import type {
   ExecutionContext,
   GraphFinal,
@@ -29,6 +29,7 @@ import type { UserId } from "@cogni/ids";
 import {
   LANGGRAPH_CATALOG,
   loadMcpTools,
+  McpToolSource,
   parseMcpConfigFromEnv,
 } from "@cogni/langgraph-graphs";
 import {
@@ -295,55 +296,86 @@ export function runGraphWithScope(params: {
 }
 
 // ---------------------------------------------------------------------------
-// MCP tool loading — cached singleton, loaded on first use
+// MCP tool source — cached singleton, loaded on first use
 // ---------------------------------------------------------------------------
 
 const mcpLog = makeLogger({ component: "mcp-bootstrap" });
 
-/** Module-scoped cache for MCP tools (loaded once, shared across providers) */
-let _mcpToolsPromise: Promise<readonly unknown[]> | null = null;
+/** Module-scoped cache for MCP tool source + close function */
+let _mcpState: {
+  sourcePromise: Promise<ToolSourcePort | null>;
+  close: (() => Promise<void>) | null;
+} | null = null;
 
-function getMcpTools(): Promise<readonly unknown[]> {
-  if (!_mcpToolsPromise) {
+/**
+ * Get or create the MCP tool source singleton.
+ * Returns null if no MCP servers are configured.
+ */
+function getMcpToolSource(): Promise<ToolSourcePort | null> {
+  if (!_mcpState) {
     const config = parseMcpConfigFromEnv();
     const serverNames = Object.keys(config);
     if (serverNames.length === 0) {
       mcpLog.debug(
         "No MCP servers configured (set MCP_SERVERS or MCP_CONFIG_PATH env)"
       );
-      _mcpToolsPromise = Promise.resolve([]);
+      _mcpState = { sourcePromise: Promise.resolve(null), close: null };
     } else {
       mcpLog.info(
         { servers: serverNames },
         "Loading MCP tools from configured servers"
       );
-      _mcpToolsPromise = loadMcpTools(config)
-        .then((tools) => {
-          mcpLog.info(
-            {
-              toolCount: tools.length,
-              toolNames: tools.map((t) => t.name),
-            },
-            "MCP tools loaded successfully"
-          );
-          return tools;
-        })
-        .catch((err) => {
-          mcpLog.error(
-            { err },
-            "Failed to load MCP tools; continuing without them"
-          );
-          return [];
-        });
+      const resultPromise = loadMcpTools(config);
+
+      _mcpState = {
+        sourcePromise: resultPromise
+          .then((result) => {
+            // Store close function for lifecycle management
+            if (_mcpState) _mcpState.close = result.close;
+            const source = new McpToolSource(result.tools);
+            mcpLog.info(
+              {
+                toolCount: result.tools.length,
+                toolNames: result.tools.map((t) => t.name),
+              },
+              "MCP tools loaded successfully"
+            );
+            return source;
+          })
+          .catch((err) => {
+            mcpLog.error(
+              { err },
+              "Failed to load MCP tools; continuing without them"
+            );
+            return null;
+          }),
+        close: null,
+      };
     }
   }
-  return _mcpToolsPromise;
+  return _mcpState.sourcePromise;
+}
+
+/**
+ * Close all MCP server connections. Call on process shutdown.
+ * Prevents orphaned stdio subprocesses.
+ */
+export async function closeMcpConnections(): Promise<void> {
+  if (_mcpState?.close) {
+    mcpLog.info("Closing MCP server connections");
+    try {
+      await _mcpState.close();
+    } catch (err) {
+      mcpLog.error({ err }, "Error closing MCP connections");
+    }
+  }
+  _mcpState = null;
 }
 
 /**
  * Create InProc provider for in-process graph execution.
  * Per CAPABILITY_INJECTION: toolSource contains real implementations with I/O.
- * MCP tools are loaded lazily and passed as extraTools to the runner.
+ * MCP tools are loaded lazily via McpToolSource and passed to the provider.
  */
 function createInProcProvider(
   deps: AiAdapterDeps,
@@ -355,12 +387,12 @@ function createInProcProvider(
     completionStreamFn
   );
 
-  // Load MCP tools async. Wrap provider so first runGraph() awaits them.
-  const mcpToolsPromise = getMcpTools();
-  return new LazyMcpLangGraphProvider(
+  // Load MCP tools async. Wrap provider so first runGraph() awaits MCP loading.
+  const mcpSourcePromise = getMcpToolSource();
+  return new LazyMcpInProcProvider(
     inprocAdapter,
     container.toolSource,
-    mcpToolsPromise
+    mcpSourcePromise
   );
 }
 
@@ -375,29 +407,29 @@ function createDevProvider(apiUrl: string): LangGraphDevProvider {
 }
 
 // ---------------------------------------------------------------------------
-// Lazy MCP provider — defers MCP tool loading to first runGraph() call
+// Lazy MCP provider — defers MCP tool source loading to first runGraph() call
 // ---------------------------------------------------------------------------
 
 /**
  * Wraps LangGraphInProcProvider construction behind an async boundary.
- * On first runGraph(), awaits MCP tools, constructs the real provider with
- * the loaded tools, then delegates. Subsequent calls use the cached provider.
+ * On first runGraph(), awaits MCP tool source loading, constructs the real
+ * provider with the source, then delegates. Subsequent calls use the cached provider.
  */
-class LazyMcpLangGraphProvider implements GraphExecutorPort {
+class LazyMcpInProcProvider implements GraphExecutorPort {
   readonly providerId = "langgraph" as const;
   private resolvedProvider: LangGraphInProcProvider | null = null;
   private readonly providerPromise: Promise<LangGraphInProcProvider>;
 
   constructor(
     adapter: import("@/adapters/server/ai/langgraph/inproc.provider").CompletionUnitAdapter,
-    toolSource: import("@cogni/ai-core").ToolSourcePort,
-    mcpToolsPromise: Promise<readonly unknown[]>
+    toolSource: ToolSourcePort,
+    mcpSourcePromise: Promise<ToolSourcePort | null>
   ) {
-    this.providerPromise = mcpToolsPromise.then((mcpTools) => {
+    this.providerPromise = mcpSourcePromise.then((mcpSource) => {
       const provider = new LangGraphInProcProvider(
         adapter,
         toolSource,
-        mcpTools
+        mcpSource ?? undefined
       );
       this.resolvedProvider = provider;
       return provider;

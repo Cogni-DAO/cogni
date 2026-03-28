@@ -4,12 +4,12 @@
 /**
  * Module: `@cogni/langgraph-graphs/runtime/mcp/client`
  * Purpose: Create LangChain tools from external MCP servers.
- * Scope: Spike — bypasses ToolRunner pipeline. Does NOT handle policy, billing, or redaction.
+ * Scope: Loads MCP tools and returns them with a lifecycle close() function.
  * Invariants:
- *   - SPIKE_ONLY: This does NOT flow through ToolRunner (no policy, no billing, no redaction)
  *   - MCP tools are prefixed with server name to avoid collisions
  *   - Connection errors are logged and skipped (don't break the agent)
  *   - ENV_INTERPOLATION: ${VAR} in config values are replaced with process.env[VAR]
+ *   - LIFECYCLE_CLOSE: loadMcpTools returns close() for graceful subprocess cleanup
  * Side-effects: IO (connects to MCP servers, spawns subprocesses for stdio transport)
  * Links: {@link ../types.ts McpServersConfig}
  * @internal
@@ -22,30 +22,40 @@ import type { StructuredToolInterface } from "@langchain/core/tools";
 import type { McpServerConfig, McpServersConfig } from "./types";
 
 /**
+ * Result of loading MCP tools. Includes a close() function for lifecycle management.
+ */
+export interface McpToolsResult {
+  readonly tools: StructuredToolInterface[];
+  /** Close all MCP server connections. Call on process shutdown to prevent orphaned subprocesses. */
+  readonly close: () => Promise<void>;
+}
+
+/**
  * Load tools from configured MCP servers.
  *
- * Returns LangChain StructuredToolInterface[] ready to merge with
- * existing tools in createReactAgent.
- *
- * Spike: tools bypass our ToolRunner pipeline entirely.
- * Path B (proj.agentic-interop) will create McpToolSource implementing ToolSourcePort.
+ * Returns tools + a close() function for graceful shutdown.
+ * Per LIFECYCLE_CLOSE: caller must store close() and invoke it on SIGTERM/SIGINT
+ * to prevent orphaned stdio subprocesses.
  *
  * @param config - Map of server name → transport config
- * @returns LangChain tools from all reachable MCP servers
+ * @returns Tools and close function
  */
 export async function loadMcpTools(
   config: McpServersConfig
-): Promise<StructuredToolInterface[]> {
+): Promise<McpToolsResult> {
+  const noopResult: McpToolsResult = {
+    tools: [],
+    close: async () => {},
+  };
+
   if (Object.keys(config).length === 0) {
-    return [];
+    return noopResult;
   }
 
   // Dynamic import to avoid loading MCP deps when not configured
   const { MultiServerMCPClient } = await import("@langchain/mcp-adapters");
 
   // Convert our config to @langchain/mcp-adapters Connection format.
-  // We build plain objects matching the Connection schema then cast,
-  // because the Zod-inferred Connection type is hard to construct incrementally.
   const connections: Record<string, unknown> = {};
 
   for (const [name, serverConfig] of Object.entries(config)) {
@@ -79,7 +89,6 @@ export async function loadMcpTools(
     }
   }
 
-  // Zod-inferred ClientConfig type is hard to construct incrementally from our types
   const clientConfig = {
     mcpServers: connections,
     prefixToolNameWithServerName: true,
@@ -90,14 +99,18 @@ export async function loadMcpTools(
 
   try {
     const tools = await client.getTools();
-    // Note: we do NOT close the client here — tools need active connections
-    // to execute. The client will be GC'd when the tools are no longer referenced.
-    // For production (Path B), we'd manage client lifecycle explicitly.
-    return tools as StructuredToolInterface[];
+    return {
+      tools: tools as StructuredToolInterface[],
+      close: () => client.close(),
+    };
   } catch (error) {
-    // biome-ignore lint/suspicious/noConsole: error logging for spike diagnostics
-    console.error("[mcp-client] Failed to load MCP tools:", error);
-    return [];
+    // Attempt cleanup even on failure — some servers may have connected
+    try {
+      await client.close();
+    } catch {
+      // ignore close errors during failure cleanup
+    }
+    throw error;
   }
 }
 

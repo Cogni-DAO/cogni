@@ -123,14 +123,6 @@ export interface InProcRunnerOptions<TTool = unknown> {
     readonly prompt?: string;
     readonly schema: unknown;
   };
-
-  /**
-   * Optional extra tools to merge alongside contract-derived tools.
-   * Used for MCP tools that are already LangChain StructuredToolInterface[].
-   * These tools bypass the ToolRunner pipeline (no policy/billing/redaction).
-   * Pass as unknown[] to preserve NO_LANGCHAIN_IN_SRC at call sites.
-   */
-  readonly extraTools?: readonly unknown[];
 }
 
 /**
