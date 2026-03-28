@@ -13,7 +13,7 @@ assignees: [derekg1729]
 credit:
 project: proj.byo-ai
 branch: feat/task-0212-unified-usage
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/652
 reviewer:
 created: 2026-03-27
 updated: 2026-03-28
