@@ -858,10 +858,10 @@ const USER_AGENT_PROFILES: RunProfile[] = [
     costPerKTokenOut: 0.0006,
     errorRate: 0.04,
   },
-  // ── BYO: ChatGPT subscription via Codex ──
+  // ── BYO: ChatGPT subscription via Codex SDK ──
   {
     graphId: "langgraph:poet",
-    model: "gpt-4o",
+    model: "gpt-5.4",
     provider: "openai-chatgpt",
     sourceSystem: "codex",
     minLatencyMs: 3000,
@@ -873,6 +873,21 @@ const USER_AGENT_PROFILES: RunProfile[] = [
     costPerKTokenIn: 0, // Zero platform cost — user's subscription
     costPerKTokenOut: 0,
     errorRate: 0.05,
+  },
+  {
+    graphId: "langgraph:ponderer",
+    model: "gpt-5.3-codex",
+    provider: "openai-chatgpt",
+    sourceSystem: "codex",
+    minLatencyMs: 2000,
+    maxLatencyMs: 8000,
+    minTokensIn: 800,
+    maxTokensIn: 4000,
+    minTokensOut: 300,
+    maxTokensOut: 1500,
+    costPerKTokenIn: 0,
+    costPerKTokenOut: 0,
+    errorRate: 0.04,
   },
   // ── BYO: Local LLM via OpenAI-compatible endpoint (Ollama) ──
   {

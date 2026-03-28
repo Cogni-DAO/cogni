@@ -3,8 +3,8 @@
 
 /**
  * Module: `@adapters/server/ai/execution-scope`
- * Purpose: AsyncLocalStorage-based execution scope for billing and abort signal.
- * Scope: Provides per-run billing context and abort signal to static inner providers via Node-native ALS. Does not carry shared contract types — billing is app-local.
+ * Purpose: AsyncLocalStorage-based execution scope for billing, abort signal, and usage source.
+ * Scope: Provides per-run billing context, abort signal, and usage source (SourceSystem) to static inner providers via Node-native ALS. Does not carry shared contract types — billing is app-local.
  * Invariants:
  *   - ALS_NOT_SHARED: ExecutionScope is app-local, never exported to @cogni/graph-execution-core
  *   - BILLING_SET_BY_LAUNCHER: runInScope is called by the launcher (chat, schedule, webhook)

@@ -9,6 +9,7 @@
  *   - COMPLETION_UNIT_NOT_PORT: This is a CompletionUnitAdapter, not GraphExecutorPort
  *   - GRAPH_LLM_VIA_COMPLETION: Delegates to completion.executeStream for billing/telemetry
  *   - P0_ATTEMPT_FREEZE: attempt is always 0 (no run persistence)
+ *   - USAGE_ALWAYS_EMITTED: Emits usage_report for every successful completion regardless of provider
  *   - NO_AWAIT_FINAL_IN_LOOP: Must break out of for-await before awaiting final (prevents deadlock)
  * Side-effects: IO (via injected completion function)
  * Links: AGENT_DISCOVERY.md, GRAPH_EXECUTION.md, features/ai/services/completion.ts

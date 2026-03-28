@@ -2,7 +2,7 @@
 id: task.0212
 type: task
 title: "Unified usage reporting — emit usage_report for all LLM providers (platform, codex, openai-compatible)"
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 4
 estimate: 2
@@ -12,11 +12,11 @@ spec_refs: [multi-provider-llm, billing-ingest-spec]
 assignees: [derekg1729]
 credit:
 project: proj.byo-ai
-branch: feat/byo-ai-openai-compatible
+branch: feat/task-0212-unified-usage
 pr:
 reviewer:
 created: 2026-03-27
-updated: 2026-03-27
+updated: 2026-03-28
 labels: [ai, byo-ai, billing, observability]
 external_refs: []
 revision: 0
