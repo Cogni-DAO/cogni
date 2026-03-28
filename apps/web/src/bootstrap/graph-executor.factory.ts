@@ -26,7 +26,11 @@ import type {
   GraphRunResult,
 } from "@cogni/graph-execution-core";
 import type { UserId } from "@cogni/ids";
-import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
+import {
+  LANGGRAPH_CATALOG,
+  loadMcpTools,
+  parseMcpConfigFromEnv,
+} from "@cogni/langgraph-graphs";
 import {
   BillingEnrichmentGraphExecutorDecorator,
   type CompletionStreamFn,
@@ -50,6 +54,7 @@ import type {
   PreflightCreditCheckFn,
 } from "@/ports";
 import { serverEnv } from "@/shared/env";
+import { makeLogger } from "@/shared/observability";
 import {
   type AiAdapterDeps,
   getContainer,
@@ -289,20 +294,74 @@ export function runGraphWithScope(params: {
   );
 }
 
+// ---------------------------------------------------------------------------
+// MCP tool loading — cached singleton, loaded on first use
+// ---------------------------------------------------------------------------
+
+const mcpLog = makeLogger({ component: "mcp-bootstrap" });
+
+/** Module-scoped cache for MCP tools (loaded once, shared across providers) */
+let _mcpToolsPromise: Promise<readonly unknown[]> | null = null;
+
+function getMcpTools(): Promise<readonly unknown[]> {
+  if (!_mcpToolsPromise) {
+    const config = parseMcpConfigFromEnv();
+    const serverNames = Object.keys(config);
+    if (serverNames.length === 0) {
+      mcpLog.debug(
+        "No MCP servers configured (set MCP_SERVERS or MCP_CONFIG_PATH env)"
+      );
+      _mcpToolsPromise = Promise.resolve([]);
+    } else {
+      mcpLog.info(
+        { servers: serverNames },
+        "Loading MCP tools from configured servers"
+      );
+      _mcpToolsPromise = loadMcpTools(config)
+        .then((tools) => {
+          mcpLog.info(
+            {
+              toolCount: tools.length,
+              toolNames: tools.map((t) => t.name),
+            },
+            "MCP tools loaded successfully"
+          );
+          return tools;
+        })
+        .catch((err) => {
+          mcpLog.error(
+            { err },
+            "Failed to load MCP tools; continuing without them"
+          );
+          return [];
+        });
+    }
+  }
+  return _mcpToolsPromise;
+}
+
 /**
  * Create InProc provider for in-process graph execution.
  * Per CAPABILITY_INJECTION: toolSource contains real implementations with I/O.
+ * MCP tools are loaded lazily and passed as extraTools to the runner.
  */
 function createInProcProvider(
   deps: AiAdapterDeps,
   completionStreamFn: CompletionStreamFn
-): LangGraphInProcProvider {
+): GraphExecutorPort {
   const container = getContainer();
   const inprocAdapter = new InProcCompletionUnitAdapter(
     deps,
     completionStreamFn
   );
-  return new LangGraphInProcProvider(inprocAdapter, container.toolSource);
+
+  // Load MCP tools async. Wrap provider so first runGraph() awaits them.
+  const mcpToolsPromise = getMcpTools();
+  return new LazyMcpLangGraphProvider(
+    inprocAdapter,
+    container.toolSource,
+    mcpToolsPromise
+  );
 }
 
 /**
@@ -313,6 +372,75 @@ function createDevProvider(apiUrl: string): LangGraphDevProvider {
   const client = createLangGraphDevClient({ apiUrl });
   const availableGraphs = Object.keys(LANGGRAPH_CATALOG);
   return new LangGraphDevProvider(client, { availableGraphs });
+}
+
+// ---------------------------------------------------------------------------
+// Lazy MCP provider — defers MCP tool loading to first runGraph() call
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps LangGraphInProcProvider construction behind an async boundary.
+ * On first runGraph(), awaits MCP tools, constructs the real provider with
+ * the loaded tools, then delegates. Subsequent calls use the cached provider.
+ */
+class LazyMcpLangGraphProvider implements GraphExecutorPort {
+  readonly providerId = "langgraph" as const;
+  private resolvedProvider: LangGraphInProcProvider | null = null;
+  private readonly providerPromise: Promise<LangGraphInProcProvider>;
+
+  constructor(
+    adapter: import("@/adapters/server/ai/langgraph/inproc.provider").CompletionUnitAdapter,
+    toolSource: import("@cogni/ai-core").ToolSourcePort,
+    mcpToolsPromise: Promise<readonly unknown[]>
+  ) {
+    this.providerPromise = mcpToolsPromise.then((mcpTools) => {
+      const provider = new LangGraphInProcProvider(
+        adapter,
+        toolSource,
+        mcpTools
+      );
+      this.resolvedProvider = provider;
+      return provider;
+    });
+  }
+
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    // Fast path: provider already resolved
+    if (this.resolvedProvider) {
+      return this.resolvedProvider.runGraph(req, ctx);
+    }
+
+    // Slow path (first call): await provider construction
+    const innerResult = this.providerPromise.then((p) => p.runGraph(req, ctx));
+
+    const stream = (async function* () {
+      let inner: GraphRunResult;
+      try {
+        inner = await innerResult;
+      } catch {
+        yield {
+          type: "error" as const,
+          error: "internal" as AiExecutionErrorCode,
+        };
+        yield { type: "done" as const };
+        return;
+      }
+      yield* inner.stream;
+    })();
+
+    const final = innerResult.then(
+      (r) => r.final,
+      () =>
+        ({
+          ok: false as const,
+          runId: req.runId,
+          requestId: ctx?.requestId ?? req.runId,
+          error: "internal",
+        }) as const
+    );
+
+    return { stream, final };
+  }
 }
 
 // ---------------------------------------------------------------------------

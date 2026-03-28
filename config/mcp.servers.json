@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "transport": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "--init",
+        "-i",
+        "--network",
+        "cogni-edge",
+        "-e",
+        "GRAFANA_URL=${GRAFANA_URL}",
+        "-e",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_SERVICE_ACCOUNT_TOKEN}",
+        "mcp/grafana",
+        "-t",
+        "stdio"
+      ],
+      "disabled": false
+    },
+    "playwright": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "disabled": false
+    },
+    "everything": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "disabled": true
+    }
+  }
+}

@@ -98,7 +98,8 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
 
   constructor(
     private readonly adapter: CompletionUnitAdapter,
-    private readonly toolSource: ToolSourcePort
+    private readonly toolSource: ToolSourcePort,
+    private readonly extraTools: readonly unknown[] = []
   ) {
     this.log = makeLogger({ component: "LangGraphInProcProvider" });
 
@@ -223,6 +224,7 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
       ...(req.responseFormat !== undefined && {
         responseFormat: req.responseFormat,
       }),
+      ...(this.extraTools.length > 0 && { extraTools: this.extraTools }),
     });
 
     // Map package result to GraphFinal
