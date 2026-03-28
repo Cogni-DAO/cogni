@@ -35,6 +35,7 @@ import type { ChatError } from "@/contracts/error.chat.v1.contract";
 import { useChatSidebarStore } from "@/features/ai/chat/components/ChatSidebarContext";
 import { ChatRuntimeProvider } from "@/features/ai/chat/providers/ChatRuntimeProvider.client";
 import { toErrorAlertProps } from "@/features/ai/chat/utils/toErrorAlertProps";
+import { CHATGPT_MODELS } from "@/features/ai/components/ModelPicker";
 import {
   ChatComposerExtras,
   ChatErrorBubble,
@@ -124,10 +125,18 @@ export function ChatView(): ReactNode {
     });
 
     if (selected) {
-      // Find the model ref from the models list
+      // Find the model ref from the models list.
+      // ChatGPT models aren't in the server models list — they're hardcoded in
+      // ModelPicker. If the stored preference is a ChatGPT model, build the ref
+      // with providerKey "codex". connectionId will be set when ModelPicker's
+      // status fetch completes and the user re-selects or the tab initializes.
       const matchedModel = models.find((m) => m.ref.modelId === selected);
+      const isChatGptModel = CHATGPT_MODELS.some((m) => m.id === selected);
       setSelectedModelRef(
-        matchedModel?.ref ?? { providerKey: "platform", modelId: selected }
+        matchedModel?.ref ??
+          (isChatGptModel
+            ? { providerKey: "codex", modelId: selected }
+            : { providerKey: "platform", modelId: selected })
       );
       setIsBlocked(false);
     } else {
