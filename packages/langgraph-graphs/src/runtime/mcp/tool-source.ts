@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/langgraph-graphs/runtime/mcp/tool-source`
  * Purpose: ToolSourcePort implementation for MCP tools.
- * Scope: Wraps loaded MCP StructuredToolInterface[] as BoundToolRuntime entries.
+ * Scope: Wraps loaded MCP StructuredToolInterface[] as BoundToolRuntime entries. Does NOT perform I/O.
  * Invariants:
  *   - TOOL_SOURCE_RETURNS_BOUND_TOOL: getBoundTool returns executable BoundToolRuntime
  *   - TOOL_ID_NAMESPACED: MCP tools use mcp__{server}__{tool} naming

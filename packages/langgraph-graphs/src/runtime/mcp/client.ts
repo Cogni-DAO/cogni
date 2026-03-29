@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/langgraph-graphs/runtime/mcp/client`
  * Purpose: Create LangChain tools from external MCP servers.
- * Scope: Loads MCP tools and returns them with a lifecycle close() function.
+ * Scope: Loads MCP tools and returns them with a lifecycle close() function. Does NOT execute tools.
  * Invariants:
  *   - MCP tools are prefixed with server name to avoid collisions
  *   - Connection errors are logged and skipped (don't break the agent)

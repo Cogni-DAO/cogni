@@ -102,6 +102,8 @@ services:
       - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
       # Redis (stream plane — ephemeral only)
       - REDIS_URL=redis://redis:6379
+      # MCP server URLs (Docker-internal DNS — per mcp-control-plane spec)
+      - MCP_PLAYWRIGHT_URL=${MCP_PLAYWRIGHT_URL:-http://playwright-mcp:3003/mcp}
     volumes:
       - repo_data:/repo:ro
     depends_on:
@@ -704,6 +706,38 @@ services:
       timeout: 2s
       retries: 5
       start_period: 15s
+
+  # =============================================================================
+  # Playwright MCP Server (Streamable HTTP)
+  # Browser automation tools for agents via Model Context Protocol.
+  # Per MCP_DOCKER_NOT_STDIO: runs as network service, not stdio subprocess.
+  # Opt-in: --profile mcp-playwright
+  # Docs: docs/spec/mcp-control-plane.md
+  # =============================================================================
+
+  playwright-mcp:
+    image: mcr.microsoft.com/playwright/mcp
+    container_name: playwright-mcp
+    profiles: [mcp-playwright]
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - cogni-edge
+    ports:
+      - "127.0.0.1:3003:3003"
+    entrypoint: node
+    command: cli.js --headless --browser chromium --no-sandbox --port 3003 --host 0.0.0.0
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://localhost:3003/mcp'',r=>{process.exit(r.statusCode<500?0:1)}).on(''error'',()=>process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
 
 networks:
   cogni-edge:

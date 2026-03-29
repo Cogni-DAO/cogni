@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/langgraph-graphs/graphs/frontend-tester/graph`
  * Purpose: Frontend testing agent — drives Playwright MCP to verify UI behavior.
- * Scope: Creates LangGraph React agent. Tools come from MCP (Playwright).
+ * Scope: Creates LangGraph React agent. Tools come from MCP (Playwright). Does NOT perform I/O.
  * Invariants:
  *   - Pure factory function — no side effects, no env reads
  *   - TYPE_TRANSPARENT_RETURN: No explicit return type

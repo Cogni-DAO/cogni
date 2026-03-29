@@ -32,6 +32,7 @@
     "dev:infra": "docker network create cogni-edge || true && docker compose --env-file .env.local -f infra/compose/runtime/docker-compose.dev.yml --profile sandbox-openclaw up -d git-sync postgres litellm redis loki grafana alloy autoheal temporal-postgres temporal temporal-ui scheduler-worker llm-proxy-openclaw openclaw-gateway",
     "dev:infra:test": "docker network create cogni-edge || true && DATABASE_SERVICE_URL_DOCKER=postgresql://app_service:service_password@postgres:5432/cogni_template_stack_test docker compose --env-file .env.test -f infra/compose/runtime/docker-compose.dev.yml --profile sandbox-openclaw up -d git-sync postgres litellm mock-llm redis loki grafana alloy autoheal temporal-postgres temporal temporal-ui scheduler-worker llm-proxy-openclaw openclaw-gateway",
     "dev:infra:tb": "docker compose --env-file .env.local -f infra/compose/runtime/docker-compose.dev.yml --profile tigerbeetle up -d tigerbeetle",
+    "dev:infra:mcp": "docker compose --env-file .env.local -f infra/compose/runtime/docker-compose.dev.yml --profile mcp-playwright up -d playwright-mcp",
     "dev:infra:down": "docker compose --env-file .env.local -f infra/compose/runtime/docker-compose.dev.yml --profile sandbox-openclaw --profile tigerbeetle down",
     "dev:smee": "dotenv -e .env.local -- bash -c 'smee -u \"$GH_WEBHOOK_PROXY_URL\" -t http://localhost:3000/api/internal/webhooks/github'",
     "dev:smee:alchemy": "dotenv -e .env.local -- bash -c 'smee -u \"$ALCHEMY_PROXY_URL\" -t http://localhost:3000/api/internal/webhooks/alchemy'",

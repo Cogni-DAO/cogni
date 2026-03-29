@@ -151,9 +151,26 @@ Phase 0 is the MVP. Phases 1-3 are tracked in proj.agentic-interop.
 
 ## Validation
 
-- [ ] McpToolSource.getBoundTool() returns BoundToolRuntime for loaded MCP tools
-- [ ] toolRunner.exec() successfully executes an MCP tool through the full pipeline
+- [x] McpToolSource.getBoundTool() returns BoundToolRuntime for loaded MCP tools
+- [x] toolRunner.exec() successfully executes an MCP tool through the full pipeline
 - [ ] Policy denies MCP tools not declared in graph's mcpServerIds
-- [ ] Playwright MCP loads and browser_navigate tool works end-to-end
-- [ ] extraTools bypass removed from runner/types
-- [ ] `pnpm check:fast` passes
+- [x] Playwright MCP loads and browser_navigate tool works end-to-end
+- [x] extraTools bypass removed from runner/types
+- [x] `pnpm check:fast` passes
+
+### Experiment: 2026-03-29 — MCP as Docker network service (Streamable HTTP)
+
+**Result: SUCCESS.** Browser agent navigated to cognidao.org and reported page contents via
+Playwright MCP tools (22 tools loaded). Full pipeline verified: Docker Compose service
+(`mcr.microsoft.com/playwright/mcp` on port 3003) → Streamable HTTP `/mcp` endpoint →
+`@langchain/mcp-adapters` MultiServerMCPClient → McpToolSource → toolRunner.exec() → LangGraph agent.
+
+Screenshot tool failed (expected — no storage mechanism configured), but navigation + snapshot +
+form interaction tools all work through the standard tool pipeline with policy enforcement.
+
+Key changes in this commit:
+
+- Playwright MCP: stdio subprocess → Docker Compose service (Streamable HTTP)
+- MCP connection: forever singleton → McpConnectionCache (reconnect-on-error + TTL backstop)
+- InProcProvider: static mcpToolSource → async getMcpToolSource() function
+- Architecture spec: docs/spec/mcp-control-plane.md (Phase 1 DB registry + Temporal preflight)

@@ -100,7 +100,8 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
   constructor(
     private readonly adapter: CompletionUnitAdapter,
     private readonly toolSource: ToolSourcePort,
-    private readonly mcpToolSource?: ToolSourcePort
+    private readonly getMcpToolSource: () => Promise<ToolSourcePort | null> = () =>
+      Promise.resolve(null)
   ) {
     this.log = makeLogger({ component: "LangGraphInProcProvider" });
 
@@ -170,105 +171,143 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
       }
     }
 
-    // Resolve MCP tools if this graph declares mcpServerIds
+    // Resolve MCP tools if this graph declares mcpServerIds.
+    // getMcpToolSource() is async (shared cache with reconnect-on-error),
+    // so we wrap the graph execution in a promise and stream from it.
     const mcpServerIds = entry.mcpServerIds ?? [];
-    const mcpToolIds: string[] = [];
-    if (mcpServerIds.length > 0 && this.mcpToolSource) {
-      for (const serverId of mcpServerIds) {
-        // MCP tools are prefixed: "{serverName}__{toolName}" by @langchain/mcp-adapters
-        const serverTools = this.mcpToolSource.listToolSpecs();
-        for (const spec of serverTools) {
-          if (spec.name.startsWith(`${serverId}__`)) {
-            const runtime = this.mcpToolSource.getBoundTool(spec.name);
-            if (runtime) {
-              runtimeTools[spec.name] = runtime;
-              mcpToolIds.push(spec.name);
+
+    // Async helper: resolve MCP tools then execute graph
+    const resolveMcpAndExecute = async (): Promise<{
+      stream: AsyncIterable<AiEvent>;
+      final: Promise<GraphResult>;
+    }> => {
+      const mcpToolIds: string[] = [];
+      if (mcpServerIds.length > 0) {
+        const mcpToolSource = await this.getMcpToolSource();
+        if (mcpToolSource) {
+          for (const serverId of mcpServerIds) {
+            for (const spec of mcpToolSource.listToolSpecs()) {
+              if (spec.name.startsWith(`${serverId}__`)) {
+                const runtime = mcpToolSource.getBoundTool(spec.name);
+                if (runtime) {
+                  runtimeTools[spec.name] = runtime;
+                  mcpToolIds.push(spec.name);
+                }
+              }
             }
+          }
+          if (mcpToolIds.length > 0) {
+            this.log.debug(
+              {
+                runId,
+                graphName,
+                mcpServerIds,
+                mcpToolCount: mcpToolIds.length,
+              },
+              "Resolved MCP tools for graph"
+            );
           }
         }
       }
-      if (mcpToolIds.length > 0) {
-        this.log.debug(
-          { runId, graphName, mcpServerIds, mcpToolCount: mcpToolIds.length },
-          "Resolved MCP tools for graph"
-        );
-      }
-    }
 
-    // Combined tool IDs for allowlist: native catalog tools + MCP tools
-    const allToolIds = [...toolIds, ...mcpToolIds];
+      // Combined tool IDs for allowlist: native catalog tools + MCP tools
+      const allToolIds = [...toolIds, ...mcpToolIds];
 
-    // Get catalog tools for contract extraction (still from TOOL_CATALOG)
-    const catalogTools = catalogToolIds
-      .map((id) => TOOL_CATALOG[id])
-      .filter((bt): bt is NonNullable<typeof bt> => bt !== undefined);
+      // Get catalog tools for contract extraction (still from TOOL_CATALOG)
+      const catalogTools = catalogToolIds
+        .map((id) => TOOL_CATALOG[id])
+        .filter((bt): bt is NonNullable<typeof bt> => bt !== undefined);
 
-    // Create tool execution function factory
-    // Policy allowlist includes both native and MCP tool IDs
-    const createToolExecFn = (emit: (e: AiEvent) => void): ToolExecFn => {
-      const policy = createToolAllowlistPolicy(allToolIds);
-      const source = createStaticToolSourceFromRecord(runtimeTools);
-      const toolRunner = createToolRunner(source, emit, {
-        policy,
-        ctx: { runId },
-      });
+      // Create tool execution function factory
+      // Policy allowlist includes both native and MCP tool IDs
+      const createToolExecFn = (emit: (e: AiEvent) => void): ToolExecFn => {
+        const policy = createToolAllowlistPolicy(allToolIds);
+        const source = createStaticToolSourceFromRecord(runtimeTools);
+        const toolRunner = createToolRunner(source, emit, {
+          policy,
+          ctx: { runId },
+        });
 
-      return async (name, args, toolCallId) => {
-        const result =
-          toolCallId !== undefined
-            ? await toolRunner.exec(name, args, { modelToolCallId: toolCallId })
-            : await toolRunner.exec(name, args);
-        return result;
+        return async (name, args, toolCallId) => {
+          const result =
+            toolCallId !== undefined
+              ? await toolRunner.exec(name, args, {
+                  modelToolCallId: toolCallId,
+                })
+              : await toolRunner.exec(name, args);
+          return result;
+        };
       };
+
+      const toolContracts = catalogTools.map((bt) => bt.contract);
+
+      const mcpToolSpecs = mcpToolIds
+        .map((id) => runtimeTools[id]?.spec)
+        .filter((s): s is NonNullable<typeof s> => s !== undefined);
+
+      const traceId =
+        trace.getActiveSpan()?.spanContext().traceId ??
+        "00000000000000000000000000000000";
+      const runnerRequest: InProcGraphRequest = {
+        runId,
+        messages: messages as InProcGraphRequest["messages"],
+        ...(scope.abortSignal !== undefined && {
+          abortSignal: scope.abortSignal,
+        }),
+        ...(traceId !== undefined && { traceId }),
+        ...(requestId !== undefined && { ingressRequestId: requestId }),
+        configurable: { model, toolIds },
+      };
+
+      return createInProcGraphRunner({
+        createGraph: entry.graphFactory,
+        completionFn,
+        createToolExecFn,
+        toolContracts,
+        ...(mcpToolSpecs.length > 0 && { mcpToolSpecs }),
+        request: runnerRequest,
+        ...(req.responseFormat !== undefined && {
+          responseFormat: req.responseFormat,
+        }),
+      });
     };
 
-    // Extract tool contracts from resolved catalog tools
-    const toolContracts = catalogTools.map((bt) => bt.contract);
+    // Execute: resolve MCP (if needed) then run graph.
+    // Returns {stream, final} synchronously per GraphRunResult contract;
+    // the inner async generator awaits the promise.
+    const innerResult = resolveMcpAndExecute();
 
-    // Collect MCP tool specs for LLM exposure (JSON Schema based, not Zod)
-    const mcpToolSpecs = mcpToolIds
-      .map((id) => runtimeTools[id]?.spec)
-      .filter((s): s is NonNullable<typeof s> => s !== undefined);
+    const stream = (async function* () {
+      let inner: Awaited<ReturnType<typeof resolveMcpAndExecute>>;
+      try {
+        inner = await innerResult;
+      } catch {
+        yield {
+          type: "error" as const,
+          error: "internal" as AiExecutionErrorCode,
+        };
+        yield { type: "done" as const };
+        return;
+      }
+      yield* inner.stream;
+    })();
 
-    // Build request for package runner
-    // Use conditional spreads for exactOptionalPropertyTypes
-    // Per UNIFIED_INVOKE_SIGNATURE: configurable has model + toolIds
-    const traceId =
-      trace.getActiveSpan()?.spanContext().traceId ??
-      "00000000000000000000000000000000";
-    const runnerRequest: InProcGraphRequest = {
-      runId,
-      messages: messages as InProcGraphRequest["messages"],
-      ...(scope.abortSignal !== undefined && {
-        abortSignal: scope.abortSignal,
-      }),
-      ...(traceId !== undefined && { traceId }),
-      ...(requestId !== undefined && { ingressRequestId: requestId }),
-      configurable: { model, toolIds },
-    };
-
-    // Delegate to package runner — all LangChain logic is there
-    const { stream, final } = createInProcGraphRunner({
-      createGraph: entry.graphFactory,
-      completionFn,
-      createToolExecFn,
-      toolContracts,
-      ...(mcpToolSpecs.length > 0 && { mcpToolSpecs }),
-      request: runnerRequest,
-      ...(req.responseFormat !== undefined && {
-        responseFormat: req.responseFormat,
-      }),
-    });
-
-    // Map package result to GraphFinal
-    const mappedFinal = this.mapToGraphFinal(
-      final,
-      runId,
-      requestId,
-      graphName
+    const final = innerResult.then(
+      (r) => this.mapToGraphFinal(r.final, runId, requestId, graphName),
+      () =>
+        ({
+          ok: false as const,
+          runId,
+          requestId,
+          error: "internal",
+        }) as const
     );
 
-    return { stream, final: mappedFinal };
+    // mapToGraphFinal returns Promise<GraphFinal>, so final is Promise<Promise<GraphFinal> | GraphFinal>
+    // Flatten with .then()
+    const flatFinal = final.then((f) => f);
+
+    return { stream, final: flatFinal };
   }
 
   /**

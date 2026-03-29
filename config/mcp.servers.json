@@ -21,9 +21,8 @@
       "disabled": true
     },
     "playwright": {
-      "transport": "stdio",
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"],
+      "transport": "http",
+      "url": "${MCP_PLAYWRIGHT_URL}",
       "disabled": false
     },
     "everything": {

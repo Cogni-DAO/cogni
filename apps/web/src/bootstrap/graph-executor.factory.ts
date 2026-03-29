@@ -93,8 +93,10 @@ export function createGraphExecutor(
 
   // Build namespace → provider map
   const env = serverEnv();
+  // Both LangGraphInProcProvider and LangGraphDevProvider expose providerId
+  const providerId = (langGraphProvider as LangGraphInProcProvider).providerId;
   const providers = new Map<string, GraphExecutorPort>([
-    [langGraphProvider.providerId, langGraphProvider],
+    [providerId, langGraphProvider],
     [
       "sandbox",
       new LazySandboxGraphProvider(
@@ -296,86 +298,215 @@ export function runGraphWithScope(params: {
 }
 
 // ---------------------------------------------------------------------------
-// MCP tool source — cached singleton, loaded on first use
+// MCP connection cache — shared connection with reconnect-on-error + TTL backstop
 // ---------------------------------------------------------------------------
 
 const mcpLog = makeLogger({ component: "mcp-bootstrap" });
 
-/** Module-scoped cache for MCP tool source + close function */
-let _mcpState: {
-  sourcePromise: Promise<ToolSourcePort | null>;
-  close: (() => Promise<void>) | null;
-} | null = null;
-
 /**
- * Get or create the MCP tool source singleton.
- * Returns null if no MCP servers are configured.
+ * Shared MCP connection cache with reconnect-on-error (correctness) and
+ * TTL backstop (cleanup insurance for silent session expiry).
+ *
+ * This is the MVP seam — not the final control plane. Phase 1 replaces
+ * `parseMcpConfigFromEnv()` with DB registry reads. The `getSource()` interface
+ * stays the same. See docs/spec/mcp-control-plane.md.
+ *
+ * Invariants:
+ *   - MCP_NOT_SINGLETON: Connections have bounded lifetime, not forever cache
+ *   - MCP_RECONNECT_ON_ERROR: Connection errors invalidate cache; next call reconnects
+ *   - GRACEFUL_DEGRADATION: Failed connections → null → agents work without MCP tools
  */
-function getMcpToolSource(): Promise<ToolSourcePort | null> {
-  if (!_mcpState) {
+class McpConnectionCache {
+  private state: {
+    source: ToolSourcePort;
+    close: () => Promise<void>;
+    createdAt: number;
+  } | null = null;
+  private connecting: Promise<ToolSourcePort | null> | null = null;
+
+  constructor(private readonly ttlMs: number = 5 * 60 * 1000) {}
+
+  /**
+   * Get MCP tool source, reconnecting if stale or on first access.
+   * Cache hit returns immediately. Cache miss or TTL expiry triggers reconnect.
+   * Concurrent callers coalesce on a single reconnect attempt.
+   */
+  async getSource(): Promise<ToolSourcePort | null> {
+    // Fast path: cached and within TTL
+    if (this.state && Date.now() - this.state.createdAt < this.ttlMs) {
+      return this.state.source;
+    }
+    // Coalesce concurrent reconnect attempts
+    if (!this.connecting) {
+      this.connecting = this.connect().finally(() => {
+        this.connecting = null;
+      });
+    }
+    return this.connecting;
+  }
+
+  /**
+   * Invalidate cached connection. Called on connection errors during tool exec.
+   * Next `getSource()` call will reconnect.
+   */
+  invalidate(): void {
+    if (this.state) {
+      const { close } = this.state;
+      this.state = null;
+      // Fire-and-forget close of dead connection
+      close().catch((err) =>
+        mcpLog.warn({ err }, "Error closing stale MCP connection")
+      );
+    }
+  }
+
+  /** Graceful shutdown. Call on SIGTERM/SIGINT. */
+  async close(): Promise<void> {
+    if (this.state) {
+      mcpLog.info("Closing MCP server connections");
+      try {
+        await this.state.close();
+      } catch (err) {
+        mcpLog.error({ err }, "Error closing MCP connections");
+      }
+      this.state = null;
+    }
+  }
+
+  private async connect(): Promise<ToolSourcePort | null> {
+    // Close previous connection if any
+    this.invalidate();
+
     const config = parseMcpConfigFromEnv();
     const serverNames = Object.keys(config);
     if (serverNames.length === 0) {
-      mcpLog.debug(
-        "No MCP servers configured (set MCP_SERVERS or MCP_CONFIG_PATH env)"
+      mcpLog.warn(
+        "No MCP servers configured — agents with mcpServerIds will have no tools"
       );
-      _mcpState = { sourcePromise: Promise.resolve(null), close: null };
-    } else {
-      mcpLog.info(
-        { servers: serverNames },
-        "Loading MCP tools from configured servers"
-      );
-      const resultPromise = loadMcpTools(config);
+      return null;
+    }
 
-      _mcpState = {
-        sourcePromise: resultPromise
-          .then((result) => {
-            // Store close function for lifecycle management
-            if (_mcpState) _mcpState.close = result.close;
-            const source = new McpToolSource(result.tools);
-            mcpLog.info(
-              {
-                toolCount: result.tools.length,
-                toolNames: result.tools.map((t) => t.name),
-              },
-              "MCP tools loaded successfully"
-            );
-            return source;
-          })
-          .catch((err) => {
-            mcpLog.error(
-              { err },
-              "Failed to load MCP tools; continuing without them"
-            );
-            return null;
-          }),
-        close: null,
+    mcpLog.info({ servers: serverNames }, "Connecting to MCP servers");
+    try {
+      const result = await loadMcpTools(config);
+      const innerSource = new McpToolSource(result.tools);
+
+      // Wrap with error detection — connection errors trigger cache invalidation
+      const source = new ErrorDetectingMcpToolSource(innerSource, () =>
+        this.invalidate()
+      );
+
+      this.state = {
+        source,
+        close: () => result.close(),
+        createdAt: Date.now(),
       };
+      mcpLog.info(
+        {
+          toolCount: result.tools.length,
+          toolNames: result.tools.map((t) => t.name),
+        },
+        "MCP tools connected"
+      );
+      return source;
+    } catch (err) {
+      mcpLog.error({ err }, "Failed to connect MCP tools; continuing without");
+      return null;
     }
   }
-  return _mcpState.sourcePromise;
+}
+
+/**
+ * ToolSourcePort wrapper that detects connection errors during tool exec
+ * and triggers cache invalidation for reconnect-on-error.
+ *
+ * The error is still thrown (toolRunner handles it) — but the cache is
+ * invalidated so the next request gets a fresh connection.
+ */
+class ErrorDetectingMcpToolSource implements ToolSourcePort {
+  constructor(
+    private readonly delegate: McpToolSource,
+    private readonly onConnectionError: () => void
+  ) {}
+
+  getBoundTool(
+    toolId: string
+  ): import("@cogni/ai-core").BoundToolRuntime | undefined {
+    const bound = this.delegate.getBoundTool(toolId);
+    if (!bound) return undefined;
+
+    const onErr = this.onConnectionError;
+    return {
+      ...bound,
+      async exec(
+        args: unknown,
+        ctx: import("@cogni/ai-core").ToolInvocationContext,
+        caps: import("@cogni/ai-core").ToolCapabilities
+      ): Promise<unknown> {
+        try {
+          return await bound.exec(args, ctx, caps);
+        } catch (err) {
+          if (isConnectionError(err)) {
+            mcpLog.warn(
+              { toolId, err },
+              "MCP connection error — invalidating cache for reconnect"
+            );
+            onErr();
+          }
+          throw err;
+        }
+      },
+    };
+  }
+
+  listToolSpecs(): readonly import("@cogni/ai-core").ToolSpec[] {
+    return this.delegate.listToolSpecs();
+  }
+
+  hasToolId(toolId: string): boolean {
+    return this.delegate.hasToolId(toolId);
+  }
+}
+
+/** Detect transport-level connection errors (not application errors from MCP tools). */
+function isConnectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const m = err.message.toLowerCase();
+  return (
+    m.includes("econnrefused") ||
+    m.includes("econnreset") ||
+    m.includes("socket hang up") ||
+    m.includes("fetch failed") ||
+    m.includes("network error") ||
+    m.includes("session not found")
+  );
+}
+
+/** Module-scoped MCP cache instance */
+let _mcpCache: McpConnectionCache | null = null;
+
+function getMcpCache(): McpConnectionCache {
+  if (!_mcpCache) {
+    _mcpCache = new McpConnectionCache();
+  }
+  return _mcpCache;
 }
 
 /**
  * Close all MCP server connections. Call on process shutdown.
- * Prevents orphaned stdio subprocesses.
+ * With HTTP transport, this disconnects the client (no subprocess cleanup needed).
  */
 export async function closeMcpConnections(): Promise<void> {
-  if (_mcpState?.close) {
-    mcpLog.info("Closing MCP server connections");
-    try {
-      await _mcpState.close();
-    } catch (err) {
-      mcpLog.error({ err }, "Error closing MCP connections");
-    }
+  if (_mcpCache) {
+    await _mcpCache.close();
+    _mcpCache = null;
   }
-  _mcpState = null;
 }
 
 /**
  * Create InProc provider for in-process graph execution.
  * Per CAPABILITY_INJECTION: toolSource contains real implementations with I/O.
- * MCP tools are loaded lazily via McpToolSource and passed to the provider.
+ * MCP tools resolved via shared cache with reconnect-on-error.
  */
 function createInProcProvider(
   deps: AiAdapterDeps,
@@ -387,12 +518,9 @@ function createInProcProvider(
     completionStreamFn
   );
 
-  // Load MCP tools async. Wrap provider so first runGraph() awaits MCP loading.
-  const mcpSourcePromise = getMcpToolSource();
-  return new LazyMcpInProcProvider(
-    inprocAdapter,
-    container.toolSource,
-    mcpSourcePromise
+  const cache = getMcpCache();
+  return new LangGraphInProcProvider(inprocAdapter, container.toolSource, () =>
+    cache.getSource()
   );
 }
 
@@ -404,75 +532,6 @@ function createDevProvider(apiUrl: string): LangGraphDevProvider {
   const client = createLangGraphDevClient({ apiUrl });
   const availableGraphs = Object.keys(LANGGRAPH_CATALOG);
   return new LangGraphDevProvider(client, { availableGraphs });
-}
-
-// ---------------------------------------------------------------------------
-// Lazy MCP provider — defers MCP tool source loading to first runGraph() call
-// ---------------------------------------------------------------------------
-
-/**
- * Wraps LangGraphInProcProvider construction behind an async boundary.
- * On first runGraph(), awaits MCP tool source loading, constructs the real
- * provider with the source, then delegates. Subsequent calls use the cached provider.
- */
-class LazyMcpInProcProvider implements GraphExecutorPort {
-  readonly providerId = "langgraph" as const;
-  private resolvedProvider: LangGraphInProcProvider | null = null;
-  private readonly providerPromise: Promise<LangGraphInProcProvider>;
-
-  constructor(
-    adapter: import("@/adapters/server/ai/langgraph/inproc.provider").CompletionUnitAdapter,
-    toolSource: ToolSourcePort,
-    mcpSourcePromise: Promise<ToolSourcePort | null>
-  ) {
-    this.providerPromise = mcpSourcePromise.then((mcpSource) => {
-      const provider = new LangGraphInProcProvider(
-        adapter,
-        toolSource,
-        mcpSource ?? undefined
-      );
-      this.resolvedProvider = provider;
-      return provider;
-    });
-  }
-
-  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
-    // Fast path: provider already resolved
-    if (this.resolvedProvider) {
-      return this.resolvedProvider.runGraph(req, ctx);
-    }
-
-    // Slow path (first call): await provider construction
-    const innerResult = this.providerPromise.then((p) => p.runGraph(req, ctx));
-
-    const stream = (async function* () {
-      let inner: GraphRunResult;
-      try {
-        inner = await innerResult;
-      } catch {
-        yield {
-          type: "error" as const,
-          error: "internal" as AiExecutionErrorCode,
-        };
-        yield { type: "done" as const };
-        return;
-      }
-      yield* inner.stream;
-    })();
-
-    const final = innerResult.then(
-      (r) => r.final,
-      () =>
-        ({
-          ok: false as const,
-          runId: req.runId,
-          requestId: ctx?.requestId ?? req.runId,
-          error: "internal",
-        }) as const
-    );
-
-    return { stream, final };
-  }
 }
 
 // ---------------------------------------------------------------------------

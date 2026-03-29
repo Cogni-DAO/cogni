@@ -4,7 +4,7 @@
 /**
  * Module: `@cogni/langgraph-graphs/runtime/mcp/bound-tool`
  * Purpose: Adapt MCP StructuredToolInterface to BoundToolRuntime for toolRunner pipeline.
- * Scope: Maps MCP tool schema/exec to ai-core's BoundToolRuntime interface.
+ * Scope: Maps MCP tool schema/exec to ai-core's BoundToolRuntime interface. Does NOT perform I/O directly.
  * Invariants:
  *   - TOOLS_VIA_TOOLRUNNER: MCP tools execute through toolRunner.exec()
  *   - MCP_EFFECT_EXTERNAL: All MCP tools are external_side_effect by default
