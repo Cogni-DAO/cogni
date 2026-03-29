@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react-markdown";
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { type FC, memo, useState } from "react";
+import rehypeRaw from "rehype-raw";
 import remarkGfm from "remark-gfm";
 
 import { TooltipIconButton } from "@/components/vendor/assistant-ui/tooltip-icon-button";
@@ -19,6 +20,7 @@ const MarkdownTextImpl = () => {
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw]}
       className="aui-md"
       components={defaultComponents}
     />
@@ -225,4 +227,22 @@ const defaultComponents = memoizeMarkdownComponents({
     );
   },
   CodeHeader,
+  details: ({ className, ...props }) => (
+    <details
+      className={cn(
+        "aui-md-details my-3 rounded-lg border bg-muted/30 transition-colors open:bg-muted/50",
+        className
+      )}
+      {...props}
+    />
+  ),
+  summary: ({ className, ...props }) => (
+    <summary
+      className={cn(
+        "aui-md-summary cursor-pointer select-none list-none rounded-lg px-4 py-3 font-semibold text-sm hover:bg-muted/60 [&::-webkit-details-marker]:hidden",
+        className
+      )}
+      {...props}
+    />
+  ),
 });
