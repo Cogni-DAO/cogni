@@ -5,8 +5,8 @@ title: MCP Control Plane Architecture
 status: draft
 spec_state: draft
 trust: draft
-summary: Control plane for MCP server lifecycle, deployment registry, agent bindings, and Temporal preflight — the target architecture beyond the MVP shared-cache approach.
-read_when: Adding MCP servers, changing MCP connection handling, implementing multi-tenant tool access, or integrating ToolHive.
+summary: MCP server lifecycle management — from static Docker Compose services (current) through deployment registry and multi-tenant credential brokering to ToolHive-managed fleet (target).
+read_when: Adding MCP servers, changing MCP connection handling, implementing multi-tenant tool access, or planning ToolHive migration.
 implements: []
 owner: cogni-dev
 created: 2026-03-29
@@ -22,198 +22,239 @@ tags:
 
 ## Context
 
-MCP (Model Context Protocol) servers provide external tool capabilities to agents — browser automation, observability queries, code search, etc. The MVP (`feat/mcp-client-mvp`) uses a config file + shared connection cache with reconnect-on-error. This spec defines the target architecture for production MCP management.
-
-The MVP approach (config file, shared cache, static `mcpServerIds` in catalog) is intentionally minimal. It works for single-tenant dev but does not support:
-
-- Dynamic MCP server provisioning (add/remove without restart)
-- Per-tenant MCP server isolation
-- Agent-level tool binding (which agent gets which tools)
-- Tool manifest snapshots for run reproducibility
-- Credential rotation without connection drops
+MCP servers provide external tool capabilities to agents — browser automation, observability queries, code search, etc. This spec covers the full lifecycle: how MCP servers are deployed, how agents bind to them, how credentials are resolved, and how the system evolves from static config to managed fleet.
 
 ## Goal
 
-Define a control plane where MCP servers are managed resources with stable identities, agents bind to them via slugs (not raw URLs), and Temporal Activities handle connection lifecycle at run start.
+Define a control plane where MCP servers are managed resources with stable identities, agents bind to them via slugs (not raw URLs), and credentials are resolved at invocation time via `ConnectionBrokerPort`.
 
 ## Non-Goals
 
-- Custom MCP gateway implementation (use ToolHive vMCP)
+- Custom MCP gateway implementation (use ToolHive vMCP when on k8s)
 - MCP auth server implementation (use external IdP via PRM)
-- Per-tool granular RBAC within MCP servers (Phase 3+)
-- MCP server auto-scaling (defer to ToolHive operator)
+- General-purpose container hosting (scope: approved MCP server templates only)
+
+---
 
 ## Design
 
-### Deployment Registry
+### Current State (Phase 0)
 
-MCP servers are registered as **deployments** with stable slug identifiers. Agents reference slugs, never raw URLs. Slugs are durable across redeployments — the slug identifies a logical capability (`browser-playwright`, `grafana-prod`), while each rollout gets an immutable revision ID.
+Shipped in `task.0228`. Dev-only, single-tenant.
+
+### How it works
+
+```
+config/mcp.servers.json (or MCP_SERVERS env var)
+    ↓ parseMcpConfigFromEnv()
+    ↓ loadMcpTools() via @langchain/mcp-adapters
+    ↓
+McpConnectionCache (reconnect-on-error + 5min TTL backstop)
+    ↓ getSource() → ErrorDetectingMcpToolSource
+    ↓
+InProcProvider.runGraph() resolves tools per catalog mcpServerIds
+    ↓
+toolRunner.exec() — standard policy/billing/redaction pipeline
+```
+
+### Config delivery
+
+| Environment        | Method                                                                 | Notes                                                                         |
+| ------------------ | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Dev (pnpm dev)     | `MCP_CONFIG_PATH` → config file + `MCP_*_URL` env vars in `.env.local` | Config file at repo root, CWD workaround via relative path                    |
+| Dev (docker:stack) | `MCP_SERVERS` env var or `MCP_*_URL` defaults in compose               | Docker-internal DNS (`playwright-mcp:3003`)                                   |
+| Staging/Prod       | `MCP_SERVERS` env var in compose                                       | Priority 1 path — bypasses config file entirely, no Dockerfile changes needed |
+
+### Services
+
+| Service        | Image                              | Port | Profile        | Transport              |
+| -------------- | ---------------------------------- | ---- | -------------- | ---------------------- |
+| playwright-mcp | `mcr.microsoft.com/playwright/mcp` | 3003 | mcp-playwright | Streamable HTTP `/mcp` |
+| grafana-mcp    | `mcp/grafana`                      | 8000 | mcp-playwright | Streamable HTTP `/mcp` |
+
+### Limitations
+
+- Static config — add/remove MCP servers requires compose change + redeploy
+- No auth on MCP endpoints (Docker-internal `cogni-edge` network only)
+- Shared browser context across all users (single-tenant)
+- `mcpServerIds` hardcoded in catalog (code change to rebind)
+- `closeMcpConnections()` not wired to shutdown handlers (pre-existing gap)
+
+---
+
+### Target State
+
+#### Deployment Registry
+
+MCP servers are registered as **deployments** with stable slug identifiers. Agents reference slugs, never raw URLs. Slugs are durable across redeployments.
 
 ```
 mcp_deployments
 ├── slug (PK)          — e.g., "playwright-dev", "grafana-prod"
-├── revision_id        — immutable per rollout (UUID), current healthy = latest
 ├── display_name       — human label
 ├── endpoint           — resolved URL (e.g., "http://playwright-mcp:3003/mcp")
 ├── transport          — "streamable-http" | "sse" | "stdio"
 ├── auth_mode          — "none" | "static_token" | "connection" | "toolhive"
-├── auth_ref           — reference to credentials (k8s secret name, connection ID, or null)
+├── auth_ref           — reference to credentials (env var name, connection ID, or null)
 ├── status             — "healthy" | "unhealthy" | "provisioning" | "decommissioned"
 ├── capabilities_hash  — SHA256 of last tools/list response (detect drift)
-├── config             — JSONB: server-specific config (timeout, retry policy, tool filters)
+├── config             — JSONB: timeout, retry policy, tool filters
 ├── created_at
 ├── updated_at
 └── billing_account_id — NULL for shared, set for tenant-scoped
 ```
 
-Slug resolution picks the current healthy revision. Active revision tracking uses either a dedicated `active_slug_revision` table or a unique partial index on `(slug) WHERE status = 'healthy'`.
+#### Agent Bindings
 
-**Shared deployments** (Grafana, filesystem tools): `billing_account_id = NULL`, service account credentials via `auth_ref`.
-
-**Per-tenant deployments** (GitHub with user creds): `billing_account_id` set, user OAuth credentials via `auth_ref → connections.id`.
-
-### Agent Bindings
-
-Agents declare which MCP deployments they can use. This replaces the static `mcpServerIds` field in the LangGraph catalog.
+Replaces static `mcpServerIds` in the LangGraph catalog.
 
 ```
 agent_mcp_bindings
 ├── agent_id           — graph ID or future agent entity ID
 ├── deployment_slug    — FK → mcp_deployments.slug
 ├── allowed_tools      — text[] or NULL (NULL = all tools from server)
-├── required           — boolean (true = fail run if server unavailable)
+├── required           — boolean (fail run if unavailable)
 ├── created_at
 └── UNIQUE(agent_id, deployment_slug)
 ```
 
-`required: false` means the agent works without this server (graceful degradation). `required: true` means the run should fail-fast if the server is unreachable.
-
-### Run-Start Preflight (Temporal Activity)
-
-At run start, a Temporal Activity resolves bindings and initializes MCP sessions:
-
-```
-initializeMcpBindingsActivity(input: {
-  runId: string
-  agentId: string
-  billingAccountId: string
-}) → {
-  resolvedTools: ToolManifestSnapshot  // frozen tool specs for this run
-  sessionIds: Record<slug, string>     // MCP session IDs (for Streamable HTTP)
-}
-```
-
-**Steps:**
-
-1. Query `agent_mcp_bindings` for `agentId`
-2. For each binding, resolve `mcp_deployments` endpoint + credentials
-3. Initialize MCP session (POST to `/mcp` with `initialize` message)
-4. Call `tools/list` to discover available tools
-5. Filter by `allowed_tools` if specified
-6. Snapshot the resolved tool manifest onto the run (reproducibility)
-7. If `required: true` and server unreachable → fail the Activity (Temporal retries)
-
-**The tool manifest snapshot is immutable for the run.** Tools don't change mid-conversation. If the MCP server adds tools (via `notifications/tools/list_changed`), the next run picks them up — not the current one.
-
-**For interactive chat runs** (not via Temporal): the same resolution logic runs synchronously in the InProc provider's `runGraph()` path. The Activity is only for scheduled/webhook-triggered runs.
-
-### Credential Resolution
+#### Credential Resolution
 
 MCP server credentials follow the existing `ConnectionBrokerPort` pattern:
 
-| Credential Type  | auth_ref Format           | Resolution                                      |
-| ---------------- | ------------------------- | ----------------------------------------------- |
-| None (local dev) | `null`                    | No auth headers                                 |
-| Static token     | `secret:grafana-sa-token` | Read from k8s Secret or env var                 |
-| User OAuth       | `connection:{uuid}`       | Resolve via ConnectionBrokerPort (encrypted DB) |
-| ToolHive managed | `toolhive:{server-name}`  | ToolHive handles auth internally                |
+| Credential Type        | auth_mode      | auth_ref                                | Resolution                                      |
+| ---------------------- | -------------- | --------------------------------------- | ----------------------------------------------- |
+| None (Docker-internal) | `none`         | `null`                                  | No auth headers                                 |
+| Static token           | `static_token` | env var name (e.g., `GRAFANA_SA_TOKEN`) | Read from env at connect time                   |
+| Tenant OAuth           | `connection`   | `connection:{uuid}`                     | Resolve via ConnectionBrokerPort (encrypted DB) |
+| ToolHive managed       | `toolhive`     | ToolHive server name                    | ToolHive handles auth internally                |
 
-**NO_SECRETS_IN_CONTEXT applies.** The resolved Bearer token is set on the MCP HTTP client, never in `ToolInvocationContext` or `RunnableConfig.configurable`.
+**connectionId and MCP:** Treat an MCP deployment like any other remote connection target. `connectionId` points to tenant-scoped credentials. The deployment row stores `auth_mode` + `auth_ref` (what kind of auth, where to find it); actual secret resolution happens at invocation time, never baked into deployment rows or agent specs.
 
-**connectionId and MCP deployments:** Treat an MCP deployment like any other remote connection target. `connectionId` points to tenant-scoped credentials needed to call the MCP endpoint when it requires auth. The deployment row stores `auth_mode` and `auth_ref` (what kind of auth, where to find it); the actual secret resolution happens at invocation time via `ConnectionBrokerPort`, never baked into the deployment row or agent spec.
-
-- **Public/internal unauthenticated MCP:** `deployment_slug` only, no `connectionId`
+- **Unauthenticated MCP (shared):** `deployment_slug` only, no `connectionId`
 - **Tenant-authenticated MCP:** `deployment_slug` + `connectionId` (resolved per-invocation)
-- **Delegated auth (MCP→backend):** Two layers — broker owns client→MCP auth, ToolHive/server-side token exchange owns MCP→backend auth
+- **Delegated auth (MCP→backend):** Two layers — broker owns client→MCP auth, server-side token exchange owns MCP→backend auth
+
+#### RBAC
+
+MCP tool access fits the existing RBAC model from `proj.rbac-hardening`:
+
+- **Tool-level:** `ToolPolicy.allowedTools` gates which MCP tools an agent can invoke (already enforced)
+- **Deployment-level:** `agent_mcp_bindings.allowed_tools` filters which tools from a server are visible to an agent
+- **Tenant-level:** `mcp_deployments.billing_account_id` scopes deployments to tenants (NULL = shared)
+- **Actor-level (P1+):** `AUTHZ_CHECK_BEFORE_TOOL_EXEC` (future invariant from tool-use.md F1) — AuthorizationPort validates actor has `tool.execute` permission before MCP tool invocation
+
+No new RBAC primitives needed. MCP tools use the same policy/grant/connection pipeline as native tools.
 
 ### Transport
 
-**Default: Streamable HTTP** (`/mcp` endpoint). This is the current MCP spec's HTTP transport (replaced legacy SSE).
-
-Streamable HTTP supports:
+**Default: Streamable HTTP** (`/mcp` endpoint). Current MCP spec HTTP transport.
 
 - Stateless request/response for simple tool calls
-- SSE upgrade for long-running operations (streaming results)
-- HTTP/2 multiplexing for concurrency
+- SSE upgrade for long-running operations
 - Session management via `Mcp-Session-Id` header
+- Session expiry (404 with session ID) → re-initialize, not permanent failure
 
-**Session lifecycle:** A 404 response to a request carrying `Mcp-Session-Id` means the session expired — client must re-initialize. The connection cache (MVP) handles this via reconnect-on-error. The preflight Activity (Phase 1) handles this by always initializing fresh sessions per run.
-
-**Security:** Non-localhost HTTP servers MUST use auth (Bearer token or mTLS). The MCP spec warns about Origin validation and DNS rebinding for localhost servers. Docker-internal networking (`cogni-edge`) is acceptable for dev but NOT for prod.
-
-### ToolHive Integration Path
-
-[ToolHive](https://docs.stacklok.com/toolhive/) is the target operator for production MCP management:
-
-| Phase             | Infrastructure                       | Registration                                         |
-| ----------------- | ------------------------------------ | ---------------------------------------------------- |
-| **Phase 0 (MVP)** | Docker Compose services, config file | Static `mcpServerIds` in catalog                     |
-| **Phase 1**       | Docker Compose + DB registry         | `mcp_deployments` + `agent_mcp_bindings` tables      |
-| **Phase 2**       | ToolHive operator + MCPServer CRDs   | ToolHive Registry Server → sync to `mcp_deployments` |
-| **Phase 3**       | ToolHive vMCP gateway                | One gateway endpoint per trust boundary, OIDC auth   |
-
-**Phase 2 detail:** ToolHive's Registry Server discovers MCPServer CRDs across namespaces. A sync job reads the registry and upserts `mcp_deployments` rows. Agent bindings remain in our DB — ToolHive manages servers, we manage policy.
-
-**Phase 3 detail:** vMCP aggregates multiple backends behind one endpoint with tool prefixing, circuit breaking, and session storage. Agent bindings reference the vMCP slug, not individual server slugs. ToolHive handles per-backend credential injection.
-
-### Admin API
-
-```
-POST   /api/internal/mcp/deployments          — register a deployment
-GET    /api/internal/mcp/deployments           — list deployments (+ health status)
-DELETE /api/internal/mcp/deployments/:slug     — decommission
-POST   /api/internal/mcp/deployments/:slug/bind — bind agent to deployment
-DELETE /api/internal/mcp/deployments/:slug/bind/:agentId — unbind
-```
-
-These are internal APIs (Bearer SCHEDULER_API_TOKEN). No public API for MCP management in Phase 1.
+**Security:** Non-localhost HTTP servers MUST use auth. Docker-internal networking is acceptable for same-host deployments. Cross-host or external MCP requires Bearer token or mTLS.
 
 ### Dynamic Deployment
 
-The fastest path to dynamic MCP hosting: an internal admin action creates an `mcp_deployments` record + applies a ToolHive/Helm/K8s template for a known server type, then stores back slug, endpoint, status, and auth ref.
+Admin action creates `mcp_deployments` record + applies a container template:
 
-`deployMcpServer(serverType, secrets, policy)` → creates the infra resource (ToolHive MCPServer CRD or Helm release) and upserts the deployment row. ToolHive owns MCP runtime mechanics (container lifecycle, health probes, secret injection). We own the thin product layer: templates, bindings, auth refs, and UX.
+```
+deployMcpServer(serverType, secrets, policy) → slug
+```
 
-**Scope guard:** This is "operator-backed deploy/teardown of approved MCP templates," not a general app platform. Do not build a Heroku clone for arbitrary containers.
+On Docker Compose infra: generates a compose service definition and restarts the stack.
+On k8s infra: applies a ToolHive MCPServer CRD or Helm release.
+
+**Scope guard:** Approved MCP server templates only. Not a general container platform.
+
+---
+
+## Roadmap
+
+### Phase 0.5: Prod Infra (hours, no code changes)
+
+Add MCP services to `docker-compose.yml` (prod). Set `MCP_SERVERS` JSON env var in CI. MCP works in staging + prod with the same code path as dev.
+
+| Deliverable                                         | Status      | Work Item |
+| --------------------------------------------------- | ----------- | --------- |
+| Add playwright-mcp + grafana-mcp to prod compose    | Not Started | —         |
+| Set `MCP_SERVERS` env var in deploy.sh / CI secrets | Not Started | —         |
+| Verify MCP tools load in staging                    | Not Started | —         |
+
+### Phase 1: Config Extraction + Auth (days)
+
+Move MCP bindings from hardcoded catalog to config-driven. Add auth header support for external MCP servers.
+
+| Deliverable                                                          | Status      | Work Item |
+| -------------------------------------------------------------------- | ----------- | --------- |
+| `mcp_deployments` table (Drizzle migration)                          | Not Started | —         |
+| `agent_mcp_bindings` table (Drizzle migration)                       | Not Started | —         |
+| Seed migration: populate from current config/catalog                 | Not Started | —         |
+| `McpConnectionCache.getSource()` reads from DB instead of env/config | Not Started | —         |
+| InProcProvider resolves bindings from DB instead of `mcpServerIds`   | Not Started | —         |
+| Auth headers via `ConnectionBrokerPort` at connect time              | Not Started | —         |
+| Admin API: CRUD for deployments + bindings (internal)                | Not Started | —         |
+
+### Phase 2: Multi-Tenant Isolation (weeks)
+
+Per-tenant MCP server instances. Tenant A's Grafana credentials don't leak to Tenant B.
+
+| Deliverable                                                     | Status      | Work Item |
+| --------------------------------------------------------------- | ----------- | --------- |
+| Per-tenant `mcp_deployments` rows (`billing_account_id` scoped) | Not Started | —         |
+| Tenant-scoped connection resolution (connectionId per binding)  | Not Started | —         |
+| RLS on `mcp_deployments` + `agent_mcp_bindings` tables          | Not Started | —         |
+| Per-tenant MCP sessions (no shared browser state)               | Not Started | —         |
+
+### Phase 3: ToolHive + Managed Fleet (when on k8s)
+
+Requires infrastructure migration to Kubernetes (Akash/Spheron k8s or self-managed k3s).
+
+| Deliverable                                           | Status      | Work Item |
+| ----------------------------------------------------- | ----------- | --------- |
+| ToolHive operator deployment                          | Not Started | —         |
+| MCPServer CRDs for managed MCP servers                | Not Started | —         |
+| Registry Server for discovery across namespaces       | Not Started | —         |
+| Sync job: ToolHive Registry → `mcp_deployments` table | Not Started | —         |
+| vMCP gateway for aggregation + circuit breaking       | Not Started | —         |
+| OIDC auth via vMCP incoming auth                      | Not Started | —         |
+| Namespace-per-tenant isolation                        | Not Started | —         |
+
+**Phase 3 depends on k8s migration.** Current infra is Docker Compose on bare VMs. ToolHive is a k8s operator — it cannot run without k8s. This phase is deferred until infra migration is planned.
+
+---
 
 ## Invariants
 
-1. **BINDING_SLUG_NOT_URL**: Agents reference MCP servers by deployment slug, never by raw URL. URLs live in the deployment registry only. Slugs are stable across redeployments; revision IDs are immutable per rollout.
+1. **BINDING_SLUG_NOT_URL**: Agents reference MCP servers by deployment slug, never by raw URL. URLs live in the deployment registry only.
 2. **STREAMABLE_HTTP_DEFAULT**: New deployments use Streamable HTTP transport unless explicitly overridden.
 3. **TOOL_MANIFEST_SNAPSHOT**: Each run freezes its tool manifest at start. Mid-run tool changes are ignored.
-4. **NO_SECRETS_IN_CONTEXT**: MCP credentials never appear in ToolInvocationContext, RunnableConfig, or ALS context.
-5. **REQUIRED_BINDING_FAIL_FAST**: If a `required: true` binding's server is unreachable, the run fails before graph execution (not mid-conversation).
+4. **NO_SECRETS_IN_CONTEXT**: MCP credentials never appear in ToolInvocationContext, RunnableConfig, or ALS context. Resolved via ConnectionBrokerPort at invocation time.
+5. **REQUIRED_BINDING_FAIL_FAST**: If a `required: true` binding's server is unreachable, the run fails before graph execution.
 6. **SESSION_REINIT_ON_EXPIRY**: Streamable HTTP session expiry (404 with Mcp-Session-Id) triggers re-initialization, not permanent failure.
+7. **MCP_SAME_POLICY_PATH**: MCP tools use the same toolRunner.exec() pipeline as native tools — same policy, billing, redaction. No bypass paths.
+8. **RBAC_VIA_EXISTING_MODEL**: MCP access control uses existing ToolPolicy + ConnectionBrokerPort + AuthorizationPort. No MCP-specific RBAC primitives.
 
-## Migration from MVP
+## Migration from Current State
 
-The MVP's `McpConnectionCache.getSource()` method is the seam. Phase 1 replaces:
-
-```
-parseMcpConfigFromEnv() → loadMcpTools(config) → McpToolSource
-```
-
-with:
+The MVP's `McpConnectionCache.getSource()` is the seam. Each phase replaces what's behind it:
 
 ```
-queryAgentBindings(agentId) → resolveDeployments(bindings) → initMcpSessions(deployments) → ToolManifestSnapshot
+Phase 0:   parseMcpConfigFromEnv() → loadMcpTools() → McpToolSource
+Phase 0.5: MCP_SERVERS env var → same code path, different config delivery
+Phase 1:   queryDeployments(agentId) → resolveAuth(bindings) → loadMcpTools() → McpToolSource
+Phase 2:   same as Phase 1, scoped by billing_account_id
+Phase 3:   ToolHive Registry → mcp_deployments sync → same resolution path
 ```
 
-The `ToolSourcePort` interface stays the same. `InProcProvider` doesn't change — it calls `getMcpToolSource()` and gets tools. The implementation behind that function evolves.
+`ToolSourcePort` interface stays the same throughout. InProcProvider calls `getMcpToolSource()` and gets tools regardless of which phase is active.
 
 ## Related
 
-- [Tool Use Specification](./tool-use.md) — Canonical tool pipeline, policy enforcement
+- [Tool Use Specification](./tool-use.md) — Canonical tool pipeline, policy enforcement, MCP invariants
 - [MCP Production Deployment Patterns](../research/mcp-production-deployment-patterns.md) — Auth spec, ToolHive, k8s patterns
 - [Tenant Connections](./tenant-connections.md) — ConnectionBrokerPort, encrypted credential storage
 - [Graph Execution](./graph-execution.md) — GraphExecutorPort, billing, execution pipeline
