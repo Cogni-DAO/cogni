@@ -50,6 +50,7 @@
     "db:migrate:direct": "tsx node_modules/drizzle-kit/bin.cjs migrate",
     "db:migrate:container": "pnpm db:migrate:direct",
     "db:seed": "dotenv -e .env.local -- node --import tsx/esm scripts/db/seed.mts",
+    "dev:seed:money": "dotenv -e .env.local -- node --import tsx/esm scripts/db/seed-money.mts",
     "db:setup": "pnpm db:provision && pnpm db:migrate && pnpm db:seed",
     "dev:setup": "pnpm db:setup && pnpm db:setup:test && pnpm governance:schedules:sync",
     "setup:secrets": "tsx scripts/setup-secrets.ts",

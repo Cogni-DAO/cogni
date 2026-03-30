@@ -25,7 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/kit/overlays/Dialog";
 import type { Model } from "@/contracts/ai.models.v1.contract";
-import { getIconByProviderKey } from "@/features/ai/config/provider-icons";
+import { resolveModelIcon } from "@/features/ai/config/provider-icons";
 import { OpenAIIcon } from "@/features/ai/icons/providers/OpenAIIcon";
 import { cn } from "@/shared/util/cn";
 
@@ -503,7 +503,10 @@ export function ModelPicker({
                   </div>
                 ) : (
                   filteredModels.map((model) => {
-                    const Icon = getIconByProviderKey(model.ref.providerKey);
+                    const Icon = resolveModelIcon(
+                      model.ref.providerKey,
+                      model.ref.modelId
+                    );
                     const isSelected = model.ref.modelId === value;
                     const isPaidAndNoBalance =
                       model.requiresPlatformCredits && balance <= 0;

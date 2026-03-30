@@ -51,20 +51,34 @@ const PROVIDER_ICONS = {
 } as const satisfies Record<string, IconComponent>;
 
 /**
+ * Map common model ID prefixes to their provider icon key.
+ * Covers cases where providerKey is unavailable (e.g. "platform" provider).
+ */
+const MODEL_PREFIX_TO_PROVIDER: Record<string, keyof typeof PROVIDER_ICONS> = {
+  gpt: "openai",
+  o1: "openai",
+  o3: "openai",
+  o4: "openai",
+  chatgpt: "openai",
+  claude: "anthropic",
+  gemini: "google",
+};
+
+/**
  * Extract provider key from model ID
  * Examples:
  * - "qwen3-4b" → "qwen"
- * - "gpt-4o-mini" → "gpt"
- * - "claude-3-haiku" → "claude"
+ * - "gpt-4o-mini" → "openai"
+ * - "claude-3-haiku" → "anthropic"
  */
 function getProviderKey(modelId: string): keyof typeof PROVIDER_ICONS {
-  const match = modelId.match(/^([a-z]+)/i);
+  const match = modelId.match(/^([a-z0-9]+)/i);
   if (!match?.[1]) return "default";
 
   const key = match[1].toLowerCase();
-  return key in PROVIDER_ICONS
-    ? (key as keyof typeof PROVIDER_ICONS)
-    : "default";
+  if (key in PROVIDER_ICONS) return key as keyof typeof PROVIDER_ICONS;
+  if (key in MODEL_PREFIX_TO_PROVIDER) return MODEL_PREFIX_TO_PROVIDER[key]!;
+  return "default";
 }
 
 /**
@@ -87,4 +101,18 @@ export function getIconByProviderKey(
   return providerKey in PROVIDER_ICONS
     ? PROVIDER_ICONS[providerKey as keyof typeof PROVIDER_ICONS]
     : PROVIDER_ICONS.default;
+}
+
+/**
+ * Resolve icon for a model — tries providerKey first, falls back to model ID prefix.
+ * Handles "platform" providerKey (no direct icon) by extracting from model ID.
+ */
+export function resolveModelIcon(
+  providerKey: string | undefined,
+  modelId: string
+): IconComponent {
+  if (providerKey && providerKey in PROVIDER_ICONS) {
+    return PROVIDER_ICONS[providerKey as keyof typeof PROVIDER_ICONS];
+  }
+  return getProviderIcon(modelId);
 }
