@@ -13,7 +13,7 @@ assignees: []
 credit:
 project:
 branch: worktree-fix+bug.0234-activity-chart
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/666
 reviewer:
 revision: 1
 blocked_by:
