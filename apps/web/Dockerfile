@@ -26,12 +26,7 @@ ENV npm_config_disturl=https://nodejs.org/dist
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm install --frozen-lockfile --ignore-scripts
 
-# Codex platform binary: pnpm installs the arch-specific optional dep
-# (@openai/codex-linux-x64 on amd64, @openai/codex-linux-arm64 on Apple Silicon).
-# Next.js standalone tracing misses it because the SDK resolves it dynamically
-# via createRequire().resolve() at runtime. Stash at a fixed path so the runner
-# can COPY it into node_modules without hardcoding the architecture.
-# See work/items/bug.0224 for the full postmortem.
+# Codex: stash platform binary for runner (standalone tracing misses it).
 RUN ARCH=$(node -p "process.arch === 'x64' ? 'x64' : 'arm64'") && \
     mkdir -p /tmp/codex-native/@openai && \
     cp -rL "node_modules/.pnpm/@openai+codex@0.116.0-linux-${ARCH}/node_modules/@openai/codex" \
@@ -96,9 +91,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
-# Codex platform binary package — standalone traces @openai/codex-sdk and @openai/codex
-# (via serverExternalPackages) but misses the platform-specific optional dep which the
-# SDK resolves dynamically. This COPY merges into the existing node_modules/@openai/ tree.
+# Codex CLI for BYO-AI ChatGPT execution.
+# Standalone output tracing can't detect spawned binaries.
+# Install globally so pnpm resolves platform-specific optional deps (@openai/codex-linux-x64).
+ENV PNPM_HOME="/usr/local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable pnpm && pnpm add -g @openai/codex@0.116.0 @openai/codex-sdk@0.116.0
+
+# The global install has broken symlinks (pnpm v10 CAS). This COPY places the real
+# platform binary where the SDK's createRequire chain finds it. See bug.0224.
 COPY --from=builder --chown=nextjs:nodejs /tmp/codex-native/@openai/ ./node_modules/@openai/
 
 USER nextjs

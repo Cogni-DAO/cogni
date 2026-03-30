@@ -12,8 +12,8 @@ spec_refs: [multi-provider-llm]
 assignees: [derekg1729]
 credit:
 project: proj.byo-ai
-branch: fix/codex-docker-platform-binary
-pr: https://github.com/Cogni-DAO/node-template/pull/661
+branch: fix/codex-dockerfile-hotfix
+pr: https://github.com/Cogni-DAO/node-template/pull/662
 reviewer:
 revision: 1
 blocked_by: []
@@ -112,6 +112,12 @@ pnpm docker:dev:stack        # build and run full stack
 # Send a ChatGPT BYO chat message from the UI
 # Check: docker logs cogni-app — no MODULE_NOT_FOUND or "Unable to locate Codex CLI"
 ```
+
+## PR / Links
+
+- Handoff: [handoff](../handoffs/bug.0224.handoff.md)
+- PR #662 (hotfix): https://github.com/Cogni-DAO/node-template/pull/662
+- PR #661 (broke preview): https://github.com/Cogni-DAO/node-template/pull/661
 
 ## Attribution
 
