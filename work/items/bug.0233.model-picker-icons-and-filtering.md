@@ -12,7 +12,7 @@ assignees: derekg1729
 credit:
 project:
 branch: fix/logo-and-seed-money
-pr:
+pr: "https://github.com/Cogni-DAO/node-template/pull/658"
 reviewer:
 created: 2026-03-29
 updated: 2026-03-29
