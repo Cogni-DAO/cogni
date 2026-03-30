@@ -10,18 +10,31 @@ import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
 
 import { StatusPill, TypeIcon } from "./work-item-icons";
 
+type SubjectRef = WorkItemDto["assignees"][number];
+
+function assigneeLabel(a: SubjectRef): string {
+  switch (a.kind) {
+    case "user":
+      return a.userId;
+    case "agent":
+      return a.agentId;
+    case "system":
+      return a.serviceId;
+  }
+}
+
 interface WorkItemDetailProps {
-  item: WorkItemDto | null;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  readonly item: WorkItemDto | null;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 function Field({
   label,
   children,
 }: {
-  label: string;
-  children: React.ReactNode;
+  readonly label: string;
+  readonly children: React.ReactNode;
 }): ReactElement | null {
   if (!children) return null;
   return (
@@ -146,11 +159,7 @@ export function WorkItemDetail({
                         key={`${a.kind}-${i}`}
                         className="rounded-md bg-muted px-2 py-0.5 text-xs"
                       >
-                        {a.kind === "user"
-                          ? a.userId
-                          : a.kind === "agent"
-                            ? a.agentId
-                            : a.serviceId}
+                        {assigneeLabel(a)}
                       </span>
                     ))}
                   </div>

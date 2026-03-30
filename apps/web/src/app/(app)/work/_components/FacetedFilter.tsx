@@ -17,10 +17,10 @@ import {
 } from "@/components";
 
 interface FacetedFilterProps {
-  title: string;
-  options: string[];
-  selected: string[];
-  onChange: (values: string[]) => void;
+  readonly title: string;
+  readonly options: readonly string[];
+  readonly selected: readonly string[];
+  readonly onChange: (values: string[]) => void;
 }
 
 export function FacetedFilter({
@@ -67,7 +67,7 @@ export function FacetedFilter({
                 onCheckedChange={() => toggle(option)}
               />
               <span className="capitalize">
-                {option.replace("needs_", "").replace(/_/g, " ")}
+                {option.replace("needs_", "").replaceAll("_", " ")}
               </span>
             </button>
           ))}

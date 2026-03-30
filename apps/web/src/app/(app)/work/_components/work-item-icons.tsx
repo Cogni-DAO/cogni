@@ -37,8 +37,8 @@ export function TypeIcon({
   type,
   className,
 }: {
-  type: string;
-  className?: string;
+  readonly type: string;
+  readonly className?: string;
 }): ReactElement {
   const entry = TYPE_ICON_MAP[type];
   if (!entry) return <span className={cn("text-xs", className)}>{type}</span>;
@@ -100,8 +100,8 @@ export function StatusIcon({
   status,
   className,
 }: {
-  status: string;
-  className?: string;
+  readonly status: string;
+  readonly className?: string;
 }): ReactElement {
   const entry = STATUS_ICON_MAP[status];
   if (!entry) return <span className={cn("text-xs", className)}>{status}</span>;
@@ -119,13 +119,13 @@ export function StatusPill({
   status,
   className,
 }: {
-  status: string;
-  className?: string;
+  readonly status: string;
+  readonly className?: string;
 }): ReactElement {
   const entry = STATUS_ICON_MAP[status];
   const Icon = entry?.icon;
   const colorClass = entry?.colorClass ?? "text-muted-foreground";
-  const label = status.replace("needs_", "").replace(/_/g, " ");
+  const label = status.replace("needs_", "").replaceAll("_", " ");
 
   return (
     <span
