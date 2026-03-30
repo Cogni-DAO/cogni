@@ -98,9 +98,14 @@ pnpm dev:smee
 
 # 5. Trigger real GitHub events — creates a merged PR + closed issue (Terminal 3)
 pnpm dev:trigger-github
+
+# 6. (Optional) Top up billing credits so paid OpenRouter models are usable
+pnpm dev:seed:money
 ```
 
 Receipts appear in `/gov/epoch` within seconds. The seeded open epoch covers the current week, so new webhook receipts show up immediately.
+
+`dev:seed:money` gives all billing accounts $100 in credits. Idempotent — safe to re-run. Requires a billing account (log in first, then run it).
 
 ## PR Review Bot (optional)
 

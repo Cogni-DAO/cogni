@@ -18,8 +18,9 @@ import { createServiceDbClient } from "@cogni/db-client/service";
 import { billingAccounts, creditLedger, virtualKeys } from "@cogni/db-schema";
 import { eq } from "drizzle-orm";
 
-// 100 USD worth of credits (credits are in micro-USD: 1 credit = $0.000001)
-const TARGET_BALANCE = 100_000_000n; // $100.00
+// Protocol constant: 10M credits per $1 USD (from core/billing/pricing.ts)
+const CREDITS_PER_USD = 10_000_000n;
+const TARGET_BALANCE = 100n * CREDITS_PER_USD; // $100.00 = 1,000,000,000 credits
 const SEED_REASON = "dev_seed_money";
 
 async function main(): Promise<void> {
@@ -29,7 +30,7 @@ async function main(): Promise<void> {
   }
 
   console.log("💰 Dev Seed: Credit Balance Top-Up");
-  console.log(`   Target balance: $${Number(TARGET_BALANCE) / 1_000_000}`);
+  console.log(`   Target balance: $${Number(TARGET_BALANCE) / Number(CREDITS_PER_USD)}`);
   console.log(`   Database: ${dbUrl.replace(/\/\/[^@]+@/, "//***@")}`);
   console.log();
 
@@ -57,7 +58,7 @@ async function main(): Promise<void> {
       const currentBalance = account.balanceCredits ?? 0n;
       if (currentBalance >= TARGET_BALANCE) {
         console.log(
-          `  ✅ ${account.id.slice(0, 12)}… (${account.isSystemTenant ? "system" : "user"}) — already at $${Number(currentBalance) / 1_000_000} — skipped`
+          `  ✅ ${account.id.slice(0, 12)}… (${account.isSystemTenant ? "system" : "user"}) — already at $${Number(currentBalance) / Number(CREDITS_PER_USD)} — skipped`
         );
         continue;
       }
@@ -98,7 +99,7 @@ async function main(): Promise<void> {
       });
 
       console.log(
-        `  💰 ${account.id.slice(0, 12)}… (${account.isSystemTenant ? "system" : "user"}) — topped up +$${Number(topUp) / 1_000_000} → $${Number(TARGET_BALANCE) / 1_000_000}`
+        `  💰 ${account.id.slice(0, 12)}… (${account.isSystemTenant ? "system" : "user"}) — topped up +$${Number(topUp) / Number(CREDITS_PER_USD)} → $${Number(TARGET_BALANCE) / Number(CREDITS_PER_USD)}`
       );
     }
 
