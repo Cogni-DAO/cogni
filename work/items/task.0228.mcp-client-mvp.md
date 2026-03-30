@@ -9,6 +9,7 @@ summary: Replace extraTools MCP bypass with McpToolSource implementing ToolSourc
 outcome: Agents use external MCP tools (Playwright, Grafana) via standard policy/billing/redaction pipeline; dev can chat with browser-enabled agent
 project: proj.agentic-interop
 branch: feat/mcp-client-mvp
+pr: https://github.com/Cogni-DAO/node-template/pull/657
 created: 2026-03-28
 updated: 2026-03-29
 assignees:
