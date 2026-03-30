@@ -267,10 +267,10 @@ interface ContentOptimizerPort {
   optimize: (
     message: ContentMessage,
     targetPlatform: PlatformId
-  ) => Promise<OptimizationResult>;
+  ) => Promise<PlatformPostDraft>;
 }
 
-interface OptimizationResult {
+interface PlatformPostDraft {
   optimizedBody: string;
   optimizedTitle?: string;
   platformMetadata: Record<string, unknown>;

@@ -18,7 +18,7 @@ export type {
 } from "./broadcast-ledger.port";
 export type {
   ContentOptimizerPort,
-  OptimizationResult,
+  PlatformPostDraft,
 } from "./content-optimizer.port";
 export type {
   HealthCheckResult,

@@ -42,7 +42,7 @@ export type {
   ContentMessageFilter,
   ContentOptimizerPort,
   HealthCheckResult,
-  OptimizationResult,
+  PlatformPostDraft,
   PublishPort,
   PublishResult,
 } from "./ports";

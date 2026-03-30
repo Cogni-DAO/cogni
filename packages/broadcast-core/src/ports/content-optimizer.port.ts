@@ -18,7 +18,7 @@ import type {
   RiskLevel,
 } from "../types";
 
-export interface OptimizationResult {
+export interface PlatformPostDraft {
   readonly optimizedBody: string;
   readonly optimizedTitle?: string;
   readonly platformMetadata: Record<string, unknown>;
@@ -35,5 +35,5 @@ export interface ContentOptimizerPort {
     message: ContentMessage,
     targetPlatform: PlatformId,
     policy?: GenerationPolicy
-  ): Promise<OptimizationResult>;
+  ): Promise<PlatformPostDraft>;
 }

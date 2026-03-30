@@ -19,8 +19,8 @@ import {
   type ContentMessage,
   type ContentOptimizerPort,
   type GenerationPolicy,
-  type OptimizationResult,
   type PlatformId,
+  type PlatformPostDraft,
 } from "@cogni/broadcast-core";
 
 export class EchoContentOptimizerAdapter implements ContentOptimizerPort {
@@ -28,7 +28,7 @@ export class EchoContentOptimizerAdapter implements ContentOptimizerPort {
     message: ContentMessage,
     targetPlatform: PlatformId,
     _policy?: GenerationPolicy
-  ): Promise<OptimizationResult> {
+  ): Promise<PlatformPostDraft> {
     // Echo: pass body through with platform context
     const optimizedBody = `[${targetPlatform}] ${message.body}`;
     const riskLevel = assessRisk(message);

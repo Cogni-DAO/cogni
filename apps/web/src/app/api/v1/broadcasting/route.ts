@@ -23,12 +23,22 @@ import { NextResponse } from "next/server";
 
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
+import {
+  createGraphExecutor,
+  createScopedGraphExecutor,
+} from "@/bootstrap/graph-executor.factory";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   broadcastDraftOperation,
   broadcastListOperation,
   ContentMessageResponseSchema,
 } from "@/contracts/broadcast.draft.v1.contract";
+import {
+  commitUsageFact,
+  executeStream,
+  preflightCreditCheck,
+} from "@/features/ai/public.server";
+import type { PreflightCreditCheckFn } from "@/ports";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";
@@ -84,15 +94,14 @@ export const POST = wrapRouteHandlerWithLogging(
       if (!sessionUser) throw new Error("sessionUser required");
 
       const container = getContainer();
-      const accountService = container.accountsForUser(
-        toUserId(sessionUser.id)
-      );
+      const userId = toUserId(sessionUser.id);
+      const accountService = container.accountsForUser(userId);
       const account = await accountService.getOrCreateBillingAccountForUser({
         userId: sessionUser.id,
       });
 
       const message = await container.broadcastLedger.createContentMessage(
-        toUserId(sessionUser.id),
+        userId,
         account.id,
         {
           body: input.body,
@@ -103,13 +112,52 @@ export const POST = wrapRouteHandlerWithLogging(
         }
       );
 
+      // Build scoped graph executor with billing/preflight/observability
+      const executor = createGraphExecutor(executeStream, userId);
+      const preflightCheckFn: PreflightCreditCheckFn = (
+        billingAccountId,
+        m,
+        msgs
+      ) =>
+        preflightCreditCheck({
+          billingAccountId,
+          messages: [...msgs],
+          model: m,
+          accountService,
+        });
+      const scopedExecutor = createScopedGraphExecutor({
+        executor,
+        preflightCheckFn,
+        commitByoUsage: async (fact, log) => {
+          await commitUsageFact(
+            fact,
+            {
+              runId: fact.runId,
+              attempt: fact.attempt,
+              ingressRequestId: fact.runId,
+            },
+            accountService,
+            log
+          );
+        },
+        billing: { billingAccountId: account.id, virtualKeyId: account.id },
+        resolver: container.providerResolver,
+        actorId: sessionUser.id,
+        ...(container.connectionBroker
+          ? { broker: container.connectionBroker }
+          : {}),
+      });
+
+      // Use graph-backed optimizer (reads platform skill docs, runs broadcast-writer graph)
+      const optimizer = container.broadcastOptimizerForExecutor(scopedExecutor);
+
       // Optimize draft — creates platform posts for each target platform
       const result = await optimizeDraft(
         {
           ledger: container.broadcastWorkerLedger,
-          optimizer: container.broadcastOptimizer,
+          optimizer,
         },
-        userActor(toUserId(sessionUser.id)),
+        userActor(userId),
         message.id
       );
 
