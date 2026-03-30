@@ -13,6 +13,7 @@
 | 0 | 1 | 3 | needs_merge | task.0161 | Governance signal executor: Alchemy webhook → on-chain verification → GitHub actions | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 1 | 1 | needs_merge | bug.0224 | Codex binary not found in Docker — standalone misses platform-specific optional dep | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
+| 0 | 1 | 2 | needs_design | spike.0240 | Dource — Gource-style visualization for Dolt database history | Premium Frontend UX | proj.premium-frontend-ux |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
@@ -45,9 +46,11 @@
 | 1 | 1 | 5 | needs_design | task.0202 | provisionNode Temporal workflow — zero-touch node launch | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 1 | 3 | needs_merge | task.0228 | MCP Client MVP — McpToolSource + Playwright browser agent | Agentic Interoperability | proj.agentic-interop |
 | 1 | 1 | 3 | needs_design | spike.0229 | Knowledge Aggregation — KnowledgeCapability Port | OSS Research AI Node | proj.oss-research-node |
+| 1 | 1 | 2 | needs_design | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 2 | 2 | needs_design | task.0236 | Dashboard statusLabel wiring — RunCard shows live phase from SSE | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -107,6 +110,8 @@
 | 1 | 99 | 2 | needs_triage | story.0193 | Lobster Racing: competitive OpenClaw agents funded by web3 wallets |  |  |
 | 1 | 99 | 2 | needs_triage | spike.0194 | Spike: Lobster Racing infrastructure and provisioning research |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
+| 2 | 1 | 3 | needs_design | task.0237 | Work items table — TanStack Table migration + detail panel | Premium Frontend UX | proj.premium-frontend-ux |
+| 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
@@ -137,6 +142,7 @@
 | 3 | 80 | 3 | needs_design | task.0146 | Extract payments application orchestration + billing ports into packages | AI Operator Wallet | proj.ai-operator-wallet |
 | 3 | 99 | 1 | needs_triage | task.0098 | Temporal retry workflow for failed identity bindings + scheduled backstop | User Identity Bindings + DID Readiness | proj.decentralized-identity |
 | 3 | 99 | 1 | needs_triage | bug.0150 | getAllReceipts query is unbounded — will degrade at scale |  |  |
+| 3 | 99 | 2 | needs_triage | spike.0239 | Three.js agent observatory — prototype + performance budget | Premium Frontend UX | proj.premium-frontend-ux |
 
 > Sort: priority ASC → rank ASC
 
@@ -253,6 +259,7 @@
 | 1 | story.0221 | Agent KPI Observability — agents measure and optimize against their own KPIs | Governance Agents | proj.governance-agents |
 | 1 | spike.0230 | AI Browser Automation Tools — OSS Survey & Integration Path | Agentic Interoperability | proj.agentic-interop |
 | 1 | bug.0234 | Activity charts show raw model IDs and "unknown" instead of human-friendly names |  |  |
+| 1 | spike.0234 | Research: Premium frontend UX — activity stream, work items, agent visualization | Premium Frontend UX | proj.premium-frontend-ux |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
