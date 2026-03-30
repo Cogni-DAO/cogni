@@ -3,11 +3,10 @@
 
 /**
  * Module: `@features/ai/config/provider-icons`
- * Purpose: Provides provider icon registry for model selection UI.
- * Scope: Maps provider keys to icon components (custom SVGs + Lucide fallbacks). Does not implement icon rendering logic.
- * Invariants: Icons use currentColor for theme compatibility.
+ * Purpose: Provider icon registry for model selection UI.
+ * Scope: Maps provider keys and model ID prefixes to icon components (custom SVGs + Lucide fallbacks).
+ * Invariants: Icons use currentColor for theme compatibility. MODEL_PREFIX_TO_PROVIDER maps model ID prefixes (gpt, claude, gemini) to provider icon keys.
  * Side-effects: none
- * Notes: Custom inline SVG components for major providers, Lucide fallbacks for others.
  * Links: Used by ModelPicker component
  * @internal
  */

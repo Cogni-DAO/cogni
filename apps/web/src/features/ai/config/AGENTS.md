@@ -41,16 +41,17 @@ Configuration and static data for AI feature including provider icon registry fo
 
 ```typescript
 // Used internally by ModelPicker component
-import { getProviderIcon } from "../config/provider-icons";
+import { resolveModelIcon } from "../config/provider-icons";
 
-const Icon = getProviderIcon(modelId); // Returns Lucide icon component
+// Tries providerKey first, falls back to model ID prefix matching
+const Icon = resolveModelIcon(model.ref.providerKey, model.ref.modelId);
 ```
 
 ## Standards
 
 - Pure data/config only (no side effects)
-- Use only bundled assets (Lucide icons)
-- Icon mappings inferred from model ID prefixes
+- Use only bundled assets (Lucide icons + custom SVG icon components)
+- Icon resolution: direct providerKey lookup → model ID prefix mapping → Zap fallback
 - Internal to feature (not exported via public.ts)
 
 ## Dependencies
@@ -66,6 +67,7 @@ const Icon = getProviderIcon(modelId); // Returns Lucide icon component
 
 ## Notes
 
-- Icons matched by model ID prefix (e.g., "gpt-4o" → "gpt" → Sparkles icon)
-- Fallback to default icon (Zap) for unknown providers
-- Currently supports: qwen, hermes, gpt, claude
+- Icons matched by providerKey or model ID prefix (e.g., "gpt-4o-mini" → "openai" → OpenAIIcon)
+- MODEL_PREFIX_TO_PROVIDER maps: gpt/o1/o3/o4/chatgpt→openai, claude→anthropic, gemini→google
+- Direct PROVIDER_ICONS keys: amazon, anthropic, deepseek, google, kimi, minimax, mistral, nvidia, llama, openai, qwen, xai
+- Fallback to Zap icon for unknown providers

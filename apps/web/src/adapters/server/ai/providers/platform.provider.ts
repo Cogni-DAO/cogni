@@ -4,11 +4,12 @@
 /**
  * Module: `@adapters/server/ai/providers/platform.provider`
  * Purpose: ModelProviderPort implementation for platform LiteLLM models.
- * Scope: Lists models from LiteLLM /model/info, creates LlmService from singleton, checks isFree for credits.
+ * Scope: Lists chat models from LiteLLM /model/info, creates LlmService from singleton, checks isFree for credits.
  *   Ported from model-catalog.server.ts — same SWR cache, same transform, same defaults logic.
  * Invariants:
  *   - SWR cache with 1h TTL
  *   - requiresPlatformCredits inverts isFree from catalog metadata
+ *   - Non-chat models (embedding, image_generation) filtered out via LiteLLM mode field
  * Side-effects: global (cache), IO (fetch to LiteLLM)
  * Links: docs/spec/multi-provider-llm.md
  * @internal

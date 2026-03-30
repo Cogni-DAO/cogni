@@ -14,6 +14,7 @@
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 1 | 1 | needs_merge | bug.0224 | Codex binary MODULE_NOT_FOUND in Docker — standalone bundles pruned @openai/codex, bypasses global install | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
+| 0 | 3 | 3 | needs_implement | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 5 | 3 | needs_design | bug.0056 | Thread switch aborts in-flight stream — credits consumed, response lost to user | Thread Persistence | proj.thread-persistence |
 | 0 | 6 | 2 | needs_implement | bug.0088 | OpenClaw gateway LLM calls missing billing headers — Discord + subagent calls unbilled |  |  |
@@ -109,6 +110,7 @@
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
+| 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
