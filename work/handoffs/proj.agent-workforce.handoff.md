@@ -57,13 +57,13 @@ last_commit: 3af89bf0
 
 ## Pointers
 
-| File / Resource                                                         | Why it matters                                               |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `packages/langgraph-graphs/src/graphs/operator/graph.ts`                | `createOperatorGraph` factory — the migration seam           |
-| `packages/langgraph-graphs/src/catalog.ts`                              | Catalog entries for ceo-operator + git-reviewer              |
-| `packages/temporal-workflows/src/workflows/scheduled-sweep.workflow.ts` | The sweep workflow (untested)                                |
-| `packages/temporal-workflows/src/workflows/pr-review.workflow.ts`       | The proven pattern to follow                                 |
-| `services/scheduler-worker/src/activities/sweep.ts`                     | Sweep activities (fetch items, log result)                   |
-| `services/scheduler-worker/src/worker.ts`                               | Where activities are registered                              |
-| `packages/work-items/src/ports.ts`                                      | `WorkItemCommandPort.claim()`/`release()` for future locking |
-| `packages/ai-tools/src/`                                                | Where new tools need to go                                   |
+| File / Resource | Why it matters |
+| --- | --- |
+| `packages/langgraph-graphs/src/graphs/operator/graph.ts` | `createOperatorGraph` factory — the migration seam |
+| `packages/langgraph-graphs/src/catalog.ts` | Catalog entries for ceo-operator + git-reviewer |
+| `packages/temporal-workflows/src/workflows/scheduled-sweep.workflow.ts` | The sweep workflow (untested) |
+| `packages/temporal-workflows/src/workflows/pr-review.workflow.ts` | The proven pattern to follow |
+| `services/scheduler-worker/src/activities/sweep.ts` | Sweep activities (fetch items, log result) |
+| `services/scheduler-worker/src/worker.ts` | Where activities are registered |
+| `packages/work-items/src/ports.ts` | `WorkItemCommandPort.claim()`/`release()` for future locking |
+| `packages/ai-tools/src/` | Where new tools need to go |
