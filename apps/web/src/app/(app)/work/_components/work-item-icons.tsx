@@ -64,31 +64,31 @@ const STATUS_ICON_MAP: Record<
   },
   needs_research: {
     icon: Search,
-    colorClass: "text-amber-500",
+    colorClass: "text-warning",
     label: "Needs research",
   },
   needs_design: {
     icon: Pencil,
-    colorClass: "text-amber-500",
+    colorClass: "text-warning",
     label: "Needs design",
   },
   needs_implement: {
     icon: Code,
-    colorClass: "text-blue-500",
+    colorClass: "text-info",
     label: "Needs implement",
   },
   needs_closeout: {
     icon: ClipboardCheck,
-    colorClass: "text-blue-500",
+    colorClass: "text-info",
     label: "Needs closeout",
   },
   needs_merge: {
     icon: GitMerge,
-    colorClass: "text-green-500",
+    colorClass: "text-success",
     label: "Needs merge",
   },
-  done: { icon: CheckCircle, colorClass: "text-green-500", label: "Done" },
-  blocked: { icon: Ban, colorClass: "text-red-500", label: "Blocked" },
+  done: { icon: CheckCircle, colorClass: "text-success", label: "Done" },
+  blocked: { icon: Ban, colorClass: "text-danger", label: "Blocked" },
   cancelled: {
     icon: XCircle,
     colorClass: "text-muted-foreground",

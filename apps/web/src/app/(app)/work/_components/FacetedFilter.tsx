@@ -64,7 +64,8 @@ export function FacetedFilter({
             >
               <Checkbox
                 checked={selected.includes(option)}
-                onCheckedChange={() => toggle(option)}
+                tabIndex={-1}
+                aria-hidden
               />
               <span className="capitalize">
                 {option.replace("needs_", "").replaceAll("_", " ")}

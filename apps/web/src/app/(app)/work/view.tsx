@@ -165,6 +165,7 @@ export function WorkDashboardView() {
         e.target instanceof HTMLTextAreaElement
       )
         return;
+      if (rows.length === 0) return;
 
       switch (e.key) {
         case "j":

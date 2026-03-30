@@ -15,7 +15,7 @@ project: proj.premium-frontend-ux
 branch: feat/premium-frontend-ux
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-30
