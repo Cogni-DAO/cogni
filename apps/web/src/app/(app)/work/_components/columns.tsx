@@ -35,37 +35,28 @@ export const columns = [
 
   col.accessor("type", {
     header: "Type",
-    size: 80,
-    cell: (info) => (
-      <span className="inline-flex items-center gap-1.5">
-        <TypeIcon type={info.getValue()} />
-        <span className="text-xs capitalize">{info.getValue()}</span>
-      </span>
-    ),
+    size: 55,
+    cell: (info) => <TypeIcon type={info.getValue()} />,
     filterFn: "arrIncludesSome",
     meta: { headerTitle: "Type" },
   }),
 
-  col.accessor("id", {
-    header: "ID",
-    size: 110,
-    cell: (info) => {
-      const id = info.getValue();
-      // Show "bug.0002" compact — the slug is in the title
+  col.display({
+    id: "item",
+    header: "Item",
+    minSize: 250,
+    cell: ({ row }) => {
+      const { id, title } = row.original;
       return (
-        <span className="font-mono text-muted-foreground text-xs">{id}</span>
+        <div className="flex flex-col gap-0.5 py-0.5">
+          <span className="line-clamp-1 text-sm">{title}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {id}
+          </span>
+        </div>
       );
     },
-    meta: { headerTitle: "ID" },
-  }),
-
-  col.accessor("title", {
-    header: "Title",
-    minSize: 200,
-    cell: (info) => (
-      <span className="line-clamp-1 text-sm">{info.getValue()}</span>
-    ),
-    meta: { headerTitle: "Title" },
+    meta: { headerTitle: "Item" },
   }),
 
   col.accessor("status", {
@@ -78,11 +69,15 @@ export const columns = [
 
   col.accessor("projectId", {
     header: "Project",
-    size: 180,
+    size: 140,
     cell: (info) => {
       const v = info.getValue();
-      if (!v) return <span className="text-muted-foreground">&mdash;</span>;
-      return <span className="text-xs">{v.replace("proj.", "")}</span>;
+      if (!v) return null;
+      return (
+        <span className="truncate text-muted-foreground text-xs">
+          {v.replace("proj.", "")}
+        </span>
+      );
     },
     filterFn: "arrIncludesSome",
     meta: { headerTitle: "Project" },
