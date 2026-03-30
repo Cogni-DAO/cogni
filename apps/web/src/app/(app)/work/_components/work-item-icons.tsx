@@ -25,12 +25,19 @@ import { cn } from "@/shared/util/cn";
 
 // --- Type icons ---
 
-const TYPE_ICON_MAP: Record<string, { icon: typeof Bug; label: string }> = {
-  task: { icon: CheckSquare, label: "Task" },
-  bug: { icon: Bug, label: "Bug" },
-  story: { icon: BookOpen, label: "Story" },
-  spike: { icon: FlaskConical, label: "Spike" },
-  subtask: { icon: CornerDownRight, label: "Subtask" },
+const TYPE_ICON_MAP: Record<
+  string,
+  { icon: typeof Bug; colorClass: string; label: string }
+> = {
+  task: { icon: CheckSquare, colorClass: "text-info", label: "Task" },
+  bug: { icon: Bug, colorClass: "text-danger", label: "Bug" },
+  story: { icon: BookOpen, colorClass: "text-primary", label: "Story" },
+  spike: { icon: FlaskConical, colorClass: "text-warning", label: "Spike" },
+  subtask: {
+    icon: CornerDownRight,
+    colorClass: "text-muted-foreground",
+    label: "Subtask",
+  },
 };
 
 export function TypeIcon({
@@ -45,7 +52,7 @@ export function TypeIcon({
   const Icon = entry.icon;
   return (
     <Icon
-      className={cn("size-4 text-muted-foreground", className)}
+      className={cn("size-4", entry.colorClass, className)}
       aria-label={entry.label}
     />
   );

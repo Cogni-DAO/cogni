@@ -52,6 +52,7 @@ import type {
 import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
 import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
+import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
 import { fetchRuns } from "./_api/fetchRuns";
 
 type Tab = "user" | "system";
@@ -107,18 +108,6 @@ const STATUS_LABEL: Record<string, string> = {
   error: "Failed",
   skipped: "Skipped",
   cancelled: "Cancelled",
-};
-
-const WORK_STATUS_PILL: Record<string, string> = {
-  needs_merge: "bg-primary/15 text-primary-foreground",
-  needs_closeout: "bg-primary/15 text-primary-foreground",
-  needs_implement: "bg-warning/15 text-warning",
-  needs_design: "bg-warning/15 text-warning",
-  needs_research: "bg-warning/15 text-warning",
-  needs_triage: "bg-muted text-muted-foreground",
-  blocked: "bg-destructive/15 text-destructive",
-  done: "bg-success/15 text-success",
-  cancelled: "bg-muted text-muted-foreground",
 };
 
 function sortRuns(runs: RunCardData[]): RunCardData[] {
@@ -382,7 +371,7 @@ export function DashboardView(): ReactElement {
                 href="/work"
                 className="text-muted-foreground text-xs hover:text-foreground"
               >
-                View all
+                View all &rarr;
               </Link>
             </div>
           </CardHeader>
@@ -400,15 +389,8 @@ export function DashboardView(): ReactElement {
                     key={item.id}
                     className="flex items-center gap-3 px-5 py-2.5"
                   >
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 rounded px-1.5 py-0.5 font-medium text-xs",
-                        WORK_STATUS_PILL[item.status] ??
-                          "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {item.status.replace("needs_", "")}
-                    </span>
+                    <TypeIcon type={item.type} className="size-3.5 shrink-0" />
+                    <StatusPill status={item.status} className="shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {item.title}
                     </span>

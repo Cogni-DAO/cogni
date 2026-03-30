@@ -35,7 +35,7 @@ export const columns = [
 
   col.accessor("type", {
     header: "Type",
-    size: 70,
+    size: 80,
     cell: (info) => (
       <span className="inline-flex items-center gap-1.5">
         <TypeIcon type={info.getValue()} />
@@ -48,16 +48,20 @@ export const columns = [
 
   col.accessor("id", {
     header: "ID",
-    size: 200,
-    cell: (info) => (
-      <span className="font-mono text-xs">{info.getValue()}</span>
-    ),
+    size: 110,
+    cell: (info) => {
+      const id = info.getValue();
+      // Show "bug.0002" compact — the slug is in the title
+      return (
+        <span className="font-mono text-muted-foreground text-xs">{id}</span>
+      );
+    },
     meta: { headerTitle: "ID" },
   }),
 
   col.accessor("title", {
     header: "Title",
-    size: 400,
+    minSize: 200,
     cell: (info) => (
       <span className="line-clamp-1 text-sm">{info.getValue()}</span>
     ),

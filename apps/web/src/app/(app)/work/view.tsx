@@ -65,13 +65,28 @@ export function WorkDashboardView() {
   const items = data?.items ?? [];
 
   // --- URL-driven state ---
+  // Default: hide done/cancelled unless user explicitly sets status filter
+  const ACTIVE_STATUSES = [
+    "needs_triage",
+    "needs_research",
+    "needs_design",
+    "needs_implement",
+    "needs_closeout",
+    "needs_merge",
+    "blocked",
+  ];
+
   const initialFilters = useMemo((): ColumnFiltersState => {
     const filters: ColumnFiltersState = [];
     const typeParam = searchParams.get("type");
     if (typeParam) filters.push({ id: "type", value: typeParam.split(",") });
     const statusParam = searchParams.get("status");
-    if (statusParam)
+    if (statusParam) {
       filters.push({ id: "status", value: statusParam.split(",") });
+    } else {
+      // Default: active items only
+      filters.push({ id: "status", value: ACTIVE_STATUSES });
+    }
     const projectParam = searchParams.get("project");
     if (projectParam)
       filters.push({ id: "projectId", value: projectParam.split(",") });
@@ -308,7 +323,7 @@ export function WorkDashboardView() {
           }}
           emptyMessage="No work items found."
         >
-          <DataGridContainer>
+          <DataGridContainer className="overflow-x-auto">
             <DataGridTable />
           </DataGridContainer>
           <DataGridPagination sizes={[25, 50, 100]} />
