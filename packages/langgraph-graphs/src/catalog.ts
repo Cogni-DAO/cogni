@@ -14,6 +14,10 @@
  * @public
  */
 
+import {
+  BROADCAST_WRITER_GRAPH_NAME,
+  createBroadcastWriterGraph,
+} from "./graphs/broadcast-writer/graph";
 import { BRAIN_GRAPH_NAME, createBrainGraph } from "./graphs/brain/graph";
 import { BRAIN_TOOL_IDS } from "./graphs/brain/tools";
 import { BROWSER_GRAPH_NAME, createBrowserGraph } from "./graphs/browser/graph";
@@ -66,6 +70,19 @@ interface CatalogEntry {
  * Per CATALOG_SINGLE_SOURCE_OF_TRUTH: graphs are defined here, not in bootstrap.
  */
 export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
+  /**
+   * Broadcast writer - adapts content for a specific platform.
+   * Single-call, no tools. Platform skill guide + content in user message.
+   * One graph run per target platform.
+   */
+  [BROADCAST_WRITER_GRAPH_NAME]: {
+    displayName: "Broadcast Writer",
+    description:
+      "Adapts content for a specific platform using its skill guide",
+    toolIds: [],
+    graphFactory: createBroadcastWriterGraph,
+  },
+
   /**
    * Brain graph - code-aware assistant with repository access.
    * Uses createReactAgent with repo search and file open tools.
@@ -163,6 +180,7 @@ export const LANGGRAPH_PROVIDER_ID = "langgraph" as const;
  * Per GRAPH_ID_NAMESPACED: format is ${providerId}:${graphName}
  */
 export const LANGGRAPH_GRAPH_IDS = {
+  "broadcast-writer": `${LANGGRAPH_PROVIDER_ID}:${BROADCAST_WRITER_GRAPH_NAME}`,
   brain: `${LANGGRAPH_PROVIDER_ID}:${BRAIN_GRAPH_NAME}`,
   poet: `${LANGGRAPH_PROVIDER_ID}:${POET_GRAPH_NAME}`,
   ponderer: `${LANGGRAPH_PROVIDER_ID}:${PONDERER_GRAPH_NAME}`,

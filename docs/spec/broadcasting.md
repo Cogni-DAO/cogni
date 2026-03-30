@@ -255,9 +255,13 @@ interface HealthCheckResult {
 ```typescript
 /**
  * Transforms a ContentMessage into platform-optimized PlatformPost bodies.
- * Implementation uses LangGraph/LLM via GraphExecutorPort.
- * Responsible for: character limits, tone adaptation, hashtag generation,
- * thread splitting (X), facet creation (Bluesky), SEO metadata (blog).
+ *
+ * Implementation: runs the `broadcast-writer` LangGraph graph per platform.
+ * The adapter reads the platform skill guide from platform-skills/<platform>.md,
+ * builds the user message via buildBroadcastWriterMessage(), and runs the graph.
+ *
+ * One call per platform = one graph run = one PlatformPost.
+ * Platform knowledge lives in markdown skill docs, not in code.
  */
 interface ContentOptimizerPort {
   optimize: (
@@ -512,76 +516,105 @@ Schema for these tables is defined in the [Walk/Run entities section](#entities-
 ### Sequence
 
 ```
-User creates ContentMessage
+User creates ContentMessage (draft — the core intent)
   │
   ▼
-1. OPTIMIZE — ContentOptimizerPort generates PlatformPost per target platform
-  │            (AI via GraphExecutorPort, billed to billingAccountId)
+1. APPROVE INTENT — Human confirms the message is worth publishing
+  │                  (draft → approved)
   │
   ▼
-2. ASSESS RISK — Pure domain rule classifies each PlatformPost
-  │
-  ├── LOW risk   → auto-approve, skip review
-  ├── MEDIUM risk → post + notify for async review
-  └── HIGH risk  → block, wait for review Signal
+2. GENERATE — N independent graph runs, one per target platform
+  │            Each runs the `broadcast-writer` LangGraph graph:
+  │              Input: platform skill guide (markdown) + content message
+  │              Output: platform-optimized post body
+  │            Creates PlatformPost per graph run result
   │
   ▼
-3. REVIEW — Human approves/edits/rejects via UI → Temporal Signal
-  │          (or auto-approve on timer for LOW/MED)
+3. REVIEW — Human reviews each platform post (or auto-approve low-risk)
+  │          approve / reject / edit per PlatformPost
   │
   ▼
 4. PUBLISH — PublishPort.publish() per approved PlatformPost
   │           Each platform = separate Temporal Activity with retry policy
-  │           BroadcastRun created per attempt
   │
   ▼
-5. OBSERVE — EngagementPort.collect() on schedule (e.g., hourly for 48h)
-             EngagementSnapshot upserted per collection
+5. OBSERVE — EngagementPort.collect() on schedule (Walk phase)
 ```
 
-### Temporal Workflow (`broadcastWorkflow`)
+### Why 1 Graph Run Per Platform
+
+Each platform has a deep, evolving **platform skill guide** (see `packages/broadcast-core/platform-skills/`).
+These are rich markdown documents covering tone, constraints, examples, engagement strategy, and
+anti-patterns. A single graph run receives one skill guide + the content and produces one post.
+
+This is simpler and more correct than running all platforms in one graph because:
+- Each run is **independent** — parallelizable, individually retryable
+- Each run's context window contains **only the relevant platform knowledge**
+- Adding a platform = adding a markdown file (no code changes for generation)
+- Each graph run produces a **graph_runs record** visible in the dashboard
+- Aligns with Temporal: parent workflow spawns N child `GraphRunWorkflow`s
+
+### Platform Skill Guides
+
+Platform knowledge lives in `packages/broadcast-core/platform-skills/<platform>.md`. Each guide covers:
+- Platform identity, audience, content lifespan, how content spreads
+- Format constraints (char limits, media, threading, special features)
+- Optimization goals (what to maximize: replies, shares, SEO, authority)
+- Tone and voice (what works, what fails, with examples)
+- Content patterns and anti-patterns
+- Adaptation rules (numbered rules the AI follows)
+- Strong vs weak examples
+
+Adding a new platform requires only:
+1. Create `<platform-id>.md` in `platform-skills/`
+2. Add the platform ID to `PLATFORM_IDS` in `types.ts`
+3. Register a `PublishPort` adapter
+
+### Crawl Execution (Synchronous in HTTP Handlers)
+
+In Crawl, the pipeline runs synchronously within HTTP handlers for simplicity:
+- `POST /broadcasting` creates draft + runs optimization inline
+- `POST .../review` applies review + publishes inline
+
+The use-case functions in `broadcast-core/application/` are structured as
+**pure functions with ports as args** — ready to wrap as Temporal Activities
+without rewriting business logic.
+
+### Walk Execution (Temporal Workflow)
 
 ```typescript
-// Pseudocode — actual implementation in services/scheduler-worker/
+// Pseudocode — Walk phase wraps existing use-cases
 async function broadcastWorkflow(
   input: BroadcastWorkflowInput
 ): Promise<BroadcastWorkflowResult> {
   const { contentMessageId, targetPlatforms } = input;
 
-  // 1. Optimize — Activity (I/O: LLM calls)
-  const platformPosts = await optimizeContent(
-    contentMessageId,
-    targetPlatforms
+  // 1. Generate — N child GraphRunWorkflows (one per platform)
+  //    Each child: read skill guide → run broadcast-writer graph → create PlatformPost
+  const graphRuns = await Promise.allSettled(
+    targetPlatforms.map((platform) =>
+      executeChild(GraphRunWorkflow, {
+        args: [{ graphId: "langgraph:broadcast-writer", platform, contentMessageId }],
+        workflowId: `broadcast-write-${contentMessageId}-${platform}`,
+      })
+    )
   );
 
-  // 2. Assess risk — Activity (reads from DB, applies pure rules)
-  const assessments = await assessRisks(contentMessageId);
-
-  // 3. Review gate — per-post
-  for (const post of platformPosts) {
-    const risk = assessments.get(post.id);
-    if (risk === "high") {
-      // Durable pause: wait for human signal (approve/reject/edit)
-      const decision = await condition(
-        () => reviewSignals.has(post.id),
-        reviewTimeout
-      );
-      if (!decision || reviewSignals.get(post.id) === "rejected") {
-        continue; // skip this platform
-      }
+  // 2. Review gate — wait for human signals per post
+  for (const post of pendingReviewPosts) {
+    const decision = await condition(
+      () => reviewSignals.has(post.id),
+      reviewTimeout
+    );
+    if (!decision || reviewSignals.get(post.id) === "rejected") {
+      continue;
     }
-    // LOW/MED: proceed directly
   }
 
-  // 4. Publish — parallel Activities per platform
-  //    Each activity calls PublishPort.publish() and updates PlatformPost
-  //    with externalId/externalUrl/publishedAt (or errorMessage on failure)
+  // 3. Publish — parallel Activities per approved platform
   const results = await Promise.allSettled(
     approvedPosts.map((post) => publishToPlatform(post))
   );
-
-  // 5. (Walk) Schedule engagement collection (separate child workflow or timer)
-  // await scheduleEngagementCollection(publishedPostIds);
 
   return { results };
 }
