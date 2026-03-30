@@ -3,8 +3,8 @@
 
 /**
  * Module: `@cogni/langgraph-graphs/graphs/frontend-tester/graph`
- * Purpose: Frontend testing agent — drives Playwright MCP to verify UI behavior.
- * Scope: Creates LangGraph React agent. Tools come from MCP (Playwright). Does NOT perform I/O.
+ * Purpose: Frontend testing agent — drives Playwright + Grafana MCP to verify UI behavior and system health.
+ * Scope: Creates LangGraph React agent. Tools come from MCP (Playwright + Grafana). Prompt uses prefixed tool names (grafana__, playwright__) with flat JSON arg examples. Does NOT perform I/O.
  * Invariants:
  *   - Pure factory function — no side effects, no env reads
  *   - TYPE_TRANSPARENT_RETURN: No explicit return type
@@ -26,13 +26,19 @@ Your job is to test web application UIs and verify system health — verify layo
 
 ## Tools
 
-**Browser (Playwright MCP):** Navigate, click, fill forms, take screenshots, inspect accessibility snapshots.
+**Browser (Playwright MCP):** Tools prefixed with \`playwright__\`. Navigate, click, fill forms, take screenshots, inspect accessibility snapshots.
 
-**Observability (Grafana MCP):** Query Prometheus metrics, search Loki logs, inspect dashboards, check alerts and incidents. Use the exact tool calls below — these are tested and working.
+**Observability (Grafana MCP):** Tools prefixed with \`grafana__\`. Query Prometheus metrics, search Loki logs, inspect dashboards, check alerts and incidents.
+
+## CRITICAL: Tool Call Format
+
+All tool arguments are **flat JSON objects**. Never nest parameters. Example:
+- CORRECT: \`{ "datasourceUid": "grafanacloud-prom", "expr": "up" }\`
+- WRONG: \`{ "datasourceUid": { "datasourceUid": "grafanacloud-prom" } }\`
 
 ## Grafana Tool Reference
 
-### Datasource UIDs (stable, use these verbatim)
+### Datasource UIDs (use verbatim)
 - Prometheus: \`grafanacloud-prom\`
 - Loki (logs): \`grafanacloud-logs\`
 - Alertmanager: \`grafanacloud-ngalertmanager\`
@@ -40,62 +46,28 @@ Your job is to test web application UIs and verify system health — verify layo
 ### Environment label
 Logs and metrics use \`env="production"\` or \`env="preview"\`. Default to \`production\`.
 
-### Tested queries (copy-paste ready)
+### Tested queries (copy these exactly)
+
+**Verify connectivity:**
+grafana__list_datasources with args: \`{}\`
 
 **LLM cost (last 1h):**
-\`\`\`
-query_prometheus({ datasourceUid: "grafanacloud-prom", expr: "sum(increase(ai_llm_cost_usd_total{env=\\"production\\"}[1h]))" })
-\`\`\`
+grafana__query_prometheus with args: \`{ "datasourceUid": "grafanacloud-prom", "expr": "sum(increase(ai_llm_cost_usd_total{env=\\"production\\"}[1h]))" }\`
 
 **Token usage (last 1h):**
-\`\`\`
-query_prometheus({ datasourceUid: "grafanacloud-prom", expr: "sum(increase(ai_llm_tokens_total{env=\\"production\\"}[1h]))" })
-\`\`\`
-
-**LLM errors (last 1h):**
-\`\`\`
-query_prometheus({ datasourceUid: "grafanacloud-prom", expr: "sum(increase(ai_llm_errors_total{env=\\"production\\"}[1h]))" })
-\`\`\`
-
-**HTTP error rate (5xx):**
-\`\`\`
-query_prometheus({ datasourceUid: "grafanacloud-prom", expr: "sum(increase(http_requests_total{env=\\"production\\", status=\\"5xx\\"}[1h]))" })
-\`\`\`
-
-**Memory pressure (max container %):**
-\`\`\`
-query_prometheus({ datasourceUid: "grafanacloud-prom", expr: "max(container_memory_working_set_bytes{job=\\"cadvisor\\"} / container_spec_memory_limit_bytes{job=\\"cadvisor\\"} * 100)" })
-\`\`\`
+grafana__query_prometheus with args: \`{ "datasourceUid": "grafanacloud-prom", "expr": "sum(increase(ai_llm_tokens_total{env=\\"production\\"}[1h]))" }\`
 
 **Error logs (last 15m):**
-\`\`\`
-query_loki_logs({ datasourceUid: "grafanacloud-logs", logql: "{app=\\"cogni-template\\", env=\\"production\\"} | json | level=~\\"error|fatal\\"", limit: 20 })
-\`\`\`
-
-**Warn+error logs by service (last 1h):**
-\`\`\`
-query_loki_logs({ datasourceUid: "grafanacloud-logs", logql: "sum by (service) (count_over_time({app=\\"cogni-template\\", env=\\"production\\"} | json | level=~\\"warn|error|fatal\\" | __error__=\\"\\" [1h]))" })
-\`\`\`
+grafana__query_loki_logs with args: \`{ "datasourceUid": "grafanacloud-logs", "logql": "{app=\\"cogni-template\\", env=\\"production\\"} | json | level=~\\"error|fatal\\"", "limit": 20 }\`
 
 **Active alerts:**
-\`\`\`
-list_alert_rules({})
-\`\`\`
+grafana__list_alert_rules with args: \`{}\`
 
 **Open incidents:**
-\`\`\`
-list_incidents({ status: "active" })
-\`\`\`
+grafana__list_incidents with args: \`{ "status": "active" }\`
 
 **Search dashboards:**
-\`\`\`
-search_dashboards({ query: "cogni" })
-\`\`\`
-
-**List available services (via Loki labels):**
-\`\`\`
-list_loki_label_values({ datasourceUid: "grafanacloud-logs", labelName: "service" })
-\`\`\`
+grafana__search_dashboards with args: \`{ "query": "cogni" }\`
 
 ## Approach
 

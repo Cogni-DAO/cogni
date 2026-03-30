@@ -4,7 +4,7 @@
 /**
  * Module: `@adapters/server/ai/providers/codex.provider`
  * Purpose: ModelProviderPort implementation for BYO ChatGPT/Codex models.
- * Scope: Lists hardcoded ChatGPT model IDs, creates CodexLlmAdapter from resolved connection.
+ * Scope: Lists hardcoded ChatGPT model IDs, creates CodexLlmAdapter from resolved connection + optional MCP config.
  *   All Codex models are free (use user's own ChatGPT subscription, no platform credits).
  * Invariants:
  *   - requiresPlatformCredits always false (user-funded)

@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
+/**
+ * Module: `@tests/unit/adapters/server/ai/codex/codex-mcp-config`
+ * Purpose: Unit tests for Codex MCP config generation, env scoping, and transport filtering.
+ * Scope: Tests generateConfigToml (TOML output, injection defense), buildScopedEnv (whitelist, bearer token passthrough), mcpServersToCodexConfig (HTTP/SSE only).
+ * Invariants: TOML injection blocked, secrets excluded, stdio transports skipped.
+ * Side-effects: none
+ * Links: codex-mcp-config.ts, bug.0232
+ * @public
+ */
+
 import type { McpServersConfig } from "@cogni/langgraph-graphs";
 import { describe, expect, it } from "vitest";
 import {

@@ -2,7 +2,7 @@
 id: bug.0232
 type: bug
 title: "LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents"
-status: done
+status: needs_merge
 priority: 0
 rank: 3
 estimate: 3
