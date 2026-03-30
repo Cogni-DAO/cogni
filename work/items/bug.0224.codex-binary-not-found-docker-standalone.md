@@ -113,6 +113,12 @@ pnpm docker:dev:stack        # build and run full stack
 # Check: docker logs cogni-app — no MODULE_NOT_FOUND or "Unable to locate Codex CLI"
 ```
 
+## PR / Links
+
+- Handoff: [handoff](../handoffs/bug.0224.handoff.md)
+- PR #662 (hotfix): https://github.com/Cogni-DAO/node-template/pull/662
+- PR #661 (broke preview): https://github.com/Cogni-DAO/node-template/pull/661
+
 ## Attribution
 
 -
