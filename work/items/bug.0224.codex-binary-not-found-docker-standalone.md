@@ -1,13 +1,13 @@
 ---
 id: bug.0224
 type: bug
-title: "Codex binary MODULE_NOT_FOUND in Docker — standalone bundles pruned @openai/codex, bypasses global install"
-status: needs_merge
+title: "Codex binary not found in Docker — standalone misses platform-specific optional dep"
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 1
-summary: "Codex SDK's findCodexPath() resolves @openai/codex from the bundled standalone copy (pruned, no native binary) instead of the global pnpm install. Every ChatGPT BYO chat in preview fails with MODULE_NOT_FOUND."
-outcome: "ChatGPT BYO chat works in preview. Codex SDK resolves the native binary from the global install, not the pruned standalone bundle."
+summary: "Codex SDK's findCodexPath() chains createRequire through @openai/codex → @openai/codex-linux-x64. Next.js standalone traces the first two packages (serverExternalPackages) but the platform binary is an optional dep resolved dynamically — it's never copied to the Docker image."
+outcome: "ChatGPT BYO chat works in Docker (dev stack and preview). Codex binary resolves from the standalone node_modules tree."
 spec_refs: [multi-provider-llm]
 assignees: [derekg1729]
 credit:
@@ -15,125 +15,103 @@ project: proj.byo-ai
 branch: fix/codex-for-real
 pr: https://github.com/Cogni-DAO/node-template/pull/654
 reviewer:
-revision: 0
+revision: 1
 blocked_by: []
 deploy_verified: false
 created: 2026-03-28
-updated: 2026-03-28
+updated: 2026-03-30
 labels: [ai, byo-ai, docker, blocker]
 external_refs: []
 ---
 
-# Codex binary MODULE_NOT_FOUND in Docker standalone
+# Codex binary not found in Docker standalone
 
-## Requirements
+## Postmortem: 5 failed attempts
 
-### Observed
+### The Problem (one sentence)
 
-Every ChatGPT BYO chat request in preview fails with:
+The Codex SDK resolves its native binary via a 3-step `createRequire` chain: **SDK → `@openai/codex` → `@openai/codex-linux-x64`**. Next.js standalone traces the first two (they're in `serverExternalPackages`), but `@openai/codex-linux-x64` is an optional dep resolved dynamically at runtime — standalone never sees it, so it's missing from the Docker image.
+
+### Resolution chain (how the SDK finds its binary)
 
 ```
-Error: Cannot find module '/app/node_modules/.pnpm/@openai+codex@0.116.0/node_modules/@openai/codex/bin/codex.js'
-  code: 'MODULE_NOT_FOUND'
+codex-sdk/dist/index.js
+  moduleRequire = createRequire(import.meta.url)        // rooted at SDK location
+  moduleRequire.resolve("@openai/codex/package.json")   // step 1: find codex wrapper
+  codexRequire = createRequire(codexPackageJsonPath)     // rooted at codex location
+  codexRequire.resolve("@openai/codex-linux-x64/...")   // step 2: find platform binary
+  → vendor/x86_64-unknown-linux-musl/codex/codex        // step 3: native binary
 ```
 
-Confirmed from Grafana Cloud logs at `2026-03-28T17:51:48Z` — 14 hours after latest deploy of sha `6c870b25` which contains the "fix."
+Every failed fix addressed a different layer of this chain but none ensured `@openai/codex-linux-x64` was actually in the image.
 
-### Expected
+### Failed attempts
 
-ChatGPT BYO chat works. Codex SDK spawns the native binary from the global pnpm install at `/usr/local/share/pnpm/`.
+| #   | Commit / PR                       | What was tried                                                                                  | Why it failed (Loki error)                                                                                                                                                                                                                                                                                                                 |
+| --- | --------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `93447224` / `b2c1b1ba` (PR #648) | `COPY node_modules/@openai/codex /opt/codex` — copy package to global path                      | pnpm copies **symlinks**, not real files. Even with real files: `/opt/codex/bin/codex.js` calls `require.resolve("@openai/codex-linux-x64")` → **MODULE_NOT_FOUND** (platform binary wasn't copied)                                                                                                                                        |
+| 2   | `8de7c007` (PR #650)              | `pnpm add -g @openai/codex` + adapter falls back to `"codex"` shim on PATH                      | pnpm v10 global install creates **broken symlinks** (CAS store `.pnpm/` dir empty). Global shim resolves `@openai/codex` from CWD `/app` → finds pruned standalone copy → **MODULE_NOT_FOUND**                                                                                                                                             |
+| 3   | `b296449a`                        | Replace Codex CLI subprocess with OpenAI HTTP adapter                                           | Reverted (`ae3ebc0b`) — broke streaming/usage pipeline                                                                                                                                                                                                                                                                                     |
+| 4   | `230e593a` (PR #654)              | Add `@openai/codex-sdk`, `@openai/codex`, `@openai/codex-linux-x64` to `serverExternalPackages` | SDK + codex now load from standalone. But `findCodexPath()` still fails: `codexRequire.resolve("@openai/codex-linux-x64")` walks up node_modules → **not there**. `serverExternalPackages` tells Next.js "don't bundle, I'll provide at runtime" but standalone doesn't trace optional deps. Loki: `"Unable to locate Codex CLI binaries"` |
+| 5   | This fix                          | `COPY --from=builder` the platform binary package into `./node_modules/@openai/codex-linux-x64` | See below                                                                                                                                                                                                                                                                                                                                  |
 
-### Root Cause
+### Key insight all attempts missed
 
-**Resolution chain (3 layers deep):**
+The builder's `pnpm install` on Linux x64 **does** install `@openai/codex-linux-x64` — it's right there at:
 
-1. **App code** (`codex-llm.adapter.ts:153`): `const codexBin = existsSync(devBin) ? devBin : "codex"` — resolves to `"codex"` in Docker. Passes as `codexPathOverride`.
-
-2. **Codex SDK** (`@openai/codex-sdk/dist/index.js:152-158`):
-
-   ```js
-   var moduleRequire = createRequire(import.meta.url);
-   // import.meta.url = the BUNDLED SDK inside .next/standalone
-   ```
-
-   `CodexExec` constructor: `this.executablePath = executablePath || findCodexPath()`. With our `"codex"` override, it uses `"codex"` as the spawn target.
-
-3. **Global shim** (`/usr/local/share/pnpm/codex`): The global pnpm shim spawns `node` which tries to `require("@openai/codex/bin/codex.js")`. Node resolves `@openai/codex` by walking from CWD (`/app`) → finds the **pruned** copy in `.next/standalone/node_modules` → binary not there → `MODULE_NOT_FOUND`.
-
-**Why the global install doesn't help**: Next.js standalone bundles `@openai/codex-sdk` into the app output (it's not in `serverExternalPackages`). The bundled SDK's `createRequire(import.meta.url)` resolves from the standalone directory, not the global store. Even the global shim fails because Node's module resolution from CWD finds the pruned copy first.
-
-### Fix
-
-Add `@openai/codex-sdk` and `@openai/codex` to `serverExternalPackages` in `next.config.ts`:
-
-```ts
-serverExternalPackages: [
-  // ... existing entries ...
-  // Codex: subprocess binary — standalone tracing prunes native platform deps
-  "@openai/codex-sdk",
-  "@openai/codex",
-  "@openai/codex-linux-x64",
-],
+```
+node_modules/.pnpm/@openai+codex@0.116.0-linux-x64/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/codex/codex
 ```
 
-This tells Next.js standalone to NOT bundle these packages. At runtime, Node resolves them from the global pnpm install (on PATH via `PNPM_HOME`), where the native `@openai/codex-linux-x64` binary is intact.
+Every attempt tried to install it in the runner stage (global pnpm, global npm, PATH shims) instead of just copying it from the builder where it already exists.
 
-The adapter code (`codex-llm.adapter.ts`) can then be simplified — don't pass `codexPathOverride` at all and let the SDK's `findCodexPath()` work naturally from the global install context.
+### The fix (one line)
 
-### Prior Attempts (both failed)
+```dockerfile
+COPY --from=builder --chown=nextjs:nodejs \
+  /app/node_modules/.pnpm/@openai+codex@0.116.0-linux-x64/node_modules/@openai/codex \
+  ./node_modules/@openai/codex-linux-x64
+```
 
-**PR #648 — Copy binaries to `/opt/codex/`:**
-Copied `node_modules/@openai/codex` to `/opt/codex`, pointed adapter at `/opt/codex/bin/codex.js`.
-Failed because `codex.js` is a Node wrapper that `require("@openai/codex-linux-x64")` — the platform optional dep wasn't copied. Same `MODULE_NOT_FOUND` one layer deeper.
+This places the platform binary at `/app/node_modules/@openai/codex-linux-x64/`. The SDK's `codexRequire.resolve("@openai/codex-linux-x64/package.json")` walks up from `@openai/codex/` → hits `/app/node_modules/` → finds it.
 
-**PR #650 — Global pnpm install + `"codex"` shim fallback:**
-`pnpm add -g @openai/codex`, adapter falls back to `"codex"` string.
-Failed for two compounding reasons: (1) the pnpm global shim resolves `@openai/codex` from CWD `/app` — finds the pruned standalone copy, not the global store. (2) The SDK itself is bundled into standalone; its `createRequire(import.meta.url)` resolves from the standalone dir, finding pruned packages.
+### Proven via Docker test
 
-**Why `serverExternalPackages` is the correct fix:** Both attempts addressed binary PATH resolution but missed the root cause — Next.js standalone bundles the SDK and prunes platform deps. The fix tells standalone to NOT bundle these packages, so runtime resolution hits the global install where platform binaries are intact. Identical pattern to `dockerode`, `ssh2`, `tigerbeetle-node` already in `next.config.ts:13-17`.
+Minimal Dockerfile (`test-codex-resolve5.Dockerfile`) simulating standalone + COPY:
 
-### Impact
+```
+Step 1 - codex: /app/node_modules/@openai/codex/package.json
+Step 2 - platform: /app/node_modules/@openai/codex-linux-x64/package.json
+SUCCESS: Codex binary found
+```
 
-- **Severity**: P0 — all ChatGPT BYO chat is broken in preview (and would be in production)
-- **Scope**: Only codex provider. Platform (LiteLLM) and local (OpenAI-compatible) are unaffected.
-- **Since**: First deploy with codex support
+Builder verification with real lockfile confirms platform dep exists:
+
+```
+node_modules/.pnpm/@openai+codex@0.116.0-linux-x64/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/codex/codex
+```
+
+### Version coupling note
+
+The COPY path contains `@0.116.0-linux-x64` — when `@openai/codex` is upgraded, this line must be updated. Build will fail loudly ("source path not found") rather than silently break.
+
+### What `serverExternalPackages` actually does (and doesn't)
+
+- `@openai/codex-sdk` — **needed**: prevents webpack from bundling the SDK; standalone copies the real package to node_modules
+- `@openai/codex` — **needed**: same; the wrapper package with `bin/codex.js` and `findCodexPath()`
+- `@openai/codex-linux-x64` — **no-op**: standalone can't find it to copy (optional dep, not statically imported), but harmless to keep as documentation
 
 ## Allowed Changes
 
-- `apps/web/next.config.ts` — add codex packages to `serverExternalPackages`
-- `apps/web/src/adapters/server/ai/codex/codex-llm.adapter.ts` — simplify binary resolution (remove `existsSync` fallback, let SDK resolve)
-- `apps/web/Dockerfile` — verify global install path is correct (may already be fine)
-
-## Plan
-
-- [ ] Add `@openai/codex-sdk`, `@openai/codex`, `@openai/codex-linux-x64` to `serverExternalPackages`
-- [ ] Remove manual binary resolution from adapter — let SDK's `findCodexPath()` handle it
-- [ ] Verify `pnpm docker:stack` builds and codex chat works locally
-- [ ] Push and verify preview deploy
+- `apps/web/Dockerfile` — replace broken `pnpm add -g` with `COPY --from=builder` for platform binary
 
 ## Validation
 
-**Command:**
-
 ```bash
-pnpm docker:stack
-# Then send a ChatGPT BYO chat message
+pnpm docker:dev:stack        # build and run full stack
+# Send a ChatGPT BYO chat message from the UI
+# Check: docker logs cogni-app — no MODULE_NOT_FOUND or "Unable to locate Codex CLI"
 ```
-
-**Expected:** Codex spawns successfully. No `MODULE_NOT_FOUND`. Chat response arrives.
-
-**Log check:** No `Cannot find module` errors in `docker logs cogni-app`.
-
-## Review Checklist
-
-- [ ] **Work Item:** `bug.0224` linked in PR body
-- [ ] **Spec:** multi-provider-llm invariants upheld (ADAPTER_IMPLEMENTS_PORT)
-- [ ] **Tests:** existing codex adapter tests still pass
-- [ ] **Reviewer:** assigned and approved
-
-## PR / Links
-
-- Logs: Grafana Cloud, `{env="preview", service="app"} |~ "MODULE_NOT_FOUND"`, 2026-03-28
 
 ## Attribution
 

@@ -86,11 +86,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
 
 # Codex CLI for BYO-AI ChatGPT execution.
-# Standalone output tracing can't detect spawned binaries.
-# Install globally so pnpm resolves platform-specific optional deps (@openai/codex-linux-x64).
-ENV PNPM_HOME="/usr/local/share/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable pnpm && pnpm add -g @openai/codex@0.116.0 @openai/codex-sdk@0.116.0
+# Next.js standalone traces @openai/codex-sdk and @openai/codex (via serverExternalPackages),
+# but misses the platform-specific optional dep (@openai/codex-linux-x64) which contains the
+# actual native binary. The SDK resolves it via dynamic createRequire().resolve() at runtime.
+# Fix: copy the platform binary package from the builder into the standalone node_modules tree
+# where require.resolve walks up to /app/node_modules/@openai/codex-linux-x64.
+COPY --from=builder --chown=nextjs:nodejs \
+  /app/node_modules/.pnpm/@openai+codex@0.116.0-linux-x64/node_modules/@openai/codex \
+  ./node_modules/@openai/codex-linux-x64
 
 USER nextjs
 
