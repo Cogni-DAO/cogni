@@ -61,6 +61,16 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     name: "OpenClaw",
     description: "Community-accessible OpenClaw container agent",
   },
+  {
+    graphId: "langgraph:browser" satisfies GraphId,
+    name: "Browser",
+    description: "Web browsing agent with Playwright MCP",
+  },
+  {
+    graphId: "langgraph:frontend-tester" satisfies GraphId,
+    name: "Frontend Tester",
+    description: "QA agent — tests web UIs via Playwright",
+  },
 ];
 
 /** Default graph ID - exported for page initialization */

@@ -108,6 +108,7 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "biome",
   "biome.json",
   "commitlint.config.cjs",
+  "config",
   "docs",
   "drizzle.config.ts",
   "e2e",

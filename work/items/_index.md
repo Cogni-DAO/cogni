@@ -42,6 +42,8 @@
 | 1 | 1 | 3 | needs_review | task.0149 | GitOps k3s provisioning + scheduler-worker migration | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_implement | task.0154 | PR Review deployment finish — output polish, deployment verification, legacy bot retirement | VCS Integration | proj.vcs-integration |
 | 1 | 1 | 5 | needs_design | task.0202 | provisionNode Temporal workflow — zero-touch node launch | Node Formation & Launch | proj.node-formation-ui |
+| 1 | 1 | 3 | needs_merge | task.0228 | MCP Client MVP — McpToolSource + Playwright browser agent | Agentic Interoperability | proj.agentic-interop |
+| 1 | 1 | 3 | needs_design | spike.0229 | Knowledge Aggregation — KnowledgeCapability Port | OSS Research AI Node | proj.oss-research-node |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD & Services GitOps | proj.cicd-services-gitops |
@@ -56,6 +58,7 @@
 | 1 | 5 | 2 | needs_triage | bug.0069 | Stack tests flaky — all 5 waitForReceipts tests time out when run as full suite |  |  |
 | 1 | 5 | 2 | needs_design | bug.0200 | setup-secrets has no validation that generated secrets are deploy-safe | Database Operations | proj.database-ops |
 | 1 | 5 | 3 | needs_merge | task.0209 | Multi-provider LLM rearchitecture — ModelCatalogPort + ModelRef | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
+| 1 | 5 | 2 | needs_triage | bug.0231 | Token usage has three disagreeing sources — app logs, LiteLLM spend_logs, and billing callback |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -246,9 +249,9 @@
 | 1 | task.0208 | PR review webhook → Temporal parent workflow with durable GitHub writes | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0212 | Unified usage reporting — emit usage_report for all LLM providers (platform, codex, openai-compatible) | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | story.0221 | Agent KPI Observability — agents measure and optimize against their own KPIs | Governance Agents | proj.governance-agents |
+| 1 | spike.0230 | AI Browser Automation Tools — OSS Survey & Integration Path | Agentic Interoperability | proj.agentic-interop |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
-| 2 | spike.0223 | Research: autoresearch experiment loop pattern for agent self-improvement | Governance Agents | proj.governance-agents |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | bug.0194 | Internal graph API conflates stateKey with runId — headless runs create phantom threads | Unified Graph Launch | proj.unified-graph-launch |
 

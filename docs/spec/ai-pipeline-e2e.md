@@ -1,32 +1,34 @@
 ---
-id: billing-data-flow-spec
+id: ai-pipeline-e2e-spec
 type: spec
-title: "Billing Data Flow: End-to-End Usage Reporting"
+title: "AI Pipeline E2E: Auth, Execution, Billing & Security"
 status: active
 spec_state: active
 trust: reviewed
-summary: "Complete data flow from user request through decorator stack, usage emission, receipt writing, and dashboard rendering. Covers all LLM providers: platform (LiteLLM), BYO (Codex, OpenAI-compatible), and sandbox."
-read_when: Understanding how usage data flows through the system, debugging missing billing records, adding a new LLM provider, or modifying the activity dashboard.
+summary: "End-to-end reference for the AI execution pipeline — auth surfaces, graph execution, billing data flow, security posture scorecard, and priority actions. Covers all LLM providers: platform (LiteLLM), BYO (Codex, OpenAI-compatible), and sandbox."
+read_when: Understanding the full AI pipeline (auth → execution → billing → dashboard), debugging missing billing records, adding a new LLM provider, evaluating security posture, or onboarding new engineers.
 implements: proj.byo-ai
 owner: derekg1729
 created: 2026-03-27
-verified: 2026-03-27
-tags: [billing, observability, byo-ai, architecture]
+verified: 2026-03-29
+tags: [billing, auth, security, observability, byo-ai, architecture]
 ---
 
-# Billing Data Flow: End-to-End Usage Reporting
+# AI Pipeline E2E: Auth, Execution, Billing & Security
 
-> One diagram, one narrative. How a user request becomes a `charge_receipt` row becomes a dashboard chart.
+> One diagram, one narrative. How a user request becomes a `charge_receipt` row becomes a dashboard chart — and the security model that protects every layer.
 
 ## Goal
 
-Provide a single reference showing the complete path of usage data through the system — from HTTP request to database row to dashboard chart — across all LLM providers (platform, BYO, sandbox).
+Provide a single reference showing the complete path from user request to dashboard chart — auth, execution, billing, and security posture — across all LLM providers (platform, BYO, sandbox).
 
 ## Non-Goals
 
 - Defining the charge_receipts schema (see [billing-evolution](./billing-evolution.md))
 - Defining the callback protocol (see [billing-ingest](./billing-ingest.md))
 - Defining provider selection or ModelRef (see [multi-provider-llm](./multi-provider-llm.md))
+- Defining RLS policy details (see [database-rls](./database-rls.md))
+- Defining auth surface details (see [security-auth](./security-auth.md))
 
 ## Design
 
@@ -40,6 +42,9 @@ Provide a single reference showing the complete path of usage data through the s
 | **Spec** | [graph-execution](./graph-execution.md)                     | Decorator stack, execution pipeline  |
 | **Spec** | [activity-metrics](./activity-metrics.md)                   | Dashboard query logic                |
 | **Spec** | [external-executor-billing](./external-executor-billing.md) | Reconciliation design                |
+| **Spec** | [security-auth](./security-auth.md)                         | Auth surfaces, route protection      |
+| **Spec** | [database-rls](./database-rls.md)                           | RLS tenant isolation                 |
+| **Spec** | [graph-execution](./graph-execution.md)                     | Execution context, invariants        |
 
 ## End-to-End Flow
 
@@ -340,3 +345,75 @@ Duplicate callbacks or retries produce the same key and are silently dropped (no
 | `packages/ai-core/src/billing/source-system.ts`                     | SourceSystem enum                        |
 | `apps/web/src/app/_facades/ai/activity.server.ts`                   | Activity dashboard query logic           |
 | `apps/web/src/contracts/ai.activity.v1.contract.ts`                 | Activity API response contract           |
+
+## Security Architecture
+
+### Defense-in-Depth Layers
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 1: Transport Auth                                     │
+│  NextAuth JWT (browser) │ Bearer token (machine-to-machine) │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 2: Authorization                                      │
+│  ExecutionGrant (scoped, expirable, revocable)              │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 3: Billing Gate                                       │
+│  PreflightCreditCheck → BillingEnrichment → UsageCommit     │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 4: Data Isolation                                     │
+│  PostgreSQL RLS (SET LOCAL per-transaction, fail-deny)      │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 5: Audit / Metering                                   │
+│  Idempotent charge_receipts, credit_ledger, Langfuse traces │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Security Posture Scorecard
+
+> Assessed 2026-03-29. Compared against practices at Stripe, AWS, Google Cloud, OpenAI, Cloudflare.
+
+| Dimension                       | Our Implementation                                                                                                   | Top 0.1% Benchmark                                                         | Gap       |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | --------- |
+| **Transport auth**              | Timing-safe bearer tokens (`timingSafeEqual`, length guards)                                                         | mTLS / short-lived signed JWTs with automatic rotation                     | Medium    |
+| **Session management**          | NextAuth JWT + HttpOnly cookies, 30-day maxAge, SIWE verification                                                    | Same                                                                       | **None**  |
+| **Tenant isolation**            | PostgreSQL RLS + `SET LOCAL` per-transaction, fail-deny on missing context                                           | Same (this IS the gold standard)                                           | **None**  |
+| **Role separation**             | Dual DB roles (`app_user` / `app_service`) + boot-time enforcement + dep-cruiser import boundary                     | Same + HSM key separation                                                  | Small     |
+| **Authorization**               | Scoped grants (`graph:execute:{id}`), expirable, revocable, validated twice                                          | Same + formal RBAC/ABAC policies                                           | Small     |
+| **Billing attribution**         | Callback-based, `end_user` field, `BILLING_INGEST_TOKEN` shared secret                                               | Per-key attribution, HMAC-signed callbacks                                 | Medium    |
+| **Billing safety**              | Preflight balance check only (single gate at start; negative balances possible by design via `BILLING_NEVER_THROWS`) | Spend caps + per-commit circuit breakers + billing alerts                  | **Large** |
+| **Rate limiting**               | Per-IP token bucket (10 req/min), per-instance, public routes only                                                   | Multi-dimensional (per-IP, per-account, per-model), shared state via Redis | **Large** |
+| **Audit trail**                 | Structured Pino logs, Langfuse traces, analytics events                                                              | Immutable append-only audit table + SIEM integration                       | **Large** |
+| **Secret rotation**             | Static bearer tokens, manual rotation, no expiry                                                                     | Automatic rotation, short-lived tokens, JWKS endpoints                     | Medium    |
+| **Input validation**            | Zod schemas on all endpoints + size limits + format checks                                                           | Same                                                                       | **None**  |
+| **Idempotency**                 | Triple-layer: DB unique constraint + credit ledger partial indexes + application check                               | Same                                                                       | **None**  |
+| **Webhook verification**        | Platform-specific HMAC signature verification (GitHub, Alchemy)                                                      | Same + timestamp-based replay protection                                   | Small     |
+| **Execution context isolation** | `NO_BILLING_LEAKAGE` / `NO_TRACING_LEAKAGE` invariants, AsyncLocalStorage scoping                                    | Same                                                                       | **None**  |
+| **Credential handling**         | `NO_BROWSER_SECRETS`, `HASH_ONLY_STORAGE`, `NO_PLAINTEXT_LITELLM_KEYS`, encrypted BYO via ConnectionBroker           | Same + HSM-backed credential broker sidecar                                | Small     |
+
+### Priority Actions
+
+| Priority | Action                                                                               | Risk Addressed                                                                                              |
+| -------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| **P0**   | Add `spend_limit_credits` to `billing_accounts` + enforcement in `commitUsageFact()` | Compromised grant with loaded account can drain entire balance — preflight runs once at start, not per-call |
+| **P1**   | Per-`billingAccountId` rate limiting via Redis                                       | No throttle between preflight pass and unbounded execution                                                  |
+| **P1**   | Immutable `security_audit_log` table (append-only, no UPDATE/DELETE grants)          | Cannot answer "who did what" without grepping ephemeral logs                                                |
+| **P1**   | HMAC-sign billing ingest callbacks (per-request nonce in outbound LiteLLM metadata)  | `BILLING_INGEST_TOKEN` compromise = arbitrary billing attribution to any account                            |
+| **P2**   | Replace static bearer tokens with short-lived signed JWTs (JWKS endpoint)            | Single point of compromise with no automatic expiry or revocation                                           |
+| **P2**   | Webhook timestamp replay protection                                                  | Idempotency key alone doesn't prevent delayed replay attacks                                                |
+| **P3**   | Credential broker sidecar for BYO keys (app never sees decrypted key)                | App process holds decrypted user credentials in memory during execution                                     |
+
+### Security File Index
+
+| File                                                           | Role                                                   |
+| -------------------------------------------------------------- | ------------------------------------------------------ |
+| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` | Bearer token auth (timing-safe), grant validation      |
+| `apps/web/src/auth.ts`                                         | NextAuth config, SIWE verification, OAuth linking      |
+| `apps/web/src/shared/env/invariants.ts`                        | Boot-time role separation enforcement                  |
+| `apps/web/src/shared/env/server-env.ts`                        | Zod schema for all secrets (min 32 chars)              |
+| `packages/db-client/src/tenant-scope.ts`                       | `withTenantScope()` — SET LOCAL per-transaction        |
+| `packages/db-client/src/adapters/drizzle-grant.adapter.ts`     | Grant validation (scope, expiry, revocation)           |
+| `apps/web/src/bootstrap/http/wrapRouteHandlerWithLogging.ts`   | Route auth guard (required/optional/none)              |
+| `apps/web/src/bootstrap/http/rateLimiter.ts`                   | Token bucket rate limiter                              |
+| `apps/web/src/app/api/internal/billing/ingest/route.ts`        | Billing callback auth + suspicious-zero-cost detection |
+| `docs/spec/database-rls.md`                                    | RLS policy design + dual-role architecture             |

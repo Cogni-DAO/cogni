@@ -4,7 +4,7 @@
 /**
  * Module: `@bootstrap/graph-executor.factory`
  * Purpose: Factory for creating GraphExecutorPort implementations with observability and billing.
- * Scope: Bridges app layer (facades) to adapters layer via bootstrap. Does not contain business logic.
+ * Scope: Bridges app layer (facades) to adapters layer via bootstrap. Does NOT contain business logic.
  * Invariants:
  *   - Facade NEVER imports adapters directly (use this factory)
  *   - Per UNIFIED_GRAPH_EXECUTOR: all graph execution flows through GraphExecutorPort
@@ -13,12 +13,14 @@
  *   - Per CALLBACK_WRITES_PLATFORM_RECEIPTS: UsageCommitDecorator validates usage_report events. Platform receipts via LiteLLM callback; BYO receipts committed directly.
  *   - Per CREDITS_ENFORCED_AT_EXECUTION_PORT: PreflightCreditCheckDecorator rejects runs with insufficient credits
  *   - LAZY_SANDBOX_IMPORT: Sandbox provider loaded via dynamic import() to defer dockerode native addon chain (SandboxRunnerAdapter)
- * Side-effects: global (module-scoped cached sandbox provider promise)
- * Links: container.ts, NamespaceGraphRouter, GRAPH_EXECUTION.md, OBSERVABILITY.md
+ *   - MCP_NOT_SINGLETON: MCP connections use McpConnectionCache with reconnect-on-error + TTL backstop
+ *   - MCP_RECONNECT_ON_ERROR: ErrorDetectingMcpToolSource invalidates cache on transport-level connection errors
+ * Side-effects: global (module-scoped McpConnectionCache, cached sandbox provider promise)
+ * Links: container.ts, NamespaceGraphRouter, GRAPH_EXECUTION.md, OBSERVABILITY.md, mcp-control-plane.md
  * @public
  */
 
-import type { SourceSystem } from "@cogni/ai-core";
+import type { SourceSystem, ToolSourcePort } from "@cogni/ai-core";
 import type {
   ExecutionContext,
   GraphFinal,
@@ -26,7 +28,12 @@ import type {
   GraphRunResult,
 } from "@cogni/graph-execution-core";
 import type { UserId } from "@cogni/ids";
-import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
+import {
+  LANGGRAPH_CATALOG,
+  loadMcpTools,
+  McpToolSource,
+  parseMcpConfigFromEnv,
+} from "@cogni/langgraph-graphs";
 import {
   BillingEnrichmentGraphExecutorDecorator,
   type CompletionStreamFn,
@@ -50,6 +57,7 @@ import type {
   PreflightCreditCheckFn,
 } from "@/ports";
 import { serverEnv } from "@/shared/env";
+import { makeLogger } from "@/shared/observability";
 import {
   type AiAdapterDeps,
   getContainer,
@@ -87,8 +95,10 @@ export function createGraphExecutor(
 
   // Build namespace → provider map
   const env = serverEnv();
+  // Both LangGraphInProcProvider and LangGraphDevProvider expose providerId
+  const providerId = (langGraphProvider as LangGraphInProcProvider).providerId;
   const providers = new Map<string, GraphExecutorPort>([
-    [langGraphProvider.providerId, langGraphProvider],
+    [providerId, langGraphProvider],
     [
       "sandbox",
       new LazySandboxGraphProvider(
@@ -289,20 +299,231 @@ export function runGraphWithScope(params: {
   );
 }
 
+// ---------------------------------------------------------------------------
+// MCP connection cache — shared connection with reconnect-on-error + TTL backstop
+// ---------------------------------------------------------------------------
+
+const mcpLog = makeLogger({ component: "mcp-bootstrap" });
+
+/**
+ * Shared MCP connection cache with reconnect-on-error (correctness) and
+ * TTL backstop (cleanup insurance for silent session expiry).
+ *
+ * This is the MVP seam — not the final control plane. Phase 1 replaces
+ * `parseMcpConfigFromEnv()` with DB registry reads. The `getSource()` interface
+ * stays the same. See docs/spec/mcp-control-plane.md.
+ *
+ * Invariants:
+ *   - MCP_NOT_SINGLETON: Connections have bounded lifetime, not forever cache
+ *   - MCP_RECONNECT_ON_ERROR: Connection errors invalidate cache; next call reconnects
+ *   - GRACEFUL_DEGRADATION: Failed connections → null → agents work without MCP tools
+ */
+class McpConnectionCache {
+  private state: {
+    source: ToolSourcePort;
+    close: () => Promise<void>;
+    createdAt: number;
+  } | null = null;
+  private connecting: Promise<ToolSourcePort | null> | null = null;
+
+  constructor(private readonly ttlMs: number = 5 * 60 * 1000) {}
+
+  /**
+   * Get MCP tool source, reconnecting if stale or on first access.
+   * Cache hit returns immediately. Cache miss or TTL expiry triggers reconnect.
+   * Concurrent callers coalesce on a single reconnect attempt.
+   */
+  async getSource(): Promise<ToolSourcePort | null> {
+    // Fast path: cached and within TTL
+    if (this.state && Date.now() - this.state.createdAt < this.ttlMs) {
+      return this.state.source;
+    }
+    // Coalesce concurrent reconnect attempts
+    if (!this.connecting) {
+      this.connecting = this.connect().finally(() => {
+        this.connecting = null;
+      });
+    }
+    return this.connecting;
+  }
+
+  /**
+   * Invalidate cached connection. Called on connection errors during tool exec.
+   * Next `getSource()` call will reconnect.
+   */
+  invalidate(): void {
+    if (this.state) {
+      const { close } = this.state;
+      this.state = null;
+      // Fire-and-forget close of dead connection
+      close().catch((err) =>
+        mcpLog.warn({ err }, "Error closing stale MCP connection")
+      );
+    }
+  }
+
+  /** Graceful shutdown. Call on SIGTERM/SIGINT. */
+  async close(): Promise<void> {
+    if (this.state) {
+      mcpLog.info("Closing MCP server connections");
+      try {
+        await this.state.close();
+      } catch (err) {
+        mcpLog.error({ err }, "Error closing MCP connections");
+      }
+      this.state = null;
+    }
+  }
+
+  private async connect(): Promise<ToolSourcePort | null> {
+    // Close previous connection if any
+    this.invalidate();
+
+    const config = parseMcpConfigFromEnv();
+    const serverNames = Object.keys(config);
+    if (serverNames.length === 0) {
+      mcpLog.warn(
+        "No MCP servers configured — agents with mcpServerIds will have no tools"
+      );
+      return null;
+    }
+
+    mcpLog.info({ servers: serverNames }, "Connecting to MCP servers");
+    try {
+      const result = await loadMcpTools(config);
+      const innerSource = new McpToolSource(result.tools);
+
+      // Wrap with error detection — connection errors trigger cache invalidation
+      const source = new ErrorDetectingMcpToolSource(innerSource, () =>
+        this.invalidate()
+      );
+
+      this.state = {
+        source,
+        close: () => result.close(),
+        createdAt: Date.now(),
+      };
+      mcpLog.info(
+        {
+          toolCount: result.tools.length,
+          toolNames: result.tools.map((t) => t.name),
+        },
+        "MCP tools connected"
+      );
+      return source;
+    } catch (err) {
+      mcpLog.error({ err }, "Failed to connect MCP tools; continuing without");
+      return null;
+    }
+  }
+}
+
+/**
+ * ToolSourcePort wrapper that detects connection errors during tool exec
+ * and triggers cache invalidation for reconnect-on-error.
+ *
+ * The error is still thrown (toolRunner handles it) — but the cache is
+ * invalidated so the next request gets a fresh connection.
+ */
+class ErrorDetectingMcpToolSource implements ToolSourcePort {
+  constructor(
+    private readonly delegate: McpToolSource,
+    private readonly onConnectionError: () => void
+  ) {}
+
+  getBoundTool(
+    toolId: string
+  ): import("@cogni/ai-core").BoundToolRuntime | undefined {
+    const bound = this.delegate.getBoundTool(toolId);
+    if (!bound) return undefined;
+
+    const onErr = this.onConnectionError;
+    return {
+      ...bound,
+      async exec(
+        args: unknown,
+        ctx: import("@cogni/ai-core").ToolInvocationContext,
+        caps: import("@cogni/ai-core").ToolCapabilities
+      ): Promise<unknown> {
+        try {
+          return await bound.exec(args, ctx, caps);
+        } catch (err) {
+          if (isConnectionError(err)) {
+            mcpLog.warn(
+              { toolId, err },
+              "MCP connection error — invalidating cache for reconnect"
+            );
+            onErr();
+          }
+          throw err;
+        }
+      },
+    };
+  }
+
+  listToolSpecs(): readonly import("@cogni/ai-core").ToolSpec[] {
+    return this.delegate.listToolSpecs();
+  }
+
+  hasToolId(toolId: string): boolean {
+    return this.delegate.hasToolId(toolId);
+  }
+}
+
+/** Detect transport-level connection errors (not application errors from MCP tools). */
+function isConnectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const m = err.message.toLowerCase();
+  return (
+    m.includes("econnrefused") ||
+    m.includes("econnreset") ||
+    m.includes("socket hang up") ||
+    m.includes("fetch failed") ||
+    m.includes("network error") ||
+    m.includes("session not found")
+  );
+}
+
+/** Module-scoped MCP cache instance */
+let _mcpCache: McpConnectionCache | null = null;
+
+function getMcpCache(): McpConnectionCache {
+  if (!_mcpCache) {
+    _mcpCache = new McpConnectionCache();
+  }
+  return _mcpCache;
+}
+
+/**
+ * Close all MCP server connections. Call on process shutdown.
+ * With HTTP transport, this disconnects the client (no subprocess cleanup needed).
+ */
+export async function closeMcpConnections(): Promise<void> {
+  if (_mcpCache) {
+    await _mcpCache.close();
+    _mcpCache = null;
+  }
+}
+
 /**
  * Create InProc provider for in-process graph execution.
  * Per CAPABILITY_INJECTION: toolSource contains real implementations with I/O.
+ * MCP tools resolved via shared cache with reconnect-on-error.
  */
 function createInProcProvider(
   deps: AiAdapterDeps,
   completionStreamFn: CompletionStreamFn
-): LangGraphInProcProvider {
+): GraphExecutorPort {
   const container = getContainer();
   const inprocAdapter = new InProcCompletionUnitAdapter(
     deps,
     completionStreamFn
   );
-  return new LangGraphInProcProvider(inprocAdapter, container.toolSource);
+
+  const cache = getMcpCache();
+  return new LangGraphInProcProvider(inprocAdapter, container.toolSource, () =>
+    cache.getSource()
+  );
 }
 
 /**

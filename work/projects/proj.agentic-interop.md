@@ -95,9 +95,9 @@ We have: hexagonal architecture (57 boundary tests), tool catalog with 6 tools, 
 
 | Deliverable                                                                                    | Status      | Est | Work Item |
 | ---------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Create `McpToolSource` implementing `ToolSourcePort` (pulls from `proj.tool-use-evolution` P2) | Not Started | 2   | —         |
-| MCP tool discovery via `tools/list` on configured external servers                             | Not Started | 1   | —         |
-| `MCP_UNTRUSTED_BY_DEFAULT`: discovered tools require explicit policy enablement                | Not Started | 1   | —         |
+| Create `McpToolSource` implementing `ToolSourcePort` (pulls from `proj.tool-use-evolution` P2) | Done        | 2   | task.0228 |
+| MCP tool discovery via `tools/list` on configured external servers                             | Done        | 1   | task.0228 |
+| `MCP_UNTRUSTED_BY_DEFAULT`: discovered tools require explicit policy enablement                | Done        | 1   | task.0228 |
 | Handle `tools/list_changed`: refresh catalog, keep policy unchanged                            | Not Started | 1   | —         |
 | OAuth client credential flow for agent-to-MCP-server auth                                      | Not Started | 2   | —         |
 | Agent identity: `ActorId` carried in OAuth token for outbound calls                            | Not Started | 1   | —         |

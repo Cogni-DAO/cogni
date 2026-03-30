@@ -19,8 +19,17 @@
  * @public
  */
 
-import { type AiEvent, normalizeErrorToExecutionCode } from "@cogni/ai-core";
+import {
+  type AiEvent,
+  normalizeErrorToExecutionCode,
+  type ToolSpec,
+} from "@cogni/ai-core";
 import type { BaseMessage } from "@langchain/core/messages";
+import {
+  DynamicStructuredTool,
+  type StructuredToolInterface,
+} from "@langchain/core/tools";
+import { z } from "zod";
 import {
   CogniCompletionAdapter,
   type CompletionFn,
@@ -28,11 +37,43 @@ import {
 } from "../runtime/cogni";
 import {
   AsyncQueue,
+  type ToolExecFn,
   toBaseMessage,
   toLangChainToolsCaptured,
 } from "../runtime/core";
 
 import type { GraphResult, InProcRunnerOptions } from "./types";
+
+/**
+ * Create LangChain tool wrappers from MCP ToolSpecs.
+ * These delegate to toolExecFn which routes through toolRunner (policy, billing, redaction).
+ */
+function mcpSpecsToLangChainTools(
+  specs: readonly ToolSpec[],
+  toolExecFn: ToolExecFn
+): StructuredToolInterface[] {
+  return specs.map(
+    (spec) =>
+      new DynamicStructuredTool({
+        name: spec.name,
+        description: spec.description,
+        // Passthrough schema — MCP tools validate internally via BoundToolRuntime
+        schema: z.record(z.unknown()),
+        func: async (args: Record<string, unknown>): Promise<string> => {
+          const result = await toolExecFn(spec.name, args, undefined);
+          if (!result.ok) {
+            return JSON.stringify({
+              error: result.errorCode,
+              message: result.safeMessage,
+            });
+          }
+          return typeof result.value === "string"
+            ? result.value
+            : JSON.stringify(result.value);
+        },
+      }) as StructuredToolInterface
+  );
+}
 
 /**
  * Extract text content from final assistant message.
@@ -88,6 +129,7 @@ export function createInProcGraphRunner<TTool = unknown>(
     completionFn,
     createToolExecFn,
     toolContracts,
+    mcpToolSpecs,
     request,
     responseFormat,
   } = opts;
@@ -121,10 +163,18 @@ export function createInProcGraphRunner<TTool = unknown>(
   const llm = new CogniCompletionAdapter();
 
   // Use toLangChainToolsCaptured since runner provides toolExecFn directly (not from ALS)
-  const tools = toLangChainToolsCaptured({
+  const contractTools = toLangChainToolsCaptured({
     contracts: toolContracts,
     toolExecFn,
   });
+
+  // Merge MCP tool wrappers (delegate to same toolExecFn → toolRunner pipeline)
+  const mcpTools =
+    mcpToolSpecs && mcpToolSpecs.length > 0
+      ? mcpSpecsToLangChainTools(mcpToolSpecs, toolExecFn)
+      : [];
+  const tools =
+    mcpTools.length > 0 ? [...contractTools, ...mcpTools] : contractTools;
 
   // Use factory from catalog instead of hardcoded graph
   const graph = createGraph({
