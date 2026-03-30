@@ -34,7 +34,7 @@ Enable AI-generated content to be drafted, optimized per platform, reviewed by h
 | `broadcast-core` — domain model, ports, rules, errors                                       | Done        | 1.5 | task.0159 |
 | DB schema — 2 tables with RLS + Drizzle adapters                                            | Done        | 2   | task.0159 |
 | API contracts + routes + container wiring                                                   | Done        | 1   | task.0159 |
-| Broadcasting UI — compose, list, detail, review                                             | Done        | 3   | task.0167 |
+| Broadcasting UI — compose, list, detail, review                                             | Done        | 3   | task.0168 |
 | Use-case seam (`broadcast-core/application/`) + echo optimizer + echo publisher + migration | In Review   | 3   | task.0159 |
 | X/Twitter `PublishPort` adapter (OAuth 2.0, rate limiting)                                  | Not Started | 2   | task.0166 |
 | Discord `PublishPort` adapter (webhook)                                                     | Not Started | 0.5 | —         |
@@ -65,7 +65,7 @@ Enable AI-generated content to be drafted, optimized per platform, reviewed by h
 | Content calendar UI                                                      | Not Started | 3   | (create at P2 start) |
 | A/B testing (post variants per platform)                                 | Not Started | 2   | (create at P2 start) |
 | Cross-platform threading (X thread → LinkedIn carousel → Bluesky thread) | Not Started | 2   | (create at P2 start) |
-| Review UI with side-by-side platform previews (upgrade from task.0167)   | Not Started | 2   | (create at P2 start) |
+| Review UI with side-by-side platform previews (upgrade from task.0168)   | Not Started | 2   | (create at P2 start) |
 | Analytics dashboard (engagement trends over time)                        | Not Started | 2   | (create at P2 start) |
 
 ## Constraints

@@ -30,7 +30,7 @@ external_refs:
 
 ## Context
 
-The broadcasting foundation is built: `broadcast-core` package (types, ports, rules, errors), DB schema, Drizzle adapters, API contracts, routes, and UI (task.0167). But the pipeline doesn't DO anything — routes call raw adapters, no optimization runs, no publishing happens, state transitions aren't enforced.
+The broadcasting foundation is built: `broadcast-core` package (types, ports, rules, errors), DB schema, Drizzle adapters, API contracts, routes, and UI (task.0168). But the pipeline doesn't DO anything — routes call raw adapters, no optimization runs, no publishing happens, state transitions aren't enforced.
 
 This task adds the orchestration layer and wires the pipeline end-to-end. The critical architectural constraint: use-case functions live in `broadcast-core` (not in routes or feature services), so Temporal activities can wrap them later without a rewrite. Routes become thin HTTP shells that call use-cases.
 
@@ -43,7 +43,7 @@ This task adds the orchestration layer and wires the pipeline end-to-end. The cr
 - `packages/db-client/src/adapters/drizzle-broadcast-*.adapter.ts` — user + worker adapters ✓
 - `apps/web/src/contracts/broadcast.*.v1.contract.ts` — 3 contract files ✓
 - `apps/web/src/app/api/v1/broadcasting/` — 3 route files ✓
-- `apps/web/src/app/(app)/broadcasting/` — UI (task.0167) ✓
+- `apps/web/src/app/(app)/broadcasting/` — UI (task.0168) ✓
 - `apps/web/src/bootstrap/container.ts` — broadcastLedger wired ✓
 
 ## What This Task Delivers

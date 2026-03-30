@@ -91,13 +91,14 @@ describe("optimizeDraft", () => {
 
   beforeEach(() => {
     const msg = makeMessage();
+    const post = makePost({ status: "pending_optimization" });
     ledger = {
       getContentMessage: vi.fn().mockResolvedValue(msg),
       updateContentMessageStatus: vi.fn().mockResolvedValue(undefined),
-      createPlatformPost: vi.fn().mockResolvedValue(makePost()),
+      createPlatformPost: vi.fn().mockResolvedValue(post),
       updatePlatformPostStatus: vi.fn().mockResolvedValue(undefined),
       finalizePlatformPost: vi.fn().mockResolvedValue(undefined),
-      getPlatformPosts: vi.fn().mockResolvedValue([]),
+      getPlatformPosts: vi.fn().mockResolvedValue([post]),
     };
     optimizer = {
       optimize: vi.fn().mockResolvedValue({
@@ -176,6 +177,20 @@ describe("optimizeDraft", () => {
     await expect(
       optimizeDraft({ ledger, optimizer }, ACTOR_ID, MSG_ID)
     ).rejects.toThrow(InvalidStatusTransitionError);
+  });
+
+  it("transitions message to failed when optimization throws", async () => {
+    vi.mocked(optimizer.optimize).mockRejectedValue(new Error("LLM timeout"));
+
+    await expect(
+      optimizeDraft({ ledger, optimizer }, ACTOR_ID, MSG_ID)
+    ).rejects.toThrow("LLM timeout");
+
+    expect(ledger.updateContentMessageStatus).toHaveBeenCalledWith(
+      ACTOR_ID,
+      MSG_ID,
+      "failed"
+    );
   });
 });
 

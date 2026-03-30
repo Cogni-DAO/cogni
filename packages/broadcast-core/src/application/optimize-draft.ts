@@ -70,40 +70,45 @@ export async function optimizeDraft(
   // 3. Optimize for each platform + create posts
   const riskLevel = assessRisk(message);
   const needsReview = requiresReview(riskLevel);
-  const posts: PlatformPost[] = [];
 
-  for (const platform of message.targetPlatforms) {
-    const result = await optimizer.optimize(message, platform);
+  try {
+    for (const platform of message.targetPlatforms) {
+      const result = await optimizer.optimize(message, platform);
 
-    const post = await ledger.createPlatformPost(actorId, {
-      contentMessageId: messageId,
-      platform,
-      optimizedBody: result.optimizedBody,
-      optimizedTitle: result.optimizedTitle,
-      mediaUrls: [...message.mediaUrls],
-      platformMetadata: result.platformMetadata,
-      riskLevel: result.riskLevel,
-      riskReason: result.riskReason,
-    });
-
-    // Transition post to appropriate status based on risk
-    if (needsReview) {
-      await ledger.updatePlatformPostStatus(actorId, post.id, "pending_review");
-    } else {
-      await ledger.updatePlatformPostStatus(actorId, post.id, "approved");
+      await ledger.createPlatformPost(actorId, {
+        contentMessageId: messageId,
+        platform,
+        optimizedBody: result.optimizedBody,
+        optimizedTitle: result.optimizedTitle,
+        mediaUrls: [...message.mediaUrls],
+        platformMetadata: result.platformMetadata,
+        riskLevel: result.riskLevel,
+        riskReason: result.riskReason,
+      });
     }
-
-    posts.push(post);
+  } catch (error) {
+    // Transition message to failed so it doesn't stay stuck in "optimizing"
+    await ledger.updateContentMessageStatus(actorId, messageId, "failed");
+    throw error;
   }
 
-  // 4. Transition message to review
+  // 4. Transition posts based on risk, then message to review
+  const posts = await ledger.getPlatformPosts(actorId, messageId);
+  for (const post of posts) {
+    const targetStatus = needsReview ? "pending_review" : "approved";
+    await ledger.updatePlatformPostStatus(actorId, post.id, targetStatus);
+  }
+
   await ledger.updateContentMessageStatus(actorId, messageId, "review");
 
-  // Re-fetch message to get updated status
-  const updatedMessage = await ledger.getContentMessage(actorId, messageId);
+  // Re-fetch to get current state
+  const [updatedMessage, updatedPosts] = await Promise.all([
+    ledger.getContentMessage(actorId, messageId),
+    ledger.getPlatformPosts(actorId, messageId),
+  ]);
 
   return {
     message: updatedMessage ?? message,
-    posts,
+    posts: updatedPosts,
   };
 }

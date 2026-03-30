@@ -140,7 +140,11 @@ export const POST = wrapRouteHandlerWithLogging<{
               { platformPostId: postId, err: publishError },
               "broadcast.publish_failed"
             );
-            // Review succeeded even if publish failed — don't error the response
+            // Re-fetch to return current state (may be "failed")
+            const currentPosts =
+              await container.broadcastLedger.getPlatformPosts(userId, msgId);
+            const currentPost = currentPosts.find((p) => p.id === pId);
+            if (currentPost) post = currentPost;
           }
         }
       }

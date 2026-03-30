@@ -41,6 +41,7 @@
 | 1 | 1 | 4 | needs_implement | task.0119 | Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 1 | 3 | needs_review | task.0149 | GitOps k3s provisioning + scheduler-worker migration | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_implement | task.0154 | PR Review deployment finish — output polish, deployment verification, legacy bot retirement | VCS Integration | proj.vcs-integration |
+| 1 | 1 | 3 | needs_merge | task.0159 | Broadcasting Crawl — use-case seam, optimizer, publish pipeline | Broadcasting | proj.broadcasting |
 | 1 | 1 | 5 | needs_design | task.0202 | provisionNode Temporal workflow — zero-touch node launch | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 1 | 3 | needs_merge | task.0228 | MCP Client MVP — McpToolSource + Playwright browser agent | Agentic Interoperability | proj.agentic-interop |
 | 1 | 1 | 3 | needs_design | spike.0229 | Knowledge Aggregation — KnowledgeCapability Port | OSS Research AI Node | proj.oss-research-node |
@@ -101,13 +102,13 @@
 | 1 | 99 | 3 | needs_triage | bug.0132 | Pipeline config leaks source-specific knobs into repo-spec; weight derivation divorced from plugin system |  |  |
 | 1 | 99 | 3 | needs_research | spike.0137 | OSS Research AI Node — Research Spike | OSS Research AI Node | proj.oss-research-node |
 | 1 | 99 | 1 | needs_triage | bug.0139 | CollectEpochWorkflow cannot be invoked without Temporal schedule |  |  |
-| 1 | 99 | 2 | needs_design | task.0159 | Governance signal executor e2e test — live Sepolia tx + webhook replay | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 1 | 99 | 1 | needs_triage | bug.0166 | Stale Split contract holds $10 USDC — deployed with test wallet, cannot distribute | AI Operator Wallet | proj.ai-operator-wallet |
 | 1 | 99 | 2 | needs_triage | story.0193 | Lobster Racing: competitive OpenClaw agents funded by web3 wallets |  |  |
 | 1 | 99 | 2 | needs_triage | spike.0194 | Spike: Lobster Racing infrastructure and provisioning research |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
+| 2 | 3 | 2 | needs_design | task.0166 | X/Twitter PublishPort adapter | Broadcasting | proj.broadcasting |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
@@ -236,11 +237,13 @@
 | 1 | bug.0147 | Next.js 16.0.7 build fails: Turbopack scans thread-stream test fixtures via RainbowKit dep chain, webpack fallback blocked by node: barrel leaks |  |  |
 | 1 | task.0148 | GitOps foundation — Kustomize manifests, k3s IaC module, Argo CD bootstrap | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | task.0153 | PR Review Bot V0 — LangGraph graph + gate orchestrator for automated PR review | VCS Integration | proj.vcs-integration |
+| 1 | spike.0158 | Broadcasting Platform Integration — Research Spike | Broadcasting | proj.broadcasting |
 | 1 | task.0160 | Scheduler-worker Dockerfile cache parity with app | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | task.0162 | Enable TypeScript LSP plugin for Claude Code | Development Workflows | proj.development-workflows |
 | 1 | task.0163 | Add voice-to-text input to chat composer |  |  |
 | 1 | task.0164 | OpenAI-compatible completions — document endpoint + surface agent status streams |  |  |
 | 1 | task.0167 | Node activation: payments.status in repo-spec + pnpm node:activate-payments | AI Operator Wallet | proj.ai-operator-wallet |
+| 1 | task.0168 | Broadcasting UI — compose draft + review posts | Broadcasting | proj.broadcasting |
 | 1 | task.0180 | Split inner executor from per-run wrapper — neutralize usage facts | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0182 | Run stream reconnection endpoint — GET /api/v1/ai/runs/{runId}/stream | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0184 | Live dashboard page: unified operations view with agents table, work items, and activity charts | Live Operations Dashboard | proj.live-dashboard |

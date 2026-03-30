@@ -14,7 +14,6 @@
 "use client";
 
 import {
-  Activity,
   Briefcase,
   CreditCard,
   Github,
