@@ -106,6 +106,7 @@
 | 1 | 99 | 1 | needs_triage | bug.0166 | Stale Split contract holds $10 USDC — deployed with test wallet, cannot distribute | AI Operator Wallet | proj.ai-operator-wallet |
 | 1 | 99 | 2 | needs_triage | story.0193 | Lobster Racing: competitive OpenClaw agents funded by web3 wallets |  |  |
 | 1 | 99 | 2 | needs_triage | spike.0194 | Spike: Lobster Racing infrastructure and provisioning research |  |  |
+| 1 | 99 | 2 | needs_implement | bug.0234 | Activity charts show raw model IDs and "unknown" instead of human-friendly names |  |  |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
