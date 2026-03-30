@@ -2,7 +2,7 @@
 id: bug.0232
 type: bug
 title: "LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents"
-status: needs_review
+status: needs_implement
 priority: 0
 rank: 3
 estimate: 3
@@ -15,11 +15,11 @@ project: proj.agentic-interop
 branch: fix/bug-0232-codex-mcp-tools
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-30
-updated: 2026-03-30
+updated: 2026-03-31
 labels: [ai-graphs, tooling, mcp, byo-ai]
 external_refs:
   - https://developers.openai.com/codex/mcp
@@ -243,6 +243,23 @@ Fix: whitelist only what Codex needs — `HOME`, `PATH`, `NODE_ENV`, `TERM`, plu
 - Related: bug.0231 (token usage triple attestation — Codex also has billing gap)
 - Codex MCP docs: https://developers.openai.com/codex/mcp
 - Codex config reference: https://developers.openai.com/codex/config-reference
+
+## Review Feedback (revision 1)
+
+### Blocking
+
+1. **TOML injection in `generateConfigToml`** — server names and URLs interpolated into TOML without validation/escaping. Validate server name matches `/^[a-zA-Z0-9_-]+$/`, reject or escape URLs containing `"`. Add tests for special characters.
+
+2. **Per-graph MCP scoping missing** — design says `mcpServerIds` filters which servers Codex sees, but implementation passes ALL servers at container construction. Either:
+   - (a) Filter at adapter construction time (requires threading `mcpServerIds` from catalog), or
+   - (b) Explicitly document as `KNOWN_DEVIATION: ALL_SERVERS_VISIBLE` in the adapter with rationale (Codex is user-funded, system prompt guides usage, only 2 servers exist). Update the invariant checklist to reflect reality.
+
+### Non-blocking
+
+- Remove printf-style `%d` from WARN log message (Pino structured fields carry the data)
+- Fix barrel import: `container.ts` imports directly from `codex-mcp-config.ts` instead of barrel
+- Add WARN log in `mcpServersToCodexConfig` when `server.headers` is non-empty (silent data loss)
+- Add test: `buildScopedEnv` with `bearerTokenEnvVar` referencing a var not in env
 
 ## Attribution
 

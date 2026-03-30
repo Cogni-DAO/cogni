@@ -53,6 +53,13 @@ const log = makeLogger({ component: "CodexLlmAdapter" });
  *
  * This keeps all LangGraph graph logic intact — nodes, tools, state machines.
  * Only the LLM completion call routes through ChatGPT instead of LiteLLM/OpenRouter.
+ *
+ * KNOWN_DEVIATION: ALL_SERVERS_VISIBLE — mcpConfig contains ALL configured MCP servers,
+ * not filtered by the graph's mcpServerIds. The ModelProviderPort.createLlmService()
+ * is called before graph execution (in bootstrap/factory), before mcpServerIds are known.
+ * Per-graph filtering would require threading catalog data through the port interface.
+ * Acceptable because: Codex is user-funded ($0 platform cost), system prompt guides usage,
+ * and only 2 servers exist (playwright, grafana). Revisit when ToolHive (Phase 3) lands.
  */
 export class CodexLlmAdapter implements LlmService {
   constructor(
@@ -90,11 +97,9 @@ export class CodexLlmAdapter implements LlmService {
             ? Object.keys(this.mcpConfig).length
             : 0,
         },
-        "INVARIANT_DEVIATION: TOOLS_VIA_TOOLRUNNER — Codex adapter received %d tools via params.tools " +
+        "INVARIANT_DEVIATION: TOOLS_VIA_TOOLRUNNER — Codex adapter received tools via params.tools " +
           "but cannot use OpenAI function-calling format. Tools stripped from LLM request. " +
-          "MCP tools available via config.toml (%d servers configured).",
-        params.tools.length,
-        this.mcpConfig ? Object.keys(this.mcpConfig).length : 0
+          "MCP tools available via config.toml."
       );
     }
 

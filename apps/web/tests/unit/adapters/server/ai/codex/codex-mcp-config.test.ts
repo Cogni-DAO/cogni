@@ -45,6 +45,29 @@ describe("generateConfigToml", () => {
       'bearer_token_env_var = "GRAFANA_SERVICE_ACCOUNT_TOKEN"'
     );
   });
+
+  it("skips server names with invalid TOML characters", () => {
+    const toml = generateConfigToml({
+      "valid-name": { url: "http://ok:8000/mcp" },
+      "bad]name": { url: "http://evil:8000/mcp" },
+    });
+    expect(toml).toContain("[mcp_servers.valid-name]");
+    expect(toml).not.toContain("bad]name");
+  });
+
+  it("escapes quotes in URLs", () => {
+    const toml = generateConfigToml({
+      test: { url: 'http://example.com/path?q="injected"' },
+    });
+    expect(toml).toContain('url = "http://example.com/path?q=\\"injected\\""');
+  });
+
+  it("returns undefined when all server names are invalid", () => {
+    const toml = generateConfigToml({
+      "bad]name": { url: "http://evil:8000/mcp" },
+    });
+    expect(toml).toBeUndefined();
+  });
 });
 
 describe("buildScopedEnv", () => {
@@ -91,6 +114,20 @@ describe("buildScopedEnv", () => {
     const scoped = buildScopedEnv(env);
     expect(scoped.HOME).toBe("/home/user");
     expect(scoped).not.toHaveProperty("MISSING_VAR");
+  });
+
+  it("skips bearer token env var when not present in env", () => {
+    const env: Record<string, string> = {
+      HOME: "/home/user",
+    };
+    const scoped = buildScopedEnv(env, {
+      grafana: {
+        url: "http://grafana-mcp:8000/mcp",
+        bearerTokenEnvVar: "GRAFANA_TOKEN_NOT_SET",
+      },
+    });
+    expect(scoped).not.toHaveProperty("GRAFANA_TOKEN_NOT_SET");
+    expect(scoped.HOME).toBe("/home/user");
   });
 });
 

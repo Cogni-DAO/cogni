@@ -16,6 +16,12 @@
  */
 
 import type { McpServersConfig } from "@cogni/langgraph-graphs";
+import { makeLogger } from "@/shared/observability";
+
+const log = makeLogger({ component: "codex-mcp-config" });
+
+/** Codex config.toml server names must be valid TOML bare keys. */
+const VALID_SERVER_NAME = /^[a-zA-Z0-9_-]+$/;
 
 /**
  * MCP server config entry for Codex config.toml.
@@ -72,13 +78,21 @@ export function generateConfigToml(config: CodexMcpConfig): string | undefined {
 
   const sections: string[] = [];
   for (const [name, entry] of entries) {
-    const lines = [`[mcp_servers.${name}]`, `url = "${entry.url}"`];
+    // Validate server name is a safe TOML bare key
+    if (!VALID_SERVER_NAME.test(name)) {
+      log.warn({ serverName: name }, "Skipping MCP server with invalid name");
+      continue;
+    }
+    // Escape quotes in URL to prevent TOML injection
+    const safeUrl = entry.url.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const lines = [`[mcp_servers.${name}]`, `url = "${safeUrl}"`];
     if (entry.bearerTokenEnvVar) {
-      lines.push(`bearer_token_env_var = "${entry.bearerTokenEnvVar}"`);
+      const safeVar = entry.bearerTokenEnvVar.replace(/"/g, "");
+      lines.push(`bearer_token_env_var = "${safeVar}"`);
     }
     sections.push(lines.join("\n"));
   }
-  return sections.join("\n\n") + "\n";
+  return sections.length > 0 ? sections.join("\n\n") + "\n" : undefined;
 }
 
 /**
@@ -120,7 +134,7 @@ export function buildScopedEnv(
  * Convert McpServersConfig (from parseMcpConfigFromEnv) to CodexMcpConfig.
  *
  * Only HTTP/SSE servers are included — Codex SDK MCP doesn't support stdio transports.
- * Headers with "Authorization: Bearer ..." are converted to bearer_token_env_var references.
+ * Auth headers are NOT converted — Codex uses bearer_token_env_var for auth.
  *
  * @param mcpServers - Parsed MCP server config from parseMcpConfigFromEnv()
  * @returns CodexMcpConfig with HTTP/SSE servers only, or undefined if none
@@ -132,6 +146,12 @@ export function mcpServersToCodexConfig(
 
   for (const [name, server] of Object.entries(mcpServers)) {
     if (server.transport === "http" || server.transport === "sse") {
+      if (server.headers && Object.keys(server.headers).length > 0) {
+        log.warn(
+          { serverName: name },
+          "MCP server has auth headers that cannot be forwarded to Codex config.toml — use bearer_token_env_var instead"
+        );
+      }
       config[name] = { url: server.url };
     }
     // stdio transports skipped — Codex SDK MCP only supports HTTP endpoints
