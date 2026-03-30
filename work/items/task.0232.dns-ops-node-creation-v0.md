@@ -2,7 +2,7 @@
 id: task.0232
 type: task
 title: "dns-ops v0 — DNS layer for multi-node creation pipeline"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 2
 estimate: 3
@@ -14,7 +14,7 @@ credit:
 project: proj.node-formation-ui
 branch: worktree-feat+domain-ops
 pr:
-reviewer:
+reviewer: derekg1729
 revision: 0
 blocked_by:
 deploy_verified: false

@@ -44,7 +44,7 @@ Full node lifecycle: DAO formation (done) -> zero-touch provisioning (this proje
 
 | Deliverable                                                                                                        | Status      | Est | Work Item           |
 | ------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ------------------- |
-| dns-ops package + create-node wizard — Cloudflare DNS automation, node-spec generation, protected record safeguards | In Progress | 3   | `task.0232`         |
+| dns-ops package + create-node wizard — Cloudflare DNS automation, node-spec generation, protected record safeguards | In Review   | 3   | `task.0232`         |
 | Design: extract node-template from operator repo — identity split, repo-spec v0.2.0 merge                         | Not Started | 5   | `task.0233`         |
 | Design: node repo creation + CI/CD onboarding — git lifecycle, secrets, preview deploys                            | Not Started | 5   | `task.0234`         |
 | provisionNode Temporal workflow — full provisioning chain (8 activities, idempotent)                               | Not Started | 8   | `task.0202`         |

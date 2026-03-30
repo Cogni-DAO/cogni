@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/dns-ops/scripts/create-preview`
+ * Purpose: Create a preview subdomain for testing. Does NOT touch protected records.
+ * Scope: Manual testing only. Does NOT run in CI.
+ * Invariants: Protected names (@, www) blocked by helpers.
+ * Side-effects: IO (creates DNS records on Cloudflare)
+ * Links: packages/dns-ops/docs/cloudflare-dns-setup.md
+ * @internal
+ */
+
 import {
   CloudflareAdapter,
   removeDnsRecord,
