@@ -12,8 +12,8 @@ spec_refs: [multi-provider-llm]
 assignees: [derekg1729]
 credit:
 project: proj.byo-ai
-branch: fix/codex-docker-platform-binary
-pr: https://github.com/Cogni-DAO/node-template/pull/661
+branch: fix/codex-dockerfile-hotfix
+pr:
 reviewer:
 revision: 1
 blocked_by: []
