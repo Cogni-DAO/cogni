@@ -101,7 +101,8 @@ export function chatMessagesToDtos(messages: ChatMessage[]): MessageDto[] {
 
 export interface CompletionInput {
   messages: MessageDto[];
-  model: string;
+  /** Fully-resolved model reference (provider + model + optional connection) */
+  modelRef: import("@cogni/ai-core").ModelRef;
   sessionUser: SessionUser;
   /** Graph name or fully-qualified graphId to execute */
   graphName: string;
@@ -155,7 +156,7 @@ export function toOpenAiFinishReason(
 
 export interface ChatCompletionInput {
   messages: ChatMessage[];
-  model: string;
+  modelRef: import("@cogni/ai-core").ModelRef;
   sessionUser: SessionUser;
   /** Graph name or fully-qualified graphId to execute */
   graphName?: string;
@@ -181,7 +182,7 @@ export async function chatCompletion(
   const { stream, final } = await completionStream(
     {
       messages: messageDtos,
-      model: input.model,
+      modelRef: input.modelRef,
       sessionUser: input.sessionUser,
       graphName,
       ...(input.stateKey ? { stateKey: input.stateKey } : {}),
@@ -215,7 +216,7 @@ export async function chatCompletion(
       id: `chatcmpl-${result.requestId}`,
       object: "chat.completion",
       created: Math.floor(Date.now() / 1000),
-      model: input.model,
+      model: input.modelRef.modelId,
       choices: [
         {
           index: 0,
@@ -266,7 +267,7 @@ export async function chatCompletion(
 
 export interface ChatCompletionStreamInput {
   messages: ChatMessage[];
-  model: string;
+  modelRef: import("@cogni/ai-core").ModelRef;
   sessionUser: SessionUser;
   /** Graph name or fully-qualified graphId to execute */
   graphName?: string;
@@ -295,7 +296,7 @@ export async function chatCompletionStream(
   return completionStream(
     {
       messages: messageDtos,
-      model: input.model,
+      modelRef: input.modelRef,
       sessionUser: input.sessionUser,
       graphName,
       ...(input.stateKey ? { stateKey: input.stateKey } : {}),
@@ -354,7 +355,7 @@ export async function completionStream(
           executionGrantId: null,
           input: {
             messages: input.messages,
-            model: input.model,
+            modelRef: input.modelRef,
             stateKey: input.stateKey,
             actorUserId: input.sessionUser.id,
             billingAccountId: billingAccount.id,

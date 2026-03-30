@@ -3,7 +3,7 @@ id: proj.ci-cd-reusable
 type: project
 primary_charter:
 title: Reusable CI/CD Rails & Multi-Node Pipeline
-state: Paused
+state: Done
 priority: 3
 estimate: 5
 summary: Extract CI/CD workflows into reusable seams, then optionally into shared rails kit for multi-node deployment
@@ -18,6 +18,8 @@ labels:
 ---
 
 # Reusable CI/CD Rails & Multi-Node Pipeline
+
+> **STATUS: ARCHIVED** — Merged into proj.cicd-services-gitops as a future phase. Reusable workflow extraction happens naturally when multi-node provisioning (task.0202 in proj.node-formation-ui) creates the second consumer.
 
 > Source: NODE_CI_CD_CONTRACT.md Phases P1–P3
 

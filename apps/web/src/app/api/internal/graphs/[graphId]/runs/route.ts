@@ -43,6 +43,7 @@ import {
   executeStream,
   redactSecretsInMessages,
 } from "@/features/ai/public.server";
+import { commitUsageFact } from "@/features/ai/services/billing";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
 
@@ -450,15 +451,46 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         ? [{ role: "user", content: input.message }]
         : [];
 
-    // Model is required - no fallback
-    if (typeof input.model !== "string") {
-      log.error("Missing required model field");
+    // ModelRef is required - parse from workflow input
+    const modelRef = (() => {
+      // New format: modelRef object
+      if (input.modelRef && typeof input.modelRef === "object") {
+        const ref = input.modelRef as {
+          providerKey?: string;
+          modelId?: string;
+          connectionId?: string;
+        };
+        if (
+          typeof ref.providerKey === "string" &&
+          typeof ref.modelId === "string"
+        ) {
+          return {
+            providerKey: ref.providerKey,
+            modelId: ref.modelId,
+            ...(typeof ref.connectionId === "string"
+              ? { connectionId: ref.connectionId }
+              : {}),
+          };
+        }
+      }
+      log.error("Missing required modelRef field");
+      return null;
+    })();
+    if (!modelRef) {
       return NextResponse.json(
-        { error: "model field is required" },
+        { error: "modelRef field is required" },
         { status: 400 }
       );
     }
-    const model = input.model;
+
+    log.info(
+      {
+        providerKey: modelRef.providerKey,
+        modelId: modelRef.modelId,
+        connectionId: modelRef.connectionId ?? null,
+      },
+      "Parsed modelRef for graph execution"
+    );
 
     const accountService = container.accountsForUser(toUserId(actorUserId));
 
@@ -481,10 +513,27 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
     const scopedExecutor = createScopedGraphExecutor({
       executor,
       preflightCheckFn,
+      commitByoUsage: async (fact, log) => {
+        await commitUsageFact(
+          fact,
+          {
+            runId: fact.runId,
+            attempt: fact.attempt,
+            ingressRequestId: fact.runId,
+          },
+          accountService,
+          log
+        );
+      },
       billing: {
         billingAccountId,
         virtualKeyId,
       },
+      resolver: container.providerResolver,
+      actorId: actorUserId,
+      ...(container.connectionBroker
+        ? { broker: container.connectionBroker }
+        : {}),
     });
     const messages = (
       messageDtos as Array<{ role: string; content: string }>
@@ -493,9 +542,6 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
       content: m.content,
     }));
     // Forward responseFormat if provided (enables structuredOutput in GraphRunResult).
-    // Zod schemas are not JSON-serializable, so callers pass responseFormat as a
-    // serializable { prompt, schema } object. The schema is passed through as-is
-    // to the graph executor which handles both Zod and plain objects.
     const responseFormat = resolveResponseFormat(input);
 
     const result = scopedExecutor.runGraph(
@@ -503,7 +549,7 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         runId,
         graphId,
         messages,
-        model,
+        modelRef,
         ...(stateKey !== undefined && { stateKey }),
         ...(responseFormat !== undefined && { responseFormat }),
       },

@@ -79,7 +79,7 @@ describe("app/_facades/ai/completion.server", () => {
     const result = await chatCompletion(
       {
         messages: [{ role: "user", content: "Hello" }],
-        model: TEST_MODEL_ID,
+        modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
         sessionUser: TEST_SESSION_USER_1,
         graphName: "langgraph:poet",
       },
@@ -120,7 +120,7 @@ describe("app/_facades/ai/completion.server", () => {
       chatCompletion(
         {
           messages: [{ role: "user", content: "Hello" }],
-          model: TEST_MODEL_ID,
+          modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
           sessionUser: TEST_SESSION_USER_1,
           graphName: "langgraph:poet",
         },

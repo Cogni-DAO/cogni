@@ -9,6 +9,7 @@
  *   - COMPLETION_UNIT_NOT_PORT: This is a CompletionUnitAdapter, not GraphExecutorPort
  *   - GRAPH_LLM_VIA_COMPLETION: Delegates to completion.executeStream for billing/telemetry
  *   - P0_ATTEMPT_FREEZE: attempt is always 0 (no run persistence)
+ *   - USAGE_ALWAYS_EMITTED: Emits usage_report for every successful completion regardless of provider
  *   - NO_AWAIT_FINAL_IN_LOOP: Must break out of for-await before awaiting final (prevents deadlock)
  * Side-effects: IO (via injected completion function)
  * Links: AGENT_DISCOVERY.md, GRAPH_EXECUTION.md, features/ai/services/completion.ts
@@ -186,10 +187,13 @@ export class InProcCompletionUnitAdapter {
           traceId,
         };
 
+        // Resolved LlmService from execution scope (set by provider registry at launch)
+        const llmService = scope.llmService;
+
         completionPromiseHolder.promise = this.completionStream({
           messages,
           model,
-          llmService: this.deps.llmService,
+          llmService,
           accountService: this.deps.accountService,
           clock: this.deps.clock,
           caller,
@@ -254,6 +258,7 @@ export class InProcCompletionUnitAdapter {
     }
   ): AsyncIterable<AiEvent> {
     const { runId, attempt, graphId } = runContext;
+    const scope = getExecutionScope();
     const completionResult = await getCompletionPromise();
     const { stream, final } = completionResult;
 
@@ -279,34 +284,36 @@ export class InProcCompletionUnitAdapter {
       if (sawDone) break;
     }
 
-    // Emit usage_report (but NOT done - caller handles that)
+    // Emit usage_report for ALL providers (but NOT done - caller handles that)
     const result = await final;
     if (result.ok) {
-      // CRITICAL: Missing litellmCallId is a BUG - fail the run deterministically
-      if (!result.litellmCallId) {
+      const { usageSource } = scope;
+      // PLATFORM_CALLID_STILL_REQUIRED: platform runs without litellmCallId are a billing violation.
+      if (!result.litellmCallId && usageSource === "litellm") {
         this.log.error(
           { runId, model: result.model },
           "CRITICAL: LiteLLM response missing call ID - billing incomplete, failing run"
         );
-        // Throw to propagate error to final (fail run, prevent silent under-billing)
         throw new Error(
           "Billing failed: LiteLLM response missing call ID (x-litellm-call-id)"
         );
       }
 
+      // DETERMINISTIC_BYO_USAGE_ID: BYO usageUnitId is deterministic for retry idempotency.
+      // Platform runs use litellmCallId (stable per-call). BYO runs use runId/attempt/byo.
+      const usageUnitId = result.litellmCallId ?? `${runId}/${attempt}/byo`;
       const fact: UsageFact = {
         runId,
         attempt,
-        source: "litellm",
+        source: usageSource,
         executorType: "inproc",
-        graphId, // For per-agent analytics
-        inputTokens: result.usage.promptTokens,
-        outputTokens: result.usage.completionTokens,
-        usageUnitId: result.litellmCallId, // Required, no fallback
+        graphId,
+        usageUnitId,
+        inputTokens: result.usage?.promptTokens,
+        outputTokens: result.usage?.completionTokens,
         ...(result.model && { model: result.model }),
-        ...(result.providerCostUsd !== undefined && {
-          costUsd: result.providerCostUsd,
-        }),
+        // BYO_ZERO_PLATFORM_COST: respect any cost the adapter reports, default to 0.
+        costUsd: result.providerCostUsd ?? 0,
       };
       const usageEvent: UsageReportEvent = { type: "usage_report", fact };
       yield usageEvent;

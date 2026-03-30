@@ -16,6 +16,11 @@
 
 import { BRAIN_GRAPH_NAME, createBrainGraph } from "./graphs/brain/graph";
 import { BRAIN_TOOL_IDS } from "./graphs/brain/tools";
+import { BROWSER_GRAPH_NAME, createBrowserGraph } from "./graphs/browser/graph";
+import {
+  createFrontendTesterGraph,
+  FRONTEND_TESTER_GRAPH_NAME,
+} from "./graphs/frontend-tester/graph";
 import { createPoetGraph, POET_GRAPH_NAME } from "./graphs/poet/graph";
 import { POET_TOOL_IDS } from "./graphs/poet/tools";
 import {
@@ -43,8 +48,10 @@ import type { CreateGraphFn } from "./inproc/types";
 interface CatalogEntry {
   readonly displayName: string;
   readonly description: string;
-  /** Tool IDs this graph may use. Providers resolve from TOOL_CATALOG. */
+  /** Native tool IDs this graph may use. Providers resolve from TOOL_CATALOG. */
   readonly toolIds: readonly string[];
+  /** MCP server names whose tools this graph may use. Empty = no MCP tools. */
+  readonly mcpServerIds?: readonly string[];
   readonly graphFactory: CreateGraphFn;
 }
 
@@ -114,6 +121,31 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     toolIds: [],
     graphFactory: createPrReviewGraph,
   },
+
+  /**
+   * Browser graph - web browsing agent via Playwright MCP.
+   * No native tools — all tools come from MCP servers.
+   */
+  [BROWSER_GRAPH_NAME]: {
+    displayName: "Browser",
+    description: "Web browsing agent with Playwright MCP browser access",
+    toolIds: [],
+    mcpServerIds: ["playwright"],
+    graphFactory: createBrowserGraph,
+  },
+
+  /**
+   * Frontend tester graph - QA agent that drives Playwright to verify UI behavior.
+   * Navigates, interacts, screenshots, and reports pass/fail per test case.
+   */
+  [FRONTEND_TESTER_GRAPH_NAME]: {
+    displayName: "Frontend Tester",
+    description:
+      "QA agent that tests web UIs via Playwright and monitors system health via Grafana",
+    toolIds: [],
+    mcpServerIds: ["playwright", "grafana"],
+    graphFactory: createFrontendTesterGraph,
+  },
 } as const;
 
 /**
@@ -136,6 +168,8 @@ export const LANGGRAPH_GRAPH_IDS = {
   ponderer: `${LANGGRAPH_PROVIDER_ID}:${PONDERER_GRAPH_NAME}`,
   research: `${LANGGRAPH_PROVIDER_ID}:${RESEARCH_GRAPH_NAME}`,
   "pr-review": `${LANGGRAPH_PROVIDER_ID}:${PR_REVIEW_GRAPH_NAME}`,
+  browser: `${LANGGRAPH_PROVIDER_ID}:${BROWSER_GRAPH_NAME}`,
+  "frontend-tester": `${LANGGRAPH_PROVIDER_ID}:${FRONTEND_TESTER_GRAPH_NAME}`,
 } as const;
 
 /**

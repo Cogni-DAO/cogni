@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Production runtime configuration directory copied to VM hosts for container orchestration and database initialization. Contains app + postgres + litellm + alloy + temporal + git-sync services, plus OpenClaw gateway services (`llm-proxy-openclaw`, `openclaw-gateway`) under the `sandbox-openclaw` compose profile. Edge (Caddy) is in separate `../edge/` project.
+Production runtime configuration directory copied to VM hosts for container orchestration and database initialization. Contains app + postgres + litellm + alloy + temporal + git-sync services, OpenClaw gateway services under the `sandbox-openclaw` profile, and Playwright MCP server under the `mcp-playwright` profile (dev-only). Edge (Caddy) is in separate `../edge/` project.
 
 ## Pointers
 
@@ -126,3 +126,11 @@ docker compose --project-name cogni-runtime logs -f app
 - `temporal-ui`: Web UI for debugging schedules (localhost:8233)
 - Namespace auto-created via `DEFAULT_NAMESPACE=cogni-{APP_ENV}`
 - Port forwarding: 127.0.0.1:7233 (gRPC), 127.0.0.1:8233 (UI)
+
+**Playwright MCP (profile: mcp-playwright, dev-only):**
+
+- `playwright-mcp`: Browser automation MCP server on `cogni-edge`, port 127.0.0.1:3003→3003
+- Image: `mcr.microsoft.com/playwright/mcp`, Streamable HTTP on `/mcp`
+- Env: `MCP_PLAYWRIGHT_URL` on app service (default: `http://playwright-mcp:3003/mcp`)
+- Start: `pnpm dev:infra:mcp`
+- Not in production compose — dev-only. See [MCP Control Plane Spec](../../../docs/spec/mcp-control-plane.md)

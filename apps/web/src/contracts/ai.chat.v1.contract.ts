@@ -12,6 +12,7 @@
  * @internal
  */
 
+import { ModelRefSchema } from "@cogni/ai-core";
 import { z } from "zod";
 
 /** Max user message length (matches route-level MAX_USER_TEXT_CHARS) */
@@ -70,8 +71,8 @@ export const ChatMessageSchema = z.object({
 export const AssistantUiInputSchema = z.object({
   /** The user's message text */
   message: z.string().min(1).max(MAX_USER_MESSAGE_CHARS),
-  /** Model ID */
-  model: z.string(),
+  /** Fully-resolved model reference (provider + model + optional connection) */
+  modelRef: ModelRefSchema,
   /** Graph name or fully-qualified graphId to execute (required) */
   graphName: z.string(),
   /**

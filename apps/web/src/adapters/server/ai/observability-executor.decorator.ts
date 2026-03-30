@@ -85,7 +85,8 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
    * Wraps inner executor, creates trace, handles terminal state.
    */
   runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
-    const { runId, graphId, messages, model } = req;
+    const { runId, graphId, messages, modelRef } = req;
+    const model = modelRef.modelId;
     const requestId = ctx?.requestId ?? req.runId;
     const maskContent = ctx?.maskContent ?? false;
 

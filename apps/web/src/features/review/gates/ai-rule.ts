@@ -81,7 +81,7 @@ export async function evaluateAiRule(params: {
     runId,
     graphId: LANGGRAPH_GRAPH_IDS["pr-review"],
     messages: [{ role: "user", content: userMessage }],
-    model,
+    modelRef: { providerKey: "platform", modelId: model },
     responseFormat: {
       prompt:
         "Respond with a JSON object containing a `metrics` array and a `summary` string. " +

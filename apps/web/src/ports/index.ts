@@ -14,7 +14,8 @@
  * @public
  */
 
-export type { GraphId } from "@cogni/ai-core";
+export type { GraphId, ModelCapabilities, ModelRef } from "@cogni/ai-core";
+export { ModelCapabilitiesSchema, ModelRefSchema } from "@cogni/ai-core";
 export type {
   ExecutionContext,
   GraphExecutorPort,
@@ -74,6 +75,11 @@ export type {
 } from "./billing-context";
 export type { Clock } from "./clock.port";
 export type {
+  ConnectionBrokerPort,
+  ConnectionScope,
+  ResolvedConnection,
+} from "./connection-broker.port";
+export type {
   GovernanceRun,
   GovernanceStatusPort,
   UpcomingRun,
@@ -117,6 +123,13 @@ export type {
   TemplateQueryResult,
   TemplateSummary,
 } from "./metrics-query.port";
+export type { ModelCatalogPort } from "./model-catalog.port";
+export type {
+  ModelOption,
+  ModelProviderPort,
+  ProviderContext,
+} from "./model-provider.port";
+export type { ModelProviderResolverPort } from "./model-provider-resolver.port";
 export type {
   OnChainVerifier,
   VerificationResult,

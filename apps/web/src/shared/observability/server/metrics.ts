@@ -167,6 +167,23 @@ export const billingInvariantViolationTotal = getOrCreateCounter(
 );
 
 // =============================================================================
+// BYO-AI Auth Metrics (alertable — critical auth path)
+// =============================================================================
+
+export const byoAuthTotal = getOrCreateCounter(
+  "byo_auth_total",
+  "BYO-AI auth flow outcomes (device code + token exchange)",
+  ["route", "outcome", "error_code"] as const
+);
+
+export const byoAuthDurationMs = getOrCreateHistogram(
+  "byo_auth_duration_ms",
+  "BYO-AI auth flow latency",
+  ["route"] as const,
+  [100, 500, 1000, 2000, 5000, 10000, 30000]
+);
+
+// =============================================================================
 // Helpers
 // =============================================================================
 

@@ -52,6 +52,30 @@ export function buildSandboxUsageFact(
 }
 
 /**
+ * Create a valid UsageFact for BYO (codex/ollama) inproc executor.
+ * Passes UsageFactStrictSchema. Uses deterministic usageUnitId and costUsd: 0.
+ */
+export function buildByoUsageFact(
+  overrides: Partial<UsageFact> = {}
+): UsageFact {
+  return {
+    runId: "run-abc-123",
+    attempt: 0,
+    usageUnitId: "run-abc-123/0/byo",
+    source: "codex",
+    executorType: "inproc",
+    billingAccountId: "billing-acct-1",
+    virtualKeyId: "vk-1",
+    graphId: "langgraph:poet",
+    model: "gpt-4o",
+    inputTokens: 200,
+    outputTokens: 80,
+    costUsd: 0,
+    ...overrides,
+  };
+}
+
+/**
  * Create a valid UsageFact for external/telemetry executor (hints schema).
  * Passes UsageFactHintsSchema by default. usageUnitId intentionally omitted.
  */

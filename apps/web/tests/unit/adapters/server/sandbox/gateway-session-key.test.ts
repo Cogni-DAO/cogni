@@ -27,6 +27,7 @@ const TEST_SCOPE = {
     billingAccountId: "ba-acct-42",
     virtualKeyId: "vk-1",
   },
+  usageSource: "litellm" as const,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ function makeRequest(
   return {
     runId: "run-test-123",
     graphId: "sandbox:openclaw",
-    model: "cogni/test-model",
+    modelRef: { providerKey: "platform", modelId: "cogni/test-model" },
     messages: [{ role: "user", content: "Hello" }],
     ...overrides,
   } as GraphRunRequest;
@@ -164,9 +165,11 @@ describe("SandboxGraphProvider gateway session key", () => {
     const req = makeRequest({ stateKey: "same-thread" });
     const scopeAlice = {
       billing: { billingAccountId: "ba-alice", virtualKeyId: "vk-1" },
+      usageSource: "litellm" as const,
     };
     const scopeBob = {
       billing: { billingAccountId: "ba-bob", virtualKeyId: "vk-2" },
+      usageSource: "litellm" as const,
     };
 
     // Reset mock for second call

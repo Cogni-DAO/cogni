@@ -26,6 +26,12 @@ ENV npm_config_disturl=https://nodejs.org/dist
 RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
     pnpm install --frozen-lockfile --ignore-scripts
 
+# Codex: stash platform binary for runner (standalone tracing misses it).
+RUN ARCH=$(node -p "process.arch === 'x64' ? 'x64' : 'arm64'") && \
+    mkdir -p /tmp/codex-native/@openai && \
+    cp -rL "node_modules/.pnpm/@openai+codex@0.116.0-linux-${ARCH}/node_modules/@openai/codex" \
+           "/tmp/codex-native/@openai/codex-linux-${ARCH}"
+
 # 3. Copy full source (filtered by .dockerignore)
 COPY . .
 
@@ -84,6 +90,21 @@ LABEL org.opencontainers.image.title="cogni-template"
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/public ./apps/web/public
+
+# Codex CLI for BYO-AI ChatGPT execution.
+# Standalone output tracing can't detect spawned binaries.
+# Install globally so pnpm resolves platform-specific optional deps (@openai/codex-linux-x64).
+ENV PNPM_HOME="/usr/local/share/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable pnpm && pnpm add -g @openai/codex@0.116.0 @openai/codex-sdk@0.116.0
+
+# The global install has broken symlinks (pnpm v10 CAS). This COPY places the real
+# platform binary where the SDK's createRequire chain finds it. See bug.0224.
+COPY --from=builder --chown=nextjs:nodejs /tmp/codex-native/@openai/ ./node_modules/@openai/
+
+# MCP server config — parseMcpConfigFromEnv reads config/mcp.servers.json relative to CWD.
+# Next.js standalone does process.chdir(__dirname) → CWD becomes /app/apps/web at runtime.
+COPY --from=builder --chown=nextjs:nodejs /app/config/mcp.servers.json ./apps/web/config/mcp.servers.json
 
 USER nextjs
 

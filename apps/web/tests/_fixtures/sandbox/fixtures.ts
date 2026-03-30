@@ -258,7 +258,7 @@ export function makeGatewayRunRequest(
     ingressRequestId: runId,
     graphId: "sandbox:openclaw" as GraphRunRequest["graphId"],
     stateKey: TEST_GATEWAY_STATE_KEY,
-    model: "cogni/test-model",
+    modelRef: { providerKey: "platform", modelId: "cogni/test-model" },
     messages: [{ role: "user", content: "Hello" }],
     caller: {
       billingAccountId: TEST_BILLING_ACCOUNT_ID,

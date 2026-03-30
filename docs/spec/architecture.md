@@ -55,6 +55,7 @@ Every dependency points inward.
 - Wallet Integration: [Wallet Auth Setup](../guides/wallet-auth-setup.md)
 - Billing Evolution: [Billing Evolution](billing-evolution.md)
 - Activity Metrics: [Activity Metrics](activity-metrics.md)
+- AI Pipeline E2E: [AI Pipeline E2E](ai-pipeline-e2e.md) — Auth, execution, billing flow & security scorecard
 
 ### Vertical slicing
 

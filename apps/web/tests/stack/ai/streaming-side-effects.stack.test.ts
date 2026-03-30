@@ -78,7 +78,7 @@ describe("STREAMING_SIDE_EFFECTS_ONCE invariant", () => {
       const modelsRes = await modelsGET(modelsReq);
       expect(modelsRes.status).toBe(200);
       const modelsData = await modelsRes.json();
-      const { defaultPreferredModelId: defaultModelId } = modelsData;
+      const { defaultRef: defaultModelRef } = modelsData;
 
       // Record counts BEFORE request
       const receiptsBefore = await db
@@ -93,7 +93,7 @@ describe("STREAMING_SIDE_EFFECTS_ONCE invariant", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...createChatRequest({
-            model: defaultModelId,
+            modelRef: defaultModelRef,
             stateKey: randomUUID(),
             messages: [
               {
@@ -192,7 +192,7 @@ describe("STREAMING_SIDE_EFFECTS_ONCE invariant", () => {
       );
       const modelsRes = await modelsGET(modelsReq);
       const modelsData = await modelsRes.json();
-      const { defaultPreferredModelId: defaultModelId } = modelsData;
+      const { defaultRef: defaultModelRef } = modelsData;
 
       // Send request that will produce multiple chunks
       const req = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
@@ -200,7 +200,7 @@ describe("STREAMING_SIDE_EFFECTS_ONCE invariant", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...createChatRequest({
-            model: defaultModelId,
+            modelRef: defaultModelRef,
             stateKey: randomUUID(),
             messages: [
               {
@@ -285,7 +285,7 @@ describe("STREAMING_SIDE_EFFECTS_ONCE invariant", () => {
       );
       const modelsRes = await modelsGET(modelsReq);
       const modelsData = await modelsRes.json();
-      const { defaultPreferredModelId: defaultModelId } = modelsData;
+      const { defaultRef: defaultModelRef } = modelsData;
 
       // Record state before request
       const receiptsBefore = await db
@@ -303,7 +303,7 @@ describe("STREAMING_SIDE_EFFECTS_ONCE invariant", () => {
         signal: ac.signal,
         body: JSON.stringify({
           ...createChatRequest({
-            model: defaultModelId,
+            modelRef: defaultModelRef,
             stateKey: randomUUID(),
             messages: [
               {

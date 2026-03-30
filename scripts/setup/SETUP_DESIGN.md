@@ -145,6 +145,8 @@ pnpm setup github --env production
        - `PRIVY_APP_ID` (from privy.io → App Settings)
        - `PRIVY_APP_SECRET` (from privy.io → App Settings)
        - `PRIVY_SIGNING_KEY` (PKCS8 PEM, multi-line — from privy.io → App Settings → Signing Key)
+     - **BYO-AI — Connection Encryption (optional — BYO-AI disabled when unset):**
+       - `CONNECTIONS_ENCRYPTION_KEY` (64 hex chars / 32 bytes — generate with `openssl rand -hex 32`)
    - **Deployment secrets:** From previous steps
      - `SSH_DEPLOY_KEY` (from `~/.ssh/cogni_template_<env>_deploy`)
      - `VM_HOST` (from `.env.<env>` file)

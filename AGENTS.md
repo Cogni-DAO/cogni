@@ -54,6 +54,7 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - [Testing Strategy](docs/guides/testing.md) — Test types, when to use each
 - [Style & Lint Rules](docs/spec/style.md) — Code style and lint configuration
 - [AI Setup Spec](docs/spec/ai-setup.md) — AI correlation IDs, telemetry
+- [AI Pipeline E2E](docs/spec/ai-pipeline-e2e.md) — Auth, execution, billing flow & security scorecard
 - [Work Management](work/README.md) — Charters, projects, and work items
 - [Subdir AGENTS.md Policy](docs/templates/agents_subdir_template.md) — Template for subdirectory files
 

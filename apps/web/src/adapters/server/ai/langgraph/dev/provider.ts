@@ -152,7 +152,8 @@ export class LangGraphDevProvider implements GraphExecutorPort {
     threadMetadata: { billingAccountId: string; stateKey: string },
     requestId: string
   ): GraphRunResult {
-    const { runId, messages, toolIds, model, graphId } = req;
+    const { runId, messages, toolIds, modelRef, graphId } = req;
+    const model = modelRef.modelId;
     const attempt = 0; // P0_ATTEMPT_FREEZE
 
     // P0 Contract: undefined => catalog default, [] => deny-all, [...] => exact

@@ -3,51 +3,63 @@
 
 /**
  * Module: `@app/api/v1/ai/models`
- * Purpose: Provides HTTP endpoint for listing available AI models.
- * Scope: Auth-protected GET endpoint that returns cached model list with tier info. Does not implement caching logic or model fetching.
- * Invariants: Uses server-side cache (no per-request network calls), validates with contract.
+ * Purpose: Provides HTTP endpoint for listing available AI models from all providers.
+ * Scope: Auth-protected GET endpoint that returns aggregated model list via ModelCatalogPort.
+ * Invariants: Uses ModelCatalogPort (providers handle caching), validates with contract.
  * Side-effects: IO (HTTP request/response)
- * Notes: Implements SEC-001 (auth-protected) and PERF-001 (cached).
- * Links: ai.models.v1.contract, models-cache utility
+ * Links: ai.models.v1.contract, ModelCatalogPort, docs/spec/multi-provider-llm.md
  * @public
  */
 
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
+import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import type { Model } from "@/contracts/ai.models.v1.contract";
 import { aiModelsOperation } from "@/contracts/ai.models.v1.contract";
-import {
-  getCachedModels,
-  type ModelMeta,
-} from "@/shared/ai/model-catalog.server";
-import { serverEnv } from "@/shared/env";
+import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export const GET = wrapRouteHandlerWithLogging(
   { routeId: "ai.models", auth: { mode: "required", getSessionUser } },
-  async (ctx, _request, _sessionUser) => {
+  async (ctx, _request, sessionUser) => {
     const startMs = performance.now();
     try {
-      // Fetch from cache (fast, no network call)
-      // defaults are computed from catalog metadata tags (never from env)
-      const { models, defaults } = await getCachedModels();
+      if (!sessionUser) throw new Error("sessionUser required");
 
-      // Map internal ModelMeta to contract Model
-      const contractModels: Model[] = models.map((m: ModelMeta) => ({
-        id: m.id,
-        name: m.name,
-        isFree: m.isFree,
-        isZdr: m.isZdr,
-        providerKey: m.providerKey,
+      const container = getContainer();
+      const accountService = container.accountsForUser(
+        (await import("@cogni/ids")).toUserId(sessionUser.id)
+      );
+      const billingAccount = await getOrCreateBillingAccountForUser(
+        accountService,
+        {
+          userId: sessionUser.id,
+          ...(sessionUser.walletAddress
+            ? { walletAddress: sessionUser.walletAddress }
+            : {}),
+        }
+      );
+
+      const { models, defaultRef } = await container.modelCatalog.listModels({
+        userId: sessionUser.id,
+        tenantId: billingAccount.id,
+      });
+
+      // Map ModelOption to contract Model
+      const contractModels: Model[] = models.map((m) => ({
+        ref: m.ref,
+        label: m.label,
+        requiresPlatformCredits: m.requiresPlatformCredits,
+        providerLabel: m.providerLabel,
+        capabilities: m.capabilities,
       }));
 
       const responseData = {
         models: contractModels,
-        defaultPreferredModelId: defaults.defaultPreferredModelId,
-        defaultFreeModelId: defaults.defaultFreeModelId,
+        defaultRef,
       };
 
       // Validate output with contract
@@ -67,10 +79,8 @@ export const GET = wrapRouteHandlerWithLogging(
         );
       }
 
-      // ONE info log on success
       ctx.log.info(
         {
-          cacheHit: true,
           modelCount: contractModels.length,
           durationMs: performance.now() - startMs,
         },
@@ -79,23 +89,12 @@ export const GET = wrapRouteHandlerWithLogging(
 
       return NextResponse.json(outputParseResult.data, { status: 200 });
     } catch (error) {
-      // ONE error log on failure (safe - no throwing in error path)
-      let sanitizedHost = "unknown";
-      try {
-        const litellmUrl = serverEnv().LITELLM_BASE_URL;
-        sanitizedHost = new URL(litellmUrl).hostname;
-      } catch {
-        // URL parsing failed, use fallback
-      }
-
       ctx.log.error(
         {
-          errCode: "ai.models_cache_fetch_failed",
-          litellmHost: sanitizedHost,
-          hasMasterKey: !!serverEnv().LITELLM_MASTER_KEY,
+          errCode: "ai.models_fetch_failed",
           errorType: error instanceof Error ? error.name : "unknown",
         },
-        "Failed to fetch models from cache"
+        "Failed to fetch models"
       );
       return NextResponse.json(
         { error: "Failed to fetch models" },

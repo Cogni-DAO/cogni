@@ -164,7 +164,7 @@ export class SandboxGraphProvider implements GraphExecutorPort {
         requestId,
         agentName,
         executionMode: agent.executionMode ?? "ephemeral",
-        model: req.model,
+        model: req.modelRef.modelId,
         messageCount: req.messages.length,
       },
       EVENT_NAMES.SANDBOX_EXECUTION_STARTED
@@ -200,7 +200,8 @@ export class SandboxGraphProvider implements GraphExecutorPort {
     // in production builds (Node async_hooks + webpack boundary issue).
     const scope = getExecutionScope();
     const stream = (async function* (): AsyncIterable<AiEvent> {
-      const { runId, messages, model, graphId } = req;
+      const { runId, messages, modelRef, graphId } = req;
+      const model = modelRef.modelId;
       const attempt = 0; // P0_ATTEMPT_FREEZE
       const execStartTime = Date.now();
 
@@ -423,7 +424,8 @@ export class SandboxGraphProvider implements GraphExecutorPort {
     // Capture ALS scope synchronously — same pattern as ephemeral path above.
     const scope = getExecutionScope();
     const stream = (async function* (): AsyncIterable<AiEvent> {
-      const { runId, messages, model, graphId, stateKey } = req;
+      const { runId, messages, modelRef, graphId, stateKey } = req;
+      const model = modelRef.modelId;
       const execStartTime = Date.now();
       const callLog = self.log.child({
         runId,

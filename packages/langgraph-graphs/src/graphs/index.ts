@@ -16,6 +16,13 @@
 
 // Brain graph (code-aware assistant with repo access)
 export { BRAIN_GRAPH_NAME, createBrainGraph } from "./brain/graph";
+// Browser graph (web browsing via Playwright MCP)
+export { BROWSER_GRAPH_NAME, createBrowserGraph } from "./browser/graph";
+// Frontend tester graph (QA agent via Playwright MCP)
+export {
+  createFrontendTesterGraph,
+  FRONTEND_TESTER_GRAPH_NAME,
+} from "./frontend-tester/graph";
 // Poet graph (poetic AI assistant)
 export { createPoetGraph, POET_GRAPH_NAME } from "./poet/graph";
 // Ponderer graph (philosophical thinker)

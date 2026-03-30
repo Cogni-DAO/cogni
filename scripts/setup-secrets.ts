@@ -1002,7 +1002,7 @@ async function main() {
         skipped++;
         continue;
       }
-      const value = secret.generate!();
+      const value = secret.generate?.();
       if (setSecretBoth(secret.name, value)) {
         console.log(
           `  ${GREEN}${secret.name}${RESET} set (preview + production)`

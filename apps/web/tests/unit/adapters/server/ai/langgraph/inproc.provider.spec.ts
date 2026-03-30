@@ -27,6 +27,7 @@ const TEST_SCOPE = {
     billingAccountId: "test-billing",
     virtualKeyId: "test-vkey",
   },
+  usageSource: "litellm" as const,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -116,7 +117,7 @@ function createTestRequest(
   return {
     runId: "test-run-id",
     messages: [{ role: "user", content: "Hello" }],
-    model: "test-model",
+    modelRef: { providerKey: "platform", modelId: "test-model" },
     graphId: "langgraph:poet",
     ...overrides,
   };

@@ -238,6 +238,10 @@ export const serverSchema = z.object({
   // Per web3-openrouter-payments spec: Coinbase Commerce protocol fee.
   OPENROUTER_CRYPTO_FEE: z.coerce.number().min(0).max(1).default(0.05),
 
+  // BYO-AI: AEAD encryption key for connections table (hex-encoded 32 bytes)
+  // Optional — BYO-AI features disabled when not set.
+  CONNECTIONS_ENCRYPTION_KEY: optionalString,
+
   // PostHog product analytics — required
   // See docs/guides/posthog-setup.md for setup
   // PostHog Cloud free tier: 1M events/month at https://us.i.posthog.com

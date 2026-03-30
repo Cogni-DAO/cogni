@@ -139,7 +139,7 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
       const idempotencyKey = `${randomUUID()}:2025-01-21T09:00:00Z`;
       const input = {
         messages: [{ role: "user", content: "Hello" }],
-        model: TEST_MODEL_ID,
+        modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
       };
 
       const request = createRequest(
@@ -172,7 +172,7 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
       const idempotencyKey = `${randomUUID()}:2025-01-21T09:00:00Z`;
       const input = {
         messages: [{ role: "user", content: "Hello" }],
-        model: TEST_MODEL_ID,
+        modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
       };
 
       // First request
@@ -221,7 +221,7 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
           executionGrantId: grantId,
           input: {
             messages: [{ role: "user", content: "Hello" }],
-            model: TEST_MODEL_ID,
+            modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
           },
         },
         { token: SCHEDULER_TOKEN, idempotencyKey }
@@ -238,7 +238,7 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
           executionGrantId: grantId,
           input: {
             messages: [{ role: "user", content: "Different!" }],
-            model: TEST_MODEL_ID,
+            modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
           },
         },
         { token: SCHEDULER_TOKEN, idempotencyKey }
@@ -258,7 +258,7 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
       const idempotencyKey = `${randomUUID()}:2025-01-21T09:00:00Z`;
       const input = {
         messages: [{ role: "user", content: "Hello" }],
-        model: TEST_MODEL_ID,
+        modelRef: { providerKey: "platform", modelId: TEST_MODEL_ID },
       };
 
       const request = createRequest(
@@ -315,7 +315,7 @@ describe("[internal] POST /api/internal/graphs/{graphId}/runs", () => {
 
       expect(response.status).toBe(400);
       const body = await response.json();
-      expect(body.error).toBe("model field is required");
+      expect(body.error).toBe("modelRef field is required");
     });
   });
 

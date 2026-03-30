@@ -24,6 +24,7 @@ import type { FinancialLedgerPort } from "@cogni/financial-ledger";
 import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
+import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import { numberToPpm } from "@cogni/operator-wallet";
 import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
@@ -41,6 +42,7 @@ import {
   AlchemyWebhookNormalizer,
   type Database,
   DrizzleAiTelemetryAdapter,
+  DrizzleConnectionBrokerAdapter,
   DrizzleExecutionGrantUserAdapter,
   DrizzleExecutionGrantWorkerAdapter,
   DrizzleExecutionRequestAdapter,
@@ -65,6 +67,16 @@ import {
   ViemTreasuryAdapter,
 } from "@/adapters/server";
 import { ServiceDrizzleAccountService } from "@/adapters/server/accounts/drizzle.adapter";
+import {
+  AggregatingModelCatalog,
+  ProviderResolver,
+} from "@/adapters/server/ai/catalog";
+import { mcpServersToCodexConfig } from "@/adapters/server/ai/codex/codex-mcp-config";
+import {
+  CodexModelProvider,
+  OpenAiCompatibleModelProvider,
+  PlatformModelProvider,
+} from "@/adapters/server/ai/providers";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { ServiceDrizzlePaymentAttemptRepository } from "@/adapters/server/payments/drizzle-payment-attempt.adapter";
 import { OpenRouterFundingAdapter } from "@/adapters/server/treasury/openrouter-funding.adapter";
@@ -88,11 +100,14 @@ import type {
   AccountService,
   AiTelemetryPort,
   Clock,
+  ConnectionBrokerPort,
   DataSourceRegistration,
   GovernanceStatusPort,
   LangfusePort,
   LlmService,
   MetricsQueryPort,
+  ModelCatalogPort,
+  ModelProviderResolverPort,
   OnChainVerifier,
   OperatorWalletPort,
   PaymentAttemptServiceRepository,
@@ -187,6 +202,12 @@ export interface Container {
   treasurySettlement: TreasurySettlementPort | undefined;
   /** Provider funding — undefined when OPENROUTER_API_KEY not set */
   providerFunding: ProviderFundingPort | undefined;
+  /** Connection broker — undefined when CONNECTIONS_ENCRYPTION_KEY not set */
+  connectionBroker: ConnectionBrokerPort | undefined;
+  /** Model catalog — aggregates all providers for model listing */
+  modelCatalog: ModelCatalogPort;
+  /** Provider resolver — resolves providerKey to ModelProviderPort for runtime dispatch */
+  providerResolver: ModelProviderResolverPort;
 }
 
 // Feature-specific dependency types
@@ -586,6 +607,25 @@ function createContainer(): Container {
     );
   })();
 
+  // Connection broker — BYO-AI credential resolution
+  // Undefined when CONNECTIONS_ENCRYPTION_KEY not set
+  const connectionBroker: ConnectionBrokerPort | undefined = (() => {
+    if (!env.CONNECTIONS_ENCRYPTION_KEY) return undefined;
+    const keyBuf = Buffer.from(env.CONNECTIONS_ENCRYPTION_KEY, "hex");
+    if (keyBuf.length !== 32) {
+      log.warn(
+        "CONNECTIONS_ENCRYPTION_KEY must be 64 hex chars (32 bytes). BYO-AI disabled."
+      );
+      return undefined;
+    }
+    return new DrizzleConnectionBrokerAdapter({
+      db: db as unknown as import("drizzle-orm/node-postgres").NodePgDatabase,
+      encryptionKey: keyBuf,
+      encryptionKeyId: "v1",
+      log,
+    });
+  })();
+
   // Redis client for run event streaming (ephemeral stream plane)
   // Per REDIS_IS_STREAM_PLANE: only transient data, no durable state
   const redisClient = new Redis(env.REDIS_URL, {
@@ -639,6 +679,28 @@ function createContainer(): Container {
       ? new SplitTreasurySettlementAdapter(operatorWallet, USDC_TOKEN_ADDRESS)
       : undefined,
     providerFunding,
+    connectionBroker,
+    // Multi-provider model ports
+    ...(() => {
+      const platformProvider = new PlatformModelProvider(llmService);
+      // Parse MCP server config for Codex native MCP support (bug.0232).
+      // parseMcpConfigFromEnv is synchronous (reads file + env vars).
+      const codexMcpConfig = mcpServersToCodexConfig(parseMcpConfigFromEnv());
+      const codexProvider = new CodexModelProvider(codexMcpConfig);
+      const openAiCompatibleProvider = new OpenAiCompatibleModelProvider(
+        connectionBroker,
+        resolveAppDb
+      );
+      const providers = [
+        platformProvider,
+        codexProvider,
+        openAiCompatibleProvider,
+      ];
+      return {
+        modelCatalog: new AggregatingModelCatalog(providers),
+        providerResolver: new ProviderResolver(providers),
+      };
+    })(),
   };
 }
 

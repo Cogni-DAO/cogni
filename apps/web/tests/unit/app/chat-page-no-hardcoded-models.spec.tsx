@@ -43,11 +43,11 @@ vi.mock("@/features/ai/public", async () => {
 vi.mock("@/features/ai/chat/providers/ChatRuntimeProvider.client", () => ({
   ChatRuntimeProvider: (props: {
     children: React.ReactNode;
-    selectedModel: string;
+    modelRef: { providerKey: string; modelId: string; connectionId?: string };
     defaultModelId: string;
   }) => (
     <div data-testid="runtime-provider">
-      <div data-testid="provider-selected-model">{props.selectedModel}</div>
+      <div data-testid="provider-selected-model">{props.modelRef.modelId}</div>
       <div data-testid="provider-default-model">{props.defaultModelId}</div>
       {props.children}
     </div>

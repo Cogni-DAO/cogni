@@ -18,6 +18,7 @@
 
 "use client";
 
+import type { ModelRef } from "@cogni/ai-core";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { useSearchParams } from "next/navigation";
@@ -29,12 +30,12 @@ import {
   useRef,
   useState,
 } from "react";
-
 import { ErrorAlert, Thread } from "@/components";
 import type { ChatError } from "@/contracts/error.chat.v1.contract";
 import { useChatSidebarStore } from "@/features/ai/chat/components/ChatSidebarContext";
 import { ChatRuntimeProvider } from "@/features/ai/chat/providers/ChatRuntimeProvider.client";
 import { toErrorAlertProps } from "@/features/ai/chat/utils/toErrorAlertProps";
+import { CHATGPT_MODELS } from "@/features/ai/components/ModelPicker";
 import {
   ChatComposerExtras,
   ChatErrorBubble,
@@ -78,7 +79,9 @@ export function ChatView(): ReactNode {
   const hasInitializedRef = useRef(false);
 
   // State
-  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
+    null
+  );
   const [selectedGraph, setSelectedGraph] = useState(DEFAULT_GRAPH_ID);
   const [chatError, setChatError] = useState<ChatError | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
@@ -91,12 +94,15 @@ export function ChatView(): ReactNode {
 
   // Extract server-provided defaults (NO CLIENT INVENTION)
   const models = modelsQuery.data?.models ?? [];
-  const defaultPreferredModelId =
-    modelsQuery.data?.defaultPreferredModelId ?? null;
-  const defaultFreeModelId = modelsQuery.data?.defaultFreeModelId ?? null;
-  const freeModelIds = models.filter((m) => m.isFree).map((m) => m.id);
+  const defaultPreferredModelId = modelsQuery.data?.defaultRef?.modelId ?? null;
+  const defaultFreeModelId =
+    models.find((m) => !m.requiresPlatformCredits)?.ref.modelId ?? null;
+  const freeModelIds = models
+    .filter((m) => !m.requiresPlatformCredits)
+    .map((m) => m.ref.modelId);
 
   // Single initialization effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: models derived from modelsQuery.data (already in deps)
   useEffect(() => {
     // Skip if user already selected or already initialized
     if (hasInitializedRef.current || hasUserSelectedRef.current) return;
@@ -119,7 +125,19 @@ export function ChatView(): ReactNode {
     });
 
     if (selected) {
-      setSelectedModel(selected);
+      // Find the model ref from the models list.
+      // ChatGPT models aren't in the server models list — they're hardcoded in
+      // ModelPicker. If the stored preference is a ChatGPT model, build the ref
+      // with providerKey "codex". connectionId will be set when ModelPicker's
+      // status fetch completes and the user re-selects or the tab initializes.
+      const matchedModel = models.find((m) => m.ref.modelId === selected);
+      const isChatGptModel = CHATGPT_MODELS.some((m) => m.id === selected);
+      setSelectedModelRef(
+        matchedModel?.ref ??
+          (isChatGptModel
+            ? { providerKey: "codex", modelId: selected }
+            : { providerKey: "platform", modelId: selected })
+      );
       setIsBlocked(false);
     } else {
       // No valid model: blocked state (zero credits + no free models)
@@ -142,13 +160,13 @@ export function ChatView(): ReactNode {
     defaultFreeModelId,
     defaultPreferredModelId,
   ]);
-  // NOTE: selectedModel intentionally NOT in deps to prevent re-init loop
+  // NOTE: selectedModelRef intentionally NOT in deps to prevent re-init loop
 
   // Model change handler - marks user intent
-  const handleModelChange = useCallback((modelId: string) => {
+  const handleModelChange = useCallback((ref: ModelRef) => {
     hasUserSelectedRef.current = true;
-    setSelectedModel(modelId);
-    setPreferredModelId(modelId);
+    setSelectedModelRef(ref);
+    setPreferredModelId(ref.modelId);
     setIsBlocked(false);
     setChatError(null);
   }, []);
@@ -166,9 +184,17 @@ export function ChatView(): ReactNode {
   // Switch to free model action
   const handleSwitchFreeModel = useCallback(() => {
     if (defaultFreeModelId) {
-      handleModelChange(defaultFreeModelId);
+      const freeModel = models.find(
+        (m) => m.ref.modelId === defaultFreeModelId
+      );
+      handleModelChange(
+        freeModel?.ref ?? {
+          providerKey: "platform",
+          modelId: defaultFreeModelId,
+        }
+      );
     }
-  }, [defaultFreeModelId, handleModelChange]);
+  }, [defaultFreeModelId, models, handleModelChange]);
 
   // Retry action - clear error (runtime handles retry internally)
   const handleRetry = useCallback(() => {
@@ -248,7 +274,7 @@ export function ChatView(): ReactNode {
   }
 
   // INV-NO-INTERACTION-BEFORE-READY: Blocked state shows error only, no chat
-  if (isBlocked && !selectedModel) {
+  if (isBlocked && !selectedModelRef) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
         <div className="mx-auto w-full max-w-[var(--size-container-sm)] px-4">
@@ -275,10 +301,10 @@ export function ChatView(): ReactNode {
   const uiDefaultModelId =
     balance <= 0 ? defaultFreeModelId : defaultPreferredModelId;
 
-  // Invariant: selectedModel is guaranteed non-null after initialization gate
-  if (!selectedModel) {
+  // Invariant: selectedModelRef is guaranteed non-null after initialization gate
+  if (!selectedModelRef) {
     throw new Error(
-      "INV-VIOLATION: selectedModel is null after initialization gate"
+      "INV-VIOLATION: selectedModelRef is null after initialization gate"
     );
   }
 
@@ -307,7 +333,7 @@ export function ChatView(): ReactNode {
       ) : (
         <ChatRuntimeProvider
           key={activeThreadKey ?? "new"}
-          selectedModel={selectedModel}
+          modelRef={selectedModelRef}
           selectedGraph={selectedGraph}
           defaultModelId={uiDefaultModelId}
           initialMessages={initialMessages}
@@ -320,7 +346,7 @@ export function ChatView(): ReactNode {
             welcomeMessage={<ChatWelcomeWithHint />}
             composerLeft={
               <ChatComposerExtras
-                selectedModel={selectedModel}
+                selectedModel={selectedModelRef.modelId}
                 onModelChange={handleModelChange}
                 defaultModelId={uiDefaultModelId}
                 balance={balance}

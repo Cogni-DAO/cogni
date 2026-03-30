@@ -11,7 +11,7 @@ outcome: Cogni agents expose tools via MCP, authenticate via OAuth 2.1, and are 
 assignees:
   - cogni-dev
 created: 2026-02-22
-updated: 2026-02-22
+updated: 2026-03-30
 labels:
   - ai-graphs
   - tooling
@@ -31,7 +31,7 @@ Make Cogni agents first-class participants in the agentic internet. Today, our a
 
 - x402 payment integration (x402 doesn't support streaming token billing — our primary cost center; evaluate when protocol matures)
 - Autonomous decision-making (stays in `proj.governance-agents`)
-- Browser/computer-use agents (not our architecture)
+- General container hosting (MCP scope: approved server templates only, not a Heroku clone)
 
 ## Context
 
@@ -93,16 +93,29 @@ We have: hexagonal architecture (57 boundary tests), tool catalog with 6 tools, 
 
 **MCP Client (inbound tool consumption):**
 
-| Deliverable                                                                                    | Status      | Est | Work Item |
-| ---------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Create `McpToolSource` implementing `ToolSourcePort` (pulls from `proj.tool-use-evolution` P2) | Not Started | 2   | —         |
-| MCP tool discovery via `tools/list` on configured external servers                             | Not Started | 1   | —         |
-| `MCP_UNTRUSTED_BY_DEFAULT`: discovered tools require explicit policy enablement                | Not Started | 1   | —         |
-| Handle `tools/list_changed`: refresh catalog, keep policy unchanged                            | Not Started | 1   | —         |
-| OAuth client credential flow for agent-to-MCP-server auth                                      | Not Started | 2   | —         |
-| Agent identity: `ActorId` carried in OAuth token for outbound calls                            | Not Started | 1   | —         |
-| Credential brokering via `ConnectionBrokerPort` for MCP server tokens                          | Not Started | 1   | —         |
-| Test: agent discovers external MCP tool, policy enables it, agent invokes it                   | Not Started | 1   | —         |
+| Deliverable                                                                     | Status      | Est | Work Item |
+| ------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Create `McpToolSource` implementing `ToolSourcePort`                            | Done        | 2   | task.0228 |
+| MCP tool discovery via `tools/list` on configured external servers              | Done        | 1   | task.0228 |
+| `MCP_UNTRUSTED_BY_DEFAULT`: discovered tools require explicit policy enablement | Done        | 1   | task.0228 |
+| MCP as Docker Compose services (Streamable HTTP, reconnect-on-error)            | Done        | 2   | task.0228 |
+| Playwright + Grafana MCP servers running in dev stack                           | Done        | 1   | task.0228 |
+| Handle `tools/list_changed`: refresh catalog, keep policy unchanged             | Not Started | 1   | —         |
+| Credential brokering via `ConnectionBrokerPort` for MCP server tokens           | Not Started | 1   | —         |
+| Test: agent discovers external MCP tool, policy enables it, agent invokes it    | Not Started | 1   | —         |
+
+**MCP Control Plane (deployment registry + multi-tenant):**
+
+See [mcp-control-plane.md](../../docs/spec/mcp-control-plane.md) for full spec.
+
+| Deliverable                                                        | Status      | Est | Work Item |
+| ------------------------------------------------------------------ | ----------- | --- | --------- |
+| Phase 0.5: MCP services in prod compose + `MCP_SERVERS` env var    | Not Started | 0   | —         |
+| Phase 1: `mcp_deployments` + `agent_mcp_bindings` tables           | Not Started | 3   | —         |
+| Phase 1: Auth headers via ConnectionBrokerPort at connect time     | Not Started | 2   | —         |
+| Phase 1: Admin API for deployment + binding CRUD                   | Not Started | 2   | —         |
+| Phase 2: Multi-tenant isolation (per-tenant deployments + RLS)     | Not Started | 3   | —         |
+| Phase 3: ToolHive operator + vMCP gateway (requires k8s migration) | Not Started | 5   | —         |
 
 **Async MCP (when spec stabilizes):**
 
@@ -159,6 +172,7 @@ We have: hexagonal architecture (57 boundary tests), tool catalog with 6 tools, 
 ## As-Built Specs
 
 - [tool-use.md](../../docs/spec/tool-use.md) — tool pipeline invariants (ToolSpec, ToolPolicy, toolRunner)
+- [mcp-control-plane.md](../../docs/spec/mcp-control-plane.md) — MCP deployment registry, agent bindings, credential resolution, ToolHive path
 - [agent-discovery.md](../../docs/spec/agent-discovery.md) — AgentCatalogPort, provider types
 - [agent-registry.md](../../docs/spec/agent-registry.md) — AgentRegistrationDocument, identity port (draft)
 - [identity-model.md](../../docs/spec/identity-model.md) — five identity primitives

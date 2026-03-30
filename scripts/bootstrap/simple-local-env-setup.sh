@@ -55,3 +55,18 @@ else
         log_warn ".env.test.example not found, skipping .env.test setup"
     fi
 fi
+
+# Setup .env.docker (overrides for docker:dev:stack — container-internal hostnames)
+ENV_DOCKER="$REPO_ROOT/.env.docker"
+ENV_DOCKER_EXAMPLE="$REPO_ROOT/.env.docker.example"
+
+if [[ -f "$ENV_DOCKER" ]]; then
+    log_info ".env.docker already exists"
+else
+    if [[ -f "$ENV_DOCKER_EXAMPLE" ]]; then
+        cp "$ENV_DOCKER_EXAMPLE" "$ENV_DOCKER"
+        log_info "Created .env.docker from .env.docker.example"
+    else
+        log_warn ".env.docker.example not found, skipping .env.docker setup"
+    fi
+fi

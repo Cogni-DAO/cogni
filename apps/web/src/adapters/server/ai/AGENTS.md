@@ -35,21 +35,21 @@ AI service adapters including LiteLLM completion/streaming, usage telemetry, age
 
 ## Public Surface
 
-- **Exports:** LiteLlmAdapter (LlmService), LiteLlmActivityUsageAdapter (ActivityUsagePort), LiteLlmUsageServiceAdapter (UsageService), InProcCompletionUnitAdapter (completion unit execution; requires graphId in CompletionUnitParams.runContext), AgentCatalogProvider (discovery interface), AggregatingAgentCatalog (implements AgentCatalogPort), LangGraphInProcAgentCatalogProvider (discovery provider), NamespaceGraphRouter (execution routing), GraphExecutorPort (execution interface), LangGraphInProcProvider (implements GraphExecutorPort), ObservabilityGraphExecutorDecorator (wraps GraphExecutorPort with Langfuse traces and per-run billing metadata), BillingEnrichmentGraphExecutorDecorator (attaches billingAccountId/virtualKeyId to neutral usage_report events in the wrapper layer), BillingGraphExecutorDecorator (intercepts enriched usage_report events and validates them; uses DI, never imports features), PreflightCreditCheckDecorator (rejects runs when credits insufficient; receives billingAccountId + injected PreflightCreditCheckFn, never imports features), TavilyWebSearchAdapter (WebSearchCapability with hard caps), DrizzleThreadPersistenceAdapter (ThreadPersistencePort; optimistic concurrency via jsonb_array_length check, tenant-scoped RLS), RedisRunStreamAdapter (RunStreamPort; publishes/subscribes AiEvents via Redis Streams XADD/XREAD/XRANGE)
+- **Exports:** LiteLlmAdapter (LlmService), LiteLlmActivityUsageAdapter (ActivityUsagePort), LiteLlmUsageServiceAdapter (UsageService), InProcCompletionUnitAdapter (completion unit execution), AgentCatalogProvider (discovery interface), AggregatingAgentCatalog (AgentCatalogPort), LangGraphInProcAgentCatalogProvider, NamespaceGraphRouter (execution routing), LangGraphInProcProvider (GraphExecutorPort), ObservabilityGraphExecutorDecorator, BillingEnrichmentGraphExecutorDecorator, UsageCommitDecorator (validates + commits BYO usage receipts), PreflightCreditCheckDecorator (uses ModelProviderResolverPort for billing policy), TavilyWebSearchAdapter, DrizzleThreadPersistenceAdapter, RedisRunStreamAdapter, PlatformModelProvider (ModelProviderPort for LiteLLM/OpenRouter), CodexModelProvider (ModelProviderPort for BYO ChatGPT), OpenAiCompatibleModelProvider (ModelProviderPort for user-hosted Ollama/vLLM/llama.cpp), OpenAiCompatibleLlmAdapter (LlmService for /v1/chat/completions endpoints), AggregatingModelCatalog (ModelCatalogPort), ProviderResolver (ModelProviderResolverPort)
 - **Env/Config keys:** LITELLM_BASE_URL, LITELLM_MASTER_KEY (model param required - no env fallback), TAVILY_API_KEY (for web search), REDIS_URL (stream plane)
-- **Files considered API:** litellm.adapter.ts, litellm.activity-usage.adapter.ts, litellm.usage-service.adapter.ts, inproc-completion-unit.adapter.ts, agent-catalog.provider.ts, aggregating-agent-catalog.ts, aggregating-executor.ts, langgraph/inproc-agent-catalog.provider.ts, langgraph/inproc.provider.ts, observability-executor.decorator.ts, billing-executor.decorator.ts, preflight-credit-check.decorator.ts, tavily-web-search.adapter.ts, thread-persistence.adapter.ts, redis-run-stream.adapter.ts
+- **Files considered API:** litellm.adapter.ts, litellm.activity-usage.adapter.ts, litellm.usage-service.adapter.ts, inproc-completion-unit.adapter.ts, agent-catalog.provider.ts, aggregating-agent-catalog.ts, aggregating-executor.ts, langgraph/inproc-agent-catalog.provider.ts, langgraph/inproc.provider.ts, observability-executor.decorator.ts, billing-executor.decorator.ts, usage-commit.decorator.ts, preflight-credit-check.decorator.ts, tavily-web-search.adapter.ts, thread-persistence.adapter.ts, redis-run-stream.adapter.ts, execution-scope.ts
 - **Streaming:** completionStream() supports SSE streaming via eventsource-parser with robustness against malformed chunks
 
 ## Ports (optional)
 
-- **Uses ports:** none
-- **Implements ports:** LlmService, ActivityUsagePort, UsageService, AgentCatalogPort, GraphExecutorPort, ThreadPersistencePort
+- **Uses ports:** ModelProviderResolverPort (PreflightCreditCheckDecorator)
+- **Implements ports:** LlmService, ActivityUsagePort, UsageService, AgentCatalogPort, GraphExecutorPort, ThreadPersistencePort, ModelProviderPort, ModelCatalogPort, ModelProviderResolverPort
 - **Contracts (required if implementing):** LlmService contract tests in tests/contract/, usage adapter tests in tests/unit/adapters/
 
 ## Responsibilities
 
 - This directory **does**: Implement LlmService for AI completions and streaming (with tool message format support); implement ActivityUsagePort for LiteLLM usage logs (read-only, powers Activity dashboard); implement UsageService adapter mapping usage logs to usage stats; implement AgentCatalogPort via AggregatingAgentCatalog (discovery-only, fans out to AgentCatalogProvider[]); implement GraphExecutorPort via NamespaceGraphRouter (routes graphId to execution providers); emit neutral usage facts from inner providers and attach billing identity in a wrapper decorator; provide AgentCatalogProvider and GraphExecutorPort interfaces; provide LangGraphInProcAgentCatalogProvider (discovery) and LangGraphInProcProvider (execution)
-- This directory **does not**: Handle authentication, rate limiting, timestamps, or write charge receipts to DB
+- This directory **does not**: Handle authentication, rate limiting, or timestamps. UsageCommitDecorator writes BYO charge receipts (via injected commitUsageFact); platform receipts are written by the LiteLLM callback route.
 
 ## Usage
 
@@ -94,3 +94,5 @@ pnpm test tests/component/ai/
 - Connects to LiteLLM proxy service for provider abstraction
 - InProcCompletionUnitAdapter fails the run if LiteLLM response lacks call ID (prevents silent under-billing)
 - All providers thread graphId through to UsageFact for per-agent analytics
+- ExecutionScope (AsyncLocalStorage): carries llmService, usageSource, billing identity, and abortSignal per-request. Set by graph-executor.factory.ts before graph invocation.
+- UsageCommitDecorator: consumes usage_report events from stream, validates via Zod, commits BYO receipts directly (platform deferred to LiteLLM callback). Events are consumed (not forwarded downstream).

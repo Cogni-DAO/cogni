@@ -55,6 +55,17 @@ Answer the following research questions with enough depth to create a project ro
 - How to keep the knowledge base current (incremental updates vs full rebuilds)?
 - How to handle conflicting or ambiguous license information?
 
+### 3a. Knowledge Aggregation & Recall System (NEW — top priority)
+
+> See: `spike.0229` for the full KnowledgeCapability design
+
+- **Three-layer data model:** raw receipts (HTML/PDF/JSON/images) → claims/chunks (extracted passages, entities, confidence, provenance) → canonical knowledge (normalized entities, relations, workflow-ready facts)
+- **Agent write pattern:** How do agents save ad-hoc research findings so they compound? (current answer: markdown chunks in `docs/research/` with structured frontmatter)
+- **Recall loop:** Agents must search local KB before hitting internet. What tooling supports this? (grep now → pgvector later → cross-node federation eventually)
+- **Freshness & trust scoring:** How to grade findings by recency, confidence, and provenance? When does a chunk become stale?
+- **Cross-node search:** When multiple nodes exist, how does Node A search Node B's knowledge base? x402-gated API?
+- **Staged storage progression:** Postgres + Singer taps + Temporal + MinIO + pgvector (now) → DuckDB + dbt Core (analytics pain) → Iceberg + Trino (scale pain). See memory: `project_node_data_progression.md`
+
 ### 4. AI Pipeline Design
 
 - Which LangGraph patterns for: continuous research agent, recommendation agent, content generation agent?
@@ -85,6 +96,10 @@ Answer the following research questions with enough depth to create a project ro
 - [ ] Research x402 protocol: read spec, identify maturity, assess compatibility
 - [ ] Survey OSS data sources: GitHub API, Libraries.io, OpenSSF, SPDX
 - [ ] Evaluate knowledge base architecture options
+- [x] **Define knowledge aggregation design** — `KnowledgeCapability` port following `RepoCapability` pattern (`spike.0229`)
+- [x] **Define data stack progression** — staged infra path for new nodes (memory: `project_node_data_progression.md`)
+- [ ] Validate three-layer data model: raw receipts → claims/chunks → canonical knowledge
+- [ ] Prototype recall loop: agent searches KB (grep) → falls back to internet → saves chunk
 - [ ] Draft AI pipeline design using LangGraph patterns from this repo
 - [ ] Assess node specialization mechanics (what to fork, what to extend)
 - [ ] Research content pipeline options

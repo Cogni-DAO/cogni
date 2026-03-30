@@ -185,7 +185,12 @@
         "cogni/minimax-m2": {},
         "cogni/qwen3-vl-8b": {},
         "cogni/grok-4.1-fast": {},
-        "cogni/llama-3.3-70b": {}
+        "cogni/llama-3.3-70b": {},
+        "openai-codex/gpt-4o": {},
+        "openai-codex/o3": {},
+        "openai-codex/o4-mini": {},
+        "openai-codex/gpt-5.3-codex": {},
+        "openai-codex/gpt-5.3-codex-spark": {}
       },
       "contextPruning": { "mode": "cache-ttl", "ttl": "1h" },
       "memorySearch": {

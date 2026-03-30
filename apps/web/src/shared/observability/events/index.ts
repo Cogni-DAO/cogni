@@ -85,6 +85,11 @@ export const EVENT_NAMES = {
   LEDGER_FINALIZE_NO_POLLERS: "ledger.finalize_no_pollers",
   LEDGER_COLLECT_TRIGGERED: "ledger.collect_triggered",
 
+  // BYO-AI Auth Domain
+  BYO_AUTH_DEVICE_CODE_COMPLETE: "byo_auth.device_code.complete",
+  BYO_AUTH_EXCHANGE_COMPLETE: "byo_auth.exchange.complete",
+  ADAPTER_OPENAI_DEVICE_AUTH_ERROR: "adapter.openai_device_auth.error",
+
   // Scheduling Domain
   SCHEDULE_CREDIT_GATE_REJECTED: "schedules.credit_gate_rejected",
 

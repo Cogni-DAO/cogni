@@ -41,7 +41,7 @@ export function createSchedulePayload(overrides?: {
     graphId: overrides?.graphId ?? "langgraph:poet",
     input: overrides?.input ?? {
       messages: [{ role: "user", content: "Hello" }],
-      model: "test-model",
+      modelRef: { providerKey: "platform", modelId: "test-model" },
     },
     cron: overrides?.cron ?? "0 9 * * *", // 9am daily
     timezone: overrides?.timezone ?? "UTC",

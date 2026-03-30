@@ -20,12 +20,25 @@ import type {
   GraphExecutorPort,
   GraphFinal,
   GraphRunRequest,
+  ModelProviderResolverPort,
   PreflightCreditCheckFn,
 } from "@/ports";
 import { InsufficientCreditsPortError } from "@/ports";
 import type { AiEvent } from "@/types/ai-events";
 
 const TEST_BILLING_ACCOUNT_ID = "ba-1";
+
+/** Mock resolver: platform provider always requires credits */
+const mockResolver: ModelProviderResolverPort = {
+  resolve: () => ({
+    providerKey: "platform",
+    usageSource: "litellm" as const,
+    requiresConnection: false,
+    listModels: vi.fn().mockResolvedValue([]),
+    createLlmService: vi.fn(),
+    requiresPlatformCredits: vi.fn().mockResolvedValue(true),
+  }),
+};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,7 +48,7 @@ function makeRequest(overrides?: Partial<GraphRunRequest>): GraphRunRequest {
   return {
     runId: "run-1",
     messages: [{ role: "user", content: "hello" }],
-    model: "gpt-4o",
+    modelRef: { providerKey: "platform", modelId: "gpt-4o" },
     graphId: "langgraph:test" as GraphRunRequest["graphId"],
     ...overrides,
   };
@@ -85,6 +98,7 @@ describe("PreflightCreditCheckDecorator", () => {
       makeInner(events),
       checkFn,
       TEST_BILLING_ACCOUNT_ID,
+      mockResolver,
       log
     );
 
@@ -122,6 +136,7 @@ describe("PreflightCreditCheckDecorator", () => {
       inner,
       checkFn,
       TEST_BILLING_ACCOUNT_ID,
+      mockResolver,
       log
     );
     const result = decorator.runGraph(makeRequest());
@@ -158,6 +173,7 @@ describe("PreflightCreditCheckDecorator", () => {
       inner,
       checkFn,
       TEST_BILLING_ACCOUNT_ID,
+      mockResolver,
       log
     );
 

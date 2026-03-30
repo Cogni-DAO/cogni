@@ -14,7 +14,7 @@
 "use client";
 
 import { useConnectModal } from "@rainbow-me/rainbowkit";
-import { Check } from "lucide-react";
+import { Check, Server as ServerIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, useSession } from "next-auth/react";
 import type { ReactElement, ReactNode } from "react";
@@ -30,6 +30,7 @@ import {
   GoogleIcon,
   PageContainer,
 } from "@/components";
+import { OpenAIIcon } from "@/features/ai/icons/providers/OpenAIIcon";
 
 /* ─── Types ────────────────────────────────────────────────────────── */
 
@@ -132,7 +133,7 @@ function SettingRow({
 }): ReactElement {
   return (
     <>
-      <div className="flex items-center justify-between gap-4 py-5">
+      <div className="flex flex-col gap-3 py-5 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {icon && (
             <div className="flex shrink-0 items-center justify-center text-muted-foreground">
@@ -277,6 +278,237 @@ function ColorPickerSwatch({
   );
 }
 
+/* ─── ChatGPT Connect Flow (Device Code) ─────────────────────────── */
+
+/**
+ * ChatGPT Device Code connect flow.
+ *
+ * Immediately starts the device code flow on mount (no idle phase).
+ * Shows a stepped walkthrough: get code → open OpenAI → enter code → wait.
+ */
+function ChatGptConnectFlow({
+  onComplete,
+  onCancel,
+}: {
+  onComplete: () => void;
+  onCancel: () => void;
+}): ReactElement {
+  const [phase, setPhase] = useState<"loading" | "code" | "error">("loading");
+  const [deviceAuth, setDeviceAuth] = useState<{
+    deviceAuthId: string;
+    userCode: string;
+    interval: number;
+    verificationUrl: string;
+  } | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [codeCopied, setCodeCopied] = useState(false);
+  const startedRef = useRef(false);
+
+  // Start device code flow immediately on mount
+  const startFlow = useCallback(async () => {
+    setPhase("loading");
+    setErrorMsg("");
+    setCodeCopied(false);
+    try {
+      const res = await fetch("/api/v1/auth/openai-codex/authorize", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        setPhase("error");
+        setErrorMsg("Failed to start authentication");
+        return;
+      }
+      const data = await res.json();
+      setDeviceAuth(data);
+      setPhase("code");
+    } catch {
+      setPhase("error");
+      setErrorMsg("Failed to connect to server");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void startFlow();
+  }, [startFlow]);
+
+  // Poll for authorization when in "code" phase
+  useEffect(() => {
+    if (phase !== "code" || !deviceAuth) return;
+
+    let cancelled = false;
+    const pollInterval = (deviceAuth.interval || 5) * 1000;
+    let elapsed = 0;
+    const maxWait = 15 * 60 * 1000; // 15 minutes
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/v1/auth/openai-codex/exchange", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deviceAuthId: deviceAuth.deviceAuthId,
+            userCode: deviceAuth.userCode,
+          }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+
+        if (data.status === "connected") {
+          onComplete();
+          return;
+        }
+        if (data.status === "pending") {
+          elapsed += pollInterval;
+          if (elapsed >= maxWait) {
+            setPhase("error");
+            setErrorMsg("Timed out waiting for authorization");
+            return;
+          }
+          timer = setTimeout(poll, pollInterval);
+          return;
+        }
+        // Error
+        setPhase("error");
+        setErrorMsg(data.error || "Authorization failed");
+      } catch {
+        if (!cancelled) {
+          setPhase("error");
+          setErrorMsg("Connection error");
+        }
+      }
+    };
+
+    let timer: ReturnType<typeof setTimeout> = setTimeout(poll, pollInterval);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [phase, deviceAuth, onComplete]);
+
+  if (phase === "error") {
+    return (
+      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+        {errorMsg && <div className="text-destructive text-sm">{errorMsg}</div>}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              startedRef.current = false;
+              void startFlow();
+            }}
+          >
+            Try again
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "loading") {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-border bg-card p-4">
+        <span className="animate-pulse text-muted-foreground">●</span>
+        <span className="text-muted-foreground text-sm">
+          Starting authentication...
+        </span>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+
+  // phase === "code" — stepped walkthrough
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card p-4">
+      {/* Warning */}
+      <div className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2">
+        <span className="shrink-0 text-warning">&#9888;</span>
+        <span className="text-muted-foreground text-sm">
+          You may need to enable <strong>Device Code Authorization</strong> in
+          your{" "}
+          <a
+            href="https://platform.openai.com/settings/authentication"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            OpenAI account settings
+          </a>{" "}
+          first.
+        </span>
+      </div>
+
+      {/* Step 1: Open OpenAI */}
+      <div className="space-y-2">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Step 1 — Open OpenAI
+        </div>
+        <Button variant="outline" size="sm" asChild>
+          <a
+            href={deviceAuth?.verificationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open OpenAI sign-in page &#8599;
+          </a>
+        </Button>
+      </div>
+
+      {/* Step 2: Copy & enter code */}
+      <div className="space-y-2">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Step 2 — Enter this code
+        </div>
+        <div className="flex items-center gap-3">
+          <code className="rounded-md border border-border bg-muted px-4 py-2 font-mono text-xl tracking-widest">
+            {deviceAuth?.userCode}
+          </code>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (deviceAuth?.userCode) {
+                navigator.clipboard.writeText(deviceAuth.userCode);
+                setCodeCopied(true);
+                setTimeout(() => setCodeCopied(false), 2000);
+              }
+            }}
+          >
+            {codeCopied ? "Copied!" : "Copy"}
+          </Button>
+        </div>
+      </div>
+
+      {/* Step 3: Waiting */}
+      <div className="space-y-1.5">
+        <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+          Step 3 — Wait for confirmation
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="animate-pulse text-primary">●</span>
+          <span className="text-muted-foreground text-sm">
+            Waiting for authorization...
+          </span>
+        </div>
+      </div>
+
+      <div className="border-border border-t pt-3">
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /* ─── View ─────────────────────────────────────────────────────────── */
 
 export function ProfileView(): ReactElement {
@@ -291,6 +523,14 @@ export function ProfileView(): ReactElement {
   const [configuredProviders, setConfiguredProviders] = useState<Set<string>>(
     new Set()
   );
+  const [chatGptConnected, setChatGptConnected] = useState(false);
+  const [chatGptLoading, setChatGptLoading] = useState(false);
+  const [ollamaConnected, setOllamaConnected] = useState(false);
+  const [ollamaLoading, setOllamaLoading] = useState(false);
+  const [ollamaExpanded, setOllamaExpanded] = useState(false);
+  const [ollamaUrl, setOllamaUrl] = useState("");
+  const [ollamaApiKey, setOllamaApiKey] = useState("");
+  const [ollamaError, setOllamaError] = useState("");
 
   // Read feedback query params and strip them to prevent re-display on refresh
   const linkedProvider = searchParams.get("linked");
@@ -341,6 +581,22 @@ export function ProfileView(): ReactElement {
       .catch(() => {
         // Provider fetch failed — show nothing rather than broken links
       });
+
+    // Check BYO-AI ChatGPT connection status
+    fetch("/api/v1/auth/openai-codex/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { connected: boolean } | null) => {
+        if (data) setChatGptConnected(data.connected);
+      })
+      .catch(() => {});
+
+    // Check OpenAI-compatible endpoint connection status
+    fetch("/api/v1/auth/openai-compatible/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { connected: boolean } | null) => {
+        if (data) setOllamaConnected(data.connected);
+      })
+      .catch(() => {});
   }, []);
 
   const walletAddress = session?.user?.walletAddress ?? null;
@@ -464,6 +720,226 @@ export function ProfileView(): ReactElement {
           </SettingRow>
         );
       })}
+
+      {/* ── AI Providers (BYO-AI) ── */}
+
+      <SectionHeading>AI Providers</SectionHeading>
+
+      <SettingRow
+        icon={<OpenAIIcon className="size-5" />}
+        label="ChatGPT"
+        description={
+          chatGptConnected
+            ? "Your ChatGPT subscription is linked."
+            : "Connect your ChatGPT subscription for $0 AI usage."
+        }
+      >
+        {chatGptConnected ? (
+          <div className="flex items-center gap-2">
+            <ConnectedBadge login="Connected" />
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={chatGptLoading}
+              onClick={async () => {
+                setChatGptLoading(true);
+                try {
+                  const res = await fetch(
+                    "/api/v1/auth/openai-codex/disconnect",
+                    { method: "POST" }
+                  );
+                  if (res.ok) {
+                    setChatGptConnected(false);
+                  }
+                } finally {
+                  setChatGptLoading(false);
+                }
+              }}
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : !chatGptLoading ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setChatGptLoading(true)}
+          >
+            Connect
+          </Button>
+        ) : null}
+      </SettingRow>
+
+      {/* Expanded connect flow — renders below the setting row */}
+      {chatGptLoading && !chatGptConnected && (
+        <ChatGptConnectFlow
+          onComplete={() => {
+            setChatGptConnected(true);
+            setChatGptLoading(false);
+          }}
+          onCancel={() => setChatGptLoading(false)}
+        />
+      )}
+
+      <SettingRow
+        icon={<ServerIcon className="size-5" />}
+        label="Local LLM"
+        description={
+          ollamaConnected
+            ? "Your endpoint is connected."
+            : "Connect Ollama, vLLM, or any OpenAI-compatible server."
+        }
+      >
+        {ollamaConnected ? (
+          <div className="flex items-center gap-2">
+            <ConnectedBadge login="Connected" />
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={ollamaLoading}
+              onClick={async () => {
+                setOllamaLoading(true);
+                try {
+                  const res = await fetch(
+                    "/api/v1/auth/openai-compatible/disconnect",
+                    { method: "POST" }
+                  );
+                  if (res.ok) {
+                    setOllamaConnected(false);
+                  }
+                } finally {
+                  setOllamaLoading(false);
+                }
+              }}
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setOllamaExpanded(!ollamaExpanded)}
+          >
+            Connect
+          </Button>
+        )}
+      </SettingRow>
+
+      {/* Expanded connect form */}
+      {ollamaExpanded && !ollamaConnected && (
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+          <div className="space-y-2">
+            <label
+              htmlFor="ollama-url"
+              className="font-medium text-foreground text-sm"
+            >
+              Endpoint URL
+            </label>
+            <input
+              id="ollama-url"
+              type="url"
+              placeholder="http://localhost:11434"
+              value={ollamaUrl}
+              onChange={(e) => {
+                setOllamaUrl(e.target.value);
+                setOllamaError("");
+              }}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-ring/50"
+            />
+            <p className="text-muted-foreground text-xs">
+              Use a{" "}
+              <a
+                href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Cloudflare Tunnel
+              </a>{" "}
+              for remote access.{" "}
+              <a
+                href="https://github.com/Cogni-DAO/node-template/blob/staging/docs/guides/connect-local-llm.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                Setup guide
+              </a>
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label
+              htmlFor="ollama-key"
+              className="font-medium text-foreground text-sm"
+            >
+              API Key
+            </label>
+            <input
+              id="ollama-key"
+              type="password"
+              placeholder="sk-..."
+              value={ollamaApiKey}
+              onChange={(e) => {
+                setOllamaApiKey(e.target.value);
+                setOllamaError("");
+              }}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-ring/50"
+            />
+          </div>
+          {ollamaError && (
+            <p className="text-destructive text-sm">{ollamaError}</p>
+          )}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={ollamaLoading || !ollamaUrl || !ollamaApiKey}
+              onClick={async () => {
+                setOllamaLoading(true);
+                setOllamaError("");
+                try {
+                  const res = await fetch(
+                    "/api/v1/auth/openai-compatible/connect",
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        endpointUrl: ollamaUrl,
+                        apiKey: ollamaApiKey,
+                      }),
+                    }
+                  );
+                  const data = await res.json();
+                  if (res.ok) {
+                    setOllamaConnected(true);
+                    setOllamaExpanded(false);
+                    setOllamaUrl("");
+                    setOllamaApiKey("");
+                  } else {
+                    setOllamaError(data.error ?? "Connection failed");
+                  }
+                } catch {
+                  setOllamaError("Failed to connect");
+                } finally {
+                  setOllamaLoading(false);
+                }
+              }}
+            >
+              {ollamaLoading ? "Testing..." : "Test & Connect"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setOllamaExpanded(false);
+                setOllamaError("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ── Ownership ── */}
 
