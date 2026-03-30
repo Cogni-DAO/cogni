@@ -6,7 +6,7 @@
  * Purpose: Runtime provider for chat using AI SDK streaming with multi-turn state and thread switching.
  * Scope: Feature-local provider. Uses useChatRuntime for AI SDK Data Stream Protocol streaming. Manages stateKey state for conversation continuity. Accepts initialMessages and initialStateKey for loading existing threads. Does not persist messages or manage auth.
  * Invariants:
- *   - CLIENT_SENDS_MESSAGE_ONLY: prepareSendMessagesRequest extracts last user message text and sends { message, model, graphName, stateKey }
+ *   - CLIENT_SENDS_MESSAGE_ONLY: prepareSendMessagesRequest extracts last user message text and sends { message, modelRef, graphName, stateKey }
  *   - THREAD_STATE_BY_KEY: stateKey stored in stateKeyMap; seeded from initialStateKey for existing threads
  * Side-effects: IO (fetch to /api/v1/ai/chat via runtime)
  * Notes: Uses useChatRuntime from @assistant-ui/react-ai-sdk; captures X-State-Key from response header.
@@ -18,7 +18,7 @@
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
-import type { GraphId } from "@cogni/ai-core";
+import type { GraphId, ModelRef } from "@cogni/ai-core";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
@@ -46,7 +46,8 @@ export interface ChatRuntimeRef {
 
 interface ChatRuntimeProviderProps {
   children: ReactNode;
-  selectedModel: string;
+  /** Fully-resolved model reference (provider + model + optional connection) */
+  modelRef: ModelRef;
   selectedGraph: GraphId;
   defaultModelId: string;
   /** Pre-loaded messages for an existing thread, or [] for a new thread. */
@@ -61,7 +62,7 @@ interface ChatRuntimeProviderProps {
 
 export function ChatRuntimeProvider({
   children,
-  selectedModel,
+  modelRef,
   selectedGraph,
   defaultModelId,
   initialMessages,
@@ -71,7 +72,7 @@ export function ChatRuntimeProvider({
   onFinish,
 }: ChatRuntimeProviderProps) {
   const queryClient = useQueryClient();
-  const selectedModelRef = useRef(selectedModel);
+  const modelRefRef = useRef(modelRef);
   const selectedGraphRef = useRef(selectedGraph);
 
   // State key for multi-turn conversations
@@ -86,8 +87,8 @@ export function ChatRuntimeProvider({
 
   // Keep refs in sync
   useEffect(() => {
-    selectedModelRef.current = selectedModel;
-  }, [selectedModel]);
+    modelRefRef.current = modelRef;
+  }, [modelRef]);
 
   useEffect(() => {
     selectedGraphRef.current = selectedGraph;
@@ -125,7 +126,7 @@ export function ChatRuntimeProvider({
       if (response.status === 409) {
         // UX-001: Invalid model - log warning but let retry happen via body.model
         clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_MODEL_INVALID_RETRY, {
-          model: selectedModelRef.current,
+          model: modelRefRef.current.modelId,
           defaultModelId,
         });
         // The server returns defaultModelId in the 409 response
@@ -164,7 +165,7 @@ export function ChatRuntimeProvider({
       prepareSendMessagesRequest: ({ messages }) => ({
         body: {
           message: extractLastUserText(messages),
-          model: selectedModelRef.current,
+          modelRef: modelRefRef.current,
           graphName: selectedGraphRef.current,
           ...(stateKeyRef.current ? { stateKey: stateKeyRef.current } : {}),
         },

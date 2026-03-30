@@ -18,7 +18,7 @@ export {
   DrizzleExecutionGrantUserAdapter,
   DrizzleExecutionGrantWorkerAdapter,
   DrizzleExecutionRequestAdapter,
-  DrizzleScheduleRunAdapter,
+  DrizzleGraphRunAdapter,
   DrizzleScheduleUserAdapter,
   DrizzleScheduleWorkerAdapter,
   type LoggerLike,
@@ -29,10 +29,8 @@ export type { AgentCatalogProvider } from "./ai/agent-catalog.provider";
 // Agent discovery infrastructure
 export { AggregatingAgentCatalog } from "./ai/aggregating-agent-catalog";
 // Graph execution infrastructure
-export { AggregatingGraphExecutor } from "./ai/aggregating-executor";
-// Billing decorator for automatic billing enforcement at port level
-export { BillingGraphExecutorDecorator } from "./ai/billing-executor.decorator";
-export type { GraphProvider } from "./ai/graph-provider";
+export { NamespaceGraphRouter } from "./ai/aggregating-executor";
+export { BillingEnrichmentGraphExecutorDecorator } from "./ai/billing-enrichment.decorator";
 export {
   type CompletionStreamFn,
   type CompletionStreamParams,
@@ -66,6 +64,7 @@ export type { ObservabilityDecoratorConfig } from "./ai/observability-executor.d
 export { ObservabilityGraphExecutorDecorator } from "./ai/observability-executor.decorator";
 // Preflight credit check decorator — rejects runs with insufficient credits before LLM execution
 export { PreflightCreditCheckDecorator } from "./ai/preflight-credit-check.decorator";
+export { RedisRunStreamAdapter } from "./ai/redis-run-stream.adapter";
 export {
   TavilyWebSearchAdapter,
   type TavilyWebSearchConfig,
@@ -74,6 +73,11 @@ export {
   DrizzleThreadPersistenceAdapter,
   MAX_THREAD_MESSAGES,
 } from "./ai/thread-persistence.adapter";
+// Usage commit decorator: validates usage_report events, commits BYO receipts directly
+export {
+  type CommitUsageFactFn,
+  UsageCommitDecorator,
+} from "./ai/usage-commit.decorator";
 export { DrizzleAiTelemetryAdapter } from "./ai-telemetry/drizzle.adapter";
 export {
   type CreateTraceWithIOParams,
@@ -81,6 +85,14 @@ export {
   type LangfuseAdapterConfig,
   type LangfuseSpanHandle,
 } from "./ai-telemetry/langfuse.adapter";
+// Connection broker adapter
+export {
+  ConnectionDecryptionError,
+  ConnectionNotFoundError,
+  DrizzleConnectionBrokerAdapter,
+  type DrizzleConnectionBrokerConfig,
+  type TokenRefreshFn,
+} from "./connections/drizzle-broker.adapter";
 export { type Database, getAppDb } from "./db/client";
 export { DrizzleGovernanceStatusAdapter } from "./governance/drizzle-governance-status.adapter";
 export {

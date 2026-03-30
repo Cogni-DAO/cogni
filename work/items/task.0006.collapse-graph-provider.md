@@ -2,7 +2,7 @@
 id: task.0006
 type: task
 title: "Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing"
-status: needs_design
+status: done
 priority: 1
 estimate: 3
 summary: Delete GraphProvider interface; providers implement GraphExecutorPort directly. Replace canHandle() with deterministic namespace prefix routing in the aggregator. Same cleanup for AgentCatalogProvider.
@@ -11,11 +11,11 @@ spec_refs: graph-execution, unified-graph-launch
 assignees: derekg1729
 credit:
 project: proj.unified-graph-launch
-branch:
+branch: claude/unified-graph-launch-mmXvl
 pr:
 reviewer:
 created: 2026-02-09
-updated: 2026-02-09
+updated: 2026-03-24
 labels: [ai-graphs, refactoring]
 external_refs:
 revision: 0
@@ -95,6 +95,51 @@ AgentCatalogPort (port — discovery only, no routing)
 - **ROUTING_BY_NAMESPACE_ONLY**: `NamespaceRouter` parses `graphId.split(":")[0]` once, looks up `Map<string, GraphExecutorPort>`. No per-provider routing logic.
 - **ADAPTERS_IMPLEMENT_PORTS**: Every provider adapter implements `GraphExecutorPort` directly.
 - **DISCOVERY_SEPARATION**: `AgentCatalogProvider` drops `canHandle()`. Discovery is `flatMap(p => p.listAgents())`, not routed.
+
+## Design
+
+### Outcome
+
+P1's `GraphRunWorkflow` builds on a single, clean execution interface — no duplicate abstractions, no per-provider routing logic. New adapters implement `GraphExecutorPort` + register a namespace key.
+
+### Approach
+
+**Solution**: Delete `GraphProvider`, make providers implement `GraphExecutorPort` directly, replace `AggregatingGraphExecutor` with `NamespaceGraphRouter` backed by `Map<string, GraphExecutorPort>`, and strip `canHandle()` from `AgentCatalogProvider`.
+
+**Reuses**: Existing `GraphExecutorPort` interface (unchanged), existing provider `runGraph()` signatures (identical), existing namespace convention (`GRAPH_ID_NAMESPACED`).
+
+**Rejected**:
+
+- **Keep GraphProvider as a narrowed subset** — adds no value since the signature is identical to `GraphExecutorPort`. More interfaces = more confusion for new adapters.
+- **Strategy pattern with explicit registry class** — over-engineered for a static `Map`. The factory already knows which providers exist at boot.
+
+### Invariants
+
+<!-- CODE REVIEW CRITERIA -->
+
+- [ ] SINGLE_EXECUTION_INTERFACE: Only `GraphExecutorPort` owns `runGraph()`. `GraphProvider` deleted. (spec: graph-execution)
+- [ ] ROUTING_BY_NAMESPACE_ONLY: `NamespaceGraphRouter` parses `graphId.split(":")[0]` once, looks up `Map<string, GraphExecutorPort>`. No per-provider routing logic. (spec: unified-graph-launch)
+- [ ] ADAPTERS_IMPLEMENT_PORTS: Every provider adapter implements `GraphExecutorPort` directly. (spec: architecture)
+- [ ] DISCOVERY_SEPARATION: `AgentCatalogProvider` drops `canHandle()`. Discovery is `flatMap(p => p.listAgents())`, not routed. (spec: graph-execution)
+- [ ] LAZY_SANDBOX_IMPORT: `LazySandboxGraphProvider` preserves lazy-init behavior via dynamic import. (spec: graph-execution)
+- [ ] SIMPLE_SOLUTION: Pure type + wiring change. No new abstractions, no new files (only renames + deletes).
+- [ ] ARCHITECTURE_ALIGNMENT: Hex layering preserved — adapters implement ports, bootstrap wires. (spec: architecture)
+
+### Files
+
+- Delete: `src/adapters/server/ai/graph-provider.ts` — redundant interface
+- Modify: `src/adapters/server/ai/aggregating-executor.ts` — rename class to `NamespaceGraphRouter`, accept `Map<string, GraphExecutorPort>`
+- Modify: `src/adapters/server/ai/langgraph/inproc.provider.ts` — `implements GraphExecutorPort`, delete `canHandle()`
+- Modify: `src/adapters/server/ai/langgraph/dev/provider.ts` — same
+- Modify: `src/adapters/server/sandbox/sandbox-graph.provider.ts` — same
+- Modify: `src/bootstrap/graph-executor.factory.ts` — `LazySandboxGraphProvider implements GraphExecutorPort`, build `Map`
+- Modify: `src/adapters/server/ai/agent-catalog.provider.ts` — remove `canHandle()` from interface
+- Modify: `src/adapters/server/ai/langgraph/inproc-agent-catalog.provider.ts` — remove `canHandle()` impl
+- Modify: `src/adapters/server/ai/langgraph/dev/agent-catalog.provider.ts` — remove `canHandle()` impl
+- Modify: `src/adapters/server/sandbox/sandbox-agent-catalog.provider.ts` — remove `canHandle()` impl
+- Modify: `src/adapters/server/index.ts` — remove `GraphProvider` export, rename `AggregatingGraphExecutor` → `NamespaceGraphRouter`
+- Test: `tests/unit/adapters/server/ai/aggregating-executor.spec.ts` — update to use `NamespaceGraphRouter` with `Map`
+- Test: `tests/_fixtures/ai/fixtures.ts` — replace `createMockGraphProvider` with `GraphExecutorPort`-based mock, remove `canHandle` from catalog mock
 
 ## Execution Plan
 

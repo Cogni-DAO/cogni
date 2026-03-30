@@ -2,25 +2,27 @@
 id: proj.node-formation-ui
 type: project
 primary_charter:
-title: Node Formation UI & CLI Tooling
+title: Node Formation & Launch
 state: Active
-priority: 2
-estimate: 5
-summary: Extend DAO formation beyond the initial web wizard — rewards-ready token mint mode, optional legal entity formation (OtoCo LLC), CLI setup tools, federation enrollment, and encoding parity tests
-outcome: Complete formation pipeline with rewards-ready GovernanceERC20 setup, optional on-chain LLC incorporation, CLI tooling, federation enrollment, and automated e2e testing
+priority: 1
+estimate: 8
+summary: Full node lifecycle from DAO formation through zero-touch provisioning. Covers web wizard, payment activation, node registry, and the provisionNode workflow (shared-cluster, namespace-per-node, Akash-forward).
+outcome: Founder clicks "Launch Node" after DAO formation -> async workflow provisions shared-cluster namespace + repo + config -> node is live at {slug}.nodes.cognidao.org within 15 minutes. Zero manual steps.
 assignees: derekg1729
 created: 2026-02-07
 updated: 2026-03-09
 labels: [web3, setup, cli, legal]
 ---
 
-# Node Formation UI & CLI Tooling
+# Node Formation & Launch
 
-> Source: docs/spec/node-formation.md
+> Source: docs/spec/node-formation.md, docs/spec/node-launch.md
 
 ## Goal
 
-Extend the P0 web DAO formation wizard (complete, manually validated on Base mainnet) to cover rewards-ready token mint configuration, optional legal entity formation (OtoCo LLC wrapper), CLI-based setup tooling, automated e2e testing, encoding parity validation, and federation enrollment.
+Full node lifecycle: DAO formation (done) -> zero-touch provisioning (this project's primary gap). Extend formation to cover rewards-ready tokens and legal entity, then build the provisionNode workflow that eliminates all manual post-formation steps.
+
+**North star:** Founder clicks "Launch Node" -> node is live. Shared cluster, namespace per node, Akash-forward.
 
 > Research: [On-Chain Entity Formation (OtoCo)](../../docs/research/onchain-entity-formation-otoco.md) — OSS evaluation of OtoCo, KaliDAO, MIDAO for legal entity wrapping. Aragon remains the governance layer; OtoCo is complementary (legal identity only).
 
@@ -36,9 +38,22 @@ Extend the P0 web DAO formation wizard (complete, manually validated on Base mai
 | Automated e2e testing (DAO formation flow with testnet)                                                                                                                                                                                             | Not Started | 2   | —           |
 | Encoding parity test: TokenVoting setup encoding must match Foundry exactly (`packages/aragon-osx/src/__tests__/encoding.parity.test.ts`). Fixture generation: Run Foundry script with known inputs, capture encoded bytes, commit as test fixture. | Not Started | 2   | —           |
 
-### Walk (P1) — Legal Entity Formation + Multi-Holder + CLI Setup Tools
+### Walk (P1) — Zero-Touch Node Launch + Node Registration
 
-**Goal:** Optional on-chain LLC formation via OtoCo, multi-holder support, CLI setup tools, and operator node registry.
+**Goal:** Build the provisionNode workflow so that DAO formation -> live node requires zero manual steps. Shared cluster, namespace per node.
+
+| Deliverable                                                                                                        | Status      | Est | Work Item           |
+| ------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ------------------- |
+| provisionNode Temporal workflow — full provisioning chain (8 activities, idempotent)                               | Not Started | 8   | `task.0202`         |
+| Node registration lifecycle — discovery, repo-spec fetch, scope reconciliation (absorbed from proj.operator-plane) | Not Started | 5   | `task.0122`         |
+| Operator-side `node_registry_nodes` table (see Design Notes §Operator Node Registry)                               | Not Started | 2   | (part of task.0202) |
+| Wildcard DNS setup — `*.nodes.cognidao.org` -> cluster ingress (one-time)                                          | Not Started | 1   | (part of task.0202) |
+| ArgoCD ApplicationSet — git-directory generator for `infra/cd/nodes/*`                                             | Not Started | 1   | (part of task.0202) |
+| `POST /api/nodes/provision` + `GET /api/nodes/{id}/status` endpoints                                               | Not Started | 2   | (part of task.0202) |
+
+### Walk (P1b) — Legal Entity + Multi-Holder
+
+**Goal:** Optional on-chain LLC formation via OtoCo, multi-holder support.
 
 | Deliverable                                                                                                     | Status      | Est | Work Item            |
 | --------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
@@ -47,12 +62,6 @@ Extend the P0 web DAO formation wizard (complete, manually validated on Base mai
 | Formation wizard TX 3+4 — optional "Incorporate as LLC" step, state machine extension                           | Not Started | 2   | (create after spike) |
 | Server verification for OtoCo entity — extend verify endpoint, add `legal_entity` to repo-spec YAML output      | Not Started | 2   | (create after spike) |
 | Multi-holder support (multiple initial token recipients)                                                        | Not Started | 2   | (create at P1 start) |
-| Create `packages/setup-cli/` with Node adapters (fs, shell, gh, tofu)                                           | Not Started | 3   | (create at P1 start) |
-| Implement `pnpm setup local` for contributor workflow                                                           | Not Started | 2   | (create at P1 start) |
-| Implement `pnpm setup infra --env preview\|production`                                                          | Not Started | 2   | (create at P1 start) |
-| Implement `pnpm setup github --env preview\|production`                                                         | Not Started | 2   | (create at P1 start) |
-| Add WalletConnect adapter (CLI wallet signing if proven needed)                                                 | Not Started | 1   | (create at P1 start) |
-| Operator-side `node_registry_nodes` table (see Design Notes §Operator Node Registry)                            | Not Started | 2   | (create at P1 start) |
 
 ### Run (P2+) — npx End-to-End + Federation Enrollment
 
@@ -89,6 +98,7 @@ Extend the P0 web DAO formation wizard (complete, manually validated on Base mai
 ## As-Built Specs
 
 - [node-formation.md](../../docs/spec/node-formation.md) — P0 formation invariants, tech stack, server verification, schemas
+- [node-launch.md](../../docs/spec/node-launch.md) — Zero-touch provisioning: shared cluster, namespace-per-node, provider-agnostic
 - [onchain-entity-formation-otoco.md](../../docs/research/onchain-entity-formation-otoco.md) — OtoCo research: OSS status, alternatives, crawl-walk-run plan
 
 ## Design Notes

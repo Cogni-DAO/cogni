@@ -13,6 +13,7 @@
 
 "use client";
 
+import type { ModelRef } from "@cogni/ai-core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronUp, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -33,6 +34,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components";
+import { ModelPicker } from "@/features/ai/components/ModelPicker";
 import { useModels } from "@/features/ai/hooks/useModels";
 import { createSchedule } from "./_api/createSchedule";
 import { deleteSchedule } from "./_api/deleteSchedule";
@@ -41,7 +43,12 @@ import { fetchSchedules } from "./_api/fetchSchedules";
 import { updateSchedule } from "./_api/updateSchedule";
 
 const SCHEDULE_PRESETS = [
+  { label: "Every minute", value: "* * * * *" },
+  { label: "Every 2 minutes", value: "*/2 * * * *" },
+  { label: "Every 5 minutes", value: "*/5 * * * *" },
+  { label: "Every 10 minutes", value: "*/10 * * * *" },
   { label: "Every 15 minutes", value: "*/15 * * * *" },
+  { label: "Every 30 minutes", value: "*/30 * * * *" },
   { label: "Hourly", value: "0 * * * *" },
   { label: "Daily at 9:00 AM", value: "0 9 * * *" },
   { label: "Daily at 6:00 PM", value: "0 18 * * *" },
@@ -69,7 +76,9 @@ export function SchedulesView() {
   const [selectedAgent, setSelectedAgent] = useState("");
   const [selectedCron, setSelectedCron] = useState("");
   const [selectedTimezone, setSelectedTimezone] = useState("UTC");
-  const [selectedModel, setSelectedModel] = useState("");
+  const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
+    null
+  );
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   const {
@@ -104,10 +113,10 @@ export function SchedulesView() {
 
   // Set default model when models data loads
   useEffect(() => {
-    if (modelsData?.defaultPreferredModelId && !selectedModel) {
-      setSelectedModel(modelsData.defaultPreferredModelId);
+    if (modelsData?.defaultRef && !selectedModelRef) {
+      setSelectedModelRef(modelsData.defaultRef);
     }
-  }, [modelsData?.defaultPreferredModelId, selectedModel]);
+  }, [modelsData?.defaultRef, selectedModelRef]);
 
   const createMutation = useMutation({
     mutationFn: createSchedule,
@@ -117,7 +126,7 @@ export function SchedulesView() {
       setSelectedAgent("");
       setSelectedCron("");
       setSelectedTimezone("UTC");
-      setSelectedModel(modelsData?.defaultPreferredModelId ?? "");
+      setSelectedModelRef(modelsData?.defaultRef ?? null);
       setIsFormOpen(false);
       setMutationError(null);
     },
@@ -149,13 +158,13 @@ export function SchedulesView() {
   });
 
   const handleCreate = () => {
-    if (!prompt.trim() || !selectedAgent || !selectedCron || !selectedModel)
+    if (!prompt.trim() || !selectedAgent || !selectedCron || !selectedModelRef)
       return;
     createMutation.mutate({
       graphId: selectedAgent,
       input: {
         messages: [{ role: "user", content: prompt.trim() }],
-        model: selectedModel,
+        modelRef: selectedModelRef,
       },
       cron: selectedCron,
       timezone: selectedTimezone,
@@ -173,14 +182,14 @@ export function SchedulesView() {
   const agents = agentsData?.agents ?? [];
   const schedules = schedulesData?.schedules ?? [];
   const models = modelsData?.models ?? [];
-  const defaultModelId = modelsData?.defaultPreferredModelId ?? "";
+  const defaultModelId = modelsData?.defaultRef?.modelId ?? "";
   const hasAgents = agents.length > 0;
   const hasModels = models.length > 0;
   const isFormValid =
     prompt.trim() &&
     selectedAgent &&
     selectedCron &&
-    selectedModel &&
+    selectedModelRef &&
     hasAgents &&
     hasModels;
 
@@ -285,31 +294,13 @@ export function SchedulesView() {
 
             {/* Model Select */}
             <div>
-              <label htmlFor="model" className="mb-2 block font-medium text-sm">
-                Model
-              </label>
-              {!hasModels ? (
-                <p className="text-muted-foreground text-sm">
-                  No models available. Check LiteLLM configuration.
-                </p>
-              ) : (
-                <Select
-                  value={selectedModel || defaultModelId}
-                  onValueChange={setSelectedModel}
-                >
-                  <SelectTrigger id="model">
-                    <SelectValue placeholder="Select a model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {models.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.name ?? model.id}
-                        {model.isFree && " (Free)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              <div className="mb-2 font-medium text-sm">Model</div>
+              <ModelPicker
+                models={models}
+                value={selectedModelRef?.modelId || defaultModelId}
+                onValueChange={setSelectedModelRef}
+                disabled={!hasModels}
+              />
             </div>
 
             {/* Frequency Select */}
@@ -425,9 +416,18 @@ export function SchedulesView() {
                       {schedule.graphId.split(":").pop() ?? schedule.graphId}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
-                      {typeof schedule.input?.model === "string"
-                        ? schedule.input.model
-                        : "—"}
+                      {(() => {
+                        const input = schedule.input as
+                          | Record<string, unknown>
+                          | undefined;
+                        const ref = input?.modelRef as
+                          | { modelId?: string }
+                          | undefined;
+                        return (
+                          ref?.modelId ??
+                          (typeof input?.model === "string" ? input.model : "—")
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="max-w-xs truncate">
                       {promptText.length > 50

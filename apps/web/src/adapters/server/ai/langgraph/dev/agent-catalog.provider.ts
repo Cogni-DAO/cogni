@@ -70,15 +70,4 @@ export class LangGraphDevAgentCatalogProvider implements AgentCatalogProvider {
   listAgents(): readonly AgentDescriptor[] {
     return this.agentDescriptors;
   }
-
-  /**
-   * Check if this provider handles the given graphId.
-   */
-  canHandle(graphId: string): boolean {
-    if (!graphId.startsWith(`${this.providerId}:`)) {
-      return false;
-    }
-    const graphName = graphId.slice(this.providerId.length + 1);
-    return graphName in LANGGRAPH_CATALOG;
-  }
 }

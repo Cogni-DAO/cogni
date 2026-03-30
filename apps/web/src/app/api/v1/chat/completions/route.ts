@@ -15,6 +15,7 @@
  * @public
  */
 
+import { isAiExecutionError } from "@cogni/ai-core";
 import { NextResponse } from "next/server";
 
 import {
@@ -22,6 +23,7 @@ import {
   chatCompletionStream,
   toOpenAiFinishReason,
 } from "@/app/_facades/ai/completion.server";
+import { executionErrorToOpenAiError } from "@/app/_facades/ai/execution-error-mapper";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
@@ -160,6 +162,13 @@ function handleRouteError(
       "invalid_request_error",
       400
     );
+  }
+
+  // Execution errors from Temporal+Redis boundary (serialization-safe error codes)
+  if (isAiExecutionError(error)) {
+    const { status, message, type } = executionErrorToOpenAiError(error.code);
+    logRequestWarn(ctx.log, error, error.code.toUpperCase());
+    return openAiError(message, type, status);
   }
 
   return null; // Unhandled → let wrapper catch as 500
@@ -415,16 +424,23 @@ export const POST = wrapRouteHandlerWithLogging(
 
       const isStreaming = input.stream === true;
       const graphName = input.graph_name;
+      const idempotencyKey =
+        request.headers.get("idempotency-key") ?? undefined;
 
       if (isStreaming) {
         // ── Streaming path ──────────────────────────────────────────────
+        const modelRef = {
+          providerKey: "platform" as const,
+          modelId: input.model,
+        };
         const { stream, final } = await chatCompletionStream(
           {
             messages: input.messages,
-            model: input.model,
+            modelRef,
             sessionUser,
             ...(graphName ? { graphName } : {}),
             abortSignal: request.signal,
+            ...(idempotencyKey ? { idempotencyKey } : {}),
           },
           ctx
         );
@@ -436,7 +452,7 @@ export const POST = wrapRouteHandlerWithLogging(
         const sseStream = createOpenAiSseStream(
           stream,
           final,
-          input.model,
+          modelRef.modelId,
           completionId,
           created,
           includeUsage,
@@ -455,12 +471,17 @@ export const POST = wrapRouteHandlerWithLogging(
       }
 
       // ── Non-streaming path ──────────────────────────────────────────
+      const modelRef = {
+        providerKey: "platform" as const,
+        modelId: input.model,
+      };
       const result = await chatCompletion(
         {
           messages: input.messages,
-          model: input.model,
+          modelRef,
           sessionUser,
           ...(graphName ? { graphName } : {}),
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         },
         ctx
       );

@@ -4,11 +4,11 @@ type: spec
 title: Scheduled Graph Execution Design
 status: active
 trust: draft
-summary: Temporal-based scheduling system for graph execution via internal HTTP API with durable ExecutionGrants
+summary: Temporal-based scheduling system for graph execution via internal HTTP API with durable ExecutionGrants and graph_runs persistence
 read_when: Implementing scheduled workflows, execution grants, or Temporal integration
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-16
+verified: 2026-03-17
 tags: [scheduler]
 ---
 
@@ -33,7 +33,7 @@ tags: [scheduler]
 
 4. **GRANT_VALIDATED_TWICE**: Worker validates grant before calling API (fail-fast). Execution service re-validates grant validity + scope (defense-in-depth). Scope format: `graph:execute:{graphId}` or `graph:execute:*`.
 
-5. **RUN_LEDGER_FOR_DB_SCHEDULES**: DB-backed schedules create `schedule_runs` records with status progression (pending→running→success/error). Temporal-only schedules (e.g., governance `governance:*`) do not write `schedule_runs`.
+5. **RUN_LEDGER_FOR_DB_SCHEDULES**: DB-backed schedules create `graph_runs` records with status progression (pending→running→success/error). Temporal-only schedules (e.g., governance `governance:*`) do not write `graph_runs`.
 
 6. **EXECUTION_VIA_SERVICE_API**: Worker triggers runs via HTTP to `POST /api/internal/graphs/{graphId}/runs`. Worker NEVER imports graph execution code.
 
@@ -43,13 +43,13 @@ tags: [scheduler]
 
 9a. **SCHEDULE_CREATION_REJECTS_IF_CURRENTLY_UNPAYABLE**: `POST /api/v1/schedules` performs a coarse credit gate before creating the schedule. Paid model + balance ≤ 0 → 402. Free models and requests without a model field bypass the check. This is a creation-time guard only; the `PreflightCreditCheckDecorator` enforces at execution time (per CREDITS_ENFORCED_AT_EXECUTION_PORT).
 
-9. **RUN_OWNERSHIP_BOUNDARY**: Worker owns `schedule_runs`. Execution service owns graph runs + billing (`charge_receipts`). Correlation via `runId` and `langfuseTraceId`.
+9. **RUN_OWNERSHIP_BOUNDARY**: Worker owns scheduler-originated `graph_runs` entries. Execution service owns graph execution + billing (`charge_receipts`). Correlation via `runId` and `langfuseTraceId`.
 
 ### Temporal-Specific Invariants
 
 10. **NAMESPACE_PER_ENV**: Temporal namespace = `cogni-{APP_ENV}` (cogni-test, cogni-production). Single `scheduler-tasks` task queue per namespace.
 
-11. **WORKER_NEVER_CONTROLS_SCHEDULES**: `scheduler-temporal-worker` must not depend on `ScheduleControlPort` or call Temporal schedule APIs. CRUD routes are the single authority. Enforce via dep-cruiser.
+11. **WORKER_NEVER_CONTROLS_SCHEDULES**: `scheduler-worker` must not depend on `ScheduleControlPort` or call Temporal schedule APIs. CRUD routes are the single authority. Enforce via dep-cruiser.
 
 12. **WORKFLOW_ID_INCLUDES_TIMESTAMP**: Temporal workflowId = `{temporalScheduleId}:{TemporalScheduledStartTime}`. Each scheduled slot gets a unique workflow. `temporalScheduleId` remains the business key for correlation. Temporal overlap=SKIP ensures only one active workflow per schedule at a time.
 
@@ -75,11 +75,11 @@ tags: [scheduler]
 
 ### Progression
 
-| Phase           | Worker Entry                            | Scheduler          | Status     |
-| --------------- | --------------------------------------- | ------------------ | ---------- |
-| **1 (Legacy)**  | `src/scripts/run-scheduler-worker.ts`   | Graphile Worker    | ✅ Deleted |
-| **2 (Current)** | `services/scheduler-worker/src/main.ts` | Graphile Worker    | ✅ Merged  |
-| **3 (Next)**    | `services/scheduler-temporal-worker/`   | Temporal Schedules | 🔲 Planned |
+| Phase           | Worker Entry                                                    | Scheduler                | Status     |
+| --------------- | --------------------------------------------------------------- | ------------------------ | ---------- |
+| **1 (Legacy)**  | `src/scripts/run-scheduler-worker.ts`                           | Graphile Worker          | ✅ Deleted |
+| **2 (Current)** | `services/scheduler-worker/src/main.ts`                         | Temporal Schedules       | ✅ Merged  |
+| **3 (Next)**    | `services/scheduler-worker/src/workflows/graph-run.workflow.ts` | Unified GraphRunWorkflow | 🔲 Planned |
 
 ### Package Extraction (Complete)
 
@@ -127,7 +127,7 @@ tags: [scheduler]
 │    • TaskQueue: scheduler-tasks                                             │
 │    • Schedules: overlap=SKIP, catchupWindow=0                               │
 │                                                                             │
-│  services/scheduler-temporal-worker/                                        │
+│  services/scheduler-worker/                                                 │
 │    • Connects to Temporal, registers taskQueue                              │
 │    • Hosts GovernanceScheduledRunWorkflow + Activities                      │
 │    • Does NOT create/update/delete schedules (CRUD is authority)            │
@@ -213,25 +213,32 @@ tags: [scheduler]
 
 > **Note:** `next_run_at` and `last_run_at` are cache columns for UI display. Authoritative timing is from `temporalClient.schedule.describe(scheduleId).info.nextActionTimes`.
 
-### `schedule_runs`
+### `graph_runs`
 
-| Column              | Type        | Constraints                 | Notes                                 |
-| ------------------- | ----------- | --------------------------- | ------------------------------------- |
-| `id`                | uuid        | PK                          |                                       |
-| `schedule_id`       | uuid        | NOT NULL, FK schedules      | DB-backed schedules only              |
-| `run_id`            | text        | NULL                        | Set after execution API responds      |
-| `scheduled_for`     | timestamptz | NOT NULL                    | From TemporalScheduledStartTime       |
-| `started_at`        | timestamptz | NULL                        |                                       |
-| `completed_at`      | timestamptz | NULL                        |                                       |
-| `status`            | text        | NOT NULL, default 'pending' | pending/running/success/error/skipped |
-| `langfuse_trace_id` | text        | NULL                        |                                       |
-| `error_message`     | text        | NULL                        |                                       |
+| Column              | Type        | Constraints                 | Notes                                                                 |
+| ------------------- | ----------- | --------------------------- | --------------------------------------------------------------------- |
+| `id`                | uuid        | PK                          |                                                                       |
+| `schedule_id`       | uuid        | NULL, FK schedules          | Null for non-scheduled runs; set for DB-backed schedules              |
+| `run_id`            | text        | NOT NULL                    | Canonical GraphExecutorPort `runId`                                   |
+| `graph_id`          | text        | NULL                        | Namespaced graph ID                                                   |
+| `run_kind`          | text        | NULL                        | `user_immediate` \| `system_scheduled` \| `system_webhook`            |
+| `trigger_source`    | text        | NULL                        | `api` \| `temporal_schedule` \| `webhook:{type}`                      |
+| `trigger_ref`       | text        | NULL                        | Upstream schedule or delivery ID                                      |
+| `requested_by`      | text        | NULL                        | User ID or `cogni_system`                                             |
+| `scheduled_for`     | timestamptz | NULL                        | Set for scheduled runs from `TemporalScheduledStartTime`              |
+| `started_at`        | timestamptz | NULL                        |                                                                       |
+| `completed_at`      | timestamptz | NULL                        |                                                                       |
+| `status`            | text        | NOT NULL, default 'pending' | `pending` / `running` / `success` / `error` / `skipped` / `cancelled` |
+| `attempt_count`     | integer     | NOT NULL, default 0         | Retry/attempt semantics                                               |
+| `langfuse_trace_id` | text        | NULL                        |                                                                       |
+| `error_code`        | text        | NULL                        |                                                                       |
+| `error_message`     | text        | NULL                        |                                                                       |
 
-**Indexes:** `idx_runs_schedule`, `idx_runs_scheduled_for`, `idx_runs_run_id`
-**Unique:** `(schedule_id, scheduled_for)` — one run per slot
-**Pattern:** Idempotent get-or-create via `INSERT ON CONFLICT DO NOTHING` + `SELECT`.
+**Indexes:** `graph_runs_schedule_idx`, `graph_runs_scheduled_for_idx`, `graph_runs_run_id_idx`, `graph_runs_run_kind_idx`
+**Unique:** `(schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL` — one scheduled run per slot
+**Pattern:** Scheduled inserts use optimistic insert + re-select on duplicate because the uniqueness constraint is partial.
 
-> **Note:** `run_id` is NULL on creation (set after internal API returns). The `ScheduleRunRepository.createRun()` port needs update to accept `runId?: string | null` to match schema.
+> **Note:** Current scheduler-worker writes only the scheduler-owned subset of `graph_runs`. API and webhook launches will share the same table once `GraphRunWorkflow` lands.
 
 ### `execution_requests`
 
@@ -258,42 +265,42 @@ tags: [scheduler]
 
 ### Current (Implemented)
 
-| File                                                                   | Purpose                                                 |
-| ---------------------------------------------------------------------- | ------------------------------------------------------- |
-| `packages/scheduler-core/src/types.ts`                                 | `ExecutionGrant`, `ScheduleSpec`, `ScheduleRun` types   |
-| `packages/db-schema/src/scheduling.ts`                                 | `execution_grants`, `schedules`, `schedule_runs` tables |
-| `packages/scheduler-core/src/ports/execution-grant.port.ts`            | `ExecutionGrantPort` + error classes                    |
-| `packages/scheduler-core/src/ports/execution-request.port.ts`          | `ExecutionRequestPort` for idempotency                  |
-| `packages/scheduler-core/src/ports/schedule-manager.port.ts`           | `ScheduleManagerPort` interface                         |
-| `packages/scheduler-core/src/ports/schedule-run.port.ts`               | `ScheduleRunRepository` interface                       |
-| `packages/db-client/src/adapters/drizzle-grant.adapter.ts`             | `DrizzleExecutionGrantAdapter`                          |
-| `packages/db-client/src/adapters/drizzle-execution-request.adapter.ts` | `DrizzleExecutionRequestAdapter`                        |
-| `packages/db-client/src/adapters/drizzle-schedule.adapter.ts`          | `DrizzleScheduleManagerAdapter`                         |
-| `packages/db-client/src/adapters/drizzle-run.adapter.ts`               | `DrizzleScheduleRunAdapter`                             |
-| `src/contracts/schedules.*.v1.contract.ts`                             | Schedule CRUD contracts (4 files)                       |
-| `src/app/api/v1/schedules/route.ts`                                    | POST (create with credit gate), GET (list)              |
-| `src/app/api/v1/schedules/[scheduleId]/route.ts`                       | PATCH (update), DELETE                                  |
-| `src/bootstrap/container.ts`                                           | Wire scheduling ports                                   |
-| `packages/scheduler-core/src/payloads.ts`                              | Zod payload schemas                                     |
+| File                                                                   | Purpose                                              |
+| ---------------------------------------------------------------------- | ---------------------------------------------------- |
+| `packages/scheduler-core/src/types.ts`                                 | `ExecutionGrant`, `ScheduleSpec`, `GraphRun` types   |
+| `packages/db-schema/src/scheduling.ts`                                 | `execution_grants`, `schedules`, `graph_runs` tables |
+| `packages/scheduler-core/src/ports/execution-grant.port.ts`            | `ExecutionGrantPort` + error classes                 |
+| `packages/scheduler-core/src/ports/execution-request.port.ts`          | `ExecutionRequestPort` for idempotency               |
+| `packages/scheduler-core/src/ports/schedule-manager.port.ts`           | `ScheduleManagerPort` interface                      |
+| `packages/scheduler-core/src/ports/schedule-run.port.ts`               | `ScheduleRunRepository` interface                    |
+| `packages/db-client/src/adapters/drizzle-grant.adapter.ts`             | `DrizzleExecutionGrantAdapter`                       |
+| `packages/db-client/src/adapters/drizzle-execution-request.adapter.ts` | `DrizzleExecutionRequestAdapter`                     |
+| `packages/db-client/src/adapters/drizzle-schedule.adapter.ts`          | `DrizzleScheduleManagerAdapter`                      |
+| `packages/db-client/src/adapters/drizzle-run.adapter.ts`               | `DrizzleGraphRunAdapter`                             |
+| `apps/web/src/contracts/schedules.*.v1.contract.ts`                    | Schedule CRUD contracts (4 files)                    |
+| `apps/web/src/app/api/v1/schedules/route.ts`                           | POST (create with credit gate), GET (list)           |
+| `apps/web/src/app/api/v1/schedules/[scheduleId]/route.ts`              | PATCH (update), DELETE                               |
+| `apps/web/src/bootstrap/container.ts`                                  | Wire scheduling ports                                |
+| `packages/scheduler-core/src/payloads.ts`                              | Zod payload schemas                                  |
 
 ### Implemented (Temporal Migration)
 
-| File                                                         | Purpose                                     |
-| ------------------------------------------------------------ | ------------------------------------------- |
-| `packages/scheduler-core/src/ports/schedule-control.port.ts` | `ScheduleControlPort` interface (no vendor) |
-| `src/adapters/server/temporal/client.ts`                     | Temporal client factory                     |
-| `src/adapters/server/temporal/schedule-control.adapter.ts`   | `TemporalScheduleControlAdapter`            |
-| `services/scheduler-worker/`                                 | Temporal worker service                     |
-| `services/scheduler-worker/src/main.ts`                      | Worker entry, connects to Temporal          |
-| `services/scheduler-worker/src/workflows/`                   | GovernanceScheduledRunWorkflow              |
-| `services/scheduler-worker/src/activities/`                  | validateGrant, createRun, executeGraph      |
+| File                                                                | Purpose                                     |
+| ------------------------------------------------------------------- | ------------------------------------------- |
+| `packages/scheduler-core/src/ports/schedule-control.port.ts`        | `ScheduleControlPort` interface (no vendor) |
+| `apps/web/src/adapters/server/temporal/client.ts`                   | Temporal client factory                     |
+| `apps/web/src/adapters/server/temporal/schedule-control.adapter.ts` | `TemporalScheduleControlAdapter`            |
+| `services/scheduler-worker/`                                        | Temporal worker service                     |
+| `services/scheduler-worker/src/main.ts`                             | Worker entry, connects to Temporal          |
+| `services/scheduler-worker/src/workflows/`                          | GovernanceScheduledRunWorkflow              |
+| `services/scheduler-worker/src/activities/`                         | validateGrant, createRun, executeGraph      |
 
 ### Implemented (P0)
 
-| File                                                  | Purpose                     |
-| ----------------------------------------------------- | --------------------------- |
-| `src/app/api/internal/graphs/[graphId]/runs/route.ts` | Internal execution endpoint |
-| `src/contracts/graphs.run.internal.v1.contract.ts`    | Internal execution contract |
+| File                                                           | Purpose                     |
+| -------------------------------------------------------------- | --------------------------- |
+| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` | Internal execution endpoint |
+| `apps/web/src/contracts/graphs.run.internal.v1.contract.ts`    | Internal execution contract |
 
 ---
 
@@ -349,7 +356,7 @@ tags: [scheduler]
 
 ## Known Issues (P0)
 
-- [ ] **Latest trace not displayed in UI**: `schedule_runs.langfuse_trace_id` is populated after execution, but Schedules list API doesn't return run history—UI hardcodes "No runs yet" (`view.tsx:440`)
+- [ ] **Latest trace not displayed in UI**: `graph_runs.langfuse_trace_id` is populated after execution, but Schedules list API doesn't return run history—UI hardcodes "No runs yet" (`view.tsx:440`)
 
 ## Related
 

@@ -51,11 +51,14 @@ System setup installers were moved to `scripts/bootstrap/` and are out of scope 
   - `runGovernanceSchedulesSyncJob()` - Job: advisory lock + governance schedule sync via container
   - `getContainer()` - Singleton DI container with logger and config
   - `resetContainer()` - Reset singleton (tests only)
-  - `Container` interface - Ports + logger + config (includes accountsForUser(userId), serviceAccountService, metricsQuery, metricsCapability, repoCapability, toolSource, threadPersistenceForUser(userId); no usageService)
+  - `Container` interface - Ports + logger + config (includes accountsForUser(userId), serviceAccountService, metricsQuery, metricsCapability, repoCapability, toolSource, threadPersistenceForUser(userId), modelCatalog, providerResolver; no usageService)
   - `ContainerConfig` interface - Runtime config (unhandledErrorPolicy, rateLimitBypass, DEPLOY_ENVIRONMENT)
   - `UnhandledErrorPolicy` type - `"rethrow" | "respond_500"`
+  - `getTemporalWorkflowClient()` - Process-wide Temporal WorkflowClient singleton (race-safe init, cleaned up by resetContainer)
   - `resolveAiAdapterDeps()` - AI adapter dependencies for factory
-  - `createGraphExecutor(completionStreamFn, userId, billingCommitFn, preflightCheckFn)` - Factory for GraphExecutorPort with preflight + billing + observability decorators (from `graph-executor.factory.ts`)
+  - `createGraphExecutor(completionStreamFn, userId)` - Factory for the static inner GraphExecutorPort router (from `graph-executor.factory.ts`)
+  - `createScopedGraphExecutor({ executor, billing, preflightCheckFn, resolver, actorId, abortSignal?, broker?, commitByoUsage? })` - Per-run wrapper: resolves LlmService from ModelProviderResolverPort, applies billing/preflight/observability/usage-commit decorators, seeds ALS ExecutionScope
+  - `runGraphWithScope({ executor, req, ctx?, billing, llmService, abortSignal? })` - App-local helper that seeds per-run ALS scope with resolved LlmService
   - `createAgentCatalog()`, `listAgentsForApi()` - Discovery factory (from `agent-discovery.ts`)
   - `wrapRouteHandlerWithLogging()` - Route logging wrapper with metrics (from `http/`)
   - `wrapPublicRoute()` - Lazy singleton wrapper for public routes with rate limiting (from `http/`)
@@ -76,7 +79,7 @@ System setup installers were moved to `scripts/bootstrap/` and are out of scope 
 
 - This directory **does**:
   - Dependency injection wiring with singleton container
-  - Factory functions for adapter construction (e.g., createGraphExecutor, createAgentCatalog)
+  - Factory functions for adapter construction and per-run executor composition (e.g., createGraphExecutor, createScopedGraphExecutor, createAgentCatalog)
   - Sandbox provider registration (LazySandboxGraphProvider + SandboxAgentCatalogProvider, gated by LITELLM_MASTER_KEY; sandbox adapter loaded via dynamic import to avoid Turbopack bundling native deps)
   - Discovery factory for agent listing (listAgentsForApi per DISCOVERY_PIPELINE invariant)
   - Environment-based adapter selection (APP_ENV=test → fakes, production → real adapters including RipgrepAdapter)

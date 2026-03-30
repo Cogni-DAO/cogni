@@ -296,11 +296,20 @@ export const repoSpecSchema = z
       base_url: z.string().url().optional(),
     }),
 
-    /** Payment configuration (required) */
-    payments_in: z.object({
-      /** Inbound payment configuration for USDC credits top-up (required) */
-      credits_topup: creditsTopupSpecSchema,
-    }),
+    /** Payment activation status — pending_activation until node:activate-payments completes */
+    payments: z
+      .object({
+        status: z.enum(["pending_activation", "active"]),
+      })
+      .optional(),
+
+    /** Payment configuration (optional — populated by node:activate-payments) */
+    payments_in: z
+      .object({
+        /** Inbound payment configuration for USDC credits top-up */
+        credits_topup: creditsTopupSpecSchema,
+      })
+      .optional(),
 
     /** Governance schedule configuration (optional — defaults to empty schedules) */
     governance: governanceSpecSchema.optional().default({ schedules: [] }),

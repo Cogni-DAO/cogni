@@ -17,6 +17,7 @@
 import { UsageFactHintsSchema, UsageFactStrictSchema } from "@cogni/ai-core";
 import type { Logger } from "pino";
 import type {
+  ExecutionContext,
   GraphExecutorPort,
   GraphRunRequest,
   GraphRunResult,
@@ -45,8 +46,8 @@ export class BillingGraphExecutorDecorator implements GraphExecutorPort {
     private readonly log: Logger
   ) {}
 
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const result = this.inner.runGraph(req);
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    const result = this.inner.runGraph(req, ctx);
     return {
       stream: this.wrapStreamWithBilling(result.stream, req),
       final: result.final,
@@ -59,7 +60,7 @@ export class BillingGraphExecutorDecorator implements GraphExecutorPort {
   ): AsyncIterable<AiEvent> {
     for await (const event of upstream) {
       if (event.type === "usage_report") {
-        this.validateUsageFact(event.fact, req.runId, req.ingressRequestId);
+        this.validateUsageFact(event.fact, req.runId);
         continue; // Don't yield usage_report to consumer
       }
       yield event;
@@ -73,11 +74,7 @@ export class BillingGraphExecutorDecorator implements GraphExecutorPort {
    * - Billing-authoritative (inproc/sandbox): strict schema, hard failure on invalid
    * - External (langgraph_server/claude_sdk): hints schema, soft skip on invalid
    */
-  private validateUsageFact(
-    fact: UsageFact,
-    runId: string,
-    ingressRequestId: string
-  ): void {
+  private validateUsageFact(fact: UsageFact, runId: string): void {
     const isBillingAuthoritative =
       fact.executorType === "inproc" || fact.executorType === "sandbox";
 
@@ -94,7 +91,6 @@ export class BillingGraphExecutorDecorator implements GraphExecutorPort {
         this.log.error(
           {
             runId,
-            ingressRequestId,
             executorType: fact.executorType,
             validationErrors: errors,
             fact,
@@ -108,7 +104,6 @@ export class BillingGraphExecutorDecorator implements GraphExecutorPort {
         this.log.warn(
           {
             runId,
-            ingressRequestId,
             executorType: fact.executorType,
             validationErrors: errors,
             fact,

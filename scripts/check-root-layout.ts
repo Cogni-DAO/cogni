@@ -65,6 +65,7 @@ const REQUIRED_PATHS: PathRequirement[] = [
 
 const ALLOWED_ROOT_ENTRIES = new Set<string>([
   ".agent",
+  ".agents",
   ".allstar",
   ".claude",
   ".clinerules",
@@ -107,6 +108,7 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "biome",
   "biome.json",
   "commitlint.config.cjs",
+  "config",
   "docs",
   "drizzle.config.ts",
   "e2e",
@@ -121,6 +123,7 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "pnpm-workspace.yaml",
   "scripts",
   "services",
+  "skills-lock.json",
   "sonar-project.properties",
   "tests",
   "tsconfig.base.json",

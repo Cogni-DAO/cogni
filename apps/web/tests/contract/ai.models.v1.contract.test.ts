@@ -31,13 +31,12 @@ describe("ai.models.v1 contract validation", () => {
 
     // Assert
     expect(fixture).toHaveProperty("models");
-    expect(fixture).toHaveProperty("defaultPreferredModelId");
-    expect(fixture).toHaveProperty("defaultFreeModelId");
-    // Defaults are nullable - fixture has defaults from JSON
-    expect(fixture.defaultPreferredModelId).toBeTruthy();
-    expect(typeof fixture.defaultPreferredModelId).toBe("string");
-    if (fixture.defaultPreferredModelId !== null) {
-      expect(fixture.defaultPreferredModelId.length).toBeGreaterThan(0);
+    expect(fixture).toHaveProperty("defaultRef");
+    // defaultRef is nullable - fixture has a default from JSON
+    expect(fixture.defaultRef).toBeTruthy();
+    if (fixture.defaultRef !== null) {
+      expect(fixture.defaultRef).toHaveProperty("providerKey");
+      expect(fixture.defaultRef).toHaveProperty("modelId");
     }
   });
 
@@ -54,13 +53,19 @@ describe("ai.models.v1 contract validation", () => {
     // Arrange
     const fixture = loadModelsFixture();
 
-    // Assert - Each model has id and isFree
+    // Assert - Each model has ref, label, requiresPlatformCredits, providerLabel, capabilities
     for (const model of fixture.models) {
-      expect(model).toHaveProperty("id");
-      expect(model).toHaveProperty("isFree");
-      expect(typeof model.id).toBe("string");
-      expect(model.id.length).toBeGreaterThan(0);
-      expect(typeof model.isFree).toBe("boolean");
+      expect(model).toHaveProperty("ref");
+      expect(model.ref).toHaveProperty("providerKey");
+      expect(model.ref).toHaveProperty("modelId");
+      expect(typeof model.ref.providerKey).toBe("string");
+      expect(typeof model.ref.modelId).toBe("string");
+      expect(model.ref.modelId.length).toBeGreaterThan(0);
+      expect(model).toHaveProperty("label");
+      expect(typeof model.label).toBe("string");
+      expect(model).toHaveProperty("requiresPlatformCredits");
+      expect(typeof model.requiresPlatformCredits).toBe("boolean");
+      expect(model).toHaveProperty("capabilities");
     }
   });
 
@@ -69,19 +74,30 @@ describe("ai.models.v1 contract validation", () => {
     const fixture = loadModelsFixture();
 
     // Assert - At least one free and one paid
-    const hasFreeModel = fixture.models.some((m) => m.isFree === true);
-    const hasPaidModel = fixture.models.some((m) => m.isFree === false);
+    const hasFreeModel = fixture.models.some(
+      (m) => m.requiresPlatformCredits === false
+    );
+    const hasPaidModel = fixture.models.some(
+      (m) => m.requiresPlatformCredits === true
+    );
 
     expect(hasFreeModel).toBe(true);
     expect(hasPaidModel).toBe(true);
   });
 
-  it("should have defaultPreferredModelId that exists in models list", () => {
+  it("should have defaultRef that exists in models list", () => {
     // Arrange
     const fixture = loadModelsFixture();
 
-    // Assert - defaultPreferredModelId is in the models array
-    const modelIds = fixture.models.map((m) => m.id);
-    expect(modelIds).toContain(fixture.defaultPreferredModelId);
+    // Assert - defaultRef matches a model in the array
+    expect(fixture.defaultRef).not.toBeNull();
+    if (fixture.defaultRef) {
+      const match = fixture.models.find(
+        (m) =>
+          m.ref.providerKey === fixture.defaultRef!.providerKey &&
+          m.ref.modelId === fixture.defaultRef!.modelId
+      );
+      expect(match).toBeDefined();
+    }
   });
 });

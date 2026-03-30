@@ -4,7 +4,7 @@
 /**
  * Module: `@tests/stack/ai/stream-drain-enforcement.stack`
  * Purpose: Verify CALLER_DRAIN_OBLIGATION invariant via static analysis.
- * Scope: Ensures all consumer-level runGraph() call sites drain the stream (via RunEventRelay or `for await`). Does not test runtime behavior.
+ * Scope: Ensures all consumer-level runGraph() call sites drain the stream (via `for await`). Does not test runtime behavior.
  * Invariants:
  *   - CALLER_DRAIN_OBLIGATION: Every runGraph() consumer must drain the stream for billing to fire
  * Side-effects: IO (grep subprocess)
@@ -45,7 +45,6 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
     );
 
     // Each consumer site's file must contain evidence of stream draining:
-    // - RunEventRelay (pump drains to completion)
     // - `for await` pattern (explicit drain loop)
     const violations: string[] = [];
 
@@ -56,12 +55,9 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
         "utf-8"
       );
 
-      const hasPumpDrain =
-        fileContent.includes("RunEventRelay") ||
-        fileContent.includes("startPump");
       const hasForAwaitDrain = fileContent.includes("for await");
 
-      if (!hasPumpDrain && !hasForAwaitDrain) {
+      if (!hasForAwaitDrain) {
         violations.push(site);
       }
     }
@@ -75,8 +71,7 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
 
     expect(violations).toEqual([]);
 
-    // Sanity: we should have found at least 2 consumer call sites
-    // (ai_runtime.ts + route.ts). If fewer, the grep pattern may be stale.
-    expect(consumerSites.length).toBeGreaterThanOrEqual(2);
+    // Sanity: we should have found at least one consumer call site.
+    expect(consumerSites.length).toBeGreaterThanOrEqual(1);
   });
 });

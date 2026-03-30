@@ -431,7 +431,7 @@ describe("OpenClaw Gateway Full-Stack", () => {
   it.skip("provider-level model selection: GraphRunRequest.model reaches LiteLLM", async () => {
     const req = makeGatewayRunRequest({
       runId: uniqueRunId("provider-model"),
-      model: "cogni/test-free-model",
+      modelRef: { providerKey: "platform", modelId: "cogni/test-free-model" },
       caller: {
         billingAccountId: "test-provider-model",
         virtualKeyId: "test-vk",

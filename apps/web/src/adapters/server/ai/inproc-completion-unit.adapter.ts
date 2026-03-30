@@ -9,6 +9,7 @@
  *   - COMPLETION_UNIT_NOT_PORT: This is a CompletionUnitAdapter, not GraphExecutorPort
  *   - GRAPH_LLM_VIA_COMPLETION: Delegates to completion.executeStream for billing/telemetry
  *   - P0_ATTEMPT_FREEZE: attempt is always 0 (no run persistence)
+ *   - USAGE_ALWAYS_EMITTED: Emits usage_report for every successful completion regardless of provider
  *   - NO_AWAIT_FINAL_IN_LOOP: Must break out of for-await before awaiting final (prevents deadlock)
  * Side-effects: IO (via injected completion function)
  * Links: AGENT_DISCOVERY.md, GRAPH_EXECUTION.md, features/ai/services/completion.ts
@@ -16,7 +17,9 @@
  */
 
 import type { GraphId } from "@cogni/ai-core";
+import { trace } from "@opentelemetry/api";
 import type { Logger } from "pino";
+import { getExecutionScope } from "@/adapters/server/ai/execution-scope";
 import {
   type AccountService,
   type AiTelemetryPort,
@@ -68,7 +71,7 @@ export interface CompletionStreamParams {
   llmService: LlmService;
   accountService: AccountService;
   clock: Clock;
-  caller: GraphRunRequest["caller"];
+  caller: import("@/ports").LlmCaller;
   ctx: RequestContext;
   aiTelemetry: AiTelemetryPort;
   langfuse: LangfusePort | undefined;
@@ -88,11 +91,9 @@ export interface CompletionStreamParams {
 export interface CompletionUnitParams {
   messages: GraphRunRequest["messages"];
   model: string;
-  caller: GraphRunRequest["caller"];
   runContext: {
     runId: string;
     attempt: number;
-    ingressRequestId: string;
     graphId: GraphId;
   };
   abortSignal?: AbortSignal;
@@ -125,7 +126,7 @@ export type CompletionStreamFn = (
  * Per COMPLETION_UNIT_NOT_PORT: This is a CompletionUnitAdapter, NOT a GraphExecutorPort.
  * Provides executeCompletionUnit() for LangGraphInProcProvider and other graph providers.
  *
- * Per PROVIDER_AGGREGATION: Graph routing is handled by AggregatingGraphExecutor.
+ * Per ROUTING_BY_NAMESPACE_ONLY: Graph routing is handled by NamespaceGraphRouter.
  * This adapter provides the completion unit execution that providers use internally.
  */
 export class InProcCompletionUnitAdapter {
@@ -147,19 +148,16 @@ export class InProcCompletionUnitAdapter {
    * Runners orchestrate; this method handles transformation + billing events.
    */
   executeCompletionUnit(params: CompletionUnitParams): CompletionUnitResult {
-    const {
-      messages,
-      model,
-      caller,
-      runContext,
-      abortSignal,
-      tools,
-      toolChoice,
-    } = params;
-    const { runId, attempt, ingressRequestId, graphId } = runContext;
+    const { messages, model, runContext, abortSignal, tools, toolChoice } =
+      params;
+    const { runId, attempt, graphId } = runContext;
+    const scope = getExecutionScope();
+    const traceId =
+      trace.getActiveSpan()?.spanContext().traceId ??
+      "00000000000000000000000000000000";
 
-    // Per GENERATION_UNDER_EXISTING_TRACE: use caller.traceId for Langfuse correlation
-    const ctx = this.createRequestContext(ingressRequestId, caller.traceId);
+    // Per GENERATION_UNDER_EXISTING_TRACE: use OTel traceId for Langfuse correlation
+    const ctx = this.createRequestContext(runId, traceId);
 
     this.log.debug(
       {
@@ -181,10 +179,21 @@ export class InProcCompletionUnitAdapter {
 
     const getCompletionPromise = async () => {
       if (!completionPromiseHolder.promise) {
+        // Build LlmCaller from execution scope + OTel context
+        const caller: import("@/ports").LlmCaller = {
+          billingAccountId: scope.billing.billingAccountId,
+          virtualKeyId: scope.billing.virtualKeyId,
+          requestId: runId,
+          traceId,
+        };
+
+        // Resolved LlmService from execution scope (set by provider registry at launch)
+        const llmService = scope.llmService;
+
         completionPromiseHolder.promise = this.completionStream({
           messages,
           model,
-          llmService: this.deps.llmService,
+          llmService,
           accountService: this.deps.accountService,
           clock: this.deps.clock,
           caller,
@@ -202,7 +211,7 @@ export class InProcCompletionUnitAdapter {
           // Classify at typed boundary: convert InsufficientCreditsPortError to typed result
           if (isInsufficientCreditsPortError(error)) {
             this.log.debug(
-              { runId, billingAccountId: caller.billingAccountId },
+              { runId, billingAccountId: scope.billing.billingAccountId },
               "Insufficient credits - returning typed error result"
             );
             // Return typed error result instead of throwing
@@ -211,7 +220,7 @@ export class InProcCompletionUnitAdapter {
             })();
             const errorFinal: Promise<CompletionFinalResult> = Promise.resolve({
               ok: false as const,
-              requestId: ingressRequestId,
+              requestId: runId,
               error: "insufficient_credits" as const,
             });
             return { stream: errorStream, final: errorFinal };
@@ -226,7 +235,6 @@ export class InProcCompletionUnitAdapter {
     const stream = this.createCompletionUnitStream(getCompletionPromise, {
       runId,
       attempt,
-      caller,
       graphId,
     });
 
@@ -246,11 +254,11 @@ export class InProcCompletionUnitAdapter {
     runContext: {
       runId: string;
       attempt: number;
-      caller: GraphRunRequest["caller"];
       graphId: GraphId;
     }
   ): AsyncIterable<AiEvent> {
-    const { runId, attempt, caller, graphId } = runContext;
+    const { runId, attempt, graphId } = runContext;
+    const scope = getExecutionScope();
     const completionResult = await getCompletionPromise();
     const { stream, final } = completionResult;
 
@@ -276,36 +284,36 @@ export class InProcCompletionUnitAdapter {
       if (sawDone) break;
     }
 
-    // Emit usage_report (but NOT done - caller handles that)
+    // Emit usage_report for ALL providers (but NOT done - caller handles that)
     const result = await final;
     if (result.ok) {
-      // CRITICAL: Missing litellmCallId is a BUG - fail the run deterministically
-      if (!result.litellmCallId) {
+      const { usageSource } = scope;
+      // PLATFORM_CALLID_STILL_REQUIRED: platform runs without litellmCallId are a billing violation.
+      if (!result.litellmCallId && usageSource === "litellm") {
         this.log.error(
           { runId, model: result.model },
           "CRITICAL: LiteLLM response missing call ID - billing incomplete, failing run"
         );
-        // Throw to propagate error to final (fail run, prevent silent under-billing)
         throw new Error(
           "Billing failed: LiteLLM response missing call ID (x-litellm-call-id)"
         );
       }
 
+      // DETERMINISTIC_BYO_USAGE_ID: BYO usageUnitId is deterministic for retry idempotency.
+      // Platform runs use litellmCallId (stable per-call). BYO runs use runId/attempt/byo.
+      const usageUnitId = result.litellmCallId ?? `${runId}/${attempt}/byo`;
       const fact: UsageFact = {
         runId,
         attempt,
-        source: "litellm",
+        source: usageSource,
         executorType: "inproc",
-        billingAccountId: caller.billingAccountId,
-        virtualKeyId: caller.virtualKeyId,
-        graphId, // For per-agent analytics
-        inputTokens: result.usage.promptTokens,
-        outputTokens: result.usage.completionTokens,
-        usageUnitId: result.litellmCallId, // Required, no fallback
+        graphId,
+        usageUnitId,
+        inputTokens: result.usage?.promptTokens,
+        outputTokens: result.usage?.completionTokens,
         ...(result.model && { model: result.model }),
-        ...(result.providerCostUsd !== undefined && {
-          costUsd: result.providerCostUsd,
-        }),
+        // BYO_ZERO_PLATFORM_COST: respect any cost the adapter reports, default to 0.
+        costUsd: result.providerCostUsd ?? 0,
       };
       const usageEvent: UsageReportEvent = { type: "usage_report", fact };
       yield usageEvent;
@@ -325,17 +333,14 @@ export class InProcCompletionUnitAdapter {
 
   /**
    * Create RequestContext for completion layer.
-   * Uses ingressRequestId as reqId (delivery-layer correlation).
-   * Uses caller's traceId for Langfuse correlation (GENERATION_UNDER_EXISTING_TRACE).
+   * Uses runId as reqId (delivery-layer correlation).
+   * Uses OTel traceId for Langfuse correlation (GENERATION_UNDER_EXISTING_TRACE).
    */
-  private createRequestContext(
-    ingressRequestId: string,
-    traceId: string
-  ): RequestContext {
+  private createRequestContext(runId: string, traceId: string): RequestContext {
     return {
-      log: this.log.child({ ingressRequestId }),
-      reqId: ingressRequestId,
-      traceId, // Use caller's traceId for Langfuse correlation
+      log: this.log.child({ runId }),
+      reqId: runId,
+      traceId, // Use OTel traceId for Langfuse correlation
       routeId: "graph.inproc",
       clock: this.deps.clock,
     };

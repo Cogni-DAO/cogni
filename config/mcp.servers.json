@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "grafana": {
+      "transport": "http",
+      "url": "${MCP_GRAFANA_URL}",
+      "disabled": false
+    },
+    "playwright": {
+      "transport": "http",
+      "url": "${MCP_PLAYWRIGHT_URL}",
+      "disabled": false
+    },
+    "everything": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "disabled": true
+    }
+  }
+}

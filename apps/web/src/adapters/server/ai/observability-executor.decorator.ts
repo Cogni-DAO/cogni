@@ -18,9 +18,10 @@
  */
 
 import { randomUUID } from "node:crypto";
-
+import { trace } from "@opentelemetry/api";
 import type { Logger } from "pino";
 import {
+  type ExecutionContext,
   type GraphExecutorPort,
   type GraphFinal,
   type GraphRunRequest,
@@ -73,7 +74,8 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
     private readonly inner: GraphExecutorPort,
     private readonly langfuse: LangfusePort | undefined,
     config: ObservabilityDecoratorConfig,
-    private readonly log: Logger
+    private readonly log: Logger,
+    private readonly billingAccountId: string
   ) {
     this.finalizationTimeoutMs = config.finalizationTimeoutMs ?? 15_000;
   }
@@ -82,53 +84,56 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
    * Execute graph with Langfuse observability.
    * Wraps inner executor, creates trace, handles terminal state.
    */
-  runGraph(req: GraphRunRequest): GraphRunResult {
-    const { runId, graphId, messages, model, caller, ingressRequestId } = req;
+  runGraph(req: GraphRunRequest, ctx?: ExecutionContext): GraphRunResult {
+    const { runId, graphId, messages, modelRef } = req;
+    const model = modelRef.modelId;
+    const requestId = ctx?.requestId ?? req.runId;
+    const maskContent = ctx?.maskContent ?? false;
 
     // Extract providerId from graphId (e.g., "langgraph:poet" → "langgraph")
     const providerId = graphId.split(":")[0] ?? "unknown";
 
     // Validate traceId - use OTel if valid, otherwise generate with correlation
+    const otelTraceId =
+      trace.getActiveSpan()?.spanContext().traceId ??
+      "00000000000000000000000000000000";
     let traceId: string;
     let otelTraceIdForMetadata: string | undefined;
 
-    if (isValidOtelTraceId(caller.traceId)) {
-      traceId = caller.traceId;
+    if (isValidOtelTraceId(otelTraceId)) {
+      traceId = otelTraceId;
     } else {
       // Generate Langfuse ID, store original for correlation
       traceId = randomUUID().replace(/-/g, "");
-      otelTraceIdForMetadata = caller.traceId;
+      otelTraceIdForMetadata = otelTraceId;
       this.log.warn(
-        { originalTraceId: caller.traceId, generatedTraceId: traceId },
+        { originalTraceId: otelTraceId, generatedTraceId: traceId },
         "Invalid OTel traceId format; generated Langfuse ID"
       );
     }
 
     // Scrub input for Langfuse
     const scrubbedInput = scrubTraceInput(messages);
-    const finalInput = applyUserMaskingPreference(
-      scrubbedInput,
-      caller.maskContent ?? false
-    );
+    const finalInput = applyUserMaskingPreference(scrubbedInput, maskContent);
 
     // Create Langfuse trace
     let langfuseTraceId: string | undefined;
     if (this.langfuse) {
       try {
-        const sessionId = truncateSessionId(caller.sessionId);
+        const sessionId = truncateSessionId(ctx?.sessionId);
         langfuseTraceId = this.langfuse.createTraceWithIO({
           traceId,
           ...(sessionId && { sessionId }),
-          ...(caller.userId && { userId: caller.userId }),
+          ...(ctx?.actorUserId && { userId: ctx.actorUserId }),
           input: finalInput,
           tags: [providerId, graphId],
           metadata: {
             runId,
-            reqId: ingressRequestId,
+            reqId: requestId,
             graphId,
             providerId,
             model,
-            billingAccountId: caller.billingAccountId,
+            billingAccountId: this.billingAccountId,
             ...(otelTraceIdForMetadata && {
               otelTraceId: otelTraceIdForMetadata,
             }),
@@ -138,7 +143,7 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
         // Log trace created (per OBSERVABILITY.md: 2-4 events per request)
         this.log.info(
           {
-            reqId: ingressRequestId,
+            reqId: requestId,
             traceId,
             langfuseTraceId,
             graphId,
@@ -196,7 +201,7 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
       });
       const finalOutput = applyUserMaskingPreference(
         scrubbedOutput,
-        caller.maskContent ?? false
+        maskContent
       );
 
       // Update Langfuse trace output
@@ -214,7 +219,7 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
       // Log trace completed
       this.log.info(
         {
-          reqId: ingressRequestId,
+          reqId: requestId,
           traceId,
           langfuseTraceId,
           outcome,
@@ -225,7 +230,7 @@ export class ObservabilityGraphExecutorDecorator implements GraphExecutorPort {
     };
 
     // Delegate to inner executor
-    const result = this.inner.runGraph(req);
+    const result = this.inner.runGraph(req, ctx);
 
     // Wrap stream to intercept events
     const wrappedStream = this.wrapStream(result.stream, {

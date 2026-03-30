@@ -18,6 +18,7 @@ import {
   Briefcase,
   CreditCard,
   Github,
+  LayoutDashboard,
   Radio,
   Vote,
 } from "lucide-react";
@@ -41,8 +42,8 @@ import {
 import { ChatThreadsSidebarGroup } from "@/features/ai/chat/components/ChatThreadsSidebarGroup";
 
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/work", label: "Work", icon: Briefcase },
-  { href: "/activity", label: "Activity", icon: Activity },
   { href: "/gov", label: "Gov", icon: Vote },
   { href: "/credits", label: "Credits", icon: CreditCard },
   { href: "/broadcasting", label: "Broadcast", icon: Radio },

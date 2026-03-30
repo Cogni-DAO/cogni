@@ -17,7 +17,7 @@ import { buildReviewUserMessage } from "@cogni/langgraph-graphs/graphs";
 import type { Rule } from "@cogni/repo-spec";
 import { z } from "zod";
 
-import type { GraphExecutorPort, LlmCaller } from "@/ports";
+import type { GraphExecutorPort } from "@/ports";
 
 import { evaluateCriteria, findRequirement } from "../criteria-evaluator";
 import type { EvidenceBundle, GateResult } from "../types";
@@ -57,10 +57,9 @@ export async function evaluateAiRule(params: {
   readonly rule: Rule;
   readonly evidence: EvidenceBundle;
   readonly executor: GraphExecutorPort;
-  readonly caller: LlmCaller;
   readonly model: string;
 }): Promise<GateResult> {
-  const { rule, evidence, executor, caller, model } = params;
+  const { rule, evidence, executor, model } = params;
   const evaluations = extractEvaluations(rule);
   const metricNames = evaluations.map((e) => e.metric);
 
@@ -80,11 +79,9 @@ export async function evaluateAiRule(params: {
   const runId = randomUUID();
   const result = executor.runGraph({
     runId,
-    ingressRequestId: runId,
     graphId: LANGGRAPH_GRAPH_IDS["pr-review"],
     messages: [{ role: "user", content: userMessage }],
-    model,
-    caller,
+    modelRef: { providerKey: "platform", modelId: model },
     responseFormat: {
       prompt:
         "Respond with a JSON object containing a `metrics` array and a `summary` string. " +

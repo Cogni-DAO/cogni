@@ -187,7 +187,7 @@ describe("Gateway Billing Callback E2E", () => {
 
     const req = makeGatewayRunRequest({
       runId,
-      model: "cogni/test-paid-model",
+      modelRef: { providerKey: "platform", modelId: "cogni/test-paid-model" },
       caller: {
         billingAccountId: testActor.billingAccountId,
         virtualKeyId: testActor.virtualKeyId,

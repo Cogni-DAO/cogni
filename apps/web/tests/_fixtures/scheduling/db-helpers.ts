@@ -4,10 +4,11 @@
 /**
  * Module: `@tests/_fixtures/scheduling/db-helpers`
  * Purpose: Database helpers for scheduling stack tests.
- * Scope: Query and poll schedule_runs and execution_requests tables. Does not modify data.
+ * Scope: Query and poll graph_runs and execution_requests tables. Does not modify data.
  * Invariants:
  *   - Polling respects timeout to avoid infinite waits
  *   - Uses getSeedDb() (BYPASSRLS) for queries on RLS-protected tables
+ *   - Per SINGLE_RUN_LEDGER: queries graph_runs (promoted from schedule_runs)
  * Side-effects: IO (database reads)
  * Links: tests/stack/scheduling/*.stack.test.ts, db/schema.scheduling.ts
  * @public
@@ -15,7 +16,7 @@
 
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { eq, like } from "drizzle-orm";
-import { executionRequests, scheduleRuns } from "@/shared/db/schema";
+import { executionRequests, graphRuns } from "@/shared/db/schema";
 
 /** Default poll interval for waiting */
 const POLL_INTERVAL_MS = 100;
@@ -24,25 +25,25 @@ const POLL_INTERVAL_MS = 100;
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
- * Polls for a schedule_runs row to appear for the given scheduleId.
+ * Polls for a graph_runs row to appear for the given scheduleId.
  * Returns the first row found, or throws if timeout exceeded.
  *
  * @param scheduleId - The schedule UUID
- * @param timeoutMs - Max time to wait (default 30s)
- * @returns The schedule_runs row
+ * @param timeoutMs - Max time to wait (default 10s)
+ * @returns The graph_runs row
  */
 export async function waitForScheduleRunCreated(
   scheduleId: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<typeof scheduleRuns.$inferSelect> {
+): Promise<typeof graphRuns.$inferSelect> {
   const db = getSeedDb();
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {
     const rows = await db
       .select()
-      .from(scheduleRuns)
-      .where(eq(scheduleRuns.scheduleId, scheduleId))
+      .from(graphRuns)
+      .where(eq(graphRuns.scheduleId, scheduleId))
       .limit(1);
 
     if (rows.length > 0 && rows[0]) {
@@ -53,24 +54,24 @@ export async function waitForScheduleRunCreated(
   }
 
   throw new Error(
-    `Timeout waiting for schedule_runs row for scheduleId=${scheduleId}`
+    `Timeout waiting for graph_runs row for scheduleId=${scheduleId}`
   );
 }
 
 /**
- * Gets all schedule_runs rows for a given scheduleId.
+ * Gets all graph_runs rows for a given scheduleId.
  *
  * @param scheduleId - The schedule UUID
- * @returns Array of schedule_runs rows
+ * @returns Array of graph_runs rows
  */
 export async function getScheduleRuns(
   scheduleId: string
-): Promise<Array<typeof scheduleRuns.$inferSelect>> {
+): Promise<Array<typeof graphRuns.$inferSelect>> {
   const db = getSeedDb();
   return db
     .select()
-    .from(scheduleRuns)
-    .where(eq(scheduleRuns.scheduleId, scheduleId));
+    .from(graphRuns)
+    .where(eq(graphRuns.scheduleId, scheduleId));
 }
 
 /**
@@ -110,16 +111,16 @@ export async function getExecutionRequestsByPrefix(
 }
 
 /**
- * Waits for schedule_runs row to reach a terminal status (success, error, skipped).
+ * Waits for graph_runs row to reach a terminal status (success, error, skipped).
  *
  * @param scheduleId - The schedule UUID
- * @param timeoutMs - Max time to wait (default 30s)
- * @returns The schedule_runs row with terminal status
+ * @param timeoutMs - Max time to wait (default 10s)
+ * @returns The graph_runs row with terminal status
  */
 export async function waitForScheduleRunCompleted(
   scheduleId: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
-): Promise<typeof scheduleRuns.$inferSelect> {
+): Promise<typeof graphRuns.$inferSelect> {
   const db = getSeedDb();
   const startTime = Date.now();
   const terminalStatuses = ["success", "error", "skipped"];
@@ -127,8 +128,8 @@ export async function waitForScheduleRunCompleted(
   while (Date.now() - startTime < timeoutMs) {
     const rows = await db
       .select()
-      .from(scheduleRuns)
-      .where(eq(scheduleRuns.scheduleId, scheduleId))
+      .from(graphRuns)
+      .where(eq(graphRuns.scheduleId, scheduleId))
       .limit(1);
 
     const row = rows[0];
@@ -140,7 +141,7 @@ export async function waitForScheduleRunCompleted(
   }
 
   throw new Error(
-    `Timeout waiting for schedule_runs completion for scheduleId=${scheduleId}`
+    `Timeout waiting for graph_runs completion for scheduleId=${scheduleId}`
   );
 }
 

@@ -69,11 +69,15 @@ services:
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
       # TigerBeetle (Financial Ledger) — optional, native client requires IP (no DNS).
       # Static IP assigned via ipam on internal network.
-      - TIGERBEETLE_ADDRESS=10.100.0.100:3002
+      # DISABLED: TB OOM-crashes on low-memory VMs; native client floods ~36M stderr lines/day to Loki (bug.0195)
+      # Re-enable when TB is provisioned with ≥2GiB and confirmed healthy.
+      # - TIGERBEETLE_ADDRESS=10.100.0.100:3002
       # Privy (Operator Wallet) — optional, silently skipped if missing
       - PRIVY_APP_ID
       - PRIVY_APP_SECRET
       - PRIVY_SIGNING_KEY
+      # BYO-AI: Connection encryption (optional — BYO-AI disabled when unset)
+      - CONNECTIONS_ENCRYPTION_KEY
       # Prometheus query (for analytics/AI tools) - read-only credentials
       - PROMETHEUS_REMOTE_WRITE_URL
       - PROMETHEUS_QUERY_URL
@@ -92,12 +96,16 @@ services:
       - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
       - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
       - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
+      # Redis (stream plane — ephemeral only)
+      - REDIS_URL=redis://redis:6379
     volumes:
       - repo_data:/repo:ro
     depends_on:
       postgres:
         condition: service_healthy
       litellm:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       temporal:
         condition: service_healthy
@@ -158,9 +166,35 @@ services:
           'python3 -c "import urllib.request,sys; r=urllib.request.urlopen(''http://127.0.0.1:4000/health/readiness'', timeout=1); sys.exit(0 if r.status==200 else 1)"',
         ]
       interval: 10s
-      timeout: 3s
-      retries: 5
+      timeout: 5s
+      retries: 8
       start_period: 120s
+
+  # =============================================================================
+  # Redis 7 — ephemeral stream plane (no persistence, no volume)
+  # Per unified-graph-launch spec: REDIS_IS_STREAM_PLANE
+  # =============================================================================
+  redis:
+    image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--maxmemory"
+      - "128mb"
+      - "--maxmemory-policy"
+      - "noeviction"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
 
   postgres:
     image: postgres:15
@@ -529,11 +563,14 @@ services:
   # Per financial-ledger-spec: double-entry ledger engine
   # Self-initializing: formats data file on first boot, then starts.
   # Optional — app gracefully handles absence (FinancialLedgerPort | undefined).
+  # Opt-in via --profile tigerbeetle (requires ≥2GiB RAM for journal mmap). See bug.0195.
   # =============================================================================
 
   tigerbeetle:
     image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
+    profiles: [tigerbeetle]
     restart: unless-stopped
+    mem_limit: 2g
     cap_add:
       - IPC_LOCK
     security_opt:

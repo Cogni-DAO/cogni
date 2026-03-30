@@ -3,25 +3,15 @@
 
 /**
  * Module: `@app/(app)/gov/page`
- * Purpose: Server entrypoint for the protected governance status page.
- * Scope: Server component only; delegates all client-side behavior to GovernanceView. Does not perform data fetching.
- * Invariants: Auth enforced by (app) layout guard.
- * Side-effects: none (server render only)
- * Links: docs/spec/governance-status-api.md
+ * Purpose: Redirect — governance landing page is the ownership view.
+ * Scope: Redirect only. No data fetching or rendering.
+ * Invariants: 308 permanent redirect to /gov/holdings.
+ * Side-effects: none
  * @public
  */
 
-import type { ReactElement } from "react";
-import { Suspense } from "react";
+import { permanentRedirect } from "next/navigation";
 
-import { PageSkeleton } from "@/components";
-
-import { GovernanceView } from "./view";
-
-export default function GovernancePage(): ReactElement {
-  return (
-    <Suspense fallback={<PageSkeleton />}>
-      <GovernanceView />
-    </Suspense>
-  );
+export default function GovernancePage() {
+  permanentRedirect("/gov/holdings");
 }

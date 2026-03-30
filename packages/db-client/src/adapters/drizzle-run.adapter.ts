@@ -3,25 +3,31 @@
 
 /**
  * Module: `@adapters/server/scheduling/drizzle-run`
- * Purpose: DrizzleScheduleRunAdapter for schedule run ledger persistence.
- * Scope: Implements ScheduleRunRepository with Drizzle ORM. Does not contain scheduling logic.
+ * Purpose: DrizzleGraphRunAdapter for the canonical graph run ledger.
+ * Scope: Implements GraphRunRepository with Drizzle ORM. Does not contain scheduling logic.
  * Invariants:
- * - Per RUN_LEDGER_FOR_GOVERNANCE: Every execution creates a run record
- * - UNIQUE(schedule_id, scheduled_for) prevents duplicate runs per slot
+ * - Per SINGLE_RUN_LEDGER: one table for all execution types
+ * - UNIQUE(schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL prevents duplicate scheduled runs
  * - withTenantScope called on every method (uniform invariant, no-op on serviceDb)
+ * - listRunsByUser relies on RLS for row visibility (no app-level requestedBy filter)
  * Side-effects: IO (database operations)
- * Links: ports/scheduling/schedule-run.port.ts, docs/spec/scheduler.md
+ * Links: ports/scheduling/schedule-run.port.ts, docs/spec/unified-graph-launch.md
  * @public
  */
 
-import { scheduleRuns } from "@cogni/db-schema/scheduling";
+import { graphRuns } from "@cogni/db-schema/scheduling";
 import type { ActorId } from "@cogni/ids";
-import type { ScheduleRun, ScheduleRunRepository } from "@cogni/scheduler-core";
-import { and, eq, inArray } from "drizzle-orm";
+import type {
+  GraphRun,
+  GraphRunKind,
+  GraphRunRepository,
+  GraphRunStatus,
+} from "@cogni/scheduler-core";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import type { Database, LoggerLike } from "../client";
 import { withTenantScope } from "../tenant-scope";
 
-export class DrizzleScheduleRunAdapter implements ScheduleRunRepository {
+export class DrizzleGraphRunAdapter implements GraphRunRepository {
   private readonly logger: LoggerLike;
 
   constructor(
@@ -37,50 +43,92 @@ export class DrizzleScheduleRunAdapter implements ScheduleRunRepository {
   }
 
   /**
-   * Creates a schedule run record with idempotent semantics.
-   * Per SCHEDULER_SPEC.md pattern: INSERT ON CONFLICT DO NOTHING + SELECT.
-   * UNIQUE(schedule_id, scheduled_for) prevents duplicate runs per slot.
+   * Creates a graph run record.
+   * For scheduled runs: idempotent via UNIQUE(schedule_id, scheduled_for).
+   * For API/webhook runs: plain insert (scheduleId is null).
    */
   async createRun(
     actorId: ActorId,
     params: {
-      scheduleId: string;
       runId: string;
-      scheduledFor: Date;
+      graphId?: string;
+      runKind?: GraphRunKind;
+      triggerSource?: string;
+      triggerRef?: string;
+      requestedBy?: string;
+      scheduleId?: string;
+      scheduledFor?: Date;
+      stateKey?: string;
     }
-  ): Promise<ScheduleRun> {
+  ): Promise<GraphRun> {
     return withTenantScope(this.db, actorId, async (tx) => {
-      // Idempotent insert - does nothing if (schedule_id, scheduled_for) exists
-      await tx
-        .insert(scheduleRuns)
-        .values({
-          scheduleId: params.scheduleId,
-          runId: params.runId,
-          scheduledFor: params.scheduledFor,
-          status: "pending",
-        })
-        .onConflictDoNothing({
-          target: [scheduleRuns.scheduleId, scheduleRuns.scheduledFor],
-        });
+      const values = {
+        runId: params.runId,
+        graphId: params.graphId ?? null,
+        runKind: params.runKind ?? null,
+        triggerSource: params.triggerSource ?? null,
+        triggerRef: params.triggerRef ?? null,
+        requestedBy: params.requestedBy ?? null,
+        scheduleId: params.scheduleId ?? null,
+        scheduledFor: params.scheduledFor ?? null,
+        stateKey: params.stateKey ?? null,
+        status: "pending" as const,
+      };
 
-      // Always SELECT to get the row (new or existing)
-      const [row] = await tx
-        .select()
-        .from(scheduleRuns)
-        .where(
-          and(
-            eq(scheduleRuns.scheduleId, params.scheduleId),
-            eq(scheduleRuns.scheduledFor, params.scheduledFor)
-          )
+      if (params.scheduleId && params.scheduledFor) {
+        // Scheduled run — insert optimistically, then re-select on duplicate.
+        // This avoids relying on ON CONFLICT inference against a partial unique index.
+        try {
+          await tx.insert(graphRuns).values(values);
+        } catch (error) {
+          const [existing] = await tx
+            .select()
+            .from(graphRuns)
+            .where(
+              and(
+                eq(graphRuns.scheduleId, params.scheduleId),
+                eq(graphRuns.scheduledFor, params.scheduledFor)
+              )
+            );
+
+          if (!existing) {
+            throw error;
+          }
+        }
+
+        // Always SELECT to get the row (new or existing)
+        const [row] = await tx
+          .select()
+          .from(graphRuns)
+          .where(
+            and(
+              eq(graphRuns.scheduleId, params.scheduleId),
+              eq(graphRuns.scheduledFor, params.scheduledFor)
+            )
+          );
+
+        if (!row) {
+          throw new Error("Failed to create or retrieve run record");
+        }
+
+        this.logger.debug(
+          { runId: row.runId, scheduleId: params.scheduleId },
+          "Created or retrieved scheduled run record"
         );
 
+        return this.toRun(row);
+      }
+
+      // Non-scheduled run — plain insert
+      const [row] = await tx.insert(graphRuns).values(values).returning();
+
       if (!row) {
-        throw new Error("Failed to create or retrieve run record");
+        throw new Error("Failed to create run record");
       }
 
       this.logger.debug(
-        { runId: row.runId, scheduleId: params.scheduleId },
-        "Created or retrieved run record"
+        { runId: row.runId, runKind: params.runKind },
+        "Created run record"
       );
 
       return this.toRun(row);
@@ -99,14 +147,14 @@ export class DrizzleScheduleRunAdapter implements ScheduleRunRepository {
     await withTenantScope(this.db, actorId, async (tx) => {
       // Monotonic guard: only update if status='pending' (prevents regression)
       await tx
-        .update(scheduleRuns)
+        .update(graphRuns)
         .set({
           status: "running",
           startedAt: new Date(),
           langfuseTraceId: langfuseTraceId ?? null,
         })
         .where(
-          and(eq(scheduleRuns.runId, runId), eq(scheduleRuns.status, "pending"))
+          and(eq(graphRuns.runId, runId), eq(graphRuns.status, "pending"))
         );
     });
 
@@ -120,22 +168,24 @@ export class DrizzleScheduleRunAdapter implements ScheduleRunRepository {
   async markRunCompleted(
     actorId: ActorId,
     runId: string,
-    status: "success" | "error" | "skipped",
-    errorMessage?: string
+    status: "success" | "error" | "skipped" | "cancelled",
+    errorMessage?: string,
+    errorCode?: string
   ): Promise<void> {
     await withTenantScope(this.db, actorId, async (tx) => {
       // Monotonic guard: only update if status is pending/running (prevents regression)
       await tx
-        .update(scheduleRuns)
+        .update(graphRuns)
         .set({
           status,
           completedAt: new Date(),
           errorMessage: errorMessage ?? null,
+          errorCode: errorCode ?? null,
         })
         .where(
           and(
-            eq(scheduleRuns.runId, runId),
-            inArray(scheduleRuns.status, ["pending", "running"])
+            eq(graphRuns.runId, runId),
+            inArray(graphRuns.status, ["pending", "running"])
           )
         );
     });
@@ -143,18 +193,95 @@ export class DrizzleScheduleRunAdapter implements ScheduleRunRepository {
     this.logger.info({ runId, status }, "Marked run as completed");
   }
 
-  private toRun(row: typeof scheduleRuns.$inferSelect): ScheduleRun {
+  async getRunByRunId(
+    actorId: ActorId,
+    runId: string
+  ): Promise<GraphRun | null> {
+    return withTenantScope(this.db, actorId, async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(graphRuns)
+        .where(eq(graphRuns.runId, runId))
+        .limit(1);
+
+      return row ? this.toRun(row) : null;
+    });
+  }
+
+  async patchRunStateKey(
+    actorId: ActorId,
+    runId: string,
+    stateKey: string
+  ): Promise<void> {
+    await withTenantScope(this.db, actorId, async (tx) => {
+      await tx
+        .update(graphRuns)
+        .set({ stateKey })
+        .where(eq(graphRuns.runId, runId));
+    });
+  }
+
+  async listRunsByUser(
+    actorId: ActorId,
+    userId: string,
+    opts?: {
+      status?: GraphRunStatus;
+      runKind?: GraphRunKind;
+      limit?: number;
+      cursor?: string;
+    }
+  ): Promise<GraphRun[]> {
+    const pageSize = Math.min(opts?.limit ?? 20, 100);
+
+    return withTenantScope(this.db, actorId, async (tx) => {
+      // requestedBy filter scopes to the queried principal. RLS provides the
+      // security boundary (user sees own runs + schedule-owned runs), but this
+      // WHERE clause ensures user-scope queries don't return system runs and
+      // system-scope queries don't return user runs. Defense-in-depth.
+      const conditions: ReturnType<typeof eq>[] = [
+        eq(graphRuns.requestedBy, userId),
+      ];
+
+      if (opts?.status) {
+        conditions.push(eq(graphRuns.status, opts.status));
+      }
+      if (opts?.runKind) {
+        conditions.push(eq(graphRuns.runKind, opts.runKind));
+      }
+      if (opts?.cursor) {
+        conditions.push(lt(graphRuns.startedAt, new Date(opts.cursor)));
+      }
+
+      const rows = await tx
+        .select()
+        .from(graphRuns)
+        .where(and(...conditions))
+        .orderBy(desc(graphRuns.startedAt))
+        .limit(pageSize + 1); // fetch one extra to detect next page
+
+      return rows.map((row) => this.toRun(row));
+    });
+  }
+
+  private toRun(row: typeof graphRuns.$inferSelect): GraphRun {
     return {
       id: row.id,
       scheduleId: row.scheduleId,
       runId: row.runId,
+      graphId: row.graphId,
+      runKind: row.runKind,
+      triggerSource: row.triggerSource,
+      triggerRef: row.triggerRef,
+      requestedBy: row.requestedBy,
       scheduledFor: row.scheduledFor,
       startedAt: row.startedAt,
       completedAt: row.completedAt,
       status: row.status,
       attemptCount: row.attemptCount,
       langfuseTraceId: row.langfuseTraceId,
+      errorCode: row.errorCode,
       errorMessage: row.errorMessage,
+      stateKey: row.stateKey,
     };
   }
 }

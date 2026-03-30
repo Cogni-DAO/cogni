@@ -145,6 +145,8 @@ pnpm setup github --env production
        - `PRIVY_APP_ID` (from privy.io → App Settings)
        - `PRIVY_APP_SECRET` (from privy.io → App Settings)
        - `PRIVY_SIGNING_KEY` (PKCS8 PEM, multi-line — from privy.io → App Settings → Signing Key)
+     - **BYO-AI — Connection Encryption (optional — BYO-AI disabled when unset):**
+       - `CONNECTIONS_ENCRYPTION_KEY` (64 hex chars / 32 bytes — generate with `openssl rand -hex 32`)
    - **Deployment secrets:** From previous steps
      - `SSH_DEPLOY_KEY` (from `~/.ssh/cogni_template_<env>_deploy`)
      - `VM_HOST` (from `.env.<env>` file)
@@ -174,6 +176,26 @@ pnpm setup github --env production
            Create at: https://grafana.com/orgs/<org>/access-policies → Add policy → metrics:read → Add token
 
 For current manual process, see [DEPLOY.md](../../docs/runbooks/DEPLOY.md).
+
+### Step 4: Payment Activation (`pnpm node:activate-payments`)
+
+**Activates the USDC payment → AI provider top-up pipeline.**
+
+Prerequisites:
+
+- Privy account (App ID + Secret + Signing Key in `.env.local`)
+- A funded EOA on Base (~$0.02 ETH for Split deployment gas)
+- DAO treasury address from `.cogni/repo-spec.yaml` (from formation)
+
+What it does:
+
+1. Verifies Privy credentials are configured
+2. Provisions operator wallet via Privy API (or finds existing)
+3. Deploys Push Split V2o2 on Base (operator + DAO treasury recipients)
+4. Validates the Split on-chain
+5. Writes `operator_wallet`, `payments_in`, `payments.status: active` to repo-spec
+
+See [Payment Activation Guide](../../docs/guides/operator-wallet-setup.md) for details.
 
 3. **Apply branch protection rules:**
    - `main`: 2 required reviews, required checks, enforce for admins

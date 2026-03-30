@@ -66,17 +66,14 @@ describe("Chat Model Validation Stack Test", () => {
     // Mock session for all requests (models + chat)
     vi.mocked(getSessionUser).mockResolvedValue(mockSessionUser);
 
-    // Arrange - Fetch actual models list to get real defaultPreferredModelId
+    // Arrange - Fetch actual models list to get real defaultRef
     const modelsReq = new NextRequest("http://localhost:3000/api/v1/ai/models");
     const modelsRes = await modelsGET(modelsReq);
     expect(modelsRes.status).toBe(200);
     const modelsData = await modelsRes.json();
-    const { defaultPreferredModelId, models } = modelsData;
-    expect(defaultPreferredModelId).toBeTruthy();
+    const { defaultRef, models } = modelsData;
+    expect(defaultRef).toBeTruthy();
     expect(models.length).toBeGreaterThan(0);
-
-    // Use as defaultModelId for test clarity (matches 409 response field)
-    const defaultModelId = defaultPreferredModelId;
 
     // Act - Send chat request with invalid model
     const invalidReq = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
@@ -84,7 +81,10 @@ describe("Chat Model Validation Stack Test", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...createChatRequest({
-          model: "invalid-model-not-in-allowlist",
+          modelRef: {
+            providerKey: "platform",
+            modelId: "invalid-model-not-in-allowlist",
+          },
           stateKey: randomUUID(),
           messages: [
             {
@@ -101,24 +101,17 @@ describe("Chat Model Validation Stack Test", () => {
 
     const invalidResponse = await chatPOST(invalidReq);
 
-    // Assert - 409 Conflict status
-    expect(invalidResponse.status).toBe(409);
+    // Model validation deferred to execution-time. LiteLLM rejects unknown models,
+    // facade peeks first stream event (error), throws AiExecutionError → route maps to 500.
+    expect(invalidResponse.status).toBe(500);
 
-    const invalidJson = await invalidResponse.json();
-
-    // Assert - Response includes error and defaultModelId for client retry
-    expect(invalidJson).toHaveProperty("error");
-    expect(invalidJson.error).toBe("Invalid model");
-    expect(invalidJson).toHaveProperty("defaultModelId");
-    expect(invalidJson.defaultModelId).toBe(defaultModelId);
-
-    // Critical: Assert defaultModelId actually works (not a retry loop)
+    // Critical: Assert defaultRef actually works (not a retry loop)
     const retryReq = new NextRequest("http://localhost:3000/api/v1/ai/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...createChatRequest({
-          model: defaultModelId, // Use the defaultModelId from 409 response
+          modelRef: defaultRef, // Use the defaultRef from models endpoint
           stateKey: randomUUID(),
           messages: [
             {

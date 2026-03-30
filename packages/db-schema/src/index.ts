@@ -17,6 +17,7 @@ export * from "./attribution";
 export * from "./auth";
 export * from "./billing";
 export * from "./broadcasting";
+export * from "./connections";
 export * from "./identity";
 export * from "./profile";
 export * from "./refs";

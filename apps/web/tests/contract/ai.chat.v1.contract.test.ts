@@ -4,7 +4,7 @@
 /**
  * Module: `@tests/contract/ai.chat.v1.contract`
  * Purpose: Validates ai.chat.v1 contract schema for P1 input format (single message string).
- * Scope: Tests Zod schema compliance for { message, model, graphName, stateKey? } input. Does not test route handler or LLM adapter behavior.
+ * Scope: Tests Zod schema compliance for { message, modelRef, graphName, stateKey? } input. Does not test route handler or LLM adapter behavior.
  * Invariants: Schema must correctly validate/reject input structures per field constraints.
  * Side-effects: none
  * Notes: P1 wire format — client sends message string, not messages[].
@@ -20,7 +20,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("accepts minimal valid input", () => {
       const payload = {
         message: "Hello",
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "langgraph:poet",
       };
 
@@ -31,7 +31,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("accepts input with stateKey", () => {
       const payload = {
         message: "What time is it?",
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "sandbox:openclaw",
         stateKey: "abc123_XYZ-456",
       };
@@ -43,7 +43,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("accepts message at max length (16000 chars)", () => {
       const payload = {
         message: "x".repeat(16_000),
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "chat",
       };
 
@@ -56,7 +56,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("rejects empty message", () => {
       const payload = {
         message: "",
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "chat",
       };
 
@@ -67,7 +67,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("rejects message exceeding 16000 chars", () => {
       const payload = {
         message: "x".repeat(16_001),
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "chat",
       };
 
@@ -77,7 +77,7 @@ describe("ai.chat.v1 contract validation", () => {
 
     it("rejects missing message field", () => {
       const payload = {
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "chat",
       };
 
@@ -85,7 +85,7 @@ describe("ai.chat.v1 contract validation", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects missing model field", () => {
+    it("rejects missing modelRef field", () => {
       const payload = {
         message: "Hello",
         graphName: "chat",
@@ -98,7 +98,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("rejects missing graphName field", () => {
       const payload = {
         message: "Hello",
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
       };
 
       const result = AssistantUiInputSchema.safeParse(payload);
@@ -108,7 +108,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("rejects stateKey with unsafe characters", () => {
       const payload = {
         message: "Hello",
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "chat",
         stateKey: "key with spaces!",
       };
@@ -123,7 +123,7 @@ describe("ai.chat.v1 contract validation", () => {
     it("rejects stateKey exceeding 128 chars", () => {
       const payload = {
         message: "Hello",
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "chat",
         stateKey: "x".repeat(129),
       };
@@ -137,7 +137,7 @@ describe("ai.chat.v1 contract validation", () => {
         messages: [
           { role: "user", content: [{ type: "text", text: "Hello" }] },
         ],
-        model: "gpt-4",
+        modelRef: { providerKey: "platform", modelId: "gpt-4" },
         graphName: "chat",
       };
 

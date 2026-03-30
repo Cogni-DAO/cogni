@@ -2,7 +2,7 @@
 id: task.0162
 type: task
 title: Enable TypeScript LSP plugin for Claude Code
-status: needs_merge
+status: done
 priority: 1
 rank: 10
 estimate: 1
@@ -19,7 +19,7 @@ revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-12
-updated: 2026-03-12
+updated: 2026-03-24
 labels: [tooling, agents, dx]
 external_refs:
   - docs/research/grep-vs-lsp-analysis.md

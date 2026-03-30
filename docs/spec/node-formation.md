@@ -5,8 +5,8 @@ title: Node Formation Design
 status: draft
 spec_state: draft
 trust: draft
-summary: DAO formation via web wizard — 2-tx wallet flow, server-side receipt verification, Aragon OSx integration.
-read_when: Working on DAO formation, the setup wizard, or aragon-osx package.
+summary: Node lifecycle from formation (governance identity) through payment activation (operator wallet + Split). Formation via web wizard; activation via child-node CLI.
+read_when: Working on DAO formation, the setup wizard, aragon-osx package, or payment activation.
 implements:
 owner: derekg1729
 created: 2026-02-07
@@ -18,26 +18,34 @@ tags: [web3, setup, dao]
 
 ## Context
 
-Node Formation is the entry point for creating a new Cogni DAO node. A web wizard guides the founder through deploying an Aragon DAO with GovernanceERC20 token and CogniSignal contract on-chain. The server independently verifies the deployment by deriving all addresses from transaction receipts.
+A Cogni DAO node has two lifecycle phases with distinct trust domains:
 
-> Node Formation is Node-owned tooling. No Operator dependencies. Wallet signs in browser; server verifies before persisting.
+1. **Formation** — governance identity (DAO + Signal). Runs in the shared operator repo's web UI. No secrets, no operator wallet, no payment rails.
+2. **Payment Activation** — operator wallet + revenue split. Runs in the child node's own repo via CLI. The child node owns its Privy credentials and operator wallet.
+
+Formation outputs a repo-spec fragment with `payments.status: pending_activation`. The child node activates payments after forking the template and configuring its own infrastructure.
+
+> Formation is Node-owned tooling. No Operator dependencies. Wallet signs in browser; server verifies before persisting.
+> Payment activation belongs to the child node's trust domain. The shared operator repo never creates or controls child wallets.
 
 ## Goal
 
-Enable any founder to create a fully-verified Cogni DAO node via a 3-field web form and 2 wallet transactions, with server-side receipt verification ensuring no client-supplied addresses are trusted.
+Enable any founder to create a fully-verified Cogni DAO node via a 3-field web form and 2 wallet transactions, then activate payment rails via a single CLI command in their own fork.
 
 ## Non-Goals
 
-| Item                                | Reason                                   |
-| ----------------------------------- | ---------------------------------------- |
-| Multiple initial holders            | P1 scope (reduces P0 to 2 wallet txs)    |
-| Custom NonTransferableVotes token   | Aragon GovernanceERC20 sufficient for P0 |
-| Anti-vote-buying (non-transferable) | Not a P0 invariant; revisit if needed    |
-| Terraform provisioning              | CLI scope (P1)                           |
-| GitHub secrets automation           | CLI scope (P1)                           |
-| Repo clone/patch/write              | CLI scope (P1)                           |
-| CLI wallet signing                  | Web is simpler; add if proven needed     |
-| Contract verification (Etherscan)   | Nice-to-have, not blocking               |
+| Item                                | Reason                                                        |
+| ----------------------------------- | ------------------------------------------------------------- |
+| Multiple initial holders            | P1 scope (reduces P0 to 2 wallet txs)                         |
+| Custom NonTransferableVotes token   | Aragon GovernanceERC20 sufficient for P0                      |
+| Anti-vote-buying (non-transferable) | Not a P0 invariant; revisit if needed                         |
+| Terraform provisioning              | CLI scope (P1)                                                |
+| GitHub secrets automation           | CLI scope (P1)                                                |
+| Repo clone/patch/write              | CLI scope (P1)                                                |
+| CLI wallet signing                  | Web is simpler; add if proven needed                          |
+| Contract verification (Etherscan)   | Nice-to-have, not blocking                                    |
+| Payment activation in formation     | Wrong trust domain — child node owns its Privy wallet         |
+| Split deployment in formation       | Requires operator wallet that doesn't exist at formation time |
 
 ## Core Invariants
 
@@ -52,13 +60,21 @@ Enable any founder to create a fully-verified Cogni DAO node via a 3-field web f
 
    Forward note: the Financial Ledger reward-distribution path reuses this same `GovernanceERC20` as the rewards token. The current founder bootstrap mint is acceptable for formation testing, but it is NOT the final rewards-ready setup. Before live contributor distributions, formation must mint a fixed supply to a DAO-controlled emissions holder and the server verification path must validate that holder and total supply.
 
-3. **NO_PRIVATE_KEY_ENV_VARS**: All transactions signed via wallet UI (wagmi/rainbowkit), never by script-loaded secrets.
+3. **NO_PRIVATE_KEY_ENV_VARS**: Formation transactions are signed via wallet UI (wagmi/rainbowkit), never by script-loaded secrets. Payment activation (child node CLI) uses `DEPLOYER_PRIVATE_KEY` for Split deployment — this is acceptable because it runs in the child node's own environment, not the shared operator repo.
 
 4. **SERVER_VERIFICATION_BOUNDARY**: Browser is untrusted. Server derives ALL addresses from tx receipts. Request contains only `{ chainId, daoTxHash, signalTxHash, initialHolder }`.
 
 5. **PACKAGE_ISOLATION**: `aragon-osx` cannot import `src/`, `services/`, or browser/node-specific APIs.
 
 6. **FORK_FREEDOM**: Formation tooling works standalone without Cogni Operator accounts.
+
+7. **FORMATION_IS_GOVERNANCE_ONLY**: Formation outputs `cogni_dao` and `payments.status: pending_activation`. It does NOT provision operator wallets, deploy Split contracts, or configure payment rails. Those belong to payment activation in the child node's trust domain.
+
+8. **CHILD_OWNS_OPERATOR_WALLET**: The child node's Privy app credentials create and control the operator wallet. The shared operator repo never creates, stores, or administers child node wallets.
+
+9. **PAYMENTS_ACTIVE_REQUIRES_ALL**: A node's payments are active only when repo-spec contains all of: `payments.status: active`, `operator_wallet.address`, `payments_in.credits_topup.receiving_address`, `payments_in.credits_topup.provider`, `payments_in.credits_topup.allowed_chains`, `payments_in.credits_topup.allowed_tokens`. Missing any field means payments are inactive — the app skips the funding chain gracefully.
+
+10. **SPLIT_CONTROLLER_IS_OPERATOR**: The Split contract's owner/controller is the operator wallet (Privy-managed). This enables programmatic allocation updates if pricing constants change. The deployer (founder wallet) signs the deployment tx but does not retain admin control.
 
 ## Schema
 
@@ -270,15 +286,63 @@ Hardcoded per chainId. Server enforces `chainId in SUPPORTED_CHAIN_IDS` before a
 
 **YAML Builder:** → `src/app/api/setup/verify/route.ts` (`buildRepoSpecYaml`)
 
-Populates: `dao_contract`, `plugin_contract`, `signal_contract`, `chain_id` (as string)
+Populates at formation time:
+
+- `node_id` — random UUID
+- `scope_id` — deterministic from node_id
+- `cogni_dao.dao_contract`, `plugin_contract`, `signal_contract`, `chain_id`
+- `payments.status: pending_activation`
+
+Populated later by `pnpm node:activate-payments` (child node CLI):
+
+- `operator_wallet.address`
+- `payments_in.credits_topup.*`
+- `payments.status: active`
 
 **Invariants:**
 
-- Server derives addresses from receipts, not client input
+- Server derives DAO/plugin/signal addresses from receipts, not client input
 - `chain_id` is string (e.g., `"8453"` not `8453`)
 - Canonical path: `.cogni/repo-spec.yaml`
+- `payments.status` is explicit — never inferred from field presence
 
 > Current schema: [.cogni/repo-spec.yaml](../../.cogni/repo-spec.yaml)
+
+### Payment Activation (Child Node)
+
+Payment activation runs in the child node's own repo after formation + infra setup. It is a separate trust domain from formation — the child node owns its Privy credentials and operator wallet.
+
+**Entrypoint:** `pnpm node:activate-payments` → `scripts/node-activate-payments.ts`
+
+**Prerequisites:**
+
+- Privy credentials in env (`PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY`)
+- Funded deployer EOA on Base (`DEPLOYER_PRIVATE_KEY`) for Split deployment gas
+- `EVM_RPC_URL` for on-chain calls
+- `cogni_dao.dao_contract` in repo-spec (from formation)
+
+**Steps (each idempotent):**
+
+1. Verify Privy env configured
+2. Resolve operator wallet (0 wallets → create; 1 → use; >1 → error without explicit `OPERATOR_WALLET_ADDRESS`)
+3. Deploy Split contract (recipients: operator wallet + DAO treasury from repo-spec)
+4. Validate: read deployed Split config back on-chain, verify recipients + allocations match
+5. Write repo-spec in place: `operator_wallet.address`, `payments_in.credits_topup.*`, `payments.status: active` (written last, only after on-chain validation succeeds)
+
+**Split controller/admin:** The operator wallet address (from repo-spec). Enables programmatic allocation updates. The founder's connected wallet signs the deployment tx but the operator wallet is the on-chain owner.
+
+**Existing primitives (kept for advanced/recovery use):**
+
+- `scripts/provision-operator-wallet.ts` — standalone Privy wallet creation
+- `scripts/deploy-split.ts` — standalone Split deployment
+- `scripts/distribute-split.ts` — manual Split distribution trigger
+
+**Trust boundaries:**
+
+- Shared operator repo: formation factory only. Never creates child wallets.
+- Child node backend: owns Privy credentials and operator wallet.
+- Operator wallet: Split controller/owner (can update allocations programmatically) AND operational spender (recipient).
+- Founder wallet: signs the Split deployment tx, does not retain on-chain admin.
 
 ### File Pointers
 
@@ -301,6 +365,10 @@ Populates: `dao_contract`, `plugin_contract`, `signal_contract`, `chain_id` (as 
 | `src/app/(app)/setup/dao/page.tsx`                      | Wizard entry point                                     |
 | `src/app/(app)/setup/dao/DAOFormationPage.client.tsx`   | Client component with form + flow orchestration        |
 | `src/features/setup/components/FormationFlowDialog.tsx` | Modal dialog for progress/success/error states         |
+| `scripts/node-activate-payments.ts`                     | Payment activation CLI (child node)                    |
+| `scripts/provision-operator-wallet.ts`                  | Standalone Privy wallet provisioning                   |
+| `scripts/deploy-split.ts`                               | Standalone Split deployment                            |
+| `docs/guides/operator-wallet-setup.md`                  | Operator wallet + payment activation guide             |
 
 ### Appendix: Aragon OSx Addresses
 
@@ -314,12 +382,20 @@ OSx v1.4.0 deployments. Hardcoded addresses from [cogni-signal-evm-contracts](ht
 
 ## Acceptance Checks
 
-**Manual:**
+**Formation (manual):**
 
 1. Successfully deployed DAOs on Base mainnet, verified via Aragon app
 2. Server derives all addresses from receipts without client-provided addresses
 3. `balanceOf(initialHolder) == 1e18` verified on-chain
 4. Observability event `SETUP_DAO_VERIFY_COMPLETE` emitted with outcome, chainId, duration
+5. Repo-spec output includes `payments.status: pending_activation`
+
+**Payment Activation (manual):**
+
+6. `pnpm node:activate-payments` provisions wallet + deploys Split + writes repo-spec
+7. Deployed Split recipients match operator wallet + DAO treasury from repo-spec
+8. `payments.status` transitions from `pending_activation` to `active` in repo-spec
+9. App starts with activated repo-spec — `container.ts` wires operator wallet + funding chain
 
 ## Open Questions
 
@@ -329,6 +405,9 @@ OSx v1.4.0 deployments. Hardcoded addresses from [cogni-signal-evm-contracts](ht
 
 - [Node vs Operator Contract](./node-operator-contract.md)
 - [Cred Licensing Policy](./cred-licensing-policy.md)
+- [Operator Wallet Spec](./operator-wallet.md) — wallet lifecycle, custody, access control
+- [Web3 OpenRouter Payments Spec](./web3-openrouter-payments.md) — payment math, funding state machine
 - [Node Formation Project](../../work/projects/proj.node-formation-ui.md)
 - [Node Formation Guide](../guides/node-formation-guide.md)
+- [Operator Wallet Setup Guide](../guides/operator-wallet-setup.md)
 - [ROADMAP](../../ROADMAP.md)

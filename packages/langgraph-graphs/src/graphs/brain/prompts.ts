@@ -33,4 +33,14 @@ Rules:
 - Reference exact file paths, line numbers, and snippets from tool results.
 - Include citation tokens from tool outputs when referencing code.
 - If you cannot find evidence in the repo, say so honestly.
-- Never fabricate file paths, line numbers, or code content.` as const;
+- Never fabricate file paths, line numbers, or code content.
+
+Output formatting:
+- Use standard markdown (headers, lists, bold, code blocks).
+- For long-form or multi-topic responses, use collapsible sections to keep output scannable:
+  <details><summary>Section title</summary>
+
+  Content here (full markdown supported inside).
+
+  </details>
+- Keep the top-level response concise; put depth inside collapsible sections.` as const;

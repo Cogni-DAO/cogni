@@ -47,8 +47,9 @@ Pure TypeScript types, port interfaces, and orchestration services for the sched
   - `ExecutionGrantUserPort` - User-facing grant create/revoke/delete (callerUserId: UserId)
   - `ExecutionGrantWorkerPort` - Worker-only grant validation (actorId: ActorId)
   - `ExecutionRequestPort` - Idempotency layer for execution requests
-  - `ScheduleRunRepository` - Schedule run persistence
-  - `ScheduleSpec`, `ScheduleRun`, `ExecutionGrant`, `ExecutionRequest` - Domain types
+  - `GraphRunRepository` (canonical, `ScheduleRunRepository` deprecated alias) - Graph run persistence (single canonical run ledger)
+  - `ScheduleSpec`, `GraphRun` (canonical, `ScheduleRun` deprecated alias), `ExecutionGrant`, `ExecutionRequest` - Domain types
+  - `GRAPH_RUN_STATUSES`, `GRAPH_RUN_KINDS`, `GraphRunStatus`, `GraphRunKind` - Run status and kind enums
   - `ScheduleDescription` (includes cron/timezone/input for drift detection), `CreateScheduleParams` - Schedule control types
   - `IdempotencyCheckResult`, `ExecutionOutcome` - Execution request types
   - Error classes: `ScheduleControlUnavailableError`, `ScheduleControlConflictError`, `ScheduleControlNotFoundError`, grant errors, validation errors

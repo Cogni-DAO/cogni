@@ -163,7 +163,7 @@ function buildChatRequest(): NextRequest {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       message: "Hello",
-      model: "test-model",
+      modelRef: { providerKey: "platform", modelId: "test-model" },
       graphName: "sandbox:openclaw",
     }),
   });

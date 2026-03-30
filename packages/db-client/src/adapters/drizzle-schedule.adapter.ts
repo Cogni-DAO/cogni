@@ -153,6 +153,7 @@ export class DrizzleScheduleUserAdapter implements ScheduleUserPort {
       await this.scheduleControl.createSchedule({
         scheduleId: row.id,
         dbScheduleId: row.id,
+        ownerUserId: callerUserId,
         cron: input.cron,
         timezone: input.timezone,
         graphId: input.graphId,

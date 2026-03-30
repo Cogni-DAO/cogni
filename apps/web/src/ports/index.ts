@@ -14,7 +14,23 @@
  * @public
  */
 
-export type { GraphId } from "@cogni/ai-core";
+export type { GraphId, ModelCapabilities, ModelRef } from "@cogni/ai-core";
+export { ModelCapabilitiesSchema, ModelRefSchema } from "@cogni/ai-core";
+export type {
+  ExecutionContext,
+  GraphExecutorPort,
+  GraphFinal,
+  GraphRunRequest,
+  GraphRunResult,
+  RunStreamEntry,
+  RunStreamPort,
+} from "@cogni/graph-execution-core";
+export {
+  RUN_STREAM_BLOCK_MS,
+  RUN_STREAM_DEFAULT_TTL_SECONDS,
+  RUN_STREAM_KEY_PREFIX,
+  RUN_STREAM_MAXLEN,
+} from "@cogni/graph-execution-core";
 // Scheduling ports moved to @/ports/server — @cogni/scheduler-core uses node:util
 // and contaminates client bundles via barrel re-export. Server-only consumers
 // must import from "@/ports/server" instead.
@@ -52,23 +68,26 @@ export type {
   IngestionCursor,
   IngestionReceipt,
 } from "./attribution-store.port";
+export type {
+  BillingContext,
+  BillingResolver,
+  PreflightCreditCheckFn,
+} from "./billing-context";
 export type { Clock } from "./clock.port";
+export type {
+  ConnectionBrokerPort,
+  ConnectionScope,
+  ResolvedConnection,
+} from "./connection-broker.port";
 export type {
   GovernanceRun,
   GovernanceStatusPort,
   UpcomingRun,
 } from "./governance-status.port";
-export type {
-  AiExecutionErrorCode,
-  GraphExecutorPort,
-  GraphFinal,
-  GraphRunRequest,
-  GraphRunResult,
-  PreflightCreditCheckFn,
-} from "./graph-executor.port";
 // LlmError types re-exported for adapters (adapters can only import from ports)
 // Features should import directly from @/core
 export {
+  type AiExecutionErrorCode,
   type ChatDeltaEvent,
   type CompletionFinalResult,
   type CompletionStreamParams,
@@ -104,6 +123,13 @@ export type {
   TemplateQueryResult,
   TemplateSummary,
 } from "./metrics-query.port";
+export type { ModelCatalogPort } from "./model-catalog.port";
+export type {
+  ModelOption,
+  ModelProviderPort,
+  ProviderContext,
+} from "./model-provider.port";
+export type { ModelProviderResolverPort } from "./model-provider-resolver.port";
 export type {
   OnChainVerifier,
   VerificationResult,

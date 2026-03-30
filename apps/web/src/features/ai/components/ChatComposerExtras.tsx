@@ -14,13 +14,16 @@
 
 "use client";
 
-import type { GraphId } from "@cogni/ai-core";
+import type { GraphId, ModelRef } from "@cogni/ai-core";
 import { useEffect, useState } from "react";
 import {
   type GraphOption,
   GraphPicker,
 } from "@/features/ai/components/GraphPicker";
-import { ModelPicker } from "@/features/ai/components/ModelPicker";
+import {
+  CHATGPT_MODELS,
+  ModelPicker,
+} from "@/features/ai/components/ModelPicker";
 import { useModels } from "@/features/ai/hooks/useModels";
 import {
   setPreferredModelId,
@@ -58,6 +61,16 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     name: "OpenClaw",
     description: "Community-accessible OpenClaw container agent",
   },
+  {
+    graphId: "langgraph:browser" satisfies GraphId,
+    name: "Browser",
+    description: "Web browsing agent with Playwright MCP",
+  },
+  {
+    graphId: "langgraph:frontend-tester" satisfies GraphId,
+    name: "Frontend Tester",
+    description: "QA agent — tests web UIs via Playwright",
+  },
 ];
 
 /** Default graph ID - exported for page initialization */
@@ -65,7 +78,7 @@ export const DEFAULT_GRAPH_ID: GraphId = "sandbox:openclaw";
 
 export interface ChatComposerExtrasProps {
   selectedModel: string;
-  onModelChange: (model: string) => void;
+  onModelChange: (ref: ModelRef) => void;
   defaultModelId: string;
   balance?: number;
   selectedGraph?: GraphId;
@@ -86,19 +99,29 @@ export function ChatComposerExtras({
   // Initialize from localStorage on mount, validate against API models
   useEffect(() => {
     if (modelsQuery.data) {
-      const modelIds = modelsQuery.data.models.map((m) => m.id);
+      // Valid model IDs = OpenRouter models + ChatGPT subscription models
+      const modelIds = [
+        ...modelsQuery.data.models.map((m) => m.ref.modelId),
+        ...CHATGPT_MODELS.map((m) => m.id),
+      ];
       const validated = validatePreferredModel(modelIds, defaultModelId);
       if (validated !== localModel) {
         setLocalModel(validated);
-        onModelChange(validated);
+        // Find the matching ref from API models (defaults to platform provider)
+        const matchedModel = modelsQuery.data.models.find(
+          (m) => m.ref.modelId === validated
+        );
+        onModelChange(
+          matchedModel?.ref ?? { providerKey: "platform", modelId: validated }
+        );
       }
     }
   }, [modelsQuery.data, defaultModelId, localModel, onModelChange]);
 
-  const handleModelChange = (modelId: string) => {
-    setLocalModel(modelId);
-    setPreferredModelId(modelId);
-    onModelChange(modelId);
+  const handleModelChange = (ref: ModelRef) => {
+    setLocalModel(ref.modelId);
+    setPreferredModelId(ref.modelId);
+    onModelChange(ref);
   };
 
   const handleGraphChange = (graphId: GraphId) => {

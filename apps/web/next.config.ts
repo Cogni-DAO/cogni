@@ -6,16 +6,31 @@ const nextConfig: NextConfig = {
   // In monorepo: tell Next.js where the workspace root is so standalone output
   // includes shared packages and resolves node_modules correctly.
   outputFileTracingRoot: path.join(__dirname, "../../"),
-  // dockerode → ssh2 → cpu-features has a native .node addon that Turbopack
-  // cannot resolve when built with --ignore-scripts. Leave as runtime require().
+  // Prevent Turbopack from bundling (and per-route duplicating) heavy server-only
+  // packages. These resolve as Node.js requires at runtime instead. (spike.0203)
   serverExternalPackages: [
+    // Native addons / build-tool incompatible
     "dockerode",
     "ssh2",
     "cpu-features",
-    "pino",
-    "pino-pretty",
     "tigerbeetle-node",
     "@cogni/financial-ledger",
+    // Codex: subprocess spawns native binary — standalone tracing prunes platform optional deps
+    "@openai/codex-sdk",
+    "@openai/codex",
+    "@openai/codex-linux-x64",
+    // Heavy server-only deps — prevent per-route duplication in dev
+    "@temporalio/client",
+    "@grpc/grpc-js",
+    "ioredis",
+    "drizzle-orm",
+    "postgres",
+    "viem",
+    "langfuse",
+    "pino",
+    "pino-pretty",
+    "prom-client",
+    "posthog-node",
   ],
   // WalletConnect pulls pino@7 → thread-stream@0.15 which ships test files
   // requiring 'tape'. outputFileTracingRoot broadens tracing to monorepo root,

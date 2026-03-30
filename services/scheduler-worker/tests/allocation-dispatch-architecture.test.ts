@@ -22,7 +22,7 @@ const ledgerActivityPath = new URL(
   import.meta.url
 );
 const collectWorkflowPath = new URL(
-  "../src/workflows/collect-epoch.workflow.ts",
+  "../../../packages/temporal-workflows/src/workflows/collect-epoch.workflow.ts",
   import.meta.url
 );
 

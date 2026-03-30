@@ -21,7 +21,7 @@ import {
   createModelsPaidOnly,
   createModelsWithFree,
 } from "@tests/_fixtures/ai/fixtures";
-import ChatPage from "@/app/(app)/chat/page";
+import { ChatView as ChatPage } from "@/app/(app)/chat/view";
 
 // Mock components and localStorage utilities (use real hooks with seeded QueryClient)
 vi.mock("@/features/ai/public", async () => {
@@ -45,12 +45,12 @@ vi.mock("@/features/ai/public", async () => {
 vi.mock("@/features/ai/chat/providers/ChatRuntimeProvider.client", () => ({
   ChatRuntimeProvider: (props: {
     children: React.ReactNode;
-    selectedModel: string;
+    modelRef: { providerKey: string; modelId: string; connectionId?: string };
     defaultModelId: string;
     disabled: boolean;
   }) => (
     <div data-testid="runtime-provider">
-      <div data-testid="provider-selected-model">{props.selectedModel}</div>
+      <div data-testid="provider-selected-model">{props.modelRef.modelId}</div>
       <div data-testid="provider-default-model">{props.defaultModelId}</div>
       <div data-testid="provider-disabled">{String(props.disabled)}</div>
       {props.children}

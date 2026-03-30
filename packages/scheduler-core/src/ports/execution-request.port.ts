@@ -95,7 +95,7 @@ export interface ExecutionRequestPort {
    *
    * @param idempotencyKey - Unique key for deduplication
    * @param requestHash - SHA256 hash of normalized request payload
-   * @param runId - GraphExecutorPort runId (canonical, shared with schedule_runs)
+   * @param runId - GraphExecutorPort runId (canonical, shared with graph_runs)
    * @param traceId - Langfuse trace ID (null if not configured)
    */
   createPendingRequest(

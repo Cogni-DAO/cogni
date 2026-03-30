@@ -2,7 +2,7 @@
 id: task.0124
 type: task
 title: "Scaffold @cogni/attribution-pipeline (framework) + @cogni/attribution-pipeline-plugins (built-ins)"
-status: needs_merge
+status: done
 priority: 1
 rank: 1
 estimate: 3
@@ -19,7 +19,7 @@ revision: 0
 blocked_by: [task.0113]
 deploy_verified: false
 created: 2026-03-02
-updated: 2026-03-02
+updated: 2026-03-24
 labels: [governance, attribution, plugins, architecture]
 external_refs:
 ---

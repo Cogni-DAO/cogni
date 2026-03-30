@@ -80,6 +80,9 @@ export class EvmRpcOnChainVerifierAdapter implements OnChainVerifier {
   }): Promise<VerificationResult> {
     // 1. Validate caller params against canonical config
     const config = getPaymentConfig();
+    if (!config) {
+      return failedResult("INVALID_RECIPIENT");
+    }
     const canonicalToken = USDC_TOKEN_ADDRESS;
 
     if (params.chainId !== CHAIN_ID) {

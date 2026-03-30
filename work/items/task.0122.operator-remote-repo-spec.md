@@ -11,7 +11,7 @@ outcome: "When an external project installs the Cogni GitHub App, the operator a
 spec_refs: vcs-integration, node-operator-contract-spec, identity-model-spec
 assignees: derekg1729
 credit:
-project: proj.operator-plane
+project: proj.node-formation-ui
 branch:
 pr:
 reviewer:

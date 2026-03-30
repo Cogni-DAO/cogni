@@ -52,6 +52,9 @@ cogni_dao:
 
 # DAO Financial Rails Configuration
 # Inbound payment configuration for USDC credits top-up
+payments:
+  status: active
+
 payments_in:
   credits_topup:
     provider: cogni-usdc-backend-v1

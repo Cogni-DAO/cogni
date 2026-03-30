@@ -16,6 +16,7 @@
 import { createUserMessage } from "@tests/_fakes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { runInScope } from "@/adapters/server/ai/execution-scope";
 import {
   LangGraphDevProvider,
   type LangGraphDevProviderConfig,
@@ -26,7 +27,6 @@ import type { GraphRunRequest } from "@/ports";
 const TEST_BILLING_ACCOUNT_ID = "test-billing-account-123";
 const TEST_VIRTUAL_KEY_ID = "vk-test-456";
 const TEST_RUN_ID = "run-test-789";
-const TEST_REQUEST_ID = "req-test-abc";
 const TEST_GRAPH_NAME = "poet";
 const TEST_GRAPH_ID = `langgraph:${TEST_GRAPH_NAME}`;
 
@@ -60,18 +60,28 @@ function createTestRequest(
 ): GraphRunRequest {
   return {
     runId: TEST_RUN_ID,
-    ingressRequestId: TEST_REQUEST_ID,
     graphId: TEST_GRAPH_ID,
-    model: "gpt-4o",
+    modelRef: { providerKey: "platform", modelId: "gpt-4o" },
     messages: [createUserMessage("Hello")],
-    caller: {
-      billingAccountId: TEST_BILLING_ACCOUNT_ID,
-      virtualKeyId: TEST_VIRTUAL_KEY_ID,
-      requestId: TEST_REQUEST_ID,
-      traceId: "trace-test",
-    },
     ...overrides,
   };
+}
+
+const TEST_SCOPE = {
+  billing: {
+    billingAccountId: TEST_BILLING_ACCOUNT_ID,
+    virtualKeyId: TEST_VIRTUAL_KEY_ID,
+  },
+  llmService: {
+    completion: vi.fn(),
+    completionStream: vi.fn(),
+  } as unknown as import("@/ports").LlmService,
+  usageSource: "litellm" as const,
+};
+
+/** Run fn within execution scope (needed for getExecutionScope() calls in provider). */
+function withScope<T>(fn: () => T): T {
+  return runInScope(TEST_SCOPE, fn);
 }
 
 describe("adapters/server/ai/langgraph/dev/provider", () => {
@@ -95,7 +105,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
     it("returns invalid_request error when stateKey is missing", async () => {
       const request = createTestRequest({ stateKey: undefined });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
 
       // Consume stream to get events
       const events: unknown[] = [];
@@ -117,7 +127,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
     it("returns invalid_request error when stateKey is empty string", async () => {
       const request = createTestRequest({ stateKey: "" });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
 
       const events: unknown[] = [];
       for await (const event of result.stream) {
@@ -133,7 +143,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
     it("proceeds when stateKey is provided", async () => {
       const request = createTestRequest({ stateKey: "valid-thread-key" });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
 
       // Consume stream
       const events: unknown[] = [];
@@ -162,10 +172,10 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
         stateKey: "test-thread",
       });
 
-      provider.runGraph(request);
+      withScope(() => provider.runGraph(request));
 
       // Drain the stream to trigger execution
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
       for await (const _ of result.stream) {
         // consume
       }
@@ -193,7 +203,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
         stateKey: "test-thread",
       });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
       for await (const _ of result.stream) {
         // consume
       }
@@ -223,7 +233,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
         stateKey: "test-thread",
       });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
 
       const events: unknown[] = [];
       for await (const event of result.stream) {
@@ -241,7 +251,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
     it("creates thread with tenant-scoped ID", async () => {
       const request = createTestRequest({ stateKey: "my-thread" });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
       for await (const _ of result.stream) {
         // consume
       }
@@ -266,12 +276,12 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
       const request2 = createTestRequest({ stateKey: "same-thread" });
 
       // Run twice
-      const result1 = provider.runGraph(request1);
+      const result1 = withScope(() => provider.runGraph(request1));
       for await (const _ of result1.stream) {
         // consume
       }
 
-      const result2 = provider.runGraph(request2);
+      const result2 = withScope(() => provider.runGraph(request2));
       for await (const _ of result2.stream) {
         // consume
       }
@@ -283,33 +293,30 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
     });
 
     it("uses different threadId for different billingAccountId", async () => {
-      const request1 = createTestRequest({
-        stateKey: "same-thread",
-        caller: {
+      const request = createTestRequest({ stateKey: "same-thread" });
+
+      const scopeA = {
+        billing: {
           billingAccountId: "tenant-a",
           virtualKeyId: TEST_VIRTUAL_KEY_ID,
-          requestId: TEST_REQUEST_ID,
-          traceId: "trace-test",
         },
-      });
-
-      const request2 = createTestRequest({
-        stateKey: "same-thread",
-        caller: {
+        usageSource: "litellm" as const,
+      };
+      const scopeB = {
+        billing: {
           billingAccountId: "tenant-b",
           virtualKeyId: TEST_VIRTUAL_KEY_ID,
-          requestId: TEST_REQUEST_ID,
-          traceId: "trace-test",
         },
-      });
+        usageSource: "litellm" as const,
+      };
 
-      // Run both
-      const result1 = provider.runGraph(request1);
+      // Run both with different billing scopes
+      const result1 = runInScope(scopeA, () => provider.runGraph(request));
       for await (const _ of result1.stream) {
         // consume
       }
 
-      const result2 = provider.runGraph(request2);
+      const result2 = runInScope(scopeB, () => provider.runGraph(request));
       for await (const _ of result2.stream) {
         // consume
       }
@@ -328,7 +335,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
         stateKey: "test-thread",
       });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
 
       const events: unknown[] = [];
       for await (const event of result.stream) {
@@ -348,7 +355,7 @@ describe("adapters/server/ai/langgraph/dev/provider", () => {
         stateKey: "test-thread",
       });
 
-      const result = provider.runGraph(request);
+      const result = withScope(() => provider.runGraph(request));
 
       const events: unknown[] = [];
       for await (const event of result.stream) {

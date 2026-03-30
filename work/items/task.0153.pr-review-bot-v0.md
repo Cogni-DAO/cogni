@@ -2,7 +2,7 @@
 id: task.0153
 type: task
 title: "PR Review Bot V0 — LangGraph graph + gate orchestrator for automated PR review"
-status: needs_merge
+status: done
 priority: 1
 rank: 1
 estimate: 4
@@ -21,7 +21,7 @@ revision: 3
 blocked_by:
 deploy_verified: false
 created: 2026-03-10
-updated: 2026-03-11
+updated: 2026-03-24
 labels: [vcs, ai, review, langgraph]
 external_refs:
   - https://github.com/cogni-dao/cogni-git-review

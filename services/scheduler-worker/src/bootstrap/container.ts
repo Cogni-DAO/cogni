@@ -27,7 +27,7 @@ import {
 import {
   DrizzleAttributionAdapter,
   DrizzleExecutionGrantWorkerAdapter,
-  DrizzleScheduleRunAdapter,
+  DrizzleGraphRunAdapter,
 } from "@cogni/db-client";
 import { createServiceDbClient } from "@cogni/db-client/service";
 import {
@@ -49,7 +49,7 @@ import type {
   AttributionStore,
   DataSourceRegistration,
   ExecutionGrantWorkerPort,
-  ScheduleRunRepository,
+  GraphRunRepository,
 } from "../ports/index.js";
 import type { Env } from "./env.js";
 
@@ -59,7 +59,7 @@ import type { Env } from "./env.js";
  */
 export interface ServiceContainer {
   grantAdapter: ExecutionGrantWorkerPort;
-  runAdapter: ScheduleRunRepository;
+  runAdapter: GraphRunRepository;
   config: {
     appBaseUrl: string;
     schedulerApiToken: string;
@@ -144,7 +144,7 @@ export function createContainer(config: Env, logger: Logger): ServiceContainer {
       db,
       logger.child?.({ component: "grant-adapter" }) ?? logger
     ),
-    runAdapter: new DrizzleScheduleRunAdapter(
+    runAdapter: new DrizzleGraphRunAdapter(
       db,
       logger.child?.({ component: "run-adapter" }) ?? logger
     ),

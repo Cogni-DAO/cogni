@@ -12,12 +12,21 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { runInScope } from "@/adapters/server/ai/execution-scope";
 import {
   type SdkStreamChunk,
   type StreamRunContext,
   translateDevServerStream,
 } from "@/adapters/server/ai/langgraph/dev/stream-translator";
 import type { AiEvent } from "@/types/ai-events";
+
+const TEST_SCOPE = {
+  billing: {
+    billingAccountId: "account-123",
+    virtualKeyId: "vkey-123",
+  },
+  usageSource: "litellm" as const,
+};
 
 /**
  * Helper to create mock stream run context.
@@ -26,11 +35,6 @@ function mockContext(): StreamRunContext {
   return {
     runId: "run-123",
     attempt: 1,
-    caller: {
-      billingAccountId: "account-123",
-      virtualKeyId: "vkey-123",
-      traceId: "trace-123",
-    },
   };
 }
 
@@ -51,11 +55,13 @@ async function* mockStream(
 async function collectEvents(
   stream: AsyncIterable<AiEvent>
 ): Promise<AiEvent[]> {
-  const events: AiEvent[] = [];
-  for await (const event of stream) {
-    events.push(event);
-  }
-  return events;
+  return runInScope(TEST_SCOPE, async () => {
+    const events: AiEvent[] = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+    return events;
+  });
 }
 
 /**
@@ -329,6 +335,35 @@ describe("translateDevServerStream", () => {
       expect(resultEvent).toMatchObject({
         result: { raw: "plain text output" },
       });
+    });
+  });
+
+  it("emits a neutral usage_report event without billing identity", async () => {
+    const chunks: SdkStreamChunk[] = [
+      messagesChunk({
+        type: "ai",
+        id: "msg-1",
+        content: "done",
+      }),
+    ];
+
+    const events = await collectEvents(
+      translateDevServerStream(mockStream(chunks), {
+        ...mockContext(),
+        graphId: "langgraph:poet",
+      })
+    );
+
+    const usageEvent = events.find((event) => event.type === "usage_report");
+    expect(usageEvent).toEqual({
+      type: "usage_report",
+      fact: {
+        runId: "run-123",
+        attempt: 1,
+        source: "litellm",
+        executorType: "langgraph_server",
+        graphId: "langgraph:poet",
+      },
     });
   });
 });

@@ -94,9 +94,9 @@ describe("parseRepoSpec", () => {
       expect(() => parseRepoSpec(rest)).toThrow(/Invalid repo-spec structure/);
     });
 
-    it("rejects missing payments_in", () => {
+    it("accepts missing payments_in (optional since payment activation)", () => {
       const { payments_in: _, ...rest } = VALID_OBJECT;
-      expect(() => parseRepoSpec(rest)).toThrow(/Invalid repo-spec structure/);
+      expect(() => parseRepoSpec(rest)).not.toThrow();
     });
 
     it("rejects invalid receiving_address", () => {

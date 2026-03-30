@@ -108,7 +108,9 @@ export function extractChainId(spec: RepoSpec): number {
 export function extractPaymentConfig(
   spec: RepoSpec,
   expectedChainId: number
-): InboundPaymentConfig {
+): InboundPaymentConfig | undefined {
+  if (!spec.payments_in?.credits_topup) return undefined;
+
   const chainId = extractChainId(spec);
 
   if (chainId !== expectedChainId) {

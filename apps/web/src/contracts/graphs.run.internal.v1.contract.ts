@@ -25,21 +25,21 @@ import { z } from "zod";
  * Per SCHEDULER_SPEC.md: Worker calls with executionGrantId and input.
  */
 export const InternalGraphRunInputSchema = z.object({
-  /** Execution grant ID for authorization (not user session) */
-  executionGrantId: z.string().uuid(),
+  /** Execution grant ID for authorization (null for API-triggered runs) */
+  executionGrantId: z.string().uuid().nullable().optional(),
   /** Graph input payload (messages, model, etc.) */
   input: z.record(z.string(), z.unknown()),
   /**
    * Optional runId - if provided, use it; otherwise generate.
    * Per SCHEDULER_SPEC.md: Worker provides canonical runId for correlation
-   * with schedule_runs and charge_receipts.
+   * with graph_runs and charge_receipts.
    */
   runId: z.string().uuid().optional(),
 });
 
 /**
  * Internal graph run response schema.
- * Aligns with GraphFinal shape from graph-executor.port.ts.
+ * Aligns with GraphFinal shape from @cogni/graph-execution-core.
  *
  * HTTP errors handled separately:
  * - 401: Missing/invalid SCHEDULER_API_TOKEN
@@ -55,6 +55,8 @@ export const InternalGraphRunOutputSchema = z.discriminatedUnion("ok", [
     runId: z.string(),
     /** Langfuse trace ID (null if Langfuse not configured) */
     traceId: z.string().nullable(),
+    /** Structured output from graph (when responseFormat was provided). Typed by caller. */
+    structuredOutput: z.unknown().optional(),
   }),
   // Execution failed (graph ran but errored)
   z.object({

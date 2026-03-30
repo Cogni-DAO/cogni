@@ -61,7 +61,7 @@ const fakeRequest: GraphRunRequest = {
   runId: "run-123",
   ingressRequestId: "req-123",
   messages: [{ role: "user", content: "test" }],
-  model: "test-model",
+  modelRef: { providerKey: "platform", modelId: "test-model" },
   caller: {
     billingAccountId: "billing-123",
     virtualKeyId: "vk-123",

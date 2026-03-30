@@ -56,6 +56,19 @@ model_list:
       is_free: false
       provider_key: "mock"
 
+  # Governance alias used by scheduler-core in stack tests
+  - model_name: kimi-k2.5
+    litellm_params:
+      model: openai/mock-gpt-markdown
+      api_base: http://mock-llm:3000
+      api_key: "os.environ/OPENROUTER_API_KEY"
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000002
+    model_info:
+      display_name: "Kimi K2.5 (Test Alias)"
+      is_free: false
+      provider_key: "mock"
+
   # Streaming plumbing model (deterministic, no prompt dependence)
   # Used by stack tests that validate SSE parsing without relying on mock-llm fidelity.
   - model_name: mock-stream

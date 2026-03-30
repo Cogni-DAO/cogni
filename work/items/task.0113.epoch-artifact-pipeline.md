@@ -2,7 +2,7 @@
 id: task.0113
 type: task
 title: "Epoch artifact pipeline + hello-world GitHub enricher"
-status: needs_merge
+status: done
 priority: 1
 rank: 1
 estimate: 3
@@ -19,7 +19,7 @@ revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-02-27
-updated: 2026-02-27
+updated: 2026-03-24
 labels: [governance, ledger, enrichment]
 external_refs:
 ---

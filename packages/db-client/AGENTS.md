@@ -47,7 +47,7 @@ Database client factory and Drizzle adapter implementations for scheduling and l
   - `Database`, `LoggerLike` — Drizzle client type (includes `$client: Sql` for pool control) and logger interface
   - `DrizzleScheduleUserAdapter`, `DrizzleScheduleWorkerAdapter` — schedule adapters (split by trust boundary)
   - `DrizzleExecutionGrantUserAdapter`, `DrizzleExecutionGrantWorkerAdapter` — grant adapters (split by trust boundary)
-  - `DrizzleExecutionRequestAdapter`, `DrizzleScheduleRunAdapter`
+  - `DrizzleExecutionRequestAdapter`, `DrizzleGraphRunAdapter` (canonical), `DrizzleScheduleRunAdapter` (deprecated alias)
   - `DrizzleAttributionAdapter` — ledger adapter (shared by app + worker, uses serviceDb/BYPASSRLS). Constructor takes `scopeId`; all epochId-based methods enforce scope via `resolveEpochScoped()` (SCOPE_GATED_QUERIES).
   - Re-exports from `@cogni/db-schema` (tables, types)
 - **Exports (sub-path `@cogni/db-client/service`):**
@@ -58,7 +58,7 @@ Database client factory and Drizzle adapter implementations for scheduling and l
 ## Ports
 
 - **Uses ports:** none
-- **Implements ports:** `ScheduleUserPort`, `ScheduleWorkerPort`, `ExecutionGrantUserPort`, `ExecutionGrantWorkerPort`, `ExecutionRequestPort`, `ScheduleRunRepository`, `ActivityLedgerStore`
+- **Implements ports:** `ScheduleUserPort`, `ScheduleWorkerPort`, `ExecutionGrantUserPort`, `ExecutionGrantWorkerPort`, `ExecutionRequestPort`, `GraphRunRepository` (canonical, `ScheduleRunRepository` deprecated alias), `ActivityLedgerStore`
 - **Contracts:** Contract tests in `tests/contract/<port>.contract.ts`
 
 ## Responsibilities

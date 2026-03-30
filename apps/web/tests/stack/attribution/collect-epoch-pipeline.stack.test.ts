@@ -10,7 +10,7 @@
  *   - SELECTION_POLICY_DELEGATED: Selection runs via plugin dispatch, not hardcoded logic
  *   - ACTIVITY_IDEMPOTENT: Re-running the workflow produces the same DB state
  * Side-effects: IO (Temporal gRPC, PostgreSQL)
- * Links: services/scheduler-worker/src/workflows/collect-epoch.workflow.ts
+ * Links: packages/temporal-workflows/src/workflows/collect-epoch.workflow.ts
  * @internal
  */
 
@@ -118,7 +118,7 @@ describe("[attribution] CollectEpochWorkflow pipeline (stack)", () => {
     // 4. Bundle workflow code (compiles TS → deterministic JS bundle)
     const workflowBundle = await bundleWorkflowCode({
       workflowsPath: new URL(
-        "../../../../../services/scheduler-worker/src/workflows/ledger-workflows.ts",
+        "../../../../../packages/temporal-workflows/src/ledger.ts",
         import.meta.url
       ).pathname,
     });
