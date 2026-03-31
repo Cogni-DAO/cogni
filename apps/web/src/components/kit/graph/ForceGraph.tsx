@@ -112,7 +112,7 @@ export function ForceGraph({
     ctx.fill();
 
     // Label
-    ctx.font = "4px sans-serif";
+    ctx.font = "10px sans-serif";
     ctx.textAlign = "center";
     ctx.fillStyle = "#e4e4e7";
     const label = n.label.length > 20 ? `${n.label.slice(0, 18)}…` : n.label;

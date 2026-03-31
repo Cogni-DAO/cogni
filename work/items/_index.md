@@ -13,7 +13,6 @@
 | 0 | 1 | 3 | needs_merge | task.0161 | Governance signal executor: Alchemy webhook → on-chain verification → GitHub actions | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 1 | 1 | needs_merge | bug.0224 | Codex binary not found in Docker — standalone misses platform-specific optional dep | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
-| 0 | 2 | 3 | needs_closeout | spike.0240 | Graph Visualization Frontend — Gource-style Interactive Viewer | Premium Frontend UX | proj.premium-frontend-ux |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
@@ -200,6 +199,7 @@
 | 0 | task.0177 | Unified streaming API: chat endpoint → Temporal + Redis + idempotency | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | task.0178 | Delete old scheduled run path, prune dead tables, observability + documentation finish | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | bug.0186 | Chat disconnect persists truncated assistant response — move thread persistence to execution layer | Unified Graph Launch | proj.unified-graph-launch |
+| 0 | spike.0240 | Graph Visualization Frontend — Gource-style Interactive Viewer | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | task.0006 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0007 | Billing enforcement decorator at GraphExecutorPort level | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0010 | OpenClaw gateway model selection — session-level override or agent-per-specialty | OpenClaw Capabilities Integration | proj.openclaw-capabilities |

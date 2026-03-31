@@ -13,7 +13,7 @@
 
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ForceGraph } from "@/components/kit/graph/ForceGraph";
 import { GraphInspector } from "@/components/kit/graph/GraphInspector";
@@ -23,11 +23,14 @@ import type { GraphNode, GraphSnapshot } from "@/components/kit/graph/types";
 export interface SystemTimelineViewProps {
   /** Full snapshot containing all nodes across the time range */
   snapshot: GraphSnapshot;
+  /** Called when a node is selected (e.g. to switch to flow view) */
+  onNodeSelect?: ((node: GraphNode) => void) | undefined;
   className?: string | undefined;
 }
 
 export function SystemTimelineView({
   snapshot,
+  onNodeSelect,
   className,
 }: SystemTimelineViewProps) {
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
@@ -49,8 +52,14 @@ export function SystemTimelineView({
     };
   }, [snapshot.nodes]);
 
-  // Start at "now" (live)
+  // Start at "now" (live). Track whether user is in live mode.
   const [currentTime, setCurrentTime] = useState(maxTime);
+  const [isLive, setIsLive] = useState(true);
+
+  // Auto-advance to maxTime when new data arrives and user is in live mode
+  useEffect(() => {
+    if (isLive) setCurrentTime(maxTime);
+  }, [isLive, maxTime]);
 
   // Filter snapshot to only show nodes up to currentTime
   const filteredSnapshot = useMemo((): GraphSnapshot => {
@@ -64,16 +73,24 @@ export function SystemTimelineView({
     return { nodes: visibleNodes, edges: visibleEdges, timestamp: currentTime };
   }, [snapshot, currentTime]);
 
-  const handleTimeChange = useCallback((ts: number) => {
-    setCurrentTime(ts);
-  }, []);
+  const handleTimeChange = useCallback(
+    (ts: number) => {
+      setCurrentTime(ts);
+      // If user scrubs away from max, exit live mode; skip-to-live re-enables it
+      setIsLive(ts >= maxTime);
+    },
+    [maxTime]
+  );
 
   return (
     <div className={`flex flex-col ${className ?? "h-full"}`}>
       <div className="flex-1">
         <ForceGraph
           snapshot={filteredSnapshot}
-          onNodeClick={setSelectedNode}
+          onNodeClick={(node) => {
+            setSelectedNode(node);
+            onNodeSelect?.(node);
+          }}
           className="h-full w-full"
         />
       </div>

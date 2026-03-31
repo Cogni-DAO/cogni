@@ -1,7 +1,7 @@
 ---
 id: spike.0240
 type: spike
-status: needs_closeout
+status: done
 priority: 0
 rank: 2
 estimate: 3

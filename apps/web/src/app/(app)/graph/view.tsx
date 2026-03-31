@@ -79,7 +79,7 @@ export function GraphView() {
     return runsToTimelineSnapshot([run]);
   }, [selectedRunId, allRuns]);
 
-  const _handleTimelineNodeClick = useCallback((node: GraphNode) => {
+  const handleTimelineNodeClick = useCallback((node: GraphNode) => {
     setSelectedRunId(node.id);
     setMode("flow");
   }, []);
@@ -120,6 +120,7 @@ export function GraphView() {
           {mode === "timeline" ? (
             <SystemTimelineView
               snapshot={timelineSnapshot}
+              onNodeSelect={handleTimelineNodeClick}
               className="h-full"
             />
           ) : (
