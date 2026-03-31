@@ -34,6 +34,7 @@ import {
   type LlmToolCallDelta,
 } from "@/ports";
 import { scrubStringContent } from "@/shared/ai/content-scrubbing";
+import { getCachedModels } from "@/shared/ai/model-catalog.server";
 import {
   computePromptHash,
   DEFAULT_MAX_TOKENS,
@@ -84,6 +85,19 @@ function extractProviderFromModel(model: string): string {
   if (model.startsWith("gpt-") || model.startsWith("o1")) return "openai";
   if (model.startsWith("claude-")) return "anthropic";
   return "unknown";
+}
+
+/**
+ * Look up display name for a LiteLLM config model name from the cached catalog.
+ * Returns undefined if catalog unavailable or model not found.
+ */
+async function lookupDisplayName(modelId: string): Promise<string | undefined> {
+  try {
+    const { models } = await getCachedModels();
+    return models.find((m) => m.id === modelId)?.name ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -321,6 +335,7 @@ export class LiteLlmAdapter implements LlmService {
     // Extract resolved model from response (may differ from requested model)
     const resolvedModel = data.model ?? model;
     const resolvedProvider = extractProviderFromModel(resolvedModel);
+    const resolvedDisplayName = await lookupDisplayName(model);
 
     const result: Awaited<ReturnType<LlmService["completion"]>> = {
       message: {
@@ -336,6 +351,7 @@ export class LiteLlmAdapter implements LlmService {
       promptHash,
       resolvedProvider,
       resolvedModel,
+      ...(resolvedDisplayName && { resolvedDisplayName }),
     };
 
     // Add optional fields only when present
@@ -775,6 +791,7 @@ export class LiteLlmAdapter implements LlmService {
             // Extract resolved model/provider (SSE doesn't return these, use request param)
             const resolvedModel = model;
             const resolvedProvider = extractProviderFromModel(resolvedModel);
+            const resolvedDisplayName = await lookupDisplayName(model);
 
             // Assemble final tool calls from accumulated deltas (per ADAPTER_ASSEMBLES_TOOLCALLS)
             // Only include if finishReason is "tool_calls" and we have accumulated data
@@ -803,6 +820,7 @@ export class LiteLlmAdapter implements LlmService {
               promptHash,
               resolvedProvider,
               resolvedModel,
+              ...(resolvedDisplayName && { resolvedDisplayName }),
             };
             if (finalUsage) {
               result.usage = finalUsage;

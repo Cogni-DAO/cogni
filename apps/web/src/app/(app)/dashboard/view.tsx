@@ -52,6 +52,8 @@ import type {
 import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
 import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
+import { WorkItemDetail } from "../work/_components/WorkItemDetail";
+import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
 import { fetchRuns } from "./_api/fetchRuns";
 
 type Tab = "user" | "system";
@@ -107,18 +109,6 @@ const STATUS_LABEL: Record<string, string> = {
   error: "Failed",
   skipped: "Skipped",
   cancelled: "Cancelled",
-};
-
-const WORK_STATUS_PILL: Record<string, string> = {
-  needs_merge: "bg-primary/15 text-primary-foreground",
-  needs_closeout: "bg-primary/15 text-primary-foreground",
-  needs_implement: "bg-warning/15 text-warning",
-  needs_design: "bg-warning/15 text-warning",
-  needs_research: "bg-warning/15 text-warning",
-  needs_triage: "bg-muted text-muted-foreground",
-  blocked: "bg-destructive/15 text-destructive",
-  done: "bg-success/15 text-success",
-  cancelled: "bg-muted text-muted-foreground",
 };
 
 function sortRuns(runs: RunCardData[]): RunCardData[] {
@@ -182,6 +172,9 @@ export function DashboardView(): ReactElement {
   const [activityGroupBy, setActivityGroupBy] = useState<
     ActivityGroupBy | undefined
   >("model");
+  const [selectedWorkItem, setSelectedWorkItem] = useState<WorkItemDto | null>(
+    null
+  );
 
   const { data: runsData, isLoading: runsLoading } = useQuery({
     queryKey: ["dashboard-runs", tab],
@@ -382,7 +375,7 @@ export function DashboardView(): ReactElement {
                 href="/work"
                 className="text-muted-foreground text-xs hover:text-foreground"
               >
-                View all
+                View all &rarr;
               </Link>
             </div>
           </CardHeader>
@@ -396,19 +389,14 @@ export function DashboardView(): ReactElement {
             ) : workItems.length > 0 ? (
               <div className="divide-y divide-border">
                 {workItems.map((item) => (
-                  <div
+                  <button
+                    type="button"
                     key={item.id}
-                    className="flex items-center gap-3 px-5 py-2.5"
+                    className="flex w-full items-center gap-3 px-5 py-2.5 text-left hover:bg-muted/50"
+                    onClick={() => setSelectedWorkItem(item)}
                   >
-                    <span
-                      className={cn(
-                        "inline-flex shrink-0 rounded px-1.5 py-0.5 font-medium text-xs",
-                        WORK_STATUS_PILL[item.status] ??
-                          "bg-muted text-muted-foreground"
-                      )}
-                    >
-                      {item.status.replace("needs_", "")}
-                    </span>
+                    <TypeIcon type={item.type} className="size-3.5 shrink-0" />
+                    <StatusPill status={item.status} className="shrink-0" />
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {item.title}
                     </span>
@@ -417,7 +405,7 @@ export function DashboardView(): ReactElement {
                         P{item.priority}
                       </span>
                     )}
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -491,6 +479,14 @@ export function DashboardView(): ReactElement {
           </div>
         ) : null}
       </div>
+
+      <WorkItemDetail
+        item={selectedWorkItem}
+        open={selectedWorkItem !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedWorkItem(null);
+        }}
+      />
     </div>
   );
 }

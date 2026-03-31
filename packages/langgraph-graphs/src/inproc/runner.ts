@@ -132,6 +132,7 @@ export function createInProcGraphRunner<TTool = unknown>(
     mcpToolSpecs,
     request,
     responseFormat,
+    systemPrompt,
   } = opts;
 
   // SINGLE_QUEUE_PER_RUN: Runner creates queue, all events flow here
@@ -181,6 +182,7 @@ export function createInProcGraphRunner<TTool = unknown>(
     llm,
     tools,
     ...(responseFormat !== undefined && { responseFormat }),
+    ...(systemPrompt !== undefined && { systemPrompt }),
   });
 
   const final = (async (): Promise<GraphResult> => {

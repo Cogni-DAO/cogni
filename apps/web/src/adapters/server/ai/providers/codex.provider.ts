@@ -41,6 +41,11 @@ const CODEX_MODELS = [
   { id: "gpt-5.1-codex-max", label: "GPT-5.1 Codex Max" },
 ] as const;
 
+/** Map of Codex model ID → display label. Used by the adapter to set resolvedDisplayName. */
+export const CODEX_MODEL_LABELS = new Map<string, string>(
+  CODEX_MODELS.map((m) => [m.id, m.label])
+);
+
 /**
  * Codex model provider — backed by user's ChatGPT subscription via Codex SDK.
  * Implements ModelProviderPort for the "codex" providerKey.

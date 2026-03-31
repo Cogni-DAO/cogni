@@ -293,6 +293,7 @@ export function runGraphWithScope(params: {
       billing,
       llmService,
       usageSource,
+      ...(ctx?.actorUserId ? { actorUserId: ctx.actorUserId } : {}),
       ...(params.abortSignal ? { abortSignal: params.abortSignal } : {}),
     },
     () => executor.runGraph(req, ctx)

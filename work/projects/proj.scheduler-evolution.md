@@ -84,6 +84,14 @@ Evolve the scheduled graph execution system from Graphile Worker to Temporal Sch
 | `packages/db-client/src/adapters/drizzle-job-queue.adapter.ts` | Graphile-specific, replaced          |
 | `services/scheduler-worker/src/tasks/reconcile.ts`             | Temporal handles scheduling natively |
 
+### Walk+ (P1.5) — Day Planner & AI Self-Scheduling
+
+**Goal:** 24-hour day planner view layer over existing schedules. AI tools for self-scheduling. Human/AI co-editing with lock modes.
+
+| Deliverable                                                 | Status    | Est | Work Item |
+| ----------------------------------------------------------- | --------- | --- | --------- |
+| Schedule AI tools + capability wiring (planner UI deferred) | In Review | 3   | task.0241 |
+
 ### Run (P2+)
 
 **Goal:** HITL integration + admin drift repair.

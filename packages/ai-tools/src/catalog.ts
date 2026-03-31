@@ -19,6 +19,8 @@ import { metricsQueryBoundTool } from "./tools/metrics-query";
 import { repoListBoundTool } from "./tools/repo-list";
 import { repoOpenBoundTool } from "./tools/repo-open";
 import { repoSearchBoundTool } from "./tools/repo-search";
+import { scheduleListBoundTool } from "./tools/schedule-list";
+import { scheduleManageBoundTool } from "./tools/schedule-manage";
 import { webSearchBoundTool } from "./tools/web-search";
 import type { BoundTool } from "./types";
 
@@ -97,6 +99,8 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   repoListBoundTool as CatalogBoundTool,
   repoOpenBoundTool as CatalogBoundTool,
   repoSearchBoundTool as CatalogBoundTool,
+  scheduleListBoundTool as CatalogBoundTool,
+  scheduleManageBoundTool as CatalogBoundTool,
   webSearchBoundTool as CatalogBoundTool,
 ]);
 

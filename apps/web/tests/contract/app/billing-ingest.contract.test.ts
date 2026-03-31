@@ -48,9 +48,10 @@ vi.mock("@/bootstrap/otel", () => ({
   ),
 }));
 
-// Mock model catalog (route uses isModelFreeFromCache for guardrail)
+// Mock model catalog (route uses isModelFreeFromCache for guardrail, getDisplayNameFromCache for display names)
 vi.mock("@/shared/ai/model-catalog.server", () => ({
   isModelFreeFromCache: vi.fn().mockReturnValue(null),
+  getDisplayNameFromCache: vi.fn().mockReturnValue(null),
 }));
 
 const mockAccountService = {

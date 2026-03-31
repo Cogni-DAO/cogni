@@ -361,6 +361,19 @@ export function isModelFreeFromCache(modelId: string): boolean | null {
 }
 
 /**
+ * Fast, non-blocking display name lookup for hot paths.
+ *
+ * - Returns the display name if the model is in the cached catalog.
+ * - Returns `null` if the catalog cache is not initialized yet (no I/O).
+ * - Returns `null` for unknown models when cache exists.
+ */
+export function getDisplayNameFromCache(modelId: string): string | null {
+  if (!cache) return null;
+  const model = cache.data.models.find((m) => m.id === modelId);
+  return model?.name ?? null;
+}
+
+/**
  * Get computed default model IDs from catalog (fast, cached).
  * Returns null values if catalog unavailable.
  */

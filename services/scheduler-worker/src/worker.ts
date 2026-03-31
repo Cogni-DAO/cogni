@@ -20,6 +20,7 @@ import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { createActivities } from "./activities/index.js";
 import { createReviewActivities } from "./activities/review.js";
+import { createSweepActivities } from "./activities/sweep.js";
 import { createContainer } from "./bootstrap/container.js";
 import type { Env } from "./bootstrap/env.js";
 import { logWorkerEvent, WORKER_EVENT_NAMES } from "./observability/index.js";
@@ -85,13 +86,21 @@ export async function startSchedulerWorker(
         })
       : {};
 
+  // Create sweep activities (queue-sweeping agent roles)
+  const sweepActivities = createSweepActivities({
+    config: container.config,
+    logger:
+      container.logger.child?.({ component: "sweep-activities" }) ??
+      container.logger,
+  });
+
   // Create Temporal Worker
   const worker = await Worker.create({
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: env.TEMPORAL_TASK_QUEUE,
     workflowsPath: require.resolve("@cogni/temporal-workflows/scheduler"),
-    activities: { ...graphActivities, ...reviewActivities },
+    activities: { ...graphActivities, ...reviewActivities, ...sweepActivities },
   });
 
   logWorkerEvent(logger, WORKER_EVENT_NAMES.LIFECYCLE_STARTING, {

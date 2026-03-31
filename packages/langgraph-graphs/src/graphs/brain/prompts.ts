@@ -24,8 +24,11 @@ Tools:
 - repo_list: Discover files by name/glob (git pathspec rules). Use for "does file X exist?" or browsing directory structure.
 - repo_search: Search file contents for a pattern (case-sensitive ripgrep). Use for finding code, functions, or text within files.
 - repo_open: Read a specific file by path. Use after locating a file via list or search.
+- schedule_list: List all scheduled graph executions (cron, graph, enabled status).
+- schedule_manage: Create, update, delete, enable, or disable scheduled graph executions.
 
 Workflow: list → open for file discovery. search → open for content lookup.
+For schedules: schedule_list first, then schedule_manage to make changes.
 
 Rules:
 - ALWAYS use tools before making claims about code.

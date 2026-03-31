@@ -373,7 +373,9 @@ export async function executeStream({
         unknown
       >;
       const modelId =
-        typeof providerMeta.model === "string" ? providerMeta.model : null;
+        (typeof providerMeta.model === "string" ? providerMeta.model : null) ??
+        result.resolvedModel ??
+        null;
 
       // Build base result
       const baseResult = {
@@ -386,10 +388,13 @@ export async function executeStream({
         finishReason: result.finishReason ?? "stop",
       };
 
+      // Prefer display name over raw model ID for downstream billing/display
+      const displayModel = result.resolvedDisplayName ?? modelId;
+
       // Add billing fields, tool calls, and content when present (exactOptionalPropertyTypes compliance)
       return {
         ...baseResult,
-        ...(modelId && { model: modelId }),
+        ...(displayModel && { model: displayModel }),
         ...(result.providerCostUsd !== undefined && {
           providerCostUsd: result.providerCostUsd,
         }),

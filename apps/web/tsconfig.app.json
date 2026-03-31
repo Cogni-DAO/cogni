@@ -15,6 +15,7 @@
     ".next/**",
     "node_modules/**",
     "coverage/**",
-    "**/__arch_probes__/**"
+    "**/__arch_probes__/**",
+    "src/components/reui/**"
   ]
 }

@@ -30,7 +30,10 @@ import {
   type StandardLoggingPayloadBilling,
 } from "@/contracts/billing-ingest.internal.v1.contract";
 import { commitUsageFact } from "@/features/ai/public.server";
-import { isModelFreeFromCache } from "@/shared/ai/model-catalog.server";
+import {
+  getDisplayNameFromCache,
+  isModelFreeFromCache,
+} from "@/shared/ai/model-catalog.server";
 import { COGNI_SYSTEM_BILLING_ACCOUNT_ID } from "@/shared/constants/system-tenant";
 import { serverEnv } from "@/shared/env";
 import { billingInvariantViolationTotal } from "@/shared/observability/server/metrics";
@@ -95,6 +98,14 @@ function resolveBillingAccountId(
   }
 
   return null;
+}
+
+/**
+ * Resolve a LiteLLM model_group (config alias) to its display name from the cached catalog.
+ * Returns the raw model_group if catalog is unavailable or model not found.
+ */
+function resolveDisplayName(modelGroup: string): string {
+  return getDisplayNameFromCache(modelGroup) ?? modelGroup;
 }
 
 /**
@@ -187,7 +198,7 @@ function buildUsageFact(
     virtualKeyId,
     graphId,
     provider: entry.custom_llm_provider,
-    model: entry.model_group, // User-facing alias (per spec: use model_group, not model)
+    model: resolveDisplayName(entry.model_group), // Display name from catalog, falls back to model_group
     inputTokens: entry.prompt_tokens,
     outputTokens: entry.completion_tokens,
     ...(costUsd !== undefined && { costUsd }),

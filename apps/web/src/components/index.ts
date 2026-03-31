@@ -85,6 +85,7 @@ export {
 } from "./kit/typography/CodeHero";
 export { HeroActionWords } from "./kit/typography/HeroActionWords";
 export { Prompt } from "./kit/typography/Prompt";
+export { Checkbox } from "./vendor/shadcn/checkbox";
 export {
   Dialog,
   DialogClose,
@@ -97,6 +98,11 @@ export {
   DialogTitle,
   DialogTrigger,
 } from "./vendor/shadcn/dialog";
+export {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "./vendor/shadcn/popover";
 export {
   Select,
   SelectContent,
@@ -113,6 +119,7 @@ export { Separator } from "./vendor/shadcn/separator";
 export {
   Sheet,
   SheetContent,
+  SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "./vendor/shadcn/sheet";

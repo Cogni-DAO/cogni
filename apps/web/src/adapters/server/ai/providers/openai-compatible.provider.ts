@@ -38,7 +38,7 @@ const log = makeLogger({ module: "openai-compatible-provider" });
  * llama-server uses GGUF filenames (sha256-...) as IDs.
  * Ollama uses "model:tag" format. Keep those as-is.
  */
-function humanizeModelId(id: string): string {
+export function humanizeModelId(id: string): string {
   // SHA256 hash from llama-server GGUF path — show truncated
   if (id.startsWith("sha256-")) {
     return `Local Model (${id.slice(7, 15)}...)`;

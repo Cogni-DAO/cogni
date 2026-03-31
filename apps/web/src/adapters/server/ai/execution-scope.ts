@@ -27,6 +27,8 @@ import type { BillingContext, LlmService } from "@/ports";
  */
 export interface ExecutionScope {
   readonly billing: BillingContext;
+  /** Actor who initiated this run. Used by tools that need user-scoped operations (e.g., schedule CRUD). */
+  readonly actorUserId?: string;
   /** Chat-only temporary tech debt — browser disconnect, not durable cancellation. */
   readonly abortSignal?: AbortSignal;
   /** Resolved LlmService for this run (from ModelProviderPort.createLlmService). */

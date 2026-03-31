@@ -42,14 +42,17 @@ Full node lifecycle: DAO formation (done) -> zero-touch provisioning (this proje
 
 **Goal:** Build the provisionNode workflow so that DAO formation -> live node requires zero manual steps. Shared cluster, namespace per node.
 
-| Deliverable                                                                                                        | Status      | Est | Work Item           |
-| ------------------------------------------------------------------------------------------------------------------ | ----------- | --- | ------------------- |
-| provisionNode Temporal workflow — full provisioning chain (8 activities, idempotent)                               | Not Started | 8   | `task.0202`         |
-| Node registration lifecycle — discovery, repo-spec fetch, scope reconciliation (absorbed from proj.operator-plane) | Not Started | 5   | `task.0122`         |
-| Operator-side `node_registry_nodes` table (see Design Notes §Operator Node Registry)                               | Not Started | 2   | (part of task.0202) |
-| Wildcard DNS setup — `*.nodes.cognidao.org` -> cluster ingress (one-time)                                          | Not Started | 1   | (part of task.0202) |
-| ArgoCD ApplicationSet — git-directory generator for `infra/cd/nodes/*`                                             | Not Started | 1   | (part of task.0202) |
-| `POST /api/nodes/provision` + `GET /api/nodes/{id}/status` endpoints                                               | Not Started | 2   | (part of task.0202) |
+| Deliverable                                                                                                         | Status      | Est | Work Item           |
+| ------------------------------------------------------------------------------------------------------------------- | ----------- | --- | ------------------- |
+| dns-ops package + create-node wizard — Cloudflare DNS automation, node-spec generation, protected record safeguards | In Review   | 3   | `task.0232`         |
+| Design: extract node-template from operator repo — identity split, repo-spec v0.2.0 merge                           | Not Started | 5   | `task.0233`         |
+| Design: node repo creation + CI/CD onboarding — git lifecycle, secrets, preview deploys                             | Not Started | 5   | `task.0234`         |
+| provisionNode Temporal workflow — full provisioning chain (8 activities, idempotent)                                | Not Started | 8   | `task.0202`         |
+| Node registration lifecycle — discovery, repo-spec fetch, scope reconciliation (absorbed from proj.operator-plane)  | Not Started | 5   | `task.0122`         |
+| Operator-side `node_registry_nodes` table (see Design Notes §Operator Node Registry)                                | Not Started | 2   | (part of task.0202) |
+| Wildcard DNS setup — `*.nodes.cognidao.org` -> cluster ingress (one-time)                                           | Not Started | 1   | (part of task.0232) |
+| ArgoCD ApplicationSet — git-directory generator for `infra/cd/nodes/*`                                              | Not Started | 1   | (part of task.0202) |
+| `POST /api/nodes/provision` + `GET /api/nodes/{id}/status` endpoints                                                | Not Started | 2   | (part of task.0202) |
 
 ### Walk (P1b) — Legal Entity + Multi-Holder
 

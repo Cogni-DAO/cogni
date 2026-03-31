@@ -60,4 +60,6 @@ export interface CreateReactAgentGraphOptions {
     readonly prompt?: string;
     readonly schema: unknown;
   };
+  /** Optional system prompt override. Used by operator graphs that are configured via catalog. */
+  readonly systemPrompt?: string;
 }

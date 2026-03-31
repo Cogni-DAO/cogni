@@ -129,7 +129,7 @@
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: var(--color-red-800);
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
@@ -168,6 +168,22 @@
     --sidebar-ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
+
+    --success: var(--color-emerald-500);
+
+    --success-foreground: var(--color-emerald-900);
+
+    --info: var(--color-violet-500);
+
+    --info-foreground: var(--color-violet-900);
+
+    --warning: var(--color-yellow-500);
+
+    --warning-foreground: var(--color-yellow-900);
+
+    --invert: var(--color-zinc-900);
+
+    --invert-foreground: var(--color-zinc-50);
   }
 
   .dark {
@@ -186,7 +202,7 @@
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: var(--color-red-600);
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 217 71% 40%;
@@ -218,6 +234,14 @@
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217.2 32.6% 17.5%;
     --sidebar-ring: 217 71% 40%;
+    --success: var(--color-emerald-500);
+    --success-foreground: var(--color-emerald-600);
+    --info: var(--color-violet-500);
+    --info-foreground: var(--color-violet-600);
+    --warning: var(--color-yellow-500);
+    --warning-foreground: var(--color-yellow-600);
+    --invert: var(--color-zinc-700);
+    --invert-foreground: var(--color-zinc-50);
   }
 
   /* Hero animation tokens (isolated, code.ts only) */

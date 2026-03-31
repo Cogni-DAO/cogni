@@ -213,6 +213,8 @@ export interface LlmCompletionResult {
   resolvedProvider?: string;
   /** Resolved model ID (e.g., "gpt-4o-2024-11-20") from LiteLLM response */
   resolvedModel?: string;
+  /** Human-readable display name (e.g., "Claude Sonnet 4.5") from the adapter's source of truth */
+  resolvedDisplayName?: string;
 }
 
 export interface LlmService {

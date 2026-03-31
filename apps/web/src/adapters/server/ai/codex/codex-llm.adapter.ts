@@ -28,7 +28,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Message } from "@cogni/ai-core";
 import type { Logger } from "pino";
-
+import { CODEX_MODEL_LABELS } from "@/adapters/server/ai/providers/codex.provider";
 import type {
   ChatDeltaEvent,
   CompletionStreamParams,
@@ -231,18 +231,26 @@ async function* runCodexExec(params: {
     const { events } = await thread.runStreamed(prompt);
 
     let fullText = "";
+    let itemText = "";
     let usage: { promptTokens: number; completionTokens: number } | undefined;
 
     for await (const event of events) {
       switch (event.type) {
-        case "item.started":
+        case "item.started": {
+          if (event.item.type === "agent_message") {
+            // Reset per-item tracking — each agent_message starts fresh
+            itemText = "";
+          }
+          break;
+        }
         case "item.updated":
         case "item.completed": {
           if (event.item.type === "agent_message") {
             const newText = event.item.text;
-            if (newText.length > fullText.length) {
-              const delta = newText.slice(fullText.length);
-              fullText = newText;
+            if (newText.length > itemText.length) {
+              const delta = newText.slice(itemText.length);
+              itemText = newText;
+              fullText += delta;
               yield { type: "text_delta", delta } as ChatDeltaEvent;
             }
           }
@@ -309,6 +317,11 @@ async function* runCodexExec(params: {
         : {}),
       finishReason: "stop",
       resolvedProvider: "openai-chatgpt",
+      ...(model ? { resolvedModel: model } : {}),
+      ...((): Record<string, never> | { resolvedDisplayName: string } => {
+        const label = model ? CODEX_MODEL_LABELS.get(model) : undefined;
+        return label ? { resolvedDisplayName: label } : {};
+      })(),
     });
 
     yield { type: "done" } as ChatDeltaEvent;

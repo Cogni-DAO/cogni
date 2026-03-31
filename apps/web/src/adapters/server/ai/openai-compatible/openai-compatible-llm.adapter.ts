@@ -17,6 +17,7 @@
  */
 
 import { createParser, type EventSourceMessage } from "eventsource-parser";
+import { humanizeModelId } from "@/adapters/server/ai/providers/openai-compatible.provider";
 import {
   type ChatDeltaEvent,
   classifyLlmErrorFromStatus,
@@ -148,6 +149,7 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       promptHash,
       resolvedProvider: "openai-compatible",
       resolvedModel,
+      resolvedDisplayName: humanizeModelId(resolvedModel),
     };
 
     if (data.choices[0]!.finish_reason) {
@@ -431,6 +433,7 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
             promptHash,
             resolvedProvider: "openai-compatible",
             resolvedModel: model,
+            resolvedDisplayName: humanizeModelId(model),
           })
         );
       } catch (err) {
