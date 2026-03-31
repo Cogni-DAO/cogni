@@ -15,6 +15,7 @@
 
 import {
   Briefcase,
+  Calendar,
   CreditCard,
   Github,
   LayoutDashboard,
@@ -43,6 +44,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/work", label: "Work", icon: Briefcase },
   { href: "/gov", label: "Gov", icon: Vote },
+  { href: "/planner", label: "Planner", icon: Calendar },
   { href: "/credits", label: "Credits", icon: CreditCard },
 ] as const;
 

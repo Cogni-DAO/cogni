@@ -88,9 +88,9 @@ Evolve the scheduled graph execution system from Graphile Worker to Temporal Sch
 
 **Goal:** 24-hour day planner view layer over existing schedules. AI tools for self-scheduling. Human/AI co-editing with lock modes.
 
-| Deliverable                                                 | Status    | Est | Work Item |
-| ----------------------------------------------------------- | --------- | --- | --------- |
-| Schedule AI tools + capability wiring (planner UI deferred) | In Review | 3   | task.0241 |
+| Deliverable                                                 | Status      | Est | Work Item |
+| ----------------------------------------------------------- | ----------- | --- | --------- |
+| Day plan contract, facade, API routes, AI tools, planner UI | Not Started | 3   | task.0234 |
 
 ### Run (P2+)
 
