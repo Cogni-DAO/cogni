@@ -36,6 +36,13 @@ export type {
   RepoSearchResult,
 } from "./repo";
 export { makeRepoCitation, REPO_CITATION_REGEX } from "./repo";
+// Schedule management capability
+export type {
+  ScheduleCapability,
+  ScheduleCreateParams,
+  ScheduleInfo,
+  ScheduleUpdateParams,
+} from "./schedule";
 // Export capability interfaces (defined here, NOT in ai-core)
 export type {
   AuthCapability,

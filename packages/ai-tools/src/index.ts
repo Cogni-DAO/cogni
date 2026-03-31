@@ -28,6 +28,10 @@ export type {
   RepoSearchHit,
   RepoSearchParams,
   RepoSearchResult,
+  ScheduleCapability,
+  ScheduleCreateParams,
+  ScheduleInfo,
+  ScheduleUpdateParams,
   TemplateQueryParams,
   ToolCapabilities,
   WebSearchCapability,
@@ -133,6 +137,32 @@ export {
   repoSearchContract,
   repoSearchStubImplementation,
 } from "./tools/repo-search";
+export {
+  createScheduleListImplementation,
+  SCHEDULE_LIST_NAME,
+  type ScheduleListDeps,
+  type ScheduleListInput,
+  ScheduleListInputSchema,
+  type ScheduleListOutput,
+  ScheduleListOutputSchema,
+  type ScheduleListRedacted,
+  scheduleListBoundTool,
+  scheduleListContract,
+  scheduleListStubImplementation,
+} from "./tools/schedule-list";
+export {
+  createScheduleManageImplementation,
+  SCHEDULE_MANAGE_NAME,
+  type ScheduleManageDeps,
+  type ScheduleManageInput,
+  ScheduleManageInputSchema,
+  type ScheduleManageOutput,
+  ScheduleManageOutputSchema,
+  type ScheduleManageRedacted,
+  scheduleManageBoundTool,
+  scheduleManageContract,
+  scheduleManageStubImplementation,
+} from "./tools/schedule-manage";
 export {
   createWebSearchImplementation,
   WEB_SEARCH_NAME,

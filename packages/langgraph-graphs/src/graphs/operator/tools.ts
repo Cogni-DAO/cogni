@@ -13,16 +13,22 @@
  * @public
  */
 
-import { GET_CURRENT_TIME_NAME, METRICS_QUERY_NAME } from "@cogni/ai-tools";
+import {
+  GET_CURRENT_TIME_NAME,
+  METRICS_QUERY_NAME,
+  SCHEDULE_LIST_NAME,
+  SCHEDULE_MANAGE_NAME,
+} from "@cogni/ai-tools";
 
 /**
  * Tool IDs for CEO Operator.
- * Uses existing tools. Work item tools (query, transition) will be added
- * when implemented in @cogni/ai-tools.
+ * Schedule tools enable self-scheduling of graph executions.
  */
 export const CEO_OPERATOR_TOOL_IDS = [
   GET_CURRENT_TIME_NAME,
   METRICS_QUERY_NAME,
+  SCHEDULE_LIST_NAME,
+  SCHEDULE_MANAGE_NAME,
 ] as const;
 
 /**

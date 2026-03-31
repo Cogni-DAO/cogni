@@ -17,6 +17,8 @@ import {
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
   REPO_SEARCH_NAME,
+  SCHEDULE_LIST_NAME,
+  SCHEDULE_MANAGE_NAME,
 } from "@cogni/ai-tools";
 
 /**
@@ -27,6 +29,8 @@ export const BRAIN_TOOL_IDS = [
   REPO_LIST_NAME,
   REPO_SEARCH_NAME,
   REPO_OPEN_NAME,
+  SCHEDULE_LIST_NAME,
+  SCHEDULE_MANAGE_NAME,
 ] as const;
 
 /**
