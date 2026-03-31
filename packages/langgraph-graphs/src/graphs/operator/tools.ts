@@ -18,13 +18,18 @@ import {
   METRICS_QUERY_NAME,
   SCHEDULE_LIST_NAME,
   SCHEDULE_MANAGE_NAME,
+  WORK_ITEM_QUERY_NAME,
+  WORK_ITEM_TRANSITION_NAME,
 } from "@cogni/ai-tools";
 
 /**
  * Tool IDs for CEO Operator.
+ * Work item tools are the primary interface for queue-sweeping.
  * Schedule tools enable self-scheduling of graph executions.
  */
 export const CEO_OPERATOR_TOOL_IDS = [
+  WORK_ITEM_QUERY_NAME,
+  WORK_ITEM_TRANSITION_NAME,
   GET_CURRENT_TIME_NAME,
   METRICS_QUERY_NAME,
   SCHEDULE_LIST_NAME,

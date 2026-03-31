@@ -57,6 +57,14 @@ export type {
   WebSearchResultItem,
   WebSearchTopic,
 } from "./web-search";
+// Work item capability
+export type {
+  WorkItemAssignee,
+  WorkItemCapability,
+  WorkItemInfo,
+  WorkItemQueryParams,
+  WorkItemTransitionResult,
+} from "./work-item";
 
 import type { AuthCapability, ClockCapability } from "./types";
 

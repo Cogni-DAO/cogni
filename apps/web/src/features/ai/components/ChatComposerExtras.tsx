@@ -71,6 +71,17 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     name: "Frontend Tester",
     description: "QA agent — tests web UIs via Playwright",
   },
+  {
+    graphId: "langgraph:ceo-operator" satisfies GraphId,
+    name: "CEO Operator",
+    description:
+      "Strategic agent — triages, prioritizes, and dispatches work items",
+  },
+  {
+    graphId: "langgraph:git-reviewer" satisfies GraphId,
+    name: "Git Reviewer",
+    description: "PR lifecycle — review, fix CI, merge or reject",
+  },
 ];
 
 /** Default graph ID - exported for page initialization */
