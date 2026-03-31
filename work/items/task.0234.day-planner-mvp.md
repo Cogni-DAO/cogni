@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.scheduler-evolution
 branch: feat/scheduled-sweep-v0
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/670
 reviewer:
 revision: 2
 blocked_by:
