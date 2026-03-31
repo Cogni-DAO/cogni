@@ -50,6 +50,12 @@ export const WorkItemQueryInputSchema = z.object({
     .string()
     .optional()
     .describe("Free-text search across title and summary"),
+  actor: z
+    .enum(["human", "ai", "either"])
+    .optional()
+    .describe(
+      "Eligibility filter. Pass 'ai' to see only items safe for autonomous AI handling."
+    ),
   projectId: z
     .string()
     .optional()
@@ -69,6 +75,7 @@ const WorkItemOutputSchema = z.object({
   type: z.string(),
   title: z.string(),
   status: z.string(),
+  actor: z.string().optional(),
   priority: z.number().optional(),
   rank: z.number().optional(),
   summary: z.string().optional(),
@@ -133,6 +140,7 @@ export function createWorkItemQueryImplementation(
         statuses: input.statuses,
         types: input.types,
         text: input.text,
+        actor: input.actor,
         projectId: input.projectId,
         limit: input.limit ?? 20,
       });
@@ -143,6 +151,7 @@ export function createWorkItemQueryImplementation(
           type: item.type,
           title: item.title,
           status: item.status,
+          actor: item.actor,
           priority: item.priority,
           rank: item.rank,
           summary: item.summary,

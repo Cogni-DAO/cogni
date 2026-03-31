@@ -26,6 +26,7 @@ export interface WorkItemInfo {
   readonly rank?: number;
   readonly summary?: string;
   readonly projectId?: string;
+  readonly actor?: string;
   readonly labels: readonly string[];
   readonly assignees: readonly WorkItemAssignee[];
   readonly branch?: string;
@@ -46,6 +47,7 @@ export interface WorkItemQueryParams {
   readonly statuses?: readonly string[];
   readonly types?: readonly string[];
   readonly text?: string;
+  readonly actor?: string;
   readonly projectId?: string;
   readonly limit?: number;
 }

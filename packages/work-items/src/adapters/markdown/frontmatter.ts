@@ -133,6 +133,7 @@ export function rawToWorkItem(raw: Record<string, unknown>): WorkItem {
     outcome: raw.outcome != null ? String(raw.outcome) : undefined,
     projectId: raw.project ? toWorkItemId(String(raw.project)) : undefined,
     parentId: raw.parent ? toWorkItemId(String(raw.parent)) : undefined,
+    actor: raw.actor === "human" || raw.actor === "ai" ? raw.actor : "either",
     assignees: toAssignees(raw.assignees),
     externalRefs: toExternalRefs(raw.external_refs),
     labels: toStringArray(raw.labels),

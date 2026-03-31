@@ -19,6 +19,7 @@ import type {
   WorkItemTransitionResult,
 } from "@cogni/ai-tools";
 import type {
+  ActorKind,
   SubjectRef,
   WorkItem,
   WorkItemCommandPort,
@@ -56,6 +57,7 @@ function toWorkItemInfo(item: WorkItem): WorkItemInfo {
     labels: [...item.labels],
     assignees: item.assignees.map((a) => ({ kind: a.kind, id: assigneeId(a) })),
     updatedAt: item.updatedAt,
+    ...(item.actor !== "either" && { actor: item.actor }),
     ...(item.priority !== undefined && { priority: item.priority }),
     ...(item.rank !== undefined && { rank: item.rank }),
     ...(item.summary !== undefined && { summary: item.summary }),
@@ -84,6 +86,7 @@ export function createWorkItemCapability(
           types: params.types as readonly WorkItemType[],
         }),
         ...(params.text && { text: params.text }),
+        ...(params.actor && { actor: params.actor as ActorKind }),
         ...(params.projectId && {
           projectId: toWorkItemId(params.projectId),
         }),

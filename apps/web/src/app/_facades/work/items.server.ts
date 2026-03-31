@@ -27,6 +27,7 @@ function toDto(item: WorkItem): WorkItemDto {
     type: item.type,
     title: item.title,
     status: item.status,
+    ...(item.actor !== "either" && { actor: item.actor }),
     priority: item.priority,
     rank: item.rank,
     estimate: item.estimate,
@@ -64,6 +65,7 @@ export async function listWorkItems(
       statuses: input.statuses as WorkItem["status"][],
     }),
     ...(input.text && { text: input.text }),
+    ...(input.actor && { actor: input.actor as WorkItem["actor"] }),
     ...(input.projectId && { projectId: toWorkItemId(input.projectId) }),
     ...(input.limit && { limit: input.limit }),
   });
