@@ -45,7 +45,7 @@
 | 1 | 1 | 5 | needs_design | task.0202 | provisionNode Temporal workflow — zero-touch node launch | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 1 | 3 | needs_merge | task.0228 | MCP Client MVP — McpToolSource + Playwright browser agent | Agentic Interoperability | proj.agentic-interop |
 | 1 | 1 | 3 | needs_design | spike.0229 | Knowledge Aggregation — KnowledgeCapability Port | OSS Research AI Node | proj.oss-research-node |
-| 1 | 1 | 2 | needs_implement | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
+| 1 | 1 | 2 | needs_merge | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 1 | 3 | needs_merge | task.0241 | Schedule Management AI Tools + Planner UI | Scheduler Evolution | proj.scheduler-evolution |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |

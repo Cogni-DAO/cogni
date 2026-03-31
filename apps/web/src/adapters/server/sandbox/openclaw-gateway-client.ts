@@ -64,6 +64,7 @@ export type GatewayAgentEvent =
   | {
       type: "status";
       phase: "thinking" | "tool_use" | "compacting";
+      text?: string;
       label?: string;
     };
 
@@ -373,7 +374,7 @@ export class OpenClawGatewayClient {
           if (stream === "lifecycle" && phase === "start") {
             push({
               kind: "event",
-              value: { type: "status", phase: "thinking" },
+              value: { type: "status", phase: "thinking", text: "Thinking..." },
             });
             return;
           }
@@ -382,18 +383,24 @@ export class OpenClawGatewayClient {
             if (phase === "start") {
               // STATUS_NEVER_LEAKS_CONTENT: only tool name, never args or results
               const toolName = data?.name as string | undefined;
+              const text = toolName ? `Using ${toolName}...` : "Using tool...";
               push({
                 kind: "event",
                 value: {
                   type: "status",
                   phase: "tool_use",
+                  text,
                   ...(toolName ? { label: toolName } : {}),
                 },
               });
             } else if (phase === "end") {
               push({
                 kind: "event",
-                value: { type: "status", phase: "thinking" },
+                value: {
+                  type: "status",
+                  phase: "thinking",
+                  text: "Thinking...",
+                },
               });
             }
             return;
@@ -403,12 +410,20 @@ export class OpenClawGatewayClient {
             if (phase === "start") {
               push({
                 kind: "event",
-                value: { type: "status", phase: "compacting" },
+                value: {
+                  type: "status",
+                  phase: "compacting",
+                  text: "Compacting context...",
+                },
               });
             } else if (phase === "end") {
               push({
                 kind: "event",
-                value: { type: "status", phase: "thinking" },
+                value: {
+                  type: "status",
+                  phase: "thinking",
+                  text: "Thinking...",
+                },
               });
             }
             return;

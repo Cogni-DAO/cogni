@@ -395,6 +395,7 @@ export const POST = wrapRouteHandlerWithLogging(
                   type: "data-status",
                   data: {
                     phase: event.phase,
+                    ...(event.text ? { text: event.text } : {}),
                     ...(event.label ? { label: event.label } : {}),
                   },
                   transient: true,

@@ -277,6 +277,7 @@ function createOpenAiSseStream(
               choices: [{ index: 0, delta: {}, finish_reason: null }],
               cogni_status: {
                 phase: event.phase,
+                ...(event.text ? { text: event.text } : {}),
                 ...(event.label ? { label: event.label } : {}),
               },
             };

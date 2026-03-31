@@ -2,12 +2,12 @@
 id: task.0235
 type: task
 title: "Chat activity status line — consume StatusEvent in thread UI"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 2
-summary: "Add a 1-line activity indicator above the chat composer that shows the current agent phase (thinking, tool_use, compacting) from StatusEvent data-status chunks. Replaces the invisible thinking gap."
-outcome: "Users see 'Thinking...', 'Using search_web...', 'Compacting context...' in real-time while the AI is working. Fades in/out with Framer Motion. Auto-dismisses on text_delta or done."
+summary: "Add a 1-line activity indicator in chat and dashboard that renders whatever the backend sends. Evolve StatusEvent to carry human-readable text (max 80 chars). Frontend is a dumb renderer — backend controls the message."
+outcome: "Users see real-time status text during AI processing. Chat shows it above composer, dashboard RunCards show it as statusLabel. Backend sends the text, frontend just renders it."
 spec_refs:
 assignees: []
 credit:
@@ -20,7 +20,7 @@ blocked_by:
 deploy_verified: false
 created: 2026-03-30
 updated: 2026-03-31
-labels: [ui, chat, ai-graphs]
+labels: [ui, chat, ai-graphs, dashboard]
 external_refs:
 ---
 
@@ -30,58 +30,71 @@ external_refs:
 
 ### Outcome
 
-When the AI is processing, users see a single animated line above the composer: "Thinking...", "Using search_web...", or "Compacting context...". Replaces the current void between sending a message and seeing the first text chunk.
+Real-time 1-line status text appears in chat (above composer) and on dashboard RunCards during AI processing. The **backend** decides what to display. The **frontend** is a dumb text renderer with a pulse animation.
 
 ### Approach
 
-**Solution**: Use `@assistant-ui/react`'s `useThreadRuntime` to subscribe to the latest assistant message's content parts. Extract `DataMessagePart` with `name === "status"` and render a `<StatusLine>` component between messages and composer in the Thread. Animate with Framer Motion.
+**Philosophy**: The UI renders whatever string the backend sends. No frontend enum mapping, no phase→icon hardcoding. Today the backend sends "Thinking...", tomorrow it sends AI-generated summaries like "Searching 12 files for auth patterns...". The frontend doesn't care — it's just a string and a dot.
 
-**Why this works**: The backend already emits `StatusEvent` → the chat route maps it to `data-status` UIMessageChunk with `transient: true` → `@assistant-ui/react` converts it to a `DataMessagePart` in the in-progress message's content array. We just need to read it and render.
+**Backend change** (packages/ai-core):
+
+- Add `text` field to `StatusEvent` (max 80 chars, optional for backward compat)
+- `text` is the human-readable display string
+- `phase` stays as animation hint (pulse style), not display text
+- Update contract schema to include `text`
+
+**Frontend** (2 components):
+
+- `StatusLine.tsx` — renders `{ text, phase? }`. Pulse dot + text. Framer Motion enter/exit. That's it.
+- Wire into `thread.tsx` (chat) and `RunCard` (dashboard) — both consume the same data shape
+
+**Constraint**: `text` max 80 characters. Enforced at the type level, truncated at render.
 
 **Reuses**:
 
-- Existing `StatusEvent` → `data-status` pipeline (zero backend changes)
-- `@assistant-ui/react` v0.12.10 `useThreadRuntime` + `ThreadPrimitive.If running` (already installed)
-- `framer-motion` (already installed) for enter/exit animation
-- `lucide-react` icons (already installed): Brain, Wrench, Minimize2
-- Status icon pattern from `work-item-icons.tsx` (same icon+color approach)
+- Existing `StatusEvent` → Redis → SSE pipeline (zero new infra)
+- `@assistant-ui/react` `useThread` selector (chat)
+- Existing SSE reconnection endpoint (dashboard RunCards)
+- `framer-motion` (already installed)
 
 **Rejected**:
 
-- **`useMessagePartData` hook**: Requires being inside a MessagePart context — can't use at thread level
-- **Separate SSE connection**: Overkill — the status is already in the AI SDK stream
-- **onData callback**: Would require switching from `useChatRuntime` to `useDataStreamRuntime` — invasive change
+- Hardcoded phase→icon map in frontend (couples UI to backend enum, blocks evolution)
+- Separate hook per consumer (DRY violation — same data shape)
+
+### Design Review Feedback (incorporated)
+
+1. Use `useThread` with selector, not deprecated `useThreadRuntime`
+2. Selector extracts only `isRunning` + last message data parts (perf)
+3. StatusEvent already flows through Redis → SSE for RunCards
 
 ### Invariants
 
-- [ ] STATUS_IS_EPHEMERAL: Status line is transient — never persisted, disappears when stream ends
-- [ ] STATUS_BEST_EFFORT: Missing status events gracefully fall back to no indicator (not an error)
-- [ ] CONTRACTS_ARE_TRUTH: Status data shape matches `CogniStatus` from ai.completions.v1.contract
-- [ ] ARCHITECTURE_ALIGNMENT: New component in kit/chat/, wired in vendor/assistant-ui/thread.tsx
+- [ ] STATUS_IS_EPHEMERAL: Status line is transient — never persisted
+- [ ] STATUS_BEST_EFFORT: Missing text gracefully shows nothing (not an error)
+- [ ] BACKEND_OWNS_TEXT: Frontend never generates display text from phase enum
+- [ ] TEXT_MAX_80: Status text max 80 characters, truncated at render
+- [ ] CONTRACTS_ARE_TRUTH: StatusEvent schema in ai-core is the single source
 
 ### Files
 
-**Create**:
+**Modify** (backend — packages):
 
-- `apps/web/src/components/kit/chat/StatusLine.tsx` — presentational component with phase icon + animated text
+- `packages/ai-core/src/events/ai-events.ts` — add `text?: string` to StatusEvent
+- `apps/web/src/contracts/ai.completions.v1.contract.ts` — add `text` to CogniStatusSchema
 
-**Modify**:
+**Modify** (emitters):
 
-- `apps/web/src/components/vendor/assistant-ui/thread.tsx` — add StatusLine between messages and composer, gated by `ThreadPrimitive.If running`
+- `apps/web/src/adapters/server/sandbox/openclaw-gateway-client.ts` — populate `text` field
+- `apps/web/src/app/api/v1/ai/chat/route.ts` — forward `text` in data-status chunk
 
-### Implementation Plan
+**Create** (frontend):
 
-- [ ] **Checkpoint 1**: StatusLine component renders statically with all three phases
-  - Create `StatusLine.tsx` with phase→icon+text map
-  - Accept `phase` and `label` props
-  - Framer Motion `AnimatePresence` for enter/exit
-  - Validation: component renders in isolation
+- `apps/web/src/components/kit/chat/StatusLine.tsx` — dumb text renderer with pulse + animation
 
-- [ ] **Checkpoint 2**: Wire into Thread, extract status from runtime
-  - Add `useThreadRuntime` subscription in Thread to read latest message's data parts
-  - Find last `DataMessagePart` with `name === "status"` in the in-progress message
-  - Render `StatusLine` inside `ThreadPrimitive.If running` block between messages and composer
-  - Validation: send a message in dev, see status line appear during processing
+**Modify** (frontend wiring):
+
+- `apps/web/src/components/vendor/assistant-ui/thread.tsx` — add StatusLine in running state
 
 ## Validation
 
