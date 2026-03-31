@@ -13,6 +13,8 @@
 | 0 | 1 | 3 | needs_merge | task.0161 | Governance signal executor: Alchemy webhook → on-chain verification → GitHub actions | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 1 | 1 | needs_merge | bug.0224 | Codex binary not found in Docker — standalone misses platform-specific optional dep | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
+| 0 | 1 | 2 | needs_design | bug.0243 | Same-scope epoch selection re-selects receipts from prior epochs — credits double-counted |  |  |
+| 0 | 1 | 2 | needs_design | spike.0240 | Dource — Gource-style visualization for Dolt database history | Premium Frontend UX | proj.premium-frontend-ux |
 | 0 | 1 | 5 | needs_triage | bug.0242 | Codex MCP tool calls invisible to platform — no persistence, no observability, no history |  |  |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
@@ -26,7 +28,6 @@
 | 0 | 10 | 5 | needs_triage | bug.0143 | Selection policy hardcoded in ledger.ts — pipeline-agnostic layer contains GitHub-specific promotion logic |  |  |
 | 0 | 10 | 3 | needs_triage | bug.0148 | Attribution pipeline credits bots and unpromoted PRs — three correctness failures in epoch selection |  |  |
 | 0 | 10 | 3 | needs_triage | bug.0190 | Empty attribution epochs in preview — promotion-selection policy excludes all receipts when no releases to main exist |  |  |
-| 0 | 10 | 3 | needs_triage | bug.0243 | Epoch selection has no cross-epoch deduplication — same receipts selected for multiple epochs |  |  |
 | 0 | 12 | 1 | needs_triage | bug.0017 | Deploy does not reload Alloy when bind-mounted config changes | Reliability & Uptime | proj.reliability |
 | 0 | 12 | 1 | needs_implement | task.0112 | SIWE zero-flash: immediate post-sign navigation | User Identity Bindings + DID Readiness | proj.decentralized-identity |
 | 0 | 13 | 2 | needs_triage | bug.0026 | Scheduler worker silently stops polling — schedules enabled but runs cease | Reliability & Uptime | proj.reliability |
