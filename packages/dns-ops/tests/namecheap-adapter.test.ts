@@ -201,6 +201,24 @@ describe("NamecheapAdapter", () => {
       expect(url.searchParams.get("TTL2")).toBe("300");
     });
 
+    it("includes MXPref for MX records", async () => {
+      mockFetch(SET_HOSTS_SUCCESS_XML);
+
+      await adapter.setDnsRecords("cognidao", "org", [
+        {
+          name: "mail",
+          type: "MX",
+          value: "mx.example.com",
+          ttl: 1800,
+          mxPref: 10,
+        },
+      ]);
+
+      const url = new URL(fetchSpy.mock.calls[0]?.[0] as string);
+      expect(url.searchParams.get("RecordType1")).toBe("MX");
+      expect(url.searchParams.get("MXPref1")).toBe("10");
+    });
+
     it("throws on failure response", async () => {
       mockFetch(`<?xml version="1.0" encoding="utf-8"?>
         <ApiResponse Status="OK">
@@ -221,6 +239,20 @@ describe("NamecheapAdapter", () => {
 
       await expect(adapter.checkAvailability(["bad.com"])).rejects.toThrow(
         "Namecheap API error: Domain not found"
+      );
+    });
+
+    it("throws with concatenated messages for multiple API errors", async () => {
+      mockFetch(`<?xml version="1.0" encoding="utf-8"?>
+        <ApiResponse Status="ERROR">
+          <Errors>
+            <Error Number="1">First error</Error>
+            <Error Number="2">Second error</Error>
+          </Errors>
+        </ApiResponse>`);
+
+      await expect(adapter.checkAvailability(["bad.com"])).rejects.toThrow(
+        "Namecheap API error: First error; Second error"
       );
     });
 

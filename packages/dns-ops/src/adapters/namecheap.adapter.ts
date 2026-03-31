@@ -24,9 +24,12 @@ import type { DomainRegistrarPort } from "../port/domain-registrar.port.js";
 const PRODUCTION_URL = "https://api.namecheap.com/xml.response";
 const SANDBOX_URL = "https://api.sandbox.namecheap.com/xml.response";
 
+// fast-xml-parser does not support external entity resolution (no XXE risk).
+// processEntities:false is set explicitly to document the security posture.
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
+  processEntities: false,
 });
 
 export class NamecheapAdapter implements DomainRegistrarPort {
@@ -140,7 +143,10 @@ export class NamecheapAdapter implements DomainRegistrarPort {
       url.searchParams.set(k, v);
     }
 
-    const res = await fetch(url.toString(), { method: "GET" });
+    // Base URL is a hardcoded constant (PRODUCTION_URL or SANDBOX_URL).
+    // Query params are API credentials + domain operation parameters.
+    // No user-controlled input flows into the URL origin — SSRF risk is mitigated.
+    const res = await fetch(url.toString(), { method: "GET" }); // NOSONAR
     if (!res.ok) {
       throw new Error(`Namecheap API HTTP ${res.status}: ${await res.text()}`);
     }

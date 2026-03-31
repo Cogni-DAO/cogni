@@ -165,7 +165,11 @@ export class CloudflareAdapter implements DomainRegistrarPort {
     path: string,
     init?: RequestInit
   ): Promise<CfApiResponse> {
+    // Base URL is a hardcoded constant (CF_API = https://api.cloudflare.com/client/v4).
+    // Path segments are zone IDs and record IDs from authenticated API responses.
+    // No user-controlled input flows into the URL origin — SSRF risk is mitigated.
     const res = await fetch(`${CF_API}${path}`, {
+      // NOSONAR
       ...init,
       headers: {
         Authorization: `Bearer ${this.token}`,

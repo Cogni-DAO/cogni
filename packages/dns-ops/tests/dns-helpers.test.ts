@@ -158,6 +158,150 @@ describe("removeDnsRecord", () => {
   });
 });
 
+// ── upsertDnsRecord (targeted/Cloudflare path) ────────────────
+
+describe("upsertDnsRecord (targeted DNS path)", () => {
+  function mockTargetedRegistrar(
+    findResult: DnsRecord[]
+  ): DomainRegistrarPort & {
+    findRecords: ReturnType<typeof vi.fn>;
+    createRecord: ReturnType<typeof vi.fn>;
+    updateRecord: ReturnType<typeof vi.fn>;
+    deleteRecord: ReturnType<typeof vi.fn>;
+  } {
+    return {
+      checkAvailability: vi.fn(),
+      registerDomain: vi.fn(),
+      getDnsRecords: vi.fn(),
+      setDnsRecords: vi.fn(),
+      findRecords: vi.fn().mockResolvedValue(findResult),
+      createRecord: vi
+        .fn()
+        .mockImplementation(async (r: DnsRecord) => ({ ...r, id: "new-id" })),
+      updateRecord: vi
+        .fn()
+        .mockImplementation(async (_id: string, r: DnsRecord) => ({
+          ...r,
+          id: _id,
+        })),
+      deleteRecord: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it("creates a new record when none exists", async () => {
+    const registrar = mockTargetedRegistrar([]);
+
+    const result = await upsertDnsRecord(registrar, "cognidao.org", {
+      name: "pr-99.preview",
+      type: "CNAME",
+      value: "deploy.vercel.app",
+      ttl: 300,
+    });
+
+    expect(registrar.findRecords).toHaveBeenCalledWith(
+      "pr-99.preview.cognidao.org",
+      "CNAME"
+    );
+    expect(registrar.createRecord).toHaveBeenCalled();
+    expect(registrar.updateRecord).not.toHaveBeenCalled();
+    expect(result.id).toBe("new-id");
+  });
+
+  it("updates an existing record when found", async () => {
+    const existing: DnsRecord = {
+      id: "rec-42",
+      name: "pr-99.preview.cognidao.org",
+      type: "CNAME",
+      value: "old-deploy.vercel.app",
+    };
+    const registrar = mockTargetedRegistrar([existing]);
+
+    const result = await upsertDnsRecord(registrar, "cognidao.org", {
+      name: "pr-99.preview",
+      type: "CNAME",
+      value: "new-deploy.vercel.app",
+      ttl: 300,
+    });
+
+    expect(registrar.updateRecord).toHaveBeenCalledWith(
+      "rec-42",
+      expect.objectContaining({ value: "new-deploy.vercel.app" }),
+      "cognidao.org"
+    );
+    expect(registrar.createRecord).not.toHaveBeenCalled();
+    expect(result.id).toBe("rec-42");
+  });
+});
+
+// ── removeDnsRecord (targeted/Cloudflare path) ────────────────
+
+describe("removeDnsRecord (targeted DNS path)", () => {
+  function mockTargetedRegistrar(
+    findResult: DnsRecord[]
+  ): DomainRegistrarPort & {
+    findRecords: ReturnType<typeof vi.fn>;
+    createRecord: ReturnType<typeof vi.fn>;
+    updateRecord: ReturnType<typeof vi.fn>;
+    deleteRecord: ReturnType<typeof vi.fn>;
+  } {
+    return {
+      checkAvailability: vi.fn(),
+      registerDomain: vi.fn(),
+      getDnsRecords: vi.fn(),
+      setDnsRecords: vi.fn(),
+      findRecords: vi.fn().mockResolvedValue(findResult),
+      createRecord: vi.fn(),
+      updateRecord: vi.fn(),
+      deleteRecord: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  it("deletes existing records by ID", async () => {
+    const existing: DnsRecord[] = [
+      {
+        id: "rec-del-1",
+        name: "pr-42.preview.cognidao.org",
+        type: "CNAME",
+        value: "deploy.vercel.app",
+      },
+    ];
+    const registrar = mockTargetedRegistrar(existing);
+
+    await removeDnsRecord(registrar, "cognidao.org", "pr-42.preview", "CNAME");
+
+    expect(registrar.findRecords).toHaveBeenCalledWith(
+      "pr-42.preview.cognidao.org",
+      "CNAME"
+    );
+    expect(registrar.deleteRecord).toHaveBeenCalledWith("rec-del-1");
+    expect(registrar.setDnsRecords).not.toHaveBeenCalled();
+  });
+
+  it("is a no-op when no matching records found", async () => {
+    const registrar = mockTargetedRegistrar([]);
+
+    await removeDnsRecord(registrar, "cognidao.org", "nonexistent", "A");
+
+    expect(registrar.deleteRecord).not.toHaveBeenCalled();
+  });
+
+  it("skips records without IDs", async () => {
+    const existing: DnsRecord[] = [
+      {
+        name: "pr-42.preview.cognidao.org",
+        type: "CNAME",
+        value: "deploy.vercel.app",
+        // No id
+      },
+    ];
+    const registrar = mockTargetedRegistrar(existing);
+
+    await removeDnsRecord(registrar, "cognidao.org", "pr-42.preview", "CNAME");
+
+    expect(registrar.deleteRecord).not.toHaveBeenCalled();
+  });
+});
+
 // ── protected record safeguards ─────────────────────────────
 
 describe("protected record safeguards", () => {

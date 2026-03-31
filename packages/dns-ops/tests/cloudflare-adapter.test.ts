@@ -264,12 +264,156 @@ describe("CloudflareAdapter", () => {
     });
   });
 
+  describe("setDnsRecords", () => {
+    it("deletes existing records then creates new ones", async () => {
+      // Sequence: getDnsRecords (list) → delete rec-1, delete rec-2 → create new-1
+      mockFetchSequence(
+        LIST_RECORDS_RESPONSE, // getDnsRecords page 1
+        DELETE_RESPONSE, // delete rec-1
+        DELETE_RESPONSE, // delete rec-2
+        CREATE_RECORD_RESPONSE // create new record
+      );
+
+      await adapter.setDnsRecords("cognidao", "org", [
+        {
+          name: "new.cognidao.org",
+          type: "A",
+          value: "5.6.7.8",
+          ttl: 300,
+        },
+      ]);
+
+      // 1 list + 2 deletes + 1 create = 4 calls
+      expect(fetchSpy).toHaveBeenCalledTimes(4);
+
+      // First call: list records
+      const listUrl = fetchSpy.mock.calls[0]?.[0] as string;
+      expect(listUrl).toContain("/dns_records?per_page=100");
+
+      // Last call: create
+      const createInit = fetchSpy.mock.calls[3]?.[1] as RequestInit;
+      expect(createInit.method).toBe("POST");
+      const body = JSON.parse(createInit.body as string);
+      expect(body.content).toBe("5.6.7.8");
+    });
+  });
+
+  describe("pagination", () => {
+    it("fetches multiple pages of records", async () => {
+      const page1 = {
+        success: true,
+        result: [
+          {
+            id: "rec-p1",
+            type: "A",
+            name: "a.cognidao.org",
+            content: "1.1.1.1",
+            ttl: 1,
+            proxied: false,
+          },
+        ],
+        result_info: { page: 1, per_page: 100, total_pages: 2 },
+      };
+      const page2 = {
+        success: true,
+        result: [
+          {
+            id: "rec-p2",
+            type: "A",
+            name: "b.cognidao.org",
+            content: "2.2.2.2",
+            ttl: 1,
+            proxied: false,
+          },
+        ],
+        result_info: { page: 2, per_page: 100, total_pages: 2 },
+      };
+      mockFetchSequence(page1, page2);
+
+      const records = await adapter.getDnsRecords("cognidao", "org");
+
+      expect(records).toHaveLength(2);
+      expect(records[0]?.value).toBe("1.1.1.1");
+      expect(records[1]?.value).toBe("2.2.2.2");
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("MX record conversion", () => {
+    it("includes priority for MX records", async () => {
+      mockFetch(CREATE_RECORD_RESPONSE);
+
+      await adapter.createRecord(
+        {
+          name: "mail",
+          type: "MX",
+          value: "mx.example.com",
+          mxPref: 10,
+        },
+        "cognidao.org"
+      );
+
+      const body = JSON.parse(
+        (fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string
+      );
+      expect(body.priority).toBe(10);
+      expect(body.type).toBe("MX");
+    });
+
+    it("omits priority for non-MX records", async () => {
+      mockFetch(CREATE_RECORD_RESPONSE);
+
+      await adapter.createRecord(
+        {
+          name: "test",
+          type: "A",
+          value: "1.2.3.4",
+        },
+        "cognidao.org"
+      );
+
+      const body = JSON.parse(
+        (fetchSpy.mock.calls[0]?.[1] as RequestInit).body as string
+      );
+      expect(body.priority).toBeUndefined();
+    });
+
+    it("parses MX priority from Cloudflare response", async () => {
+      mockFetch({
+        success: true,
+        result: [
+          {
+            id: "rec-mx",
+            type: "MX",
+            name: "cognidao.org",
+            content: "mx.example.com",
+            ttl: 1,
+            proxied: false,
+            priority: 10,
+          },
+        ],
+        result_info: { page: 1, per_page: 100, total_pages: 1 },
+      });
+
+      const records = await adapter.getDnsRecords("cognidao", "org");
+      expect(records[0]?.mxPref).toBe(10);
+    });
+  });
+
   describe("error handling", () => {
     it("throws on Cloudflare API error", async () => {
       mockFetch(ERROR_RESPONSE);
 
       await expect(adapter.getDnsRecords("bad", "zone")).rejects.toThrow(
         "Cloudflare API error: 7003: Could not route to /zones/bad/dns_records"
+      );
+    });
+
+    it("shows 'Unknown error' when no error details provided", async () => {
+      mockFetch({ success: false });
+
+      await expect(adapter.getDnsRecords("bad", "zone")).rejects.toThrow(
+        "Cloudflare API error: Unknown error"
       );
     });
   });
