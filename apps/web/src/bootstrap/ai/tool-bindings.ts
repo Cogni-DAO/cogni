@@ -17,6 +17,7 @@
 import type {
   MetricsCapability,
   RepoCapability,
+  ScheduleCapability,
   ToolImplementation,
   WebSearchCapability,
 } from "@cogni/ai-tools";
@@ -25,6 +26,8 @@ import {
   createRepoListImplementation,
   createRepoOpenImplementation,
   createRepoSearchImplementation,
+  createScheduleListImplementation,
+  createScheduleManageImplementation,
   createWebSearchImplementation,
   GET_CURRENT_TIME_NAME,
   getCurrentTimeImplementation,
@@ -32,6 +35,8 @@ import {
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
   REPO_SEARCH_NAME,
+  SCHEDULE_LIST_NAME,
+  SCHEDULE_MANAGE_NAME,
   WEB_SEARCH_NAME,
 } from "@cogni/ai-tools";
 
@@ -43,6 +48,7 @@ export interface ToolBindingDeps {
   readonly metricsCapability: MetricsCapability;
   readonly webSearchCapability: WebSearchCapability;
   readonly repoCapability: RepoCapability;
+  readonly scheduleCapability: ScheduleCapability;
 }
 
 /**
@@ -93,6 +99,14 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
 
     [REPO_SEARCH_NAME]: createRepoSearchImplementation({
       repoCapability: deps.repoCapability,
+    }) as AnyToolImplementation,
+
+    [SCHEDULE_LIST_NAME]: createScheduleListImplementation({
+      scheduleCapability: deps.scheduleCapability,
+    }) as AnyToolImplementation,
+
+    [SCHEDULE_MANAGE_NAME]: createScheduleManageImplementation({
+      scheduleCapability: deps.scheduleCapability,
     }) as AnyToolImplementation,
   };
 }

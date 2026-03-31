@@ -94,6 +94,7 @@ import {
   derivePrometheusQueryUrl,
 } from "@/bootstrap/capabilities/metrics";
 import { createRepoCapability } from "@/bootstrap/capabilities/repo";
+import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
 import type {
@@ -509,11 +510,28 @@ function createContainer(): Container {
   // RepoCapability for AI tools (requires COGNI_REPO_PATH)
   const repoCapability = createRepoCapability(env);
 
+  // ScheduleCapability for AI tools (reads actorUserId from ALS at invocation time)
+  const scheduleCapability = createScheduleCapability({
+    scheduleManager,
+    getOrCreateBillingAccountId: async (userId) => {
+      const accountService = new UserDrizzleAccountService(
+        db,
+        userId,
+        financialLedger
+      );
+      const account = await accountService.getOrCreateBillingAccountForUser({
+        userId: userId as string,
+      });
+      return account.id;
+    },
+  });
+
   // ToolSource with real implementations (per CAPABILITY_INJECTION)
   const toolBindings = createToolBindings({
     metricsCapability,
     webSearchCapability,
     repoCapability,
+    scheduleCapability,
   });
   const toolSource = createBoundToolSource(toolBindings);
 

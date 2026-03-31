@@ -31,6 +31,9 @@ export { AggregatingAgentCatalog } from "./ai/aggregating-agent-catalog";
 // Graph execution infrastructure
 export { NamespaceGraphRouter } from "./ai/aggregating-executor";
 export { BillingEnrichmentGraphExecutorDecorator } from "./ai/billing-enrichment.decorator";
+export type { ExecutionScope } from "./ai/execution-scope";
+// Execution scope (ALS) — per-run billing + actor context for tools
+export { getExecutionScope, runInScope } from "./ai/execution-scope";
 export {
   type CompletionStreamFn,
   type CompletionStreamParams,
