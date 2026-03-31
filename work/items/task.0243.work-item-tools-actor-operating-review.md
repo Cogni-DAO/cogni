@@ -29,12 +29,14 @@ external_refs:
 ## What Changed
 
 ### 1. Work Item Tools (`@cogni/ai-tools`)
+
 - `core__work_item_query` (read_only) — query backlog with filters: status, type, text, actor, project, limit
 - `core__work_item_transition` (state_change) — transition status or patch priority/labels/summary
 - `WorkItemCapability` interface — bridges tools to `WorkItemQueryPort` + `WorkItemCommandPort`
 - Bootstrap wiring: capability factory, tool bindings, container DI
 
 ### 2. Actor Eligibility Field (`@cogni/work-items`)
+
 - `ActorKind = "human" | "ai" | "either"` — routing hint for work selection (NOT ownership/provenance)
 - Added to `WorkItem` type, `WorkQuery`, frontmatter parsing, adapter matching
 - `actor=ai` matches items with `"ai"` or `"either"`. Default: `"either"`.
@@ -42,6 +44,7 @@ external_refs:
 - Wired through REST API contract, route, facade
 
 ### 3. Operating Review Agent (replaces CEO Operator)
+
 - Renamed `ceo-operator` → `operating-review` across graph, catalog, role-spec, UI
 - 3-layer prompt: identity + capabilities (with explicit CANNOT list) + methodology
 - Schedule: hourly → every 12h
