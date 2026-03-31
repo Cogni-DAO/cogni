@@ -2,7 +2,7 @@
 id: task.0234
 type: task
 title: "Schedule Management AI Tools + Planner UI"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 3
@@ -19,7 +19,7 @@ revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-30
-updated: 2026-03-30
+updated: 2026-03-31
 labels: [scheduler, ai-tools, ui]
 external_refs:
 ---
@@ -43,9 +43,8 @@ Schedules are the primitive. No "day plan" abstraction. The planner UI is a time
   - `core__schedule_manage` (state_change) — `action: "create"|"update"|"delete"|"enable"|"disable"` with per-action input
 - `ScheduleCapability` in packages/ai-tools is generic schedule CRUD — no day-plan domain concepts
 - `editPolicy` metadata in `input._meta.editPolicy`: `"ai_managed" | "human_only"` — AI tool rejects mutations on `human_only` slots
-- `/planner` UI page: 24-hour grid rendering of existing schedules, grouped by cron hour
-- Sidebar nav item for Planner
 - CEO Operator and Brain graphs gain the 2 schedule tool IDs
+- Planner UI deferred — existing /schedules page serves as the human view
 
 ## Allowed Changes
 
@@ -57,9 +56,7 @@ Schedules are the primitive. No "day plan" abstraction. The planner UI is a time
 - `apps/web/src/bootstrap/capabilities/` — capability implementation (reads from ALS)
 - `apps/web/src/bootstrap/ai/tool-bindings.ts` — wire capability
 - `apps/web/src/bootstrap/container.ts` — create capability
-- `apps/web/src/app/(app)/planner/` — new UI page (reuses existing schedule API helpers)
 - `packages/langgraph-graphs/src/graphs/{operator,brain}/tools.ts` — add tool IDs
-- `apps/web/src/features/layout/components/AppSidebar.tsx` — add nav item
 
 ## Plan
 
