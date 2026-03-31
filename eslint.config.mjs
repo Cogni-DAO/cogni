@@ -22,6 +22,7 @@ export default [
       "*.config.cjs",
       "test*/**/fixtures/**",
       "**/__arch_probes__/**",
+      "apps/web/src/components/reui/**",
       "**/*.md",
       "**/*.css",
       "**/.env*",
