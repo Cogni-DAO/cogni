@@ -88,7 +88,7 @@ describe("toBaseMessage", () => {
     ];
 
     // Should not throw — this is the exact sequence that crashed before the fix
-    const converted = messages.map(toBaseMessage);
+    const converted = messages.map((m) => toBaseMessage(m));
     expect(converted).toHaveLength(4);
     expect(converted[2]).toBeInstanceOf(ToolMessage);
   });
