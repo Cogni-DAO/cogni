@@ -4,8 +4,10 @@
 /**
  * Module: `@cogni/langgraph-graphs/tests/runtime/message-converters.test`
  * Purpose: Unit tests for toBaseMessage / fromBaseMessage converters.
- * Scope: Verifies tool messages require toolCallId and assistant messages preserve toolCalls.
+ * Scope: Verifies tool messages require toolCallId and assistant messages preserve toolCalls. Does NOT test LangGraph integration.
+ * Invariants: toolCallId required for tool messages, toolCalls preserved on assistant messages
  * Side-effects: none
+ * Links: src/runtime/core/message-converters.ts
  * @internal
  */
 
