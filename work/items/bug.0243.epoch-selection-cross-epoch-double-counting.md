@@ -2,7 +2,7 @@
 id: bug.0243
 type: bug
 title: "Same-scope epoch selection re-selects receipts from prior epochs — credits double-counted"
-status: needs_design
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 2
@@ -15,7 +15,7 @@ project:
 branch: fix/epoch-selection-cross-epoch-dedup
 pr:
 reviewer:
-revision: 1
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-03-31
@@ -79,57 +79,91 @@ HAVING COUNT(DISTINCT es.epoch_id) > 1;
 - **Financial:** If epochs finalize, same work is paid twice via DAO treasury.
 - **Severity:** P0 — affects all nodes running multi-epoch attribution.
 
-## Allowed Changes
+## Design
 
-- `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — `getSelectionCandidates()` query
-- `packages/attribution-ledger/src/store.ts` — interface docstrings if needed
-- `packages/attribution-pipeline-contracts/src/selection.ts` — `SelectionContext` if epoch context is added
-- `services/scheduler-worker/src/activities/ledger.ts` — `materializeSelection()` if filtering moves here
-- Tests for the above
-- Migration or data-fix script to clean up existing duplicates
+### Outcome
 
-## Plan
+Each receipt is selected for at most one epoch within a scope. The next `materializeSelection` run for epoch 2 will only see genuinely new receipts, not epoch 1 carryover.
 
-### Option A: Query-level same-scope exclusion (recommended — simplest, no contract changes)
+### Approach
 
-Add a NOT EXISTS subquery to `getSelectionCandidates()` that excludes receipts already selected in any other epoch with the same `scope_id`. The adapter already has `this.scopeId` available:
+**Solution**: Add a `notInArray` pre-filter to `getSelectionCandidates()`. Before the main query, collect receipt IDs already selected in prior same-scope epochs, then exclude them. Uses `notInArray` — already imported and used in the adapter (line 91, used at line 1136).
 
-```sql
-AND NOT EXISTS (
-  SELECT 1 FROM epoch_selection es_prior
-  JOIN epochs e_prior ON e_prior.id = es_prior.epoch_id
-  WHERE es_prior.receipt_id = ingestion_receipts.receipt_id
-    AND e_prior.epoch_id != :currentEpochId
-    AND e_prior.scope_id = :scopeId
-)
+Two-query pattern (follows existing adapter style — no subqueries used anywhere in db-client):
+
+```typescript
+// 1. Collect receipt IDs already claimed by other same-scope epochs
+const priorEpochIds = await this.db
+  .select({ id: epochs.id })
+  .from(epochs)
+  .where(and(eq(epochs.scopeId, this.scopeId), ne(epochs.id, epochId)));
+
+const alreadySelected = priorEpochIds.length > 0
+  ? await this.db
+      .selectDistinct({ receiptId: epochSelection.receiptId })
+      .from(epochSelection)
+      .where(inArray(epochSelection.epochId, priorEpochIds.map(e => e.id)))
+  : [];
+
+const excludeIds = new Set(alreadySelected.map(r => r.receiptId));
+
+// 2. Existing query + filter
+// Add to WHERE: excludeIds.size > 0 ? notInArray(ingestionReceipts.receiptId, [...excludeIds]) : undefined
 ```
 
-- [ ] Add NOT EXISTS subquery to `getSelectionCandidates()` scoped to `this.scopeId`
-- [ ] Update SELECTION_POLICY_AUTHORITY docstring to note the query now pre-filters same-scope prior selections
-- [ ] Add test: two same-scope epochs — epoch 2 candidates exclude epoch 1 receipts
-- [ ] Add test: two different-scope epochs — epoch 2 candidates still include cross-scope receipts (RECEIPT_SCOPE_AGNOSTIC preserved)
+**Reuses**: `notInArray` (already imported line 91, used at line 1136), `epochs` table join pattern, `this.scopeId` from adapter constructor (line 363).
 
-### Option B: Pass prior-epoch context to selection policy
+**Rejected alternatives**:
 
-- [ ] Add `priorScopeSelections` (receipt IDs already claimed in same scope) to `SelectionContext`
-- [ ] Update selection policies to filter out prior-epoch receipts
-- [ ] More complex, but preserves SELECTION_POLICY_AUTHORITY literally
+1. **NOT EXISTS subquery** — cleaner SQL, but zero precedent in db-client. Every query in the adapter uses flat Drizzle builder chains with `inArray`/`notInArray`. Adding raw `sql` subqueries would be a style break.
+
+2. **Pass prior-epoch context to SelectionContext** — changes the pipeline contract package (`attribution-pipeline-contracts`), requires updating all selection policy implementations, and adds complexity to `materializeSelection()`. Over-engineering for a query-level fix.
+
+3. **Add `scope_id` column to `epoch_selection`** — schema migration + backfill for a column that's derivable via JOIN. Denormalization not justified.
+
+### Invariants
+
+<!-- CODE REVIEW CRITERIA -->
+
+- [ ] RECEIPT_SCOPE_AGNOSTIC: Cross-scope selection still works — filter is same-scope only (spec: attribution-ledger)
+- [ ] SELECTION_POLICY_AUTHORITY: Updated docstring — query pre-filters same-scope prior selections, policy decides within remaining candidates (spec: plugin-attribution-pipeline)
+- [ ] SELECTION_AUTO_POPULATE: No change to insert/update behavior — only candidate set is narrowed (spec: attribution-ledger)
+- [ ] SELECTION_FREEZE_ON_FINALIZE: Untouched — finalized epochs still reject writes (spec: attribution-ledger)
+- [ ] SCOPE_GATED_QUERIES: Preserved — `resolveEpochScoped` still validates epoch ownership (spec: attribution-ledger)
+- [ ] PACKAGES_NO_SRC_IMPORTS: db-client imports only from `@cogni/*` packages and `drizzle-orm` (spec: packages-architecture)
+- [ ] SIMPLE_SOLUTION: Two queries using existing `notInArray` pattern, no new abstractions
+- [ ] ARCHITECTURE_ALIGNMENT: Change is adapter-internal, no port signature changes (spec: architecture)
+
+### Files
+
+- Modify: `packages/db-client/src/adapters/drizzle-attribution.adapter.ts` — add prior-epoch exclusion to `getSelectionCandidates()` (~15 lines), import `ne` from drizzle-orm
+- Modify: `packages/attribution-ledger/src/store.ts` — update SELECTION_POLICY_AUTHORITY docstring (1 line)
+- Test: `apps/web/tests/component/db/drizzle-attribution.adapter.int.test.ts` — add two tests: same-scope dedup + cross-scope preservation
 
 ### Data cleanup
 
-- [ ] Write a one-time SQL or migration to remove duplicate same-scope selections from epoch 2 (keep epoch 1 rows, delete epoch 2 duplicates)
+Run once against production after deploy:
+
+```sql
+-- Delete epoch 2 selection rows for receipts that already exist in epoch 1 (same scope)
+DELETE FROM epoch_selection
+WHERE epoch_id = 2
+  AND receipt_id IN (
+    SELECT receipt_id FROM epoch_selection WHERE epoch_id = 1
+  );
+```
 
 ## Validation
 
 **Command:**
 
 ```bash
-pnpm vitest run --config vitest.config.mts packages/db-client/src/adapters/__tests__/drizzle-attribution-selection.test.ts
+pnpm dotenv -e .env.test -- vitest run --config vitest.component.config.mts apps/web/tests/component/db/drizzle-attribution.adapter.int.test.ts
 ```
 
 **Expected:** "same-scope cross-epoch deduplication" test passes; "cross-scope selection preserved" test passes.
 
-**Production verification after deploy:**
+**Production verification after deploy + cleanup:**
 
 ```sql
 SELECT es.receipt_id, COUNT(DISTINCT es.epoch_id) AS epoch_count
