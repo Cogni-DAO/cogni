@@ -69,12 +69,11 @@ export const Thread: FC<ThreadProps> = ({ welcomeMessage, errorMessage }) => {
         )}
       </ThreadPrimitive.Viewport>
 
-      {/* Status line — visible only when running + backend sends status text */}
-      <ThreadStatusLine />
-
       {/* Composer is sibling after Viewport - always pinned at bottom */}
       <div className="aui-thread-composer-container relative mx-auto w-full max-w-(--thread-max-width) shrink-0 px-4 pt-2 pb-4 md:pb-6">
         <ThreadScrollToBottom />
+        {/* Status line — above composer, below scroll-to-bottom */}
+        <ThreadStatusLine />
         {/* Suggestions fixed above composer - only show when thread is empty */}
         <ThreadPrimitive.If empty>
           <ThreadSuggestions />
@@ -112,7 +111,7 @@ const ThreadScrollToBottom: FC = () => {
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom -top-12 absolute z-10 self-center rounded-full p-4 disabled:invisible dark:bg-background dark:hover:bg-accent"
+        className="aui-thread-scroll-to-bottom -top-12 absolute right-0 z-10 rounded-full p-4 disabled:invisible dark:bg-background dark:hover:bg-accent"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
