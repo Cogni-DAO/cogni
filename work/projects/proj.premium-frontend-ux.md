@@ -11,7 +11,7 @@ outcome: Users see live agent activity in chat (replacing invisible thinking), w
 assignees:
   - derekg1729
 created: 2026-03-30
-updated: 2026-03-30
+updated: 2026-03-31
 labels:
   - ui
   - ux
@@ -90,7 +90,7 @@ Each phase delivers standalone value. No throwaway work.
 
 | Deliverable                                                                      | Status      | Est | Work Item |
 | -------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Work items table — ReUI data-grid, detail panel, visual type icons, keyboard nav | Not Started | 3   | task.0237 |
+| Work items table — ReUI data-grid, detail panel, visual type icons, keyboard nav | Done        | 3   | task.0237 |
 | Agent avatars — Rive/Lottie animated characters on run cards + chat              | Not Started | 3   | task.0238 |
 
 ### Run (P2): Three.js Observatory
