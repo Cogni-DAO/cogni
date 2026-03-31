@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.agentic-project-management
 branch: feat/scheduled-sweep-v0
-pr:
+pr: "https://github.com/Cogni-DAO/node-template/pull/676"
 reviewer:
 revision: 0
 blocked_by:
