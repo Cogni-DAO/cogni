@@ -95,9 +95,12 @@ export interface AssistantFinalEvent {
  */
 export interface StatusEvent {
   readonly type: "status";
-  /** Current agent phase. */
+  /** Current agent phase — drives animation style, not display text. */
   readonly phase: "thinking" | "tool_use" | "compacting";
-  /** Optional label for display (e.g., tool name). */
+  /** Human-readable status text for UI display (max 80 chars). Backend owns this string.
+   *  Examples: "Thinking...", "Searching 12 files for auth patterns...", "Compacting context..." */
+  readonly text?: string;
+  /** Optional structured label (e.g., tool name). Prefer `text` for display. */
   readonly label?: string;
 }
 

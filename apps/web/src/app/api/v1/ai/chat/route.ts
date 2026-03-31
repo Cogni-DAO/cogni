@@ -391,13 +391,17 @@ export const POST = wrapRouteHandlerWithLogging(
               } else if (event.type === "status") {
                 // STATUS_IS_EPHEMERAL: transient data part, never persisted in UIMessage
                 // STATUS_BEST_EFFORT: safe to skip if stream is backpressured
+                // Stable id → AI SDK updates in-place instead of accumulating.
+                // Not transient → part appears in message.content for useThread selector.
+                // Replaced by assistant_final content when stream completes.
                 writer.write({
                   type: "data-status",
+                  id: "agent-status",
                   data: {
                     phase: event.phase,
+                    ...(event.text ? { text: event.text } : {}),
                     ...(event.label ? { label: event.label } : {}),
                   },
-                  transient: true,
                 } as UIMessageChunk);
               }
             }

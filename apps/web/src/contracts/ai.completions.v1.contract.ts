@@ -241,6 +241,8 @@ const ChunkChoiceSchema = z.object({
 const CogniStatusSchema = z
   .object({
     phase: z.enum(["thinking", "tool_use", "compacting"]),
+    /** Human-readable status text for display (max 80 chars). Backend owns this. */
+    text: z.string().max(80).optional(),
     label: z.string().optional(),
   })
   .optional();

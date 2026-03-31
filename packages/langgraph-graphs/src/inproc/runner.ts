@@ -187,6 +187,7 @@ export function createInProcGraphRunner<TTool = unknown>(
 
   const final = (async (): Promise<GraphResult> => {
     try {
+      emit({ type: "status", phase: "thinking", text: "Thinking..." });
       const messages = request.messages.map(toBaseMessage);
 
       // Set up ALS context and invoke graph

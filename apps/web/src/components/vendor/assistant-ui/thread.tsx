@@ -5,6 +5,7 @@ import {
   ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useThread,
 } from "@assistant-ui/react";
 import {
   ArrowDownIcon,
@@ -20,6 +21,7 @@ import {
 import type { FC, ReactNode } from "react";
 import { ComposerAddAttachment } from "@/components/kit/chat/ComposerAddAttachment";
 import { ComposerVoiceInput } from "@/components/kit/chat/ComposerVoiceInput";
+import { StatusLine } from "@/components/kit/chat/StatusLine";
 import {
   ComposerAttachments,
   UserMessageAttachments,
@@ -70,6 +72,8 @@ export const Thread: FC<ThreadProps> = ({ welcomeMessage, errorMessage }) => {
       {/* Composer is sibling after Viewport - always pinned at bottom */}
       <div className="aui-thread-composer-container relative mx-auto w-full max-w-(--thread-max-width) shrink-0 px-4 pt-2 pb-4 md:pb-6">
         <ThreadScrollToBottom />
+        {/* Status line — above composer, below scroll-to-bottom */}
+        <ThreadStatusLine />
         {/* Suggestions fixed above composer - only show when thread is empty */}
         <ThreadPrimitive.If empty>
           <ThreadSuggestions />
@@ -80,13 +84,34 @@ export const Thread: FC<ThreadProps> = ({ welcomeMessage, errorMessage }) => {
   );
 };
 
+/** Extracts status text from the last assistant message's data parts. */
+const ThreadStatusLine: FC = () => {
+  const statusText = useThread((s) => {
+    if (!s.isRunning) return null;
+    const lastMsg = s.messages.at(-1);
+    if (!lastMsg || lastMsg.role !== "assistant") return null;
+    // Find the last data part named "status" with a text field
+    for (let i = lastMsg.content.length - 1; i >= 0; i--) {
+      const part = lastMsg.content[i];
+      if (part && part.type === "data" && part.name === "status") {
+        const data = part.data as { text?: string } | undefined;
+        if (data?.text) return data.text;
+      }
+    }
+    return null;
+  });
+
+  if (!statusText) return null;
+  return <StatusLine text={statusText} />;
+};
+
 const ThreadScrollToBottom: FC = () => {
   return (
     <ThreadPrimitive.ScrollToBottom asChild>
       <TooltipIconButton
         tooltip="Scroll to bottom"
         variant="outline"
-        className="aui-thread-scroll-to-bottom -top-12 absolute z-10 self-center rounded-full p-4 disabled:invisible dark:bg-background dark:hover:bg-accent"
+        className="aui-thread-scroll-to-bottom -top-12 absolute right-0 z-10 rounded-full p-4 disabled:invisible dark:bg-background dark:hover:bg-accent"
       >
         <ArrowDownIcon />
       </TooltipIconButton>
