@@ -230,19 +230,25 @@ async function* runCodexExec(params: {
 
     const { events } = await thread.runStreamed(prompt);
 
-    let fullText = "";
+    let itemText = "";
     let usage: { promptTokens: number; completionTokens: number } | undefined;
 
     for await (const event of events) {
       switch (event.type) {
-        case "item.started":
+        case "item.started": {
+          if (event.item.type === "agent_message") {
+            // Reset per-item tracking — each agent_message starts fresh
+            itemText = "";
+          }
+          break;
+        }
         case "item.updated":
         case "item.completed": {
           if (event.item.type === "agent_message") {
             const newText = event.item.text;
-            if (newText.length > fullText.length) {
-              const delta = newText.slice(fullText.length);
-              fullText = newText;
+            if (newText.length > itemText.length) {
+              const delta = newText.slice(itemText.length);
+              itemText = newText;
               yield { type: "text_delta", delta } as ChatDeltaEvent;
             }
           }

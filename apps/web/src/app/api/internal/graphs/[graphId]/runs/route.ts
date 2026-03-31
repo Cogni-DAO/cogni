@@ -536,10 +536,17 @@ export const POST = wrapRouteHandlerWithLogging<RouteParams>(
         : {}),
     });
     const messages = (
-      messageDtos as Array<{ role: string; content: string }>
+      messageDtos as Array<{
+        role: string;
+        content: string;
+        toolCalls?: Array<{ id: string; name: string; arguments: string }>;
+        toolCallId?: string;
+      }>
     ).map((m) => ({
-      role: m.role as "user" | "assistant" | "system",
+      role: m.role as "user" | "assistant" | "system" | "tool",
       content: m.content,
+      ...(m.toolCalls?.length ? { toolCalls: m.toolCalls } : {}),
+      ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}),
     }));
     // Forward responseFormat if provided (enables structuredOutput in GraphRunResult).
     const responseFormat = resolveResponseFormat(input);
