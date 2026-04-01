@@ -289,7 +289,8 @@ services:
       POSTGRES_ROOT_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
       DB_HOST: postgres
       DB_PORT: 5432
-      APP_DB_NAME: ${APP_DB_NAME}
+      # DB_PER_NODE: comma-separated list of node databases to provision
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS:-cogni_operator,cogni_poly,cogni_resy}
       APP_DB_USER: ${APP_DB_USER}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
       APP_DB_SERVICE_USER: ${APP_DB_SERVICE_USER}
