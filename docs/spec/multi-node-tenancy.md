@@ -120,7 +120,7 @@ All invariants are detailed in their respective sections below. Summary:
 | Invariant | Rule |
 | --- | --- |
 | DB_PER_NODE | 1 Postgres server, 1 database per node. Each node has its own database, its own migrations, its own schema version. |
-| DB_IS_BOUNDARY | The database itself is the node boundary. No tenancy columns (`node_id`, `tenant_id`) needed in node-local tables. Don't add multi-tenant assumptions to single-node schemas. |
+| DB_IS_BOUNDARY | The database itself is the node boundary. No `node_id` columns needed in node-local tables — the DB already scopes to this node. User/account-scoped RLS within the node is still legitimate and expected. |
 | NODE_LOCAL_METERING_PRIMARY | Each node's local billing/metering data is authoritative. Operator aggregation is derived, never the source of truth. If operator aggregate diverges from node-local, **node-local wins**. |
 | NO_CROSS_NODE_QUERIES | Nodes never query each other's database. The operator never queries a node's database directly. |
 | OPERATOR_AGGREGATES_ARE_DERIVED | Cross-node views are read-only projections from node-local data, not independent records. They may lag, they may be incomplete, they are never primary. |
@@ -166,6 +166,7 @@ The operator needs cross-node cost visibility for gateway metering (proj.operato
   - LiteLLM callback routing that identifies source node (task.0256)
   - Periodic sync/ETL from node DBs (future, respects DATA_SOVEREIGNTY)
 - **NOT** by adding `node_id` columns to every node's `charge_receipts`
+- Aggregate records **must** retain a source receipt ref (`source_node_id` + `source_receipt_id` or `source_litellm_call_id`) back to the node-local record, enabling reconciliation
 
 ---
 
