@@ -154,7 +154,10 @@ function MarketCard({
       () => {
         setOutcomes((prev) => {
           const drift = Math.random() > 0.5 ? 1 : -1;
-          const newYes = Math.max(1, Math.min(99, prev[0]!.probability + drift));
+          const newYes = Math.max(
+            1,
+            Math.min(99, prev[0]!.probability + drift)
+          );
           return [
             { ...prev[0]!, probability: newYes },
             { ...prev[1]!, probability: 100 - newYes },

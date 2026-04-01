@@ -11,6 +11,7 @@ outcome: "Each node app deploys to its own domain (cognidao.org, poly.cognidao.o
 spec_refs:
   - docs/spec/node-launch.md
   - docs/spec/node-operator-contract.md
+  - docs/spec/multi-node-tenancy.md
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops

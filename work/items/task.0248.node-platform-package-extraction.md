@@ -10,6 +10,7 @@ summary: "Refactor the shared platform code (ports, core, shared, contracts, com
 outcome: "nodes/node-template/app is a thin shell (~50 files) that imports @cogni/node-platform for all shared platform functionality. Adding a new node means creating a thin app + graphs, not copying 800 files."
 spec_refs:
   - docs/spec/architecture.md
+  - docs/spec/multi-node-tenancy.md
 assignees: derekg1729
 credit:
 project: proj.operator-plane
@@ -64,10 +65,34 @@ across all nodes so new nodes get them for free:
 
 Related: bug.0255 (node landing page auth flow broken — useTryDemo not wired)
 
+## Auth extraction (per multi-node-tenancy spec)
+
+The auth model must move from "4 identical auth.ts files" to "operator is IdP,
+nodes are SSO relying parties" (SHARED_IDENTITY_ISOLATED_SESSIONS):
+
+- Extract shared auth config (providers, callbacks, user_bindings logic) into
+  `packages/node-platform` or a dedicated `packages/auth-core`
+- Each node mints its own origin-scoped session after IdP verification
+  (SSO_THEN_LOCAL_SESSION) — no parent-domain cookies (ORIGIN_SCOPED_COOKIES)
+- Operator owns the identity provider; nodes configure SSO against it
+- Per-node AUTH_SECRET (not shared) in production
+
+## Per-node database (per multi-node-tenancy spec)
+
+Per DB_PER_NODE: each node gets its own database on a shared Postgres server.
+This task must ensure the extracted platform supports per-node DATABASE_URL:
+
+- `packages/node-platform` DB client accepts connection config at construction
+  (PACKAGES_NO_ENV — credentials injected, not read from env)
+- Migration tooling runs per-node (each node manages its own schema version)
+- RLS policies remain within each node's DB (user/account-scoped)
+- No tenancy columns (node_id) in node-local tables (DB_IS_BOUNDARY)
+
 ## Non-goals
 
 - Runtime plugin system (nodes are still separate Next.js apps)
-- Shared database migrations (each node manages own schema)
+- Operator aggregation plane (separate concern, V2 per migration path)
+- Federation auth protocol (V3 concern)
 
 ## Validation
 

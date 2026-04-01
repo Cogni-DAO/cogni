@@ -7,5 +7,9 @@ export default defineConfig({
   clean: false,
   sourcemap: true,
   platform: "node",
-  external: ["@langchain/langgraph", "@cogni/ai-tools", "@cogni/langgraph-graphs"],
+  external: [
+    "@langchain/langgraph",
+    "@cogni/ai-tools",
+    "@cogni/langgraph-graphs",
+  ],
 });
