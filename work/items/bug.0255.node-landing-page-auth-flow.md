@@ -46,6 +46,7 @@ which uses `useTryDemo` — but resy's fork-specific homepage doesn't).
 ### Expected
 
 All node landing pages use the same auth flow as operator:
+
 - Button opens RainbowKit connect modal (wallet + OAuth options)
 - On auth success, redirect to `/chat`
 - Operator uses `useTryDemo` hook at `apps/operator/src/features/home/hooks/useTryDemo.ts`

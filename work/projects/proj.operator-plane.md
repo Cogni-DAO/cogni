@@ -217,16 +217,16 @@ Nodes are sovereign app instances sharing operator infrastructure. Each node
 has a Next.js app + graph package under `nodes/{name}/`. All share one DB,
 one auth layer, one set of migrations.
 
-| Deliverable | Status | Work Item |
-|---|---|---|
-| Absorb cogni-resy-helper into monorepo | Done | task.0244 |
-| nodes/ bounded context + dep-cruiser | Done | task.0245 |
-| Rename apps/web → apps/operator | Done | task.0246 |
-| Node-template + poly + resy platform apps | In Review | PR #682 |
-| Multi-node CI/CD deployment | Needs Design | task.0247 |
-| Extract shared platform package | Needs Design | task.0248 |
-| Port resy reservations feature | Needs Design | task.0253 |
-| Node landing page auth flow | Needs Triage | bug.0255 |
+| Deliverable                               | Status       | Work Item |
+| ----------------------------------------- | ------------ | --------- |
+| Absorb cogni-resy-helper into monorepo    | Done         | task.0244 |
+| nodes/ bounded context + dep-cruiser      | Done         | task.0245 |
+| Rename apps/web → apps/operator           | Done         | task.0246 |
+| Node-template + poly + resy platform apps | In Review    | PR #682   |
+| Multi-node CI/CD deployment               | Needs Design | task.0247 |
+| Extract shared platform package           | Needs Design | task.0248 |
+| Port resy reservations feature            | Needs Design | task.0253 |
+| Node landing page auth flow               | Needs Triage | bug.0255  |
 
 ## As-Built Specs
 
