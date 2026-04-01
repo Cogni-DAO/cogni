@@ -150,6 +150,7 @@ This gives data isolation without extra infra. Per-node Postgres instances are
 overkill until nodes need different configs or true blast-radius separation (k3s).
 
 Implications:
+
 - `db:provision` must create per-node databases + users
 - Each node's `.env` points at its own `DATABASE_URL`
 - `dev:stack:full` must ensure all DBs exist before starting apps
