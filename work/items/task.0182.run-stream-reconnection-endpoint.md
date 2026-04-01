@@ -40,8 +40,8 @@ After task.0177, chat SSE streams from Redis via `RunStreamPort.subscribe()`. Re
 
 ## Allowed Changes
 
-- `apps/web/src/app/api/v1/ai/runs/[runId]/stream/route.ts` — new endpoint
-- `apps/web/src/contracts/` — reconnection contract if needed
+- `apps/operator/src/app/api/v1/ai/runs/[runId]/stream/route.ts` — new endpoint
+- `apps/operator/src/contracts/` — reconnection contract if needed
 - Tests
 
 ## Plan
@@ -54,8 +54,8 @@ After task.0177, chat SSE streams from Redis via `RunStreamPort.subscribe()`. Re
     - [x] Implement `getRunByRunId` in `DrizzleGraphRunAdapter` (db-client)
     - [x] Add `streamLength` to `RunStreamPort` (graph-execution-core) — needed for 410 detection
     - [x] Implement `streamLength` in `RedisRunStreamAdapter`
-    - [x] Create `apps/web/src/contracts/runs.stream.v1.contract.ts` — path param schema
-    - [x] Create `apps/web/src/app/api/v1/ai/runs/[runId]/stream/route.ts` — GET endpoint
+    - [x] Create `apps/operator/src/contracts/runs.stream.v1.contract.ts` — path param schema
+    - [x] Create `apps/operator/src/app/api/v1/ai/runs/[runId]/stream/route.ts` — GET endpoint
   - Validation:
     - [x] Route compiles and serves SSE events from Redis stream
     - Test levels:

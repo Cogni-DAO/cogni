@@ -9,7 +9,7 @@
 
 // Use dynamic import to resolve path aliases via tsconfig
 const { OpenAiCompatibleLlmAdapter } = await import(
-  "../../apps/web/src/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.js"
+  "../../apps/operator/src/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.js"
 );
 
 const endpoint = { baseUrl: "http://localhost:11434" };

@@ -42,9 +42,9 @@ The live dashboard needs a run list endpoint to populate the card grid. `graph_r
 
 ## Allowed Changes
 
-- `apps/web/src/contracts/ai.runs.v1.contract.ts` — new contract
-- `apps/web/src/app/api/v1/ai/runs/route.ts` — new endpoint
-- `apps/web/src/features/ai/services/` — run list service
+- `apps/operator/src/contracts/ai.runs.v1.contract.ts` — new contract
+- `apps/operator/src/app/api/v1/ai/runs/route.ts` — new endpoint
+- `apps/operator/src/features/ai/services/` — run list service
 - Tests
 
 ## Plan

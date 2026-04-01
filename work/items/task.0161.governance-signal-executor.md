@@ -44,21 +44,21 @@ external_refs:
 
 ## Allowed Changes
 
-- `apps/web/src/adapters/server/ingestion/alchemy-webhook.ts` — new normalizer
-- `apps/web/src/features/governance/` — new feature (signal handler, parser, actions, types, barrel)
-- `apps/web/src/features/review/summary-formatter.ts` — deep link URL construction
-- `apps/web/src/features/review/services/review-handler.ts` — pass full DAO config to formatter
-- `apps/web/src/bootstrap/container.ts` — register alchemy normalizer
-- `apps/web/src/app/api/internal/webhooks/[source]/route.ts` — add alchemy secret resolution + signal dispatch
-- `apps/web/src/shared/env/server-env.ts` — add `ALCHEMY_WEBHOOK_SECRET`
+- `apps/operator/src/adapters/server/ingestion/alchemy-webhook.ts` — new normalizer
+- `apps/operator/src/features/governance/` — new feature (signal handler, parser, actions, types, barrel)
+- `apps/operator/src/features/review/summary-formatter.ts` — deep link URL construction
+- `apps/operator/src/features/review/services/review-handler.ts` — pass full DAO config to formatter
+- `apps/operator/src/bootstrap/container.ts` — register alchemy normalizer
+- `apps/operator/src/app/api/internal/webhooks/[source]/route.ts` — add alchemy secret resolution + signal dispatch
+- `apps/operator/src/shared/env/server-env.ts` — add `ALCHEMY_WEBHOOK_SECRET`
 - `.env.local.example` — document new env var
-- `apps/web/src/shared/config/` — repo-spec DAO config reader (if not already present)
-- `apps/web/tests/unit/features/governance/` — unit tests
-- `apps/web/src/features/governance/AGENTS.md` — feature documentation
+- `apps/operator/src/shared/config/` — repo-spec DAO config reader (if not already present)
+- `apps/operator/tests/unit/features/governance/` — unit tests
+- `apps/operator/src/features/governance/AGENTS.md` — feature documentation
 
 ## Plan
 
-- [ ] **1. Zod contract + types**: Create `apps/web/src/features/governance/types.ts` with Zod schemas for `Signal` (dao, chainId, vcs, repoUrl, action, target, resource, nonce, deadline, paramsJson, executor) and `ActionResult` (success, error, txHash)
+- [ ] **1. Zod contract + types**: Create `apps/operator/src/features/governance/types.ts` with Zod schemas for `Signal` (dao, chainId, vcs, repoUrl, action, target, resource, nonce, deadline, paramsJson, executor) and `ActionResult` (success, error, txHash)
 - [ ] **2. Alchemy webhook normalizer**: Create `AlchemyWebhookNormalizer` implementing `WebhookNormalizer` — `verify()` uses HMAC-SHA256 of raw body, `normalize()` extracts tx hashes from Alchemy `ADDRESS_ACTIVITY` payloads → `ActivityEvent[]`
 - [ ] **3. Register normalizer**: Add `"alchemy"` to `getWebhookRegistrations()` in `bootstrap/container.ts`, add `case "alchemy"` to `resolveWebhookSecret()` in webhook route, add `ALCHEMY_WEBHOOK_SECRET` to server env schema
 - [ ] **4. Signal parser**: Port `parseCogniAction()` from cogni-git-admin — decode `CogniAction` event from tx receipt logs using viem `decodeEventLog`. Port `CogniSignal.json` ABI. Parse `extra` field (nonce, deadline, paramsJson). Validate against Zod `Signal` schema
@@ -77,7 +77,7 @@ external_refs:
 
 ```bash
 pnpm check
-pnpm test apps/web/tests/unit/features/governance/
+pnpm test apps/operator/tests/unit/features/governance/
 ```
 
 **Expected:** All lint, type, format checks pass. All unit tests pass.

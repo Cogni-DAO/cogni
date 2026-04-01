@@ -51,9 +51,9 @@ last_commit: abc704da
 
 | File / Resource                                                          | Why it matters                                                                                |
 | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `apps/web/Dockerfile`                                                    | The only file changed — two additions (builder stash + runner COPY)                           |
+| `apps/operator/Dockerfile`                                               | The only file changed — two additions (builder stash + runner COPY)                           |
 | `work/items/bug.0224...md`                                               | Full postmortem with all 5 failed attempts, resolution chain diagram                          |
-| `apps/web/next.config.ts:11-21`                                          | `serverExternalPackages` — why standalone traces codex-sdk and codex but not the platform dep |
+| `apps/operator/next.config.ts:11-21`                                     | `serverExternalPackages` — why standalone traces codex-sdk and codex but not the platform dep |
 | `node_modules/.pnpm/@openai+codex-sdk@0.116.0/.../dist/index.js:368-430` | `findCodexPath()` — the 3-step createRequire resolution chain                                 |
 | `.env.docker.example`                                                    | Container-internal URL overrides for `docker:dev:stack`                                       |
 | [PR #648](https://github.com/Cogni-DAO/node-template/pull/648)           | Attempt 1: COPY to /opt/codex (failed — symlinks + missing platform dep)                      |

@@ -64,7 +64,7 @@ Assistant messages are always persisted with full content, regardless of client 
 ### Architecture after fix
 
 ```
-Chat route (apps/web)          Internal API route (apps/web)
+Chat route (apps/operator)          Internal API route (apps/operator)
 ─────────────────────          ──────────────────────────────
 Phase 1: save user msg         Drains executor stream:
 Start workflow                   → publish each event to Redis
@@ -85,14 +85,14 @@ Pipe events → SSE               → on stream end: persist assistant msg to th
 
 **2. Move assistant persistence to internal API route**
 
-- `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts`:
+- `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts`:
   - Accumulate `text_delta`, `tool_call_start`, `tool_call_result`, `assistant_final` events alongside Redis publish (same loop)
   - After stream drain + `result.final` resolves: load thread via `threadPersistenceForUser(actorUserId)`, append assistant UIMessage, save
   - Needs: `stateKey` (already in input), `actorUserId` (already in input)
 
 **3. Strip Phase 2 from chat route**
 
-- `apps/web/src/app/api/v1/ai/chat/route.ts`:
+- `apps/operator/src/app/api/v1/ai/chat/route.ts`:
   - Remove: `accumulatedText`, `assistantFinalContent`, `accToolParts`, `toolPartIndexByCallId`, `pumpDone`, `resolvePumpDone`, `persistAfterPump` (~100 lines)
   - Keep: Phase 1 (user message save), SSE writer (text_delta, tool events, status, reconciliation for display only)
   - The `for await` loop becomes pure SSE piping — no persistence responsibility
@@ -115,9 +115,9 @@ Pipe events → SSE               → on stream end: persist assistant msg to th
 - Modify: `packages/scheduler-core/src/types.ts` — add stateKey to GraphRun
 - Modify: `packages/scheduler-core/src/ports/schedule-run.port.ts` — add stateKey to createRun params
 - Modify: `packages/db-client/src/adapters/drizzle-run.adapter.ts` — persist + return stateKey
-- Create: `apps/web/src/features/ai/services/assemble-assistant-message.ts` — shared AiEvent[] → UIMessage builder
-- Modify: `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — accumulate + persist using shared assembler
-- Modify: `apps/web/src/app/api/v1/ai/chat/route.ts` — strip Phase 2, pure SSE pipe
+- Create: `apps/operator/src/features/ai/services/assemble-assistant-message.ts` — shared AiEvent[] → UIMessage builder
+- Modify: `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — accumulate + persist using shared assembler
+- Modify: `apps/operator/src/app/api/v1/ai/chat/route.ts` — strip Phase 2, pure SSE pipe
 - Create: migration for stateKey column + index
 - Test: idempotent persistence, terminal-only semantics
 
@@ -127,11 +127,11 @@ Pipe events → SSE               → on stream end: persist assistant msg to th
 - `packages/scheduler-core/src/types.ts` — GraphRun type
 - `packages/scheduler-core/src/ports/schedule-run.port.ts` — createRun params
 - `packages/db-client/src/adapters/drizzle-run.adapter.ts` — stateKey in adapter
-- `apps/web/src/features/ai/services/assemble-assistant-message.ts` — shared event→message builder (new)
-- `apps/web/src/features/ai/public.server.ts` — export assembler
-- `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — accumulate + persist
-- `apps/web/src/app/api/v1/ai/chat/route.ts` — strip Phase 2
-- `apps/web/src/bootstrap/container.ts` — if wiring changes needed
+- `apps/operator/src/features/ai/services/assemble-assistant-message.ts` — shared event→message builder (new)
+- `apps/operator/src/features/ai/public.server.ts` — export assembler
+- `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — accumulate + persist
+- `apps/operator/src/app/api/v1/ai/chat/route.ts` — strip Phase 2
+- `apps/operator/src/bootstrap/container.ts` — if wiring changes needed
 - Drizzle migration
 - Tests
 
@@ -155,12 +155,12 @@ Pipe events → SSE               → on stream end: persist assistant msg to th
   - Milestone: internal API route persists assistant message after full stream drain
   - Invariants: SHARED_EVENT_ASSEMBLER, IDEMPOTENT_THREAD_PERSIST, TERMINAL_ONLY_PERSIST, STATEKEY_NULLABLE
   - Todos:
-    - [ ] Create `apps/web/src/features/ai/services/assemble-assistant-message.ts`
+    - [ ] Create `apps/operator/src/features/ai/services/assemble-assistant-message.ts`
       - `assembleAssistantMessage(runId: string, events: AiEvent[]): UIMessage | null`
       - Returns null if no `assistant_final` received (error runs)
       - Message ID = `assistant-${runId}` (deterministic, idempotent)
       - Handles text + tool_call_start + tool_call_result → UIMessage parts
-    - [ ] Export from `apps/web/src/features/ai/public.server.ts`
+    - [ ] Export from `apps/operator/src/features/ai/public.server.ts`
     - [ ] In internal API route stream drain loop: collect events into array
     - [ ] After drain + final: call assembler, persist thread if stateKey present
       - Load thread, check if `assistant-${runId}` already exists (idempotent guard)

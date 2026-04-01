@@ -137,20 +137,20 @@ Update `docs/spec/multi-provider-llm.md` — mark PROVIDER_AWARE_USAGE as implem
 
 #### Modify — execution scope
 
-- Modify: `apps/web/src/adapters/server/ai/execution-scope.ts` — add `usageSource: SourceSystem` to `ExecutionScope`
+- Modify: `apps/operator/src/adapters/server/ai/execution-scope.ts` — add `usageSource: SourceSystem` to `ExecutionScope`
 
 #### Modify — factory (sets usageSource on scope)
 
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — pass `provider.usageSource` to scope when creating `ExecutionScope`
+- Modify: `apps/operator/src/bootstrap/graph-executor.factory.ts` — pass `provider.usageSource` to scope when creating `ExecutionScope`
 
 #### Modify — inproc adapter (always emit usage_report)
 
-- Modify: `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — remove `if (result.litellmCallId)` gate, read `usageSource` from scope, deterministic `${runId}/${attempt}/byo` when no `litellmCallId`, `costUsd: result.providerCostUsd ?? 0`
+- Modify: `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — remove `if (result.litellmCallId)` gate, read `usageSource` from scope, deterministic `${runId}/${attempt}/byo` when no `litellmCallId`, `costUsd: result.providerCostUsd ?? 0`
 
 #### Modify — billing decorator → usage commit decorator
 
-- Rename: `apps/web/src/adapters/server/ai/billing-executor.decorator.ts` → `usage-commit.decorator.ts` — redefine contract from "validate only" to "validate + commit for non-platform". Inject `accountService` + `RunContext`. Update file header, class doc, invariant comments.
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — pass `accountService` + `RunContext` to decorator constructor, update import
+- Rename: `apps/operator/src/adapters/server/ai/billing-executor.decorator.ts` → `usage-commit.decorator.ts` — redefine contract from "validate only" to "validate + commit for non-platform". Inject `accountService` + `RunContext`. Update file header, class doc, invariant comments.
+- Modify: `apps/operator/src/bootstrap/graph-executor.factory.ts` — pass `accountService` + `RunContext` to decorator constructor, update import
 
 #### Modify — specs
 
@@ -159,8 +159,8 @@ Update `docs/spec/multi-provider-llm.md` — mark PROVIDER_AWARE_USAGE as implem
 
 #### Test
 
-- Test: `apps/web/tests/unit/adapters/server/ai/inproc-completion-unit.test.ts` — verify usage_report emitted for codex/ollama sources with deterministic usageUnitId and costUsd: 0
-- Test: `apps/web/tests/unit/adapters/server/ai/usage-commit.decorator.test.ts` — verify commitUsageFact called directly for non-litellm, deferred for litellm
+- Test: `apps/operator/tests/unit/adapters/server/ai/inproc-completion-unit.test.ts` — verify usage_report emitted for codex/ollama sources with deterministic usageUnitId and costUsd: 0
+- Test: `apps/operator/tests/unit/adapters/server/ai/usage-commit.decorator.test.ts` — verify commitUsageFact called directly for non-litellm, deferred for litellm
 
 ## Validation
 

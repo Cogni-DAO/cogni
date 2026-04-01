@@ -38,13 +38,13 @@ external_refs:
 
 ## Allowed Changes
 
-- `apps/web/src/features/ai/chat/hooks/` — new `useSpeechToText.ts` hook
-- `apps/web/src/components/kit/chat/` — new `ComposerVoiceInput.tsx` component
-- `apps/web/src/components/kit/chat/index.ts` — export new component
-- `apps/web/src/components/kit/chat/AGENTS.md` — document new component
-- `apps/web/src/app/(app)/chat/page.tsx` — wire voice button into `composerLeft` slot
-- `apps/web/src/features/ai/components/ChatComposerExtras.tsx` — add voice button alongside model/graph pickers
-- `apps/web/package.json` / root `pnpm-lock.yaml` — add `@huggingface/transformers` dependency
+- `apps/operator/src/features/ai/chat/hooks/` — new `useSpeechToText.ts` hook
+- `apps/operator/src/components/kit/chat/` — new `ComposerVoiceInput.tsx` component
+- `apps/operator/src/components/kit/chat/index.ts` — export new component
+- `apps/operator/src/components/kit/chat/AGENTS.md` — document new component
+- `apps/operator/src/app/(app)/chat/page.tsx` — wire voice button into `composerLeft` slot
+- `apps/operator/src/features/ai/components/ChatComposerExtras.tsx` — add voice button alongside model/graph pickers
+- `apps/operator/package.json` / root `pnpm-lock.yaml` — add `@huggingface/transformers` dependency
 - `tests/` — unit tests for the hook
 
 ## Design
@@ -106,12 +106,12 @@ The Web Speech API provides the complete UX with **zero new dependencies**:
 
 <!-- High-level scope -->
 
-- Create: `apps/web/src/features/ai/chat/hooks/useSpeechToText.ts` — feature-layer hook wrapping SpeechRecognition with composer text injection
-- Create: `apps/web/src/components/kit/chat/ComposerVoiceInput.tsx` — presentational mic button (props-driven, no business logic)
-- Modify: `apps/web/src/components/kit/chat/index.ts` — export `ComposerVoiceInput`
-- Modify: `apps/web/src/features/ai/components/ChatComposerExtras.tsx` — compose hook + component alongside pickers
-- Modify: `apps/web/src/components/kit/chat/AGENTS.md` — document new component
-- Modify: `apps/web/src/features/ai/public.ts` — re-export hook if needed by tests
+- Create: `apps/operator/src/features/ai/chat/hooks/useSpeechToText.ts` — feature-layer hook wrapping SpeechRecognition with composer text injection
+- Create: `apps/operator/src/components/kit/chat/ComposerVoiceInput.tsx` — presentational mic button (props-driven, no business logic)
+- Modify: `apps/operator/src/components/kit/chat/index.ts` — export `ComposerVoiceInput`
+- Modify: `apps/operator/src/features/ai/components/ChatComposerExtras.tsx` — compose hook + component alongside pickers
+- Modify: `apps/operator/src/components/kit/chat/AGENTS.md` — document new component
+- Modify: `apps/operator/src/features/ai/public.ts` — re-export hook if needed by tests
 - Test: `tests/unit/features/ai/chat/hooks/useSpeechToText.test.ts` — hook state machine, append semantics, unsupported fallback, cleanup
 - Test: `tests/unit/components/kit/chat/ComposerVoiceInput.test.tsx` — render/null when unsupported, aria-label toggle
 
@@ -125,7 +125,7 @@ The Web Speech API provides the complete UX with **zero new dependencies**:
 
 ### Phase 2 — Hook (`useSpeechToText`)
 
-- [ ] **2.1** Create `apps/web/src/features/ai/chat/hooks/useSpeechToText.ts`
+- [ ] **2.1** Create `apps/operator/src/features/ai/chat/hooks/useSpeechToText.ts`
   - Place in `features/ai/chat/hooks/` (not `components/kit/`) — this hook has browser side-effects (mic permissions, audio capture) and belongs at the feature layer
   - Returns `{ isListening, isSupported, transcript, start, stop, toggle, error }`
   - State machine: `idle → listening → processing → idle`
@@ -139,16 +139,16 @@ The Web Speech API provides the complete UX with **zero new dependencies**:
 
 ### Phase 3 — Component (`ComposerVoiceInput`)
 
-- [ ] **3.1** Create `apps/web/src/components/kit/chat/ComposerVoiceInput.tsx`
+- [ ] **3.1** Create `apps/operator/src/components/kit/chat/ComposerVoiceInput.tsx`
   - Follow exact pattern of `ComposerAddAttachment.tsx` (TooltipIconButton, same sizing `size-[34px]`)
   - Uses `Mic` icon from `lucide-react` (already a dependency)
   - Visual states: default (muted icon), recording (pulsing indicator or accent color)
   - `aria-label` toggles: "Start voice input" / "Stop voice input"
   - Returns `null` when `isSupported` is false (progressive enhancement)
   - Kit layer: no business logic, delegates to hook passed via props or composed at feature layer
-- [ ] **3.2** Export from `apps/web/src/components/kit/chat/index.ts`
+- [ ] **3.2** Export from `apps/operator/src/components/kit/chat/index.ts`
 - [ ] **3.3** Add SPDX license header and TSDoc module documentation
-- [ ] **3.4** Update `apps/web/src/components/kit/chat/AGENTS.md`
+- [ ] **3.4** Update `apps/operator/src/components/kit/chat/AGENTS.md`
 
 ### Phase 4 — Integration
 

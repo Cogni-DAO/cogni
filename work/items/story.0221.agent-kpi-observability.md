@@ -60,7 +60,7 @@ But today these KPIs exist only as type definitions. No metrics pipeline emits t
 | Local Grafana + Loki       | Dev       | `docker-compose`, `infra/compose/configs/alloy-config.*.alloy`     |
 | Alloy collector            | Running   | Scrapes Prometheus + ships logs to Loki                            |
 | Pino JSON logging          | Active    | All app logs → stdout → Alloy → Loki                               |
-| Prometheus `/metrics`      | Active    | `apps/web/src/shared/observability/server/metrics.ts`              |
+| Prometheus `/metrics`      | Active    | `apps/operator/src/shared/observability/server/metrics.ts`         |
 | Grafana MCP server         | Connected | `/mcp` reconnects, `query_prometheus`, `query_loki_logs` available |
 | RoleSpec + KPI types       | Defined   | `feat/mission-control-clean:docs/spec/agent-roles.md`              |
 | `monitoring-expert` skill  | Installed | `.claude/skills/monitoring-expert/`                                |

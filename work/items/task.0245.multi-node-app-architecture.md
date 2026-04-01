@@ -65,7 +65,7 @@ services/                      ← shared operator-level infrastructure
   sandbox-openclaw/
   sandbox-runtime/
 
-apps/web/                      ← operator app (rename to apps/operator in separate PR)
+apps/operator/                      ← operator app (rename to apps/operator in separate PR)
 ```
 
 ### Per-node contents
@@ -138,7 +138,7 @@ packages:
 
 ## Separate PR (not this task)
 
-- Rename `apps/web` → `apps/operator` — one clear rename PR, no mixing concerns
+- Rename `apps/operator` → `apps/operator` — one clear rename PR, no mixing concerns
 
 ## Non-goals
 

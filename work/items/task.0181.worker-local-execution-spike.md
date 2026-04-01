@@ -36,16 +36,16 @@ external_refs:
 
 task.0176 (2026-03-18 design decision) explicitly deferred worker-local execution:
 
-> Execution stays in `apps/web` via the existing internal API route. If worker-local execution becomes necessary later, that's a separate task with its own package (`graph-execution-host` or similar).
+> Execution stays in `apps/operator` via the existing internal API route. If worker-local execution becomes necessary later, that's a separate task with its own package (`graph-execution-host` or similar).
 
-Currently, the scheduler-worker calls `POST /api/internal/graphs/{graphId}/runs` via HTTP to execute graphs. The internal API route in `apps/web` owns the full execution stack (providers, decorators, factory, Redis pump). This adds an HTTP hop and couples execution availability to the Next.js process.
+Currently, the scheduler-worker calls `POST /api/internal/graphs/{graphId}/runs` via HTTP to execute graphs. The internal API route in `apps/operator` owns the full execution stack (providers, decorators, factory, Redis pump). This adds an HTTP hop and couples execution availability to the Next.js process.
 
 This spike evaluates whether that indirection causes measurable problems and, if so, designs the extraction.
 
 ## Requirements
 
 - Measure internal API hop latency overhead (p50/p95/p99) from existing Grafana metrics or targeted instrumentation
-- Document reliability failure modes: what happens when `apps/web` is deploying/restarting during a scheduled run?
+- Document reliability failure modes: what happens when `apps/operator` is deploying/restarting during a scheduled run?
 - Identify the full dependency tree that would need to move: providers, decorators, factory, env config, feature-layer functions (`executeStream`, `preflightCreditCheck`)
 - Evaluate package boundaries: can `@cogni/graph-execution-host` satisfy `PURE_LIBRARY` (no process lifecycle) or does it need to be a service?
 - If justified: design the package shape, migration plan, and which invariants change (particularly `EXECUTION_VIA_SERVICE_API` and `STREAM_PUBLISH_IN_EXECUTION_LAYER`)
@@ -54,7 +54,7 @@ This spike evaluates whether that indirection causes measurable problems and, if
 ## Trigger conditions (when to prioritize this spike)
 
 - Observed p95 latency > 200ms on the internal API hop (excluding graph execution time)
-- Observed execution failures during `apps/web` deploys
+- Observed execution failures during `apps/operator` deploys
 - Need for >1 execution host (horizontal scaling of graph execution independent of web)
 - Desire to eliminate the internal API route entirely
 

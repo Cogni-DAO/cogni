@@ -143,7 +143,7 @@ This is explicitly a Crawl limitation. Walk phase adds transactional guarantees.
 
 ### Step 6: Integration Tests
 
-- [x] Create `apps/web/tests/stack/payments/tigerbeetle-adapter.stack.test.ts` — stack integration tests against real TigerBeetle: single-ledger transfer, linked transfers, idempotent account creation, account balance queries
+- [x] Create `apps/operator/tests/stack/payments/tigerbeetle-adapter.stack.test.ts` — stack integration tests against real TigerBeetle: single-ledger transfer, linked transfers, idempotent account creation, account balance queries
 
 ## Out of Scope (separate tasks)
 

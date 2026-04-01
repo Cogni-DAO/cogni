@@ -84,7 +84,7 @@ This matches OpenAI's "externally managed token mode" where the host owns auth l
 
 ## Files
 
-- Modify: `apps/web/Dockerfile` — add `@openai/codex` to production dependencies or install separately
-- Modify: `apps/web/src/adapters/server/ai/codex/codex-llm.adapter.ts` — fix binary path resolution for Docker
+- Modify: `apps/operator/Dockerfile` — add `@openai/codex` to production dependencies or install separately
+- Modify: `apps/operator/src/adapters/server/ai/codex/codex-llm.adapter.ts` — fix binary path resolution for Docker
 - Create: per-connection serialization mechanism (location TBD based on approach)
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — integrate serialization
+- Modify: `apps/operator/src/bootstrap/graph-executor.factory.ts` — integrate serialization

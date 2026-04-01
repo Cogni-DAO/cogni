@@ -53,15 +53,15 @@ last_commit: 04ee2baf
 
 ## Pointers
 
-| File / Resource                                                | Why it matters                                                                  |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `apps/web/src/app/api/v1/auth/openai-codex/exchange/route.ts`  | Token exchange — RLS fix needed here                                            |
-| `apps/web/src/app/api/v1/auth/openai-codex/authorize/route.ts` | Device code initiation                                                          |
-| `apps/web/src/app/api/v1/auth/openai-codex/status/route.ts`    | Status check — also affected by RLS (silent empty result)                       |
-| `apps/web/src/app/(app)/profile/view.tsx`                      | ChatGptConnectFlow component (lines ~290-520)                                   |
-| `packages/db-client/src/tenant-scope.ts`                       | `withTenantScope` — the correct RLS pattern                                     |
-| `packages/db-schema/src/connections.ts`                        | Table schema + RLS policy + unique index                                        |
-| `apps/web/src/shared/crypto/aead.ts`                           | AEAD encrypt/decrypt — returns Buffer for bytea column                          |
-| `.claude/plans/dreamy-growing-whale.md`                        | Drafted PKCE redesign plan (paused)                                             |
-| PR #643                                                        | Env propagation PR against staging                                              |
-| `scripts/ci/deploy.sh`                                         | 3 places for new env vars: OPTIONAL_SECRETS, append_env_if_set, SSH passthrough |
+| File / Resource                                                     | Why it matters                                                                  |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `apps/operator/src/app/api/v1/auth/openai-codex/exchange/route.ts`  | Token exchange — RLS fix needed here                                            |
+| `apps/operator/src/app/api/v1/auth/openai-codex/authorize/route.ts` | Device code initiation                                                          |
+| `apps/operator/src/app/api/v1/auth/openai-codex/status/route.ts`    | Status check — also affected by RLS (silent empty result)                       |
+| `apps/operator/src/app/(app)/profile/view.tsx`                      | ChatGptConnectFlow component (lines ~290-520)                                   |
+| `packages/db-client/src/tenant-scope.ts`                            | `withTenantScope` — the correct RLS pattern                                     |
+| `packages/db-schema/src/connections.ts`                             | Table schema + RLS policy + unique index                                        |
+| `apps/operator/src/shared/crypto/aead.ts`                           | AEAD encrypt/decrypt — returns Buffer for bytea column                          |
+| `.claude/plans/dreamy-growing-whale.md`                             | Drafted PKCE redesign plan (paused)                                             |
+| PR #643                                                             | Env propagation PR against staging                                              |
+| `scripts/ci/deploy.sh`                                              | 3 places for new env vars: OPTIONAL_SECRETS, append_env_if_set, SSH passthrough |

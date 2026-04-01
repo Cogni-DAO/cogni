@@ -35,7 +35,7 @@ external_refs:
 - `packages/market-provider/` — Polymarket + Kalshi adapters (port pattern)
 - `packages/langgraph-graphs/src/graphs/poly-brain/` — prediction market graph
 - `packages/ai-tools/src/tools/market-list.ts` — AI tool for market queries
-- `apps/web/src/bootstrap/` — container wiring for market capability
+- `apps/operator/src/bootstrap/` — container wiring for market capability
 
 The fork diverged because we didn't yet support multiple node apps in the monorepo.
 Now we do (pnpm workspaces already resolve `apps/*`). Time to absorb.
@@ -51,7 +51,7 @@ Now we do (pnpm workspaces already resolve `apps/*`). Time to absorb.
 
 **Each node = one or more apps under `apps/`.** Current:
 
-- `apps/web` — operator + default node (chat, admin, AI runtime)
+- `apps/operator` — operator + default node (chat, admin, AI runtime)
 - `apps/poly` — poly prediction market node (landing page, eventually full app)
 
 Future pattern (per node-operator-contract goals):
@@ -68,13 +68,13 @@ Future pattern (per node-operator-contract goals):
 2. Copy `packages/market-provider/` from same branch
 3. Cherry-pick poly-brain graph into `packages/langgraph-graphs/`
 4. Cherry-pick market-list tool into `packages/ai-tools/`
-5. Wire bootstrap bindings in `apps/web/`
+5. Wire bootstrap bindings in `apps/operator/`
 6. Validate: `pnpm install`, typecheck, build, unit tests
 
 ### Phase 2: Verify parity (follow-up)
 
 1. Run apps/poly dev server — confirm landing page renders
-2. Run apps/web chat — confirm poly-brain graph appears in picker
+2. Run apps/operator chat — confirm poly-brain graph appears in picker
 3. Run market-list tool — confirm Polymarket/Kalshi adapters work
 
 ### Phase 3: Archive fork
@@ -85,7 +85,7 @@ Future pattern (per node-operator-contract goals):
 
 ## Non-goals
 
-- Resy-specific features (no separate resy app yet — those features live in apps/web)
+- Resy-specific features (no separate resy app yet — those features live in apps/operator)
 - CI/CD per-app isolation (that's proj.cicd-services-gitops P2+)
 - Node provisioning automation (that's node-launch.md scope)
 
@@ -96,7 +96,7 @@ Future pattern (per node-operator-contract goals):
 - [ ] `pnpm --filter @cogni/ai-tools typecheck` — passes with market-list tool
 - [ ] `pnpm --filter @cogni/langgraph-graphs typecheck` — passes with poly-brain graph
 - [ ] `pnpm --filter @cogni/market-provider typecheck` — passes
-- [ ] `pnpm --filter web typecheck` — passes with MarketCapability wiring
+- [ ] `pnpm --filter operator typecheck` — passes with MarketCapability wiring
 - [ ] Unit tests: 120 tests across 17 files (ai-tools, langgraph-graphs, market-provider)
 - [ ] `apps/poly` dev server renders landing page on port 3100
-- [ ] `apps/web` chat shows "Poly Brain" in graph picker
+- [ ] `apps/operator` chat shows "Poly Brain" in graph picker

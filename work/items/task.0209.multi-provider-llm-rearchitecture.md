@@ -61,10 +61,10 @@ One authority per decision. `ModelCatalogPort` owns "what's selectable." `ModelR
 #### New
 
 - Create: `packages/ai-core/src/model/model-ref.ts` — `ModelRef` type, `ModelCapabilities` type (shared across packages)
-- Create: `apps/web/src/ports/model-catalog.port.ts` — `ModelCatalogPort`, `ModelOption` (imports `ModelRef` from `@cogni/ai-core`)
-- Create: `apps/web/src/adapters/server/ai/model-catalog/aggregating.adapter.ts` — combines providers, applies capability filter
-- Create: `apps/web/src/adapters/server/ai/model-catalog/litellm.adapter.ts` — fetches from LiteLLM `/model/info`
-- Create: `apps/web/src/adapters/server/ai/model-catalog/chatgpt.adapter.ts` — returns ChatGPT models when connection exists
+- Create: `apps/operator/src/ports/model-catalog.port.ts` — `ModelCatalogPort`, `ModelOption` (imports `ModelRef` from `@cogni/ai-core`)
+- Create: `apps/operator/src/adapters/server/ai/model-catalog/aggregating.adapter.ts` — combines providers, applies capability filter
+- Create: `apps/operator/src/adapters/server/ai/model-catalog/litellm.adapter.ts` — fetches from LiteLLM `/model/info`
+- Create: `apps/operator/src/adapters/server/ai/model-catalog/chatgpt.adapter.ts` — returns ChatGPT models when connection exists
 
 #### Modify — core types (packages)
 
@@ -74,30 +74,30 @@ One authority per decision. `ModelCatalogPort` owns "what's selectable." `ModelR
 
 #### Modify — core types (app)
 
-- Modify: `apps/web/src/contracts/ai.models.v1.contract.ts` — `ModelOption` with `ref: ModelRef`, `requiresPlatformCredits`, `capabilities`
-- Modify: `apps/web/src/contracts/ai.chat.v1.contract.ts` — `modelRef` replaces `model` + `modelConnectionId`
+- Modify: `apps/operator/src/contracts/ai.models.v1.contract.ts` — `ModelOption` with `ref: ModelRef`, `requiresPlatformCredits`, `capabilities`
+- Modify: `apps/operator/src/contracts/ai.chat.v1.contract.ts` — `modelRef` replaces `model` + `modelConnectionId`
 
 #### Modify — execution pipeline
 
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — provider registry + `resolveLlmService` from `modelRef.providerKey`, delete override pattern
-- Modify: `apps/web/src/adapters/server/ai/execution-scope.ts` — `llmService: LlmService` (resolved, not override)
-- Modify: `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — receive resolved `LlmService` as param to `executeCompletionUnit()`
-- Modify: `apps/web/src/adapters/server/ai/preflight-credit-check.decorator.ts` — check `requiresPlatformCredits` from catalog, not provider key comparison
-- Modify: `apps/web/src/ports/connection-broker.port.ts` — widen `resolve()` scope to `{ actorId, billingAccountId }` instead of bare `billingAccountId`
+- Modify: `apps/operator/src/bootstrap/graph-executor.factory.ts` — provider registry + `resolveLlmService` from `modelRef.providerKey`, delete override pattern
+- Modify: `apps/operator/src/adapters/server/ai/execution-scope.ts` — `llmService: LlmService` (resolved, not override)
+- Modify: `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — receive resolved `LlmService` as param to `executeCompletionUnit()`
+- Modify: `apps/operator/src/adapters/server/ai/preflight-credit-check.decorator.ts` — check `requiresPlatformCredits` from catalog, not provider key comparison
+- Modify: `apps/operator/src/ports/connection-broker.port.ts` — widen `resolve()` scope to `{ actorId, billingAccountId }` instead of bare `billingAccountId`
 
 #### Modify — routes
 
-- Modify: `apps/web/src/app/api/v1/ai/models/route.ts` — call `ModelCatalogPort` instead of LiteLLM directly
-- Modify: `apps/web/src/app/api/v1/ai/chat/route.ts` — validate `modelRef` via catalog, remove `isModelAllowed` hack
-- Modify: `apps/web/src/app/api/v1/schedules/route.ts` — remove inline credit check, use catalog `requiresPlatformCredits`
-- Modify: `apps/web/src/app/_facades/ai/completion.server.ts` — pass `modelRef` to Temporal
-- Modify: `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — extract `modelRef` from input
+- Modify: `apps/operator/src/app/api/v1/ai/models/route.ts` — call `ModelCatalogPort` instead of LiteLLM directly
+- Modify: `apps/operator/src/app/api/v1/ai/chat/route.ts` — validate `modelRef` via catalog, remove `isModelAllowed` hack
+- Modify: `apps/operator/src/app/api/v1/schedules/route.ts` — remove inline credit check, use catalog `requiresPlatformCredits`
+- Modify: `apps/operator/src/app/_facades/ai/completion.server.ts` — pass `modelRef` to Temporal
+- Modify: `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — extract `modelRef` from input
 
 #### Modify — UI
 
-- Modify: `apps/web/src/features/ai/components/ModelPicker.tsx` — render from API only, delete `CHATGPT_MODELS` const
-- Modify: `apps/web/src/features/ai/components/ChatComposerExtras.tsx` — selection value is `ModelRef`
-- Modify: `apps/web/src/features/ai/chat/providers/ChatRuntimeProvider.client.tsx` — send `modelRef` in request body
+- Modify: `apps/operator/src/features/ai/components/ModelPicker.tsx` — render from API only, delete `CHATGPT_MODELS` const
+- Modify: `apps/operator/src/features/ai/components/ChatComposerExtras.tsx` — selection value is `ModelRef`
+- Modify: `apps/operator/src/features/ai/chat/providers/ChatRuntimeProvider.client.tsx` — send `modelRef` in request body
 
 #### Delete
 

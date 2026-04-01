@@ -49,7 +49,7 @@ Define the invariants, schema, and architecture for routing all graph execution 
 
 7. **REDIS_IS_STREAM_PLANE**: Redis holds only ephemeral stream data (events in-flight). PostgreSQL is the durable source of truth for all persisted state. Redis loss = stream interruption, not data loss.
 
-8. **STREAM_PUBLISH_IN_EXECUTION_LAYER**: The execution layer (internal API route in `apps/web`) publishes events to Redis as it drains the executor stream. The scheduler-worker activity triggers execution via HTTP but does not publish to Redis directly. This keeps the full execution stack (providers, decorators, factory) in `apps/web` per `EXECUTION_VIA_SERVICE_API`.
+8. **STREAM_PUBLISH_IN_EXECUTION_LAYER**: The execution layer (internal API route in `apps/operator`) publishes events to Redis as it drains the executor stream. The scheduler-worker activity triggers execution via HTTP but does not publish to Redis directly. This keeps the full execution stack (providers, decorators, factory) in `apps/operator` per `EXECUTION_VIA_SERVICE_API`.
 
 9. **PUMP_TO_COMPLETION_VIA_REDIS**: The internal API route drains `AsyncIterable<AiEvent>` to completion and publishes each event to Redis, regardless of subscriber count. Same billing safety guarantee as today's `RunEventRelay`.
 
@@ -193,12 +193,12 @@ Rename `schedule_runs` to `graph_runs` and extend with trigger provenance column
 │   1. Activity: validateGrantActivity(grantRef)                         │
 │   2. Activity: createRunRecordActivity(runId, triggerContext)           │
 │   3. Activity: executeGraphActivity(runId, graphId, input)             │
-│      └─► POST /api/internal/graphs/{graphId}/runs (apps/web)           │
+│      └─► POST /api/internal/graphs/{graphId}/runs (apps/operator)           │
 │   4. Activity: finalizeRunActivity(runId, result)                      │
 └────────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
-┌─ EXECUTION LAYER (apps/web internal API) ────────────────────────────┐
+┌─ EXECUTION LAYER (apps/operator internal API) ────────────────────────────┐
 │ POST /api/internal/graphs/{graphId}/runs                               │
 │   • Validates grant (defense-in-depth)                                 │
 │   • Calls GraphExecutorPort.runGraph()                                 │
@@ -219,7 +219,7 @@ Rename `schedule_runs` to `graph_runs` and extend with trigger provenance column
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Execution host decision (2026-03-18):** The full `GraphExecutorPort` composition root (providers, decorators, factory) lives in `apps/web`. The scheduler-worker remains a lean Temporal worker per `EXECUTION_VIA_SERVICE_API`. Redis publishing happens in the internal API route (execution layer), not in the Temporal activity (orchestration layer). This keeps the three-plane separation clean: Temporal orchestrates, apps/web executes and publishes to Redis, Redis delivers to SSE endpoints.
+**Execution host decision (2026-03-18):** The full `GraphExecutorPort` composition root (providers, decorators, factory) lives in `apps/operator`. The scheduler-worker remains a lean Temporal worker per `EXECUTION_VIA_SERVICE_API`. Redis publishing happens in the internal API route (execution layer), not in the Temporal activity (orchestration layer). This keeps the three-plane separation clean: Temporal orchestrates, apps/operator executes and publishes to Redis, Redis delivers to SSE endpoints.
 
 **Why Redis Streams (not Pub/Sub):** Redis Pub/Sub is fire-and-forget (at-most-once). Streams are an append-log with cursor-based reads — supports replay from any position, enabling reconnection after browser close.
 
@@ -302,7 +302,7 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 - **Network**: `internal` (production), `cogni-edge` with port 6379 exposed (dev)
 - **Healthcheck**: `redis-cli ping` with 10s interval
 - **Env**: `REDIS_URL` (optional, defaults to `redis://localhost:6379`), validated via Zod in `server-env.ts`
-- **Dependency**: `ioredis ^5.6.1` in `apps/web/package.json` (ships own types)
+- **Dependency**: `ioredis ^5.6.1` in `apps/operator/package.json` (ships own types)
 
 ### Risks and Mitigations
 
@@ -320,16 +320,16 @@ Redis 7 is available in all runtime stacks (dev, test, prod) via Docker Compose.
 
 **Implemented (task.0174, task.0175):**
 
-| File                                                           | Purpose                                          |
-| -------------------------------------------------------------- | ------------------------------------------------ |
-| `packages/graph-execution-core/src/run-stream.port.ts`         | RunStreamPort interface + stream constants       |
-| `apps/web/src/adapters/server/ai/redis-run-stream.adapter.ts`  | RedisRunStreamAdapter (XADD/XREAD/XRANGE/EXPIRE) |
-| `apps/web/src/bootstrap/container.ts`                          | Redis client + RunStreamPort wiring              |
-| `apps/web/src/shared/env/server-env.ts`                        | REDIS_URL env var (optional, Zod validated)      |
-| `apps/web/src/contracts/run-stream.contract.ts`                | Zod schema for stream entry wire format          |
-| `infra/compose/runtime/docker-compose.yml`                     | Redis 7 service (production)                     |
-| `infra/compose/runtime/docker-compose.dev.yml`                 | Redis 7 service (dev, port 6379 exposed)         |
-| `apps/web/tests/unit/adapters/server/ai/redis-run-stream.*.ts` | Unit tests with mocked ioredis (11 tests)        |
+| File                                                                | Purpose                                          |
+| ------------------------------------------------------------------- | ------------------------------------------------ |
+| `packages/graph-execution-core/src/run-stream.port.ts`              | RunStreamPort interface + stream constants       |
+| `apps/operator/src/adapters/server/ai/redis-run-stream.adapter.ts`  | RedisRunStreamAdapter (XADD/XREAD/XRANGE/EXPIRE) |
+| `apps/operator/src/bootstrap/container.ts`                          | Redis client + RunStreamPort wiring              |
+| `apps/operator/src/shared/env/server-env.ts`                        | REDIS_URL env var (optional, Zod validated)      |
+| `apps/operator/src/contracts/run-stream.contract.ts`                | Zod schema for stream entry wire format          |
+| `infra/compose/runtime/docker-compose.yml`                          | Redis 7 service (production)                     |
+| `infra/compose/runtime/docker-compose.dev.yml`                      | Redis 7 service (dev, port 6379 exposed)         |
+| `apps/operator/tests/unit/adapters/server/ai/redis-run-stream.*.ts` | Unit tests with mocked ioredis (11 tests)        |
 
 **Implemented (task.0176):**
 
@@ -355,19 +355,19 @@ Scheduler-worker can now import shared execution contracts without violating `PA
 
 **Implemented (task.0182):**
 
-| File                                                      | Purpose                                                            |
-| --------------------------------------------------------- | ------------------------------------------------------------------ |
-| `apps/web/src/app/api/v1/ai/runs/[runId]/stream/route.ts` | SSE reconnection endpoint — Last-Event-ID replay from Redis Stream |
-| `apps/web/src/contracts/runs.stream.v1.contract.ts`       | Path parameter validation (runId UUID)                             |
+| File                                                           | Purpose                                                            |
+| -------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `apps/operator/src/app/api/v1/ai/runs/[runId]/stream/route.ts` | SSE reconnection endpoint — Last-Event-ID replay from Redis Stream |
+| `apps/operator/src/contracts/runs.stream.v1.contract.ts`       | Path parameter validation (runId UUID)                             |
 
 **Planned (future tasks):**
 
-| File                                                            | Purpose                                                                     | Task      |
-| --------------------------------------------------------------- | --------------------------------------------------------------------------- | --------- |
-| `services/scheduler-worker/src/workflows/graph-run.workflow.ts` | GraphRunWorkflow (replaces GovernanceScheduledRunWorkflow)                  | task.0176 |
-| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts`  | Add Redis Stream publishing as stream drains (PUMP_TO_COMPLETION_VIA_REDIS) | task.0176 |
-| `apps/web/src/app/api/v1/ai/chat/route.ts`                      | API trigger (starts workflow → subscribes Redis → SSE)                      | task.0177 |
-| `apps/web/src/features/ai/services/ai_runtime.ts`               | AI runtime (workflow start + Redis subscribe)                               | task.0177 |
+| File                                                                | Purpose                                                                     | Task      |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------- | --------- |
+| `services/scheduler-worker/src/workflows/graph-run.workflow.ts`     | GraphRunWorkflow (replaces GovernanceScheduledRunWorkflow)                  | task.0176 |
+| `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` | Add Redis Stream publishing as stream drains (PUMP_TO_COMPLETION_VIA_REDIS) | task.0176 |
+| `apps/operator/src/app/api/v1/ai/chat/route.ts`                     | API trigger (starts workflow → subscribes Redis → SSE)                      | task.0177 |
+| `apps/operator/src/features/ai/services/ai_runtime.ts`              | AI runtime (workflow start + Redis subscribe)                               | task.0177 |
 
 ## Acceptance Checks
 

@@ -36,9 +36,9 @@ external_refs:
 
 ## Allowed Changes
 
-- `apps/web/src/components/kit/data-display/AgentAvatar.tsx` — new component
-- `apps/web/src/components/kit/data-display/RunCard.tsx` — add avatar slot
-- `apps/web/public/assets/agents/` — avatar asset files
+- `apps/operator/src/components/kit/data-display/AgentAvatar.tsx` — new component
+- `apps/operator/src/components/kit/data-display/RunCard.tsx` — add avatar slot
+- `apps/operator/public/assets/agents/` — avatar asset files
 - `package.json` — add Rive or Lottie runtime dependency
 
 ## Plan

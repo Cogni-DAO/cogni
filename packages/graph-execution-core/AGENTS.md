@@ -87,4 +87,4 @@ pnpm --filter @cogni/graph-execution-core build
 
 - GraphRunRequest carries only business input; billing/tracing resolved at app layer
 - ExecutionContext is optional second arg to runGraph(), not on the request
-- Consumers: `apps/web`, `services/scheduler-worker`, `packages/scheduler-core`
+- Consumers: `apps/operator`, `services/scheduler-worker`, `packages/scheduler-core`

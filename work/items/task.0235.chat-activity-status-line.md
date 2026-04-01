@@ -39,9 +39,9 @@ external_refs:
 
 ## Allowed Changes
 
-- `apps/web/src/components/vendor/assistant-ui/thread.tsx` — add StatusLine to AssistantMessage or Thread
-- `apps/web/src/components/kit/chat/StatusLine.tsx` — new component
-- `apps/web/src/features/ai/chat/` — hook to consume status events if needed
+- `apps/operator/src/components/vendor/assistant-ui/thread.tsx` — add StatusLine to AssistantMessage or Thread
+- `apps/operator/src/components/kit/chat/StatusLine.tsx` — new component
+- `apps/operator/src/features/ai/chat/` — hook to consume status events if needed
 
 ## Plan
 

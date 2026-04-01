@@ -103,7 +103,7 @@ The COPY path contains `@0.116.0-linux-x64` — when `@openai/codex` is upgraded
 
 ## Allowed Changes
 
-- `apps/web/Dockerfile` — replace broken `pnpm add -g` with `COPY --from=builder` for platform binary
+- `apps/operator/Dockerfile` — replace broken `pnpm add -g` with `COPY --from=builder` for platform binary
 
 ## Validation
 

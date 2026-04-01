@@ -79,10 +79,10 @@ Add a simple in-memory mutex map keyed by connectionId. Before refresh, acquire 
 
 ## Files
 
-- Modify: `apps/web/src/app/api/v1/auth/openai-codex/authorize/route.ts` — set encrypted cookie, return only `{ url }`
-- Modify: `apps/web/src/app/api/v1/auth/openai-codex/exchange/route.ts` — read cookie, validate URL origin, drop client-sent verifier/state
-- Modify: `apps/web/src/app/(app)/profile/view.tsx` — remove verifier/state from client state, send only `{ url }` to exchange
-- Modify: `apps/web/src/adapters/server/connections/drizzle-broker.adapter.ts` — add refresh mutex
+- Modify: `apps/operator/src/app/api/v1/auth/openai-codex/authorize/route.ts` — set encrypted cookie, return only `{ url }`
+- Modify: `apps/operator/src/app/api/v1/auth/openai-codex/exchange/route.ts` — read cookie, validate URL origin, drop client-sent verifier/state
+- Modify: `apps/operator/src/app/(app)/profile/view.tsx` — remove verifier/state from client state, send only `{ url }` to exchange
+- Modify: `apps/operator/src/adapters/server/connections/drizzle-broker.adapter.ts` — add refresh mutex
 
 ## Validation
 

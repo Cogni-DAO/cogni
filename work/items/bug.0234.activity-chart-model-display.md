@@ -72,16 +72,16 @@ UsageFact.model carries it → billing writes to DB → facade reads clean
 
 ## Allowed Changes
 
-- `apps/web/src/ports/llm.port.ts` — add `resolvedDisplayName` to `LlmCompletionResult`
-- `apps/web/src/adapters/server/ai/litellm.adapter.ts` — set `resolvedDisplayName` from catalog
-- `apps/web/src/adapters/server/ai/codex/codex-llm.adapter.ts` — set `resolvedModel` + `resolvedDisplayName`
-- `apps/web/src/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.ts` — set `resolvedDisplayName`
-- `apps/web/src/adapters/server/ai/providers/codex.provider.ts` — export `CODEX_MODEL_LABELS`
-- `apps/web/src/adapters/server/ai/providers/openai-compatible.provider.ts` — export `humanizeModelId`
-- `apps/web/src/features/ai/services/completion.ts` — prefer display name, fallback to `resolvedModel`
-- `apps/web/src/app/api/internal/billing/ingest/route.ts` — resolve display name for callback path
-- `apps/web/src/shared/ai/model-catalog.server.ts` — add sync `getDisplayNameFromCache()`
-- `apps/web/src/components/vendor/shadcn/chart.tsx` — legend flex-wrap + truncation
+- `apps/operator/src/ports/llm.port.ts` — add `resolvedDisplayName` to `LlmCompletionResult`
+- `apps/operator/src/adapters/server/ai/litellm.adapter.ts` — set `resolvedDisplayName` from catalog
+- `apps/operator/src/adapters/server/ai/codex/codex-llm.adapter.ts` — set `resolvedModel` + `resolvedDisplayName`
+- `apps/operator/src/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.ts` — set `resolvedDisplayName`
+- `apps/operator/src/adapters/server/ai/providers/codex.provider.ts` — export `CODEX_MODEL_LABELS`
+- `apps/operator/src/adapters/server/ai/providers/openai-compatible.provider.ts` — export `humanizeModelId`
+- `apps/operator/src/features/ai/services/completion.ts` — prefer display name, fallback to `resolvedModel`
+- `apps/operator/src/app/api/internal/billing/ingest/route.ts` — resolve display name for callback path
+- `apps/operator/src/shared/ai/model-catalog.server.ts` — add sync `getDisplayNameFromCache()`
+- `apps/operator/src/components/vendor/shadcn/chart.tsx` — legend flex-wrap + truncation
 
 ## Validation
 

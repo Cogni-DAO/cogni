@@ -54,7 +54,7 @@ Graph execution keeps the shared port surface clean while the app runtime still 
 
 - Existing `GraphExecutorPort` contract in `@cogni/graph-execution-core`
 - Existing `BillingGraphExecutorDecorator`, `PreflightCreditCheckDecorator`, and `ObservabilityGraphExecutorDecorator`
-- Existing bootstrap entrypoint in `apps/web/src/bootstrap/graph-executor.factory.ts`
+- Existing bootstrap entrypoint in `apps/operator/src/bootstrap/graph-executor.factory.ts`
 
 **Rejected**:
 
@@ -75,17 +75,17 @@ Graph execution keeps the shared port surface clean while the app runtime still 
 
 ### Files
 
-- Create: `apps/web/src/adapters/server/ai/billing-enrichment.decorator.ts` — add billing identity to neutral `usage_report` events in the wrapper layer.
-- Modify: `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — emit neutral usage facts.
-- Modify: `apps/web/src/adapters/server/ai/langgraph/dev/stream-translator.ts` — emit neutral usage facts.
-- Modify: `apps/web/src/adapters/server/sandbox/sandbox-graph.provider.ts` — emit neutral usage facts.
-- Note: `apps/web/src/adapters/server/ai/execution-scope.ts` is unchanged here; ALS still carries tenant-scoped identity for provider behavior outside usage fact emission.
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — split static inner executor creation from per-run wrapper composition in `runGraphWithScope()`, and make bootstrap the only owner of wrapper composition.
-- Modify: `apps/web/src/features/ai/services/ai_runtime.ts` — collapse runtime deps back to an executor-only interface.
-- Modify: `apps/web/src/app/_facades/ai/completion.server.ts` — stop passing billing/scope launch primitives into the feature layer.
-- Modify: `apps/web/src/app/_facades/review/dispatch.server.ts` — remove inline scoped-executor wrapper.
-- Modify: `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — use the new launcher composition shape.
-- Test: `apps/web/tests/unit/adapters/server/ai/*.test.ts` and `apps/web/tests/unit/features/ai/services/ai-runtime-relay.test.ts` — cover neutral usage facts, enrichment, and simplified runtime deps.
+- Create: `apps/operator/src/adapters/server/ai/billing-enrichment.decorator.ts` — add billing identity to neutral `usage_report` events in the wrapper layer.
+- Modify: `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — emit neutral usage facts.
+- Modify: `apps/operator/src/adapters/server/ai/langgraph/dev/stream-translator.ts` — emit neutral usage facts.
+- Modify: `apps/operator/src/adapters/server/sandbox/sandbox-graph.provider.ts` — emit neutral usage facts.
+- Note: `apps/operator/src/adapters/server/ai/execution-scope.ts` is unchanged here; ALS still carries tenant-scoped identity for provider behavior outside usage fact emission.
+- Modify: `apps/operator/src/bootstrap/graph-executor.factory.ts` — split static inner executor creation from per-run wrapper composition in `runGraphWithScope()`, and make bootstrap the only owner of wrapper composition.
+- Modify: `apps/operator/src/features/ai/services/ai_runtime.ts` — collapse runtime deps back to an executor-only interface.
+- Modify: `apps/operator/src/app/_facades/ai/completion.server.ts` — stop passing billing/scope launch primitives into the feature layer.
+- Modify: `apps/operator/src/app/_facades/review/dispatch.server.ts` — remove inline scoped-executor wrapper.
+- Modify: `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — use the new launcher composition shape.
+- Test: `apps/operator/tests/unit/adapters/server/ai/*.test.ts` and `apps/operator/tests/unit/features/ai/services/ai-runtime-relay.test.ts` — cover neutral usage facts, enrichment, and simplified runtime deps.
 
 ## Implementation Notes
 
@@ -103,17 +103,17 @@ Graph execution keeps the shared port surface clean while the app runtime still 
 
 ## Allowed Changes
 
-- `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts`
-- `apps/web/src/adapters/server/ai/langgraph/dev/stream-translator.ts`
-- `apps/web/src/adapters/server/sandbox/sandbox-graph.provider.ts`
-- `apps/web/src/bootstrap/graph-executor.factory.ts`
-- `apps/web/src/features/ai/services/ai_runtime.ts`
-- `apps/web/src/app/_facades/ai/completion.server.ts`
-- `apps/web/src/app/_facades/review/dispatch.server.ts`
-- `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts`
-- `apps/web/src/adapters/server/ai/preflight-credit-check.decorator.ts`
-- `apps/web/src/adapters/server/ai/observability-executor.decorator.ts`
-- `apps/web/src/features/ai/services/billing.ts`
+- `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts`
+- `apps/operator/src/adapters/server/ai/langgraph/dev/stream-translator.ts`
+- `apps/operator/src/adapters/server/sandbox/sandbox-graph.provider.ts`
+- `apps/operator/src/bootstrap/graph-executor.factory.ts`
+- `apps/operator/src/features/ai/services/ai_runtime.ts`
+- `apps/operator/src/app/_facades/ai/completion.server.ts`
+- `apps/operator/src/app/_facades/review/dispatch.server.ts`
+- `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts`
+- `apps/operator/src/adapters/server/ai/preflight-credit-check.decorator.ts`
+- `apps/operator/src/adapters/server/ai/observability-executor.decorator.ts`
+- `apps/operator/src/features/ai/services/billing.ts`
 - `packages/ai-core/src/usage/usage.ts`
 - New: billing enrichment decorator
 - Tests

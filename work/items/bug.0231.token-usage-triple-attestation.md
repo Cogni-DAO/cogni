@@ -69,11 +69,11 @@ One authoritative token count per LLM call. App logs, `ai_invocation_summaries`,
 
 ## Allowed Changes
 
-- `apps/web/src/adapters/server/ai/litellm.adapter.ts` — SSE usage handling
-- `apps/web/src/features/ai/services/completion.ts` — token count sourcing
-- `apps/web/src/features/ai/services/metrics.ts` — Prometheus metric source
-- `apps/web/src/app/api/internal/billing/ingest/route.ts` — token writeback if needed
-- `apps/web/src/shared/observability/events/ai.ts` — event type fields
+- `apps/operator/src/adapters/server/ai/litellm.adapter.ts` — SSE usage handling
+- `apps/operator/src/features/ai/services/completion.ts` — token count sourcing
+- `apps/operator/src/features/ai/services/metrics.ts` — Prometheus metric source
+- `apps/operator/src/app/api/internal/billing/ingest/route.ts` — token writeback if needed
+- `apps/operator/src/shared/observability/events/ai.ts` — event type fields
 
 ## Plan
 

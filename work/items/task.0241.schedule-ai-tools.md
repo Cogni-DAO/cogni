@@ -51,11 +51,11 @@ Schedules are the primitive. No "day plan" abstraction. The planner UI is a time
 - `packages/ai-tools/src/capabilities/` — new ScheduleCapability interface
 - `packages/ai-tools/src/tools/` — 2 new tool files
 - `packages/ai-tools/src/catalog.ts` + `index.ts` — register + export
-- `apps/web/src/adapters/server/ai/execution-scope.ts` — add actorUserId + billingAccountId to ExecutionScope
-- `apps/web/src/bootstrap/graph-executor.factory.ts` — pass actorUserId into runInScope
-- `apps/web/src/bootstrap/capabilities/` — capability implementation (reads from ALS)
-- `apps/web/src/bootstrap/ai/tool-bindings.ts` — wire capability
-- `apps/web/src/bootstrap/container.ts` — create capability
+- `apps/operator/src/adapters/server/ai/execution-scope.ts` — add actorUserId + billingAccountId to ExecutionScope
+- `apps/operator/src/bootstrap/graph-executor.factory.ts` — pass actorUserId into runInScope
+- `apps/operator/src/bootstrap/capabilities/` — capability implementation (reads from ALS)
+- `apps/operator/src/bootstrap/ai/tool-bindings.ts` — wire capability
+- `apps/operator/src/bootstrap/container.ts` — create capability
 - `packages/langgraph-graphs/src/graphs/{operator,brain}/tools.ts` — add tool IDs
 
 ## Plan
@@ -64,7 +64,7 @@ Schedules are the primitive. No "day plan" abstraction. The planner UI is a time
 - [ ] Create `packages/ai-tools/src/tools/schedule-list.ts` — contract + factory + stub
 - [ ] Create `packages/ai-tools/src/tools/schedule-manage.ts` — action-discriminated contract + factory + stub
 - [ ] Register in catalog + export from index
-- [ ] Create `apps/web/src/bootstrap/capabilities/schedule.ts` — impl wrapping ScheduleUserPort
+- [ ] Create `apps/operator/src/bootstrap/capabilities/schedule.ts` — impl wrapping ScheduleUserPort
 - [ ] Wire in tool-bindings.ts + container.ts
 - [ ] Add tool IDs to operator + brain graphs
 - [ ] Create `/planner` page + view (24-hour grid, reuses fetchSchedules + fetchAgents)

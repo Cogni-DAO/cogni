@@ -36,9 +36,9 @@ external_refs:
 
 ## Allowed Changes
 
-- `apps/web/src/features/ai/hooks/useRunActivity.ts` — new hook
-- `apps/web/src/app/(app)/dashboard/view.tsx` — wire hook to running cards
-- `apps/web/src/components/kit/data-display/RunCard.tsx` — minor: accept external statusLabel override
+- `apps/operator/src/features/ai/hooks/useRunActivity.ts` — new hook
+- `apps/operator/src/app/(app)/dashboard/view.tsx` — wire hook to running cards
+- `apps/operator/src/components/kit/data-display/RunCard.tsx` — minor: accept external statusLabel override
 
 ## Plan
 
