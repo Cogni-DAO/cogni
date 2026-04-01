@@ -13,7 +13,7 @@ assignees: []
 credit:
 project:
 branch: fix/epoch-selection-cross-epoch-dedup
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/686
 reviewer:
 revision: 2
 blocked_by:
