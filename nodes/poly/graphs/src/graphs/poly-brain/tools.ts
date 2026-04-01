@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/langgraph-graphs/graphs/poly-brain/tools`
+ * Module: `@cogni/poly-graphs/graphs/poly-brain/tools`
  * Purpose: Tool IDs for poly-brain graph (single source of truth).
  * Scope: Exports tool capability metadata. Does not enforce policy.
  * Invariants: SINGLE_SOURCE_OF_TRUTH, CAPABILITY_NOT_POLICY.

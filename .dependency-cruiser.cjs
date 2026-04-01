@@ -33,6 +33,7 @@ const srcLayers = {
 // Monorepo boundary layers (packages/)
 const monorepoLayers = {
   packages: "^packages/",
+  nodes: "^nodes/",
   // services: "^services/",
 };
 
@@ -251,6 +252,18 @@ module.exports = {
       to: { path: "^services/" },
     },
 
+    // nodes/ can import within itself (node-local)
+    {
+      from: { path: "^nodes/" },
+      to: { path: "^nodes/" },
+    },
+
+    // nodes/ can import from shared packages
+    {
+      from: { path: "^nodes/" },
+      to: { path: "^packages/" },
+    },
+
     // scripts → bootstrap (CLI wrappers that call job modules)
     {
       from: { path: "^apps/operator/src/scripts" },
@@ -411,6 +424,46 @@ module.exports = {
         path: "^apps/operator/src/",
       },
       comment: "services/ cannot depend on Next.js app code in src/",
+    },
+
+    // nodes/ cannot import operator apps/ or services/
+    {
+      name: "node-not-operator",
+      severity: "error",
+      from: {
+        path: "^nodes/",
+      },
+      to: {
+        path: ["^apps/", "^services/"],
+      },
+      comment: "nodes/ must not depend on operator apps/ or services/",
+    },
+
+    // shared packages cannot depend on node-specific code
+    {
+      name: "shared-not-node",
+      severity: "error",
+      from: {
+        path: "^packages/",
+      },
+      to: {
+        path: "^nodes/",
+      },
+      comment: "packages/ are shared and must not depend on node-specific code",
+    },
+
+    // nodes cannot import other nodes (except itself)
+    {
+      name: "no-cross-node",
+      severity: "error",
+      from: {
+        path: "^nodes/([^/]+)/",
+      },
+      to: {
+        path: "^nodes/([^/]+)/",
+        pathNot: "^nodes/$1/",
+      },
+      comment: "node code must not import from another node directory",
     },
 
     // src/ cannot import from services/

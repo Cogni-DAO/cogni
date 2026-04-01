@@ -37,6 +37,7 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - **Toolchain:** pnpm, Biome, ESLint, Prettier, Vitest, Playwright, SonarQube
 - **Observability:** Pino JSON → Alloy → local Loki (dev) or Grafana Cloud (preview/prod). MCP via grafana-local/grafana.
 - **CI entrypoint:** `pnpm check` (static) → `pnpm check:full` (stack tests)
+- **Node layout:** sovereign node code lives under `nodes/{node}/` (`app/`, `graphs/`, `.cogni/`)
 
 ## API Contracts are the Single Source of Truth
 

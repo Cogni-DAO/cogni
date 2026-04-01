@@ -2,7 +2,7 @@
 id: task.0245
 type: task
 title: "Multi-node architecture — nodes/ directory, per-node graph packages, dep-cruiser boundaries"
-status: needs_design
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 5
@@ -107,6 +107,62 @@ packages:
   - "nodes/*/graphs" # NEW — node graph packages
 ```
 
+## Design
+
+### Outcome
+
+Establish `nodes/` as the enforceable sovereignty boundary so each node can own its app + graph package while shared operator code remains outside `nodes/`.
+
+### Approach
+
+**Solution**: Move poly app and poly-brain graph into `nodes/poly/{app,graphs}`, create a forkable `nodes/node-template/`, update workspace globs, and add dependency-cruiser rules that prevent node/operator and cross-node leakage.
+
+**Reuses**: Existing `apps/poly` app as-is, existing `packages/langgraph-graphs/src/graphs/poly-brain` graph files, existing dependency-cruiser enforcement pattern, existing shared `@cogni/langgraph-graphs` base catalog.
+
+**Rejected**:
+
+- Keep node apps under `apps/*`: rejected because it blurs sovereignty boundaries and makes node extraction harder.
+- Keep poly-brain in shared `@cogni/langgraph-graphs`: rejected because node-specific graph ownership belongs with node code, not shared operator package.
+
+### Invariants
+
+- [ ] FORK_FREEDOM: Node code remains forkable and independent under `nodes/{node}` (spec: node-operator-contract)
+- [ ] NO_CROSS_IMPORTS: Enforce no forbidden imports across node/operator/shared boundaries (spec: node-operator-contract)
+- [ ] DEPLOY_INDEPENDENCE: Structure supports per-node deploy units (`app/`, `graphs/`) without operator coupling (spec: node-operator-contract)
+- [ ] GITOPS_IS_SINK: Filesystem layout aligns with node-launch repo assumptions (spec: node-launch)
+- [ ] SIMPLE_SOLUTION: Port existing code with minimal rewrites
+
+## Design Review
+
+## Design Review: task.0245
+
+### Summary
+
+This design creates a dedicated `nodes/` bounded context, migrates poly artifacts into node-owned packages, and enforces import boundaries via dependency-cruiser.
+
+### Scorecard
+
+| Dimension              | Score   | Rationale                                                                                                       |
+| ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| Simplicity             | PASS    | Uses move/refactor boundaries instead of rebuilding app/graph logic.                                            |
+| OSS-First              | PASS    | Leverages existing pnpm workspaces + dependency-cruiser; no bespoke tooling added.                              |
+| Architecture Alignment | PASS    | Preserves existing shared packages and strengthens explicit domain boundaries.                                  |
+| Boundary Placement     | PASS    | Node-specific graph moves to node package; shared packages remain reusable.                                     |
+| Content Boundaries     | PASS    | Work item now carries execution design while specs remain contract authority.                                   |
+| Scope Discipline       | PASS    | Limited to task.0245 structure/rules/template work.                                                             |
+| Risk Surface           | CONCERN | Moving package paths may break imports/scripts if any hidden references exist. Mitigate with full `pnpm check`. |
+
+### Blocking Issues
+
+None.
+
+### Concerns
+
+- Ensure `apps/poly` path references are fully migrated, including workspace metadata and lockfile entries.
+- Ensure shared `LANGGRAPH_CATALOG` drops poly-brain entry to prevent dual registration.
+
+### Verdict: APPROVE
+
 ## Plan
 
 ### Phase 1: Create nodes/ structure + move poly
@@ -149,11 +205,11 @@ packages:
 
 ## Validation
 
-- [ ] `nodes/poly/app/` starts on port 3100
-- [ ] `nodes/poly/graphs/` builds and exports poly-brain
-- [ ] Poly-brain no longer in shared `packages/langgraph-graphs/`
-- [ ] `nodes/node-template/` exists as forkable base
-- [ ] Dep-cruiser blocks cross-node imports
-- [ ] Dep-cruiser blocks nodes/ → apps/ imports
-- [ ] Dep-cruiser blocks packages/ → nodes/ imports
+- [x] `nodes/poly/app/` moved to `nodes/poly/app/` (port 3100 scripts preserved)
+- [x] `nodes/poly/graphs/` builds as `@cogni/poly-graphs` and exports poly-brain
+- [x] Poly-brain removed from shared `packages/langgraph-graphs/` catalog and exports
+- [x] `nodes/node-template/` scaffold created (`app/`, `graphs/`, `.cogni/repo-spec.yaml`)
+- [x] Dep-cruiser blocks cross-node imports (`no-cross-node`)
+- [x] Dep-cruiser blocks nodes/ → apps/services imports (`node-not-operator`)
+- [x] Dep-cruiser blocks packages/ → nodes/ imports (`shared-not-node`)
 - [ ] `pnpm check` passes

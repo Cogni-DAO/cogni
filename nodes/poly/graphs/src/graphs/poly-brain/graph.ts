@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/langgraph-graphs/graphs/poly-brain/graph`
+ * Module: `@cogni/poly-graphs/graphs/poly-brain/graph`
  * Purpose: Prediction market brain agent graph factory.
  * Scope: Creates LangGraph React agent with market + web search tools. Does not execute graphs or read env.
  * Invariants: Pure factory, TYPE_TRANSPARENT_RETURN, PACKAGES_NO_ENV.
@@ -14,7 +14,7 @@
 import { MessagesAnnotation } from "@langchain/langgraph";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 
-import type { CreateReactAgentGraphOptions } from "../types";
+import type { CreateReactAgentGraphOptions } from "@cogni/langgraph-graphs/graphs";
 import { POLY_BRAIN_SYSTEM_PROMPT } from "./prompts";
 
 export const POLY_BRAIN_GRAPH_NAME = "poly-brain" as const;

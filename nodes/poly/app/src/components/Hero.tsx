@@ -5,7 +5,7 @@ import { ArrowRight, TrendingUp } from "lucide-react";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 
-import { cn } from "@/lib/cn";
+import { cn } from "../lib/cn";
 
 import { AgentStream } from "./AgentStream";
 import { NeuralNetworkBackground } from "./NeuralNetwork";

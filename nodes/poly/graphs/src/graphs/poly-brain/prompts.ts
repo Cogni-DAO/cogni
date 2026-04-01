@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/langgraph-graphs/graphs/poly-brain/prompts`
+ * Module: `@cogni/poly-graphs/graphs/poly-brain/prompts`
  * Purpose: System prompt for the prediction market brain agent.
  * Scope: Prompt text only. Does not contain runtime logic or I/O.
  * Invariants: PACKAGES_NO_ENV.

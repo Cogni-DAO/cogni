@@ -1,0 +1,12 @@
+version: 1
+node:
+  id: "00000000-0000-0000-0000-000000000000"
+  slug: "node-template"
+  display_name: "Node Template"
+  description: "Forkable base for sovereign Cogni nodes"
+operator:
+  enabled: false
+projects:
+  - id: "default"
+    display_name: "Default"
+    status: active

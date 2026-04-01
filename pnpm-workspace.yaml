@@ -7,6 +7,9 @@
 packages:
   # Deployable applications
   - "apps/*"
+  # Sovereign node applications + graph packages
+  - "nodes/*/app"
+  - "nodes/*/graphs"
   # Shared packages (Node-owned, pure libraries)
   - "packages/*"
   # Operator services (future: git-review-daemon, git-admin-daemon)

@@ -61,6 +61,7 @@ const REQUIRED_PATHS: PathRequirement[] = [
   { anyOf: ["infra"], kind: "dir" },
   { anyOf: ["packages"], kind: "dir" },
   { anyOf: ["apps"], kind: "dir" },
+  { anyOf: ["nodes"], kind: "dir" },
 ];
 
 const ALLOWED_ROOT_ENTRIES = new Set<string>([
@@ -116,6 +117,7 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "eslint",
   "eslint.config.mjs",
   "infra",
+  "nodes",
   "package.json",
   "packages",
   "playwright.config.mjs",
