@@ -85,8 +85,8 @@ function ProbabilityBar({
 }: {
   outcomes: MarketOutcome[];
 }): ReactElement {
-  const yes = outcomes[0];
-  const no = outcomes[1];
+  const yes = outcomes[0]!;
+  const no = outcomes[1]!;
 
   return (
     <div className="flex gap-1.5">
@@ -154,10 +154,10 @@ function MarketCard({
       () => {
         setOutcomes((prev) => {
           const drift = Math.random() > 0.5 ? 1 : -1;
-          const newYes = Math.max(1, Math.min(99, prev[0].probability + drift));
+          const newYes = Math.max(1, Math.min(99, prev[0]!.probability + drift));
           return [
-            { ...prev[0], probability: newYes },
-            { ...prev[1], probability: 100 - newYes },
+            { ...prev[0]!, probability: newYes },
+            { ...prev[1]!, probability: 100 - newYes },
           ];
         });
       },
@@ -191,9 +191,9 @@ function MarketCard({
         </div>
         <div className="shrink-0 text-right">
           <div className="font-bold font-mono text-foreground text-lg tabular-nums sm:text-xl">
-            {outcomes[0].probability}%
+            {outcomes[0]!.probability}%
           </div>
-          <ChangeBadge change={market.outcomes[0].change24h} />
+          <ChangeBadge change={market.outcomes[0]!.change24h} />
         </div>
       </div>
 

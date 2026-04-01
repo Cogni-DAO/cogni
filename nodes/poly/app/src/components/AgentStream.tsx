@@ -149,7 +149,7 @@ export function AgentStream(): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const sequence = STREAM_SEQUENCES[seqIdx % STREAM_SEQUENCES.length];
+    const sequence = STREAM_SEQUENCES[seqIdx % STREAM_SEQUENCES.length]!;
     const timeouts: ReturnType<typeof setTimeout>[] = [];
 
     setEvents([]);
@@ -164,7 +164,7 @@ export function AgentStream(): ReactElement {
     }
 
     // After sequence ends, pause then start next
-    const lastEvent = sequence[sequence.length - 1];
+    const lastEvent = sequence[sequence.length - 1]!;
     timeouts.push(
       setTimeout(() => {
         setIsStreaming(false);
