@@ -37,6 +37,11 @@ import {
 import { createPoetGraph, POET_GRAPH_NAME } from "./graphs/poet/graph";
 import { POET_TOOL_IDS } from "./graphs/poet/tools";
 import {
+  createPolyBrainGraph,
+  POLY_BRAIN_GRAPH_NAME,
+} from "./graphs/poly-brain/graph";
+import { POLY_BRAIN_TOOL_IDS } from "./graphs/poly-brain/tools";
+import {
   createPondererGraph,
   PONDERER_GRAPH_NAME,
 } from "./graphs/ponderer/graph";
@@ -101,6 +106,17 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     description: "Poetic AI assistant with structured verse responses",
     toolIds: POET_TOOL_IDS,
     graphFactory: createPoetGraph,
+  },
+
+  /**
+   * Poly Brain graph - prediction market analyst with market + web search.
+   */
+  [POLY_BRAIN_GRAPH_NAME]: {
+    displayName: "Poly Brain",
+    description:
+      "Prediction market analyst with live market data and web research",
+    toolIds: POLY_BRAIN_TOOL_IDS,
+    graphFactory: createPolyBrainGraph,
   },
 
   /**
@@ -206,6 +222,7 @@ export const LANGGRAPH_PROVIDER_ID = "langgraph" as const;
 export const LANGGRAPH_GRAPH_IDS = {
   brain: `${LANGGRAPH_PROVIDER_ID}:${BRAIN_GRAPH_NAME}`,
   poet: `${LANGGRAPH_PROVIDER_ID}:${POET_GRAPH_NAME}`,
+  "poly-brain": `${LANGGRAPH_PROVIDER_ID}:${POLY_BRAIN_GRAPH_NAME}`,
   ponderer: `${LANGGRAPH_PROVIDER_ID}:${PONDERER_GRAPH_NAME}`,
   research: `${LANGGRAPH_PROVIDER_ID}:${RESEARCH_GRAPH_NAME}`,
   "pr-review": `${LANGGRAPH_PROVIDER_ID}:${PR_REVIEW_GRAPH_NAME}`,

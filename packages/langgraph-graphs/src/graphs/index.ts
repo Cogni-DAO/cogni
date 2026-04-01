@@ -25,6 +25,11 @@ export {
 } from "./frontend-tester/graph";
 // Poet graph (poetic AI assistant)
 export { createPoetGraph, POET_GRAPH_NAME } from "./poet/graph";
+// Poly Brain graph (prediction market analyst)
+export {
+  createPolyBrainGraph,
+  POLY_BRAIN_GRAPH_NAME,
+} from "./poly-brain/graph";
 // Ponderer graph (philosophical thinker)
 export { createPondererGraph, PONDERER_GRAPH_NAME } from "./ponderer/graph";
 // PR Review graph (single-call structured output, no tools)

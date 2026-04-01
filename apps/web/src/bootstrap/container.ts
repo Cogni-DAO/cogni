@@ -526,8 +526,14 @@ function createContainer(): Container {
     },
   });
 
+  // MarketCapability for AI tools (stub — real adapters wired in Walk phase)
+  const marketCapability = {
+    listMarkets: async () => ({ markets: [], totalCount: 0, providers: [] }),
+  };
+
   // ToolSource with real implementations (per CAPABILITY_INJECTION)
   const toolBindings = createToolBindings({
+    marketCapability,
     metricsCapability,
     webSearchCapability,
     repoCapability,
