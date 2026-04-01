@@ -36,6 +36,7 @@ feature was not properly ported. The feature spans the full hex architecture:
 ## Files to Port (from fork)
 
 ### Core domain (`core/reservations/`)
+
 - `model.ts` — WatchRequest entity, status enum, state machine
 - `rules.ts` — assertValidDateRange, assertValidPartySize, isValidStatusTransition
 - `errors.ts` — InvalidStatusTransitionError
@@ -43,26 +44,32 @@ feature was not properly ported. The feature spans the full hex architecture:
 - Update `core/public.ts` to re-export reservations
 
 ### Ports (`ports/`)
+
 - `reservation.port.ts` — ReservationProviderPort interface
 - `graph-executor.port.ts` — if resy-specific
 
 ### Adapters (`adapters/server/reservations/`)
+
 - Full adapter implementation from fork
 
 ### Contracts (`contracts/`)
+
 - `reservations.booking.v1.contract.ts`
 - `reservations.events.v1.contract.ts`
 - `reservations.ingest.v1.contract.ts`
 - `reservations.watch.v1.contract.ts`
 
 ### Features (`features/reservations/`)
+
 - Full feature slice from fork
 
 ### Routes
+
 - `app/(app)/reservations/` — pages
 - `app/api/v1/reservations/` — API routes
 
 ### Bootstrap
+
 - Wire reservations capability in container.ts
 
 ## Validation

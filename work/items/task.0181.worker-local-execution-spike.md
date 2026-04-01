@@ -38,6 +38,7 @@ task.0176 (2026-03-18) explicitly deferred worker-local execution:
 > Execution stays in `apps/operator` via the existing internal API route. If worker-local execution becomes necessary later, that's a separate task with its own package (`graph-execution-host` or similar).
 
 The multi-node deployment model (docs/spec/node-formation.md) makes this critical now:
+
 - **Each node** gets its own Next.js app container (forked from `apps/operator`)
 - **All nodes share** one scheduler-worker, one Temporal cluster, one Redis
 - Currently Codex SDK alone adds ~283 MB to the Next.js image (159 MB global install + 124 MB copied `node_modules/@openai/`) — that's >30% of the 900 MB virtual image, **duplicated per node**
@@ -54,6 +55,7 @@ Graph execution moves from the Next.js internal API into the shared scheduler-wo
 **Solution**: Extract execution-host logic into `@cogni/graph-execution-host` (pure library package), wire it in the scheduler-worker's bootstrap. Change `executeGraphActivity` from HTTP-to-internal-API → in-process executor call. Keep Redis stream publishing (invariant `STREAM_PUBLISH_IN_EXECUTION_LAYER` moves to worker). Strip AI deps from Next.js Dockerfile.
 
 **Reuses**:
+
 - Existing `@cogni/graph-execution-core` ports/types (unchanged)
 - Existing decorator classes (`BillingEnrichmentGraphExecutorDecorator`, `UsageCommitDecorator`, `PreflightCreditCheckDecorator`, `ObservabilityGraphExecutorDecorator`) — move to package as-is
 - Existing `NamespaceGraphRouter`, `LangGraphInProcProvider`, `InProcCompletionUnitAdapter` — move to package
@@ -62,6 +64,7 @@ Graph execution moves from the Next.js internal API into the shared scheduler-wo
 - Existing `RedisRunStreamAdapter` for stream publishing (unchanged)
 
 **Rejected alternatives**:
+
 1. **New standalone execution service**: Adds another Docker image, another compose service, another health endpoint. The scheduler-worker already runs Temporal activities with DB/Redis access — absorbing execution there avoids a new moving part.
 2. **Separate Temporal task queue + execution-worker**: Proper for horizontal scaling but premature — we don't have load data justifying a second worker process. If needed later, the `@cogni/graph-execution-host` package makes this a one-PR extraction (new service, same package).
 3. **Keep in Next.js, just slim the Docker image**: Doesn't solve the N-nodes-×-AI-runtime problem. The execution code path still couples availability to the web process.
@@ -92,6 +95,7 @@ AFTER (1 shared AI runtime):
 **1. Package shape: `@cogni/graph-execution-host`**
 
 A `PURE_LIBRARY` package (no process lifecycle). Contains:
+
 - Graph executor factory (`createGraphExecutor`, `createScopedGraphExecutor`)
 - All providers (InProc, Sandbox, Dev — constructors take injected deps)
 - All decorators (billing, usage, preflight, observability)
@@ -99,6 +103,7 @@ A `PURE_LIBRARY` package (no process lifecycle). Contains:
 - Execution scope (`runInScope` + AsyncLocalStorage)
 
 Does NOT contain:
+
 - DB adapters (injected from service bootstrap)
 - Redis adapter (injected)
 - Environment config (service owns its env)
@@ -107,11 +112,14 @@ Does NOT contain:
 **2. Scheduler-worker absorbs execution**
 
 `executeGraphActivity` changes from:
+
 ```ts
 // BEFORE: HTTP hop to Next.js
 const response = await fetch(`${appBaseUrl}/api/internal/graphs/${graphId}/runs`, { ... });
 ```
+
 to:
+
 ```ts
 // AFTER: in-process via injected executor
 const result = executor.runGraph(request, context);
@@ -131,12 +139,14 @@ For future multi-DB-per-node: the `@cogni/graph-execution-host` factory takes a 
 **4. Next.js keeps: SSE, thread reads, auth**
 
 The Next.js app retains:
+
 - Chat completion API route (starts Temporal workflow, subscribes to Redis stream for SSE)
 - Thread/conversation read endpoints
 - Auth, session management, dashboard
 - All UI/frontend code
 
 The Next.js app loses:
+
 - `/api/internal/graphs/[graphId]/runs` route (dead code after migration)
 - `graph-executor.factory.ts` (moved to package)
 - All AI adapter imports (`@cogni/langgraph-graphs`, `@cogni/ai-tools`, Codex SDK, etc.)
@@ -144,12 +154,12 @@ The Next.js app loses:
 
 ### Invariant Changes
 
-| Invariant | Before | After |
-|-----------|--------|-------|
-| `EXECUTION_VIA_SERVICE_API` | Worker calls Next.js internal API | **Retired** — worker executes in-process |
-| `STREAM_PUBLISH_IN_EXECUTION_LAYER` | Next.js route publishes to Redis | Worker activity publishes to Redis (same contract) |
-| `ONE_RUN_EXECUTION_PATH` | Unchanged — all runs via `GraphRunWorkflow` | Unchanged |
-| `SSE_FROM_REDIS_NOT_MEMORY` | Unchanged — Next.js reads Redis for SSE | Unchanged |
+| Invariant                           | Before                                      | After                                              |
+| ----------------------------------- | ------------------------------------------- | -------------------------------------------------- |
+| `EXECUTION_VIA_SERVICE_API`         | Worker calls Next.js internal API           | **Retired** — worker executes in-process           |
+| `STREAM_PUBLISH_IN_EXECUTION_LAYER` | Next.js route publishes to Redis            | Worker activity publishes to Redis (same contract) |
+| `ONE_RUN_EXECUTION_PATH`            | Unchanged — all runs via `GraphRunWorkflow` | Unchanged                                          |
+| `SSE_FROM_REDIS_NOT_MEMORY`         | Unchanged — Next.js reads Redis for SSE     | Unchanged                                          |
 
 ### Invariants
 
@@ -170,6 +180,7 @@ The Next.js app loses:
 <!-- Scope by sub-task. See task.0250, task.0251, task.0252 below. -->
 
 **Create: `packages/graph-execution-host/`**
+
 - `src/factory.ts` — `createGraphExecutor`, `createScopedGraphExecutor` (from `bootstrap/graph-executor.factory.ts`)
 - `src/providers/` — InProc, Sandbox, Dev providers (from `adapters/server/ai/langgraph/`)
 - `src/decorators/` — All 4 decorators (from `adapters/server/ai/`)
@@ -179,12 +190,14 @@ The Next.js app loses:
 - `package.json`, `tsconfig.json`, `tsup.config.ts`
 
 **Modify: `services/scheduler-worker/`**
+
 - `src/bootstrap/container.ts` — add execution deps (graph executor, Redis, DB adapters for execution_requests + threads)
 - `src/activities/index.ts` — `executeGraphActivity` → in-process execution + Redis publish + thread persistence
 - `package.json` — add `@cogni/graph-execution-host`, `@cogni/ai-tools`, `@cogni/langgraph-graphs`
 - `Dockerfile` — add AI runtime deps (Codex SDK, etc.)
 
 **Modify: `apps/operator/`**
+
 - Remove `src/bootstrap/graph-executor.factory.ts`
 - Remove `src/app/api/internal/graphs/[graphId]/runs/route.ts`
 - Remove AI adapter barrel exports (langgraph, sandbox providers, decorators)
@@ -192,6 +205,7 @@ The Next.js app loses:
 - `package.json` — remove unused AI runtime deps
 
 **Test:**
+
 - `services/scheduler-worker/src/activities/__tests__/execute-graph.test.ts` — unit test in-process execution
 - Existing stack tests (`sandbox-llm-roundtrip-billing.stack.test.ts` etc.) validate end-to-end unchanged
 
@@ -208,6 +222,7 @@ This is a 3-PR sequence:
 **Per-task validation:** `pnpm check:fast` during iteration, `pnpm check` once before commit.
 
 **End-to-end after task.0252:**
+
 ```bash
 # Verify Next.js image slimmed
 docker build -t cogni-template-local:latest . && docker images cogni-template-local:latest

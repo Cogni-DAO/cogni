@@ -50,25 +50,30 @@ This task changes `executeGraphActivity` from an HTTP call to `apps/operator` in
 ## Files
 
 **Modify: `services/scheduler-worker/src/bootstrap/container.ts`**
+
 - Add graph executor factory from `@cogni/graph-execution-host`
 - Add Redis client for `RunStreamPort`
 - Add DB adapters: `DrizzleExecutionRequestAdapter`, `DrizzleThreadPersistenceAdapter`
 - Add model provider resolver, connection broker
 
 **Modify: `services/scheduler-worker/src/activities/index.ts`**
+
 - `executeGraphActivity`: replace `fetch()` with in-process executor call
 - Add idempotency check/create/finalize around execution
 - Add Redis stream publish loop (drain async iterable → publish)
 - Add thread persistence post-execution
 
 **Modify: `services/scheduler-worker/package.json`**
+
 - Add: `@cogni/graph-execution-host`, `@cogni/ai-tools`, `@cogni/langgraph-graphs`, `@cogni/ai-core`
 
 **Modify: `services/scheduler-worker/Dockerfile`**
+
 - Add Codex SDK install (from apps/operator Dockerfile pattern)
 - Add any native deps needed by providers (dockerode for sandbox, etc.)
 
 **Test: `services/scheduler-worker/src/activities/__tests__/execute-graph.test.ts`**
+
 - Unit test: in-process execution with mocked executor
 - Unit test: idempotency dedup (duplicate request → skip)
 - Unit test: Redis stream publish (events appear in stream)

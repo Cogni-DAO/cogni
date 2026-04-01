@@ -50,14 +50,17 @@ Parent: task.0181. Step 3 of 3. After task.0248 wires execution in the scheduler
 **Delete: AI adapter files** no longer imported by any remaining code
 
 **Modify: `apps/operator/Dockerfile`**
+
 - Remove Codex SDK install + copy layers
 - Remove any AI-specific native deps
 
 **Modify: `apps/operator/package.json`**
+
 - Remove: `@cogni/graph-execution-host`, `@cogni/ai-tools`, `@cogni/langgraph-graphs` (if no other consumer)
 - Remove: `@openai/codex`, `@openai/codex-sdk`
 
 **Modify: `docs/spec/unified-graph-launch.md`**
+
 - Retire `EXECUTION_VIA_SERVICE_API` (replaced by in-process execution in worker)
 - Update `STREAM_PUBLISH_IN_EXECUTION_LAYER` to say "worker activity" not "internal API route"
 

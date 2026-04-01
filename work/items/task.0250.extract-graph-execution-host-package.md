@@ -50,6 +50,7 @@ After this task, `apps/operator` imports from `@cogni/graph-execution-host` inst
 ## Files
 
 **Create: `packages/graph-execution-host/`**
+
 - `src/index.ts` — public barrel export
 - `src/factory.ts` — `createGraphExecutor`, `createScopedGraphExecutor` (adapted from `graph-executor.factory.ts`)
 - `src/providers/inproc.provider.ts` — from `adapters/server/ai/langgraph/inproc.provider.ts`
@@ -66,10 +67,12 @@ After this task, `apps/operator` imports from `@cogni/graph-execution-host` inst
 - `tsconfig.json`, `tsup.config.ts`
 
 **Modify: `apps/operator/src/bootstrap/graph-executor.factory.ts`**
+
 - Replace local adapter imports with `@cogni/graph-execution-host` imports
 - Keep as thin wiring layer (reads `serverEnv()`, passes to package factory)
 
 **Modify: `apps/operator/src/adapters/server/` barrel exports**
+
 - Re-export from `@cogni/graph-execution-host` where needed for backward compat during migration
 
 ## Validation
