@@ -2,7 +2,7 @@
 id: task.0244
 type: task
 title: "Absorb cogni-resy-helper into monorepo — make fork obsolete"
-status: needs_review
+status: done
 priority: 0
 rank: 1
 estimate: 5
@@ -22,7 +22,7 @@ revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-03-31
-updated: 2026-03-31
+updated: 2026-04-01
 labels: [nodes, multi-app, monorepo]
 external_refs:
 ---
