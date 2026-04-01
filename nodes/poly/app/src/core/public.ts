@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@core/public`
+ * Purpose: Stable core entry point - explicit named exports to control public surface.
+ * Scope: Re-exports only approved domain interfaces, prevents accidental creep/cycles. Does not modify or transform exports.
+ * Invariants: Named exports only, no export *, controlled public API surface
+ * Side-effects: none
+ * Notes: Single entry point for all core domain access, enforced by ESLint
+ * Links: Used by features via \@/core alias
+ * @public
+ */
+
+export type { Account } from "./accounts/model";
+export {
+  AccountNotFoundError,
+  ensureHasCredits,
+  hasSufficientCredits,
+  InsufficientCreditsError,
+  isAccountNotFoundError,
+  isInsufficientCreditsError,
+  isUnknownApiKeyError,
+  UnknownApiKeyError,
+} from "./accounts/public";
+// LLM error types moved to @cogni/ai-core (SINGLE_SOURCE_OF_TRUTH)
+// Import directly from @cogni/ai-core or via @/ports
+export {
+  applyBaselineSystemPrompt,
+  BASELINE_SYSTEM_PROMPT,
+} from "./ai/system-prompt.server";
+export {
+  ESTIMATED_USD_PER_1K_TOKENS,
+  estimateTotalTokens,
+} from "./ai/token-estimation.server";
+// Ledger domain
+export type {
+  EpochStatus,
+  FinalizedAllocation,
+  StatementLineItem,
+} from "./attribution/public";
+export {
+  AllocationNotFoundError,
+  ATTRIBUTION_STATEMENT_TYPES,
+  // Legacy user-only helpers remain re-exported for compatibility while the
+  // app/core surface finishes migrating to claimant-aware naming.
+  computeAllocationSetHash,
+  computeStatementItems,
+  EPOCH_STATUSES,
+  EpochAlreadyFinalizedError,
+  EpochNotFoundError,
+  EpochNotOpenError,
+  isAllocationNotFoundError,
+  isEpochAlreadyFinalizedError,
+  isEpochNotFoundError,
+  isEpochNotOpenError,
+  isPoolComponentMissingError,
+  PoolComponentMissingError,
+} from "./attribution/public";
+export {
+  CREDITS_PER_USD,
+  calculateLlmUserCharge,
+  calculateOpenRouterTopUp,
+  calculateRevenueShareBonus,
+  creditsToUsd,
+  isMarginPreserved,
+  usdCentsToCredits,
+  usdToCredits,
+} from "./billing/pricing";
+export type {
+  Message,
+  MessageRole,
+  MessageToolCall,
+} from "./chat/model";
+export {
+  assertMessageLength,
+  ChatErrorCode,
+  ChatValidationError,
+  filterSystemMessages,
+  MAX_MESSAGE_CHARS,
+  normalizeMessageRole,
+  pickDefaultModel,
+  trimConversationHistory,
+} from "./chat/rules";
+export type {
+  ClientVisibleStatus,
+  PaymentAttempt,
+  PaymentAttemptStatus,
+  PaymentErrorCode,
+} from "./payments/public";
+export {
+  InvalidStateTransitionError,
+  isIntentExpired,
+  isInvalidStateTransitionError,
+  isPaymentIntentExpiredError,
+  isPaymentNotFoundError,
+  isPaymentVerificationError,
+  isTerminalState,
+  isTxHashAlreadyBoundError,
+  isValidPaymentAmount,
+  isValidTransition,
+  isVerificationTimedOut,
+  MAX_PAYMENT_CENTS,
+  MIN_PAYMENT_CENTS,
+  PAYMENT_INTENT_TTL_MS,
+  PaymentIntentExpiredError,
+  PaymentNotFoundError,
+  PaymentVerificationError,
+  PENDING_UNVERIFIED_TTL_MS,
+  rawUsdcToUsdCents,
+  TxHashAlreadyBoundError,
+  toClientVisibleStatus,
+  usdCentsToRawUsdc,
+} from "./payments/public";

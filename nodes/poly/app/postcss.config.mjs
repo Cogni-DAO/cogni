@@ -4,5 +4,4 @@ const config = {
   },
 };
 
-// biome-ignore lint/style/noDefaultExport: required by PostCSS
 export default config;
