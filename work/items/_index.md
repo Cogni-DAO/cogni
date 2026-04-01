@@ -99,9 +99,13 @@
 | 1 | 20 | 2 | needs_triage | task.0075 | Governance scheduled runs post status updates to #continuous-cogni-updates Discord channel | Messenger Channels | proj.messenger-channels |
 | 1 | 20 | 3 | needs_design | task.0135 | Rewards-Ready Token Formation: Governance Decisions + Implementation | Financial Ledger | proj.financial-ledger |
 | 1 | 20 | 3 | needs_design | task.0141 | Category pool allocation — split epoch budget across source categories before per-source scoring | Transparent Credit Payouts | proj.transparent-credit-payouts |
+| 1 | 20 | 5 | needs_implement | task.0181 | Worker-local graph execution — move AI runtime out of Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 21 | 2 | needs_triage | task.0076 | Dedicated Discord community agent — separate agent config with Discord-specific personality and skills | Messenger Channels | proj.messenger-channels |
+| 1 | 21 | 3 | needs_implement | task.0250 | Extract @cogni/graph-execution-host package | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 22 | 2 | needs_design | task.0038 | Rename tests/integration → tests/component with dependency-class subdirs | Reusable CI/CD Rails & Multi-Node Pipeline | proj.ci-cd-reusable |
 | 1 | 22 | 2 | needs_design | task.0142 | Epoch pool value stabilization — minimum activity threshold + carry-over policy | Transparent Credit Payouts | proj.transparent-credit-payouts |
+| 1 | 22 | 3 | needs_implement | task.0251 | Wire in-process graph execution in scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |
+| 1 | 23 | 1 | needs_implement | task.0252 | Strip AI runtime deps from Next.js image | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 25 | 5 | needs_triage | story.0081 | Work receipts, transparency log, and deterministic epoch payouts | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 3 | needs_implement | task.0130 | Tokenomics Crawl: Budget Policy + kill Score UI | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 2 | needs_closeout | task.0165 | Live money e2e test — full OpenRouter top-up chain on Base mainnet | AI Operator Wallet | proj.ai-operator-wallet |
@@ -144,7 +148,6 @@
 | 2 | 99 | 3 | needs_design | task.0105 | Allocation algorithm expansion — multi-source credit estimate algos + per-source weight derivation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 3 | needs_implement | task.0126 | Fluence Provider Base — VM Provisioning via REST API |  |  |
 | 2 | 99 | 2 | needs_triage | spike.0146 | OtoCo testnet validation — verify Base Sepolia contracts, createSeries events, GovernanceERC20 token attachment | Node Formation & Launch | proj.node-formation-ui |
-| 2 | 99 | 2 | needs_triage | task.0181 | Spike: Worker-local graph execution — evaluate and design | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 99 | 2 | needs_triage | bug.0222 | Graph execution sends tools to models that declare capabilities.tools: false | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 30 | 3 | needs_merge | task.0207 | Run: BYO-AI hosted OSS provider — user connects their OpenAI-compatible endpoint | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
