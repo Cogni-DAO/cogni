@@ -1,6 +1,8 @@
-<!-- doc-id: guide.multi-node-dev -->
-<!-- status: draft -->
-<!-- trust: measured -->
+---
+doc-id: guide.multi-node-dev
+status: draft
+trust: measured
+---
 
 # Multi-Node Development Guide
 
