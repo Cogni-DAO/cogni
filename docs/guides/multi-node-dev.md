@@ -14,7 +14,8 @@ nodes/resy/             → Resy reservations node (port 3300)
 ```
 
 Each node has two workspace packages: `app/` (Next.js) and `graphs/` (AI graphs).
-All nodes share infra services (Postgres, Temporal, LiteLLM, Redis) run by the operator stack.
+All nodes share infra services (Postgres, Temporal, LiteLLM, Redis) and the same
+database. Auth sessions are shared — sign in once, use any node.
 
 ## Running Locally
 
@@ -93,11 +94,29 @@ when you change node-specific code. This will be unified in task.0248.
 6. Add node-specific graphs under `graphs/src/graphs/`
 7. Run `pnpm install` to link the new workspace packages
 
+## Database & Auth
+
+All nodes share one Postgres database (`cogni_template_dev`) and one set of
+migrations (from `apps/operator/src/adapters/server/db/migrations/`). Standard
+setup applies:
+
+```bash
+pnpm db:setup           # provision + migrate + seed (first time)
+pnpm db:migrate:dev     # run pending migrations (after schema changes)
+```
+
+**Auth:** NextAuth sessions are shared across all apps (same DB, same JWT secret).
+The `dev:stack:*` scripts automatically set `NEXTAUTH_URL` per node so OAuth
+redirects return to the correct port. Each node can sign in independently.
+
+**Future (task.0247):** Per-node databases for data isolation in production.
+
 ## Architecture Notes
 
 - Each node app is a **full platform copy** of the operator (auth, chat, streaming,
   billing, treasury) minus the DAO formation wizard
 - Node-specific features (e.g. resy's reservations) live in `app/src/features/`
 - Shared packages (`@cogni/ai-tools`, `@cogni/market-provider`, etc.) are in `packages/`
+- All nodes share one DB and one migration path for now (task.0247 adds isolation)
 - Future: task.0248 will extract the shared platform into `packages/node-platform`
   so nodes become thin shells instead of full copies
