@@ -13,7 +13,7 @@ import { AuthRedirect } from "./AuthRedirect";
 export default async function HomePage(): Promise<ReactElement> {
   const user = await getServerSessionUser();
   if (user) {
-    redirect("/reservations");
+    redirect("/chat");
   }
 
   return (
