@@ -131,11 +131,35 @@ Rationale:
 2. Update `deploy.sh` to pull + restart node containers
 3. Add per-node health checks to `staging-preview.yml`
 
+## Design Decisions Needed
+
+### Docker Compose: one file, per-node services
+
+Single `docker-compose.dev.yml` with `node-poly` and `node-resy` service entries
+(not separate compose files per node). Each builds from `nodes/{name}/app/Dockerfile`,
+runs on its own port, shares the existing infra services. Separate compose files
+only justified when nodes deploy to different hosts (k3s phase).
+
+### Postgres isolation: separate databases, shared instance
+
+Each node gets its own database (`cogni_poly`, `cogni_resy`) within the same
+Postgres container. Operator keeps `cogni_template`. Each DB gets its own app
+user with RLS. Migrations run per-node via `db:migrate:{node}` scripts.
+
+This gives data isolation without extra infra. Per-node Postgres instances are
+overkill until nodes need different configs or true blast-radius separation (k3s).
+
+Implications:
+
+- `db:provision` must create per-node databases + users
+- Each node's `.env` points at its own `DATABASE_URL`
+- `dev:stack:full` must ensure all DBs exist before starting apps
+- Stack tests need per-node test databases
+
 ## Non-goals
 
 - k3s provisioning (proj.cicd-services-gitops P1)
 - ArgoCD setup (proj.cicd-services-gitops P1)
-- Per-node databases (V1+)
 - Preview environments per PR (proj.cicd-services-gitops P2)
 
 ## Validation

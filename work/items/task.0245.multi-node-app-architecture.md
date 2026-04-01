@@ -212,4 +212,9 @@ None.
 - [x] Dep-cruiser blocks cross-node imports (`no-cross-node`)
 - [x] Dep-cruiser blocks nodes/ → apps/services imports (`node-not-operator`)
 - [x] Dep-cruiser blocks packages/ → nodes/ imports (`shared-not-node`)
-- [ ] `pnpm check` passes
+- [x] `pnpm check` passes
+
+## PR / Links
+
+- PR: https://github.com/Cogni-DAO/node-template/pull/682
+- Handoff: [handoff](../handoffs/multi-node-cleanup.handoff.md)

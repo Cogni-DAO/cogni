@@ -56,6 +56,8 @@
 | 1 | 2 | 3 | needs_merge | task.0232 | dns-ops v0 — DNS layer for multi-node creation pipeline | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0236 | Dashboard statusLabel wiring — RunCard shows live phase from SSE | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 2 | 3 | needs_review | task.0246 | Rename app workspace to apps/operator | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 2 | 3 | needs_design | task.0253 | Port resy reservations feature from cogni-resy-helper fork | Operator Plane | proj.operator-plane |
+| 1 | 2 | 2 | needs_triage | bug.0255 | Node landing pages have broken sign-in flow | Operator Plane | proj.operator-plane |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -63,6 +65,7 @@
 | 1 | 3 | 3 | needs_merge | bug.0196 | Scheduled runs attributed to system tenant instead of schedule owner |  |  |
 | 1 | 3 | 5 | needs_design | task.0233 | Design: extract node-template from operator repo — identity split + repo-spec merge | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 3 | 3 | needs_design | task.0247 | Multi-node CI/CD deployment strategy — current stack vs ArgoCD | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 3 | 2 | needs_implement | task.0254 | Upgrade poly node landing page onto full platform base | Operator Plane | proj.operator-plane |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |
@@ -84,6 +87,7 @@
 | 1 | 10 | 3 | needs_merge | bug.0195 | TigerBeetle unreachable in all envs — native client floods ~72M garbage log lines/day to Grafana Cloud | Financial Ledger | proj.financial-ledger |
 | 1 | 10 | 1 | needs_review | task.0210 | BYO-AI ChatGPT v0 — OAuth hardening + security review fixes | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | 10 | 1 | needs_implement | spike.0220 | Validate AiMo Network x402 passthrough — 402 flow, model coverage, E2E feasibility | x402 E2E Migration: Hyperbolic + Per-Request Settlement | proj.x402-e2e-migration |
+| 1 | 10 | 3 | needs_design | task.0256 | Multi-Node LiteLLM Callback Routing: Dynamic Per-Node Billing Ingest | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 11 | 3 | needs_design | task.0045 | Enable OpenClaw subagent spawning — upstream header fix + Cogni config + delegation instructions | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 12 | 2 | needs_design | task.0034 | Wire OpenClaw memory search + bootstrap files for cogni-template repo context | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 13 | 1 | needs_design | task.0018 | Dynamic agent catalog in UI + OpenClaw model sync | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
@@ -99,9 +103,13 @@
 | 1 | 20 | 2 | needs_triage | task.0075 | Governance scheduled runs post status updates to #continuous-cogni-updates Discord channel | Messenger Channels | proj.messenger-channels |
 | 1 | 20 | 3 | needs_design | task.0135 | Rewards-Ready Token Formation: Governance Decisions + Implementation | Financial Ledger | proj.financial-ledger |
 | 1 | 20 | 3 | needs_design | task.0141 | Category pool allocation — split epoch budget across source categories before per-source scoring | Transparent Credit Payouts | proj.transparent-credit-payouts |
+| 1 | 20 | 5 | needs_implement | task.0181 | Worker-local graph execution — move AI runtime out of Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 21 | 2 | needs_triage | task.0076 | Dedicated Discord community agent — separate agent config with Discord-specific personality and skills | Messenger Channels | proj.messenger-channels |
+| 1 | 21 | 3 | needs_implement | task.0250 | Extract @cogni/graph-execution-host package | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 22 | 2 | needs_design | task.0038 | Rename tests/integration → tests/component with dependency-class subdirs | Reusable CI/CD Rails & Multi-Node Pipeline | proj.ci-cd-reusable |
 | 1 | 22 | 2 | needs_design | task.0142 | Epoch pool value stabilization — minimum activity threshold + carry-over policy | Transparent Credit Payouts | proj.transparent-credit-payouts |
+| 1 | 22 | 3 | needs_implement | task.0251 | Wire in-process graph execution in scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |
+| 1 | 23 | 1 | needs_implement | task.0252 | Strip AI runtime deps from Next.js image | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 25 | 5 | needs_triage | story.0081 | Work receipts, transparency log, and deterministic epoch payouts | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 3 | needs_implement | task.0130 | Tokenomics Crawl: Budget Policy + kill Score UI | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 2 | needs_closeout | task.0165 | Live money e2e test — full OpenRouter top-up chain on Base mainnet | AI Operator Wallet | proj.ai-operator-wallet |
@@ -124,6 +132,7 @@
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
+| 2 | 5 | 5 | needs_design | task.0248 | Extract shared node platform into packages/node-platform | Operator Plane | proj.operator-plane |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
@@ -143,7 +152,6 @@
 | 2 | 99 | 3 | needs_design | task.0105 | Allocation algorithm expansion — multi-source credit estimate algos + per-source weight derivation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 3 | needs_implement | task.0126 | Fluence Provider Base — VM Provisioning via REST API |  |  |
 | 2 | 99 | 2 | needs_triage | spike.0146 | OtoCo testnet validation — verify Base Sepolia contracts, createSeries events, GovernanceERC20 token attachment | Node Formation & Launch | proj.node-formation-ui |
-| 2 | 99 | 2 | needs_triage | task.0181 | Spike: Worker-local graph execution — evaluate and design | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 99 | 2 | needs_triage | bug.0222 | Graph execution sends tools to models that declare capabilities.tools: false | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 30 | 3 | needs_merge | task.0207 | Run: BYO-AI hosted OSS provider — user connects their OpenAI-compatible endpoint | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |

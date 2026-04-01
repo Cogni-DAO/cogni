@@ -1,14 +1,19 @@
-import "../styles/tailwind.css";
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+import "@/styles/tailwind.css";
+import "@rainbow-me/rainbowkit/styles.css";
 
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Manrope } from "next/font/google";
+import Script from "next/script";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
-const jetbrains = JetBrains_Mono({
+import { AppProviders } from "./providers/app-providers.client";
+
+const manrope = Manrope({
   subsets: ["latin"],
-  variable: "--font-mono",
 });
 
 export const metadata: Metadata = {
@@ -17,16 +22,16 @@ export const metadata: Metadata = {
     "Community-pooled AI trading across Polymarket, Kalshi, and more. Transparent, DAO-governed, collectively intelligent.",
 };
 
-// biome-ignore lint/style/noDefaultExport: required by Next.js
 export default function RootLayout({
   children,
-}: Readonly<{ children: ReactNode }>): ReactNode {
+}: Readonly<{
+  children: ReactNode;
+}>): ReactNode {
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} ${jetbrains.variable} ${inter.className}`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={manrope.className} suppressHydrationWarning>
+      <head>
+        <Script src="/theme-init.js" strategy="beforeInteractive" />
+      </head>
       <body className="min-h-dvh bg-background text-foreground antialiased">
         <ThemeProvider
           attribute="class"
@@ -34,7 +39,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <AppProviders>
+            <div id="main">{children}</div>
+          </AppProviders>
         </ThemeProvider>
       </body>
     </html>

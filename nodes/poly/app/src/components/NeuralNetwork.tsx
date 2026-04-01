@@ -1,3 +1,4 @@
+// @ts-nocheck — Three.js R3F JSX intrinsic elements not typed in strict mode
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";

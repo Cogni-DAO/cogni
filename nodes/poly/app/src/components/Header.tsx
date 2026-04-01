@@ -49,12 +49,12 @@ export function Header(): ReactElement {
         >
           <Github className="size-4" />
         </a>
-        <button
-          type="button"
+        <a
+          href="/api/auth/signin"
           className="rounded-full border border-primary/40 bg-primary/10 px-4 py-1.5 font-medium text-primary text-sm transition-colors hover:bg-primary/20"
         >
-          Join waitlist
-        </button>
+          Sign in
+        </a>
       </div>
     </motion.header>
   );

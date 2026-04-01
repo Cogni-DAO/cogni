@@ -114,13 +114,13 @@ export function Hero(): ReactElement {
           transition={{ duration: 0.6, delay: 0.35 }}
           className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
         >
-          <button
-            type="button"
+          <a
+            href="/api/auth/signin"
             className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
           >
-            Join the community
+            Sign in
             <ArrowRight className="size-4" />
-          </button>
+          </a>
           <span className="text-muted-foreground text-xs uppercase tracking-widest">
             Teach it. Guide it. Profit with it.
           </span>
