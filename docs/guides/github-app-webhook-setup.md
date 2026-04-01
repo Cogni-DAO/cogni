@@ -38,12 +38,13 @@ tags: [github, webhooks, ingestion, review, setup]
 
 3. **Permissions (Repository):**
 
-| Permission    | Access       | Why                          |
-| ------------- | ------------ | ---------------------------- |
-| Checks        | Read & write | PR review creates Check Runs |
-| Contents      | Read-only    | Read repo files, diffs       |
-| Issues        | Read-only    | Attribution ingestion        |
-| Pull requests | Read & write | PR review posts comments     |
+| Permission    | Access       | Why                                         |
+| ------------- | ------------ | ------------------------------------------- |
+| Actions       | Read & write | PR Manager triggers workflow runs (future)  |
+| Checks        | Read & write | PR review creates Check Runs                |
+| Contents      | Read & write | PR Manager merges PRs, creates branches     |
+| Issues        | Read-only    | Attribution ingestion                       |
+| Pull requests | Read & write | PR review posts comments, PR Manager merges |
 
 4. **Subscribe to events:** Issues, Issue comment, Pull request, Pull request review, Push
 

@@ -22,6 +22,10 @@ import { repoOpenBoundTool } from "./tools/repo-open";
 import { repoSearchBoundTool } from "./tools/repo-search";
 import { scheduleListBoundTool } from "./tools/schedule-list";
 import { scheduleManageBoundTool } from "./tools/schedule-manage";
+import { vcsCreateBranchBoundTool } from "./tools/vcs-create-branch";
+import { vcsGetCiStatusBoundTool } from "./tools/vcs-get-ci-status";
+import { vcsListPrsBoundTool } from "./tools/vcs-list-prs";
+import { vcsMergePrBoundTool } from "./tools/vcs-merge-pr";
 import { webSearchBoundTool } from "./tools/web-search";
 import { workItemQueryBoundTool } from "./tools/work-item-query";
 import { workItemTransitionBoundTool } from "./tools/work-item-transition";
@@ -105,6 +109,10 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   repoSearchBoundTool as CatalogBoundTool,
   scheduleListBoundTool as CatalogBoundTool,
   scheduleManageBoundTool as CatalogBoundTool,
+  vcsCreateBranchBoundTool as CatalogBoundTool,
+  vcsGetCiStatusBoundTool as CatalogBoundTool,
+  vcsListPrsBoundTool as CatalogBoundTool,
+  vcsMergePrBoundTool as CatalogBoundTool,
   webSearchBoundTool as CatalogBoundTool,
   workItemQueryBoundTool as CatalogBoundTool,
   workItemTransitionBoundTool as CatalogBoundTool,

@@ -49,6 +49,15 @@ export type {
   ClockCapability,
   ToolCapabilities,
 } from "./types";
+// VCS capability (per VCS_WRITE_CAPABLE)
+export type {
+  CheckInfo,
+  CiStatusResult,
+  CreateBranchResult,
+  MergeResult,
+  PrSummary,
+  VcsCapability,
+} from "./vcs";
 // Web search capability
 export type {
   WebSearchCapability,

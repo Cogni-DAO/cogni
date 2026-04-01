@@ -20,6 +20,7 @@ import type {
   RepoCapability,
   ScheduleCapability,
   ToolImplementation,
+  VcsCapability,
   WebSearchCapability,
   WorkItemCapability,
 } from "@cogni/ai-tools";
@@ -31,6 +32,10 @@ import {
   createRepoSearchImplementation,
   createScheduleListImplementation,
   createScheduleManageImplementation,
+  createVcsCreateBranchImplementation,
+  createVcsGetCiStatusImplementation,
+  createVcsListPrsImplementation,
+  createVcsMergePrImplementation,
   createWebSearchImplementation,
   createWorkItemQueryImplementation,
   createWorkItemTransitionImplementation,
@@ -43,6 +48,10 @@ import {
   REPO_SEARCH_NAME,
   SCHEDULE_LIST_NAME,
   SCHEDULE_MANAGE_NAME,
+  VCS_CREATE_BRANCH_NAME,
+  VCS_GET_CI_STATUS_NAME,
+  VCS_LIST_PRS_NAME,
+  VCS_MERGE_PR_NAME,
   WEB_SEARCH_NAME,
   WORK_ITEM_QUERY_NAME,
   WORK_ITEM_TRANSITION_NAME,
@@ -58,6 +67,7 @@ export interface ToolBindingDeps {
   readonly webSearchCapability: WebSearchCapability;
   readonly repoCapability: RepoCapability;
   readonly scheduleCapability: ScheduleCapability;
+  readonly vcsCapability: VcsCapability;
   readonly workItemCapability: WorkItemCapability;
 }
 
@@ -121,6 +131,22 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
 
     [SCHEDULE_MANAGE_NAME]: createScheduleManageImplementation({
       scheduleCapability: deps.scheduleCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_CREATE_BRANCH_NAME]: createVcsCreateBranchImplementation({
+      vcsCapability: deps.vcsCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_GET_CI_STATUS_NAME]: createVcsGetCiStatusImplementation({
+      vcsCapability: deps.vcsCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_LIST_PRS_NAME]: createVcsListPrsImplementation({
+      vcsCapability: deps.vcsCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_MERGE_PR_NAME]: createVcsMergePrImplementation({
+      vcsCapability: deps.vcsCapability,
     }) as AnyToolImplementation,
 
     [WORK_ITEM_QUERY_NAME]: createWorkItemQueryImplementation({

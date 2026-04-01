@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/langgraph-graphs/graphs/pr-manager/tools`
+ * Purpose: Tool ID constants for the PR Manager agent graph.
+ * Scope: References tool IDs from @cogni/ai-tools. Does NOT import implementations.
+ * Invariants: TOOL_CATALOG_IS_CANONICAL — IDs only, resolution at runtime.
+ * Side-effects: none
+ * Links: task.0242
+ * @public
+ */
+
+import {
+  REPO_OPEN_NAME,
+  VCS_CREATE_BRANCH_NAME,
+  VCS_GET_CI_STATUS_NAME,
+  VCS_LIST_PRS_NAME,
+  VCS_MERGE_PR_NAME,
+  WORK_ITEM_QUERY_NAME,
+} from "@cogni/ai-tools";
+
+/**
+ * Tool IDs available to the PR Manager agent.
+ *
+ * - repo_open: reads the evolving playbook at docs/guides/pr-management-playbook.md
+ * - VCS tools: PR lifecycle management
+ * - work item query: cross-reference PR ↔ task
+ */
+export const PR_MANAGER_TOOL_IDS = [
+  REPO_OPEN_NAME,
+  VCS_LIST_PRS_NAME,
+  VCS_GET_CI_STATUS_NAME,
+  VCS_MERGE_PR_NAME,
+  VCS_CREATE_BRANCH_NAME,
+  WORK_ITEM_QUERY_NAME,
+] as const;
