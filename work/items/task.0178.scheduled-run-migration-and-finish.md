@@ -106,8 +106,8 @@ The review handler (`handlePrReview`) moves into the graph execution path — th
 
 **Modify (webhook alignment):**
 
-- `apps/web/src/app/_facades/review/dispatch.server.ts` — replace `createGraphExecutor` + inline execution with `workflowClient.start("GraphRunWorkflow")` via Temporal
-- `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — ensure webhook runs (system_webhook runKind) are handled correctly (may already work)
+- `apps/operator/src/app/_facades/review/dispatch.server.ts` — replace `createGraphExecutor` + inline execution with `workflowClient.start("GraphRunWorkflow")` via Temporal
+- `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — ensure webhook runs (system_webhook runKind) are handled correctly (may already work)
 
 **Modify (deprecated alias removal):**
 
@@ -117,7 +117,7 @@ The review handler (`handlePrReview`) moves into the graph execution path — th
 - `packages/db-schema/src/scheduling.ts` — remove `scheduleRuns`, `SCHEDULE_RUN_STATUSES`
 - `packages/db-client/src/adapters/drizzle-run.adapter.ts` — remove `DrizzleScheduleRunAdapter`
 - `packages/db-client/src/index.ts` — remove `DrizzleScheduleRunAdapter` re-export
-- `apps/web/src/adapters/server/index.ts` — remove `DrizzleScheduleRunAdapter` re-export
+- `apps/operator/src/adapters/server/index.ts` — remove `DrizzleScheduleRunAdapter` re-export
 - `services/scheduler-worker/src/ports/index.ts` — remove `ScheduleRunRepository` re-export
 
 **Modify (docs):**

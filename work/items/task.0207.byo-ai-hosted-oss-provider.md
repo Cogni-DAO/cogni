@@ -111,15 +111,15 @@ This is the OpenAI `/v1/models` standard. Ollama, vLLM, and llama.cpp all suppor
 
 ### Files
 
-- Create: `apps/web/src/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.ts` — LlmService impl: HTTP POST to user's `/v1/chat/completions` with SSE streaming
-- Create: `apps/web/src/adapters/server/ai/providers/openai-compatible.provider.ts` — ModelProviderPort impl: dynamic model discovery via `/v1/models`, creates adapter from resolved connection
-- Create: `apps/web/src/adapters/server/ai/openai-compatible/ssrf-guard.ts` — URL validation against private IP ranges
-- Modify: `apps/web/src/adapters/server/ai/providers/index.ts` — export new provider
-- Modify: `apps/web/src/bootstrap/container.ts` — register `OpenAiCompatibleModelProvider` in providers array
-- Modify: `apps/web/src/app/(app)/profile/view.tsx` — add "Connect OpenAI-Compatible Endpoint" section (URL + API key form)
-- Test: `apps/web/tests/unit/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.spec.ts` — completion, streaming, error handling, timeout
-- Test: `apps/web/tests/unit/adapters/server/ai/openai-compatible/ssrf-guard.spec.ts` — private IP rejection
-- Test: `apps/web/tests/unit/adapters/server/ai/providers/openai-compatible.provider.spec.ts` — model discovery, provider contract
+- Create: `apps/operator/src/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.ts` — LlmService impl: HTTP POST to user's `/v1/chat/completions` with SSE streaming
+- Create: `apps/operator/src/adapters/server/ai/providers/openai-compatible.provider.ts` — ModelProviderPort impl: dynamic model discovery via `/v1/models`, creates adapter from resolved connection
+- Create: `apps/operator/src/adapters/server/ai/openai-compatible/ssrf-guard.ts` — URL validation against private IP ranges
+- Modify: `apps/operator/src/adapters/server/ai/providers/index.ts` — export new provider
+- Modify: `apps/operator/src/bootstrap/container.ts` — register `OpenAiCompatibleModelProvider` in providers array
+- Modify: `apps/operator/src/app/(app)/profile/view.tsx` — add "Connect OpenAI-Compatible Endpoint" section (URL + API key form)
+- Test: `apps/operator/tests/unit/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.spec.ts` — completion, streaming, error handling, timeout
+- Test: `apps/operator/tests/unit/adapters/server/ai/openai-compatible/ssrf-guard.spec.ts` — private IP rejection
+- Test: `apps/operator/tests/unit/adapters/server/ai/providers/openai-compatible.provider.spec.ts` — model discovery, provider contract
 
 ### User Documentation
 

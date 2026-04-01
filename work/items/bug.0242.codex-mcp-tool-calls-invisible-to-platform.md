@@ -103,9 +103,9 @@ Events: `item.started` (status: in_progress), `item.completed` (status: complete
 
 ## Allowed Changes
 
-- `apps/web/src/adapters/server/ai/codex/codex-llm.adapter.ts` — handle `mcp_tool_call` items
-- `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — forward tool events if needed
-- `apps/web/src/ports/llm.port.ts` — extend `ChatDeltaEvent` if needed
+- `apps/operator/src/adapters/server/ai/codex/codex-llm.adapter.ts` — handle `mcp_tool_call` items
+- `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — forward tool events if needed
+- `apps/operator/src/ports/llm.port.ts` — extend `ChatDeltaEvent` if needed
 - `packages/langgraph-graphs/src/inproc/runner.ts` — handle tool events from completion stream
 - `packages/ai-core/src/events/ai-events.ts` — only if new event type needed
 

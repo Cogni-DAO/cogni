@@ -331,20 +331,20 @@ Duplicate callbacks or retries produce the same key and are silently dropped (no
 
 ## File Index
 
-| File                                                                | Role                                     |
-| ------------------------------------------------------------------- | ---------------------------------------- |
-| `apps/web/src/adapters/server/ai/execution-scope.ts`                | AsyncLocalStorage scope (usageSource)    |
-| `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` | Emits `usage_report` for all providers   |
-| `apps/web/src/adapters/server/ai/billing-enrichment.decorator.ts`   | Adds billing identity to facts           |
-| `apps/web/src/adapters/server/ai/usage-commit.decorator.ts`         | Validates + commits BYO receipts         |
-| `apps/web/src/bootstrap/graph-executor.factory.ts`                  | Decorator stack composition              |
-| `apps/web/src/app/api/internal/billing/ingest/route.ts`             | LiteLLM callback handler                 |
-| `apps/web/src/features/ai/services/billing.ts`                      | `commitUsageFact()` — sole ledger writer |
-| `packages/db-schema/src/billing.ts`                                 | charge_receipts + llm_charge_details     |
-| `packages/ai-core/src/usage/usage.ts`                               | UsageFact type + Zod schemas             |
-| `packages/ai-core/src/billing/source-system.ts`                     | SourceSystem enum                        |
-| `apps/web/src/app/_facades/ai/activity.server.ts`                   | Activity dashboard query logic           |
-| `apps/web/src/contracts/ai.activity.v1.contract.ts`                 | Activity API response contract           |
+| File                                                                     | Role                                     |
+| ------------------------------------------------------------------------ | ---------------------------------------- |
+| `apps/operator/src/adapters/server/ai/execution-scope.ts`                | AsyncLocalStorage scope (usageSource)    |
+| `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts` | Emits `usage_report` for all providers   |
+| `apps/operator/src/adapters/server/ai/billing-enrichment.decorator.ts`   | Adds billing identity to facts           |
+| `apps/operator/src/adapters/server/ai/usage-commit.decorator.ts`         | Validates + commits BYO receipts         |
+| `apps/operator/src/bootstrap/graph-executor.factory.ts`                  | Decorator stack composition              |
+| `apps/operator/src/app/api/internal/billing/ingest/route.ts`             | LiteLLM callback handler                 |
+| `apps/operator/src/features/ai/services/billing.ts`                      | `commitUsageFact()` — sole ledger writer |
+| `packages/db-schema/src/billing.ts`                                      | charge_receipts + llm_charge_details     |
+| `packages/ai-core/src/usage/usage.ts`                                    | UsageFact type + Zod schemas             |
+| `packages/ai-core/src/billing/source-system.ts`                          | SourceSystem enum                        |
+| `apps/operator/src/app/_facades/ai/activity.server.ts`                   | Activity dashboard query logic           |
+| `apps/operator/src/contracts/ai.activity.v1.contract.ts`                 | Activity API response contract           |
 
 ## Security Architecture
 
@@ -405,15 +405,15 @@ Duplicate callbacks or retries produce the same key and are silently dropped (no
 
 ### Security File Index
 
-| File                                                           | Role                                                   |
-| -------------------------------------------------------------- | ------------------------------------------------------ |
-| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` | Bearer token auth (timing-safe), grant validation      |
-| `apps/web/src/auth.ts`                                         | NextAuth config, SIWE verification, OAuth linking      |
-| `apps/web/src/shared/env/invariants.ts`                        | Boot-time role separation enforcement                  |
-| `apps/web/src/shared/env/server-env.ts`                        | Zod schema for all secrets (min 32 chars)              |
-| `packages/db-client/src/tenant-scope.ts`                       | `withTenantScope()` — SET LOCAL per-transaction        |
-| `packages/db-client/src/adapters/drizzle-grant.adapter.ts`     | Grant validation (scope, expiry, revocation)           |
-| `apps/web/src/bootstrap/http/wrapRouteHandlerWithLogging.ts`   | Route auth guard (required/optional/none)              |
-| `apps/web/src/bootstrap/http/rateLimiter.ts`                   | Token bucket rate limiter                              |
-| `apps/web/src/app/api/internal/billing/ingest/route.ts`        | Billing callback auth + suspicious-zero-cost detection |
-| `docs/spec/database-rls.md`                                    | RLS policy design + dual-role architecture             |
+| File                                                                | Role                                                   |
+| ------------------------------------------------------------------- | ------------------------------------------------------ |
+| `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` | Bearer token auth (timing-safe), grant validation      |
+| `apps/operator/src/auth.ts`                                         | NextAuth config, SIWE verification, OAuth linking      |
+| `apps/operator/src/shared/env/invariants.ts`                        | Boot-time role separation enforcement                  |
+| `apps/operator/src/shared/env/server-env.ts`                        | Zod schema for all secrets (min 32 chars)              |
+| `packages/db-client/src/tenant-scope.ts`                            | `withTenantScope()` — SET LOCAL per-transaction        |
+| `packages/db-client/src/adapters/drizzle-grant.adapter.ts`          | Grant validation (scope, expiry, revocation)           |
+| `apps/operator/src/bootstrap/http/wrapRouteHandlerWithLogging.ts`   | Route auth guard (required/optional/none)              |
+| `apps/operator/src/bootstrap/http/rateLimiter.ts`                   | Token bucket rate limiter                              |
+| `apps/operator/src/app/api/internal/billing/ingest/route.ts`        | Billing callback auth + suspicious-zero-cost detection |
+| `docs/spec/database-rls.md`                                         | RLS policy design + dual-role architecture             |

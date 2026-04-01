@@ -23,7 +23,7 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
     // Find all .runGraph( call sites in src/ (production code only)
     const grepResult = execSync(
       "grep -rn '\\.runGraph(' src/ --include='*.ts' || true",
-      { encoding: "utf-8", cwd: join(process.cwd(), "apps/web") }
+      { encoding: "utf-8", cwd: join(process.cwd(), "apps/operator") }
     );
 
     const allSites = grepResult.split("\n").filter(Boolean);
@@ -51,7 +51,7 @@ describe("CALLER_DRAIN_OBLIGATION Invariant", () => {
     for (const site of consumerSites) {
       const filePath = site.split(":")[0] ?? "";
       const fileContent = readFileSync(
-        join(process.cwd(), "apps/web", filePath),
+        join(process.cwd(), "apps/operator", filePath),
         "utf-8"
       );
 

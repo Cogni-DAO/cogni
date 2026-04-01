@@ -56,15 +56,15 @@ last_commit: 2418b237
 
 ## Pointers
 
-| File / Resource                                                                | Why it matters                                     |
-| ------------------------------------------------------------------------------ | -------------------------------------------------- |
-| `work/items/task.0150.web3-scripts-to-package-and-setup-dao.md`                | Work item with checkpoint checklists               |
-| `work/items/task.0086.openrouter-topup-integration.md`                         | Next task — OpenRouter top-up (blocked by this)    |
-| `docs/guides/operator-wallet-setup.md`                                         | Setup guide — Privy credentials + Split deployment |
-| `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts` | Real adapter — `distributeSplit()` impl            |
-| `apps/web/tests/external/operator-wallet/operator-wallet.external.test.ts`     | External test suite — 3 tests, real Base txs       |
-| `apps/web/src/bootstrap/container.ts:401-437`                                  | Container wiring — decides Fake vs Real adapter    |
-| `apps/web/src/features/payments/application/confirmCreditsPurchase.ts`         | Orchestrator — credits + treasury settlement       |
-| `apps/web/src/adapters/server/treasury/split-treasury-settlement.adapter.ts`   | Settlement adapter — calls `distributeSplit()`     |
-| `.cogni/repo-spec.yaml`                                                        | Real addresses for operator wallet + Split         |
-| `scripts/experiments/full-chain.ts`                                            | Spike.0090 reference — proven e2e chain            |
+| File / Resource                                                                   | Why it matters                                     |
+| --------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `work/items/task.0150.web3-scripts-to-package-and-setup-dao.md`                   | Work item with checkpoint checklists               |
+| `work/items/task.0086.openrouter-topup-integration.md`                            | Next task — OpenRouter top-up (blocked by this)    |
+| `docs/guides/operator-wallet-setup.md`                                            | Setup guide — Privy credentials + Split deployment |
+| `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts`    | Real adapter — `distributeSplit()` impl            |
+| `apps/operator/tests/external/operator-wallet/operator-wallet.external.test.ts`   | External test suite — 3 tests, real Base txs       |
+| `apps/operator/src/bootstrap/container.ts:401-437`                                | Container wiring — decides Fake vs Real adapter    |
+| `apps/operator/src/features/payments/application/confirmCreditsPurchase.ts`       | Orchestrator — credits + treasury settlement       |
+| `apps/operator/src/adapters/server/treasury/split-treasury-settlement.adapter.ts` | Settlement adapter — calls `distributeSplit()`     |
+| `.cogni/repo-spec.yaml`                                                           | Real addresses for operator wallet + Split         |
+| `scripts/experiments/full-chain.ts`                                               | Spike.0090 reference — proven e2e chain            |

@@ -371,7 +371,7 @@ importers:
         specifier: ^5
         version: 5.9.3
 
-  apps/web:
+  apps/operator:
     dependencies:
       '@assistant-ui/react':
         specifier: ^0.12.10

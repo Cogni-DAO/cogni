@@ -57,7 +57,7 @@ RLS is actually smarter — it allows the user to see runs from schedules they o
 
 ### Bug A: `requestedBy` hardcoded to system tenant for ALL schedules
 
-**File**: `apps/web/src/adapters/server/temporal/schedule-control.adapter.ts:144`
+**File**: `apps/operator/src/adapters/server/temporal/schedule-control.adapter.ts:144`
 
 ```typescript
 requestedBy: COGNI_SYSTEM_PRINCIPAL_USER_ID,  // hardcoded for ALL schedules
@@ -123,7 +123,7 @@ export interface CreateScheduleParams {
 
 ### 2. Adapter uses `ownerUserId` as `requestedBy`
 
-**File**: `apps/web/src/adapters/server/temporal/schedule-control.adapter.ts:144`
+**File**: `apps/operator/src/adapters/server/temporal/schedule-control.adapter.ts:144`
 
 ```typescript
 // Before:
@@ -183,12 +183,12 @@ Migration: `UPDATE graph_runs SET requested_by = '00000000-0000-4000-a000-000000
 ## Allowed Changes
 
 - `packages/scheduler-core/src/ports/schedule-control.port.ts` — add `ownerUserId` to `CreateScheduleParams`
-- `apps/web/src/adapters/server/temporal/schedule-control.adapter.ts` — use `ownerUserId` instead of hardcoded system principal
+- `apps/operator/src/adapters/server/temporal/schedule-control.adapter.ts` — use `ownerUserId` instead of hardcoded system principal
 - `packages/db-client/src/adapters/drizzle-schedule.adapter.ts` — pass `callerUserId` as `ownerUserId`
 - `packages/scheduler-core/src/services/syncGovernanceSchedules.ts` — pass system principal as `ownerUserId`
 - `packages/db-client/src/adapters/drizzle-run.adapter.ts` — remove redundant `requestedBy` filter in `listRunsByUser`
 - `packages/db-schema/src/scheduling.ts` — rename `GRAPH_RUN_KINDS` values, fix column comment
-- `apps/web/src/adapters/server/db/migrations/` — new migration for runKind rename + stale data fix
+- `apps/operator/src/adapters/server/db/migrations/` — new migration for runKind rename + stale data fix
 - Tests touching the above files
 
 ## Plan

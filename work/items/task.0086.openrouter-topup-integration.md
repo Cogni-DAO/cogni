@@ -96,17 +96,17 @@ confirmCreditsPurchase() — application orchestrator
 
 ### Files
 
-- Create: `apps/web/src/ports/provider-funding.port.ts` — `ProviderFundingPort` interface with `fundAfterCreditPurchase(context)`. Provider-agnostic (OpenRouter today, other providers tomorrow)
-- Create: `apps/web/src/adapters/server/treasury/openrouter-funding.adapter.ts` — implements `ProviderFundingPort`. Composes OpenRouter charge creation + `OperatorWalletPort.fundOpenRouterTopUp()`. Manages `provider_funding_attempts` row. Error logging distinguishes `reasonCode: "insufficient_balance_timing"` (transient — split tx not yet confirmed, wallet will have funds shortly) from `reasonCode: "funding_failed"` (real failure)
-- Modify: `apps/web/src/core/billing/pricing.ts` — add `calculateOpenRouterTopUp(paymentUsd, markupFactor, revenueShare, cryptoFee): number`
-- Modify: `apps/web/src/shared/env/server-env.ts` — add `OPENROUTER_API_KEY` (optional), `OPENROUTER_CRYPTO_FEE` (default 0.05)
-- Modify: `apps/web/src/features/payments/application/confirmCreditsPurchase.ts` — add Steps 4-6 composing `FinancialLedgerPort` + `ProviderFundingPort`. Deps object instead of positional params
-- Modify: `apps/web/src/app/_facades/payments/credits.server.ts` — pass new deps from container
-- Modify: `apps/web/src/bootstrap/container.ts` — wire `ProviderFundingPort`, `MARGIN_PRESERVED` startup check
+- Create: `apps/operator/src/ports/provider-funding.port.ts` — `ProviderFundingPort` interface with `fundAfterCreditPurchase(context)`. Provider-agnostic (OpenRouter today, other providers tomorrow)
+- Create: `apps/operator/src/adapters/server/treasury/openrouter-funding.adapter.ts` — implements `ProviderFundingPort`. Composes OpenRouter charge creation + `OperatorWalletPort.fundOpenRouterTopUp()`. Manages `provider_funding_attempts` row. Error logging distinguishes `reasonCode: "insufficient_balance_timing"` (transient — split tx not yet confirmed, wallet will have funds shortly) from `reasonCode: "funding_failed"` (real failure)
+- Modify: `apps/operator/src/core/billing/pricing.ts` — add `calculateOpenRouterTopUp(paymentUsd, markupFactor, revenueShare, cryptoFee): number`
+- Modify: `apps/operator/src/shared/env/server-env.ts` — add `OPENROUTER_API_KEY` (optional), `OPENROUTER_CRYPTO_FEE` (default 0.05)
+- Modify: `apps/operator/src/features/payments/application/confirmCreditsPurchase.ts` — add Steps 4-6 composing `FinancialLedgerPort` + `ProviderFundingPort`. Deps object instead of positional params
+- Modify: `apps/operator/src/app/_facades/payments/credits.server.ts` — pass new deps from container
+- Modify: `apps/operator/src/bootstrap/container.ts` — wire `ProviderFundingPort`, `MARGIN_PRESERVED` startup check
 - Modify: `packages/financial-ledger/src/domain/accounts.ts` — add `ASSETS_PROVIDER_FLOAT: 2003n` on USDC ledger (asset, not expense)
-- Modify: `apps/web/src/shared/db/schema.billing.ts` — add `provider_funding_attempts` table
-- Modify: `apps/web/src/adapters/server/db/migrations/` — new migration for `provider_funding_attempts`
-- Modify: `apps/web/src/ports/index.ts` — export new port
+- Modify: `apps/operator/src/shared/db/schema.billing.ts` — add `provider_funding_attempts` table
+- Modify: `apps/operator/src/adapters/server/db/migrations/` — new migration for `provider_funding_attempts`
+- Modify: `apps/operator/src/ports/index.ts` — export new port
 - Modify: `docs/spec/financial-ledger.md` — fix OpenRouter top-up row: `Expense:AI:OpenRouter` → `Assets:ProviderFloat:USDC`
 - Test: `tests/unit/core/billing/pricing.test.ts` — `calculateOpenRouterTopUp` + margin check
 - Test: `tests/contract/provider-funding.contract.test.ts` — funding with FakeOperatorWallet + deterministic IDs
@@ -166,16 +166,16 @@ On crash recovery: lookup by `paymentIntentId` → resume from last status. `cha
 
 ## Allowed Changes
 
-- `apps/web/src/ports/provider-funding.port.ts` (new — ProviderFundingPort interface)
-- `apps/web/src/ports/index.ts` (export new port)
-- `apps/web/src/adapters/server/treasury/openrouter-funding.adapter.ts` (new — OpenRouter adapter)
-- `apps/web/src/core/billing/pricing.ts` (add calculateOpenRouterTopUp)
-- `apps/web/src/shared/env/server-env.ts` (add OPENROUTER_API_KEY, OPENROUTER_CRYPTO_FEE)
-- `apps/web/src/shared/db/schema.billing.ts` (add provider_funding_attempts table)
-- `apps/web/src/adapters/server/db/migrations/` (new migration)
-- `apps/web/src/features/payments/application/confirmCreditsPurchase.ts` (compose new ports)
-- `apps/web/src/app/_facades/payments/credits.server.ts` (pass new deps)
-- `apps/web/src/bootstrap/container.ts` (wire ProviderFundingPort, margin check)
+- `apps/operator/src/ports/provider-funding.port.ts` (new — ProviderFundingPort interface)
+- `apps/operator/src/ports/index.ts` (export new port)
+- `apps/operator/src/adapters/server/treasury/openrouter-funding.adapter.ts` (new — OpenRouter adapter)
+- `apps/operator/src/core/billing/pricing.ts` (add calculateOpenRouterTopUp)
+- `apps/operator/src/shared/env/server-env.ts` (add OPENROUTER_API_KEY, OPENROUTER_CRYPTO_FEE)
+- `apps/operator/src/shared/db/schema.billing.ts` (add provider_funding_attempts table)
+- `apps/operator/src/adapters/server/db/migrations/` (new migration)
+- `apps/operator/src/features/payments/application/confirmCreditsPurchase.ts` (compose new ports)
+- `apps/operator/src/app/_facades/payments/credits.server.ts` (pass new deps)
+- `apps/operator/src/bootstrap/container.ts` (wire ProviderFundingPort, margin check)
 - `packages/financial-ledger/src/domain/accounts.ts` (add ASSETS_PROVIDER_FLOAT)
 - `docs/spec/financial-ledger.md` (fix accounting for OpenRouter top-up row)
 - `tests/` (unit + contract tests)

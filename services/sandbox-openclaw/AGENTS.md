@@ -19,7 +19,7 @@ Multi-stage devtools image for running OpenClaw in Cogni. One image for both gat
 - [Sandbox Images Guide](../../docs/guides/sandbox-images.md) — build/push/pull commands for all published images
 - [Sandbox Spec](../../docs/spec/sandboxed-agents.md)
 - [Sandbox Runtime (reference)](../sandbox-runtime/)
-- [Sandbox Adapter](../../apps/web/src/adapters/server/sandbox/)
+- [Sandbox Adapter](../../apps/operator/src/adapters/server/sandbox/)
 
 ## Boundaries
 

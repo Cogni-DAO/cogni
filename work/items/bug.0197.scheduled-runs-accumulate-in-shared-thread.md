@@ -47,7 +47,7 @@ Confirmed: `sha256("cddba5f8-6a90-4593-ab23-8a38b7053462")` = `a7683f4b...` (pon
 
 ### Root Cause
 
-**File**: `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts:352-353`
+**File**: `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts:352-353`
 
 ```typescript
 const scheduleId = extractScheduleId(idempotencyKey);
@@ -104,7 +104,7 @@ Each scheduled run persists its own isolated thread (prompt + response + tool ca
 
 **Solution**: Derive `stateKey` from the idempotency key (unique per execution slot) instead of the bare schedule ID. Each run gets a fresh, isolated `ai_threads` row.
 
-**File**: `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts:352-353`
+**File**: `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts:352-353`
 
 ```typescript
 // Before — one thread per schedule (accumulates):
@@ -136,14 +136,14 @@ Why this works: `loadThread(stateKey)` returns `[]` for a never-seen stateKey, s
 
 ### Files
 
-- Modify: `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts:352-353` — hash `idempotencyKey` instead of `scheduleId`
+- Modify: `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts:352-353` — hash `idempotencyKey` instead of `scheduleId`
 - Modify: `services/scheduler-worker/src/activities/index.ts` — add optional `stateKey` to `updateGraphRunActivity` input
 - Modify: `packages/db-client/src/adapters/drizzle-run.adapter.ts` — support `stateKey` in update params
 - Test: verify new scheduled runs create isolated 1-message threads
 
 ## Allowed Changes
 
-- `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — change stateKey hash input for grant-backed runs
+- `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — change stateKey hash input for grant-backed runs
 - `services/scheduler-worker/src/activities/index.ts` — add stateKey to updateGraphRun
 - `packages/db-client/src/adapters/drizzle-run.adapter.ts` — support stateKey in run updates
 

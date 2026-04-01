@@ -28,14 +28,14 @@ deploy_verified: false
 
 ### Observed
 
-`InProcCompletionUnitAdapter.executeCompletionUnit()` at `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts:203-204` unconditionally forwards tools to the `LlmService`:
+`InProcCompletionUnitAdapter.executeCompletionUnit()` at `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts:203-204` unconditionally forwards tools to the `LlmService`:
 
 ```ts
 ...(tools && { tools }),
 ...(toolChoice && { toolChoice }),
 ```
 
-The LangGraph runner at `apps/web/src/adapters/server/ai/langgraph/inproc.provider.ts:147-148` resolves tools from the catalog based on `toolIds`, then passes them to `executeCompletionUnit()` — also without checking capabilities.
+The LangGraph runner at `apps/operator/src/adapters/server/ai/langgraph/inproc.provider.ts:147-148` resolves tools from the catalog based on `toolIds`, then passes them to `executeCompletionUnit()` — also without checking capabilities.
 
 When the resolved `LlmService` is `OpenAiCompatibleLlmAdapter` targeting a model without function calling support (e.g. `tinyllama:latest` on Ollama), the endpoint returns HTTP 400:
 
@@ -66,9 +66,9 @@ The capability information is available: `ModelProviderPort.listModels()` return
 
 ## Allowed Changes
 
-- `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — gate tools on capability
-- `apps/web/src/adapters/server/ai/langgraph/inproc.provider.ts` — pass capability flag or strip tools before `executeCompletionUnit()`
-- `apps/web/src/adapters/server/ai/execution-scope.ts` — optionally carry capabilities on scope
+- `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — gate tools on capability
+- `apps/operator/src/adapters/server/ai/langgraph/inproc.provider.ts` — pass capability flag or strip tools before `executeCompletionUnit()`
+- `apps/operator/src/adapters/server/ai/execution-scope.ts` — optionally carry capabilities on scope
 - Remove retry hack from `openai-compatible-llm.adapter.ts` once proper gating is in place
 
 ## Validation

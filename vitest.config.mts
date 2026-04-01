@@ -4,7 +4,7 @@
 /**
  * Module: `vitest.config`
  * Purpose: Vitest test runner configuration for cross-workspace tests (arch, lint, packages, services).
- * Scope: Tests that do NOT import @/ app code. App-specific tests run via apps/web/vitest.config.mts.
+ * Scope: Tests that do NOT import @/ app code. App-specific tests run via apps/operator/vitest.config.mts.
  * Invariants: Coverage disabled by default; fast execution; v8 provider for Node.js compatibility; constrained envs use threads pool (MessagePort IPC, no signals) to avoid ulimit -i 0 hangs.
  * Side-effects: file system (coverage reports written to ./coverage/)
  * Notes: Uses vite-tsconfig-paths for module resolution; excludes tests/component/** from main test run.

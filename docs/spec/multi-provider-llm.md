@@ -317,18 +317,18 @@ No conditional throw for missing `usageUnitId`. Platform runs that are missing i
 
 ### File Pointers
 
-| File                                                                  | Purpose                                                                    |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `packages/graph-execution-core/src/graph-executor.port.ts`            | `GraphRunRequest` with `modelRef`                                          |
-| `apps/web/src/ports/llm.port.ts`                                      | `LlmService` interface                                                     |
-| `apps/web/src/ports/model-catalog.port.ts`                            | `ModelCatalogPort` (new)                                                   |
-| `apps/web/src/ports/connection-broker.port.ts`                        | `ConnectionBrokerPort` (scoped by actor+tenant, not billing account alone) |
-| `packages/ai-core/src/billing/source-system.ts`                       | `SourceSystem` enum                                                        |
-| `packages/ai-core/src/usage/usage.ts`                                 | `UsageFact` type                                                           |
-| `apps/web/src/bootstrap/graph-executor.factory.ts`                    | `resolveLlmService` + decorator stack                                      |
-| `apps/web/src/adapters/server/ai/preflight-credit-check.decorator.ts` | Unified credit check                                                       |
-| `apps/web/src/shared/ai/model-catalog.server.ts`                      | `AggregatingModelCatalog` adapter                                          |
-| `apps/web/src/contracts/ai.models.v1.contract.ts`                     | `/api/v1/ai/models` contract                                               |
+| File                                                                       | Purpose                                                                    |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `packages/graph-execution-core/src/graph-executor.port.ts`                 | `GraphRunRequest` with `modelRef`                                          |
+| `apps/operator/src/ports/llm.port.ts`                                      | `LlmService` interface                                                     |
+| `apps/operator/src/ports/model-catalog.port.ts`                            | `ModelCatalogPort` (new)                                                   |
+| `apps/operator/src/ports/connection-broker.port.ts`                        | `ConnectionBrokerPort` (scoped by actor+tenant, not billing account alone) |
+| `packages/ai-core/src/billing/source-system.ts`                            | `SourceSystem` enum                                                        |
+| `packages/ai-core/src/usage/usage.ts`                                      | `UsageFact` type                                                           |
+| `apps/operator/src/bootstrap/graph-executor.factory.ts`                    | `resolveLlmService` + decorator stack                                      |
+| `apps/operator/src/adapters/server/ai/preflight-credit-check.decorator.ts` | Unified credit check                                                       |
+| `apps/operator/src/shared/ai/model-catalog.server.ts`                      | `AggregatingModelCatalog` adapter                                          |
+| `apps/operator/src/contracts/ai.models.v1.contract.ts`                     | `/api/v1/ai/models` contract                                               |
 
 ## Open Questions
 

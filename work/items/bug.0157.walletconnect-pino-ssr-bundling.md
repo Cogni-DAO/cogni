@@ -28,7 +28,7 @@ external_refs:
 
 ## Symptoms
 
-`pnpm --filter web build` (Turbopack) fails with 21 "Module not found" errors in Docker:
+`pnpm --filter operator build` (Turbopack) fails with 21 "Module not found" errors in Docker:
 
 ```
 Module not found: Can't resolve './ROOT/node_modules/.pnpm/thread-stream@0.15.2/node_modules/thread-stream/test/close-on-gc.js'
@@ -55,15 +55,15 @@ This only manifests with `outputFileTracingRoot` set (monorepo layout) because T
 
 ## Current Containment (temporary)
 
-- `apps/web/src/shared/stubs/thread-stream-noop.ts` — noop class
-- `apps/web/next.config.ts` → `turbopack.resolveAlias: { "thread-stream": "./src/shared/stubs/thread-stream-noop.ts" }`
+- `apps/operator/src/shared/stubs/thread-stream-noop.ts` — noop class
+- `apps/operator/next.config.ts` → `turbopack.resolveAlias: { "thread-stream": "./src/shared/stubs/thread-stream-noop.ts" }`
 
 ## Real Fix
 
 Remove the wallet subtree from SSR entirely using a client-only dynamic boundary. Next.js `ssr: false` is the supported escape hatch for browser-only dependency chains:
 
 ```tsx
-// apps/web/src/components/wallet/WalletConnectButton.tsx (or parent)
+// apps/operator/src/components/wallet/WalletConnectButton.tsx (or parent)
 import dynamic from "next/dynamic";
 
 const WalletConnectButton = dynamic(
@@ -74,7 +74,7 @@ const WalletConnectButton = dynamic(
 
 Once the dynamic boundary is in place:
 
-- Remove `apps/web/src/shared/stubs/thread-stream-noop.ts`
+- Remove `apps/operator/src/shared/stubs/thread-stream-noop.ts`
 - Remove `turbopack.resolveAlias` from `next.config.ts`
 - Remove `"pino"` and `"pino-pretty"` from `serverExternalPackages` (if only there for this issue)
 
@@ -88,10 +88,10 @@ Once the dynamic boundary is in place:
 
 ## Allowed Changes
 
-- `apps/web/src/components/` — wallet component files
-- `apps/web/src/app/` — layouts that render wallet components
-- `apps/web/next.config.ts` — remove workaround
-- `apps/web/src/shared/stubs/` — delete thread-stream-noop.ts
+- `apps/operator/src/components/` — wallet component files
+- `apps/operator/src/app/` — layouts that render wallet components
+- `apps/operator/next.config.ts` — remove workaround
+- `apps/operator/src/shared/stubs/` — delete thread-stream-noop.ts
 
 ## Plan
 

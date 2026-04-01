@@ -196,19 +196,19 @@ Fix: whitelist only what Codex needs — `HOME`, `PATH`, `NODE_ENV`, `TERM`, plu
 
 **Modify:**
 
-- `apps/web/src/adapters/server/ai/providers/codex.provider.ts` — `createLlmService()` accepts optional `CodexMcpConfig`
-- `apps/web/src/adapters/server/ai/codex/codex-llm.adapter.ts` — accept `CodexMcpConfig`, write `config.toml`, whitelist env vars
-- `apps/web/src/adapters/server/ai/langgraph/inproc.provider.ts` — resolve MCP config for Codex path, pass to `createLlmService()`
-- `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — enforcement gate
+- `apps/operator/src/adapters/server/ai/providers/codex.provider.ts` — `createLlmService()` accepts optional `CodexMcpConfig`
+- `apps/operator/src/adapters/server/ai/codex/codex-llm.adapter.ts` — accept `CodexMcpConfig`, write `config.toml`, whitelist env vars
+- `apps/operator/src/adapters/server/ai/langgraph/inproc.provider.ts` — resolve MCP config for Codex path, pass to `createLlmService()`
+- `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts` — enforcement gate
 
 **Do NOT modify:**
 
-- `apps/web/src/ports/llm.port.ts` — `CompletionStreamParams` stays clean
-- `apps/web/src/features/ai/services/completion.ts` — no MCP awareness needed
+- `apps/operator/src/ports/llm.port.ts` — `CompletionStreamParams` stays clean
+- `apps/operator/src/features/ai/services/completion.ts` — no MCP awareness needed
 
 **Create:**
 
-- `apps/web/src/adapters/server/ai/codex/codex-mcp-config.ts` — `CodexMcpConfig` type + `generateConfigToml()`
+- `apps/operator/src/adapters/server/ai/codex/codex-mcp-config.ts` — `CodexMcpConfig` type + `generateConfigToml()`
 
 **Test:**
 

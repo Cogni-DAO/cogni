@@ -53,11 +53,11 @@ P0 of the live operations dashboard. Static card grid powered by the run list AP
 
 ## Allowed Changes
 
-- `apps/web/src/app/(app)/dashboard/page.tsx` — new page
-- `apps/web/src/app/(app)/dashboard/view.tsx` — client view
-- `apps/web/src/app/(app)/dashboard/_api/` — API fetch functions
-- `apps/web/src/components/kit/data-display/RunCard.tsx` — new card component
-- `apps/web/src/features/ai/hooks/useRunList.ts` — React Query hook
+- `apps/operator/src/app/(app)/dashboard/page.tsx` — new page
+- `apps/operator/src/app/(app)/dashboard/view.tsx` — client view
+- `apps/operator/src/app/(app)/dashboard/_api/` — API fetch functions
+- `apps/operator/src/components/kit/data-display/RunCard.tsx` — new card component
+- `apps/operator/src/features/ai/hooks/useRunList.ts` — React Query hook
 - Navigation update to include /dashboard link
 
 ## Design Notes

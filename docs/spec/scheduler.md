@@ -277,30 +277,30 @@ tags: [scheduler]
 | `packages/db-client/src/adapters/drizzle-execution-request.adapter.ts` | `DrizzleExecutionRequestAdapter`                     |
 | `packages/db-client/src/adapters/drizzle-schedule.adapter.ts`          | `DrizzleScheduleManagerAdapter`                      |
 | `packages/db-client/src/adapters/drizzle-run.adapter.ts`               | `DrizzleGraphRunAdapter`                             |
-| `apps/web/src/contracts/schedules.*.v1.contract.ts`                    | Schedule CRUD contracts (4 files)                    |
-| `apps/web/src/app/api/v1/schedules/route.ts`                           | POST (create with credit gate), GET (list)           |
-| `apps/web/src/app/api/v1/schedules/[scheduleId]/route.ts`              | PATCH (update), DELETE                               |
-| `apps/web/src/bootstrap/container.ts`                                  | Wire scheduling ports                                |
+| `apps/operator/src/contracts/schedules.*.v1.contract.ts`               | Schedule CRUD contracts (4 files)                    |
+| `apps/operator/src/app/api/v1/schedules/route.ts`                      | POST (create with credit gate), GET (list)           |
+| `apps/operator/src/app/api/v1/schedules/[scheduleId]/route.ts`         | PATCH (update), DELETE                               |
+| `apps/operator/src/bootstrap/container.ts`                             | Wire scheduling ports                                |
 | `packages/scheduler-core/src/payloads.ts`                              | Zod payload schemas                                  |
 
 ### Implemented (Temporal Migration)
 
-| File                                                                | Purpose                                     |
-| ------------------------------------------------------------------- | ------------------------------------------- |
-| `packages/scheduler-core/src/ports/schedule-control.port.ts`        | `ScheduleControlPort` interface (no vendor) |
-| `apps/web/src/adapters/server/temporal/client.ts`                   | Temporal client factory                     |
-| `apps/web/src/adapters/server/temporal/schedule-control.adapter.ts` | `TemporalScheduleControlAdapter`            |
-| `services/scheduler-worker/`                                        | Temporal worker service                     |
-| `services/scheduler-worker/src/main.ts`                             | Worker entry, connects to Temporal          |
-| `services/scheduler-worker/src/workflows/`                          | GovernanceScheduledRunWorkflow              |
-| `services/scheduler-worker/src/activities/`                         | validateGrant, createRun, executeGraph      |
+| File                                                                     | Purpose                                     |
+| ------------------------------------------------------------------------ | ------------------------------------------- |
+| `packages/scheduler-core/src/ports/schedule-control.port.ts`             | `ScheduleControlPort` interface (no vendor) |
+| `apps/operator/src/adapters/server/temporal/client.ts`                   | Temporal client factory                     |
+| `apps/operator/src/adapters/server/temporal/schedule-control.adapter.ts` | `TemporalScheduleControlAdapter`            |
+| `services/scheduler-worker/`                                             | Temporal worker service                     |
+| `services/scheduler-worker/src/main.ts`                                  | Worker entry, connects to Temporal          |
+| `services/scheduler-worker/src/workflows/`                               | GovernanceScheduledRunWorkflow              |
+| `services/scheduler-worker/src/activities/`                              | validateGrant, createRun, executeGraph      |
 
 ### Implemented (P0)
 
-| File                                                           | Purpose                     |
-| -------------------------------------------------------------- | --------------------------- |
-| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` | Internal execution endpoint |
-| `apps/web/src/contracts/graphs.run.internal.v1.contract.ts`    | Internal execution contract |
+| File                                                                | Purpose                     |
+| ------------------------------------------------------------------- | --------------------------- |
+| `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` | Internal execution endpoint |
+| `apps/operator/src/contracts/graphs.run.internal.v1.contract.ts`    | Internal execution contract |
 
 ---
 

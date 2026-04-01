@@ -34,7 +34,7 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 | `check:full` local CI-parity gate with trap-based cleanup                 | Done   | 1   | —         |
 | `validate-dsns.sh` for runtime DSN isolation                              | Done   | 1   | —         |
 | Runtime containers receive only `DATABASE_URL` and `DATABASE_SERVICE_URL` | Done   | 1   | —         |
-| App to `apps/web` workspace, flatten platform/ → infra/ + scripts/        | Done   | 5   | task.0151 |
+| App to `apps/operator` workspace, flatten platform/ → infra/ + scripts/   | Done   | 5   | task.0151 |
 
 ### Walk (P1) — DSN-Only Provisioning & Build Improvements
 
@@ -61,11 +61,11 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 | Update docs: "Only 3 DSNs exist"                                                                                                                                                                                                                                                                                                                    | Not Started | 1   | (create at P2 start)        |
 | Add `DATABASE_ROOT_URL` to INFRASTRUCTURE_SETUP.md secret table                                                                                                                                                                                                                                                                                     | Not Started | 1   | (create at P2 start)        |
 | Graph-scoped builds: adopt `pnpm deploy` for service Dockerfiles — eliminates fragile multi-COPY symlink approach. Root `package.json` currently lists all `@cogni/*` workspace packages as deps to ensure pnpm creates root-level symlinks needed by the scheduler-worker Dockerfile (task.0151 workaround). `pnpm deploy` resolves this properly. | Not Started | 3   | (create at P2 start)        |
-| App as workspace package: move app to `apps/web` for proper filter targeting (`pnpm --filter web... build`)                                                                                                                                                                                                                                         | Not Started | 2   | — (superseded by task.0151) |
+| App as workspace package: move app to `apps/operator` for proper filter targeting (`pnpm --filter operator... build`)                                                                                                                                                                                                                               | Not Started | 2   | — (superseded by task.0151) |
 | `check:full --watch`: re-run on file changes                                                                                                                                                                                                                                                                                                        | Not Started | 2   | (create at P2 start)        |
 | Parallel test execution in check:full (once isolation is proven stable)                                                                                                                                                                                                                                                                             | Not Started | 2   | (create at P2 start)        |
 
-| Test architecture: `tests/_fakes/` and `tests/_fixtures/` import `@/` app code — they're app-owned, not shared. Either move into `apps/web/tests/` or extract truly shared parts into a test utils package. Same coupling affects stack/external tests. Root `tests/` should be free of `@/` imports. | Not Started | 3 | (create at P2 start) |
+| Test architecture: `tests/_fakes/` and `tests/_fixtures/` import `@/` app code — they're app-owned, not shared. Either move into `apps/operator/tests/` or extract truly shared parts into a test utils package. Same coupling affects stack/external tests. Root `tests/` should be free of `@/` imports. | Not Started | 3 | (create at P2 start) |
 
 ### Future — IaC Lane
 

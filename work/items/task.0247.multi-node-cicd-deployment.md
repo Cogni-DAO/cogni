@@ -115,7 +115,7 @@ Rationale:
 
 ### Phase 1: Per-node Dockerfiles
 
-1. Create `nodes/poly/app/Dockerfile` (based on `apps/web/Dockerfile` pattern)
+1. Create `nodes/poly/app/Dockerfile` (based on `apps/operator/Dockerfile` pattern)
 2. Create `nodes/resy/app/Dockerfile` (same pattern)
 3. Add build scripts to `scripts/ci/build-node.sh`
 

@@ -88,18 +88,18 @@ User clicks "Connect ChatGPT" on the profile page, authenticates at OpenAI via s
 
 #### OAuth routes
 
-- Create: `apps/web/src/app/api/v1/auth/openai-codex/authorize/route.ts` — generates PKCE, sets cookie, returns redirect URL
-- Create: `apps/web/src/app/api/v1/auth/openai-codex/callback/route.ts` — exchanges code, encrypts tokens, inserts connection, redirects to profile
-- Create: `apps/web/src/app/api/v1/auth/openai-codex/disconnect/route.ts` — soft-deletes connection
+- Create: `apps/operator/src/app/api/v1/auth/openai-codex/authorize/route.ts` — generates PKCE, sets cookie, returns redirect URL
+- Create: `apps/operator/src/app/api/v1/auth/openai-codex/callback/route.ts` — exchanges code, encrypts tokens, inserts connection, redirects to profile
+- Create: `apps/operator/src/app/api/v1/auth/openai-codex/disconnect/route.ts` — soft-deletes connection
 
 #### Profile page
 
-- Modify: `apps/web/src/app/(app)/profile/view.tsx` — add "AI Providers" section with ChatGPT SettingRow
+- Modify: `apps/operator/src/app/(app)/profile/view.tsx` — add "AI Providers" section with ChatGPT SettingRow
 
 #### Container wiring
 
-- Modify: `apps/web/src/bootstrap/container.ts` — wire `DrizzleConnectionBrokerAdapter` when `CONNECTIONS_ENCRYPTION_KEY` set, keep `LocalConnectionBrokerAdapter` as fallback
-- Modify: `apps/web/src/bootstrap/graph-executor.factory.ts` — pass `container.connectionBroker` (already does this)
+- Modify: `apps/operator/src/bootstrap/container.ts` — wire `DrizzleConnectionBrokerAdapter` when `CONNECTIONS_ENCRYPTION_KEY` set, keep `LocalConnectionBrokerAdapter` as fallback
+- Modify: `apps/operator/src/bootstrap/graph-executor.factory.ts` — pass `container.connectionBroker` (already does this)
 
 #### Chat page (already done)
 

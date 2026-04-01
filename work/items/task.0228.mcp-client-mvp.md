@@ -103,7 +103,7 @@ LangGraph agent gets result
 - [ ] TOOLS_VIA_TOOLRUNNER: MCP tools execute through toolRunner.exec(), not direct invocation
 - [ ] DENY_BY_DEFAULT: MCP tools require explicit allowlist via catalog mcpServerIds
 - [ ] MCP_UNTRUSTED_BY_DEFAULT: MCP tools not auto-enabled; graph must declare mcpServerIds
-- [ ] NO_LANGCHAIN_IN_SRC: McpToolSource lives in packages/langgraph-graphs, not apps/web/src
+- [ ] NO_LANGCHAIN_IN_SRC: McpToolSource lives in packages/langgraph-graphs, not apps/operator/src
 - [ ] SINGLE_AUTH_PATH: MCP server credentials via env/config (Phase 0); same ConnectionBrokerPort pattern later
 - [ ] TOOL_ID_NAMESPACED: MCP tools prefixed mcp**{server}**{tool} to prevent collisions
 
@@ -122,8 +122,8 @@ LangGraph agent gets result
 - `packages/langgraph-graphs/src/catalog.ts` — Add mcpServerIds field, browser graph entry
 - `packages/langgraph-graphs/src/inproc/types.ts` — Remove extraTools (replaced by McpToolSource)
 - `packages/langgraph-graphs/src/inproc/runner.ts` — Remove extraTools merge logic
-- `apps/web/src/adapters/server/ai/langgraph/inproc.provider.ts` — Use composite ToolSource (native + MCP)
-- `apps/web/src/bootstrap/graph-executor.factory.ts` — Wire McpToolSource into composite source, remove LazyMcpLangGraphProvider
+- `apps/operator/src/adapters/server/ai/langgraph/inproc.provider.ts` — Use composite ToolSource (native + MCP)
+- `apps/operator/src/bootstrap/graph-executor.factory.ts` — Wire McpToolSource into composite source, remove LazyMcpLangGraphProvider
 - `config/mcp.servers.json` — Playwright already added
 
 **Test:**

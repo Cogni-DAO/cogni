@@ -24,7 +24,7 @@ last_commit: d6387ef3
 - **Done**: Port interfaces, domain types, transition table, MarkdownWorkItemAdapter, contract test suite, spec (`docs/spec/work-items-port.md`)
 - **PR open**: https://github.com/Cogni-DAO/node-template/pull/542 — needs merge to staging
 - **Worktree**: `.claude/worktrees/agentic-pm` (branch `design/agentic-project-management`)
-- **Not done**: No consumer wired. The web app `/work` page still uses the bespoke `apps/web/src/lib/work-scanner.ts` scanner. Skills (`/triage`, `/implement`, etc.) still hand-edit frontmatter
+- **Not done**: No consumer wired. The web app `/work` page still uses the bespoke `apps/operator/src/lib/work-scanner.ts` scanner. Skills (`/triage`, `/implement`, etc.) still hand-edit frontmatter
 - **task.0152** exists at `needs_design` for skill migration, blocked on task.0156
 
 ## Decisions Made
@@ -41,7 +41,7 @@ last_commit: d6387ef3
 The first wiring target is the **web app work dashboard** — it already reads work items and would benefit from typed data.
 
 - [ ] **Merge PR #542** to staging
-- [ ] **Wire the `/work` page**: Replace `apps/web/src/lib/work-scanner.ts` → `MarkdownWorkItemAdapter.list()`. The existing `WorkItem` interface in work-scanner.ts is a subset of `@cogni/work-items`'s `WorkItem` type. Swap the import, instantiate the adapter with `process.cwd()`, update `view.tsx` to use the richer type
+- [ ] **Wire the `/work` page**: Replace `apps/operator/src/lib/work-scanner.ts` → `MarkdownWorkItemAdapter.list()`. The existing `WorkItem` interface in work-scanner.ts is a subset of `@cogni/work-items`'s `WorkItem` type. Swap the import, instantiate the adapter with `process.cwd()`, update `view.tsx` to use the richer type
 - [ ] **Unblock task.0152**: Once merged, update `blocked_by` and design the skill migration — `/triage` and `/implement` are the proof-of-concept consumers
 - [ ] **Wire skills**: Replace direct `readFile`/`writeFile` + YAML parsing in skill code with `adapter.get()`, `adapter.transitionStatus()`, `adapter.patch()` etc.
 - [ ] **Consider a pnpm script**: A thin CLI wrapper (e.g., `pnpm work:get task.0151`, `pnpm work:transition task.0151 needs_merge`) would let agents use the port from shell commands without TypeScript imports
@@ -64,7 +64,7 @@ The first wiring target is the **web app work dashboard** — it already reads w
 | `packages/work-items/tests/contract/work-item-port.contract.ts` | Contract test suite — reusable for future adapters                              |
 | `docs/spec/work-items-port.md`                                  | Spec with invariants, diagrams, acceptance checks                               |
 | `work/projects/proj.agentic-project-management.md`              | Project roadmap — Crawl (ports) → Walk (relations) → Run (agents) → Sprint (DB) |
-| `apps/web/src/lib/work-scanner.ts`                              | **First replacement target** — bespoke scanner the `/work` page uses today      |
-| `apps/web/src/app/(app)/work/page.tsx`                          | Work dashboard page — calls `getWorkItems()` from scanner                       |
+| `apps/operator/src/lib/work-scanner.ts`                         | **First replacement target** — bespoke scanner the `/work` page uses today      |
+| `apps/operator/src/app/(app)/work/page.tsx`                     | Work dashboard page — calls `getWorkItems()` from scanner                       |
 | `work/items/task.0152.skill-port-migration.md`                  | Next task — wire `/triage` + `/implement` skills to use port                    |
 | `packages/work-items/AGENTS.md`                                 | Package-level AGENTS.md with public surface and boundaries                      |

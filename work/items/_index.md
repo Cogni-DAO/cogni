@@ -55,7 +55,7 @@
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_merge | task.0232 | dns-ops v0 — DNS layer for multi-node creation pipeline | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0236 | Dashboard statusLabel wiring — RunCard shows live phase from SSE | Premium Frontend UX | proj.premium-frontend-ux |
-| 1 | 2 | 3 | needs_implement | task.0246 | Rename apps/web → apps/operator | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 2 | 3 | needs_review | task.0246 | Rename app workspace to apps/operator | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -194,7 +194,7 @@
 | 0 | bug.0146 | Epoch transition deadlock: grace period prevents new epoch creation, halting all collection |  |  |
 | 0 | bug.0149 | Epoch receipt scope too narrow + pendingSelectionDto fabricates inclusion |  |  |
 | 0 | bug.0151 | ensurePoolComponents crashes on duplicate key — Drizzle wraps PostgresError, catch block misses it |  |  |
-| 0 | task.0151 | Monorepo re-architecture: app to apps/web, platform/ to infra/ + scripts/ | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | task.0151 | Monorepo re-architecture: app to apps/operator, platform/ to infra/ + scripts/ | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | bug.0153 | Check name mismatch: code creates 'Cogni PR Review' but branch protection requires 'Cogni Git PR Review' | VCS Integration | proj.vcs-integration |
 | 0 | task.0155 | packages/work-items — port interfaces, domain types, and status transition table | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | task.0156 | packages/work-items — MarkdownWorkItemAdapter + contract tests | DAO Agentic Project Management | proj.agentic-project-management |
