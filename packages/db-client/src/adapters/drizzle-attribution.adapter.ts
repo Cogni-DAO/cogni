@@ -88,7 +88,6 @@ import {
   isNotNull,
   isNull,
   lte,
-  ne,
   notInArray,
   or,
   sql,
@@ -1775,32 +1774,6 @@ export class DrizzleAttributionAdapter implements AttributionStore {
     epochId: bigint
   ): Promise<UnselectedReceipt[]> {
     await this.resolveEpochScoped(epochId);
-
-    // Exclude receipts already selected in prior same-scope epochs.
-    // RECEIPT_SCOPE_AGNOSTIC: cross-scope selection is preserved — filter is same-scope only.
-    const priorEpochRows = await this.db
-      .select({ id: epochs.id })
-      .from(epochs)
-      .where(
-        and(
-          eq(epochs.nodeId, nodeId),
-          eq(epochs.scopeId, this.scopeId),
-          ne(epochs.id, epochId)
-        )
-      );
-
-    const priorEpochIds = priorEpochRows.map((e) => e.id);
-
-    const alreadySelected =
-      priorEpochIds.length > 0
-        ? await this.db
-            .selectDistinct({ receiptId: epochSelection.receiptId })
-            .from(epochSelection)
-            .where(inArray(epochSelection.epochId, priorEpochIds))
-        : [];
-
-    const excludeIds = alreadySelected.map((r) => r.receiptId);
-
     const rows = await this.db
       .select({
         receipt: ingestionReceipts,
@@ -1818,12 +1791,19 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         and(
           eq(ingestionReceipts.nodeId, nodeId),
           or(
-            isNull(epochSelection.id), // no selection row
+            isNull(epochSelection.id), // no selection row for this epoch
             isNull(epochSelection.userId) // selection exists but unresolved
           ),
-          excludeIds.length > 0
-            ? notInArray(ingestionReceipts.receiptId, excludeIds)
-            : undefined
+          // Exclude receipts already selected in prior same-scope epochs.
+          // RECEIPT_SCOPE_AGNOSTIC: cross-scope selection preserved — filter is same-scope only.
+          sql`NOT EXISTS (
+            SELECT 1 FROM epoch_selection es_prior
+            JOIN epochs e_prior ON e_prior.id = es_prior.epoch_id
+            WHERE es_prior.receipt_id = ${ingestionReceipts.receiptId}
+              AND e_prior.node_id = ${nodeId}
+              AND e_prior.scope_id = ${this.scopeId}
+              AND es_prior.epoch_id != ${epochId}
+          )`
         )
       )
       .orderBy(ingestionReceipts.eventTime);
