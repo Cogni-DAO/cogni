@@ -53,15 +53,15 @@ last_commit: 01ab240b
 
 ## Pointers
 
-| File / Resource | Why it matters |
-| --- | --- |
-| `docs/guides/multi-node-dev.md` | Dev commands, testing, DB/auth setup for multi-node |
-| `nodes/node-template/app/tsconfig.app.json` | The `@/*` path override pattern all nodes must follow |
-| `nodes/*/app/next.config.ts` | `outputFileTracingRoot` must be `../../../` for nodes |
-| `package.json` (root) | `dev:poly`, `dev:resy`, `dev:stack:full`, `typecheck:*` scripts |
-| `work/projects/proj.operator-plane.md` | Multi-Node Infrastructure section — deliverable table |
-| `work/items/task.0247` | CI/CD + Docker + per-node DB design notes |
-| `work/items/task.0248` | Shared platform package + UI standardization notes |
-| `work/items/bug.0255` | Node landing page auth flow — root cause analysis |
-| `apps/operator/src/features/home/hooks/useTryDemo.ts` | The correct sign-in pattern nodes should use |
-| `/Users/derek/dev/cogni-resy-helper/apps/web/src/` | Resy fork source — reservations feature lives here |
+| File / Resource                                       | Why it matters                                                  |
+| ----------------------------------------------------- | --------------------------------------------------------------- |
+| `docs/guides/multi-node-dev.md`                       | Dev commands, testing, DB/auth setup for multi-node             |
+| `nodes/node-template/app/tsconfig.app.json`           | The `@/*` path override pattern all nodes must follow           |
+| `nodes/*/app/next.config.ts`                          | `outputFileTracingRoot` must be `../../../` for nodes           |
+| `package.json` (root)                                 | `dev:poly`, `dev:resy`, `dev:stack:full`, `typecheck:*` scripts |
+| `work/projects/proj.operator-plane.md`                | Multi-Node Infrastructure section — deliverable table           |
+| `work/items/task.0247`                                | CI/CD + Docker + per-node DB design notes                       |
+| `work/items/task.0248`                                | Shared platform package + UI standardization notes              |
+| `work/items/bug.0255`                                 | Node landing page auth flow — root cause analysis               |
+| `apps/operator/src/features/home/hooks/useTryDemo.ts` | The correct sign-in pattern nodes should use                    |
+| `/Users/derek/dev/cogni-resy-helper/apps/web/src/`    | Resy fork source — reservations feature lives here              |
