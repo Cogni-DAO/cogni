@@ -144,7 +144,7 @@ export interface CompletionStreamParams {
   /** Tool choice strategy */
   toolChoice?: LlmToolChoice;
   /** Billing correlation metadata forwarded to LiteLLM as x-litellm-spend-logs-metadata header */
-  spendLogsMetadata?: { run_id: string; graph_id: string };
+  spendLogsMetadata?: { run_id: string; graph_id: string; node_id?: string };
 }
 
 export type ChatDeltaEvent =
@@ -225,7 +225,7 @@ export interface LlmService {
     maxTokens?: number;
     caller: LlmCaller;
     /** Billing correlation metadata forwarded to LiteLLM as x-litellm-spend-logs-metadata header */
-    spendLogsMetadata?: { run_id: string; graph_id: string };
+    spendLogsMetadata?: { run_id: string; graph_id: string; node_id?: string };
   }): Promise<LlmCompletionResult>;
 
   completionStream(params: CompletionStreamParams): Promise<{

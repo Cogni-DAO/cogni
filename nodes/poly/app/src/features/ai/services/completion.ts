@@ -259,7 +259,7 @@ export interface ExecuteStreamParams {
   /** Optional tool choice policy */
   toolChoice?: import("@/ports").LlmToolChoice;
   /** Billing correlation metadata forwarded to LiteLLM as x-litellm-spend-logs-metadata header */
-  spendLogsMetadata?: { run_id: string; graph_id: string };
+  spendLogsMetadata?: { run_id: string; graph_id: string; node_id?: string };
 }
 
 /**

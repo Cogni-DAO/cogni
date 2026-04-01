@@ -50,6 +50,7 @@ export interface InProcCompletionUnitDeps {
   readonly clock: Clock;
   readonly aiTelemetry: AiTelemetryPort;
   readonly langfuse: LangfusePort | undefined;
+  readonly nodeId: string;
 }
 
 /**
@@ -81,7 +82,7 @@ export interface CompletionStreamParams {
   /** Tool choice for LLM (optional) */
   toolChoice?: import("@/ports").LlmToolChoice;
   /** Billing correlation metadata forwarded to LiteLLM as x-litellm-spend-logs-metadata header */
-  spendLogsMetadata?: { run_id: string; graph_id: string };
+  spendLogsMetadata?: { run_id: string; graph_id: string; node_id?: string };
 }
 
 /**
@@ -205,6 +206,7 @@ export class InProcCompletionUnitAdapter {
           ...(toolChoice && { toolChoice }),
           spendLogsMetadata: {
             run_id: runContext.runId,
+            node_id: this.deps.nodeId,
             graph_id: runContext.graphId,
           },
         }).catch((error: unknown) => {

@@ -48,6 +48,7 @@ export const StandardLoggingPayloadBillingSchema = z
         spend_logs_metadata: z
           .object({
             run_id: z.string(),
+            node_id: z.string().optional(),
             graph_id: z.string().optional(),
             attempt: z.number().int().optional(),
           })
