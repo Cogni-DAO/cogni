@@ -34,6 +34,7 @@ export const GET = wrapRouteHandlerWithLogging(
     const typesParam = url.searchParams.get("types");
     const statusesParam = url.searchParams.get("statuses");
     const textParam = url.searchParams.get("text");
+    const actorParam = url.searchParams.get("actor");
     const projectIdParam = url.searchParams.get("projectId");
     const limitParam = url.searchParams.get("limit");
 
@@ -41,6 +42,7 @@ export const GET = wrapRouteHandlerWithLogging(
       types: typesParam ? typesParam.split(",") : undefined,
       statuses: statusesParam ? statusesParam.split(",") : undefined,
       text: textParam ?? undefined,
+      actor: actorParam ?? undefined,
       projectId: projectIdParam ?? undefined,
       limit: limitParam ? Number(limitParam) : undefined,
     });

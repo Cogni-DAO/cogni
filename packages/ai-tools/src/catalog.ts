@@ -23,6 +23,8 @@ import { repoSearchBoundTool } from "./tools/repo-search";
 import { scheduleListBoundTool } from "./tools/schedule-list";
 import { scheduleManageBoundTool } from "./tools/schedule-manage";
 import { webSearchBoundTool } from "./tools/web-search";
+import { workItemQueryBoundTool } from "./tools/work-item-query";
+import { workItemTransitionBoundTool } from "./tools/work-item-transition";
 import type { BoundTool } from "./types";
 
 /**
@@ -104,6 +106,8 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   scheduleListBoundTool as CatalogBoundTool,
   scheduleManageBoundTool as CatalogBoundTool,
   webSearchBoundTool as CatalogBoundTool,
+  workItemQueryBoundTool as CatalogBoundTool,
+  workItemTransitionBoundTool as CatalogBoundTool,
 ]);
 
 /**

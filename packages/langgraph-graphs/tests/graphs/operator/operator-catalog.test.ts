@@ -20,10 +20,10 @@ import { LANGGRAPH_CATALOG, LANGGRAPH_GRAPH_IDS } from "../../../src/catalog";
 import { createOperatorGraph } from "../../../src/graphs/operator/graph";
 
 describe("operator catalog entries", () => {
-  it("ceo-operator entry exists with systemPrompt and graphFactory", () => {
-    const entry = LANGGRAPH_CATALOG["ceo-operator"];
+  it("operating-review entry exists with systemPrompt and graphFactory", () => {
+    const entry = LANGGRAPH_CATALOG["operating-review"];
     expect(entry).toBeDefined();
-    expect(entry.displayName).toBe("CEO Operator");
+    expect(entry.displayName).toBe("Operating Review");
     expect(entry.systemPrompt).toBeDefined();
     expect(typeof entry.systemPrompt).toBe("string");
     expect(entry.systemPrompt!.length).toBeGreaterThan(100);
@@ -42,7 +42,9 @@ describe("operator catalog entries", () => {
   });
 
   it("graph IDs include operator roles", () => {
-    expect(LANGGRAPH_GRAPH_IDS["ceo-operator"]).toBe("langgraph:ceo-operator");
+    expect(LANGGRAPH_GRAPH_IDS["operating-review"]).toBe(
+      "langgraph:operating-review"
+    );
     expect(LANGGRAPH_GRAPH_IDS["git-reviewer"]).toBe("langgraph:git-reviewer");
   });
 

@@ -21,6 +21,7 @@ import type {
   ScheduleCapability,
   ToolImplementation,
   WebSearchCapability,
+  WorkItemCapability,
 } from "@cogni/ai-tools";
 import {
   createMarketListImplementation,
@@ -31,6 +32,8 @@ import {
   createScheduleListImplementation,
   createScheduleManageImplementation,
   createWebSearchImplementation,
+  createWorkItemQueryImplementation,
+  createWorkItemTransitionImplementation,
   GET_CURRENT_TIME_NAME,
   getCurrentTimeImplementation,
   MARKET_LIST_NAME,
@@ -41,6 +44,8 @@ import {
   SCHEDULE_LIST_NAME,
   SCHEDULE_MANAGE_NAME,
   WEB_SEARCH_NAME,
+  WORK_ITEM_QUERY_NAME,
+  WORK_ITEM_TRANSITION_NAME,
 } from "@cogni/ai-tools";
 
 /**
@@ -53,6 +58,7 @@ export interface ToolBindingDeps {
   readonly webSearchCapability: WebSearchCapability;
   readonly repoCapability: RepoCapability;
   readonly scheduleCapability: ScheduleCapability;
+  readonly workItemCapability: WorkItemCapability;
 }
 
 /**
@@ -115,6 +121,14 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
 
     [SCHEDULE_MANAGE_NAME]: createScheduleManageImplementation({
       scheduleCapability: deps.scheduleCapability,
+    }) as AnyToolImplementation,
+
+    [WORK_ITEM_QUERY_NAME]: createWorkItemQueryImplementation({
+      workItemCapability: deps.workItemCapability,
+    }) as AnyToolImplementation,
+
+    [WORK_ITEM_TRANSITION_NAME]: createWorkItemTransitionImplementation({
+      workItemCapability: deps.workItemCapability,
     }) as AnyToolImplementation,
   };
 }

@@ -22,7 +22,7 @@ import type { CreateReactAgentGraphOptions } from "../types";
 /**
  * Graph name constants for operator roles.
  */
-export const CEO_OPERATOR_GRAPH_NAME = "ceo-operator" as const;
+export const OPERATING_REVIEW_GRAPH_NAME = "operating-review" as const;
 export const GIT_REVIEWER_GRAPH_NAME = "git-reviewer" as const;
 
 /**

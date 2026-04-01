@@ -41,7 +41,7 @@ Work item port interfaces, domain types, and the markdown file-backed adapter fo
 ## Public Surface
 
 - **Exports (root `@cogni/work-items`):**
-  - `WorkItemId`, `Revision`, `WorkItemType`, `WorkItemStatus` — identity and enum types
+  - `WorkItemId`, `Revision`, `WorkItemType`, `WorkItemStatus`, `ActorKind` — identity and enum types
   - `SubjectRef`, `ExternalRef`, `RelationType`, `WorkRelation` — structured domain types
   - `WorkItem`, `WorkQuery` — full work item type and query filter
   - `toWorkItemId(raw: string): WorkItemId` — boundary constructor

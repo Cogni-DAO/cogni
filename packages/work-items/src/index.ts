@@ -14,6 +14,7 @@
 export type { WorkItemCommandPort, WorkItemQueryPort } from "./ports.js";
 export { isValidTransition, VALID_TRANSITIONS } from "./transitions.js";
 export type {
+  ActorKind,
   ExternalRef,
   RelationType,
   Revision,
