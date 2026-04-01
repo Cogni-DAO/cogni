@@ -187,6 +187,11 @@ export const serverSchema = z.object({
   // Required for research graph web search capability
   TAVILY_API_KEY: z.string().min(1).optional(),
 
+  // Market Provider: Kalshi - Optional
+  // Required for Kalshi market data in poly-brain. Polymarket works without credentials.
+  KALSHI_API_KEY: z.string().min(1).optional(),
+  KALSHI_API_SECRET: z.string().min(1).optional(),
+
   // Redis (stream plane — ephemeral only)
   // Per unified-graph-launch spec: REDIS_IS_STREAM_PLANE
   // Default: localhost for host-mode dev; docker-compose overrides to redis://redis:6379

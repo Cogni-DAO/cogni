@@ -421,6 +421,9 @@ importers:
       '@cogni/langgraph-graphs':
         specifier: workspace:*
         version: link:../../packages/langgraph-graphs
+      '@cogni/market-provider':
+        specifier: workspace:*
+        version: link:../../packages/market-provider
       '@cogni/repo-spec':
         specifier: workspace:*
         version: link:../../packages/repo-spec

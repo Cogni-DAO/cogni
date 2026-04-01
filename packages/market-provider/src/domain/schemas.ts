@@ -43,7 +43,7 @@ export const NormalizedMarketSchema = z.object({
   resolvesAt: z.string(),
   active: z.boolean(),
   /** Platform-specific fields (conditionId, eventTicker, etc.) */
-  attributes: z.record(z.unknown()),
+  attributes: z.record(z.string(), z.unknown()),
   updatedAt: z.string(),
 });
 export type NormalizedMarket = z.infer<typeof NormalizedMarketSchema>;

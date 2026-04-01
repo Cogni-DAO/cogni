@@ -89,6 +89,7 @@ import {
 } from "@/adapters/test";
 import { createToolBindings } from "@/bootstrap/ai/tool-bindings";
 import { createBoundToolSource } from "@/bootstrap/ai/tool-source.factory";
+import { createMarketCapability } from "@/bootstrap/capabilities/market";
 import {
   createMetricsCapability,
   derivePrometheusQueryUrl,
@@ -534,10 +535,12 @@ function createContainer(): Container {
     },
   });
 
-  // MarketCapability for AI tools (stub — real adapters wired in Walk phase)
-  const marketCapability = {
-    listMarkets: async () => ({ markets: [], totalCount: 0, providers: [] }),
-  };
+  // MarketCapability for AI tools (live Polymarket + optional Kalshi)
+  // Dynamic import avoided — direct import at top of file
+  const marketCapability = createMarketCapability({
+    KALSHI_API_KEY: env.KALSHI_API_KEY,
+    KALSHI_API_SECRET: env.KALSHI_API_SECRET,
+  });
 
   // ToolSource with real implementations (per CAPABILITY_INJECTION)
   const toolBindings = createToolBindings({
