@@ -43,12 +43,12 @@ export function useTryDemo() {
   const handleTryDemo = useCallback(() => {
     // Already authenticated: navigate immediately
     if (status === "authenticated") {
-      router.push("/chat");
+      router.push("/reservations");
       return;
     }
 
     // Store redirect intent in sessionStorage (survives SIWE flow)
-    sessionStorage.setItem(REDIRECT_KEY, "/chat");
+    sessionStorage.setItem(REDIRECT_KEY, "/reservations");
 
     // Not connected: open connect modal
     if (!isConnected) {

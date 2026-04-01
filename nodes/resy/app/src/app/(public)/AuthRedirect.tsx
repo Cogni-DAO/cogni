@@ -25,7 +25,7 @@ export function AuthRedirect(): React.JSX.Element | null {
   useEffect(() => {
     if (status === "authenticated") {
       setRedirecting(true);
-      window.location.replace("/chat");
+      window.location.replace("/reservations");
     }
   }, [status]);
 
