@@ -39,6 +39,11 @@ export type {
   WebSearchResult,
   // Note: WebSearchResultItem exported from tools/web-search to avoid duplicate
   WebSearchTopic,
+  WorkItemAssignee,
+  WorkItemCapability,
+  WorkItemInfo,
+  WorkItemQueryParams,
+  WorkItemTransitionResult,
 } from "./capabilities";
 // Capabilities
 export {
@@ -178,6 +183,32 @@ export {
   webSearchContract,
   webSearchStubImplementation,
 } from "./tools/web-search";
+export {
+  createWorkItemQueryImplementation,
+  WORK_ITEM_QUERY_NAME,
+  type WorkItemQueryDeps,
+  type WorkItemQueryInput,
+  WorkItemQueryInputSchema,
+  type WorkItemQueryOutput,
+  WorkItemQueryOutputSchema,
+  type WorkItemQueryRedacted,
+  workItemQueryBoundTool,
+  workItemQueryContract,
+  workItemQueryStubImplementation,
+} from "./tools/work-item-query";
+export {
+  createWorkItemTransitionImplementation,
+  WORK_ITEM_TRANSITION_NAME,
+  type WorkItemTransitionDeps,
+  type WorkItemTransitionInput,
+  WorkItemTransitionInputSchema,
+  type WorkItemTransitionOutput,
+  WorkItemTransitionOutputSchema,
+  type WorkItemTransitionRedacted,
+  workItemTransitionBoundTool,
+  workItemTransitionContract,
+  workItemTransitionStubImplementation,
+} from "./tools/work-item-transition";
 // Tool types
 export type {
   BoundTool,

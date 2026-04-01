@@ -19,7 +19,7 @@
  */
 export interface RoleSpec {
   readonly roleId: string;
-  /** Fully-qualified graph ID (e.g., "langgraph:ceo-operator") */
+  /** Fully-qualified graph ID (e.g., "langgraph:operating-review") */
   readonly graphId: string;
   readonly workflowShape: "webhook" | "scheduled-sweep";
   readonly model: string;
@@ -35,12 +35,12 @@ export interface RoleSpec {
 
 // ── Role Constants ──────────────────────────────────────
 
-export const CEO_ROLE: RoleSpec = {
-  roleId: "ceo-operator",
-  graphId: "langgraph:ceo-operator",
+export const OPERATING_REVIEW_ROLE: RoleSpec = {
+  roleId: "operating-review",
+  graphId: "langgraph:operating-review",
   workflowShape: "scheduled-sweep",
   model: "openai/gpt-4o-mini",
-  schedule: { cron: "0 * * * *" },
+  schedule: { cron: "0 */12 * * *" },
   queueFilter: {},
   concurrency: 1,
 };

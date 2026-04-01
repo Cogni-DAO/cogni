@@ -52,6 +52,9 @@ export function createSweepActivities(deps: SweepActivityDeps) {
       url.searchParams.set("types", input.types.join(","));
     }
 
+    // Agents only see AI-eligible work items (actor=ai matches "ai" + "either")
+    url.searchParams.set("actor", "ai");
+
     logger.info(
       { event: "sweep.fetch_items", url: url.toString() },
       "Fetching work items for sweep"

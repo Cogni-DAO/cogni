@@ -54,6 +54,9 @@ Pure tool definitions for AI agent execution. Defines `ToolContract`, `ToolImple
   - `RepoCapability`, `RepoSearchHit`, `RepoSearchResult`, `RepoOpenResult`, `RepoListParams`, `RepoListResult` - Repo capability types
   - `makeRepoCitation()`, `REPO_CITATION_REGEX` - Citation helpers
   - `toToolSpec()`, `toToolSpecs()` - Compile ToolContract to ToolSpec (Zod → JSONSchema7)
+  - `workItemQueryBoundTool`, `WORK_ITEM_QUERY_NAME`, `createWorkItemQueryImplementation` - Work item query tool
+  - `workItemTransitionBoundTool`, `WORK_ITEM_TRANSITION_NAME`, `createWorkItemTransitionImplementation` - Work item transition tool
+  - `WorkItemCapability`, `WorkItemInfo`, `WorkItemQueryParams`, `WorkItemTransitionResult` - Work item capability types
   - `TOOL_CATALOG` - Singleton catalog of all registered tools (Record<string, CatalogBoundTool>)
   - `createToolCatalog()`, `getToolById()`, `getToolIds()`, `hasToolId()` - Catalog accessors
   - `toBoundToolRuntime()`, `contractToRuntime()` - Runtime adapter converters (contractToRuntime for DI)

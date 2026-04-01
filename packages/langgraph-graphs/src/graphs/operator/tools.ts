@@ -3,7 +3,7 @@
 
 /**
  * Module: `@cogni/langgraph-graphs/graphs/operator/tools`
- * Purpose: Tool IDs for operator roles (CEO, Git Reviewer).
+ * Purpose: Tool IDs for operator roles (Operating Review, Git Reviewer).
  * Scope: Exports tool capability metadata. Does NOT enforce policy.
  * Invariants:
  *   - SINGLE_SOURCE_OF_TRUTH: This is THE list of tools each operator role can use
@@ -17,23 +17,26 @@ import {
   GET_CURRENT_TIME_NAME,
   METRICS_QUERY_NAME,
   SCHEDULE_LIST_NAME,
-  SCHEDULE_MANAGE_NAME,
+  WORK_ITEM_QUERY_NAME,
+  WORK_ITEM_TRANSITION_NAME,
 } from "@cogni/ai-tools";
 
 /**
- * Tool IDs for CEO Operator.
- * Schedule tools enable self-scheduling of graph executions.
+ * Tool IDs for Operating Review.
+ * Read-mostly: query items, patch priority/labels, triage status transitions.
+ * Schedule read-only (no SCHEDULE_MANAGE — planner must not modify its own schedule).
  */
-export const CEO_OPERATOR_TOOL_IDS = [
+export const OPERATING_REVIEW_TOOL_IDS = [
+  WORK_ITEM_QUERY_NAME,
+  WORK_ITEM_TRANSITION_NAME,
   GET_CURRENT_TIME_NAME,
   METRICS_QUERY_NAME,
   SCHEDULE_LIST_NAME,
-  SCHEDULE_MANAGE_NAME,
 ] as const;
 
 /**
  * Tool IDs for Git Reviewer.
- * Uses existing tools. GitHub PR tools (read, comment) will be added
- * when implemented in @cogni/ai-tools.
+ * Currently a queue observer only — no GitHub API access.
+ * GitHub PR tools (read, comment) will be added when implemented.
  */
 export const GIT_REVIEWER_TOOL_IDS = [GET_CURRENT_TIME_NAME] as const;

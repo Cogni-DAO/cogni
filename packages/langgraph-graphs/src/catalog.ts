@@ -22,17 +22,17 @@ import {
   FRONTEND_TESTER_GRAPH_NAME,
 } from "./graphs/frontend-tester/graph";
 import {
-  CEO_OPERATOR_GRAPH_NAME,
   createOperatorGraph,
   GIT_REVIEWER_GRAPH_NAME,
+  OPERATING_REVIEW_GRAPH_NAME,
 } from "./graphs/operator/graph";
 import {
-  CEO_OPERATOR_PROMPT,
   GIT_REVIEWER_PROMPT,
+  OPERATING_REVIEW_PROMPT,
 } from "./graphs/operator/prompts";
 import {
-  CEO_OPERATOR_TOOL_IDS,
   GIT_REVIEWER_TOOL_IDS,
+  OPERATING_REVIEW_TOOL_IDS,
 } from "./graphs/operator/tools";
 import { createPoetGraph, POET_GRAPH_NAME } from "./graphs/poet/graph";
 import { POET_TOOL_IDS } from "./graphs/poet/tools";
@@ -163,26 +163,26 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
   },
 
   /**
-   * CEO Operator - strategic executive agent for work queue management.
-   * Uses createOperatorGraph with catalog-driven system prompt.
+   * Operating Review — periodic planner-of-record for backlog health.
+   * Runs every 12h to triage, flag stuck items, and produce structured briefs.
    */
-  [CEO_OPERATOR_GRAPH_NAME]: {
-    displayName: "CEO Operator",
+  [OPERATING_REVIEW_GRAPH_NAME]: {
+    displayName: "Operating Review",
     description:
-      "Strategic operator — triages, prioritizes, and dispatches work items",
-    toolIds: CEO_OPERATOR_TOOL_IDS as readonly string[],
+      "Periodic review — triages backlog, flags risks, produces structured briefs",
+    toolIds: OPERATING_REVIEW_TOOL_IDS as readonly string[],
     graphFactory: createOperatorGraph,
-    systemPrompt: CEO_OPERATOR_PROMPT,
+    systemPrompt: OPERATING_REVIEW_PROMPT,
   },
 
   /**
-   * Git Reviewer - PR lifecycle owner driving PRs to merge or rejection.
-   * Uses createOperatorGraph with catalog-driven system prompt.
+   * Git Reviewer — queue observer for merge-ready items.
+   * Reports status based on work item metadata (no GitHub API access).
    */
   [GIT_REVIEWER_GRAPH_NAME]: {
     displayName: "Git Reviewer",
     description:
-      "Owns PR lifecycle — review, fix CI, merge or reject with rationale",
+      "Queue observer — reports merge-ready item status from metadata",
     toolIds: GIT_REVIEWER_TOOL_IDS as readonly string[],
     graphFactory: createOperatorGraph,
     systemPrompt: GIT_REVIEWER_PROMPT,
@@ -211,7 +211,7 @@ export const LANGGRAPH_GRAPH_IDS = {
   "pr-review": `${LANGGRAPH_PROVIDER_ID}:${PR_REVIEW_GRAPH_NAME}`,
   browser: `${LANGGRAPH_PROVIDER_ID}:${BROWSER_GRAPH_NAME}`,
   "frontend-tester": `${LANGGRAPH_PROVIDER_ID}:${FRONTEND_TESTER_GRAPH_NAME}`,
-  "ceo-operator": `${LANGGRAPH_PROVIDER_ID}:${CEO_OPERATOR_GRAPH_NAME}`,
+  "operating-review": `${LANGGRAPH_PROVIDER_ID}:${OPERATING_REVIEW_GRAPH_NAME}`,
   "git-reviewer": `${LANGGRAPH_PROVIDER_ID}:${GIT_REVIEWER_GRAPH_NAME}`,
 } as const;
 

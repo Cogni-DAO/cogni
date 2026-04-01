@@ -96,6 +96,7 @@ import {
 import { createRepoCapability } from "@/bootstrap/capabilities/repo";
 import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
+import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
 import type {
   AccountService,
@@ -510,6 +511,13 @@ function createContainer(): Container {
   // RepoCapability for AI tools (requires COGNI_REPO_PATH)
   const repoCapability = createRepoCapability(env);
 
+  // WorkItemCapability for AI tools (delegates to markdown adapter ports)
+  const workItemAdapter = new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT);
+  const workItemCapability = createWorkItemCapability({
+    workItemQuery: workItemAdapter,
+    workItemCommand: workItemAdapter,
+  });
+
   // ScheduleCapability for AI tools (reads actorUserId from ALS at invocation time)
   const scheduleCapability = createScheduleCapability({
     scheduleManager,
@@ -532,6 +540,7 @@ function createContainer(): Container {
     webSearchCapability,
     repoCapability,
     scheduleCapability,
+    workItemCapability,
   });
   const toolSource = createBoundToolSource(toolBindings);
 
@@ -686,7 +695,7 @@ function createContainer(): Container {
       userActor(toUserId(COGNI_SYSTEM_PRINCIPAL_USER_ID))
     ),
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
-    workItemQuery: new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT),
+    workItemQuery: workItemAdapter,
     runStream,
     get webhookRegistrations() {
       return getWebhookRegistrations();
