@@ -17,6 +17,8 @@ RUN apk add --no-cache g++ make python3
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --parents apps/operator/package.json ./
 COPY --parents packages/*/package.json ./
+COPY --parents nodes/*/app/package.json ./
+COPY --parents nodes/*/packages/*/package.json ./
 
 # Use official node dist to avoid unofficial-builds.nodejs.org flakiness
 ENV npm_config_disturl=https://nodejs.org/dist

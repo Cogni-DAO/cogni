@@ -25,6 +25,8 @@ WORKDIR /app
 # Copy workspace config for dependency resolution
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY --parents packages/*/package.json ./
+COPY --parents nodes/*/app/package.json ./
+COPY --parents nodes/*/packages/*/package.json ./
 COPY --parents services/scheduler-worker/package.json ./
 
 # Install all dependencies (dev + prod) for build
