@@ -33,7 +33,7 @@ import {
 import type {
   ChatCompletionOutput,
   ChatMessage,
-} from "@/contracts/ai.completions.v1.contract";
+} from "@cogni/node-contracts";
 import { mapAccountsPortErrorToFeature } from "@/features/accounts/public";
 // Types from client-safe barrel (types only, no runtime)
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";

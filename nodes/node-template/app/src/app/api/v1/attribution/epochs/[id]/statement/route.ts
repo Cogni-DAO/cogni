@@ -16,7 +16,7 @@ import { getSessionUser } from "@/app/_lib/auth/session";
 import { toStatementDto } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { epochStatementOperation } from "@/contracts/attribution.epoch-statement.v1.contract";
+import { epochStatementOperation } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

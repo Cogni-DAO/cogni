@@ -39,7 +39,7 @@ import type {
   ActivityGroupBy,
   aiActivityOperation,
   TimeRange,
-} from "@/contracts/ai.activity.v1.contract";
+} from "@cogni/node-contracts";
 import { useGovernanceStatus } from "@/features/governance/hooks/useGovernanceStatus";
 import { creditsToUsd } from "@/features/payments/public";
 import { fetchGovernanceActivity } from "../_api/fetchGovernanceActivity";

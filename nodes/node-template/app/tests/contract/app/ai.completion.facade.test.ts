@@ -12,7 +12,7 @@ import { createRunStreamMock } from "@tests/_fixtures/ai/completion-facade-setup
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatCompletion } from "@/app/_facades/ai/completion.server";
-import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
+import { chatCompletionsContract } from "@cogni/node-contracts";
 import type { RequestContext } from "@/shared/observability";
 import { makeNoopLogger } from "@/shared/observability";
 

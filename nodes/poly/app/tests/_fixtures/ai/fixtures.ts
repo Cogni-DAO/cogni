@@ -12,8 +12,8 @@
  * @internal
  */
 
-import type { ModelsOutput } from "@/contracts/ai.models.v1.contract";
-import { aiModelsOperation } from "@/contracts/ai.models.v1.contract";
+import type { ModelsOutput } from "@cogni/node-contracts";
+import { aiModelsOperation } from "@cogni/node-contracts";
 import type { ModelsCatalog } from "@/shared/ai/model-catalog.server";
 import modelsFixture from "./models.response.json";
 

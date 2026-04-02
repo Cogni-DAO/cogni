@@ -15,9 +15,9 @@
 import { toUserId } from "@cogni/ids";
 import { getAddress } from "viem";
 import { type Container, getContainer } from "@/bootstrap/container";
-import type { PaymentIntentOutput } from "@/contracts/payments.intent.v1.contract";
-import type { PaymentStatusOutput } from "@/contracts/payments.status.v1.contract";
-import type { PaymentSubmitOutput } from "@/contracts/payments.submit.v1.contract";
+import type { PaymentIntentOutput } from "@cogni/node-contracts";
+import type { PaymentStatusOutput } from "@cogni/node-contracts";
+import type { PaymentSubmitOutput } from "@cogni/node-contracts";
 import type { PostCreditFundingDeps } from "@/features/payments/application/confirmCreditsPurchase";
 import {
   AuthUserNotFoundError,

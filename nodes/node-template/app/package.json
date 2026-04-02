@@ -26,6 +26,7 @@
     "@cogni/financial-ledger": "workspace:*",
     "@cogni/ids": "workspace:*",
     "@cogni/node-core": "workspace:*",
+    "@cogni/node-contracts": "workspace:*",
     "@cogni/ingestion-core": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
     "@cogni/market-provider": "workspace:*",

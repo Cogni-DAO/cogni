@@ -30,7 +30,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ChatError } from "@/contracts/error.chat.v1.contract";
+import type { ChatError } from "@cogni/node-contracts";
 import * as clientLogger from "@/shared/observability/client";
 import { EVENT_NAMES } from "@/shared/observability/events";
 

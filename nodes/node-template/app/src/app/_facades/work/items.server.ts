@@ -19,7 +19,7 @@ import type {
   WorkItemDto,
   WorkItemsListInput,
   WorkItemsListOutput,
-} from "@/contracts/work.items.list.v1.contract";
+} from "@cogni/node-contracts";
 
 function toDto(item: WorkItem): WorkItemDto {
   return {

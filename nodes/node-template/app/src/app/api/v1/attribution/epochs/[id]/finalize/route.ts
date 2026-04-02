@@ -24,7 +24,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   FinalizeEpochInputSchema,
   finalizeEpochOperation,
-} from "@/contracts/attribution.finalize-epoch.v1.contract";
+} from "@cogni/node-contracts";
 import { getScopeId } from "@/shared/config";
 import { serverEnv } from "@/shared/env/server-env";
 

@@ -33,7 +33,7 @@ import {
 } from "@/components/reui/data-grid/data-grid";
 import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
 import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
-import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
+import type { WorkItemDto } from "@cogni/node-contracts";
 
 import { fetchWorkItems } from "./_api/fetchWorkItems";
 import { columns } from "./_components/columns";

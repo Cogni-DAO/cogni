@@ -5,7 +5,7 @@
 
 import { createColumnHelper } from "@tanstack/react-table";
 
-import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
+import type { WorkItemDto } from "@cogni/node-contracts";
 
 import { StatusPill, TypeIcon } from "./work-item-icons";
 

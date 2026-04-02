@@ -28,7 +28,7 @@ import {
   BillingIngestBodySchema,
   type BillingIngestResponse,
   type StandardLoggingPayloadBilling,
-} from "@/contracts/billing-ingest.internal.v1.contract";
+} from "@cogni/node-contracts";
 import { commitUsageFact } from "@/features/ai/public.server";
 import {
   getDisplayNameFromCache,

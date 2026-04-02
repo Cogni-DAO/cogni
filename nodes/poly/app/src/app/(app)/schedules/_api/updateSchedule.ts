@@ -11,8 +11,8 @@
  * @internal
  */
 
-import type { ScheduleResponse } from "@/contracts/schedules.create.v1.contract";
-import type { ScheduleUpdateInput } from "@/contracts/schedules.update.v1.contract";
+import type { ScheduleResponse } from "@cogni/node-contracts";
+import type { ScheduleUpdateInput } from "@cogni/node-contracts";
 
 export interface UpdateScheduleParams {
   id: string;

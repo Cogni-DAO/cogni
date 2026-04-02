@@ -15,7 +15,7 @@
 import { MOCK_SERVER_ENV } from "@tests/_fixtures/env/base-env";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { analyticsSummaryOperation } from "@/contracts/analytics.summary.v1.contract";
+import { analyticsSummaryOperation } from "@cogni/node-contracts";
 
 // Mock the facade
 vi.mock("@/app/_facades/analytics/summary.server", () => ({

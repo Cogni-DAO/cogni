@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { PoolComponentInputSchema } from "@/contracts/attribution.record-pool-component.v1.contract";
+import { PoolComponentInputSchema } from "@cogni/node-contracts";
 
 describe("ledger.record-pool-component.v1 contract", () => {
   const validPayload = {

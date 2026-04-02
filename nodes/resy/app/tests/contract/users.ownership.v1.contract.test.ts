@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ownershipSummaryOperation } from "@/contracts/users.ownership.v1.contract";
+import { ownershipSummaryOperation } from "@cogni/node-contracts";
 
 describe("users.ownership.read.v1 contract", () => {
   it("validates a well-formed ownership summary response", () => {

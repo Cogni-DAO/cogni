@@ -11,7 +11,7 @@
  * @internal
  */
 
-import type { SchedulesListOutput } from "@/contracts/schedules.list.v1.contract";
+import type { SchedulesListOutput } from "@cogni/node-contracts";
 
 export async function fetchSchedules(): Promise<SchedulesListOutput> {
   const response = await fetch("/api/v1/schedules", {

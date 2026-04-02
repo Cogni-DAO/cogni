@@ -26,7 +26,7 @@ import { withRootSpan } from "@/bootstrap/otel";
 import {
   type SetupVerifyOutput,
   setupVerifyOperation,
-} from "@/contracts/setup.verify.v1.contract";
+} from "@cogni/node-contracts";
 import { serverEnv } from "@/shared/env";
 import {
   createRequestContext,

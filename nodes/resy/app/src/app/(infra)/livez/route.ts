@@ -14,7 +14,7 @@
 
 import { NextResponse } from "next/server";
 
-import { metaLivezOperation } from "@/contracts/meta.livez.read.v1.contract";
+import { metaLivezOperation } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 

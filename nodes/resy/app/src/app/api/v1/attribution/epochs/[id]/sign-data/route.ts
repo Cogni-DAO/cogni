@@ -24,7 +24,7 @@ import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { signDataOperation } from "@/contracts/attribution.sign-data.v1.contract";
+import { signDataOperation } from "@cogni/node-contracts";
 import { getNodeId, getScopeId } from "@/shared/config";
 import { CHAIN_ID } from "@/shared/web3/chain";
 

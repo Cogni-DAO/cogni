@@ -19,7 +19,7 @@ import {
   MAX_RANGE_FOR_STEP,
   MAX_RANGE_MS,
   STEP_MS,
-} from "@/contracts/ai.activity.v1.contract";
+} from "@cogni/node-contracts";
 
 export class InvalidRangeError extends Error {
   constructor(message: string) {

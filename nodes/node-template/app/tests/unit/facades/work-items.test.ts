@@ -18,7 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WorkItemDtoSchema,
   workItemsListOperation,
-} from "@/contracts/work.items.list.v1.contract";
+} from "@cogni/node-contracts";
 
 // Mock the container
 vi.mock("@/bootstrap/container", () => ({

@@ -31,7 +31,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   aiChatOperation,
   type ChatInput,
-} from "@/contracts/ai.chat.v1.contract";
+} from "@cogni/node-contracts";
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import {
   redactSecretsInMessages,

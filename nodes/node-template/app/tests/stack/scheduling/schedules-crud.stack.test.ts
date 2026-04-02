@@ -27,8 +27,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { DELETE, PATCH } from "@/app/api/v1/schedules/[scheduleId]/route";
 import { GET, POST } from "@/app/api/v1/schedules/route";
-import { schedulesCreateOperation } from "@/contracts/schedules.create.v1.contract";
-import { schedulesListOperation } from "@/contracts/schedules.list.v1.contract";
+import { schedulesCreateOperation } from "@cogni/node-contracts";
+import { schedulesListOperation } from "@cogni/node-contracts";
 import { executionGrants, schedules, users } from "@/shared/db";
 
 // Mock session

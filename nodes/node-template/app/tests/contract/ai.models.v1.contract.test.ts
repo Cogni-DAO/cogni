@@ -14,7 +14,7 @@
 
 import { loadModelsFixture } from "@tests/_fixtures/ai/fixtures";
 import { describe, expect, it } from "vitest";
-import { aiModelsOperation } from "@/contracts/ai.models.v1.contract";
+import { aiModelsOperation } from "@cogni/node-contracts";
 
 describe("ai.models.v1 contract validation", () => {
   it("should parse fixture via contract schema without errors", () => {

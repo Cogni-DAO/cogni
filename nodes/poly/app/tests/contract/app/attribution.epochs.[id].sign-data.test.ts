@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { signDataOperation } from "@/contracts/attribution.sign-data.v1.contract";
+import { signDataOperation } from "@cogni/node-contracts";
 
 const VALID_SIGN_DATA = {
   domain: {

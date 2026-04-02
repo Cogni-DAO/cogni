@@ -15,12 +15,12 @@
 import type {
   PaymentIntentInput,
   PaymentIntentOutput,
-} from "@/contracts/payments.intent.v1.contract";
-import type { PaymentStatusOutput } from "@/contracts/payments.status.v1.contract";
+} from "@cogni/node-contracts";
+import type { PaymentStatusOutput } from "@cogni/node-contracts";
 import type {
   PaymentSubmitInput,
   PaymentSubmitOutput,
-} from "@/contracts/payments.submit.v1.contract";
+} from "@cogni/node-contracts";
 import * as clientLogger from "@/shared/observability/client";
 import { EVENT_NAMES } from "@/shared/observability/events";
 

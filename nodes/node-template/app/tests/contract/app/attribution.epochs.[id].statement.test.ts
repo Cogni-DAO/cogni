@@ -12,7 +12,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { epochStatementOperation } from "@/contracts/attribution.epoch-statement.v1.contract";
+import { epochStatementOperation } from "@cogni/node-contracts";
 
 describe("ledger.epoch-statement.v1 contract", () => {
   it("should validate a well-formed statement response", () => {

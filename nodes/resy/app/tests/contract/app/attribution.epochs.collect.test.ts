@@ -21,7 +21,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CollectTriggerCooldownResponseSchema,
   CollectTriggerResponseSchema,
-} from "@/contracts/attribution.collect-trigger.v1.contract";
+} from "@cogni/node-contracts";
 
 // Mock session authentication
 vi.mock("@/app/_lib/auth/session", () => ({

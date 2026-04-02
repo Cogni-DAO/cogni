@@ -13,7 +13,7 @@
 
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import type { z } from "zod";
-import type { governanceStatusOutputSchema } from "@/contracts/governance.status.v1.contract";
+import type { governanceStatusOutputSchema } from "@cogni/node-contracts";
 
 type GovernanceStatus = z.infer<typeof governanceStatusOutputSchema>;
 

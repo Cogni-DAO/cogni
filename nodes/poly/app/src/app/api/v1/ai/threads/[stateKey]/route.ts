@@ -22,7 +22,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   deleteThreadOperation,
   loadThreadOperation,
-} from "@/contracts/ai.threads.v1.contract";
+} from "@cogni/node-contracts";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";

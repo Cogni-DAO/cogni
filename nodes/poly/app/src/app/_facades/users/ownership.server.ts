@@ -30,7 +30,7 @@ import { type UserId, userActor } from "@cogni/ids";
 import { eq } from "drizzle-orm";
 
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
-import type { OwnershipSummaryOutput } from "@/contracts/users.ownership.v1.contract";
+import type { OwnershipSummaryOutput } from "@cogni/node-contracts";
 import type { SessionUser } from "@/shared/auth";
 import { getNodeId } from "@/shared/config";
 import { userBindings } from "@/shared/db/schema";

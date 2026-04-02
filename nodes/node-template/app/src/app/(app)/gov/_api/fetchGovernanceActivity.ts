@@ -17,7 +17,7 @@ import type {
   ActivityGroupBy,
   aiActivityOperation,
   TimeRange,
-} from "@/contracts/ai.activity.v1.contract";
+} from "@cogni/node-contracts";
 
 type ActivityData = z.infer<typeof aiActivityOperation.output>;
 

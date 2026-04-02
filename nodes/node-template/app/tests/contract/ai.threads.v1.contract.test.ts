@@ -16,7 +16,7 @@ import {
   deleteThreadOperation,
   listThreadsOperation,
   loadThreadOperation,
-} from "@/contracts/ai.threads.v1.contract";
+} from "@cogni/node-contracts";
 
 describe("ai.threads.v1 contract validation", () => {
   // ─────────────────────────────────────────────

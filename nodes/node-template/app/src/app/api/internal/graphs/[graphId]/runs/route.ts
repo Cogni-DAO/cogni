@@ -37,7 +37,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   InternalGraphRunInputSchema,
   type InternalGraphRunOutput,
-} from "@/contracts/graphs.run.internal.v1.contract";
+} from "@cogni/node-contracts";
 import {
   assembleAssistantMessage,
   executeStream,

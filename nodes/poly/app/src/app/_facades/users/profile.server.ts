@@ -21,7 +21,7 @@ import type {
   ProfileReadOutput,
   ProfileUpdateInput,
   ProfileUpdateOutput,
-} from "@/contracts/users.profile.v1.contract";
+} from "@cogni/node-contracts";
 import type { SessionUser } from "@/shared/auth";
 import { userBindings, userProfiles, users } from "@/shared/db/schema";
 

@@ -23,8 +23,8 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   ScheduleResponseSchema,
   schedulesCreateOperation,
-} from "@/contracts/schedules.create.v1.contract";
-import { schedulesListOperation } from "@/contracts/schedules.list.v1.contract";
+} from "@cogni/node-contracts";
+import { schedulesListOperation } from "@cogni/node-contracts";
 import {
   InvalidCronExpressionError,
   InvalidTimezoneError,
