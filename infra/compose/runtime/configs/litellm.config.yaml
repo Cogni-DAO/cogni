@@ -237,7 +237,9 @@ model_list:
 litellm_settings:
   drop_params: true
   include_cost_in_streaming_usage: true
-  success_callback: ["langfuse", "generic_api"]
+  # Per-node billing routing via custom callback (replaces generic_api).
+  # See: infra/litellm/cogni_callbacks.py, docs/spec/multi-node-tenancy.md
+  success_callback: ["langfuse", "cogni_callbacks.CogniNodeRouter"]
   failure_callback: ["langfuse"]
 
 general_settings:

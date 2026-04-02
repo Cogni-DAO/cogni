@@ -86,7 +86,8 @@ model_list:
 
 litellm_settings:
   include_cost_in_streaming_usage: true
-  success_callback: ["generic_api"]
+  # Per-node billing routing via custom callback (replaces generic_api)
+  success_callback: ["cogni_callbacks.CogniNodeRouter"]
 
 general_settings:
   master_key: "os.environ/LITELLM_MASTER_KEY"

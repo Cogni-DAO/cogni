@@ -66,22 +66,36 @@ grant a session on resy (:3300).
 
 ### 3. LiteLLM callback routing
 
-**Chosen: Option A — node identity in request metadata.**
+**Chosen: Custom Python callback class (in-process, no external router).**
 
 Each node stamps `node_id` in LiteLLM request metadata via the existing
-`x-litellm-spend-logs-metadata` header. LiteLLM passes metadata through to
-the `generic_api` callback payload. A lightweight callback router (nginx or
-Node script in compose) inspects `metadata.node_id` and forwards to the
-correct node's `/api/internal/billing/ingest` endpoint.
+`x-litellm-spend-logs-metadata` header. A custom `CustomLogger` subclass
+(`cogni_callbacks.py`) runs inside LiteLLM's process, reads `node_id` from
+the callback kwargs, and POSTs to the correct node's ingest endpoint.
 
-Why Option A:
+Why custom callback class:
 
+- Runs in-process — no external router service, no extra port, no mixed-batch bug
+- Called per-completion (not per-batch) — routing is always per-request context
+- LiteLLM's documented extension point for custom behavior
+- ~30 lines of Python adapter glue (CALLBACK_IS_ADAPTER_GLUE)
 - Metadata pass-through already proven (used for `run_id`)
-- No LiteLLM source changes needed
-- Router is ~20 lines of nginx config or a tiny proxy
 - Per-node endpoints = each node writes to its own DB (NO_CROSS_NODE_QUERIES)
 
-**Option D ruled out** per spec (violates NO_CROSS_NODE_QUERIES).
+**Options ruled out:**
+
+- Per-team `generic_api` callbacks: **proven not to work** — LiteLLM's per-team
+  callback system only supports a hardcoded allowlist of named integrations
+  (Langfuse, Langsmith, etc.), not `generic_api` / `GENERIC_LOGGER_ENDPOINT`.
+  Tested live against v1.80.8.
+- External Node.js router (`billing-callback-router.mts`): works but adds a
+  moving part and has the mixed-batch bug (reads only `payload[0]`).
+- Option D (centralized ingest + fan-out): violates NO_CROSS_NODE_QUERIES.
+
+**Implementation:** Custom LiteLLM container image (`infra/litellm/Dockerfile`)
+that extends the upstream SHA-pinned image with `cogni_callbacks.py` baked in.
+Registered via `litellm_settings.custom_callback_class` in config YAML.
+Replaces `generic_api` callback — the custom class IS the callback.
 
 ### 4. Auth token strategy
 
@@ -93,14 +107,15 @@ improvement if isolation needs tighten.
 ## Allowed Changes
 
 - `infra/compose/runtime/postgres-init/provision.sh` — create per-node DBs + roles
-- `infra/compose/runtime/docker-compose.yml` — per-node DB env vars, callback router service
+- `infra/compose/runtime/docker-compose.yml` — per-node DB env vars, litellm build context
 - `infra/compose/runtime/docker-compose.dev.yml` — same for dev
-- `infra/compose/runtime/configs/litellm.config.yaml` — callback endpoint config
+- `infra/compose/runtime/configs/litellm.config.yaml` — register custom callback class
+- `infra/litellm/` — new dir: `Dockerfile` + `cogni_callbacks.py` (custom callback)
 - `.env.local.example` / `.env.test.example` — per-node DATABASE_URL + AUTH_SECRET vars
 - `package.json` (root) — update dev:poly/dev:resy scripts with per-node env
 - Node app env wiring (NEXTAUTH_SECRET, DATABASE_URL per node)
-- New `infra/compose/runtime/configs/callback-router.*` if nginx proxy needed
 - LLM port adapter or middleware — inject node_id into outgoing LiteLLM metadata
+- `scripts/dev/billing-callback-router.mts` — **DELETE** (replaced by in-process callback)
 - `docs/spec/billing-ingest.md` — update if contract changes
 
 ## Plan
@@ -148,18 +163,21 @@ improvement if isolation needs tighten.
 - Invariants: NODE_LOCAL_METERING_PRIMARY, NO_CROSS_NODE_QUERIES,
   CHARGE_RECEIPTS_IDEMPOTENT_BY_CALL_ID, CALLBACK_AUTHENTICATED
 - Todos:
-  - [ ] Add `node_id` to `spendLogsMetadata` type in LLM port
-        (`apps/operator/src/ports/llm.port.ts:147` and all node copies)
-  - [ ] Set `node_id` in LiteLLM adapter when building metadata
-        (`apps/operator/src/adapters/server/ai/litellm.adapter.ts:240` and node copies)
-        Source: new `COGNI_NODE_ID` env var (e.g., "operator", "poly", "resy")
-  - [ ] Create `infra/compose/runtime/configs/billing-callback-router.conf` —
-        nginx config that receives POST from LiteLLM, parses JSON body for
-        `[0].metadata.spend_logs_metadata.node_id`, proxies to correct node
-  - [ ] Add `billing-callback-router` service to `docker-compose.dev.yml`
-        (nginx container with the above config)
-  - [ ] Update `GENERIC_LOGGER_ENDPOINT` to point at router service
-  - [ ] Pass `COGNI_NODE_ID` env to each node's dev script and compose service
+  - [x] Add `node_id` to `spendLogsMetadata` type in LLM port (all 4 apps) — DONE rev0
+  - [x] Set `node_id` in adapter via `COGNI_NODE_ID` env var — DONE rev0
+  - [ ] Create `infra/litellm/cogni_callbacks.py` — custom `CustomLogger` subclass
+        that reads `node_id` from kwargs metadata, POSTs to correct node endpoint.
+        Adapter glue only (CALLBACK_IS_ADAPTER_GLUE): extract, validate, forward, log.
+  - [ ] Create `infra/litellm/Dockerfile` — extends upstream SHA-pinned image,
+        COPYs `cogni_callbacks.py` into the image
+  - [ ] Update `litellm.config.yaml` — replace `generic_api` in `success_callback`
+        with `custom_callback_class` pointing to `cogni_callbacks.CogniNodeRouter`
+  - [ ] Update `docker-compose.dev.yml` + `docker-compose.yml` — change litellm
+        service from `image:` to `build:` context pointing at `infra/litellm/`
+  - [ ] Pass node endpoint URLs via env vars to litellm container
+        (e.g., `COGNI_NODE_ENDPOINTS=operator=http://app:3000,poly=http://poly:3100,...`)
+  - [ ] Delete `scripts/dev/billing-callback-router.mts` and `dev:callback-router` script
+  - [ ] Revert `.env.local.example` `GENERIC_LOGGER_ENDPOINT` default to single-node
 - Validation:
   - [ ] LLM call from poly → callback routed to poly:3100 → charge in poly_db
   - [ ] LLM call from resy → callback routed to resy:3300 → charge in resy_db

@@ -137,7 +137,10 @@ services:
       - "autoheal=false"
 
   litellm:
-    image: ghcr.io/berriai/litellm@sha256:7e7816d58c265c182be5f3568ed8e5d999f11a5deda1d85e8e347a18bc578f64
+    build:
+      context: ../../litellm
+      dockerfile: Dockerfile
+    image: cogni-litellm:latest
     restart: unless-stopped
     labels:
       - "autoheal=true"
@@ -153,9 +156,10 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_BASE_URL}
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
-      # Billing ingest callback (generic_api → app ingest endpoint)
+      # Per-node billing callback routing (custom callback class replaces generic_api)
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS:-operator=http://app:3000/api/internal/billing/ingest}
+      - BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
       - GENERIC_LOGGER_ENDPOINT=${GENERIC_LOGGER_ENDPOINT:-http://app:3000/api/internal/billing/ingest}
-      - "GENERIC_LOGGER_HEADERS=Authorization=Bearer ${BILLING_INGEST_TOKEN}"
     volumes:
       - ./configs/litellm.config.yaml:/app/config.yaml:ro
     command: --config /app/config.yaml --host 0.0.0.0 --port 4000
