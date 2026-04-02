@@ -86,8 +86,9 @@ AUTH_SECRET_{NAME}="{name}-dev-secret-at-least-32-characters-change-me!!"
 # Append node DB to provision list
 COGNI_NODE_DBS=cogni_operator,cogni_poly,cogni_resy,cogni_{name}
 
-# Append billing callback endpoint
-COGNI_NODE_ENDPOINTS=...,{name}=http://host.docker.internal:{port}/api/internal/billing/ingest
+# Append billing callback endpoint — key MUST be the node_id UUID (not slug).
+# The billing router stamps UUIDs in LLM callback metadata and looks them up here.
+COGNI_NODE_ENDPOINTS=...,<node-uuid>=http://host.docker.internal:{port}/api/internal/billing/ingest
 ```
 
 Also update `.env.test` / `.env.test.example` with test-safe equivalents.
@@ -103,6 +104,8 @@ Add an entry to `.cogni/repo-spec.yaml` `nodes[]`:
   endpoint: "http://{name}:{port}/api/internal/billing/ingest"
 ```
 
+The `endpoint` field is currently declaration-only (not consumed at runtime — the billing router reads `COGNI_NODE_ENDPOINTS` env var instead). Future: auto-generate env var from repo-spec at startup.
+
 ## 5. Wire root scripts
 
 Add to the **root** `package.json` scripts:
@@ -114,16 +117,26 @@ Add to the **root** `package.json` scripts:
 
 `COGNI_REPO_PATH` points to the node's own directory (not repo root). The script remaps per-node env vars at runtime so the app sees standard `DATABASE_URL` / `AUTH_SECRET`. Follow the exact pattern from `dev:poly` / `dev:resy`.
 
-## 6. Provision database and install
+## 6. Wire migration script
+
+Add to root `package.json`:
+
+```json
+"db:migrate:{name}": "dotenv -e .env.local -- bash -c 'DATABASE_URL=$DATABASE_URL_{NAME} tsx node_modules/drizzle-kit/bin.cjs migrate'"
+```
+
+Then append `pnpm db:migrate:{name}` to the `db:migrate:nodes` composite script.
+
+## 7. Provision database and install
 
 ```bash
 pnpm install
-pnpm db:provision:nodes    # creates cogni_{name} DB + roles
-pnpm db:migrate:nodes      # runs Drizzle migrations on all node DBs
+pnpm db:provision:nodes    # creates cogni_{name} DB + roles via COGNI_NODE_DBS
+pnpm db:migrate:nodes      # runs Drizzle migrations on all node DBs sequentially
 pnpm typecheck:{name}
 ```
 
-## 7. Add a custom graph
+## 8. Add a custom graph
 
 Create `nodes/{name}/graphs/src/graphs/{name}-brain/`:
 
@@ -144,7 +157,7 @@ The template's `graphs/src/index.ts` re-exports the shared `LANGGRAPH_CATALOG`. 
 
 Build: `pnpm --filter @cogni/{name}-graphs build`
 
-## 8. Validate locally
+## 9. Validate locally
 
 ```bash
 pnpm dev:stack          # terminal 1: infra + operator

@@ -146,7 +146,7 @@ nodes:
     endpoint: "http://{name}:{port}/api/internal/billing/ingest"
 ```
 
-The schema is defined in `packages/repo-spec/src/schema.ts` (`nodeRegistryEntrySchema`).
+The `endpoint` field is currently **declaration-only** — not consumed at runtime. The billing router reads `COGNI_NODE_ENDPOINTS` env var instead (see 4e). Future: auto-generate env var from repo-spec at startup.
 
 ### 4e. Wire environment variables
 
@@ -166,13 +166,14 @@ AUTH_SECRET_{NAME}="{name}-dev-secret-at-least-32-characters-change-me!!"
 # Append to COGNI_NODE_DBS (comma-separated list of DBs to provision)
 COGNI_NODE_DBS=cogni_operator,cogni_poly,cogni_resy,cogni_{name}
 
-# Append to COGNI_NODE_ENDPOINTS (routes LLM billing callbacks to correct node)
-COGNI_NODE_ENDPOINTS=...,{name}=http://host.docker.internal:{port}/api/internal/billing/ingest
+# Append to COGNI_NODE_ENDPOINTS — keys MUST be node_id UUIDs (not slugs).
+# The billing callback router stamps UUIDs in metadata and looks them up here.
+COGNI_NODE_ENDPOINTS=...,<node-uuid>=http://host.docker.internal:{port}/api/internal/billing/ingest
 ```
 
 **Also update `.env.test` and `.env.test.example`** with test-safe equivalents.
 
-### 4e. Wire root scripts
+### 4f. Wire root scripts
 
 Add to root `package.json`:
 
@@ -183,15 +184,25 @@ Add to root `package.json`:
 
 The `dev:{name}` script sets `COGNI_REPO_PATH` to the node's own directory (not repo root), then remaps per-node env vars (`DATABASE_URL_{NAME}` → `DATABASE_URL`) at runtime. Follow the exact pattern from `dev:poly` / `dev:resy`.
 
-### 4f. Provision database
+### 4g. Wire migration script
+
+Add to root `package.json`:
+
+```json
+"db:migrate:{name}": "dotenv -e .env.local -- bash -c 'DATABASE_URL=$DATABASE_URL_{NAME} tsx node_modules/drizzle-kit/bin.cjs migrate'"
+```
+
+Then add `pnpm db:migrate:{name}` to the `db:migrate:nodes` composite script (it's a sequential chain of per-node migrations).
+
+### 4h. Provision database
 
 ```bash
 pnpm install
-pnpm db:provision:nodes    # creates cogni_{name} DB + roles
-pnpm db:migrate:nodes      # runs Drizzle migrations on all node DBs
+pnpm db:provision:nodes    # creates cogni_{name} DB + roles via COGNI_NODE_DBS
+pnpm db:migrate:nodes      # runs Drizzle migrations on all node DBs sequentially
 ```
 
-### 4g. Verify template rename is complete
+### 4i. Verify template rename is complete
 
 ```bash
 grep -r "node-template" nodes/{name}/
