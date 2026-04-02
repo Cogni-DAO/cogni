@@ -14,8 +14,7 @@
 
 import { expect, test } from "vitest";
 
-import { metaLivezOutputSchema } from "@cogni/node-contracts";
-import { metaReadyzOutputSchema } from "@cogni/node-contracts";
+import { metaLivezOutputSchema, metaReadyzOutputSchema } from "@cogni/node-contracts";
 
 function baseUrl(path: string): string {
   const root = process.env.TEST_BASE_URL ?? "http://localhost:3000/";

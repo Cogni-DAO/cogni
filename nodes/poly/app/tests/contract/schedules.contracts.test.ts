@@ -22,9 +22,9 @@ import { describe, expect, it } from "vitest";
 import {
   ScheduleCreateInputSchema,
   ScheduleResponseSchema,
+  schedulesListOperation,
+  ScheduleUpdateInputSchema,
 } from "@cogni/node-contracts";
-import { schedulesListOperation } from "@cogni/node-contracts";
-import { ScheduleUpdateInputSchema } from "@cogni/node-contracts";
 
 describe("schedules.create.v1 contract", () => {
   describe("ScheduleCreateInputSchema", () => {

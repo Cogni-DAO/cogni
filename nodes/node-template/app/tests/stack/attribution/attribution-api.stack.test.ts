@@ -18,10 +18,12 @@ import { seedClosedEpoch } from "@tests/_fixtures/attribution/seed-attribution";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { EpochClaimantsOutputSchema } from "@cogni/node-contracts";
-import { EpochStatementOutputSchema } from "@cogni/node-contracts";
-import { EpochUserProjectionsOutputSchema } from "@cogni/node-contracts";
-import { ListEpochsOutputSchema } from "@cogni/node-contracts";
+import {
+  EpochClaimantsOutputSchema,
+  EpochStatementOutputSchema,
+  EpochUserProjectionsOutputSchema,
+  ListEpochsOutputSchema,
+} from "@cogni/node-contracts";
 import { users } from "@/shared/db/schema";
 
 // ---------------------------------------------------------------------------

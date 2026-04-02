@@ -45,11 +45,7 @@ import {
   buildGroupedChartData,
 } from "@/components/kit/data-display/activity-chart-utils";
 import type { RunCardData } from "@/components/kit/data-display/RunCard";
-import type {
-  ActivityGroupBy,
-  TimeRange,
-} from "@cogni/node-contracts";
-import type { WorkItemDto } from "@cogni/node-contracts";
+import type { ActivityGroupBy, TimeRange, WorkItemDto } from "@cogni/node-contracts";
 import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";

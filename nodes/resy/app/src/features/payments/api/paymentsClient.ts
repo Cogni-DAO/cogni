@@ -15,9 +15,7 @@
 import type {
   PaymentIntentInput,
   PaymentIntentOutput,
-} from "@cogni/node-contracts";
-import type { PaymentStatusOutput } from "@cogni/node-contracts";
-import type {
+  PaymentStatusOutput,
   PaymentSubmitInput,
   PaymentSubmitOutput,
 } from "@cogni/node-contracts";

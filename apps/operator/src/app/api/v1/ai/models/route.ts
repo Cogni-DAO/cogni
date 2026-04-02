@@ -11,8 +11,7 @@
  * @public
  */
 
-import type { Model } from "@cogni/node-contracts";
-import { aiModelsOperation } from "@cogni/node-contracts";
+import { aiModelsOperation, type Model } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";

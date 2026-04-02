@@ -12,8 +12,7 @@
  * @public
  */
 
-import type { ModelsOutput } from "@cogni/node-contracts";
-import { aiModelsOperation } from "@cogni/node-contracts";
+import { aiModelsOperation, type ModelsOutput } from "@cogni/node-contracts";
 import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 
 /**
