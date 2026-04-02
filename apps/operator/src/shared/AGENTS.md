@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Low-level building blocks used across the repo. Primitives, DTO mappers, pure utilities, database schemas, environment validation, and cross-cutting observability (logging, request context).
+App-local building blocks that cannot be extracted to `@cogni/node-shared` (env, db, hooks, config server, heavy-dep modules). Pure utilities, constants, observability helpers, and domain types live in `@cogni/node-shared`.
 
 ## Pointers
 
@@ -36,29 +36,25 @@ Low-level building blocks used across the repo. Primitives, DTO mappers, pure ut
 
 ## Public Surface
 
-- **Exports:**
-  - Environment validation (`serverEnv`, `clientEnv`)
-  - Database schemas (auth, billing)
-  - Utilities (cn, uuid, accountId)
-  - Time utilities (TimeRange presets, deriveTimeRange)
-  - Constants (payments, web3)
-  - Observability (Logger, RequestContext, log helpers, event schemas)
-  - AI model catalog (cache)
-  - Shared errors (`TooManyLogsError`, `MAX_LOGS_PER_RANGE`)
+- **App-local exports:**
+  - Environment validation (`serverEnv`, `clientEnv`) — reads `process.env`
+  - Database schemas (Drizzle ORM) — `db/schema.ts`
+  - Config server (`repoSpec.server.ts`) — file I/O + env
+  - AI model catalog (`model-catalog.server.ts`) — LiteLLM fetch + env
+  - Wagmi chain adapter (`evm-wagmi.ts`, `wagmi.config.ts`) — wagmi/chains runtime dep
+  - Onchain client interface (`onchain/`) — viem types
+  - Server logger (`observability/server/logger.ts`) — pino runtime
+  - Metrics (`observability/server/metrics.ts`) — prom-client runtime
+  - Redact paths (`observability/server/redact.ts`) — fast-safe-stringify
+  - CSS utility (`util/cn.ts`) — clsx + tailwind-merge
+  - React hook (`hooks/useIsMobile.ts`)
+- **Re-exports from `@cogni/node-shared`:** observability barrels, web3 barrels, util barrels combine app-local + package exports
 - **Env/Config keys:** `PINO_LOG_LEVEL`, `DATABASE_URL`, `LITELLM_*`, `APP_ENV`, `NODE_ENV`
-- **Files considered API:** `index.ts`, `env/index.ts`, `observability/index.ts`
 
 ## Responsibilities
 
-- This directory **does**:
-  - Provide pure utilities, constants, environment validation
-  - Define database schemas (Drizzle)
-  - Provide observability infrastructure (logging, context, events)
-  - Provide AI model catalog cache
-- This directory **does not**:
-  - Contain business logic or domain rules
-  - Import from ports, bootstrap, core, features, adapters
-  - Handle HTTP routing or responses
+- This directory **does**: Provide app-local env access, database schemas, server config, wagmi adapter, pino logger, prom-client metrics, and UI utilities
+- This directory **does not**: Contain pure utilities (those live in `@cogni/node-shared`), import from ports/bootstrap/core/features/adapters, or handle HTTP routing
 
 ## Usage
 
@@ -78,8 +74,8 @@ pnpm typecheck
 
 ## Dependencies
 
-- **Internal:** shared/ only
-- **External:** zod, clsx, tailwind-merge, drizzle-orm (pg-core), pino, pino-pretty
+- **Internal:** `@cogni/node-shared`, shared/ only
+- **External:** clsx, tailwind-merge, drizzle-orm (pg-core), pino, pino-pretty, prom-client, wagmi, @rainbow-me/rainbowkit
 
 ## Change Protocol
 
