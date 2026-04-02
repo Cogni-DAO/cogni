@@ -84,29 +84,30 @@ packages/
 
 ### What goes where
 
-| Code | Location | Rationale |
-|------|----------|-----------|
-| Port interfaces (32 files) | Capability packages (`@cogni/ai-core`, `@cogni/graph-execution-core`, new `@cogni/node-ports` if needed) | Pure types, runtime-agnostic — consumed by services too |
-| Domain models, types (31 files) | Capability packages | Pure domain, no framework deps |
-| Zod route contracts (55 files) | `@cogni/node-contracts` (new capability package) | Pure Zod, no framework deps |
-| Pure shared utils — observability, crypto, config (81 files) | `@cogni/node-shared` (new capability package) | Pure functions, used by services too |
-| Adapters — AI execution subset (~20 files) | `@cogni/graph-execution-host` | Consumed by scheduler-worker |
-| Adapters — DB, payments, temporal, etc. (~139 files) | Existing capability packages (`@cogni/db-client`, etc.) or stay in app pending further extraction | Pure but need per-capability home |
-| **App chrome** — layout frame, sidebar/header/topbar structure with slots | `@cogni/node-app` | Low-volatility shell, identical across nodes |
-| **Common providers** — auth session, theme, query client wrappers | `@cogni/node-app` | App-runtime-specific, identical across nodes |
-| **Extension-point types** — slot interfaces, factory types, registry shapes | `@cogni/node-app` | Define the node customization surface |
-| **Default scaffolding** — starter layout, default nav items | `@cogni/node-app` | Gives new nodes a working starting point |
-| Routes/pages | Node `apps/web/src/app/` | **Node-owned** — product UX decisions |
-| Product features (chat UI, billing dashboard, etc.) | Node `apps/web/src/features/` | **Node-owned** — may diverge, use libraries like assistant-ui |
-| Product components | Node `apps/web/src/components/` | **Node-owned** — poly Hero, resy booking, etc. |
-| Container overrides / tool bindings | Node `apps/web/src/bootstrap/` | **Node-owned** — per-node capability wiring |
-| Graphs | Node `packages/graphs/` | **Node-owned** — AI graph definitions |
-| Theme / CSS | Node `apps/web/src/styles/` | **Node-owned** — per-node color tokens |
-| Server env config | Node `apps/web/src/shared/env/` | **Node-owned** — per-node env vars (DB_PER_NODE) |
+| Code                                                                        | Location                                                                                                 | Rationale                                                     |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Port interfaces (32 files)                                                  | Capability packages (`@cogni/ai-core`, `@cogni/graph-execution-core`, new `@cogni/node-ports` if needed) | Pure types, runtime-agnostic — consumed by services too       |
+| Domain models, types (31 files)                                             | Capability packages                                                                                      | Pure domain, no framework deps                                |
+| Zod route contracts (55 files)                                              | `@cogni/node-contracts` (new capability package)                                                         | Pure Zod, no framework deps                                   |
+| Pure shared utils — observability, crypto, config (81 files)                | `@cogni/node-shared` (new capability package)                                                            | Pure functions, used by services too                          |
+| Adapters — AI execution subset (~20 files)                                  | `@cogni/graph-execution-host`                                                                            | Consumed by scheduler-worker                                  |
+| Adapters — DB, payments, temporal, etc. (~139 files)                        | Existing capability packages (`@cogni/db-client`, etc.) or stay in app pending further extraction        | Pure but need per-capability home                             |
+| **App chrome** — layout frame, sidebar/header/topbar structure with slots   | `@cogni/node-app`                                                                                        | Low-volatility shell, identical across nodes                  |
+| **Common providers** — auth session, theme, query client wrappers           | `@cogni/node-app`                                                                                        | App-runtime-specific, identical across nodes                  |
+| **Extension-point types** — slot interfaces, factory types, registry shapes | `@cogni/node-app`                                                                                        | Define the node customization surface                         |
+| **Default scaffolding** — starter layout, default nav items                 | `@cogni/node-app`                                                                                        | Gives new nodes a working starting point                      |
+| Routes/pages                                                                | Node `apps/web/src/app/`                                                                                 | **Node-owned** — product UX decisions                         |
+| Product features (chat UI, billing dashboard, etc.)                         | Node `apps/web/src/features/`                                                                            | **Node-owned** — may diverge, use libraries like assistant-ui |
+| Product components                                                          | Node `apps/web/src/components/`                                                                          | **Node-owned** — poly Hero, resy booking, etc.                |
+| Container overrides / tool bindings                                         | Node `apps/web/src/bootstrap/`                                                                           | **Node-owned** — per-node capability wiring                   |
+| Graphs                                                                      | Node `packages/graphs/`                                                                                  | **Node-owned** — AI graph definitions                         |
+| Theme / CSS                                                                 | Node `apps/web/src/styles/`                                                                              | **Node-owned** — per-node color tokens                        |
+| Server env config                                                           | Node `apps/web/src/shared/env/`                                                                          | **Node-owned** — per-node env vars (DB_PER_NODE)              |
 
 ### What `@cogni/node-app` is and is NOT
 
 **IS (thin shell):**
+
 - Layout frame with named slots (header slot, sidebar slot, content area)
 - Auth/session provider wiring (NextAuth config shape, session context)
 - Theme provider (CSS variable injection, dark mode toggle)
@@ -115,6 +116,7 @@ packages/
 - Default implementations that nodes can replace via container/config
 
 **IS NOT (stays node-owned or in capability packages):**
+
 - Route trees or page components (node-owned)
 - Feature UIs — chat, billing dashboard, account management (node-owned)
 - Library integrations — assistant-ui, wagmi, etc. (node-owned)
@@ -239,31 +241,31 @@ Enable nodes as thin app shells that compose a shared layout/provider framework 
 
 ## Invariants
 
-| Rule | Constraint |
-|------|-----------|
-| TWO_PACKAGE_CATEGORIES | Capability libraries export `dist/` (PURE_LIBRARY). `@cogni/node-app` exports `src/` (internal source package). No mixing. |
-| SOURCE_EXPORTS_FOR_SHELL | `@cogni/node-app` exports TypeScript source via curated subpath exports, never compiled `dist/`. Consumers compile it via `transpilePackages`. |
-| CAPABILITY_STAYS_PURE | Code consumed by scheduler-worker or services MUST live in a capability library, not in `@cogni/node-app`. |
-| SHELL_IS_CHROME_ONLY | `@cogni/node-app` contains only low-volatility app chrome: layout frame, providers, auth framing, extension-point types, default scaffolding. No feature UIs, no product flows, no route trees. |
-| SHELL_NEVER_READS_ENV | `@cogni/node-app` must never call `process.env`, `serverEnv()`, or read environment variables directly. All config injected via `NodeAppConfig`. |
-| NODE_OWNS_PRODUCT | Each node owns its routes, features, components, library choices, and product UX. The shell provides slots; the node fills them. |
-| CURATED_EXPORTS | `@cogni/node-app` uses curated subpath exports (`"./layout"`, `"./providers"`, etc.), never wildcard exports. Internal files are not importable. |
-| OVERRIDE_VIA_CONFIG | Node customization via explicit `NodeAppConfig` injection (slots, factories, registries), never via file-path shadowing. |
-| NO_CROSS_NODE_IMPORTS | `nodes/poly/**` must never import from `nodes/resy/**` or vice versa. Enforced by dependency-cruiser. |
-| GOLDEN_PATH_IS_TEMPLATE | `node-template` is the reference node. New nodes scaffold from it. |
-| TRANSPILE_PACKAGES_REQUIRED | Every Next.js app consuming `@cogni/node-app` must include it in `transpilePackages` in `next.config.ts`. |
+| Rule                        | Constraint                                                                                                                                                                                      |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TWO_PACKAGE_CATEGORIES      | Capability libraries export `dist/` (PURE_LIBRARY). `@cogni/node-app` exports `src/` (internal source package). No mixing.                                                                      |
+| SOURCE_EXPORTS_FOR_SHELL    | `@cogni/node-app` exports TypeScript source via curated subpath exports, never compiled `dist/`. Consumers compile it via `transpilePackages`.                                                  |
+| CAPABILITY_STAYS_PURE       | Code consumed by scheduler-worker or services MUST live in a capability library, not in `@cogni/node-app`.                                                                                      |
+| SHELL_IS_CHROME_ONLY        | `@cogni/node-app` contains only low-volatility app chrome: layout frame, providers, auth framing, extension-point types, default scaffolding. No feature UIs, no product flows, no route trees. |
+| SHELL_NEVER_READS_ENV       | `@cogni/node-app` must never call `process.env`, `serverEnv()`, or read environment variables directly. All config injected via `NodeAppConfig`.                                                |
+| NODE_OWNS_PRODUCT           | Each node owns its routes, features, components, library choices, and product UX. The shell provides slots; the node fills them.                                                                |
+| CURATED_EXPORTS             | `@cogni/node-app` uses curated subpath exports (`"./layout"`, `"./providers"`, etc.), never wildcard exports. Internal files are not importable.                                                |
+| OVERRIDE_VIA_CONFIG         | Node customization via explicit `NodeAppConfig` injection (slots, factories, registries), never via file-path shadowing.                                                                        |
+| NO_CROSS_NODE_IMPORTS       | `nodes/poly/**` must never import from `nodes/resy/**` or vice versa. Enforced by dependency-cruiser.                                                                                           |
+| GOLDEN_PATH_IS_TEMPLATE     | `node-template` is the reference node. New nodes scaffold from it.                                                                                                                              |
+| TRANSPILE_PACKAGES_REQUIRED | Every Next.js app consuming `@cogni/node-app` must include it in `transpilePackages` in `next.config.ts`.                                                                                       |
 
 ### File Pointers
 
-| File | Purpose |
-|------|---------|
-| `packages/node-app/package.json` | Internal source package declaration with curated subpath exports |
-| `packages/node-app/src/extensions/types.ts` | `NodeAppConfig` — the node customization surface |
-| `nodes/node-template/apps/web/src/node-config.ts` | Reference `NodeAppConfig` implementation |
-| `nodes/node-template/apps/web/next.config.ts` | Reference `transpilePackages` config |
-| `pnpm-workspace.yaml` | Workspace globs: `packages/*`, `nodes/*/apps/*`, `nodes/*/packages/*` |
-| `.dependency-cruiser.cjs` | Cross-node import enforcement |
-| `docs/spec/packages-architecture.md` | Capability library rules (companion spec) |
+| File                                              | Purpose                                                               |
+| ------------------------------------------------- | --------------------------------------------------------------------- |
+| `packages/node-app/package.json`                  | Internal source package declaration with curated subpath exports      |
+| `packages/node-app/src/extensions/types.ts`       | `NodeAppConfig` — the node customization surface                      |
+| `nodes/node-template/apps/web/src/node-config.ts` | Reference `NodeAppConfig` implementation                              |
+| `nodes/node-template/apps/web/next.config.ts`     | Reference `transpilePackages` config                                  |
+| `pnpm-workspace.yaml`                             | Workspace globs: `packages/*`, `nodes/*/apps/*`, `nodes/*/packages/*` |
+| `.dependency-cruiser.cjs`                         | Cross-node import enforcement                                         |
+| `docs/spec/packages-architecture.md`              | Capability library rules (companion spec)                             |
 
 ## Open Questions
 

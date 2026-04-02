@@ -53,16 +53,16 @@ See [spec.node-app-shell](../../docs/spec/node-app-shell.md) for the full archit
 
 ### What extracts where
 
-| Code | Target | Category |
-|------|--------|----------|
-| Zod route contracts (55 files) | `@cogni/node-contracts` | Capability library |
-| Domain models + types (31 files) | `@cogni/node-core` | Capability library |
-| Pure shared utils — observability, crypto, config (81 files) | `@cogni/node-shared` | Capability library |
-| AI execution stack — decorators, providers, factory (~20 files) | `@cogni/graph-execution-host` (task.0250) | Capability library |
-| Port interfaces (32 files) | Existing capability packages + `@cogni/node-ports` for app-local ports | Capability library |
-| App chrome — layout frame, providers, auth, extension types | `@cogni/node-app` | Internal source package |
-| Non-AI adapters (~139 files) | Stay in app pending per-adapter audit | Deferred |
-| Features, components, routes, bootstrap | **Node-owned** | Node apps |
+| Code                                                            | Target                                                                 | Category                |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| Zod route contracts (55 files)                                  | `@cogni/node-contracts`                                                | Capability library      |
+| Domain models + types (31 files)                                | `@cogni/node-core`                                                     | Capability library      |
+| Pure shared utils — observability, crypto, config (81 files)    | `@cogni/node-shared`                                                   | Capability library      |
+| AI execution stack — decorators, providers, factory (~20 files) | `@cogni/graph-execution-host` (task.0250)                              | Capability library      |
+| Port interfaces (32 files)                                      | Existing capability packages + `@cogni/node-ports` for app-local ports | Capability library      |
+| App chrome — layout frame, providers, auth, extension types     | `@cogni/node-app`                                                      | Internal source package |
+| Non-AI adapters (~139 files)                                    | Stay in app pending per-adapter audit                                  | Deferred                |
+| Features, components, routes, bootstrap                         | **Node-owned**                                                         | Node apps               |
 
 ### Key constraint: `SHELL_IS_CHROME_ONLY`
 
@@ -71,6 +71,7 @@ See [spec.node-app-shell](../../docs/spec/node-app-shell.md) for the full archit
 ### Extension-point mechanism
 
 Nodes customize via `NodeAppConfig` injection, not file-path shadowing:
+
 - `headerComponent` — slot for per-node header
 - `navItems` — sidebar navigation
 - `capabilityBindings` — DI wiring
@@ -141,11 +142,13 @@ See spec for full interface definition.
 ## Validation
 
 Each phase independently:
+
 ```bash
 pnpm check
 ```
 
 After all phases:
+
 ```bash
 # Verify node-template is a complete runnable app
 pnpm dev  # operator still works
