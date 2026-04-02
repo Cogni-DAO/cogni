@@ -70,6 +70,7 @@
 | 1 | 3 | 5 | needs_design | task.0233 | Design: extract node-template from operator repo — identity split + repo-spec merge | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 3 | 3 | needs_design | task.0247 | Multi-node CI/CD deployment strategy — current stack vs ArgoCD | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 3 | 2 | needs_implement | task.0254 | Upgrade poly node landing page onto full platform base | Operator Plane | proj.operator-plane |
+| 1 | 3 | 3 | needs_design | task.0259 | Unified rounded UI theming — buttons, cards, dialogs across all nodes | Operator Plane | proj.operator-plane |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |

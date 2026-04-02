@@ -41,20 +41,20 @@ instance. Multi-node tests need `dev:stack:full` (all 3 nodes + shared infra).
 
 `apps/operator/tests/stack/internal/multi-node-billing.stack.test.ts`
 
-Operator is the test infrastructure host. Multi-node tests test the *system*,
+Operator is the test infrastructure host. Multi-node tests test the _system_,
 not individual nodes.
 
 ### Test cases (7)
 
-| # | Test | Invariant |
-|---|---|---|
-| 1 | Operator callback → receipt in operator DB | Baseline backward compat |
-| 2 | Poly callback → receipt in poly DB | NODE_LOCAL_METERING_PRIMARY |
-| 3 | Resy callback → receipt in resy DB | NODE_LOCAL_METERING_PRIMARY |
-| 4 | Missing node_id → defaults to operator | MISSING_NODE_ID_DEFAULTS_OPERATOR |
-| 5 | Duplicate callback idempotent per node | CHARGE_RECEIPTS_IDEMPOTENT_BY_CALL_ID |
-| 6 | Poly receipt absent from resy DB | DB_PER_NODE / NO_CROSS_NODE_QUERIES |
-| 7 | Invalid token rejected | CALLBACK_AUTHENTICATED |
+| #   | Test                                       | Invariant                             |
+| --- | ------------------------------------------ | ------------------------------------- |
+| 1   | Operator callback → receipt in operator DB | Baseline backward compat              |
+| 2   | Poly callback → receipt in poly DB         | NODE_LOCAL_METERING_PRIMARY           |
+| 3   | Resy callback → receipt in resy DB         | NODE_LOCAL_METERING_PRIMARY           |
+| 4   | Missing node_id → defaults to operator     | MISSING_NODE_ID_DEFAULTS_OPERATOR     |
+| 5   | Duplicate callback idempotent per node     | CHARGE_RECEIPTS_IDEMPOTENT_BY_CALL_ID |
+| 6   | Poly receipt absent from resy DB           | DB_PER_NODE / NO_CROSS_NODE_QUERIES   |
+| 7   | Invalid token rejected                     | CALLBACK_AUTHENTICATED                |
 
 ### Infrastructure changes
 
