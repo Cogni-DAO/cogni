@@ -2,7 +2,7 @@
 id: task.0257
 type: task
 title: "Fix node identity — wire node_id from repo-spec, not env var slug"
-status: needs_closeout
+status: done
 priority: 0
 rank: 1
 estimate: 3
