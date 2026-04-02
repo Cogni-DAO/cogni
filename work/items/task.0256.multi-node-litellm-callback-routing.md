@@ -2,7 +2,7 @@
 id: task.0256
 type: task
 title: "Per-node billing pipeline: DB isolation + auth isolation + LiteLLM callback routing"
-status: needs_closeout
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 5
