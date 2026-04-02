@@ -12,7 +12,7 @@
  * @internal
  */
 
-import type { ChatError } from "@/contracts/error.chat.v1.contract";
+import type { ChatError } from "@cogni/node-contracts";
 
 /**
  * Map HTTP response to structured ChatError.

@@ -11,13 +11,12 @@
  * @internal
  */
 
-import type { z } from "zod";
-
 import type {
   ActivityGroupBy,
   aiActivityOperation,
   TimeRange,
-} from "@/contracts/ai.activity.v1.contract";
+} from "@cogni/node-contracts";
+import type { z } from "zod";
 
 type ActivityData = z.infer<typeof aiActivityOperation.output>;
 

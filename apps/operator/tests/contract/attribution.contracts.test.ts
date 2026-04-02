@@ -11,8 +11,8 @@
  * @internal
  */
 
+import { PoolComponentInputSchema } from "@cogni/node-contracts";
 import { describe, expect, it } from "vitest";
-import { PoolComponentInputSchema } from "@/contracts/attribution.record-pool-component.v1.contract";
 
 describe("ledger.record-pool-component.v1 contract", () => {
   const validPayload = {

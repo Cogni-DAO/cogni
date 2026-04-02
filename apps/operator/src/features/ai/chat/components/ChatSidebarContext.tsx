@@ -13,9 +13,8 @@
 
 "use client";
 
+import type { ThreadSummary } from "@cogni/node-contracts";
 import { create } from "zustand";
-
-import type { ThreadSummary } from "@/contracts/ai.threads.v1.contract";
 
 interface ChatSidebarState {
   threads: ThreadSummary[];

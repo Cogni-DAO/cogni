@@ -11,7 +11,7 @@
  * @internal
  */
 
-import type { WorkItemsListOutput } from "@/contracts/work.items.list.v1.contract";
+import type { WorkItemsListOutput } from "@cogni/node-contracts";
 
 export async function fetchWorkItems(): Promise<WorkItemsListOutput> {
   const response = await fetch("/api/v1/work/items", {

@@ -12,8 +12,8 @@
  * @public
  */
 
+import type { TreasurySnapshotResponseV1 } from "@cogni/node-contracts";
 import { getContainer } from "@/bootstrap/container";
-import type { TreasurySnapshotResponseV1 } from "@/contracts/treasury.snapshot.v1.contract";
 import { getDaoConfig } from "@/shared/config/repoSpec.server";
 import type { RequestContext } from "@/shared/observability";
 import { EVENT_NAMES } from "@/shared/observability/events";

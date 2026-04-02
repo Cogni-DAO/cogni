@@ -21,7 +21,7 @@ import {
 } from "@tests/_fixtures/ai/completion-facade-setup";
 import { describe, expect, it, vi } from "vitest";
 
-import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
+import { chatCompletionsContract } from "@cogni/node-contracts";
 import type { RequestContext } from "@/shared/observability";
 import { makeNoopLogger } from "@/shared/observability";
 

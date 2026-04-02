@@ -16,8 +16,11 @@
  */
 
 import { isAiExecutionError } from "@cogni/ai-core";
+import {
+  type ChatCompletionChunk,
+  chatCompletionsContract,
+} from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
 import {
   chatCompletion,
   chatCompletionStream,
@@ -26,10 +29,6 @@ import {
 import { executionErrorToOpenAiError } from "@/app/_facades/ai/execution-error-mapper";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import {
-  type ChatCompletionChunk,
-  chatCompletionsContract,
-} from "@/contracts/ai.completions.v1.contract";
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 import { isLlmError } from "@/ports";

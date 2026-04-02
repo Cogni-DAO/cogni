@@ -11,7 +11,7 @@
  * @internal
  */
 
-import type { AgentsOutput } from "@/contracts/ai.agents.v1.contract";
+import type { AgentsOutput } from "@cogni/node-contracts";
 
 export async function fetchAgents(): Promise<AgentsOutput> {
   const response = await fetch("/api/v1/ai/agents", {

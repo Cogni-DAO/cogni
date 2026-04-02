@@ -3,10 +3,9 @@
 
 "use client";
 
+import type { WorkItemDto } from "@cogni/node-contracts";
 import type { ReactElement } from "react";
-
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components";
-import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
 
 import { StatusPill, TypeIcon } from "./work-item-icons";
 

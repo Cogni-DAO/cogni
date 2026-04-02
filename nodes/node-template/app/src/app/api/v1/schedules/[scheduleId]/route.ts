@@ -19,8 +19,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { ScheduleResponseSchema } from "@/contracts/schedules.create.v1.contract";
-import { schedulesUpdateOperation } from "@/contracts/schedules.update.v1.contract";
+import { ScheduleResponseSchema, schedulesUpdateOperation } from "@cogni/node-contracts";
 import {
   InvalidCronExpressionError,
   InvalidTimezoneError,

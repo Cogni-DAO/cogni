@@ -25,7 +25,7 @@ import {
   type ActivityGroupBy,
   type aiActivityOperation,
   STEP_MS,
-} from "@/contracts/ai.activity.v1.contract";
+} from "@cogni/node-contracts";
 import { validateActivityRange } from "@/features/ai/public.server";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 import type { SessionUser } from "@/shared/auth";

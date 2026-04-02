@@ -14,7 +14,7 @@
 import type {
   ScheduleCreateInput,
   ScheduleResponse,
-} from "@/contracts/schedules.create.v1.contract";
+} from "@cogni/node-contracts";
 
 export async function createSchedule(
   input: ScheduleCreateInput

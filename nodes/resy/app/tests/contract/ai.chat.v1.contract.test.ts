@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { AssistantUiInputSchema } from "@/contracts/ai.chat.v1.contract";
+import { AssistantUiInputSchema } from "@cogni/node-contracts";
 
 describe("ai.chat.v1 contract validation", () => {
   describe("valid inputs", () => {

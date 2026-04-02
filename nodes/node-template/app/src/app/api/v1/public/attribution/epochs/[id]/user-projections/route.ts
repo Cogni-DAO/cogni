@@ -15,7 +15,7 @@ import { NextResponse } from "next/server";
 import { toUserProjectionDto } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapPublicRoute } from "@/bootstrap/http";
-import { epochUserProjectionsOperation } from "@/contracts/attribution.epoch-user-projections.v1.contract";
+import { epochUserProjectionsOperation } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 

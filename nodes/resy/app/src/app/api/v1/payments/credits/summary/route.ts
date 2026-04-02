@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import { getCreditsSummaryFacade } from "@/app/_facades/payments/credits.server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { creditsSummaryOperation } from "@/contracts/payments.credits.summary.v1.contract";
+import { creditsSummaryOperation } from "@cogni/node-contracts";
 import { AuthUserNotFoundError } from "@/features/payments/errors";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 

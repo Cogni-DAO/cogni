@@ -24,16 +24,13 @@
 import { createHash } from "node:crypto";
 import { AiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
+import type { ChatCompletionOutput, ChatMessage } from "@cogni/node-contracts";
 import { WorkflowExecutionAlreadyStartedError } from "@temporalio/client";
 import {
   getContainer,
   getTemporalWorkflowClient,
   resolveAiAdapterDeps,
 } from "@/bootstrap/container";
-import type {
-  ChatCompletionOutput,
-  ChatMessage,
-} from "@/contracts/ai.completions.v1.contract";
 import { mapAccountsPortErrorToFeature } from "@/features/accounts/public";
 // Types from client-safe barrel (types only, no runtime)
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";

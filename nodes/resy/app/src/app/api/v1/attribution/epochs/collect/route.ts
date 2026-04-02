@@ -21,7 +21,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   CollectTriggerCooldownResponseSchema,
   CollectTriggerResponseSchema,
-} from "@/contracts/attribution.collect-trigger.v1.contract";
+} from "@cogni/node-contracts";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";

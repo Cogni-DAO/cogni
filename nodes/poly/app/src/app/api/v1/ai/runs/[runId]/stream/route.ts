@@ -20,7 +20,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { RunStreamParamsSchema } from "@/contracts/runs.stream.v1.contract";
+import { RunStreamParamsSchema } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

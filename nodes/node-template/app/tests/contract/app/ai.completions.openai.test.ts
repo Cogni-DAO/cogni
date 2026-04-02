@@ -22,7 +22,7 @@ import {
   type ChatCompletionInput,
   type ChatCompletionOutput,
   chatCompletionsContract,
-} from "@/contracts/ai.completions.v1.contract";
+} from "@cogni/node-contracts";
 
 describe("OpenAI Chat Completions Contract", () => {
   describe("input schema", () => {

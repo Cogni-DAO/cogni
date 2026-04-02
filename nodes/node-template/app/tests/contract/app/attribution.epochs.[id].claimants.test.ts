@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { epochClaimantsOperation } from "@/contracts/attribution.epoch-claimants.v1.contract";
+import { epochClaimantsOperation } from "@cogni/node-contracts";
 
 describe("ledger.epoch-claimants.v1 contract", () => {
   it("validates a finalized claimant attribution response", () => {

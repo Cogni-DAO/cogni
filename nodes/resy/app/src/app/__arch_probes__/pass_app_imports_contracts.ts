@@ -12,5 +12,5 @@
  * @public
  */
 
-import { aiCompleteOperation } from "@/contracts/__arch_probes__/ai.contract";
+import { aiCompleteOperation } from "@cogni/node-contracts";
 export const probePass = aiCompleteOperation;

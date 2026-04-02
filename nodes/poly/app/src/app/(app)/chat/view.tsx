@@ -31,7 +31,7 @@ import {
   useState,
 } from "react";
 import { ErrorAlert, Thread } from "@/components";
-import type { ChatError } from "@/contracts/error.chat.v1.contract";
+import type { ChatError } from "@cogni/node-contracts";
 import { useChatSidebarStore } from "@/features/ai/chat/components/ChatSidebarContext";
 import { ChatRuntimeProvider } from "@/features/ai/chat/providers/ChatRuntimeProvider.client";
 import { toErrorAlertProps } from "@/features/ai/chat/utils/toErrorAlertProps";

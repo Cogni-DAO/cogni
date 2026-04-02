@@ -12,8 +12,8 @@
  * @public
  */
 
+import type { AnalyticsSummaryOutput } from "@cogni/node-contracts";
 import { getContainer } from "@/bootstrap/container";
-import type { AnalyticsSummaryOutput } from "@/contracts/analytics.summary.v1.contract";
 import { getAnalyticsSummary } from "@/features/analytics/services/analytics";
 import { serverEnv } from "@/shared/env";
 

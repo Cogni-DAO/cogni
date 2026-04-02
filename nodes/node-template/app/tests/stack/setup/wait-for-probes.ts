@@ -16,7 +16,7 @@
 
 import { Agent, type Dispatcher, setGlobalDispatcher } from "undici";
 
-import { metaReadyzOutputSchema } from "@/contracts/meta.readyz.read.v1.contract";
+import { metaReadyzOutputSchema } from "@cogni/node-contracts";
 
 const LIVEZ_BUDGET_MS = 20_000; // 20s fail-fast budget
 const LIVEZ_INTERVAL_MS = 1_000; // Poll every 1s (fast fail-fast signal)

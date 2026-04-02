@@ -15,6 +15,7 @@
  * @public
  */
 
+import { chatCompletionsContract } from "@cogni/node-contracts";
 import {
   createCompletionRequest,
   createMockAccountServiceWithDefaults,
@@ -29,8 +30,6 @@ import {
 } from "@tests/_fixtures/ai/completion-facade-setup";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
 import { LlmError } from "@/ports";
 import { ChatErrorCode, ChatValidationError } from "@/shared/errors";
 

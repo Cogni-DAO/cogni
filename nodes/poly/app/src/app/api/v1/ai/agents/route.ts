@@ -22,7 +22,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { listAgentsForApi } from "@/bootstrap/agent-discovery";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { aiAgentsOperation } from "@/contracts/ai.agents.v1.contract";
+import { aiAgentsOperation } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

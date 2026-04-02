@@ -11,14 +11,13 @@
  * @internal
  */
 
-import type { WorkItem, WorkItemQueryPort } from "@cogni/work-items";
-import { toWorkItemId } from "@cogni/work-items";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import {
   WorkItemDtoSchema,
   workItemsListOperation,
-} from "@/contracts/work.items.list.v1.contract";
+} from "@cogni/node-contracts";
+import type { WorkItem, WorkItemQueryPort } from "@cogni/work-items";
+import { toWorkItemId } from "@cogni/work-items";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the container
 vi.mock("@/bootstrap/container", () => ({

@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentDescriptorSchema,
   aiAgentsOperation,
-} from "@/contracts/ai.agents.v1.contract";
+} from "@cogni/node-contracts";
 
 describe("ai.agents.v1 contract validation", () => {
   it("accepts null description (LANGGRAPH_SERVER_ALIGNED)", () => {

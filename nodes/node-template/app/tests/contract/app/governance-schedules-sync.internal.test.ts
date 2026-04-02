@@ -16,7 +16,7 @@
 
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { GovernanceSchedulesSyncSummarySchema } from "@/contracts/governance-schedules-sync.internal.v1.contract";
+import { GovernanceSchedulesSyncSummarySchema } from "@cogni/node-contracts";
 
 const TEST_INTERNAL_OPS_TOKEN = "x".repeat(32);
 

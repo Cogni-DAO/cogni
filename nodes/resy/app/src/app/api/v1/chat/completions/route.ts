@@ -29,7 +29,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   type ChatCompletionChunk,
   chatCompletionsContract,
-} from "@/contracts/ai.completions.v1.contract";
+} from "@cogni/node-contracts";
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 import { isLlmError } from "@/ports";

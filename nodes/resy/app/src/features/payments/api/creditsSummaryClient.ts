@@ -15,7 +15,7 @@
 import type {
   CreditsSummaryInput,
   CreditsSummaryOutput,
-} from "@/contracts/payments.credits.summary.v1.contract";
+} from "@cogni/node-contracts";
 import * as clientLogger from "@/shared/observability/client";
 import { EVENT_NAMES } from "@/shared/observability/events";
 

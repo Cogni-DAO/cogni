@@ -24,7 +24,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   profileReadOperation,
   profileUpdateOperation,
-} from "@/contracts/users.profile.v1.contract";
+} from "@cogni/node-contracts";
 import { getServerSessionUser } from "@/lib/auth/server";
 
 export const dynamic = "force-dynamic";

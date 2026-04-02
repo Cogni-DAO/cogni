@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 
 import { readOwnershipSummary } from "@/app/_facades/users/ownership.server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { ownershipSummaryOperation } from "@/contracts/users.ownership.v1.contract";
+import { ownershipSummaryOperation } from "@cogni/node-contracts";
 import { getServerSessionUser } from "@/lib/auth/server";
 
 export const dynamic = "force-dynamic";

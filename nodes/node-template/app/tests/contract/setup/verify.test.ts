@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { setupVerifyOperation } from "@/contracts/setup.verify.v1.contract";
+import { setupVerifyOperation } from "@cogni/node-contracts";
 
 describe("setupVerifyOperation contract", () => {
   describe("input validation", () => {

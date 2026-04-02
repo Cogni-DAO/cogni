@@ -29,7 +29,7 @@ import {
 } from "@tests/_fakes/ai/fakes";
 import errorCases from "@tests/_fixtures/ai/error-cases.json";
 import { describe, expect, it } from "vitest";
-import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
+import { chatCompletionsContract } from "@cogni/node-contracts";
 import {
   type MessageDto,
   toCoreMessages,

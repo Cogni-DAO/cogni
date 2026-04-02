@@ -3,9 +3,8 @@
 
 "use client";
 
+import type { WorkItemDto } from "@cogni/node-contracts";
 import { createColumnHelper } from "@tanstack/react-table";
-
-import type { WorkItemDto } from "@/contracts/work.items.list.v1.contract";
 
 import { StatusPill, TypeIcon } from "./work-item-icons";
 

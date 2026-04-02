@@ -11,15 +11,14 @@
  * @internal
  */
 
-import type { WorkItem, WorkItemId } from "@cogni/work-items";
-import { toWorkItemId } from "@cogni/work-items";
-
-import { getContainer } from "@/bootstrap/container";
 import type {
   WorkItemDto,
   WorkItemsListInput,
   WorkItemsListOutput,
-} from "@/contracts/work.items.list.v1.contract";
+} from "@cogni/node-contracts";
+import type { WorkItem, WorkItemId } from "@cogni/work-items";
+import { toWorkItemId } from "@cogni/work-items";
+import { getContainer } from "@/bootstrap/container";
 
 function toDto(item: WorkItem): WorkItemDto {
   return {

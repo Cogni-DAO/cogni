@@ -23,7 +23,7 @@ import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
 import { toEpochDto } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { reviewEpochOperation } from "@/contracts/attribution.review-epoch.v1.contract";
+import { reviewEpochOperation } from "@cogni/node-contracts";
 import { getLedgerApprovers } from "@/shared/config";
 
 export const dynamic = "force-dynamic";

@@ -19,7 +19,7 @@ import { getContainer } from "@/bootstrap/container";
 import type {
   listThreadsOperation,
   loadThreadOperation,
-} from "@/contracts/ai.threads.v1.contract";
+} from "@cogni/node-contracts";
 import type { SessionUser } from "@/shared/auth";
 
 type ListThreadsInput = {

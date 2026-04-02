@@ -30,7 +30,7 @@ import {
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { chatCompletionsContract } from "@/contracts/ai.completions.v1.contract";
+import { chatCompletionsContract } from "@cogni/node-contracts";
 import { LlmError } from "@/ports";
 import { ChatErrorCode, ChatValidationError } from "@/shared/errors";
 

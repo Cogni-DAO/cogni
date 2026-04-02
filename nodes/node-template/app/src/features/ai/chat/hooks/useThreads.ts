@@ -21,7 +21,7 @@ import {
 import type {
   ListThreadsOutput,
   LoadThreadOutput,
-} from "@/contracts/ai.threads.v1.contract";
+} from "@cogni/node-contracts";
 
 const THREADS_KEY = "ai-threads";
 const THREAD_KEY = "ai-thread";

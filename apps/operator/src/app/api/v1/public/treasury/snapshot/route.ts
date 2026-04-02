@@ -12,11 +12,10 @@
  * @public
  */
 
+import { TreasurySnapshotResponseV1 } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
 import { getTreasurySnapshotFacade } from "@/app/_facades/treasury/snapshot.server";
 import { wrapPublicRoute } from "@/bootstrap/http";
-import { TreasurySnapshotResponseV1 } from "@/contracts/treasury.snapshot.v1.contract";
 
 export const dynamic = "force-dynamic";
 

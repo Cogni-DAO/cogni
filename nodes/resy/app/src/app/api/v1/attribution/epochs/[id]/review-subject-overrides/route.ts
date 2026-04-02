@@ -25,7 +25,7 @@ import {
   deleteReviewSubjectOverrideOperation,
   getReviewSubjectOverridesOperation,
   patchReviewSubjectOverridesOperation,
-} from "@/contracts/attribution.review-subject-overrides.v1.contract";
+} from "@cogni/node-contracts";
 import { getNodeId } from "@/shared/config";
 import {
   EVENT_NAMES,

@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { profileUpdateOperation } from "@/contracts/users.profile.v1.contract";
+import { profileUpdateOperation } from "@cogni/node-contracts";
 
 const parse = (input: unknown) => profileUpdateOperation.input.safeParse(input);
 

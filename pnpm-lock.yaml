@@ -360,6 +360,9 @@ importers:
       '@cogni/market-provider':
         specifier: workspace:*
         version: link:../../packages/market-provider
+      '@cogni/node-contracts':
+        specifier: workspace:*
+        version: link:../../packages/node-contracts
       '@cogni/node-core':
         specifier: workspace:*
         version: link:../../packages/node-core
@@ -652,6 +655,9 @@ importers:
       '@cogni/market-provider':
         specifier: workspace:*
         version: link:../../../packages/market-provider
+      '@cogni/node-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/node-contracts
       '@cogni/node-core':
         specifier: workspace:*
         version: link:../../../packages/node-core
@@ -960,6 +966,9 @@ importers:
       '@cogni/market-provider':
         specifier: workspace:*
         version: link:../../../packages/market-provider
+      '@cogni/node-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/node-contracts
       '@cogni/node-core':
         specifier: workspace:*
         version: link:../../../packages/node-core
@@ -1286,6 +1295,9 @@ importers:
       '@cogni/market-provider':
         specifier: workspace:*
         version: link:../../../packages/market-provider
+      '@cogni/node-contracts':
+        specifier: workspace:*
+        version: link:../../../packages/node-contracts
       '@cogni/node-core':
         specifier: workspace:*
         version: link:../../../packages/node-core
@@ -1806,6 +1818,34 @@ importers:
       zod:
         specifier: ^3.24.0
         version: 3.25.76
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.10)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  packages/node-contracts:
+    dependencies:
+      '@cogni/ai-core':
+        specifier: workspace:*
+        version: link:../ai-core
+      '@cogni/aragon-osx':
+        specifier: workspace:*
+        version: link:../aragon-osx
+      '@cogni/node-core':
+        specifier: workspace:*
+        version: link:../node-core
+      '@ts-rest/core':
+        specifier: ^3.52.1
+        version: 3.52.1(@types/node@25.2.3)(zod@4.3.6)
+      '@ts-rest/open-api':
+        specifier: ^3.52.1
+        version: 3.52.1(@ts-rest/core@3.52.1(@types/node@25.2.3)(zod@4.3.6))(zod@4.3.6)
+      zod:
+        specifier: ^4.1.12
+        version: 4.3.6
     devDependencies:
       tsup:
         specifier: ^8.5.1

@@ -14,12 +14,11 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { aiAgentsOperation } from "@cogni/node-contracts";
 import { NextRequest } from "next/server";
 import { expect, test, vi } from "vitest";
-
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { GET as agentsGET } from "@/app/api/v1/ai/agents/route";
-import { aiAgentsOperation } from "@/contracts/ai.agents.v1.contract";
 import type { SessionUser } from "@/shared/auth/session";
 
 // Mock session

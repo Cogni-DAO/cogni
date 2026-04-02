@@ -16,7 +16,7 @@ import { NextResponse } from "next/server";
 import { listWorkItems } from "@/app/_facades/work/items.server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { workItemsListOperation } from "@/contracts/work.items.list.v1.contract";
+import { workItemsListOperation } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

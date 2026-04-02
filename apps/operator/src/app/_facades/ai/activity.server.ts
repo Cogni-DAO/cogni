@@ -19,13 +19,13 @@
 
 import { randomUUID } from "node:crypto";
 import { toUserId } from "@cogni/ids";
-import type { z } from "zod";
-import { resolveActivityDeps } from "@/bootstrap/container";
 import {
   type ActivityGroupBy,
   type aiActivityOperation,
   STEP_MS,
-} from "@/contracts/ai.activity.v1.contract";
+} from "@cogni/node-contracts";
+import type { z } from "zod";
+import { resolveActivityDeps } from "@/bootstrap/container";
 import { validateActivityRange } from "@/features/ai/public.server";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 import type { SessionUser } from "@/shared/auth";
