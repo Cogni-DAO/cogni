@@ -172,3 +172,7 @@ pnpm dev:stack                # Doltgres + Postgres both healthy, seeds queryabl
 - Automatic promotion gate
 - UI for knowledge browsing
 - `analysis_runs.knowledge_commit` column (added when task.0227 wires analysis)
+
+## PR / Links
+
+- Handoff: [handoff](../handoffs/task.0231.handoff.md)
