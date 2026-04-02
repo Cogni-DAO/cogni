@@ -99,6 +99,10 @@ files + the pre-built package — dramatically reducing per-node Turbopack memor
 Combined with task.0181 (move AI runtime to scheduler-worker), node apps shed
 AI deps entirely, further shrinking the compilation footprint.
 
+## Known drift: shared TOOL_CATALOG breaks node boot
+
+`TOOL_BINDING_REQUIRED` crashes nodes when operator adds tools (e.g., VCS tools from PR #687) that nodes don't bind. Root cause: single shared catalog forces every app to bind every tool. Fix: per-node composable catalog as part of this extraction.
+
 ## Expected test deduplication
 
 Each node currently has ~200 identical test fixture files copied from operator.
