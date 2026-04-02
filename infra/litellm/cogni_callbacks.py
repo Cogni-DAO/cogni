@@ -30,17 +30,15 @@ DEFAULT_NODE = "operator"
 def _parse_node_endpoints() -> dict[str, str]:
     """Parse COGNI_NODE_ENDPOINTS env var into {node_id: url} map.
 
-    Format: "operator=http://app:3000,poly=http://poly:3100,resy=http://resy:3300"
-    Falls back to single-node default if not set.
+    Format: "operator=http://app:3000/api/internal/billing/ingest,poly=http://poly:3100/api/internal/billing/ingest"
+    Required — fails loudly if not set.
     """
     raw = os.environ.get("COGNI_NODE_ENDPOINTS", "")
     if not raw:
-        # Single-node fallback — use GENERIC_LOGGER_ENDPOINT or default
-        fallback = os.environ.get(
-            "GENERIC_LOGGER_ENDPOINT",
-            "http://app:3000/api/internal/billing/ingest",
+        raise RuntimeError(
+            "COGNI_NODE_ENDPOINTS is required. "
+            "Format: node_id=endpoint_url,node_id=endpoint_url,..."
         )
-        return {DEFAULT_NODE: fallback}
 
     endpoints: dict[str, str] = {}
     for pair in raw.split(","):
@@ -49,6 +47,13 @@ def _parse_node_endpoints() -> dict[str, str]:
             continue
         node_id, url = pair.split("=", 1)
         endpoints[node_id.strip()] = url.strip()
+
+    if not endpoints:
+        raise RuntimeError(
+            "COGNI_NODE_ENDPOINTS parsed to empty map. "
+            "Format: node_id=endpoint_url,node_id=endpoint_url,..."
+        )
+
     return endpoints
 
 

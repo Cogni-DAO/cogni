@@ -156,10 +156,9 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_BASE_URL}
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
-      # Per-node billing callback routing (custom callback class replaces generic_api)
-      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS:-operator=http://app:3000/api/internal/billing/ingest}
+      # Per-node billing callback routing (custom callback class — cogni_callbacks.CogniNodeRouter)
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS}
       - BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
-      - GENERIC_LOGGER_ENDPOINT=${GENERIC_LOGGER_ENDPOINT:-http://app:3000/api/internal/billing/ingest}
     volumes:
       - ./configs/litellm.config.yaml:/app/config.yaml:ro
     command: --config /app/config.yaml --host 0.0.0.0 --port 4000
