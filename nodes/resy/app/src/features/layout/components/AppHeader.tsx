@@ -51,7 +51,7 @@ export function AppHeader(): ReactElement {
               rel="noopener noreferrer"
               className="hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
             >
-              <Github className="size-4" />
+              <Github className="size-4" strokeWidth={1.5} />
             </a>
 
             <WalletConnectButton variant="compact" className="sm:hidden" />

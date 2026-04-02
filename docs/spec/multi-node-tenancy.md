@@ -39,14 +39,14 @@ Cogni runs multiple sovereign nodes (operator, poly, resy) on shared infrastruct
 
 ### Key references
 
-| Spec | Relevance |
-| --- | --- |
-| [Database RLS](./database-rls.md) | RLS policy mechanics — applies within each node's DB |
-| [Identity Model](./identity-model.md) | Identity primitive taxonomy — `user_id` is portable cross-node |
-| [Node Operator Contract](./node-operator-contract.md) | DATA_SOVEREIGNTY, NO_CROSS_IMPORTS, WALLET_CUSTODY |
-| [Node Launch](./node-launch.md) | `provisionDatabase` step in node creation workflow |
-| [System Tenant](./system-tenant.md) | `cogni_system` account lives in operator's DB |
-| [Billing Ingest](./billing-ingest.md) | LiteLLM callback pipeline — per-node routing = task.0256 |
+| Spec                                                  | Relevance                                                      |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| [Database RLS](./database-rls.md)                     | RLS policy mechanics — applies within each node's DB           |
+| [Identity Model](./identity-model.md)                 | Identity primitive taxonomy — `user_id` is portable cross-node |
+| [Node Operator Contract](./node-operator-contract.md) | DATA_SOVEREIGNTY, NO_CROSS_IMPORTS, WALLET_CUSTODY             |
+| [Node Launch](./node-launch.md)                       | `provisionDatabase` step in node creation workflow             |
+| [System Tenant](./system-tenant.md)                   | `cogni_system` account lives in operator's DB                  |
+| [Billing Ingest](./billing-ingest.md)                 | LiteLLM callback pipeline — per-node routing = task.0256       |
 
 ---
 
@@ -61,19 +61,19 @@ Cogni runs multiple sovereign nodes (operator, poly, resy) on shared infrastruct
 
 All invariants are detailed in their respective sections below. Summary:
 
-| Invariant | Section |
-| --- | --- |
-| SHARED_IDENTITY_ISOLATED_SESSIONS | Auth Model |
-| ORIGIN_SCOPED_COOKIES | Auth Model |
-| SSO_THEN_LOCAL_SESSION | Auth Model |
-| DB_PER_NODE | Data Isolation |
-| DB_IS_BOUNDARY | Data Isolation |
-| NODE_LOCAL_METERING_PRIMARY | Data Isolation |
-| NO_CROSS_NODE_QUERIES | Data Isolation |
-| OPERATOR_AGGREGATES_ARE_DERIVED | Data Isolation |
-| NO_CROSS_IMPORTS | Inter-Node Communication |
-| NODE_TO_OPERATOR_READ_ONLY | Inter-Node Communication |
-| OPERATOR_READS_NODE_VIA_VCS | Inter-Node Communication |
+| Invariant                         | Section                  |
+| --------------------------------- | ------------------------ |
+| SHARED_IDENTITY_ISOLATED_SESSIONS | Auth Model               |
+| ORIGIN_SCOPED_COOKIES             | Auth Model               |
+| SSO_THEN_LOCAL_SESSION            | Auth Model               |
+| DB_PER_NODE                       | Data Isolation           |
+| DB_IS_BOUNDARY                    | Data Isolation           |
+| NODE_LOCAL_METERING_PRIMARY       | Data Isolation           |
+| NO_CROSS_NODE_QUERIES             | Data Isolation           |
+| OPERATOR_AGGREGATES_ARE_DERIVED   | Data Isolation           |
+| NO_CROSS_IMPORTS                  | Inter-Node Communication |
+| NODE_TO_OPERATOR_READ_ONLY        | Inter-Node Communication |
+| OPERATOR_READS_NODE_VIA_VCS       | Inter-Node Communication |
 
 ---
 
@@ -81,11 +81,11 @@ All invariants are detailed in their respective sections below. Summary:
 
 ### Auth invariants
 
-| Invariant | Rule |
-| --- | --- |
-| SHARED_IDENTITY_ISOLATED_SESSIONS | One identity provider (operator), per-node app sessions. A user signs in once via the operator IdP; each node mints and verifies its own local session. |
-| ORIGIN_SCOPED_COOKIES | No parent-domain (`.cognidao.org`) session cookie. Each node's session cookie is scoped to its own origin (`poly.cognidao.org`, `resy.cognidao.org`). OWASP: parent-domain cookies expose all subdomains to cross-subdomain session risk. |
-| SSO_THEN_LOCAL_SESSION | After IdP verification, the node creates a local JWT/session. The node never trusts a cookie from another origin. |
+| Invariant                         | Rule                                                                                                                                                                                                                                      |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SHARED_IDENTITY_ISOLATED_SESSIONS | One identity provider (operator), per-node app sessions. A user signs in once via the operator IdP; each node mints and verifies its own local session.                                                                                   |
+| ORIGIN_SCOPED_COOKIES             | No parent-domain (`.cognidao.org`) session cookie. Each node's session cookie is scoped to its own origin (`poly.cognidao.org`, `resy.cognidao.org`). OWASP: parent-domain cookies expose all subdomains to cross-subdomain session risk. |
+| SSO_THEN_LOCAL_SESSION            | After IdP verification, the node creates a local JWT/session. The node never trusts a cookie from another origin.                                                                                                                         |
 
 ### Architecture: three realms
 
@@ -97,13 +97,13 @@ All invariants are detailed in their respective sections below. Summary:
 
 ### As-built gap analysis
 
-| Aspect | Current (V0) | Target (V1) |
-| --- | --- | --- |
-| Auth config | 4 identical `auth.ts` files doing full NextAuth per-node | Operator = IdP, nodes = SSO relying parties |
-| Session sharing | Implicit via `localhost` cookie sharing | Per-node origin-scoped cookies, no cross-node session |
-| AUTH_SECRET | Single shared secret | Per-node secrets; operator IdP has its own |
-| SIWE verification | Domain-bound to `NEXTAUTH_URL.host` | Verify against domain in signed SIWE message |
-| OAuth callbacks | Per-port in dev (`localhost:3100/api/auth/callback`) | Per-domain registration with providers |
+| Aspect            | Current (V0)                                             | Target (V1)                                           |
+| ----------------- | -------------------------------------------------------- | ----------------------------------------------------- |
+| Auth config       | 4 identical `auth.ts` files doing full NextAuth per-node | Operator = IdP, nodes = SSO relying parties           |
+| Session sharing   | Implicit via `localhost` cookie sharing                  | Per-node origin-scoped cookies, no cross-node session |
+| AUTH_SECRET       | Single shared secret                                     | Per-node secrets; operator IdP has its own            |
+| SIWE verification | Domain-bound to `NEXTAUTH_URL.host`                      | Verify against domain in signed SIWE message          |
+| OAuth callbacks   | Per-port in dev (`localhost:3100/api/auth/callback`)     | Per-domain registration with providers                |
 
 ### Production multi-domain requirements
 
@@ -117,13 +117,13 @@ All invariants are detailed in their respective sections below. Summary:
 
 ### Data invariants
 
-| Invariant | Rule |
-| --- | --- |
-| DB_PER_NODE | 1 Postgres server, 1 database per node. Each node has its own database, its own migrations, its own schema version. |
-| DB_IS_BOUNDARY | The database itself is the node boundary. No `node_id` columns needed in node-local tables — the DB already scopes to this node. User/account-scoped RLS within the node is still legitimate and expected. |
-| NODE_LOCAL_METERING_PRIMARY | Each node's local billing/metering data is authoritative. Operator aggregation is derived, never the source of truth. If operator aggregate diverges from node-local, **node-local wins**. |
-| NO_CROSS_NODE_QUERIES | Nodes never query each other's database. The operator never queries a node's database directly. |
-| OPERATOR_AGGREGATES_ARE_DERIVED | Cross-node views are read-only projections from node-local data, not independent records. They may lag, they may be incomplete, they are never primary. |
+| Invariant                       | Rule                                                                                                                                                                                                       |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DB_PER_NODE                     | 1 Postgres server, 1 database per node. Each node has its own database, its own migrations, its own schema version.                                                                                        |
+| DB_IS_BOUNDARY                  | The database itself is the node boundary. No `node_id` columns needed in node-local tables — the DB already scopes to this node. User/account-scoped RLS within the node is still legitimate and expected. |
+| NODE_LOCAL_METERING_PRIMARY     | Each node's local billing/metering data is authoritative. Operator aggregation is derived, never the source of truth. If operator aggregate diverges from node-local, **node-local wins**.                 |
+| NO_CROSS_NODE_QUERIES           | Nodes never query each other's database. The operator never queries a node's database directly.                                                                                                            |
+| OPERATOR_AGGREGATES_ARE_DERIVED | Cross-node views are read-only projections from node-local data, not independent records. They may lag, they may be incomplete, they are never primary.                                                    |
 
 ### Architecture
 
@@ -148,18 +148,19 @@ All invariants are detailed in their respective sections below. Summary:
 
 ### As-built gap analysis
 
-| Aspect | Current (V0) | Target (V1) |
-| --- | --- | --- |
-| Database | Single `cogni_template_dev` shared by all nodes | Per-node database (`operator_db`, `poly_db`, `resy_db`) |
-| `DATABASE_URL` | Same connection string for all nodes | Per-node env: each node's `DATABASE_URL` points to its own DB |
-| Provisioning | Manual | `provisionDatabase` step in [node-launch](./node-launch.md) workflow creates DB + user + runs migrations |
-| Schema | Single shared schema | Per-node schema, versioned independently (same base, diverges over time) |
+| Aspect         | Current (V0)                                    | Target (V1)                                                                                              |
+| -------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Database       | Single `cogni_template_dev` shared by all nodes | Per-node database (`operator_db`, `poly_db`, `resy_db`)                                                  |
+| `DATABASE_URL` | Same connection string for all nodes            | Per-node env: each node's `DATABASE_URL` points to its own DB                                            |
+| Provisioning   | Manual                                          | `provisionDatabase` step in [node-launch](./node-launch.md) workflow creates DB + user + runs migrations |
+| Schema         | Single shared schema                            | Per-node schema, versioned independently (same base, diverges over time)                                 |
 
 ### Operator aggregation plane
 
 The operator needs cross-node cost visibility for gateway metering (proj.operator-plane v0). This is an **aggregation plane**, not a primary data store.
 
 **Principles:**
+
 - The aggregation plane is **derived** (NODE_LOCAL_METERING_PRIMARY)
 - Data flows **from** node DBs **to** operator aggregation, never the reverse
 - Populated by:
@@ -174,11 +175,11 @@ The operator needs cross-node cost visibility for gateway metering (proj.operato
 
 ### Communication invariants
 
-| Invariant | Rule |
-| --- | --- |
-| NO_CROSS_IMPORTS | Compile-time: no import paths between `nodes/poly/**` and `nodes/resy/**`, or between `nodes/**` and `apps/**`/`services/**`. Enforced by dep-cruiser. |
-| NODE_TO_OPERATOR_READ_ONLY | Node → Operator runtime calls are **read-only by default**. Any write operation requires an explicit, versioned API contract. No implicit state sync, no fire-and-forget writes, no silent coupling creep. |
-| OPERATOR_READS_NODE_VIA_VCS | Operator → Node only via VCS API (read repo-spec, read manifests). Never direct DB access. Never wallet access. |
+| Invariant                   | Rule                                                                                                                                                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| NO_CROSS_IMPORTS            | Compile-time: no import paths between `nodes/poly/**` and `nodes/resy/**`, or between `nodes/**` and `apps/**`/`services/**`. Enforced by dep-cruiser.                                                     |
+| NODE_TO_OPERATOR_READ_ONLY  | Node → Operator runtime calls are **read-only by default**. Any write operation requires an explicit, versioned API contract. No implicit state sync, no fire-and-forget writes, no silent coupling creep. |
+| OPERATOR_READS_NODE_VIA_VCS | Operator → Node only via VCS API (read repo-spec, read manifests). Never direct DB access. Never wallet access.                                                                                            |
 
 ### Patterns
 
@@ -190,9 +191,9 @@ The operator needs cross-node cost visibility for gateway metering (proj.operato
 
 ## Migration Path
 
-| Phase | What changes | Gate |
-| --- | --- | --- |
-| **V0** (current) | Shared DB, shared auth. Works for dev, not production. | — |
-| **V1** (this spec) | Per-node DB provisioning. SSO with per-node origin-scoped sessions. | Multi-node CICD proven (task.0247) |
-| **V2** | Operator aggregation plane for cross-node metering. Derived, not primary. | Paying gateway customer (proj.operator-plane v0) |
-| **V3** | Federation. Sovereign nodes trust external IdPs. Inter-node contracts formalized. | Multiple independent node operators |
+| Phase              | What changes                                                                      | Gate                                             |
+| ------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **V0** (current)   | Shared DB, shared auth. Works for dev, not production.                            | —                                                |
+| **V1** (this spec) | Per-node DB provisioning. SSO with per-node origin-scoped sessions.               | Multi-node CICD proven (task.0247)               |
+| **V2**             | Operator aggregation plane for cross-node metering. Derived, not primary.         | Paying gateway customer (proj.operator-plane v0) |
+| **V3**             | Federation. Sovereign nodes trust external IdPs. Inter-node contracts formalized. | Multiple independent node operators              |

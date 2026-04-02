@@ -16,7 +16,7 @@
 import { Github } from "lucide-react";
 import { useSession } from "next-auth/react";
 import type { ReactElement } from "react";
-import { ModeToggle, SidebarTrigger } from "@/components";
+import { SidebarTrigger } from "@/components";
 import { WalletConnectButton } from "@/components/kit/auth/WalletConnectButton";
 import { TreasuryBadge } from "@/features/treasury/components/TreasuryBadge";
 import { UserAvatarMenu } from "./UserAvatarMenu";
@@ -39,10 +39,8 @@ export function AppTopBar(): ReactElement {
           rel="noopener noreferrer"
           className="hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
         >
-          <Github className="size-4" />
+          <Github className="size-4" strokeWidth={1.5} />
         </a>
-
-        <ModeToggle />
 
         {/* Auth slot: avatar menu when authenticated, wallet connect when not */}
         {isAuthenticated ? (
