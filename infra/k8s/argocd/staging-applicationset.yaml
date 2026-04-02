@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ApplicationSet for staging environment.
+# Generates one Argo Application per catalog entry.
+# Adding a new node/service = adding infra/catalog/{name}.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cogni-staging
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: staging
+        files:
+          - path: "infra/catalog/*.yaml"
+  template:
+    metadata:
+      name: "staging-{{name}}"
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        targetRevision: staging
+        path: "infra/k8s/overlays/staging/{{name}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cogni-staging
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

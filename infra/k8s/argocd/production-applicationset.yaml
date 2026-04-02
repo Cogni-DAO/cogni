@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ApplicationSet for production environment.
+# Same pattern as staging — reads infra/catalog/*.yaml from main branch.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cogni-production
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: main
+        files:
+          - path: "infra/catalog/*.yaml"
+  template:
+    metadata:
+      name: "production-{{name}}"
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        targetRevision: main
+        path: "infra/k8s/overlays/production/{{name}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cogni-production
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
