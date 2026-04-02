@@ -3,4 +3,3 @@ type: node
 port: 3000
 node_id: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d"
 dockerfile: apps/operator/Dockerfile
-overlay_path_template: infra/k8s/overlays/{{env}}/operator

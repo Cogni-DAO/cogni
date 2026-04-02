@@ -4,6 +4,7 @@
 
 # Script: scripts/ci/promote-k8s-image.sh
 # Purpose: Update k8s overlay with new image digest for any app/node, commit to branch.
+# Note: sed uses GNU extensions (0, address). Runs in CI (ubuntu). Local use: review diff only.
 # Invariants:
 #   - IMAGE_IMMUTABILITY: Uses @sha256: digest, never mutable tags
 #   - MANIFEST_DRIVEN_DEPLOY: Promotion = overlay change → Argo CD syncs

@@ -14,11 +14,10 @@ images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
     newTag: "prod-placeholder-resy"
-  - name: ghcr.io/cogni-dao/cogni-template:placeholder-migrate
-    newName: ghcr.io/cogni-dao/cogni-template
-    newTag: "prod-placeholder-resy-migrate"
 
 patches:
+  # Node-specific ConfigMap values.
+  # DNS names must match prefixed Service names (namePrefix applies to all resources).
   - target:
       kind: ConfigMap
       name: node-app-config
@@ -32,6 +31,16 @@ patches:
       - op: replace
         path: /data/TEMPORAL_NAMESPACE
         value: "cogni-production"
+      - op: replace
+        path: /data/LITELLM_BASE_URL
+        value: "http://resy-litellm-external:4000"
+      - op: replace
+        path: /data/TEMPORAL_ADDRESS
+        value: "resy-temporal-external:7233"
+      - op: replace
+        path: /data/REDIS_URL
+        value: "redis://resy-redis-external:6379"
+  # NodePort assignment (resy = 30300)
   - target:
       kind: Service
       name: node-app

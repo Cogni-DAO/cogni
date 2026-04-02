@@ -2,4 +2,3 @@ name: sandbox-openclaw
 type: service
 port: 18789
 image: ghcr.io/cogni-dao/cogni-sandbox-openclaw
-overlay_path_template: infra/k8s/overlays/{{env}}/sandbox-openclaw

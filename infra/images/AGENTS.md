@@ -12,10 +12,10 @@
 Infra-owned Docker image build contexts. These produce images used by Compose services
 or deployed to GHCR for k8s consumption.
 
-## Contents
+## Pointers
 
-- `litellm/` — LiteLLM proxy with custom CogniNodeRouter billing callback
-- `sandbox-proxy/` — nginx gateway config templates for OpenClaw LLM proxy
+- [litellm/](litellm/): LiteLLM proxy with custom CogniNodeRouter billing callback
+- [sandbox-proxy/](sandbox-proxy/): nginx gateway config templates for OpenClaw LLM proxy
 
 ## Boundaries
 
@@ -27,6 +27,22 @@ or deployed to GHCR for k8s consumption.
 }
 ```
 
+## Public Surface
+
+- **Exports:** Docker images (litellm), nginx config templates (sandbox-proxy)
+- **CLI:** `docker build -f infra/images/litellm/Dockerfile infra/images/litellm/`
+
+## Responsibilities
+
+- This directory **does**: Contain Dockerfiles and build contexts for infra-owned images
+- This directory **does not**: Contain runtime config, application code, or Kubernetes manifests
+
 ## Change Protocol
 
 - Adding a new infra image: create `images/{name}/` with Dockerfile
+
+## Notes
+
+- `litellm/` was moved from `infra/litellm/` during the CD pipeline restructure
+- `sandbox-proxy/` was moved from `infra/compose/sandbox-proxy/`
+- Docker Compose references these via `build.context: ../../images/litellm`

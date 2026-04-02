@@ -3,4 +3,3 @@ type: node
 port: 3000
 node_id: "f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e"
 dockerfile: nodes/resy/app/Dockerfile
-overlay_path_template: infra/k8s/overlays/{{env}}/resy

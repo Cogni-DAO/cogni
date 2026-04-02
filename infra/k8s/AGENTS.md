@@ -75,3 +75,11 @@ k8s/
 - Adding a new app/node: add `infra/catalog/{name}.yaml`, create overlay, add SOPS secret
 - Promoting an image: update overlay `images:` section with new digest
 - Update this file when **directory structure changes**
+
+## Notes
+
+- Renamed from `infra/cd/` during CD pipeline restructure (see `docs/spec/cd-pipeline-e2e.md`)
+- Node overlays use `namePrefix: {name}-` — configmap DNS values must match prefixed service names
+- SOPS secrets use age encryption; private key injected at cluster bootstrap, not stored in repo
+- Argo CD install is pinned to v2.13.4 (non-HA) — update version deliberately
+- Update this file when **directory structure changes**

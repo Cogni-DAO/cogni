@@ -124,9 +124,6 @@ write_files:
       k3s --version
       kubectl get nodes
 
-      # ── SOPS age key (pre-generated, injected via Terraform) ──
-      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Writing SOPS age private key to k8s Secret..."
-
       # ── Argo CD + ksops ──────────────────────────────────────
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Cloning repo for Argo CD manifests..."
       apt-get install -y git
@@ -137,6 +134,7 @@ write_files:
 
       # Create argocd namespace + age key Secret BEFORE Argo CD install.
       # ksops sidecar mounts this Secret as a volume for decryption.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Creating argocd namespace + SOPS age key Secret..."
       kubectl create namespace argocd || true
       echo "${sops_age_private_key}" > /tmp/age-key.txt
       kubectl -n argocd create secret generic sops-age-key \
