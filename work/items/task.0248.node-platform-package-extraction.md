@@ -2,13 +2,14 @@
 id: task.0248
 type: task
 title: "Deduplicate node platform: targeted package extractions + bounded node workspaces"
-status: needs_implement
+status: needs_design
 priority: 1
 rank: 5
 estimate: 5
 summary: "Eliminate ~660 duplicated files per node via targeted shared-package extractions and bounded node workspace structure. Node-template becomes the golden path."
 outcome: "Adding a new node = create thin app shell (~50 files) + node-specific graphs. No file copying. Platform fixes land once, all nodes get them."
 spec_refs:
+  - spec.node-app-shell
   - docs/spec/architecture.md
   - docs/spec/multi-node-tenancy.md
   - docs/spec/packages-architecture.md
@@ -45,6 +46,7 @@ Node-template is the golden path. Adding a new node = scaffold from template, cu
 **Solution:** Three-layer extraction, following the established capability-package pattern. Each layer is an independent PR that can be reviewed and validated separately.
 
 **Rejected alternatives:**
+
 1. **One `@cogni/node-platform` monolith package** — Violates PURE_LIBRARY (features use Next.js, components use React, bootstrap reads env). Mixes 5 architectural layers in one package. Creates a god-dependency.
 2. **Turborepo/Next.js shared app overlay** — No established pattern in codebase. Turbopack's transpilePackages doesn't solve the identical-file problem. Novel infra for unclear benefit.
 3. **Symlinks** — Fragile, confusing for IDEs, breaks git history, not a pnpm workspace pattern.
@@ -53,19 +55,19 @@ Node-template is the golden path. Adding a new node = scaffold from template, cu
 
 Based on framework-coupling analysis of the actual code:
 
-| Layer | Files | Framework deps | Extractable? | Target |
-|---|---|---|---|---|
-| **ports/** | 32 | 0 | Yes | `@cogni/node-ports` |
-| **core/** | 24 | 0 | Yes | `@cogni/node-core` |
-| **contracts/** | 55 | 0 | Yes | `@cogni/node-contracts` |
-| **types/** | 7 | 0 | Yes | `@cogni/node-core` |
-| **shared/** (pure) | 81 | 0 | Yes | `@cogni/node-shared` |
-| **shared/hooks/** | 1 | React | No | stays in app |
-| **adapters/** | 159 | 0 | Yes | `@cogni/node-adapters` |
-| **features/** | 153 | 70 Next.js | **No** | stays in app (Next.js coupled) |
-| **components/** | 101 | 96 React | **No** | stays in app (React coupled) |
-| **bootstrap/** | 36 | 18 env/process | **No** | stays in app (runtime wiring) |
-| **app/** (routes) | 157 | Next.js | **No** | stays in app |
+| Layer              | Files | Framework deps | Extractable? | Target                         |
+| ------------------ | ----- | -------------- | ------------ | ------------------------------ |
+| **ports/**         | 32    | 0              | Yes          | `@cogni/node-ports`            |
+| **core/**          | 24    | 0              | Yes          | `@cogni/node-core`             |
+| **contracts/**     | 55    | 0              | Yes          | `@cogni/node-contracts`        |
+| **types/**         | 7     | 0              | Yes          | `@cogni/node-core`             |
+| **shared/** (pure) | 81    | 0              | Yes          | `@cogni/node-shared`           |
+| **shared/hooks/**  | 1     | React          | No           | stays in app                   |
+| **adapters/**      | 159   | 0              | Yes          | `@cogni/node-adapters`         |
+| **features/**      | 153   | 70 Next.js     | **No**       | stays in app (Next.js coupled) |
+| **components/**    | 101   | 96 React       | **No**       | stays in app (React coupled)   |
+| **bootstrap/**     | 36    | 18 env/process | **No**       | stays in app (runtime wiring)  |
+| **app/** (routes)  | 157   | Next.js        | **No**       | stays in app                   |
 
 **Extractable:** ~358 files (ports + core + contracts + types + shared-pure + adapters)
 **Stays in app:** ~448 files (features + components + bootstrap + app routes + hooks)
@@ -111,28 +113,28 @@ nodes/
 
 **Phase 1 — Pure domain extractions (zero risk, immediate dedup)**
 
-| Package | From | Files | Deps |
-|---|---|---|---|
-| `@cogni/node-contracts` | `src/contracts/` | 55 | `zod`, `@cogni/ai-core` |
-| `@cogni/node-core` | `src/core/` + `src/types/` | 31 | None (pure domain) |
+| Package                 | From                       | Files | Deps                    |
+| ----------------------- | -------------------------- | ----- | ----------------------- |
+| `@cogni/node-contracts` | `src/contracts/`           | 55    | `zod`, `@cogni/ai-core` |
+| `@cogni/node-core`      | `src/core/` + `src/types/` | 31    | None (pure domain)      |
 
 These are already 100% identical across all nodes, have zero framework deps, and follow the exact capability-package pattern.
 
 **Phase 2 — Port + adapter extractions (subsumes task.0250)**
 
-| Package | From | Files | Deps |
-|---|---|---|---|
-| `@cogni/node-ports` | `src/ports/` | 32 | `@cogni/ai-core`, `@cogni/graph-execution-core` |
-| `@cogni/graph-execution-host` | `src/adapters/server/ai/` subset | ~20 | `@cogni/ai-core`, `@cogni/langgraph-graphs`, `@cogni/ai-tools` |
-| `@cogni/node-adapters` | `src/adapters/` (remainder) | ~139 | `@cogni/node-ports`, various |
+| Package                       | From                             | Files | Deps                                                           |
+| ----------------------------- | -------------------------------- | ----- | -------------------------------------------------------------- |
+| `@cogni/node-ports`           | `src/ports/`                     | 32    | `@cogni/ai-core`, `@cogni/graph-execution-core`                |
+| `@cogni/graph-execution-host` | `src/adapters/server/ai/` subset | ~20   | `@cogni/ai-core`, `@cogni/langgraph-graphs`, `@cogni/ai-tools` |
+| `@cogni/node-adapters`        | `src/adapters/` (remainder)      | ~139  | `@cogni/node-ports`, various                                   |
 
 `@cogni/node-ports` must extract first (adapters depend on ports). `@cogni/graph-execution-host` extracts the AI execution subset (task.0250 design, reviewed and approved) as part of this phase. Remaining adapters become `@cogni/node-adapters`.
 
 **Phase 3 — Shared utilities**
 
-| Package | From | Files | Deps |
-|---|---|---|---|
-| `@cogni/node-shared` | `src/shared/` minus hooks | 81 | `pino`, `node:crypto` |
+| Package              | From                      | Files | Deps                  |
+| -------------------- | ------------------------- | ----- | --------------------- |
+| `@cogni/node-shared` | `src/shared/` minus hooks | 81    | `pino`, `node:crypto` |
 
 This includes observability, config helpers, content-scrubbing, crypto utils — all pure functions with zero framework deps.
 
@@ -151,6 +153,7 @@ Phase 4 is the most complex and should be designed separately after Phases 1-3 p
 ### Relationship to task.0250/0251/0252
 
 task.0250 (extract graph-execution-host) is **absorbed into Phase 2** of this task. The design decisions from task.0250's review still apply:
+
 - Type ownership: define in package, app re-exports (same PR)
 - Constructor injection for Logger (PURE_LIBRARY compliant)
 - Opaque CompletionStreamFn signature
@@ -201,11 +204,13 @@ task.0251 (wire execution in scheduler-worker) and task.0252 (strip AI deps from
 ## Validation
 
 Each phase independently:
+
 ```bash
 pnpm check
 ```
 
 After all phases:
+
 ```bash
 # Verify no duplicate platform code
 diff -rq packages/node-ports/src/ apps/operator/src/ports/ 2>/dev/null
