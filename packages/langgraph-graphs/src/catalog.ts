@@ -31,6 +31,11 @@ import {
   OPERATING_REVIEW_PROMPT,
 } from "./graphs/operator/prompts";
 import {
+  NODE_CREATOR_GRAPH_NAME,
+  NODE_CREATOR_PROMPT,
+} from "./graphs/node-creator/prompts";
+import { NODE_CREATOR_TOOL_IDS } from "./graphs/node-creator/tools";
+import {
   GIT_REVIEWER_TOOL_IDS,
   OPERATING_REVIEW_TOOL_IDS,
 } from "./graphs/operator/tools";
@@ -205,6 +210,20 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     toolIds: GIT_REVIEWER_TOOL_IDS as readonly string[],
     graphFactory: createOperatorGraph,
     systemPrompt: GIT_REVIEWER_PROMPT,
+  },
+  /**
+   * Node Creator — guided node creation orchestrator.
+   * Conversational intake + identity, then triggers preset workflows for
+   * DAO formation, scaffolding, PR creation, and DNS. Display-only tools
+   * render interactive cards in the chat UI via makeAssistantToolUI.
+   */
+  [NODE_CREATOR_GRAPH_NAME]: {
+    displayName: "Node Creator",
+    description:
+      "Guided node creation — intake, identity, DAO formation, scaffolding, PR, DNS",
+    toolIds: NODE_CREATOR_TOOL_IDS as readonly string[],
+    graphFactory: createOperatorGraph,
+    systemPrompt: NODE_CREATOR_PROMPT,
   },
 } as const;
 
