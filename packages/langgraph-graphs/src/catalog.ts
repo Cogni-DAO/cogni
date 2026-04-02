@@ -42,6 +42,11 @@ import {
 } from "./graphs/ponderer/graph";
 import { PONDERER_TOOL_IDS } from "./graphs/ponderer/tools";
 import {
+  PR_MANAGER_GRAPH_NAME,
+  PR_MANAGER_PROMPT,
+} from "./graphs/pr-manager/prompts";
+import { PR_MANAGER_TOOL_IDS } from "./graphs/pr-manager/tools";
+import {
   createPrReviewGraph,
   PR_REVIEW_GRAPH_NAME,
 } from "./graphs/pr-review/graph";
@@ -176,6 +181,20 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
   },
 
   /**
+   * PR Manager — recurring agent that merges ready PRs and reports blockers.
+   * Complements the webhook-triggered PR Review (quality) with lifecycle management.
+   * v0: merge bot (auto-merge green PRs). v-next: spawns developer agents to fix CI.
+   */
+  [PR_MANAGER_GRAPH_NAME]: {
+    displayName: "PR Manager",
+    description:
+      "Merge bot — auto-merges green PRs, flags blockers, tracks PR throughput",
+    toolIds: PR_MANAGER_TOOL_IDS as readonly string[],
+    graphFactory: createOperatorGraph,
+    systemPrompt: PR_MANAGER_PROMPT,
+  },
+
+  /**
    * Git Reviewer — queue observer for merge-ready items.
    * Reports status based on work item metadata (no GitHub API access).
    */
@@ -212,6 +231,7 @@ export const LANGGRAPH_GRAPH_IDS = {
   browser: `${LANGGRAPH_PROVIDER_ID}:${BROWSER_GRAPH_NAME}`,
   "frontend-tester": `${LANGGRAPH_PROVIDER_ID}:${FRONTEND_TESTER_GRAPH_NAME}`,
   "operating-review": `${LANGGRAPH_PROVIDER_ID}:${OPERATING_REVIEW_GRAPH_NAME}`,
+  "pr-manager": `${LANGGRAPH_PROVIDER_ID}:${PR_MANAGER_GRAPH_NAME}`,
   "git-reviewer": `${LANGGRAPH_PROVIDER_ID}:${GIT_REVIEWER_GRAPH_NAME}`,
 } as const;
 

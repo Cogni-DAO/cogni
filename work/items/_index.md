@@ -14,6 +14,7 @@
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 1 | 1 | needs_merge | bug.0224 | Codex binary not found in Docker — standalone misses platform-specific optional dep | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 0 | 1 | 5 | needs_triage | bug.0242 | Codex MCP tool calls invisible to platform — no persistence, no observability, no history |  |  |
+| 0 | 1 | 3 | needs_merge | task.0242 | VCS tool plane + PR Manager agent | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | 1 | 3 | needs_merge | task.0243 | Work item AI tools + actor eligibility + Operating Review agent | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | 1 | 5 | needs_closeout | task.0245 | Multi-node architecture — nodes/ directory, per-node graph packages, dep-cruiser boundaries | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 1 | 5 | needs_implement | task.0256 | Per-node billing pipeline: DB isolation + auth isolation + LiteLLM callback routing | Operator Plane | proj.operator-plane |

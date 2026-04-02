@@ -135,5 +135,10 @@ export {
   type TemporalScheduleControlConfig,
 } from "./temporal";
 export { SystemClock } from "./time/system.adapter";
+// VCS capability (GitHub App adapter)
+export {
+  GitHubVcsAdapter,
+  type GitHubVcsAdapterConfig,
+} from "./vcs/github-vcs.adapter";
 // NOTE: PrivyOperatorWalletAdapter lives in @cogni/operator-wallet/adapters/privy.
 // @privy-io/node is heavy — lazy-import in container.ts only.
