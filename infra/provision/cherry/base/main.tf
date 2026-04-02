@@ -26,7 +26,13 @@ resource "cherryservers_server" "server" {
     region       = var.region
     image        = "ubuntu_22_04"
     ssh_key_ids  = [cherryservers_ssh_key.key.id]
-    user_data    = base64encode(file("${path.module}/bootstrap.yaml"))
+    user_data    = base64encode(templatefile("${path.module}/bootstrap.yaml", {
+      ghcr_deploy_username = var.ghcr_deploy_username
+      ghcr_deploy_token    = var.ghcr_deploy_token
+      cogni_repo_url       = var.cogni_repo_url
+      cogni_repo_ref       = var.cogni_repo_ref
+      sops_age_private_key = var.sops_age_private_key
+    }))
     allow_reinstall = true
     
     lifecycle {
@@ -66,7 +72,7 @@ resource "null_resource" "bootstrap_health_check" {
 
   provisioner "remote-exec" {
     inline = [
-      "bash -lc 'set -euo pipefail; echo \"Waiting for cloud-init...\"; cloud-init status --wait; echo \"Checking bootstrap marker...\"; test -f /var/lib/cogni/bootstrap.ok || { echo \"FAIL: missing bootstrap.ok\"; cat /var/lib/cogni/bootstrap.fail 2>/dev/null || true; tail -n 200 /var/log/cloud-init-output.log || true; tail -n 200 /var/log/cogni-bootstrap.log || true; exit 1; }; echo \"Checking Docker...\"; docker version; docker compose version; echo \"Bootstrap health check passed\"'"
+      "bash -lc 'set -euo pipefail; echo \"Waiting for cloud-init...\"; cloud-init status --wait; echo \"Checking bootstrap marker...\"; test -f /var/lib/cogni/bootstrap.ok || { echo \"FAIL: missing bootstrap.ok\"; cat /var/lib/cogni/bootstrap.fail 2>/dev/null || true; tail -n 200 /var/log/cloud-init-output.log || true; tail -n 200 /var/log/cogni-bootstrap.log || true; exit 1; }; echo \"Checking Docker...\"; docker version; docker compose version; echo \"Checking k3s...\"; kubectl get nodes; echo \"Checking Argo CD...\"; kubectl -n argocd get deploy argocd-server -o jsonpath=\"{.status.availableReplicas}\" | grep -q 1; echo \"Bootstrap health check passed\"'"
     ]
   }
 }

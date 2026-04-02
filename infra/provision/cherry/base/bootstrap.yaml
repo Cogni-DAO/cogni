@@ -33,12 +33,41 @@ write_files:
       SystemMaxUse=200M
       SystemMaxFileSize=50M
       RuntimeMaxUse=50M
+
+  # k3s server config — disable traefik + servicelb (Caddy handles ingress).
+  # k3s install script reads this automatically; no INSTALL_K3S_EXEC flags needed.
+  - path: /etc/rancher/k3s/config.yaml
+    owner: root:root
+    permissions: "0644"
+    content: |
+      disable:
+        - traefik
+        - servicelb
+
+  # k3s GHCR private registry auth — node-level, all pods get access.
+  # Simpler than per-Deployment imagePullSecrets for single-node.
+  - path: /etc/rancher/k3s/registries.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      mirrors:
+        ghcr.io:
+          endpoint:
+            - "https://ghcr.io"
+      configs:
+        "ghcr.io":
+          auth:
+            username: "${ghcr_deploy_username}"
+            password: "${ghcr_deploy_token}"
+
   - path: /opt/cogni-bootstrap.sh
     owner: root:root
     permissions: "0755"
     content: |
       #!/bin/bash
-      # Cogni VM Bootstrap - single fail-fast script for cloud-init
+      # Cogni VM Bootstrap — Docker + k3s + Argo CD on a single VM.
+      # Docker Compose runs postgres/temporal/litellm/redis (infra services).
+      # k3s runs operator + nodes + services via Argo CD GitOps.
       # Contract: writes /var/lib/cogni/bootstrap.ok on success, bootstrap.fail on error
       set -euo pipefail
 
@@ -54,7 +83,7 @@ write_files:
         echo "BOOTSTRAP_OK=0"
         echo "FAIL_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "EXIT_CODE=$ec"
-        echo "LAST_COMMAND=${BASH_COMMAND}"
+        echo "LAST_COMMAND=$${BASH_COMMAND}"
       } > "$MARKER_FAIL"
       echo "=== cloud-init status ===" >> "$LOG"
       cloud-init status 2>&1 >> "$LOG" || true
@@ -64,40 +93,94 @@ write_files:
 
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Starting Cogni bootstrap..."
 
-      # Install Docker via get.docker.com (more resilient than apt to CDN issues)
+      # ── Docker ───────────────────────────────────────────────
       # TODO: Replace with golden image (Packer) - Docker should be pre-installed, not fetched at boot
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing Docker via get.docker.com..."
       curl -fsSL https://get.docker.com | sh
 
-      # Enable and start Docker
       systemctl enable docker
       systemctl start docker
 
-      # Validate installation (explicit checks, fail fast)
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Validating Docker installation..."
       command -v docker >/dev/null || { echo "FATAL: docker binary not found"; exit 1; }
       docker --version || { echo "FATAL: docker --version failed"; exit 1; }
       docker compose version || { echo "FATAL: docker compose plugin not found"; exit 1; }
       systemctl is-active --quiet docker || { echo "FATAL: docker service not active"; exit 1; }
 
-      # Restart journald for updated log config
       systemctl restart systemd-journald
 
-      # Create shared Docker network
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Creating cogni-edge network..."
       docker network create cogni-edge || true
 
-      # Create deployment directories
       mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime
-      mkdir -p /var/lib/cogni
 
-      # Write success marker
+      # ── k3s (containerd) ─────────────────────────────────────
+      # Coexists with Docker Compose (dockerd) on the same host.
+      # docker ps won't show k3s pods; use kubectl or crictl.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing k3s..."
+      curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.31.4+k3s1" sh -
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Waiting for k3s node to be ready..."
+      kubectl wait --for=condition=Ready node --all --timeout=120s
+      k3s --version
+      kubectl get nodes
+
+      # ── SOPS age key (pre-generated, injected via Terraform) ──
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Writing SOPS age private key to k8s Secret..."
+
+      # ── Argo CD + ksops ──────────────────────────────────────
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Cloning repo for Argo CD manifests..."
+      apt-get install -y git
+      # Inject GHCR PAT for private repo access (same token works for git + registry).
+      AUTHED_URL=$(echo "${cogni_repo_url}" | sed "s|https://|https://${ghcr_deploy_username}:${ghcr_deploy_token}@|")
+      git clone --depth=1 --branch "${cogni_repo_ref}" \
+        "$AUTHED_URL" /tmp/cogni-repo
+
+      # Create argocd namespace + age key Secret BEFORE Argo CD install.
+      # ksops sidecar mounts this Secret as a volume for decryption.
+      kubectl create namespace argocd || true
+      echo "${sops_age_private_key}" > /tmp/age-key.txt
+      kubectl -n argocd create secret generic sops-age-key \
+        --from-file=keys.txt=/tmp/age-key.txt
+      rm -f /tmp/age-key.txt
+
+      # Install Argo CD in stages:
+      # 1. Base install (remote manifest, pinned version)
+      # 2. Wait for server to be available (patches need running deployments)
+      # 3. Apply ksops CMP ConfigMap
+      # 4. Patch repo-server with ksops sidecar
+      # 5. Apply ApplicationSets for staging + production
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing Argo CD base (v2.13.4)..."
+      kubectl apply -n argocd \
+        -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Waiting for Argo CD to be ready..."
+      kubectl -n argocd wait --for=condition=Available \
+        deployment/argocd-server --timeout=300s
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Applying ksops CMP plugin..."
+      kubectl apply -n argocd \
+        -f /tmp/cogni-repo/infra/k8s/argocd/ksops-cmp.yaml
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Patching repo-server with ksops sidecar..."
+      kubectl -n argocd patch deployment argocd-repo-server \
+        --patch-file /tmp/cogni-repo/infra/k8s/argocd/repo-server-patch.yaml
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Applying Argo CD ApplicationSets..."
+      kubectl apply -f /tmp/cogni-repo/infra/k8s/argocd/staging-applicationset.yaml
+      kubectl apply -f /tmp/cogni-repo/infra/k8s/argocd/production-applicationset.yaml
+
+      rm -rf /tmp/cogni-repo
+
+      # ── Success marker ───────────────────────────────────────
       rm -f "$MARKER_FAIL"
       {
         echo "BOOTSTRAP_OK=1"
         echo "BOOTSTRAP_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         echo "DOCKER_VERSION=$(docker --version)"
         echo "COMPOSE_VERSION=$(docker compose version)"
+        echo "K3S_VERSION=$(k3s --version 2>&1 | head -1)"
+        echo "ARGOCD=installed"
+        echo "SOPS_KEY=injected"
       } > "$MARKER_OK"
 
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Bootstrap complete!"
