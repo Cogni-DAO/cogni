@@ -20,7 +20,7 @@ export const tsupConfig = defineConfig({
   clean: false,
   sourcemap: true,
   platform: "node",
-  external: ["drizzle-orm", "postgres", "zod"],
+  external: ["@cogni/ai-tools", "drizzle-orm", "postgres", "zod"],
 });
 
 // biome-ignore lint/style/noDefaultExport: required by tsup

@@ -183,6 +183,11 @@ export const serverSchema = z.object({
   // Per LANGGRAPH_SERVER.md MVP: default port 2024 for langgraph dev
   LANGGRAPH_DEV_URL: z.string().url().optional(),
 
+  // Doltgres (Knowledge Data Plane) - Optional
+  // Per knowledge-data-plane spec: versioned knowledge store for agent domain expertise.
+  // Writer URL used by knowledge tools (auto-commit on write). Reader URL for read-only agents.
+  DOLTGRES_WRITER_URL: optionalUrl,
+
   // Tavily Web Search - Optional
   // Required for research graph web search capability
   TAVILY_API_KEY: z.string().min(1).optional(),

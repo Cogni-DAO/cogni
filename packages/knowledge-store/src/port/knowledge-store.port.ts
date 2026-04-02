@@ -52,8 +52,12 @@ export interface KnowledgeStorePort {
     query: string,
     opts?: { limit?: number }
   ): Promise<Knowledge[]>;
+  /** List distinct domains in the knowledge store. Agents use this to browse what's available. */
+  listDomains(): Promise<string[]>;
 
   // --- Write ---
+  /** Upsert: inserts new entry or updates existing entry with same ID. */
+  upsertKnowledge(entry: NewKnowledge): Promise<Knowledge>;
   addKnowledge(entry: NewKnowledge): Promise<Knowledge>;
   updateKnowledge(
     id: string,

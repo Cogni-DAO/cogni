@@ -146,7 +146,50 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
     return rows.map((r) => rowToKnowledge(r as Record<string, unknown>));
   }
 
+  async listDomains(): Promise<string[]> {
+    const rows = await this.sql.unsafe(
+      "SELECT DISTINCT domain FROM knowledge ORDER BY domain"
+    );
+    return rows.map((r) => (r as Record<string, unknown>).domain as string);
+  }
+
   // --- Write ---
+
+  async upsertKnowledge(entry: NewKnowledge): Promise<Knowledge> {
+    const cols = [
+      "id",
+      "domain",
+      "entity_id",
+      "title",
+      "content",
+      "confidence_pct",
+      "source_type",
+      "source_ref",
+      "tags",
+    ];
+    const vals = [
+      escapeValue(entry.id),
+      escapeValue(entry.domain),
+      escapeValue(entry.entityId ?? null),
+      escapeValue(entry.title),
+      escapeValue(entry.content),
+      escapeValue(entry.confidencePct ?? null),
+      escapeValue(entry.sourceType),
+      escapeValue(entry.sourceRef ?? null),
+      entry.tags ? escapeValue(entry.tags) : "NULL",
+    ];
+
+    const rows = await this.sql.unsafe(
+      `INSERT INTO knowledge (${cols.join(", ")}) VALUES (${vals.join(", ")}) ` +
+        `ON CONFLICT (id) DO UPDATE SET ` +
+        `domain = EXCLUDED.domain, entity_id = EXCLUDED.entity_id, title = EXCLUDED.title, ` +
+        `content = EXCLUDED.content, confidence_pct = EXCLUDED.confidence_pct, ` +
+        `source_type = EXCLUDED.source_type, source_ref = EXCLUDED.source_ref, ` +
+        `tags = EXCLUDED.tags ` +
+        `RETURNING *`
+    );
+    return rowToKnowledge(rows[0] as Record<string, unknown>);
+  }
 
   async addKnowledge(entry: NewKnowledge): Promise<Knowledge> {
     const cols = [

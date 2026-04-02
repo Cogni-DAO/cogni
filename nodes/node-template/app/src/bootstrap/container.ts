@@ -546,8 +546,38 @@ function createContainer(): Container {
     KALSHI_API_SECRET: env.KALSHI_API_SECRET,
   });
 
+  // KnowledgeCapability for AI tools (optional — requires DOLTGRES_WRITER_URL)
+  // When configured, wraps KnowledgeStorePort with auto-commit on writes.
+  // When not configured, tools throw "not configured" at invocation time.
+  let knowledgeCapability: import("@cogni/ai-tools").KnowledgeCapability;
+  if (env.DOLTGRES_WRITER_URL) {
+    const { buildDoltgresClient, DoltgresKnowledgeStoreAdapter } = await import(
+      "@cogni/knowledge-store/adapters/doltgres"
+    );
+    const { createKnowledgeCapability } = await import("@cogni/knowledge-store");
+    const doltClient = buildDoltgresClient({
+      connectionString: env.DOLTGRES_WRITER_URL,
+      applicationName: `cogni_knowledge_${env.SERVICE_NAME ?? "app"}`,
+    });
+    const knowledgePort = new DoltgresKnowledgeStoreAdapter({ sql: doltClient });
+    knowledgeCapability = createKnowledgeCapability(knowledgePort);
+    log.info("Knowledge store configured (Doltgres)");
+  } else {
+    const notConfigured = () => {
+      throw new Error("KnowledgeCapability not configured. Set DOLTGRES_WRITER_URL.");
+    };
+    knowledgeCapability = {
+      search: notConfigured,
+      list: notConfigured,
+      get: notConfigured,
+      write: notConfigured,
+    };
+    log.warn("Knowledge store not configured (DOLTGRES_WRITER_URL not set)");
+  }
+
   // ToolSource with real implementations (per CAPABILITY_INJECTION)
   const toolBindings = createToolBindings({
+    knowledgeCapability,
     marketCapability,
     metricsCapability,
     webSearchCapability,

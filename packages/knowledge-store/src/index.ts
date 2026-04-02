@@ -11,6 +11,8 @@
  * @public
  */
 
+// Capability factory (shared across all nodes)
+export { createKnowledgeCapability } from "./capability.js";
 // Domain types & schemas
 export {
   type DoltCommit,
@@ -24,6 +26,5 @@ export {
   type SourceType,
   SourceTypeSchema,
 } from "./domain/schemas.js";
-
 // Port interface
 export type { KnowledgeStorePort } from "./port/knowledge-store.port.js";
