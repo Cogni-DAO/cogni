@@ -29,7 +29,7 @@ import {
   computePromptHash,
   DEFAULT_MAX_TOKENS,
   DEFAULT_TEMPERATURE,
-} from "@/shared/ai/prompt-hash";
+} from "@cogni/node-shared";
 import { makeLogger } from "@/shared/observability";
 
 const log = makeLogger({ component: "OpenAiCompatibleAdapter" });

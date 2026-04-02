@@ -130,7 +130,7 @@ import type {
   GraphRunRepository,
   ScheduleUserPort,
 } from "@/ports/server";
-import { initAnalytics, shutdownAnalytics } from "@/shared/analytics";
+import { initAnalytics, shutdownAnalytics } from "@cogni/node-shared";
 import {
   getDaoTreasuryAddress,
   getNodeId,
@@ -138,7 +138,7 @@ import {
   getPaymentConfig,
   getScopeId,
 } from "@/shared/config";
-import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
+import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
 import { USDC_TOKEN_ADDRESS } from "@/shared/web3";

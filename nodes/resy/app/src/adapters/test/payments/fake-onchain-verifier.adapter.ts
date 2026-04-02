@@ -17,7 +17,7 @@ import type {
   PaymentErrorCode,
   VerificationResult,
 } from "@/ports";
-import { MIN_CONFIRMATIONS } from "@/shared/web3/chain";
+import { MIN_CONFIRMATIONS } from "@cogni/node-shared";
 
 /**
  * Fake on-chain verifier for testing

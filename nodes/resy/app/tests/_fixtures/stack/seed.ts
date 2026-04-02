@@ -17,7 +17,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 
 import type { Database } from "@/adapters/server/db/client";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import {
   billingAccounts,
   linkTransactions,

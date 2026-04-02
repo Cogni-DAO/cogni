@@ -27,9 +27,9 @@ import {
   getPaymentStatusFacade,
   submitPaymentTxHashFacade,
 } from "@/app/_facades/payments/attempts.server";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import { creditLedger, paymentAttempts } from "@/shared/db/schema";
-import { CHAIN_ID } from "@/shared/web3/chain";
+import { CHAIN_ID } from "@cogni/node-shared";
 
 describe("MVP Payment Scenarios (9 critical flows)", () => {
   let testUserId: string;

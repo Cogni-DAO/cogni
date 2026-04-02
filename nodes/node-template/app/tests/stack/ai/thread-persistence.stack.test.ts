@@ -36,7 +36,7 @@ import { POST as chatPOST } from "@/app/api/v1/ai/chat/route";
 import { GET as modelsGET } from "@/app/api/v1/ai/models/route";
 import { getContainer } from "@/bootstrap/container";
 import { ThreadConflictError } from "@/ports";
-import type { SessionUser } from "@/shared/auth/session";
+import type { SessionUser } from "@cogni/node-shared";
 import { aiThreads } from "@/shared/db/schema";
 
 // Mock session — stack tests seed a real user then mock getSessionUser

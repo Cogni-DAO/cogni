@@ -12,7 +12,7 @@
  */
 
 import type { ServiceAccountService } from "@/ports";
-import { COGNI_SYSTEM_BILLING_ACCOUNT_ID } from "@/shared";
+import { COGNI_SYSTEM_BILLING_ACCOUNT_ID } from "@cogni/node-shared";
 
 /**
  * Verify the system tenant billing account exists.

@@ -21,6 +21,11 @@
 import { randomUUID } from "node:crypto";
 import { isLlmError, normalizeErrorToExecutionCode } from "@cogni/ai-core";
 import type { Message } from "@cogni/node-core";
+import {
+  computePromptHash,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_TEMPERATURE,
+} from "@cogni/node-shared";
 import type { Logger } from "pino";
 import type { StreamFinalResult } from "@/features/ai/types";
 import type {
@@ -32,11 +37,6 @@ import type {
   LlmCompletionResult,
   LlmService,
 } from "@/ports";
-import {
-  computePromptHash,
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_TEMPERATURE,
-} from "@/shared/ai/prompt-hash";
 import type { AiLlmCallEvent, RequestContext } from "@/shared/observability";
 // recordBilling removed: billing now via RunEventRelay + commitUsageFact (GRAPH_EXECUTION.md)
 import { recordMetrics } from "./metrics";

@@ -20,9 +20,9 @@ import type {
   ProfileUpdateInput,
   ProfileUpdateOutput,
 } from "@cogni/node-contracts";
+import type { SessionUser } from "@cogni/node-shared";
 import { eq } from "drizzle-orm";
 import { resolveAppDb } from "@/bootstrap/container";
-import type { SessionUser } from "@/shared/auth";
 import { userBindings, userProfiles, users } from "@/shared/db/schema";
 
 /** Truncate wallet address for display: 0x1234…abcd */

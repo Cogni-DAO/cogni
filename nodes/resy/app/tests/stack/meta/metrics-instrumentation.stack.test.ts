@@ -200,7 +200,7 @@ import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import { billingAccounts, users, virtualKeys } from "@/shared/db/schema";
 import { metricsRegistry } from "@/shared/observability";
 

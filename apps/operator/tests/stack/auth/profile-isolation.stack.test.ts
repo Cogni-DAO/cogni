@@ -20,10 +20,10 @@ vi.mock("@/lib/auth/server", () => ({
   getServerSessionUser: vi.fn(),
 }));
 
+import type { SessionUser } from "@cogni/node-shared";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { GET, PATCH } from "@/app/api/v1/users/me/route";
 import { getServerSessionUser } from "@/lib/auth/server";
-import type { SessionUser } from "@/shared/auth";
 import { users } from "@/shared/db/schema";
 
 describe("Profile Isolation Stack Test", () => {

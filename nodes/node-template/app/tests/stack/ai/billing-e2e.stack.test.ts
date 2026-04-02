@@ -27,7 +27,7 @@ import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
 import { GET as summaryGET } from "@/app/api/v1/payments/credits/summary/route";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import {
   billingAccounts,
   chargeReceipts,

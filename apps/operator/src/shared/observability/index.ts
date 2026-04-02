@@ -3,53 +3,34 @@
 
 /**
  * Module: `@shared/observability`
- * Purpose: Cross-cutting observability - events, logging, context.
- * Scope: Unified entry point for all observability utilities. Does not implement logic.
- * Invariants: No imports from bootstrap or ports (structural typing only).
+ * Purpose: Cross-cutting observability — combines app-local (pino/prom-client) + extracted (@cogni/node-shared) utilities.
+ * Scope: Unified entry point for all observability utilities.
+ * Invariants: No imports from bootstrap or ports.
  * Side-effects: none
- * Notes: Minimal public API - events registry + logEvent + context.
- * Links: Delegates to events, server, client, context submodules.
  * @public
  */
 
-// Client-side logging
-export * as clientLogger from "./client";
-// Context
-export type { Clock, RequestContext } from "./context";
-export { createRequestContext } from "./context";
-export type { EventBase, EventName } from "./events";
-// Event Registry (shared by client and server)
-export { EVENT_NAMES } from "./events";
-// Type-only exports for domain event payloads (used by features)
-export type {
-  AiActivityQueryCompletedEvent,
-  AiLlmCallEvent,
-} from "./events/ai";
-export type {
-  PaymentsConfirmedEvent,
-  PaymentsIntentCreatedEvent,
-  PaymentsStateTransitionEvent,
-  PaymentsStatusReadEvent,
-  PaymentsVerifiedEvent,
-} from "./events/payments";
-export type { AiExecutionErrorCode, Logger } from "./server";
-// Server-side logging
+// --- Extracted: events, context, client (from @cogni/node-shared) ---
+// NOTE: logEvent/logRequestWarn/etc. come through ./server (which re-exports from @cogni/node-shared)
 export {
-  aiChatStreamDurationMs,
-  aiLlmCallDurationMs,
-  aiLlmCostUsdTotal,
-  aiLlmErrorsTotal,
-  aiLlmTokensTotal,
-  httpRequestDurationMs,
-  httpRequestsTotal,
-  logEvent,
-  logRequestEnd,
-  logRequestError,
-  logRequestStart,
-  logRequestWarn,
-  makeLogger,
-  makeNoopLogger,
-  metricsRegistry,
-  publicRateLimitExceededTotal,
-  statusBucket,
-} from "./server";
+  // Event payload types
+  type AiActivityQueryCompletedEvent,
+  type AiLlmCallEvent,
+  type Clock,
+  // Client-side logging
+  clientLogger,
+  // Context
+  createRequestContext,
+  // Event registry
+  EVENT_NAMES,
+  type EventBase,
+  type EventName,
+  type PaymentsConfirmedEvent,
+  type PaymentsIntentCreatedEvent,
+  type PaymentsStateTransitionEvent,
+  type PaymentsStatusReadEvent,
+  type PaymentsVerifiedEvent,
+  type RequestContext,
+} from "@cogni/node-shared";
+// --- App-local: server logger/metrics/redact (pino + prom-client runtime deps) ---
+export * from "./server";

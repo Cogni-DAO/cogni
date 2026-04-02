@@ -21,7 +21,7 @@ import { authOptions, authSecret } from "@/auth";
 import {
   type LinkIntent,
   linkIntentStore,
-} from "@/shared/auth/link-intent-store";
+} from "@cogni/node-shared";
 
 export const runtime = "nodejs";
 

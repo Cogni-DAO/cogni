@@ -33,13 +33,13 @@ import {
   type LlmToolCall,
   type LlmToolCallDelta,
 } from "@/ports";
-import { scrubStringContent } from "@/shared/ai/content-scrubbing";
+import { scrubStringContent } from "@cogni/node-shared";
 import { getCachedModels } from "@/shared/ai/model-catalog.server";
 import {
   computePromptHash,
   DEFAULT_MAX_TOKENS,
   DEFAULT_TEMPERATURE,
-} from "@/shared/ai/prompt-hash";
+} from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env";
 import { assertRuntimeSecrets } from "@/shared/env/invariants";
 import { makeLogger } from "@/shared/observability";

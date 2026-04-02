@@ -16,7 +16,7 @@
 // Native fetch strips Set-Cookie from redirect: "manual" responses per Fetch API spec
 import type { Response as UndiciResponse } from "undici";
 import { fetch } from "undici";
-import { CHAIN_ID } from "@/shared/web3/chain";
+import { CHAIN_ID } from "@cogni/node-shared";
 import type { TestWallet } from "./siwe-helpers";
 import { createAndSignSiweMessage } from "./siwe-helpers";
 

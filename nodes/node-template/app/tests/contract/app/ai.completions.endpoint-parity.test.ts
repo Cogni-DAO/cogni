@@ -32,7 +32,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { chatCompletionsContract } from "@cogni/node-contracts";
 import { LlmError } from "@/ports";
-import { ChatErrorCode, ChatValidationError } from "@/shared/errors";
+import { ChatErrorCode, ChatValidationError } from "@cogni/node-shared";
 
 // Mock auth
 vi.mock("@/app/_lib/auth/session", () => ({

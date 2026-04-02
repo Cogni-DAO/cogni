@@ -13,15 +13,11 @@
  * @public
  */
 
+import { type LinkIntent, linkIntentStore } from "@cogni/node-shared";
 import type { NextRequest } from "next/server";
 import NextAuth from "next-auth";
 import { decode } from "next-auth/jwt";
-
 import { authOptions, authSecret } from "@/auth";
-import {
-  type LinkIntent,
-  linkIntentStore,
-} from "@/shared/auth/link-intent-store";
 
 export const runtime = "nodejs";
 

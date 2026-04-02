@@ -16,6 +16,11 @@
  * @internal
  */
 
+import {
+  computePromptHash,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_TEMPERATURE,
+} from "@cogni/node-shared";
 import { createParser, type EventSourceMessage } from "eventsource-parser";
 import { humanizeModelId } from "@/adapters/server/ai/providers/openai-compatible.provider";
 import {
@@ -25,11 +30,6 @@ import {
   type LlmService,
   type LlmToolCall,
 } from "@/ports";
-import {
-  computePromptHash,
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_TEMPERATURE,
-} from "@/shared/ai/prompt-hash";
 import { makeLogger } from "@/shared/observability";
 
 const log = makeLogger({ component: "OpenAiCompatibleAdapter" });

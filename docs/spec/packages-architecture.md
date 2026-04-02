@@ -230,6 +230,7 @@ TypeScript project references build packages incrementally using `.tsbuildinfo` 
 | `@cogni/scheduler-core`       | node       | Scheduling types, port interfaces, payload schemas              |
 | `@cogni/node-core`            | neutral    | Shared domain models, types, pure business logic for all nodes  |
 | `@cogni/node-contracts`       | neutral    | Shared Zod route contracts and HTTP router for all nodes        |
+| `@cogni/node-shared`          | neutral    | Shared pure utilities, constants, observability, web3 constants |
 | `@cogni/db-schema`            | node       | Drizzle schema with subpath exports per domain slice            |
 | `@cogni/db-client`            | node       | Drizzle client factory + scheduling adapters                    |
 

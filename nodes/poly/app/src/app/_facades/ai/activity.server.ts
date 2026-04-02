@@ -28,7 +28,7 @@ import {
 } from "@cogni/node-contracts";
 import { validateActivityRange } from "@/features/ai/public.server";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import {
   type AiActivityQueryCompletedEvent,
   EVENT_NAMES,

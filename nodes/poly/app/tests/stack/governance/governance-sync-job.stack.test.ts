@@ -27,7 +27,7 @@ import { runGovernanceSchedulesSyncJob } from "@/bootstrap/jobs/syncGovernanceSc
 import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@/shared/constants/system-tenant";
+} from "@cogni/node-shared";
 
 describe("Governance Schedule Sync Job (Stack)", () => {
   const createdScheduleIds: string[] = [];

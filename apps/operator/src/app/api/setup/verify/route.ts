@@ -22,6 +22,11 @@ import {
   type SetupVerifyOutput,
   setupVerifyOperation,
 } from "@cogni/node-contracts";
+import {
+  CHAINS,
+  GOVERNANCE_ERC20_ABI,
+  TOKEN_VOTING_ABI,
+} from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import { v5 as uuidv5 } from "uuid";
 import { createPublicClient, http } from "viem";
@@ -34,11 +39,6 @@ import {
   logEvent,
   makeLogger,
 } from "@/shared/observability";
-import { CHAINS } from "@/shared/web3/chain";
-import {
-  GOVERNANCE_ERC20_ABI,
-  TOKEN_VOTING_ABI,
-} from "@/shared/web3/node-formation/aragon-abi";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

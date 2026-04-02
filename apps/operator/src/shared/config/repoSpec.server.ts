@@ -13,7 +13,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-
+import { CHAIN_ID } from "@cogni/node-shared";
 import {
   type DaoConfig,
   extractDaoConfig,
@@ -28,9 +28,7 @@ import {
   parseRepoSpec,
   type RepoSpec,
 } from "@cogni/repo-spec";
-
 import { serverEnv } from "@/shared/env";
-import { CHAIN_ID } from "@/shared/web3/chain";
 
 export type {
   DaoConfig,

@@ -23,6 +23,7 @@ import {
   COGNI_SIGNAL_ABI,
   COGNI_SIGNAL_BYTECODE,
 } from "@cogni/cogni-contracts";
+import { DAO_FACTORY_ABI } from "@cogni/node-shared";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import {
   useAccount,
@@ -31,7 +32,6 @@ import {
   useWaitForTransactionReceipt,
   useWriteContract,
 } from "wagmi";
-import { DAO_FACTORY_ABI } from "@/shared/web3/node-formation/aragon-abi";
 import { verifyFormation } from "../daoFormation/api";
 import {
   type DAOFormationConfig,

@@ -24,7 +24,7 @@ import { getGovernanceConfig } from "@/shared/config";
 import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@/shared/constants/system-tenant";
+} from "@cogni/node-shared";
 import { schedules } from "@/shared/db/schema";
 import { serverEnv } from "@/shared/env/server-env";
 

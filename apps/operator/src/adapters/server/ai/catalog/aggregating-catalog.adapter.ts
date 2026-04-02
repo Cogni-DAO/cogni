@@ -41,7 +41,7 @@ export class AggregatingModelCatalog implements ModelCatalogPort {
         models.push(...result.value);
       } else {
         log.error(
-          { err: result.reason, providerKey: this.providers[i]!.providerKey },
+          { err: result.reason, providerKey: this.providers[i]?.providerKey },
           "Provider failed to list models"
         );
       }

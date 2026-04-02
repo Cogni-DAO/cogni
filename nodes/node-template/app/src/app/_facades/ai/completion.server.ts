@@ -45,9 +45,9 @@ import {
   isInsufficientCreditsPortError,
   isVirtualKeyNotFoundPortError,
 } from "@/ports";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import type { RequestContext } from "@/shared/observability";
-import { EVENT_NAMES } from "@/shared/observability/events";
+import { EVENT_NAMES } from "@cogni/node-shared";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default graph for requests that don't specify one

@@ -20,7 +20,7 @@ import type {
   listThreadsOperation,
   loadThreadOperation,
 } from "@cogni/node-contracts";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 
 type ListThreadsInput = {
   sessionUser: SessionUser;

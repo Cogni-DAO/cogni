@@ -18,7 +18,7 @@ import {
   needsCitationRetry,
   parseCitation,
   validateSources,
-} from "@/shared/ai/guards";
+} from "@cogni/node-shared";
 
 // ---------------------------------------------------------------------------
 // Fixtures

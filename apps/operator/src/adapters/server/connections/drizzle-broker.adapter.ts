@@ -18,12 +18,11 @@
 import { withTenantScope } from "@cogni/db-client";
 import { connections } from "@cogni/db-schema";
 import type { ActorId } from "@cogni/ids";
+import { type AeadAAD, aeadDecrypt, aeadEncrypt } from "@cogni/node-shared";
 import { and, eq, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "pino";
-
 import type { ConnectionBrokerPort, ResolvedConnection } from "@/ports";
-import { type AeadAAD, aeadDecrypt, aeadEncrypt } from "@/shared/crypto/aead";
 
 /** Parsed credential blob shape (provider-agnostic) */
 interface CredentialBlob {

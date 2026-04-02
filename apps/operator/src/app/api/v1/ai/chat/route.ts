@@ -21,6 +21,7 @@
 import { isAiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
 import { aiChatOperation, type ChatInput } from "@cogni/node-contracts";
+import { ChatValidationError } from "@cogni/node-shared";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { nanoid } from "nanoid";
@@ -39,7 +40,6 @@ import {
   isLlmError,
   ThreadConflictError,
 } from "@/ports";
-import { ChatValidationError } from "@/shared/errors";
 import {
   aiChatStreamDurationMs,
   logRequestWarn,

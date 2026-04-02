@@ -14,11 +14,10 @@
  * @public
  */
 
+import { EVENT_NAMES } from "@cogni/node-shared";
 import type { Octokit } from "@octokit/core";
 import type { Logger } from "pino";
 import type { Address, Hex, PublicClient } from "viem";
-
-import { EVENT_NAMES } from "@/shared/observability/events";
 
 import { resolveAction } from "../actions";
 import { COGNI_TOPIC0, parseCogniAction, parseRepoRef } from "../signal-parser";

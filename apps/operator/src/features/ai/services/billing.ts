@@ -19,10 +19,10 @@
  */
 
 import type { RunContext, UsageFact } from "@cogni/node-core";
+import type { AiBillingCommitCompleteEvent } from "@cogni/node-shared";
 import type { Logger } from "pino";
 import type { AccountService } from "@/ports";
 import { EVENT_NAMES } from "@/shared/observability";
-import type { AiBillingCommitCompleteEvent } from "@/shared/observability/events/ai";
 import {
   billingInvariantViolationTotal,
   billingMissingCostDeferredTotal,

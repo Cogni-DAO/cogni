@@ -56,6 +56,8 @@ export async function setup() {
       `DB_PORT=5432`,
       `POSTGRES_ROOT_USER=${superuser}`,
       `POSTGRES_ROOT_PASSWORD=${superpass}`,
+      `COGNI_NODE_DBS=${APP_DB_NAME}`,
+      `LITELLM_DB_NAME=litellm_test`,
       `APP_DB_NAME=${APP_DB_NAME}`,
       `APP_DB_USER=${APP_DB_USER}`,
       `APP_DB_PASSWORD=${APP_DB_PASSWORD}`,

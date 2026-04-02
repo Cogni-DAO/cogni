@@ -29,7 +29,7 @@ vi.mock("@/lib/auth/server", () => ({
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { GET } from "@/app/api/v1/activity/route";
 import { getServerSessionUser } from "@/lib/auth/server";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import { billingAccounts, users, virtualKeys } from "@/shared/db/schema";
 
 describe("Activity API Stack Tests", () => {

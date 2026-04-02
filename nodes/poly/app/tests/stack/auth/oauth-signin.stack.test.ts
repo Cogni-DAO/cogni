@@ -36,7 +36,7 @@ const { mockGetStore } = vi.hoisted(() => ({
   mockGetStore: vi.fn().mockReturnValue(null),
 }));
 
-vi.mock(import("@/shared/auth/link-intent-store"), async (importOriginal) => ({
+vi.mock(import("@cogni/node-shared"), async (importOriginal) => ({
   ...(await importOriginal()),
   linkIntentStore: { getStore: mockGetStore },
 }));

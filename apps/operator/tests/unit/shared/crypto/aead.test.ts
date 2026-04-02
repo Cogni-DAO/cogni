@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
+import { type AeadAAD, aeadDecrypt, aeadEncrypt } from "@cogni/node-shared";
 import { describe, expect, it } from "vitest";
-import { type AeadAAD, aeadDecrypt, aeadEncrypt } from "@/shared/crypto/aead";
 
 const KEY = randomBytes(32);
 const AAD: AeadAAD = {

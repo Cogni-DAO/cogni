@@ -15,7 +15,13 @@
 /* eslint-disable boundaries/no-unknown-files */
 
 import nodeCrypto, { randomUUID } from "node:crypto";
-
+import {
+  AnalyticsEvents,
+  capture,
+  isFailedIntent,
+  isPendingIntent,
+  linkIntentStore,
+} from "@cogni/node-shared";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
@@ -24,15 +30,8 @@ import GitHub from "next-auth/providers/github";
 import Google from "next-auth/providers/google";
 import { getCsrfToken } from "next-auth/react";
 import { SiweMessage } from "siwe";
-
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { createBinding } from "@/adapters/server/identity/create-binding";
-import { AnalyticsEvents, capture } from "@/shared/analytics";
-import {
-  isFailedIntent,
-  isPendingIntent,
-  linkIntentStore,
-} from "@/shared/auth/link-intent-store";
 import {
   identityEvents,
   linkTransactions,

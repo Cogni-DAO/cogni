@@ -11,10 +11,9 @@
  * @public
  */
 
+import type { SessionUser } from "@cogni/node-shared";
 import { getServerSession } from "next-auth";
-
 import { authOptions } from "@/auth";
-import type { SessionUser } from "@/shared/auth";
 
 export async function getServerSessionUser(): Promise<SessionUser | null> {
   const session = await getServerSession(authOptions);

@@ -12,8 +12,8 @@
  * @public
  */
 
+import { MIN_CONFIRMATIONS } from "@cogni/node-shared";
 import type { OnChainVerifier, VerificationResult } from "@/ports";
-import { MIN_CONFIRMATIONS } from "@/shared/web3/chain";
 
 /**
  * Ponder-backed on-chain verifier (stubbed for MVP)

@@ -24,11 +24,11 @@ import {
   type aiActivityOperation,
   STEP_MS,
 } from "@cogni/node-contracts";
+import type { SessionUser } from "@cogni/node-shared";
 import type { z } from "zod";
 import { resolveActivityDeps } from "@/bootstrap/container";
 import { validateActivityRange } from "@/features/ai/public.server";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { SessionUser } from "@/shared/auth";
 import {
   type AiActivityQueryCompletedEvent,
   EVENT_NAMES,

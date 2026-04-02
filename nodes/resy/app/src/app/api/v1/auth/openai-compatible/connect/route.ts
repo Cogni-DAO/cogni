@@ -28,7 +28,7 @@ import { z } from "zod";
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 import { getServerSessionUser } from "@/lib/auth/server";
-import { aeadEncrypt } from "@/shared/crypto/aead";
+import { aeadEncrypt } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env/server";
 import { makeLogger } from "@/shared/observability";
 

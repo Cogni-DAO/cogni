@@ -15,16 +15,16 @@
  */
 
 import { toUserId } from "@cogni/ids";
+import {
+  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
+} from "@cogni/node-shared";
 import { syncGovernanceSchedules } from "@cogni/scheduler-core";
 import cronParser from "cron-parser";
 import { and, eq } from "drizzle-orm";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { getContainer } from "@/bootstrap/container";
 import { getGovernanceConfig } from "@/shared/config";
-import {
-  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
-  COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@/shared/constants/system-tenant";
 import { schedules } from "@/shared/db/schema";
 import { serverEnv } from "@/shared/env/server-env";
 

@@ -42,7 +42,7 @@ import {
   isLlmError,
   ThreadConflictError,
 } from "@/ports";
-import { ChatValidationError } from "@/shared/errors";
+import { ChatValidationError } from "@cogni/node-shared";
 import {
   aiChatStreamDurationMs,
   logRequestWarn,

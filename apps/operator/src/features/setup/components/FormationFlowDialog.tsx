@@ -11,10 +11,14 @@
  * @public
  */
 
+import {
+  getDaoUrl,
+  getTransactionExplorerUrl,
+  toUiError,
+} from "@cogni/node-shared";
 import { CheckCircle2, ExternalLink, Loader2, XCircle } from "lucide-react";
 import type { ReactElement } from "react";
 import { useChainId } from "wagmi";
-
 import { Button } from "@/components/kit/inputs/Button";
 import {
   Dialog,
@@ -26,11 +30,6 @@ import type {
   FormationPhase,
   VerifiedAddresses,
 } from "@/features/setup/daoFormation/formation.reducer";
-import { toUiError } from "@/shared/errors";
-import {
-  getDaoUrl,
-  getTransactionExplorerUrl,
-} from "@/shared/web3/block-explorer";
 
 export interface FormationFlowDialogProps {
   open: boolean;

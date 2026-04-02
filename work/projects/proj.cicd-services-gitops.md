@@ -49,6 +49,7 @@ Improve the build pipeline, local testing tooling, and database provisioning acr
 | Runtime-only env validation: remove build-time env coupling by checking `NEXT_PHASE` or deferring validation (currently `AUTH_SECRET` required at build because Next.js page collection triggers env validation) | Not Started | 2   | (create at P1 start) |
 | `check:full --only-stack`: skip unit/int, only run stack tests                                                                                                                                                   | Not Started | 1   | (create at P1 start) |
 | `check:full --verbose`: show container logs on failure                                                                                                                                                           | Not Started | 1   | (create at P1 start) |
+| Multi-node CI: `validate:chain` runs once at repo root but each node has its own `.cogni/repo-spec.yaml` — should validate per-node. Also `component` job missing `COGNI_NODE_DBS` env var.                      | Not Started | 1   | (create at P1 start) |
 
 ### Run (P2+) — Secret Cleanup, Graph-Scoped Builds, Advanced CLI
 

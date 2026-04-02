@@ -12,10 +12,9 @@
  * @public
  */
 
+import { ACTIVE_CHAIN_KEY, type ChainKey } from "@cogni/node-shared";
 import type { Chain } from "wagmi/chains";
 import { base, sepolia } from "wagmi/chains";
-
-import { ACTIVE_CHAIN_KEY, type ChainKey } from "./chain";
 
 /**
  * Maps ChainKey to wagmi Chain object.

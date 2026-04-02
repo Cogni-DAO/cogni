@@ -25,7 +25,7 @@ import { POST } from "@/app/api/internal/ops/governance/schedules/sync/route";
 import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@/shared/constants/system-tenant";
+} from "@cogni/node-shared";
 
 const INTERNAL_OPS_TOKEN =
   process.env.INTERNAL_OPS_TOKEN ?? "test-internal-ops-token-min-32-chars";

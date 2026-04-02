@@ -32,7 +32,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST as chatPOST } from "@/app/api/v1/ai/chat/route";
 import { GET as modelsGET } from "@/app/api/v1/ai/models/route";
-import type { SessionUser } from "@/shared/auth/session";
+import type { SessionUser } from "@cogni/node-shared";
 import {
   aiInvocationSummaries,
   chargeReceipts,

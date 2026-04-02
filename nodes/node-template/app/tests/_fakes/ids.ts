@@ -16,7 +16,7 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { toUserId, type UserId } from "@cogni/ids";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 
 // --- Deterministic test users (stable UUIDs for reproducible tests) ---
 
@@ -81,7 +81,7 @@ export function testUser(n: 1 | 2 | 3 | 4 | 5): SessionUser {
 export {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@/shared/constants/system-tenant";
+} from "@cogni/node-shared";
 
 /** Mock billing account row for the system tenant. */
 export const SYSTEM_BILLING_ACCOUNT = {

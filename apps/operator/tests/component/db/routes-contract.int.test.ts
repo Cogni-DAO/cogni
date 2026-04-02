@@ -18,6 +18,8 @@ import type {
   PaymentErrorCode,
   PaymentStatus,
 } from "@cogni/node-core";
+import type { SessionUser } from "@cogni/node-shared";
+import { CHAIN_ID } from "@cogni/node-shared";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { eq } from "drizzle-orm";
@@ -27,8 +29,6 @@ import {
   getTestOnChainVerifier,
   resetTestOnChainVerifier,
 } from "@/adapters/test";
-import type { SessionUser } from "@/shared/auth";
-import { CHAIN_ID } from "@/shared/web3/chain";
 
 // Mock session auth
 vi.mock("@/app/_lib/auth/session", () => ({

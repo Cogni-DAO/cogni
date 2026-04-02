@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { SessionUser } from "@cogni/node-shared";
 import { createChatRequest } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
@@ -29,7 +30,6 @@ import { describe, expect, it, vi } from "vitest";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST as chatPOST } from "@/app/api/v1/ai/chat/route";
 import { GET as modelsGET } from "@/app/api/v1/ai/models/route";
-import type { SessionUser } from "@/shared/auth/session";
 import { billingAccounts, chargeReceipts } from "@/shared/db/schema";
 
 // Mock session

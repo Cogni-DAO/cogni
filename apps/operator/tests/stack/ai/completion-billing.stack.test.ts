@@ -22,12 +22,12 @@ vi.mock("@/app/_lib/auth/session", () => ({
 }));
 
 import { chatCompletionsContract } from "@cogni/node-contracts";
+import type { SessionUser } from "@cogni/node-shared";
 import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { waitForReceipts } from "@tests/helpers/poll-db";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST } from "@/app/api/v1/chat/completions/route";
-import type { SessionUser } from "@/shared/auth/session";
 import {
   billingAccounts,
   chargeReceipts,

@@ -36,7 +36,7 @@ import {
   computePromptHash,
   DEFAULT_MAX_TOKENS,
   DEFAULT_TEMPERATURE,
-} from "@/shared/ai/prompt-hash";
+} from "@cogni/node-shared";
 import type { AiLlmCallEvent, RequestContext } from "@/shared/observability";
 // recordBilling removed: billing now via RunEventRelay + commitUsageFact (GRAPH_EXECUTION.md)
 import { recordMetrics } from "./metrics";

@@ -16,10 +16,9 @@
 
 import type { PaymentFlowState } from "@cogni/node-core";
 import { usdCentsToCredits } from "@cogni/node-core";
+import { clientLogger, EVENT_NAMES } from "@cogni/node-shared";
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { useWaitForTransactionReceipt, useWriteContract } from "wagmi";
-import * as clientLogger from "@/shared/observability/client";
-import { EVENT_NAMES } from "@/shared/observability/events";
 import { ERC20_ABI, getTransactionExplorerUrl } from "@/shared/web3";
 import { paymentsClient } from "../api/paymentsClient";
 import { formatPaymentError } from "../utils/formatPaymentError";

@@ -3,17 +3,16 @@
 
 /**
  * Module: `@shared/util`
- * Purpose: Public surface for shared utilities via re-exports.
- * Scope: Re-exports public utility functions. Does not export internal helpers or types.
- * Invariants: No circular dependencies; maintains clean public API.
+ * Purpose: Public surface for shared utilities — app-local cn() + extracted (@cogni/node-shared) uuid.
+ * Scope: Re-exports public utility functions.
+ * Invariants: No circular dependencies.
  * Side-effects: none
- * Notes: Changes here affect module's public API contract; includes UUID validation export.
- * Links: ARCHITECTURE.md#public-surface
  * @public
  */
 
-// NOTE: accountId.ts uses node:crypto and MUST NOT be re-exported here.
-// Client components import from this barrel — server-only symbols contaminate the client bundle.
-// Import accountId directly: import { deriveAccountIdFromApiKey } from "@/shared/util/accountId"
+// App-local (clsx + tailwind-merge UI dep)
 export { cn } from "./cn";
-export { isValidUuid } from "./uuid";
+
+// Extracted to @cogni/node-shared
+// NOTE: accountId.ts uses node:crypto — import directly, not through barrel
+export { isValidUuid } from "@cogni/node-shared";

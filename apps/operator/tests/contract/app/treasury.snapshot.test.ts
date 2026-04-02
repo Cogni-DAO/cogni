@@ -13,10 +13,10 @@
  */
 
 import { TreasurySnapshotResponseV1 } from "@cogni/node-contracts";
+import { CHAIN_ID, USDC_TOKEN_ADDRESS } from "@cogni/node-shared";
 import { MOCK_SERVER_ENV } from "@tests/_fixtures/env/base-env";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CHAIN_ID, USDC_TOKEN_ADDRESS } from "@/shared/web3/chain";
 
 // Mock the facade
 vi.mock("@/app/_facades/treasury/snapshot.server", () => ({

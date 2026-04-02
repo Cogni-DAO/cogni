@@ -23,7 +23,7 @@ vi.mock("@/lib/auth/server", () => ({
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { GET, PATCH } from "@/app/api/v1/users/me/route";
 import { getServerSessionUser } from "@/lib/auth/server";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import { users } from "@/shared/db/schema";
 
 describe("Profile Isolation Stack Test", () => {

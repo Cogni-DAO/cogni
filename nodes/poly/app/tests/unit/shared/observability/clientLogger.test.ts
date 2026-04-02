@@ -15,8 +15,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Import from package path
-import * as clientLogger from "@/shared/observability/client";
-import { EVENT_NAMES } from "@/shared/observability/events";
+import * as clientLogger from "@cogni/node-shared";
+import { EVENT_NAMES } from "@cogni/node-shared";
 
 describe("clientLogger", () => {
   // Store original console methods

@@ -30,6 +30,7 @@ import {
   InternalGraphRunInputSchema,
   type InternalGraphRunOutput,
 } from "@cogni/node-contracts";
+import { AnalyticsEvents, capture } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getContainer } from "@/bootstrap/container";
@@ -46,7 +47,6 @@ import {
 import { commitUsageFact } from "@/features/ai/services/billing";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
-
 import { isInsufficientCreditsPortError, ThreadConflictError } from "@/ports";
 import {
   isGrantExpiredError,
@@ -54,7 +54,6 @@ import {
   isGrantRevokedError,
   isGrantScopeMismatchError,
 } from "@/ports/server";
-import { AnalyticsEvents, capture } from "@/shared/analytics";
 import { serverEnv } from "@/shared/env";
 
 export const dynamic = "force-dynamic";

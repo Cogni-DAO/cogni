@@ -20,6 +20,7 @@ import {
   type ChatCompletionChunk,
   chatCompletionsContract,
 } from "@cogni/node-contracts";
+import { ChatValidationError } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import {
   chatCompletion,
@@ -32,7 +33,6 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 import { isLlmError } from "@/ports";
-import { ChatValidationError } from "@/shared/errors";
 import {
   EVENT_NAMES,
   logEvent,

@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { EVENT_NAMES, logEvent } from "@cogni/node-shared";
 import type { Rule } from "@cogni/repo-spec";
 import {
   extractDaoConfig,
@@ -21,10 +22,7 @@ import {
   parseRule,
 } from "@cogni/repo-spec";
 import type { Logger } from "pino";
-
 import type { GraphExecutorPort } from "@/ports";
-import { EVENT_NAMES } from "@/shared/observability/events";
-import { logEvent } from "@/shared/observability/server/logEvent";
 
 import { runGates } from "../gate-orchestrator";
 import { formatCheckRunSummary, formatPrComment } from "../summary-formatter";

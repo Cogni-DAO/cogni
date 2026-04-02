@@ -16,7 +16,7 @@ import { Loader2 } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { Button } from "@/components/kit/inputs/Button";
-import { formatCentsToDollars } from "@/shared/utils/money";
+import { formatCentsToDollars } from "@cogni/node-shared";
 
 export interface PaymentButtonProps {
   /** Amount in USD cents */

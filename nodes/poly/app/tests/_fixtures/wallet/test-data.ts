@@ -12,7 +12,7 @@
  * @public
  */
 
-import { deriveAccountIdFromApiKey } from "@/shared/util/accountId";
+import { deriveAccountIdFromApiKey } from "@cogni/node-shared";
 
 // Expected API key from .env.test LITELLM_MVP_API_KEY
 export const TEST_MVP_API_KEY = "test-mvp-api-key";

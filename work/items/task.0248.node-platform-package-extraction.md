@@ -17,7 +17,7 @@ assignees: derekg1729
 credit:
 project: proj.operator-plane
 branch: feat/task-0248-node-platform-extraction
-pr: https://github.com/Cogni-DAO/node-template/pull/693
+pr: https://github.com/Cogni-DAO/node-template/pull/694
 reviewer:
 revision: 2
 blocked_by: []
@@ -111,9 +111,13 @@ Results recorded in spec.node-app-shell.
   - 42 duplicate import statements merged post-sed
   - Original files deleted. -8,405 lines.
   - `pnpm check:fast` all 6 checks pass.
-- [ ] Create `packages/node-shared/` — move ~81 pure shared utility files (minus hooks)
-- [ ] Move `shared/hooks/useIsMobile.ts` to app-local
-- [ ] `pnpm check` passes on all apps
+- [x] Create `packages/node-shared/` — 40 pure shared utility files extracted (not 81; dependency audit excluded heavy-dep files)
+  - 485 consumer imports rewired across 4 apps + tests. -10,967 lines.
+  - App-local barrels (observability, web3, util) combine local + package re-exports.
+  - 22 files remain app-local per app: env, db, hooks, config server, model-catalog, wagmi, evm-wagmi, onchain, logger, metrics, redact, cn.
+  - `pnpm check` all 11 checks pass.
+  - Branch: `feat/task-0248-phase1b-node-shared`
+- [ ] Move `shared/hooks/useIsMobile.ts` to app-local (deferred to Phase 3 @cogni/node-app)
 
 ### Phase 2: Graph execution extraction (task.0250, consumed by scheduler-worker)
 

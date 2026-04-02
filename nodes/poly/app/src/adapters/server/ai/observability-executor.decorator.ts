@@ -36,8 +36,8 @@ import {
   scrubTraceInput,
   scrubTraceOutput,
   truncateSessionId,
-} from "@/shared/ai/content-scrubbing";
-import { EVENT_NAMES } from "@/shared/observability/events";
+} from "@cogni/node-shared";
+import { EVENT_NAMES } from "@cogni/node-shared";
 
 /**
  * Terminal state tracking for once-guard.

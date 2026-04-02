@@ -16,12 +16,11 @@
 
 import { withTenantScope } from "@cogni/db-client";
 import type { ActorId } from "@cogni/ids";
+import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@cogni/node-shared";
 import cronParser from "cron-parser";
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
-
 import type { Database } from "@/adapters/server/db/client";
 import type { GovernanceRun, GovernanceStatusPort, UpcomingRun } from "@/ports";
-import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { aiThreads, schedules } from "@/shared/db/schema";
 
 export class DrizzleGovernanceStatusAdapter implements GovernanceStatusPort {

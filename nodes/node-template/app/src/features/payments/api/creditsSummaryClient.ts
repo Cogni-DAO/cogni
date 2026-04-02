@@ -16,8 +16,8 @@ import type {
   CreditsSummaryInput,
   CreditsSummaryOutput,
 } from "@cogni/node-contracts";
-import * as clientLogger from "@/shared/observability/client";
-import { EVENT_NAMES } from "@/shared/observability/events";
+import { clientLogger } from "@cogni/node-shared";
+import { EVENT_NAMES } from "@cogni/node-shared";
 
 /**
  * Resolves a relative URL path to an absolute URL.

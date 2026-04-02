@@ -19,6 +19,14 @@
 
 import { randomUUID } from "node:crypto";
 import type { AiEvent } from "@cogni/node-core";
+import {
+  applyUserMaskingPreference,
+  EVENT_NAMES,
+  isValidOtelTraceId,
+  scrubTraceInput,
+  scrubTraceOutput,
+  truncateSessionId,
+} from "@cogni/node-shared";
 import { trace } from "@opentelemetry/api";
 import type { Logger } from "pino";
 import {
@@ -30,14 +38,6 @@ import {
   type LangfusePort,
   normalizeErrorToExecutionCode,
 } from "@/ports";
-import {
-  applyUserMaskingPreference,
-  isValidOtelTraceId,
-  scrubTraceInput,
-  scrubTraceOutput,
-  truncateSessionId,
-} from "@/shared/ai/content-scrubbing";
-import { EVENT_NAMES } from "@/shared/observability/events";
 
 /**
  * Terminal state tracking for once-guard.

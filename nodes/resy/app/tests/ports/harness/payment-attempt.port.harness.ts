@@ -23,7 +23,7 @@ import type {
 } from "@/ports";
 import { isTxHashAlreadyBoundPortError } from "@/ports";
 import { billingAccounts, users } from "@/shared/db/schema";
-import { CHAIN_ID } from "@/shared/web3/chain";
+import { CHAIN_ID } from "@cogni/node-shared";
 
 import { dispose, makeHarness, type TestHarness } from "./factory";
 

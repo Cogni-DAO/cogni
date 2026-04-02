@@ -16,12 +16,12 @@
 
 import { toUserId } from "@cogni/ids";
 import { governanceStatusOperation } from "@cogni/node-contracts";
+import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { getGovernanceStatus } from "@/features/governance/services/get-governance-status";
 import { getServerSessionUser } from "@/lib/auth/server";
-import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 
 export const dynamic = "force-dynamic";
 

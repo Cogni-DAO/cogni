@@ -25,6 +25,8 @@ import { createHash } from "node:crypto";
 import { AiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
 import type { ChatCompletionOutput, ChatMessage } from "@cogni/node-contracts";
+import type { SessionUser } from "@cogni/node-shared";
+import { EVENT_NAMES } from "@cogni/node-shared";
 import { WorkflowExecutionAlreadyStartedError } from "@temporalio/client";
 import {
   getContainer,
@@ -42,9 +44,7 @@ import {
   isInsufficientCreditsPortError,
   isVirtualKeyNotFoundPortError,
 } from "@/ports";
-import type { SessionUser } from "@/shared/auth";
 import type { RequestContext } from "@/shared/observability";
-import { EVENT_NAMES } from "@/shared/observability/events";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default graph for requests that don't specify one

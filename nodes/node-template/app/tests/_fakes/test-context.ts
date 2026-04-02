@@ -12,7 +12,7 @@
  * @public
  */
 
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import { makeNoopLogger, type RequestContext } from "@/shared/observability";
 import { FakeClock } from "./fake-clock";
 

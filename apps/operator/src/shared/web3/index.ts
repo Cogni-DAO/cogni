@@ -3,16 +3,35 @@
 
 /**
  * Module: `@shared/web3`
- * Purpose: Barrel export for web3 chain configuration.
- * Scope: Re-exports chain configuration helpers/constants; does not contain runtime logic or side effects.
- * Invariants: Exports both framework-agnostic config (chain.ts) and wagmi adapter (evm-wagmi.ts).
+ * Purpose: Barrel export — combines app-local wagmi config + extracted (@cogni/node-shared) chain constants.
+ * Scope: Re-exports chain config, ABIs, block explorer URLs, and wagmi adapter.
+ * Invariants: none
  * Side-effects: none
- * Links: docs/spec/payments-design.md, docs/spec/onchain-readers.md
  * @public
  */
 
-export * from "./block-explorer";
-export * from "./chain";
-export * from "./erc20-abi";
+// Extracted to @cogni/node-shared
+export {
+  // Chain constants
+  ACTIVE_CHAIN_KEY,
+  // Node formation
+  ARAGON_OSX_ADDRESSES,
+  CHAIN_ID,
+  CHAINS,
+  type ChainKey,
+  DAO_FACTORY_ABI,
+  // ERC20 ABI
+  ERC20_ABI,
+  GOVERNANCE_ERC20_ABI,
+  // Block explorer
+  getDaoTreasuryUrl,
+  getTransactionExplorerUrl,
+  SUPPORTED_CHAIN_IDS,
+  type SupportedChainId,
+  TOKEN_VOTING_ABI,
+  TOKEN_VOTING_VERSION_TAG,
+  USDC_TOKEN_ADDRESS,
+  VERIFY_THROTTLE_SECONDS,
+} from "@cogni/node-shared";
+// App-local (wagmi/chains runtime dep)
 export * from "./evm-wagmi";
-export * from "./node-formation";

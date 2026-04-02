@@ -54,7 +54,7 @@ import {
   isGrantRevokedError,
   isGrantScopeMismatchError,
 } from "@/ports/server";
-import { AnalyticsEvents, capture } from "@/shared/analytics";
+import { AnalyticsEvents, capture } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env";
 
 export const dynamic = "force-dynamic";

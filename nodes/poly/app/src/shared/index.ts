@@ -3,16 +3,13 @@
 
 /**
  * Module: `@shared`
- * Purpose: Shared utilities barrel export.
- * Scope: Re-exports common utilities, constants, and env validation. Does not contain business logic.
- * Invariants: Pure re-exports only, no side effects
+ * Purpose: Shared utilities barrel — app-local re-exports (env, config, db, observability, web3, util).
+ * Scope: Hex layer extension point. Pure library code extracted to @cogni/node-shared.
+ * Invariants: Pure re-exports only, no side effects.
  * Side-effects: none
- * Links: Used across all layers for common functionality
  * @public
  */
 
-export * from "./constants";
 export * from "./env";
-export * from "./errors";
 export * from "./observability";
 export * from "./util";

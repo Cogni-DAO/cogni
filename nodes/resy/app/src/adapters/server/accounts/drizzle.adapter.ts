@@ -53,8 +53,8 @@ import {
 } from "@/shared/db";
 import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
-import { EVENT_NAMES } from "@/shared/observability/events";
-import { isValidUuid } from "@/shared/util/uuid";
+import { EVENT_NAMES } from "@cogni/node-shared";
+import { isValidUuid } from "@cogni/node-shared";
 
 const logger = makeLogger({ component: "DrizzleAccountService" });
 

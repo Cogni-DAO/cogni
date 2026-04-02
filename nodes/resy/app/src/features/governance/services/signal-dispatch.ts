@@ -19,8 +19,8 @@ import { createPublicClient, http } from "viem";
 import { base, mainnet, sepolia } from "viem/chains";
 
 import { getDaoConfig } from "@/shared/config";
-import { EVENT_NAMES } from "@/shared/observability/events";
-import { CHAINS } from "@/shared/web3/chain";
+import { EVENT_NAMES } from "@cogni/node-shared";
+import { CHAINS } from "@cogni/node-shared";
 
 import { handleSignal } from "./signal-handler";
 

@@ -33,7 +33,7 @@ import {
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 import { isLlmError } from "@/ports";
-import { ChatValidationError } from "@/shared/errors";
+import { ChatValidationError } from "@cogni/node-shared";
 import {
   EVENT_NAMES,
   logEvent,

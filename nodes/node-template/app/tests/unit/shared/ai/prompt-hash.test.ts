@@ -19,7 +19,7 @@ import {
   computePromptHash,
   DEFAULT_MAX_TOKENS,
   DEFAULT_TEMPERATURE,
-} from "@/shared/ai/prompt-hash";
+} from "@cogni/node-shared";
 
 describe("shared/ai/prompt-hash", () => {
   // Reusable base payload

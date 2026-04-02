@@ -34,7 +34,7 @@ import type {
   LangfusePort,
   LangfuseSpanHandle,
 } from "@/ports";
-import type { SessionUser } from "@/shared/auth/session";
+import type { SessionUser } from "@cogni/node-shared";
 
 // Mock session
 vi.mock("@/app/_lib/auth/session", () => ({

@@ -21,7 +21,7 @@ import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   PLATFORM_REVENUE_SHARE_REASON,
   WIDGET_PAYMENT_REASON,
-} from "@/shared";
+} from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env";
 
 export interface CreditsConfirmInput {

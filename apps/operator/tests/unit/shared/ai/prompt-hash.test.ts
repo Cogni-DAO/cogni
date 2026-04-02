@@ -12,14 +12,13 @@
  * @internal
  */
 
-import { TEST_MODEL_ID } from "@tests/_fakes";
-import { describe, expect, it } from "vitest";
-
 import {
   computePromptHash,
   DEFAULT_MAX_TOKENS,
   DEFAULT_TEMPERATURE,
-} from "@/shared/ai/prompt-hash";
+} from "@cogni/node-shared";
+import { TEST_MODEL_ID } from "@tests/_fakes";
+import { describe, expect, it } from "vitest";
 
 describe("shared/ai/prompt-hash", () => {
   // Reusable base payload

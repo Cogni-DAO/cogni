@@ -21,7 +21,7 @@ import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   PLATFORM_REVENUE_SHARE_REASON,
   WIDGET_PAYMENT_REASON,
-} from "@/shared";
+} from "@cogni/node-shared";
 
 vi.mock("@/shared/env", () => ({
   serverEnv: () => ({ SYSTEM_TENANT_REVENUE_SHARE: 0.75 }),

@@ -13,7 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { SessionUser } from "@/shared/auth/session";
+import type { SessionUser } from "@cogni/node-shared";
 
 /**
  * Creates a mock authenticated session user.

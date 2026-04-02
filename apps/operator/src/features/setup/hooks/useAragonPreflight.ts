@@ -14,10 +14,9 @@
 "use client";
 
 import { getAragonAddresses, type SupportedChainId } from "@cogni/aragon-osx";
+import { DAO_FACTORY_ABI } from "@cogni/node-shared";
 import { useCallback, useState } from "react";
 import { usePublicClient } from "wagmi";
-
-import { DAO_FACTORY_ABI } from "@/shared/web3/node-formation/aragon-abi";
 
 export type PreflightStatus =
   | { status: "idle" }

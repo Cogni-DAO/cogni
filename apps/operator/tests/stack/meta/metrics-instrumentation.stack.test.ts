@@ -194,13 +194,13 @@ vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));
 
+import type { SessionUser } from "@cogni/node-shared";
 // Import after mock
 import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
-import type { SessionUser } from "@/shared/auth";
 import { billingAccounts, users, virtualKeys } from "@/shared/db/schema";
 import { metricsRegistry } from "@/shared/observability";
 

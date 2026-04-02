@@ -23,7 +23,7 @@ import {
   CHAIN_ID,
   MIN_CONFIRMATIONS,
   USDC_TOKEN_ADDRESS,
-} from "@/shared/web3/chain";
+} from "@cogni/node-shared";
 import type { EvmOnchainClient } from "@/shared/web3/onchain/evm-onchain-client.interface";
 
 // ERC20 Transfer event ABI for decoding logs

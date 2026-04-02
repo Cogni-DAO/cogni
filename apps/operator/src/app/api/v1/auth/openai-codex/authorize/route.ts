@@ -13,11 +13,10 @@
  * @public
  */
 
+import { EVENT_NAMES } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
-
 import { getServerSessionUser } from "@/lib/auth/server";
 import { makeLogger } from "@/shared/observability";
-import { EVENT_NAMES } from "@/shared/observability/events";
 import {
   byoAuthDurationMs,
   byoAuthTotal,

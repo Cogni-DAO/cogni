@@ -19,7 +19,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-
+import type { SessionUser } from "@cogni/node-shared";
 import { createChatRequest } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
@@ -34,7 +34,6 @@ import type {
   LangfusePort,
   LangfuseSpanHandle,
 } from "@/ports";
-import type { SessionUser } from "@/shared/auth/session";
 
 // Mock session
 vi.mock("@/app/_lib/auth/session", () => ({

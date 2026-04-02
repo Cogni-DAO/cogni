@@ -21,7 +21,7 @@ import {
   PAYMENT_INTENT_TTL_MS,
   PENDING_UNVERIFIED_TTL_MS,
 } from "@cogni/node-core";
-import { CHAIN_ID, USDC_TOKEN_ADDRESS } from "@/shared/web3/chain";
+import { CHAIN_ID, USDC_TOKEN_ADDRESS } from "@cogni/node-shared";
 
 /**
  * Options for creating a PaymentAttempt test fixture

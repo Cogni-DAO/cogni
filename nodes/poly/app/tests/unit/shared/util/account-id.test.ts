@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { deriveAccountIdFromApiKey } from "@/shared/util/accountId";
+import { deriveAccountIdFromApiKey } from "@cogni/node-shared";
 
 describe("deriveAccountIdFromApiKey", () => {
   describe("Deterministic Output", () => {

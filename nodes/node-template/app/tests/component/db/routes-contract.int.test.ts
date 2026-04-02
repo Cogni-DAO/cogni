@@ -27,8 +27,8 @@ import {
   getTestOnChainVerifier,
   resetTestOnChainVerifier,
 } from "@/adapters/test";
-import type { SessionUser } from "@/shared/auth";
-import { CHAIN_ID } from "@/shared/web3/chain";
+import type { SessionUser } from "@cogni/node-shared";
+import { CHAIN_ID } from "@cogni/node-shared";
 
 // Mock session auth
 vi.mock("@/app/_lib/auth/session", () => ({

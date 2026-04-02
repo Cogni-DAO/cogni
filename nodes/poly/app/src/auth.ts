@@ -27,12 +27,12 @@ import { SiweMessage } from "siwe";
 
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { createBinding } from "@/adapters/server/identity/create-binding";
-import { AnalyticsEvents, capture } from "@/shared/analytics";
+import { AnalyticsEvents, capture } from "@cogni/node-shared";
 import {
   isFailedIntent,
   isPendingIntent,
   linkIntentStore,
-} from "@/shared/auth/link-intent-store";
+} from "@cogni/node-shared";
 import {
   identityEvents,
   linkTransactions,

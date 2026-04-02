@@ -16,8 +16,8 @@ import { getContainer } from "@/bootstrap/container";
 import type { TreasurySnapshotResponseV1 } from "@cogni/node-contracts";
 import { getDaoConfig } from "@/shared/config/repoSpec.server";
 import type { RequestContext } from "@/shared/observability";
-import { EVENT_NAMES } from "@/shared/observability/events";
-import { CHAIN_ID } from "@/shared/web3/chain";
+import { EVENT_NAMES } from "@cogni/node-shared";
+import { CHAIN_ID } from "@cogni/node-shared";
 
 const TREASURY_RPC_TIMEOUT_MS = 10_000; // 10s — generous for slow RPC; calls are parallelized
 

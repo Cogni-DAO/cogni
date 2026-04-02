@@ -13,7 +13,7 @@
  */
 
 import type { OnChainVerifier, VerificationResult } from "@/ports";
-import { MIN_CONFIRMATIONS } from "@/shared/web3/chain";
+import { MIN_CONFIRMATIONS } from "@cogni/node-shared";
 
 /**
  * Ponder-backed on-chain verifier (stubbed for MVP)

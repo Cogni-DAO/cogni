@@ -31,7 +31,7 @@ import {
   submitTxHash,
 } from "@/features/payments/services/paymentService";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env/server-env";
 import type {
   PaymentsIntentCreatedEvent,

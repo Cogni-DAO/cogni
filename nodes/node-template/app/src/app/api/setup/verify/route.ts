@@ -34,11 +34,11 @@ import {
   logEvent,
   makeLogger,
 } from "@/shared/observability";
-import { CHAINS } from "@/shared/web3/chain";
+import { CHAINS } from "@cogni/node-shared";
 import {
   GOVERNANCE_ERC20_ABI,
   TOKEN_VOTING_ABI,
-} from "@/shared/web3/node-formation/aragon-abi";
+} from "@cogni/node-shared";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

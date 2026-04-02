@@ -27,7 +27,7 @@ import { waitForReceipts } from "@tests/helpers/poll-db";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST } from "@/app/api/v1/chat/completions/route";
 import { chatCompletionsContract } from "@cogni/node-contracts";
-import type { SessionUser } from "@/shared/auth/session";
+import type { SessionUser } from "@cogni/node-shared";
 import {
   billingAccounts,
   chargeReceipts,

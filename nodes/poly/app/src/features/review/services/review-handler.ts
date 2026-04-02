@@ -23,8 +23,8 @@ import {
 import type { Logger } from "pino";
 
 import type { GraphExecutorPort } from "@/ports";
-import { EVENT_NAMES } from "@/shared/observability/events";
-import { logEvent } from "@/shared/observability/server/logEvent";
+import { EVENT_NAMES } from "@cogni/node-shared";
+import { logEvent } from "@cogni/node-shared";
 
 import { runGates } from "../gate-orchestrator";
 import { formatCheckRunSummary, formatPrComment } from "../summary-formatter";

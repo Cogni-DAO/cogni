@@ -21,7 +21,7 @@ import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { governanceStatusOperation } from "@cogni/node-contracts";
 import { getGovernanceStatus } from "@/features/governance/services/get-governance-status";
 import { getServerSessionUser } from "@/lib/auth/server";
-import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
+import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@cogni/node-shared";
 
 export const dynamic = "force-dynamic";
 

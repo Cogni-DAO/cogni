@@ -26,7 +26,7 @@ import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { signDataOperation } from "@cogni/node-contracts";
 import { getNodeId, getScopeId } from "@/shared/config";
-import { CHAIN_ID } from "@/shared/web3/chain";
+import { CHAIN_ID } from "@cogni/node-shared";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

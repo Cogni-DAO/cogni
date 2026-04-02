@@ -20,13 +20,13 @@ import {
   toReviewSubjectOverrides,
 } from "@cogni/attribution-ledger";
 import { signDataOperation } from "@cogni/node-contracts";
+import { CHAIN_ID } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { getNodeId, getScopeId } from "@/shared/config";
-import { CHAIN_ID } from "@/shared/web3/chain";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

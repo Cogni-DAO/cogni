@@ -25,6 +25,11 @@ import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
+import {
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
+  initAnalytics,
+  shutdownAnalytics,
+} from "@cogni/node-shared";
 import { numberToPpm } from "@cogni/operator-wallet";
 import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
@@ -130,7 +135,6 @@ import type {
   GraphRunRepository,
   ScheduleUserPort,
 } from "@/ports/server";
-import { initAnalytics, shutdownAnalytics } from "@/shared/analytics";
 import {
   getDaoTreasuryAddress,
   getNodeId,
@@ -138,7 +142,6 @@ import {
   getPaymentConfig,
   getScopeId,
 } from "@/shared/config";
-import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
 import { USDC_TOKEN_ADDRESS } from "@/shared/web3";

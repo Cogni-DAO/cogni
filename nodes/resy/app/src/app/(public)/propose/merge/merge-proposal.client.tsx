@@ -41,7 +41,7 @@ import {
   getChainName,
   validateDeeplinkParams,
 } from "@/features/governance/lib/proposal-utils";
-import { getDaoUrl } from "@/shared/web3/block-explorer";
+import { getDaoUrl } from "@cogni/node-shared";
 
 export function MergeProposal() {
   const searchParams = useSearchParams();

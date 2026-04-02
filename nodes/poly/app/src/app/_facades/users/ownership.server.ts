@@ -31,7 +31,7 @@ import { eq } from "drizzle-orm";
 
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import type { OwnershipSummaryOutput } from "@cogni/node-contracts";
-import type { SessionUser } from "@/shared/auth";
+import type { SessionUser } from "@cogni/node-shared";
 import { getNodeId } from "@/shared/config";
 import { userBindings } from "@/shared/db/schema";
 

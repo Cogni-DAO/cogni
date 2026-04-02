@@ -30,7 +30,7 @@ import {
 } from "@cogni/repo-spec";
 
 import { serverEnv } from "@/shared/env";
-import { CHAIN_ID } from "@/shared/web3/chain";
+import { CHAIN_ID } from "@cogni/node-shared";
 
 export type {
   DaoConfig,

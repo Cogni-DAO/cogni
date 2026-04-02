@@ -23,7 +23,7 @@ import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "pino";
 
 import type { ConnectionBrokerPort, ResolvedConnection } from "@/ports";
-import { type AeadAAD, aeadDecrypt, aeadEncrypt } from "@/shared/crypto/aead";
+import { type AeadAAD, aeadDecrypt, aeadEncrypt } from "@cogni/node-shared";
 
 /** Parsed credential blob shape (provider-agnostic) */
 interface CredentialBlob {

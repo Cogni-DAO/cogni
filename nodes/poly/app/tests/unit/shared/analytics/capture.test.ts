@@ -22,7 +22,7 @@ import {
   type PostHogClient,
   resetAnalytics,
   shutdownAnalytics,
-} from "@/shared/analytics";
+} from "@cogni/node-shared";
 
 /** Creates a mock PostHog client that records calls. */
 function createMockClient(): PostHogClient & {

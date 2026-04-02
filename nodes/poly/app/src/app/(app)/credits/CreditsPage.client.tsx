@@ -31,7 +31,7 @@ import {
   useCreditsSummary,
   usePaymentFlow,
 } from "@/features/payments/public";
-import { isValidAmountInput, parseDollarsToCents } from "@/shared/utils/money";
+import { isValidAmountInput, parseDollarsToCents } from "@cogni/node-shared";
 
 function formatDollars(credits: number): string {
   const dollars = creditsToUsd(credits);

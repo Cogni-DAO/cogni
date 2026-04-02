@@ -3,35 +3,23 @@
 
 /**
  * Module: `@shared/observability/server`
- * Purpose: Server-side logging utilities (pino-based).
- * Scope: Logger factory, helpers, and logEvent() wrapper. Does not define events.
+ * Purpose: Server-side logging utilities — app-local (pino/prom-client) + extracted (@cogni/node-shared) helpers.
+ * Scope: Re-exports from app-local logger/metrics/redact + package logEvent/helpers.
  * Invariants: none
  * Side-effects: IO (logging to stdout)
- * Notes: Use for server-side code only. Event names from ../events.ts.
- * Links: Uses event registry from ../events; called by routes/features/adapters.
  * @public
  */
 
+// App-local (pino runtime, prom-client runtime)
+export * from "./logger";
+export * from "./metrics";
+export { REDACT_PATHS } from "./redact";
+
+// Extracted to @cogni/node-shared
 export {
+  logEvent,
   logRequestEnd,
   logRequestError,
   logRequestStart,
   logRequestWarn,
-} from "./helpers";
-export { logEvent } from "./logEvent";
-export type { Logger } from "./logger";
-export { makeLogger, makeNoopLogger } from "./logger";
-export {
-  type AiExecutionErrorCode,
-  aiChatStreamDurationMs,
-  aiLlmCallDurationMs,
-  aiLlmCostUsdTotal,
-  aiLlmErrorsTotal,
-  aiLlmTokensTotal,
-  httpRequestDurationMs,
-  httpRequestsTotal,
-  metricsRegistry,
-  publicRateLimitExceededTotal,
-  statusBucket,
-} from "./metrics";
-export { REDACT_PATHS } from "./redact";
+} from "@cogni/node-shared";

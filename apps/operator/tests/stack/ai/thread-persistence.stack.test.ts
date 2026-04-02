@@ -18,6 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 import { toUserId } from "@cogni/ids";
+import type { SessionUser } from "@cogni/node-shared";
 import { createChatRequest } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
@@ -36,7 +37,6 @@ import { POST as chatPOST } from "@/app/api/v1/ai/chat/route";
 import { GET as modelsGET } from "@/app/api/v1/ai/models/route";
 import { getContainer } from "@/bootstrap/container";
 import { ThreadConflictError } from "@/ports";
-import type { SessionUser } from "@/shared/auth/session";
 import { aiThreads } from "@/shared/db/schema";
 
 // Mock session — stack tests seed a real user then mock getSessionUser

@@ -25,6 +25,7 @@
     { "path": "./packages/work-items" },
     { "path": "./packages/dns-ops" },
     { "path": "./packages/node-core" },
-    { "path": "./packages/node-contracts" }
+    { "path": "./packages/node-contracts" },
+    { "path": "./packages/node-shared" }
   ]
 }
