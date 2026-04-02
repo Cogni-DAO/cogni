@@ -1,14 +1,14 @@
-# Resy Helper Node — repo-spec
+# Poly Prediction Market Node — repo-spec
 # See: docs/spec/identity-model.md, docs/spec/multi-node-tenancy.md
 
 schema_version: "0.1.4"
 
-node_id: "f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e"
-scope_id: "46a78763-2739-55c9-9d8c-a26611b2dbdf"
+node_id: "5ed2d64f-2745-4676-983b-2fb7e05b2eba"
+scope_id: "7d5858fd-b1a3-5c45-9dd2-2e38e47051ad"
 scope_key: "default"
 
 intent:
-  name: cogni-resy
+  name: cogni-poly
 
 cogni_dao:
   chain_id: "8453" # Base mainnet — DAO not yet deployed
