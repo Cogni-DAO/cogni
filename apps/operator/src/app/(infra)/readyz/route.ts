@@ -14,12 +14,11 @@
  * @public
  */
 
+import { metaReadyzOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
 import { getContainer } from "@/bootstrap/container";
 import { verifySystemTenant } from "@/bootstrap/healthchecks";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { metaReadyzOperation } from "@/contracts/meta.readyz.read.v1.contract";
 import { EnvValidationError, serverEnv } from "@/shared/env";
 import {
   assertEvmRpcConfig,

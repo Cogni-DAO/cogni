@@ -26,6 +26,10 @@ import type { AiEvent } from "@cogni/ai-core";
 import { RUN_STREAM_DEFAULT_TTL_SECONDS } from "@cogni/graph-execution-core";
 import { toUserId } from "@cogni/ids";
 import { SYSTEM_ACTOR } from "@cogni/ids/system";
+import {
+  InternalGraphRunInputSchema,
+  type InternalGraphRunOutput,
+} from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getContainer } from "@/bootstrap/container";
@@ -34,10 +38,6 @@ import {
   createScopedGraphExecutor,
 } from "@/bootstrap/graph-executor.factory";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import {
-  InternalGraphRunInputSchema,
-  type InternalGraphRunOutput,
-} from "@/contracts/graphs.run.internal.v1.contract";
 import {
   assembleAssistantMessage,
   executeStream,

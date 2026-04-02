@@ -19,6 +19,7 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
 import type { GraphId, ModelRef } from "@cogni/ai-core";
+import type { ChatError } from "@cogni/node-contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { DefaultChatTransport } from "ai";
@@ -30,7 +31,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ChatError } from "@/contracts/error.chat.v1.contract";
 import * as clientLogger from "@/shared/observability/client";
 import { EVENT_NAMES } from "@/shared/observability/events";
 

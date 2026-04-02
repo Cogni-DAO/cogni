@@ -16,7 +16,7 @@ import type { HexAddress } from "@cogni/aragon-osx";
 import type {
   SetupVerifyInput,
   SetupVerifyOutput,
-} from "@/contracts/setup.verify.v1.contract";
+} from "@cogni/node-contracts";
 
 import type { VerifiedAddresses } from "./formation.reducer";
 

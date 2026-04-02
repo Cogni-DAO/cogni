@@ -13,8 +13,8 @@
  */
 
 import { toUserId } from "@cogni/ids";
+import type { CreditsSummaryOutput } from "@cogni/node-contracts";
 import { getContainer } from "@/bootstrap/container";
-import type { CreditsSummaryOutput } from "@/contracts/payments.credits.summary.v1.contract";
 import { AuthUserNotFoundError } from "@/features/payments/errors";
 import { getCreditsSummary } from "@/features/payments/services/creditsSummary";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";

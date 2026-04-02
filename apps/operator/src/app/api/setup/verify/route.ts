@@ -18,15 +18,15 @@ import {
   type SupportedChainId,
 } from "@cogni/aragon-osx";
 import { COGNI_SIGNAL_ABI } from "@cogni/cogni-contracts";
+import {
+  type SetupVerifyOutput,
+  setupVerifyOperation,
+} from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { v5 as uuidv5 } from "uuid";
 import { createPublicClient, http } from "viem";
 import { base, sepolia } from "viem/chains";
 import { withRootSpan } from "@/bootstrap/otel";
-import {
-  type SetupVerifyOutput,
-  setupVerifyOperation,
-} from "@/contracts/setup.verify.v1.contract";
 import { serverEnv } from "@/shared/env";
 import {
   createRequestContext,

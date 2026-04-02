@@ -11,9 +11,8 @@
  * @internal
  */
 
+import { ownershipSummaryOperation } from "@cogni/node-contracts";
 import { describe, expect, it } from "vitest";
-
-import { ownershipSummaryOperation } from "@/contracts/users.ownership.v1.contract";
 
 describe("users.ownership.read.v1 contract", () => {
   it("validates a well-formed ownership summary response", () => {

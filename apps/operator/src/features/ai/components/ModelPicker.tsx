@@ -15,6 +15,7 @@
 "use client";
 
 import type { ModelRef } from "@cogni/ai-core";
+import type { Model } from "@cogni/node-contracts";
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -24,7 +25,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/kit/overlays/Dialog";
-import type { Model } from "@/contracts/ai.models.v1.contract";
 import { resolveModelIcon } from "@/features/ai/config/provider-icons";
 import { OpenAIIcon } from "@/features/ai/icons/providers/OpenAIIcon";
 import { cn } from "@/shared/util/cn";

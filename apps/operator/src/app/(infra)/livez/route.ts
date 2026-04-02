@@ -12,9 +12,8 @@
  * @public
  */
 
+import { metaLivezOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
-import { metaLivezOperation } from "@/contracts/meta.livez.read.v1.contract";
 
 export const dynamic = "force-dynamic";
 

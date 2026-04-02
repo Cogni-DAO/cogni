@@ -13,11 +13,10 @@
  * @public
  */
 
+import { aiActivityOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
 import { getActivity } from "@/app/_facades/ai/activity.server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { aiActivityOperation } from "@/contracts/ai.activity.v1.contract";
 import { getServerSessionUser } from "@/lib/auth/server";
 import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@/shared/constants/system-tenant";
 import { deriveTimeRange } from "@/shared/time/time-range";

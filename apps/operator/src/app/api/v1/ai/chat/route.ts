@@ -20,6 +20,7 @@
 
 import { isAiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
+import { aiChatOperation, type ChatInput } from "@cogni/node-contracts";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { nanoid } from "nanoid";
@@ -28,10 +29,6 @@ import { executionErrorToHttpStatus } from "@/app/_facades/ai/execution-error-ma
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import {
-  aiChatOperation,
-  type ChatInput,
-} from "@/contracts/ai.chat.v1.contract";
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import {
   redactSecretsInMessages,

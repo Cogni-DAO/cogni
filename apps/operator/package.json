@@ -27,6 +27,7 @@
     "@cogni/ids": "workspace:*",
     "@cogni/ingestion-core": "workspace:*",
     "@cogni/node-core": "workspace:*",
+    "@cogni/node-contracts": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
     "@cogni/market-provider": "workspace:*",
     "@cogni/repo-spec": "workspace:*",
