@@ -65,6 +65,7 @@
 | 1 | 2 | 3 | needs_review | task.0246 | Rename app workspace to apps/operator | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0253 | Port resy reservations feature from cogni-resy-helper fork | Operator Plane | proj.operator-plane |
 | 1 | 2 | 2 | needs_triage | bug.0255 | Node landing pages have broken sign-in flow | Operator Plane | proj.operator-plane |
+| 1 | 2 | 8 | needs_implement | task.0260 | Node creation orchestration — chat-native guided flow | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
