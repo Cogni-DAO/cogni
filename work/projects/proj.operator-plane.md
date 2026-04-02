@@ -232,6 +232,7 @@ See: `docs/spec/multi-node-tenancy.md`
 | Extract shared platform package             | Needs Design    | task.0248 |
 | Port resy reservations feature              | Needs Design    | task.0253 |
 | Node landing page auth flow                 | Needs Triage    | bug.0255  |
+| Auto-generate COGNI_NODE_ENDPOINTS from repo-spec | TODO (future) | — |
 
 ## As-Built Specs
 
