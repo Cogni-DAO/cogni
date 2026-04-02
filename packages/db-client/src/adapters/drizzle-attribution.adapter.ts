@@ -9,6 +9,7 @@
  * - Uses serviceDb (BYPASSRLS) — no RLS in V0.
  * - SCOPE_GATED_QUERIES: Every epochId-based method enforces scope_id = this.scopeId. Scope mismatches throw EpochNotFoundError.
  * - RECEIPT_SCOPE_AGNOSTIC: ingestion_receipts has no scope_id — scope assigned at selection via epoch membership.
+ * - SELECTION_POLICY_AUTHORITY: getSelectionCandidates excludes receipts already selected in prior same-scope epochs (NOT EXISTS subquery). No time-window filter — the selection policy decides epoch membership within remaining candidates.
  * - SELECTION_AUTO_POPULATE: insertSelectionDoNothing uses onConflictDoNothing; updateSelectionUserId only sets userId where NULL.
  * - SELECTION_FREEZE_ON_FINALIZE: DB trigger enforces; adapter does not duplicate check.
  * - ONE_OPEN_EPOCH: DB constraint enforces; adapter lets DB error propagate.
@@ -1791,9 +1792,19 @@ export class DrizzleAttributionAdapter implements AttributionStore {
         and(
           eq(ingestionReceipts.nodeId, nodeId),
           or(
-            isNull(epochSelection.id), // no selection row
+            isNull(epochSelection.id), // no selection row for this epoch
             isNull(epochSelection.userId) // selection exists but unresolved
-          )
+          ),
+          // Exclude receipts already selected in prior same-scope epochs.
+          // RECEIPT_SCOPE_AGNOSTIC: cross-scope selection preserved — filter is same-scope only.
+          sql`NOT EXISTS (
+            SELECT 1 FROM epoch_selection es_prior
+            JOIN epochs e_prior ON e_prior.id = es_prior.epoch_id
+            WHERE es_prior.receipt_id = ${ingestionReceipts.receiptId}
+              AND e_prior.node_id = ${nodeId}
+              AND e_prior.scope_id = ${this.scopeId}
+              AND es_prior.epoch_id != ${epochId}
+          )`
         )
       )
       .orderBy(ingestionReceipts.eventTime);

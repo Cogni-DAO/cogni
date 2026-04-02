@@ -4,8 +4,8 @@
 /**
  * Module: `@tests/component/db/drizzle-attribution.adapter.int`
  * Purpose: Component tests for DrizzleAttributionAdapter against real PostgreSQL via testcontainers.
- * Scope: Verifies adapter + DB triggers (RECEIPT_APPEND_ONLY, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, RECEIPT_IDEMPOTENT). Does not test domain logic or routes.
- * Invariants: RECEIPT_APPEND_ONLY, RECEIPT_IDEMPOTENT, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, SCOPE_GATED_QUERIES
+ * Scope: Verifies adapter + DB triggers (RECEIPT_APPEND_ONLY, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, RECEIPT_IDEMPOTENT) and cross-epoch dedup (SELECTION_POLICY_AUTHORITY, RECEIPT_SCOPE_AGNOSTIC). Does not test domain logic or routes.
+ * Invariants: RECEIPT_APPEND_ONLY, RECEIPT_IDEMPOTENT, SELECTION_FREEZE_ON_FINALIZE, ONE_OPEN_EPOCH, SCOPE_GATED_QUERIES, SELECTION_POLICY_AUTHORITY, RECEIPT_SCOPE_AGNOSTIC
  * Side-effects: IO (database operations via testcontainers)
  * Links: packages/db-client/src/adapters/drizzle-attribution.adapter.ts, packages/attribution-ledger/src/store.ts
  * @public
@@ -1903,6 +1903,147 @@ describe("DrizzleAttributionAdapter (Component)", () => {
         expect(row.epochId).toBe(claimantEpochId);
         expect(row.nodeId).toBe(TEST_NODE_ID);
       }
+    });
+  });
+
+  // ── Cross-epoch same-scope deduplication (bug.0243) ───────────
+
+  describe("getSelectionCandidates cross-epoch dedup (bug.0243)", () => {
+    const otherScopeAdapter = new DrizzleAttributionAdapter(db, OTHER_SCOPE_ID);
+    let epoch1Id: bigint;
+    let epoch2Id: bigint;
+    let otherScopeEpochId: bigint;
+
+    beforeAll(async () => {
+      // Shared receipts — ingested once, global (RECEIPT_SCOPE_AGNOSTIC)
+      await adapter.insertIngestionReceipts([
+        makeIngestionReceipt({
+          receiptId: "dedup:pr:1",
+          eventTime: new Date("2026-04-01T10:00:00Z"),
+          platformUserId: "u1",
+        }),
+        makeIngestionReceipt({
+          receiptId: "dedup:pr:2",
+          eventTime: new Date("2026-04-01T11:00:00Z"),
+          platformUserId: "u2",
+        }),
+        makeIngestionReceipt({
+          receiptId: "dedup:pr:3",
+          eventTime: new Date("2026-04-02T10:00:00Z"),
+          platformUserId: "u3",
+        }),
+      ]);
+
+      // Epoch 1 (same scope) — select dedup:pr:1 and dedup:pr:2
+      const e1 = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(300),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      epoch1Id = e1.id;
+
+      await adapter.insertSelectionDoNothing([
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: epoch1Id,
+          receiptId: "dedup:pr:1",
+          userId: null,
+          included: true,
+        }),
+        makeSelectionAuto({
+          nodeId: TEST_NODE_ID,
+          epochId: epoch1Id,
+          receiptId: "dedup:pr:2",
+          userId: null,
+          included: true,
+        }),
+      ]);
+
+      // Close + finalize epoch 1 so we can open epoch 2
+      await adapter.closeIngestion(
+        epoch1Id,
+        [],
+        "dedup-hash-1",
+        "weight-sum-v0",
+        "dedup-wch-1"
+      );
+      await adapter.finalizeEpoch(epoch1Id, 1000n);
+
+      // Epoch 2 (same scope) — no selections yet
+      const e2 = await adapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: TEST_SCOPE_ID,
+        ...epochWindow(301),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      epoch2Id = e2.id;
+
+      // Epoch in OTHER scope — no selections yet
+      const eOther = await otherScopeAdapter.createEpoch({
+        nodeId: TEST_NODE_ID,
+        scopeId: OTHER_SCOPE_ID,
+        ...epochWindow(300),
+        weightConfig: TEST_WEIGHT_CONFIG,
+      });
+      otherScopeEpochId = eOther.id;
+    });
+
+    afterAll(async () => {
+      // Cleanup: finalize open epochs to avoid leaking ONE_OPEN_EPOCH
+      const open = await adapter.getOpenEpoch(TEST_NODE_ID, TEST_SCOPE_ID);
+      if (open) {
+        await adapter.closeIngestion(
+          open.id,
+          [],
+          "cleanup-hash",
+          "weight-sum-v0",
+          "cleanup-wch"
+        );
+        await adapter.finalizeEpoch(open.id, 0n);
+      }
+      const otherOpen = await otherScopeAdapter.getOpenEpoch(
+        TEST_NODE_ID,
+        OTHER_SCOPE_ID
+      );
+      if (otherOpen) {
+        await otherScopeAdapter.closeIngestion(
+          otherOpen.id,
+          [],
+          "cleanup-hash",
+          "weight-sum-v0",
+          "cleanup-wch"
+        );
+        await otherScopeAdapter.finalizeEpoch(otherOpen.id, 0n);
+      }
+    });
+
+    it("same-scope: epoch 2 candidates exclude receipts selected in epoch 1", async () => {
+      const candidates = await adapter.getSelectionCandidates(
+        TEST_NODE_ID,
+        epoch2Id
+      );
+      const candidateIds = candidates.map((c) => c.receipt.receiptId);
+
+      // dedup:pr:1 and dedup:pr:2 were selected in epoch 1 (same scope) — must be excluded
+      expect(candidateIds).not.toContain("dedup:pr:1");
+      expect(candidateIds).not.toContain("dedup:pr:2");
+
+      // dedup:pr:3 was never selected — must be included
+      expect(candidateIds).toContain("dedup:pr:3");
+    });
+
+    it("cross-scope: other scope still sees all receipts (RECEIPT_SCOPE_AGNOSTIC)", async () => {
+      const candidates = await otherScopeAdapter.getSelectionCandidates(
+        TEST_NODE_ID,
+        otherScopeEpochId
+      );
+      const candidateIds = candidates.map((c) => c.receipt.receiptId);
+
+      // All three receipts should be candidates — epoch 1 selections are in a different scope
+      expect(candidateIds).toContain("dedup:pr:1");
+      expect(candidateIds).toContain("dedup:pr:2");
+      expect(candidateIds).toContain("dedup:pr:3");
     });
   });
 });
