@@ -5,11 +5,16 @@
 ## Metadata
 
 - **Owners:** @derekg1729
-- **Status:** active
+- **Status:** stable
 
 ## Purpose
 
 Custom LiteLLM Docker image extending upstream with per-node billing callback routing. The `CogniNodeRouter` custom callback class inspects `node_id` from `spend_logs_metadata` and routes billing events to the correct node's `/api/internal/billing/ingest` endpoint.
+
+## Pointers
+
+- [Multi-Node Tenancy Spec](../../docs/spec/multi-node-tenancy.md): CALLBACK_IS_ADAPTER_GLUE, MISSING_NODE_ID_DEFAULTS_OPERATOR
+- [Billing Ingest Spec](../../docs/spec/billing-ingest.md): Callback pipeline, ingest endpoint contract
 
 ## Boundaries
 
@@ -17,7 +22,16 @@ Custom LiteLLM Docker image extending upstream with per-node billing callback ro
 {
   "layer": "infra",
   "may_import": [],
-  "must_not_import": ["app", "features", "ports", "core", "adapters", "shared", "services", "packages"]
+  "must_not_import": [
+    "app",
+    "features",
+    "ports",
+    "core",
+    "adapters",
+    "shared",
+    "services",
+    "packages"
+  ]
 }
 ```
 
@@ -33,9 +47,13 @@ Custom LiteLLM Docker image extending upstream with per-node billing callback ro
 - `COGNI_NODE_ENDPOINTS` (required) — comma-separated `node_id=endpoint_url` pairs
 - `BILLING_INGEST_TOKEN` — Bearer token forwarded to node ingest endpoints
 
-## Invariants
+## Responsibilities
 
-- CALLBACK_IS_ADAPTER_GLUE: no pricing logic, no policy logic, no reconciliation
-- MISSING_NODE_ID_DEFAULTS_OPERATOR: missing node_id → operator endpoint + warning log
-- CALLBACK_AUTHENTICATED: forwards Bearer token as-is
-- NODE_LOCAL_METERING_PRIMARY: routes to node-local endpoint, never centralizes writes
+- This directory **does**: build a custom LiteLLM image, route billing callbacks to per-node ingest endpoints based on `node_id` metadata
+- This directory **does not**: contain pricing logic, policy logic, reconciliation logic, or any business rules (CALLBACK_IS_ADAPTER_GLUE)
+
+## Notes
+
+- Missing `node_id` defaults to operator with a warning (MISSING_NODE_ID_DEFAULTS_OPERATOR)
+- Dockerfile extends the same SHA-pinned upstream image used previously in docker-compose
+- `COGNI_NODE_ENDPOINTS` is required — `CogniNodeRouter` raises `RuntimeError` at init if unset
