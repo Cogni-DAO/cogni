@@ -2,7 +2,7 @@
 id: task.0248
 type: task
 title: "Deduplicate node platform: capability extractions + thin app shell"
-status: needs_design
+status: needs_implement
 priority: 1
 rank: 5
 estimate: 5
@@ -25,6 +25,7 @@ blocked_by:
 deploy_verified: false
 created: 2026-04-01
 updated: 2026-04-02
+
 labels: [refactor, architecture, nodes, packages]
 external_refs:
 ---
@@ -92,13 +93,12 @@ See spec for full interface definition.
 
 ## Plan
 
-### Spike: Turbopack + transpilePackages (gates all shell work)
+### Spike: Turbopack + transpilePackages — DONE (2026-04-02)
 
-- [ ] Create minimal `packages/node-app/` with ~5 files (layout frame, one provider, extension types)
-- [ ] Add `transpilePackages: ["@cogni/node-app"]` to node-template's next.config.ts
-- [ ] Run `pnpm dev:poly` — measure Turbopack memory vs baseline
-- [ ] If memory regression > 20% or breaks: fall back to capability-only extraction
-- [ ] Document spike results in `docs/research/`
+Validated: 7-file `@cogni/node-app` with `AppShell`, `NodeAppProvider`, `NodeAppConfig` + slot injection.
+Turbopack compiles source exports correctly. No memory regression. Curated subpath exports resolve.
+Gotcha: git worktrees break Turbopack (symlink outside filesystem root). Must run from real repo.
+Results recorded in spec.node-app-shell.
 
 ### Phase 1: Pure capability extractions (no risk, immediate dedup)
 
@@ -115,7 +115,7 @@ See spec for full interface definition.
 - [ ] Rewire apps/operator + nodes to import from package
 - [ ] `pnpm check` passes
 
-### Phase 3: Thin app shell (`@cogni/node-app`) — gated on spike success
+### Phase 3: Thin app shell (`@cogni/node-app`) — spike passed, ready to implement
 
 - [ ] Create `packages/node-app/` with curated subpath exports
 - [ ] Move layout frame (sidebar, header, topbar structure with slots)

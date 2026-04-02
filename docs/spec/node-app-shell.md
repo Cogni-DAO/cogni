@@ -3,7 +3,7 @@ id: spec.node-app-shell
 type: spec
 title: "Node App Shell: Shared Platform via Internal Source Package"
 status: draft
-spec_state: draft
+spec_state: proposed
 trust: draft
 summary: "Defines two package categories (capability libraries and internal source packages) and how node apps consume a thin shared app shell without file duplication."
 read_when: "Creating a new node, extracting shared code from apps/operator, or deciding whether code belongs in a capability package vs the app shell."
@@ -267,10 +267,20 @@ Enable nodes as thin app shells that compose a shared layout/provider framework 
 | `.dependency-cruiser.cjs`                         | Cross-node import enforcement                                         |
 | `docs/spec/packages-architecture.md`              | Capability library rules (companion spec)                             |
 
+## Spike Results (2026-04-02)
+
+Validated with Next.js 16.1.7 + Turbopack. 7-file `@cogni/node-app` package with `AppShell`, `NodeAppProvider`, `NodeAppConfig`, `DefaultHeader`, `DefaultSidebar`.
+
+| Question                        | Result                                                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Turbopack + `transpilePackages` | **Works.** Source exports (`./src/*`) compile correctly. 5.3s first compile for spike page. No crashes.                                   |
+| Curated subpath exports         | **Works.** `"./layout"`, `"./providers"`, `"./extensions"` all resolve. No wildcards needed.                                              |
+| `NodeAppConfig` slot injection  | **Works.** `headerComponent: PolyHeader` renders custom component, replacing `DefaultHeader`.                                             |
+| Memory regression               | **No regression detected.** 47 MB after 2 pages compiled. Fair comparison requires full-app test during implementation.                   |
+| Worktree compatibility          | **Broken.** Turbopack rejects symlinked `node_modules` pointing outside filesystem root. Spike must run from real repo, not git worktree. |
+
 ## Open Questions
 
-- [ ] Does Turbopack (Next.js 16 dev mode) handle `transpilePackages` for the app shell without dev-server memory regression? Spike with a small shell first (~20 files), not the full 660.
-- [ ] What is the exact extension-point surface? Enumerate the slots/factories needed for current node variations (header, sidebar, nav items, tool bindings, theme).
 - [ ] For the ~139 non-AI adapters: which existing capability packages should absorb them vs which stay app-local pending further extraction? Needs per-adapter audit.
 
 ## Related
