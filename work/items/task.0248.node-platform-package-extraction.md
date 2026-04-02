@@ -88,6 +88,14 @@ This task must ensure the extracted platform supports per-node DATABASE_URL:
 - RLS policies remain within each node's DB (user/account-scoped)
 - No tenancy columns (node_id) in node-local tables (DB_IS_BOUNDARY)
 
+## Expected test deduplication
+
+Each node currently has ~200 identical test fixture files copied from operator.
+After platform extraction, test helpers (seed-client, seedTestActor, poll-db,
+stack setup pipeline) live in the shared package or a test-utils package. Nodes
+only add node-specific test cases. Multi-node system tests (task.0258) stay in
+operator as the test infrastructure host.
+
 ## Non-goals
 
 - Runtime plugin system (nodes are still separate Next.js apps)
