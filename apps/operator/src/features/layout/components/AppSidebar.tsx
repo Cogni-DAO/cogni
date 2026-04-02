@@ -14,13 +14,13 @@
 "use client";
 
 import {
-  Brain,
   Briefcase,
   CreditCard,
   Github,
   LayoutDashboard,
   Vote,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactElement } from "react";
@@ -82,10 +82,17 @@ export function AppSidebar(): ReactElement {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip="Cogni">
               <Link href="/chat">
-                <div className="flex aspect-square size-8 items-center justify-center text-primary">
-                  <Brain className="size-5" />
+                <div className="flex aspect-square size-8 items-center justify-center">
+                  <Image
+                    src="/TransparentBrainOnly.png"
+                    alt="Cogni"
+                    width={24}
+                    height={24}
+                  />
                 </div>
-                <span className="truncate font-bold">Cogni</span>
+                <span className="truncate font-bold text-gradient-accent">
+                  Cogni
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

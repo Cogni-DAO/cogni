@@ -42,7 +42,7 @@ interface WalletConnectButtonProps {
  * Base treasury badge styling - matches TreasuryBadge.tsx
  */
 const BASE_BADGE_CLASSES =
-  "flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-sm transition-colors hover:bg-accent";
+  "flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20";
 
 /**
  * Custom wallet connect button matching treasury badge design.
