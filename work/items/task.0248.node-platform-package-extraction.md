@@ -148,8 +148,15 @@ Results recorded in spec.node-app-shell.
 - [x] Create `node-config.ts` in all 4 apps (operator, node-template, poly, resy)
 - [x] Wire `transpilePackages: ["@cogni/node-app"]` in all 4 next.config.ts
 - [x] Rewire all 4 root layouts, delete 20 duplicate provider files + 4 AGENTS.md
-- [x] `pnpm check:fast` passes
-- Layout extraction consciously deferred — sidebar/header depend on shadcn vendor primitives via `@/components`. NodeAppConfig extension points are the prep work.
+- [x] Each app has thin `providers.client.tsx` wrapper (wagmiConfig must stay in "use client" boundary)
+- [x] `pnpm check:fast` + CI static/unit/component passes; `next build` passes
+- Layout extraction consciously deferred — sidebar/header depend on shadcn vendor primitives via `@/components`. NodeAppConfig extension points are established but not yet consumed; layout migration is the follow-up.
+
+### Phase 3b: Wire NodeAppConfig into sidebar (follow-up)
+
+- [ ] Sidebar reads navItems/externalLinks from `useNodeAppConfig()` instead of hardcoded constants
+- [ ] Remove duplicate NAV_ITEMS/EXTERNAL_LINKS from each AppSidebar.tsx
+- [ ] node-config.ts becomes the single source for node identity
 
 ### Phase 4: Node workspace restructure
 
