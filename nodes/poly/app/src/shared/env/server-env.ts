@@ -186,7 +186,7 @@ export const serverSchema = z.object({
   // Doltgres Knowledge Store - Optional
   // Per knowledge-data-plane spec: versioned knowledge store for agent domain expertise.
   // Writer URL used by knowledge tools (auto-commit on write). Reader URL for read-only agents.
-  DOLTGRES_URL: optionalUrl,
+  DOLTGRES_URL_POLY: optionalUrl,
 
   // Tavily Web Search - Optional
   // Required for research graph web search capability

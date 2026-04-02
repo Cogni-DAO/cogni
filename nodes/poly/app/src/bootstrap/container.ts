@@ -553,13 +553,13 @@ function createContainer(): Container {
     KALSHI_API_SECRET: env.KALSHI_API_SECRET,
   });
 
-  // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL)
+  // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL_POLY)
   // When configured, wraps KnowledgeStorePort with auto-commit on writes.
   // When not configured, tools throw "not configured" at invocation time.
   let knowledgeCapability: KnowledgeCapability;
-  if (env.DOLTGRES_URL) {
+  if (env.DOLTGRES_URL_POLY) {
     const doltClient = buildDoltgresClient({
-      connectionString: env.DOLTGRES_URL,
+      connectionString: env.DOLTGRES_URL_POLY,
       applicationName: `cogni_knowledge_${env.SERVICE_NAME ?? "app"}`,
     });
     const knowledgePort = new DoltgresKnowledgeStoreAdapter({ sql: doltClient });
@@ -567,7 +567,7 @@ function createContainer(): Container {
     log.info("Knowledge store configured (Doltgres)");
   } else {
     const notConfigured = () => {
-      throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL.");
+      throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL_POLY.");
     };
     knowledgeCapability = {
       search: notConfigured,
@@ -575,7 +575,7 @@ function createContainer(): Container {
       get: notConfigured,
       write: notConfigured,
     };
-    log.warn("Knowledge store not configured (DOLTGRES_URL not set)");
+    log.warn("Knowledge store not configured (DOLTGRES_URL_POLY not set)");
   }
 
   // ToolSource with real implementations (per CAPABILITY_INJECTION)

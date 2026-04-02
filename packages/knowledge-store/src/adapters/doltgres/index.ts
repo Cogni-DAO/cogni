@@ -315,3 +315,7 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
 }
 
 export type { DoltgresAdapterConfig as Config };
+export {
+  buildDoltgresClient,
+  type DoltgresClientConfig,
+} from "./build-client.js";

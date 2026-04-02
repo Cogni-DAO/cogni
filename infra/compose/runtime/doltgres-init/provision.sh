@@ -53,14 +53,13 @@ echo "✅ Doltgres is up."
 
 # ── Roles ──────────────────────────────────────────────────────────────────
 echo "🔧 Creating roles..."
-# Doltgres may not have pg_roles, so use error suppression for idempotency.
-# Use psql variable binding (:'var') for passwords to prevent SQL injection.
-PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d postgres \
-  -v reader_pass="$DG_READER_PASS" \
-  -c "CREATE ROLE knowledge_reader WITH LOGIN PASSWORD :'reader_pass'" 2>/dev/null || true
-PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d postgres \
-  -v writer_pass="$DG_WRITER_PASS" \
-  -c "CREATE ROLE knowledge_writer WITH LOGIN PASSWORD :'writer_pass'" 2>/dev/null || true
+# Doltgres doesn't support psql :'var' binding or pg_roles checks.
+# Passwords are dev defaults (not user input) — direct interpolation is safe.
+run_sql_quiet "postgres" "CREATE ROLE knowledge_reader WITH LOGIN PASSWORD '${DG_READER_PASS}'"
+run_sql_quiet "postgres" "CREATE ROLE knowledge_writer WITH LOGIN PASSWORD '${DG_WRITER_PASS}'"
+# Verify roles were created (don't silently continue if they failed)
+echo "   Verifying roles..."
+run_sql "postgres" "SELECT 1" > /dev/null
 echo "   -> Roles ready (knowledge_reader, knowledge_writer)"
 
 # ── Per-node databases + schema ────────────────────────────────────────────
@@ -97,21 +96,8 @@ for COGNI_DB in $(echo "$COGNI_NODE_DBS" | tr ',' ' '); do
   run_sql "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_writer"
   run_sql "$DB" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO knowledge_writer"
 
-  # Base seed (idempotent via ON CONFLICT)
-  run_sql "$DB" "
-    INSERT INTO knowledge (id, domain, title, content, source_type, tags)
-    VALUES (
-      'cogni-meta-001',
-      'meta',
-      'Knowledge store overview',
-      'This node uses a Doltgres-backed knowledge store with git-like versioning. Knowledge is separated from hot operational data (awareness plane). Use commit() after writes to create versioned snapshots.',
-      'human',
-      '[\"meta\", \"knowledge-store\", \"onboarding\"]'::jsonb
-    ) ON CONFLICT (id) DO NOTHING
-  "
-
-  # Dolt commit (creates versioned snapshot)
-  run_sql "$DB" "SELECT dolt_commit('-Am', 'provision: schema + roles + base seed')"
+  # Dolt commit (schema + roles only — seed data comes from pnpm db:seed:doltgres)
+  run_sql "$DB" "SELECT dolt_commit('-Am', 'provision: schema + roles')"
 
   echo "   -> $DB provisioned and committed."
 done

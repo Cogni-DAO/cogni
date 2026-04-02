@@ -98,8 +98,13 @@ import { createRepoCapability } from "@/bootstrap/capabilities/repo";
 import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
-import type { KnowledgeCapability } from "@cogni/ai-tools";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
+import type { KnowledgeCapability } from "@cogni/ai-tools";
+import { createKnowledgeCapability } from "@cogni/knowledge-store";
+import {
+  buildDoltgresClient,
+  DoltgresKnowledgeStoreAdapter,
+} from "@cogni/knowledge-store/adapters/doltgres";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
 import type {
   AccountService,
@@ -548,13 +553,28 @@ function createContainer(): Container {
     KALSHI_API_SECRET: env.KALSHI_API_SECRET,
   });
 
-  // KnowledgeCapability stub — resy does not use knowledge store
-  const knowledgeCapability: KnowledgeCapability = {
-    search: async () => { throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL."); },
-    list: async () => { throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL."); },
-    get: async () => { throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL."); },
-    write: async () => { throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL."); },
-  };
+  // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL)
+  let knowledgeCapability: KnowledgeCapability;
+  if (env.DOLTGRES_URL) {
+    const doltClient = buildDoltgresClient({
+      connectionString: env.DOLTGRES_URL,
+      applicationName: `cogni_knowledge_${env.SERVICE_NAME ?? "app"}`,
+    });
+    const knowledgePort = new DoltgresKnowledgeStoreAdapter({ sql: doltClient });
+    knowledgeCapability = createKnowledgeCapability(knowledgePort);
+    log.info("Knowledge store configured (Doltgres)");
+  } else {
+    const notConfigured = () => {
+      throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL.");
+    };
+    knowledgeCapability = {
+      search: notConfigured,
+      list: notConfigured,
+      get: notConfigured,
+      write: notConfigured,
+    };
+    log.warn("Knowledge store not configured (DOLTGRES_URL not set)");
+  }
 
   // ToolSource with real implementations (per CAPABILITY_INJECTION)
   const toolBindings = createToolBindings({
