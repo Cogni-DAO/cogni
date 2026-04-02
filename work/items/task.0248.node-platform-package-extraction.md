@@ -16,7 +16,7 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.operator-plane
-branch:
+branch: feat/task-0248-node-platform-extraction
 pr:
 reviewer:
 revision: 2
