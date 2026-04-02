@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/node-app/providers`
+ * Purpose: SessionProvider wrapper for NextAuth client context.
+ * Scope: Client-only provider. Does not fetch data or add side effects.
+ * Invariants: Minimal; only composes SessionProvider.
+ * Side-effects: none
+ * Links: https://next-auth.js.org/getting-started/client
+ * @public
+ */
+
 "use client";
 
 import { SessionProvider } from "next-auth/react";

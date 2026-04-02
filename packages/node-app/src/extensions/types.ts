@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/node-app/extensions`
+ * Purpose: Extension-point types for node customization — NavItem, ExternalLink, NodeAppConfig.
+ * Scope: Pure type definitions. Does not contain runtime code, React components, or env access.
+ * Invariants: All fields readonly; NodeAppConfig is the single customization surface for nodes.
+ * Side-effects: none
+ * Links: docs/spec/node-app-shell.md
+ * @public
+ */
+
 import type { ComponentType, ReactNode } from "react";
 
 /** A primary navigation item rendered in the sidebar. */

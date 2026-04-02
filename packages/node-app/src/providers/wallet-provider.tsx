@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/node-app/providers`
+ * Purpose: Wallet provider for EVM wallet connections using wagmi and RainbowKit.
+ * Scope: Wraps app with WagmiProvider and RainbowKitProvider with SSR support. Does not own wagmiConfig — accepts it as prop so node-local chain/RPC config stays node-owned.
+ * Invariants: Always renders children (no null return); nested RainbowKitThemeProvider isolates theme changes from WagmiProvider.
+ * Side-effects: none (providers only)
+ * Links: https://rainbowkit.com/docs/installation, https://wagmi.sh/react/guides/ssr
+ * @public
+ */
+
 "use client";
 
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";

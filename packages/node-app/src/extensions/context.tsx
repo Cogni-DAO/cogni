@@ -1,3 +1,16 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/node-app/extensions`
+ * Purpose: React context providing NodeAppConfig to the component tree.
+ * Scope: Client-only context provider + hook. Does not own config shape (see types.ts).
+ * Invariants: Throws if useNodeAppConfig called outside NodeAppProvider.
+ * Side-effects: none
+ * Links: packages/node-app/src/extensions/types.ts
+ * @public
+ */
+
 "use client";
 
 import { createContext, type ReactNode, useContext } from "react";
