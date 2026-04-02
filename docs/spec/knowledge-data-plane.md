@@ -3,7 +3,7 @@ id: knowledge-data-plane-spec
 type: spec
 title: "Knowledge Data Plane — Doltgres-Backed Expertise for Node-Template"
 status: draft
-spec_state: draft
+spec_state: proposed
 trust: draft
 summary: "Separates hot operational awareness (Postgres) from cold curated knowledge (Doltgres). The awareness plane owns what the AI sees right now. The knowledge plane owns what the AI has learned — strategies, prompt versions, evaluations, evidence. Doltgres is a Postgres drop-in with git-like versioning (commit, log, diff). Same Drizzle schemas, same pg driver — just add commit/push/sync workflows."
 read_when: Designing a knowledge store for a Cogni node, choosing where data lives (awareness vs knowledge), understanding the promotion boundary, or forking the node-template.
