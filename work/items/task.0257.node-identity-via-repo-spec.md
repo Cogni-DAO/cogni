@@ -2,7 +2,7 @@
 id: task.0257
 type: task
 title: "Fix node identity — wire node_id from repo-spec, not env var slug"
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 3
@@ -22,7 +22,7 @@ revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-04-01
-updated: 2026-04-01
+updated: 2026-04-02
 labels: [identity, repo-spec, multi-node, architecture]
 external_refs:
 ---
