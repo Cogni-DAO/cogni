@@ -158,3 +158,8 @@ class CogniNodeRouter(CustomLogger):
                 "CogniNodeRouter.async_log_success_event failed — call_id=%s",
                 kwargs.get("litellm_call_id", "unknown"),
             )
+
+
+# Module-level instance — LiteLLM `callbacks` config expects an instance, not a class.
+# Config: `callbacks: cogni_callbacks.cogni_node_router`
+cogni_node_router = CogniNodeRouter()
