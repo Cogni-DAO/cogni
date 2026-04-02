@@ -2,7 +2,7 @@
 id: task.0231
 type: task
 title: "Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds"
-status: needs_closeout
+status: done
 priority: 2
 rank: 1
 estimate: 4
