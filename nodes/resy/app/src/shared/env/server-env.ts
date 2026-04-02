@@ -62,8 +62,6 @@ export const serverSchema = z.object({
   // Deployment environment (for observability labels and analytics filtering)
   DEPLOY_ENVIRONMENT: z.string().optional(),
 
-  // Node identity for LiteLLM callback routing (per multi-node-tenancy spec)
-  COGNI_NODE_ID: z.string().default("operator"),
 
   // Service identity for observability (multi-service deployments)
   SERVICE_NAME: z.string().default("app"),
@@ -326,10 +324,11 @@ export function serverEnv(): ServerEnv {
       }
       if (
         !existsSync(join(COGNI_REPO_ROOT, "package.json")) &&
+        !existsSync(join(COGNI_REPO_ROOT, ".cogni", "repo-spec.yaml")) &&
         !existsSync(join(COGNI_REPO_ROOT, ".git"))
       ) {
         throw new Error(
-          `COGNI_REPO_ROOT missing package.json and .git: ${COGNI_REPO_ROOT}`
+          `COGNI_REPO_ROOT missing package.json, .cogni/repo-spec.yaml, and .git: ${COGNI_REPO_ROOT}`
         );
       }
 

@@ -24,7 +24,9 @@ from litellm.integrations.custom_logger import CustomLogger
 
 logger = logging.getLogger("cogni.callbacks")
 
-DEFAULT_NODE = "operator"
+# Operator node_id UUID — fallback when node_id missing from metadata.
+# Must match node_id in .cogni/repo-spec.yaml (REPO_SPEC_AUTHORITY).
+DEFAULT_NODE = os.environ.get("COGNI_DEFAULT_NODE_ID", "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d")
 
 
 def _parse_node_endpoints() -> dict[str, str]:
@@ -64,9 +66,9 @@ def _get_billing_token() -> str:
 class CogniNodeRouter(CustomLogger):
     """Routes LiteLLM success callbacks to per-node billing ingest endpoints.
 
-    Reads node_id from spend_logs_metadata (set by each node's LLM adapter
+    Reads node_id (UUID) from spend_logs_metadata (set by each node's LLM adapter
     via x-litellm-spend-logs-metadata header). Routes to the matching node's
-    /api/internal/billing/ingest endpoint. Defaults to operator if node_id
+    /api/internal/billing/ingest endpoint. Defaults to operator UUID if node_id
     is missing (MISSING_NODE_ID_DEFAULTS_OPERATOR).
     """
 

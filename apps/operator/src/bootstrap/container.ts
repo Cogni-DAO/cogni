@@ -133,6 +133,7 @@ import type {
 import { initAnalytics, shutdownAnalytics } from "@/shared/analytics";
 import {
   getDaoTreasuryAddress,
+  getNodeId,
   getOperatorWalletConfig,
   getPaymentConfig,
   getScopeId,
@@ -694,7 +695,7 @@ function createContainer(): Container {
     treasuryReadPort,
     aiTelemetry,
     langfuse,
-    nodeId: env.COGNI_NODE_ID,
+    nodeId: getNodeId(),
     scheduleControl,
     executionGrantPort,
     executionGrantWorkerPort,

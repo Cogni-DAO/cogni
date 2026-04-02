@@ -2,7 +2,7 @@
 id: task.0257
 type: task
 title: "Fix node identity — wire node_id from repo-spec, not env var slug"
-status: needs_implement
+status: needs_merge
 priority: 0
 rank: 1
 estimate: 3
@@ -15,14 +15,14 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.operator-plane
-branch:
-pr:
+branch: feat/task-0257-repo-spec-identity
+pr: https://github.com/Cogni-DAO/node-template/pull/690
 reviewer:
 revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-04-01
-updated: 2026-04-01
+updated: 2026-04-02
 labels: [identity, repo-spec, multi-node, architecture]
 external_refs:
 ---

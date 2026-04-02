@@ -45,10 +45,11 @@ Pure parsing and typed extraction for `.cogni/repo-spec.yaml` — the governance
   - `extractLedgerConfig(spec)` — Extracts ledger config (requires scope identity)
   - `extractLedgerApprovers(spec)` — Lowercased EVM approver addresses
   - `extractNodeId(spec)` — Node identity UUID
+  - `extractNodes(spec)` — Node registry entries (operator-only, returns `[]` for non-operator specs)
   - `extractScopeId(spec)` — Scope identity UUID (throws if missing)
   - `extractChainId(spec)` — Numeric chain ID from cogni_dao section
-  - Zod schemas: `repoSpecSchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, etc.
-  - Types: `RepoSpec`, `InboundPaymentConfig`, `GovernanceConfig`, `GovernanceSchedule`, `LedgerConfig`, `LedgerPoolConfig`
+  - Zod schemas: `repoSpecSchema`, `nodeRegistryEntrySchema`, `creditsTopupSpecSchema`, `governanceScheduleSchema`, etc.
+  - Types: `RepoSpec`, `NodeRegistryEntry`, `InboundPaymentConfig`, `GovernanceConfig`, `GovernanceSchedule`, `LedgerConfig`, `LedgerPoolConfig`
 
 ## Ports
 
