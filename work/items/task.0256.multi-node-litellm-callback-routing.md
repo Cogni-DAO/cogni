@@ -2,7 +2,7 @@
 id: task.0256
 type: task
 title: "Per-node billing pipeline: DB isolation + auth isolation + LiteLLM callback routing"
-status: needs_closeout
+status: needs_implement
 priority: 0
 rank: 1
 estimate: 5
@@ -15,7 +15,7 @@ project: proj.operator-plane
 branch: feat/task-0256-per-node-billing-v2
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-04-01
@@ -185,6 +185,22 @@ pnpm check
 - Per-node LiteLLM instances (METERING_IS_LOCAL deferred for operator-repo nodes)
 - Production multi-domain auth (SSO IdP flow — task.0248 concern)
 - Federation auth (V3)
+
+## Review Feedback (revision 1)
+
+### Blocking
+
+1. **`.env.local.example` default breaks single-node:** `GENERIC_LOGGER_ENDPOINT` defaults to `:3900` (callback router), but the router only starts with `dev:stack:full`. Single-node `pnpm dev:stack` users will get 502 on billing callbacks. **Fix:** Default back to `http://host.docker.internal:3000/api/internal/billing/ingest`. Override in `dev:stack:full` or the callback router startup.
+
+2. **Mixed-node callback batches:** `extractNodeId` in `billing-callback-router.mts` only reads `payload[0].metadata.spend_logs_metadata.node_id`. Under concurrent multi-node usage, LiteLLM may batch entries from different nodes into one callback POST. Entries after `[0]` with different `node_id` route to the wrong DB. **Fix:** Group entries by `node_id`, fan-out one POST per distinct node. Or at minimum, log a warning when entries have heterogeneous `node_id` values.
+
+### Non-blocking suggestions
+
+3. **Warning on default fallback:** In `extractNodeId`, distinguish "explicitly operator" from "no node_id found" — `console.warn` for the latter so misrouted callbacks are detectable (agreed earlier in conversation).
+
+4. **Seed data per node:** `db:setup:nodes` only seeds operator DB. Verify poly/resy boot without seed data, or add per-node seed scripts.
+
+5. **Contract test coverage:** No billing contract test includes `node_id` in `spend_logs_metadata`. One test case with `node_id` present would catch schema regressions cheaply.
 
 ## PR / Links
 

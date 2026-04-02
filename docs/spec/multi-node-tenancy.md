@@ -71,6 +71,7 @@ All invariants are detailed in their respective sections below. Summary:
 | NODE_LOCAL_METERING_PRIMARY       | Data Isolation           |
 | NO_CROSS_NODE_QUERIES             | Data Isolation           |
 | OPERATOR_AGGREGATES_ARE_DERIVED   | Data Isolation           |
+| MISSING_NODE_ID_DEFAULTS_OPERATOR | Data Isolation           |
 | NO_CROSS_IMPORTS                  | Inter-Node Communication |
 | NODE_TO_OPERATOR_READ_ONLY        | Inter-Node Communication |
 | OPERATOR_READS_NODE_VIA_VCS       | Inter-Node Communication |
@@ -117,13 +118,14 @@ All invariants are detailed in their respective sections below. Summary:
 
 ### Data invariants
 
-| Invariant                       | Rule                                                                                                                                                                                                       |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DB_PER_NODE                     | 1 Postgres server, 1 database per node. Each node has its own database, its own migrations, its own schema version.                                                                                        |
-| DB_IS_BOUNDARY                  | The database itself is the node boundary. No `node_id` columns needed in node-local tables — the DB already scopes to this node. User/account-scoped RLS within the node is still legitimate and expected. |
-| NODE_LOCAL_METERING_PRIMARY     | Each node's local billing/metering data is authoritative. Operator aggregation is derived, never the source of truth. If operator aggregate diverges from node-local, **node-local wins**.                 |
-| NO_CROSS_NODE_QUERIES           | Nodes never query each other's database. The operator never queries a node's database directly.                                                                                                            |
-| OPERATOR_AGGREGATES_ARE_DERIVED | Cross-node views are read-only projections from node-local data, not independent records. They may lag, they may be incomplete, they are never primary.                                                    |
+| Invariant                         | Rule                                                                                                                                                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DB_PER_NODE                       | 1 Postgres server, 1 database per node. Each node has its own database, its own migrations, its own schema version.                                                                                                                         |
+| DB_IS_BOUNDARY                    | The database itself is the node boundary. No `node_id` columns needed in node-local tables — the DB already scopes to this node. User/account-scoped RLS within the node is still legitimate and expected.                                  |
+| NODE_LOCAL_METERING_PRIMARY       | Each node's local billing/metering data is authoritative. Operator aggregation is derived, never the source of truth. If operator aggregate diverges from node-local, **node-local wins**.                                                  |
+| MISSING_NODE_ID_DEFAULTS_OPERATOR | If `node_id` is absent from callback metadata (e.g., direct LiteLLM call, legacy client), the callback router defaults to the operator node and logs a warning. This prevents silent data loss while making misrouted callbacks detectable. |
+| NO_CROSS_NODE_QUERIES             | Nodes never query each other's database. The operator never queries a node's database directly.                                                                                                                                             |
+| OPERATOR_AGGREGATES_ARE_DERIVED   | Cross-node views are read-only projections from node-local data, not independent records. They may lag, they may be incomplete, they are never primary.                                                                                     |
 
 ### Architecture
 
