@@ -205,23 +205,7 @@ describe("[multi-node] billing isolation (task.0258)", () => {
   const actors: Record<string, TestActor> = {};
 
   beforeAll(async () => {
-    // Verify all nodes are reachable before running tests
-    for (const [name, node] of Object.entries(NODES)) {
-      try {
-        const res = await fetch(`${node.baseUrl}/livez`, {
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (!res.ok) {
-          throw new Error(`${name} /livez returned ${res.status}`);
-        }
-      } catch (e) {
-        throw new Error(
-          `Node '${name}' not reachable at ${node.baseUrl}/livez. ` +
-            `Run 'pnpm dev:stack:full' first. Error: ${e}`
-        );
-      }
-    }
-
+    // Node liveness already verified by globalSetup (wait-for-probes-multi.ts)
     // Seed test actors in each node's DB
     for (const name of Object.keys(NODES)) {
       const db = getNodeDb(name);
