@@ -228,6 +228,8 @@ TypeScript project references build packages incrementally using `.tsbuildinfo` 
 | `@cogni/ids`                  | isomorphic | Branded ID types (UserId, ActorId) for RLS enforcement          |
 | `@cogni/graph-execution-core` | neutral    | Shared graph execution contracts: executor, context, run stream |
 | `@cogni/scheduler-core`       | node       | Scheduling types, port interfaces, payload schemas              |
+| `@cogni/node-core`            | neutral    | Shared domain models, types, pure business logic for all nodes  |
+| `@cogni/node-contracts`       | neutral    | Shared Zod route contracts and HTTP router for all nodes        |
 | `@cogni/db-schema`            | node       | Drizzle schema with subpath exports per domain slice            |
 | `@cogni/db-client`            | node       | Drizzle client factory + scheduling adapters                    |
 

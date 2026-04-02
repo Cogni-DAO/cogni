@@ -23,7 +23,7 @@ revision: 2
 blocked_by: []
 deploy_verified: false
 created: 2026-04-01
-updated: 2026-04-02
+updated: 2026-04-03
 
 labels: [refactor, architecture, nodes, packages]
 external_refs:
@@ -105,7 +105,12 @@ Results recorded in spec.node-app-shell.
   - All 4 apps rewired: `@/core` → `@cogni/node-core`, `@/types/*` → `@cogni/node-core`
   - Original files deleted (no shims). -4,870 lines.
   - `pnpm check` all 11 checks pass.
-- [ ] Create `packages/node-contracts/` — move ~45 Zod contract files
+- [x] Create `packages/node-contracts/` — move 45 Zod contract files → DONE (feat/task-0248-phase2-contracts)
+  - All 4 apps rewired: `@/contracts/*` → `@cogni/node-contracts` barrel import
+  - ChatMessage dedup: selective re-export from ai.chat.v1.contract to avoid TS2308 collision
+  - 42 duplicate import statements merged post-sed
+  - Original files deleted. -8,405 lines.
+  - `pnpm check:fast` all 6 checks pass.
 - [ ] Create `packages/node-shared/` — move ~81 pure shared utility files (minus hooks)
 - [ ] Move `shared/hooks/useIsMobile.ts` to app-local
 - [ ] `pnpm check` passes on all apps
