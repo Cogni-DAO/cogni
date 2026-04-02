@@ -40,6 +40,9 @@ pnpm dev:stack:test
 
 # Run tests (in another terminal)
 pnpm test:stack:dev
+
+# Run a specific test file
+pnpm dotenv -e .env.test -- vitest run --config apps/operator/vitest.stack.config.mts <testfile>
 ```
 
 ### What `dev:stack:test` provides
@@ -129,6 +132,9 @@ pnpm dev:stack:test:full
 
 # Run multi-node tests (in another terminal)
 pnpm test:stack:multi
+
+# Run a specific multi-node test file
+pnpm dotenv -e .env.test -- vitest run --config apps/operator/vitest.stack-multi.config.mts <testfile>
 ```
 
 ### What `dev:stack:test:full` provides

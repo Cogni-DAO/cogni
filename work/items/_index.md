@@ -19,7 +19,8 @@
 | 0 | 1 | 5 | needs_closeout | task.0245 | Multi-node architecture — nodes/ directory, per-node graph packages, dep-cruiser boundaries | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 1 | 5 | needs_merge | task.0256 | Per-node billing pipeline: DB isolation + auth isolation + LiteLLM callback routing | Operator Plane | proj.operator-plane |
 | 0 | 1 | 3 | needs_merge | task.0257 | Fix node identity — wire node_id from repo-spec, not env var slug | Operator Plane | proj.operator-plane |
-| 0 | 2 | 3 | needs_design | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
+| 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
+| 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
@@ -79,7 +80,7 @@
 | 1 | 5 | 2 | needs_design | bug.0200 | setup-secrets has no validation that generated secrets are deploy-safe | Database Operations | proj.database-ops |
 | 1 | 5 | 3 | needs_merge | task.0209 | Multi-provider LLM rearchitecture — ModelCatalogPort + ModelRef | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | 5 | 2 | needs_triage | bug.0231 | Token usage has three disagreeing sources — app logs, LiteLLM spend_logs, and billing callback |  |  |
-| 1 | 5 | 5 | needs_implement | task.0248 | Deduplicate node platform: targeted package extractions + bounded node workspaces | Operator Plane | proj.operator-plane |
+| 1 | 5 | 5 | needs_implement | task.0248 | Deduplicate node platform: capability extractions + thin app shell | Operator Plane | proj.operator-plane |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |

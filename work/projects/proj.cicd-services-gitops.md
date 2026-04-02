@@ -177,17 +177,17 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Simplify GitHub Actions to thin wrappers (`dagger call build`, `dagger call test`)             | Not Started | 1   | —         |
 | Validate: Same pipeline runs locally and in CI                                                 | Not Started | 1   | —         |
 
-#### P5: CI Acceleration (NX)
+#### P5: CI Acceleration (Turborepo — supersedes NX)
 
-**Goal:** Optimize CI task selection/caching. Only after CD is stable. **Why deferred:** NX solves CI time/cost, not deployment correctness. GitOps must be stable first.
+**Goal:** Affected-scope CI with remote cache. 3-lane pipeline: (1) affected-only fast checks on every PR, (2) multi-node stack tests when node/runtime scopes change, (3) nightly protected-branch gate.
 
-| Deliverable                                                                   | Status      | Est | Work Item |
-| ----------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Spike: Evaluate NX vs Turborepo (NX preferred for structure + affected graph) | Not Started | 2   | —         |
-| Add NX targets for build/test/lint per package/service                        | Not Started | 2   | —         |
-| Implement affected-only task execution (`nx affected:build`)                  | Not Started | 2   | —         |
-| Add remote cache (NX Cloud or self-hosted)                                    | Not Started | 1   | —         |
-| Keep image builds explicit initially; integrate with Dagger later             | Not Started | 1   | —         |
+| Deliverable                                                 | Status      | Est | Work Item |
+| ----------------------------------------------------------- | ----------- | --- | --------- |
+| Turborepo `--affected` spike + `turbo.json` pipeline config | Not Started | 2   | task.0260 |
+| Refactor `ci.yaml` to affected-only fast checks (Lane 1)    | Not Started | 2   | task.0260 |
+| Multi-node stack test CI job with scope detection (Lane 2)  | Not Started | 3   | task.0260 |
+| Nightly + merge-queue protected-branch gate (Lane 3)        | Not Started | 1   | task.0260 |
+| Remote cache (Vercel Turbo free tier or self-hosted)        | Not Started | 1   | task.0260 |
 
 ## Constraints
 

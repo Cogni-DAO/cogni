@@ -37,6 +37,7 @@ export default defineConfig({
   plugins: [tsconfigPaths({ projects: ["./tsconfig.test.json"] })],
   test: {
     include: ["tests/stack/**/*.stack.test.ts"],
+    exclude: ["tests/stack/**/multi-node-*.stack.test.ts"],
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
     // Global setup: preflight binaries → wait for probes → openclaw gateway → litellm config → mock-llm → preflight DB roles → reset DB (order matters)

@@ -33,7 +33,7 @@ export const StandardLoggingPayloadBillingSchema = z
   .object({
     id: z.string().min(1), // litellm_call_id
     call_type: z.string(),
-    stream: z.boolean(),
+    stream: z.boolean().nullable(),
     status: z.string(),
     response_cost: z.number(), // USD cost
     model: z.string(), // Full provider model path

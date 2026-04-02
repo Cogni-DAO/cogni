@@ -65,18 +65,18 @@ last_commit: 4851e7e7e
 
 ## Pointers
 
-| File / Resource | Why it matters |
-| --- | --- |
-| `docs/spec/node-formation.md` | Full DAO formation lifecycle (2 wallet txs → server verify → repo-spec output) |
-| `docs/spec/node-launch.md` | Zero-touch provisioning design (Temporal workflow, 8 steps) |
-| `docs/spec/multi-node-tenancy.md` | Auth, data isolation, metering boundaries (11 invariants) |
-| `docs/spec/node-operator-contract.md` | Sovereignty invariants (FORK_FREEDOM, DATA_SOVEREIGNTY) |
-| `.cogni/repo-spec.yaml` | Operator repo-spec with `nodes[]` registry |
-| `nodes/node-template/` | Forkable base: `app/`, `graphs/`, `.cogni/repo-spec.yaml` |
-| `packages/repo-spec/src/schema.ts` | Zod schema — `nodeRegistryEntrySchema`, `repoSpecSchema` |
-| `packages/dns-ops/` | DNS management for node subdomains |
-| `.claude/skills/dns-ops/SKILL.md` | DNS ops skill guide (Cloudflare setup, create-node wizard) |
-| `infra/litellm/cogni_callbacks.py` | Billing callback router — routes by UUID from `COGNI_NODE_ENDPOINTS` |
-| `infra/compose/runtime/postgres-init/provision.sh` | DB provisioning — loops over `COGNI_NODE_DBS` |
-| `work/items/task.0248.node-platform-package-extraction.md` | Fixes TOOL_BINDING_REQUIRED drift (composable catalog) |
-| `work/projects/proj.operator-plane.md` | Multi-node deliverable tracker |
+| File / Resource                                            | Why it matters                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `docs/spec/node-formation.md`                              | Full DAO formation lifecycle (2 wallet txs → server verify → repo-spec output) |
+| `docs/spec/node-launch.md`                                 | Zero-touch provisioning design (Temporal workflow, 8 steps)                    |
+| `docs/spec/multi-node-tenancy.md`                          | Auth, data isolation, metering boundaries (11 invariants)                      |
+| `docs/spec/node-operator-contract.md`                      | Sovereignty invariants (FORK_FREEDOM, DATA_SOVEREIGNTY)                        |
+| `.cogni/repo-spec.yaml`                                    | Operator repo-spec with `nodes[]` registry                                     |
+| `nodes/node-template/`                                     | Forkable base: `app/`, `graphs/`, `.cogni/repo-spec.yaml`                      |
+| `packages/repo-spec/src/schema.ts`                         | Zod schema — `nodeRegistryEntrySchema`, `repoSpecSchema`                       |
+| `packages/dns-ops/`                                        | DNS management for node subdomains                                             |
+| `.claude/skills/dns-ops/SKILL.md`                          | DNS ops skill guide (Cloudflare setup, create-node wizard)                     |
+| `infra/litellm/cogni_callbacks.py`                         | Billing callback router — routes by UUID from `COGNI_NODE_ENDPOINTS`           |
+| `infra/compose/runtime/postgres-init/provision.sh`         | DB provisioning — loops over `COGNI_NODE_DBS`                                  |
+| `work/items/task.0248.node-platform-package-extraction.md` | Fixes TOOL_BINDING_REQUIRED drift (composable catalog)                         |
+| `work/projects/proj.operator-plane.md`                     | Multi-node deliverable tracker                                                 |

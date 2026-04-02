@@ -20,12 +20,19 @@ PG_PORT="${DB_PORT:-5432}"
 PG_USER="${POSTGRES_ROOT_USER:-postgres}"
 PG_PASS="${POSTGRES_ROOT_PASSWORD:-postgres}"
 
-# Per-node databases (comma-separated). Default: single DB for backward compat.
-# Multi-node: COGNI_NODE_DBS=cogni_operator,cogni_poly,cogni_resy
-APP_DBS="${COGNI_NODE_DBS:-${APP_DB_NAME:-cogni_template_dev}}"
+# Per-node databases (comma-separated). Required — no defaults.
+APP_DBS="${COGNI_NODE_DBS:-}"
+if [ -z "$APP_DBS" ]; then
+  echo "❌ ERROR: COGNI_NODE_DBS is required (comma-separated list of database names)"
+  exit 1
+fi
 
 # LiteLLM database (shared, root-owned — single instance serves all nodes)
-LITELLM_DB="${LITELLM_DB_NAME:-litellm_dev}"
+LITELLM_DB="${LITELLM_DB_NAME:-}"
+if [ -z "$LITELLM_DB" ]; then
+  echo "❌ ERROR: LITELLM_DB_NAME is required"
+  exit 1
+fi
 
 # App User Credentials (required, no defaults)
 APP_USER="${APP_DB_USER:-}"

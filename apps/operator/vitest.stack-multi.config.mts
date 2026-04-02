@@ -28,8 +28,7 @@ export default defineConfig({
     include: ["tests/stack/internal/multi-node-*.stack.test.ts"],
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
-    // No globalSetup — multi-node tests check node liveness in beforeAll.
-    // No reset-db — tests seed and clean up their own data in per-node DBs.
+    globalSetup: ["./tests/stack/setup/wait-for-probes-multi.ts"],
     sequence: { concurrent: false },
     testTimeout: 30_000,
     hookTimeout: 30_000,

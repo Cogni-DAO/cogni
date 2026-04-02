@@ -131,6 +131,9 @@ Rationale:
 1. Update `build-prod.yml` to build node images
 2. Update `deploy.sh` to pull + restart node containers
 3. Add per-node health checks to `staging-preview.yml`
+4. Add `stack-test-multi` CI job: build poly + resy images, provision per-node
+   test DBs, boot 3 app containers, run `pnpm test:stack:multi` (task.0258 tests
+   already written and passing locally)
 
 ## Design Decisions Needed
 

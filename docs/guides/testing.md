@@ -24,14 +24,14 @@ tags: [testing, dev]
 
 ## Test Layers
 
-| Layer | What it proves | Infra needed | Speed | Command |
-|---|---|---|---|---|
-| **Unit** | Pure logic, no I/O | None | Fast | `pnpm test` |
-| **Contract** | Route handler input/output shapes | None (in-memory) | Fast | `pnpm test:contract` |
-| **Component** | Adapter + DB integration | Testcontainers | Medium | `pnpm test:component` |
-| **Stack (single)** | Full HTTP path through one node | Docker Compose (test) | Slow | `pnpm test:stack:dev` |
-| **Stack (multi)** | Cross-node isolation + routing | Docker Compose (dev) + 3 nodes | Slow | `pnpm test:stack:multi` |
-| **E2E** | Black-box production validation | Full Docker stack | Slowest | `pnpm e2e` |
+| Layer              | What it proves                    | Infra needed                   | Speed   | Command                 |
+| ------------------ | --------------------------------- | ------------------------------ | ------- | ----------------------- |
+| **Unit**           | Pure logic, no I/O                | None                           | Fast    | `pnpm test`             |
+| **Contract**       | Route handler input/output shapes | None (in-memory)               | Fast    | `pnpm test:contract`    |
+| **Component**      | Adapter + DB integration          | Testcontainers                 | Medium  | `pnpm test:component`   |
+| **Stack (single)** | Full HTTP path through one node   | Docker Compose (test)          | Slow    | `pnpm test:stack:dev`   |
+| **Stack (multi)**  | Cross-node isolation + routing    | Docker Compose (dev) + 3 nodes | Slow    | `pnpm test:stack:multi` |
+| **E2E**            | Black-box production validation   | Full Docker stack              | Slowest | `pnpm e2e`              |
 
 Use the lightest layer that can prove your assertion. Most billing logic is testable at contract level. Multi-node isolation requires stack-multi.
 

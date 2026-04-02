@@ -96,6 +96,7 @@ import {
 } from "@/bootstrap/capabilities/metrics";
 import { createRepoCapability } from "@/bootstrap/capabilities/repo";
 import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
+import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
@@ -552,6 +553,7 @@ function createContainer(): Container {
     webSearchCapability,
     repoCapability,
     scheduleCapability,
+    vcsCapability: stubVcsCapability,
     workItemCapability,
   });
   const toolSource = createBoundToolSource(toolBindings);
