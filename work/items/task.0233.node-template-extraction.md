@@ -105,6 +105,7 @@ external_refs:
 - Depends on: task.0232 (dns-ops, create-node wizard)
 - Blocks: task.0202 (provisionNode needs to know what repo to create)
 - Reference: https://github.com/Cogni-DAO/cogni-resy-helper/pull/11
+- Handoff: [handoff](../handoffs/node-setup-workflow.handoff.md)
 
 ## Attribution
 
