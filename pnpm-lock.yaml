@@ -1887,6 +1887,9 @@ importers:
       '@cogni/node-core':
         specifier: workspace:*
         version: link:../node-core
+      '@cogni/repo-spec':
+        specifier: workspace:*
+        version: link:../repo-spec
       fast-safe-stringify:
         specifier: ^2.1.1
         version: 2.1.1
