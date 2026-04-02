@@ -324,10 +324,11 @@ export function serverEnv(): ServerEnv {
       }
       if (
         !existsSync(join(COGNI_REPO_ROOT, "package.json")) &&
+        !existsSync(join(COGNI_REPO_ROOT, ".cogni", "repo-spec.yaml")) &&
         !existsSync(join(COGNI_REPO_ROOT, ".git"))
       ) {
         throw new Error(
-          `COGNI_REPO_ROOT missing package.json and .git: ${COGNI_REPO_ROOT}`
+          `COGNI_REPO_ROOT missing package.json, .cogni/repo-spec.yaml, and .git: ${COGNI_REPO_ROOT}`
         );
       }
 
