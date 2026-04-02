@@ -1,0 +1,43 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-staging
+
+resources:
+  - ../../../base/node-app
+
+namePrefix: operator-
+
+images:
+  - name: ghcr.io/cogni-dao/cogni-template
+    newName: ghcr.io/cogni-dao/cogni-template
+    newTag: "staging-placeholder-operator"
+  - name: ghcr.io/cogni-dao/cogni-template:placeholder-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
+    newTag: "staging-placeholder-operator-migrate"
+
+patches:
+  # Node-specific ConfigMap values
+  - target:
+      kind: ConfigMap
+      name: node-app-config
+    patch: |
+      - op: replace
+        path: /data/APP_ENV
+        value: "preview"
+      - op: replace
+        path: /data/NODE_NAME
+        value: "operator"
+      - op: replace
+        path: /data/TEMPORAL_NAMESPACE
+        value: "cogni-preview"
+  # NodePort assignment (operator = 30000)
+  - target:
+      kind: Service
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30000

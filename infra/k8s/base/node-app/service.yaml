@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Service for node apps. ClusterIP for internal k8s routing.
+# Overlays add NodePort for Compose→k8s access (LiteLLM billing callbacks, Caddy).
+apiVersion: v1
+kind: Service
+metadata:
+  name: node-app
+  labels:
+    app.kubernetes.io/name: node-app
+    app.kubernetes.io/part-of: cogni
+spec:
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: node-app
+  ports:
+    - port: 3000
+      targetPort: http
+      protocol: TCP
+      name: http
+      # nodePort set by overlay (30000=operator, 30100=poly, 30300=resy)

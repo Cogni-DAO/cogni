@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Shared Deployment template for Cogni node apps (operator, poly, resy).
+# Overlays patch: image digest, secret ref name, resource limits.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-app
+  labels:
+    app.kubernetes.io/name: node-app
+    app.kubernetes.io/part-of: cogni
+    app.kubernetes.io/component: node
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-app
+        app.kubernetes.io/part-of: cogni
+        app.kubernetes.io/component: node
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          image: ghcr.io/cogni-dao/cogni-template:placeholder
+          ports:
+            - containerPort: 3000
+              name: http
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: node-app-config
+            - secretRef:
+                name: node-app-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "1000m"
