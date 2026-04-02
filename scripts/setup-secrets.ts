@@ -66,7 +66,7 @@ function generateSSHKey(env: string): string {
   console.log(`     ${pubKey}`);
   console.log("");
   console.log(
-    `     Save this to: infra/tofu/cherry/base/keys/cogni_template_${env}_deploy.pub`
+    `     Save this to: infra/provision/cherry/base/keys/cogni_template_${env}_deploy.pub`
   );
   console.log(`     Then run: tofu apply -var-file=terraform.${env}.tfvars`);
   console.log("");
@@ -160,7 +160,7 @@ const SECRETS: Secret[] = [
       "Auto-generated ed25519 keypair (one per environment)",
       "1. Pubkey pushed to server via existing SSH access",
       "2. Private key set in GitHub environment secret",
-      "3. Pubkey saved to infra/tofu/cherry/base/keys/",
+      "3. Pubkey saved to infra/provision/cherry/base/keys/",
       "4. Run: tofu apply -var-file=terraform.<env>.tfvars",
     ],
     // generate handled specially in main loop

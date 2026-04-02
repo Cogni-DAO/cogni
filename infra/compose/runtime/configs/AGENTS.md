@@ -74,6 +74,6 @@ Mounted as volumes in docker-compose.yml.
 ## Notes
 
 - litellm.config.yaml is single source of truth for model metadata and callback config
-- Billing callback: custom `CogniNodeRouter` callback class (`infra/litellm/cogni_callbacks.py`) routes each completion to the correct node's `/api/internal/billing/ingest` endpoint based on `node_id` in metadata. Configured via `COGNI_NODE_ENDPOINTS` env var. Auth via `BILLING_INGEST_TOKEN` (Bearer token).
+- Billing callback: custom `CogniNodeRouter` callback class (`infra/images/litellm/cogni_callbacks.py`) routes each completion to the correct node's `/api/internal/billing/ingest` endpoint based on `node_id` in metadata. Configured via `COGNI_NODE_ENDPOINTS` env var. Auth via `BILLING_INGEST_TOKEN` (Bearer token).
 - App fetches from `/model/info` endpoint to read `model_info` fields
 - Adding models: update config + restart LiteLLM, app cache refreshes within 1h

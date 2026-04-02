@@ -17,7 +17,7 @@ Production runtime configuration directory copied to VM hosts for container orch
 - [docker-compose.dev.yml](docker-compose.dev.yml): Development container stack (includes local loki, grafana)
 - [postgres-init/](postgres-init/): Database initialization scripts
 - [configs/](configs/): Service configuration templates (litellm, alloy, temporal)
-- [sandbox-proxy/](../sandbox-proxy/): nginx gateway config template for OpenClaw LLM proxy (rsync'd by deploy.sh)
+- [sandbox-proxy/](../../images/sandbox-proxy/): nginx gateway config template for OpenClaw LLM proxy (rsync'd by deploy.sh)
 - [docker-daemon.json](docker-daemon.json): Docker daemon log limits (reference only, applied via bootstrap.yaml)
 - [Edge stack](../edge/): TLS termination (Caddy) - separate compose project, never stopped during deploys
 

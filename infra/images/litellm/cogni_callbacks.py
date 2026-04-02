@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 """
-Module: infra/litellm/cogni_callbacks.py
+Module: infra/images/litellm/cogni_callbacks.py
 Purpose: Custom LiteLLM callback that routes billing callbacks to the correct
   node's /api/internal/billing/ingest endpoint based on node_id metadata.
 Scope: Adapter glue only — runs inside LiteLLM process. No pricing logic,

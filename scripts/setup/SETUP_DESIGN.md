@@ -80,7 +80,7 @@ pnpm setup github --env production
 
 1. **Generate SSH keypair:**
    - `ssh-keygen -t ed25519 -f ~/.ssh/<repo-name>_<env>_deploy`
-   - Copy public key → `infra/tofu/cherry/base/keys/`
+   - Copy public key → `infra/provision/cherry/base/keys/`
    - **Manual:** User commits public key to repo
 
 2. **Update Terraform vars:**

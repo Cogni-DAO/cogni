@@ -587,7 +587,7 @@ services:
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
     volumes:
-      - ../sandbox-proxy/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ../../images/sandbox-proxy/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
     command: >
       sh -c "envsubst '$$LITELLM_MASTER_KEY' < /etc/nginx/nginx.conf.template
       > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
