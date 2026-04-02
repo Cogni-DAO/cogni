@@ -13,7 +13,7 @@ assignees: derekg1729
 credit:
 project: proj.operator-plane
 branch: feat/task-0256-per-node-billing-v2
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/688
 reviewer:
 revision: 1
 blocked_by:
