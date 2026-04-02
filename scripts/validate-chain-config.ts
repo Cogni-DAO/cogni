@@ -16,7 +16,9 @@ import path from "node:path";
 
 import { parse } from "yaml";
 
-import { CHAIN_ID } from "@/shared/web3/chain";
+// Direct source import: tsx scripts resolve TS files directly.
+// Workspace packages use ESM-only exports which tsx CJS loader can't resolve.
+import { CHAIN_ID } from "../packages/node-shared/src/web3/chain";
 
 function main(): void {
   const repoSpecPath = path.join(process.cwd(), ".cogni", "repo-spec.yaml");
