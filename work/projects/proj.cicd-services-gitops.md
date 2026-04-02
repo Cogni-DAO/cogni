@@ -10,7 +10,7 @@ summary: Build pipeline improvements (graph-scoped builds, env decoupling), chec
 outcome: Faster builds, better developer tooling, and a single source of truth for database secrets (3 DSNs only)
 assignees: derekg1729
 created: 2026-02-06
-updated: 2026-02-06
+updated: 2026-04-02
 labels: [deployment, infra, ci-cd]
 ---
 
@@ -128,6 +128,10 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | Storage plan: PVCs for stateful deps (postgres data), backup strategy          | Not Started | 2   | —         |
 | ArgoCD manages apps only; infra via OpenTofu + bootstrap manifests             | Not Started | ↑   | task.0149 |
 | Retire SSH deploy for services (keep for app until P2)                         | Not Started | ↑   | task.0149 |
+| Multi-node Argo CD: catalog-driven ApplicationSets, node-app Kustomize base    | In Review   | 3   | task.0247 |
+| infra/ reorg: k8s/, provision/, images/, catalog/ by responsibility            | In Review   | ↑   | task.0247 |
+| CI scripts: manifest check, coverage check, promote-k8s-image                  | In Review   | ↑   | task.0247 |
+| k3s + Argo CD bootstrap via cloud-init (Docker + k3s + Argo + ksops)           | In Review   | ↑   | task.0247 |
 | K8s API read-only service account for AI agent debugging                       | Not Started | 1   | task.0187 |
 | Argo CD API token for sync status / rollback by AI agents                      | Not Started | 1   | task.0187 |
 

@@ -1,29 +1,30 @@
 ---
 id: task.0247
 type: task
-title: "Multi-node CI/CD deployment strategy — current stack vs ArgoCD"
-status: needs_design
+title: "Multi-node CI/CD deployment — Argo CD GitOps on k3s"
+status: needs_merge
 priority: 1
 rank: 3
 estimate: 3
-summary: "Design and implement deployment infra for multiple node apps. Decision: extend current Docker Compose + Caddy stack (fast, proven) or jump to ArgoCD + Kustomize (right long-term, higher upfront cost)."
-outcome: "Each node app deploys to its own domain (cognidao.org, poly.cognidao.org, resy.cognidao.org) with independent health checks and rollback capability."
+summary: "Argo CD GitOps pipeline for multi-node deployment. infra/ reorganized by responsibility (k8s, provision, compose, images, catalog). Kustomize bases + overlays for operator/poly/resy. Git file generator ApplicationSets. CI scripts for manifest validation + image promotion."
+outcome: "Each node app deploys to its own domain via Argo CD on k3s. Adding a node = adding a catalog file. 10/10 overlays validated via kubectl kustomize."
 spec_refs:
+  - docs/spec/cd-pipeline-e2e.md
   - docs/spec/node-launch.md
   - docs/spec/node-operator-contract.md
   - docs/spec/multi-node-tenancy.md
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch:
+branch: worktree-cd-pipeline-analysis
 pr:
 reviewer:
 revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-04-01
-updated: 2026-04-01
-labels: [cicd, deployment, nodes, infrastructure]
+updated: 2026-04-02
+labels: [cicd, deployment, nodes, infrastructure, argocd, gitops]
 external_refs:
 ---
 
