@@ -1,0 +1,31 @@
+{
+  "name": "cogni-contribute",
+  "version": "0.1.0",
+  "description": "CLI for AI agents contributing to Cogni repos — find tasks, claim, submit, track CI/review status",
+  "type": "module",
+  "bin": {
+    "cogni-contribute": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "postbuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist/index.js')){console.error('ERROR: dist/index.js missing'); process.exit(1)}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "yaml": "^2.7.1"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^5",
+    "@types/node": "^22"
+  }
+}

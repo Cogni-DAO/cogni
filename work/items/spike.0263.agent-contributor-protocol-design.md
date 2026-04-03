@@ -2,7 +2,7 @@
 id: spike.0263
 type: spike
 title: "Spike: agent contributor protocol — communication mechanism + workflow design"
-status: needs_research
+status: done
 priority: 1
 rank: 99
 estimate: 3
@@ -12,14 +12,14 @@ spec_refs: []
 assignees: derekg1729
 credit:
 project: proj.development-workflows
-branch:
-pr:
+branch: feat/agent-contributor-protocol
+pr: https://github.com/Cogni-DAO/node-template/pull/716
 reviewer:
 revision: 0
 blocked_by: []
 deploy_verified: false
 created: 2026-04-02
-updated: 2026-04-02
+updated: 2026-04-03
 labels: [infrastructure, agents, protocol, research]
 external_refs:
 ---
