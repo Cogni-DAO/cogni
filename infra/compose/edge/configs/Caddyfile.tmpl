@@ -21,7 +21,7 @@ www.{$DOMAIN} {
 
   @public path /api/v1/public/*
   handle @public {
-    reverse_proxy host.docker.internal:30000 {
+    reverse_proxy {$BACKEND_HOST}:30000 {
       header_up X-Real-IP {remote_host}
       transport http {
         response_header_timeout 10s
@@ -29,7 +29,7 @@ www.{$DOMAIN} {
     }
   }
 
-  reverse_proxy host.docker.internal:30000
+  reverse_proxy {$BACKEND_HOST}:30000
 
   log {
     format json
@@ -47,7 +47,7 @@ www.{$DOMAIN} {
 
   @public path /api/v1/public/*
   handle @public {
-    reverse_proxy host.docker.internal:30100 {
+    reverse_proxy {$BACKEND_HOST}:30100 {
       header_up X-Real-IP {remote_host}
       transport http {
         response_header_timeout 10s
@@ -55,7 +55,7 @@ www.{$DOMAIN} {
     }
   }
 
-  reverse_proxy host.docker.internal:30100
+  reverse_proxy {$BACKEND_HOST}:30100
 
   log {
     format json
@@ -73,7 +73,7 @@ www.{$DOMAIN} {
 
   @public path /api/v1/public/*
   handle @public {
-    reverse_proxy host.docker.internal:30300 {
+    reverse_proxy {$BACKEND_HOST}:30300 {
       header_up X-Real-IP {remote_host}
       transport http {
         response_header_timeout 10s
@@ -81,7 +81,7 @@ www.{$DOMAIN} {
     }
   }
 
-  reverse_proxy host.docker.internal:30300
+  reverse_proxy {$BACKEND_HOST}:30300
 
   log {
     format json

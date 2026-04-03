@@ -26,6 +26,7 @@ services:
       - DOMAIN=${DOMAIN}
       - POLY_DOMAIN=${POLY_DOMAIN:-}
       - RESY_DOMAIN=${RESY_DOMAIN:-}
+      - BACKEND_HOST=${BACKEND_HOST:-host.docker.internal}
     volumes:
       - ./configs/Caddyfile.tmpl:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
