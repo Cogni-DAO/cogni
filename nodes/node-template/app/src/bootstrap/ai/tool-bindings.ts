@@ -15,15 +15,20 @@
  */
 
 import type {
+  KnowledgeCapability,
   MarketCapability,
   MetricsCapability,
   RepoCapability,
   ScheduleCapability,
   ToolImplementation,
+  VcsCapability,
   WebSearchCapability,
   WorkItemCapability,
 } from "@cogni/ai-tools";
 import {
+  createKnowledgeReadImplementation,
+  createKnowledgeSearchImplementation,
+  createKnowledgeWriteImplementation,
   createMarketListImplementation,
   createMetricsQueryImplementation,
   createRepoListImplementation,
@@ -31,11 +36,18 @@ import {
   createRepoSearchImplementation,
   createScheduleListImplementation,
   createScheduleManageImplementation,
+  createVcsCreateBranchImplementation,
+  createVcsGetCiStatusImplementation,
+  createVcsListPrsImplementation,
+  createVcsMergePrImplementation,
   createWebSearchImplementation,
   createWorkItemQueryImplementation,
   createWorkItemTransitionImplementation,
   GET_CURRENT_TIME_NAME,
   getCurrentTimeImplementation,
+  KNOWLEDGE_READ_NAME,
+  KNOWLEDGE_SEARCH_NAME,
+  KNOWLEDGE_WRITE_NAME,
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
   REPO_LIST_NAME,
@@ -43,6 +55,10 @@ import {
   REPO_SEARCH_NAME,
   SCHEDULE_LIST_NAME,
   SCHEDULE_MANAGE_NAME,
+  VCS_CREATE_BRANCH_NAME,
+  VCS_GET_CI_STATUS_NAME,
+  VCS_LIST_PRS_NAME,
+  VCS_MERGE_PR_NAME,
   WEB_SEARCH_NAME,
   WORK_ITEM_QUERY_NAME,
   WORK_ITEM_TRANSITION_NAME,
@@ -53,11 +69,13 @@ import {
  * These are resolved from the container at bootstrap time.
  */
 export interface ToolBindingDeps {
+  readonly knowledgeCapability: KnowledgeCapability;
   readonly marketCapability: MarketCapability;
   readonly metricsCapability: MetricsCapability;
   readonly webSearchCapability: WebSearchCapability;
   readonly repoCapability: RepoCapability;
   readonly scheduleCapability: ScheduleCapability;
+  readonly vcsCapability: VcsCapability;
   readonly workItemCapability: WorkItemCapability;
 }
 
@@ -90,6 +108,17 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     [GET_CURRENT_TIME_NAME]:
       getCurrentTimeImplementation as AnyToolImplementation,
 
+    // Knowledge tools (Doltgres-backed knowledge store)
+    [KNOWLEDGE_SEARCH_NAME]: createKnowledgeSearchImplementation({
+      knowledgeCapability: deps.knowledgeCapability,
+    }) as AnyToolImplementation,
+    [KNOWLEDGE_READ_NAME]: createKnowledgeReadImplementation({
+      knowledgeCapability: deps.knowledgeCapability,
+    }) as AnyToolImplementation,
+    [KNOWLEDGE_WRITE_NAME]: createKnowledgeWriteImplementation({
+      knowledgeCapability: deps.knowledgeCapability,
+    }) as AnyToolImplementation,
+
     // I/O tools (require capability injection)
     [MARKET_LIST_NAME]: createMarketListImplementation({
       marketCapability: deps.marketCapability,
@@ -121,6 +150,22 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
 
     [SCHEDULE_MANAGE_NAME]: createScheduleManageImplementation({
       scheduleCapability: deps.scheduleCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_CREATE_BRANCH_NAME]: createVcsCreateBranchImplementation({
+      vcsCapability: deps.vcsCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_GET_CI_STATUS_NAME]: createVcsGetCiStatusImplementation({
+      vcsCapability: deps.vcsCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_LIST_PRS_NAME]: createVcsListPrsImplementation({
+      vcsCapability: deps.vcsCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_MERGE_PR_NAME]: createVcsMergePrImplementation({
+      vcsCapability: deps.vcsCapability,
     }) as AnyToolImplementation,
 
     [WORK_ITEM_QUERY_NAME]: createWorkItemQueryImplementation({

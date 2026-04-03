@@ -280,6 +280,58 @@ services:
       retries: 3
       start_period: 10s
 
+  # =============================================================================
+  # Doltgres — versioned knowledge store (per knowledge-data-plane spec)
+  # Postgres-compatible with native git-like versioning (commit, log, diff).
+  # =============================================================================
+
+  doltgres:
+    image: dolthub/doltgresql:latest
+    container_name: doltgres
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - cogni-edge
+    environment:
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+    ports:
+      - "5435:5432"
+    volumes:
+      - doltgres_data:/var/lib/doltgres
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/5432' 2>/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 15s
+
+  doltgres-provision:
+    image: postgres:15
+    container_name: doltgres-provision
+    profiles:
+      - bootstrap
+    restart: "no"
+    networks:
+      - cogni-edge
+    environment:
+      DOLTGRES_HOST: doltgres
+      DOLTGRES_PORT: 5432
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+      DOLTGRES_READER_PASSWORD: ${DOLTGRES_READER_PASSWORD:-knowledge_reader}
+      DOLTGRES_WRITER_PASSWORD: ${DOLTGRES_WRITER_PASSWORD:-knowledge_writer}
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS}
+    volumes:
+      - ./doltgres-init/provision.sh:/app/provision.sh:ro
+    entrypoint: ["/bin/bash", "/app/provision.sh"]
+    depends_on:
+      doltgres:
+        condition: service_healthy
+
   db-provision:
     image: postgres:15
     container_name: db-provision
@@ -808,5 +860,7 @@ volumes:
     name: pnpm_store
   tigerbeetle_data:
     name: tigerbeetle_data
+  doltgres_data:
+    name: doltgres_data
   cogni_workspace:
     name: cogni_workspace

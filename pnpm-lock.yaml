@@ -354,6 +354,9 @@ importers:
       '@cogni/ingestion-core':
         specifier: workspace:*
         version: link:../../packages/ingestion-core
+      '@cogni/knowledge-store':
+        specifier: workspace:*
+        version: link:../../packages/knowledge-store
       '@cogni/langgraph-graphs':
         specifier: workspace:*
         version: link:../../packages/langgraph-graphs
@@ -652,6 +655,9 @@ importers:
       '@cogni/ingestion-core':
         specifier: workspace:*
         version: link:../../../packages/ingestion-core
+      '@cogni/knowledge-store':
+        specifier: workspace:*
+        version: link:../../../packages/knowledge-store
       '@cogni/langgraph-graphs':
         specifier: workspace:*
         version: link:../../../packages/langgraph-graphs
@@ -919,6 +925,22 @@ importers:
         specifier: ^4.0.9
         version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.2.3)(happy-dom@20.0.10)(jsdom@16.7.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(msw@2.12.1(@types/node@25.2.3)(typescript@5.9.3))(vite@7.2.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3))
 
+  nodes/node-template/packages/knowledge:
+    dependencies:
+      '@cogni/knowledge-store':
+        specifier: workspace:*
+        version: link:../../../../packages/knowledge-store
+      drizzle-orm:
+        specifier: ^0.44.7
+        version: 0.44.7(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(pg@8.17.1)(postgres@3.4.7)
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.10)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   nodes/poly/app:
     dependencies:
       '@assistant-ui/react':
@@ -966,6 +988,9 @@ importers:
       '@cogni/ingestion-core':
         specifier: workspace:*
         version: link:../../../packages/ingestion-core
+      '@cogni/knowledge-store':
+        specifier: workspace:*
+        version: link:../../../packages/knowledge-store
       '@cogni/langgraph-graphs':
         specifier: workspace:*
         version: link:../../../packages/langgraph-graphs
@@ -1251,6 +1276,25 @@ importers:
         specifier: ^4.0.9
         version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.2.3)(happy-dom@20.0.10)(jsdom@16.7.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(msw@2.12.1(@types/node@25.2.3)(typescript@5.9.3))(vite@7.2.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3))
 
+  nodes/poly/packages/knowledge:
+    dependencies:
+      '@cogni/knowledge-store':
+        specifier: workspace:*
+        version: link:../../../../packages/knowledge-store
+      '@cogni/node-template-knowledge':
+        specifier: workspace:*
+        version: link:../../../node-template/packages/knowledge
+      drizzle-orm:
+        specifier: ^0.44.7
+        version: 0.44.7(@opentelemetry/api@1.9.0)(@types/pg@8.16.0)(pg@8.17.1)(postgres@3.4.7)
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.10)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   nodes/resy/app:
     dependencies:
       '@assistant-ui/react':
@@ -1298,6 +1342,9 @@ importers:
       '@cogni/ingestion-core':
         specifier: workspace:*
         version: link:../../../packages/ingestion-core
+      '@cogni/knowledge-store':
+        specifier: workspace:*
+        version: link:../../../packages/knowledge-store
       '@cogni/langgraph-graphs':
         specifier: workspace:*
         version: link:../../../packages/langgraph-graphs
@@ -1780,6 +1827,22 @@ importers:
         version: 5.9.3
 
   packages/ingestion-core:
+    devDependencies:
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(@swc/core@1.15.10)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.3)
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  packages/knowledge-store:
+    dependencies:
+      '@cogni/ai-tools':
+        specifier: workspace:*
+        version: link:../ai-tools
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
     devDependencies:
       tsup:
         specifier: ^8.5.1

@@ -14,6 +14,7 @@
 
 import type { ToolSourcePort } from "@cogni/ai-core";
 import type {
+  KnowledgeCapability,
   MetricsCapability,
   RepoCapability,
   WebSearchCapability,
@@ -24,6 +25,11 @@ import type { FinancialLedgerPort } from "@cogni/financial-ledger";
 import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
+import { createKnowledgeCapability } from "@cogni/knowledge-store";
+import {
+  buildDoltgresClient,
+  DoltgresKnowledgeStoreAdapter,
+} from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import {
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
@@ -553,8 +559,34 @@ function createContainer(): Container {
     KALSHI_API_SECRET: env.KALSHI_API_SECRET,
   });
 
+  // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL)
+  let knowledgeCapability: KnowledgeCapability;
+  if (env.DOLTGRES_URL) {
+    const doltClient = buildDoltgresClient({
+      connectionString: env.DOLTGRES_URL,
+      applicationName: `cogni_knowledge_${env.SERVICE_NAME ?? "app"}`,
+    });
+    const knowledgePort = new DoltgresKnowledgeStoreAdapter({
+      sql: doltClient,
+    });
+    knowledgeCapability = createKnowledgeCapability(knowledgePort);
+    log.info("Knowledge store configured (Doltgres)");
+  } else {
+    const notConfigured = () => {
+      throw new Error("KnowledgeCapability not configured. Set DOLTGRES_URL.");
+    };
+    knowledgeCapability = {
+      search: notConfigured,
+      list: notConfigured,
+      get: notConfigured,
+      write: notConfigured,
+    };
+    log.warn("Knowledge store not configured (DOLTGRES_URL not set)");
+  }
+
   // ToolSource with real implementations (per CAPABILITY_INJECTION)
   const toolBindings = createToolBindings({
+    knowledgeCapability,
     marketCapability,
     metricsCapability,
     webSearchCapability,

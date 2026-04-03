@@ -26,6 +26,9 @@
     { "path": "./packages/dns-ops" },
     { "path": "./packages/node-core" },
     { "path": "./packages/node-contracts" },
-    { "path": "./packages/node-shared" }
+    { "path": "./packages/node-shared" },
+    { "path": "./packages/knowledge-store" },
+    { "path": "./nodes/node-template/packages/knowledge" },
+    { "path": "./nodes/poly/packages/knowledge" }
   ]
 }

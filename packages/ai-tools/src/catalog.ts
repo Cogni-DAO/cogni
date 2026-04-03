@@ -15,6 +15,9 @@
  */
 
 import { getCurrentTimeBoundTool } from "./tools/get-current-time";
+import { knowledgeReadBoundTool } from "./tools/knowledge-read";
+import { knowledgeSearchBoundTool } from "./tools/knowledge-search";
+import { knowledgeWriteBoundTool } from "./tools/knowledge-write";
 import { marketListBoundTool } from "./tools/market-list";
 import { metricsQueryBoundTool } from "./tools/metrics-query";
 import { repoListBoundTool } from "./tools/repo-list";
@@ -102,6 +105,9 @@ export function createToolCatalog(
 export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   // Core tools (core__ prefix)
   getCurrentTimeBoundTool as CatalogBoundTool,
+  knowledgeReadBoundTool as CatalogBoundTool,
+  knowledgeSearchBoundTool as CatalogBoundTool,
+  knowledgeWriteBoundTool as CatalogBoundTool,
   marketListBoundTool as CatalogBoundTool,
   metricsQueryBoundTool as CatalogBoundTool,
   repoListBoundTool as CatalogBoundTool,

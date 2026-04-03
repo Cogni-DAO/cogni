@@ -15,6 +15,7 @@
  */
 
 import type {
+  KnowledgeCapability,
   MarketCapability,
   MetricsCapability,
   RepoCapability,
@@ -25,6 +26,9 @@ import type {
   WorkItemCapability,
 } from "@cogni/ai-tools";
 import {
+  createKnowledgeReadImplementation,
+  createKnowledgeSearchImplementation,
+  createKnowledgeWriteImplementation,
   createMarketListImplementation,
   createMetricsQueryImplementation,
   createRepoListImplementation,
@@ -41,6 +45,9 @@ import {
   createWorkItemTransitionImplementation,
   GET_CURRENT_TIME_NAME,
   getCurrentTimeImplementation,
+  KNOWLEDGE_READ_NAME,
+  KNOWLEDGE_SEARCH_NAME,
+  KNOWLEDGE_WRITE_NAME,
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
   REPO_LIST_NAME,
@@ -62,6 +69,7 @@ import {
  * These are resolved from the container at bootstrap time.
  */
 export interface ToolBindingDeps {
+  readonly knowledgeCapability: KnowledgeCapability;
   readonly marketCapability: MarketCapability;
   readonly metricsCapability: MetricsCapability;
   readonly webSearchCapability: WebSearchCapability;
@@ -99,6 +107,17 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     // Pure tools (no I/O dependencies)
     [GET_CURRENT_TIME_NAME]:
       getCurrentTimeImplementation as AnyToolImplementation,
+
+    // Knowledge tools (Doltgres-backed knowledge store)
+    [KNOWLEDGE_SEARCH_NAME]: createKnowledgeSearchImplementation({
+      knowledgeCapability: deps.knowledgeCapability,
+    }) as AnyToolImplementation,
+    [KNOWLEDGE_READ_NAME]: createKnowledgeReadImplementation({
+      knowledgeCapability: deps.knowledgeCapability,
+    }) as AnyToolImplementation,
+    [KNOWLEDGE_WRITE_NAME]: createKnowledgeWriteImplementation({
+      knowledgeCapability: deps.knowledgeCapability,
+    }) as AnyToolImplementation,
 
     // I/O tools (require capability injection)
     [MARKET_LIST_NAME]: createMarketListImplementation({

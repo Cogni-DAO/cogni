@@ -17,6 +17,11 @@ export type {
   CiStatusResult,
   ClockCapability,
   CreateBranchResult,
+  KnowledgeCapability,
+  KnowledgeEntry,
+  KnowledgeListParams,
+  KnowledgeSearchParams,
+  KnowledgeWriteParams,
   MergeResult,
   MetricDataPoint,
   MetricQueryResult,
@@ -53,6 +58,7 @@ export type {
 } from "./capabilities";
 // Capabilities
 export {
+  CONFIDENCE,
   createFixedClock,
   makeRepoCitation,
   REPO_CITATION_REGEX,
@@ -90,6 +96,45 @@ export {
   getCurrentTimeContract,
   getCurrentTimeImplementation,
 } from "./tools/get-current-time";
+export {
+  createKnowledgeReadImplementation,
+  KNOWLEDGE_READ_NAME,
+  type KnowledgeReadDeps,
+  type KnowledgeReadInput,
+  KnowledgeReadInputSchema,
+  type KnowledgeReadOutput,
+  KnowledgeReadOutputSchema,
+  type KnowledgeReadRedacted,
+  knowledgeReadBoundTool,
+  knowledgeReadContract,
+  knowledgeReadStubImplementation,
+} from "./tools/knowledge-read";
+export {
+  createKnowledgeSearchImplementation,
+  KNOWLEDGE_SEARCH_NAME,
+  type KnowledgeSearchDeps,
+  type KnowledgeSearchInput,
+  KnowledgeSearchInputSchema,
+  type KnowledgeSearchOutput,
+  KnowledgeSearchOutputSchema,
+  type KnowledgeSearchRedacted,
+  knowledgeSearchBoundTool,
+  knowledgeSearchContract,
+  knowledgeSearchStubImplementation,
+} from "./tools/knowledge-search";
+export {
+  createKnowledgeWriteImplementation,
+  KNOWLEDGE_WRITE_NAME,
+  type KnowledgeWriteDeps,
+  type KnowledgeWriteInput,
+  KnowledgeWriteInputSchema,
+  type KnowledgeWriteOutput,
+  KnowledgeWriteOutputSchema,
+  type KnowledgeWriteRedacted,
+  knowledgeWriteBoundTool,
+  knowledgeWriteContract,
+  knowledgeWriteStubImplementation,
+} from "./tools/knowledge-write";
 export {
   createMarketListImplementation,
   MARKET_LIST_NAME,

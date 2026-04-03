@@ -135,18 +135,12 @@
 | 1 | 99 | 2 | needs_triage | spike.0194 | Spike: Lobster Racing infrastructure and provisioning research |  |  |
 | 1 | 99 | 3 | needs_research | spike.0263 | Spike: agent contributor protocol — communication mechanism + workflow design | Development Workflows | proj.development-workflows |
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
-| 2 | 1 | 4 | needs_implement | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
-| 2 | 1 | 1 | needs_implement | task.0264 | Add PWA manifests + service workers to operator + all nodes | Mobile App | proj.mobile-app |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
-| 2 | 2 | 2 | needs_implement | task.0265 | Scaffold apps/mobile/ — Expo Router + Metro pnpm workspace config | Mobile App | proj.mobile-app |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
-| 2 | 3 | 2 | needs_implement | task.0266 | Mobile OAuth auth — GitHub/Discord/Google via expo-auth-session | Mobile App | proj.mobile-app |
+| 2 | 3 | 5 | needs_design | story.0263 | Doltgres Node Lifecycle — clone/pull from remotes, repo-spec linking, permission model | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
-| 2 | 4 | 3 | needs_implement | task.0267 | Mobile streaming AI chat screen using @cogni/node-contracts | Mobile App | proj.mobile-app |
 | 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
-| 2 | 5 | 2 | needs_implement | task.0268 | Node-switcher — multi-backend support in mobile app | Mobile App | proj.mobile-app |
-| 2 | 6 | 2 | needs_implement | task.0269 | Mobile activity dashboard + credits screens | Mobile App | proj.mobile-app |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
@@ -167,9 +161,9 @@
 | 2 | 99 | 3 | needs_implement | task.0126 | Fluence Provider Base — VM Provisioning via REST API |  |  |
 | 2 | 99 | 2 | needs_triage | spike.0146 | OtoCo testnet validation — verify Base Sepolia contracts, createSeries events, GovernanceERC20 token attachment | Node Formation & Launch | proj.node-formation-ui |
 | 2 | 99 | 2 | needs_triage | bug.0222 | Graph execution sends tools to models that declare capabilities.tools: false | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
+| 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
-| 3 | 7 | 3 | needs_design | task.0270 | SIWE wallet auth via WalletConnect on mobile | Mobile App | proj.mobile-app |
-| 3 | 8 | 2 | needs_implement | task.0271 | EAS Build + TestFlight + App Store submission | Mobile App | proj.mobile-app |
+| 3 | 10 | 2 | needs_design | bug.0262 | Operator Postgres env vars lack _OPERATOR suffix — inconsistent with multi-node pattern | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 30 | 3 | needs_merge | task.0207 | Run: BYO-AI hosted OSS provider — user connects their OpenAI-compatible endpoint | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 3 | 80 | 3 | needs_design | task.0146 | Extract payments application orchestration + billing ports into packages | AI Operator Wallet | proj.ai-operator-wallet |
 | 3 | 99 | 1 | needs_triage | task.0098 | Temporal retry workflow for failed identity bindings + scheduled backstop | User Identity Bindings + DID Readiness | proj.decentralized-identity |
@@ -299,6 +293,7 @@
 | 1 | story.0262 | Agent contributor protocol — shared workflow for AI agents coordinating on a codebase | Development Workflows | proj.development-workflows |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
+| 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | bug.0194 | Internal graph API conflates stateKey with runId — headless runs create phantom threads | Unified Graph Launch | proj.unified-graph-launch |
 

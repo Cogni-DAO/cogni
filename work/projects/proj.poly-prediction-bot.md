@@ -47,7 +47,7 @@ Build a prediction market bot that starts by reading and searching live markets 
 | --------------------------------------------------------------------------- | ----------- | --- | -------------------- |
 | Redis 7 infrastructure (upstream merge from operator repo)                  | Blocked     | 1   | (upstream task.0174) |
 | Data streams spec — Redis live plane + selective Postgres persistence       | Done        | 1   | (data-streams-spec)  |
-| Knowledge data plane — strategy/prompt versioning for analysis graphs       | In Progress | 3   | task.0231            |
+| Knowledge data plane — strategy/prompt versioning for analysis graphs       | In Review   | 3   | task.0231            |
 | Temporal MarketStreamWorkflow (poll → Redis → triggers → selective persist) | Not Started | 3   | (create at P1 start) |
 | SSE endpoint — frontend tails Redis for live updates                        | Not Started | 2   | (create at P1 start) |
 | `poly-synth` LangGraph reasoning graph (structured analysis, not chat)      | Not Started | 3   | (create at P1 start) |
