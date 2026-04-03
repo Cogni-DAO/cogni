@@ -13,7 +13,7 @@ namePrefix: poly-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    newTag: "staging-placeholder-poly"
+    digest: "sha256:51cc40fdb9f4d62c9bae3c28035b3f25b74f2062579347f9492aa6dfb72b3148"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
     newTag: "staging-placeholder-poly-migrate"
