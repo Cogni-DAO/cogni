@@ -3,66 +3,66 @@ id: task.0231.handoff
 type: handoff
 work_item_id: task.0231
 status: active
-created: 2026-04-01
+created: 2026-04-02
 updated: 2026-04-02
 branch: feat/knowledge-data-plane
-last_commit: e21f97f
+last_commit: 94c0d5a3a
 ---
 
-# Handoff: Knowledge Data Plane — Doltgres Prototype
+# Handoff: Knowledge Data Plane — What's Next
 
 ## Context
 
-- task.0231 adds a versioned knowledge store (Doltgres) to the node-template, separating curated domain expertise from hot operational data (Postgres)
-- Part of proj.poly-prediction-bot Walk/P1 — unblocks poly-synth reasoning graph reading strategies from a typed port instead of hardcoded strings
-- Doltgres is Postgres-compatible with native git-like versioning (commit, log, diff) — same wire protocol, same DDL
-- Spike validated full stack: postgres.js driver, role-based auth, all Dolt versioning functions — 13 integration tests passing
-- Architecture: shared `packages/knowledge-store/` (port + adapter) + per-node schema/seeds at `nodes/{node}/packages/knowledge/`
+- Cogni nodes now have a Doltgres-backed knowledge store — versioned domain expertise separate from hot Postgres operational data
+- The brain agent has 3 knowledge tools (`core__knowledge_search/read/write`) with a recall-first prompt (search knowledge before web search)
+- Each node gets its own Doltgres database (`knowledge_operator`, `knowledge_poly`, etc.) with structural isolation
+- Per-node seed data lives in `nodes/{node}/packages/knowledge/` and is applied via `scripts/db/seed-doltgres.mts`
+- PR #692 delivers the full v0: port, adapter, capability, tools, brain wiring, infra, seeds, env alignment
+- KNOWLEDGE charter at `work/charters/KNOWLEDGE.md` defines the vision and invariants
 
 ## Current State
 
-- **Built + tested:** `KnowledgeStorePort`, `DoltgresKnowledgeStoreAdapter`, `buildDoltgresClient()`, Zod domain types, base schema + DDL, node-template + poly seed data, 13 integration tests passing against live Doltgres
-- **Not built:** Docker Compose service, provisioning init script, `.env.local.example` updates, seed runner script, Zod unit tests, root tsconfig references
-- **Not verified:** `pnpm check` (typecheck + lint + format), `pnpm packages:build`
-- **Blocked by nothing** — all risks de-risked in spike
+- **Done:** KnowledgeStorePort + DoltgresKnowledgeStoreAdapter, 3 AI tools in catalog, brain graph wired, per-node schema packages, Docker Compose service, provision + seed scripts, env vars aligned with multi-node pattern (`DOLTGRES_URL_OPERATOR/POLY/RESY`)
+- **Working e2e:** `pnpm dev:stack` → `pnpm dev:setup` → brain agent reads/writes knowledge via tools
+- **Not done:** No `/knowledge` skill for Claude Code agents. No graph-specific knowledge tools (poly-brain doesn't use knowledge yet). No Obsidian export. No knowledge visualization UI. No branching/CI/CD.
+- **Key limitation:** `sql.unsafe()` for all Doltgres queries (extended protocol broken). Internal agents only.
 
 ## Decisions Made
 
-- **postgres.js parameterized queries don't work on Doltgres** — adapter uses `sql.unsafe()` + `escapeValue()` for all queries. See [design doc](../docs/design/knowledge-data-plane-prototype.md) and [AGENTS.md](../../packages/knowledge-store/AGENTS.md)
-- **Schema lives in node packages, not db-schema** — Doltgres tables must not pollute Postgres migration pipeline. Each node owns its schema at `nodes/{node}/packages/knowledge/`. Reviewed and approved.
-- **No RLS** — per-node databases provide structural isolation. Two roles: `knowledge_reader` (SELECT), `knowledge_writer` (DML + dolt_commit)
-- **JSONB `@>` and ILIKE not supported** — fallbacks: `CAST(tags AS TEXT) LIKE` and `LOWER(col) LIKE`. Documented in AGENTS.md.
-- **Node directory convention** — `nodes/{node}/packages/{concern}/` approved as target layout. `pnpm-workspace.yaml` updated with `nodes/*/packages/*` pattern.
-- **Poly seeds pruned** — poly-specific seeds are out of scope for this task; use node-template starter seeds for all nodes
+- [Knowledge data plane spec](../../docs/spec/knowledge-data-plane.md) — two planes, promotion gate, agent access, confidence defaults
+- [KNOWLEDGE charter](../../work/charters/KNOWLEDGE.md) — data segments (Postgres ops / Redis streams / Doltgres knowledge / Git code), confidence lifecycle (30/80/95), principles
+- Schema lives in node packages, not shared `db-schema` — each node may add companion tables
+- `createKnowledgeCapability(port)` is a shared factory — all nodes use it, auto-commits on every write
 
 ## Next Actions
 
-- [ ] Add `doltgres` service to `infra/compose/runtime/docker-compose.dev.yml` (image: `dolthub/doltgresql:latest`, port 5435, healthcheck: `nc -z localhost 5432`)
-- [ ] Write `infra/compose/runtime/doltgres-init/provision.sh` — create DBs, roles, apply DDL from `KNOWLEDGE_TABLE_DDL`, seed, commit (follow existing `postgres-init/provision.sh` pattern)
-- [ ] Add `DOLTGRES_URL`, `DOLTGRES_PASSWORD` to `.env.local.example`
-- [ ] Add root `tsconfig.json` references for knowledge-store + node knowledge packages
-- [ ] Run `pnpm check` — fix any typecheck/lint/format issues
-- [ ] Write 3-5 Zod unit tests (pure, no Docker) in `packages/knowledge-store/tests/schemas.test.ts`
-- [ ] Tag integration tests to run under `test:stack:*` only (skip in `pnpm test`)
-- [ ] Wire `core__knowledge_search` + `core__knowledge_read` BoundTools in `packages/ai-tools/`
+The most important next phase is **making knowledge useful to agents in practice**.
+
+- [ ] **Create `/knowledge` skill** for Claude Code — wraps the 3 tools so terminal agents can search/read/write knowledge. See existing skills in `.claude/skills/` for the pattern.
+- [ ] **Wire knowledge into poly-brain graph** — poly-brain should search `strategy` and `implementation` domains before analysis. Update its prompt + tool list in `nodes/poly/graphs/`.
+- [ ] **Research graph → knowledge write** — after research, auto-save findings to Doltgres at 30% confidence. Wire `core__knowledge_write` into research graph tools.
+- [ ] **Confidence promotion workflow** — when analysis signals are outcome-validated, bump supporting knowledge from 30→80%. Needs monitoring-engine integration.
+- [ ] **Data segmentation guide** — dedicated doc covering all 4 data planes. Noted in KNOWLEDGE charter roadmap.
+- [ ] **Obsidian export** — export knowledge entries as markdown with YAML frontmatter + wiki-links. Enables offline browsing and graph visualization.
 
 ## Risks / Gotchas
 
-- **`escapeValue()` is hand-rolled SQL escaping** — covers single quotes but not backslash/NUL byte edge cases. Acceptable for internal-agent-only access. Harden before exposing to external input (x402 phase).
-- **Doltgres healthcheck has no `pg_isready`** — use TCP check (`nc -z`) or Node.js net.connect, not `pg_isready`
-- **`fetch_types: false` required** — non-superuser postgres.js connections fail without this. Always use `buildDoltgresClient()`.
-- **Integration tests require running Doltgres container** — `docker run -d --name doltgres-test -e DOLTGRES_PASSWORD=doltgres -p 5435:5432 dolthub/doltgresql:latest`
-- **Drizzle table def is for types only** — do NOT run `drizzle-kit push` against Doltgres. DDL applied via raw SQL in provisioning script.
+- **Doltgres Beta** — storage format may change. Pin image version for production.
+- **`escapeValue()` is hand-rolled SQL escaping** — internal agents only. Harden before x402 external exposure.
+- **`dolt_commit` on clean working set** may error. The capability wraps this but `provision.sh` does not — wrap in `|| true` if re-provisioning fails.
+- **Seed script loads all node seeds** — tries `@cogni/poly-knowledge` for every database. Harmless (silent catch, upsert) but double-writes base seeds for poly.
 
 ## Pointers
 
-| File / Resource                                                                                            | Why it matters                                                        |
-| ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| [Spec](../../docs/spec/knowledge-data-plane.md)                                                            | Authoritative design — two planes, promotion gate, invariants         |
-| [Design doc](../../docs/design/knowledge-data-plane-prototype.md)                                          | Spike results, auth model, agent tooling roadmap, Docker service YAML |
-| [packages/knowledge-store/](../../packages/knowledge-store/)                                               | Shared port + adapter package                                         |
-| [packages/knowledge-store/AGENTS.md](../../packages/knowledge-store/AGENTS.md)                             | Doltgres compat table, arch diagram, responsibilities                 |
-| [nodes/node-template/packages/knowledge/](../../nodes/node-template/packages/knowledge/)                   | Base schema + DDL + starter seed                                      |
-| [nodes/poly/packages/knowledge/](../../nodes/poly/packages/knowledge/)                                     | Poly-specific seeds (to be pruned — use node-template seeds)          |
-| [infra/compose/runtime/postgres-init/provision.sh](../../infra/compose/runtime/postgres-init/provision.sh) | Pattern to follow for doltgres-init/provision.sh                      |
-| [task.0231](../items/task.0231.knowledge-data-plane.md)                                                    | Work item with acceptance criteria and deliverable matrix             |
+| File / Resource                                                                                          | Why it matters                                                   |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [KNOWLEDGE charter](../../work/charters/KNOWLEDGE.md)                                                    | Vision, data segments, principles, success metrics               |
+| [Spec](../../docs/spec/knowledge-data-plane.md)                                                          | Authoritative design — agent access, confidence, recall protocol |
+| [packages/knowledge-store/](../../packages/knowledge-store/)                                             | Shared port + adapter + capability factory                       |
+| [packages/ai-tools/src/tools/knowledge-\*.ts](../../packages/ai-tools/src/tools/)                        | 3 BoundTool definitions                                          |
+| [packages/ai-tools/src/capabilities/knowledge.ts](../../packages/ai-tools/src/capabilities/knowledge.ts) | KnowledgeCapability interface + CONFIDENCE constants             |
+| [packages/langgraph-graphs/src/graphs/brain/](../../packages/langgraph-graphs/src/graphs/brain/)         | Brain prompt + tool list (knowledge-first)                       |
+| [nodes/poly/packages/knowledge/](../../nodes/poly/packages/knowledge/)                                   | Poly seeds (strategy, implementation domains)                    |
+| [scripts/db/seed-doltgres.mts](../../scripts/db/seed-doltgres.mts)                                       | Per-node seed runner                                             |
+| [story.0248](../../work/items/story.0248.dolt-branching-cicd.md)                                         | Branching CI/CD — experiment → eval → merge                      |
+| [story.0263](../../work/items/story.0263.doltgres-node-lifecycle.md)                                     | Node lifecycle — clone/pull/push from remotes                    |
