@@ -6,7 +6,7 @@ name: Build Multi-Node
 
 on:
   push:
-    branches: [integration/multi-node]
+    branches: [integration/multi-node, canary]
   workflow_dispatch:
 
 permissions:
@@ -84,9 +84,6 @@ jobs:
   # ── Services build (parallel with nodes) ───────────────────────
   build-services:
     runs-on: ubuntu-latest
-    outputs:
-      migrator-digest: ${{ steps.migrator-digest.outputs.digest }}
-      scheduler-worker-digest: ${{ steps.sw-digest.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 

@@ -27,7 +27,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: ghcr.io/cogni-dao/node-template-migrator:placeholder
+          image: ghcr.io/cogni-dao/cogni-template-migrate:placeholder
           # TODO: Use dedicated migrator image with tsx + drizzle-kit (standalone app image strips devDeps)
           command:
             [

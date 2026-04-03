@@ -8,7 +8,7 @@ on:
   workflow_run:
     workflows: ["Promote k8s Staging Overlays"]
     types: [completed]
-    branches: [integration/multi-node]
+    branches: [integration/multi-node, canary]
 
 permissions:
   contents: read
@@ -31,14 +31,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Wait for Argo CD sync + pod startup
-        run: |
-          echo "Waiting 90s for Argo CD poll interval + pod startup..."
-          sleep 90
-
       - name: Poll health endpoints
         run: |
-          MAX_ATTEMPTS=20
+          # Start polling immediately — Argo may have already synced.
+          # 30 attempts × 15s = 7.5 min total (covers Argo 3-min poll + pod startup + migration)
+          MAX_ATTEMPTS=30
           SLEEP=15
 
           poll_health() {
@@ -97,14 +94,16 @@ jobs:
 
       - name: Dump diagnostics on failure
         if: failure()
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
         run: |
-          if [ -z "$VM_HOST" ]; then
-            echo "No VM_HOST configured — cannot SSH for diagnostics"
+          if [ -z "$VM_HOST" ] || [ -z "$SSH_DEPLOY_KEY" ]; then
+            echo "No VM_HOST or SSH_DEPLOY_KEY configured — cannot SSH for diagnostics"
             exit 0
           fi
 
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          echo "${{ secrets.SSH_DEPLOY_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
@@ -124,6 +123,6 @@ jobs:
           echo ""
           echo "=== Pod Logs (last 30 lines each) ==="
           for app in operator poly resy; do
-            echo "--- $app ---"
-            ssh $SSH_OPTS root@"$VM_HOST" "kubectl -n cogni-staging logs -l app.kubernetes.io/name=node-app --prefix --tail=30 -c app 2>&1 | grep -i '$app' | head -30" 2>&1 || true
+            echo "--- ${app} ---"
+            ssh $SSH_OPTS root@"$VM_HOST" "kubectl -n cogni-staging logs -l app.kubernetes.io/name=node-app --prefix --tail=30 -c app 2>&1 | grep -i ${app} | head -30" 2>&1 || true
           done
