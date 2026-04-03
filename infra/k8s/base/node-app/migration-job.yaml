@@ -28,7 +28,8 @@ spec:
       containers:
         - name: migrate
           image: ghcr.io/cogni-dao/node-template-migrator:placeholder
-          command: ["pnpm", "db:migrate:direct"]
+          command:
+            ["sh", "-c", "cd /app/apps/operator && npx drizzle-kit migrate"]
           env:
             - name: DATABASE_URL
               valueFrom:
