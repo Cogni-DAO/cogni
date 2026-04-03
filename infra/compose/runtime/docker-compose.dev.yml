@@ -10,7 +10,7 @@ services:
     image: ${APP_IMAGE:-cogni-template-local}
     build:
       context: ../../..
-      dockerfile: ./apps/operator/Dockerfile
+      dockerfile: ./nodes/operator/app/Dockerfile
     container_name: app
     restart: always
     networks:
@@ -363,7 +363,7 @@ services:
     image: ${MIGRATOR_IMAGE:-cogni-template-migrate-local}
     build:
       context: ../../..
-      dockerfile: ./apps/operator/Dockerfile
+      dockerfile: ./nodes/operator/app/Dockerfile
       target: migrator
     container_name: db-migrate
     profiles:

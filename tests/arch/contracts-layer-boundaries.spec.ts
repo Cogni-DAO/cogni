@@ -50,7 +50,7 @@ function runDepCruise(probeDirs: string[]): {
 describe("Contracts layer boundaries", () => {
   it("allows contracts to import from shared", () => {
     const { exitCode, stderr } = runDepCruise([
-      "apps/operator/src/contracts/__arch_probes__",
+      "nodes/operator/app/src/contracts/__arch_probes__",
     ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
@@ -60,8 +60,8 @@ describe("Contracts layer boundaries", () => {
 
   it("blocks contracts from importing core", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/contracts/__arch_probes__",
-      "apps/operator/src/core/__arch_probes__",
+      "nodes/operator/app/src/contracts/__arch_probes__",
+      "nodes/operator/app/src/core/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -72,8 +72,8 @@ describe("Contracts layer boundaries", () => {
 
   it("blocks contracts from importing features", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/contracts/__arch_probes__",
-      "apps/operator/src/features/__arch_probes__",
+      "nodes/operator/app/src/contracts/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -84,8 +84,8 @@ describe("Contracts layer boundaries", () => {
 
   it("blocks contracts from importing ports", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/contracts/__arch_probes__",
-      "apps/operator/src/ports/__arch_probes__",
+      "nodes/operator/app/src/contracts/__arch_probes__",
+      "nodes/operator/app/src/ports/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -96,8 +96,8 @@ describe("Contracts layer boundaries", () => {
 
   it("blocks contracts from importing adapters", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/contracts/__arch_probes__",
-      "apps/operator/src/adapters/__arch_probes__",
+      "nodes/operator/app/src/contracts/__arch_probes__",
+      "nodes/operator/app/src/adapters/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -108,8 +108,8 @@ describe("Contracts layer boundaries", () => {
 
   it("blocks contracts from importing app", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/contracts/__arch_probes__",
-      "apps/operator/src/app/__arch_probes__",
+      "nodes/operator/app/src/contracts/__arch_probes__",
+      "nodes/operator/app/src/app/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -120,8 +120,8 @@ describe("Contracts layer boundaries", () => {
 
   it("blocks contracts from importing components", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/contracts/__arch_probes__",
-      "apps/operator/src/components/__arch_probes__",
+      "nodes/operator/app/src/contracts/__arch_probes__",
+      "nodes/operator/app/src/components/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);

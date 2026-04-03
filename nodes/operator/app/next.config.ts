@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@cogni/node-app"],
   // In monorepo: tell Next.js where the workspace root is so standalone output
   // includes shared packages and resolves node_modules correctly.
-  outputFileTracingRoot: path.join(__dirname, "../../"),
+  outputFileTracingRoot: path.join(__dirname, "../../../"),
   // Prevent Turbopack from bundling (and per-route duplicating) heavy server-only
   // packages. These resolve as Node.js requires at runtime instead. (spike.0203)
   serverExternalPackages: [

@@ -10,7 +10,7 @@
  *   - TERMINAL_ONLY_PERSIST: returns null if no assistant_final received (error runs)
  *   - SHARED_EVENT_ASSEMBLER: single source of truth for event→message conversion
  * Side-effects: none
- * Links: apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts, ai-events.ts
+ * Links: nodes/operator/app/src/app/api/internal/graphs/[graphId]/runs/route.ts, ai-events.ts
  * @public
  */
 

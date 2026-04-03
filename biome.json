@@ -9,7 +9,7 @@
   "files": {
     "includes": [
       "apps/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
-      "!apps/operator/src/components/reui",
+      "!nodes/operator/app/src/components/reui",
       "packages/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "services/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "tests/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",

@@ -5,9 +5,7 @@
 # See: https://pnpm.io/workspaces
 
 packages:
-  # Deployable applications
-  - "apps/*"
-  # Sovereign node applications + packages
+  # All node applications (operator + sovereign nodes)
   - "nodes/*/app"
   - "nodes/*/graphs"
   - "nodes/*/packages/*"

@@ -50,7 +50,7 @@ function runDepCruise(probeDirs: string[]): {
 describe("Bootstrap layer boundaries", () => {
   it("allows bootstrap to import from adapters", () => {
     const { exitCode, stderr } = runDepCruise([
-      "apps/operator/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
     ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
@@ -60,7 +60,7 @@ describe("Bootstrap layer boundaries", () => {
 
   it("allows bootstrap to import from ports", () => {
     const { exitCode, stderr } = runDepCruise([
-      "apps/operator/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
     ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
@@ -70,7 +70,7 @@ describe("Bootstrap layer boundaries", () => {
 
   it("allows bootstrap to import from shared", () => {
     const { exitCode, stderr } = runDepCruise([
-      "apps/operator/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
     ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
@@ -80,8 +80,8 @@ describe("Bootstrap layer boundaries", () => {
 
   it("blocks bootstrap from importing features", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/bootstrap/__arch_probes__",
-      "apps/operator/src/features/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -92,8 +92,8 @@ describe("Bootstrap layer boundaries", () => {
 
   it("blocks bootstrap from importing core directly", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/bootstrap/__arch_probes__",
-      "apps/operator/src/core/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/core/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -104,8 +104,8 @@ describe("Bootstrap layer boundaries", () => {
 
   it("blocks bootstrap from importing app", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/bootstrap/__arch_probes__",
-      "apps/operator/src/app/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/app/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -116,8 +116,8 @@ describe("Bootstrap layer boundaries", () => {
 
   it("blocks bootstrap from importing components", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/bootstrap/__arch_probes__",
-      "apps/operator/src/components/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/components/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);

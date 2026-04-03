@@ -23,7 +23,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
   describe("Allowed imports", () => {
     it("allows contracts importing shared schemas", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/contracts/ai.complete.v1.contract.ts",
+        "nodes/operator/app/src/contracts/ai.complete.v1.contract.ts",
         `import { baseSchema } from "@/shared/schemas"; export const aiCompleteSchema = baseSchema.extend({});`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -32,7 +32,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
 
     it("allows contracts importing shared validation utilities", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/contracts/user.profile.v1.contract.ts",
+        "nodes/operator/app/src/contracts/user.profile.v1.contract.ts",
         `import { validateEmail } from "@/shared/validation"; export const userProfileSchema = { email: validateEmail };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -41,7 +41,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
 
     it("allows contracts importing external validation libraries", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/contracts/auth.login.v1.contract.ts",
+        "nodes/operator/app/src/contracts/auth.login.v1.contract.ts",
         `import { z } from "zod"; export const loginSchema = z.object({ email: z.string() });`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -54,7 +54,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block contracts→core imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/contracts/ai.complete.v1.contract.ts",
+        "nodes/operator/app/src/contracts/ai.complete.v1.contract.ts",
         `import { Message } from "@/core"; export const schema = { message: Message };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -68,7 +68,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block contracts→features imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/contracts/auth.session.v1.contract.ts",
+        "nodes/operator/app/src/contracts/auth.session.v1.contract.ts",
         `import { execute } from "@/features/ai/services/complete"; export default execute;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -80,7 +80,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
 
     it("blocks contracts importing ports", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/contracts/llm.query.v1.contract.ts",
+        "nodes/operator/app/src/contracts/llm.query.v1.contract.ts",
         `import { LlmService } from "@/ports"; export const schema = { llm: LlmService };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -94,7 +94,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block contracts→adapters imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/contracts/db.query.v1.contract.ts",
+        "nodes/operator/app/src/contracts/db.query.v1.contract.ts",
         `import { DrizzleClient } from "@/adapters/server/db"; export default DrizzleClient;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -108,7 +108,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block contracts→app imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/contracts/api.route.v1.contract.ts",
+        "nodes/operator/app/src/contracts/api.route.v1.contract.ts",
         `import { middleware } from "@/app/middleware"; export default middleware;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -120,7 +120,7 @@ describe.skip("Contracts Layer Edge Schema Boundaries", () => {
 
     it("blocks contracts importing components", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/contracts/ui.form.v1.contract.ts",
+        "nodes/operator/app/src/contracts/ui.form.v1.contract.ts",
         `import { Button } from "@/components"; export default Button;`,
         { focusRulePrefixes: ["boundaries/"] }
       );

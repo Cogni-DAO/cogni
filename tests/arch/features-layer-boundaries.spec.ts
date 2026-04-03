@@ -50,7 +50,7 @@ function runDepCruise(probeDirs: string[]): {
 describe("Features layer boundaries", () => {
   it("allows features to import from shared", () => {
     const { exitCode, stderr } = runDepCruise([
-      "apps/operator/src/features/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
     ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
@@ -60,7 +60,7 @@ describe("Features layer boundaries", () => {
 
   it("allows features to import from components", () => {
     const { exitCode, stderr } = runDepCruise([
-      "apps/operator/src/features/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
     ]);
     if (exitCode !== 0) {
       console.error("STDERR:", stderr);
@@ -70,8 +70,8 @@ describe("Features layer boundaries", () => {
 
   it("blocks features from importing adapters", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/features/__arch_probes__",
-      "apps/operator/src/adapters/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
+      "nodes/operator/app/src/adapters/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -82,8 +82,8 @@ describe("Features layer boundaries", () => {
 
   it("blocks features from importing bootstrap", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/features/__arch_probes__",
-      "apps/operator/src/bootstrap/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
+      "nodes/operator/app/src/bootstrap/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);
@@ -94,8 +94,8 @@ describe("Features layer boundaries", () => {
 
   it("blocks features from importing styles", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/operator/src/features/__arch_probes__",
-      "apps/operator/src/styles/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
+      "nodes/operator/app/src/styles/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);

@@ -7,7 +7,7 @@
  * Scope: Provider-agnostic message types (OpenAI, Anthropic, etc. all use role+content). Does not include thread state, DB metadata, or UI concerns.
  * Invariants: SINGLE_SOURCE_OF_TRUTH — these are the canonical message definitions
  * Side-effects: none
- * Links: apps/operator/src/core/chat/model.ts (re-exports for backward compat)
+ * Links: nodes/operator/app/src/core/chat/model.ts (re-exports for backward compat)
  * @public
  */
 

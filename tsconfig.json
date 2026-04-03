@@ -3,7 +3,7 @@
   "files": [],
   "include": [],
   "references": [
-    { "path": "./apps/operator/tsconfig.app.json" },
+    { "path": "./nodes/operator/app/tsconfig.app.json" },
     { "path": "./packages/ai-core" },
     { "path": "./packages/ai-tools" },
     { "path": "./packages/aragon-osx" },

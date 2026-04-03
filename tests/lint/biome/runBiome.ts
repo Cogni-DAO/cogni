@@ -135,7 +135,7 @@ export async function lintFixture(
     // Determine test file path within temp dir
     const testFilePath = options.virtualRepoPath
       ? path.join(tempDir, options.virtualRepoPath)
-      : path.join(tempDir, "apps/operator/src", relPath);
+      : path.join(tempDir, "nodes/operator/app/src", relPath);
 
     // Create directory structure
     mkdirSync(path.dirname(testFilePath), { recursive: true });

@@ -62,7 +62,7 @@ describe("Services layer isolation", () => {
     it("blocks importing from src/ (Next.js app)", () => {
       const { exitCode, stdout } = runDepCruise([
         "services/scheduler-worker/__arch_probes__",
-        "apps/operator/src/shared",
+        "nodes/operator/app/src/shared",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);

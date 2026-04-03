@@ -11,7 +11,7 @@ services:
     image: ${APP_IMAGE:-cogni-template-local}
     build:
       context: ../../..
-      dockerfile: ./apps/operator/Dockerfile
+      dockerfile: ./nodes/operator/app/Dockerfile
     restart: always
     # TigerBeetle native client uses io_uring — blocked by default seccomp profile
     security_opt:

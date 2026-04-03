@@ -118,7 +118,7 @@
   "overrides": [
     {
       "includes": [
-        "apps/operator/src/infra/**",
+        "nodes/operator/app/src/infra/**",
         "packages/langgraph-graphs/**"
       ],
       "linter": {
@@ -131,14 +131,14 @@
     },
     {
       "includes": [
-        "apps/operator/src/shared/env/**/*.ts",
-        "apps/operator/src/shared/env/**/*.tsx",
-        "apps/operator/src/auth.ts",
-        "apps/operator/src/shared/observability/clientLogger.ts",
+        "nodes/operator/app/src/shared/env/**/*.ts",
+        "nodes/operator/app/src/shared/env/**/*.tsx",
+        "nodes/operator/app/src/auth.ts",
+        "nodes/operator/app/src/shared/observability/clientLogger.ts",
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.ts",
-        "apps/operator/tests/**/*.ts",
+        "nodes/operator/app/tests/**/*.ts",
         "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "docs/templates/**/*.ts",
         "services/**/*.ts",
@@ -161,7 +161,7 @@
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.{ts,tsx}",
-        "apps/operator/tests/**/*.{ts,tsx}",
+        "nodes/operator/app/tests/**/*.{ts,tsx}",
         "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "services/**/*.ts",
         "**/*.config.ts",
@@ -169,8 +169,8 @@
         "**/*.config.cjs",
         "**/*.config.mts",
         "drizzle.config.ts",
-        "apps/operator/src/shared/observability/logging/logger.ts",
-        "apps/operator/src/shared/observability/clientLogger.ts"
+        "nodes/operator/app/src/shared/observability/logging/logger.ts",
+        "nodes/operator/app/src/shared/observability/clientLogger.ts"
       ],
       "linter": {
         "rules": {
@@ -192,7 +192,7 @@
     },
     {
       "includes": [
-        "apps/operator/src/**/__arch_probes__/**",
+        "nodes/operator/app/src/**/__arch_probes__/**",
         "nodes/*/app/src/**/__arch_probes__/**"
       ],
       "linter": {
@@ -243,9 +243,9 @@
         "services/scheduler-worker/tsup.config.ts",
         "services/scheduler-worker/vitest.config.ts",
         "vitest.workspace.ts",
-        "apps/operator/vitest.component.config.mts",
-        "apps/operator/vitest.external.config.mts",
-        "apps/operator/vitest.stack.config.mts"
+        "nodes/operator/app/vitest.component.config.mts",
+        "nodes/operator/app/vitest.external.config.mts",
+        "nodes/operator/app/vitest.stack.config.mts"
       ],
       "linter": {
         "rules": {

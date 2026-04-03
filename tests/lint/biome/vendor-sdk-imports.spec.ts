@@ -22,7 +22,7 @@ import { lintFixture } from "./runBiome";
 describe.skip("Vendor SDK Import Restrictions", () => {
   it("blocks observability SaaS imports", async () => {
     const { errors, messages } = await lintFixture(
-      "apps/operator/src/components/tracking/Analytics.tsx",
+      "nodes/operator/app/src/components/tracking/Analytics.tsx",
       `import * as Sentry from "@sentry/nextjs";
        import { trace } from "dd-trace";
        import posthog from "posthog-js";
@@ -56,7 +56,7 @@ describe.skip("Vendor SDK Import Restrictions", () => {
 
   it("blocks auth SaaS imports", async () => {
     const { errors, messages } = await lintFixture(
-      "apps/operator/src/features/auth/LoginForm.tsx",
+      "nodes/operator/app/src/features/auth/LoginForm.tsx",
       `import { ClerkProvider } from "@clerk/nextjs";
        import { useAuth0 } from "@auth0/nextjs-auth0";
        export const LoginForm = () => <div>login</div>;`,
@@ -76,7 +76,7 @@ describe.skip("Vendor SDK Import Restrictions", () => {
 
   it("blocks BaaS and queue/cache imports", async () => {
     const { errors, messages } = await lintFixture(
-      "apps/operator/src/lib/database.ts",
+      "nodes/operator/app/src/lib/database.ts",
       `import { createClient } from "@supabase/supabase-js";
        import { Redis } from "@upstash/redis";
        import { initializeApp } from "firebase/app";
@@ -109,7 +109,7 @@ describe.skip("Vendor SDK Import Restrictions", () => {
 
   it("blocks Vercel platform SDKs", async () => {
     const { errors, messages } = await lintFixture(
-      "apps/operator/src/lib/deployment.ts",
+      "nodes/operator/app/src/lib/deployment.ts",
       `import { geolocation } from "@vercel/edge";
        import { analytics } from "@vercel/analytics";
        export const deployment = {};`,
@@ -135,7 +135,7 @@ describe.skip("Vendor SDK Import Restrictions", () => {
 
   it("allows standard library and framework imports", async () => {
     const { errors } = await lintFixture(
-      "apps/operator/src/components/ui/Button.tsx",
+      "nodes/operator/app/src/components/ui/Button.tsx",
       `import React from "react";
        import { NextResponse } from "next/server";
        import { drizzle } from "drizzle-orm";
@@ -149,7 +149,7 @@ describe.skip("Vendor SDK Import Restrictions", () => {
 
   it("allows vendor SDKs in infra adapters", async () => {
     const { errors } = await lintFixture(
-      "apps/operator/src/infra/auth/clerk.adapter.ts",
+      "nodes/operator/app/src/infra/auth/clerk.adapter.ts",
       `import { ClerkProvider } from "@clerk/nextjs";
        import * as Sentry from "@sentry/nextjs";
        export class ClerkAdapter {
@@ -163,7 +163,7 @@ describe.skip("Vendor SDK Import Restrictions", () => {
 
   it("blocks dynamic imports and require calls", async () => {
     const { errors, messages } = await lintFixture(
-      "apps/operator/src/lib/lazy-load.ts",
+      "nodes/operator/app/src/lib/lazy-load.ts",
       `export async function loadSentry() {
          const sentry = await import("@sentry/browser");
          const dd = require("dd-trace");
@@ -191,7 +191,7 @@ describe.skip("Vendor SDK Import Restrictions", () => {
 
   it("blocks subpath imports from vendor SDKs", async () => {
     const { errors, messages } = await lintFixture(
-      "apps/operator/src/features/auth/hooks.ts",
+      "nodes/operator/app/src/features/auth/hooks.ts",
       `import { useUser } from "@clerk/nextjs/server";
        import { getSession } from "@auth0/nextjs-auth0/edge";
        export const useAuthHooks = () => {};`,

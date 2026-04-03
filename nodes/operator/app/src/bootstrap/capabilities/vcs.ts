@@ -9,7 +9,7 @@
  *   - NO_SECRETS_IN_CONTEXT: GitHub App credentials resolved from env, never passed to tools
  *   - GRACEFUL_DEGRADATION: Returns stub if GH_REVIEW_APP_ID not configured
  * Side-effects: none (factory only)
- * Links: task.0242, apps/operator/src/adapters/server/vcs/github-vcs.adapter.ts
+ * Links: task.0242, nodes/operator/app/src/adapters/server/vcs/github-vcs.adapter.ts
  * @internal
  */
 

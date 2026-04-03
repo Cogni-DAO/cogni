@@ -7,7 +7,7 @@
  * Scope: Verifies deterministic message ID, terminal-only semantics, and tool part assembly.
  * Invariants: IDEMPOTENT_THREAD_PERSIST, TERMINAL_ONLY_PERSIST, SHARED_EVENT_ASSEMBLER
  * Side-effects: none
- * Links: apps/operator/src/features/ai/services/assemble-assistant-message.ts
+ * Links: nodes/operator/app/src/features/ai/services/assemble-assistant-message.ts
  * @internal
  */
 

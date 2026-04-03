@@ -15,7 +15,7 @@ RUN apk add --no-cache g++ make python3
 # 1. Copy dependency manifests first (maximizes install layer caching)
 #    --parents preserves directory structure with wildcards (BuildKit feature)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY --parents apps/operator/package.json ./
+COPY --parents nodes/operator/app/package.json ./
 COPY --parents packages/*/package.json ./
 COPY --parents nodes/*/app/package.json ./
 COPY --parents nodes/*/packages/*/package.json ./
@@ -54,7 +54,7 @@ ARG AUTH_SECRET_BUILD="build-time-placeholder-min-32-chars-xxxxxxxxxxxxxxxx"
 ENV AUTH_SECRET=${AUTH_SECRET_BUILD}
 
 # Build the web app
-RUN --mount=type=cache,id=next-cache,target=/app/apps/operator/.next/cache,sharing=locked \
+RUN --mount=type=cache,id=next-cache,target=/app/nodes/operator/app/.next/cache,sharing=locked \
     pnpm --filter operator build
 
 # Migrator – minimal image for database migrations via drizzle-kit
@@ -65,8 +65,8 @@ WORKDIR /app
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/apps/operator/src/shared/db ./apps/operator/src/shared/db
-COPY --from=builder /app/apps/operator/src/adapters/server/db/migrations ./apps/operator/src/adapters/server/db/migrations
+COPY --from=builder /app/nodes/operator/app/src/shared/db ./nodes/operator/app/src/shared/db
+COPY --from=builder /app/nodes/operator/app/src/adapters/server/db/migrations ./nodes/operator/app/src/adapters/server/db/migrations
 
 # Run canonical migration script (drizzle-kit migrate)
 CMD ["pnpm", "db:migrate:container"]
@@ -89,9 +89,9 @@ LABEL org.opencontainers.image.title="cogni-template"
 
 # Copy standalone bundle (includes production dependencies)
 # outputFileTracingRoot=../../ means standalone output mirrors monorepo structure
-COPY --from=builder --chown=nextjs:nodejs /app/apps/operator/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/operator/.next/static ./apps/operator/.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/apps/operator/public ./apps/operator/public
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/.next/static ./nodes/operator/app/.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/public ./nodes/operator/app/public
 
 # Codex CLI for BYO-AI ChatGPT execution.
 # Standalone output tracing can't detect spawned binaries.
@@ -105,8 +105,8 @@ RUN corepack enable pnpm && pnpm add -g @openai/codex@0.116.0 @openai/codex-sdk@
 COPY --from=builder --chown=nextjs:nodejs /tmp/codex-native/@openai/ ./node_modules/@openai/
 
 # MCP server config — parseMcpConfigFromEnv reads config/mcp.servers.json relative to CWD.
-# Next.js standalone does process.chdir(__dirname) → CWD becomes /app/apps/operator at runtime.
-COPY --from=builder --chown=nextjs:nodejs /app/config/mcp.servers.json ./apps/operator/config/mcp.servers.json
+# Next.js standalone does process.chdir(__dirname) → CWD becomes /app/nodes/operator/app at runtime.
+COPY --from=builder --chown=nextjs:nodejs /app/config/mcp.servers.json ./nodes/operator/app/config/mcp.servers.json
 
 USER nextjs
 
@@ -115,4 +115,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -fsS http://localhost:3000/livez || exit 1
 
-CMD ["node", "apps/operator/server.js"]
+CMD ["node", "nodes/operator/app/server.js"]

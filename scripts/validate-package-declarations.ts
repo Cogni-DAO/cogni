@@ -67,8 +67,8 @@ function main(): void {
     const typesPath = pkgJson.exports?.["."]?.types ?? pkgJson.types;
 
     if (!typesPath) {
-      // Skip apps — they are workspace members but not publishable packages
-      if (ref.path.startsWith("./apps/")) {
+      // Skip node apps — they are workspace members but not publishable packages
+      if (ref.path.includes("/app/tsconfig")) {
         continue;
       }
       console.error(`✗ ${ref.path}: No types export defined in package.json`);

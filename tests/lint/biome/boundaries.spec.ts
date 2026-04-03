@@ -23,7 +23,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
   describe("Core layer", () => {
     it("allows core importing core", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/core/auth/session.ts",
+        "nodes/operator/app/src/core/auth/session.ts",
         `import { other } from "@/core/other/model"; export default other;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -32,7 +32,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
 
     it("blocks core importing features", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/core/auth/session.ts",
+        "nodes/operator/app/src/core/auth/session.ts",
         `import { Terminal } from "@/features/home/components/Terminal"; export default Terminal;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -44,7 +44,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
 
     it("blocks core importing ports", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/core/auth/session.ts",
+        "nodes/operator/app/src/core/auth/session.ts",
         `import { LlmService } from "@/ports/llm.port"; export default LlmService;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -58,7 +58,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block core→adapters imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/core/auth/session.ts",
+        "nodes/operator/app/src/core/auth/session.ts",
         `import { DbClient } from "@/adapters/server/db"; export default DbClient;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -72,7 +72,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
   describe("Ports layer", () => {
     it("allows ports importing core", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/ports/auth.port.ts",
+        "nodes/operator/app/src/ports/auth.port.ts",
         `import { AuthSession } from "@/core/auth/session"; export type AuthPort = { session: AuthSession };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -81,7 +81,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
 
     it("allows ports importing core types via canonical entry", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/ports/user.port.ts",
+        "nodes/operator/app/src/ports/user.port.ts",
         `import type { User } from "@/core"; export interface UserPort { getUser(): User; };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -92,7 +92,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block ports→adapters imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/ports/auth.port.ts",
+        "nodes/operator/app/src/ports/auth.port.ts",
         `import { DbClient } from "@/adapters/server/db"; export default DbClient;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -106,7 +106,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block ports→features imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/ports/auth.port.ts",
+        "nodes/operator/app/src/ports/auth.port.ts",
         `import { authAction } from "@/features/auth/actions"; export default authAction;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -120,7 +120,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
   describe("App layer", () => {
     it("allows app importing features", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/app/api/auth/route.ts",
+        "nodes/operator/app/src/app/api/auth/route.ts",
         `import { authAction } from "@/features/auth/actions"; export default authAction;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -129,7 +129,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
 
     it("allows app importing features components", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/app/home/page.tsx",
+        "nodes/operator/app/src/app/home/page.tsx",
         `import { Terminal } from "@/features/home/components/Terminal"; export default () => <Terminal />;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -138,7 +138,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
 
     it("allows app importing bootstrap container", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/app/api/ai/route.ts",
+        "nodes/operator/app/src/app/api/ai/route.ts",
         `import { resolveAiDeps } from "@/bootstrap/container"; export const deps = resolveAiDeps();`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -147,7 +147,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
 
     it("allows app importing contracts", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/app/api/ai/complete/route.ts",
+        "nodes/operator/app/src/app/api/ai/complete/route.ts",
         `import { aiCompleteOperation } from "@/contracts/ai.complete.v1.contract"; export default aiCompleteOperation;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -156,7 +156,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
 
     it("allows app importing components barrel", async () => {
       const { errors } = await lintFixture(
-        "apps/operator/src/app/layout.tsx",
+        "nodes/operator/app/src/app/layout.tsx",
         `import { Button } from "@/components"; export default () => <Button />;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -167,7 +167,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block app→core direct imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/app/api/auth/route.ts",
+        "nodes/operator/app/src/app/api/auth/route.ts",
         `import { AuthService } from "@/core/auth/service"; export default AuthService;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -181,7 +181,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block app→adapters direct imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/app/api/data/route.ts",
+        "nodes/operator/app/src/app/api/data/route.ts",
         `import { LiteLlmAdapter } from "@/adapters/server/ai"; export default LiteLlmAdapter;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -195,7 +195,7 @@ describe.skip("Hexagonal Layer Boundaries", () => {
   describe("Shared layer", () => {
     it("blocks shared importing features", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/operator/src/shared/util/bad.ts",
+        "nodes/operator/app/src/shared/util/bad.ts",
         `import { Terminal } from "@/features/home/components/Terminal"; export default Terminal;`,
         { focusRulePrefixes: ["boundaries/"] }
       );

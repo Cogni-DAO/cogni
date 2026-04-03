@@ -1,0 +1,18 @@
+# Operator Node — repo-spec
+# The operator is the root node. Full identity in /.cogni/repo-spec.yaml.
+# This file provides the same shape as other node repo-specs for uniform discovery.
+
+schema_version: "0.1.4"
+
+node_id: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d"
+scope_id: "a28a8b1e-1f9d-5cd5-9329-569e4819feda"
+scope_key: "default"
+
+intent:
+  name: operator
+
+cogni_dao:
+  chain_id: "8453"
+
+payments:
+  status: active

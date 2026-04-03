@@ -20,7 +20,7 @@ import { lintFixture } from "./runEslint";
 describe.skip("n/no-process-env rule", () => {
   it("should block process.env in regular app files", async () => {
     const result = await lintFixture(
-      "apps/operator/src/app/page.tsx",
+      "nodes/operator/app/src/app/page.tsx",
       `export default function Page() {
   const env = process.env.NODE_ENV;
   return <div>{env}</div>;
@@ -38,7 +38,7 @@ describe.skip("n/no-process-env rule", () => {
 
   it("should block process.env in component files", async () => {
     const result = await lintFixture(
-      "apps/operator/src/components/MyComponent.tsx",
+      "nodes/operator/app/src/components/MyComponent.tsx",
       `export function MyComponent() {
   if (process.env.NODE_ENV === 'development') {
     console.log('dev mode');
@@ -58,7 +58,7 @@ describe.skip("n/no-process-env rule", () => {
 
   it("should allow process.env in environment files", async () => {
     const result = await lintFixture(
-      "apps/operator/src/shared/env/server.ts",
+      "nodes/operator/app/src/shared/env/server.ts",
       `export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   databaseUrl: process.env.DATABASE_URL,
@@ -70,7 +70,7 @@ describe.skip("n/no-process-env rule", () => {
 
   it("should allow process.env in client env files", async () => {
     const result = await lintFixture(
-      "apps/operator/src/shared/env/client.ts",
+      "nodes/operator/app/src/shared/env/client.ts",
       `export const clientConfig = {
   publicKey: process.env.NEXT_PUBLIC_API_KEY,
 };`

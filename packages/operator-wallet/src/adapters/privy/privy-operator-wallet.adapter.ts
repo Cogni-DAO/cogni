@@ -38,7 +38,7 @@ const BASE_CAIP2 = `eip155:${BASE_CHAIN_ID}`;
 /** Distribution incentive: 0 = no third-party reward for calling distribute(). */
 const DISTRIBUTION_INCENTIVE = 0;
 
-/** USDC on Base (6 decimals). Canonical source: apps/operator/src/shared/web3/chain.ts:USDC_TOKEN_ADDRESS */
+/** USDC on Base (6 decimals). Canonical source: nodes/operator/app/src/shared/web3/chain.ts:USDC_TOKEN_ADDRESS */
 const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as Address;
 const USDC_DECIMALS = 6n;
 
