@@ -86,7 +86,7 @@ export interface ProxyStopResult {
 /** Path to the nginx config template (lazy to avoid serverEnv() at import time) */
 function getTemplatePath(): string {
   return join(
-    serverEnv().COGNI_REPO_ROOT,
+    serverEnv().COGNI_REPO_ROOT ?? "/nonexistent",
     "infra/compose/sandbox-proxy/nginx.conf.template"
   );
 }

@@ -38,7 +38,7 @@ export function createReviewAdapterDeps(
     privateKeyBase64
   );
 
-  const repoRoot = serverEnv().COGNI_REPO_ROOT;
+  const repoRoot = serverEnv().COGNI_REPO_ROOT ?? "/nonexistent";
 
   return {
     createCheckRun: (owner: string, repo: string, headSha: string) =>

@@ -60,6 +60,10 @@ export const stubRepoCapability: RepoCapability = {
  * @returns RepoCapability backed by appropriate adapters
  */
 export function createRepoCapability(env: ServerEnv): RepoCapability {
+  if (!env.COGNI_REPO_ROOT) {
+    return stubRepoCapability;
+  }
+
   if (env.isTestMode) {
     const fake = new FakeRepoAdapter();
     return {
