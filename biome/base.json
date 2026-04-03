@@ -146,7 +146,8 @@
         "**/*.config.js",
         "**/*.config.cjs",
         "**/*.config.mts",
-        "drizzle.config.ts"
+        "drizzle.config.ts",
+        "packages/contributor-cli/src/**/*.ts"
       ],
       "linter": {
         "rules": {
@@ -170,7 +171,8 @@
         "**/*.config.mts",
         "drizzle.config.ts",
         "nodes/operator/app/src/shared/observability/logging/logger.ts",
-        "nodes/operator/app/src/shared/observability/clientLogger.ts"
+        "nodes/operator/app/src/shared/observability/clientLogger.ts",
+        "packages/contributor-cli/src/**/*.ts"
       ],
       "linter": {
         "rules": {
@@ -245,7 +247,8 @@
         "vitest.workspace.ts",
         "nodes/operator/app/vitest.component.config.mts",
         "nodes/operator/app/vitest.external.config.mts",
-        "nodes/operator/app/vitest.stack.config.mts"
+        "nodes/operator/app/vitest.stack.config.mts",
+        "packages/contributor-cli/tsup.config.ts"
       ],
       "linter": {
         "rules": {
