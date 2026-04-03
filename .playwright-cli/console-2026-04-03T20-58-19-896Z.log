@@ -1,6 +1,0 @@
-[    5389ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://test.cognidao.org/_next/static/chunks/6e00aac5d678c7a6.js:0
-[    5731ms] ChunkLoadError: Failed to load chunk /_next/static/chunks/6e00aac5d678c7a6.js from module 405189
-    at https://test.cognidao.org/_next/static/chunks/turbopack-13196c0baa7934c1.js:1:5917
-[    5402ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://test.cognidao.org/_next/static/chunks/baed5a830fcb345d.js:0
-[    5402ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://test.cognidao.org/_next/static/chunks/a006b5e1962a417b.js:0
-[    5410ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://test.cognidao.org/_next/static/chunks/e93dbcb7ca185473.js:0

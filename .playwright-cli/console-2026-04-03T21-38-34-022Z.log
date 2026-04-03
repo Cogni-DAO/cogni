@@ -1,4 +1,0 @@
-[    7092ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://test.cognidao.org/api/v1/public/treasury/snapshot:0
-[    7516ms] [ERROR] Failed to load resource: the server responded with a status of 403 () @ https://pulse.walletconnect.org/e?projectId=21fef48091f12692cad574a6f7753643&st=appkit&sv=html-core-1.7.8:0
-[    7516ms] [ERROR] Origin https://test.cognidao.org not found on Allowlist - update configuration on cloud.reown.com @ https://test.cognidao.org/_next/static/chunks/e5952ff51eea9a74.js:1
-[    9860ms] [ERROR] Failed to load resource: the server responded with a status of 500 () @ https://test.cognidao.org/api/v1/public/treasury/snapshot:0
