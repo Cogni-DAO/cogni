@@ -76,7 +76,8 @@ function getProviderKey(modelId: string): keyof typeof PROVIDER_ICONS {
 
   const key = match[1].toLowerCase();
   if (key in PROVIDER_ICONS) return key as keyof typeof PROVIDER_ICONS;
-  if (key in MODEL_PREFIX_TO_PROVIDER) return MODEL_PREFIX_TO_PROVIDER[key]!;
+  if (key in MODEL_PREFIX_TO_PROVIDER)
+    return MODEL_PREFIX_TO_PROVIDER[key] ?? "default";
   return "default";
 }
 

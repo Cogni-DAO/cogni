@@ -124,8 +124,10 @@ export function createKnowledgeReadImplementation(
         };
       }
 
+      // After the `if (input.id)` early return, the Zod refine guarantees domain is defined
+      const domain = input.domain ?? "";
       const entries = await deps.knowledgeCapability.list({
-        domain: input.domain!,
+        domain,
         tags: input.tags,
         limit: input.limit ?? 20,
       });

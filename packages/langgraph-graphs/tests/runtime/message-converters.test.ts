@@ -56,7 +56,7 @@ describe("toBaseMessage", () => {
     expect(result).toBeInstanceOf(AIMessage);
     const aiMsg = result as AIMessage;
     expect(aiMsg.tool_calls).toHaveLength(1);
-    expect(aiMsg.tool_calls![0]).toMatchObject({
+    expect(aiMsg.tool_calls?.[0]).toMatchObject({
       id: "call_abc123",
       name: "search",
       args: { q: "test" },

@@ -204,6 +204,12 @@ describe("[multi-node] billing isolation (task.0258)", () => {
   // Per-node test actors — seeded in each node's DB
   const actors: Record<string, TestActor> = {};
 
+  function requireActor(name: string): TestActor {
+    const actor = actors[name];
+    if (!actor) throw new Error(`Test actor "${name}" not seeded`);
+    return actor;
+  }
+
   beforeAll(async () => {
     // Node liveness already verified by globalSetup (wait-for-probes-multi.ts)
     // Seed test actors in each node's DB
@@ -227,12 +233,12 @@ describe("[multi-node] billing isolation (task.0258)", () => {
   // ── Test 1: Operator baseline ───────────────────────────────────────────
 
   it("operator callback → receipt in operator DB", async () => {
-    const actor = actors.operator!;
+    const actor = requireActor("operator");
     const { entry, litellmCallId } = makeCallbackPayload(
       actor.billingAccountId
     );
 
-    const res = await postBillingIngest(NODES.operator!.baseUrl, [entry]);
+    const res = await postBillingIngest(NODES.operator?.baseUrl, [entry]);
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -243,18 +249,18 @@ describe("[multi-node] billing isolation (task.0258)", () => {
       actor.billingAccountId
     );
     expect(receipts.length).toBe(1);
-    expect(receipts[0]!.sourceReference).toContain(litellmCallId);
+    expect(receipts[0]?.sourceReference).toContain(litellmCallId);
   });
 
   // ── Test 2: Poly isolation ──────────────────────────────────────────────
 
   it("poly callback → receipt in poly DB (NODE_LOCAL_METERING_PRIMARY)", async () => {
-    const actor = actors.poly!;
+    const actor = requireActor("poly");
     const { entry, litellmCallId } = makeCallbackPayload(
       actor.billingAccountId
     );
 
-    const res = await postBillingIngest(NODES.poly!.baseUrl, [entry]);
+    const res = await postBillingIngest(NODES.poly?.baseUrl, [entry]);
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -265,18 +271,18 @@ describe("[multi-node] billing isolation (task.0258)", () => {
       actor.billingAccountId
     );
     expect(receipts.length).toBe(1);
-    expect(receipts[0]!.sourceReference).toContain(litellmCallId);
+    expect(receipts[0]?.sourceReference).toContain(litellmCallId);
   });
 
   // ── Test 3: Resy isolation ──────────────────────────────────────────────
 
   it("resy callback → receipt in resy DB (NODE_LOCAL_METERING_PRIMARY)", async () => {
-    const actor = actors.resy!;
+    const actor = requireActor("resy");
     const { entry, litellmCallId } = makeCallbackPayload(
       actor.billingAccountId
     );
 
-    const res = await postBillingIngest(NODES.resy!.baseUrl, [entry]);
+    const res = await postBillingIngest(NODES.resy?.baseUrl, [entry]);
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -287,13 +293,13 @@ describe("[multi-node] billing isolation (task.0258)", () => {
       actor.billingAccountId
     );
     expect(receipts.length).toBe(1);
-    expect(receipts[0]!.sourceReference).toContain(litellmCallId);
+    expect(receipts[0]?.sourceReference).toContain(litellmCallId);
   });
 
   // ── Test 4: Cross-node isolation ────────────────────────────────────────
 
   it("poly receipt absent from operator + resy DBs (DB_PER_NODE)", async () => {
-    const polyActor = actors.poly!;
+    const polyActor = requireActor("poly");
 
     // Query operator and resy DBs for the poly actor's billing account
     const operatorReceipts = await queryReceipts(
@@ -312,14 +318,14 @@ describe("[multi-node] billing isolation (task.0258)", () => {
   // ── Test 5: Idempotency ─────────────────────────────────────────────────
 
   it("duplicate callback is idempotent per node (CHARGE_RECEIPTS_IDEMPOTENT_BY_CALL_ID)", async () => {
-    const actor = actors.operator!;
+    const actor = requireActor("operator");
     const { entry } = makeCallbackPayload(actor.billingAccountId);
 
     // Send same payload twice
-    const res1 = await postBillingIngest(NODES.operator!.baseUrl, [entry]);
+    const res1 = await postBillingIngest(NODES.operator?.baseUrl, [entry]);
     expect(res1.status).toBe(200);
 
-    const res2 = await postBillingIngest(NODES.operator!.baseUrl, [entry]);
+    const res2 = await postBillingIngest(NODES.operator?.baseUrl, [entry]);
     expect(res2.status).toBe(200);
 
     // Should still be exactly the receipts from test 1 + this one (no duplicates from double-send)
@@ -341,7 +347,7 @@ describe("[multi-node] billing isolation (task.0258)", () => {
     const { entry } = makeCallbackPayload(randomUUID());
 
     const res = await postBillingIngest(
-      NODES.operator!.baseUrl,
+      NODES.operator?.baseUrl,
       [entry],
       "wrong-token-that-should-be-rejected"
     );

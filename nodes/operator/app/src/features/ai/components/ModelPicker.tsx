@@ -195,7 +195,7 @@ export function ModelPicker({
 
   const displayName =
     backend === "chatgpt" && isChatGptModel
-      ? selectedChatGptModel!.name
+      ? selectedChatGptModel?.name
       : selectedOpenRouterModel?.label ||
         selectedOpenRouterModel?.ref.modelId ||
         "Select model";
