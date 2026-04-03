@@ -17,5 +17,6 @@ data:
   TEMPORAL_NAMESPACE: "cogni-preview"
   TEMPORAL_TASK_QUEUE: "scheduler-tasks"
   REDIS_URL: "redis://redis-external:6379"
-  # COGNI_REPO_PATH intentionally unset — requires git-sync sidecar (not wired yet).
-  # When unset, serverEnv() leaves COGNI_REPO_ROOT=undefined and repo tools are disabled.
+  # Repo-spec baked into image at /app/.cogni/repo-spec.yaml (no git-sync needed).
+  # Updated every CI build via COPY in Dockerfile.
+  COGNI_REPO_PATH: "/app"
