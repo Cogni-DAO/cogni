@@ -41,60 +41,74 @@ Operator is the only node app living outside `nodes/`. It sits at `apps/operator
 
 Operator has only 8 unique files vs node-template (DAO setup flow + VCS adapter). Everything else is shared platform code. The "operator plane" is a role distinction, not a code structure distinction.
 
+## Reference audit
+
+`grep -rl "apps/operator"` finds references in 4 categories:
+
+| Category                         | Count     | Action                                             |
+| -------------------------------- | --------- | -------------------------------------------------- |
+| Config/build (must fix)          | 24 files  | sed replace `apps/operator` → `nodes/operator/app` |
+| Docs/specs (update refs)         | 19 files  | sed replace in prose                               |
+| Work items/handoffs (historical) | 81 files  | Leave as-is — historical records                   |
+| Tests (arch probes, lint)        | ~30 files | sed replace paths                                  |
+
 ## Plan
 
-### Pre-flight
+### 1. Move the directory
 
-- [ ] Verify integration/multi-node is clean and all task.0248 phases merged
-- [ ] Snapshot: `find apps/operator -type f | wc -l` for before/after comparison
-
-### Move
-
-- [ ] `mkdir -p nodes/operator && mv apps/operator nodes/operator/app`
+- [ ] `mkdir -p nodes/operator && git mv apps/operator nodes/operator/app`
 - [ ] Create `nodes/operator/.cogni/repo-spec.yaml` (copy from node-template, update node identity)
-- [ ] Update `nodes/operator/app/next.config.ts`: `outputFileTracingRoot` depth `../../` → `../../../` (matches other nodes)
-- [ ] Update `nodes/operator/app/tsconfig.app.json`: verify `baseUrl` and path aliases resolve
-- [ ] Update `nodes/operator/app/package.json`: verify name field
 
-### Workspace wiring
+### 2. Fix operator-internal paths
 
-- [ ] Update `pnpm-workspace.yaml`: remove `apps/*` glob (all apps now under `nodes/*/app`)
-- [ ] `pnpm install` — verify lockfile resolves
-- [ ] Update root `tsconfig.json`: path aliases `@/*` → `nodes/operator/app/src/*` (was `apps/operator/src/*`)
-- [ ] Update root `tsconfig.base.json`: same path alias update
+- [ ] `nodes/operator/app/next.config.ts`: `outputFileTracingRoot` `"../../"` → `"../../../"`
+- [ ] `nodes/operator/app/Dockerfile`: COPY/WORKDIR paths (monorepo root offset changes)
+- [ ] `nodes/operator/app/package.json`: verify name field resolves
 
-### Docker + CI
+### 3. Workspace + TypeScript wiring (24 files)
 
-- [ ] Update `apps/operator/Dockerfile` → `nodes/operator/app/Dockerfile` (path references inside)
-- [ ] Update `infra/compose/runtime/docker-compose.yml`: app service build context
-- [ ] Update `infra/compose/runtime/docker-compose.dev.yml`: app service build context
-- [ ] Update `.github/workflows/ci.yaml`: all `apps/operator` path references
-- [ ] Update any scripts referencing `apps/operator` (`scripts/`, `infra/`)
+- [ ] `pnpm-workspace.yaml`: remove `apps/*` glob
+- [ ] `tsconfig.json`: update references path
+- [ ] `tsconfig.base.json`: `@/*` paths `apps/operator/src/*` → `nodes/operator/app/src/*`
+- [ ] `drizzle.config.ts`: schema path
+- [ ] `vitest.workspace.ts`: operator include pattern
+- [ ] `package.json` (root): workspace scripts referencing operator
 
-### Dependency cruiser + lint
+### 4. Lint + arch enforcement (12 files)
 
-- [ ] Update `.dependency-cruiser.cjs`: operator path references
-- [ ] Update `biome/` config if it references `apps/operator`
-- [ ] Update `eslint` config paths in package.json lint scripts
+- [ ] `.dependency-cruiser.cjs`: all operator path patterns
+- [ ] `biome.json`, `biome/app.json`, `biome/base.json`: operator overrides
+- [ ] `eslint.config.mjs`, `eslint/chain-governance.config.mjs`, `eslint/ui-governance.config.mjs`
+- [ ] `tests/arch/*.spec.ts`: operator path in test subjects (~12 files)
+- [ ] `tests/lint/**/*.spec.ts`: operator path in lint subjects (~14 files)
 
-### Documentation
+### 5. Docker + CI + scripts (8 files)
 
-- [ ] Update `CLAUDE.md`: usage commands, directory references
-- [ ] Update `docs/spec/architecture.md`: directory structure diagram
-- [ ] Update `docs/spec/node-app-shell.md`: file pointers
-- [ ] Update `docs/guides/multi-node-dev.md`: operator references
-- [ ] Remove stale `apps/` AGENTS.md if the directory is empty
+- [ ] `.github/workflows/ci.yaml`: build context, filter paths
+- [ ] `infra/compose/runtime/docker-compose.yml`: app service build context
+- [ ] `infra/compose/runtime/docker-compose.dev.yml`: app service build context
+- [ ] `infra/catalog/operator.yaml`: path references
+- [ ] `scripts/check-all.sh`, `scripts/check-fast.sh`, `scripts/ci/build.sh`, `scripts/ci/compute_migrator_fingerprint.sh`
+- [ ] `scripts/check-root-layout.ts`
+
+### 6. Docs (19 files — update live references only)
+
+- [ ] `CLAUDE.md`
+- [ ] `docs/spec/architecture.md`, `docs/spec/node-app-shell.md`, `docs/spec/build-architecture.md`
+- [ ] `docs/guides/multi-node-dev.md`, `docs/guides/full-stack-testing.md`
+- [ ] Other specs with `apps/operator` references (~13 files)
 - [ ] Create `nodes/operator/AGENTS.md`
+- [ ] Remove empty `apps/` directory or keep for future non-node apps
 
-### Validate
+### 7. Validate
 
 - [ ] `pnpm install`
 - [ ] `pnpm packages:build`
 - [ ] `pnpm check:fast`
-- [ ] `pnpm --filter operator build` (next build passes)
+- [ ] `pnpm --filter operator build`
 - [ ] `pnpm check:docs`
 
-### Post-merge coordination
+### 8. Post-merge
 
 - [ ] Notify Argo CD dev: operator deploy target path changed
 - [ ] Verify `pnpm dev` still works (operator on port 3000)
