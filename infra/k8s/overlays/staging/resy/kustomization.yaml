@@ -13,7 +13,7 @@ namePrefix: resy-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    newTag: "staging-placeholder-resy"
+    digest: "sha256:26ba9828434193d92b6ec81269080ff012022a4abc51953efaf40829a322eb67"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
     newTag: "staging-placeholder-resy-migrate"
