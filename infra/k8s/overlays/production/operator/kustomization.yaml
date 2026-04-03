@@ -43,6 +43,12 @@ patches:
       - op: replace
         path: /data/REDIS_URL
         value: "redis://operator-redis-external:6379"
+      - op: add
+        path: /data/NEXTAUTH_URL
+        value: "https://cognidao.org"
+      - op: add
+        path: /data/AUTH_TRUST_HOST
+        value: "true"
   # NodePort assignment (operator = 30000) + instance label on selector.
   # Instance label prevents cross-node service routing: namePrefix only renames
   # resource names, not labels/selectors, so without this every Service

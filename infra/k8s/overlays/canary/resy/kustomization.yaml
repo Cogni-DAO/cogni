@@ -43,6 +43,12 @@ patches:
       - op: replace
         path: /data/REDIS_URL
         value: "redis://resy-redis-external:6379"
+      - op: add
+        path: /data/NEXTAUTH_URL
+        value: "https://resy-test.cognidao.org"
+      - op: add
+        path: /data/AUTH_TRUST_HOST
+        value: "true"
   # NodePort + instance label on selector (prevents cross-node routing)
   - target:
       kind: Service
