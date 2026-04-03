@@ -21,8 +21,10 @@
 | 0 | 1 | 3 | needs_merge | task.0257 | Fix node identity — wire node_id from repo-spec, not env var slug | Operator Plane | proj.operator-plane |
 | 0 | 1 | 2 | needs_triage | bug.0261 | CogniNodeRouter has four production reliability gaps — silent failures, no retry, unstructured logs |  |  |
 | 0 | 1 | 1 | needs_merge | task.0272 | Wire nodeId from repo-spec into logger base bindings and metrics default labels | Operator Plane | proj.operator-plane |
+| 0 | 1 | 2 | needs_triage | bug.0276 | K8s deployed app crashes to white — client-side exception after initial render | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
@@ -74,6 +76,7 @@
 | 1 | 3 | 3 | needs_merge | task.0247 | Multi-node CI/CD deployment — Argo CD GitOps on k3s | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 3 | 2 | needs_implement | task.0254 | Upgrade poly node landing page onto full platform base | Operator Plane | proj.operator-plane |
 | 1 | 3 | 3 | needs_design | task.0259 | Unified rounded UI theming — buttons, cards, dialogs across all nodes | Operator Plane | proj.operator-plane |
+| 1 | 3 | 3 | needs_design | task.0278 | Git manager skill + GitHub App permissions for AI branch operations | Agentic Dev Setup | proj.agentic-dev-setup |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |

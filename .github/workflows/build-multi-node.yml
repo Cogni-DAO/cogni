@@ -216,11 +216,13 @@ jobs:
 
           scripts/ci/promote-k8s-image.sh \
             --app poly \
-            --digest "${{ steps.digests.outputs.poly }}"
+            --digest "${{ steps.digests.outputs.poly }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
 
           scripts/ci/promote-k8s-image.sh \
             --app resy \
-            --digest "${{ steps.digests.outputs.resy }}"
+            --digest "${{ steps.digests.outputs.resy }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
 
           scripts/ci/promote-k8s-image.sh \
             --app scheduler-worker \
