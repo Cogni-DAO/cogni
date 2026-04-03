@@ -16,14 +16,14 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch: worktree-cd-pipeline-analysis
-pr: https://github.com/Cogni-DAO/node-template/pull/695
+branch: deploy/multi-node
+pr:
 reviewer:
 revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-04-01
-updated: 2026-04-02
+updated: 2026-04-03
 labels: [cicd, deployment, nodes, infrastructure, argocd, gitops]
 external_refs:
 ---
@@ -196,3 +196,9 @@ Implications:
 - [ ] Compose infra on VM: postgres, temporal, litellm, redis (deploy.sh)
 - [ ] DNS records for poly + resy subdomains
 - [ ] Full green status card from /deploy-node skill
+
+## Links
+
+- Handoff: [handoff](../handoffs/task.0247.handoff.md)
+- Spec: [cd-pipeline-e2e.md](../../docs/spec/cd-pipeline-e2e.md)
+- Skill: [deploy-node](../../.claude/skills/deploy-node/SKILL.md)
