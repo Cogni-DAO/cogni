@@ -1,0 +1,111 @@
+name: Promote k8s Staging Overlays
+
+# Triggered by staging-preview success. Updates Kustomize overlay digests
+# so Argo CD auto-syncs apps to the tested image.
+#
+# Separate workflow to avoid branch-mutation loop (staging-preview is triggered
+# by push to staging; committing back would retrigger it even with [skip ci]).
+
+on:
+  workflow_run:
+    workflows: ["Staging Preview"]
+    types: [completed]
+    branches: [staging]
+
+permissions:
+  contents: write
+  packages: read
+
+concurrency:
+  group: promote-k8s-staging
+  cancel-in-progress: true
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout staging
+        uses: actions/checkout@v4
+        with:
+          ref: staging
+          fetch-depth: 1
+          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+
+      - name: Login to GHCR (read digests)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image digests
+        id: digests
+        env:
+          IMAGE_NAME: ghcr.io/${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          IMAGE_NAME=$(echo "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
+          TAG="preview-${SHA}"
+
+          # Pull and resolve digest for each image
+          resolve_digest() {
+            local tag="$1"
+            docker pull "${IMAGE_NAME}:${tag}" >/dev/null 2>&1
+            docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE_NAME}:${tag}"
+          }
+
+          # App image (used by operator — poly/resy use node-template repo)
+          APP_DIGEST=$(resolve_digest "$TAG")
+          echo "app_digest=$APP_DIGEST" >> $GITHUB_OUTPUT
+
+          # Migrator (same base, -migrate suffix)
+          MIGRATOR_DIGEST=$(resolve_digest "${TAG}-migrate")
+          echo "migrator_digest=$MIGRATOR_DIGEST" >> $GITHUB_OUTPUT
+
+          # Scheduler-worker
+          SW_DIGEST=$(resolve_digest "${TAG}-scheduler-worker")
+          echo "sw_digest=$SW_DIGEST" >> $GITHUB_OUTPUT
+
+          echo "✅ Resolved digests:"
+          echo "  App: $APP_DIGEST"
+          echo "  Migrator: $MIGRATOR_DIGEST"
+          echo "  Scheduler-worker: $SW_DIGEST"
+
+      - name: Update overlay digests
+        env:
+          # Unset GITHUB_SHA so promote script skips auto-commit.
+          # We batch all overlay updates into one atomic commit below.
+          GITHUB_SHA: ""
+        run: |
+          scripts/ci/promote-k8s-image.sh \
+            --app operator \
+            --digest "${{ steps.digests.outputs.app_digest }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator_digest }}"
+
+          scripts/ci/promote-k8s-image.sh \
+            --app scheduler-worker \
+            --digest "${{ steps.digests.outputs.sw_digest }}"
+
+          # Note: poly/resy use ghcr.io/cogni-dao/node-template, not cogni-template.
+          # Their images are built from nodes/{name}/app/Dockerfile with separate tags.
+          # When multi-node CI lands (task.0260), add promote steps here for each node.
+          # For now, poly/resy overlays use placeholder tags updated manually.
+
+      - name: Commit and push overlay updates
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add infra/k8s/overlays/staging/
+
+          if git diff --cached --quiet; then
+            echo "No overlay changes (digests unchanged)"
+          else
+            SHORT_SHA=$(echo "$SHA" | cut -c1-8)
+            git commit -m "chore(cd): promote staging overlays to ${SHORT_SHA} [skip ci]"
+            git push origin staging
+            echo "✅ Overlay digests updated on staging"
+          fi

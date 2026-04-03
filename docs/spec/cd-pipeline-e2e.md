@@ -290,23 +290,34 @@ Source of truth: `.cogni/repo-spec.yaml` (operator), `nodes/{name}/.cogni/repo-s
 
 ### 4.3 Promotion Flow
 
+**Promotion uses a separate workflow**, not in-line in the build pipeline. This avoids
+the branch-mutation loop where a workflow commits to the branch that triggered it.
+The pattern mirrors `deploy-production.yml` (triggered by `build-prod` success via
+`workflow_run`).
+
 ```
-integration/multi-node merge
-  → CI builds + pushes images (preview-{sha} tags)
-  → promote-images.sh updates overlays on staging branch [skip ci]
-  → Argo CD (watching staging) auto-syncs to preview VM
-  → E2E tests on preview
-  → Create release/* → main PR (includes overlay digests from staging)
-  → Approve → auto-merge to main
-  → CI rebuilds with prod tags (prod-{sha})
-  → promote-images.sh updates production overlays on main [skip ci]
-  → Argo CD (watching main for production) auto-syncs to production VM
+Push to staging
+  → staging-preview.yml: build + push images + SSH deploy (Compose) + e2e + release PR
+  → promote-k8s-staging.yml (workflow_run trigger on staging-preview success):
+      fetch digest from GHCR → promote-k8s-image.sh per app → commit [skip ci] → push
+  → Argo CD detects overlay change → auto-syncs apps on k3s
+
+Merge release/* to main
+  → build-prod.yml: build + push prod images
+  → deploy-production.yml (workflow_run trigger): SSH deploy (Compose)
+  → promote-k8s-production.yml (workflow_run trigger on build-prod success):
+      fetch digest → promote-k8s-image.sh --env production → commit [skip ci] → push
+  → Argo CD syncs production apps
 ```
+
+**Why separate workflows:** A workflow that commits to its own trigger branch is
+fragile even with `[skip ci]`. Separate `workflow_run`-triggered workflows fire once
+on completion, have their own concurrency group, and cannot loop.
 
 **Key detail:** Overlay digests flow with the code through the branch model. The
 `release/*` branch carries the staging overlay digests. After merge to main, CI
-rebuilds images with `prod-` prefix and updates production overlays. This means
-production overlays always contain production-built digests, not staging ones.
+rebuilds images with `prod-` prefix and updates production overlays. Production
+overlays always contain production-built digests, not staging ones.
 
 ### 4.4 Rollback
 
