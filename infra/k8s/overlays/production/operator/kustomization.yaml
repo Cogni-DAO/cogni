@@ -14,6 +14,9 @@ images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
     newTag: "prod-placeholder-operator"
+  - name: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
+    newTag: "prod-placeholder-operator-migrate"
 
 patches:
   # Node-specific ConfigMap values.
@@ -48,3 +51,11 @@ patches:
       - op: add
         path: /spec/ports/0/nodePort
         value: 30000
+  # Fix secret refs — namePrefix doesn't transform secretRef/secretKeyRef names
+  - target:
+      kind: Job
+      name: migrate-node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "operator-node-app-secrets"

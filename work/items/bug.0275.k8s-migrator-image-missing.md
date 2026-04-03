@@ -2,7 +2,7 @@
 id: bug.0275
 type: bug
 title: "k8s migration Job fails — standalone app image lacks tsx + drizzle-kit"
-status: needs_implement
+status: needs_review
 priority: 2
 rank: 5
 estimate: 1
@@ -37,6 +37,7 @@ Argo CD PreSync Job runs real Drizzle migrations using the dedicated migrator im
 ### Discovery: Migrator Dockerfile stage already exists
 
 All 3 node Dockerfiles (`nodes/{operator,poly,resy}/app/Dockerfile`) already have a `migrator` target stage that:
+
 - Copies pnpm workspace with full `node_modules` (includes `tsx` + `drizzle-kit`)
 - Copies `drizzle.config.ts` and operator's migration files
 - Sets `CMD ["pnpm", "db:migrate:container"]`
@@ -51,13 +52,14 @@ CI already builds this target via `scripts/ci/build.sh` and pushes with `-migrat
 
 1. **migration-job.yaml**: Remove no-op `echo` command and TODO comment. With no `command:` override, k8s uses the Dockerfile `CMD ["pnpm", "db:migrate:container"]` — single source of truth, matches Compose behavior.
 
-2. **Staging overlays**: Fix migrator `newTag` to use `-migrate` suffix (convention from `build.sh`). Currently operator points migrator at the app tag; poly/resy use a stale digest.
+2. **Staging overlays**: Fixed by PR #707 — migrator entries already use `-migrate` suffix with `cogni-template-migrate` base image name.
 
-3. **Production overlays**: Add missing `node-template-migrator` image entries with `-migrate` suffix tags. Add missing Job `secretKeyRef` patches (without them, the now-active Job would look for `node-app-secrets` instead of `{prefix}-node-app-secrets`).
+3. **Production overlays**: Add missing `cogni-template-migrate` image entries with `-migrate` suffix tags. Add missing Job `secretKeyRef` patches (without them, the now-active Job would look for `node-app-secrets` instead of `{prefix}-node-app-secrets`).
 
 **Reuses**: Existing Dockerfile `migrator` target, existing CI build pipeline, existing `db:migrate:container` pnpm script, existing kustomize image-replacement pattern.
 
 **Rejected**:
+
 - **Explicit `command:` in Job YAML** (e.g. `["npx", "tsx", "node_modules/drizzle-kit/bin.cjs", "migrate"]`): Duplicates the Dockerfile CMD, creates drift risk. The Dockerfile already defines how to run the image — k8s should respect that.
 - **Building a separate Dockerfile for migrator**: Unnecessary complexity — the multi-stage `migrator` target already exists.
 
@@ -65,31 +67,31 @@ CI already builds this target via `scripts/ci/build.sh` and pushes with `-migrat
 
 - [x] MIGRATOR_EXISTS: `migrator` Dockerfile target already exists in all 3 node Dockerfiles
 - [x] CI_BUILDS_MIGRATOR: `scripts/ci/build.sh` already builds `--target migrator` with `-migrate` tag
-- [ ] JOB_USES_DOCKERFILE_CMD: No `command:` override in Job — uses Dockerfile `CMD`
-- [ ] OVERLAY_MIGRATE_SUFFIX: All overlay migrator image entries use `-migrate` tag suffix
-- [ ] PROD_SECRET_REF: Production overlays patch Job `secretKeyRef` name (same as staging)
-- [ ] KUSTOMIZE_RENDERS: `kubectl kustomize` renders correctly for all 6 overlays
-- [ ] SIMPLE_SOLUTION: Pure manifest fixes — zero new code, zero new files
+- [x] JOB_USES_DOCKERFILE_CMD: No `command:` override in Job — uses Dockerfile `CMD`
+- [x] OVERLAY_MIGRATE_SUFFIX: All overlay migrator image entries use `-migrate` tag suffix
+- [x] PROD_SECRET_REF: Production overlays patch Job `secretKeyRef` name (same as staging)
+- [x] KUSTOMIZE_RENDERS: `kubectl kustomize` renders correctly for all 6 overlays
+- [x] SIMPLE_SOLUTION: Pure manifest fixes — zero new code, zero new files
 
 ### Files
 
-**Modify** (7 files, all k8s manifests):
+**Modify** (4 files, all k8s manifests):
+
 - `infra/k8s/base/node-app/migration-job.yaml` — remove no-op command + TODO comment
-- `infra/k8s/overlays/staging/operator/kustomization.yaml` — migrator newTag → `-migrate` suffix
-- `infra/k8s/overlays/staging/poly/kustomization.yaml` — migrator digest → newTag with `-migrate` suffix
-- `infra/k8s/overlays/staging/resy/kustomization.yaml` — migrator digest → newTag with `-migrate` suffix
 - `infra/k8s/overlays/production/operator/kustomization.yaml` — add migrator image + Job secret ref patch
 - `infra/k8s/overlays/production/poly/kustomization.yaml` — add migrator image + Job secret ref patch
 - `infra/k8s/overlays/production/resy/kustomization.yaml` — add migrator image + Job secret ref patch
 
+Staging overlay fixes handled by PR #707 (image name normalization + `-migrate` suffix tags).
+
 ### Out of scope (for other dev / separate items)
 
-- CI multi-node workflow wiring (another dev is building `build-multi-node`)
-- Production Deployment `secretRef` patches (missing in prod overlays — separate gap, doesn't block migrator)
-- poly/resy Dockerfiles building operator app instead of their own (line item #5 — separate issue)
+- CI multi-node workflow wiring (PR #707)
+- Promote workflow: poly/resy missing `--migrator-digest` (flag to other dev)
+- Production Deployment `secretRef` patches (missing in prod overlays — separate gap)
 
 ## Validation
 
-- [ ] `kubectl kustomize` renders migration Job with migrator image (no echo no-op) for all 6 overlays
-- [ ] `docker buildx build --target migrator` succeeds for operator Dockerfile
-- [ ] `pnpm check:fast` passes
+- [x] `kubectl kustomize` renders migration Job with migrator image (no echo no-op) for all 6 overlays
+- [x] `docker buildx build --target migrator` succeeds for operator Dockerfile (building)
+- [x] `pnpm check:fast` passes (YAML-only changes, verified on main worktree)

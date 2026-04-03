@@ -28,12 +28,6 @@ spec:
       containers:
         - name: migrate
           image: ghcr.io/cogni-dao/cogni-template-migrate:placeholder
-          # TODO: Use dedicated migrator image with tsx + drizzle-kit (standalone app image strips devDeps)
-          command:
-            [
-              "echo",
-              "migration skipped — DB already migrated by compose db-provision",
-            ]
           env:
             - name: DATABASE_URL
               valueFrom:
