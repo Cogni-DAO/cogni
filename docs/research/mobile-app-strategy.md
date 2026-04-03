@@ -115,12 +115,35 @@ apps/mobile/                        # New Expo app in the monorepo
 
 **What NOT to build in v1**: Push notifications, offline mode, on-chain transaction signing (use web fallback via in-app browser).
 
+## Validated (POC 2026-04-02)
+
+POC in `experiments/mobile-expo-poc/` confirmed on physical iPhone:
+
+- **Expo SDK 54** + React 19.1 + RN 0.81 loads in Expo Go
+- **NativeWind v4** — same Tailwind `className` strings as web app
+- **Metro + pnpm workspaces** — `unstable_enablePackageExports` resolves workspace packages
+- **Expo Router** — file-based routing with group layouts works
+- **Next.js component reuse: NOT possible** — RN uses View/Text/Pressable, not DOM. Reuse is at the type/logic/styling-vocabulary level only. Use `react-native-reusables` (shadcn port) for equivalent component API.
+
+### Auth path (critical finding)
+
+NextAuth uses HttpOnly cookies — mobile can't use cookies. Two paths:
+1. **API key flow** (`/api/v1/auth/openai-compatible/connect`) — works today, zero backend changes. Best for MVP.
+2. **OAuth redirect** (`expo-auth-session`) — needs design work to extract JWT from NextAuth callback outside cookie context.
+
+### Core tasks to real app (6 points)
+
+1. API key auth via existing OpenAI-compatible endpoint (1pt)
+2. SSE streaming chat client with `react-native-sse` (2pt)
+3. Inline chat contracts or wait for task.0248 (1pt)
+4. Persist node list + auth tokens in SecureStore/AsyncStorage (1pt)
+5. `react-native-reusables` component kit for polished UI (1pt)
+
 ## Open Questions
 
-- Should the Expo app live in `apps/mobile/` or a separate repo? Monorepo is simpler for package sharing but adds mobile tooling to CI.
-- wagmi v1.x pin: is this blocking? The web app likely uses wagmi v2. Can they coexist in the same monorepo with different versions?
-- Do we need a BFF (Backend for Frontend) API gateway, or is direct-to-node sufficient? Direct is simpler and matches the decentralized architecture.
-- Should node discovery be manual (paste URL) or use a registry/DNS convention (e.g., `api.{node}.cogni.dev`)?
+- wagmi v1.x pin: is this blocking for SIWE? Web uses wagmi v2. Can they coexist in pnpm monorepo?
+- Should node discovery be manual (paste URL) or use DNS convention (e.g., `api.{node}.cogni.dev`)?
+- CI impact: does `apps/mobile/` in monorepo slow down existing pipelines? May need workspace filtering.
 
 ## Proposed Layout
 

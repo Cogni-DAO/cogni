@@ -118,7 +118,7 @@
 | 2 | 0 | 2 | needs_triage | task.0109 | Expand GitHub adapter — PR comments, review comments, issue creation | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 1 | 1 | needs_implement | task.0264 | Add PWA manifests + service workers to operator + all nodes | Mobile App | proj.mobile-app |
 | 2 | 2 | 3 | needs_design | task.0238 | Agent avatars — Rive/Lottie animated characters on run cards and chat | Premium Frontend UX | proj.premium-frontend-ux |
-| 2 | 2 | 2 | needs_closeout | task.0265 | Scaffold apps/mobile/ — Expo Router + Metro pnpm workspace config | Mobile App | proj.mobile-app |
+| 2 | 2 | 2 | needs_implement | task.0265 | Scaffold apps/mobile/ — Expo Router + Metro pnpm workspace config | Mobile App | proj.mobile-app |
 | 2 | 3 | 1 | needs_triage | bug.0012 | pre-commit check:docs validates all files, not just staged — blocks unrelated commits |  |  |
 | 2 | 3 | 3 | needs_design | story.0128 | Governance ops: manual workflow triggers, run history, and admin role gating | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
 | 2 | 3 | 2 | needs_implement | task.0266 | Mobile OAuth auth — GitHub/Discord/Google via expo-auth-session | Mobile App | proj.mobile-app |

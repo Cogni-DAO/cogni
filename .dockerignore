@@ -81,5 +81,5 @@ work
 docs
 *.md
 
-# Mobile app (Expo — not built via Docker)
-apps/mobile
+# Experiments (POCs, not deployed)
+experiments
