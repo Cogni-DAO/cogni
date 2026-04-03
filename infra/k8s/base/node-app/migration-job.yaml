@@ -17,7 +17,7 @@ metadata:
     app.kubernetes.io/component: migration
 spec:
   backoffLimit: 3
-  activeDeadlineSeconds: 120
+  activeDeadlineSeconds: 300
   template:
     metadata:
       labels:
@@ -27,7 +27,13 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: ghcr.io/cogni-dao/cogni-template:placeholder-migrate
+          image: ghcr.io/cogni-dao/node-template-migrator:placeholder
+          # TODO: Use dedicated migrator image with tsx + drizzle-kit (standalone app image strips devDeps)
+          command:
+            [
+              "echo",
+              "migration skipped — DB already migrated by compose db-provision",
+            ]
           env:
             - name: DATABASE_URL
               valueFrom:
@@ -36,8 +42,8 @@ spec:
                   key: DATABASE_URL
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "384Mi"
+              cpu: "200m"
             limits:
-              memory: "256Mi"
-              cpu: "500m"
+              memory: "1Gi"
+              cpu: "1000m"

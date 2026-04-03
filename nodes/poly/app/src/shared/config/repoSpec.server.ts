@@ -50,11 +50,11 @@ let cachedSpec: RepoSpec | null = null;
 function loadRepoSpec(): RepoSpec {
   if (cachedSpec) return cachedSpec;
 
-  const repoSpecPath = path.join(
-    serverEnv().COGNI_REPO_ROOT,
-    ".cogni",
-    "repo-spec.yaml"
-  );
+  const repoRoot = serverEnv().COGNI_REPO_ROOT;
+  if (!repoRoot) {
+    throw new Error("[repo-spec] COGNI_REPO_PATH not configured — repo-spec unavailable");
+  }
+  const repoSpecPath = path.join(repoRoot, ".cogni", "repo-spec.yaml");
 
   if (!fs.existsSync(repoSpecPath)) {
     throw new Error(

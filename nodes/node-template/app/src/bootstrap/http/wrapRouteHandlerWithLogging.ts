@@ -18,6 +18,7 @@
 
 import { type NextRequest, NextResponse } from "next/server";
 
+import type { Container } from "@/bootstrap/container";
 import { withRootSpan } from "@/bootstrap/otel";
 import type { SessionUser } from "@cogni/node-shared";
 import {
@@ -27,6 +28,7 @@ import {
   logRequestEnd,
   logRequestError,
   logRequestStart,
+  makeLogger,
   type RequestContext,
   statusBucket,
 } from "@/shared/observability";
@@ -123,17 +125,46 @@ export function wrapRouteHandlerWithLogging<TContext = unknown>(
   ): Promise<NextResponse> => {
     // Dynamic import: breaks Turbopack's per-route static module graph tracing
     // of the entire DI composition root (spike.0203 — was causing 6GB RSS in dev).
-    const { getContainer } = await import("@/bootstrap/container");
-    const container = getContainer();
+    let container: Container;
+    let unhandledErrorPolicy: "rethrow" | "respond_500";
+
+    try {
+      const mod = await import("@/bootstrap/container");
+      container = mod.getContainer();
+      unhandledErrorPolicy = container.config.unhandledErrorPolicy;
+    } catch (bootError) {
+      // Container init failed (env validation, missing secrets, etc.)
+      // Return structured 503 so /readyz never returns an empty 500.
+      const fallbackLog = makeLogger({ component: "wrapRouteHandler" });
+      fallbackLog.error(
+        {
+          errorCode: "CONTAINER_INIT_FAILED",
+          err:
+            bootError instanceof Error ? bootError.message : String(bootError),
+        },
+        "container initialization failed — returning 503"
+      );
+      return new NextResponse(
+        JSON.stringify({
+          status: "error",
+          reason: "CONTAINER_INIT_FAILED",
+          message:
+            bootError instanceof Error
+              ? bootError.message
+              : "Unknown container initialization error",
+        }),
+        {
+          status: 503,
+          headers: { "content-type": "application/json" },
+        }
+      );
+    }
 
     // Fetch session based on auth mode
     const sessionUser =
       options.auth && options.auth.mode !== "none"
         ? await options.auth.getSessionUser()
         : null;
-
-    // Get config once before try block to avoid env failures masking real errors
-    const { unhandledErrorPolicy } = container.config;
 
     // Wrap entire request in OTel root span for distributed tracing
     // Per AI_SETUP_SPEC.md: root span bound to context via context.with()

@@ -3,11 +3,12 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # Script: scripts/setup/provision-test-vm.sh
-# Purpose: One-command test VM provisioning for Argo CD pipeline validation.
-#          Generates ephemeral SSH + age keys, writes tfvars, runs tofu apply.
+# Purpose: One-command test VM provisioning + infra deployment + scorecard.
+#          Generates ALL secrets (same generators as setup-secrets.ts), provisions
+#          via OpenTofu, deploys Compose infra, verifies k3s + Argo CD.
 # Usage:
-#   CHERRY_AUTH_TOKEN=<token> CHERRY_PROJECT_ID=<id> bash scripts/setup/provision-test-vm.sh
-#   # Or interactively (prompts for values)
+#   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh
+#   # Or interactively (prompts for missing values)
 
 set -euo pipefail
 
@@ -15,26 +16,48 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROVISION_DIR="$REPO_ROOT/infra/provision/cherry/base"
 WORKSPACE="test"
-BRANCH="worktree-cd-pipeline-analysis"
+BRANCH="${COGNI_REPO_REF:-deploy/multi-node}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_step() { echo -e "${CYAN}[STEP]${NC} $1"; }
 
 # ── Prerequisites ──────────────────────────────────────────
-for cmd in tofu ssh-keygen age-keygen; do
+for cmd in tofu ssh-keygen age-keygen openssl; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     log_error "Required: $cmd not found. Install it first."
     exit 1
   fi
 done
 
-# ── Collect inputs ─────────────────────────────────────────
+# ── Secret generators (ported from setup-secrets.ts) ──────
+# rand64: openssl rand -base64 <bytes>  (same as setup-secrets.ts rand64)
+rand64() { openssl rand -base64 "${1:-32}"; }
+# randHex: openssl rand -hex <bytes>    (same as setup-secrets.ts randHex)
+randHex() { openssl rand -hex "${1:-32}"; }
+
+# ══════════════════════════════════════════════════════════════
+# Phase 1: Collect external inputs (only 2 required from human)
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 1: Collect inputs"
+
+# Load .env.operator if present (CHERRY_AUTH_TOKEN, OPENROUTER_API_KEY)
+if [[ -f "$REPO_ROOT/.env.operator" ]]; then
+  log_info "Loading .env.operator"
+  set -a
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/.env.operator"
+  set +a
+fi
+
+# Cherry token — required
 if [[ -z "${CHERRY_AUTH_TOKEN:-}" ]]; then
   echo -n "Cherry Servers API token: "
   read -rs CHERRY_AUTH_TOKEN
@@ -42,33 +65,145 @@ if [[ -z "${CHERRY_AUTH_TOKEN:-}" ]]; then
 fi
 export CHERRY_AUTH_TOKEN
 
+if [[ -z "$CHERRY_AUTH_TOKEN" ]]; then
+  log_error "CHERRY_AUTH_TOKEN is required."
+  exit 1
+fi
+
+# Cherry project ID
 if [[ -z "${CHERRY_PROJECT_ID:-}" ]]; then
   echo -n "Cherry Servers project ID: "
   read -r CHERRY_PROJECT_ID
   echo ""
 fi
 
-# Optional: GHCR token for k3s image pulls (dummy OK for test)
+# OpenRouter key — optional (LiteLLM starts but can't proxy)
+if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+  echo -n "OpenRouter API key (Enter to skip): "
+  read -rs OPENROUTER_API_KEY
+  echo ""
+fi
+if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
+  log_warn "No OPENROUTER_API_KEY — LiteLLM will start but LLM calls will fail."
+  OPENROUTER_API_KEY="sk-placeholder-no-llm-calls"
+fi
+
+# GHCR token for k3s image pulls (dummy OK for test — images are placeholders anyway)
 GHCR_TOKEN="${GHCR_DEPLOY_TOKEN:-dummy-ghcr-token-for-test}"
 GHCR_USERNAME="${GHCR_DEPLOY_USERNAME:-Cogni-1729}"
 
-# ── Generate ephemeral keys ────────────────────────────────
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+# ══════════════════════════════════════════════════════════════
+# Phase 2: Generate ALL secrets (same logic as setup-secrets.ts)
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 2: Generate ephemeral secrets"
 
+TMPDIR=$(mktemp -d)
+# Don't auto-delete TMPDIR — keys saved to .local/ immediately after generation
+mkdir -p "$REPO_ROOT/.local"
+
+# SSH keypair
 log_info "Generating ephemeral SSH keypair..."
 ssh-keygen -t ed25519 -f "$TMPDIR/deploy_key" -C "cogni-test-vm" -N "" -q
 cp "$TMPDIR/deploy_key.pub" "$PROVISION_DIR/keys/cogni_template_test_deploy.pub"
+# Save immediately so we don't lose the key if tofu fails
+cp "$TMPDIR/deploy_key" "$REPO_ROOT/.local/test-vm-key"
+chmod 600 "$REPO_ROOT/.local/test-vm-key"
 
+# SOPS age keypair
 log_info "Generating ephemeral SOPS age keypair..."
 age-keygen -o "$TMPDIR/age-key.txt" 2>"$TMPDIR/age-pub.txt"
 AGE_PRIVATE_KEY=$(grep 'AGE-SECRET-KEY' "$TMPDIR/age-key.txt")
 AGE_PUBLIC_KEY=$(grep 'age1' "$TMPDIR/age-pub.txt" || grep 'age1' "$TMPDIR/age-key.txt" | head -1)
-
 log_info "  Age public key: $AGE_PUBLIC_KEY"
-log_info "  SSH public key: $(cat "$TMPDIR/deploy_key.pub")"
 
-# ── Write tfvars ───────────────────────────────────────────
+# ── Agent-generated secrets (matching setup-secrets.ts generators exactly) ──
+AUTH_SECRET=$(rand64 32)
+LITELLM_MASTER_KEY="sk-cogni-$(randHex 24)"
+OPENCLAW_GATEWAY_TOKEN=$(rand64 32)
+SCHEDULER_API_TOKEN=$(rand64 32)
+BILLING_INGEST_TOKEN=$(rand64 32)
+INTERNAL_OPS_TOKEN=$(rand64 32)
+METRICS_TOKEN=$(rand64 32)
+GH_WEBHOOK_SECRET=$(randHex 32)
+
+# Database (matching setup-secrets.ts conventions)
+POSTGRES_ROOT_USER="postgres"
+POSTGRES_ROOT_PASSWORD=$(randHex 24)
+APP_DB_USER="app_user"
+APP_DB_PASSWORD=$(randHex 24)
+APP_DB_SERVICE_USER="app_service"
+APP_DB_SERVICE_PASSWORD=$(randHex 24)
+TEMPORAL_DB_USER="temporal"
+TEMPORAL_DB_PASSWORD=$(randHex 24)
+
+# Derived values
+DOMAIN="${DOMAIN:-test.cognidao.org}"
+POLY_DOMAIN="${POLY_DOMAIN:-poly-test.cognidao.org}"
+RESY_DOMAIN="${RESY_DOMAIN:-resy-test.cognidao.org}"
+APP_ENV="staging"
+DEPLOY_ENVIRONMENT="preview"
+
+# Per-node databases
+COGNI_NODE_DBS="cogni_operator,cogni_poly,cogni_resy"
+LITELLM_DB_NAME="litellm"
+
+# EVM RPC — use public Base mainnet endpoint for test
+EVM_RPC_URL="${EVM_RPC_URL:-https://mainnet.base.org}"
+
+# PostHog — use placeholder (app logs warning but starts)
+POSTHOG_API_KEY="${POSTHOG_API_KEY:-phc_placeholder_test}"
+POSTHOG_HOST="${POSTHOG_HOST:-https://us.i.posthog.com}"
+
+# Repo URL/ref for git-sync
+COGNI_REPO_URL="https://github.com/Cogni-DAO/cogni-template.git"
+COGNI_REPO_REF="$BRANCH"
+
+# LiteLLM node endpoints (Compose→k8s NodePorts via host gateway)
+COGNI_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000/api/internal/billing/ingest"
+
+# DATABASE_URLs (constructed from parts — same derivation as setup-secrets.ts)
+# DATABASE_URLs use VM_IP placeholder — replaced after Phase 3 when IP is known.
+# Inside k8s pods, 127.0.0.1 is the pod's loopback, NOT the host.
+DATABASE_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@VM_IP_PLACEHOLDER:5432/cogni_operator"
+DATABASE_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@VM_IP_PLACEHOLDER:5432/cogni_operator"
+
+log_info "All secrets generated"
+
+# Save secrets to .local for reference (gitignored)
+mkdir -p "$REPO_ROOT/.local"
+cat > "$REPO_ROOT/.local/test-vm-secrets.env" << EOF
+# Auto-generated test VM secrets — $(date -u +%Y-%m-%dT%H:%M:%SZ)
+# These are ephemeral. Destroy the VM when done.
+DOMAIN=${DOMAIN}
+POLY_DOMAIN=${POLY_DOMAIN}
+RESY_DOMAIN=${RESY_DOMAIN}
+AUTH_SECRET=${AUTH_SECRET}
+LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
+BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
+INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN}
+METRICS_TOKEN=${METRICS_TOKEN}
+POSTGRES_ROOT_USER=${POSTGRES_ROOT_USER}
+POSTGRES_ROOT_PASSWORD=${POSTGRES_ROOT_PASSWORD}
+APP_DB_USER=${APP_DB_USER}
+APP_DB_PASSWORD=${APP_DB_PASSWORD}
+APP_DB_SERVICE_USER=${APP_DB_SERVICE_USER}
+APP_DB_SERVICE_PASSWORD=${APP_DB_SERVICE_PASSWORD}
+TEMPORAL_DB_USER=${TEMPORAL_DB_USER}
+TEMPORAL_DB_PASSWORD=${TEMPORAL_DB_PASSWORD}
+DATABASE_URL=${DATABASE_URL}
+DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}
+AGE_PUBLIC_KEY=${AGE_PUBLIC_KEY}
+EOF
+chmod 600 "$REPO_ROOT/.local/test-vm-secrets.env"
+log_info "Secrets saved to .local/test-vm-secrets.env"
+
+# ══════════════════════════════════════════════════════════════
+# Phase 3: Provision VM via OpenTofu
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 3: Provision VM"
+
 TFVARS="$PROVISION_DIR/terraform.test.tfvars"
 cat > "$TFVARS" << EOF
 environment          = "preview"
@@ -78,18 +213,17 @@ plan                 = "B1-6-6gb-100s-shared"
 region               = "LT-Siauliai"
 public_key_path      = "keys/cogni_template_test_deploy.pub"
 ghcr_deploy_username = "${GHCR_USERNAME}"
-cogni_repo_url       = "https://github.com/Cogni-DAO/cogni-template.git"
-cogni_repo_ref       = "${BRANCH}"
+cogni_repo_url       = "${COGNI_REPO_URL}"
+cogni_repo_ref       = "${COGNI_REPO_REF}"
 EOF
-
 log_info "Wrote $TFVARS"
 
-# ── Set sensitive TF vars via environment ──────────────────
-export TF_VAR_ssh_private_key="$(cat "$TMPDIR/deploy_key")"
+# Pass empty SSH key to skip tofu's built-in health check (count = ssh_key != "" ? 1 : 0).
+# Our Phase 4 loop handles the bootstrap wait more robustly (retries, SSH, progress).
+export TF_VAR_ssh_private_key=""
 export TF_VAR_ghcr_deploy_token="$GHCR_TOKEN"
 export TF_VAR_sops_age_private_key="$AGE_PRIVATE_KEY"
 
-# ── Tofu init + apply ─────────────────────────────────────
 cd "$PROVISION_DIR"
 
 log_info "Initializing OpenTofu..."
@@ -116,29 +250,347 @@ tofu apply tfplan
 VM_IP=$(tofu output -raw vm_host)
 log_info "VM provisioned at: $VM_IP"
 
-# ── Save connection info ───────────────────────────────────
-# Copy the SSH key somewhere persistent (tmpdir cleaned on exit)
-mkdir -p "$REPO_ROOT/.local"
-cp "$TMPDIR/deploy_key" "$REPO_ROOT/.local/test-vm-key"
-chmod 600 "$REPO_ROOT/.local/test-vm-key"
+# Save connection info (key already saved in phase 2)
 echo "$VM_IP" > "$REPO_ROOT/.local/test-vm-ip"
 echo "$AGE_PRIVATE_KEY" > "$REPO_ROOT/.local/test-vm-age-key"
 
+# Fix DATABASE_URLs — replace placeholder with actual VM IP
+# (pods can't use 127.0.0.1 — that's the pod's own loopback, not the host)
+DATABASE_URL="${DATABASE_URL/VM_IP_PLACEHOLDER/$VM_IP}"
+DATABASE_SERVICE_URL="${DATABASE_SERVICE_URL/VM_IP_PLACEHOLDER/$VM_IP}"
+log_info "DATABASE_URLs updated with VM IP: $VM_IP"
+
+cd "$REPO_ROOT"
+
+SSH_KEY="$REPO_ROOT/.local/test-vm-key"
+SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -o ServerAliveCountMax=12"
+
+# ══════════════════════════════════════════════════════════════
+# Phase 4: Wait for cloud-init bootstrap
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 4: Wait for bootstrap (~3-5 min)"
+
+for attempt in $(seq 1 60); do
+  if ssh $SSH_OPTS root@"$VM_IP" 'test -f /var/lib/cogni/bootstrap.ok' 2>/dev/null; then
+    log_info "Bootstrap complete!"
+    ssh $SSH_OPTS root@"$VM_IP" 'cat /var/lib/cogni/bootstrap.ok'
+    break
+  fi
+  if ssh $SSH_OPTS root@"$VM_IP" 'test -f /var/lib/cogni/bootstrap.fail' 2>/dev/null; then
+    log_error "Bootstrap FAILED:"
+    ssh $SSH_OPTS root@"$VM_IP" 'cat /var/lib/cogni/bootstrap.fail; tail -50 /var/log/cogni-bootstrap.log'
+    exit 1
+  fi
+  if [[ $attempt -eq 60 ]]; then
+    log_error "Bootstrap did not complete after 10 minutes."
+    log_error "SSH in to debug: ssh -i .local/test-vm-key root@$VM_IP"
+    exit 1
+  fi
+  # Show progress every 30s
+  if (( attempt % 3 == 0 )); then
+    log_info "  Waiting... (${attempt}0s elapsed)"
+  fi
+  sleep 10
+done
+
+# Quick verification
+log_info "Verifying k3s + Argo CD..."
+ssh $SSH_OPTS root@"$VM_IP" 'kubectl get nodes && echo "---" && kubectl -n argocd get pods --no-headers'
+
+# ApplicationSets applied in Phase 7 (after all prerequisites are in place)
+
+# ══════════════════════════════════════════════════════════════
+# Phase 4b: Patch k8s EndpointSlice IPs + push to git
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 4b: Patch EndpointSlice IPs to $VM_IP"
+
+# k8s rejects 127.0.0.1 in EndpointSlices. Overlays must use the node's real IP.
+# Sed-replace the placeholder/previous IP in all overlay kustomization files.
+OVERLAYS_DIR="$REPO_ROOT/infra/k8s/overlays/staging"
+for overlay in "$OVERLAYS_DIR"/*/kustomization.yaml; do
+  # Replace any IP in EndpointSlice address arrays: value: ["X.X.X.X"]
+  sed -i '' -E "s/value: \[\"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\"\]/value: [\"${VM_IP}\"]/g" "$overlay"
+done
+log_info "Patched overlays with VM IP: $VM_IP"
+
+# Commit + push so Argo CD sees the updated IPs
+cd "$REPO_ROOT"
+if ! git diff --quiet infra/k8s/overlays/; then
+  git add infra/k8s/overlays/ infra/k8s/base/
+  git commit -m "chore(infra): patch EndpointSlice IPs to ${VM_IP} for test VM"
+  git push origin HEAD:"$BRANCH"
+  log_info "Pushed EndpointSlice IP patches to $BRANCH"
+else
+  log_info "EndpointSlice IPs already correct"
+fi
+
+# ══════════════════════════════════════════════════════════════
+# Phase 5: Deploy Compose infrastructure
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 5: Deploy Compose infrastructure"
+
+# Upload files
+log_info "Uploading Compose files..."
+ssh $SSH_OPTS root@"$VM_IP" 'mkdir -p /opt/cogni-template-edge/configs /opt/cogni-template-runtime/configs /opt/cogni-template-runtime/postgres-init /opt/cogni-template-runtime/litellm-image'
+
+# Edge stack
+scp $SSH_OPTS "$REPO_ROOT/infra/compose/edge/docker-compose.yml" root@"$VM_IP":/opt/cogni-template-edge/docker-compose.yml
+scp $SSH_OPTS "$REPO_ROOT/infra/compose/edge/configs/Caddyfile.tmpl" root@"$VM_IP":/opt/cogni-template-edge/configs/Caddyfile.tmpl
+
+# Runtime stack
+scp $SSH_OPTS "$REPO_ROOT/infra/compose/runtime/docker-compose.yml" root@"$VM_IP":/opt/cogni-template-runtime/docker-compose.yml
+scp $SSH_OPTS "$REPO_ROOT/infra/compose/runtime/configs/litellm.config.yaml" root@"$VM_IP":/opt/cogni-template-runtime/configs/litellm.config.yaml
+scp $SSH_OPTS "$REPO_ROOT/infra/compose/runtime/configs/temporal-dynamicconfig.yaml" root@"$VM_IP":/opt/cogni-template-runtime/configs/temporal-dynamicconfig.yaml
+scp $SSH_OPTS "$REPO_ROOT/infra/compose/runtime/postgres-init/provision.sh" root@"$VM_IP":/opt/cogni-template-runtime/postgres-init/provision.sh
+
+# LiteLLM custom image
+scp $SSH_OPTS "$REPO_ROOT/infra/images/litellm/Dockerfile" root@"$VM_IP":/opt/cogni-template-runtime/litellm-image/Dockerfile
+scp $SSH_OPTS "$REPO_ROOT/infra/images/litellm/cogni_callbacks.py" root@"$VM_IP":/opt/cogni-template-runtime/litellm-image/cogni_callbacks.py
+
+# Write .env files
+log_info "Writing .env files..."
+
+ssh $SSH_OPTS root@"$VM_IP" "cat > /opt/cogni-template-edge/.env << 'ENVEOF'
+DOMAIN=${DOMAIN}
+POLY_DOMAIN=${POLY_DOMAIN}
+RESY_DOMAIN=${RESY_DOMAIN}
+ENVEOF"
+
+# All required vars must be in .env — Docker Compose validates ALL services at parse time,
+# even when only starting specific ones. Services we won't start get placeholder values.
+ssh $SSH_OPTS root@"$VM_IP" "cat > /opt/cogni-template-runtime/.env << 'ENVEOF'
+# Infra services (actually used)
+APP_ENV=${APP_ENV}
+DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
+POSTGRES_ROOT_USER=${POSTGRES_ROOT_USER}
+POSTGRES_ROOT_PASSWORD=${POSTGRES_ROOT_PASSWORD}
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+TEMPORAL_DB_USER=${TEMPORAL_DB_USER}
+TEMPORAL_DB_PASSWORD=${TEMPORAL_DB_PASSWORD}
+COGNI_NODE_DBS=${COGNI_NODE_DBS}
+LITELLM_DB_NAME=${LITELLM_DB_NAME}
+APP_DB_USER=${APP_DB_USER}
+APP_DB_PASSWORD=${APP_DB_PASSWORD}
+APP_DB_SERVICE_USER=${APP_DB_SERVICE_USER}
+APP_DB_SERVICE_PASSWORD=${APP_DB_SERVICE_PASSWORD}
+COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS}
+BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
+# App service vars (placeholders — services not started, but compose validates all)
+AUTH_SECRET=${AUTH_SECRET}
+EVM_RPC_URL=${EVM_RPC_URL}
+DATABASE_URL=${DATABASE_URL}
+DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}
+POSTHOG_API_KEY=${POSTHOG_API_KEY}
+POSTHOG_HOST=${POSTHOG_HOST}
+OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+OPENCLAW_GITHUB_RW_TOKEN=placeholder-not-started
+SCHEDULER_WORKER_IMAGE=placeholder:not-started
+MIGRATOR_IMAGE=placeholder:not-started
+APP_IMAGE=placeholder:not-started
+APP_BASE_URL=https://${DOMAIN}
+COGNI_REPO_URL=${COGNI_REPO_URL}
+COGNI_REPO_REF=${COGNI_REPO_REF}
+ENVEOF"
+
+# Start services
+log_info "Creating cogni-edge network..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker network create cogni-edge 2>/dev/null || true'
+
+log_info "Building LiteLLM custom image..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker build -t cogni-litellm:latest /opt/cogni-template-runtime/litellm-image/'
+
+log_info "Starting edge stack (Caddy)..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-edge --env-file /opt/cogni-template-edge/.env -f /opt/cogni-template-edge/docker-compose.yml up -d'
+
+log_info "Starting infra services (postgres, temporal, litellm, redis)..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml up -d --no-build postgres temporal-postgres temporal redis litellm autoheal'
+
+# Wait for postgres
+log_info "Waiting for postgres to become healthy..."
+for i in $(seq 1 30); do
+  if ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml ps postgres --format "{{.Health}}"' 2>/dev/null | grep -q "healthy"; then
+    log_info "Postgres is healthy"
+    break
+  fi
+  if [[ $i -eq 30 ]]; then
+    log_error "Postgres did not become healthy after 60s"
+    ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml logs postgres --tail 30'
+    exit 1
+  fi
+  sleep 2
+done
+
+# DB provisioning
+log_info "Running database provisioning..."
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml run --rm db-provision'
+
+# ══════════════════════════════════════════════════════════════
+# Phase 6: Create k8s secrets directly on cluster
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 6: Create k8s secrets on cluster"
+
+# Create namespace (Argo CD creates it on first sync, but secrets need it now)
+ssh $SSH_OPTS root@"$VM_IP" 'kubectl create namespace cogni-staging 2>/dev/null || true'
+
+# Node-app secrets — one per node (operator, poly, resy)
+# The Deployment references secretRef: {namePrefix}-node-app-secrets
+for node in operator poly resy; do
+  case $node in
+    operator) db_name="cogni_operator" ;;
+    poly)     db_name="cogni_poly" ;;
+    resy)     db_name="cogni_resy" ;;
+  esac
+
+  NODE_DB_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${VM_IP}:5432/${db_name}?sslmode=disable"
+  NODE_DB_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${VM_IP}:5432/${db_name}?sslmode=disable"
+
+  ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic ${node}-node-app-secrets \
+    --from-literal=DATABASE_URL='${NODE_DB_URL}' \
+    --from-literal=DATABASE_SERVICE_URL='${NODE_DB_SERVICE_URL}' \
+    --from-literal=AUTH_SECRET='${AUTH_SECRET}' \
+    --from-literal=LITELLM_MASTER_KEY='${LITELLM_MASTER_KEY}' \
+    --from-literal=OPENROUTER_API_KEY='${OPENROUTER_API_KEY}' \
+    --from-literal=EVM_RPC_URL='${EVM_RPC_URL}' \
+    --from-literal=POSTHOG_API_KEY='${POSTHOG_API_KEY}' \
+    --from-literal=POSTHOG_HOST='${POSTHOG_HOST}' \
+    --from-literal=OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}' \
+    --from-literal=OPENCLAW_GITHUB_RW_TOKEN='placeholder-not-needed-for-test' \
+    --from-literal=SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN}' \
+    --from-literal=BILLING_INGEST_TOKEN='${BILLING_INGEST_TOKEN}' \
+    --from-literal=INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN}' \
+    --from-literal=METRICS_TOKEN='${METRICS_TOKEN}' \
+    --dry-run=client -o yaml | kubectl apply -f -"
+  log_info "  Created ${node}-node-app-secrets"
+done
+
+# Scheduler-worker secret
+ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic scheduler-worker-secrets \
+  --from-literal=DATABASE_URL='${DATABASE_SERVICE_URL}' \
+  --from-literal=SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN}' \
+  --dry-run=client -o yaml | kubectl apply -f -"
+log_info "  Created scheduler-worker-secrets"
+
+# Sandbox-openclaw secret (placeholder)
+ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic sandbox-openclaw-secrets \
+  --from-literal=OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}' \
+  --from-literal=OPENCLAW_GITHUB_RW_TOKEN='placeholder-not-needed-for-test' \
+  --from-literal=LITELLM_MASTER_KEY='${LITELLM_MASTER_KEY}' \
+  --from-literal=DISCORD_BOT_TOKEN='placeholder' \
+  --dry-run=client -o yaml | kubectl apply -f -"
+log_info "  Created sandbox-openclaw-secrets"
+
+log_info "All k8s secrets created"
+
+# ══════════════════════════════════════════════════════════════
+# Phase 7: Deployment Status Report (Scorecard)
+# ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# Phase 7: Apply ApplicationSets (LAST — all prerequisites ready)
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 7: Apply ApplicationSets (triggers Argo sync)"
+
+# Gate: verify prerequisites exist before enabling Argo sync
+ssh $SSH_OPTS root@"$VM_IP" '
+  kubectl -n cogni-staging get secret operator-node-app-secrets >/dev/null || { echo "FATAL: operator secrets missing"; exit 1; }
+  kubectl -n cogni-staging get secret poly-node-app-secrets >/dev/null || { echo "FATAL: poly secrets missing"; exit 1; }
+  kubectl -n cogni-staging get secret resy-node-app-secrets >/dev/null || { echo "FATAL: resy secrets missing"; exit 1; }
+  kubectl -n cogni-staging get secret scheduler-worker-secrets >/dev/null || { echo "FATAL: scheduler-worker secrets missing"; exit 1; }
+  echo "All prerequisite secrets verified"
+'
+
+# Clone repo on VM, patch revision to our branch, then apply
+ssh $SSH_OPTS root@"$VM_IP" "
+  AUTHED_URL=\$(echo '${COGNI_REPO_URL}' | sed 's|https://|https://${GHCR_USERNAME}:${GHCR_TOKEN}@|')
+  git clone --depth=1 --branch '${BRANCH}' \"\$AUTHED_URL\" /tmp/cogni-appsets 2>/dev/null
+
+  # Patch revision to match our branch (YAML defaults to 'staging'/'main')
+  sed -i 's|revision: staging|revision: ${BRANCH}|g' /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
+  sed -i 's|targetRevision: staging|targetRevision: ${BRANCH}|g' /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
+
+  # Apply ApplicationSets — Argo starts syncing NOW
+  kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
+  kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/production-applicationset.yaml
+  rm -rf /tmp/cogni-appsets
+  echo 'ApplicationSets applied — Argo syncing on branch ${BRANCH}'
+"
+
+# Poll for apps to sync (up to 5 min)
+log_info "Waiting for Argo to sync apps..."
+for attempt in $(seq 1 30); do
+  HEALTHY=$(ssh $SSH_OPTS root@"$VM_IP" 'kubectl -n argocd get applications -o jsonpath="{range .items[*]}{.status.health.status}{\" \"}{end}"' 2>/dev/null)
+  HEALTHY_COUNT=$(echo "$HEALTHY" | tr ' ' '\n' | grep -c "Healthy" || true)
+  TOTAL=$(echo "$HEALTHY" | tr ' ' '\n' | grep -c '.' || true)
+  log_info "  Apps healthy: ${HEALTHY_COUNT}/${TOTAL} (${attempt}0s)"
+  if [[ "$HEALTHY_COUNT" -ge 3 ]]; then
+    log_info "Core apps healthy!"
+    break
+  fi
+  if [[ $attempt -eq 30 ]]; then
+    log_warn "Timeout waiting for apps — check scorecard for details"
+  fi
+  sleep 10
+done
+
+# ══════════════════════════════════════════════════════════════
+# Phase 8: Deployment Status Report
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 8: Deployment Status Report"
+
 echo ""
-log_info "═══════════════════════════════════════════════════════"
-log_info "Test VM ready! Connection info saved to .local/"
-log_info "═══════════════════════════════════════════════════════"
+echo "═══════════════════════════════════════════════════════════════════"
+echo "  DEPLOYMENT STATUS REPORT"
+echo "═══════════════════════════════════════════════════════════════════"
 echo ""
-echo "SSH:     ssh -i .local/test-vm-key root@$VM_IP"
-echo "Verify:  ssh -i .local/test-vm-key root@$VM_IP 'cat /var/lib/cogni/bootstrap.ok'"
+echo "  Environment: ${APP_ENV} | VM: ${VM_IP} | Plan: B1-6-6gb-100s-shared"
+echo "  Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "  Branch: ${BRANCH}"
 echo ""
-echo "After cloud-init completes (~3-5 min), verify:"
-echo "  ssh -i .local/test-vm-key root@$VM_IP 'kubectl get nodes'"
-echo "  ssh -i .local/test-vm-key root@$VM_IP 'kubectl -n argocd get applicationsets'"
-echo "  ssh -i .local/test-vm-key root@$VM_IP 'kubectl -n argocd get applications'"
+
+# Docker Compose services
+echo "── Compose Infrastructure ──────────────────────────────────────"
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml ps --format "table {{.Name}}\t{{.Status}}\t{{.Ports}}"' 2>/dev/null || echo "(failed to query)"
 echo ""
-echo "Destroy when done:"
-echo "  cd infra/provision/cherry/base"
-echo "  tofu workspace select test"
-echo "  tofu destroy -var-file=terraform.test.tfvars"
+
+echo "── Edge (Caddy) ────────────────────────────────────────────────"
+ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-edge --env-file /opt/cogni-template-edge/.env -f /opt/cogni-template-edge/docker-compose.yml ps --format "table {{.Name}}\t{{.Status}}"' 2>/dev/null || echo "(failed to query)"
+echo ""
+
+# Host port bindings (k3s bridge)
+echo "── k3s Bridge Ports ────────────────────────────────────────────"
+for port in 5432 7233 4000 6379; do
+  if ssh $SSH_OPTS root@"$VM_IP" "ss -tlnp | grep -q ':${port} '" 2>/dev/null; then
+    echo "  Port $port: [UP]"
+  else
+    echo "  Port $port: [DOWN]"
+  fi
+done
+echo ""
+
+# k3s + Argo CD
+echo "── k3s Cluster ─────────────────────────────────────────────────"
+ssh $SSH_OPTS root@"$VM_IP" 'kubectl get nodes 2>/dev/null' || echo "(not ready)"
+echo ""
+
+echo "── Argo CD Applications ────────────────────────────────────────"
+ssh $SSH_OPTS root@"$VM_IP" 'kubectl -n argocd get applications -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status 2>/dev/null' || echo "(not ready)"
+echo ""
+
+echo "── k8s Pods (cogni-staging) ────────────────────────────────────"
+ssh $SSH_OPTS root@"$VM_IP" 'kubectl -n cogni-staging get pods 2>/dev/null' || echo "(namespace not created yet — Argo CD will create it on first sync)"
+echo ""
+
+echo "═══════════════════════════════════════════════════════════════════"
+echo ""
+echo "  SSH:     ssh -i .local/test-vm-key root@$VM_IP"
+echo "  Secrets: .local/test-vm-secrets.env"
+echo ""
+echo "  Next steps:"
+echo "    1. Push this branch so Argo CD can find catalog + overlay files"
+echo "    2. Argo CD will auto-sync within 3 minutes"
+echo "    3. Re-run scorecard: ssh -i .local/test-vm-key root@\$VM_IP 'kubectl -n argocd get applications'"
+echo "    4. k8s secrets already created directly on cluster (no SOPS needed for test)"
+echo ""
+echo "  Destroy when done:"
+echo "    cd infra/provision/cherry/base && tofu workspace select test && tofu destroy -var-file=terraform.test.tfvars"
 echo ""

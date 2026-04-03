@@ -17,4 +17,6 @@ data:
   TEMPORAL_NAMESPACE: "cogni-preview"
   TEMPORAL_TASK_QUEUE: "scheduler-tasks"
   REDIS_URL: "redis://redis-external:6379"
-  COGNI_REPO_PATH: "/repo/current"
+  # Placeholder — real value requires git-sync sidecar (not in k8s yet).
+  # /tmp exists in every container; repo tools will see empty dir but app boots.
+  COGNI_REPO_PATH: "/tmp"

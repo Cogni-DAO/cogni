@@ -5,8 +5,8 @@
 # Node apps run in k3s; infra (Postgres, Temporal, LiteLLM, Redis) runs on Compose.
 # These let pods reach Compose services via k8s DNS.
 #
-# On single-VM: all endpoints are 127.0.0.1 (k3s and Compose share localhost).
-# Overlay patches replace IPs if environments differ.
+# Base uses placeholder 10.0.0.1 — overlays MUST patch with the node's InternalIP.
+# k8s rejects loopback (127.0.0.1) in EndpointSlices. Use the node IP instead.
 
 # --- PostgreSQL ---
 apiVersion: v1
@@ -29,7 +29,7 @@ metadata:
 addressType: IPv4
 endpoints:
   - addresses:
-      - "127.0.0.1"
+      - "10.0.0.1"
 ports:
   - port: 5432
     protocol: TCP
@@ -57,7 +57,7 @@ metadata:
 addressType: IPv4
 endpoints:
   - addresses:
-      - "127.0.0.1"
+      - "10.0.0.1"
 ports:
   - port: 7233
     protocol: TCP
@@ -85,7 +85,7 @@ metadata:
 addressType: IPv4
 endpoints:
   - addresses:
-      - "127.0.0.1"
+      - "10.0.0.1"
 ports:
   - port: 4000
     protocol: TCP
@@ -113,7 +113,7 @@ metadata:
 addressType: IPv4
 endpoints:
   - addresses:
-      - "127.0.0.1"
+      - "10.0.0.1"
 ports:
   - port: 6379
     protocol: TCP

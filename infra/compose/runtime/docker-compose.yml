@@ -147,6 +147,9 @@ services:
     networks:
       - internal
       - sandbox-internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:4000)
+    ports:
+      - "4000:4000"
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
@@ -184,6 +187,9 @@ services:
       - "autoheal=true"
     networks:
       - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:6379)
+    ports:
+      - "6379:6379"
     command:
       - "redis-server"
       - "--save"
@@ -206,6 +212,10 @@ services:
       - "autoheal=true"
     networks:
       - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:5432).
+    # 0.0.0.0 required because k8s pods reach host via node IP, not loopback.
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: ${POSTGRES_ROOT_USER}
@@ -360,8 +370,9 @@ services:
       - "autoheal=true"
     networks:
       - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:7233)
     ports:
-      - "127.0.0.1:7233:7233"
+      - "7233:7233"
     environment:
       # Temporal DB config (auto-setup env vars)
       - DB=postgres12

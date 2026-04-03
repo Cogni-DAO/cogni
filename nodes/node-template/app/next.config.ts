@@ -63,6 +63,11 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    // Enable server-side source maps so production stack traces are readable.
+    // Does NOT expose maps to the browser (productionBrowserSourceMaps defaults to false).
+    serverSourceMaps: true,
+  },
 };
 
 export default nextConfig;

@@ -524,7 +524,7 @@ function createContainer(): Container {
   const repoCapability = createRepoCapability(env);
 
   // WorkItemCapability for AI tools (delegates to markdown adapter ports)
-  const workItemAdapter = new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT);
+  const workItemAdapter = new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT ?? "/nonexistent");
   const workItemCapability = createWorkItemCapability({
     workItemQuery: workItemAdapter,
     workItemCommand: workItemAdapter,

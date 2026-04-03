@@ -11,9 +11,12 @@ resources:
 namePrefix: resy-
 
 images:
-  - name: ghcr.io/cogni-dao/cogni-template
-    newName: ghcr.io/cogni-dao/cogni-template
+  - name: ghcr.io/cogni-dao/node-template
+    newName: ghcr.io/cogni-dao/node-template
     newTag: "staging-placeholder-resy"
+  - name: ghcr.io/cogni-dao/node-template-migrator
+    newName: ghcr.io/cogni-dao/node-template
+    digest: "sha256:7a9bd8cf61ead5622d3a854766b3c401215bc95dfc3b37fdaef9aaa7d76ec93d"
 
 patches:
   # Node-specific ConfigMap values.
@@ -24,7 +27,7 @@ patches:
     patch: |
       - op: replace
         path: /data/APP_ENV
-        value: "preview"
+        value: "test"
       - op: replace
         path: /data/NODE_NAME
         value: "resy"
@@ -48,3 +51,47 @@ patches:
       - op: add
         path: /spec/ports/0/nodePort
         value: 30300
+  # Fix secret refs — namePrefix doesn't transform secretRef/secretKeyRef names
+  - target:
+      kind: Deployment
+      name: node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
+        value: "resy-node-app-secrets"
+  - target:
+      kind: Job
+      name: migrate-node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "resy-node-app-secrets"
+  # EndpointSlice IPs — node InternalIP (provision script updates this per-VM)
+  - target:
+      kind: EndpointSlice
+      name: postgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: temporal-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: litellm-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: redis-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]

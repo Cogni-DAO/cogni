@@ -11,10 +11,9 @@ resources:
 # Image digest — updated by promote-k8s-image.sh on each CI push.
 # Argo CD ApplicationSet points here; digest change → auto-sync.
 images:
-  - name: ghcr.io/cogni-dao/cogni-template
-    newName: ghcr.io/cogni-dao/cogni-template
-    # Replace with @sha256: digest on first real deployment
-    newTag: "staging-placeholder-scheduler-worker"
+  - name: ghcr.io/cogni-dao/node-template
+    newName: ghcr.io/cogni-dao/node-template
+    digest: "sha256:a047d8881063718df24ef328a2ce68733ea98e742c05712b3f7fbd77890ae69c"
 
 patches:
   # Patch ConfigMap with staging-specific values
@@ -32,25 +31,25 @@ patches:
         path: /data/IMAGE_DIGEST
         value: "staging-placeholder-scheduler-worker"
 
-  # EndpointSlice IPs — 127.0.0.1 (single-VM: k3s + Compose on same host)
+  # EndpointSlice IPs — node InternalIP (provision script updates this per-VM)
   - target:
       kind: EndpointSlice
       name: temporal-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["127.0.0.1"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: postgres-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["127.0.0.1"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["127.0.0.1"]
+        value: ["84.32.109.222"]

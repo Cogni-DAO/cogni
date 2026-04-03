@@ -119,7 +119,16 @@ write_files:
       # docker ps won't show k3s pods; use kubectl or crictl.
       echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing k3s..."
       curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.31.4+k3s1" sh -
-      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Waiting for k3s node to be ready..."
+
+      # Wait for k3s node to register (race condition: node not immediately available)
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Waiting for k3s node to register..."
+      for i in $(seq 1 30); do
+        if kubectl get nodes --no-headers 2>/dev/null | grep -q .; then
+          break
+        fi
+        echo "  waiting for node registration ($i/30)..."
+        sleep 2
+      done
       kubectl wait --for=condition=Ready node --all --timeout=120s
       k3s --version
       kubectl get nodes
@@ -163,9 +172,10 @@ write_files:
       kubectl -n argocd patch deployment argocd-repo-server \
         --patch-file /tmp/cogni-repo/infra/k8s/argocd/repo-server-patch.yaml
 
-      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Applying Argo CD ApplicationSets..."
-      kubectl apply -f /tmp/cogni-repo/infra/k8s/argocd/staging-applicationset.yaml
-      kubectl apply -f /tmp/cogni-repo/infra/k8s/argocd/production-applicationset.yaml
+      # ApplicationSets are NOT applied here — the provision script applies them
+      # AFTER secrets, EndpointSlice IPs, and overlay fixes are all in place.
+      # This prevents Argo from racing to sync with incomplete manifests.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Skipping ApplicationSets (provision script applies them last)"
 
       rm -rf /tmp/cogni-repo
 

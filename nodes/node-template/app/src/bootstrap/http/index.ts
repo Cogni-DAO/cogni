@@ -12,7 +12,8 @@
  * @public
  */
 
-import type { NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
+import { makeLogger } from "@/shared/observability";
 import { publicApiLimiter } from "./rateLimiter";
 import { makeWrapPublicRoute, type PublicRouteConfig } from "./wrapPublicRoute";
 
@@ -63,7 +64,37 @@ export function wrapPublicRoute<TContext = unknown>(
           DEPLOY_ENVIRONMENT: container.config.DEPLOY_ENVIRONMENT,
         });
       })();
-      await _initPromise;
+      try {
+        await _initPromise;
+      } catch (bootError) {
+        // Reset promise so next request retries init (container may recover)
+        _initPromise = null;
+        const fallbackLog = makeLogger({ component: "wrapPublicRoute" });
+        fallbackLog.error(
+          {
+            errorCode: "CONTAINER_INIT_FAILED",
+            err:
+              bootError instanceof Error
+                ? bootError.message
+                : String(bootError),
+          },
+          "container initialization failed — returning 503"
+        );
+        return new NextResponse(
+          JSON.stringify({
+            status: "error",
+            reason: "CONTAINER_INIT_FAILED",
+            message:
+              bootError instanceof Error
+                ? bootError.message
+                : "Unknown container initialization error",
+          }),
+          {
+            status: 503,
+            headers: { "content-type": "application/json" },
+          }
+        );
+      }
     }
     if (!_wrapPublicRoute) throw new Error("wrapPublicRoute init failed");
     return _wrapPublicRoute(config, handler)(request, context);

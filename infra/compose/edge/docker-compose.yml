@@ -1,48 +1,646 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
-# Cogni Edge Stack
-# Always-on TLS termination layer. Isolated from app deployments to prevent
-# connection resets during deploys. Started once at bootstrap, rarely touched.
-#
-# INVARIANTS:
-# - Never `docker compose down` this stack during app deployments
-# - Only restart on Caddyfile changes or cert issues
-# - Shares `cogni-edge` network with app stack for service DNS resolution
+# Cogni Runtime Stack
+# Environment-agnostic container stack for app + litellm + postgres + alloy
+# Edge (Caddy) runs in separate compose project to prevent connection resets during deploys
+# Secrets and config come from environment variables set by CI
 
 services:
-  caddy:
-    image: caddy:2
+  app:
+    image: ${APP_IMAGE:-cogni-template-local}
+    build:
+      context: ../../..
+      dockerfile: ./apps/operator/Dockerfile
     restart: always
+    # TigerBeetle native client uses io_uring — blocked by default seccomp profile
+    security_opt:
+      - "seccomp=unconfined"
     networks:
       - cogni-edge
-    ports:
-      - "80:80"
-      - "443:443"
+      - internal
+    labels:
+      - "autoheal=true"
+    mem_limit: 512m
+    memswap_limit: 768m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/livez"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     environment:
-      - DOMAIN=${DOMAIN}
+      - NODE_ENV=${NODE_ENV:-production}
+      # Required vars - fail fast at compose level if missing
+      - APP_ENV=${APP_ENV?APP_ENV is required}
+      - AUTH_SECRET=${AUTH_SECRET?AUTH_SECRET is required}
+      - EVM_RPC_URL=${EVM_RPC_URL?EVM_RPC_URL is required}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY?LITELLM_MASTER_KEY is required}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY?OPENROUTER_API_KEY is required}
+      # Database connections — both required, pass-through only (no DSN construction).
+      # Per DATABASE_RLS_SPEC.md design decision 7: explicit DSNs, no component-piece fallback.
+      - DATABASE_URL=${DATABASE_URL?DATABASE_URL is required}
+      - DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL?DATABASE_SERVICE_URL is required}
+      # Vars with sensible defaults
+      - APP_BASE_URL=${APP_BASE_URL:-https://localhost}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-${APP_BASE_URL:-https://localhost}}
+      - LITELLM_BASE_URL=http://litellm:4000
+      - PORT=${PORT:-3000}
+      - PINO_LOG_LEVEL=${PINO_LOG_LEVEL:-info}
+      - DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
+      # Optional vars - pass-through only if set in host (absent = undefined, not empty string)
+      - METRICS_TOKEN
+      - SCHEDULER_API_TOKEN
+      - BILLING_INGEST_TOKEN
+      - INTERNAL_OPS_TOKEN
+      - GH_WEBHOOK_SECRET
+      - GH_REVIEW_APP_ID
+      - GH_REVIEW_APP_PRIVATE_KEY_BASE64
+      # OAuth providers (optional — provider silently skipped if missing)
+      - GH_OAUTH_CLIENT_ID
+      - GH_OAUTH_CLIENT_SECRET
+      - DISCORD_OAUTH_CLIENT_ID
+      - DISCORD_OAUTH_CLIENT_SECRET
+      - GOOGLE_OAUTH_CLIENT_ID
+      - GOOGLE_OAUTH_CLIENT_SECRET
+      - LANGFUSE_PUBLIC_KEY
+      - LANGFUSE_SECRET_KEY
+      - LANGFUSE_BASE_URL
+      - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
+      # TigerBeetle (Financial Ledger) — optional, native client requires IP (no DNS).
+      # Static IP assigned via ipam on internal network.
+      # DISABLED: TB OOM-crashes on low-memory VMs; native client floods ~36M stderr lines/day to Loki (bug.0195)
+      # Re-enable when TB is provisioned with ≥2GiB and confirmed healthy.
+      # - TIGERBEETLE_ADDRESS=10.100.0.100:3002
+      # Privy (Operator Wallet) — optional, silently skipped if missing
+      - PRIVY_APP_ID
+      - PRIVY_APP_SECRET
+      - PRIVY_SIGNING_KEY
+      # BYO-AI: Connection encryption (optional — BYO-AI disabled when unset)
+      - CONNECTIONS_ENCRYPTION_KEY
+      # Prometheus query (for analytics/AI tools) - read-only credentials
+      - PROMETHEUS_REMOTE_WRITE_URL
+      - PROMETHEUS_QUERY_URL
+      - PROMETHEUS_READ_USERNAME
+      - PROMETHEUS_READ_PASSWORD
+      # Brain repo tools (COGNI_BRAIN_SPEC.md Step 4)
+      - COGNI_REPO_PATH=${COGNI_REPO_PATH:-/repo/current}
+      - COGNI_REPO_SHA=${COGNI_REPO_REF:-}
+      # PostHog product analytics (required)
+      - POSTHOG_API_KEY=${POSTHOG_API_KEY?POSTHOG_API_KEY is required}
+      - POSTHOG_HOST=${POSTHOG_HOST?POSTHOG_HOST is required}
+      # Temporal schedule orchestration (required)
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=cogni-${APP_ENV}
+      - TEMPORAL_TASK_QUEUE=scheduler-tasks
+      - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
+      - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
+      # Redis (stream plane — ephemeral only)
+      - REDIS_URL=redis://redis:6379
     volumes:
-      - ./configs/Caddyfile.tmpl:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+      - repo_data:/repo:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      git-sync:
+        condition: service_completed_successfully
+
+  # =============================================================================
+  # Autoheal — restarts unhealthy containers (label-gated)
+  # Per vm-watchdog spec: WATCHDOG_AUTOHEAL_HARDENED, WATCHDOG_LABEL_GATE
+  # =============================================================================
+  autoheal:
+    image: willfarrell/autoheal@sha256:babbdf5d586b8e2708db827893a228e542b7cbd3b61ee698ba172a67b725c7dd
+    restart: always
+    network_mode: "none"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=5
+      - AUTOHEAL_START_PERIOD=60
+      - AUTOHEAL_DEFAULT_STOP_TIMEOUT=10
+      - DOCKER_SOCK=/var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    labels:
+      - "autoheal=false"
+
+  litellm:
+    build:
+      context: ../../images/litellm
+      dockerfile: Dockerfile
+    image: cogni-litellm:latest
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+      - sandbox-internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:4000)
+    ports:
+      - "4000:4000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - LITELLM_DATABASE_URL=postgresql://${POSTGRES_ROOT_USER}:${POSTGRES_ROOT_PASSWORD}@postgres:5432/litellm
+      # Langfuse integration (LiteLLM->Langfuse callback for generation observations)
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
+      - LANGFUSE_HOST=${LANGFUSE_BASE_URL}
+      - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
+      # Per-node billing callback routing (custom callback class — cogni_callbacks.CogniNodeRouter)
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS}
+      - BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
+    volumes:
+      - ./configs/litellm.config.yaml:/app/config.yaml:ro
+    command: --config /app/config.yaml --host 0.0.0.0 --port 4000
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "wget -qO- http://127.0.0.1:2019/config/ >/dev/null 2>&1 || exit 1",
+          'python3 -c "import urllib.request,sys; r=urllib.request.urlopen(''http://127.0.0.1:4000/health/readiness'', timeout=1); sys.exit(0 if r.status==200 else 1)"',
         ]
-      interval: 30s
+      interval: 10s
       timeout: 5s
+      retries: 8
+      start_period: 120s
+
+  # =============================================================================
+  # Redis 7 — ephemeral stream plane (no persistence, no volume)
+  # Per unified-graph-launch spec: REDIS_IS_STREAM_PLANE
+  # =============================================================================
+  redis:
+    image: redis:7-alpine@sha256:8b81dd37ff027bec4e516d41acfbe9fe2460070dc6d4a4570a2ac5b9d59df065
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:6379)
+    ports:
+      - "6379:6379"
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--maxmemory"
+      - "128mb"
+      - "--maxmemory-policy"
+      - "noeviction"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 5s
+
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:5432).
+    # 0.0.0.0 required because k8s pods reach host via node IP, not loopback.
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_ROOT_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_ROOT_USER}"]
+      interval: 10s
+      timeout: 2s
       retries: 3
       start_period: 10s
 
+  db-provision:
+    image: postgres:15
+    profiles:
+      - bootstrap
+    restart: "no"
+    networks:
+      - internal
+    environment:
+      # Root credentials for provisioning (must match postgres service)
+      POSTGRES_ROOT_USER: ${POSTGRES_ROOT_USER}
+      POSTGRES_ROOT_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS}
+      APP_DB_USER: ${APP_DB_USER}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+      APP_DB_SERVICE_USER: ${APP_DB_SERVICE_USER}
+      APP_DB_SERVICE_PASSWORD: ${APP_DB_SERVICE_PASSWORD}
+      LITELLM_DB_NAME: litellm
+    volumes:
+      - ./postgres-init/provision.sh:/app/provision.sh:ro
+    entrypoint: ["/bin/bash", "/app/provision.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  db-migrate:
+    image: ${MIGRATOR_IMAGE}
+    profiles:
+      - bootstrap
+    restart: "no"
+    networks:
+      - internal
+    environment:
+      # Only DB env var (least-secret exposure). Migrator uses DATABASE_URL directly.
+      - DATABASE_URL=${DATABASE_URL?DATABASE_URL is required}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  repo-init:
+    image: busybox:1.37
+    user: "0:0"
+    command: ["sh", "-c", "chown -R 1001:1001 /repo"]
+    volumes:
+      - repo_data:/repo
+    restart: "no"
+
+  git-sync:
+    image: registry.k8s.io/git-sync/git-sync:v4.4.0
+    # Must match app's nextjs UID:GID (1001:1001 from Dockerfile)
+    # so the repo volume ownership aligns — git 2.35.2+ rejects cross-user repos
+    user: "1001:1001"
+    restart: "no"
+    volumes:
+      - repo_data:/repo
+    depends_on:
+      repo-init:
+        condition: service_completed_successfully
+    environment:
+      - GITSYNC_REPO=${COGNI_REPO_URL}
+      - GITSYNC_REF=${COGNI_REPO_REF}
+      - GITSYNC_ROOT=/repo
+      - GITSYNC_LINK=current
+      - GITSYNC_ONE_TIME=true
+      - GITSYNC_DEPTH=1
+      - GITSYNC_USERNAME=${GIT_READ_USERNAME:-}
+      - GITSYNC_PASSWORD=${GIT_READ_TOKEN:-}
+
+  alloy:
+    image: grafana/alloy:v1.9.2
+    restart: unless-stopped
+    networks:
+      - internal
+    ports:
+      - "127.0.0.1:12345:12345"
+    volumes:
+      - ./configs/alloy-config.metrics.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Host mounts for prometheus.exporter.unix (node-level metrics)
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+    command:
+      - run
+      - /etc/alloy/config.alloy
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy
+    environment:
+      - DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
+      - LOKI_WRITE_URL=${LOKI_WRITE_URL}
+      - LOKI_USERNAME=${LOKI_USERNAME}
+      - LOKI_PASSWORD=${LOKI_PASSWORD}
+      # Metrics scraping (Stage 9)
+      - METRICS_TOKEN=${METRICS_TOKEN:-}
+      - PROMETHEUS_REMOTE_WRITE_URL=${PROMETHEUS_REMOTE_WRITE_URL:-}
+      - PROMETHEUS_USERNAME=${PROMETHEUS_USERNAME:-}
+      - PROMETHEUS_PASSWORD=${PROMETHEUS_PASSWORD:-}
+
+  # =============================================================================
+  # Temporal Services (from temporalio/docker-compose v1.29.1, postgres-only)
+  # Per SCHEDULER_SPEC.md: Required for schedule orchestration
+  #
+  # External DB support: To use managed Postgres (RDS, Cloud SQL, etc.):
+  #   1. Set TEMPORAL_DB_HOST to external hostname
+  #   2. Set TEMPORAL_DB_PORT if non-standard
+  #   3. Add temporal service to cogni-edge network (for external connectivity)
+  #   4. Remove temporal-postgres service and volume
+  # =============================================================================
+
+  temporal-postgres:
+    # Dedicated Postgres for Temporal (not shared with app DB)
+    # Aligned to postgres:15 for consistency with app DB
+    image: postgres:15
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    environment:
+      POSTGRES_USER: ${TEMPORAL_DB_USER:-temporal}
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD:-temporal}
+    volumes:
+      - temporal_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${TEMPORAL_DB_USER:-temporal}"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 10s
+
+  temporal:
+    # Temporal server with auto-setup (handles schema migrations)
+    # Pinned version from temporalio/docker-compose v1.29.1
+    image: temporalio/auto-setup:1.29.1
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:7233)
+    ports:
+      - "7233:7233"
+    environment:
+      # Temporal DB config (auto-setup env vars)
+      - DB=postgres12
+      - DB_PORT=${TEMPORAL_DB_PORT:-5432}
+      - POSTGRES_USER=${TEMPORAL_DB_USER:-temporal}
+      - POSTGRES_PWD=${TEMPORAL_DB_PASSWORD:-temporal}
+      - POSTGRES_SEEDS=${TEMPORAL_DB_HOST:-temporal-postgres}
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      # Temporal gRPC endpoints
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CLI_ADDRESS=temporal:7233
+      # Namespace auto-creation (must match app's TEMPORAL_NAMESPACE)
+      - DEFAULT_NAMESPACE=cogni-${APP_ENV}
+    volumes:
+      - ./configs/temporal-dynamicconfig.yaml:/etc/temporal/config/dynamicconfig/development-sql.yaml:ro
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    healthcheck:
+      # Use temporal CLI to check cluster health (available in auto-setup image)
+      test: ["CMD", "temporal", "operator", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  temporal-ui:
+    # Temporal Web UI for debugging schedules and workflows
+    # Pinned version from temporalio/docker-compose v1.29.1
+    image: temporalio/ui:2.34.0
+    restart: unless-stopped
+    networks:
+      - internal
+    ports:
+      - "127.0.0.1:8233:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  # =============================================================================
+  # Scheduler Worker (Temporal)
+  # Per SCHEDULER_SPEC.md: Executes scheduled graph runs via internal API
+  # =============================================================================
+
+  scheduler-worker:
+    image: ${SCHEDULER_WORKER_IMAGE}
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    stop_grace_period: 30s
+    networks:
+      - internal
+      - cogni-edge
+    environment:
+      # Temporal connection
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=cogni-${APP_ENV}
+      - TEMPORAL_TASK_QUEUE=scheduler-tasks
+      # Database: service role (BYPASSRLS) for cross-tenant scheduler operations.
+      # Pass through DATABASE_SERVICE_URL — worker needs BYPASSRLS for cross-tenant reads.
+      - DATABASE_URL=${DATABASE_SERVICE_URL?DATABASE_SERVICE_URL is required}
+      # Internal API (scheduler-worker → app)
+      - APP_BASE_URL=http://app:3000
+      - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
+      # GitHub App credentials (optional — required only for GitHub ingestion)
+      # Bare passthrough: passes empty string "" when var is unset in host env.
+      # Zod schema coerces "" → undefined so both cases are safe.
+      - GH_REVIEW_APP_ID
+      - GH_REVIEW_APP_PRIVATE_KEY_BASE64
+      - GH_REPOS
+      # Observability
+      - LOG_LEVEL=${PINO_LOG_LEVEL:-info}
+      - SERVICE_NAME=scheduler-worker
+      - HEALTH_PORT=9000
+      # Image digest for /version endpoint (set by deploy pipeline)
+      - IMAGE_DIGEST=${SCHEDULER_WORKER_IMAGE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      # node -e inline check: wget/curl not available in node:20-bookworm-slim
+      # Uses /livez (liveness) per WATCHDOG_LIVEZ_NOT_READYZ invariant
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "require(''http'').get(''http://localhost:9000/livez'',r=>{process.exit(r.statusCode===200?0:1)}).on(''error'',()=>process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
+  # OpenClaw Gateway Services (profile: sandbox-openclaw)
+  # Long-running OpenClaw in gateway mode + auth-injecting nginx proxy
+  # Per openclaw-sandbox-spec.md: shared internal service, concurrent sessions
+  # =============================================================================
+
+  llm-proxy-openclaw:
+    image: nginx:alpine@sha256:5878d06ae4c83d73285438255f705bb3f9a736f41cd24876ed25bb33faf76c7d
+    container_name: llm-proxy-openclaw
+    profiles: [sandbox-openclaw]
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - sandbox-internal
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+    volumes:
+      - ../../images/sandbox-proxy/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
+    command: >
+      sh -c "envsubst '$$LITELLM_MASTER_KEY' < /etc/nginx/nginx.conf.template
+      > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+    depends_on:
+      litellm:
+        condition: service_healthy
+
+  openclaw-gateway:
+    image: ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest
+    container_name: openclaw-gateway
+    profiles: [sandbox-openclaw]
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - sandbox-internal
+      - cogni-edge # internet egress for curl, gh, web search
+      - internal
+    ports:
+      - "127.0.0.1:3333:18789"
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "mkdir -p /workspace/.openclaw-config && cp /opt/openclaw-config-source.json /workspace/.openclaw-config/openclaw.json && exec node /app/dist/index.js gateway",
+      ]
+    environment:
+      - HOME=/workspace
+      - npm_config_store_dir=/pnpm-store
+      - OPENCLAW_CONFIG_PATH=/workspace/.openclaw-config/openclaw.json
+      - OPENCLAW_STATE_DIR=/workspace/.openclaw-state
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN?OPENCLAW_GATEWAY_TOKEN is required}
+      - OPENCLAW_LOAD_SHELL_ENV=0
+      - GITHUB_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
+      - COGNI_REPO_URL=${COGNI_REPO_URL}
+      - GIT_AUTHOR_NAME=Cogni Agent
+      - GIT_COMMITTER_NAME=Cogni Agent
+      - GIT_AUTHOR_EMAIL=agent@cogni.dev
+      - GIT_COMMITTER_EMAIL=agent@cogni.dev
+      - OPENCLAW_RAW_STREAM=1
+      - OPENCLAW_RAW_STREAM_PATH=/tmp/openclaw-raw-stream.jsonl
+      - PI_RAW_STREAM=1
+      - PI_RAW_STREAM_PATH=/tmp/pi-raw-stream.jsonl
+      # Grafana observability (for grafana-health skill)
+      - GRAFANA_URL=${GRAFANA_URL}
+      - GRAFANA_SERVICE_ACCOUNT_TOKEN=${GRAFANA_SERVICE_ACCOUNT_TOKEN}
+      # Discord bot (OpenClaw channel plugin)
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m
+    volumes:
+      - ./openclaw/openclaw-gateway.json:/opt/openclaw-config-source.json:ro # seed config — copied to writable path on startup
+      - ./openclaw/gateway-workspace:/workspace/gateway
+      - repo_data:/repo:ro
+      - pnpm_store:/pnpm-store
+      - cogni_workspace:/workspace # RW volume — pnpm hardlinks require same fs as pnpm_store
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "const s=require(''net'').connect(18789,''127.0.0.1'',()=>{s.end();process.exit(0)});s.setTimeout(2000,()=>{s.destroy();process.exit(1)});s.on(''error'',()=>process.exit(1))"',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 90s
+    depends_on:
+      llm-proxy-openclaw:
+        condition: service_healthy
+      git-sync:
+        condition: service_completed_successfully
+
+  # =============================================================================
+  # TigerBeetle (Financial Ledger)
+  # Per financial-ledger-spec: double-entry ledger engine
+  # Self-initializing: formats data file on first boot, then starts.
+  # Optional — app gracefully handles absence (FinancialLedgerPort | undefined).
+  # Opt-in via --profile tigerbeetle (requires ≥2GiB RAM for journal mmap). See bug.0195.
+  # =============================================================================
+
+  tigerbeetle:
+    image: ghcr.io/tigerbeetle/tigerbeetle:0.16.76
+    profiles: [tigerbeetle]
+    restart: unless-stopped
+    mem_limit: 2g
+    cap_add:
+      - IPC_LOCK
+    security_opt:
+      - "seccomp=unconfined"
+    labels:
+      - "autoheal=true"
+    networks:
+      internal:
+        ipv4_address: 10.100.0.100
+    entrypoint:
+      - "sh"
+      - "-c"
+      - |
+        if [ ! -f /data/0_0.tigerbeetle ]; then
+          echo "TigerBeetle: formatting data file (first boot)..."
+          /tigerbeetle format --cluster=0 --replica=0 --replica-count=1 /data/0_0.tigerbeetle
+        fi
+        exec /tigerbeetle start --addresses=0.0.0.0:3002 /data/0_0.tigerbeetle
+    volumes:
+      - tigerbeetle_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 3002"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 15s
+
 networks:
+  # External network shared with edge stack (Caddy)
+  # App must be on this network for Caddy to reverse_proxy to it
   cogni-edge:
     name: cogni-edge
     external: true
+  # Internal network for app stack services (postgres, litellm, alloy)
+  # Subnet defined for TigerBeetle static IP (native client requires IP, no DNS)
+  internal:
+    ipam:
+      config:
+        - subnet: 10.100.0.0/24
+  # Isolated network for sandbox containers (no external gateway)
+  sandbox-internal:
+    name: sandbox-internal
+    internal: true
 
 volumes:
-  caddy_data:
-    name: cogni-edge_caddy_data
-  caddy_config:
-    name: cogni-edge_caddy_config
+  postgres_data:
+    name: postgres_data
+  alloy_data:
+    name: alloy_data
+  temporal_postgres_data:
+    name: temporal_postgres_data
+  repo_data:
+    name: repo_data
+  pnpm_store:
+    name: pnpm_store
+  tigerbeetle_data:
+    name: tigerbeetle_data
+  cogni_workspace:
+    name: cogni_workspace
