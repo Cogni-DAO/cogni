@@ -688,7 +688,7 @@ const SECRETS: Secret[] = [
 
 const REPO = "Cogni-DAO/node-template";
 /** Deploy environments. Secrets are set per-env, not repo-level. */
-const ENVIRONMENTS = ["preview", "production"] as const;
+const ENVIRONMENTS = ["preview", "canary", "production"] as const;
 
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
