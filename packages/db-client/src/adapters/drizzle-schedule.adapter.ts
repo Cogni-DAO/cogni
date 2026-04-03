@@ -152,6 +152,7 @@ export class DrizzleScheduleUserAdapter implements ScheduleUserPort {
       // Order: grant → DB → scheduleControl (on fail: rollback DB and grant)
       await this.scheduleControl.createSchedule({
         scheduleId: row.id,
+        nodeId: input.nodeId,
         dbScheduleId: row.id,
         ownerUserId: callerUserId,
         cron: input.cron,

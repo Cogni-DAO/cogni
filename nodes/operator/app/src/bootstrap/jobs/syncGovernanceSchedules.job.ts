@@ -24,7 +24,7 @@ import cronParser from "cron-parser";
 import { and, eq } from "drizzle-orm";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { getContainer } from "@/bootstrap/container";
-import { getGovernanceConfig } from "@/shared/config";
+import { getGovernanceConfig, getNodeId } from "@/shared/config";
 import { schedules } from "@/shared/db/schema";
 import { serverEnv } from "@/shared/env/server-env";
 
@@ -142,6 +142,7 @@ export async function runGovernanceSchedulesSyncJob(): Promise<GovernanceSchedul
         return row.id;
       },
       systemUserId: COGNI_SYSTEM_PRINCIPAL_USER_ID,
+      nodeId: getNodeId(),
       scheduleControl: container.scheduleControl,
       listGovernanceScheduleIds: () =>
         container.scheduleControl.listScheduleIds("governance:"),

@@ -588,10 +588,10 @@ services:
       # DATABASE_SERVICE_URL_DOCKER provides Docker-internal URL (postgres:5432) for test scripts.
       # Falls back to DATABASE_SERVICE_URL for production/non-test contexts.
       - DATABASE_URL=${DATABASE_SERVICE_URL_DOCKER:-${DATABASE_SERVICE_URL}}
-      # Internal API (scheduler-worker → app)
-      # Default: http://app:3000 for Docker-based stacks
-      # Override: http://host.docker.internal:3000 for test:stack:dev (app on host)
-      - APP_BASE_URL=${SCHEDULER_APP_BASE_URL:-http://app:3000}
+      # Per-node API endpoints (scheduler-worker → node apps)
+      # Default: Docker-internal DNS for each node
+      # Override: COGNI_NODE_ENDPOINTS for test:stack:dev (app on host)
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS:-operator=http://app:3000,poly=http://poly:3100,resy=http://resy:3300}
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN?SCHEDULER_API_TOKEN is required}
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.

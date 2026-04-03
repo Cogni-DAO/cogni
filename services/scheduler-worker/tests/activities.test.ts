@@ -62,7 +62,7 @@ describe("createActivities", () => {
       grantAdapter: mockGrantAdapter,
       runAdapter: mockRunAdapter,
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -90,7 +90,7 @@ describe("validateGrantActivity", () => {
       grantAdapter: mockGrantAdapter,
       runAdapter: {} as Parameters<typeof createActivities>[0]["runAdapter"],
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -119,7 +119,7 @@ describe("validateGrantActivity", () => {
       grantAdapter: mockGrantAdapter,
       runAdapter: {} as Parameters<typeof createActivities>[0]["runAdapter"],
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -148,7 +148,7 @@ describe("createGraphRunActivity", () => {
       >[0]["grantAdapter"],
       runAdapter: mockRunAdapter,
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -192,7 +192,7 @@ describe("updateGraphRunActivity", () => {
       >[0]["grantAdapter"],
       runAdapter: mockRunAdapter,
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -224,7 +224,7 @@ describe("updateGraphRunActivity", () => {
       >[0]["grantAdapter"],
       runAdapter: mockRunAdapter,
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -257,7 +257,7 @@ describe("updateGraphRunActivity", () => {
       >[0]["grantAdapter"],
       runAdapter: mockRunAdapter,
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -296,13 +296,14 @@ describe("executeGraphActivity", () => {
       >[0]["grantAdapter"],
       runAdapter: {} as Parameters<typeof createActivities>[0]["runAdapter"],
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
     });
 
     const result = await activities.executeGraphActivity({
+      nodeId: "operator",
       temporalScheduleId: FIXED_IDS.scheduleId,
       graphId: FIXED_IDS.graphId,
       executionGrantId: FIXED_IDS.grantId,
@@ -347,7 +348,7 @@ describe("executeGraphActivity", () => {
       >[0]["grantAdapter"],
       runAdapter: {} as Parameters<typeof createActivities>[0]["runAdapter"],
       config: {
-        appBaseUrl: "http://localhost:3000",
+        nodeEndpoints: new Map([["operator", "http://localhost:3000"]]),
         schedulerApiToken: "test-token-min-32-characters-long",
       },
       logger: mockLogger,
@@ -355,6 +356,7 @@ describe("executeGraphActivity", () => {
 
     await expect(
       activities.executeGraphActivity({
+        nodeId: "operator",
         temporalScheduleId: FIXED_IDS.scheduleId,
         graphId: FIXED_IDS.graphId,
         executionGrantId: FIXED_IDS.grantId,

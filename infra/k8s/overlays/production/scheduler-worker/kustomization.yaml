@@ -23,8 +23,8 @@ patches:
         path: /data/TEMPORAL_NAMESPACE
         value: "cogni-production"
       - op: replace
-        path: /data/APP_BASE_URL
-        value: "http://app:3000"
+        path: /data/COGNI_NODE_ENDPOINTS
+        value: "operator=http://app:3000,poly=http://poly-app:3000,resy=http://resy-app:3000"
       - op: replace
         path: /data/IMAGE_DIGEST
         value: "production-placeholder-scheduler-worker"
@@ -47,6 +47,20 @@ patches:
   - target:
       kind: EndpointSlice
       name: app-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["127.0.0.1"]
+  - target:
+      kind: EndpointSlice
+      name: poly-app-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["127.0.0.1"]
+  - target:
+      kind: EndpointSlice
+      name: resy-app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses

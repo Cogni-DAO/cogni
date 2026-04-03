@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # Non-secret configuration for scheduler-worker.
-# Env-specific values (TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, APP_BASE_URL,
+# Env-specific values (TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, COGNI_NODE_ENDPOINTS,
 # IMAGE_DIGEST) are patched by overlays.
 apiVersion: v1
 kind: ConfigMap
@@ -17,8 +17,8 @@ data:
   TEMPORAL_NAMESPACE: "cogni-staging"
   TEMPORAL_TASK_QUEUE: "scheduler-tasks"
 
-  # Internal API — overridden per-env by overlay
-  APP_BASE_URL: "http://app:3000"
+  # Per-node API endpoints — overridden per-env by overlay
+  COGNI_NODE_ENDPOINTS: "operator=http://app:3000"
 
   # Observability
   LOG_LEVEL: "info"

@@ -22,6 +22,7 @@ import {
 import { WorkflowExecutionAlreadyStartedError } from "@temporalio/client";
 import type { Logger } from "pino";
 import { getContainer, getTemporalWorkflowClient } from "@/bootstrap/container";
+import { getNodeId } from "@/shared/config";
 
 /** PR actions that trigger review. */
 const REVIEW_ACTIONS = new Set(["opened", "synchronize", "reopened"]);
@@ -117,6 +118,7 @@ async function startPrReviewWorkflow(
       workflowId,
       args: [
         {
+          nodeId: getNodeId(),
           owner: ctx.owner,
           repo: ctx.repo,
           prNumber: ctx.prNumber,

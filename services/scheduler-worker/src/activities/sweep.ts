@@ -23,7 +23,8 @@ import type { Logger } from "../observability/logger.js";
  */
 export interface SweepActivityDeps {
   config: {
-    appBaseUrl: string;
+    /** Operator node URL — sweeps are operator-only for now. */
+    operatorBaseUrl: string;
     schedulerApiToken: string;
   };
   logger: Logger;
@@ -43,7 +44,7 @@ export function createSweepActivities(deps: SweepActivityDeps) {
     labels?: string[];
     types?: string[];
   }): Promise<SweepWorkItem[]> {
-    const url = new URL("/api/v1/work/items", config.appBaseUrl);
+    const url = new URL("/api/v1/work/items", config.operatorBaseUrl);
 
     if (input.statuses?.length) {
       url.searchParams.set("statuses", input.statuses.join(","));

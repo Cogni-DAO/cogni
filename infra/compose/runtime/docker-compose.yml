@@ -437,8 +437,8 @@ services:
       # Database: service role (BYPASSRLS) for cross-tenant scheduler operations.
       # Pass through DATABASE_SERVICE_URL — worker needs BYPASSRLS for cross-tenant reads.
       - DATABASE_URL=${DATABASE_SERVICE_URL?DATABASE_SERVICE_URL is required}
-      # Internal API (scheduler-worker → app)
-      - APP_BASE_URL=http://app:3000
+      # Per-node API endpoints (scheduler-worker → node apps)
+      - COGNI_NODE_ENDPOINTS=operator=http://app:3000,poly=http://poly:3100,resy=http://resy:3300
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.

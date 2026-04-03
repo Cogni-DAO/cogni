@@ -87,8 +87,18 @@ export async function startSchedulerWorker(
       : {};
 
   // Create sweep activities (queue-sweeping agent roles)
+  // Sweeps are operator-only; extract operator URL from node endpoints.
+  const operatorBaseUrl = container.config.nodeEndpoints.get("operator");
+  if (!operatorBaseUrl) {
+    throw new Error(
+      'COGNI_NODE_ENDPOINTS must include "operator" entry for sweep activities'
+    );
+  }
   const sweepActivities = createSweepActivities({
-    config: container.config,
+    config: {
+      operatorBaseUrl,
+      schedulerApiToken: container.config.schedulerApiToken,
+    },
     logger:
       container.logger.child?.({ component: "sweep-activities" }) ??
       container.logger,

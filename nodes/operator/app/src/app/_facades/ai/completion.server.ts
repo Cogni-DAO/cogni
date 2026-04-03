@@ -44,6 +44,7 @@ import {
   isInsufficientCreditsPortError,
   isVirtualKeyNotFoundPortError,
 } from "@/ports";
+import { getNodeId } from "@/shared/config";
 import type { RequestContext } from "@/shared/observability";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -348,6 +349,7 @@ export async function completionStream(
       workflowId,
       args: [
         {
+          nodeId: getNodeId(),
           graphId,
           executionGrantId: null,
           input: {

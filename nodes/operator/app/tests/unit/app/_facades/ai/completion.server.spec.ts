@@ -31,6 +31,11 @@ vi.mock("@/shared/env", () => ({
   }),
 }));
 
+// Mock getNodeId (repo-spec not available in test env)
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "operator",
+}));
+
 describe("completion facade contract", () => {
   it("should return exact shape matching chatCompletionsContract.output (OpenAI ChatCompletion)", async () => {
     // Arrange - Use reusable fixture
