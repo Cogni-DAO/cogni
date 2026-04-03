@@ -54,20 +54,33 @@ Operator has only 8 unique files vs node-template (DAO setup flow + VCS adapter)
 
 ## Plan
 
+### 0. Design review notes (2026-04-03)
+
+1. **ALL 4 Dockerfiles hardcode `apps/operator` paths** — not just operator's. Node-template, poly, resy all build operator (pre-existing bug). After the move, ALL Docker builds break. Fix all 4 Dockerfiles.
+2. **`pnpm --filter operator` uses package name, not path** — the 15 `--filter operator` refs in root package.json work by name resolution. Don't change the package name. These scripts need zero changes.
+3. **Remove `apps/` dir + glob entirely** — don't keep empty dirs for hypothetical future use. Remove `apps/*` from pnpm-workspace.yaml.
+
 ### 1. Move the directory
 
 - [ ] `mkdir -p nodes/operator && git mv apps/operator nodes/operator/app`
 - [ ] Create `nodes/operator/.cogni/repo-spec.yaml` (copy from node-template, update node identity)
+- [ ] Remove empty `apps/` directory
+- [ ] Remove `apps/*` glob from `pnpm-workspace.yaml`
 
 ### 2. Fix operator-internal paths
 
 - [ ] `nodes/operator/app/next.config.ts`: `outputFileTracingRoot` `"../../"` → `"../../../"`
-- [ ] `nodes/operator/app/Dockerfile`: COPY/WORKDIR paths (monorepo root offset changes)
-- [ ] `nodes/operator/app/package.json`: verify name field resolves
+- [ ] `nodes/operator/app/Dockerfile`: all `apps/operator` → `nodes/operator/app` (10 refs)
+- [ ] `nodes/operator/app/package.json`: verify name stays `"operator"` (pnpm --filter depends on it)
 
-### 3. Workspace + TypeScript wiring (24 files)
+### 2b. Fix OTHER node Dockerfiles (pre-existing bug: they all hardcode apps/operator)
 
-- [ ] `pnpm-workspace.yaml`: remove `apps/*` glob
+- [ ] `nodes/node-template/app/Dockerfile`: `apps/operator` → `nodes/operator/app` (10 refs)
+- [ ] `nodes/poly/app/Dockerfile`: `apps/operator` → `nodes/operator/app` (10 refs)
+- [ ] `nodes/resy/app/Dockerfile`: `apps/operator` → `nodes/operator/app` (10 refs)
+
+### 3. Workspace + TypeScript wiring
+
 - [ ] `tsconfig.json`: update references path
 - [ ] `tsconfig.base.json`: `@/*` paths `apps/operator/src/*` → `nodes/operator/app/src/*`
 - [ ] `drizzle.config.ts`: schema path
@@ -84,12 +97,15 @@ Operator has only 8 unique files vs node-template (DAO setup flow + VCS adapter)
 
 ### 5. Docker + CI + scripts (8 files)
 
-- [ ] `.github/workflows/ci.yaml`: build context, filter paths
-- [ ] `infra/compose/runtime/docker-compose.yml`: app service build context
-- [ ] `infra/compose/runtime/docker-compose.dev.yml`: app service build context
+- [ ] `.github/workflows/ci.yaml`: Dockerfile path refs (2 refs — `--filter operator` stays as-is)
+- [ ] `infra/compose/runtime/docker-compose.yml`: Dockerfile path
+- [ ] `infra/compose/runtime/docker-compose.dev.yml`: Dockerfile paths (2 refs)
 - [ ] `infra/catalog/operator.yaml`: path references
-- [ ] `scripts/check-all.sh`, `scripts/check-fast.sh`, `scripts/ci/build.sh`, `scripts/ci/compute_migrator_fingerprint.sh`
-- [ ] `scripts/check-root-layout.ts`
+- [ ] `scripts/check-all.sh`, `scripts/check-fast.sh`: vitest config path
+- [ ] `scripts/ci/build.sh`: Dockerfile path
+- [ ] `scripts/ci/compute_migrator_fingerprint.sh`: db/migration paths
+- [ ] `scripts/check-root-layout.ts`: directory check paths
+- [ ] Root `package.json`: lint/typecheck paths that use filesystem paths (NOT --filter commands)
 
 ### 6. Docs (19 files — update live references only)
 
