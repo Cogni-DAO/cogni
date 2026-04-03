@@ -2,7 +2,7 @@
 id: task.0250
 type: task
 title: "Extract @cogni/graph-execution-host package"
-status: needs_merge
+status: done
 priority: 1
 rank: 21
 estimate: 3
