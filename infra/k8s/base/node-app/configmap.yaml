@@ -17,4 +17,5 @@ data:
   TEMPORAL_NAMESPACE: "cogni-preview"
   TEMPORAL_TASK_QUEUE: "scheduler-tasks"
   REDIS_URL: "redis://redis-external:6379"
-  COGNI_REPO_PATH: ""
+  # COGNI_REPO_PATH omitted — requires git-sync sidecar (not in k8s yet).
+  # App starts without it; repo tools disabled.
