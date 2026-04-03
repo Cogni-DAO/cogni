@@ -19,7 +19,7 @@ labels:
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:d8797729be677233a3fd0096062195738ec4605e9422e1905ad7c60646aadc68"
+    digest: "sha256:1471ef3222bb0839dc6a448c6ba002313361d3f59d7643a04356385653ec7de7"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
     digest: "sha256:de3c0c0f967addfeb25cf5de111ab56b14bf4b789ea2927e3d8d87b3f321d4f4"
