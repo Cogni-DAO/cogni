@@ -238,7 +238,8 @@ export function DeploymentsView(): ReactElement {
 
   const rows = data?.rows ?? [];
   const recentRuns = data?.recentRuns ?? [];
-  const allHealthy = rows.every((r) => r.health.status === "healthy");
+  const allHealthy =
+    rows.length > 0 && rows.every((r) => r.health.status === "healthy");
 
   return (
     <div className="flex flex-col gap-6 p-5 md:p-6">
@@ -314,7 +315,7 @@ export function DeploymentsView(): ReactElement {
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      <DeployIcon status={row.deploy.status} />
+                      <DeployIcon status={row.deploy.status as DeployStatus} />
                     </TableCell>
                     <TableCell className="text-center">
                       <HealthIcon
@@ -408,7 +409,7 @@ export function DeploymentsView(): ReactElement {
               {recentRuns.map((run) => (
                 <a
                   key={run.id}
-                  href={run.url}
+                  href={run.htmlUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-3 px-5 py-2 hover:bg-muted/50"
@@ -418,17 +419,17 @@ export function DeploymentsView(): ReactElement {
                     conclusion={run.conclusion}
                   />
                   <span className="min-w-0 flex-1 truncate text-sm">
-                    {run.message || run.name}
+                    {run.commitMessage || run.name}
                   </span>
                   <Badge
                     intent="secondary"
                     size="sm"
                     className="shrink-0 font-mono"
                   >
-                    {branchShort(run.branch)}
+                    {branchShort(run.headBranch)}
                   </Badge>
                   <span className="shrink-0 text-muted-foreground text-xs tabular-nums">
-                    {timeAgo(run.timestamp)}
+                    {timeAgo(run.createdAt)}
                   </span>
                 </a>
               ))}

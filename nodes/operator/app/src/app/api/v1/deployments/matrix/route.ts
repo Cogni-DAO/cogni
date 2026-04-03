@@ -3,74 +3,43 @@
 
 /**
  * Module: `@app/api/v1/deployments/matrix/route`
- * Purpose: Aggregates deployment status from GitHub Actions, Grafana Loki deployment events, and health probes.
- * Scope: Unauthenticated GET endpoint (deployment status is non-sensitive). Aggregates multiple data sources.
- * Invariants: GRACEFUL_DEGRADATION — returns partial data if any data source is unavailable.
- * Side-effects: IO (GitHub API, Loki API, HTTP health pings)
+ * Purpose: Deployment matrix — aggregates GitHub Actions, Loki deploy events, and health probes.
+ * Scope: Delivery-only route. Delegates to observability adapters. TTL-cached (30s).
+ * Invariants: GRACEFUL_DEGRADATION — returns partial data if any source is unavailable.
+ * Side-effects: IO (via adapters)
  * @public
  */
 
-import { createAppAuth } from "@octokit/auth-app";
-import { Octokit } from "@octokit/core";
 import { NextResponse } from "next/server";
+import {
+  GitHubActionsClient,
+  type WorkflowRun,
+} from "@/adapters/server/observability/github-actions-client";
+import { probeHealth } from "@/adapters/server/observability/health-probe";
+import { LokiQueryClient } from "@/adapters/server/observability/loki-query-client";
 import { serverEnv } from "@/shared/env";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 // ---------------------------------------------------------------------------
-// Types
+// Response types
 // ---------------------------------------------------------------------------
-
-interface WorkflowRun {
-  id: number;
-  name: string;
-  status: string;
-  conclusion: string | null;
-  html_url: string;
-  head_branch: string;
-  head_sha: string;
-  head_commit: {
-    message: string;
-    author: { name: string };
-    timestamp: string;
-  } | null;
-  created_at: string;
-  updated_at: string;
-  run_number: number;
-}
-
-interface HealthResult {
-  status: "healthy" | "degraded" | "down" | "unknown";
-  latencyMs: number | null;
-}
-
-interface LokiDeployEvent {
-  environment: string;
-  status: "success" | "failed" | "started";
-  commit: string;
-  actor: string;
-  timestamp: string;
-  app: string;
-}
 
 export interface DeploymentRow {
   branch: string;
-  environment: string | null;
+  environment: string;
   ci: {
     status: "success" | "failure" | "pending" | "unknown";
-    conclusion: string | null;
     url: string | null;
     workflowName: string | null;
-    runNumber: number | null;
   };
-  health: HealthResult;
-  deploy: {
-    status: "success" | "failed" | "started" | "unknown";
-    actor: string | null;
-    timestamp: string | null;
+  health: {
+    status: "healthy" | "degraded" | "down" | "unknown";
+    latencyMs: number | null;
   };
-  url: string | null;
+  deploy: { status: string; actor: string | null; timestamp: string | null };
+  url: string;
   commit: {
     sha: string;
     message: string;
@@ -79,259 +48,176 @@ export interface DeploymentRow {
   } | null;
 }
 
-interface RecentRun {
-  id: number;
-  name: string;
-  status: string;
-  conclusion: string | null;
-  url: string;
-  branch: string;
-  sha: string;
-  message: string;
-  author: string;
-  timestamp: string;
-  runNumber: number;
-}
-
 export interface DeploymentMatrixResponse {
   rows: DeploymentRow[];
-  recentRuns: RecentRun[];
-  lokiEvents: LokiDeployEvent[];
+  recentRuns: WorkflowRun[];
   sources: { github: boolean; loki: boolean; health: boolean };
   fetchedAt: string;
 }
 
 // ---------------------------------------------------------------------------
-// Config — branch → environment topology
+// Topology — branch → environment → health URL
 // ---------------------------------------------------------------------------
 
 const OWNER = "cogni-dao";
 const REPO = "cogni-template";
 
-interface EnvConfig {
+interface EnvTarget {
   branch: string;
   environment: string;
   healthUrl: string;
 }
 
-function getTopology(env: ReturnType<typeof serverEnv>): EnvConfig[] {
-  const domain = env.DOMAIN ?? "cognidao.org";
-  return [
-    {
-      branch: "canary",
-      environment: "canary",
-      healthUrl: `https://canary.${domain}/livez`,
-    },
-    {
-      branch: "staging",
-      environment: "preview",
-      healthUrl: `https://preview.${domain}/livez`,
-    },
-    {
-      branch: "main",
-      environment: "production",
-      healthUrl: `https://${domain}/livez`,
-    },
-  ];
-}
+const TOPOLOGY: EnvTarget[] = [
+  {
+    branch: "canary",
+    environment: "canary",
+    healthUrl: "https://test.cognidao.org/livez",
+  },
+  {
+    branch: "canary",
+    environment: "canary-poly",
+    healthUrl: "https://poly-test.cognidao.org/livez",
+  },
+  {
+    branch: "canary",
+    environment: "canary-resy",
+    healthUrl: "https://resy-test.cognidao.org/livez",
+  },
+  {
+    branch: "staging",
+    environment: "preview",
+    healthUrl: "https://preview.cognidao.org/livez",
+  },
+  {
+    branch: "main",
+    environment: "production",
+    healthUrl: "https://cognidao.org/livez",
+  },
+];
 
 // ---------------------------------------------------------------------------
-// GitHub Actions — uses same auth pattern as VCS adapter
+// Singleton clients (created once per process, cached installation IDs)
 // ---------------------------------------------------------------------------
 
-async function getOctokit(
+let ghClient: GitHubActionsClient | null | undefined;
+let lokiClient: LokiQueryClient | null | undefined;
+
+function getGitHubClient(
   env: ReturnType<typeof serverEnv>
-): Promise<Octokit | null> {
+): GitHubActionsClient | null {
+  if (ghClient !== undefined) return ghClient;
   const appId = env.GH_REVIEW_APP_ID;
-  const privateKeyBase64 = env.GH_REVIEW_APP_PRIVATE_KEY_BASE64;
-  if (!appId || !privateKeyBase64) return null;
-
-  const privateKey = Buffer.from(privateKeyBase64, "base64").toString("utf-8");
-  const auth = createAppAuth({ appId, privateKey });
-
-  const { token } = await auth({ type: "app" });
-  const res = await fetch(
-    `https://api.github.com/repos/${OWNER}/${REPO}/installation`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/vnd.github+json",
-      },
-    }
-  );
-  if (!res.ok) return null;
-
-  const { id: installationId } = (await res.json()) as { id: number };
-  return new Octokit({
-    authStrategy: createAppAuth,
-    auth: { appId, privateKey, installationId },
+  const pkB64 = env.GH_REVIEW_APP_PRIVATE_KEY_BASE64;
+  if (!appId || !pkB64) {
+    ghClient = null;
+    return null;
+  }
+  ghClient = new GitHubActionsClient({
+    appId,
+    privateKey: Buffer.from(pkB64, "base64").toString("utf-8"),
   });
+  return ghClient;
 }
 
-async function fetchWorkflowRuns(
-  octokit: Octokit,
-  branch?: string
-): Promise<WorkflowRun[]> {
-  const { data } = await octokit.request(
-    "GET /repos/{owner}/{repo}/actions/runs",
-    {
-      owner: OWNER,
-      repo: REPO,
-      per_page: branch ? 5 : 20,
-      ...(branch ? { branch } : {}),
-    }
-  );
-  return data.workflow_runs as WorkflowRun[];
-}
-
-// ---------------------------------------------------------------------------
-// Grafana Cloud Loki — deployment event queries
-// ---------------------------------------------------------------------------
-
-async function queryLokiDeployEvents(
+function getLokiClient(
   env: ReturnType<typeof serverEnv>
-): Promise<LokiDeployEvent[]> {
-  const lokiUrl = env.LOKI_WRITE_URL;
-  const lokiUser = env.LOKI_USERNAME;
-  const lokiPassword = env.LOKI_PASSWORD;
-  if (!lokiUrl || !lokiUser || !lokiPassword) return [];
-
-  try {
-    const query = `{service="deployment"} |= "deployment" | json`;
-    const end = Date.now();
-    const start = end - 24 * 60 * 60 * 1000; // last 24h
-
-    // LOKI_WRITE_URL may include /loki/api/v1/push — strip to base
-    const baseUrl = lokiUrl.replace(/\/loki\/api\/v1\/push\/?$/, "");
-    const url = new URL(`${baseUrl}/loki/api/v1/query_range`);
-    url.searchParams.set("query", query);
-    url.searchParams.set("start", String(start * 1_000_000)); // nanoseconds
-    url.searchParams.set("end", String(end * 1_000_000));
-    url.searchParams.set("limit", "50");
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const res = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${lokiUser}:${lokiPassword}`).toString("base64")}`,
-      },
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) return [];
-
-    const data = (await res.json()) as {
-      data: {
-        result: Array<{
-          values: Array<[string, string]>;
-        }>;
-      };
-    };
-
-    const events: LokiDeployEvent[] = [];
-    for (const stream of data.data.result) {
-      for (const [ts, line] of stream.values) {
-        try {
-          const parsed = JSON.parse(line) as Record<string, string>;
-          events.push({
-            environment: parsed.env ?? "unknown",
-            status: (parsed.status as LokiDeployEvent["status"]) ?? "unknown",
-            commit: parsed.commit ?? "",
-            actor: parsed.actor ?? "",
-            timestamp: new Date(Number(ts) / 1_000_000).toISOString(),
-            app: parsed.app ?? "operator",
-          });
-        } catch {
-          // Skip unparseable lines
-        }
-      }
-    }
-    return events.sort(
-      (a, b) =>
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-    );
-  } catch {
-    return [];
+): LokiQueryClient | null {
+  if (lokiClient !== undefined) return lokiClient;
+  const url = env.LOKI_WRITE_URL;
+  const user = env.LOKI_USERNAME;
+  const pass = env.LOKI_PASSWORD;
+  if (!url || !user || !pass) {
+    lokiClient = null;
+    return null;
   }
+  lokiClient = new LokiQueryClient({
+    baseUrl: url,
+    username: user,
+    password: pass,
+  });
+  return lokiClient;
 }
 
 // ---------------------------------------------------------------------------
-// Health probe
+// TTL cache — one response per 30s regardless of viewer count
 // ---------------------------------------------------------------------------
 
-async function probeHealth(url: string): Promise<HealthResult> {
-  const start = Date.now();
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      cache: "no-store",
-    });
-    clearTimeout(timeout);
-    const latencyMs = Date.now() - start;
-
-    if (res.ok) return { status: "healthy", latencyMs };
-    if (res.status >= 500) return { status: "degraded", latencyMs };
-    return { status: "down", latencyMs };
-  } catch {
-    return { status: "down", latencyMs: null };
-  }
-}
+let cache: { data: DeploymentMatrixResponse; expiresAt: number } | null = null;
+const CACHE_TTL_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // Route handler
 // ---------------------------------------------------------------------------
 
 export async function GET(): Promise<NextResponse<DeploymentMatrixResponse>> {
+  if (cache && Date.now() < cache.expiresAt) {
+    return NextResponse.json(cache.data);
+  }
+
   const env = serverEnv();
-  const topology = getTopology(env);
-  const octokit = await getOctokit(env);
+  const gh = getGitHubClient(env);
+  const loki = getLokiClient(env);
 
-  // Fetch all data sources in parallel
-  const branchRunsPromises = topology.map(async (env) => {
-    if (!octokit) return { env, runs: [] as WorkflowRun[] };
-    try {
-      const runs = await fetchWorkflowRuns(octokit, env.branch);
-      return { env, runs };
-    } catch {
-      return { env, runs: [] as WorkflowRun[] };
-    }
-  });
+  // Deduplicate branches for GitHub API calls
+  const uniqueBranches = [...new Set(TOPOLOGY.map((t) => t.branch))];
 
-  const recentRunsPromise = octokit
-    ? fetchWorkflowRuns(octokit).catch(() => [] as WorkflowRun[])
-    : Promise.resolve([] as WorkflowRun[]);
-
-  const healthPromises = topology.map((env) => probeHealth(env.healthUrl));
-  const lokiPromise = queryLokiDeployEvents(env);
-
-  const [branchResults, recentWorkflowRuns, healthResults, lokiEvents] =
+  const [branchRunMap, recentRuns, healthResults, lokiEntries] =
     await Promise.all([
-      Promise.all(branchRunsPromises),
-      recentRunsPromise,
-      Promise.all(healthPromises),
-      lokiPromise,
+      // GitHub: one call per unique branch
+      (async () => {
+        if (!gh) return new Map<string, WorkflowRun[]>();
+        const entries = await Promise.all(
+          uniqueBranches.map(async (branch) => {
+            const runs = await gh.listWorkflowRuns(OWNER, REPO, {
+              branch,
+              perPage: 5,
+            });
+            return [branch, runs] as const;
+          })
+        );
+        return new Map(entries);
+      })(),
+      // GitHub: recent runs across all branches
+      gh?.listWorkflowRuns(OWNER, REPO, { perPage: 15 }) ?? Promise.resolve([]),
+      // Health probes
+      Promise.all(TOPOLOGY.map((t) => probeHealth(t.healthUrl))),
+      // Loki deploy events (last 24h)
+      (async () => {
+        if (!loki) return [];
+        const now = Date.now();
+        return loki.queryRange(
+          `{service="deployment"} |= "deployment" | json`,
+          now - 86_400_000,
+          now,
+          50
+        );
+      })(),
     ]);
 
   // Index latest Loki deploy event per environment
-  const latestDeployByEnv = new Map<string, LokiDeployEvent>();
-  for (const event of lokiEvents) {
-    if (!latestDeployByEnv.has(event.environment)) {
-      latestDeployByEnv.set(event.environment, event);
+  const latestDeploy = new Map<
+    string,
+    { status: string; actor: string; timestamp: string }
+  >();
+  for (const entry of lokiEntries) {
+    if (!entry.parsed) continue;
+    const envName = entry.parsed.env ?? "unknown";
+    if (!latestDeploy.has(envName)) {
+      latestDeploy.set(envName, {
+        status: entry.parsed.status ?? "unknown",
+        actor: entry.parsed.actor ?? "",
+        timestamp: entry.timestamp,
+      });
     }
   }
 
   // Build matrix rows
-  const rows: DeploymentRow[] = branchResults.map(({ env, runs }, i) => {
+  const rows: DeploymentRow[] = TOPOLOGY.map((target, i) => {
+    const runs = branchRunMap.get(target.branch) ?? [];
     const latest = runs[0] ?? null;
-    const health = healthResults[i] ?? {
-      status: "unknown" as const,
-      latencyMs: null,
-    };
-    const lokiDeploy = latestDeployByEnv.get(env.environment);
+    const health = healthResults[i];
+    const deploy = latestDeploy.get(target.environment);
 
     let ciStatus: DeploymentRow["ci"]["status"] = "unknown";
     if (latest) {
@@ -343,59 +229,45 @@ export async function GET(): Promise<NextResponse<DeploymentMatrixResponse>> {
     }
 
     return {
-      branch: env.branch,
-      environment: env.environment,
+      branch: target.branch,
+      environment: target.environment,
       ci: {
         status: ciStatus,
-        conclusion: latest?.conclusion ?? null,
-        url: latest?.html_url ?? null,
+        url: latest?.htmlUrl ?? null,
         workflowName: latest?.name ?? null,
-        runNumber: latest?.run_number ?? null,
       },
-      health,
+      health: {
+        status: health?.status ?? "unknown",
+        latencyMs: health?.latencyMs ?? null,
+      },
       deploy: {
-        status: lokiDeploy?.status ?? "unknown",
-        actor: lokiDeploy?.actor ?? null,
-        timestamp: lokiDeploy?.timestamp ?? null,
+        status: deploy?.status ?? "unknown",
+        actor: deploy?.actor ?? null,
+        timestamp: deploy?.timestamp ?? null,
       },
-      url: env.healthUrl.replace("/livez", ""),
-      commit: latest?.head_commit
+      url: target.healthUrl.replace("/livez", ""),
+      commit: latest
         ? {
-            sha: latest.head_sha,
-            message: (latest.head_commit.message ?? "").split("\n")[0] ?? "",
-            author: latest.head_commit.author.name,
-            timestamp: latest.created_at,
+            sha: latest.headSha,
+            message: latest.commitMessage,
+            author: latest.commitAuthor,
+            timestamp: latest.createdAt,
           }
         : null,
     };
   });
 
-  // Build recent runs feed
-  const recentRuns: RecentRun[] = recentWorkflowRuns
-    .slice(0, 15)
-    .map((run) => ({
-      id: run.id,
-      name: run.name,
-      status: run.status,
-      conclusion: run.conclusion,
-      url: run.html_url,
-      branch: run.head_branch,
-      sha: run.head_sha.slice(0, 7),
-      message: (run.head_commit?.message ?? "").split("\n")[0] ?? "",
-      author: run.head_commit?.author.name ?? "unknown",
-      timestamp: run.created_at,
-      runNumber: run.run_number,
-    }));
-
-  return NextResponse.json({
+  const result: DeploymentMatrixResponse = {
     rows,
     recentRuns,
-    lokiEvents: lokiEvents.slice(0, 20),
     sources: {
-      github: octokit !== null,
-      loki: lokiEvents.length > 0,
+      github: gh !== null,
+      loki: lokiEntries.length > 0,
       health: true,
     },
     fetchedAt: new Date().toISOString(),
-  });
+  };
+
+  cache = { data: result, expiresAt: Date.now() + CACHE_TTL_MS };
+  return NextResponse.json(result);
 }
