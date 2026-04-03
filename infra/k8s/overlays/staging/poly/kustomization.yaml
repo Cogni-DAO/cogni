@@ -43,7 +43,7 @@ patches:
       - op: replace
         path: /data/REDIS_URL
         value: "redis://poly-redis-external:6379"
-  # NodePort assignment (poly = 30100)
+  # NodePort assignment (poly = 30100, app listens on 3100)
   - target:
       kind: Service
       name: node-app
@@ -51,7 +51,10 @@ patches:
       - op: add
         path: /spec/ports/0/nodePort
         value: 30100
-  # Fix secret refs — namePrefix doesn't transform secretRef/secretKeyRef names
+      - op: replace
+        path: /spec/ports/0/targetPort
+        value: 3100
+  # Fix secret refs + container port (poly listens on 3100, not 3000)
   - target:
       kind: Deployment
       name: node-app
@@ -59,6 +62,9 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
         value: "poly-node-app-secrets"
+      - op: replace
+        path: /spec/template/spec/containers/0/ports/0/containerPort
+        value: 3100
   - target:
       kind: Job
       name: migrate-node-app
