@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROVISION_DIR="$REPO_ROOT/infra/provision/cherry/base"
 WORKSPACE="test"
-BRANCH="worktree-cd-pipeline-analysis"
+BRANCH="deploy/multi-node"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
