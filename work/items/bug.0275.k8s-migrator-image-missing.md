@@ -2,7 +2,7 @@
 id: bug.0275
 type: bug
 title: "k8s migration Job fails — standalone app image lacks tsx + drizzle-kit"
-status: needs_review
+status: done
 priority: 2
 rank: 5
 estimate: 1
@@ -14,6 +14,7 @@ assignees: []
 labels: [deployment, k8s, migration, argocd]
 created: 2026-04-03
 updated: 2026-04-03
+revision: 0
 ---
 
 ## Bug
