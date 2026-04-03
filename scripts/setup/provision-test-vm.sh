@@ -301,6 +301,31 @@ if [[ "$BRANCH" != "staging" ]]; then
 fi
 
 # ══════════════════════════════════════════════════════════════
+# Phase 4b: Patch k8s EndpointSlice IPs + push to git
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 4b: Patch EndpointSlice IPs to $VM_IP"
+
+# k8s rejects 127.0.0.1 in EndpointSlices. Overlays must use the node's real IP.
+# Sed-replace the placeholder/previous IP in all overlay kustomization files.
+OVERLAYS_DIR="$REPO_ROOT/infra/k8s/overlays/staging"
+for overlay in "$OVERLAYS_DIR"/*/kustomization.yaml; do
+  # Replace any IP in EndpointSlice address arrays: value: ["X.X.X.X"]
+  sed -i '' -E "s/value: \[\"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\"\]/value: [\"${VM_IP}\"]/g" "$overlay"
+done
+log_info "Patched overlays with VM IP: $VM_IP"
+
+# Commit + push so Argo CD sees the updated IPs
+cd "$REPO_ROOT"
+if ! git diff --quiet infra/k8s/overlays/; then
+  git add infra/k8s/overlays/ infra/k8s/base/
+  git commit -m "chore(infra): patch EndpointSlice IPs to ${VM_IP} for test VM"
+  git push origin HEAD:"$BRANCH"
+  log_info "Pushed EndpointSlice IP patches to $BRANCH"
+else
+  log_info "EndpointSlice IPs already correct"
+fi
+
+# ══════════════════════════════════════════════════════════════
 # Phase 5: Deploy Compose infrastructure
 # ══════════════════════════════════════════════════════════════
 log_step "Phase 5: Deploy Compose infrastructure"

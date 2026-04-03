@@ -48,3 +48,32 @@ patches:
       - op: add
         path: /spec/ports/0/nodePort
         value: 30300
+  # EndpointSlice IPs — node InternalIP (provision script updates this per-VM)
+  - target:
+      kind: EndpointSlice
+      name: postgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: temporal-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: litellm-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: redis-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]

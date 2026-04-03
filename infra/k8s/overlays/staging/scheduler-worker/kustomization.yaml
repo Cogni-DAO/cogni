@@ -31,25 +31,25 @@ patches:
         path: /data/IMAGE_DIGEST
         value: "staging-placeholder-scheduler-worker"
 
-  # EndpointSlice IPs — 127.0.0.1 (single-VM: k3s + Compose on same host)
+  # EndpointSlice IPs — node InternalIP (provision script updates this per-VM)
   - target:
       kind: EndpointSlice
       name: temporal-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["127.0.0.1"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: postgres-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["127.0.0.1"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["127.0.0.1"]
+        value: ["84.32.109.222"]
