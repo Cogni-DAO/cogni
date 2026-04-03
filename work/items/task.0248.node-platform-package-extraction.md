@@ -23,7 +23,7 @@ revision: 2
 blocked_by: []
 deploy_verified: false
 created: 2026-04-01
-updated: 2026-04-03
+updated: 2026-04-02
 review_notes: "Phase 2 design review (2026-04-02): 3 blocking issues resolved — see Phase 2 section"
 
 labels: [refactor, architecture, nodes, packages]
@@ -139,16 +139,24 @@ Results recorded in spec.node-app-shell.
 - [ ] Delete originals (36 files)
 - [ ] `pnpm check` passes
 
-### Phase 3: Thin app shell (`@cogni/node-app`) — spike passed, ready to implement
+### Phase 3: Thin app shell (`@cogni/node-app`) — DONE (feat/task-0248-phase3-node-app)
 
-- [ ] Create `packages/node-app/` with curated subpath exports
-- [ ] Move layout frame (sidebar, header, topbar structure with slots)
-- [ ] Move common providers (auth session wrapper, theme, query client)
-- [ ] Define `NodeAppConfig` extension-point interface
-- [ ] Create default `node-config.ts` in node-template
-- [ ] Create poly/resy `node-config.ts` overrides
-- [ ] Rewire all apps
-- [ ] `pnpm check` passes
+- [x] Create `packages/node-app/` with curated subpath exports (`./providers`, `./extensions`)
+- [x] Move platform providers (auth, query, wallet, rainbowkit-theme, app-providers) to shell
+- [x] WalletProvider refactored to accept `wagmiConfig` as prop (SHELL_NEVER_READS_ENV)
+- [x] Define `NodeAppConfig` extension-point interface + `NodeAppProvider` context
+- [x] Create `node-config.ts` in all 4 apps (operator, node-template, poly, resy)
+- [x] Wire `transpilePackages: ["@cogni/node-app"]` in all 4 next.config.ts
+- [x] Rewire all 4 root layouts, delete 20 duplicate provider files + 4 AGENTS.md
+- [x] Each app has thin `providers.client.tsx` wrapper (wagmiConfig must stay in "use client" boundary)
+- [x] `pnpm check:fast` + CI static/unit/component passes; `next build` passes
+- Layout extraction consciously deferred — sidebar/header depend on shadcn vendor primitives via `@/components`. NodeAppConfig extension points are established but not yet consumed; layout migration is the follow-up.
+
+### Phase 3b: Wire NodeAppConfig into sidebar (follow-up)
+
+- [ ] Sidebar reads navItems/externalLinks from `useNodeAppConfig()` instead of hardcoded constants
+- [ ] Remove duplicate NAV_ITEMS/EXTERNAL_LINKS from each AppSidebar.tsx
+- [ ] node-config.ts becomes the single source for node identity
 
 ### Phase 4: Node workspace restructure
 

@@ -21,7 +21,7 @@ import Script from "next/script";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 
-import { AppProviders } from "./providers/app-providers.client";
+import { Providers } from "./providers.client";
 
 const manrope = Manrope({
   subsets: ["latin"],
@@ -50,9 +50,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AppProviders>
+          <Providers>
             <div id="main">{children}</div>
-          </AppProviders>
+          </Providers>
         </ThemeProvider>
       </body>
     </html>

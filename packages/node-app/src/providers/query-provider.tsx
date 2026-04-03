@@ -2,12 +2,11 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/providers/query.client`
+ * Module: `@cogni/node-app/providers`
  * Purpose: React Query provider for client-side data fetching and caching.
- * Scope: Wraps application with QueryClientProvider; configures default options. Client component only. Does not fetch data or manage state directly.
- * Invariants: QueryClient instance created once per component mount; stale time set to 60 seconds.
+ * Scope: Wraps application with QueryClientProvider; configures default options. Does not fetch data or manage state directly.
+ * Invariants: QueryClient instance created once per component mount; stale time 60 seconds.
  * Side-effects: none
- * Notes: Required by wagmi for wallet state management; follows React Query best practices.
  * Links: https://tanstack.com/query/latest/docs/framework/react/overview
  * @public
  */
@@ -21,14 +20,13 @@ import { useState } from "react";
 export function QueryProvider({
   children,
 }: {
-  children: ReactNode;
+  readonly children: ReactNode;
 }): ReactNode {
   const [queryClient] = useState(
     () =>
       new QueryClient({
         defaultOptions: {
           queries: {
-            // 60 seconds
             staleTime: 60_000,
           },
         },

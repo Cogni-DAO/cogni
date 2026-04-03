@@ -2,12 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/providers/auth.client`
+ * Module: `@cogni/node-app/providers`
  * Purpose: SessionProvider wrapper for NextAuth client context.
- * Scope: Client-only provider to wrap the App tree. Does not fetch data or add side effects.
+ * Scope: Client-only provider. Does not fetch data or add side effects.
  * Invariants: Minimal; only composes SessionProvider.
  * Side-effects: none
- * Links: None
+ * Links: https://next-auth.js.org/getting-started/client
  * @public
  */
 

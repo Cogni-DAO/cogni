@@ -133,15 +133,20 @@ packages/
   "name": "@cogni/node-app",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
   "exports": {
-    "./layout": "./src/layout/index.ts",
     "./providers": "./src/providers/index.ts",
-    "./auth": "./src/auth/index.ts",
     "./extensions": "./src/extensions/index.ts"
   },
   "peerDependencies": {
     "react": ">=19",
-    "next": ">=16"
+    "next-auth": ">=4",
+    "next-themes": ">=0.4",
+    "@tanstack/react-query": ">=5",
+    "@rainbow-me/rainbowkit": ">=2",
+    "@rainbow-me/rainbowkit-siwe-next-auth": ">=0.5",
+    "wagmi": ">=2"
   }
 }
 ```
@@ -249,7 +254,7 @@ Enable nodes as thin app shells that compose a shared layout/provider framework 
 | SHELL_IS_CHROME_ONLY        | `@cogni/node-app` contains only low-volatility app chrome: layout frame, providers, auth framing, extension-point types, default scaffolding. No feature UIs, no product flows, no route trees. |
 | SHELL_NEVER_READS_ENV       | `@cogni/node-app` must never call `process.env`, `serverEnv()`, or read environment variables directly. All config injected via `NodeAppConfig`.                                                |
 | NODE_OWNS_PRODUCT           | Each node owns its routes, features, components, library choices, and product UX. The shell provides slots; the node fills them.                                                                |
-| CURATED_EXPORTS             | `@cogni/node-app` uses curated subpath exports (`"./layout"`, `"./providers"`, etc.), never wildcard exports. Internal files are not importable.                                                |
+| CURATED_EXPORTS             | `@cogni/node-app` uses curated subpath exports (`"./providers"`, `"./extensions"`), never wildcard exports. Internal files are not importable.                                                  |
 | OVERRIDE_VIA_CONFIG         | Node customization via explicit `NodeAppConfig` injection (slots, factories, registries), never via file-path shadowing.                                                                        |
 | NO_CROSS_NODE_IMPORTS       | `nodes/poly/**` must never import from `nodes/resy/**` or vice versa. Enforced by dependency-cruiser.                                                                                           |
 | GOLDEN_PATH_IS_TEMPLATE     | `node-template` is the reference node. New nodes scaffold from it.                                                                                                                              |
@@ -257,15 +262,16 @@ Enable nodes as thin app shells that compose a shared layout/provider framework 
 
 ### File Pointers
 
-| File                                              | Purpose                                                               |
-| ------------------------------------------------- | --------------------------------------------------------------------- |
-| `packages/node-app/package.json`                  | Internal source package declaration with curated subpath exports      |
-| `packages/node-app/src/extensions/types.ts`       | `NodeAppConfig` — the node customization surface                      |
-| `nodes/node-template/apps/web/src/node-config.ts` | Reference `NodeAppConfig` implementation                              |
-| `nodes/node-template/apps/web/next.config.ts`     | Reference `transpilePackages` config                                  |
-| `pnpm-workspace.yaml`                             | Workspace globs: `packages/*`, `nodes/*/apps/*`, `nodes/*/packages/*` |
-| `.dependency-cruiser.cjs`                         | Cross-node import enforcement                                         |
-| `docs/spec/packages-architecture.md`              | Capability library rules (companion spec)                             |
+| File                                                | Purpose                                                               |
+| --------------------------------------------------- | --------------------------------------------------------------------- |
+| `packages/node-app/package.json`                    | Internal source package declaration with curated subpath exports      |
+| `packages/node-app/src/extensions/types.ts`         | `NodeAppConfig` — the node customization surface                      |
+| `packages/node-app/src/providers/app-providers.tsx` | `AppProviders` — platform provider composition (accepts wagmiConfig)  |
+| `nodes/node-template/app/src/node-config.ts`        | Reference `NodeAppConfig` implementation                              |
+| `nodes/node-template/app/next.config.ts`            | Reference `transpilePackages` config                                  |
+| `pnpm-workspace.yaml`                               | Workspace globs: `packages/*`, `nodes/*/apps/*`, `nodes/*/packages/*` |
+| `.dependency-cruiser.cjs`                           | Cross-node import enforcement                                         |
+| `docs/spec/packages-architecture.md`                | Capability library rules (companion spec)                             |
 
 ## Spike Results (2026-04-02)
 

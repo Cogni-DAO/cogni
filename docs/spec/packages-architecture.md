@@ -219,21 +219,22 @@ TypeScript project references build packages incrementally using `.tsbuildinfo` 
 
 ### Existing Packages
 
-| Package                       | Target     | Purpose                                                                |
-| ----------------------------- | ---------- | ---------------------------------------------------------------------- |
-| `@cogni/ai-core`              | isomorphic | AI event types, UsageFact, ExecutorType for billing                    |
-| `@cogni/ai-tools`             | isomorphic | Pure tool contracts and implementations (NO LangChain)                 |
-| `@cogni/aragon-osx`           | isomorphic | Aragon OSx encoding, addresses, receipt decoders                       |
-| `@cogni/cogni-contracts`      | isomorphic | Cogni-owned contract ABI and bytecode constants                        |
-| `@cogni/ids`                  | isomorphic | Branded ID types (UserId, ActorId) for RLS enforcement                 |
-| `@cogni/graph-execution-core` | neutral    | Shared graph execution contracts: executor, context, run stream        |
-| `@cogni/graph-execution-host` | neutral    | Graph execution decorators: billing, observability, preflight, routing |
-| `@cogni/scheduler-core`       | node       | Scheduling types, port interfaces, payload schemas                     |
-| `@cogni/node-core`            | neutral    | Shared domain models, types, pure business logic for all nodes         |
-| `@cogni/node-contracts`       | neutral    | Shared Zod route contracts and HTTP router for all nodes               |
-| `@cogni/node-shared`          | neutral    | Shared pure utilities, constants, observability, web3 constants        |
-| `@cogni/db-schema`            | node       | Drizzle schema with subpath exports per domain slice                   |
-| `@cogni/db-client`            | node       | Drizzle client factory + scheduling adapters                           |
+| Package                       | Target     | Purpose                                                                                     |
+| ----------------------------- | ---------- | ------------------------------------------------------------------------------------------- |
+| `@cogni/ai-core`              | isomorphic | AI event types, UsageFact, ExecutorType for billing                                         |
+| `@cogni/ai-tools`             | isomorphic | Pure tool contracts and implementations (NO LangChain)                                      |
+| `@cogni/aragon-osx`           | isomorphic | Aragon OSx encoding, addresses, receipt decoders                                            |
+| `@cogni/cogni-contracts`      | isomorphic | Cogni-owned contract ABI and bytecode constants                                             |
+| `@cogni/ids`                  | isomorphic | Branded ID types (UserId, ActorId) for RLS enforcement                                      |
+| `@cogni/graph-execution-core` | neutral    | Shared graph execution contracts: executor, context, run stream                             |
+| `@cogni/graph-execution-host` | neutral    | Graph execution decorators: billing, observability, preflight, routing                      |
+| `@cogni/scheduler-core`       | node       | Scheduling types, port interfaces, payload schemas                                          |
+| `@cogni/node-core`            | neutral    | Shared domain models, types, pure business logic for all nodes                              |
+| `@cogni/node-contracts`       | neutral    | Shared Zod route contracts and HTTP router for all nodes                                    |
+| `@cogni/node-shared`          | neutral    | Shared pure utilities, constants, observability, web3 constants                             |
+| `@cogni/node-app`             | source     | Internal source package: platform providers + extension types (transpilePackages, no dist/) |
+| `@cogni/db-schema`            | node       | Drizzle schema with subpath exports per domain slice                                        |
+| `@cogni/db-client`            | node       | Drizzle client factory + scheduling adapters                                                |
 
 ### File Pointers
 
