@@ -442,8 +442,8 @@ for node in operator poly resy; do
     resy)     db_name="cogni_resy" ;;
   esac
 
-  NODE_DB_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${VM_IP}:5432/${db_name}"
-  NODE_DB_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${VM_IP}:5432/${db_name}"
+  NODE_DB_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${VM_IP}:5432/${db_name}?sslmode=disable"
+  NODE_DB_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${VM_IP}:5432/${db_name}?sslmode=disable"
 
   ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic ${node}-node-app-secrets \
     --from-literal=DATABASE_URL='${NODE_DB_URL}' \
