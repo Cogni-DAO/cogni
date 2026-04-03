@@ -27,13 +27,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: ghcr.io/cogni-dao/node-template-migrator:placeholder
-          # TODO: Use dedicated migrator image with tsx + drizzle-kit (standalone app image strips devDeps)
-          command:
-            [
-              "echo",
-              "migration skipped — DB already migrated by compose db-provision",
-            ]
+          image: ghcr.io/cogni-dao/cogni-template-migrate:placeholder
           env:
             - name: DATABASE_URL
               valueFrom:

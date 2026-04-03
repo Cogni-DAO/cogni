@@ -140,7 +140,7 @@
 | 2 | 3 | 5 | needs_design | story.0263 | Doltgres Node Lifecycle — clone/pull from remotes, repo-spec linking, permission model | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
-| 2 | 5 | 2 | needs_implement | bug.0275 | k8s migration Job fails — standalone app image lacks tsx + drizzle-kit | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 2 | 5 | 1 | needs_review | bug.0275 | k8s migration Job fails — standalone app image lacks tsx + drizzle-kit | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
