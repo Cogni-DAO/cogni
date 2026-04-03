@@ -18,6 +18,7 @@ import {
   CreditCard,
   Github,
   LayoutDashboard,
+  Rocket,
   Vote,
 } from "lucide-react";
 import Image from "next/image";
@@ -41,6 +42,7 @@ import { ChatThreadsSidebarGroup } from "@/features/ai/chat/components/ChatThrea
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/deployments", label: "Deploy", icon: Rocket },
   { href: "/work", label: "Work", icon: Briefcase },
   { href: "/gov", label: "Gov", icon: Vote },
   { href: "/credits", label: "Credits", icon: CreditCard },

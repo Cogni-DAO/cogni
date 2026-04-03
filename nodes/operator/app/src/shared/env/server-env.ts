@@ -164,6 +164,13 @@ export const serverSchema = z.object({
   ANALYTICS_K_THRESHOLD: z.coerce.number().int().positive().default(50),
   ANALYTICS_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
 
+  // Grafana Cloud Loki - Shared by Alloy write path and deployment matrix read path
+  // Passed by deploy.sh as LOKI_WRITE_URL/LOKI_USERNAME/LOKI_PASSWORD
+  // Used by deployment matrix dashboard to query deployment events
+  LOKI_WRITE_URL: optionalUrl,
+  LOKI_USERNAME: optionalString,
+  LOKI_PASSWORD: optionalString,
+
   // EVM RPC - On-chain verification (Phase 3)
   // Required for production/preview/dev; not used in test mode (FakeEvmOnchainClient)
   EVM_RPC_URL: z.string().url().optional(),
