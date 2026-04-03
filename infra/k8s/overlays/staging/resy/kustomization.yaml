@@ -10,6 +10,12 @@ resources:
 
 namePrefix: resy-
 
+# Disambiguate pod labels so each Service selects only its own node's pods.
+labels:
+  - pairs:
+      app.kubernetes.io/instance: resy
+    includeSelectors: true
+
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template

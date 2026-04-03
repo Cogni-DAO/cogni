@@ -10,6 +10,14 @@ resources:
 
 namePrefix: operator-
 
+# Disambiguate pod labels so each Service selects only its own node's pods.
+# Without this, all three node-app Deployments share app.kubernetes.io/name=node-app
+# and every Service round-robins across all pods (wrong ports, wrong content).
+labels:
+  - pairs:
+      app.kubernetes.io/instance: operator
+    includeSelectors: true
+
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
