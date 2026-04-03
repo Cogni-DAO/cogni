@@ -2,7 +2,7 @@
 id: task.0273
 type: task
 title: "Unify workspace: move operator to nodes/operator/app"
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 5
 estimate: 3
