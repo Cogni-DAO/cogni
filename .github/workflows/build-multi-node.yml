@@ -112,6 +112,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push migrator
+        id: build-migrator
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -122,14 +123,8 @@ jobs:
           cache-from: type=gha,scope=build-migrator
           cache-to: type=gha,mode=max,scope=build-migrator
 
-      - name: Capture migrator digest
-        id: migrator-digest
-        run: |
-          TAG="${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}-migrate"
-          DIGEST=$(docker buildx imagetools inspect "$TAG" --format '{{.Manifest.Digest}}')
-          echo "digest=${{ steps.meta.outputs.image_name }}@${DIGEST}" >> $GITHUB_OUTPUT
-
       - name: Build and push scheduler-worker
+        id: build-sw
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -139,16 +134,9 @@ jobs:
           cache-from: type=gha,scope=build-scheduler-worker
           cache-to: type=gha,mode=max,scope=build-scheduler-worker
 
-      - name: Capture scheduler-worker digest
-        id: sw-digest
-        run: |
-          TAG="${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}-scheduler-worker"
-          DIGEST=$(docker buildx imagetools inspect "$TAG" --format '{{.Manifest.Digest}}')
-          echo "digest=${{ steps.meta.outputs.image_name }}@${DIGEST}" >> $GITHUB_OUTPUT
-
       - name: Build summary
         run: |
           echo "## Multi-Node Build" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`${GITHUB_SHA}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Migrator:** \`${{ steps.migrator-digest.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Scheduler-Worker:** \`${{ steps.sw-digest.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Migrator digest:** \`${{ steps.build-migrator.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Scheduler-Worker digest:** \`${{ steps.build-sw.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
