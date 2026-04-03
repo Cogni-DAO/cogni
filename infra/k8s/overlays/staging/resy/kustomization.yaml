@@ -11,8 +11,8 @@ resources:
 namePrefix: resy-
 
 images:
-  - name: ghcr.io/cogni-dao/cogni-template
-    newName: ghcr.io/cogni-dao/cogni-template
+  - name: ghcr.io/cogni-dao/node-template
+    newName: ghcr.io/cogni-dao/node-template
     newTag: "staging-placeholder-resy"
 
 patches:

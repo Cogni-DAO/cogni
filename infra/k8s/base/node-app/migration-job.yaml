@@ -27,7 +27,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: ghcr.io/cogni-dao/cogni-template:placeholder-migrate
+          image: ghcr.io/cogni-dao/node-template-migrator:placeholder
           env:
             - name: DATABASE_URL
               valueFrom:

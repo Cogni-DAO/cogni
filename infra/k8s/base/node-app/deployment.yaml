@@ -26,7 +26,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: app
-          image: ghcr.io/cogni-dao/cogni-template:placeholder
+          image: ghcr.io/cogni-dao/node-template:placeholder
           ports:
             - containerPort: 3000
               name: http

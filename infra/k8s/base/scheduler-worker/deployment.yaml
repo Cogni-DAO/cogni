@@ -21,7 +21,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: scheduler-worker
-          image: ghcr.io/cogni-dao/cogni-template:placeholder
+          image: ghcr.io/cogni-dao/node-template:placeholder
           ports:
             - containerPort: 9000
               name: health

@@ -11,9 +11,12 @@ resources:
 namePrefix: operator-
 
 images:
-  - name: ghcr.io/cogni-dao/cogni-template
-    newName: ghcr.io/cogni-dao/cogni-template
-    newTag: "staging-placeholder-operator"
+  - name: ghcr.io/cogni-dao/node-template
+    newName: ghcr.io/cogni-dao/node-template
+    digest: "sha256:0107cf3818b0ae0496279dd3c8c54b3026a8a74d7f659fa3bbc996ccb0c11440"
+  - name: ghcr.io/cogni-dao/node-template-migrator
+    newName: ghcr.io/cogni-dao/node-template
+    digest: "sha256:7a9bd8cf61ead5622d3a854766b3c401215bc95dfc3b37fdaef9aaa7d76ec93d"
 
 patches:
   # Node-specific ConfigMap values.
