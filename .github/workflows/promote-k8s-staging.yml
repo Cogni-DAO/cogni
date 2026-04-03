@@ -11,7 +11,7 @@ on:
   workflow_run:
     workflows: ["Build Multi-Node"]
     types: [completed]
-    branches: [integration/multi-node]
+    branches: [integration/multi-node, canary]
 
 permissions:
   contents: write
@@ -29,7 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: integration/multi-node
+          ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 1
           token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
 
@@ -116,6 +116,7 @@ jobs:
           else
             SHORT_SHA=$(echo "$SHA" | cut -c1-8)
             git commit -m "chore(cd): promote staging overlays to ${SHORT_SHA} [skip ci]"
-            git push origin integration/multi-node
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+            git push origin "HEAD:${BRANCH}"
             echo "✅ Overlay digests updated"
           fi

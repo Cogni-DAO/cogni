@@ -11,12 +11,12 @@ resources:
 namePrefix: resy-
 
 images:
-  - name: ghcr.io/cogni-dao/node-template
-    newName: ghcr.io/cogni-dao/node-template
+  - name: ghcr.io/cogni-dao/cogni-template
+    newName: ghcr.io/cogni-dao/cogni-template
     newTag: "staging-placeholder-resy"
-  - name: ghcr.io/cogni-dao/node-template-migrator
-    newName: ghcr.io/cogni-dao/node-template
-    digest: "sha256:7a9bd8cf61ead5622d3a854766b3c401215bc95dfc3b37fdaef9aaa7d76ec93d"
+  - name: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
+    newTag: "staging-placeholder-resy-migrate"
 
 patches:
   # Node-specific ConfigMap values.
