@@ -370,8 +370,9 @@ services:
       - "autoheal=true"
     networks:
       - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:7233)
     ports:
-      - "127.0.0.1:7233:7233"
+      - "7233:7233"
     environment:
       # Temporal DB config (auto-setup env vars)
       - DB=postgres12
