@@ -51,6 +51,14 @@ patches:
       - op: add
         path: /spec/ports/0/nodePort
         value: 30000
+  # Fix secretKeyRef name — namePrefix doesn't transform env.valueFrom.secretKeyRef.name
+  - target:
+      kind: Job
+      name: migrate-node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "operator-node-app-secrets"
   # EndpointSlice IPs — node InternalIP (provision script updates this per-VM)
   - target:
       kind: EndpointSlice
