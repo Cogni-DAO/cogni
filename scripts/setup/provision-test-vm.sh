@@ -499,16 +499,20 @@ ssh $SSH_OPTS root@"$VM_IP" '
   echo "All prerequisite secrets verified"
 '
 
-# Clone repo on VM to get ApplicationSet manifests
+# Clone repo on VM, patch revision to our branch, then apply
 ssh $SSH_OPTS root@"$VM_IP" "
   AUTHED_URL=\$(echo '${COGNI_REPO_URL}' | sed 's|https://|https://${GHCR_USERNAME}:${GHCR_TOKEN}@|')
   git clone --depth=1 --branch '${BRANCH}' \"\$AUTHED_URL\" /tmp/cogni-appsets 2>/dev/null
+
+  # Patch revision to match our branch (YAML defaults to 'staging'/'main')
+  sed -i 's|revision: staging|revision: ${BRANCH}|g' /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
+  sed -i 's|targetRevision: staging|targetRevision: ${BRANCH}|g' /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
 
   # Apply ApplicationSets — Argo starts syncing NOW
   kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
   kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/production-applicationset.yaml
   rm -rf /tmp/cogni-appsets
-  echo 'ApplicationSets applied — Argo syncing'
+  echo 'ApplicationSets applied — Argo syncing on branch ${BRANCH}'
 "
 
 # Poll for apps to sync (up to 5 min)
