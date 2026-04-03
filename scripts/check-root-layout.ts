@@ -115,6 +115,7 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "e2e",
   "eslint",
   "eslint.config.mjs",
+  "experiments",
   "infra",
   "package.json",
   "packages",
