@@ -12,11 +12,11 @@
  */
 
 import {
-  GitHubActionsClient,
+  getGitHubActionsClient,
+  getLokiQueryClient,
+  probeHealth,
   type WorkflowRun,
-} from "@/adapters/server/observability/github-actions-client";
-import { probeHealth } from "@/adapters/server/observability/health-probe";
-import { LokiQueryClient } from "@/adapters/server/observability/loki-query-client";
+} from "@/bootstrap/capabilities/observability";
 import { serverEnv } from "@/shared/env";
 
 // ---------------------------------------------------------------------------
@@ -96,49 +96,6 @@ const TOPOLOGY: EnvTarget[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Singleton clients (created once per process)
-// ---------------------------------------------------------------------------
-
-let ghClient: GitHubActionsClient | null | undefined;
-let lokiClient: LokiQueryClient | null | undefined;
-
-function getGitHubClient(
-  env: ReturnType<typeof serverEnv>
-): GitHubActionsClient | null {
-  if (ghClient !== undefined) return ghClient;
-  const appId = env.GH_REVIEW_APP_ID;
-  const pkB64 = env.GH_REVIEW_APP_PRIVATE_KEY_BASE64;
-  if (!appId || !pkB64) {
-    ghClient = null;
-    return null;
-  }
-  ghClient = new GitHubActionsClient({
-    appId,
-    privateKey: Buffer.from(pkB64, "base64").toString("utf-8"),
-  });
-  return ghClient;
-}
-
-function getLokiClient(
-  env: ReturnType<typeof serverEnv>
-): LokiQueryClient | null {
-  if (lokiClient !== undefined) return lokiClient;
-  const url = env.LOKI_WRITE_URL;
-  const user = env.LOKI_USERNAME;
-  const pass = env.LOKI_PASSWORD;
-  if (!url || !user || !pass) {
-    lokiClient = null;
-    return null;
-  }
-  lokiClient = new LokiQueryClient({
-    baseUrl: url,
-    username: user,
-    password: pass,
-  });
-  return lokiClient;
-}
-
-// ---------------------------------------------------------------------------
 // TTL cache — one response per 30s regardless of viewer count
 // ---------------------------------------------------------------------------
 
@@ -153,8 +110,8 @@ export async function fetchDeploymentMatrix(): Promise<DeploymentMatrixResponse>
   if (cache && Date.now() < cache.expiresAt) return cache.data;
 
   const env = serverEnv();
-  const gh = getGitHubClient(env);
-  const loki = getLokiClient(env);
+  const gh = getGitHubActionsClient(env);
+  const loki = getLokiQueryClient(env);
 
   const uniqueBranches = [...new Set(TOPOLOGY.map((t) => t.branch))];
 
