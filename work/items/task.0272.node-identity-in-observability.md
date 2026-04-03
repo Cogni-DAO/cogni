@@ -13,8 +13,8 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.operator-plane
-branch: worktree-cd-pipeline-analysis
-pr:
+branch: feat/task-0272-node-identity-observability
+pr: https://github.com/Cogni-DAO/node-template/pull/699
 reviewer:
 revision: 0
 blocked_by:
