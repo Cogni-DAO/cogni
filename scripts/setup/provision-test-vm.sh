@@ -162,9 +162,10 @@ COGNI_REPO_REF="$BRANCH"
 COGNI_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000/api/internal/billing/ingest"
 
 # DATABASE_URLs (constructed from parts — same derivation as setup-secrets.ts)
-# Per-node: operator uses cogni_operator DB
-DATABASE_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@127.0.0.1:5432/cogni_operator"
-DATABASE_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@127.0.0.1:5432/cogni_operator"
+# DATABASE_URLs use VM_IP placeholder — replaced after Phase 3 when IP is known.
+# Inside k8s pods, 127.0.0.1 is the pod's loopback, NOT the host.
+DATABASE_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@VM_IP_PLACEHOLDER:5432/cogni_operator"
+DATABASE_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@VM_IP_PLACEHOLDER:5432/cogni_operator"
 
 log_info "All secrets generated"
 
@@ -252,6 +253,12 @@ log_info "VM provisioned at: $VM_IP"
 # Save connection info (key already saved in phase 2)
 echo "$VM_IP" > "$REPO_ROOT/.local/test-vm-ip"
 echo "$AGE_PRIVATE_KEY" > "$REPO_ROOT/.local/test-vm-age-key"
+
+# Fix DATABASE_URLs — replace placeholder with actual VM IP
+# (pods can't use 127.0.0.1 — that's the pod's own loopback, not the host)
+DATABASE_URL="${DATABASE_URL/VM_IP_PLACEHOLDER/$VM_IP}"
+DATABASE_SERVICE_URL="${DATABASE_SERVICE_URL/VM_IP_PLACEHOLDER/$VM_IP}"
+log_info "DATABASE_URLs updated with VM IP: $VM_IP"
 
 cd "$REPO_ROOT"
 
@@ -443,8 +450,8 @@ for node in operator poly resy; do
     resy)     db_name="cogni_resy" ;;
   esac
 
-  NODE_DB_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@127.0.0.1:5432/${db_name}"
-  NODE_DB_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@127.0.0.1:5432/${db_name}"
+  NODE_DB_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${VM_IP}:5432/${db_name}"
+  NODE_DB_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${VM_IP}:5432/${db_name}"
 
   ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic ${node}-node-app-secrets \
     --from-literal=DATABASE_URL='${NODE_DB_URL}' \

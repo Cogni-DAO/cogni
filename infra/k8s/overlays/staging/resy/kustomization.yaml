@@ -27,7 +27,7 @@ patches:
     patch: |
       - op: replace
         path: /data/APP_ENV
-        value: "preview"
+        value: "test"
       - op: replace
         path: /data/NODE_NAME
         value: "resy"
@@ -51,7 +51,14 @@ patches:
       - op: add
         path: /spec/ports/0/nodePort
         value: 30300
-  # Fix secretKeyRef name — namePrefix doesn't transform env.valueFrom.secretKeyRef.name
+  # Fix secret refs — namePrefix doesn't transform secretRef/secretKeyRef names
+  - target:
+      kind: Deployment
+      name: node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
+        value: "resy-node-app-secrets"
   - target:
       kind: Job
       name: migrate-node-app
