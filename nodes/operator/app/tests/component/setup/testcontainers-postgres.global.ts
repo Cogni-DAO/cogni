@@ -25,7 +25,7 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROVISION_SH = path.resolve(
   __dirname,
-  "../../../../../infra/compose/runtime/postgres-init/provision.sh"
+  "../../../../../../infra/compose/runtime/postgres-init/provision.sh"
 );
 
 const APP_DB_USER = "app_user";

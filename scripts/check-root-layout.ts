@@ -60,7 +60,6 @@ const REQUIRED_PATHS: PathRequirement[] = [
   { anyOf: ["nodes/operator/app/public"], kind: "dir" },
   { anyOf: ["infra"], kind: "dir" },
   { anyOf: ["packages"], kind: "dir" },
-  { anyOf: ["apps"], kind: "dir" },
   { anyOf: ["nodes"], kind: "dir" },
 ];
 
@@ -106,7 +105,6 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "ROADMAP.md",
   "REUSE.toml",
   "SECURITY.md",
-  "apps",
   "biome",
   "biome.json",
   "commitlint.config.cjs",
