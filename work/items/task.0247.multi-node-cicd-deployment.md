@@ -169,9 +169,30 @@ Implications:
 
 ## Validation
 
-- [ ] `docker compose up` starts all 3 node apps + shared services
-- [ ] Caddy routes requests to correct app by domain
-- [ ] Each app responds on its own domain with valid TLS
-- [ ] CI builds and pushes images for each node app
-- [ ] Deploy script handles multi-node deployment
-- [ ] Health checks pass for all 3 apps post-deploy
+### Infrastructure (done)
+
+- [x] infra/ reorganized: k8s/, provision/, images/, catalog/, akash/
+- [x] Kustomize base/node-app shared base for operator/poly/resy
+- [x] Git file generator ApplicationSets (catalog-driven)
+- [x] CI scripts: manifest validation, coverage check, promote
+- [x] Bootstrap: Docker + k3s + Argo CD via cloud-init (with retry loop fix)
+- [x] GHCR repo name fixed: cogni-dao/node-template (not cogni-template)
+- [x] Caddy Caddyfile.tmpl: multi-domain routing to k3s NodePorts
+- [x] Real image digests promoted into staging/operator overlay
+
+### Deployment verification (in progress)
+
+- [ ] Fresh VM provisions with fixed bootstrap (k3s node registers, Argo installs)
+- [ ] Argo ApplicationSets generate 5 Applications from catalog
+- [ ] Operator pod starts with real image digest (not placeholder)
+- [ ] Scheduler-worker pod starts with real image digest
+- [ ] Caddy routes test.cognidao.org → operator NodePort 30000
+- [ ] `curl https://test.cognidao.org/livez` returns 200
+
+### Blocked on (for poly + resy green)
+
+- [ ] CI build matrix: add poly + resy Dockerfiles to staging-preview.yml
+- [ ] SOPS secrets: encrypt real DATABASE_URL + AUTH_SECRET per node
+- [ ] Compose infra on VM: postgres, temporal, litellm, redis (deploy.sh)
+- [ ] DNS records for poly + resy subdomains
+- [ ] Full green status card from /deploy-node skill
