@@ -138,7 +138,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --config nodes/operator/app/vitest.config.mts nodes/operator/app/tests/unit",
     "test:ci": "vitest run --coverage.enabled=true --coverage.reporter=lcov --coverage.reporter=json-summary --coverage.reporter=text",
-    "test:component": "vitest run --config nodes/operator/app/vitest.component.config.mts",
+    "test:component": "for cfg in nodes/*/app/vitest.component.config.mts; do echo \"Running component tests: $cfg\" && vitest run --config \"$cfg\" || exit 1; done",
     "test:comp": "pnpm test:component",
     "test:smee": "dotenv -e .env.test -- bash -c 'smee -u \"$GH_WEBHOOK_PROXY_URL\" -t http://localhost:3000/api/internal/webhooks/github'",
     "test:external": "vitest run --config nodes/operator/app/vitest.external.config.mts",
