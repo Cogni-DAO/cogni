@@ -82,7 +82,7 @@
 | 1 | 5 | 2 | needs_design | bug.0200 | setup-secrets has no validation that generated secrets are deploy-safe | Database Operations | proj.database-ops |
 | 1 | 5 | 3 | needs_merge | task.0209 | Multi-provider LLM rearchitecture — ModelCatalogPort + ModelRef | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | 5 | 2 | needs_triage | bug.0231 | Token usage has three disagreeing sources — app logs, LiteLLM spend_logs, and billing callback |  |  |
-| 1 | 5 | 5 | needs_merge | task.0248 | Deduplicate node platform: capability extractions + thin app shell | Operator Plane | proj.operator-plane |
+| 1 | 5 | 3 | needs_closeout | task.0273 | Unify workspace: move operator to nodes/operator/app | Operator Plane | proj.operator-plane |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -163,6 +163,7 @@
 | 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 10 | 2 | needs_design | bug.0262 | Operator Postgres env vars lack _OPERATOR suffix — inconsistent with multi-node pattern | Cogni Poly | proj.poly-prediction-bot |
+| 3 | 20 | 2 | needs_design | task.0274 | Wire NodeAppConfig into sidebar + layout components | Operator Plane | proj.operator-plane |
 | 3 | 30 | 3 | needs_merge | task.0207 | Run: BYO-AI hosted OSS provider — user connects their OpenAI-compatible endpoint | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 3 | 80 | 3 | needs_design | task.0146 | Extract payments application orchestration + billing ports into packages | AI Operator Wallet | proj.ai-operator-wallet |
 | 3 | 99 | 1 | needs_triage | task.0098 | Temporal retry workflow for failed identity bindings + scheduled backstop | User Identity Bindings + DID Readiness | proj.decentralized-identity |
@@ -289,6 +290,7 @@
 | 1 | bug.0234 | Activity charts show raw model IDs and "unknown" instead of human-friendly names |  |  |
 | 1 | spike.0234 | Research: Premium frontend UX — activity stream, work items, agent visualization | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | task.0237 | Work items table — ReUI data-grid + detail panel + visual identity | Premium Frontend UX | proj.premium-frontend-ux |
+| 1 | task.0248 | Deduplicate node platform: capability extractions + thin app shell | Operator Plane | proj.operator-plane |
 | 1 | task.0250 | Extract @cogni/graph-execution-host package | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | story.0262 | Agent contributor protocol — shared workflow for AI agents coordinating on a codebase | Development Workflows | proj.development-workflows |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |

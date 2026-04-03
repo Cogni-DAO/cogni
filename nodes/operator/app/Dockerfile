@@ -88,7 +88,7 @@ ENV LOG_FORMAT=json
 LABEL org.opencontainers.image.title="cogni-template"
 
 # Copy standalone bundle (includes production dependencies)
-# outputFileTracingRoot=../../ means standalone output mirrors monorepo structure
+# outputFileTracingRoot=../../../ means standalone output mirrors monorepo structure
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/.next/static ./nodes/operator/app/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/public ./nodes/operator/app/public

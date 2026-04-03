@@ -17,7 +17,7 @@ tags: [nodes, dev, infrastructure]
 ## Layout
 
 ```
-apps/operator/          → Operator dashboard (port 3000)
+nodes/operator/         → Operator dashboard (port 3000)
 nodes/node-template/    → Base template for new nodes
 nodes/poly/             → Poly prediction node (port 3100)
 nodes/resy/             → Resy reservations node (port 3300)
@@ -102,7 +102,7 @@ when you change node-specific code. This will be unified in task.0248.
 ## Database & Auth
 
 All nodes share one Postgres database (`cogni_template_dev`) and one set of
-migrations (from `apps/operator/src/adapters/server/db/migrations/`). Standard
+migrations (from `nodes/operator/app/src/adapters/server/db/migrations/`). Standard
 setup applies:
 
 ```bash

@@ -2,7 +2,7 @@
 id: task.0273
 type: task
 title: "Unify workspace: move operator to nodes/operator/app"
-status: needs_implement
+status: needs_closeout
 priority: 1
 rank: 5
 estimate: 3
@@ -21,7 +21,7 @@ revision: 1
 blocked_by: []
 deploy_verified: false
 created: 2026-04-02
-updated: 2026-04-02
+updated: 2026-04-03
 
 labels: [refactor, architecture, nodes, infra]
 external_refs:

@@ -6,7 +6,7 @@ status: draft
 spec_state: proposed
 trust: draft
 summary: "Defines two package categories (capability libraries and internal source packages) and how node apps consume a thin shared app shell without file duplication."
-read_when: "Creating a new node, extracting shared code from apps/operator, or deciding whether code belongs in a capability package vs the app shell."
+read_when: "Creating a new node, extracting shared code from nodes/operator/app, or deciding whether code belongs in a capability package vs the app shell."
 implements: proj.operator-plane
 owner: derekg1729
 created: 2026-04-02

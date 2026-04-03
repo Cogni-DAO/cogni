@@ -39,7 +39,7 @@ intent:
 nodes:
   - node_id: "4ff8eac1-4eba-4ed0-931b-b1fe4f64713d"
     node_name: "Cogni Operator"
-    path: "."
+    path: "nodes/operator"
     endpoint: "http://app:3000/api/internal/billing/ingest"
   - node_id: "5ed2d64f-2745-4676-983b-2fb7e05b2eba"
     node_name: "Poly Prediction"
