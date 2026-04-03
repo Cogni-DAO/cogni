@@ -10,6 +10,7 @@ summary: "Argo CD PreSync migration Job can't run Drizzle migrations — Next.js
 outcome: "Migration Job runs real Drizzle migrations in k8s using a lightweight migrator image with tsx + drizzle-kit."
 project: proj.cicd-services-gitops
 branch: bug/0275-k8s-migrator-image
+pr: https://github.com/Cogni-DAO/node-template/pull/709
 assignees: []
 labels: [deployment, k8s, migration, argocd]
 created: 2026-04-03
