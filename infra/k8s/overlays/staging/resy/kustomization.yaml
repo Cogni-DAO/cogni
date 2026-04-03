@@ -16,7 +16,7 @@ images:
     digest: "sha256:26ba9828434193d92b6ec81269080ff012022a4abc51953efaf40829a322eb67"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
-    newTag: "staging-placeholder-resy-migrate"
+    digest: "sha256:bf8d345cb62448ef5804aa0fedd2d6f088e7b98d5fc7d048fec79a210626c8c9"
 
 patches:
   # Node-specific ConfigMap values.
