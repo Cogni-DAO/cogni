@@ -16,10 +16,10 @@ branch:
 pr:
 reviewer:
 revision: 0
-blocked_by:
+blocked_by: task.0247
 deploy_verified: false
 created: 2026-04-02
-updated: 2026-04-02
+updated: 2026-04-03
 labels: [ci, monorepo, turborepo, testing, multi-node]
 external_refs:
 ---

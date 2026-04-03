@@ -134,17 +134,42 @@ Terraform/OpenTofu can manage role creation as an alternative to CD-time provisi
 | k3s + Argo CD bootstrap via cloud-init (Docker + k3s + Argo + ksops)           | In Review   | ↑   | task.0247 |
 | K8s API read-only service account for AI agent debugging                       | Not Started | 1   | task.0187 |
 | Argo CD API token for sync status / rollback by AI agents                      | Not Started | 1   | task.0187 |
+| Merge `@cogni/container-runtime` package + workload-controller service         | Not Started | 2   | —         |
 
-#### P2: Preview Environments for AI Dev-Lifecycle
+#### P2: Preview Environments for AI Dev-Lifecycle (Tier 2 — Approved Preview Apps)
 
-**Goal:** Per-branch preview environments (~5 simultaneous) enabling AI dev-lifecycle agents to deploy, view, interact with, and validate their own work. Retire Compose entirely.
+**Goal:** Imperative preview deployments (~3 concurrent, hard-capped) enabling AI agents and CI to deploy, test, and tear down preview apps via HTTP API. Separate preview host from staging/prod.
 
-| Deliverable                                                                  | Status      | Est | Work Item |
-| ---------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Auto-create preview app per PR (ApplicationSet + wildcard DNS + Ingress)     | Not Started | 3   | task.0188 |
-| Share heavy infra (Temporal, LiteLLM, PG), only per-branch app + worker pods | Not Started | 2   | task.0188 |
-| Cleanup on PR close / 48h TTL                                                | Not Started | 1   | task.0188 |
-| Migrate Next.js app to k3s (retire Compose entirely)                         | Not Started | 3   | —         |
+**Why NOT Argo CD for previews:** Argo polls git at 3-minute intervals (requeueAfterSeconds=180) — the entire agent e2e loop budget is 5 minutes. Git commits as state changes create garbage commits for ephemeral resources. Agents need imperative `POST /deploy → URL → DELETE`, not declarative reconciliation. See [preview-deployments spec](../../docs/spec/preview-deployments.md).
+
+**Architecture:** Preview Controller service (HTTP API) + `ContainerRuntimePort` with DockerAdapter (now) / AkashAdapter (later). Caddy dynamic routing via Admin API (:2019). Shared infra (PG, Temporal, LiteLLM) accessed over network; only thin app workload is per-preview.
+
+| Deliverable                                                                                | Status      | Est | Work Item |
+| ------------------------------------------------------------------------------------------ | ----------- | --- | --------- |
+| Preview Controller service + DockerAdapter (implements `ContainerRuntimePort`)             | Not Started | 3   | task.0188 |
+| Preview DB lifecycle (CREATE/DROP per-preview database on shared Postgres, run migrations) | Not Started | 2   | task.0188 |
+| Caddy dynamic routing via Admin API + wildcard DNS (`*.preview.cognidao.org`)              | Not Started | 1   | task.0188 |
+| Preview orchestration: quotas (hard cap 3), TTL reaper, cleanup on failure, health polling | Not Started | 2   | task.0188 |
+| CI integration: call preview controller after image push, run stack tests, post URL to PR  | Not Started | 1   | task.0188 |
+| Separate preview VM provisioning (or same VM with hard cap for MVP)                        | Not Started | 1   | —         |
+
+**Important:** The DockerAdapter is the easy part. The Preview Controller orchestration (DB lifecycle, migration ordering, cleanup of orphaned containers/leaked databases, quotas, Caddy routing error recovery) is where the real complexity lives.
+
+**Portability note:** `ContainerRuntimePort` is portable to Akash. Docker networks, Caddy Admin API, and container labels are VM-specific — keep DB provisioning, routing, and health polling as injectable concerns in the controller.
+
+#### P2.5: Live AI Prototype Streaming (Tier 1 — Instant Preview)
+
+**Goal:** User talks to AI agent → sees live visualization of what's being built in real-time → approves → promotes to Tier 2 preview. No CI, no Docker build, no deploy in the loop.
+
+| Deliverable                                                                    | Status      | Est | Work Item |
+| ------------------------------------------------------------------------------ | ----------- | --- | --------- |
+| Pre-warmed dev runner pool (sandbox containers ready before user asks)         | Not Started | 3   | —         |
+| Live streaming: AI edits → hot-reload or screenshot stream → iframe to user    | Not Started | 3   | —         |
+| Approve & promote: user clicks approve → CI builds → Tier 2 preview deployment | Not Started | 2   | —         |
+
+**Open questions:** Does OpenClaw sandbox support hot-reload + visual streaming? What runtime (next dev is 2GB, need lighter alternative)? WebSocket iframe vs Playwright MCP screenshots? Warm pool sizing?
+
+**Resource pooling (mandatory for both tiers):** Shared PG server (per-preview DB), shared Temporal (per-preview namespace), shared LiteLLM (per-preview API key), shared Redis (key prefix), shared Caddy (route only). Only the thin app workload is per-preview. Without pooling, 2-3 concurrent users crush the VM.
 
 #### P3: Scaling Infrastructure
 
