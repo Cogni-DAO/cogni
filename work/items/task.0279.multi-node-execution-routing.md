@@ -1,15 +1,14 @@
 ---
 id: task.0279
 type: task
-title: "Multi-node execution routing — scheduler-worker graph execution targets correct node"
+title: "Node-aware execution routing — nodeId in workflow input + per-node API dispatch"
 status: needs_design
 priority: 1
 rank: 3
-estimate: 3
-summary: "Scheduler-worker executes graphs against the originating node's API, not hardcoded operator. Ensures billing, data isolation, and graph catalog correctness across nodes."
-outcome: "Scheduled graph runs on poly execute against poly's API with poly's DB and billing. No cross-node data leakage."
+estimate: 2
+summary: "Add nodeId to GraphRunWorkflowInput. Worker resolves per-node API URL for executeGraphActivity. Chat facade + schedule creation pass nodeId from repo-spec. Billing follows automatically."
+outcome: "All graph execution routes to the originating node. Billing callbacks land on the correct node's DB. No cross-node charge misattribution."
 spec_refs:
-  - packages-architecture-spec
   - graph-execution-spec
 assignees: []
 credit:
@@ -17,7 +16,7 @@ project: proj.unified-graph-launch
 branch: feat/task-0279-multi-node-execution-routing
 pr:
 reviewer:
-revision: 0
+revision: 1
 blocked_by: []
 deploy_verified: false
 created: 2026-04-03
@@ -30,161 +29,141 @@ labels:
 external_refs:
 ---
 
-# Multi-node execution routing
+# Node-aware execution routing
 
 ## Context
 
-The scheduler-worker has a single `APP_BASE_URL` env var (`http://app:3000`), hardcoded to the operator node. When any node creates a Temporal schedule, the worker executes the graph against the operator — regardless of which node originated the schedule.
+On canary, ALL graph execution (chat + scheduled + webhook) flows through Temporal → scheduler-worker → `executeGraphActivity` → HTTP POST to `APP_BASE_URL`. The worker's `APP_BASE_URL` is a single string hardcoded to operator (`http://app:3000`).
 
-This means:
+When a user on poly sends a chat message, the execution happens on operator. The LiteLLM billing callback carries operator's `node_id` (set by operator's `InProcCompletionUnitAdapter`). The charge lands in operator's DB. Poly's activity dashboard shows nothing.
 
-1. **Wrong billing** — execution charges operator's billing account, not the originating node's
-2. **Wrong database** — graph_runs recorded in operator's DB, not the node's
-3. **Wrong graph catalog** — when nodes have divergent graphs, execution fails (404)
-4. **Wrong auth context** — execution_grant validated against operator's DB
+**The billing pipeline is already multi-node capable** — `cogni_callbacks.py` routes by `node_id`, each node's billing ingest writes to its own DB. The problem is the execution doesn't happen on the right node.
 
-Chat and webhook-triggered graph execution work correctly — they run in-process in each node's Next.js app. The gap is only in the Temporal scheduled path.
+## Bug
 
-### Evidence
+**One field missing**: `GraphRunWorkflowInput` has no `nodeId`. The workflow has no way to tell the worker which node originated the request. The worker POSTs to operator for everything.
 
-- `services/scheduler-worker/src/activities/index.ts:257`: `const url = ${config.appBaseUrl}/api/internal/graphs/${graphId}/runs`
-- `services/scheduler-worker/src/bootstrap/env.ts:39`: `APP_BASE_URL: z.string().url()` — single string, not a map
-- `infra/k8s/base/scheduler-worker/configmap.yaml:21`: `APP_BASE_URL: "http://app:3000"`
-- `infra/k8s/base/scheduler-worker/external-services.yaml:71-96`: Single `app` Service → one IP
-- `ExecuteGraphInput` interface: no `nodeId` field
-- `execution_grants` table: no `node_id` column (scoped by per-node DB per DB_PER_NODE)
-
-### Prior art that works
-
-Billing callbacks are already multi-node routed via `COGNI_NODE_ENDPOINTS` in `infra/images/litellm/cogni_callbacks.py`. The `CogniNodeRouter` class routes billing ingest POSTs to the correct node based on `node_id` in spend_logs_metadata. This proves the pattern.
-
-## Bug analysis
-
-### What breaks today
-
-Per `DB_PER_NODE`, each node has its own Postgres database. The scheduler-worker connects to ONE `DATABASE_URL` (operator's service DB). When it validates execution grants for a poly schedule, it queries operator's DB — the grant doesn't exist there.
-
-Actually — today this is silently safe: no node other than operator has schedules yet. Poly and resy don't have schedule-creation UI or API enabled. But the moment they do, this breaks.
-
-### What's at risk
-
-The scheduler-worker's `DATABASE_URL` is the operator's service-role connection. If poly creates a schedule:
-
-1. Worker picks up the Temporal schedule event
-2. Worker tries to validate the execution grant against operator's DB → grant not found → execution rejected
-3. Even if grant validation is skipped, the HTTP POST goes to operator → operator's billing context is used
-
-This is a data isolation violation per `NO_CROSS_NODE_QUERIES` invariant.
+Each node already has a unique `node_id` in `.cogni/repo-spec.yaml` (operator: `4ff8eac1...`, poly: `5ed2d64f...`, resy: `f6d2a17d...`). The app reads it via `getNodeId()` at bootstrap. It's just not threaded into the Temporal workflow input.
 
 ## Design
 
-### Core principle: NODE_IDENTITY_IN_WORKFLOW_INPUT
+### Add `nodeId` at the source, resolve at the worker
 
-Every Temporal workflow that triggers graph execution carries `nodeId` in its input. The worker uses this to resolve the correct:
+**Principle**: The originating node sets `nodeId` once. It flows through unchanged. The worker uses it to route. No backwards compat — all new workflows carry `nodeId`.
 
-- **API endpoint** (which node to POST to)
-- **Database connection** (which node's grants/runs to access)
+### Changes
 
-### Option A: Multi-endpoint routing + per-node DB connections (recommended)
+**1. `GraphRunWorkflowInput` — add `nodeId`**
 
-The worker maintains a node registry — a map of `nodeId → { apiUrl, databaseUrl }`. It resolves per-node on every activity execution.
+File: `packages/temporal-workflows/src/workflows/graph-run.workflow.ts`
 
-```
-SCHEDULER_NODE_REGISTRY = {
-  "operator": { "apiUrl": "http://operator-node-app:3000", "dbUrl": "postgresql://...operator_db" },
-  "poly":     { "apiUrl": "http://poly-node-app:3000",     "dbUrl": "postgresql://...poly_db" },
-  "resy":     { "apiUrl": "http://resy-node-app:3000",     "dbUrl": "postgresql://...resy_db" }
+```typescript
+export interface GraphRunWorkflowInput {
+  nodeId: string; // ← NEW: originating node identity
+  graphId: string;
+  // ... rest unchanged
 }
 ```
 
-#### Changes required
-
-**1. Workflow/schedule input carries nodeId**
-
-Add `nodeId: string` to `ExecuteGraphInput` and the Temporal schedule creation payload. Each node's app reads `COGNI_NODE_ID` from its env and passes it when creating schedules.
-
-**2. Worker resolves per-node config**
-
-New env var: `SCHEDULER_NODE_REGISTRY` (JSON string or structured env). The worker parses it at startup and creates per-node DB clients + endpoint URLs.
-
-In `executeGraphActivity`:
+The workflow passes `nodeId` through to `executeGraphActivity`:
 
 ```typescript
-const nodeConfig = nodeRegistry.get(input.nodeId);
-const url = `${nodeConfig.apiUrl}/api/internal/graphs/${graphId}/runs`;
+const result = await executeGraphActivity({
+  nodeId, // ← NEW
+  temporalScheduleId,
+  graphId,
+  // ... rest unchanged
+});
 ```
 
-**3. Per-node grant validation**
+**2. `ExecuteGraphInput` — add `nodeId`**
 
-The `DrizzleExecutionGrantWorkerAdapter` currently uses a single DB client. Change to accept the node's DB client from the registry.
+File: `services/scheduler-worker/src/activities/index.ts`
 
-**4. Per-node graph_runs recording**
+```typescript
+export interface ExecuteGraphInput {
+  nodeId: string; // ← NEW
+  temporalScheduleId?: string;
+  graphId: string;
+  // ... rest unchanged
+}
+```
 
-Same pattern — use the node's DB client for inserting/updating graph_runs records.
+**3. Worker resolves per-node API URL**
 
-**5. Infra config**
+File: `services/scheduler-worker/src/bootstrap/env.ts` — add:
 
-- k8s ConfigMap: Replace `APP_BASE_URL` with `SCHEDULER_NODE_REGISTRY`
-- Docker Compose: Same
-- k8s external-services: Add per-node app Services (`operator-app`, `poly-app`, `resy-app`)
+```typescript
+COGNI_NODE_ENDPOINTS: z.string().min(1),
+// Format: "operator=http://operator-node-app:3000,poly=http://poly-node-app:3000,resy=http://resy-node-app:3000"
+```
 
-#### Migration path
+File: `services/scheduler-worker/src/activities/index.ts` — change:
 
-1. Add `nodeId` to `ExecuteGraphInput` with fallback: `input.nodeId ?? "operator"` (backwards compat for existing schedules)
-2. Add `SCHEDULER_NODE_REGISTRY` env with fallback to legacy `APP_BASE_URL` (single-node mode)
-3. When all schedules carry nodeId, remove the fallback
+```typescript
+// Before:
+const url = `${config.appBaseUrl}/api/internal/graphs/${graphId}/runs`;
 
-### Option B: Per-node task queues (deferred)
+// After:
+const nodeUrl = config.nodeEndpoints.get(input.nodeId);
+if (!nodeUrl) throw new ApplicationFailure(`Unknown nodeId: ${input.nodeId}`);
+const url = `${nodeUrl}/api/internal/graphs/${graphId}/runs`;
+```
 
-Each node gets its own Temporal task queue and its own worker instance. Schedules target the correct queue at creation time.
+**4. Chat facade passes `nodeId`**
 
-This provides full isolation but requires N worker deployments. Deferred until traffic patterns justify it.
+File: `nodes/*/app/src/app/_facades/ai/completion.server.ts`
+
+```typescript
+args: [
+  {
+    nodeId: getNodeId(), // ← NEW: from repo-spec
+    graphId,
+    // ... rest unchanged
+  },
+];
+```
+
+**5. Schedule creation passes `nodeId`**
+
+File: `nodes/*/app/src/adapters/server/temporal/schedule-control.adapter.ts`
+
+The schedule's workflow args include `nodeId: getNodeId()`.
+
+**6. Infra config**
+
+- `infra/k8s/base/scheduler-worker/configmap.yaml`: Replace `APP_BASE_URL` with `COGNI_NODE_ENDPOINTS`
+- `infra/k8s/overlays/staging/scheduler-worker/kustomization.yaml`: Set per-node URLs
+- `infra/k8s/base/scheduler-worker/external-services.yaml`: Add per-node app Services
+- `infra/compose/runtime/docker-compose.dev.yml`: Add `COGNI_NODE_ENDPOINTS`
+
+### What about grant validation + graph_runs?
+
+The worker also calls `validateGrantActivity`, `createGraphRunActivity`, `updateGraphRunActivity` — these hit the worker's single `DATABASE_URL`. This is a separate concern (task.0280). For now, the shared DB in staging/prod means these work. When per-node DBs deploy, task.0280 addresses it.
+
+### Evaluating: stable context envelope
+
+Today `nodeId` threads through 4 layers: facade → workflow input → activity input → HTTP URL resolution. That's acceptable for one field. If more per-node context is needed later (billing policy, LLM config, etc.), a `NodeExecutionContext` envelope makes sense. But for now, one field is not worth an abstraction.
 
 ## Plan
 
-### Step 1: Schema + workflow input
-
-- [ ] Add `nodeId: string` to `ExecuteGraphInput` in `services/scheduler-worker/src/activities/index.ts`
-- [ ] Add `nodeId` to Temporal schedule creation in app code (where schedules are created)
-- [ ] Read `COGNI_NODE_ID` from `serverEnv()` and pass to schedule payload
-
-### Step 2: Worker node registry
-
-- [ ] Add `SCHEDULER_NODE_REGISTRY` to `services/scheduler-worker/src/bootstrap/env.ts`
-- [ ] Parse into `Map<string, { apiUrl: string; dbUrl: string }>`
-- [ ] Fallback: if not set, use `APP_BASE_URL` as single-node mode for backwards compat
-
-### Step 3: Per-node routing in executeGraphActivity
-
-- [ ] Resolve `nodeConfig` from registry using `input.nodeId`
-- [ ] Use `nodeConfig.apiUrl` for the HTTP POST
-- [ ] Log node routing decision for observability
-
-### Step 4: Per-node DB connections for grants + runs
-
-- [ ] Create per-node `DrizzleExecutionGrantWorkerAdapter` instances at bootstrap
-- [ ] Route grant validation to the correct node's DB
-- [ ] Route graph_runs insert/update to the correct node's DB
-
-### Step 5: Infra config
-
-- [ ] Update `infra/k8s/base/scheduler-worker/configmap.yaml` with `SCHEDULER_NODE_REGISTRY`
-- [ ] Update k8s overlays (staging, production) with per-node URLs
-- [ ] Add per-node `app` Services + EndpointSlices to `external-services.yaml`
-- [ ] Update `docker-compose.dev.yml` and `docker-compose.yml`
-
-### Step 6: Validate
-
+- [ ] Add `nodeId: string` to `GraphRunWorkflowInput`
+- [ ] Add `nodeId: string` to `ExecuteGraphInput`
+- [ ] Workflow passes `nodeId` through to executeGraphActivity
+- [ ] Worker parses `COGNI_NODE_ENDPOINTS` env, resolves per-node URL
+- [ ] Chat facade passes `nodeId` from `getNodeId()`
+- [ ] Schedule creation passes `nodeId` from `getNodeId()`
+- [ ] Webhook-triggered runs pass `nodeId` from `getNodeId()`
+- [ ] Remove `APP_BASE_URL` from worker env (replaced by `COGNI_NODE_ENDPOINTS`)
+- [ ] Update k8s configmaps + external-services for per-node routing
+- [ ] Update docker-compose for dev
 - [ ] `pnpm check`
-- [ ] Stack test: create schedule on node, verify execution routes correctly
-- [ ] Verify billing goes to correct node's charge_receipts
 
 ## Invariants
 
-- **NODE_IDENTITY_IN_WORKFLOW_INPUT**: Every Temporal workflow input carries `nodeId`
-- **DB_PER_NODE**: Worker accesses the correct node's database for grants and runs
-- **NO_CROSS_NODE_QUERIES**: Worker never queries the wrong node's DB
-- **BACKWARDS_COMPAT**: Existing schedules without `nodeId` default to operator
+- **NODE_IDENTITY_IN_WORKFLOW_INPUT**: Every `GraphRunWorkflowInput` carries `nodeId`
+- **EXECUTION_ON_ORIGINATING_NODE**: Worker routes to the node that started the workflow
+- **NO_BACKWARDS_COMPAT**: All new workflows require `nodeId`. No fallback to operator.
 
 ## Validation
 
@@ -192,16 +171,13 @@ This provides full isolation but requires N worker deployments. Deferred until t
 pnpm check
 ```
 
-- Stack test: create schedule on operator, verify execution targets operator API
-- Stack test: create schedule on poly (when enabled), verify execution targets poly API
-- Verify grant validation uses the correct node's DB
-- Verify graph_runs written to the correct node's DB
-- Verify billing charge_receipts land in the correct node's DB
+- Unit test: worker routes to correct URL based on nodeId
+- Integration: verify COGNI_NODE_ENDPOINTS parsing
+- Stack test (future): create schedule on poly, verify execution hits poly's API
 
 ## Related
 
-- [Multi-Node Tenancy Spec](../../docs/spec/multi-node-tenancy.md) — DB_PER_NODE, NO_CROSS_NODE_QUERIES
+- task.0280 — Per-node DB isolation for worker activities (evaluate approach)
+- [Multi-Node Tenancy Spec](../../docs/spec/multi-node-tenancy.md) — DB_PER_NODE
 - [Graph Execution Spec](../../docs/spec/graph-execution.md) — UNIFIED_GRAPH_EXECUTOR
-- [Multi-Node Graph Execution Scaling](../../docs/research/multi-node-graph-execution-scaling.md) — Paths A/B/C analysis
-- task.0250 — Extract @cogni/graph-execution-host (done)
-- task.0181 — Spike: Worker-local execution (future)
+- [Multi-Node Graph Execution Scaling](../../docs/research/multi-node-graph-execution-scaling.md)
