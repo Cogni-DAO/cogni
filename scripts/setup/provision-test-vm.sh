@@ -297,15 +297,7 @@ done
 log_info "Verifying k3s + Argo CD..."
 ssh $SSH_OPTS root@"$VM_IP" 'kubectl get nodes && echo "---" && kubectl -n argocd get pods --no-headers'
 
-# Patch ApplicationSet to watch our branch (default is 'staging')
-if [[ "$BRANCH" != "staging" ]]; then
-  log_info "Patching Argo CD ApplicationSet to watch branch: $BRANCH"
-  ssh $SSH_OPTS root@"$VM_IP" "kubectl -n argocd patch applicationset cogni-staging --type=json -p='[
-    {\"op\": \"replace\", \"path\": \"/spec/generators/0/git/revision\", \"value\": \"${BRANCH}\"},
-    {\"op\": \"replace\", \"path\": \"/spec/template/spec/source/targetRevision\", \"value\": \"${BRANCH}\"}
-  ]'"
-  log_info "ApplicationSet now watches: $BRANCH"
-fi
+# ApplicationSets applied in Phase 7 (after all prerequisites are in place)
 
 # ══════════════════════════════════════════════════════════════
 # Phase 4b: Patch k8s EndpointSlice IPs + push to git
@@ -493,7 +485,39 @@ log_info "All k8s secrets created"
 # ══════════════════════════════════════════════════════════════
 # Phase 7: Deployment Status Report (Scorecard)
 # ══════════════════════════════════════════════════════════════
-log_step "Phase 7: Deployment Status Report"
+# ══════════════════════════════════════════════════════════════
+# Phase 7: Apply ApplicationSets (LAST — all prerequisites ready)
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 7: Apply ApplicationSets (triggers Argo sync)"
+
+# Gate: verify prerequisites exist before enabling Argo sync
+ssh $SSH_OPTS root@"$VM_IP" '
+  kubectl -n cogni-staging get secret operator-node-app-secrets >/dev/null || { echo "FATAL: operator secrets missing"; exit 1; }
+  kubectl -n cogni-staging get secret poly-node-app-secrets >/dev/null || { echo "FATAL: poly secrets missing"; exit 1; }
+  kubectl -n cogni-staging get secret resy-node-app-secrets >/dev/null || { echo "FATAL: resy secrets missing"; exit 1; }
+  kubectl -n cogni-staging get secret scheduler-worker-secrets >/dev/null || { echo "FATAL: scheduler-worker secrets missing"; exit 1; }
+  echo "All prerequisite secrets verified"
+'
+
+# Clone repo on VM to get ApplicationSet manifests
+ssh $SSH_OPTS root@"$VM_IP" "
+  AUTHED_URL=\$(echo '${COGNI_REPO_URL}' | sed 's|https://|https://${GHCR_USERNAME}:${GHCR_TOKEN}@|')
+  git clone --depth=1 --branch '${BRANCH}' \"\$AUTHED_URL\" /tmp/cogni-appsets 2>/dev/null
+
+  # Apply ApplicationSets — Argo starts syncing NOW
+  kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
+  kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/production-applicationset.yaml
+  rm -rf /tmp/cogni-appsets
+  echo 'ApplicationSets applied — Argo syncing'
+"
+
+log_info "Waiting 120s for Argo to sync all apps..."
+sleep 120
+
+# ══════════════════════════════════════════════════════════════
+# Phase 8: Deployment Status Report
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 8: Deployment Status Report"
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════════"

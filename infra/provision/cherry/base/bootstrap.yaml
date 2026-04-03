@@ -172,9 +172,10 @@ write_files:
       kubectl -n argocd patch deployment argocd-repo-server \
         --patch-file /tmp/cogni-repo/infra/k8s/argocd/repo-server-patch.yaml
 
-      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Applying Argo CD ApplicationSets..."
-      kubectl apply -f /tmp/cogni-repo/infra/k8s/argocd/staging-applicationset.yaml
-      kubectl apply -f /tmp/cogni-repo/infra/k8s/argocd/production-applicationset.yaml
+      # ApplicationSets are NOT applied here — the provision script applies them
+      # AFTER secrets, EndpointSlice IPs, and overlay fixes are all in place.
+      # This prevents Argo from racing to sync with incomplete manifests.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Skipping ApplicationSets (provision script applies them last)"
 
       rm -rf /tmp/cogni-repo
 

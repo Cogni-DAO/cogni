@@ -70,7 +70,7 @@
 | 1 | 3 | 5 | needs_design | task.0188 | Per-branch preview environments (~5 simultaneous) for AI dev-lifecycle agents | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 3 | 3 | needs_merge | bug.0196 | Scheduled runs attributed to system tenant instead of schedule owner |  |  |
 | 1 | 3 | 5 | needs_design | task.0233 | Design: extract node-template from operator repo — identity split + repo-spec merge | Node Formation & Launch | proj.node-formation-ui |
-| 1 | 3 | 3 | needs_design | task.0247 | Multi-node CI/CD deployment strategy — current stack vs ArgoCD | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 3 | 3 | needs_merge | task.0247 | Multi-node CI/CD deployment — Argo CD GitOps on k3s | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 1 | 3 | 2 | needs_implement | task.0254 | Upgrade poly node landing page onto full platform base | Operator Plane | proj.operator-plane |
 | 1 | 3 | 3 | needs_design | task.0259 | Unified rounded UI theming — buttons, cards, dialogs across all nodes | Operator Plane | proj.operator-plane |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
