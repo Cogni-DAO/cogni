@@ -14,6 +14,19 @@ updated: 2026-04-02
 
 Every Cogni node accumulates domain expertise in a versioned, queryable, exportable knowledge store. Knowledge compounds — agents get smarter with every interaction, research run, and outcome validation. Provable competence: you can diff what the node knew last week vs today and measure the delta.
 
+## Data Segments at Cogni
+
+Cogni nodes have four distinct data planes. Each serves a different purpose with different lifecycle and storage characteristics. A dedicated guide for this segmentation is needed (separate from this charter).
+
+| Segment              | Storage  | Tempo         | What lives here                                                                                                                                            |
+| -------------------- | -------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Operational data** | Postgres | Real-time     | Users, billing, auth, scheduling, AI runs, observations, signals. All critical ops info captured automatically.                                            |
+| **Stream data**      | Redis    | Ephemeral     | Live market feeds, SSE events, trigger evaluation. No persistence — replay from source.                                                                    |
+| **Knowledge**        | Doltgres | Hours-to-days | Curated domain expertise — strategies, claims, research findings. The only way (besides git) to save + compound knowledge. Versioned with commit/log/diff. |
+| **Code + ops**       | Git      | Commits       | Source code, specs, work items, AGENTS.md, repo-spec.yaml. The codebase itself.                                                                            |
+
+Doltgres is not a replacement for Postgres. Postgres owns all hot operational data — it flows there automatically through existing pipelines. Doltgres is the deliberate, curated layer: what the AI has _learned_, not what it has _seen_.
+
 ## What Dolt Is
 
 Dolt is git for data. Doltgres is the Postgres-compatible flavor. Same wire protocol, same SQL, same Drizzle ORM — but with native `commit`, `log`, `diff`, `branch`, `merge`. Every write creates a versioned snapshot. You can pin an analysis to a knowledge commit hash and reproduce it exactly.
@@ -94,6 +107,7 @@ _Updated by governance skills_
 
 | Initiative              | Status                    | What                                                                                  |
 | ----------------------- | ------------------------- | ------------------------------------------------------------------------------------- |
+| Data segmentation guide | Not started               | Clear guide for all 4 data planes (Redis, Postgres, Doltgres, Git) — when to use each |
 | Branching CI/CD         | story.0248 (needs_design) | Experiment branches, A/B eval, confidence-gated merge to main                         |
 | Node lifecycle          | story.0263 (needs_design) | Clone from DoltHub remotes, pull operator updates, push contributions                 |
 | Obsidian export         | Not started               | Export knowledge as Obsidian-compatible markdown vault — links, tags, graph view      |
