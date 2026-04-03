@@ -300,7 +300,32 @@ ssh $SSH_OPTS root@"$VM_IP" 'kubectl get nodes && echo "---" && kubectl -n argoc
 # ApplicationSets applied in Phase 7 (after all prerequisites are in place)
 
 # ══════════════════════════════════════════════════════════════
-# Phase 4b: Patch k8s EndpointSlice IPs + push to git
+# Phase 4b: Create/update DNS records
+# ══════════════════════════════════════════════════════════════
+if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then
+  log_step "Phase 4b: Create DNS records"
+  for sub in test poly-test resy-test; do
+    # Delete existing A records for this subdomain
+    EXISTING=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+      "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?name=${sub}.cognidao.org&type=A" \
+      | python3 -c "import json,sys; [print(x['id']) for x in json.load(sys.stdin).get('result',[])]" 2>/dev/null)
+    for id in $EXISTING; do
+      curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+        "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records/$id" >/dev/null
+    done
+    # Create new A record
+    RESULT=$(curl -s -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+      "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
+      -d "{\"type\":\"A\",\"name\":\"${sub}\",\"content\":\"${VM_IP}\",\"ttl\":300,\"proxied\":false}")
+    OK=$(echo "$RESULT" | python3 -c 'import json,sys; print("OK" if json.load(sys.stdin).get("success") else "FAIL")' 2>/dev/null)
+    log_info "  ${sub}.cognidao.org → ${VM_IP}: $OK"
+  done
+else
+  log_warn "Skipping DNS — CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set"
+fi
+
+# ══════════════════════════════════════════════════════════════
+# Phase 4c: Patch k8s EndpointSlice IPs + push to git
 # ══════════════════════════════════════════════════════════════
 log_step "Phase 4b: Patch EndpointSlice IPs to $VM_IP"
 
@@ -397,8 +422,19 @@ ENVEOF"
 log_info "Creating cogni-edge network..."
 ssh $SSH_OPTS root@"$VM_IP" 'docker network create cogni-edge 2>/dev/null || true'
 
-log_info "Building LiteLLM custom image..."
-ssh $SSH_OPTS root@"$VM_IP" 'docker build -t cogni-litellm:latest /opt/cogni-template-runtime/litellm-image/'
+log_info "Building LiteLLM custom image (retry up to 3x — base image is ~1.2GB)..."
+for attempt in 1 2 3; do
+  if ssh $SSH_OPTS root@"$VM_IP" 'docker build -t cogni-litellm:latest /opt/cogni-template-runtime/litellm-image/' 2>&1; then
+    log_info "LiteLLM image built"
+    break
+  fi
+  if [[ $attempt -eq 3 ]]; then
+    log_error "LiteLLM build failed after 3 attempts"
+    exit 1
+  fi
+  log_warn "LiteLLM build failed (attempt $attempt/3), retrying in 10s..."
+  sleep 10
+done
 
 log_info "Starting edge stack (Caddy)..."
 ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-edge --env-file /opt/cogni-template-edge/.env -f /opt/cogni-template-edge/docker-compose.yml up -d'
