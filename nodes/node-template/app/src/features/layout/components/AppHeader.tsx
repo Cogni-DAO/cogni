@@ -25,14 +25,24 @@ import { TreasuryBadge } from "@/features/treasury/components/TreasuryBadge";
 
 export function AppHeader(): ReactElement {
   return (
-    <header className="border-border border-b bg-background py-3">
+    <header className="border-border bg-background border-b py-3">
+      <a
+        href="#main"
+        className="focus:bg-background focus:text-foreground sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:p-2"
+      >
+        Skip to main content
+      </a>
       {/* Container: matches max-w-7xl pattern from Credits page */}
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           {/* Left side: Logo + Treasury */}
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <nav
+            aria-label="Primary"
+            className="flex min-w-0 items-center gap-3 sm:gap-4"
+          >
             <Link
               href="/"
+              aria-current="page"
               className="flex min-w-0 items-center gap-2 pl-4 sm:pl-0"
             >
               <Image
@@ -42,7 +52,7 @@ export function AppHeader(): ReactElement {
                 height={24}
                 className="shrink-0"
               />
-              <span className="hidden truncate font-bold text-gradient-accent text-xl md:inline">
+              <span className="text-gradient-accent hidden truncate text-xl font-bold md:inline">
                 Cogni
               </span>
             </Link>
@@ -51,7 +61,7 @@ export function AppHeader(): ReactElement {
             <div className="flex">
               <TreasuryBadge />
             </div>
-          </div>
+          </nav>
 
           {/* Action buttons */}
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
@@ -61,7 +71,7 @@ export function AppHeader(): ReactElement {
                 href="https://discord.gg/3b9sSyhZ4z"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center text-foreground transition-colors hover:text-muted-foreground"
+                className="text-foreground hover:text-muted-foreground inline-flex items-center transition-colors"
                 aria-label="Join our Discord"
               >
                 <span className="sr-only">Join our Discord</span>
@@ -81,6 +91,7 @@ export function AppHeader(): ReactElement {
                 variant="default"
                 showGithubIcon={true}
                 showStarIcon={true}
+                label="cogni-template"
                 initialStars={0}
                 targetStars={172900}
                 autoAnimate={true}

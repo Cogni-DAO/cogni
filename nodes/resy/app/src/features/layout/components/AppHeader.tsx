@@ -23,17 +23,27 @@ import { TreasuryBadge } from "@/features/treasury/components/TreasuryBadge";
 
 export function AppHeader(): ReactElement {
   return (
-    <header className="border-border border-b bg-background py-3">
+    <header className="border-border bg-background border-b py-3">
+      <a
+        href="#main"
+        className="focus:bg-background focus:text-foreground sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:p-2"
+      >
+        Skip to main content
+      </a>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           {/* Left side: Logo + Treasury */}
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <nav
+            aria-label="Primary"
+            className="flex min-w-0 items-center gap-3 sm:gap-4"
+          >
             <Link
               href="/"
+              aria-current="page"
               className="flex min-w-0 items-center gap-2 pl-4 sm:pl-0"
             >
-              <UtensilsCrossed className="size-5 shrink-0 text-primary" />
-              <span className="hidden truncate font-bold text-xl md:inline">
+              <UtensilsCrossed className="text-primary size-5 shrink-0" />
+              <span className="hidden truncate text-xl font-bold md:inline">
                 cogni<span className="text-primary">/resy</span>
               </span>
             </Link>
@@ -41,7 +51,7 @@ export function AppHeader(): ReactElement {
             <div className="flex">
               <TreasuryBadge />
             </div>
-          </div>
+          </nav>
 
           {/* Right side: GitHub + Wallet + Theme */}
           <div className="flex shrink-0 items-center gap-3">
@@ -49,9 +59,10 @@ export function AppHeader(): ReactElement {
               href="https://github.com/cogni-dao"
               target="_blank"
               rel="noopener noreferrer"
-              className="hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
+              aria-label="Cogni on GitHub"
+              className="text-muted-foreground hover:text-foreground hidden transition-colors lg:inline-flex"
             >
-              <Github className="size-4" strokeWidth={1.5} />
+              <Github className="size-4" strokeWidth={1.5} aria-hidden="true" />
             </a>
 
             <WalletConnectButton variant="compact" className="sm:hidden" />
