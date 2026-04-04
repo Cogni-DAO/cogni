@@ -166,8 +166,10 @@ jobs:
           OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
           HEAD_SHA: ${{ steps.env.outputs.head_sha }}
         run: |
-          # PAT checkout (ACTIONS_AUTOMATION_BOT_PAT) sets the commit author
-          # to the PAT owner — no explicit git config needed.
+          # PAT handles push auth but git needs an identity for commits
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           git add infra/k8s/overlays/${OVERLAY_ENV}/
 
           if git diff --cached --quiet; then
