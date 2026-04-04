@@ -81,9 +81,15 @@ if [[ -n "$MIGRATOR_DIGEST" ]]; then
   MIGRATOR_IMAGE_DIGEST="${MIGRATOR_DIGEST#*@}"
   log_info "  Migrator: $MIGRATOR_IMAGE_NAME"
   log_info "  Migrator digest: $MIGRATOR_IMAGE_DIGEST"
-  # Update the second image entry (migrator)
-  # Uses a different pattern to target the migrate placeholder
-  sed -i.bak "s|newTag: \".*-placeholder-.*-migrate\"|digest: \"${MIGRATOR_IMAGE_DIGEST}\"|" "$OVERLAY_FILE"
+  # Update the second image entry (migrator) — target the line after cogni-template-migrate
+  # Use awk to find the migrate image block and replace its digest line
+  awk -v new_digest="$MIGRATOR_IMAGE_DIGEST" -v new_name="$MIGRATOR_IMAGE_NAME" '
+    /name: .*cogni-template-migrate/ { in_migrate=1 }
+    in_migrate && /newName:/ { $0 = "    newName: " new_name; }
+    in_migrate && /digest:/ { $0 = "    digest: \"" new_digest "\""; in_migrate=0 }
+    in_migrate && /newTag:/ { $0 = "    digest: \"" new_digest "\""; in_migrate=0 }
+    { print }
+  ' "$OVERLAY_FILE" > "${OVERLAY_FILE}.tmp" && mv "${OVERLAY_FILE}.tmp" "$OVERLAY_FILE"
 fi
 
 rm -f "${OVERLAY_FILE}.bak"
