@@ -9,65 +9,64 @@ branch: canary
 last_commit: 9cd213cdc
 ---
 
-# Handoff: CI/CD Canary→Staging Parity — Unblock Staging Multi-Node
+# Handoff: CI/CD Pipeline — Deploy Branch Model + Preview/Production Green
 
 ## Context
 
-- Canary has a working multi-node setup: 3 k8s app pods (operator/poly/resy), Compose infra (postgres/litellm/temporal/redis/alloy/caddy), Argo CD syncing, Grafana logs flowing
-- Staging is legacy single-node Compose. It needs to be reprovisioned as multi-node to match canary
-- `deploy-infra.sh` (CI) handles Compose infra + k8s secrets on every push — proven on canary
-- `provision-test-vm.sh` creates VMs with k3s + Argo CD — has multiple bugs, completed canary with manual intervention
-- The CI pipeline (`promote-and-deploy.yml`) is broken: it needs to commit image digests to protected branches (Argo GitOps model), but branch protection blocks CI pushes. This is a design conflict that needs resolution
+- Canary multi-node is working: 3 k8s pods (operator/poly/resy), Compose infra, Argo CD, Grafana pod logs flowing
+- The pipeline is blocked because `promote-and-deploy.yml` needs to commit image digests but can't push to protected branches
+- **Decision made:** use `deploy/*` branches (one per env) for Argo-tracked deploy state. CI PRs digest updates there. App code stays on protected branches. See `docs/spec/ci-cd.md` for the spec
+- Preview VM (84.32.110.74) has k3s + Argo but no Compose services or apps — provision died mid-run
+- Production is legacy single-node Compose, untouched
 
 ## Current State
 
-- **Canary VM (84.32.109.222):** Fully working. All 3 nodes readyz 200. Grafana pod logs via `{source="k8s", env="canary"}`. deploy-infra runs on every canary push
-- **Preview VM (84.32.110.74):** k3s + Argo CD bootstrapped. Zero Compose services, no namespace, no secrets, no apps. Provision script died on staging push (branch protection). Needs Phase 5-9 completed
-- **Pipeline:** Build Multi-Node succeeds on canary. `promote-and-deploy.yml` (triggered by workflow_run from staging branch) fails with two bugs: (1) missing `git config user.name/email`, (2) push to protected branch blocked
-- **EndpointSlice IPs for preview:** PR #744 open to staging, waiting CI checks
-- **Secrets:** GitHub canary env has all secrets. GitHub preview env has all secrets (human + agent). `.env.preview` saved locally with staging DB passwords for data preservation
+- **Canary VM (84.32.109.222):** readyz 200 all nodes. Grafana logs via `{source="k8s", env="canary"}`. deploy-infra proven
+- **Preview VM (84.32.110.74):** k3s + Argo bootstrapped. No Compose, no namespace, no secrets, no apps. DNS points here. Needs deploy-infra to run
+- **Production VM (84.32.109.162):** Legacy single-node. `.env.production` saved locally. SSH key at `~/.ssh/cogni_template_production_deploy`
+- **Pipeline chain:** `Build Multi-Node` (canary) ✅ → `Promote and Deploy` (runs from staging) ❌ fails: missing git identity + can't push to protected branch → `E2E Smoke` ⏭️ skipped
+- **PR #744:** EndpointSlice IPs for preview, open to staging, waiting CI
+- **`docs/spec/ci-cd.md`:** Updated with deploy branch model, but the code hasn't been implemented yet
 
 ## Decisions Made
 
+- **Deploy branch model** agreed: `deploy/canary`, `deploy/staging`, `deploy/production` branches hold rendered overlay state. Argo tracks these. CI creates PRs to update digests, never pushes directly. See `docs/spec/ci-cd.md` sections: Branch Model, Promote and Deploy, Branch Protection
 - deploy-infra.sh creates k8s secrets from GitHub env secrets (bridge until ESO — task.0284): PR #739
-- Alloy ships k8s pod logs via `/var/log/pods` host mount (not k8s DaemonSet): PR #723, closed #727
-- SOPS/ksops removed from bootstrap — k8s secrets managed directly: commit `4cbdccaed`
-- Node repo-specs share same DAO contracts (operator/poly/resy same DAO, different scopes): PR #737
-- Provision script bugs documented in task.0285
-- Secrets architecture assessment: task.0283 (provision as GH Action), task.0284 (ESO + secret store)
+- SOPS/ksops removed from bootstrap — secrets managed directly by provision + deploy-infra: commit `4cbdccaed`
+- `workflow_run` always executes from default branch (staging). Any workflow fix must land on staging to take effect
+- Turborepo CI optimization (task.0260) plan reviewed and refined — separate from this work, no blockers between them
 
 ## Next Actions
 
-- [ ] **Fix promote-and-deploy.yml Argo digest commit design.** Current approach (CI pushes directly to protected branch) is incompatible with branch protection. Options: (a) Argo Image Updater watches GHCR directly — no git commits needed, (b) separate unprotected deploy branch for overlays, (c) CI creates auto-merge PRs for digest updates. This is the #1 blocker
-- [ ] **Complete preview VM provisioning.** Phase 5-9: Compose infra, k8s secrets, ApplicationSets. Either fix provision script's staging push or run deploy-infra.sh against preview VM via `workflow_dispatch`
+- [ ] **Create deploy branches.** `deploy/canary`, `deploy/staging`, `deploy/production`. Seed each with its environment's `infra/k8s/overlays/{env}/` content. Update Argo ApplicationSets to track `deploy/{env}` instead of `canary`/`staging`/`main`
+- [ ] **Update `promote-and-deploy.yml`** to create a PR against `deploy/{env}` branch (not push to app branch). Add `git config user.name/email`. Auto-merge the PR. This must land on staging (default branch) for `workflow_run` to use it
+- [ ] **Verify canary pipeline end-to-end:** push to canary → Build Multi-Node → Promote and Deploy PRs to `deploy/canary` → auto-merge → Argo syncs → verify readyz → E2E smoke
 - [ ] **Merge PR #744** (EndpointSlice IPs for preview) to staging
-- [ ] **Merge canary → staging** once pipeline is proven — brings deploy-infra.sh, all fixes, new workflow files
-- [ ] **Fix provision-test-vm.sh** (task.0285): credential mismatch volume reset, run migrations after db-provision, Cherry SSH key collision handling, branch-protection-aware overlay push
-- [ ] **Destroy old staging VM** at 84.32.109.160 (project 254586) and old tofu state at `infra/tofu/` after new preview is verified
-- [ ] **Clean up `infra/tofu/`** — migrate production state to `infra/provision/` or delete after production reprovisioning
+- [ ] **Run deploy-infra against preview VM** via `workflow_dispatch` of promote-and-deploy.yml for preview environment — starts Compose services, creates k8s secrets, applies ApplicationSets
+- [ ] **Provision production VM** with `provision-test-vm.sh production --yes` (after preview is proven). `.env.production` saved locally. Old VM at 84.32.109.162 (project 254821)
+- [ ] **Destroy old VMs** after new ones verified: staging at 84.32.109.160 (project 254586), production at 84.32.109.162 (project 254821). Also clean up `infra/tofu/` (old tofu state)
+- [ ] **Fix provision-test-vm.sh** (task.0285): credential mismatch volume reset, migrations, Cherry SSH key collision, branch-protection-aware overlay push
 
 ## Risks / Gotchas
 
-- `workflow_run` always executes from the **default branch** (staging), not the triggering branch. Any fix to `promote-and-deploy.yml` must land on staging to take effect
-- `provision-test-vm.sh` uses system `TMPDIR` for age-keygen — causes hangs on re-runs if leftover files exist (fixed in #743 for age, but SSH key block has same pattern)
-- Cherry Servers API rejects duplicate SSH key names globally across projects — second-environment provision fails without manual `tofu import`
-- `.env.preview` and `.env.production` saved locally (gitignored) with real DB passwords from current VMs. Losing these means losing the ability to preserve DB data during reprovision. GitHub secrets are write-only — can't reconstruct
-- Canary branch protection was just enabled — any CI that pushes directly to canary (promote overlay digests) will now fail
+- **`workflow_run` reads from staging.** Every `promote-and-deploy.yml` fix must be cherry-picked or merged to staging before it takes effect. Canary-only changes are invisible to the triggered workflow
+- **`.env.preview` and `.env.production` are on Derek's laptop** (gitignored). GitHub secrets are write-only — can't reconstruct DB passwords. These files are the only way to reprovision without losing database data
+- **Provision script has 4 known bugs** (task.0285): TMPDIR collision (fixed #743), Cherry SSH key collision (manual workaround), ksops missing files (fixed), branch protection push failure (unfixed — deploy branch model eliminates this)
+- **Old `infra/tofu/` directory** has production tofu state. The new `infra/provision/` directory is the standard. Production must be migrated before `infra/tofu/` can be deleted
+- **Argo ApplicationSet paths must match deploy branch content.** If overlays move to deploy branches, the ApplicationSet `path:` must point to the same relative path on the deploy branch
 
 ## Pointers
 
 | File / Resource | Why it matters |
 | --- | --- |
-| `scripts/ci/deploy-infra.sh` | Compose infra + k8s secrets deployment. Runs in CI. The core of the new pipeline |
-| `scripts/setup/provision-test-vm.sh` | VM creation + bootstrap. Multiple known bugs (task.0285) |
-| `.github/workflows/promote-and-deploy.yml` | The broken workflow. Needs redesign for protected branch compat |
-| `.github/workflows/build-multi-node.yml` | Build-only (canary). Works correctly |
-| `infra/provision/cherry/base/bootstrap.yaml` | Cloud-init for VM bootstrap. ksops references removed |
-| `infra/compose/runtime/configs/alloy-config.metrics.alloy` | Alloy config with k8s pod log shipping |
-| `work/items/task.0281-canary-cicd-parity-staging-promotion.md` | Parent task with full phase plan |
-| `work/items/task.0283-provision-as-github-action.md` | Future: eliminate laptop .env dependency |
-| `work/items/task.0284-secrets-single-source-eso.md` | Future: ESO replaces all secret management |
-| `work/items/task.0285-provision-reprovision-resilience.md` | Immediate: fix provision script bugs |
-| `.env.preview` (local, gitignored) | Staging DB passwords for data preservation |
+| `docs/spec/ci-cd.md` | **Read first.** Updated spec with deploy branch model, pipeline chain, branch protection rules |
+| `.github/workflows/promote-and-deploy.yml` | The workflow to fix. Needs deploy-branch PR flow + git identity |
+| `.github/workflows/build-multi-node.yml` | Build-only (canary). Works correctly. No changes needed |
+| `scripts/ci/deploy-infra.sh` | Compose infra + k8s secrets. Runs in CI. Proven on canary |
+| `scripts/setup/provision-test-vm.sh` | VM creation. Multiple known bugs (task.0285) |
+| `infra/k8s/argocd/*-applicationset.yaml` | Argo ApplicationSets — must update `targetRevision` to `deploy/{env}` |
+| `infra/provision/cherry/base/bootstrap.yaml` | Cloud-init. ksops removed. Production needs migration from `infra/tofu/` |
+| `.env.preview` (local, gitignored) | Staging DB passwords — preserves data on reprovision |
 | `.env.production` (local, gitignored) | Production DB passwords — DO NOT LOSE |
-| `docs/spec/ci-cd.md` | CI/CD spec (needs update after pipeline redesign) |
+| `work/items/task.0281-canary-cicd-parity-staging-promotion.md` | Parent task with phase plan |
+| `work/items/task.0285-provision-reprovision-resilience.md` | Provision script bug fixes |
