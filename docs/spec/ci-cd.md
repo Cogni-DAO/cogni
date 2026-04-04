@@ -109,6 +109,35 @@ push to main → build-prod.yml (build → test → push) → deploy-production.
 - Deploy workflow triggers only on build success
 - Rolling deployment (no downtime)
 
+### 5. Multi-Node Pipeline (canary → preview → production)
+
+```
+push to canary → build-multi-node.yml
+```
+
+**Jobs:** `build-nodes (operator, poly, resy) + build-services (scheduler-worker) → promote-k8s → verify → e2e-canary.yml`
+
+Parallel builds for all nodes. After build:
+
+- Resolves image digests from GHCR
+- Maps branch → overlay: `canary` → `overlays/canary/`, `staging` → `overlays/preview/`, `main` → `overlays/production/`
+- Commits digest updates to overlay kustomization.yaml files `[skip ci]`
+- Argo CD auto-syncs (30s reconciliation, ApplicationSet per environment)
+- Verify job polls `/readyz` on all 3 nodes
+- E2E Canary (separate workflow) runs Playwright smoke tests against deployed apps
+
+**Environments (k8s via Argo CD):**
+
+| Environment | Branch    | Namespace          | Argo ApplicationSet | Purpose                     |
+| ----------- | --------- | ------------------ | ------------------- | --------------------------- |
+| canary      | `canary`  | `cogni-canary`     | `cogni-canary`      | AI e2e testing (Playwright) |
+| preview     | `staging` | `cogni-preview`    | `cogni-preview`     | Human e2e testing           |
+| production  | `main`    | `cogni-production` | `cogni-production`  | Production                  |
+
+**Note:** This pipeline coexists with the single-node staging-preview pipeline (section 2). The staging-preview pipeline handles the `staging` branch for operator-only deploys with E2E gating and release branch promotion. The multi-node pipeline handles `canary` branch with all 3 nodes. These will be unified when multi-node replaces single-node as the primary deployment path.
+
+**Note:** These are long-lived Argo-managed environments — NOT ephemeral per-PR previews. Ephemeral previews are a separate P2 initiative (see `docs/spec/preview-deployments.md`).
+
 ## Key Features
 
 - **Fork-safe:** No secrets in PR CI checks
