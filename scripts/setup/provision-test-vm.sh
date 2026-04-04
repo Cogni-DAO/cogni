@@ -17,14 +17,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROVISION_DIR="$REPO_ROOT/infra/provision/cherry/base"
 
-# ── Environment selection (required first arg) ───────────────
-DEPLOY_ENV="${1:-}"
+# ── Flags ─────────────────────────────────────────────────────
+AUTO_APPROVE=false
+DEPLOY_ENV=""
+for arg in "$@"; do
+  case "$arg" in
+    --yes|-y) AUTO_APPROVE=true ;;
+    canary|preview|production) DEPLOY_ENV="$arg" ;;
+    *) echo "Unknown arg: $arg"; exit 1 ;;
+  esac
+done
+
 if [[ -z "$DEPLOY_ENV" ]]; then
-  echo "Usage: provision-test-vm.sh <canary|preview|production>"
+  echo "Usage: provision-test-vm.sh <canary|preview|production> [--yes]"
   echo ""
   echo "  canary      — test.cognidao.org, branch: canary"
   echo "  preview     — preview.cognidao.org, branch: staging"
   echo "  production  — cognidao.org, branch: main"
+  echo "  --yes       — skip confirmation prompt (for CI/automation)"
   exit 1
 fi
 
@@ -286,11 +296,15 @@ tofu plan -var-file="terraform.test.tfvars" -out=tfplan
 
 echo ""
 log_warn "About to provision a VM. This costs money and takes ~5 minutes."
-echo -n "Proceed? [y/N] "
-read -r confirm
-if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
-  log_info "Aborted."
-  exit 0
+if [[ "$AUTO_APPROVE" == "true" ]]; then
+  log_info "Auto-approved (--yes flag)"
+else
+  echo -n "Proceed? [y/N] "
+  read -r confirm
+  if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    log_info "Aborted."
+    exit 0
+  fi
 fi
 
 log_info "Applying..."
