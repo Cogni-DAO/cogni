@@ -16,7 +16,7 @@ images:
     digest: "sha256:818f84e4a72fb4420840e833ee8145603dd9ba1b10987bc5828d2f531e17c434"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:de3c0c0f967addfeb25cf5de111ab56b14bf4b789ea2927e3d8d87b3f321d4f4"
+    digest: "sha256:f0b7b6e9fcea0b86957ce628a1874338f874e226ed56152d645c8eb374accbce"
 
 patches:
   # Node-specific ConfigMap values.
