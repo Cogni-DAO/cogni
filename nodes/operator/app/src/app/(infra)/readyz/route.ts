@@ -90,11 +90,14 @@ export const GET = wrapRouteHandlerWithLogging(
 
       // MVP readiness: Validate env + runtime secrets + EVM RPC + Temporal connectivity
       assertRuntimeSecrets(env);
-      assertEvmRpcConfig(env);
 
-      // Test RPC connectivity (3s budget, triggers lazy ViemEvmOnchainClient init)
-      // This catches missing/invalid EVM_RPC_URL immediately after deploy
-      await assertEvmRpcConnectivity(container.evmOnchainClient, env);
+      // EVM RPC checks: skip when payment rails not activated (nodes without payments_in config).
+      // Payment config comes from repo-spec; nodes that haven't activated payments yet are still
+      // healthy for chat/AI — they just can't process crypto payments.
+      if (container.paymentRailsActive) {
+        assertEvmRpcConfig(env);
+        await assertEvmRpcConnectivity(container.evmOnchainClient, env);
+      }
 
       // Test Temporal connectivity (5s budget, triggers lazy connection)
       // This catches Temporal not running before stack tests execute

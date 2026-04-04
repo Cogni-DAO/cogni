@@ -175,6 +175,8 @@ export interface Container {
   paymentAttemptServiceRepository: PaymentAttemptServiceRepository;
   onChainVerifier: OnChainVerifier;
   evmOnchainClient: EvmOnchainClient;
+  /** True when repo-spec has payments_in config (receiving address + chain). False for nodes pending activation. */
+  paymentRailsActive: boolean;
   metricsQuery: MetricsQueryPort;
   treasuryReadPort: TreasuryReadPort;
   /** AI telemetry DB writer - always wired */
@@ -729,6 +731,7 @@ function createContainer(): Container {
     paymentAttemptServiceRepository,
     onChainVerifier,
     evmOnchainClient,
+    paymentRailsActive: !!getPaymentConfig(),
     metricsQuery,
     treasuryReadPort,
     aiTelemetry,
