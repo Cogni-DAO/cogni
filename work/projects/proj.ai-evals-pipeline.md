@@ -56,36 +56,36 @@ Eval readiness:   0/8  MISSING
 
 **Goal:** Prove the pipeline works end-to-end with 2 evals.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Eval harness (TypeScript runner, 4o-mini judge, Langfuse datasets) | Not Started | 3 | task.0286 |
-| Poet quality eval (format + relevance scoring) | Not Started | — | task.0286 |
-| Brain tool-calling eval (tool use + accuracy scoring) | Not Started | — | task.0286 |
-| `pnpm eval:canary` command | Not Started | — | task.0286 |
+| Deliverable                                                        | Status      | Est | Work Item |
+| ------------------------------------------------------------------ | ----------- | --- | --------- |
+| Eval harness (TypeScript runner, 4o-mini judge, Langfuse datasets) | Not Started | 3   | task.0286 |
+| Poet quality eval (format + relevance scoring)                     | Not Started | —   | task.0286 |
+| Brain tool-calling eval (tool use + accuracy scoring)              | Not Started | —   | task.0286 |
+| `pnpm eval:canary` command                                         | Not Started | —   | task.0286 |
 
 ### Walk (P1) — CI Gate + Canary Promotion Gate
 
 **Goal:** Evals block PRs and canary promotion automatically.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| `pnpm eval:check` for PR-level regression | Not Started | 2 | (create at P1 start) |
-| Golden dataset expansion (10+ cases/graph) | Not Started | 2 | (create at P1 start) |
-| GitHub Action in `e2e.yml` | Not Started | 1 | (create at P1 start) |
-| Canary → staging promotion gated on eval pass | Not Started | 1 | (create at P1 start) |
+| Deliverable                                   | Status      | Est | Work Item            |
+| --------------------------------------------- | ----------- | --- | -------------------- |
+| `pnpm eval:check` for PR-level regression     | Not Started | 2   | (create at P1 start) |
+| Golden dataset expansion (10+ cases/graph)    | Not Started | 2   | (create at P1 start) |
+| GitHub Action in `e2e.yml`                    | Not Started | 1   | (create at P1 start) |
+| Canary → staging promotion gated on eval pass | Not Started | 1   | (create at P1 start) |
 
 ### Run (P2) — Production Monitoring + Feedback Loop
 
 **Goal:** Continuous quality monitoring on live traffic.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Langfuse managed evaluators on live traces | Not Started | 2 | (create at P2 start) |
-| Score trend dashboard in Grafana | Not Started | 1 | (create at P2 start) |
-| Alert rules for quality degradation | Not Started | 1 | (create at P2 start) |
-| Feedback loop: prod edge cases → datasets | Not Started | 2 | (create at P2 start) |
-| Multi-model A/B comparison | Not Started | 2 | (create at P2 start) |
-| Red teaming / adversarial testing | Not Started | 3 | (create at P2 start) |
+| Deliverable                                | Status      | Est | Work Item            |
+| ------------------------------------------ | ----------- | --- | -------------------- |
+| Langfuse managed evaluators on live traces | Not Started | 2   | (create at P2 start) |
+| Score trend dashboard in Grafana           | Not Started | 1   | (create at P2 start) |
+| Alert rules for quality degradation        | Not Started | 1   | (create at P2 start) |
+| Feedback loop: prod edge cases → datasets  | Not Started | 2   | (create at P2 start) |
+| Multi-model A/B comparison                 | Not Started | 2   | (create at P2 start) |
+| Red teaming / adversarial testing          | Not Started | 3   | (create at P2 start) |
 
 ## Constraints
 
@@ -104,14 +104,14 @@ Eval readiness:   0/8  MISSING
 
 ### Package Mapping (LangGraph → Evals)
 
-| Package | Role in Evals |
-| --- | --- |
-| `@cogni/langgraph-graphs` | **Subject under test** — graph definitions being scored |
+| Package                       | Role in Evals                                            |
+| ----------------------------- | -------------------------------------------------------- |
+| `@cogni/langgraph-graphs`     | **Subject under test** — graph definitions being scored  |
 | `@cogni/graph-execution-core` | **Execution contract** — `GraphExecutorPort` for CI runs |
-| `@cogni/graph-execution-host` | **Observability bridge** — auto-traces during eval runs |
-| `@cogni/ai-core` | **Event types** — `AiEvent` for tool call assertions |
-| `langfuse` (SDK) | **Eval platform** — datasets, experiments, scores, UI |
-| `@langchain/langgraph` | **Runtime** — executes graphs under test |
+| `@cogni/graph-execution-host` | **Observability bridge** — auto-traces during eval runs  |
+| `@cogni/ai-core`              | **Event types** — `AiEvent` for tool call assertions     |
+| `langfuse` (SDK)              | **Eval platform** — datasets, experiments, scores, UI    |
+| `@langchain/langgraph`        | **Runtime** — executes graphs under test                 |
 
 No `@langchain/evals` package exists. LangChain deprecated its eval module in favor of LangSmith. Since we use Langfuse (not LangSmith), our eval harness is a lightweight TypeScript runner calling the Langfuse SDK directly.
 

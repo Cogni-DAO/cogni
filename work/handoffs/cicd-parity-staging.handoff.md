@@ -57,16 +57,16 @@ last_commit: 9cd213cdc
 
 ## Pointers
 
-| File / Resource | Why it matters |
-| --- | --- |
-| `docs/spec/ci-cd.md` | **Read first.** Updated spec with deploy branch model, pipeline chain, branch protection rules |
-| `.github/workflows/promote-and-deploy.yml` | The workflow to fix. Needs deploy-branch PR flow + git identity |
-| `.github/workflows/build-multi-node.yml` | Build-only (canary). Works correctly. No changes needed |
-| `scripts/ci/deploy-infra.sh` | Compose infra + k8s secrets. Runs in CI. Proven on canary |
-| `scripts/setup/provision-test-vm.sh` | VM creation. Multiple known bugs (task.0285) |
-| `infra/k8s/argocd/*-applicationset.yaml` | Argo ApplicationSets — must update `targetRevision` to `deploy/{env}` |
-| `infra/provision/cherry/base/bootstrap.yaml` | Cloud-init. ksops removed. Production needs migration from `infra/tofu/` |
-| `.env.preview` (local, gitignored) | Staging DB passwords — preserves data on reprovision |
-| `.env.production` (local, gitignored) | Production DB passwords — DO NOT LOSE |
-| `work/items/task.0281-canary-cicd-parity-staging-promotion.md` | Parent task with phase plan |
-| `work/items/task.0285-provision-reprovision-resilience.md` | Provision script bug fixes |
+| File / Resource                                                | Why it matters                                                                                 |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `docs/spec/ci-cd.md`                                           | **Read first.** Updated spec with deploy branch model, pipeline chain, branch protection rules |
+| `.github/workflows/promote-and-deploy.yml`                     | The workflow to fix. Needs deploy-branch PR flow + git identity                                |
+| `.github/workflows/build-multi-node.yml`                       | Build-only (canary). Works correctly. No changes needed                                        |
+| `scripts/ci/deploy-infra.sh`                                   | Compose infra + k8s secrets. Runs in CI. Proven on canary                                      |
+| `scripts/setup/provision-test-vm.sh`                           | VM creation. Multiple known bugs (task.0285)                                                   |
+| `infra/k8s/argocd/*-applicationset.yaml`                       | Argo ApplicationSets — must update `targetRevision` to `deploy/{env}`                          |
+| `infra/provision/cherry/base/bootstrap.yaml`                   | Cloud-init. ksops removed. Production needs migration from `infra/tofu/`                       |
+| `.env.preview` (local, gitignored)                             | Staging DB passwords — preserves data on reprovision                                           |
+| `.env.production` (local, gitignored)                          | Production DB passwords — DO NOT LOSE                                                          |
+| `work/items/task.0281-canary-cicd-parity-staging-promotion.md` | Parent task with phase plan                                                                    |
+| `work/items/task.0285-provision-reprovision-resilience.md`     | Provision script bug fixes                                                                     |

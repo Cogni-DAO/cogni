@@ -29,6 +29,7 @@ updated: 2026-04-04
 ### Approach
 
 **Solution:** Lightweight TypeScript eval harness in `evals/` that:
+
 1. Reads test cases from JSON dataset files
 2. Calls canary HTTP chat API (same pattern as E2E Playwright tests)
 3. Runs deterministic assertions (format, tool calls, latency)
@@ -37,6 +38,7 @@ updated: 2026-04-04
 6. Checks aggregate scores against thresholds → exit code
 
 **Reuses:**
+
 - Langfuse SDK (`langfuse` — already a dependency)
 - OpenRouter API key (already in CI secrets)
 - Canary HTTP endpoint (same as E2E tests)
@@ -44,6 +46,7 @@ updated: 2026-04-04
 - SSE stream parsing from existing test utils
 
 **Rejected:**
+
 - **promptfoo** — adds a new tool + YAML DSL. Overkill for 2 evals. Revisit at 20+ evals.
 - **DeepEval** — Python-only. We're a TypeScript shop. Would require Python in CI.
 - **LangSmith** — we already use Langfuse. Adding a second observability platform is waste.
@@ -72,7 +75,10 @@ updated: 2026-04-04
       "input": {
         "message": "Write a haiku about TypeScript",
         "graphName": "poet",
-        "modelRef": { "providerKey": "platform", "modelId": "openai/gpt-4o-mini" }
+        "modelRef": {
+          "providerKey": "platform",
+          "modelId": "openai/gpt-4o-mini"
+        }
       },
       "assertions": {
         "deterministic": {
@@ -90,7 +96,10 @@ updated: 2026-04-04
       "input": {
         "message": "Write a limerick about debugging",
         "graphName": "poet",
-        "modelRef": { "providerKey": "platform", "modelId": "openai/gpt-4o-mini" }
+        "modelRef": {
+          "providerKey": "platform",
+          "modelId": "openai/gpt-4o-mini"
+        }
       },
       "assertions": {
         "deterministic": {
@@ -121,7 +130,10 @@ updated: 2026-04-04
       "input": {
         "message": "Search the codebase for the GraphExecutorPort interface and explain what it does",
         "graphName": "brain",
-        "modelRef": { "providerKey": "platform", "modelId": "openai/gpt-4o-mini" }
+        "modelRef": {
+          "providerKey": "platform",
+          "modelId": "openai/gpt-4o-mini"
+        }
       },
       "assertions": {
         "deterministic": {
@@ -132,7 +144,11 @@ updated: 2026-04-04
         },
         "llm_judge": {
           "prompt": "The user asked about GraphExecutorPort. Score the response:\n1. TOOL_USE (0-1): Did the agent search the codebase (not guess)?\n2. ACCURACY (0-1): Is the description of GraphExecutorPort correct?\n3. COMPLETENESS (0-1): Does it mention key details (interface, runGraph method, streaming)?\nRespond as JSON: {\"tool_use\": 0.X, \"accuracy\": 0.X, \"completeness\": 0.X, \"reasoning\": \"...\"}",
-          "thresholds": { "tool_use": 0.8, "accuracy": 0.7, "completeness": 0.5 }
+          "thresholds": {
+            "tool_use": 0.8,
+            "accuracy": 0.7,
+            "completeness": 0.5
+          }
         }
       }
     },
@@ -140,7 +156,10 @@ updated: 2026-04-04
       "input": {
         "message": "What files are in the evals/ directory?",
         "graphName": "brain",
-        "modelRef": { "providerKey": "platform", "modelId": "openai/gpt-4o-mini" }
+        "modelRef": {
+          "providerKey": "platform",
+          "modelId": "openai/gpt-4o-mini"
+        }
       },
       "assertions": {
         "deterministic": {
@@ -167,7 +186,7 @@ updated: 2026-04-04
 - **Create:** `evals/harness/client.ts` — HTTP SSE client for canary chat API (collect full response + tool events)
 - **Create:** `evals/harness/langfuse-experiment.ts` — create/get Langfuse datasets, push experiment runs + scores
 - **Create:** `evals/harness/assertions.ts` — deterministic checks (non-empty, latency, tool called, mentions)
-- **Create:** `evals/config.ts` — env config (EVAL_TARGET_URL, LANGFUSE_*, OPENROUTER_API_KEY, EVAL_JUDGE_MODEL)
+- **Create:** `evals/config.ts` — env config (EVAL*TARGET_URL, LANGFUSE*\*, OPENROUTER_API_KEY, EVAL_JUDGE_MODEL)
 - **Create:** `evals/vitest.config.ts` — vitest config for running evals as test suite
 - **Modify:** `package.json` — add `eval:canary` script
 - **Create:** `evals/AGENTS.md` — directory scope doc
@@ -201,12 +220,12 @@ EVAL_FAIL_THRESHOLD=0.7                      # Global pass/fail threshold
 
 ### Estimated Cost per Run
 
-| Component | Cases | Cost |
-|-----------|-------|------|
-| Poet graph (4o-mini subject) | 2 | ~$0.001 |
-| Brain graph (4o-mini subject) | 2 | ~$0.002 |
-| 4o-mini judge calls | 4 | ~$0.001 |
-| **Total per run** | **4** | **< $0.01** |
+| Component                     | Cases | Cost        |
+| ----------------------------- | ----- | ----------- |
+| Poet graph (4o-mini subject)  | 2     | ~$0.001     |
+| Brain graph (4o-mini subject) | 2     | ~$0.002     |
+| 4o-mini judge calls           | 4     | ~$0.001     |
+| **Total per run**             | **4** | **< $0.01** |
 
 ## Validation
 

@@ -21,13 +21,13 @@ updated: 2026-04-04
 
 Five places hold secrets today:
 
-| Source | Used by | Reconstructable? |
-|---|---|---|
-| GitHub env secrets | CI deploy-infra.sh | No (write-only API) |
-| `.env.{env}` on laptop | provision-test-vm.sh | No (gitignored) |
-| VM `/opt/cogni-template-runtime/.env` | Compose services | Overwritten each deploy |
-| k8s Secrets (kubectl create) | App pods | Recreated on provision |
-| SOPS `.enc.yaml` in git | Unused by Argo (ksops not wired) | Yes (git) |
+| Source                                | Used by                          | Reconstructable?        |
+| ------------------------------------- | -------------------------------- | ----------------------- |
+| GitHub env secrets                    | CI deploy-infra.sh               | No (write-only API)     |
+| `.env.{env}` on laptop                | provision-test-vm.sh             | No (gitignored)         |
+| VM `/opt/cogni-template-runtime/.env` | Compose services                 | Overwritten each deploy |
+| k8s Secrets (kubectl create)          | App pods                         | Recreated on provision  |
+| SOPS `.enc.yaml` in git               | Unused by Argo (ksops not wired) | Yes (git)               |
 
 If a developer's laptop dies, secrets are unrecoverable. Rotation requires touching multiple systems. No audit trail for secret changes.
 
@@ -38,6 +38,7 @@ If a developer's laptop dies, secrets are unrecoverable. Rotation requires touch
 Rationale (per Argo CD docs): destination-cluster secret management is more secure than decrypting during manifest generation. It decouples secret changes from app syncs and avoids giving Argo repo-server access to decrypt all secrets.
 
 **Secret store options (evaluate in design phase):**
+
 - **1Password Connect** — team already uses 1Password, lowest friction
 - **Doppler** — purpose-built for this, good DX, free tier
 - **HashiCorp Vault** — most capable, most operational overhead
@@ -60,6 +61,7 @@ Secret Store (source of truth)
 ## Phases
 
 ### Phase 1: ESO + secret store for k8s secrets
+
 - Install ESO on k3s cluster
 - Configure SecretStore pointing to chosen provider
 - Create ExternalSecret CRDs for each app (operator, poly, resy, scheduler-worker)
@@ -67,12 +69,14 @@ Secret Store (source of truth)
 - Verify Argo syncs apps with ESO-managed secrets
 
 ### Phase 2: Compose .env from secret store
+
 - deploy-infra.sh reads from secret store API (not GitHub env secrets)
 - provision.sh reads from secret store API (not .env file)
 - Delete `.env.{env}` workflow entirely
 - Migrate GitHub env secrets to secret store (keep only CI infra secrets in GitHub)
 
 ### Phase 3: Cleanup
+
 - Remove SOPS encrypted files from git (no longer needed)
 - Remove setup-secrets.ts (replaced by store UI/CLI)
 - Document rotation runbook

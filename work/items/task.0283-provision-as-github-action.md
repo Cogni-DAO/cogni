@@ -20,6 +20,7 @@ updated: 2026-04-04
 ## Problem
 
 Provisioning a VM currently requires:
+
 1. Run `pnpm setup:secrets --env canary --all` locally to generate `.env.canary`
 2. Run `bash scripts/setup/provision-test-vm.sh canary --yes` locally, which reads `.env.canary`
 
