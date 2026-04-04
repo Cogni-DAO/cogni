@@ -80,9 +80,7 @@ patches:
       - op: add
         path: /spec/template/metadata/labels/app.kubernetes.io~1instance
         value: "poly"
-  # Migration: skip until node-template builds its own -migrate image (task.0260).
-  # The current migrate digest points to the app image, which starts Next.js
-  # instead of running migrations — blocking Argo PreSync indefinitely.
+  # Migration: shared migrator image runs operator's schema against poly's DB.
   - target:
       kind: Job
       name: migrate-node-app
@@ -90,9 +88,6 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "poly-node-app-secrets"
-      - op: add
-        path: /spec/template/spec/containers/0/command
-        value: ["sh", "-c", "echo 'poly: no dedicated migrate image yet (task.0260)' && exit 0"]
   # EndpointSlice IPs + service-name label fix (namePrefix doesn't update label values)
   - target:
       kind: EndpointSlice
