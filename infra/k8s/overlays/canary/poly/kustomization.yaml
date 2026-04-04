@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-canary
+
+resources:
+  - ../../../base/node-app
+
+namePrefix: poly-
+
+images:
+  - name: ghcr.io/cogni-dao/cogni-template
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:ece1c28580d934420c27d0dad672f5aca67954f05b24eea72eb019d549c872c4"
+  - name: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:f6c723a29c402c89fffd805c3707f0200d9dc0bf252418a771043027a8d3352c"
+
+patches:
+  # Node-specific ConfigMap values.
+  # DNS names must match prefixed Service names (namePrefix applies to all resources).
+  - target:
+      kind: ConfigMap
+      name: node-app-config
+    patch: |
+      - op: replace
+        path: /data/APP_ENV
+        value: "production"
+      - op: replace
+        path: /data/NODE_NAME
+        value: "poly"
+      - op: replace
+        path: /data/TEMPORAL_NAMESPACE
+        value: "cogni-canary"
+      - op: replace
+        path: /data/LITELLM_BASE_URL
+        value: "http://poly-litellm-external:4000"
+      - op: replace
+        path: /data/TEMPORAL_ADDRESS
+        value: "poly-temporal-external:7233"
+      - op: replace
+        path: /data/REDIS_URL
+        value: "redis://poly-redis-external:6379"
+      - op: add
+        path: /data/NEXTAUTH_URL
+        value: "https://poly-test.cognidao.org"
+      - op: add
+        path: /data/AUTH_TRUST_HOST
+        value: "true"
+  # NodePort + instance label on selector (prevents cross-node routing)
+  - target:
+      kind: Service
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30100
+      - op: replace
+        path: /spec/ports/0/targetPort
+        value: 3100
+      - op: add
+        path: /spec/selector/app.kubernetes.io~1instance
+        value: "poly"
+  # Fix secret refs + container port + instance label
+  - target:
+      kind: Deployment
+      name: node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
+        value: "poly-node-app-secrets"
+      - op: replace
+        path: /spec/template/spec/containers/0/ports/0/containerPort
+        value: 3100
+      - op: add
+        path: /spec/selector/matchLabels/app.kubernetes.io~1instance
+        value: "poly"
+      - op: add
+        path: /spec/template/metadata/labels/app.kubernetes.io~1instance
+        value: "poly"
+  # Migration: shared migrator image runs operator's schema against poly's DB.
+  - target:
+      kind: Job
+      name: migrate-node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "poly-node-app-secrets"
+  # EndpointSlice IPs + service-name label fix (namePrefix doesn't update label values)
+  - target:
+      kind: EndpointSlice
+      name: postgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "poly-postgres-external"
+  - target:
+      kind: EndpointSlice
+      name: temporal-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "poly-temporal-external"
+  - target:
+      kind: EndpointSlice
+      name: litellm-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "poly-litellm-external"
+  - target:
+      kind: EndpointSlice
+      name: redis-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "poly-redis-external"

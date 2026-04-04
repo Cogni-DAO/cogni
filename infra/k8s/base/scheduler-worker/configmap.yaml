@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Non-secret configuration for scheduler-worker.
+# Env-specific values (TEMPORAL_ADDRESS, TEMPORAL_NAMESPACE, COGNI_NODE_ENDPOINTS,
+# IMAGE_DIGEST) are patched by overlays.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scheduler-worker-config
+  labels:
+    app.kubernetes.io/name: scheduler-worker
+    app.kubernetes.io/part-of: cogni
+data:
+  # Temporal connection — overridden per-env by overlay
+  TEMPORAL_ADDRESS: "temporal:7233"
+  TEMPORAL_NAMESPACE: "cogni-staging"
+  TEMPORAL_TASK_QUEUE: "scheduler-tasks"
+
+  # Per-node API endpoints — overridden per-env by overlay
+  COGNI_NODE_ENDPOINTS: "operator=http://app:3000"
+
+  # Observability
+  LOG_LEVEL: "info"
+  SERVICE_NAME: "scheduler-worker"
+  HEALTH_PORT: "9000"
+
+  # Image digest — set by overlay on promotion
+  IMAGE_DIGEST: "placeholder"
