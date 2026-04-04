@@ -3,20 +3,71 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # Script: scripts/setup/provision-test-vm.sh
-# Purpose: One-command test VM provisioning + infra deployment + scorecard.
+# Purpose: One-command VM provisioning + infra deployment + scorecard.
 #          Generates ALL secrets (same generators as setup-secrets.ts), provisions
 #          via OpenTofu, deploys Compose infra, verifies k3s + Argo CD.
 # Usage:
-#   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh
-#   # Or interactively (prompts for missing values)
+#   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh canary
+#   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh preview
+#   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh production
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROVISION_DIR="$REPO_ROOT/infra/provision/cherry/base"
-WORKSPACE="test"
-BRANCH="${COGNI_REPO_REF:-deploy/multi-node}"
+
+# ── Environment selection (required first arg) ───────────────
+DEPLOY_ENV="${1:-}"
+if [[ -z "$DEPLOY_ENV" ]]; then
+  echo "Usage: provision-test-vm.sh <canary|preview|production>"
+  echo ""
+  echo "  canary      — test.cognidao.org, branch: canary"
+  echo "  preview     — preview.cognidao.org, branch: staging"
+  echo "  production  — cognidao.org, branch: main"
+  exit 1
+fi
+
+case "$DEPLOY_ENV" in
+  canary)
+    BRANCH="canary"
+    K8S_NAMESPACE="cogni-canary"
+    OVERLAY_DIR="canary"
+    APPSET_FILE="canary-applicationset.yaml"
+    DOMAIN="${DOMAIN:-test.cognidao.org}"
+    POLY_DOMAIN="${POLY_DOMAIN:-poly-test.cognidao.org}"
+    RESY_DOMAIN="${RESY_DOMAIN:-resy-test.cognidao.org}"
+    WORKSPACE="test"
+    ;;
+  preview)
+    BRANCH="staging"
+    K8S_NAMESPACE="cogni-preview"
+    OVERLAY_DIR="preview"
+    APPSET_FILE="preview-applicationset.yaml"
+    DOMAIN="${DOMAIN:-preview.cognidao.org}"
+    POLY_DOMAIN="${POLY_DOMAIN:-poly-preview.cognidao.org}"
+    RESY_DOMAIN="${RESY_DOMAIN:-resy-preview.cognidao.org}"
+    WORKSPACE="preview"
+    ;;
+  production)
+    BRANCH="main"
+    K8S_NAMESPACE="cogni-production"
+    OVERLAY_DIR="production"
+    APPSET_FILE="production-applicationset.yaml"
+    DOMAIN="${DOMAIN:-cognidao.org}"
+    POLY_DOMAIN="${POLY_DOMAIN:-poly.cognidao.org}"
+    RESY_DOMAIN="${RESY_DOMAIN:-resy.cognidao.org}"
+    WORKSPACE="production"
+    ;;
+  *)
+    echo "Unknown environment: $DEPLOY_ENV"
+    echo "Must be one of: canary, preview, production"
+    exit 1
+    ;;
+esac
+
+# Allow branch override (e.g., testing a feature branch on canary infra)
+BRANCH="${COGNI_REPO_REF:-$BRANCH}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -136,12 +187,9 @@ APP_DB_SERVICE_PASSWORD=$(randHex 24)
 TEMPORAL_DB_USER="temporal"
 TEMPORAL_DB_PASSWORD=$(randHex 24)
 
-# Derived values
-DOMAIN="${DOMAIN:-test.cognidao.org}"
-POLY_DOMAIN="${POLY_DOMAIN:-poly-test.cognidao.org}"
-RESY_DOMAIN="${RESY_DOMAIN:-resy-test.cognidao.org}"
-APP_ENV="staging"
-DEPLOY_ENVIRONMENT="preview"
+# Derived values (domains set by environment case above)
+APP_ENV="${DEPLOY_ENV}"
+DEPLOY_ENVIRONMENT="${DEPLOY_ENV}"
 
 # Per-node databases
 COGNI_NODE_DBS="cogni_operator,cogni_poly,cogni_resy"
@@ -158,8 +206,9 @@ POSTHOG_HOST="${POSTHOG_HOST:-https://us.i.posthog.com}"
 COGNI_REPO_URL="https://github.com/Cogni-DAO/cogni-template.git"
 COGNI_REPO_REF="$BRANCH"
 
-# LiteLLM node endpoints (Compose→k8s NodePorts via host gateway)
-COGNI_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000/api/internal/billing/ingest"
+# LiteLLM node endpoints — billing callback routing (Compose→k8s NodePorts via host gateway)
+# Format: nodeId=billingIngestUrl (one per node)
+COGNI_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000/api/internal/billing/ingest,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://host.docker.internal:30100/api/internal/billing/ingest,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://host.docker.internal:30300/api/internal/billing/ingest"
 
 # DATABASE_URLs (constructed from parts — same derivation as setup-secrets.ts)
 # DATABASE_URLs use VM_IP placeholder — replaced after Phase 3 when IP is known.
@@ -304,10 +353,13 @@ ssh $SSH_OPTS root@"$VM_IP" 'kubectl get nodes && echo "---" && kubectl -n argoc
 # ══════════════════════════════════════════════════════════════
 if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; then
   log_step "Phase 4b: Create DNS records"
-  for sub in test poly-test resy-test; do
+  # Derive subdomains from domain vars (e.g., test.cognidao.org → test)
+  DNS_RECORDS=("$DOMAIN" "$POLY_DOMAIN" "$RESY_DOMAIN")
+  for fqdn in "${DNS_RECORDS[@]}"; do
+    sub="${fqdn%.cognidao.org}"  # Strip zone suffix to get subdomain
     # Delete existing A records for this subdomain
     EXISTING=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-      "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?name=${sub}.cognidao.org&type=A" \
+      "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records?name=${fqdn}&type=A" \
       | python3 -c "import json,sys; [print(x['id']) for x in json.load(sys.stdin).get('result',[])]" 2>/dev/null)
     for id in $EXISTING; do
       curl -s -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -318,7 +370,7 @@ if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] && [[ -n "${CLOUDFLARE_ZONE_ID:-}" ]]; t
       "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/dns_records" \
       -d "{\"type\":\"A\",\"name\":\"${sub}\",\"content\":\"${VM_IP}\",\"ttl\":300,\"proxied\":false}")
     OK=$(echo "$RESULT" | python3 -c 'import json,sys; print("OK" if json.load(sys.stdin).get("success") else "FAIL")' 2>/dev/null)
-    log_info "  ${sub}.cognidao.org → ${VM_IP}: $OK"
+    log_info "  ${fqdn} → ${VM_IP}: $OK"
   done
 else
   log_warn "Skipping DNS — CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set"
@@ -331,7 +383,7 @@ log_step "Phase 4b: Patch EndpointSlice IPs to $VM_IP"
 
 # k8s rejects 127.0.0.1 in EndpointSlices. Overlays must use the node's real IP.
 # Sed-replace the placeholder/previous IP in all overlay kustomization files.
-OVERLAYS_DIR="$REPO_ROOT/infra/k8s/overlays/staging"
+OVERLAYS_DIR="$REPO_ROOT/infra/k8s/overlays/${OVERLAY_DIR}"
 for overlay in "$OVERLAYS_DIR"/*/kustomization.yaml; do
   # Replace any IP in EndpointSlice address arrays: value: ["X.X.X.X"]
   sed -i '' -E "s/value: \[\"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\"\]/value: [\"${VM_IP}\"]/g" "$overlay"
@@ -468,7 +520,7 @@ ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-f
 log_step "Phase 6: Create k8s secrets on cluster"
 
 # Create namespace (Argo CD creates it on first sync, but secrets need it now)
-ssh $SSH_OPTS root@"$VM_IP" 'kubectl create namespace cogni-staging 2>/dev/null || true'
+ssh $SSH_OPTS root@"$VM_IP" "kubectl create namespace ${K8S_NAMESPACE} 2>/dev/null || true"
 
 # Node-app secrets — one per node (operator, poly, resy)
 # The Deployment references secretRef: {namePrefix}-node-app-secrets
@@ -482,7 +534,7 @@ for node in operator poly resy; do
   NODE_DB_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${VM_IP}:5432/${db_name}?sslmode=disable"
   NODE_DB_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${VM_IP}:5432/${db_name}?sslmode=disable"
 
-  ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic ${node}-node-app-secrets \
+  ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} create secret generic ${node}-node-app-secrets \
     --from-literal=DATABASE_URL='${NODE_DB_URL}' \
     --from-literal=DATABASE_SERVICE_URL='${NODE_DB_SERVICE_URL}' \
     --from-literal=AUTH_SECRET='${AUTH_SECRET}' \
@@ -502,14 +554,14 @@ for node in operator poly resy; do
 done
 
 # Scheduler-worker secret
-ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic scheduler-worker-secrets \
+ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} create secret generic scheduler-worker-secrets \
   --from-literal=DATABASE_URL='${DATABASE_SERVICE_URL}' \
   --from-literal=SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN}' \
   --dry-run=client -o yaml | kubectl apply -f -"
 log_info "  Created scheduler-worker-secrets"
 
 # Sandbox-openclaw secret (placeholder)
-ssh $SSH_OPTS root@"$VM_IP" "kubectl -n cogni-staging create secret generic sandbox-openclaw-secrets \
+ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} create secret generic sandbox-openclaw-secrets \
   --from-literal=OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}' \
   --from-literal=OPENCLAW_GITHUB_RW_TOKEN='placeholder-not-needed-for-test' \
   --from-literal=LITELLM_MASTER_KEY='${LITELLM_MASTER_KEY}' \
@@ -528,28 +580,25 @@ log_info "All k8s secrets created"
 log_step "Phase 7: Apply ApplicationSets (triggers Argo sync)"
 
 # Gate: verify prerequisites exist before enabling Argo sync
-ssh $SSH_OPTS root@"$VM_IP" '
-  kubectl -n cogni-staging get secret operator-node-app-secrets >/dev/null || { echo "FATAL: operator secrets missing"; exit 1; }
-  kubectl -n cogni-staging get secret poly-node-app-secrets >/dev/null || { echo "FATAL: poly secrets missing"; exit 1; }
-  kubectl -n cogni-staging get secret resy-node-app-secrets >/dev/null || { echo "FATAL: resy secrets missing"; exit 1; }
-  kubectl -n cogni-staging get secret scheduler-worker-secrets >/dev/null || { echo "FATAL: scheduler-worker secrets missing"; exit 1; }
-  echo "All prerequisite secrets verified"
-'
+ssh $SSH_OPTS root@"$VM_IP" "
+  kubectl -n ${K8S_NAMESPACE} get secret operator-node-app-secrets >/dev/null || { echo 'FATAL: operator secrets missing'; exit 1; }
+  kubectl -n ${K8S_NAMESPACE} get secret poly-node-app-secrets >/dev/null || { echo 'FATAL: poly secrets missing'; exit 1; }
+  kubectl -n ${K8S_NAMESPACE} get secret resy-node-app-secrets >/dev/null || { echo 'FATAL: resy secrets missing'; exit 1; }
+  kubectl -n ${K8S_NAMESPACE} get secret scheduler-worker-secrets >/dev/null || { echo 'FATAL: scheduler-worker secrets missing'; exit 1; }
+  echo 'All prerequisite secrets verified'
+"
 
-# Clone repo on VM, patch revision to our branch, then apply
+# Clone repo on VM, apply ALL ApplicationSets via kustomize (idempotent).
+# Each ApplicationSet file already has the correct targetRevision baked in.
 ssh $SSH_OPTS root@"$VM_IP" "
   AUTHED_URL=\$(echo '${COGNI_REPO_URL}' | sed 's|https://|https://${GHCR_USERNAME}:${GHCR_TOKEN}@|')
+  rm -rf /tmp/cogni-appsets
   git clone --depth=1 --branch '${BRANCH}' \"\$AUTHED_URL\" /tmp/cogni-appsets 2>/dev/null
 
-  # Patch revision to match our branch (YAML defaults to 'staging'/'main')
-  sed -i 's|revision: staging|revision: ${BRANCH}|g' /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
-  sed -i 's|targetRevision: staging|targetRevision: ${BRANCH}|g' /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
-
-  # Apply ApplicationSets — Argo starts syncing NOW
-  kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/staging-applicationset.yaml
-  kubectl apply -f /tmp/cogni-appsets/infra/k8s/argocd/production-applicationset.yaml
+  # Apply full Argo CD config (kustomization includes all ApplicationSets)
+  kubectl kustomize /tmp/cogni-appsets/infra/k8s/argocd/ | kubectl apply -n argocd -f -
   rm -rf /tmp/cogni-appsets
-  echo 'ApplicationSets applied — Argo syncing on branch ${BRANCH}'
+  echo 'Argo CD config applied — syncing from branch-specific ApplicationSets'
 "
 
 # Poll for apps to sync (up to 5 min)
@@ -613,8 +662,8 @@ echo "── Argo CD Applications ───────────────�
 ssh $SSH_OPTS root@"$VM_IP" 'kubectl -n argocd get applications -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status 2>/dev/null' || echo "(not ready)"
 echo ""
 
-echo "── k8s Pods (cogni-staging) ────────────────────────────────────"
-ssh $SSH_OPTS root@"$VM_IP" 'kubectl -n cogni-staging get pods 2>/dev/null' || echo "(namespace not created yet — Argo CD will create it on first sync)"
+echo "── k8s Pods (${K8S_NAMESPACE}) ────────────────────────────────────"
+ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} get pods 2>/dev/null" || echo "(namespace not created yet — Argo CD will create it on first sync)"
 echo ""
 
 echo "═══════════════════════════════════════════════════════════════════"
