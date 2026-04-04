@@ -77,6 +77,7 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   ".editorconfig",
   ".env.docker.example",
   ".env.local.example",
+  ".env.operator.example",
   ".env.test.example",
   ".gemini",
   ".github",
