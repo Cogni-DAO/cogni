@@ -26,13 +26,23 @@ import { TreasuryBadge } from "@/features/treasury/components/TreasuryBadge";
 export function AppHeader(): ReactElement {
   return (
     <header className="border-border border-b bg-background py-3">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-background focus:p-2 focus:text-foreground"
+      >
+        Skip to main content
+      </a>
       {/* Container: matches max-w-7xl pattern from Credits page */}
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           {/* Left side: Logo + Treasury */}
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <nav
+            aria-label="Primary"
+            className="flex min-w-0 items-center gap-3 sm:gap-4"
+          >
             <Link
               href="/"
+              aria-current="page"
               className="flex min-w-0 items-center gap-2 pl-4 sm:pl-0"
             >
               <Image
@@ -51,7 +61,7 @@ export function AppHeader(): ReactElement {
             <div className="flex">
               <TreasuryBadge />
             </div>
-          </div>
+          </nav>
 
           {/* Action buttons */}
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
@@ -81,6 +91,7 @@ export function AppHeader(): ReactElement {
                 variant="default"
                 showGithubIcon={true}
                 showStarIcon={true}
+                label="cogni-template"
                 initialStars={0}
                 targetStars={172900}
                 autoAnimate={true}

@@ -16,8 +16,8 @@ import { expect, test } from "@playwright/test";
 
 test("[smoke] header landmarks and active link", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator('a[href="#main"]')).toBeVisible(); // skip link
-  await expect(page.locator('header[role="banner"]')).toBeVisible();
+  await expect(page.locator('a[href="#main"]')).toBeAttached(); // skip link (sr-only)
+  await expect(page.locator("header")).toBeVisible(); // <header> implies role="banner"
   await expect(page.locator('nav[aria-label="Primary"]')).toBeVisible();
   // Active state
   const active = page.locator(
