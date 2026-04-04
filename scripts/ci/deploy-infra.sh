@@ -648,6 +648,83 @@ log_info "[$(date -u +%H:%M:%S)] DB provisioning complete"
 emit_deployment_event "infra_deployment.db_provision_complete" "success" "Database provisioned successfully"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 6.5: Create/update k8s secrets + rolling restart (bridge — task.0284 replaces)
+# k3s is on the same VM; kubectl is available. deploy-infra has ALL secrets
+# from GitHub Environment — unlike provision which only has agent-generated ones.
+# Uses --from-env-file for cleaner secret definitions.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if command -v kubectl &>/dev/null; then
+  log_info "[$(date -u +%H:%M:%S)] Creating/updating k8s secrets..."
+  emit_deployment_event "infra_deployment.k8s_secrets_started" "in_progress" "Creating k8s secrets"
+
+  K8S_NS="cogni-${DEPLOY_ENVIRONMENT}"
+  kubectl create namespace "${K8S_NS}" 2>/dev/null || true
+  HOST_IP=$(hostname -I | awk '{print $1}')
+  log_info "  k8s namespace: ${K8S_NS}, host IP: ${HOST_IP}"
+
+  # ── Per-node secrets (operator, poly, resy) ────────────────────────────────
+  for node in operator poly resy; do
+    SECRET_FILE=$(mktemp)
+    cat > "$SECRET_FILE" <<SECEOF
+DATABASE_URL=postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
+DATABASE_SERVICE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
+AUTH_SECRET=${AUTH_SECRET}
+LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+EVM_RPC_URL=${EVM_RPC_URL}
+POSTHOG_API_KEY=${POSTHOG_API_KEY}
+POSTHOG_HOST=${POSTHOG_HOST}
+OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
+SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
+BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN:-}
+INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN:-}
+METRICS_TOKEN=${METRICS_TOKEN:-}
+SECEOF
+    kubectl -n "${K8S_NS}" create secret generic "${node}-node-app-secrets" \
+      --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+    rm -f "$SECRET_FILE"
+    log_info "  Applied ${node}-node-app-secrets"
+  done
+
+  # ── Scheduler-worker secret ────────────────────────────────────────────────
+  SECRET_FILE=$(mktemp)
+  cat > "$SECRET_FILE" <<SECEOF
+DATABASE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_operator?sslmode=disable
+SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
+SECEOF
+  kubectl -n "${K8S_NS}" create secret generic scheduler-worker-secrets \
+    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+  rm -f "$SECRET_FILE"
+  log_info "  Applied scheduler-worker-secrets"
+
+  # ── Sandbox-openclaw secret ────────────────────────────────────────────────
+  # Key name: GITHUB_TOKEN (not OPENCLAW_GITHUB_RW_TOKEN) — matches k8s deployment envFrom
+  SECRET_FILE=$(mktemp)
+  cat > "$SECRET_FILE" <<SECEOF
+OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+GITHUB_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
+LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+SECEOF
+  kubectl -n "${K8S_NS}" create secret generic sandbox-openclaw-secrets \
+    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+  rm -f "$SECRET_FILE"
+  log_info "  Applied sandbox-openclaw-secrets"
+
+  # ── Rolling restart — pods must restart to pick up changed secrets ──────────
+  kubectl -n "${K8S_NS}" rollout restart \
+    deployment/operator-node-app \
+    deployment/poly-node-app \
+    deployment/resy-node-app \
+    deployment/scheduler-worker 2>/dev/null || true
+  log_info "[$(date -u +%H:%M:%S)] k8s secrets applied, pods restarting"
+  emit_deployment_event "infra_deployment.k8s_secrets_complete" "success" "k8s secrets applied"
+else
+  log_warn "kubectl not found — skipping k8s secret creation (k3s may not be installed)"
+fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 7: Start/update infra services (rolling update, no down)
 # Only starts infrastructure services — app and scheduler-worker are managed by k8s.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
