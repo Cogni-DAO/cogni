@@ -79,3 +79,7 @@ The provision script already reads from environment variables when `.env.{env}` 
 - Do not remove local provisioning capability — developers still need it for debugging
 - Provision workflow must be `workflow_dispatch` only (never auto-triggered)
 - Production provisioning requires manual approval gate
+
+## Validation
+
+Provisioning via `gh workflow run provision-vm --ref canary` produces a healthy VM with all pods running and health checks passing.

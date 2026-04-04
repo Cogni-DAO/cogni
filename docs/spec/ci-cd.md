@@ -3,7 +3,7 @@ id: ci-cd-spec
 type: spec
 title: CI/CD Pipeline Flow
 status: active
-trust: verified
+trust: reviewed
 summary: Modular canary→staging→release→main pipeline with build-once digest promotion and automated E2E-gated releases
 read_when: Understanding deployment pipelines, release workflow, or CI configuration
 owner: derekg1729

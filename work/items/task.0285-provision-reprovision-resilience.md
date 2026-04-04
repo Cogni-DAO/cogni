@@ -133,3 +133,7 @@ Fix: before `tofu apply`, check if the key name exists via Cherry API. If it doe
   - Replace .env heredoc with SCP + append
 - No new files
 - No test files (infra script — validated by running provision)
+
+## Validation
+
+Running `provision-test-vm.sh canary --yes` against an existing VM with changed secrets produces a fully working environment with no SSH intervention.

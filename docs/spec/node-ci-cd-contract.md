@@ -3,7 +3,7 @@ id: spec.node-ci-cd-contract
 type: spec
 title: Node CI/CD Contract
 status: active
-trust: verified
+trust: reviewed
 summary: CI/CD sovereignty invariants, merge gate checks, workflow entrypoints, and file ownership classification
 read_when: Modifying CI workflows, adding checks to merge gate, or planning multi-node CI extraction
 implements: []

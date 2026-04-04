@@ -4,7 +4,7 @@ type: task
 status: needs_design
 priority: 1
 rank: 3
-estimate: 8
+estimate: 5
 title: "Secrets single source of truth — External Secrets Operator + secret store"
 summary: Replace the current split-brain (GitHub env secrets + laptop .env + VM .env + half-wired SOPS) with one authoritative secret store. Kubernetes pulls secrets via External Secrets Operator. Compose infra derives from the same source.
 outcome: "One secret store (Vault, Doppler, or 1Password Connect). K8s secrets synced via ESO. Compose .env derived from same store at deploy time. No laptop .env files. No GitHub env secrets for app secrets (only CI infra like GITHUB_TOKEN). SOPS used only as bootstrap/interim for non-k8s consumers, not as Argo repo-server decryption."
@@ -93,3 +93,7 @@ Secret Store (source of truth)
 
 - task.0283 (provision as GH Action) — bridges the gap until this is done
 - Backup strategy (etcd + Velero + Postgres PITR) — should be designed in parallel
+
+## Validation
+
+ESO-managed secrets are synced to k8s, Compose .env derived from same store, and secret rotation propagates without manual intervention.
