@@ -154,50 +154,71 @@ GHCR_TOKEN="${GHCR_DEPLOY_TOKEN:-dummy-ghcr-token-for-test}"
 GHCR_USERNAME="${GHCR_DEPLOY_USERNAME:-Cogni-1729}"
 
 # ══════════════════════════════════════════════════════════════
-# Phase 2: Generate ALL secrets (same logic as setup-secrets.ts)
+# Phase 2: Generate secrets (or reuse if VM exists)
 # ══════════════════════════════════════════════════════════════
-log_step "Phase 2: Generate ephemeral secrets"
-
-TMPDIR=$(mktemp -d)
-# Don't auto-delete TMPDIR — keys saved to .local/ immediately after generation
 mkdir -p "$REPO_ROOT/.local"
 
-# SSH keypair
-log_info "Generating ephemeral SSH keypair..."
-ssh-keygen -t ed25519 -f "$TMPDIR/deploy_key" -C "cogni-test-vm" -N "" -q
-cp "$TMPDIR/deploy_key.pub" "$PROVISION_DIR/keys/cogni_template_test_deploy.pub"
-# Save immediately so we don't lose the key if tofu fails
-cp "$TMPDIR/deploy_key" "$REPO_ROOT/.local/test-vm-key"
-chmod 600 "$REPO_ROOT/.local/test-vm-key"
+# Check if we can reuse an existing VM's keys + secrets
+REUSE_EXISTING=false
+if [[ -f "$REPO_ROOT/.local/test-vm-key" ]] && [[ -f "$REPO_ROOT/.local/test-vm-secrets.env" ]]; then
+  cd "$PROVISION_DIR"
+  tofu init -input=false >/dev/null 2>&1
+  tofu workspace new "$WORKSPACE" 2>/dev/null || tofu workspace select "$WORKSPACE" 2>/dev/null
+  RESOURCE_COUNT=$(tofu state list 2>/dev/null | wc -l | tr -d ' ')
+  cd "$REPO_ROOT"
+  if [[ "$RESOURCE_COUNT" -gt 0 ]]; then
+    REUSE_EXISTING=true
+  fi
+fi
 
-# SOPS age keypair
-log_info "Generating ephemeral SOPS age keypair..."
-age-keygen -o "$TMPDIR/age-key.txt" 2>"$TMPDIR/age-pub.txt"
-AGE_PRIVATE_KEY=$(grep 'AGE-SECRET-KEY' "$TMPDIR/age-key.txt")
-AGE_PUBLIC_KEY=$(grep 'age1' "$TMPDIR/age-pub.txt" || grep 'age1' "$TMPDIR/age-key.txt" | head -1)
-log_info "  Age public key: $AGE_PUBLIC_KEY"
+if [[ "$REUSE_EXISTING" == "true" ]]; then
+  log_step "Phase 2: Reusing saved keys + secrets (VM exists)"
+  set -a
+  source "$REPO_ROOT/.local/test-vm-secrets.env"
+  set +a
+  AGE_PRIVATE_KEY=$(cat "$REPO_ROOT/.local/test-vm-age-key" 2>/dev/null || echo "")
+  log_info "Loaded secrets from .local/test-vm-secrets.env"
+else
+  log_step "Phase 2: Generate ephemeral secrets"
 
-# ── Agent-generated secrets (matching setup-secrets.ts generators exactly) ──
-AUTH_SECRET=$(rand64 32)
-LITELLM_MASTER_KEY="sk-cogni-$(randHex 24)"
-OPENCLAW_GATEWAY_TOKEN=$(rand64 32)
-SCHEDULER_API_TOKEN=$(rand64 32)
-BILLING_INGEST_TOKEN=$(rand64 32)
-INTERNAL_OPS_TOKEN=$(rand64 32)
-METRICS_TOKEN=$(rand64 32)
-GH_WEBHOOK_SECRET=$(randHex 32)
+  TMPDIR=$(mktemp -d)
 
-# Database (matching setup-secrets.ts conventions)
-POSTGRES_ROOT_USER="postgres"
-POSTGRES_ROOT_PASSWORD=$(randHex 24)
-APP_DB_USER="app_user"
-APP_DB_PASSWORD=$(randHex 24)
-APP_DB_SERVICE_USER="app_service"
-APP_DB_SERVICE_PASSWORD=$(randHex 24)
-TEMPORAL_DB_USER="temporal"
-TEMPORAL_DB_PASSWORD=$(randHex 24)
+  # SSH keypair
+  log_info "Generating ephemeral SSH keypair..."
+  ssh-keygen -t ed25519 -f "$TMPDIR/deploy_key" -C "cogni-test-vm" -N "" -q
+  cp "$TMPDIR/deploy_key.pub" "$PROVISION_DIR/keys/cogni_template_test_deploy.pub"
+  cp "$TMPDIR/deploy_key" "$REPO_ROOT/.local/test-vm-key"
+  chmod 600 "$REPO_ROOT/.local/test-vm-key"
 
-# Derived values (domains set by environment case above)
+  # SOPS age keypair
+  log_info "Generating ephemeral SOPS age keypair..."
+  age-keygen -o "$TMPDIR/age-key.txt" 2>"$TMPDIR/age-pub.txt"
+  AGE_PRIVATE_KEY=$(grep 'AGE-SECRET-KEY' "$TMPDIR/age-key.txt")
+  AGE_PUBLIC_KEY=$(grep 'age1' "$TMPDIR/age-pub.txt" || grep 'age1' "$TMPDIR/age-key.txt" | head -1)
+  log_info "  Age public key: $AGE_PUBLIC_KEY"
+
+  # ── Agent-generated secrets (matching setup-secrets.ts generators exactly) ──
+  AUTH_SECRET=$(rand64 32)
+  LITELLM_MASTER_KEY="sk-cogni-$(randHex 24)"
+  OPENCLAW_GATEWAY_TOKEN=$(rand64 32)
+  SCHEDULER_API_TOKEN=$(rand64 32)
+  BILLING_INGEST_TOKEN=$(rand64 32)
+  INTERNAL_OPS_TOKEN=$(rand64 32)
+  METRICS_TOKEN=$(rand64 32)
+  GH_WEBHOOK_SECRET=$(randHex 32)
+
+  # Database (matching setup-secrets.ts conventions)
+  POSTGRES_ROOT_USER="postgres"
+  POSTGRES_ROOT_PASSWORD=$(randHex 24)
+  APP_DB_USER="app_user"
+  APP_DB_PASSWORD=$(randHex 24)
+  APP_DB_SERVICE_USER="app_service"
+  APP_DB_SERVICE_PASSWORD=$(randHex 24)
+  TEMPORAL_DB_USER="temporal"
+  TEMPORAL_DB_PASSWORD=$(randHex 24)
+fi
+
+# Derived values (always set, whether reused or fresh)
 APP_ENV="${DEPLOY_ENV}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENV}"
 
@@ -233,9 +254,12 @@ mkdir -p "$REPO_ROOT/.local"
 cat > "$REPO_ROOT/.local/test-vm-secrets.env" << EOF
 # Auto-generated test VM secrets — $(date -u +%Y-%m-%dT%H:%M:%SZ)
 # These are ephemeral. Destroy the VM when done.
+# Re-runs of the provision script reload these instead of regenerating.
 DOMAIN=${DOMAIN}
 POLY_DOMAIN=${POLY_DOMAIN}
 RESY_DOMAIN=${RESY_DOMAIN}
+APP_ENV=${APP_ENV}
+DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
 AUTH_SECRET=${AUTH_SECRET}
 LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
 OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
@@ -253,7 +277,15 @@ TEMPORAL_DB_USER=${TEMPORAL_DB_USER}
 TEMPORAL_DB_PASSWORD=${TEMPORAL_DB_PASSWORD}
 DATABASE_URL=${DATABASE_URL}
 DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}
-AGE_PUBLIC_KEY=${AGE_PUBLIC_KEY}
+AGE_PUBLIC_KEY=${AGE_PUBLIC_KEY:-}
+COGNI_NODE_DBS=${COGNI_NODE_DBS}
+LITELLM_DB_NAME=${LITELLM_DB_NAME}
+EVM_RPC_URL=${EVM_RPC_URL}
+POSTHOG_API_KEY=${POSTHOG_API_KEY}
+POSTHOG_HOST=${POSTHOG_HOST}
+COGNI_REPO_URL=${COGNI_REPO_URL}
+COGNI_REPO_REF=${COGNI_REPO_REF}
+COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS}
 EOF
 chmod 600 "$REPO_ROOT/.local/test-vm-secrets.env"
 log_info "Secrets saved to .local/test-vm-secrets.env"
@@ -331,6 +363,9 @@ SSH_OPTS="-i $SSH_KEY -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -o S
 # ══════════════════════════════════════════════════════════════
 # Phase 4: Wait for cloud-init bootstrap
 # ══════════════════════════════════════════════════════════════
+# Clear stale host key — Cherry reuses IPs across VM recreations
+ssh-keygen -R "$VM_IP" 2>/dev/null || true
+
 log_step "Phase 4: Wait for bootstrap (~3-5 min)"
 
 for attempt in $(seq 1 60); do
@@ -609,17 +644,19 @@ ssh $SSH_OPTS root@"$VM_IP" "
   echo 'All prerequisite secrets verified'
 "
 
-# Clone repo on VM, apply ALL ApplicationSets via kustomize (idempotent).
-# Each ApplicationSet file already has the correct targetRevision baked in.
+# Clone repo on VM, apply ONLY the ApplicationSet files (not the full Argo CD install).
+# Bootstrap cloud-init already installed Argo CD. Re-applying the full install conflicts.
 ssh $SSH_OPTS root@"$VM_IP" "
   AUTHED_URL=\$(echo '${COGNI_REPO_URL}' | sed 's|https://|https://${GHCR_USERNAME}:${GHCR_TOKEN}@|')
   rm -rf /tmp/cogni-appsets
   git clone --depth=1 --branch '${BRANCH}' \"\$AUTHED_URL\" /tmp/cogni-appsets 2>/dev/null
 
-  # Apply full Argo CD config (kustomization includes all ApplicationSets)
-  kubectl kustomize /tmp/cogni-appsets/infra/k8s/argocd/ | kubectl apply -n argocd -f -
+  # Apply each ApplicationSet file directly (not via kustomize)
+  for appset in /tmp/cogni-appsets/infra/k8s/argocd/*-applicationset.yaml; do
+    kubectl apply -f \"\$appset\" -n argocd
+  done
   rm -rf /tmp/cogni-appsets
-  echo 'Argo CD config applied — syncing from branch-specific ApplicationSets'
+  echo 'ApplicationSets applied — Argo syncing from branch-specific targets'
 "
 
 # Poll for apps to sync (up to 5 min)
@@ -701,3 +738,39 @@ echo ""
 echo "  Destroy when done:"
 echo "    cd infra/provision/cherry/base && tofu workspace select test && tofu destroy -var-file=terraform.test.tfvars"
 echo ""
+
+# ══════════════════════════════════════════════════════════════
+# Phase 9: Verify /readyz on all nodes (exit code = green/red)
+# ══════════════════════════════════════════════════════════════
+log_step "Phase 9: Verify /readyz on all nodes (up to 5 min)"
+
+READYZ_OK=true
+for node_port in 30000 30100 30300; do
+  NODE_OK=false
+  for attempt in $(seq 1 30); do
+    STATUS=$(ssh $SSH_OPTS root@"$VM_IP" "curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 http://localhost:${node_port}/readyz" 2>/dev/null || echo "000")
+    if [[ "$STATUS" == "200" ]]; then
+      log_info "  Port ${node_port}: /readyz 200 ✅"
+      NODE_OK=true
+      break
+    fi
+    if (( attempt % 6 == 0 )); then
+      log_info "  Port ${node_port}: waiting... (${attempt}0s, last status: ${STATUS})"
+    fi
+    sleep 10
+  done
+  if [[ "$NODE_OK" != "true" ]]; then
+    log_error "  Port ${node_port}: /readyz FAILED after 5 min ❌"
+    READYZ_OK=false
+  fi
+done
+
+echo ""
+if [[ "$READYZ_OK" == "true" ]]; then
+  log_info "═══ ALL NODES HEALTHY — CANARY IS GREEN ═══"
+  exit 0
+else
+  log_error "═══ SOME NODES FAILED /readyz — CANARY IS RED ═══"
+  log_error "Debug: ssh -i .local/test-vm-key root@$VM_IP 'kubectl -n ${K8S_NAMESPACE} logs -l app.kubernetes.io/name=node-app --tail=20'"
+  exit 1
+fi
