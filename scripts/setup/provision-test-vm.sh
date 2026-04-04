@@ -594,6 +594,9 @@ ssh $SSH_OPTS root@"$VM_IP" "
 
 # Clone repo on VM, apply ONLY the ApplicationSet files (not the full Argo CD install).
 # Bootstrap cloud-init already installed Argo CD. Re-applying the full install conflicts.
+# ApplicationSets in the repo point to deploy/* branches (deploy/canary, deploy/staging,
+# deploy/production) — Argo watches those orphan branches for overlay digest changes,
+# NOT the app branches directly. See docs/spec/cd-pipeline-e2e.md.
 ssh $SSH_OPTS root@"$VM_IP" "
   AUTHED_URL=\$(echo '${COGNI_REPO_URL}' | sed 's|https://|https://${GHCR_USERNAME}:${GHCR_TOKEN}@|')
   rm -rf /tmp/cogni-appsets
@@ -604,7 +607,7 @@ ssh $SSH_OPTS root@"$VM_IP" "
     kubectl apply -f \"\$appset\" -n argocd
   done
   rm -rf /tmp/cogni-appsets
-  echo 'ApplicationSets applied — Argo syncing from branch-specific targets'
+  echo 'ApplicationSets applied — Argo syncing from deploy/* branches'
 "
 
 # Poll for apps to sync (up to 5 min)
