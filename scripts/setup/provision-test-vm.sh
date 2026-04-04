@@ -154,71 +154,58 @@ GHCR_TOKEN="${GHCR_DEPLOY_TOKEN:-dummy-ghcr-token-for-test}"
 GHCR_USERNAME="${GHCR_DEPLOY_USERNAME:-Cogni-1729}"
 
 # ══════════════════════════════════════════════════════════════
-# Phase 2: Generate secrets (or reuse if VM exists)
+# Phase 2: Load secrets from .env.{env} + generate VM keys
 # ══════════════════════════════════════════════════════════════
 mkdir -p "$REPO_ROOT/.local"
 
-# Check if we can reuse an existing VM's keys + secrets
-REUSE_EXISTING=false
-if [[ -f "$REPO_ROOT/.local/test-vm-key" ]] && [[ -f "$REPO_ROOT/.local/test-vm-secrets.env" ]]; then
-  cd "$PROVISION_DIR"
-  tofu init -input=false >/dev/null 2>&1
-  tofu workspace new "$WORKSPACE" 2>/dev/null || tofu workspace select "$WORKSPACE" 2>/dev/null
-  RESOURCE_COUNT=$(tofu state list 2>/dev/null | wc -l | tr -d ' ')
-  cd "$REPO_ROOT"
-  if [[ "$RESOURCE_COUNT" -gt 0 ]]; then
-    REUSE_EXISTING=true
-  fi
+ENV_FILE="$REPO_ROOT/.env.${DEPLOY_ENV}"
+if [[ ! -f "$ENV_FILE" ]]; then
+  log_error "Missing $ENV_FILE"
+  log_error "Run 'pnpm setup:secrets' first to generate secrets and save to .env.${DEPLOY_ENV}"
+  exit 1
 fi
 
-if [[ "$REUSE_EXISTING" == "true" ]]; then
-  log_step "Phase 2: Reusing saved keys + secrets (VM exists)"
-  set -a
-  source "$REPO_ROOT/.local/test-vm-secrets.env"
-  set +a
-  AGE_PRIVATE_KEY=$(cat "$REPO_ROOT/.local/test-vm-age-key" 2>/dev/null || echo "")
-  log_info "Loaded secrets from .local/test-vm-secrets.env"
+log_step "Phase 2: Load secrets + generate VM keys"
+
+# Load application secrets from .env.{env} (source of truth: setup-secrets.ts)
+set -a
+source "$ENV_FILE"
+set +a
+log_info "Loaded secrets from $ENV_FILE"
+
+# SSH keypair — per-VM, not in .env file (uploaded to Cherry, saved to .local/)
+# Reuse if VM exists, generate if fresh
+if [[ -f "$REPO_ROOT/.local/test-vm-key" ]]; then
+  log_info "Reusing existing SSH key from .local/test-vm-key"
 else
-  log_step "Phase 2: Generate ephemeral secrets"
-
   TMPDIR=$(mktemp -d)
-
-  # SSH keypair
   log_info "Generating ephemeral SSH keypair..."
-  ssh-keygen -t ed25519 -f "$TMPDIR/deploy_key" -C "cogni-test-vm" -N "" -q
+  ssh-keygen -t ed25519 -f "$TMPDIR/deploy_key" -C "cogni-${DEPLOY_ENV}-vm" -N "" -q
   cp "$TMPDIR/deploy_key.pub" "$PROVISION_DIR/keys/cogni_template_test_deploy.pub"
   cp "$TMPDIR/deploy_key" "$REPO_ROOT/.local/test-vm-key"
   chmod 600 "$REPO_ROOT/.local/test-vm-key"
+fi
 
-  # SOPS age keypair
+# SOPS age keypair — per-VM, reuse if exists
+if [[ -f "$REPO_ROOT/.local/test-vm-age-key" ]]; then
+  AGE_PRIVATE_KEY=$(cat "$REPO_ROOT/.local/test-vm-age-key")
+  log_info "Reusing existing SOPS age key"
+else
+  TMPDIR="${TMPDIR:-$(mktemp -d)}"
   log_info "Generating ephemeral SOPS age keypair..."
   age-keygen -o "$TMPDIR/age-key.txt" 2>"$TMPDIR/age-pub.txt"
   AGE_PRIVATE_KEY=$(grep 'AGE-SECRET-KEY' "$TMPDIR/age-key.txt")
   AGE_PUBLIC_KEY=$(grep 'age1' "$TMPDIR/age-pub.txt" || grep 'age1' "$TMPDIR/age-key.txt" | head -1)
   log_info "  Age public key: $AGE_PUBLIC_KEY"
-
-  # ── Agent-generated secrets (matching setup-secrets.ts generators exactly) ──
-  AUTH_SECRET=$(rand64 32)
-  LITELLM_MASTER_KEY="sk-cogni-$(randHex 24)"
-  OPENCLAW_GATEWAY_TOKEN=$(rand64 32)
-  SCHEDULER_API_TOKEN=$(rand64 32)
-  BILLING_INGEST_TOKEN=$(rand64 32)
-  INTERNAL_OPS_TOKEN=$(rand64 32)
-  METRICS_TOKEN=$(rand64 32)
-  GH_WEBHOOK_SECRET=$(randHex 32)
-
-  # Database (matching setup-secrets.ts conventions)
-  POSTGRES_ROOT_USER="postgres"
-  POSTGRES_ROOT_PASSWORD=$(randHex 24)
-  APP_DB_USER="app_user"
-  APP_DB_PASSWORD=$(randHex 24)
-  APP_DB_SERVICE_USER="app_service"
-  APP_DB_SERVICE_PASSWORD=$(randHex 24)
-  TEMPORAL_DB_USER="temporal"
-  TEMPORAL_DB_PASSWORD=$(randHex 24)
 fi
 
-# Derived values (always set, whether reused or fresh)
+# Set defaults for vars that may not be in .env file
+POSTGRES_ROOT_USER="${POSTGRES_ROOT_USER:-postgres}"
+APP_DB_USER="${APP_DB_USER:-app_user}"
+APP_DB_SERVICE_USER="${APP_DB_SERVICE_USER:-app_service}"
+TEMPORAL_DB_USER="${TEMPORAL_DB_USER:-temporal}"
+
+# Derived values
 APP_ENV="${DEPLOY_ENV}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENV}"
 
@@ -247,48 +234,7 @@ COGNI_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.in
 DATABASE_URL="postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@VM_IP_PLACEHOLDER:5432/cogni_operator"
 DATABASE_SERVICE_URL="postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@VM_IP_PLACEHOLDER:5432/cogni_operator"
 
-log_info "All secrets generated"
-
-# Save secrets to .local for reference (gitignored)
-mkdir -p "$REPO_ROOT/.local"
-cat > "$REPO_ROOT/.local/test-vm-secrets.env" << EOF
-# Auto-generated test VM secrets — $(date -u +%Y-%m-%dT%H:%M:%SZ)
-# These are ephemeral. Destroy the VM when done.
-# Re-runs of the provision script reload these instead of regenerating.
-DOMAIN=${DOMAIN}
-POLY_DOMAIN=${POLY_DOMAIN}
-RESY_DOMAIN=${RESY_DOMAIN}
-APP_ENV=${APP_ENV}
-DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
-AUTH_SECRET=${AUTH_SECRET}
-LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
-BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
-INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN}
-METRICS_TOKEN=${METRICS_TOKEN}
-POSTGRES_ROOT_USER=${POSTGRES_ROOT_USER}
-POSTGRES_ROOT_PASSWORD=${POSTGRES_ROOT_PASSWORD}
-APP_DB_USER=${APP_DB_USER}
-APP_DB_PASSWORD=${APP_DB_PASSWORD}
-APP_DB_SERVICE_USER=${APP_DB_SERVICE_USER}
-APP_DB_SERVICE_PASSWORD=${APP_DB_SERVICE_PASSWORD}
-TEMPORAL_DB_USER=${TEMPORAL_DB_USER}
-TEMPORAL_DB_PASSWORD=${TEMPORAL_DB_PASSWORD}
-DATABASE_URL=${DATABASE_URL}
-DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}
-AGE_PUBLIC_KEY=${AGE_PUBLIC_KEY:-}
-COGNI_NODE_DBS=${COGNI_NODE_DBS}
-LITELLM_DB_NAME=${LITELLM_DB_NAME}
-EVM_RPC_URL=${EVM_RPC_URL}
-POSTHOG_API_KEY=${POSTHOG_API_KEY}
-POSTHOG_HOST=${POSTHOG_HOST}
-COGNI_REPO_URL=${COGNI_REPO_URL}
-COGNI_REPO_REF=${COGNI_REPO_REF}
-COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS}
-EOF
-chmod 600 "$REPO_ROOT/.local/test-vm-secrets.env"
-log_info "Secrets saved to .local/test-vm-secrets.env"
+log_info "All secrets loaded from .env.${DEPLOY_ENV}"
 
 # ══════════════════════════════════════════════════════════════
 # Phase 3: Provision VM via OpenTofu
