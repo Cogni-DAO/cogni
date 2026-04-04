@@ -13,6 +13,7 @@
  *   pnpm setup:secrets                        # walk through missing secrets (all envs)
  *   pnpm setup:secrets --env canary           # only canary environment
  *   pnpm setup:secrets --env canary --all     # canary, including already-set
+ *   pnpm setup:secrets --env canary --auto    # auto-generate missing agent secrets, only prompt for human ones
  *   pnpm setup:secrets --required             # only required secrets
  *   pnpm setup:secrets --all                  # walk through everything (including already-set)
  *   pnpm setup:secrets --only DISCORD         # just secrets matching "DISCORD"
@@ -869,6 +870,7 @@ async function main() {
   const args = process.argv.slice(2);
   const showAll = args.includes("--all");
   const filterRequired = args.includes("--required");
+  const autoGenerate = args.includes("--auto");
   // --only DISCORD,SONAR  or  --only DISCORD_OAUTH_CLIENT_ID
   const onlyArg =
     args.find((a) => a.startsWith("--only="))?.slice(7) ||
@@ -994,18 +996,30 @@ async function main() {
 
     // SSH_DEPLOY_KEY is special — one key per environment
     if (secret.name === "SSH_DEPLOY_KEY") {
-      const action = await prompt(
-        rl,
-        `  Generate SSH keys for ${targetEnvs.join(", ")}? [Y/n] `
+      const missingEnvs = targetEnvs.filter(
+        (e) => !envSecretSets[e]?.has(secret.name)
       );
-      if (action.toLowerCase() === "n") {
+      if (missingEnvs.length === 0) {
+        console.log(`  ${DIM}SSH_DEPLOY_KEY — already set, skipping${RESET}`);
         skipped++;
         continue;
       }
-      for (const env of targetEnvs) {
+      if (!autoGenerate) {
+        const action = await prompt(
+          rl,
+          `  Generate SSH keys for ${missingEnvs.join(", ")}? [Y/n] `
+        );
+        if (action.toLowerCase() === "n") {
+          skipped++;
+          continue;
+        }
+      }
+      for (const env of missingEnvs) {
         const privKey = generateSSHKey(env);
         setSecret(secret.name, privKey, env);
-        console.log(`  ${GREEN}SSH_DEPLOY_KEY${RESET} set for ${env}`);
+        console.log(
+          `  ${GREEN}SSH_DEPLOY_KEY${RESET} generated + set for ${env}`
+        );
       }
       set++;
       continue;
@@ -1032,22 +1046,49 @@ async function main() {
     }
 
     if (secret.source === "agent") {
-      const action = await prompt(
-        rl,
-        `  Generate and set for ${targetEnvs.join(", ")}? [Y/n] `
-      );
-      if (action.toLowerCase() === "n") {
-        skipped++;
-        continue;
-      }
-      const value = secret.generate?.();
-      if (setSecretBoth(secret.name, value, targetEnvs)) {
-        console.log(
-          `  ${GREEN}${secret.name}${RESET} set (${targetEnvs.join(", ")})`
+      // --auto: skip prompt, auto-generate missing agent secrets
+      if (autoGenerate) {
+        // Only set if missing in at least one target env
+        const missing = targetEnvs.some(
+          (e) => !envSecretSets[e]?.has(secret.name)
         );
-        set++;
-        if (secret.category === "Database") {
-          dbPasswords[secret.name] = value;
+        if (!missing) {
+          console.log(`  ${DIM}${secret.name} — already set, skipping${RESET}`);
+          skipped++;
+          continue;
+        }
+        const value = secret.generate?.();
+        // Only set for envs where it's missing
+        const envsToSet = targetEnvs.filter(
+          (e) => !envSecretSets[e]?.has(secret.name)
+        );
+        if (setSecretBoth(secret.name, value, envsToSet)) {
+          console.log(
+            `  ${GREEN}${secret.name}${RESET} generated + set (${envsToSet.join(", ")})`
+          );
+          set++;
+          if (secret.category === "Database") {
+            dbPasswords[secret.name] = value;
+          }
+        }
+      } else {
+        const action = await prompt(
+          rl,
+          `  Generate and set for ${targetEnvs.join(", ")}? [Y/n] `
+        );
+        if (action.toLowerCase() === "n") {
+          skipped++;
+          continue;
+        }
+        const value = secret.generate?.();
+        if (setSecretBoth(secret.name, value, targetEnvs)) {
+          console.log(
+            `  ${GREEN}${secret.name}${RESET} set (${targetEnvs.join(", ")})`
+          );
+          set++;
+          if (secret.category === "Database") {
+            dbPasswords[secret.name] = value;
+          }
         }
       }
     } else if (secret.perEnv) {
