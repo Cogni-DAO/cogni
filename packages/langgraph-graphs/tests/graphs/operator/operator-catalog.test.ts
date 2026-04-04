@@ -50,7 +50,7 @@ describe("operator catalog entries", () => {
 
   it("existing graph entries are unchanged", () => {
     // Verify original entries still exist and don't have systemPrompt
-    const poet = LANGGRAPH_CATALOG["poet"];
+    const poet = LANGGRAPH_CATALOG.poet;
     expect(poet).toBeDefined();
     expect(poet.displayName).toBe("Poet");
     expect(poet.systemPrompt).toBeUndefined();
