@@ -96,7 +96,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.110.74"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-postgres-external"
@@ -106,7 +106,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.110.74"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-temporal-external"
@@ -116,7 +116,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.110.74"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-litellm-external"
@@ -126,7 +126,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.110.74"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-redis-external"
