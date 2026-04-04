@@ -37,11 +37,11 @@ run_sql_quiet() {
   PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d "$db" -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null || true
 }
 
-# Wait for Doltgres
+# Wait for Doltgres (pg_isready — no default database required)
 echo "⏳ Waiting for Doltgres at $DG_HOST:$DG_PORT..."
 ELAPSED=0
 TIMEOUT=60
-until PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d postgres -c '\q' >/dev/null 2>&1; do
+until pg_isready -h "$DG_HOST" -p "$DG_PORT" -q 2>/dev/null; do
   if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
     echo "❌ Timed out waiting for Doltgres after ${TIMEOUT}s"
     exit 1
@@ -102,7 +102,8 @@ for COGNI_DB in $(echo "$COGNI_NODE_DBS" | tr ',' ' '); do
   fi
 
   # Dolt commit (schema + roles only — seed data comes from pnpm db:seed:doltgres)
-  run_sql "$DB" "SELECT dolt_commit('-Am', 'provision: schema + roles')"
+  # --allow-empty is not supported; skip if nothing to commit (idempotent re-runs)
+  run_sql_quiet "$DB" "SELECT dolt_commit('-Am', 'provision: schema + roles')"
 
   echo "   -> $DB provisioned and committed."
 done

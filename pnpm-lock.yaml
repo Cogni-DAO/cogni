@@ -50,6 +50,9 @@ importers:
       '@cogni/ingestion-core':
         specifier: workspace:*
         version: link:packages/ingestion-core
+      '@cogni/knowledge-store':
+        specifier: workspace:^
+        version: link:packages/knowledge-store
       '@cogni/langgraph-graphs':
         specifier: workspace:*
         version: link:packages/langgraph-graphs
