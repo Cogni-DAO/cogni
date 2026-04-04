@@ -1,0 +1,245 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+//
+// Alloy configuration for k8s — pod log collection + kubelet metrics → Grafana Cloud
+// Adapted from infra/compose/runtime/configs/alloy-config.metrics.alloy
+// Requires Secret: LOKI_WRITE_URL, LOKI_USERNAME, LOKI_PASSWORD,
+//                  PROMETHEUS_REMOTE_WRITE_URL, PROMETHEUS_USERNAME, PROMETHEUS_PASSWORD
+
+// =============================================================================
+// Kubernetes Pod Discovery & Log Collection
+// =============================================================================
+
+discovery.kubernetes "pods" {
+  role = "pod"
+}
+
+discovery.relabel "pod_logs" {
+  targets = discovery.kubernetes.pods.targets
+
+  // Only collect logs from cogni namespaces
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    regex         = "cogni-.*"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+
+  // Map k8s app label → service (matches Compose convention)
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+    target_label  = "service"
+  }
+
+  rule {
+    target_label = "app"
+    replacement  = "cogni-template"
+  }
+
+  rule {
+    target_label = "env"
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")
+  }
+
+  // Construct log file path from pod UID + container name
+  // k8s log path: /var/log/pods/<namespace>_<pod>_<uid>/<container>/*.log
+  rule {
+    source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+    target_label  = "__path__"
+    separator     = "/"
+    replacement   = "/var/log/pods/*$1/$2/*.log"
+  }
+}
+
+loki.source.file "pod_logs" {
+  targets    = discovery.relabel.pod_logs.output
+  forward_to = [loki.process.pod_logs.receiver]
+}
+
+// =============================================================================
+// Log Processing with Health-Check Noise Suppression
+// =============================================================================
+// Ported from Compose config. Same fail-safe drop filters.
+
+loki.process "pod_logs" {
+  // k8s container runtime wraps logs in JSON with "log", "stream", "time" keys
+  stage.cri {}
+
+  // Extract JSON fields from app logs (fail-safe: non-JSON lines get no extracted fields)
+  stage.json {
+    expressions = {
+      route       = "route",
+      status_code = "status",
+      duration_ms = "durationMs",
+      log_msg     = "msg",
+    }
+  }
+
+  // Drop "request received" lines for health/metrics probe routes
+  stage.template {
+    source   = "drop_probe_start"
+    template = "{{ if and .route .log_msg (or (eq .route \"meta.readyz\") (eq .route \"meta.metrics\")) (eq .log_msg \"request received\") }}true{{ end }}"
+  }
+
+  stage.drop {
+    source              = "drop_probe_start"
+    value               = "true"
+    drop_counter_reason = "probe_start_noise"
+  }
+
+  // Drop successful metrics scrape completions (status=200)
+  stage.template {
+    source   = "drop_metrics_ok"
+    template = "{{ if and .route .status_code (eq .route \"meta.metrics\") (eq .status_code \"200\") }}true{{ end }}"
+  }
+
+  stage.drop {
+    source              = "drop_metrics_ok"
+    value               = "true"
+    drop_counter_reason = "metrics_scrape_ok"
+  }
+
+  // Drop successful fast readyz probe completions (status=200, duration < 1000ms)
+  stage.template {
+    source   = "drop_readyz_ok"
+    template = "{{ if and .route .status_code .duration_ms (eq .route \"meta.readyz\") (eq .status_code \"200\") }}{{ if lt (int .duration_ms) 1000 }}true{{ end }}{{ end }}"
+  }
+
+  stage.drop {
+    source              = "drop_readyz_ok"
+    value               = "true"
+    drop_counter_reason = "readyz_probe_ok"
+  }
+
+  forward_to = [loki.write.grafana_cloud.receiver]
+}
+
+loki.write "grafana_cloud" {
+  endpoint {
+    url = sys.env("LOKI_WRITE_URL")
+    basic_auth {
+      username = sys.env("LOKI_USERNAME")
+      password = sys.env("LOKI_PASSWORD")
+    }
+  }
+}
+
+// =============================================================================
+// Kubernetes Node Discovery & Kubelet cAdvisor Metrics
+// =============================================================================
+// Scrapes container metrics from kubelet's cAdvisor endpoint.
+// Uses ServiceAccount token for auth (RBAC grants nodes/metrics access).
+
+discovery.kubernetes "nodes" {
+  role = "node"
+}
+
+discovery.relabel "kubelet_cadvisor" {
+  targets = discovery.kubernetes.nodes.targets
+
+  rule {
+    replacement  = "/metrics/cadvisor"
+    target_label = "__metrics_path__"
+  }
+
+  rule {
+    source_labels = ["__meta_kubernetes_node_name"]
+    target_label  = "node"
+  }
+}
+
+prometheus.scrape "cadvisor" {
+  targets         = discovery.relabel.kubelet_cadvisor.output
+  scheme          = "https"
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  job_name        = "cadvisor"
+
+  tls_config {
+    insecure_skip_verify = true
+  }
+
+  bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+  forward_to        = [prometheus.relabel.k8s_metrics.receiver]
+}
+
+// =============================================================================
+// Node (host) Metrics via unix exporter
+// =============================================================================
+
+prometheus.exporter.unix "default" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/host/root"
+}
+
+prometheus.scrape "node" {
+  targets         = prometheus.exporter.unix.default.targets
+  forward_to      = [prometheus.relabel.k8s_metrics.receiver]
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  job_name        = "node"
+}
+
+// =============================================================================
+// Metric Allowlist + Label Policy
+// =============================================================================
+// Same allowlist as Compose config — only metrics we alert on or dashboard.
+
+prometheus.relabel "k8s_metrics" {
+  forward_to = [prometheus.remote_write.grafana_cloud.receiver]
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "(container_memory_working_set_bytes|container_memory_rss|container_spec_memory_limit_bytes|container_cpu_usage_seconds_total|container_oom_events_total|container_network_receive_bytes_total|container_network_transmit_bytes_total|container_network_receive_errors_total|container_network_transmit_errors_total|container_network_receive_packets_dropped_total|container_network_transmit_packets_dropped_total|container_fs_reads_bytes_total|container_fs_writes_bytes_total|node_filesystem_avail_bytes|node_memory_MemAvailable_bytes|node_cpu_seconds_total|node_network_receive_bytes_total|node_network_transmit_bytes_total|up)"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__name__", "fstype"]
+    regex         = "node_filesystem_avail_bytes;(tmpfs|overlay|proc|sysfs|devtmpfs|squashfs)"
+    action        = "drop"
+  }
+
+  // Map k8s pod labels → service for consistent querying
+  rule {
+    source_labels = ["pod"]
+    regex         = "(operator|poly|resy)-.*"
+    target_label  = "service"
+    replacement   = "$1"
+  }
+
+  rule {
+    target_label = "env"
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")
+  }
+
+  rule {
+    regex  = "(id|image|name)"
+    action = "labeldrop"
+  }
+}
+
+prometheus.remote_write "grafana_cloud" {
+  endpoint {
+    url = sys.env("PROMETHEUS_REMOTE_WRITE_URL")
+    basic_auth {
+      username = sys.env("PROMETHEUS_USERNAME")
+      password = sys.env("PROMETHEUS_PASSWORD")
+    }
+  }
+}

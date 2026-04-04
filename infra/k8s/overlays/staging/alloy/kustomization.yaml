@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-staging
+
+resources:
+  - ../../../base/alloy
+
+patches:
+  # Set environment to preview (staging/canary use same value)
+  - target:
+      kind: ConfigMap
+      name: alloy-config
+    patch: |
+      - op: replace
+        path: /data/DEPLOY_ENVIRONMENT
+        value: "preview"
+  # Fix ClusterRoleBinding namespace (cluster-scoped, not affected by kustomize namespace)
+  - target:
+      kind: ClusterRoleBinding
+      name: alloy
+    patch: |
+      - op: replace
+        path: /subjects/0/namespace
+        value: "cogni-staging"
