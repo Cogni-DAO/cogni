@@ -10,7 +10,9 @@
  * Links: docs/runbooks/SECRET_ROTATION.md
  *
  * Usage:
- *   pnpm setup:secrets                        # walk through missing secrets
+ *   pnpm setup:secrets                        # walk through missing secrets (all envs)
+ *   pnpm setup:secrets --env canary           # only canary environment
+ *   pnpm setup:secrets --env canary --all     # canary, including already-set
  *   pnpm setup:secrets --required             # only required secrets
  *   pnpm setup:secrets --all                  # walk through everything (including already-set)
  *   pnpm setup:secrets --only DISCORD         # just secrets matching "DISCORD"
@@ -748,9 +750,13 @@ function setSecret(name: string, value: string, env: string): boolean {
   }
 }
 
-function setSecretBoth(name: string, value: string): boolean {
+function setSecretBoth(
+  name: string,
+  value: string,
+  envs: readonly string[] = ENVIRONMENTS
+): boolean {
   let ok = true;
-  for (const env of ENVIRONMENTS) {
+  for (const env of envs) {
     if (!setSecret(name, value, env)) ok = false;
   }
   return ok;
@@ -803,7 +809,7 @@ function applyTransform(secret: Secret, value: string): string {
 
 const dbPasswords: Record<string, string> = {};
 
-function buildDSNs(): void {
+function buildDSNs(envs: readonly string[]): void {
   const appUser = dbPasswords["APP_DB_USER"] || "app_user";
   const appPw = dbPasswords["APP_DB_PASSWORD"];
   const svcUser = dbPasswords["APP_DB_SERVICE_USER"] || "app_service";
@@ -813,12 +819,12 @@ function buildDSNs(): void {
 
   if (appPw) {
     const url = `postgresql://${appUser}:${appPw}@${host}:5432/${dbName}`;
-    setSecretBoth("DATABASE_URL", url);
-    console.log(`  ${GREEN}DATABASE_URL${RESET} set (preview + production)`);
+    setSecretBoth("DATABASE_URL", url, envs);
+    console.log(`  ${GREEN}DATABASE_URL${RESET} set (${envs.join(", ")})`);
   }
   if (svcPw) {
     const url = `postgresql://${svcUser}:${svcPw}@${host}:5432/${dbName}`;
-    setSecretBoth("DATABASE_SERVICE_URL", url);
+    setSecretBoth("DATABASE_SERVICE_URL", url, envs);
     console.log(
       `  ${GREEN}DATABASE_SERVICE_URL${RESET} set (preview + production)`
     );
@@ -910,8 +916,31 @@ async function main() {
     .map((p) => p.trim().toUpperCase())
     .filter(Boolean);
 
+  // --env canary  or  --env=canary  (target a single environment)
+  const envArg =
+    args.find((a) => a.startsWith("--env="))?.slice(6) ||
+    (args.includes("--env") ? args[args.indexOf("--env") + 1] : undefined);
+  const targetEnvs: (typeof ENVIRONMENTS)[number][] = envArg
+    ? [envArg as (typeof ENVIRONMENTS)[number]]
+    : [...ENVIRONMENTS];
+
+  if (
+    envArg &&
+    !ENVIRONMENTS.includes(envArg as (typeof ENVIRONMENTS)[number])
+  ) {
+    console.error(
+      `Unknown environment: ${envArg}. Must be one of: ${ENVIRONMENTS.join(", ")}`
+    );
+    process.exit(1);
+  }
+
+  if (envArg) {
+    console.log(`  ${CYAN}Targeting environment: ${envArg}${RESET}\n`);
+  }
+
   const previewSecrets = getSetSecrets("preview");
   const prodSecrets = getSetSecrets("production");
+  const canarySecrets = getSetSecrets("canary");
   const repoSecrets = getRepoSecrets();
 
   // Always print full inventory first
@@ -975,7 +1004,7 @@ async function main() {
         skipped++;
         continue;
       }
-      for (const env of ENVIRONMENTS) {
+      for (const env of targetEnvs) {
         const privKey = generateSSHKey(env);
         setSecret(secret.name, privKey, env);
         console.log(`  ${GREEN}SSH_DEPLOY_KEY${RESET} set for ${env}`);
@@ -1014,9 +1043,9 @@ async function main() {
         continue;
       }
       const value = secret.generate?.();
-      if (setSecretBoth(secret.name, value)) {
+      if (setSecretBoth(secret.name, value, targetEnvs)) {
         console.log(
-          `  ${GREEN}${secret.name}${RESET} set (preview + production)`
+          `  ${GREEN}${secret.name}${RESET} set (${targetEnvs.join(", ")})`
         );
         set++;
         if (secret.category === "Database") {
@@ -1025,11 +1054,14 @@ async function main() {
       }
     } else if (secret.perEnv) {
       // Per-env human secrets (DOMAIN, VM_HOST) — ask for each env separately
-      for (const env of ENVIRONMENTS) {
-        const already =
+      for (const env of targetEnvs) {
+        const envSecrets =
           env === "preview"
-            ? previewSecrets.has(secret.name)
-            : prodSecrets.has(secret.name);
+            ? previewSecrets
+            : env === "canary"
+              ? canarySecrets
+              : prodSecrets;
+        const already = envSecrets.has(secret.name);
         if (already && !showAll) continue;
         const value = await prompt(
           rl,
@@ -1099,7 +1131,7 @@ async function main() {
     console.log(
       `\n${"═".repeat(2)} ${BOLD}Derived Database URLs${RESET} ${"═".repeat(41)}`
     );
-    buildDSNs();
+    buildDSNs(targetEnvs);
   }
 
   // Write .env.{env} files for each environment that had secrets set
@@ -1107,7 +1139,7 @@ async function main() {
     encoding: "utf-8",
   }).trim();
 
-  for (const env of ENVIRONMENTS) {
+  for (const env of targetEnvs) {
     const secrets = envSecretValues[env];
     if (!secrets || Object.keys(secrets).length === 0) continue;
 
@@ -1118,7 +1150,9 @@ async function main() {
       `# Read by: provision-test-vm.sh, deploy-infra.sh (via GitHub env)`,
       `# DO NOT commit this file (gitignored).`,
       "",
-      ...Object.entries(secrets).map(([k, v]) => `${k}=${v}`),
+      ...Object.entries(secrets).map(
+        ([k, v]) => `${k}='${v.replace(/'/g, "'\\''")}'`
+      ),
       "",
     ];
     const { writeFileSync, chmodSync } = await import("node:fs");
