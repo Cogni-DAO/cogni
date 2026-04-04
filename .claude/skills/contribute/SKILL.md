@@ -70,6 +70,7 @@ Common fixes:
 - `pnpm format` — auto-fixes all formatting
 - Arch violations → read `.dependency-cruiser.cjs` for boundary rules
 - `pnpm check:docs` errors → the message tells you the exact file and field
+- Typecheck errors on fields that clearly exist in source → run `pnpm packages:build` to rebuild stale `dist/*.d.ts` declarations
 
 ### Phase 5: Push and PR
 
@@ -110,11 +111,32 @@ You're done after merge to canary.
 
 ## How Canary Deployment Works
 
-Every push to canary triggers: image build → GHCR push → digest promotion commit → Argo sync → pods rolling update (~30s after promotion). Argo reconciles every 30s on canary.
+```
+feature branch → PR to canary
+  → CI on PR: typecheck + lint + unit + component           ~6 min
+  → review + approval → merge
+    → Build Multi-Node: build all node images in parallel    ~3 min
+      → promote-k8s: resolve digests, update overlays        ~1 min
+        → deploy-infra: Compose services (postgres, etc.)    ~1 min
+          → verify: poll /readyz on all nodes in parallel     ~1-7 min
+            → E2E Canary: Playwright smoke tests              ~2 min
+```
 
-All infra changes go through git. Argo is the only deployer. If Argo doesn't have it, it doesn't exist on the cluster. Never manually patch k8s resources — Argo overwrites them on next sync.
+**Three environments, three branches, three namespaces:**
 
-Test with the browser (playwright), not curl. `/livez` returning 200 doesn't mean the app works — client-side hydration crashes are invisible to health checks.
+| Environment | Branch    | Namespace          | Domain               | Purpose          |
+| ----------- | --------- | ------------------ | -------------------- | ---------------- |
+| canary      | `canary`  | `cogni-canary`     | test.cognidao.org    | AI e2e (PR here) |
+| preview     | `staging` | `cogni-preview`    | preview.cognidao.org | Human e2e        |
+| production  | `main`    | `cogni-production` | cognidao.org         | Production       |
+
+**App pods** (operator, poly, resy, scheduler-worker): deployed by Argo CD via k8s overlays in `infra/k8s/overlays/{env}/`. Image digests promoted by CI.
+
+**Infra services** (postgres, temporal, litellm, redis, caddy): deployed by `deploy-infra.sh` via SSH + Docker Compose. NOT managed by Argo.
+
+Never manually patch k8s resources — Argo overwrites them on next sync.
+
+Test with the browser (Playwright), not curl. `/livez` returning 200 doesn't mean the app works — client-side hydration crashes are invisible to health checks.
 
 Monitor with Grafana MCP for logs and metrics, not SSH.
 
