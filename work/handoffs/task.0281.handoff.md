@@ -94,17 +94,27 @@ Each GH environment (canary/preview/production) has its own `VM_HOST` and `SSH_D
 
 ## How to test end-to-end
 
+### Test 0 (THE parity proof): Alloy k8s pod log shipping
+
+This is the definitive test. It proves deploy-infra.sh works AND gives us observability.
+
+1. Update `infra/compose/runtime/configs/alloy-config.metrics.alloy` to add k8s pod log scraping (Alloy supports `discovery.kubernetes` or reading k3s container logs from host `/var/log/pods/`)
+2. PR to canary → merge
+3. CI runs → deploy-infra.sh rsyncs new Alloy config → detects SHA256 change → restarts Alloy
+4. Verify: open Grafana Cloud → query `{namespace="cogni-canary"}` → operator/poly/resy pod logs appear
+5. **If pod logs show up in Grafana without SSH, Phase 1 is proven.**
+
 ### Test 1: Caddy config change deploys automatically
 
 1. Make a visible change to `infra/compose/edge/configs/Caddyfile.tmpl` (e.g. add a comment header)
-2. Push to canary
+2. PR to canary → merge
 3. CI runs → deploy-infra.sh rsyncs new Caddyfile → detects SHA256 change → reloads Caddy
-4. Verify: SSH to VM, check Caddy config has the comment. Or: the deploy-infra.sh logs show "Caddyfile changed, reloading"
+4. Verify: deploy-infra.sh logs in GH Actions show "Caddyfile changed, reloading"
 
 ### Test 2: LiteLLM config change deploys automatically
 
 1. Add a model alias to litellm config
-2. Push to canary
+2. PR to canary → merge
 3. deploy-infra.sh detects config change → restarts litellm
 4. Verify: `curl https://test.cognidao.org/api/v1/models` shows the new model (proxied through litellm)
 

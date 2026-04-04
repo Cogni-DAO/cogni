@@ -53,12 +53,19 @@ Extract Compose infra deploy from `deploy.sh` so canary CI deploys infra changes
 
 3. **Add environment concurrency to all jobs**: `concurrency: group: canary-{job}, cancel-in-progress: true`
 
+4. **Parity proof: Alloy k8s pod log shipping** — the first real infra change deployed via deploy-infra.sh:
+   - Update Alloy config (`infra/compose/runtime/configs/alloy-config.metrics.alloy`) to add k8s pod log scraping via `discovery.kubernetes` or by reading k3s container logs from the host filesystem
+   - Push to canary via PR → merge → deploy-infra.sh ships the config → Alloy restarts → pod logs appear in Grafana Cloud
+   - This proves the infra deploy pipeline works AND closes the observability gap (currently pod logs are only visible via `kubectl logs` / SSH)
+   - If pod logs show up in Grafana without SSH, Phase 1 is proven
+
 ### Phase 1 checklist
 
 - [ ] Push app code change to canary → new image built → Argo deploys → readyz 200 on all 3 nodes
-- [ ] Push Compose infra change (Caddy route) to canary → CI deploys via deploy-infra.sh → change is live without SSH
+- [ ] Push Alloy config for k8s pod log scraping → deploy-infra.sh deploys → pod logs visible in Grafana Cloud (no SSH)
+- [ ] Push Caddy config change → deploy-infra.sh deploys → change is live without SSH
 - [ ] Push DB migration (new table) to canary → Argo PreSync Job runs → table exists in all node DBs
-- [ ] Push litellm config change to canary → deploy-infra.sh detects change → litellm restarts
+- [ ] Push litellm config change → deploy-infra.sh detects change → litellm restarts
 - [ ] Verify job passes (parallel polling, all 3 nodes healthy)
 - [ ] E2E Playwright smoke passes against canary domain
 - [ ] Chat works end-to-end (sign in → send message → get response)
