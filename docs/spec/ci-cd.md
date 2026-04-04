@@ -21,17 +21,21 @@ Modular canary-first pipeline. Code builds once on canary, tested digests promot
 ## Branch Model
 
 ```
-feat/* → canary → staging → release/* → main
+feat/* → canary → staging → release/* → main          (app code)
+deploy/canary, deploy/staging, deploy/production       (deploy state, Argo-tracked)
 ```
 
 - **Feature branches** (`feat/`, `fix/`, `chore/`, etc.) → `canary` (via PR, CI required)
 - **canary** → `staging` (automated after canary E2E success, same digests)
 - **staging** → `release/YYYYMMDD-<shortsha>` (automated after staging E2E success)
 - **release/\*** → `main` (via PR, manual approval)
+- **deploy/\*** branches hold rendered k8s overlay state (image digests). Argo CD tracks these. CI updates them via auto-merge PRs, never direct push.
 
 **Key invariant**: `main` receives code only via `release/*` branches, never direct commits or non-release PRs.
 
 **Key invariant**: Staging and production never rebuild images. They receive promoted digests from canary.
+
+**Key invariant**: CI never pushes directly to protected branches. Overlay digest updates go through PRs to `deploy/*` branches.
 
 ## Pipeline Chain
 
@@ -49,11 +53,11 @@ push to canary
   │
   └── build-multi-node.yml            Build images (canary only)
         ↓ workflow_run on success
-      promote-and-deploy.yml [canary]  Promote overlays → deploy infra → verify
+      promote-and-deploy.yml [canary]  PR digest update to deploy/canary → auto-merge → deploy infra → verify
         ↓ workflow_run on success
       e2e.yml [canary]                 Playwright smoke tests
         ↓ canary E2E passes
-      promote-and-deploy.yml [staging] Same digests, no rebuild (via workflow_dispatch)
+      promote-and-deploy.yml [staging] Same digests → PR to deploy/staging → auto-merge → deploy infra → verify
         ↓ workflow_run on success
       e2e.yml [staging]                Playwright smoke tests
         ↓ staging E2E passes
@@ -110,11 +114,12 @@ These will be retired when production migrates to k8s/Argo and uses the same pro
 
 - **Trigger**: workflow_run on Build Multi-Node success; workflow_dispatch with environment + optional source_sha
 - **Jobs**: `promote-k8s` → `deploy-infra` → `verify`
-- **Promote**: Resolves digests from GHCR, updates k8s overlay, one atomic commit with `[skip ci]`
-- **Deploy**: SSH to VM, runs `scripts/ci/deploy-infra.sh` (Compose infra only — Argo handles app pods)
+- **Promote**: Resolves digests from GHCR, creates a PR updating k8s overlays on the `deploy/{env}` branch. PR is auto-merged after checks. Argo CD watches the deploy branch and syncs on merge.
+- **Deploy**: SSH to VM, runs `scripts/ci/deploy-infra.sh` (Compose infra + k8s secrets — Argo handles app pods)
 - **Verify**: Polls `/readyz` on all 3 nodes, smoke tests `/livez`, SSH diagnostics on failure
 - **Cross-env promotion**: `source_sha` input allows deploying canary's images to staging without rebuild
 - **Concurrency**: cancel-in-progress: false (never cancel a deploy mid-flight)
+- **Deploy branch model**: App code lives on `canary`/`staging`/`main`. Rendered deploy state (image digests, overlay patches) lives on `deploy/canary`, `deploy/staging`, `deploy/production`. This separation keeps branch protection real — CI never needs write access to protected app branches.
 
 ### 3. E2E and Release (`e2e.yml`)
 
@@ -133,13 +138,15 @@ These will be retired when production migrates to k8s/Argo and uses the same pro
 
 ## Environments (k8s via Argo CD)
 
-| Environment | Branch    | GH Environment | Namespace          | Argo ApplicationSet | Purpose           |
-| ----------- | --------- | -------------- | ------------------ | ------------------- | ----------------- |
-| canary      | `canary`  | `canary`       | `cogni-canary`     | `cogni-canary`      | Automated testing |
-| preview     | `staging` | `preview`      | `cogni-preview`    | `cogni-preview`     | Human acceptance  |
-| production  | `main`    | `production`   | `cogni-production` | `cogni-production`  | Production        |
+| Environment | App Branch | Deploy Branch       | GH Environment | Namespace          | Argo Tracks         | Purpose           |
+| ----------- | ---------- | ------------------- | -------------- | ------------------ | ------------------- | ----------------- |
+| canary      | `canary`   | `deploy/canary`     | `canary`       | `cogni-canary`     | `deploy/canary`     | Automated testing |
+| preview     | `staging`  | `deploy/staging`    | `preview`      | `cogni-preview`    | `deploy/staging`    | Human acceptance  |
+| production  | `main`     | `deploy/production` | `production`   | `cogni-production` | `deploy/production` | Production        |
 
 Each GH environment provides its own `VM_HOST`, `SSH_DEPLOY_KEY`, `DOMAIN`, and all infra/app secrets. promote-and-deploy.yml selects the environment based on the triggering branch or the `environment` input.
+
+**Deploy branches** contain only `infra/k8s/overlays/{env}/` with image digests and EndpointSlice IPs. They are never merged into app branches. Argo CD ApplicationSets point to the deploy branch for each environment.
 
 ## Image Tagging Strategy
 
@@ -164,17 +171,27 @@ Each GH environment provides its own `VM_HOST`, `SSH_DEPLOY_KEY`, `DOMAIN`, and 
 
 ## Critical TODOs
 
-**P0 - Complete the chain**:
+**P0 — Pipeline completion**:
 
+- [ ] Implement deploy branch model: create `deploy/canary`, `deploy/staging`, `deploy/production` branches; update Argo ApplicationSets to track them; update promote-and-deploy.yml to PR digest updates to deploy branches
+- [ ] Fix promote-and-deploy.yml git identity (`git config user.name/email`) on staging
 - [ ] Production migration: add `main` to promote-and-deploy.yml triggers, retire build-prod.yml + deploy-production.yml
 - [ ] Gate canary→staging promotion on CI success (currently promotes even if CI fails in parallel)
 
-**P1 - Optimization**:
+**P1 — CI optimization (task.0260)**:
 
-- [ ] Affected-only builds: Turborepo `--affected` to skip unchanged node images (task.0260)
-- [ ] Migrator fingerprinting: content-addressed `migrate-${FINGERPRINT}` tags for CI cache
+- [ ] Turborepo `--affected` for PR-scoped typecheck/lint/test
+- [ ] Merge static + unit jobs into single `checks` job
+- [ ] Scope detection for conditional component/stack-test skip on docs-only PRs
+- [ ] Nightly full validation gate
+
+**P2 — Infrastructure**:
+
+- [ ] Provision script resilience (task.0285): credential reset, migrations, SSH key collision
+- [ ] Secrets single source of truth via ESO (task.0284)
+- [ ] Provision as GitHub Action (task.0283)
+- [ ] Migrator fingerprinting: content-addressed `migrate-${FINGERPRINT}` tags
 - [ ] Image scanning and signing (cosign)
-- [ ] Edge routing CI validation (Caddyfile smoke tests)
 
 ## TypeScript Package Build Strategy
 
@@ -184,23 +201,21 @@ Each GH environment provides its own `VM_HOST`, `SSH_DEPLOY_KEY`, `DOMAIN`, and 
 
 ## Branch Configuration Settings
 
-### Branch Protection: canary
+### Branch Protection: canary, staging, main (app branches)
 
 - Require pull request before merging
-- Require status checks to pass: `ci`
-- Require linear history (enforces squash merge)
+- Require status checks to pass: `checks` (replaces `static` + `unit` after task.0260)
+- canary + staging: require linear history (squash merge)
+- main: DO NOT require linear history (allows merge commits from release/\*)
+- main: require `require-pinned-release-branch` check
+- **No CI bot bypass.** All changes go through PRs.
 
-### Branch Protection: staging
+### Branch Protection: deploy/\* (deploy state branches)
 
-- Require pull request before merging (optional — may receive automated promotions)
-- Require status checks to pass: `ci`
-
-### Branch Protection: main
-
-- Require pull request before merging
-- Require status checks to pass: `ci`, `require-pinned-release-branch`
-- DO NOT require linear history (allows merge commits from release/\*)
-- DO NOT require branches to be up to date
+- No branch protection required — these are machine-written, auto-merged
+- Argo CD has read access; CI bot has write access via PAT
+- Changes are always PRs from CI (never direct push), but no required checks gate them
+- Content is limited to `infra/k8s/overlays/{env}/` — image digests and EndpointSlice patches
 
 ### Workflow Enforcement
 

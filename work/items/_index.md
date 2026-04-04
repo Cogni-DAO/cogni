@@ -22,12 +22,10 @@
 | 0 | 1 | 2 | needs_triage | bug.0261 | CogniNodeRouter has four production reliability gaps — silent failures, no retry, unstructured logs |  |  |
 | 0 | 1 | 1 | needs_merge | task.0272 | Wire nodeId from repo-spec into logger base bindings and metrics default labels | Operator Plane | proj.operator-plane |
 | 0 | 1 | 2 | needs_triage | bug.0276 | K8s deployed app crashes to white — client-side exception after initial render | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | 1 | 3 | needs_implement | task.0285 | Provision script resilience — credential reset, migrations, complete .env |  |  |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
-| 0 | 1 | 3 | needs_implement | task.0285 | Provision script resilience — credential reset, migrations, complete .env | CI/CD & Services GitOps | proj.cicd-services-gitops |
-| 0 | 2 | 3 | needs_design | task.0283 | Provision VM as GitHub Action — eliminate local .env.{env} dependency | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD & Services GitOps | proj.cicd-services-gitops |
-| 0 | 3 | 8 | needs_design | task.0284 | Secrets single source of truth — ESO + secret store | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
@@ -62,6 +60,7 @@
 | 1 | 1 | 3 | needs_design | spike.0229 | Knowledge Aggregation — KnowledgeCapability Port | OSS Research AI Node | proj.oss-research-node |
 | 1 | 1 | 2 | needs_design | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 1 | 3 | needs_merge | task.0241 | Schedule Management AI Tools + Planner UI | Scheduler Evolution | proj.scheduler-evolution |
+| 1 | 1 | 5 | needs_implement | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD & Services GitOps | proj.cicd-services-gitops |
@@ -71,6 +70,8 @@
 | 1 | 2 | 3 | needs_design | task.0253 | Port resy reservations feature from cogni-resy-helper fork | Operator Plane | proj.operator-plane |
 | 1 | 2 | 2 | needs_triage | bug.0255 | Node landing pages have broken sign-in flow | Operator Plane | proj.operator-plane |
 | 1 | 2 | 3 | needs_design | task.0282 | Secure secret delivery for CI/CD deploys — replace SSH command-line passing | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 2 | 3 | needs_design | task.0283 | Provision VM as GitHub Action — eliminate local .env.{env} dependency |  |  |
+| 1 | 2 | 3 | needs_implement | task.0286 | Eval POC — 2 evals with 4o-mini judge, Langfuse datasets, canary HTTP target |  |  |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -82,6 +83,7 @@
 | 1 | 3 | 3 | needs_design | task.0259 | Unified rounded UI theming — buttons, cards, dialogs across all nodes | Operator Plane | proj.operator-plane |
 | 1 | 3 | 3 | needs_design | task.0278 | Git manager skill + GitHub App permissions for AI branch operations | Agentic Dev Setup | proj.agentic-dev-setup |
 | 1 | 3 | 2 | needs_closeout | task.0279 | Node-aware execution routing — nodeId in workflow input + per-node API dispatch | Unified Graph Launch | proj.unified-graph-launch |
+| 1 | 3 | 8 | needs_design | task.0284 | Secrets single source of truth — External Secrets Operator + secret store |  |  |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |
