@@ -17,12 +17,22 @@ tags: [deployment, k3s, argo-cd, ci-cd, infrastructure]
 ## Architecture
 
 ```
-push to branch → build-multi-node.yml (build 5 images, push GHCR)
-    → promote-k8s-staging.yml (update overlay digests, commit)
-        → Argo CD auto-syncs → verify-deployment.yml (health + smoke)
+push to canary → build-multi-node.yml (build 5 images, push GHCR)
+    → promote-and-deploy.yml:
+        1. resolve digests from GHCR
+        2. create PR against deploy/canary branch (overlay digest update)
+        3. squash-merge PR → Argo CD auto-syncs pods
+        4. deploy Compose infra via SSH (deploy-infra.sh)
+        5. verify health endpoints
+    → e2e.yml (Playwright smoke tests)
 ```
 
-Compose runs infra (Postgres, Temporal, LiteLLM, Redis, Caddy). k3s + Argo CD runs apps (operator, poly, resy, scheduler-worker). See [cd-pipeline-e2e.md](../spec/cd-pipeline-e2e.md).
+**Two trust surfaces, one repo:**
+
+- **App branches** (canary, staging, main) — code changes, human-reviewed PRs
+- **Deploy branches** (deploy/canary, deploy/staging, deploy/production) — rendered deploy state, CI-driven PRs with audit trail
+
+Argo CD watches `deploy/*` branches (orphan branches containing only `infra/catalog/`, `infra/k8s/base/`, and `infra/k8s/overlays/{env}/`). Compose runs infra (Postgres, Temporal, LiteLLM, Redis, Caddy). k3s + Argo CD runs apps (operator, poly, resy, scheduler-worker). See [cd-pipeline-e2e.md](../spec/cd-pipeline-e2e.md).
 
 ## 1. Provision VM (~5 min)
 
@@ -61,12 +71,24 @@ gh variable set DOMAIN --repo Cogni-DAO/node-template --env canary --body "test.
 ## 4. Push to trigger CI
 
 ```bash
-git push origin integration/multi-node   # or canary branch
+git push origin canary
 ```
 
-Workflows fire: `build-multi-node` → `promote-k8s-staging` → `verify-deployment`. Watch in GitHub Actions tab.
+Workflows fire: `build-multi-node` → `promote-and-deploy` (creates PR against `deploy/canary`, auto-merges, deploys infra, verifies health) → `e2e` (Playwright smoke). Watch in GitHub Actions tab.
 
-## 5. Verify
+## 5. Manual deploy-branch validation
+
+To deploy a specific image without CI, edit the digest directly on the deploy branch:
+
+```bash
+git clone --single-branch -b deploy/canary <repo-url> /tmp/deploy-test
+cd /tmp/deploy-test
+# Edit infra/k8s/overlays/canary/operator/kustomization.yaml — change digest field
+git commit -am "chore(cd): manual digest update" && git push
+# Argo syncs within 30s
+```
+
+## 6. Verify
 
 ```bash
 # Check from your machine
@@ -76,10 +98,10 @@ curl -sk https://resy-test.cognidao.org/livez
 
 # Check Argo status on VM
 ssh -i .local/test-vm-key root@<VM_IP> "kubectl -n argocd get applications"
-ssh -i .local/test-vm-key root@<VM_IP> "kubectl -n cogni-staging get pods"
+ssh -i .local/test-vm-key root@<VM_IP> "kubectl -n cogni-canary get pods"
 ```
 
-## 6. Destroy
+## 7. Destroy
 
 ```bash
 cd infra/provision/cherry/base
