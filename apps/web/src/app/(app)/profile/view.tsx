@@ -463,10 +463,56 @@ function ChatGptConnectFlow({
       </div>
 
       {/* Step 2: Copy & enter code */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
-          Step 2 — Enter this code
+          Step 2 — Enter your code
         </div>
+
+        {/* Visual reference: what the OpenAI page looks like */}
+        <p className="text-muted-foreground text-sm">
+          You&apos;ll see this page:
+        </p>
+        <div className="overflow-hidden rounded-xl border border-white/[0.06] bg-[#18181b] shadow-lg">
+          <div className="flex flex-col items-center gap-2.5 px-5 pb-4 pt-5">
+            {/* Codex CLI logo hint */}
+            <div className="flex h-11 w-11 items-center justify-center rounded-[10px] border border-white/10 bg-white text-black">
+              <span className="font-mono text-base leading-none tracking-tight">
+                &bull;-
+              </span>
+            </div>
+            <p className="mt-1 text-center font-semibold text-[13px] leading-snug text-white/90">
+              Use your device code to grant
+              <br />
+              access to Codex CLI
+            </p>
+            <p className="text-[11px] text-white/40">
+              Enter the 9-character code displayed in your terminal
+            </p>
+            {/* Code input boxes illustration (XXXX-XXXXX) */}
+            <div className="flex items-center justify-center gap-[3px] py-1.5">
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={`l-${i}`}
+                  className="h-10 w-[26px] rounded-md border border-white/10 bg-white/[0.03]"
+                />
+              ))}
+              <span className="mx-1.5 text-sm font-medium text-white/25">
+                -
+              </span>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div
+                  key={`r-${i}`}
+                  className="h-10 w-[26px] rounded-md border border-white/10 bg-white/[0.03]"
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Actual code to copy */}
+        <p className="text-sm font-medium text-foreground">
+          Copy your code and paste it there:
+        </p>
         <div className="flex items-center gap-3">
           <code className="rounded-md border border-border bg-muted px-4 py-2 font-mono text-xl tracking-widest">
             {deviceAuth?.userCode}
