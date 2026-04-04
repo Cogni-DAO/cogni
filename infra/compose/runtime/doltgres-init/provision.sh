@@ -90,11 +90,16 @@ for COGNI_DB in $(echo "$COGNI_NODE_DBS" | tr ',' ' '); do
   run_sql "$DB" "CREATE INDEX IF NOT EXISTS idx_knowledge_entity ON knowledge(entity_id)"
   run_sql "$DB" "CREATE INDEX IF NOT EXISTS idx_knowledge_source_type ON knowledge(source_type)"
 
-  # Grants
-  run_sql "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_reader"
-  run_sql "$DB" "GRANT SELECT ON ALL TABLES IN SCHEMA public TO knowledge_reader"
-  run_sql "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_writer"
-  run_sql "$DB" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO knowledge_writer"
+  # Grants — Doltgres has limited GRANT support; attempt but warn on failure.
+  # First probe whether GRANT works at all on this Doltgres version.
+  if PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d "$DB" \
+       -c "GRANT USAGE ON SCHEMA public TO knowledge_reader" 2>/dev/null; then
+    run_sql "$DB" "GRANT SELECT ON ALL TABLES IN SCHEMA public TO knowledge_reader"
+    run_sql "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_writer"
+    run_sql "$DB" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO knowledge_writer"
+  else
+    echo "   ⚠ GRANT not supported by this Doltgres version — skipping (roles are permissive by default)"
+  fi
 
   # Dolt commit (schema + roles only — seed data comes from pnpm db:seed:doltgres)
   run_sql "$DB" "SELECT dolt_commit('-Am', 'provision: schema + roles')"
