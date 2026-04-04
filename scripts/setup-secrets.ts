@@ -692,14 +692,21 @@ const SECRETS: Secret[] = [
     required: true,
     category: "Infrastructure (derived)",
     source: "agent",
-    description: "Comma-separated per-node database names (derived from nodes/*/)",
+    description:
+      "Comma-separated per-node database names (derived from nodes/*/)",
     steps: ["Auto-derived from nodes/*/ directories (excludes node-template)"],
     generate: () => {
       const { readdirSync, existsSync } = require("node:fs");
       const { join } = require("node:path");
-      const root = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
+      const root = execSync("git rev-parse --show-toplevel", {
+        encoding: "utf-8",
+      }).trim();
       return readdirSync(join(root, "nodes"))
-        .filter((d: string) => d !== "node-template" && existsSync(join(root, "nodes", d, ".cogni", "repo-spec.yaml")))
+        .filter(
+          (d: string) =>
+            d !== "node-template" &&
+            existsSync(join(root, "nodes", d, ".cogni", "repo-spec.yaml"))
+        )
         .map((d: string) => `cogni_${d}`)
         .join(",");
     },
@@ -709,17 +716,31 @@ const SECRETS: Secret[] = [
     required: true,
     category: "Infrastructure (derived)",
     source: "agent",
-    description: "Per-node billing callback endpoints (derived from repo-spec node_ids + NodePort map)",
+    description:
+      "Per-node billing callback endpoints (derived from repo-spec node_ids + NodePort map)",
     steps: ["Auto-derived from nodes/*/.cogni/repo-spec.yaml"],
     generate: () => {
       const { readdirSync, readFileSync, existsSync } = require("node:fs");
       const { join } = require("node:path");
-      const root = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
-      const portMap: Record<string, number> = { operator: 30000, poly: 30100, resy: 30300 };
+      const root = execSync("git rev-parse --show-toplevel", {
+        encoding: "utf-8",
+      }).trim();
+      const portMap: Record<string, number> = {
+        operator: 30000,
+        poly: 30100,
+        resy: 30300,
+      };
       return readdirSync(join(root, "nodes"))
-        .filter((d: string) => d !== "node-template" && existsSync(join(root, "nodes", d, ".cogni", "repo-spec.yaml")))
+        .filter(
+          (d: string) =>
+            d !== "node-template" &&
+            existsSync(join(root, "nodes", d, ".cogni", "repo-spec.yaml"))
+        )
         .map((d: string) => {
-          const spec = readFileSync(join(root, "nodes", d, ".cogni", "repo-spec.yaml"), "utf-8");
+          const spec = readFileSync(
+            join(root, "nodes", d, ".cogni", "repo-spec.yaml"),
+            "utf-8"
+          );
           const nodeId = spec.match(/^node_id:\s*"([^"]+)"/m)?.[1] ?? d;
           const port = portMap[d] ?? 30000;
           return `${nodeId}=http://host.docker.internal:${port}/api/internal/billing/ingest`;
@@ -1058,20 +1079,22 @@ async function main() {
       }
       for (const env of missingEnvs) {
         // Reuse existing key from .local/{env}-vm-key if available (matches what's on that env's VM)
-        const repoRoot = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
+        const repoRoot = execSync("git rev-parse --show-toplevel", {
+          encoding: "utf-8",
+        }).trim();
         const localKeyPath = `${repoRoot}/.local/${env}-vm-key`;
         const { existsSync, readFileSync } = require("node:fs");
         let privKey: string;
         if (existsSync(localKeyPath)) {
           privKey = readFileSync(localKeyPath, "utf-8");
-          console.log(`  ${DIM}Using existing key from .local/${env}-vm-key${RESET}`);
+          console.log(
+            `  ${DIM}Using existing key from .local/${env}-vm-key${RESET}`
+          );
         } else {
           privKey = generateSSHKey(env);
         }
         setSecret(secret.name, privKey, env);
-        console.log(
-          `  ${GREEN}SSH_DEPLOY_KEY${RESET} set for ${env}`
-        );
+        console.log(`  ${GREEN}SSH_DEPLOY_KEY${RESET} set for ${env}`);
       }
       set++;
       continue;
@@ -1220,8 +1243,9 @@ async function main() {
     if (!secrets || Object.keys(secrets).length === 0) continue;
 
     const envFile = `${repoRoot}/.env.${env}`;
-    const { readFileSync, writeFileSync, chmodSync, existsSync } =
-      await import("node:fs");
+    const { readFileSync, writeFileSync, chmodSync, existsSync } = await import(
+      "node:fs"
+    );
 
     // Merge with existing .env file — never lose previously set values
     const existing: Record<string, string> = {};
