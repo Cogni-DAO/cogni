@@ -181,3 +181,4 @@ pnpm check
 - [Multi-Node Tenancy Spec](../../docs/spec/multi-node-tenancy.md) — DB_PER_NODE
 - [Graph Execution Spec](../../docs/spec/graph-execution.md) — UNIFIED_GRAPH_EXECUTOR
 - [Multi-Node Graph Execution Scaling](../../docs/research/multi-node-graph-execution-scaling.md)
+- Handoff: [canary-deploy-secrets-infra](../handoffs/canary-deploy-secrets-infra.handoff.md)
