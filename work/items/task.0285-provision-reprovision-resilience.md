@@ -110,12 +110,18 @@ Later values override earlier ones in bash `source` — so the derived `DATABASE
 - **Store postgres password hash in a sidecar file and compare**: Over-engineered. Just test auth — it's the direct check.
 - **Generate `.env` from a template engine**: Adds a dependency. SCP + append is simpler.
 
+**Fix 3: Cherry Servers SSH key name collision** (Phase 3, tofu apply)
+
+Cherry Servers API rejects duplicate SSH key names globally. When a second tofu workspace (e.g. `preview`) tries to create a key with the same name as an existing one (from `test` workspace), it fails with 400. The script has no recovery path — requires manual `tofu import`.
+
+Fix: before `tofu apply`, check if the key name exists via Cherry API. If it does, import it into the current workspace state. Or use a unique name per workspace (include workspace name or hash).
+
 ### Invariants
 
 - [ ] IDEMPOTENT_PROVISION: Running provision twice with same secrets produces same result
 - [ ] CREDENTIAL_RESET: Changed postgres/temporal creds trigger volume reset, not timeout
 - [ ] MIGRATIONS_RUN: All node DBs have schema after provision (not deferred to k8s)
-- [ ] COMPLETE_ENV: No compose warnings about missing vars
+- [ ] SSH_KEY_IDEMPOTENT: Multi-workspace provisioning handles pre-existing Cherry SSH keys
 - [ ] NO_NEW_DEPS: No new tools or languages required
 
 ### Files
