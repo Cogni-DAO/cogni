@@ -23,8 +23,11 @@
 | 0 | 1 | 1 | needs_merge | task.0272 | Wire nodeId from repo-spec into logger base bindings and metrics default labels | Operator Plane | proj.operator-plane |
 | 0 | 1 | 2 | needs_triage | bug.0276 | K8s deployed app crashes to white — client-side exception after initial render | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
+| 0 | 1 | 3 | needs_implement | task.0285 | Provision script resilience — credential reset, migrations, complete .env | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | 2 | 3 | needs_design | task.0283 | Provision VM as GitHub Action — eliminate local .env.{env} dependency | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | 3 | 8 | needs_design | task.0284 | Secrets single source of truth — ESO + secret store | CI/CD & Services GitOps | proj.cicd-services-gitops |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
