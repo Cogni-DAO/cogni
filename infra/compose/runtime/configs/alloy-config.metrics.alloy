@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 //
-// Alloy configuration with logs + metrics shipping (preview/production only)
+// Alloy configuration with logs + metrics shipping (canary/preview/production)
 // Requires: PROMETHEUS_REMOTE_WRITE_URL, PROMETHEUS_USERNAME, PROMETHEUS_PASSWORD, METRICS_TOKEN
 // Use alloy-config.alloy for logs-only (local dev)
 
@@ -47,7 +47,7 @@ discovery.relabel "docker_logs" {
 
   rule {
     source_labels = ["env"]
-    regex         = "^(local|preview|production)$"
+    regex         = "^(local|canary|preview|production)$"
     action        = "keep"
   }
 }
@@ -138,6 +138,56 @@ loki.write "loki" {
       password = sys.env("LOKI_PASSWORD")
     }
   }
+}
+
+// =============================================================================
+// K8s Pod Log Collection (k3s)
+// =============================================================================
+// Tails pod logs from /var/log/pods/ for k3s-managed app pods (operator, poly, resy).
+// Only ships logs from cogni-* namespaces. Excludes kube-system and argocd.
+// Requires host mount: /var/log/pods:/var/log/pods:ro
+// On VMs without k3s, local.file_match simply finds no files — zero overhead.
+
+local.file_match "k8s_pods" {
+  path_targets = [{
+    __path__ = "/var/log/pods/cogni-*/**/*.log",
+  }]
+  sync_period = "10s"
+}
+
+loki.source.file "k8s_pods" {
+  targets    = local.file_match.k8s_pods.targets
+  forward_to = [loki.process.k8s_pod_logs.receiver]
+}
+
+loki.process "k8s_pod_logs" {
+  // Parse CRI log format (k3s/containerd: "timestamp stream flags message")
+  stage.cri {}
+
+  // Extract namespace, pod, container from /var/log/pods/<ns>_<pod>_<uid>/<container>/*.log
+  stage.regex {
+    source     = "filename"
+    expression = ".*/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)_[^/]+/(?P<container>[^/]+)/.*"
+  }
+
+  stage.labels {
+    values = {
+      namespace = "",
+      pod       = "",
+      container = "",
+      service   = "container",
+    }
+  }
+
+  stage.static_labels {
+    values = {
+      app    = "cogni-template",
+      source = "k8s",
+      env    = sys.env("DEPLOY_ENVIRONMENT"),
+    }
+  }
+
+  forward_to = [loki.write.loki.receiver]
 }
 
 // =============================================================================
