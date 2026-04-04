@@ -45,14 +45,14 @@ discovery.relabel "docker_logs" {
 
   rule {
     target_label = "env"
-    replacement  = sys.env("DEPLOY_ENVIRONMENT")  // local | preview | production
+    replacement  = sys.env("DEPLOY_ENVIRONMENT")  // local | canary | preview | production
   }
 
   // Fail-closed: Drop logs if DEPLOY_ENVIRONMENT is not valid
   // Prevents mislabeling if env var is unset or invalid
   rule {
     source_labels = ["env"]
-    regex         = "^(local|preview|production)$"
+    regex         = "^(local|canary|preview|production)$"
     action        = "keep"
   }
 }

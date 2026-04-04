@@ -313,6 +313,8 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host/root:ro
+      # K8s pod logs for k3s log shipping (no-op on hosts without k3s)
+      - /var/log/pods:/var/log/pods:ro
     command:
       - run
       - /etc/alloy/config.alloy
