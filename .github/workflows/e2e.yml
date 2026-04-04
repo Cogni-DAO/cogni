@@ -39,11 +39,14 @@ jobs:
             echo "Running E2E against $TEST_BASE_URL"
           fi
 
+      # workflow_run.head_sha resolves to the default branch (staging) SHA,
+      # not the canary source SHA. Checkout the actual app branch so we get
+      # the correct test files matching the deployed code.
       - name: Checkout
         if: steps.gate.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Setup Node.js
         if: steps.gate.outputs.skip != 'true'
