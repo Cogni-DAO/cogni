@@ -13,7 +13,7 @@ spec:
   generators:
     - git:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        revision: canary
+        revision: deploy/canary
         files:
           - path: "infra/catalog/*.yaml"
   template:
@@ -26,7 +26,7 @@ spec:
       project: default
       source:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        targetRevision: canary
+        targetRevision: deploy/canary
         path: "infra/k8s/overlays/canary/{{name}}"
       destination:
         server: https://kubernetes.default.svc
