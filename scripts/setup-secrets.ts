@@ -1152,9 +1152,16 @@ async function main() {
     if (existsSync(envFile)) {
       const content = readFileSync(envFile, "utf-8");
       for (const line of content.split("\n")) {
-        const match = line.match(/^([A-Z_][A-Z0-9_]*)='(.*)'$/);
-        if (match) {
-          existing[match[1]!] = match[2]!;
+        if (line.startsWith("#") || !line.includes("=")) continue;
+        const eqIdx = line.indexOf("=");
+        const key = line.slice(0, eqIdx);
+        let val = line.slice(eqIdx + 1);
+        // Strip surrounding single quotes if present
+        if (val.startsWith("'") && val.endsWith("'")) {
+          val = val.slice(1, -1).replace(/'\\'''/g, "'");
+        }
+        if (/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+          existing[key] = val;
         }
       }
     }
