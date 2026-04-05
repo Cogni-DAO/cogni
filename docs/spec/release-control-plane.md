@@ -334,11 +334,19 @@ type SupersededSignal = { by: string };
 
 ### EnvironmentControllerWorkflow
 
+Subsumes promotion policy — the controller self-selects candidates via a timer-based loop, avoiding a third cooperating workflow.
+
 ```typescript
 // One workflow per environment. Very long-running (effectively permanent, use continue-as-new).
+// Contains promotion policy as an internal timer loop:
+//   - Every `selectionIntervalMs` (default 60s), query for latest eligible candidate
+//   - If candidate exists, soak window passed, and no active review → deploy
+//   - This eliminates the need for a separate PromotionPolicyWorkflow
 
 interface EnvironmentControllerInput {
   env: "canary" | "preview" | "production";
+  selectionIntervalMs?: number; // Default 60_000 (1 min)
+  soakWindowMinutes?: number; // Default 15 (preview), 0 (canary)
 }
 
 // Signals
@@ -485,41 +493,43 @@ Data sources (reusing existing patterns):
 
 API contract: `release.status.v1.contract.ts` with standard Zod schemas.
 
-## Migration Path
+## Credential Management
 
-### Phase 0: Fix the immediate blocker (this PR)
+The `updateDeployBranch` activity requires git push access to `deploy/*` branches. Two options, in order of preference:
 
-1. Fix E2E smoke tests (operator a11y layout)
-2. Get one clean canary→preview→release flow through existing pipeline
-3. This proves the images work; the control plane improves the orchestration
+1. **GitHub App installation token** (preferred): Short-lived (1hr), scoped to `contents:write` on the single repo. The scheduler-worker refreshes via `ACTIONS_AUTOMATION_BOT_APP_ID` + private key (already used by existing CI workflows as `ACTIONS_AUTOMATION_BOT_PAT`). Activity calls `POST /app/installations/{id}/access_tokens` per invocation.
 
-### Phase 1: State machine + webhook receiver (1-2 PRs)
+2. **Long-lived PAT** (fallback): The existing `ACTIONS_AUTOMATION_BOT_PAT` secret, mounted as a Kubernetes secret into the scheduler-worker pod. Simpler but violates least-privilege (PAT has broader scope).
 
-1. Add DB tables (`release_candidates`, `candidate_transitions`, `environment_state`, `promotion_decisions`)
-2. Add `github-actions` DataSourceRegistration (webhook normalizer for `workflow_run` events)
-3. Add `ReleaseCandidateWorkflow` and `EnvironmentControllerWorkflow` to `@cogni/temporal-workflows`
-4. Add release activities to scheduler-worker
-5. Add `POST /api/v1/release/build-complete` webhook endpoint (operator node)
+**Constraint:** `deploy/*` branches should have "restrict push" to only the CI bot account. This prevents human accidents and ensures all deploy-branch changes are auditable through the control plane.
 
-### Phase 2: GH Actions simplification (1 PR)
+## Rollback Mechanism
 
-1. Replace `promote-and-deploy.yml` relay with `orchestrator.yml` + reusable `_build-node.yml`
-2. Strip `e2e.yml` to pure `workflow_dispatch` test runner
-3. Move deploy-branch updates to Temporal activity
-4. Switch canary deploy-branch to direct commits (kill auto-PR)
+Rollback means: redeploy the previous stable SHA's digests to the target environment.
 
-### Phase 3: Branch model migration
+1. `EnvironmentController` receives `RollbackSignal`
+2. Activity queries `environment_state` for the environment's `previous_stable_sha` (tracked alongside `current_sha`)
+3. Activity looks up `release_candidates` for that SHA's digests
+4. Activity calls `updateDeployBranch` with the old digests (new commit, not git revert)
+5. Argo CD syncs the old digests → pods roll back
+6. Candidate that was running gets status `rolled_back`
 
-1. Make `canary` the default branch
-2. Redirect feature PRs from `staging` → `canary`
-3. Archive `staging` branch (tag for history)
-4. Update branch protection rules
+**Constraint:** `environment_state` must track both `current_sha` and `previous_stable_sha`. Rollback is always one step back — cascading rollback requires manual intervention.
 
-### Phase 4: Visualization (1 PR)
+## Staging Decommission Checklist
 
-1. Add `release.status.v1.contract.ts`
-2. Build swimlane dashboard on operator `/release` route
-3. Wire approval action (button → Temporal signal → GH Environment approval)
+Eliminating `staging` as a code branch requires updating every reference:
+
+- `.github/workflows/*.yml` — all `branches: [staging]` triggers and `--ref staging` dispatches
+- Branch protection rules — remove staging protection, ensure canary has equivalent rules
+- `workflow_run` triggers — these fire from default branch only; changing default to canary handles this
+- Open PRs targeting staging — close or retarget to canary
+- `docs/spec/ci-cd.md` — update branch model documentation
+- GitHub repo settings — change default branch from staging to canary
+- 5+ stale release PRs targeting main — close, new releases will come from canary flow
+- `CLAUDE.md` / `AGENTS.md` references to staging workflow
+
+**This is a high-blast-radius migration. It should be its own task with a dedicated checklist, executed only after the pipeline is green end-to-end.**
 
 ## Invariants
 

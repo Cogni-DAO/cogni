@@ -11,6 +11,7 @@ outcome: "Canary handles 1000+ AI commits/day. Preview gets policy-selected snap
 project: proj.cicd-services-gitops
 assignees: [derekg1729]
 branch: design/release-control-plane
+spec_refs: [spec.release-control-plane]
 created: 2026-04-05
 updated: 2026-04-05
 labels: [ci-cd, temporal, deployment, architecture]
@@ -20,93 +21,58 @@ labels: [ci-cd, temporal, deployment, architecture]
 
 ## Design
 
+See [Release Control Plane spec](../../docs/spec/release-control-plane.md) for full architecture, state machines, DB schema, workflow definitions, and invariants.
+
 ### Outcome
 
-AI agents ship 1000+ commits/day to canary without drowning humans in noise. Preview gets policy-selected snapshots (not every green SHA). Production gets human-approved, exact-SHA-matching releases. No split-brain between code and images.
+AI agents ship 1000+ commits/day to canary without drowning humans in noise. Preview gets policy-selected snapshots. Production gets human-approved, exact-SHA releases. No split-brain.
 
 ### Approach
 
-**Solution**: Two Temporal state machines — `ReleaseCandidateWorkflow(sha)` (many, per-commit) and `EnvironmentControllerWorkflow(env)` (scarce, per-environment) — with `PromotionPolicyWorkflow` running periodic selection. GH Actions emits build/test facts via webhook; Temporal owns all state transitions. Deploy-branch updates via Temporal activity (direct commits, no PRs for canary/preview). Kill `staging` as a code branch; feature PRs target `canary`. Release branches cut late, from canary, at the exact SHA running in preview.
+Two Temporal state machines (`ReleaseCandidateWorkflow` per SHA, `EnvironmentControllerWorkflow` per environment with built-in promotion policy). GH Actions emits facts; Temporal owns all state transitions.
 
-**Reuses**:
+**Reuses:** `@cogni/ingestion-core` webhook pattern, `@cogni/temporal-workflows` activity tiers, `@cogni/db-schema` append-only audit patterns, `scripts/ci/promote-k8s-image.sh`, existing operator webhook receiver.
 
-- `@cogni/ingestion-core` `DataSourceRegistration` + `WebhookNormalizer` pattern for GH Actions → control plane fact ingestion
-- `@cogni/temporal-workflows` activity profile tiers and workflow patterns
-- `@cogni/db-schema` Drizzle table patterns (append-only audit logs like attribution)
-- `scripts/ci/promote-k8s-image.sh` for deploy-branch updates (called from Temporal activity)
-- Existing operator webhook receiver service pattern
-- `@cogni/ids` for deterministic workflow IDs
+**Rejected:** Three-branch code promotion (split-brain), GH Actions as state machine (3-level chain limit), auto-promote every green SHA (noise at scale), PR-per-canary-promotion (100+ PRs/day).
 
-**Rejected**:
+## Prerequisite: Pipeline Must Be Green First
 
-- **Three-branch code promotion (canary → staging → main)**: Creates split-brain between code branches and image promotion. Staging as a long-lived code branch forces code to merge through an intermediate branch that adds latency, merge conflicts, and desynchronization from the images actually deployed.
-- **GH Actions as the state machine**: `workflow_run` limited to 3-level chaining, only fires from default branch, provides no durable state, no policy queries, no soak windows. Not designed for release orchestration.
-- **Auto-promote every green canary to preview**: At 1000 commits/day, this is noise. Preview resets every few minutes, humans can never meaningfully review, "green" becomes statistical noise.
-- **PR-per-promotion for canary deploy branch**: 100+ PRs/day is pure noise. Direct bot commits are the standard GitOps pattern for high-churn environments.
+**Do not build this until the existing canary→preview flow works end-to-end.** See task.0291 (v0 path to green) for the prerequisite work. This task picks up after the pipeline is proven.
 
-### Invariants
+## Migration Phases
 
-- [ ] CANDIDATE_IDENTITY: SHA + digests are one object, never separate tracks (spec: release-control-plane)
-- [ ] BUILD_ONCE: Images built once on canary, promoted by digest to all environments (spec: release-control-plane)
-- [ ] PREVIEW_POLICY_NOT_PASS: Preview updates on policy (soak + availability), not every green SHA (spec: release-control-plane)
-- [ ] TEMPORAL_OWNS_STATE: GH Actions emits facts only, Temporal owns transitions (spec: release-control-plane)
-- [ ] HUMAN_GATE_AT_PROD: Single human approval at preview→production boundary (spec: release-control-plane)
-- [ ] DEPLOY_BRANCH_DIRECT: Canary/preview deploy-branch updates are direct commits, not PRs (spec: release-control-plane)
-- [ ] RELEASE_BRANCH_LATE: Release branches cut from canary at exact approved SHA (spec: release-control-plane)
-- [ ] APPEND_ONLY_AUDIT: candidate_transitions and promotion_decisions are immutable audit logs (spec: release-control-plane)
-- [ ] SIMPLE_SOLUTION: Reuses existing ingestion, Temporal, and webhook patterns
-- [ ] ARCHITECTURE_ALIGNMENT: Follows hexagonal layering — ports in packages, adapters in services
+### Phase 1: State machine + webhook receiver (1-2 PRs)
 
-### Phases
-
-**Phase 0** (immediate, this branch): Fix E2E smoke → get one clean flow through existing pipeline
-**Phase 1** (1-2 PRs): DB tables + Temporal workflows + webhook receiver
-**Phase 2** (1 PR): GH Actions simplification (orchestrator + reusable workflows)
-**Phase 3** (1 PR): Branch model migration (canary as default branch)
-**Phase 4** (1 PR): Swimlane visualization dashboard
-
-### Files
-
-**Spec:**
-
-- Create: `docs/spec/release-control-plane.md` — full spec (done)
-
-**Phase 1 — State Machine:**
-
-- Create: `packages/db-schema/src/release.ts` — release_candidates, candidate_transitions, environment_state, promotion_decisions tables
-- Create: `packages/temporal-workflows/src/workflows/release-candidate.workflow.ts` — per-SHA workflow
-- Create: `packages/temporal-workflows/src/workflows/environment-controller.workflow.ts` — per-env workflow
-- Create: `packages/temporal-workflows/src/workflows/promotion-policy.workflow.ts` — periodic selector
-- Modify: `packages/temporal-workflows/src/activity-types.ts` — add ReleaseActivities interface
+- Create: `packages/db-schema/src/release.ts` — 4 tables (release_candidates, candidate_transitions, environment_state, promotion_decisions)
+- Create: `packages/temporal-workflows/src/workflows/release-candidate.workflow.ts`
+- Create: `packages/temporal-workflows/src/workflows/environment-controller.workflow.ts`
+- Modify: `packages/temporal-workflows/src/activity-types.ts` — add ReleaseActivities
 - Create: `services/scheduler-worker/src/activities/release/` — activity implementations
 - Create: `nodes/operator/app/src/app/api/v1/release/build-complete/route.ts` — webhook endpoint
-- Create: `nodes/operator/app/src/features/release/` — feature slice for release control
+- Create: `nodes/operator/app/src/features/release/` — feature slice
 
-**Phase 2 — GH Actions:**
+### Phase 2: GH Actions simplification (1 PR)
 
-- Create: `.github/workflows/orchestrator.yml` — single entry point on canary push
-- Create: `.github/workflows/_build-node.yml` — reusable build workflow
-- Modify: `.github/workflows/e2e.yml` — strip to pure workflow_dispatch test runner
+- Create: `.github/workflows/orchestrator.yml` — single entry on canary push
+- Create: `.github/workflows/_build-node.yml` — reusable build
+- Modify: `.github/workflows/e2e.yml` — strip to workflow_dispatch test runner
 - Delete: `.github/workflows/staging-preview.yml`
-- Delete: `.github/workflows/promote-and-deploy.yml` relay chain (replaced by Temporal)
+- Delete: `.github/workflows/promote-and-deploy.yml` relay chain
 
-**Phase 3 — Branch Model:**
+### Phase 3: Branch model migration (separate task)
 
-- Modify: `.github/workflows/ci.yaml` — update branch triggers
-- Modify: `docs/spec/ci-cd.md` — update branch model documentation
+- Make `canary` the default branch — **high blast radius, own task + checklist**
+- See spec "Staging Decommission Checklist" for full scope
 
-**Phase 4 — Visualization:**
+### Phase 4: Visualization (1 PR)
 
-- Create: `nodes/operator/app/src/contracts/release.status.v1.contract.ts` — API contract
-- Create: `nodes/operator/app/src/app/(authenticated)/release/` — dashboard page
+- Create: `nodes/operator/app/src/contracts/release.status.v1.contract.ts`
+- Create: `nodes/operator/app/src/app/(authenticated)/release/` — swimlane dashboard
 
 ## Validation
 
 - [ ] Spec reviewed and approved: `docs/spec/release-control-plane.md`
-- [ ] Phase 0: E2E smoke tests pass, one clean canary→preview flow works
-- [ ] Phase 1: ReleaseCandidate and EnvironmentController workflows registered in Temporal
-- [ ] Phase 1: GH Actions webhook → operator → Temporal signal works end-to-end
-- [ ] Phase 2: `orchestrator.yml` replaces `promote-and-deploy.yml` relay chain
-- [ ] Phase 3: `canary` is default branch, feature PRs target canary
+- [ ] Phase 1: Workflows registered in Temporal, webhook → signal works end-to-end
+- [ ] Phase 2: `orchestrator.yml` replaces relay chain, canary deploy-branch uses direct commits
+- [ ] Phase 3: Decommission staging (separate task with own checklist)
 - [ ] Phase 4: Swimlane dashboard renders environment state and candidate queue
-- [ ] All invariants in spec are enforced (code review checklist)
