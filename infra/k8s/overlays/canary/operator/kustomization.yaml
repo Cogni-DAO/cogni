@@ -84,6 +84,9 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "operator-node-app-secrets"
+  # Secret: operator-node-app-secrets must include DOLTGRES_URL (optional).
+  # Format: postgresql://knowledge_writer:<password>@operator-doltgres-external:5435/knowledge_operator
+  #
   # EndpointSlice IPs + service-name label fix.
   # namePrefix renames Services but NOT the kubernetes.io/service-name label
   # inside EndpointSlices. Without this fix, DNS can't associate the
@@ -128,3 +131,13 @@ patches:
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-redis-external"
+  - target:
+      kind: EndpointSlice
+      name: doltgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "operator-doltgres-external"

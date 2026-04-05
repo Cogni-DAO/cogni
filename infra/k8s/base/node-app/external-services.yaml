@@ -92,6 +92,34 @@ ports:
     name: http
 
 ---
+# --- Doltgres (Knowledge Data Plane) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: doltgres-external
+spec:
+  clusterIP: None
+  ports:
+    - port: 5435
+      protocol: TCP
+      name: doltgres
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: doltgres-external-1
+  labels:
+    kubernetes.io/service-name: doltgres-external
+addressType: IPv4
+endpoints:
+  - addresses:
+      - "10.0.0.1"
+ports:
+  - port: 5435
+    protocol: TCP
+    name: doltgres
+
+---
 # --- Redis ---
 apiVersion: v1
 kind: Service

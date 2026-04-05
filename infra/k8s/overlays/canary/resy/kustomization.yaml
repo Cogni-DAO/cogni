@@ -88,6 +88,9 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "resy-node-app-secrets"
+  # Secret: resy-node-app-secrets must include DOLTGRES_URL (optional).
+  # Format: postgresql://knowledge_writer:<password>@resy-doltgres-external:5435/knowledge_resy
+  #
   # EndpointSlice IPs + service-name label fix (namePrefix doesn't update label values)
   - target:
       kind: EndpointSlice
@@ -129,3 +132,13 @@ patches:
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-redis-external"
+  - target:
+      kind: EndpointSlice
+      name: doltgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "resy-doltgres-external"

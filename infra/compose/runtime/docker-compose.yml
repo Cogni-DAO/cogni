@@ -98,6 +98,8 @@ services:
       - OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN?OPENCLAW_GITHUB_RW_TOKEN is required}
       # Redis (stream plane — ephemeral only)
       - REDIS_URL=redis://redis:6379
+      # Doltgres (Knowledge Data Plane) — optional, knowledge features disabled when absent
+      - DOLTGRES_URL
     volumes:
       - repo_data:/repo:ro
     depends_on:
@@ -267,6 +269,58 @@ services:
       - DATABASE_URL=${DATABASE_URL?DATABASE_URL is required}
     depends_on:
       postgres:
+        condition: service_healthy
+
+  # =============================================================================
+  # Doltgres (Knowledge Data Plane)
+  # Per knowledge-data-plane spec: versioned knowledge store with git-like history.
+  # Postgres-compatible wire protocol. Optional — app gracefully handles absence.
+  # =============================================================================
+
+  doltgres:
+    image: dolthub/doltgresql:latest
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    environment:
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+    # Expose on host port 5435 (5432 taken by Postgres) for k3s pods via EndpointSlice.
+    ports:
+      - "5435:5432"
+    volumes:
+      - doltgres_data:/var/lib/doltgres
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/5432' 2>/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 15s
+
+  doltgres-provision:
+    image: postgres:15
+    profiles:
+      - bootstrap
+    restart: "no"
+    networks:
+      - internal
+    environment:
+      DOLTGRES_HOST: doltgres
+      DOLTGRES_PORT: 5432
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+      DOLTGRES_READER_PASSWORD: ${DOLTGRES_READER_PASSWORD:-knowledge_reader}
+      DOLTGRES_WRITER_PASSWORD: ${DOLTGRES_WRITER_PASSWORD:-knowledge_writer}
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS}
+    volumes:
+      - ./doltgres-init/provision.sh:/app/provision.sh:ro
+    entrypoint: ["/bin/bash", "/app/provision.sh"]
+    depends_on:
+      doltgres:
         condition: service_healthy
 
   repo-init:
@@ -645,5 +699,7 @@ volumes:
     name: pnpm_store
   tigerbeetle_data:
     name: tigerbeetle_data
+  doltgres_data:
+    name: doltgres_data
   cogni_workspace:
     name: cogni_workspace

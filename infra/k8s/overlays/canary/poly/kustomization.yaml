@@ -88,6 +88,10 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "poly-node-app-secrets"
+  # Secret: poly-node-app-secrets must include DOLTGRES_URL_POLY (optional).
+  # Note: poly env schema uses DOLTGRES_URL_POLY (node-suffixed), not DOLTGRES_URL.
+  # Format: postgresql://knowledge_writer:<password>@poly-doltgres-external:5435/knowledge_poly
+  #
   # EndpointSlice IPs + service-name label fix (namePrefix doesn't update label values)
   - target:
       kind: EndpointSlice
@@ -129,3 +133,13 @@ patches:
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "poly-redis-external"
+  - target:
+      kind: EndpointSlice
+      name: doltgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "poly-doltgres-external"
