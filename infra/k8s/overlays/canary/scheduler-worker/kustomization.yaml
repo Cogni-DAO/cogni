@@ -38,32 +38,32 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
   - target:
       kind: EndpointSlice
       name: postgres-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
   - target:
       kind: EndpointSlice
       name: app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
   - target:
       kind: EndpointSlice
       name: poly-app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
   - target:
       kind: EndpointSlice
       name: resy-app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
