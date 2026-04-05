@@ -48,7 +48,7 @@ case "$DEPLOY_ENV" in
     DOMAIN="${DOMAIN:-test.cognidao.org}"
     POLY_DOMAIN="${POLY_DOMAIN:-poly-test.cognidao.org}"
     RESY_DOMAIN="${RESY_DOMAIN:-resy-test.cognidao.org}"
-    WORKSPACE="test"
+    WORKSPACE="canary"
     ;;
   preview)
     BRANCH="staging"
@@ -184,7 +184,7 @@ else
   TMPDIR=$(mktemp -d)
   log_info "Generating ephemeral SSH keypair..."
   ssh-keygen -t ed25519 -f "$TMPDIR/deploy_key" -C "cogni-${DEPLOY_ENV}-vm" -N "" -q
-  cp "$TMPDIR/deploy_key.pub" "$PROVISION_DIR/keys/cogni_template_test_deploy.pub"
+  cp "$TMPDIR/deploy_key.pub" "$PROVISION_DIR/keys/cogni_${DEPLOY_ENV}_deploy.pub"
   cp "$TMPDIR/deploy_key" "$REPO_ROOT/.local/${DEPLOY_ENV}-vm-key"
   chmod 600 "$REPO_ROOT/.local/${DEPLOY_ENV}-vm-key"
 fi
@@ -244,14 +244,14 @@ log_info "All secrets loaded from .env.${DEPLOY_ENV}"
 # ══════════════════════════════════════════════════════════════
 log_step "Phase 3: Provision VM"
 
-TFVARS="$PROVISION_DIR/terraform.test.tfvars"
+TFVARS="$PROVISION_DIR/terraform.${WORKSPACE}.tfvars"
 cat > "$TFVARS" << EOF
-environment          = "preview"
-vm_name_prefix       = "cogni-test"
+environment          = "${DEPLOY_ENV}"
+vm_name_prefix       = "cogni"
 project_id           = "${CHERRY_PROJECT_ID}"
 plan                 = "B1-6-6gb-100s-shared"
 region               = "LT-Siauliai"
-public_key_path      = "keys/cogni_template_test_deploy.pub"
+public_key_path      = "keys/cogni_${DEPLOY_ENV}_deploy.pub"
 ghcr_deploy_username = "${GHCR_USERNAME}"
 cogni_repo_url       = "${COGNI_REPO_URL}"
 cogni_repo_ref       = "${COGNI_REPO_REF}"
@@ -273,7 +273,7 @@ log_info "Selecting workspace: $WORKSPACE"
 tofu workspace new "$WORKSPACE" 2>/dev/null || tofu workspace select "$WORKSPACE"
 
 log_info "Planning..."
-tofu plan -var-file="terraform.test.tfvars" -out=tfplan
+tofu plan -var-file="terraform.${WORKSPACE}.tfvars" -out=tfplan
 
 echo ""
 log_warn "About to provision a VM. This costs money and takes ~5 minutes."
@@ -713,7 +713,7 @@ echo "    3. Re-run scorecard: ssh -i .local/${DEPLOY_ENV}-vm-key root@\$VM_IP '
 echo "    4. k8s secrets already created directly on cluster (no SOPS needed for test)"
 echo ""
 echo "  Destroy when done:"
-echo "    cd infra/provision/cherry/base && tofu workspace select test && tofu destroy -var-file=terraform.test.tfvars"
+echo "    cd infra/provision/cherry/base && tofu workspace select ${WORKSPACE} && tofu destroy -var-file=terraform.${WORKSPACE}.tfvars"
 echo ""
 
 # ══════════════════════════════════════════════════════════════
