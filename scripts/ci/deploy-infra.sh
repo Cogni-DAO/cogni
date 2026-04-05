@@ -746,6 +746,16 @@ log_info "[$(date -u +%H:%M:%S)] Infra stack up complete"
 emit_deployment_event "infra_deployment.stack_up_complete" "success" "Infrastructure services started"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 7.5: Ensure Temporal namespace exists (idempotent)
+# App pods need cogni-${env} namespace registered in Temporal before /readyz passes.
+# Same script used by provision-test-vm.sh — one shared primitive.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TEMPORAL_NAMESPACE="cogni-${DEPLOY_ENVIRONMENT}" \
+TEMPORAL_CONTAINER="cogni-runtime-temporal-1" \
+TEMPORAL_TIMEOUT=60 \
+  bash /tmp/ensure-temporal-namespace.sh
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 8: Checksum-gated restart for LiteLLM config changes
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HASH_DIR="/var/lib/cogni"
@@ -856,10 +866,11 @@ rsync -av -e "ssh $SSH_OPTS" \
 # Upload deployment script
 scp $SSH_OPTS "$ARTIFACT_DIR/deploy-infra-remote.sh" root@"$VM_HOST":/tmp/deploy-infra-remote.sh
 
-# Upload healthcheck scripts (called from deploy-infra-remote.sh)
+# Upload healthcheck and bootstrap scripts (called from deploy-infra-remote.sh)
 scp $SSH_OPTS \
   "$REPO_ROOT/scripts/ci/healthcheck-openclaw.sh" \
   "$REPO_ROOT/scripts/ci/seed-pnpm-store.sh" \
+  "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" \
   root@"$VM_HOST":/tmp/
 scp $SSH_OPTS \
   "$REPO_ROOT/services/sandbox-openclaw/seed-pnpm-store.sh" \

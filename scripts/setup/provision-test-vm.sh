@@ -41,6 +41,7 @@ fi
 case "$DEPLOY_ENV" in
   canary)
     BRANCH="canary"
+    DEPLOY_BRANCH="deploy/canary"
     K8S_NAMESPACE="cogni-canary"
     OVERLAY_DIR="canary"
     APPSET_FILE="canary-applicationset.yaml"
@@ -51,6 +52,7 @@ case "$DEPLOY_ENV" in
     ;;
   preview)
     BRANCH="staging"
+    DEPLOY_BRANCH="deploy/staging"
     K8S_NAMESPACE="cogni-preview"
     OVERLAY_DIR="preview"
     APPSET_FILE="preview-applicationset.yaml"
@@ -61,6 +63,7 @@ case "$DEPLOY_ENV" in
     ;;
   production)
     BRANCH="main"
+    DEPLOY_BRANCH="deploy/production"
     K8S_NAMESPACE="cogni-production"
     OVERLAY_DIR="production"
     APPSET_FILE="production-applicationset.yaml"
@@ -372,29 +375,47 @@ else
 fi
 
 # ══════════════════════════════════════════════════════════════
-# Phase 4c: Patch k8s EndpointSlice IPs + push to git
+# Phase 4c: Patch EndpointSlice IPs on deploy branch
 # ══════════════════════════════════════════════════════════════
-log_step "Phase 4b: Patch EndpointSlice IPs to $VM_IP"
+log_step "Phase 4c: Patch EndpointSlice IPs to $VM_IP on $DEPLOY_BRANCH"
 
-# k8s rejects 127.0.0.1 in EndpointSlices. Overlays must use the node's real IP.
-# Sed-replace the placeholder/previous IP in all overlay kustomization files.
-OVERLAYS_DIR="$REPO_ROOT/infra/k8s/overlays/${OVERLAY_DIR}"
-for overlay in "$OVERLAYS_DIR"/*/kustomization.yaml; do
-  # Replace any IP in EndpointSlice address arrays: value: ["X.X.X.X"]
-  sed -i '' -E "s/value: \[\"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\"\]/value: [\"${VM_IP}\"]/g" "$overlay"
+# deploy/<env> is the sole persistence layer for env-discovered state (VM IPs).
+# promote-and-deploy.yml no longer rsyncs overlays — only updates digests.
+# Provision is the one writer for IP state.
+DEPLOY_TMP=$(mktemp -d)
+REPO_URL="https://${GHCR_USERNAME:-Cogni-1729}:${GHCR_TOKEN}@github.com/Cogni-DAO/cogni-template.git"
+
+log_info "Cloning $DEPLOY_BRANCH..."
+git clone --depth=1 --branch "$DEPLOY_BRANCH" "$REPO_URL" "$DEPLOY_TMP" 2>/dev/null
+
+# Sed-replace any IP in EndpointSlice address arrays across all overlays
+# Note: sed -i '' is macOS syntax — this script runs locally only (not in CI)
+for overlay in "$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}"/*/kustomization.yaml; do
+  if [[ -f "$overlay" ]]; then
+    sed -i '' -E "s/value: \[\"[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\"\]/value: [\"${VM_IP}\"]/g" "$overlay"
+  fi
 done
-log_info "Patched overlays with VM IP: $VM_IP"
 
-# Commit + push so Argo CD sees the updated IPs
-cd "$REPO_ROOT"
-if ! git diff --quiet infra/k8s/overlays/; then
-  git add infra/k8s/overlays/ infra/k8s/base/
-  git commit -m "chore(infra): patch EndpointSlice IPs to ${VM_IP} for test VM"
-  git push origin HEAD:"$BRANCH"
-  log_info "Pushed EndpointSlice IP patches to $BRANCH"
-else
-  log_info "EndpointSlice IPs already correct"
+# Guard: fail if any placeholder 0.0.0.0 remains (should never happen after sed)
+if grep -rq 'value: \["0\.0\.0\.0"\]' "$DEPLOY_TMP/infra/k8s/overlays/${OVERLAY_DIR}/" 2>/dev/null; then
+  log_error "Placeholder 0.0.0.0 still present in overlays after patching — aborting"
+  rm -rf "$DEPLOY_TMP"
+  exit 1
 fi
+
+cd "$DEPLOY_TMP"
+git config user.name "provision-script"
+git config user.email "provision@cogni.dev"
+git add -A
+if ! git diff --cached --quiet; then
+  git commit -m "chore(infra): patch ${DEPLOY_ENV} EndpointSlice IPs to ${VM_IP} [provision]"
+  git push origin "$DEPLOY_BRANCH"
+  log_info "Pushed EndpointSlice IP patches to $DEPLOY_BRANCH"
+else
+  log_info "EndpointSlice IPs already correct on $DEPLOY_BRANCH"
+fi
+rm -rf "$DEPLOY_TMP"
+cd "$REPO_ROOT"
 
 # ══════════════════════════════════════════════════════════════
 # Phase 5: Deploy Compose infrastructure
@@ -517,6 +538,11 @@ done
 # DB provisioning
 log_info "Running database provisioning..."
 ssh $SSH_OPTS root@"$VM_IP" 'docker compose --project-name cogni-runtime --env-file /opt/cogni-template-runtime/.env -f /opt/cogni-template-runtime/docker-compose.yml run --rm db-provision'
+
+# Temporal namespace bootstrap (idempotent — same script used by deploy-infra.sh)
+log_info "Ensuring Temporal namespace exists..."
+scp $SSH_OPTS "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" root@"$VM_IP":/tmp/ensure-temporal-namespace.sh
+ssh $SSH_OPTS root@"$VM_IP" "TEMPORAL_NAMESPACE=cogni-${DEPLOY_ENV} TEMPORAL_CONTAINER=cogni-runtime-temporal-1 TEMPORAL_TIMEOUT=60 bash /tmp/ensure-temporal-namespace.sh"
 
 # ══════════════════════════════════════════════════════════════
 # Phase 6: Create k8s secrets directly on cluster

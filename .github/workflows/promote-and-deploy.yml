@@ -141,37 +141,8 @@ jobs:
           echo "  migrator:         $MIGRATOR_DIGEST"
           echo "  scheduler-worker: $SW_DIGEST"
 
-      - name: Update overlay digests in app-src
-        env:
-          OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
-        working-directory: app-src
-        run: |
-          echo "Promoting to overlay: $OVERLAY_ENV"
-
-          scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app operator \
-            --digest "${{ steps.digests.outputs.operator }}" \
-            --migrator-digest "${{ steps.digests.outputs.migrator }}"
-
-          scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app poly \
-            --digest "${{ steps.digests.outputs.poly }}" \
-            --migrator-digest "${{ steps.digests.outputs.migrator }}"
-
-          scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app resy \
-            --digest "${{ steps.digests.outputs.resy }}" \
-            --migrator-digest "${{ steps.digests.outputs.migrator }}"
-
-          scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app scheduler-worker \
-            --digest "${{ steps.digests.outputs.scheduler_worker }}"
-
-      # Checkout the deploy branch for PR-driven overlay update
+      # Checkout the deploy branch — promote-k8s-image.sh runs HERE, not on app-src.
+      # This preserves env-specific state (EndpointSlice IPs) written by provision.
       - name: Checkout deploy branch
         uses: actions/checkout@v4
         with:
@@ -180,18 +151,47 @@ jobs:
           token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
           path: deploy-branch
 
-      - name: Sync base, catalog, and overlays to deploy branch
-        env:
-          OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
+      - name: Sync base and catalog from app branch
         run: |
-          # Sync base templates (may have changed on the app branch)
+          # Base templates and catalog may change on the app branch.
+          # Overlays are NOT synced — they contain env-specific state (IPs)
+          # that provision wrote directly to the deploy branch.
+          # NOTE: New node overlay directories must be added to the deploy branch
+          # manually when a node is added (see docs/guides/node-formation-guide.md).
           rsync -a --delete app-src/infra/k8s/base/ deploy-branch/infra/k8s/base/
-
-          # Sync catalog (may have new entries)
           rsync -a --delete app-src/infra/catalog/ deploy-branch/infra/catalog/
 
-          # Sync the updated overlays (with new digests from promote-k8s-image.sh)
-          rsync -a --delete app-src/infra/k8s/overlays/${OVERLAY_ENV}/ deploy-branch/infra/k8s/overlays/${OVERLAY_ENV}/
+      - name: Update overlay digests on deploy branch
+        env:
+          OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
+        working-directory: deploy-branch
+        run: |
+          echo "Promoting digests to overlay: $OVERLAY_ENV (on deploy branch)"
+
+          # promote-k8s-image.sh runs on the deploy branch checkout.
+          # It only touches image digest fields — never EndpointSlice IPs.
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app operator \
+            --digest "${{ steps.digests.outputs.operator }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app poly \
+            --digest "${{ steps.digests.outputs.poly }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app resy \
+            --digest "${{ steps.digests.outputs.resy }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app scheduler-worker \
+            --digest "${{ steps.digests.outputs.scheduler_worker }}"
 
       - name: Commit overlay changes to deploy branch
         id: deploy-pr
