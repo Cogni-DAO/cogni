@@ -13,10 +13,10 @@ namePrefix: operator-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:b4a130d1ca0ea0d70ab60aa5c669582b3ba71da0b60ab1cb864271a990133320"
+    digest: "sha256:12666f5457bcd6f7290a01439308441d231436789c6065ef27c1b868acff3862"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:0809d677f7d7f1b6b62733e309f90edd8af6877ada10dd9efadbf5d041e6ef62"
+    digest: "sha256:b99498189911cdaedd3b9b80001245d72a32c6212c7309c61cd24eff42d2880d"
 
 patches:
   # Node-specific ConfigMap values.
@@ -94,7 +94,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-postgres-external"
@@ -104,7 +104,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-temporal-external"
@@ -114,7 +114,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-litellm-external"
@@ -124,7 +124,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-redis-external"

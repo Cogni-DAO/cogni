@@ -13,10 +13,10 @@ namePrefix: resy-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:fa525e7037f6f8cb7e603e3af3fe5aa893a06678725e739c05af75fb1066b1ea"
+    digest: "sha256:e882fc1d55c51152488ea8211f01cd224b51cb593e6617e7f86a0b2c73b211b8"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:0809d677f7d7f1b6b62733e309f90edd8af6877ada10dd9efadbf5d041e6ef62"
+    digest: "sha256:b99498189911cdaedd3b9b80001245d72a32c6212c7309c61cd24eff42d2880d"
 
 patches:
   # Node-specific ConfigMap values.
@@ -96,7 +96,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-postgres-external"
@@ -106,7 +106,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-temporal-external"
@@ -116,7 +116,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-litellm-external"
@@ -126,7 +126,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-redis-external"

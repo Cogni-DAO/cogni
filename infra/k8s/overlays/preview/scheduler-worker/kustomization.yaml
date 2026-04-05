@@ -13,7 +13,7 @@ resources:
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:f3c1890f43ba4fa0415dc7638b6d3b462cf0cba4919e988598edf114910f7db3"
+    digest: "sha256:9860d03caf60062a10743dac6436c54cbf74fc5659fccf6a783a190180ce7224"
 
 patches:
   # Patch ConfigMap with staging-specific values
@@ -38,32 +38,32 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: postgres-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: poly-app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
   - target:
       kind: EndpointSlice
       name: resy-app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.110.92"]
+        value: ["84.32.109.222"]
