@@ -1,8 +1,10 @@
 name: Promote and Deploy
 
-# After Build Multi-Node succeeds: resolve digests from GHCR, create a PR
-# against the deploy branch (deploy/canary, deploy/staging, deploy/production),
-# auto-merge it, deploy Compose infra via SSH, verify health.
+# After Build Multi-Node succeeds: resolve digests from GHCR, update the
+# deploy branch (deploy/canary, deploy/staging, deploy/production),
+# deploy Compose infra via SSH, verify health.
+# Canary: direct push to deploy branch (high-churn, no PR noise).
+# Other envs: PR + auto-merge for human-reviewable audit trail.
 # App containers are managed by Argo CD (auto-syncs on deploy branch change).
 
 on:
@@ -191,22 +193,21 @@ jobs:
           # Sync the updated overlays (with new digests from promote-k8s-image.sh)
           rsync -a --delete app-src/infra/k8s/overlays/${OVERLAY_ENV}/ deploy-branch/infra/k8s/overlays/${OVERLAY_ENV}/
 
-      - name: Create and merge deploy PR
+      - name: Commit overlay changes to deploy branch
         id: deploy-pr
         env:
           GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
           OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
           HEAD_SHA: ${{ steps.env.outputs.head_sha }}
           DEPLOY_BRANCH: ${{ steps.env.outputs.deploy_branch }}
+          ENVIRONMENT: ${{ steps.env.outputs.environment }}
         working-directory: deploy-branch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           SHORT_SHA=$(echo "$HEAD_SHA" | cut -c1-8)
-          BRANCH_NAME="promote/${OVERLAY_ENV}-${SHORT_SHA}-$(date +%s)"
 
-          git checkout -b "$BRANCH_NAME"
           git add -A
 
           if git diff --cached --quiet; then
@@ -215,6 +216,18 @@ jobs:
             exit 0
           fi
 
+          # Canary: direct push (high-churn, no human review needed)
+          if [ "$ENVIRONMENT" = "canary" ]; then
+            git commit -m "promote: canary ${SHORT_SHA}"
+            git push origin HEAD:${DEPLOY_BRANCH}
+            echo "pr_merged=true" >> $GITHUB_OUTPUT
+            echo "✅ Direct push to ${DEPLOY_BRANCH} for canary ${SHORT_SHA}"
+            exit 0
+          fi
+
+          # All other environments: PR + auto-merge flow
+          BRANCH_NAME="promote/${OVERLAY_ENV}-${SHORT_SHA}-$(date +%s)"
+          git checkout -b "$BRANCH_NAME"
           git commit -m "chore(cd): promote ${OVERLAY_ENV} overlays to ${SHORT_SHA}"
 
           git push origin "$BRANCH_NAME"
