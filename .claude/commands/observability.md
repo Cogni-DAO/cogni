@@ -70,9 +70,26 @@ Before marking observability complete, answer YES to every question below. If an
 5. **"Can I correlate across services?"** — Does `reqId`/`traceId` propagate through the full call chain, including inter-node callbacks?
 6. **"Will the dashboard work?"** — Are all metric labels low-cardinality? Is `node_id` in both logs and metrics?
 
-## 7) Deliverables (in PR description)
+## 7) Infra log collection audit (conditional — run when infra files changed)
+
+**Trigger:** Run this section if the branch touches `infra/compose/`, `infra/k8s/`, `infra/provision/`, or `services/*/Dockerfile`.
+
+**Check Alloy coverage:** Read `infra/compose/runtime/configs/alloy-config.metrics.alloy` and verify:
+
+1. **Docker container allowlist** — Every Compose service that produces logs is in the `discovery.docker` allowlist regex. If you added a new service to docker-compose.yml, add it to the allowlist.
+2. **K8s namespace coverage** — Every k8s namespace that runs pods is matched by `local.file_match`. Current pattern: `cogni-*` + `argocd`. If you added a new namespace, add a path target.
+3. **Metrics scraping** — If you added a service with a `/metrics` endpoint, verify it has a `prometheus.scrape` block in the Alloy config.
+4. **Label correctness** — New services must produce structured JSON logs (not plain text) for Loki's JSON pipeline to work. Python services: use `json` logging, not `print()`.
+
+**Check Compose → k8s boundary:** If your change involves Compose services calling k8s services (or vice versa):
+
+- Compose → k8s: must use `host.docker.internal:NodePort` (k8s service names don't resolve from Docker)
+- k8s → Compose: must use EndpointSlice with VM IP (Compose DNS doesn't resolve from k8s)
+
+## 8) Deliverables (in PR description)
 
 - Events added/used (name + fields)
 - Metrics added (name + labels) or "none"
 - Multi-node: confirmed `nodeId` present in logs + `node_id` in metrics (or filed bug if missing)
+- Infra coverage: confirmed all new services are in Alloy allowlist (or "no infra changes")
 - Files changed
