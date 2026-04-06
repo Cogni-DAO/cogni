@@ -36,6 +36,35 @@ Goal: find a shorter, memorable root domain for the Cogni network.
 
 ---
 
+## Active Domains
+
+| Domain           | Registrar | Renewal   | Expires    | DNS Provider           | Notes                                                         |
+| ---------------- | --------- | --------- | ---------- | ---------------------- | ------------------------------------------------------------- |
+| **cognidao.org** | Namecheap | $10.11/yr | 2027-04-06 | Cloudflare (alice/ian) | Primary domain. Renewed 2026-04-05 after grace period outage. |
+
+### DNS Records — Canonical Mapping
+
+```
+PRODUCTION (cognidao.org)           → 84.32.109.162  (Cherry Servers, Docker Compose)
+  www.cognidao.org                  → 84.32.109.162
+
+CANARY (test.cognidao.org)          → 84.32.109.222  (Cherry Servers, k3s + Argo CD)
+  poly-test.cognidao.org            → 84.32.109.222
+  resy-test.cognidao.org            → 84.32.109.222
+
+PREVIEW (preview.cognidao.org)      → 84.32.110.92   (Cherry Servers, k3s + Argo CD)
+  poly-preview.cognidao.org         → 84.32.110.92
+  resy-preview.cognidao.org         → 84.32.110.92
+```
+
+### Incident Log
+
+| Date       | Impact                         | Root Cause                                                               | Resolution                                               |
+| ---------- | ------------------------------ | ------------------------------------------------------------------------ | -------------------------------------------------------- |
+| 2026-04-05 | All domains unreachable (~6hr) | cognidao.org expired (grace period). Namecheap suspended DNS resolution. | Renewed domain. DNS propagated in ~50 min after renewal. |
+
+---
+
 ## Ranked Shortlist
 
 Priority domains the team is actively considering. Ordered by preference.
