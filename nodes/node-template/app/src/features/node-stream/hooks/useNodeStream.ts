@@ -102,6 +102,7 @@ export function useNodeStream(opts?: {
       "deploy",
       "snapshot",
       "process_health",
+      "vcs_activity",
     ] as const;
 
     for (const type of knownTypes) {

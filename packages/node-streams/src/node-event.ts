@@ -67,9 +67,27 @@ export interface ProcessHealthEvent extends NodeEventBase {
   environment: string;
 }
 
+/** VCS activity summary from webhook ingestion (PR, review, issue, push events). */
+export interface VcsActivityEvent extends NodeEventBase {
+  type: "vcs_activity";
+  /** GitHub event type (pull_request, pull_request_review, issues, push, etc.) */
+  eventType: string;
+  /** Action within the event (opened, closed, merged, submitted, etc.) */
+  action: string;
+  /** PR number if applicable. */
+  prNumber: number | null;
+  /** Event title (PR title, issue title, branch name). */
+  title: string;
+  /** Actor login (GitHub username). */
+  actor: string;
+  /** Repository (owner/repo). */
+  repo: string;
+}
+
 /** Convenience union of common node event types. Nodes define their own unions for domain events. */
 export type NodeEvent =
   | HealthEvent
   | CiStatusEvent
   | DeployEvent
-  | ProcessHealthEvent;
+  | ProcessHealthEvent
+  | VcsActivityEvent;
