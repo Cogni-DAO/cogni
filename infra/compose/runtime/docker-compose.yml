@@ -576,6 +576,47 @@ services:
         condition: service_completed_successfully
 
   # =============================================================================
+  # Sandbox Coding Agents (profile: sandbox-coding)
+  # Aider + OpenCode containers for sandboxed code generation tasks.
+  # Both use COGNI_MODEL env var from graph executor — no hardcoded models.
+  # LLM access via socat bridge (same pattern as sandbox-runtime).
+  # =============================================================================
+
+  sandbox-aider:
+    build:
+      context: ../../../services/sandbox-aider
+      dockerfile: Dockerfile
+    image: cogni-sandbox-aider:latest
+    profiles: [sandbox-coding]
+    networks:
+      - sandbox-internal
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 256
+    volumes:
+      - sandbox_aider_workspace:/workspace
+
+  sandbox-opencode:
+    build:
+      context: ../../../services/sandbox-opencode
+      dockerfile: Dockerfile
+    image: cogni-sandbox-opencode:latest
+    profiles: [sandbox-coding]
+    networks:
+      - sandbox-internal
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 256
+    volumes:
+      - sandbox_opencode_workspace:/workspace
+
+  # =============================================================================
   # TigerBeetle (Financial Ledger)
   # Per financial-ledger-spec: double-entry ledger engine
   # Self-initializing: formats data file on first boot, then starts.
@@ -647,3 +688,7 @@ volumes:
     name: tigerbeetle_data
   cogni_workspace:
     name: cogni_workspace
+  sandbox_aider_workspace:
+    name: sandbox_aider_workspace
+  sandbox_opencode_workspace:
+    name: sandbox_opencode_workspace
