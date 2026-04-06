@@ -2,7 +2,7 @@
 id: task.0292
 type: task
 title: "Deploy branches: switch preview/production to direct commits (kill PR noise)"
-status: needs_implement
+status: done
 priority: 0
 rank: 1
 estimate: 1
@@ -15,7 +15,7 @@ project: proj.cicd-services-gitops
 branch:
 pr_url:
 created: 2026-04-05
-updated: 2026-04-05
+updated: 2026-04-06
 labels: [ci-cd, deploy]
 ---
 
