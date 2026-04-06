@@ -114,7 +114,11 @@ ssh -i .local/canary-vm-key root@<IP> \
 ## PR / Links
 
 - Production manually patched 2026-04-06 ~05:30 UTC (temporary fix)
+- **Canary confirmed broken 2026-04-06 ~18:25 UTC** — Codex OAuth device flow completes (`byo_auth.device_code.complete` success) but token exchange fails: `CONNECTIONS_ENCRYPTION_KEY not set` (level 50, component `openai-codex-exchange`, pod `operator-node-app-8f5864b45-x99dz`)
+- **Preview confirmed broken 2026-04-06 ~19:09 UTC** — same `CONNECTIONS_ENCRYPTION_KEY not set` on poly pod `poly-node-app-584c9f69d-6kp7m`. Also missing: `GH_REVIEW_APP_ID`, `GH_REVIEW_APP_PRIVATE_KEY_BASE64`, `GH_REPOS` (scheduler worker `source_no_adapter` error)
+- **Production working** — Codex OAuth functional, active LLM calls via `CodexLlmAdapter` as of 2026-04-06
 
 ## Attribution
 
 - Discovered during production deploy session 2026-04-06
+- Log evidence collected 2026-04-06 via Grafana Cloud Loki (`env=canary|preview|production`)
