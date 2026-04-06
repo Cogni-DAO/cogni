@@ -14,6 +14,21 @@ tags: [dev, onboarding]
 
 # Developer Setup
 
+## Branch Workflow
+
+```
+git checkout main && git pull
+git checkout -b feat/my-feature
+# ... make changes ...
+# PR to canary (NOT main)
+gh pr create --base canary
+```
+
+- **Branch from `main`** (default) — source of truth
+- **PR to `canary`** — integration branch, triggers CI + deploy
+- **Never PR directly to `main`** — code reaches main via release PRs after preview validation
+- Full pipeline: `canary → build → deploy → verify → E2E → preview → release PR → main`
+
 ## When to Use This
 
 You are setting up the Cogni-Template repo for the first time, or need a reference for daily development and testing commands.

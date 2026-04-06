@@ -10,6 +10,13 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - All accounting and payments via DAO-controlled crypto wallets
 - Strict reproducibility and code discipline across all Cogni repos
 
+## Branch Workflow
+
+- **Branch from `main`** (default branch) — `main` is the source of truth
+- **PR to `canary`** — canary is the integration branch where CI builds and deploys happen
+- **Never commit directly to `main`** — code reaches main via `release/*` PRs after preview validation
+- Pipeline: `canary push → build → promote → deploy → verify → E2E → preview → release PR → main`
+
 ## Workflow Guiding Principles
 
 - **Spec first:** Write the plan before code. Confirm the plan with the user.
