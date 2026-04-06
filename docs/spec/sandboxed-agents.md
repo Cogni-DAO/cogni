@@ -29,6 +29,7 @@ Enable AI agents to run in hermetically-sealed Docker containers (`network=none`
 - Tool execution gateway (P1 — see initiative)
 - Authenticated external tools via ConnectionBroker (P1.5)
 - Multi-turn persistent agent sessions (P2)
+- Long-running / daemon-mode coding agents (P2 — current containers are ephemeral one-shot; continuous coding requires Temporal-driven respawn; see spike.0296)
 - Sandbox warm pools or pre-provisioned containers
 - Streaming agent output (currently batch-only)
 
@@ -155,6 +156,10 @@ Proxy runs as nginx:alpine container (not host process) for HERMETIC_STACK compl
 - **Output**: Agent prints assistant response to **stdout** (plain text). Provider wraps as `text_delta`.
 - **Model**: Provider passes `model` via env var `COGNI_MODEL` (agent uses it in API call)
 - **Non-streaming**: Runs agent to completion, then emits entire response. Streaming deferred.
+
+**Coding agent containers** (`sandbox:aider`, `sandbox:opencode`) follow the same protocol but accept task input via `/workspace/.cogni/context.json` (structured work item context resolved by host) or fall back to `messages.json`. They emit `SandboxProgramContract` JSON on stdout with diff summary as the text payload. Model selection uses the same `COGNI_MODEL` passthrough — no hardcoded model names. See `services/sandbox-aider/` and `services/sandbox-opencode/`.
+
+**Ephemeral-only limitation**: All sandbox containers are one-shot (start, execute, exit). For continuous coding, the orchestration layer (Temporal) must respawn containers per task. True daemon-mode / long-running agent sessions are deferred to P2.
 
 ### Key Decisions
 

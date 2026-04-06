@@ -37,15 +37,13 @@ API_BASE="${OPENAI_API_BASE:-http://localhost:8080}"
 
 # ── Read task context (C7: standard protocol path) ──────────────────────────
 if [[ -f /workspace/.cogni/context.json ]]; then
-    # Structured context (work item resolved by host)
+    # Structured context (work item resolved by host via WorkItemPort)
     TASK_MSG="$(jq -r '.task // .messages[-1].content // empty' /workspace/.cogni/context.json)"
 elif [[ -f /workspace/.cogni/messages.json ]]; then
     # Standard sandbox protocol — extract last user message
     TASK_MSG="$(jq -r '[.[] | select(.role=="user")] | last | .content // empty' /workspace/.cogni/messages.json)"
-elif [[ -n "${TASK:-}" ]]; then
-    TASK_MSG="$TASK"
 else
-    emit "" "input_error" "No task input. Provide /workspace/.cogni/context.json, messages.json, or TASK env var"
+    emit "" "input_error" "No task input. Host must write /workspace/.cogni/context.json or messages.json"
 fi
 
 if [[ -z "$TASK_MSG" ]]; then
