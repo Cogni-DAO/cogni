@@ -3,14 +3,14 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Module: scripts/check-fast.sh
-# Purpose: Lightweight quality gate for iterative development: typecheck + lint/format fix + unit tests.
-#          Always auto-fixes lint and format issues. Use during iteration; run full `pnpm check` once
-#          before committing.
+# Purpose: Lightweight quality gate for iterative development: typecheck + lint + format check + unit tests.
+#          Auto-fixes lint issues; format runs in check-only mode (matching CI). Run `pnpm format`
+#          manually to auto-fix format issues before retrying.
 # Usage: pnpm check:fast          # Compact output (quiet mode)
 #        pnpm check:fast:verbose  # Full banners + live streaming output
 #        Direct: bash scripts/check-fast.sh [--verbose]
 # Exit: 0 if all checks pass, 1 if any check fails
-# Side-effects: Modifies files via ESLint and Prettier auto-fix
+# Side-effects: Modifies files via ESLint auto-fix (format is check-only)
 
 set +e
 set -o pipefail
