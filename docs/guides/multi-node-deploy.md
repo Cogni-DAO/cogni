@@ -30,7 +30,7 @@ push to canary → build-multi-node.yml (build 5 images, push GHCR)
 **Two trust surfaces, one repo:**
 
 - **App branches** (canary, staging, main) — code changes, human-reviewed PRs
-- **Deploy branches** (deploy/canary, deploy/staging, deploy/production) — rendered deploy state, CI-driven PRs with audit trail
+- **Deploy branches** (deploy/canary, deploy/preview, deploy/production) — rendered deploy state, direct bot commits
 
 Argo CD watches `deploy/*` branches (orphan branches containing only `infra/catalog/`, `infra/k8s/base/`, and `infra/k8s/overlays/{env}/`). Compose runs infra (Postgres, Temporal, LiteLLM, Redis, Caddy). k3s + Argo CD runs apps (operator, poly, resy, scheduler-worker). See [cd-pipeline-e2e.md](../spec/cd-pipeline-e2e.md).
 

@@ -165,7 +165,7 @@ Three deployment environments, each with its own VM, k8s namespace, and Argo App
 | preview     | `deploy/preview`    | `preview`      | `cogni-preview`    | `overlays/preview/`    | Human acceptance |
 | production  | `deploy/production` | `production`   | `cogni-production` | `overlays/production/` | Production       |
 
-**Current code note**: The git branch is still named `deploy/staging` and workflow code still references `staging`. Renaming to `deploy/preview` is a stabilization task.
+**Note**: `deploy/preview` branch created 2026-04-06. The `deploy/staging` branch still exists as a legacy alias — can be deleted once all references are confirmed migrated.
 
 Each GH environment provides its own `VM_HOST`, `SSH_DEPLOY_KEY`, `DOMAIN`, and all infra/app secrets. promote-and-deploy.yml selects the environment based on the triggering branch or the `environment` input.
 

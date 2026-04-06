@@ -1,7 +1,7 @@
 name: Promote and Deploy
 
 # After Build Multi-Node succeeds: resolve digests from GHCR, update the
-# deploy branch (deploy/canary, deploy/staging, deploy/production),
+# deploy branch (deploy/canary, deploy/preview, deploy/production),
 # deploy Compose infra via SSH, verify health.
 # All envs: direct push to deploy branch (git history is the audit trail).
 # App containers are managed by Argo CD (auto-syncs on deploy branch change).
@@ -68,7 +68,7 @@ jobs:
 
           case "$ENV" in
             canary)     OVERLAY=canary;     DEPLOY_BRANCH=deploy/canary ;;
-            preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/staging ;;
+            preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/preview ;;
             production) OVERLAY=production; DEPLOY_BRANCH=deploy/production ;;
           esac
 

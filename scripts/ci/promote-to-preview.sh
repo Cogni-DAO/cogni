@@ -10,8 +10,8 @@ set -euo pipefail
 #   - unlocked: deploy this SHA, lock for review
 #   - reviewing: record as candidate, don't disturb current review
 #
-# State stored in .promote-state/ on the deploy branch (deploy/staging today,
-# deploy/preview target). Written via git commit+push.
+# State stored in .promote-state/ on deploy/preview branch.
+# Written via git commit+push.
 #
 # Usage: promote-to-preview.sh <sha> <repo> <deploy-branch> <gh-token>
 

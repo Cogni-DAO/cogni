@@ -52,7 +52,7 @@ case "$DEPLOY_ENV" in
     ;;
   preview)
     BRANCH="staging"
-    DEPLOY_BRANCH="deploy/staging"
+    DEPLOY_BRANCH="deploy/preview"
     K8S_NAMESPACE="cogni-preview"
     OVERLAY_DIR="preview"
     APPSET_FILE="preview-applicationset.yaml"
@@ -374,6 +374,11 @@ else
   log_warn "Skipping DNS — CLOUDFLARE_API_TOKEN or CLOUDFLARE_ZONE_ID not set"
 fi
 
+# WARNING: Caddy (Phase 5) will attempt Let's Encrypt ACME HTTP-01 challenges
+# immediately on startup. If DNS hasn't globally propagated by then, ACME fails
+# and burns through the 5-failures-per-hostname-per-hour rate limit. Certs won't
+# issue until the hourly window resets. See .claude/skills/dns-ops/SKILL.md.
+
 # ══════════════════════════════════════════════════════════════
 # Phase 4c: Patch EndpointSlice IPs on deploy branch
 # ══════════════════════════════════════════════════════════════
@@ -623,17 +628,32 @@ ssh $SSH_OPTS root@"$VM_IP" "
 # ApplicationSets in the repo point to deploy/* branches (deploy/canary, deploy/staging,
 # deploy/production) — Argo watches those orphan branches for overlay digest changes,
 # NOT the app branches directly. See docs/spec/cd-pipeline-e2e.md.
+#
+# BUG: ${BRANCH} may not have infra/k8s/argocd/ (e.g. staging lags canary).
+# Fix: SCP the files from the local working directory instead of cloning a branch.
+# See work/handoffs/ for details.
+#
+# IMPORTANT: Always clone from 'canary' for ApplicationSet files. These files live on
+# the development branch (canary), not on staging/main which may lag behind.
 ssh $SSH_OPTS root@"$VM_IP" "
   AUTHED_URL=\$(echo '${COGNI_REPO_URL}' | sed 's|https://|https://${GHCR_USERNAME}:${GHCR_TOKEN}@|')
   rm -rf /tmp/cogni-appsets
-  git clone --depth=1 --branch '${BRANCH}' \"\$AUTHED_URL\" /tmp/cogni-appsets 2>/dev/null
+  git clone --depth=1 --branch canary \"\$AUTHED_URL\" /tmp/cogni-appsets 2>/dev/null
 
   # Apply each ApplicationSet file directly (not via kustomize)
+  APPLIED=0
   for appset in /tmp/cogni-appsets/infra/k8s/argocd/*-applicationset.yaml; do
+    [ -f \"\$appset\" ] || continue
     kubectl apply -f \"\$appset\" -n argocd
+    APPLIED=\$((APPLIED + 1))
   done
   rm -rf /tmp/cogni-appsets
-  echo 'ApplicationSets applied — Argo syncing from deploy/* branches'
+
+  if [ \"\$APPLIED\" -eq 0 ]; then
+    echo 'FATAL: No ApplicationSet files found on canary branch'
+    exit 1
+  fi
+  echo \"ApplicationSets applied (\$APPLIED) — Argo syncing from deploy/* branches\"
 "
 
 # Poll for apps to sync (up to 5 min)
