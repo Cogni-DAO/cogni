@@ -80,7 +80,7 @@ fi
 run_check "packages:build" "pnpm packages:build"
 run_check "typecheck" "pnpm typecheck"
 run_check "lint" "pnpm lint:fix"
-run_check "format" "pnpm format"
+run_check "format" "pnpm format:check"
 run_check "test:app" "pnpm vitest run --config nodes/operator/app/vitest.config.mts"
 run_check "test:packages:local" "pnpm test:packages:local"
 run_check "test:services:local" "pnpm test:services:local"
