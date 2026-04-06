@@ -23,11 +23,11 @@ Get the canary-first pipeline fully green: build once on canary, promote proven 
 ## Pipeline Health
 
 ```
-build → promote → deploy-infra → verify  → e2e   → preview → release → production
-GREEN    GREEN      GREEN          AMBER     BLOCKED  BLOCKED   BLOCKED   LEGACY
+build → promote → deploy-infra → verify → e2e → preview → release → production
+GREEN    GREEN      GREEN          AMBER    TBD    TBD       NEW       LEGACY
 ```
 
-Verify is AMBER: all nodes healthy via NodePort, blocked only by Let's Encrypt TLS rate limit (resets 01:39 UTC 2026-04-06). Not a code bug.
+Verify is AMBER: TLS rate limit (resets hourly). Build Multi-Node + CI running on latest push. E2E, preview promotion (new `promote-to-preview.sh`), and release (`release.yml`) are untested in production — first real run pending.
 
 ## Active Blockers
 
@@ -45,6 +45,7 @@ Verify is AMBER: all nodes healthy via NodePort, blocked only by Let's Encrypt T
 | 10  | **SHA-pin OpenClaw images** — gateway uses `:latest`, violates IMAGE_IMMUTABILITY                        | ❌ RED      | —     | Mutable tags in production                                                |
 | 11  | **Argo EndpointSlice OutOfSync** — k8s adds metadata fields not in Git manifests                         | ⚠️ COSMETIC | —     | Fix: add `ignoreDifferences` for EndpointSlice metadata in ApplicationSet |
 | 12  | **Canary missing Prometheus metrics** — Alloy running but preview has no Alloy deployed                  | ⚠️ GAP      | —     | Preview has no metrics scraping; canary Loki flowing                      |
+| 13  | **VM IPs in public repo** — env-endpoints.yaml on deploy branches exposes bare VM IPs                    | ⚠️ SECURITY | —     | bug.0295: need floating IPs or DNS-only EndpointSlices                    |
 
 ## Environment Status (2026-04-06)
 

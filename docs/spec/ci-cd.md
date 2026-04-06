@@ -199,11 +199,11 @@ Each GH environment provides its own `VM_HOST`, `SSH_DEPLOY_KEY`, `DOMAIN`, and 
 These gaps block the end-to-end release flow. Verified against workflow source code 2026-04-05.
 
 - [x] Deploy branch model: `deploy/canary`, `deploy/preview`, `deploy/production` branches created; Argo ApplicationSets track them
-- [ ] **Deploy branches use direct commits, not PRs**: promote-and-deploy.yml currently creates auto-merge PRs for preview/production. Switch to direct bot commits (canary already does this). Git history is the audit trail.
+- [x] **Deploy branches use direct commits, not PRs** (task.0292): all envs use direct push. Git history is the audit trail.
+- [x] **Gate canary→preview on CI success** (task.0293): `promote-to-preview.sh` checks CI status before dispatch. No promotion while CI is red.
+- [x] **Policy-gated release promotion** (task.0294): `release.yml` workflow_dispatch creates singleton release PR. Auto-release conveyor belt removed.
+- [x] **Rename staging→preview** : `deploy/preview` branch created, promote-and-deploy.yml + Argo ApplicationSet + provision script updated.
 - [ ] **Stop production rebuilds (GAP A+E)**: `build-prod.yml` rebuilds fresh `prod-${SHA}` images on every main push instead of promoting the proven canary digests. Wire promote-and-deploy.yml for production after release merge; retire `build-prod.yml` + `deploy-production.yml`
-- [ ] **Gate canary→preview on CI success (GAP B)**: `e2e.yml` promote-to-preview dispatches without checking CI status. This is a hard invariant violation — add CI status check before dispatch
-- [ ] **Policy-gated release promotion**: Change `e2e.yml` from auto-creating release PRs to recording the latest successful preview SHA. Add workflow_dispatch trigger for human-initiated singleton release PR creation
-- [ ] **Rename staging→preview in workflow code (GAP C+D)**: `staging` git branch and workflow references are a historical artifact. Rename branch to `preview`, update `e2e.yml` dispatch refs (lines 10, 113, 128), `promote-and-deploy.yml` env mapping, and `ci.yaml` push triggers
 
 ### Post-Green — Simplify
 
