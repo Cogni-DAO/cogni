@@ -41,11 +41,31 @@ Doltgres adds what Langfuse can't:
 
 ## Design
 
-### Key Decision: Extend `@cogni/knowledge-store`, Don't Build a New Node
+### Two Layers, Same Doltgres Server
 
-The `KnowledgeStorePort` + `DoltgresKnowledgeStoreAdapter` already exist in `packages/knowledge-store/`. Every node already has a Doltgres connection. The simplest path: add 4 tables to the knowledge-store schema. Every node inherits them on fork.
+```
+Shared Doltgres Server (doltgres:5435)
+│
+├── knowledge_operator        ← operator's knowledge + eval tables (P0)
+├── knowledge_poly            ← poly's knowledge + eval tables (P0)
+├── knowledge_resy            ← resy's knowledge + eval tables (P0)
+│     Each contains: knowledge, graph_registry, eval_definitions,
+│                    eval_runs, eval_results
+│
+└── knowledge_registry        ← cross-node catalog (P1, operator-only)
+      Contains: catalog_entries, access_policies, index_cursors
+      Indexes metadata from all node DBs. Never stores content.
+```
 
-**Rejected alternative:** Create a separate "registry node" (Tier 1). This adds a new deployment, new infra, cross-node networking. Overkill for P0. The registry node pattern emerges naturally at P2 when cross-node querying is needed — at that point it's a read-only aggregator over existing per-node tables.
+**P0: Per-node eval tables** — extend `@cogni/knowledge-store` with 4 tables. Every node inherits on fork. No new package.
+
+**P1: Cross-node catalog** — separate `knowledge_registry` DB + `packages/knowledge-registry/` package. Lives inside operator's deployment with hard domain boundary. Indexes across all node DBs via commit-cursor model.
+
+### Key Decision: Extend `@cogni/knowledge-store` for P0, New Package for P1
+
+The `KnowledgeStorePort` + `DoltgresKnowledgeStoreAdapter` already exist. Every node has a Doltgres connection. P0 adds 4 eval tables to the existing schema — every node inherits them on fork.
+
+P1 introduces the cross-node catalog as a **separate domain** (`packages/knowledge-registry/`) because it has fundamentally different responsibilities: indexing across databases, access control, brokered reads. Keeping it separate preserves the extraction path to a standalone node at P2.
 
 ### Schema: 4 Seed Tables
 
@@ -103,17 +123,22 @@ CREATE TABLE eval_results (
 );
 ```
 
-### Sync Pattern: catalog.ts → graph_registry
+### Sync Pattern: Commit-Cursor, Not Startup-Only
 
-On node startup (or `pnpm eval:sync-registry`):
+`catalog.ts` remains the single source of truth (CATALOG_SINGLE_SOURCE_OF_TRUTH). The sync to `graph_registry` uses a **commit-cursor model** — not just "run on startup":
 
-```typescript
-// Read LANGGRAPH_CATALOG from @cogni/langgraph-graphs
-// UPSERT into graph_registry table
-// dolt_commit("sync graph registry from catalog.ts")
+```
+catalog.ts changes → node redeploy → sync script runs → UPSERT graph_registry
+  │
+  │  Tracks sync state:
+  │  - last_synced_catalog_hash (SHA of serialized LANGGRAPH_CATALOG)
+  │  - Skip if hash unchanged (idempotent, no wasted commits)
+  │
+  ▼
+dolt_commit("sync: graph registry from catalog @ {hash}")
 ```
 
-This keeps `catalog.ts` as the single source of truth for graph definitions (CATALOG_SINGLE_SOURCE_OF_TRUTH invariant) while making the data queryable via SQL.
+The same cursor model applies to the cross-node knowledge catalog (P1). Each node's knowledge DB tracks its last-indexed commit; the operator's registry indexes by diffing from that cursor — no wall-clock polling, no drift window.
 
 ### Eval Harness Integration
 
@@ -173,36 +198,99 @@ ORDER BY gr.tier, gr.display_name;
 | Seed eval_definitions for brain + pr-review        | Not Started | 1   | task.0299 |
 | `pnpm eval:registry` — print eval coverage matrix  | Not Started | —   | task.0299 |
 
-### Walk (P1) — Query API + Score Trends
+### Walk (P1) — Cross-Node Knowledge Catalog + Query API
 
-**Goal:** Agents can query the registry. Score trends visible.
+**Goal:** Operator hosts a `knowledge_registry` database that indexes metadata across all node knowledge DBs. Agents query the registry for cross-node discovery. Score trends visible.
 
-| Deliverable                                              | Status      | Est | Work Item            |
-| -------------------------------------------------------- | ----------- | --- | -------------------- |
-| `core__registry_search` tool — "who knows X?"            | Not Started | 2   | (create at P1 start) |
-| `core__registry_scores` tool — "what's below threshold?" | Not Started | 1   | (create at P1 start) |
-| Score trend view (dolt log + pass_rate over time)        | Not Started | 1   | (create at P1 start) |
-| Grafana dashboard for eval scores                        | Not Started | 1   | (create at P1 start) |
+The registry is a **separate domain inside operator** — own package, tables, workflows, APIs — but deployed within operator. Hard domain boundary preserves future extraction to a standalone node.
 
-### Run (P2) — Cross-Node Registry + Tier 1 Nodes
+#### Cross-Node Catalog Tables (in `knowledge_registry` DB on shared Doltgres)
 
-**Goal:** Registry node aggregates across all nodes. Tier 1 node concept proven.
+```sql
+-- Metadata index across all node knowledge DBs (content stays at source)
+CREATE TABLE catalog_entries (
+  id TEXT PRIMARY KEY,                     -- sha256(node_id + knowledge_id)
+  node_id TEXT NOT NULL,
+  knowledge_id TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  title TEXT NOT NULL,
+  confidence_pct INTEGER,
+  source_type TEXT NOT NULL,
+  tags JSONB DEFAULT '[]',
+  content_hash TEXT NOT NULL,              -- sha256 of content (dedup)
+  owner_scope_id TEXT,                     -- DAO scope (nullable)
+  visibility TEXT NOT NULL DEFAULT 'node', -- node | network | public
+  source_url TEXT,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  updated_at TIMESTAMPTZ NOT NULL,
+  indexed_at TIMESTAMPTZ DEFAULT NOW(),
+  source_commit TEXT NOT NULL,             -- dolt commit on source node
+  UNIQUE(node_id, knowledge_id)
+);
+
+-- DAO access policies for cross-node reads
+CREATE TABLE access_policies (
+  id TEXT PRIMARY KEY,
+  scope_id TEXT NOT NULL,
+  domain TEXT NOT NULL,
+  access_level TEXT NOT NULL,              -- read | write | admin
+  granted_by TEXT NOT NULL,
+  granted_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Commit cursor per node (indexer state)
+CREATE TABLE index_cursors (
+  node_id TEXT PRIMARY KEY,
+  node_db_name TEXT NOT NULL,
+  last_indexed_commit TEXT NOT NULL,
+  last_indexed_at TIMESTAMPTZ NOT NULL,
+  entry_count INTEGER DEFAULT 0
+);
+```
+
+#### Cross-Node Access Invariant
+
+```
+CROSS_NODE_VIA_REGISTRY_ONLY:
+  Same-node reads  → direct via KnowledgeStorePort (unchanged)
+  Cross-node reads → MUST go through RegistryCapability (new)
+  No direct cross-database queries from agent tools
+```
+
+| Deliverable                                                   | Status      | Est | Work Item            |
+| ------------------------------------------------------------- | ----------- | --- | -------------------- |
+| `knowledge_registry` DB + 3 catalog tables in provisioning    | Not Started | 2   | (create at P1 start) |
+| `packages/knowledge-registry/` — RegistryPort + types         | Not Started | 2   | (create at P1 start) |
+| Commit-cursor indexer (Temporal activity, per-node)           | Not Started | 2   | (create at P1 start) |
+| `core__knowledge_federated_search` tool — cross-node brokered | Not Started | 2   | (create at P1 start) |
+| `core__registry_scores` tool — "what's below threshold?"      | Not Started | 1   | (create at P1 start) |
+| Score trend view (dolt log + pass_rate over time)             | Not Started | 1   | (create at P1 start) |
+| Grafana dashboard for eval scores                             | Not Started | 1   | (create at P1 start) |
+
+### Run (P2) — DoltHub Sync + DAO Governance + Tier 1 Nodes
+
+**Goal:** DoltHub remote sync. DAO-scoped access policies. Registry node emerges as Tier 1.
 
 | Deliverable                                                | Status      | Est | Work Item            |
 | ---------------------------------------------------------- | ----------- | --- | -------------------- |
+| DoltHub sync (push per-node + registry DBs)                | Not Started | 2   | (create at P2 start) |
+| DAO access policies + visibility controls                  | Not Started | 2   | (create at P2 start) |
 | Registry node (Tier 1: Dolt + graphs only, no app)         | Not Started | 3   | (create at P2 start) |
-| Cross-node graph_registry sync (dolt_push/pull)            | Not Started | 2   | (create at P2 start) |
-| "Who knows X?" across all nodes                            | Not Started | 2   | (create at P2 start) |
 | x402 permissioned access to registry data                  | Not Started | 3   | (create at P2 start) |
 | Dolt branch eval: test prompt on branch, merge if improved | Not Started | 2   | (create at P2 start) |
 
 ## Constraints
 
 - **CATALOG_SINGLE_SOURCE_OF_TRUTH** — `catalog.ts` remains the definition source. `graph_registry` is a sync target, not a replacement.
-- **Knowledge-store is the owner** — registry tables live in `@cogni/knowledge-store`, not a new package. Same Doltgres connection, same adapter.
-- **No new node in P0** — extend existing infrastructure. Registry node is P2.
-- **Dual-write, not replace** — Langfuse stays for UI. Doltgres for versioned history + SQL queries.
-- **PORT_BEFORE_BACKEND** — new tables accessed via extended `KnowledgeStorePort` or a new `EvalRegistryPort`.
+- **Knowledge-store is the owner (P0)** — eval tables live in `@cogni/knowledge-store`, not a new package. Same Doltgres connection, same adapter.
+- **Registry is a separate domain (P1)** — cross-node catalog lives in `packages/knowledge-registry/` with own port, types, contracts. Hard domain boundary inside operator's deployment — preserves future extraction to standalone node.
+- **CROSS_NODE_VIA_REGISTRY_ONLY** — cross-node knowledge access goes exclusively through RegistryCapability. No direct cross-database queries from agent tools.
+- **COMMIT_CURSOR_INDEXING** — registry indexes by dolt commit cursor, not wall-clock polling. No drift window, no wasted polls.
+- **REGISTRY_INDEXES_NOT_STORES** — catalog contains metadata + content_hash, never content. Source node DBs remain sovereign.
+- **NODE_SOVEREIGNTY** — nodes control their own knowledge DBs. Registry reads, never writes to node DBs.
+- **No new node in P0/P1** — extend existing infrastructure. Registry node is P2.
+- **Dual-write, not replace** — Langfuse stays for eval UI. Doltgres for versioned history + SQL queries.
+- **PORT_BEFORE_BACKEND** — eval tables accessed via `EvalRegistryPort`. Cross-node catalog via `RegistryPort`.
 
 ## Dependencies
 
@@ -212,15 +300,19 @@ ORDER BY gr.tier, gr.display_name;
 
 ## As-Built Specs
 
-- [Knowledge Data Plane](../docs/spec/knowledge-data-plane.md) — two-plane architecture, Doltgres rationale
-- [AI Evals Spec](../docs/spec/ai-evals.md) — eval invariants and conventions
+- [Knowledge Data Plane](../../docs/spec/knowledge-data-plane.md) — two-plane architecture, Doltgres rationale
+- [Knowledge Syntropy](../../docs/spec/knowledge-syntropy.md) — storage/retrieval protocol, citation DAGs
+- [AI Evals Spec](../../docs/spec/ai-evals.md) — eval invariants and conventions
+- Knowledge Registry Spec — TBD (formalize P1 cross-node catalog design)
 
 ## Related
 
 - [proj.ai-evals-pipeline](proj.ai-evals-pipeline.md) — eval harness that writes to this registry
-- [proj.agent-registry](proj.agent-registry.md) — discovery/execution split (Paused, orthogonal)
+- [proj.agent-registry](proj.agent-registry.md) — runtime discovery (Paused, orthogonal)
 - [EVALS Charter](../charters/EVALS.md) — eval program principles, per-node matrix
-- [story.0248](../items/story.0248.dolt-branching-cicd.md) — Dolt branching CI/CD experiment
+- [story.0248](../items/story.0248.dolt-branching-cicd.md) — Dolt branching (deferred, separate complexity)
+- [story.0263](../items/story.0263.doltgres-node-lifecycle.md) — Dolt remotes (deferred, DoltHub sync at P2)
+- [DATA_STREAMS Charter](../charters/DATA_STREAMS.md) — data source maturity scorecard
 
 ## Design Notes
 
