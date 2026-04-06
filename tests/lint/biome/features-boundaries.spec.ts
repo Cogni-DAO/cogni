@@ -25,7 +25,7 @@ describe.skip("Features Layer Missing Boundaries", () => {
       // SKIP: ESLint incorrectly blocks features→kit subpath imports
       // Expected: 0 errors (should be allowed), Actual: 1 error (blocked by plugin)
       const { errors } = await lintFixture(
-        "apps/web/src/features/ui/components/Dashboard.tsx",
+        "nodes/operator/app/src/features/ui/components/Dashboard.tsx",
         `import { Container } from "@/components/kit/layout/Container"; export const Dashboard = () => <Container />;`,
         {
           focusRulePrefixes: [
@@ -40,7 +40,7 @@ describe.skip("Features Layer Missing Boundaries", () => {
 
     it("allows features importing shared utilities", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/features/data/services/validation.ts",
+        "nodes/operator/app/src/features/data/services/validation.ts",
         `import { someUtil } from "@/shared"; export const validate = someUtil;`,
         {
           focusRulePrefixes: [
@@ -57,7 +57,7 @@ describe.skip("Features Layer Missing Boundaries", () => {
   describe("Forbidden imports (missing negative tests)", () => {
     it("blocks features importing adapters directly", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/ai/services/llm.ts",
+        "nodes/operator/app/src/features/ai/services/llm.ts",
         `import { LiteLlmAdapter } from "@/adapters/server/ai"; export const service = new LiteLlmAdapter();`,
         { focusRulePrefixes: ["boundaries/", "no-restricted-imports"] }
       );
@@ -73,7 +73,7 @@ describe.skip("Features Layer Missing Boundaries", () => {
 
     it("blocks features importing bootstrap container", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/ai/services/complete.ts",
+        "nodes/operator/app/src/features/ai/services/complete.ts",
         `import { resolveAiDeps } from "@/bootstrap/container"; export const deps = resolveAiDeps();`,
         { focusRulePrefixes: ["boundaries/", "no-restricted-imports"] }
       );
@@ -89,7 +89,7 @@ describe.skip("Features Layer Missing Boundaries", () => {
 
     it("blocks cross-feature imports", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/auth/components/LoginForm.tsx",
+        "nodes/operator/app/src/features/auth/components/LoginForm.tsx",
         `import { Terminal } from "@/features/home/components/Terminal"; export const LoginForm = () => <Terminal />;`,
         { focusRulePrefixes: ["boundaries/", "no-restricted-imports"] }
       );
@@ -107,7 +107,7 @@ describe.skip("Features Layer Missing Boundaries", () => {
   describe("App layer missing shared utilities test", () => {
     it("allows app importing shared utilities", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/app/api/utils/helper.ts",
+        "nodes/operator/app/src/app/api/utils/helper.ts",
         `import { someUtil } from "@/shared"; export const helper = someUtil;`,
         { focusRulePrefixes: ["boundaries/"] }
       );

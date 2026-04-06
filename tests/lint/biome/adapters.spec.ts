@@ -23,7 +23,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
   describe("Allowed imports", () => {
     it("allows adapters importing port types", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/adapters/server/ai/litellm.adapter.ts",
+        "nodes/operator/app/src/adapters/server/ai/litellm.adapter.ts",
         `import type { LlmService } from "@/ports"; export class LiteLlmAdapter implements LlmService {};`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -34,7 +34,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
       // SKIP: ESLint boundaries plugin incorrectly blocks adapters→core type imports
       // Expected: 0 errors (should be allowed), Actual: 1 error (blocked by plugin)
       const { errors } = await lintFixture(
-        "apps/web/src/adapters/server/ai/litellm.adapter.ts",
+        "nodes/operator/app/src/adapters/server/ai/litellm.adapter.ts",
         `import type { Message } from "@/core"; export class LiteLlmAdapter { process(msg: Message) {} };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -43,7 +43,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
 
     it("allows adapters importing shared utilities", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/adapters/server/db/drizzle.adapter.ts",
+        "nodes/operator/app/src/adapters/server/db/drizzle.adapter.ts",
         `import { someUtil } from "@/shared"; export class DrizzleAdapter { init() { someUtil(); } };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -52,7 +52,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
 
     it("allows adapters importing external libraries", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/adapters/server/ai/openai.adapter.ts",
+        "nodes/operator/app/src/adapters/server/ai/openai.adapter.ts",
         `import OpenAI from "openai"; export class OpenAIAdapter { client = new OpenAI(); };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -64,7 +64,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
     it.skip("blocks adapters importing features", async () => {
       // SKIP: ESLint boundaries plugin false negative - will address in future
       const { errors, messages } = await lintFixture(
-        "apps/web/src/adapters/server/ai/litellm.adapter.ts",
+        "nodes/operator/app/src/adapters/server/ai/litellm.adapter.ts",
         `import { execute } from "@/features/ai/services/complete"; export default execute;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -78,7 +78,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
       // SKIP: ESLint boundaries plugin fails to block adapters→app imports
       // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
       const { errors, messages } = await lintFixture(
-        "apps/web/src/adapters/server/auth/clerk.adapter.ts",
+        "nodes/operator/app/src/adapters/server/auth/clerk.adapter.ts",
         `import { NextRequest } from "next/server"; export class ClerkAdapter { handle(req: NextRequest) {} };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -90,7 +90,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
 
     it("blocks adapters importing components", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/adapters/server/ui/renderer.adapter.ts",
+        "nodes/operator/app/src/adapters/server/ui/renderer.adapter.ts",
         `import { Button } from "@/components"; export default Button;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -102,7 +102,7 @@ describe.skip("Adapters Layer Infrastructure Boundaries", () => {
 
     it("blocks adapters importing bootstrap", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/adapters/server/cache/redis.adapter.ts",
+        "nodes/operator/app/src/adapters/server/cache/redis.adapter.ts",
         `import { container } from "@/bootstrap/container"; export default container;`,
         { focusRulePrefixes: ["boundaries/"] }
       );

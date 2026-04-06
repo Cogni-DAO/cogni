@@ -90,7 +90,7 @@ All new code plugs into existing infrastructure:
 
 #### 1. Alchemy Webhook Normalizer
 
-**Location**: `apps/web/src/adapters/server/ingestion/alchemy-webhook.ts`
+**Location**: `apps/operator/src/adapters/server/ingestion/alchemy-webhook.ts`
 
 Implements `WebhookNormalizer` from `@cogni/ingestion-core`:
 
@@ -101,7 +101,7 @@ Register in `bootstrap/container.ts` alongside GitHub normalizer.
 
 #### 2. Signal Executor Feature
 
-**Location**: `apps/web/src/features/governance/`
+**Location**: `apps/operator/src/features/governance/`
 
 ```
 features/governance/
@@ -137,7 +137,7 @@ if (source === "alchemy") {
 
 #### 3. Proposal Launcher Pages
 
-**Location**: `apps/web/src/app/(governance)/`
+**Location**: `apps/operator/src/app/(governance)/`
 
 ```
 app/(governance)/
@@ -152,8 +152,8 @@ app/(governance)/
 - Route group `(governance)` keeps wallet providers isolated — no wagmi loaded for non-governance pages
 - Port from Pages Router (`useRouter().query`) → App Router (`useSearchParams()`)
 - Middleware validation stays in `src/middleware.ts` (existing Next.js middleware)
-- Contract ABIs → `apps/web/src/lib/governance/abis.ts`
-- Deep link validation → `apps/web/src/lib/governance/deeplink.ts`
+- Contract ABIs → `apps/operator/src/lib/governance/abis.ts`
+- Deep link validation → `apps/operator/src/lib/governance/deeplink.ts`
 
 ## Implementation Plan
 

@@ -86,7 +86,7 @@ model_list:
 
 litellm_settings:
   include_cost_in_streaming_usage: true
-  success_callback: ["generic_api"]
+  callbacks: cogni_callbacks.cogni_node_router
 
 general_settings:
   master_key: "os.environ/LITELLM_MASTER_KEY"

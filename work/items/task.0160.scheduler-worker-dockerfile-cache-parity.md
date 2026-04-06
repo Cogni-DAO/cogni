@@ -6,7 +6,7 @@ status: done
 priority: 1
 rank: 1
 estimate: 2
-summary: Apply manifest-first Docker layering and BuildKit cache mounts to the scheduler-worker Dockerfile — matching patterns already proven in apps/web/Dockerfile. Retains bookworm-slim (Temporal core-bridge requires glibc).
+summary: Apply manifest-first Docker layering and BuildKit cache mounts to the scheduler-worker Dockerfile — matching patterns already proven in apps/operator/Dockerfile. Retains bookworm-slim (Temporal core-bridge requires glibc).
 outcome: Scheduler-worker Docker builds use pnpm store cache mount, reducing warm-build dependency install to near-instant.
 spec_refs: build-architecture-spec, services-architecture-spec
 assignees: derekg1729

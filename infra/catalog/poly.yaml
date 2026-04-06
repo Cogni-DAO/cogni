@@ -1,0 +1,5 @@
+name: poly
+type: node
+port: 3000
+node_id: "5ed2d64f-2745-4676-983b-2fb7e05b2eba"
+dockerfile: nodes/poly/app/Dockerfile

@@ -86,7 +86,7 @@ docker build \
     --tag "$APP_IMAGE" \
     "${BUILD_LABELS[@]}" \
     --label "org.opencontainers.image.title=cogni-template" \
-    -f apps/web/Dockerfile .
+    -f nodes/operator/app/Dockerfile .
 
 # Build migrator image (migrator target)
 log_info ""
@@ -97,7 +97,7 @@ docker build \
     --tag "$MIGRATOR_IMAGE" \
     "${BUILD_LABELS[@]}" \
     --label "org.opencontainers.image.title=cogni-template-migrate" \
-    -f apps/web/Dockerfile .
+    -f nodes/operator/app/Dockerfile .
 
 # Verify app image was created successfully
 log_info ""

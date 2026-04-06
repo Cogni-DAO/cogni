@@ -55,15 +55,15 @@ This handoff covers what's left after merge.
 
 ## Pointers
 
-| File                                                                              | Why                                                      |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `services/scheduler-worker/src/workflows/pr-review.workflow.ts`                   | Parent workflow — 4 steps                                |
-| `services/scheduler-worker/src/activities/review.ts`                              | GitHub I/O activities                                    |
-| `services/scheduler-worker/src/domain/review.ts`                                  | Pure domain logic (criteria eval, formatting)            |
-| `apps/web/src/app/_facades/review/dispatch.server.ts`                             | Webhook → Temporal dispatch                              |
-| `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts`                    | responseFormat forwarding + stateKey fix                 |
-| `apps/web/src/app/api/v1/ai/runs/route.ts`                                        | Runs API with `scope=system` for Cogni Live              |
-| `apps/web/src/app/(app)/dashboard/_api/fetchRuns.ts`                              | Client fetch with scope param                            |
-| `apps/web/src/adapters/server/db/migrations/0024_graph_runs_rls_requested_by.sql` | RLS migration                                            |
-| `docs/spec/temporal-patterns.md`                                                  | Normative webhook pattern, terminology, invariants       |
-| `apps/web/tests/external/review/pr-review-e2e.external.test.ts`                   | E2E test — creates real PR, verifies check run + comment |
+| File                                                                                   | Why                                                      |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `services/scheduler-worker/src/workflows/pr-review.workflow.ts`                        | Parent workflow — 4 steps                                |
+| `services/scheduler-worker/src/activities/review.ts`                                   | GitHub I/O activities                                    |
+| `services/scheduler-worker/src/domain/review.ts`                                       | Pure domain logic (criteria eval, formatting)            |
+| `apps/operator/src/app/_facades/review/dispatch.server.ts`                             | Webhook → Temporal dispatch                              |
+| `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts`                    | responseFormat forwarding + stateKey fix                 |
+| `apps/operator/src/app/api/v1/ai/runs/route.ts`                                        | Runs API with `scope=system` for Cogni Live              |
+| `apps/operator/src/app/(app)/dashboard/_api/fetchRuns.ts`                              | Client fetch with scope param                            |
+| `apps/operator/src/adapters/server/db/migrations/0024_graph_runs_rls_requested_by.sql` | RLS migration                                            |
+| `docs/spec/temporal-patterns.md`                                                       | Normative webhook pattern, terminology, invariants       |
+| `apps/operator/tests/external/review/pr-review-e2e.external.test.ts`                   | E2E test — creates real PR, verifies check run + comment |

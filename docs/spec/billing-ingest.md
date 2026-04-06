@@ -5,7 +5,7 @@ title: "Billing Ingest: Callback-Driven, Port-Level Billing"
 status: active
 spec_state: active
 trust: reviewed
-summary: "Canonicalize billing at GraphExecutorPort: LiteLLM generic_api callback writes receipts, adapters only emit usage_unit_created{call_id}, decorator logs for observability. Async reconciliation catches missing callbacks."
+summary: "Canonicalize billing at GraphExecutorPort: LiteLLM custom callback writes receipts per-node, adapters only emit usage_unit_created{call_id}, decorator logs for observability. Async reconciliation catches missing callbacks."
 read_when: Working on billing pipeline, LiteLLM integration, sandbox billing, or charge receipt reconciliation.
 implements: proj.unified-graph-launch
 owner: derekg1729
@@ -16,7 +16,7 @@ tags: [billing, litellm, sandbox]
 
 # Billing Ingest: Callback-Driven, Port-Level Billing
 
-> Billing is canonicalized at GraphExecutorPort. Adapters never implement billing — they only emit `usage_unit_created{call_id}`. Cost data comes from a single source (LiteLLM `generic_api` callback). The decorator logs call_ids for observability; a periodic reconciliation job catches missing receipts. **No synchronous receipt barrier blocks the user response.**
+> Billing is canonicalized at GraphExecutorPort. Adapters never implement billing — they only emit `usage_unit_created{call_id}`. Cost data comes from a single source (LiteLLM custom callback). In multi-node deployments, the callback routes each completion to the correct node's ingest endpoint based on `node_id` metadata. The decorator logs call_ids for observability; a periodic reconciliation job catches missing receipts. **No synchronous receipt barrier blocks the user response.**
 
 ### Key References
 
@@ -26,8 +26,10 @@ tags: [billing, litellm, sandbox]
 | **Spec**    | [billing-evolution](./billing-evolution.md)                                          | Charge receipt schema, credit unit                  |
 | **Spec**    | [billing-sandbox](./billing-sandbox.md)                                              | Current proxy audit log pipeline (to be superseded) |
 | **Spec**    | [external-executor-billing](./external-executor-billing.md)                          | Reconciliation design                               |
-| **Task**    | [task.0029](../../work/items/task.0029.callback-driven-billing-kill-log-scraping.md) | Implementation work item                            |
+| **Spec**    | [multi-node-tenancy](./multi-node-tenancy.md)                                        | Per-node DB isolation, callback routing invariants  |
+| **Task**    | [task.0029](../../work/items/task.0029.callback-driven-billing-kill-log-scraping.md) | Original callback billing implementation            |
 | **Task**    | [task.0039](../../work/items/task.0039.billing-reconciler-worker.md)                 | Reconciliation worker (companion)                   |
+| **Task**    | [task.0256](../../work/items/task.0256.multi-node-litellm-callback-routing.md)       | Per-node callback routing via custom callback class |
 
 ## Core Primitive
 
@@ -76,23 +78,26 @@ tags: [billing, litellm, sandbox]
                     ┌── callback fires async ──┐
                     ▼                           │
 ┌─────────────────────────────────────────────────────────────────────┐
-│ LiteLLM Proxy (cost oracle)                                         │
+│ LiteLLM Proxy (cost oracle) + CogniNodeRouter callback              │
 │                                                                     │
 │  On every successful LLM call:                                      │
 │  1. Computes response_cost                                          │
-│  2. Fires generic_api callback →                                    │
-│     POST /api/internal/billing/ingest                               │
-│     List[StandardLoggingPayload] (batched)                          │
+│  2. CogniNodeRouter reads node_id from spend_logs_metadata          │
+│  3. Routes POST to correct node's /api/internal/billing/ingest      │
+│     (COGNI_NODE_ENDPOINTS env: node_id=endpoint_url,...)            │
+│  4. Missing node_id → defaults to operator + warning                │
+│     (MISSING_NODE_ID_DEFAULTS_OPERATOR)                             │
 └──────────────────────┬──────────────────────────────────────────────┘
-                       │
+                       │ (per-completion, not batched)
                        ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│ POST /api/internal/billing/ingest                                   │
+│ POST /api/internal/billing/ingest (per-node)                        │
 │                                                                     │
 │  1. Validate payload array (Zod)                                    │
 │  2. For each entry: commitUsageFact() → recordChargeReceipt()       │
 │  3. UPSERT by (source_system, source_reference=call_id)             │
 │  4. Return 200 OK (duplicates are no-ops internally)                │
+│  5. Each node writes to its own DB (DB_PER_NODE)                    │
 └─────────────────────────────────────────────────────────────────────┘
 
                        ┌── periodic (task.0039) ──┐
@@ -163,17 +168,18 @@ The decorator's role shrinks from "billing writer" to "billing event consumer + 
 
 ### Callback Payload Schema (Verified)
 
-Verified against LiteLLM `generic_api` callback on 2026-02-13. The callback sends `List[StandardLoggingPayload]` — a JSON array, sometimes batched (2+ entries per POST).
+The callback sends `List[StandardLoggingPayload]` (a JSON array wrapping one entry per POST from the custom callback, or sometimes batched from legacy `generic_api`).
 
 **LiteLLM Configuration:**
 
 ```yaml
 # litellm.config.yaml
 litellm_settings:
-  success_callback: ["langfuse", "generic_api"]
-# Environment variable (on LiteLLM container):
-# GENERIC_LOGGER_ENDPOINT=http://app:3000/api/internal/billing/ingest
-# GENERIC_LOGGER_HEADERS=Authorization=Bearer ${BILLING_INGEST_TOKEN}
+  # CogniNodeRouter replaces generic_api — routes per-completion to correct node
+  success_callback: ["langfuse", "cogni_callbacks.CogniNodeRouter"]
+# Environment variables (on LiteLLM container):
+# COGNI_NODE_ENDPOINTS=operator=http://app:3000/api/internal/billing/ingest,poly=http://poly:3100/api/internal/billing/ingest
+# BILLING_INGEST_TOKEN=<shared-secret>
 ```
 
 **Actual payload shape** (relevant fields for billing — full payload has ~40 fields):
@@ -199,6 +205,7 @@ const StandardLoggingPayloadBilling = z.object({
         .object({
           // From x-litellm-spend-logs-metadata header
           run_id: z.string(),
+          node_id: z.string().optional(), // Used by CogniNodeRouter for per-node routing
           graph_id: z.string().optional(),
           attempt: z.number().int().optional(),
         })
@@ -251,26 +258,27 @@ Canonicalize billing at GraphExecutorPort so adapters never implement billing. S
 Callback and log-scraping paths coexisted briefly during cutover:
 
 1. **Add ingest endpoint** — ~~Done (task.0029).~~ `POST /api/internal/billing/ingest` accepting `List[StandardLoggingPayload]`, Zod validation, `commitUsageFact()`, shared-secret auth.
-2. **Configure LiteLLM `generic_api` callback** — ~~Done (task.0029).~~ `success_callback: ["langfuse", "generic_api"]` with `GENERIC_LOGGER_ENDPOINT` + `GENERIC_LOGGER_HEADERS` env vars.
-3. **Fix gateway `run_id` gap** — Not started. Add `x-litellm-spend-logs-metadata` to OpenClaw `outboundHeaders` per session.
-4. **Strip billing from adapters** — ~~Done (task.0029).~~ `ProxyBillingReader` deleted, gateway billing removed from `SandboxGraphProvider`, `OPENCLAW_BILLING_DIR` removed. Gateway nginx audit log removed.
-5. **Delete old paths** — ~~Done (task.0029).~~ `ProxyBillingReader`, billing volumes, `OPENCLAW_BILLING_DIR`, gateway audit log all removed. `commitUsageFact()` refactored to strict cost-known/unknown branching (COST_AUTHORITY_IS_LITELLM).
+2. **Configure LiteLLM callback** — ~~Done (task.0029, upgraded task.0256).~~ Originally `generic_api` with `GENERIC_LOGGER_ENDPOINT`. Replaced by custom callback class `CogniNodeRouter` (`infra/litellm/cogni_callbacks.py`) for per-node routing via `COGNI_NODE_ENDPOINTS` env var.
+3. **Per-node callback routing** — ~~Done (task.0256).~~ Each node stamps `node_id` in `spendLogsMetadata`. Custom callback reads it and routes to correct node's ingest endpoint. Missing `node_id` defaults to operator with warning.
+4. **Fix gateway `run_id` gap** — Not started. Add `x-litellm-spend-logs-metadata` to OpenClaw `outboundHeaders` per session.
+5. **Strip billing from adapters** — ~~Done (task.0029).~~ `ProxyBillingReader` deleted, gateway billing removed from `SandboxGraphProvider`, `OPENCLAW_BILLING_DIR` removed. Gateway nginx audit log removed.
+6. **Delete old paths** — ~~Done (task.0029).~~ `ProxyBillingReader`, billing volumes, `OPENCLAW_BILLING_DIR`, gateway audit log all removed. `commitUsageFact()` refactored to strict cost-known/unknown branching (COST_AUTHORITY_IS_LITELLM).
 
 ## Verified Findings (Spike 2026-02-13)
 
 Tested against running dev:stack with LiteLLM `generic_api` callback pointed at a capture server.
 
-| Question                                                   | Answer                                                                                                                              |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Does `metadata.spend_logs_metadata` survive into callback? | **Yes** — `run_id`, `graph_id`, `attempt` all present when set via `x-litellm-spend-logs-metadata` header                           |
-| What is the callback name?                                 | `generic_api` (not `generic` or `webhook`). URL via `GENERIC_LOGGER_ENDPOINT` env var, headers via `GENERIC_LOGGER_HEADERS` env var |
-| Is the payload batched?                                    | **Yes** — always `List[StandardLoggingPayload]`, sometimes 2+ entries per POST                                                      |
-| Is `id` the same as `x-litellm-call-id`?                   | **Yes** — `id` field = litellm_call_id                                                                                              |
-| Is `response_cost` present for streaming?                  | **Yes** — accurate costs for paid models (e.g., gemini-2.5-flash: $0.0005-0.003 per call)                                           |
-| Does `end_user` populate from header?                      | **No** — `x-litellm-end-user-id` header → `end_user: ""`. Must use request body `user` field to populate `end_user`                 |
-| Token fields?                                              | `prompt_tokens`, `completion_tokens`, `total_tokens` (not `input_tokens`/`output_tokens`)                                           |
-| `model` vs `model_group`?                                  | `model` = full provider path (`google/gemini-2.5-flash`), `model_group` = LiteLLM alias (`gemini-2.5-flash`)                        |
-| Does gateway set `run_id` in metadata?                     | **No** — live gateway calls have `spend_logs_metadata: null`. Must add `x-litellm-spend-logs-metadata` to OpenClaw outboundHeaders  |
+| Question                                                   | Answer                                                                                                                                                   |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Does `metadata.spend_logs_metadata` survive into callback? | **Yes** — `run_id`, `graph_id`, `attempt` all present when set via `x-litellm-spend-logs-metadata` header                                                |
+| What is the callback mechanism?                            | Custom callback class `CogniNodeRouter` (replaced `generic_api` in task.0256). Routes per-completion to correct node via `COGNI_NODE_ENDPOINTS` env var. |
+| Is the payload batched?                                    | Custom callback fires per-completion (1 entry per POST). Legacy `generic_api` batched (2+ entries per POST).                                             |
+| Is `id` the same as `x-litellm-call-id`?                   | **Yes** — `id` field = litellm_call_id                                                                                                                   |
+| Is `response_cost` present for streaming?                  | **Yes** — accurate costs for paid models (e.g., gemini-2.5-flash: $0.0005-0.003 per call)                                                                |
+| Does `end_user` populate from header?                      | **No** — `x-litellm-end-user-id` header → `end_user: ""`. Must use request body `user` field to populate `end_user`                                      |
+| Token fields?                                              | `prompt_tokens`, `completion_tokens`, `total_tokens` (not `input_tokens`/`output_tokens`)                                                                |
+| `model` vs `model_group`?                                  | `model` = full provider path (`google/gemini-2.5-flash`), `model_group` = LiteLLM alias (`gemini-2.5-flash`)                                             |
+| Does gateway set `run_id` in metadata?                     | **No** — live gateway calls have `spend_logs_metadata: null`. Must add `x-litellm-spend-logs-metadata` to OpenClaw outboundHeaders                       |
 
 ## Related
 

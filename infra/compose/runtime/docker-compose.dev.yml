@@ -10,7 +10,7 @@ services:
     image: ${APP_IMAGE:-cogni-template-local}
     build:
       context: ../../..
-      dockerfile: ./apps/web/Dockerfile
+      dockerfile: ./nodes/operator/app/Dockerfile
     container_name: app
     restart: always
     networks:
@@ -145,7 +145,10 @@ services:
       - "autoheal=false"
 
   litellm:
-    image: ghcr.io/berriai/litellm@sha256:7e7816d58c265c182be5f3568ed8e5d999f11a5deda1d85e8e347a18bc578f64
+    build:
+      context: ../../images/litellm
+      dockerfile: Dockerfile
+    image: cogni-litellm:dev
     container_name: litellm
     restart: unless-stopped
     labels:
@@ -164,9 +167,10 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_BASE_URL}
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
-      # Billing ingest callback (generic_api → app ingest endpoint)
-      - GENERIC_LOGGER_ENDPOINT=${GENERIC_LOGGER_ENDPOINT:-http://app:3000/api/internal/billing/ingest}
-      - "GENERIC_LOGGER_HEADERS=Authorization=Bearer ${BILLING_INGEST_TOKEN}"
+      # Per-node billing callback routing (custom callback class — cogni_callbacks.CogniNodeRouter)
+      # Format: node_id=endpoint_url,... — routes each completion to the correct node
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS}
+      - BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
     volumes:
       - ./configs/${LITELLM_CONFIG:-litellm.config.yaml}:/app/config.yaml:ro
     command: --config /app/config.yaml --host 0.0.0.0 --port 4000
@@ -178,8 +182,8 @@ services:
         ]
       interval: 10s
       timeout: 3s
-      retries: 3
-      start_period: 30s
+      retries: 8
+      start_period: 120s
 
   mock-llm:
     image: zerob13/mock-openai-api:latest
@@ -205,6 +209,8 @@ services:
       - "443:443"
     environment:
       - DOMAIN=${DOMAIN}
+      - POLY_DOMAIN=${POLY_DOMAIN:-poly.localhost}
+      - RESY_DOMAIN=${RESY_DOMAIN:-resy.localhost}
     volumes:
       - ../edge/configs/Caddyfile.tmpl:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -276,6 +282,58 @@ services:
       retries: 3
       start_period: 10s
 
+  # =============================================================================
+  # Doltgres — versioned knowledge store (per knowledge-data-plane spec)
+  # Postgres-compatible with native git-like versioning (commit, log, diff).
+  # =============================================================================
+
+  doltgres:
+    image: dolthub/doltgresql:latest
+    container_name: doltgres
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - cogni-edge
+    environment:
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+    ports:
+      - "5435:5432"
+    volumes:
+      - doltgres_data:/var/lib/doltgres
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/5432' 2>/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 15s
+
+  doltgres-provision:
+    image: postgres:15
+    container_name: doltgres-provision
+    profiles:
+      - bootstrap
+    restart: "no"
+    networks:
+      - cogni-edge
+    environment:
+      DOLTGRES_HOST: doltgres
+      DOLTGRES_PORT: 5432
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+      DOLTGRES_READER_PASSWORD: ${DOLTGRES_READER_PASSWORD:-knowledge_reader}
+      DOLTGRES_WRITER_PASSWORD: ${DOLTGRES_WRITER_PASSWORD:-knowledge_writer}
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS}
+    volumes:
+      - ./doltgres-init/provision.sh:/app/provision.sh:ro
+    entrypoint: ["/bin/bash", "/app/provision.sh"]
+    depends_on:
+      doltgres:
+        condition: service_healthy
+
   db-provision:
     image: postgres:15
     container_name: db-provision
@@ -289,7 +347,8 @@ services:
       POSTGRES_ROOT_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
       DB_HOST: postgres
       DB_PORT: 5432
-      APP_DB_NAME: ${APP_DB_NAME}
+      # DB_PER_NODE: comma-separated list of node databases to provision (required, no default)
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS}
       APP_DB_USER: ${APP_DB_USER}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
       APP_DB_SERVICE_USER: ${APP_DB_SERVICE_USER}
@@ -306,7 +365,7 @@ services:
     image: ${MIGRATOR_IMAGE:-cogni-template-migrate-local}
     build:
       context: ../../..
-      dockerfile: ./apps/web/Dockerfile
+      dockerfile: ./nodes/operator/app/Dockerfile
       target: migrator
     container_name: db-migrate
     profiles:
@@ -531,10 +590,10 @@ services:
       # DATABASE_SERVICE_URL_DOCKER provides Docker-internal URL (postgres:5432) for test scripts.
       # Falls back to DATABASE_SERVICE_URL for production/non-test contexts.
       - DATABASE_URL=${DATABASE_SERVICE_URL_DOCKER:-${DATABASE_SERVICE_URL}}
-      # Internal API (scheduler-worker → app)
-      # Default: http://app:3000 for Docker-based stacks
-      # Override: http://host.docker.internal:3000 for test:stack:dev (app on host)
-      - APP_BASE_URL=${SCHEDULER_APP_BASE_URL:-http://app:3000}
+      # Per-node API endpoints (scheduler-worker → node apps)
+      # Default: Docker-internal DNS for each node
+      # Override: COGNI_NODE_ENDPOINTS for test:stack:dev (app on host)
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS:-operator=http://app:3000,poly=http://poly:3100,resy=http://resy:3300}
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN?SCHEDULER_API_TOKEN is required}
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.
@@ -582,7 +641,7 @@ services:
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
     volumes:
-      - ../sandbox-proxy/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ./configs/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
     command: >
       sh -c "envsubst '$$LITELLM_MASTER_KEY' < /etc/nginx/nginx.conf.template
       > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"
@@ -803,5 +862,7 @@ volumes:
     name: pnpm_store
   tigerbeetle_data:
     name: tigerbeetle_data
+  doltgres_data:
+    name: doltgres_data
   cogni_workspace:
     name: cogni_workspace

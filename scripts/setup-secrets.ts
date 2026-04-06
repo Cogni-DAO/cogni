@@ -10,7 +10,10 @@
  * Links: docs/runbooks/SECRET_ROTATION.md
  *
  * Usage:
- *   pnpm setup:secrets                        # walk through missing secrets
+ *   pnpm setup:secrets                        # walk through missing secrets (all envs)
+ *   pnpm setup:secrets --env canary           # only canary environment
+ *   pnpm setup:secrets --env canary --all     # canary, including already-set
+ *   pnpm setup:secrets --env canary --auto    # auto-generate missing agent secrets, only prompt for human ones
  *   pnpm setup:secrets --required             # only required secrets
  *   pnpm setup:secrets --all                  # walk through everything (including already-set)
  *   pnpm setup:secrets --only DISCORD         # just secrets matching "DISCORD"
@@ -66,7 +69,7 @@ function generateSSHKey(env: string): string {
   console.log(`     ${pubKey}`);
   console.log("");
   console.log(
-    `     Save this to: infra/tofu/cherry/base/keys/cogni_template_${env}_deploy.pub`
+    `     Save this to: infra/provision/cherry/base/keys/cogni_template_${env}_deploy.pub`
   );
   console.log(`     Then run: tofu apply -var-file=terraform.${env}.tfvars`);
   console.log("");
@@ -160,7 +163,7 @@ const SECRETS: Secret[] = [
       "Auto-generated ed25519 keypair (one per environment)",
       "1. Pubkey pushed to server via existing SSH access",
       "2. Private key set in GitHub environment secret",
-      "3. Pubkey saved to infra/tofu/cherry/base/keys/",
+      "3. Pubkey saved to infra/provision/cherry/base/keys/",
       "4. Run: tofu apply -var-file=terraform.<env>.tfvars",
     ],
     // generate handled specially in main loop
@@ -682,13 +685,83 @@ const SECRETS: Secret[] = [
     url: "https://cloud.walletconnect.com",
     steps: ["Your project", "Copy Project ID"],
   },
+
+  // ── Derived from repo: auto-generated from nodes/*/.cogni/repo-spec.yaml ──
+  {
+    name: "COGNI_NODE_DBS",
+    required: true,
+    category: "Infrastructure (derived)",
+    source: "agent",
+    description:
+      "Comma-separated per-node database names (derived from nodes/*/)",
+    steps: ["Auto-derived from nodes/*/ directories (excludes node-template)"],
+    generate: () => {
+      const { readdirSync, existsSync } = require("node:fs");
+      const { join } = require("node:path");
+      const root = execSync("git rev-parse --show-toplevel", {
+        encoding: "utf-8",
+      }).trim();
+      return readdirSync(join(root, "nodes"))
+        .filter(
+          (d: string) =>
+            d !== "node-template" &&
+            existsSync(join(root, "nodes", d, ".cogni", "repo-spec.yaml"))
+        )
+        .map((d: string) => `cogni_${d}`)
+        .join(",");
+    },
+  },
+  {
+    name: "COGNI_NODE_ENDPOINTS",
+    required: true,
+    category: "Infrastructure (derived)",
+    source: "agent",
+    description:
+      "Per-node billing callback endpoints (derived from repo-spec node_ids + NodePort map)",
+    steps: ["Auto-derived from nodes/*/.cogni/repo-spec.yaml"],
+    generate: () => {
+      const { readdirSync, readFileSync, existsSync } = require("node:fs");
+      const { join } = require("node:path");
+      const root = execSync("git rev-parse --show-toplevel", {
+        encoding: "utf-8",
+      }).trim();
+      const portMap: Record<string, number> = {
+        operator: 30000,
+        poly: 30100,
+        resy: 30300,
+      };
+      return readdirSync(join(root, "nodes"))
+        .filter(
+          (d: string) =>
+            d !== "node-template" &&
+            existsSync(join(root, "nodes", d, ".cogni", "repo-spec.yaml"))
+        )
+        .map((d: string) => {
+          const spec = readFileSync(
+            join(root, "nodes", d, ".cogni", "repo-spec.yaml"),
+            "utf-8"
+          );
+          const nodeId = spec.match(/^node_id:\s*"([^"]+)"/m)?.[1] ?? d;
+          const port = portMap[d] ?? 30000;
+          return `${nodeId}=http://host.docker.internal:${port}/api/internal/billing/ingest`;
+        })
+        .join(",");
+    },
+  },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const REPO = "Cogni-DAO/node-template";
 /** Deploy environments. Secrets are set per-env, not repo-level. */
-const ENVIRONMENTS = ["preview", "production"] as const;
+const ENVIRONMENTS = ["preview", "canary", "production"] as const;
+
+/** Track secret values per environment for .env file generation */
+const envSecretValues: Record<string, Record<string, string>> = {
+  preview: {},
+  canary: {},
+  production: {},
+};
 
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
@@ -730,6 +803,10 @@ function setSecret(name: string, value: string, env: string): boolean {
       input: value,
       encoding: "utf-8",
     });
+    // Track for .env file generation
+    if (env in envSecretValues) {
+      envSecretValues[env]![name] = value;
+    }
     return true;
   } catch (e) {
     console.error(`  Failed to set ${name} (${env}): ${e}`);
@@ -737,9 +814,13 @@ function setSecret(name: string, value: string, env: string): boolean {
   }
 }
 
-function setSecretBoth(name: string, value: string): boolean {
+function setSecretBoth(
+  name: string,
+  value: string,
+  envs: readonly string[] = ENVIRONMENTS
+): boolean {
   let ok = true;
-  for (const env of ENVIRONMENTS) {
+  for (const env of envs) {
     if (!setSecret(name, value, env)) ok = false;
   }
   return ok;
@@ -792,7 +873,7 @@ function applyTransform(secret: Secret, value: string): string {
 
 const dbPasswords: Record<string, string> = {};
 
-function buildDSNs(): void {
+function buildDSNs(envs: readonly string[]): void {
   const appUser = dbPasswords["APP_DB_USER"] || "app_user";
   const appPw = dbPasswords["APP_DB_PASSWORD"];
   const svcUser = dbPasswords["APP_DB_SERVICE_USER"] || "app_service";
@@ -802,12 +883,12 @@ function buildDSNs(): void {
 
   if (appPw) {
     const url = `postgresql://${appUser}:${appPw}@${host}:5432/${dbName}`;
-    setSecretBoth("DATABASE_URL", url);
-    console.log(`  ${GREEN}DATABASE_URL${RESET} set (preview + production)`);
+    setSecretBoth("DATABASE_URL", url, envs);
+    console.log(`  ${GREEN}DATABASE_URL${RESET} set (${envs.join(", ")})`);
   }
   if (svcPw) {
     const url = `postgresql://${svcUser}:${svcPw}@${host}:5432/${dbName}`;
-    setSecretBoth("DATABASE_SERVICE_URL", url);
+    setSecretBoth("DATABASE_SERVICE_URL", url, envs);
     console.log(
       `  ${GREEN}DATABASE_SERVICE_URL${RESET} set (preview + production)`
     );
@@ -815,51 +896,13 @@ function buildDSNs(): void {
 }
 
 // ── Display ──────────────────────────────────────────────────────────────────
-
-function printInventory(
-  previewSecrets: Set<string>,
-  prodSecrets: Set<string>,
-  repoSecrets: Set<string>
-): void {
-  console.log(`\n${BOLD}  Secret Inventory — ${REPO}${RESET}\n`);
-  console.log(
-    `  ${"SECRET".padEnd(42)} ${"LEVEL".padEnd(8)} ${"STATUS".padEnd(22)} ${"SOURCE"}`
-  );
-  console.log(
-    `  ${"─".repeat(42)} ${"─".repeat(8)} ${"─".repeat(22)} ${"─".repeat(8)}`
-  );
-
-  let lastCategory = "";
-  for (const s of SECRETS) {
-    if (s.category !== lastCategory) {
-      console.log(`\n  ${DIM}${s.category}${RESET}`);
-      lastCategory = s.category;
-    }
-    const req = s.required ? "" : `${DIM}(opt)${RESET} `;
-    const src =
-      s.source === "agent" ? `${DIM}auto${RESET}` : `${YELLOW}human${RESET}`;
-
-    if (s.repoLevel) {
-      const rStatus = envStatus(repoSecrets.has(s.name));
-      console.log(
-        `  ${req}${s.name.padEnd(s.required ? 42 : 37)} ${DIM}repo${RESET}     ${rStatus.padEnd(31)} ${src}`
-      );
-    } else {
-      const pStatus = envStatus(previewSecrets.has(s.name));
-      const dStatus = envStatus(prodSecrets.has(s.name));
-      console.log(
-        `  ${req}${s.name.padEnd(s.required ? 42 : 37)} ${DIM}env${RESET}      pre:${pStatus} prod:${dStatus}  ${src}`
-      );
-    }
-  }
-  console.log("");
-}
+// (printInventory removed — inventory now rendered inline in main() using targetEnvs)
 
 function printSecretHeader(
   secret: Secret,
-  previewSecrets: Set<string>,
-  prodSecrets: Set<string>,
-  repoSecrets: Set<string>
+  envSets: Record<string, Set<string>>,
+  repoSecrets: Set<string>,
+  envNames: readonly string[]
 ): void {
   const reqTag = secret.required
     ? `${BOLD}[REQUIRED]${RESET}`
@@ -868,7 +911,7 @@ function printSecretHeader(
   console.log("");
   const statusLine = secret.repoLevel
     ? `[repo: ${envStatus(repoSecrets.has(secret.name))}]`
-    : `[preview: ${envStatus(previewSecrets.has(secret.name))}, production: ${envStatus(prodSecrets.has(secret.name))}]`;
+    : `[${envNames.map((e) => `${e}: ${envStatus(envSets[e]?.has(secret.name) ?? false)}`).join(", ")}]`;
   console.log(`  ${reqTag} ${BOLD}${secret.name}${RESET}  ${statusLine}`);
   console.log(`  ${secret.description}`);
 
@@ -890,6 +933,7 @@ async function main() {
   const args = process.argv.slice(2);
   const showAll = args.includes("--all");
   const filterRequired = args.includes("--required");
+  const autoGenerate = args.includes("--auto");
   // --only DISCORD,SONAR  or  --only DISCORD_OAUTH_CLIENT_ID
   const onlyArg =
     args.find((a) => a.startsWith("--only="))?.slice(7) ||
@@ -899,16 +943,72 @@ async function main() {
     .map((p) => p.trim().toUpperCase())
     .filter(Boolean);
 
-  const previewSecrets = getSetSecrets("preview");
-  const prodSecrets = getSetSecrets("production");
+  // --env canary  or  --env=canary  (target a single environment)
+  const envArg =
+    args.find((a) => a.startsWith("--env="))?.slice(6) ||
+    (args.includes("--env") ? args[args.indexOf("--env") + 1] : undefined);
+  const targetEnvs: (typeof ENVIRONMENTS)[number][] = envArg
+    ? [envArg as (typeof ENVIRONMENTS)[number]]
+    : [...ENVIRONMENTS];
+
+  if (
+    envArg &&
+    !ENVIRONMENTS.includes(envArg as (typeof ENVIRONMENTS)[number])
+  ) {
+    console.error(
+      `Unknown environment: ${envArg}. Must be one of: ${ENVIRONMENTS.join(", ")}`
+    );
+    process.exit(1);
+  }
+
+  if (envArg) {
+    console.log(`  ${CYAN}Targeting environment: ${envArg}${RESET}\n`);
+  }
+
+  // Fetch current secret status for target environments
+  const envSecretSets: Record<string, Set<string>> = {};
+  for (const env of targetEnvs) {
+    envSecretSets[env] = getSetSecrets(env);
+  }
   const repoSecrets = getRepoSecrets();
 
-  // Always print full inventory first
-  printInventory(previewSecrets, prodSecrets, repoSecrets);
+  // Print inventory for target environments only
+  console.log(
+    `\n${BOLD}  Secret Inventory — ${REPO} (${targetEnvs.join(", ")})${RESET}\n`
+  );
+  console.log(
+    `  ${"SECRET".padEnd(42)} ${"LEVEL".padEnd(8)} ${"STATUS".padEnd(22)} ${"SOURCE"}`
+  );
+  console.log(
+    `  ${"─".repeat(42)} ${"─".repeat(8)} ${"─".repeat(22)} ${"─".repeat(8)}`
+  );
+  let lastCat = "";
+  for (const s of SECRETS) {
+    if (s.category !== lastCat) {
+      console.log(`\n  ${DIM}${s.category}${RESET}`);
+      lastCat = s.category;
+    }
+    const req = s.required ? "" : `${DIM}(opt)${RESET} `;
+    const src =
+      s.source === "agent" ? `${DIM}auto${RESET}` : `${YELLOW}human${RESET}`;
+    if (s.repoLevel) {
+      const rStatus = envStatus(repoSecrets.has(s.name));
+      console.log(
+        `  ${req}${s.name.padEnd(s.required ? 42 : 37)} ${DIM}repo${RESET}     ${rStatus.padEnd(31)} ${src}`
+      );
+    } else {
+      const statuses = targetEnvs
+        .map((e) => `${e}:${envStatus(envSecretSets[e]?.has(s.name) ?? false)}`)
+        .join(" ");
+      console.log(
+        `  ${req}${s.name.padEnd(s.required ? 42 : 37)} ${DIM}env${RESET}      ${statuses}  ${src}`
+      );
+    }
+  }
+  console.log("");
 
   let filtered = SECRETS;
   if (onlyPatterns) {
-    // --only DISCORD matches DISCORD_OAUTH_CLIENT_ID, DISCORD_BOT_TOKEN, etc.
     filtered = filtered.filter((s) =>
       onlyPatterns.some((p) => s.name.includes(p))
     );
@@ -919,13 +1019,16 @@ async function main() {
     if (!showAll) {
       filtered = filtered.filter((s) => {
         if (s.repoLevel) return !repoSecrets.has(s.name);
-        return !previewSecrets.has(s.name) || !prodSecrets.has(s.name);
+        // Show if missing in ANY target environment
+        return targetEnvs.some((e) => !envSecretSets[e]?.has(s.name));
       });
     }
   }
 
   if (filtered.length === 0) {
-    console.log(`  ${GREEN}All secrets are set in both environments.${RESET}`);
+    console.log(
+      `  ${GREEN}All secrets are set for ${targetEnvs.join(", ")}.${RESET}`
+    );
     console.log(`  Run with --all to walk through everything.\n`);
     return;
   }
@@ -952,20 +1055,44 @@ async function main() {
       lastCategory = secret.category;
     }
 
-    printSecretHeader(secret, previewSecrets, prodSecrets, repoSecrets);
+    printSecretHeader(secret, envSecretSets, repoSecrets, targetEnvs);
 
     // SSH_DEPLOY_KEY is special — one key per environment
     if (secret.name === "SSH_DEPLOY_KEY") {
-      const action = await prompt(
-        rl,
-        `  Generate SSH keys for both environments? [Y/n] `
+      const missingEnvs = targetEnvs.filter(
+        (e) => !envSecretSets[e]?.has(secret.name)
       );
-      if (action.toLowerCase() === "n") {
+      if (missingEnvs.length === 0) {
+        console.log(`  ${DIM}SSH_DEPLOY_KEY — already set, skipping${RESET}`);
         skipped++;
         continue;
       }
-      for (const env of ENVIRONMENTS) {
-        const privKey = generateSSHKey(env);
+      if (!autoGenerate) {
+        const action = await prompt(
+          rl,
+          `  Generate SSH keys for ${missingEnvs.join(", ")}? [Y/n] `
+        );
+        if (action.toLowerCase() === "n") {
+          skipped++;
+          continue;
+        }
+      }
+      for (const env of missingEnvs) {
+        // Reuse existing key from .local/{env}-vm-key if available (matches what's on that env's VM)
+        const repoRoot = execSync("git rev-parse --show-toplevel", {
+          encoding: "utf-8",
+        }).trim();
+        const localKeyPath = `${repoRoot}/.local/${env}-vm-key`;
+        const { existsSync, readFileSync } = require("node:fs");
+        let privKey: string;
+        if (existsSync(localKeyPath)) {
+          privKey = readFileSync(localKeyPath, "utf-8");
+          console.log(
+            `  ${DIM}Using existing key from .local/${env}-vm-key${RESET}`
+          );
+        } else {
+          privKey = generateSSHKey(env);
+        }
         setSecret(secret.name, privKey, env);
         console.log(`  ${GREEN}SSH_DEPLOY_KEY${RESET} set for ${env}`);
       }
@@ -994,31 +1121,55 @@ async function main() {
     }
 
     if (secret.source === "agent") {
-      const action = await prompt(
-        rl,
-        `  Generate and set for both envs? [Y/n] `
-      );
-      if (action.toLowerCase() === "n") {
-        skipped++;
-        continue;
-      }
-      const value = secret.generate?.();
-      if (setSecretBoth(secret.name, value)) {
-        console.log(
-          `  ${GREEN}${secret.name}${RESET} set (preview + production)`
+      // --auto: skip prompt, auto-generate missing agent secrets
+      if (autoGenerate) {
+        // Only set if missing in at least one target env
+        const missing = targetEnvs.some(
+          (e) => !envSecretSets[e]?.has(secret.name)
         );
-        set++;
-        if (secret.category === "Database") {
-          dbPasswords[secret.name] = value;
+        if (!missing) {
+          console.log(`  ${DIM}${secret.name} — already set, skipping${RESET}`);
+          skipped++;
+          continue;
+        }
+        const value = secret.generate?.();
+        // Only set for envs where it's missing
+        const envsToSet = targetEnvs.filter(
+          (e) => !envSecretSets[e]?.has(secret.name)
+        );
+        if (setSecretBoth(secret.name, value, envsToSet)) {
+          console.log(
+            `  ${GREEN}${secret.name}${RESET} generated + set (${envsToSet.join(", ")})`
+          );
+          set++;
+          if (secret.category === "Database") {
+            dbPasswords[secret.name] = value;
+          }
+        }
+      } else {
+        const action = await prompt(
+          rl,
+          `  Generate and set for ${targetEnvs.join(", ")}? [Y/n] `
+        );
+        if (action.toLowerCase() === "n") {
+          skipped++;
+          continue;
+        }
+        const value = secret.generate?.();
+        if (setSecretBoth(secret.name, value, targetEnvs)) {
+          console.log(
+            `  ${GREEN}${secret.name}${RESET} set (${targetEnvs.join(", ")})`
+          );
+          set++;
+          if (secret.category === "Database") {
+            dbPasswords[secret.name] = value;
+          }
         }
       }
     } else if (secret.perEnv) {
       // Per-env human secrets (DOMAIN, VM_HOST) — ask for each env separately
-      for (const env of ENVIRONMENTS) {
-        const already =
-          env === "preview"
-            ? previewSecrets.has(secret.name)
-            : prodSecrets.has(secret.name);
+      for (const env of targetEnvs) {
+        const already = envSecretSets[env]?.has(secret.name) ?? false;
         if (already && !showAll) continue;
         const value = await prompt(
           rl,
@@ -1035,31 +1186,22 @@ async function main() {
       }
     } else {
       // Human secrets — ask per-environment
-      const pMissing = !previewSecrets.has(secret.name);
-      const dMissing = !prodSecrets.has(secret.name);
+      // Determine which target envs are missing this secret
+      const missingEnvs = targetEnvs.filter(
+        (e) => !envSecretSets[e]?.has(secret.name)
+      );
 
-      // Determine which envs to prompt for
-      let envsToSet: (typeof ENVIRONMENTS)[number][];
-      if (pMissing && dMissing) {
-        const envHint = `[${BOLD}B${RESET}]oth / [${BOLD}P${RESET}]review only / pro[${BOLD}D${RESET}] only / [${BOLD}S${RESET}]kip`;
-        const target = await prompt(rl, `  Set for: ${envHint}: `);
-        const t = target.toLowerCase().trim() || "b";
-        if (t === "s") {
-          skipped++;
-          continue;
-        }
-        envsToSet =
-          t === "p"
-            ? ["preview"]
-            : t === "d"
-              ? ["production"]
-              : [...ENVIRONMENTS];
-      } else {
-        envsToSet = pMissing ? ["preview"] : ["production"];
-        console.log(`  ${DIM}(only missing in ${envsToSet[0]})${RESET}`);
+      if (missingEnvs.length === 0 && !showAll) {
+        skipped++;
+        continue;
       }
 
-      // Prompt for each environment separately
+      const envsToSet = missingEnvs.length > 0 ? missingEnvs : targetEnvs;
+      if (missingEnvs.length > 0 && missingEnvs.length < targetEnvs.length) {
+        console.log(`  ${DIM}(missing in ${missingEnvs.join(", ")})${RESET}`);
+      }
+
+      // Prompt for each environment
       let didSet = false;
       for (const env of envsToSet) {
         const value = await prompt(
@@ -1088,7 +1230,58 @@ async function main() {
     console.log(
       `\n${"═".repeat(2)} ${BOLD}Derived Database URLs${RESET} ${"═".repeat(41)}`
     );
-    buildDSNs();
+    buildDSNs(targetEnvs);
+  }
+
+  // Write .env.{env} files for each environment that had secrets set
+  const repoRoot = execSync("git rev-parse --show-toplevel", {
+    encoding: "utf-8",
+  }).trim();
+
+  for (const env of targetEnvs) {
+    const secrets = envSecretValues[env];
+    if (!secrets || Object.keys(secrets).length === 0) continue;
+
+    const envFile = `${repoRoot}/.env.${env}`;
+    const { readFileSync, writeFileSync, chmodSync, existsSync } = await import(
+      "node:fs"
+    );
+
+    // Merge with existing .env file — never lose previously set values
+    const existing: Record<string, string> = {};
+    if (existsSync(envFile)) {
+      const content = readFileSync(envFile, "utf-8");
+      for (const line of content.split("\n")) {
+        if (line.startsWith("#") || !line.includes("=")) continue;
+        const eqIdx = line.indexOf("=");
+        const key = line.slice(0, eqIdx);
+        let val = line.slice(eqIdx + 1);
+        if (val.startsWith("'") && val.endsWith("'")) {
+          val = val.slice(1, -1).replace(/'\\'''/g, "'");
+        }
+        if (/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+          existing[key] = val;
+        }
+      }
+    }
+
+    const merged = { ...existing, ...secrets };
+    const lines = [
+      `# setup-secrets.ts — ${new Date().toISOString()}`,
+      `# Source of truth for ${env} environment secrets.`,
+      `# Read by: provision-test-vm.sh, deploy-infra.sh (via GitHub env)`,
+      `# DO NOT commit this file (gitignored).`,
+      "",
+      ...Object.entries(merged).map(
+        ([k, v]) => `${k}='${v.replace(/'/g, "'\\''")}'`
+      ),
+      "",
+    ];
+    writeFileSync(envFile, lines.join("\n"));
+    chmodSync(envFile, 0o600);
+    console.log(
+      `  ${GREEN}Saved${RESET} .env.${env} (${Object.keys(merged).length} total, ${Object.keys(secrets).length} new/updated)`
+    );
   }
 
   console.log(

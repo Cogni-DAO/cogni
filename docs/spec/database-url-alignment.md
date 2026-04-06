@@ -41,7 +41,7 @@ Establish a clear security boundary between provisioning and runtime database cr
 
 ## Core Invariants
 
-1. **AUTHORITATIVE_INPUTS_PER_PHASE**: Provisioning currently uses component vars + `POSTGRES_ROOT_*`; target state uses `DATABASE_ROOT_URL` + `DATABASE_URL` + `DATABASE_SERVICE_URL`. Runtime always uses only `DATABASE_URL` and `DATABASE_SERVICE_URL`.
+1. **AUTHORITATIVE_INPUTS_PER_PHASE**: Provisioning uses `POSTGRES_ROOT_*`, `APP_DB_*`, `COGNI_NODE_DBS`, and `LITELLM_DB_NAME` — all required, no defaults. Runtime uses only `DATABASE_URL` and `DATABASE_SERVICE_URL`.
 
 2. **RUNTIME_DSN_ONLY**: Runtime containers (`app`, `scheduler-worker`, `migrate`) receive **only** `DATABASE_URL` and/or `DATABASE_SERVICE_URL`. They never receive `DATABASE_ROOT_URL`, `APP_DB_*` component vars, or `POSTGRES_ROOT_*` credentials. **Enforcement:** CI validation fails if runtime container env blocks contain forbidden vars.
 
@@ -89,14 +89,16 @@ Establish a clear security boundary between provisioning and runtime database cr
 
 ### Per-Container Env Contract
 
-| Container          | Current (P0)                           | Target (P1+)                                                |
-| ------------------ | -------------------------------------- | ----------------------------------------------------------- |
-| `app`              | `DATABASE_URL`, `DATABASE_SERVICE_URL` | Same                                                        |
-| `scheduler-worker` | `DATABASE_URL` (= service DSN)         | Same                                                        |
-| `migrate`          | `DATABASE_URL` (= app DSN)             | Same                                                        |
-| `db-provision`     | `POSTGRES_ROOT_*`, `APP_DB_*`          | `DATABASE_ROOT_URL`, `DATABASE_URL`, `DATABASE_SERVICE_URL` |
+| Container          | Receives                                                           |
+| ------------------ | ------------------------------------------------------------------ |
+| `app`              | `DATABASE_URL`, `DATABASE_SERVICE_URL`                             |
+| `scheduler-worker` | `DATABASE_SERVICE_URL`                                             |
+| `migrate`          | `DATABASE_URL`                                                     |
+| `db-provision`     | `POSTGRES_ROOT_*`, `APP_DB_*`, `COGNI_NODE_DBS`, `LITELLM_DB_NAME` |
 
-**Forbidden in runtime containers (all phases):** `APP_DB_*`, `POSTGRES_ROOT_*`, `DATABASE_ROOT_URL`
+**Forbidden in runtime containers:** `APP_DB_*`, `POSTGRES_ROOT_*`, `COGNI_NODE_DBS`, `LITELLM_DB_NAME`
+
+**Required by provisioning (no defaults):** `COGNI_NODE_DBS` (comma-separated node DB names), `LITELLM_DB_NAME`
 
 ### Implementation Status (P0)
 

@@ -1,0 +1,42 @@
+{
+  "name": "@cogni/node-shared",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "postbuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist/index.js')){console.error('ERROR: dist/index.js missing'); process.exit(1)}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cogni/node-core": "workspace:*",
+    "@cogni/repo-spec": "workspace:*",
+    "fast-safe-stringify": "^2.1.1",
+    "uuid": "^11.1.0",
+    "zod": "^4.1.12"
+  },
+  "peerDependencies": {
+    "pino": "^9"
+  },
+  "peerDependenciesMeta": {
+    "pino": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "pino": "^9.6.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5"
+  }
+}

@@ -8,7 +8,7 @@ created: 2025-02-28
 # Event Taxonomy v0
 
 > Single source of truth for PostHog product analytics events.
-> Code registry: `apps/web/src/shared/analytics/events.ts`
+> Code registry: `apps/operator/src/shared/analytics/events.ts`
 
 ## Event Envelope (Required on Every Event)
 

@@ -18,7 +18,22 @@ tags: [testing, dev]
 
 **For stack testing modes and commands, see [Environments Spec](../spec/environments.md).**
 
+**For full-stack testing (single-node and multi-node), see [Full-Stack Testing](./full-stack-testing.md).**
+
 **For system integration test design (mock-LLM, adapter overrides), see [System Test Architecture](../../work/projects/proj.system-test-architecture.md).**
+
+## Test Layers
+
+| Layer              | What it proves                    | Infra needed                   | Speed   | Command                 |
+| ------------------ | --------------------------------- | ------------------------------ | ------- | ----------------------- |
+| **Unit**           | Pure logic, no I/O                | None                           | Fast    | `pnpm test`             |
+| **Contract**       | Route handler input/output shapes | None (in-memory)               | Fast    | `pnpm test:contract`    |
+| **Component**      | Adapter + DB integration          | Testcontainers                 | Medium  | `pnpm test:component`   |
+| **Stack (single)** | Full HTTP path through one node   | Docker Compose (test)          | Slow    | `pnpm test:stack:dev`   |
+| **Stack (multi)**  | Cross-node isolation + routing    | Docker Compose (dev) + 3 nodes | Slow    | `pnpm test:stack:multi` |
+| **E2E**            | Black-box production validation   | Full Docker stack              | Slowest | `pnpm e2e`              |
+
+Use the lightest layer that can prove your assertion. Most billing logic is testable at contract level. Multi-node isolation requires stack-multi.
 
 ## When to Use This
 
@@ -114,6 +129,7 @@ pnpm check          # Full lint + type + format validation
 
 ## Related
 
+- [Full-Stack Testing](./full-stack-testing.md) — running and writing stack tests (single-node and multi-node)
 - [Developer Setup](./developer-setup.md) — first-time setup and daily dev workflow
 - [Environments Spec](../spec/environments.md) — deployment modes and stack configurations
 - [Feature Development Guide](./feature-development.md) — end-to-end feature workflow including testing

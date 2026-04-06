@@ -11,7 +11,7 @@ services:
     image: ${APP_IMAGE:-cogni-template-local}
     build:
       context: ../../..
-      dockerfile: ./apps/web/Dockerfile
+      dockerfile: ./nodes/operator/app/Dockerfile
     restart: always
     # TigerBeetle native client uses io_uring — blocked by default seccomp profile
     security_opt:
@@ -137,13 +137,19 @@ services:
       - "autoheal=false"
 
   litellm:
-    image: ghcr.io/berriai/litellm@sha256:7e7816d58c265c182be5f3568ed8e5d999f11a5deda1d85e8e347a18bc578f64
+    build:
+      context: ../../images/litellm
+      dockerfile: Dockerfile
+    image: cogni-litellm:latest
     restart: unless-stopped
     labels:
       - "autoheal=true"
     networks:
       - internal
       - sandbox-internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:4000)
+    ports:
+      - "4000:4000"
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
@@ -153,9 +159,9 @@ services:
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY}
       - LANGFUSE_HOST=${LANGFUSE_BASE_URL}
       - LANGFUSE_TRACING_ENVIRONMENT=${DEPLOY_ENVIRONMENT}
-      # Billing ingest callback (generic_api → app ingest endpoint)
-      - GENERIC_LOGGER_ENDPOINT=${GENERIC_LOGGER_ENDPOINT:-http://app:3000/api/internal/billing/ingest}
-      - "GENERIC_LOGGER_HEADERS=Authorization=Bearer ${BILLING_INGEST_TOKEN}"
+      # Per-node billing callback routing (custom callback class — cogni_callbacks.CogniNodeRouter)
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS}
+      - BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN}
     volumes:
       - ./configs/litellm.config.yaml:/app/config.yaml:ro
     command: --config /app/config.yaml --host 0.0.0.0 --port 4000
@@ -181,6 +187,9 @@ services:
       - "autoheal=true"
     networks:
       - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:6379)
+    ports:
+      - "6379:6379"
     command:
       - "redis-server"
       - "--save"
@@ -203,6 +212,10 @@ services:
       - "autoheal=true"
     networks:
       - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:5432).
+    # 0.0.0.0 required because k8s pods reach host via node IP, not loopback.
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: ${POSTGRES_ROOT_USER}
@@ -229,7 +242,7 @@ services:
       POSTGRES_ROOT_PASSWORD: ${POSTGRES_ROOT_PASSWORD}
       DB_HOST: postgres
       DB_PORT: 5432
-      APP_DB_NAME: ${APP_DB_NAME}
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS}
       APP_DB_USER: ${APP_DB_USER}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD}
       APP_DB_SERVICE_USER: ${APP_DB_SERVICE_USER}
@@ -300,6 +313,8 @@ services:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host/root:ro
+      # K8s pod logs for k3s log shipping (no-op on hosts without k3s)
+      - /var/log/pods:/var/log/pods:ro
     command:
       - run
       - /etc/alloy/config.alloy
@@ -357,8 +372,9 @@ services:
       - "autoheal=true"
     networks:
       - internal
+    # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:7233)
     ports:
-      - "127.0.0.1:7233:7233"
+      - "7233:7233"
     environment:
       # Temporal DB config (auto-setup env vars)
       - DB=postgres12
@@ -370,8 +386,9 @@ services:
       # Temporal gRPC endpoints
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_CLI_ADDRESS=temporal:7233
-      # Namespace auto-creation (must match app's TEMPORAL_NAMESPACE)
-      - DEFAULT_NAMESPACE=cogni-${APP_ENV}
+      # Namespace auto-creation — must match k8s overlay TEMPORAL_NAMESPACE.
+      # Set TEMPORAL_NAMESPACE in .env (e.g. cogni-canary, cogni-production).
+      - DEFAULT_NAMESPACE=${TEMPORAL_NAMESPACE:-cogni-${APP_ENV}}
     volumes:
       - ./configs/temporal-dynamicconfig.yaml:/etc/temporal/config/dynamicconfig/development-sql.yaml:ro
     depends_on:
@@ -423,8 +440,8 @@ services:
       # Database: service role (BYPASSRLS) for cross-tenant scheduler operations.
       # Pass through DATABASE_SERVICE_URL — worker needs BYPASSRLS for cross-tenant reads.
       - DATABASE_URL=${DATABASE_SERVICE_URL?DATABASE_SERVICE_URL is required}
-      # Internal API (scheduler-worker → app)
-      - APP_BASE_URL=http://app:3000
+      # Per-node API endpoints (scheduler-worker → node apps)
+      - COGNI_NODE_ENDPOINTS=operator=http://app:3000,poly=http://poly:3100,resy=http://resy:3300
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN}
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.
@@ -474,7 +491,7 @@ services:
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
     volumes:
-      - ./sandbox-proxy/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ./configs/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
     command: >
       sh -c "envsubst '$$LITELLM_MASTER_KEY' < /etc/nginx/nginx.conf.template
       > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"

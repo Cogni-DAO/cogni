@@ -88,7 +88,8 @@ export async function ScheduledSweepWorkflow(
   }
 
   // Workflow: deterministic pick — first item is highest priority (activity pre-sorted)
-  const item = items[0]!;
+  const item = items[0];
+  if (!item) return { outcome: "no_op", roleId };
   const runId = uuid4();
 
   // Child workflow: run the graph with item context

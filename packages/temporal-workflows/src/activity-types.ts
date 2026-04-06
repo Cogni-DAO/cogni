@@ -39,6 +39,7 @@ export interface SchedulerActivities {
   }): Promise<void>;
 
   executeGraphActivity(input: {
+    nodeId: string;
     temporalScheduleId?: string;
     graphId: string;
     executionGrantId: string | null;

@@ -1,0 +1,21 @@
+# Node Template — repo-spec
+# Replace these placeholder UUIDs when forking this template for a new node.
+# Generate node_id: openssl rand -hex 16 | sed 's/\(.\{8\}\)\(.\{4\}\)\(.\{4\}\)\(.\{4\}\)\(.\{12\}\)/\1-\2-\3-\4-\5/'
+# Derive scope_id: uuidv5(node_id, "default")
+# See: docs/spec/identity-model.md, docs/spec/multi-node-tenancy.md
+
+schema_version: "0.1.4"
+
+# REPLACE THESE — placeholder UUIDs for template only
+node_id: "00000000-0000-4000-a000-000000000000"
+scope_id: "00000000-0000-5000-a000-000000000000"
+scope_key: "default"
+
+intent:
+  name: node-template
+
+cogni_dao:
+  chain_id: "8453" # Base mainnet
+
+payments:
+  status: pending_activation

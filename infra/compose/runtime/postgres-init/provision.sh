@@ -6,8 +6,12 @@ set -euo pipefail
 
 # Module: infra/compose/postgres-init/provision.sh
 # Purpose: Idempotent database and role provisioning for runtime stack.
-# Scope: Executed by the db-provision service container; creates app role, app database (owned by role), and litellm database (root-owned).
-# Invariants: Requires APP_DB_USER and APP_DB_PASSWORD; validates identifier syntax (alphanumeric + underscore); creates role only if missing; sets DB ownership on new databases only.
+# Scope: Executed by the db-provision service container; creates app role,
+#   per-node databases (DB_PER_NODE), and litellm database.
+# Invariants:
+#   DB_PER_NODE: Each node gets its own database on the shared Postgres server.
+#   DB_IS_BOUNDARY: Database itself is the node boundary — no tenancy columns.
+#   Requires APP_DB_USER and APP_DB_PASSWORD; validates identifier syntax.
 # Side-effects: IO (psql commands); creates roles and databases in target Postgres instance.
 
 # Configuration from Env
@@ -16,9 +20,19 @@ PG_PORT="${DB_PORT:-5432}"
 PG_USER="${POSTGRES_ROOT_USER:-postgres}"
 PG_PASS="${POSTGRES_ROOT_PASSWORD:-postgres}"
 
-# Target Databases (defaults)
-APP_DB="${APP_DB_NAME:-cogni_template_dev}"
-LITELLM_DB="${LITELLM_DB_NAME:-litellm_dev}"
+# Per-node databases (comma-separated). Required — no defaults.
+APP_DBS="${COGNI_NODE_DBS:-}"
+if [ -z "$APP_DBS" ]; then
+  echo "❌ ERROR: COGNI_NODE_DBS is required (comma-separated list of database names)"
+  exit 1
+fi
+
+# LiteLLM database (shared, root-owned — single instance serves all nodes)
+LITELLM_DB="${LITELLM_DB_NAME:-}"
+if [ -z "$LITELLM_DB" ]; then
+  echo "❌ ERROR: LITELLM_DB_NAME is required"
+  exit 1
+fi
 
 # App User Credentials (required, no defaults)
 APP_USER="${APP_DB_USER:-}"
@@ -47,10 +61,6 @@ if ! [[ "$APP_USER" =~ ^[a-zA-Z0-9_]+$ ]]; then
 fi
 if ! [[ "$APP_SERVICE_USER" =~ ^[a-zA-Z0-9_]+$ ]]; then
   echo "❌ ERROR: APP_DB_SERVICE_USER contains invalid characters (allowed: a-zA-Z0-9_)"
-  exit 1
-fi
-if ! [[ "$APP_DB" =~ ^[a-zA-Z0-9_]+$ ]]; then
-  echo "❌ ERROR: APP_DB_NAME contains invalid characters (allowed: a-zA-Z0-9_)"
   exit 1
 fi
 if ! [[ "$LITELLM_DB" =~ ^[a-zA-Z0-9_]+$ ]]; then
@@ -96,13 +106,13 @@ echo "✅ Postgres is up."
 
 echo "🔧 Starting Provisioning (Roles and Databases)..."
 
-# App Role Creation (Idempotent)
+# ── Role Creation (Idempotent, shared across all node DBs) ─────────────────
+
+# App Role
 echo "🔧 Checking app role '$APP_USER'..."
 role_exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_roles WHERE rolname = '$APP_USER'" | grep -c 1 || true)
 if [ "$role_exists" -eq 0 ]; then
   echo "   -> Creating role '$APP_USER'..."
-  # Use psql variable for password (:'var' substitutes as properly-quoted literal)
-  # Note: psql variables only work with heredoc/stdin, not with -c flag
   PGPASSWORD="$PG_PASS" psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "postgres" -v ON_ERROR_STOP=1 \
     -v app_pass="$APP_PASS" <<SQL
 CREATE ROLE "$APP_USER" WITH LOGIN PASSWORD :'app_pass';
@@ -111,56 +121,7 @@ else
   echo "   -> Role '$APP_USER' already exists."
 fi
 
-# App Database Creation (Idempotent, owned by app user)
-echo "🔧 Checking app database '$APP_DB'..."
-app_db_exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_database WHERE datname = '$APP_DB'" | grep -c 1 || true)
-if [ "$app_db_exists" -eq 0 ]; then
-  echo "   -> Creating database '$APP_DB' with owner '$APP_USER'..."
-  run_sql_as_root "postgres" "CREATE DATABASE \"$APP_DB\" OWNER \"$APP_USER\";"
-else
-  echo "   -> Database '$APP_DB' already exists. Ensuring ownership and privileges..."
-  # Converge ownership (in case DB was created by postgres or another role)
-  run_sql_as_root "postgres" "ALTER DATABASE \"$APP_DB\" OWNER TO \"$APP_USER\";"
-  # Explicit grants for migrations (CREATE = can create schemas)
-  run_sql_as_root "postgres" "GRANT CONNECT, CREATE, TEMP ON DATABASE \"$APP_DB\" TO \"$APP_USER\";"
-fi
-
-# LiteLLM Database Creation (Idempotent, root-owned for litellm service)
-echo "🔧 Checking litellm database '$LITELLM_DB'..."
-litellm_db_exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_database WHERE datname = '$LITELLM_DB'" | grep -c 1 || true)
-if [ "$litellm_db_exists" -eq 0 ]; then
-  echo "   -> Creating database '$LITELLM_DB'..."
-  run_sql_as_root "postgres" "CREATE DATABASE \"$LITELLM_DB\";"
-else
-  echo "   -> Database '$LITELLM_DB' already exists."
-fi
-
-# ── RLS Role Hardening ──────────────────────────────────────────────────────
-# Per DATABASE_RLS_SPEC.md: app_user gets DML-only; app_service gets BYPASSRLS.
-# Note: Migrations currently run as app_user (DB owner, via drizzle-kit + DATABASE_URL).
-# Future hardening: separate migrator role from runtime role (P1).
-
-echo "🔧 Applying RLS role hardening on '$APP_DB'..."
-
-# Ensure app_user owns public schema (converge existing DBs where postgres owns it)
-run_sql_as_root "$APP_DB" "ALTER SCHEMA public OWNER TO \"$APP_USER\";"
-
-# Grant schema usage (needed for queries) + CREATE (needed for migrations to create tables/indexes)
-run_sql_as_root "$APP_DB" "GRANT USAGE, CREATE ON SCHEMA public TO \"$APP_USER\";"
-
-# Grant DML-only on existing tables
-run_sql_as_root "$APP_DB" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"$APP_USER\";"
-run_sql_as_root "$APP_DB" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$APP_USER\";"
-
-# Ensure future tables (created by app_user during migrations) inherit the same grants.
-# FOR ROLE is required: without it, defaults only apply to objects created by the current
-# session user (postgres), not by app_user who actually runs drizzle-kit migrations.
-run_sql_as_root "$APP_DB" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"$APP_USER\";"
-run_sql_as_root "$APP_DB" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO \"$APP_USER\";"
-
-# ── Service Role (scheduler, internal workers) ─────────────────────────────
-# Same DML grants but with BYPASSRLS for cross-tenant operations.
-# Uses explicit APP_DB_SERVICE_USER (no derived naming).
+# Service Role (BYPASSRLS for scheduler, internal workers)
 echo "🔧 Checking service role '$APP_SERVICE_USER'..."
 service_role_exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_roles WHERE rolname = '$APP_SERVICE_USER'" | grep -c 1 || true)
 if [ "$service_role_exists" -eq 0 ]; then
@@ -173,12 +134,68 @@ else
   echo "   -> Service role '$APP_SERVICE_USER' already exists."
 fi
 
-# Grant DML + schema usage to service role on app DB
-run_sql_as_root "$APP_DB" "GRANT CONNECT ON DATABASE \"$APP_DB\" TO \"$APP_SERVICE_USER\";"
-run_sql_as_root "$APP_DB" "GRANT USAGE ON SCHEMA public TO \"$APP_SERVICE_USER\";"
-run_sql_as_root "$APP_DB" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"$APP_SERVICE_USER\";"
-run_sql_as_root "$APP_DB" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$APP_SERVICE_USER\";"
-run_sql_as_root "$APP_DB" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"$APP_SERVICE_USER\";"
-run_sql_as_root "$APP_DB" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO \"$APP_SERVICE_USER\";"
+# ── Per-Node Database Provisioning (DB_PER_NODE) ──────────────────────────
+# Each node gets its own database. The database IS the node boundary.
 
-echo "✅ Provisioning Complete."
+function provision_node_db() {
+  local db_name="$1"
+
+  # Validate identifier
+  if ! [[ "$db_name" =~ ^[a-zA-Z0-9_]+$ ]]; then
+    echo "❌ ERROR: Database name '$db_name' contains invalid characters (allowed: a-zA-Z0-9_)"
+    exit 1
+  fi
+
+  echo "🔧 Provisioning node database '$db_name'..."
+
+  # Create database (idempotent)
+  local db_exists
+  db_exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_database WHERE datname = '$db_name'" | grep -c 1 || true)
+  if [ "$db_exists" -eq 0 ]; then
+    echo "   -> Creating database '$db_name' with owner '$APP_USER'..."
+    run_sql_as_root "postgres" "CREATE DATABASE \"$db_name\" OWNER \"$APP_USER\";"
+  else
+    echo "   -> Database '$db_name' already exists. Ensuring ownership..."
+    run_sql_as_root "postgres" "ALTER DATABASE \"$db_name\" OWNER TO \"$APP_USER\";"
+    run_sql_as_root "postgres" "GRANT CONNECT, CREATE, TEMP ON DATABASE \"$db_name\" TO \"$APP_USER\";"
+  fi
+
+  # RLS role hardening
+  echo "   -> Applying RLS role hardening on '$db_name'..."
+  run_sql_as_root "$db_name" "ALTER SCHEMA public OWNER TO \"$APP_USER\";"
+  run_sql_as_root "$db_name" "GRANT USAGE, CREATE ON SCHEMA public TO \"$APP_USER\";"
+  run_sql_as_root "$db_name" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"$APP_USER\";"
+  run_sql_as_root "$db_name" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$APP_USER\";"
+  run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"$APP_USER\";"
+  run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO \"$APP_USER\";"
+
+  # Service role grants — includes CREATE for migrations (drizzle-kit needs to create schemas + tables)
+  run_sql_as_root "$db_name" "GRANT CONNECT, CREATE ON DATABASE \"$db_name\" TO \"$APP_SERVICE_USER\";"
+  run_sql_as_root "$db_name" "GRANT USAGE, CREATE ON SCHEMA public TO \"$APP_SERVICE_USER\";"
+  run_sql_as_root "$db_name" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"$APP_SERVICE_USER\";"
+  run_sql_as_root "$db_name" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$APP_SERVICE_USER\";"
+  run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"$APP_SERVICE_USER\";"
+  run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO \"$APP_SERVICE_USER\";"
+
+  echo "   ✅ Node database '$db_name' provisioned."
+}
+
+# Provision each node database from comma-separated list
+IFS=',' read -ra NODE_DBS <<< "$APP_DBS"
+for db in "${NODE_DBS[@]}"; do
+  # Trim whitespace
+  db=$(echo "$db" | xargs)
+  provision_node_db "$db"
+done
+
+# ── LiteLLM Database (shared, root-owned) ─────────────────────────────────
+echo "🔧 Checking litellm database '$LITELLM_DB'..."
+litellm_db_exists=$(run_sql_as_root "postgres" "SELECT 1 FROM pg_database WHERE datname = '$LITELLM_DB'" | grep -c 1 || true)
+if [ "$litellm_db_exists" -eq 0 ]; then
+  echo "   -> Creating database '$LITELLM_DB'..."
+  run_sql_as_root "postgres" "CREATE DATABASE \"$LITELLM_DB\";"
+else
+  echo "   -> Database '$LITELLM_DB' already exists."
+fi
+
+echo "✅ Provisioning Complete (${#NODE_DBS[@]} node database(s) + litellm)."

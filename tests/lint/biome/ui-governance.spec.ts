@@ -24,7 +24,7 @@ describe.skip("UI Governance Rules", () => {
   describe("Token-safe class usage", () => {
     it("blocks raw palette utilities", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/home/components/Test.tsx",
+        "nodes/operator/app/src/features/home/components/Test.tsx",
         `export const Component = () => <div className="bg-red-500 text-gray-600 border-sky-300" />;`,
         focus
       );
@@ -42,7 +42,7 @@ describe.skip("UI Governance Rules", () => {
 
     it("blocks raw hex/rgb values", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/home/components/Test.tsx",
+        "nodes/operator/app/src/features/home/components/Test.tsx",
         `export const Component = () => <div className="text-[#fff] bg-[rgb(10,10,10)]" />;`,
         focus
       );
@@ -62,7 +62,7 @@ describe.skip("UI Governance Rules", () => {
 
     it("allows semantic token-prefixed utilities", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/features/home/components/Test.tsx",
+        "nodes/operator/app/src/features/home/components/Test.tsx",
         `export const Component = () => <div className="bg-background text-foreground border-border ring-primary ring-offset-background flex gap-4" />;`,
         focus
       );
@@ -74,7 +74,7 @@ describe.skip("UI Governance Rules", () => {
   describe("Arbitrary values", () => {
     it("blocks arbitrary values that are not token-driven", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/home/components/Test.tsx",
+        "nodes/operator/app/src/features/home/components/Test.tsx",
         `export const Component = () => <div className="gap-[12px] px-[1.25rem]" />;`,
         focus
       );
@@ -94,7 +94,7 @@ describe.skip("UI Governance Rules", () => {
 
     it("allows arbitrary values that reference tokens", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/features/home/components/Test.tsx",
+        "nodes/operator/app/src/features/home/components/Test.tsx",
         `export const Component = () => <div className="gap-[var(--spacing-lg)] px-[var(--spacing-xl)]" />;`,
         focus
       );
@@ -104,7 +104,7 @@ describe.skip("UI Governance Rules", () => {
 
     it("allows structural/layout utilities from Tailwind scale", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/features/home/components/Test.tsx",
+        "nodes/operator/app/src/features/home/components/Test.tsx",
         `export const Component = () => <div className="flex grid gap-4 px-6 py-4 sm:mt-8" />;`,
         focus
       );
@@ -116,7 +116,7 @@ describe.skip("UI Governance Rules", () => {
   describe("Vendor imports", () => {
     it("blocks vendor imports outside kit", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/home/components/Test.tsx",
+        "nodes/operator/app/src/features/home/components/Test.tsx",
         `import { Button } from "@/components/vendor/ui-primitives/shadcn/button";
          export const Component = () => <Button />;`,
         focus
@@ -137,7 +137,7 @@ describe.skip("UI Governance Rules", () => {
 
     it("allows vendor imports within kit wrappers", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/components/kit/data-display/Test.tsx",
+        "nodes/operator/app/src/components/kit/data-display/Test.tsx",
         `import { Button } from "@/components/vendor/ui-primitives/shadcn/button";
          export const KitButton = () => <Button />;`,
         focus

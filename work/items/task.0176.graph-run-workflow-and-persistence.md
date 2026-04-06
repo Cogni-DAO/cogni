@@ -6,7 +6,7 @@ status: done
 priority: 0
 rank: 3
 estimate: 5
-summary: Promote schedule_runs to graph_runs as single canonical run ledger; create GraphRunWorkflow in Temporal; execution stays in apps/web via internal API with Redis pump
+summary: Promote schedule_runs to graph_runs as single canonical run ledger; create GraphRunWorkflow in Temporal; execution stays in apps/operator via internal API with Redis pump
 outcome: All graph runs (API, scheduled, webhook) share a single run ledger with trigger provenance; GraphRunWorkflow orchestrates via Temporal; internal API route publishes events to Redis Streams
 spec_refs:
   - spec.unified-graph-launch
@@ -30,16 +30,16 @@ labels:
 
 **Idempotency stays in `execution_requests`.** Idempotency is a request-layer concern, not a run-ledger concern. No `idempotency_key` column on `graph_runs`. The existing `execution_requests` table handles request deduplication for all trigger types.
 
-## Design Decision (2026-03-18): Execution host stays in apps/web
+## Design Decision (2026-03-18): Execution host stays in apps/operator
 
-**Problem:** task.0176 originally specified `executeAndStreamActivity` calling `GraphExecutorPort.runGraph()` directly in the scheduler-worker. But the full execution stack (InProc, Sandbox, LangGraph providers, billing/observability decorators, `createGraphExecutor()`, `createScopedGraphExecutor()`) lives in `apps/web/src/`. The scheduler-worker has no composition root for this and operates under invariant `EXECUTION_VIA_SERVICE_API: Worker NEVER imports graph execution code`.
+**Problem:** task.0176 originally specified `executeAndStreamActivity` calling `GraphExecutorPort.runGraph()` directly in the scheduler-worker. But the full execution stack (InProc, Sandbox, LangGraph providers, billing/observability decorators, `createGraphExecutor()`, `createScopedGraphExecutor()`) lives in `apps/operator/src/`. The scheduler-worker has no composition root for this and operates under invariant `EXECUTION_VIA_SERVICE_API: Worker NEVER imports graph execution code`.
 
-**Resolution:** Execution stays in `apps/web` via the existing internal API route. The internal API route (`POST /api/internal/graphs/{graphId}/runs`) is modified to publish events to Redis Streams as it drains the executor stream. The scheduler-worker's `executeGraphActivity` continues calling the internal API via HTTP — no new execution host, no adapter extraction.
+**Resolution:** Execution stays in `apps/operator` via the existing internal API route. The internal API route (`POST /api/internal/graphs/{graphId}/runs`) is modified to publish events to Redis Streams as it drains the executor stream. The scheduler-worker's `executeGraphActivity` continues calling the internal API via HTTP — no new execution host, no adapter extraction.
 
 **Why not extract adapters to a package?**
 
 - `@cogni/graph-execution-core` must stay contracts-only (ports, types, run lifecycle). Adding adapters destroys the boundary task.0179/0180 just cleaned up.
-- A new `graph-execution-runtime` package is premature — only one consumer (`apps/web`) needs the full stack today.
+- A new `graph-execution-runtime` package is premature — only one consumer (`apps/operator`) needs the full stack today.
 - If worker-local execution becomes necessary later, that's a separate task with its own package (`graph-execution-host` or similar).
 
 **What changes:**
@@ -52,7 +52,7 @@ labels:
 **What stays the same:**
 
 - Scheduler-worker remains a lean Temporal worker (no graph execution code)
-- `apps/web` composition root unchanged
+- `apps/operator` composition root unchanged
 - `@cogni/graph-execution-core` stays contracts-only
 
 ## Design Feedback (2026-03-18): Codebase audit + review notes
@@ -111,10 +111,10 @@ Feedback items analyzed against existing code to avoid unnecessary rebuilds:
 - `services/scheduler-worker/src/` — update all `schedule_runs` references → `graph_runs`
 - `services/scheduler-worker/src/workflows/` — new `graph-run.workflow.ts` (replaces `scheduled-run.workflow.ts`)
 - `services/scheduler-worker/src/activities/` — update existing activities for unified workflow shape
-- `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — add Redis Stream publishing (publish events as stream drains)
-- `apps/web/src/ports/` — new `graph-run.port.ts` if needed for run record CRUD
-- `apps/web/src/adapters/server/` — Drizzle adapter for graph_runs
-- `apps/web/tests/` — update fixtures and tests referencing `schedule_runs`
+- `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — add Redis Stream publishing (publish events as stream drains)
+- `apps/operator/src/ports/` — new `graph-run.port.ts` if needed for run record CRUD
+- `apps/operator/src/adapters/server/` — Drizzle adapter for graph_runs
+- `apps/operator/tests/` — update fixtures and tests referencing `schedule_runs`
 - Tests
 
 ## Plan

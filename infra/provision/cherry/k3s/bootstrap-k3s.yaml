@@ -1,0 +1,147 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Cloud-init for k3s VM provisioning.
+# Extends the base/bootstrap.yaml pattern: same marker files, same logging,
+# same failure handling. Installs k3s instead of Docker.
+#
+# Argo CD install commands are included but commented — exercised in task.0149.
+#cloud-config
+
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+
+swap:
+  filename: /swapfile
+  size: 2147483648
+
+write_files:
+  # k3s GHCR registry auth — node-level, all pods get access
+  - path: /etc/rancher/k3s/registries.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      mirrors:
+        ghcr.io:
+          endpoint:
+            - "https://ghcr.io"
+      configs:
+        "ghcr.io":
+          auth:
+            username: "${ghcr_deploy_username}"
+            password: "${ghcr_deploy_token}"
+
+  # Journald config — same as base
+  - path: /etc/systemd/journald.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=200M
+      SystemMaxFileSize=50M
+      RuntimeMaxUse=50M
+
+  # Bootstrap script
+  - path: /opt/cogni-bootstrap-k3s.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      LOGFILE="/var/log/cogni-bootstrap.log"
+      MARKER_DIR="/var/lib/cogni"
+      mkdir -p "$MARKER_DIR"
+
+      exec > >(tee -a "$LOGFILE") 2>&1
+
+      trap 'code=$?; cmd=$BASH_COMMAND; {
+        echo "=== BOOTSTRAP FAILED ==="
+        echo "exit_code=$code"
+        echo "failed_command=$cmd"
+        echo "timestamp=$(date -u +%FT%TZ)"
+        echo "=== cloud-init status ==="
+        cloud-init status 2>/dev/null || true
+        echo "=== last 50 lines of cloud-init-output ==="
+        tail -50 /var/log/cloud-init-output.log 2>/dev/null || true
+      } > "$MARKER_DIR/bootstrap.fail"
+      exit $code' ERR
+
+      echo "=== k3s bootstrap started at $(date -u +%FT%TZ) ==="
+
+      # Restart journald with updated config
+      systemctl restart systemd-journald
+
+      # Install k3s — disable traefik (Caddy handles ingress) and servicelb
+      echo "Installing k3s..."
+      curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--disable traefik --disable servicelb" sh -
+
+      # Wait for k3s to be ready
+      echo "Waiting for k3s node to be ready..."
+      kubectl wait --for=condition=Ready node --all --timeout=120s
+
+      # Validate
+      echo "Validating k3s installation..."
+      k3s --version
+      kubectl get nodes
+      kubectl get namespaces
+
+      # Install age for SOPS secret decryption
+      echo "Installing age..."
+      AGE_VERSION="v1.2.0"
+      curl -sLo /tmp/age.tar.gz "https://github.com/FiloSottile/age/releases/download/$${AGE_VERSION}/age-$${AGE_VERSION}-linux-amd64.tar.gz"
+      tar -xzf /tmp/age.tar.gz -C /tmp
+      mv /tmp/age/age /usr/local/bin/age
+      mv /tmp/age/age-keygen /usr/local/bin/age-keygen
+      rm -rf /tmp/age /tmp/age.tar.gz
+      age --version
+
+      # Argo CD install
+      echo "Installing Argo CD..."
+      kubectl create namespace argocd || true
+      kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+      echo "Waiting for Argo CD to be ready..."
+      kubectl -n argocd wait --for=condition=Available deployment/argocd-server --timeout=300s
+
+      # Apply ApplicationSets (canary/preview/production) from repo
+      echo "Cloning repo for Argo ApplicationSets..."
+      REPO_DIR="/tmp/cogni-bootstrap-repo"
+      rm -rf "$REPO_DIR"
+      git clone --depth=1 --branch "${git_branch:-canary}" \
+        "https://github.com/cogni-dao/cogni-template.git" "$REPO_DIR"
+
+      echo "Applying ApplicationSets..."
+      for appset in canary-applicationset.yaml preview-applicationset.yaml production-applicationset.yaml; do
+        if [[ -f "$REPO_DIR/infra/k8s/argocd/$appset" ]]; then
+          kubectl apply -f "$REPO_DIR/infra/k8s/argocd/$appset" -n argocd
+          echo "  Applied $appset"
+        fi
+      done
+      rm -rf "$REPO_DIR"
+
+      # Create app namespaces (Argo CreateNamespace=true handles this too, belt+suspenders)
+      for ns in cogni-canary cogni-preview cogni-production; do
+        kubectl create namespace "$ns" 2>/dev/null || true
+      done
+
+      echo "Argo CD ready. ApplicationSets applied."
+
+      # Write success marker
+      {
+        echo "bootstrap=ok"
+        echo "timestamp=$(date -u +%FT%TZ)"
+        echo "k3s_version=$(k3s --version 2>&1 | head -1)"
+        echo "kubectl_version=$(kubectl version --client --short 2>/dev/null || kubectl version --client 2>&1 | head -1)"
+        echo "age_version=$(age --version 2>&1)"
+      } > "$MARKER_DIR/bootstrap.ok"
+
+      echo "=== k3s bootstrap completed at $(date -u +%FT%TZ) ==="
+
+runcmd:
+  - bash /opt/cogni-bootstrap-k3s.sh

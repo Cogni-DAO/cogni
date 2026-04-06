@@ -117,7 +117,10 @@
   },
   "overrides": [
     {
-      "includes": ["apps/web/src/infra/**", "packages/langgraph-graphs/**"],
+      "includes": [
+        "nodes/operator/app/src/infra/**",
+        "packages/langgraph-graphs/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -128,14 +131,14 @@
     },
     {
       "includes": [
-        "apps/web/src/shared/env/**/*.ts",
-        "apps/web/src/shared/env/**/*.tsx",
-        "apps/web/src/auth.ts",
-        "apps/web/src/shared/observability/clientLogger.ts",
+        "nodes/operator/app/src/shared/env/**/*.ts",
+        "nodes/operator/app/src/shared/env/**/*.tsx",
+        "nodes/operator/app/src/auth.ts",
+        "nodes/operator/app/src/shared/observability/clientLogger.ts",
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.ts",
-        "apps/web/tests/**/*.ts",
+        "nodes/operator/app/tests/**/*.ts",
         "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "docs/templates/**/*.ts",
         "services/**/*.ts",
@@ -158,7 +161,7 @@
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.{ts,tsx}",
-        "apps/web/tests/**/*.{ts,tsx}",
+        "nodes/operator/app/tests/**/*.{ts,tsx}",
         "scripts/**/*.{ts,mts,js,cjs,mjs}",
         "services/**/*.ts",
         "**/*.config.ts",
@@ -166,8 +169,8 @@
         "**/*.config.cjs",
         "**/*.config.mts",
         "drizzle.config.ts",
-        "apps/web/src/shared/observability/logging/logger.ts",
-        "apps/web/src/shared/observability/clientLogger.ts"
+        "nodes/operator/app/src/shared/observability/logging/logger.ts",
+        "nodes/operator/app/src/shared/observability/clientLogger.ts"
       ],
       "linter": {
         "rules": {
@@ -188,7 +191,10 @@
       "formatter": { "enabled": false }
     },
     {
-      "includes": ["apps/web/src/**/__arch_probes__/**"],
+      "includes": [
+        "nodes/operator/app/src/**/__arch_probes__/**",
+        "nodes/*/app/src/**/__arch_probes__/**"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -229,12 +235,17 @@
         "packages/temporal-workflows/vitest.config.ts",
         "packages/work-items/tsup.config.ts",
         "packages/work-items/vitest.config.ts",
+        "packages/node-core/tsup.config.ts",
+        "packages/node-contracts/tsup.config.ts",
+        "packages/node-shared/tsup.config.ts",
+        "packages/graph-execution-host/tsup.config.ts",
+        "packages/graph-execution-host/vitest.config.ts",
         "services/scheduler-worker/tsup.config.ts",
         "services/scheduler-worker/vitest.config.ts",
         "vitest.workspace.ts",
-        "apps/web/vitest.component.config.mts",
-        "apps/web/vitest.external.config.mts",
-        "apps/web/vitest.stack.config.mts"
+        "nodes/operator/app/vitest.component.config.mts",
+        "nodes/operator/app/vitest.external.config.mts",
+        "nodes/operator/app/vitest.stack.config.mts"
       ],
       "linter": {
         "rules": {

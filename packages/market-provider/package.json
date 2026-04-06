@@ -1,0 +1,40 @@
+{
+  "name": "@cogni/market-provider",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./adapters/polymarket": {
+      "types": "./dist/adapters/polymarket/index.d.ts",
+      "import": "./dist/adapters/polymarket/index.js",
+      "default": "./dist/adapters/polymarket/index.js"
+    },
+    "./adapters/kalshi": {
+      "types": "./dist/adapters/kalshi/index.d.ts",
+      "import": "./dist/adapters/kalshi/index.js",
+      "default": "./dist/adapters/kalshi/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "postbuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist/index.js')){console.error('ERROR: dist/index.js missing'); process.exit(1)}\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^5"
+  }
+}

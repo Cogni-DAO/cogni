@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Strategic merge patch for argocd-repo-server Deployment.
+# Adds ksops sidecar CMP container + age key volume for SOPS secret decryption.
+#
+# The sidecar runs alongside the repo-server and handles .enc.yaml files.
+# Age private key is mounted from the sops-age-key K8s Secret (created manually
+# during cluster bootstrap — see bootstrap.yaml cloud-init).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      volumes:
+        # ksops CMP plugin config — from ConfigMap
+        - name: ksops-cmp-plugin
+          configMap:
+            name: ksops-cmp-plugin
+        # Age private key for SOPS decryption — from bootstrap-created Secret
+        - name: sops-age-key
+          secret:
+            secretName: sops-age-key
+        # Shared /tmp for CMP sidecar communication
+        - name: cmp-tmp
+          emptyDir: {}
+      containers:
+        # ksops sidecar — decrypts SOPS-encrypted secrets at apply time
+        - name: ksops
+          # viaduct-ai/ksops image includes sops + kustomize + ksops binary
+          image: viaductoss/ksops:v4.3.2
+          command: ["/var/run/argocd/argocd-cmp-server"]
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+          env:
+            - name: SOPS_AGE_KEY_FILE
+              value: /sops-age-key/keys.txt
+          volumeMounts:
+            - name: ksops-cmp-plugin
+              mountPath: /home/argocd/cmp-server/config/plugin.yaml
+              subPath: plugin.yaml
+            - name: sops-age-key
+              mountPath: /sops-age-key
+              readOnly: true
+            - name: cmp-tmp
+              mountPath: /tmp

@@ -57,16 +57,16 @@ last_commit: b423a97d
 
 ## Pointers
 
-| File / Resource                                                         | Why it matters                                            |
-| ----------------------------------------------------------------------- | --------------------------------------------------------- | --------- |
-| `docs/spec/multi-provider-llm.md`                                       | The spec — 8 invariants, type definitions, open questions |
-| `work/items/task.0209.multi-provider-llm-rearchitecture.md`             | Task with file-by-file plan                               |
-| `work/projects/proj.byo-ai.md`                                          | Project with "what's wrong" analysis and design           |
-| `apps/web/src/ports/llm.port.ts`                                        | `LlmService` interface — the port all adapters implement  |
-| `apps/web/src/adapters/server/ai/codex/codex-llm.adapter.ts`            | ChatGPT adapter — spawns codex exec, maps events          |
-| `apps/web/src/bootstrap/graph-executor.factory.ts:145-220`              | BYO path — async credential resolution + scope override   |
-| `apps/web/src/adapters/server/ai/inproc-completion-unit.adapter.ts:192` | Where `llmServiceOverride` is read — the swap point       |
-| `apps/web/src/shared/ai/model-catalog.server.ts:300-360`                | The `CHATGPT_MODEL_IDS` hacks to delete                   |
-| `apps/web/src/features/ai/components/ModelPicker.tsx:41-82`             | The `CHATGPT_MODELS` hardcoded array to delete            |
-| `packages/ai-core/src/billing/source-system.ts`                         | `SourceSystem` enum — needs `"codex"                      | "ollama"` |
-| https://github.com/Cogni-DAO/node-template/pull/612                     | PR with all crawl + walk implementation                   |
+| File / Resource                                                              | Why it matters                                            |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------- | --------- |
+| `docs/spec/multi-provider-llm.md`                                            | The spec — 8 invariants, type definitions, open questions |
+| `work/items/task.0209.multi-provider-llm-rearchitecture.md`                  | Task with file-by-file plan                               |
+| `work/projects/proj.byo-ai.md`                                               | Project with "what's wrong" analysis and design           |
+| `apps/operator/src/ports/llm.port.ts`                                        | `LlmService` interface — the port all adapters implement  |
+| `apps/operator/src/adapters/server/ai/codex/codex-llm.adapter.ts`            | ChatGPT adapter — spawns codex exec, maps events          |
+| `apps/operator/src/bootstrap/graph-executor.factory.ts:145-220`              | BYO path — async credential resolution + scope override   |
+| `apps/operator/src/adapters/server/ai/inproc-completion-unit.adapter.ts:192` | Where `llmServiceOverride` is read — the swap point       |
+| `apps/operator/src/shared/ai/model-catalog.server.ts:300-360`                | The `CHATGPT_MODEL_IDS` hacks to delete                   |
+| `apps/operator/src/features/ai/components/ModelPicker.tsx:41-82`             | The `CHATGPT_MODELS` hardcoded array to delete            |
+| `packages/ai-core/src/billing/source-system.ts`                              | `SourceSystem` enum — needs `"codex"                      | "ollama"` |
+| https://github.com/Cogni-DAO/node-template/pull/612                          | PR with all crawl + walk implementation                   |

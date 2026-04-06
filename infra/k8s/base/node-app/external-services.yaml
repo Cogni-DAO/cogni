@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Selectorless Services + EndpointSlices for k8s→Compose connectivity.
+# Node apps run in k3s; infra (Postgres, Temporal, LiteLLM, Redis) runs on Compose.
+# These let pods reach Compose services via k8s DNS.
+#
+# Base uses placeholder 10.0.0.1 — overlays MUST patch with the node's InternalIP.
+# k8s rejects loopback (127.0.0.1) in EndpointSlices. Use the node IP instead.
+
+# --- PostgreSQL ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-external
+spec:
+  clusterIP: None
+  ports:
+    - port: 5432
+      protocol: TCP
+      name: postgres
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: postgres-external-1
+  labels:
+    kubernetes.io/service-name: postgres-external
+addressType: IPv4
+endpoints:
+  - addresses:
+      - "10.0.0.1"
+ports:
+  - port: 5432
+    protocol: TCP
+    name: postgres
+
+---
+# --- Temporal (gRPC) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal-external
+spec:
+  clusterIP: None
+  ports:
+    - port: 7233
+      protocol: TCP
+      name: grpc
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: temporal-external-1
+  labels:
+    kubernetes.io/service-name: temporal-external
+addressType: IPv4
+endpoints:
+  - addresses:
+      - "10.0.0.1"
+ports:
+  - port: 7233
+    protocol: TCP
+    name: grpc
+
+---
+# --- LiteLLM (HTTP) ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: litellm-external
+spec:
+  clusterIP: None
+  ports:
+    - port: 4000
+      protocol: TCP
+      name: http
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: litellm-external-1
+  labels:
+    kubernetes.io/service-name: litellm-external
+addressType: IPv4
+endpoints:
+  - addresses:
+      - "10.0.0.1"
+ports:
+  - port: 4000
+    protocol: TCP
+    name: http
+
+---
+# --- Redis ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-external
+spec:
+  clusterIP: None
+  ports:
+    - port: 6379
+      protocol: TCP
+      name: redis
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: redis-external-1
+  labels:
+    kubernetes.io/service-name: redis-external
+addressType: IPv4
+endpoints:
+  - addresses:
+      - "10.0.0.1"
+ports:
+  - port: 6379
+    protocol: TCP
+    name: redis

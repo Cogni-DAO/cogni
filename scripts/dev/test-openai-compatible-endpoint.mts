@@ -168,7 +168,11 @@ async function main() {
       process.exit(1);
     }
 
-    const model = models[0]!;
+    const model = models[0];
+    if (!model) {
+      console.log("\n⚠️  No models found after discovery.");
+      process.exit(1);
+    }
     await testCompletion(model);
     await testStreaming(model);
 

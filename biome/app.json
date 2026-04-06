@@ -2,10 +2,10 @@
   "overrides": [
     {
       "includes": [
-        "apps/web/src/components/**/*.{ts,tsx}",
-        "apps/web/src/features/**/components/**/*.{ts,tsx}",
-        "apps/web/src/features/**/hooks/**/*.{ts,tsx}",
-        "apps/web/src/app/**/*.client.{ts,tsx}"
+        "nodes/operator/app/src/components/**/*.{ts,tsx}",
+        "nodes/operator/app/src/features/**/components/**/*.{ts,tsx}",
+        "nodes/operator/app/src/features/**/hooks/**/*.{ts,tsx}",
+        "nodes/operator/app/src/app/**/*.client.{ts,tsx}"
       ],
       "linter": {
         "rules": {
@@ -27,22 +27,22 @@
     },
     {
       "includes": [
-        "apps/web/src/app/**/page.tsx",
-        "apps/web/src/app/**/layout.tsx",
-        "apps/web/src/app/**/loading.tsx",
-        "apps/web/src/app/**/error.tsx",
-        "apps/web/src/app/**/not-found.tsx",
-        "apps/web/src/app/**/template.tsx",
-        "apps/web/src/app/**/global-error.tsx",
-        "apps/web/src/app/**/default.tsx",
-        "apps/web/src/app/**/opengraph-image.tsx",
-        "apps/web/src/app/**/twitter-image.tsx",
-        "apps/web/next.config.ts",
-        "apps/web/postcss.config.mjs",
+        "nodes/operator/app/src/app/**/page.tsx",
+        "nodes/operator/app/src/app/**/layout.tsx",
+        "nodes/operator/app/src/app/**/loading.tsx",
+        "nodes/operator/app/src/app/**/error.tsx",
+        "nodes/operator/app/src/app/**/not-found.tsx",
+        "nodes/operator/app/src/app/**/template.tsx",
+        "nodes/operator/app/src/app/**/global-error.tsx",
+        "nodes/operator/app/src/app/**/default.tsx",
+        "nodes/operator/app/src/app/**/opengraph-image.tsx",
+        "nodes/operator/app/src/app/**/twitter-image.tsx",
+        "nodes/operator/app/next.config.ts",
+        "nodes/operator/app/postcss.config.mjs",
         "drizzle.config.ts",
         "playwright.config.ts",
         "vitest.config.mts",
-        "apps/web/vitest.*.config.mts",
+        "nodes/operator/app/vitest.*.config.mts",
         "commitlint.config.cjs",
         "eslint.config.mjs",
         "eslint/*.config.mjs"

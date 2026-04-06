@@ -1,0 +1,194 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+
+swap:
+  filename: /swapfile
+  size: 2147483648
+
+write_files:
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: "0644"
+    # Reference: infra/compose/docker-daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+  - path: /etc/systemd/journald.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=200M
+      SystemMaxFileSize=50M
+      RuntimeMaxUse=50M
+
+  # k3s server config — disable traefik + servicelb (Caddy handles ingress).
+  # k3s install script reads this automatically; no INSTALL_K3S_EXEC flags needed.
+  - path: /etc/rancher/k3s/config.yaml
+    owner: root:root
+    permissions: "0644"
+    content: |
+      disable:
+        - traefik
+        - servicelb
+
+  # k3s GHCR private registry auth — node-level, all pods get access.
+  # Simpler than per-Deployment imagePullSecrets for single-node.
+  - path: /etc/rancher/k3s/registries.yaml
+    owner: root:root
+    permissions: "0600"
+    content: |
+      mirrors:
+        ghcr.io:
+          endpoint:
+            - "https://ghcr.io"
+      configs:
+        "ghcr.io":
+          auth:
+            username: "${ghcr_deploy_username}"
+            password: "${ghcr_deploy_token}"
+
+  - path: /opt/cogni-bootstrap.sh
+    owner: root:root
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Cogni VM Bootstrap — Docker + k3s + Argo CD on a single VM.
+      # Docker Compose runs postgres/temporal/litellm/redis (infra services).
+      # k3s runs operator + nodes + services via Argo CD GitOps.
+      # Contract: writes /var/lib/cogni/bootstrap.ok on success, bootstrap.fail on error
+      set -euo pipefail
+
+      MARKER_OK="/var/lib/cogni/bootstrap.ok"
+      MARKER_FAIL="/var/lib/cogni/bootstrap.fail"
+      LOG="/var/log/cogni-bootstrap.log"
+
+      mkdir -p /var/lib/cogni
+      exec > >(tee -a "$LOG") 2>&1
+
+      # Trap: write failure marker with context, append diagnostics to log
+      trap 'ec=$?; {
+        echo "BOOTSTRAP_OK=0"
+        echo "FAIL_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "EXIT_CODE=$ec"
+        echo "LAST_COMMAND=$${BASH_COMMAND}"
+      } > "$MARKER_FAIL"
+      echo "=== cloud-init status ===" >> "$LOG"
+      cloud-init status 2>&1 >> "$LOG" || true
+      echo "=== cloud-init-output.log tail ===" >> "$LOG"
+      tail -n 200 /var/log/cloud-init-output.log 2>&1 >> "$LOG" || true
+      exit $ec' ERR
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Starting Cogni bootstrap..."
+
+      # ── Docker ───────────────────────────────────────────────
+      # TODO: Replace with golden image (Packer) - Docker should be pre-installed, not fetched at boot
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing Docker via get.docker.com..."
+      curl -fsSL https://get.docker.com | sh
+
+      systemctl enable docker
+      systemctl start docker
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Validating Docker installation..."
+      command -v docker >/dev/null || { echo "FATAL: docker binary not found"; exit 1; }
+      docker --version || { echo "FATAL: docker --version failed"; exit 1; }
+      docker compose version || { echo "FATAL: docker compose plugin not found"; exit 1; }
+      systemctl is-active --quiet docker || { echo "FATAL: docker service not active"; exit 1; }
+
+      systemctl restart systemd-journald
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Creating cogni-edge network..."
+      docker network create cogni-edge || true
+
+      mkdir -p /opt/cogni-template-edge /opt/cogni-template-runtime
+
+      # ── k3s (containerd) ─────────────────────────────────────
+      # Coexists with Docker Compose (dockerd) on the same host.
+      # docker ps won't show k3s pods; use kubectl or crictl.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing k3s..."
+      curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="v1.31.4+k3s1" sh -
+
+      # Wait for k3s node to register (race condition: node not immediately available)
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Waiting for k3s node to register..."
+      for i in $(seq 1 30); do
+        if kubectl get nodes --no-headers 2>/dev/null | grep -q .; then
+          break
+        fi
+        echo "  waiting for node registration ($i/30)..."
+        sleep 2
+      done
+      kubectl wait --for=condition=Ready node --all --timeout=120s
+      k3s --version
+      kubectl get nodes
+
+      # ── Argo CD + ksops ──────────────────────────────────────
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Cloning repo for Argo CD manifests..."
+      apt-get install -y git
+      # Inject GHCR PAT for private repo access (same token works for git + registry).
+      AUTHED_URL=$(echo "${cogni_repo_url}" | sed "s|https://|https://${ghcr_deploy_username}:${ghcr_deploy_token}@|")
+      git clone --depth=1 --branch "${cogni_repo_ref}" \
+        "$AUTHED_URL" /tmp/cogni-repo
+
+      # Create argocd namespace + age key Secret BEFORE Argo CD install.
+      # ksops sidecar mounts this Secret as a volume for decryption.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Creating argocd namespace + SOPS age key Secret..."
+      kubectl create namespace argocd || true
+      echo "${sops_age_private_key}" > /tmp/age-key.txt
+      kubectl -n argocd create secret generic sops-age-key \
+        --from-file=keys.txt=/tmp/age-key.txt
+      rm -f /tmp/age-key.txt
+
+      # Install Argo CD in stages:
+      # 1. Base install (remote manifest, pinned version)
+      # 2. Wait for server to be available (patches need running deployments)
+      # 3. Apply ksops CMP ConfigMap
+      # 4. Patch repo-server with ksops sidecar
+      # 5. Apply ApplicationSets for staging + production
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Installing Argo CD base (v2.13.4)..."
+      kubectl apply -n argocd \
+        -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Waiting for Argo CD to be ready..."
+      kubectl -n argocd wait --for=condition=Available \
+        deployment/argocd-server --timeout=300s
+
+      # ksops CMP plugin + repo-server sidecar patch removed.
+      # k8s secrets are created directly by provision script + deploy-infra.sh.
+      # SOPS/ksops will be replaced by ESO (task.0284).
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Argo CD installed (no ksops — secrets managed directly)"
+
+      # ApplicationSets are NOT applied here — the provision script applies them
+      # AFTER secrets, EndpointSlice IPs, and overlay fixes are all in place.
+      # This prevents Argo from racing to sync with incomplete manifests.
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Skipping ApplicationSets (provision script applies them last)"
+
+      rm -rf /tmp/cogni-repo
+
+      # ── Success marker ───────────────────────────────────────
+      rm -f "$MARKER_FAIL"
+      {
+        echo "BOOTSTRAP_OK=1"
+        echo "BOOTSTRAP_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "DOCKER_VERSION=$(docker --version)"
+        echo "COMPOSE_VERSION=$(docker compose version)"
+        echo "K3S_VERSION=$(k3s --version 2>&1 | head -1)"
+        echo "ARGOCD=installed"
+        echo "SOPS_KEY=injected"
+      } > "$MARKER_OK"
+
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Bootstrap complete!"
+
+runcmd:
+  - bash /opt/cogni-bootstrap.sh

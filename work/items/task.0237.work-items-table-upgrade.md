@@ -105,15 +105,15 @@ Each work item type and status gets a distinct visual icon optimized for human r
 
 **Create**:
 
-- `apps/web/src/app/(app)/work/_components/columns.tsx` — column definitions with type/status icon renderers
-- `apps/web/src/app/(app)/work/_components/WorkItemDetail.tsx` — Sheet/Drawer detail panel
-- `apps/web/src/app/(app)/work/_components/type-icons.tsx` — type/status icon maps (lucide-react)
-- `apps/web/src/app/(app)/work/_components/faceted-filter.tsx` — faceted filter for status/type/project (if not in ReUI)
+- `apps/operator/src/app/(app)/work/_components/columns.tsx` — column definitions with type/status icon renderers
+- `apps/operator/src/app/(app)/work/_components/WorkItemDetail.tsx` — Sheet/Drawer detail panel
+- `apps/operator/src/app/(app)/work/_components/type-icons.tsx` — type/status icon maps (lucide-react)
+- `apps/operator/src/app/(app)/work/_components/faceted-filter.tsx` — faceted filter for status/type/project (if not in ReUI)
 
 **Modify**:
 
-- `apps/web/src/app/(app)/work/view.tsx` — rewrite with ReUI data-grid, wire column defs + detail panel
-- `apps/web/src/app/(app)/work/_api/fetchWorkItems.ts` — add `fetchWorkItem(id)` for detail panel
+- `apps/operator/src/app/(app)/work/view.tsx` — rewrite with ReUI data-grid, wire column defs + detail panel
+- `apps/operator/src/app/(app)/work/_api/fetchWorkItems.ts` — add `fetchWorkItem(id)` for detail panel
 
 **Test**:
 

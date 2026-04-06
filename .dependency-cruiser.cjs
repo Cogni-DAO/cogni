@@ -1,38 +1,39 @@
 // .dependency-cruiser.cjs
 // Hexagonal architecture boundaries enforced via dependency-cruiser.
 // Pure policy config - scope controlled via CLI --include-only flag.
-// Production: depcruise apps/web/src packages services --include-only '^(apps/web/src|packages|services)' --output-type err-long
-// Arch probes: depcruise apps/web/src/__arch_probes__ --include-only '^apps/web/src/__arch_probes__' --output-type err
+// Production: depcruise nodes/operator/app/src packages services --include-only '^(nodes/operator/app/src|packages|services)' --output-type err-long
+// Arch probes: depcruise nodes/operator/app/src/__arch_probes__ --include-only '^nodes/operator/app/src/__arch_probes__' --output-type err
 
 /** @type {import('dependency-cruiser').IConfiguration} */
 
 // src/ hexagonal layers
 const srcLayers = {
-  core: "^apps/web/src/core",
-  ports: "^apps/web/src/ports",
-  features: "^apps/web/src/features",
-  app: "^apps/web/src/app",
-  adapters: "^apps/web/src/adapters",
-  adaptersServer: "^apps/web/src/adapters/server",
-  adaptersTest: "^apps/web/src/adapters/test",
+  core: "^nodes/operator/app/src/core",
+  ports: "^nodes/operator/app/src/ports",
+  features: "^nodes/operator/app/src/features",
+  app: "^nodes/operator/app/src/app",
+  adapters: "^nodes/operator/app/src/adapters",
+  adaptersServer: "^nodes/operator/app/src/adapters/server",
+  adaptersTest: "^nodes/operator/app/src/adapters/test",
   // adaptersWorker, adaptersCli: add when implemented
-  shared: "^apps/web/src/shared",
-  bootstrap: "^apps/web/src/bootstrap",
-  lib: "^apps/web/src/lib",
-  auth: "^apps/web/src/auth\\.ts$",
-  proxy: "^apps/web/src/proxy\\.ts$",
-  components: "^apps/web/src/components",
-  styles: "^apps/web/src/styles",
-  types: "^apps/web/src/types",
-  assets: "^apps/web/src/assets",
-  contracts: "^apps/web/src/contracts",
-  mcp: "^apps/web/src/mcp",
-  scripts: "^apps/web/src/scripts",
+  shared: "^nodes/operator/app/src/shared",
+  bootstrap: "^nodes/operator/app/src/bootstrap",
+  lib: "^nodes/operator/app/src/lib",
+  auth: "^nodes/operator/app/src/auth\\.ts$",
+  proxy: "^nodes/operator/app/src/proxy\\.ts$",
+  components: "^nodes/operator/app/src/components",
+  styles: "^nodes/operator/app/src/styles",
+  types: "^nodes/operator/app/src/types",
+  assets: "^nodes/operator/app/src/assets",
+  contracts: "^nodes/operator/app/src/contracts",
+  mcp: "^nodes/operator/app/src/mcp",
+  scripts: "^nodes/operator/app/src/scripts",
 };
 
 // Monorepo boundary layers (packages/)
 const monorepoLayers = {
   packages: "^packages/",
+  nodes: "^nodes/",
   // services: "^services/",
 };
 
@@ -235,7 +236,7 @@ module.exports = {
 
     // src/ can import from packages/ (consumption)
     {
-      from: { path: "^apps/web/src/" },
+      from: { path: "^nodes/operator/app/src/" },
       to: { path: "^packages/" },
     },
 
@@ -251,10 +252,24 @@ module.exports = {
       to: { path: "^services/" },
     },
 
+    // nodes/ can import within itself (node-local)
+    // Exclude operator/app/src/ — operator has full layer enforcement via srcLayers rules above.
+    // Other nodes get blanket pass until they gain layer enforcement.
+    {
+      from: { path: "^nodes/(?!operator/app/src/)" },
+      to: { path: "^nodes/" },
+    },
+
+    // nodes/ can import from shared packages
+    {
+      from: { path: "^nodes/" },
+      to: { path: "^packages/" },
+    },
+
     // scripts → bootstrap (CLI wrappers that call job modules)
     {
-      from: { path: "^apps/web/src/scripts" },
-      to: { path: ["^apps/web/src/bootstrap"] },
+      from: { path: "^nodes/operator/app/src/scripts" },
+      to: { path: ["^nodes/operator/app/src/bootstrap"] },
     },
 
     // Files not in a known layer are caught by the forbidden `no-unknown-layer` rule below.
@@ -266,7 +281,7 @@ module.exports = {
       name: "no-unknown-src-layer",
       severity: "error",
       from: {
-        path: "^apps/web/src",
+        path: "^nodes/operator/app/src",
         pathNot: knownSrcLayerPatterns,
       },
       to: {},
@@ -276,7 +291,7 @@ module.exports = {
     {
       severity: "error",
       from: {
-        path: "^apps/web/src",
+        path: "^nodes/operator/app/src",
       },
       to: {
         path: "\\.\\./",
@@ -292,10 +307,10 @@ module.exports = {
       name: "no-internal-ports-imports",
       severity: "error",
       from: {
-        path: "^apps/web/src/(?!ports/)",
+        path: "^nodes/operator/app/src/(?!ports/)",
       },
       to: {
-        path: "^apps/web/src/ports/(?!index\\.ts$|server\\.ts$).*\\.ts$",
+        path: "^nodes/operator/app/src/ports/(?!index\\.ts$|server\\.ts$).*\\.ts$",
       },
       comment:
         "Import from @/ports (index.ts) or @/ports/server (server-only scheduler ports), not internal port files",
@@ -306,10 +321,10 @@ module.exports = {
       name: "no-internal-core-imports",
       severity: "error",
       from: {
-        path: "^apps/web/src/(?!core/)",
+        path: "^nodes/operator/app/src/(?!core/)",
       },
       to: {
-        path: "^apps/web/src/core/(?!public\\.ts$).*\\.ts$",
+        path: "^nodes/operator/app/src/core/(?!public\\.ts$).*\\.ts$",
       },
       comment: "Import from @/core (public.ts), not internal core files",
     },
@@ -324,10 +339,10 @@ module.exports = {
       name: "no-internal-adapter-imports",
       severity: "error",
       from: {
-        path: "^apps/web/src/(?!adapters/server/)(?!auth\\.ts$)(?!bootstrap/container\\.ts$)(?!bootstrap/graph-executor\\.factory\\.ts$)(?!bootstrap/review-adapter\\.factory\\.ts$)(?!bootstrap/agent-discovery\\.ts$)(?!bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts$)",
+        path: "^nodes/operator/app/src/(?!adapters/server/)(?!auth\\.ts$)(?!bootstrap/container\\.ts$)(?!bootstrap/graph-executor\\.factory\\.ts$)(?!bootstrap/review-adapter\\.factory\\.ts$)(?!bootstrap/agent-discovery\\.ts$)(?!bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts$)",
       },
       to: {
-        path: "^apps/web/src/adapters/server/(?!index\\.ts$).*\\.ts$",
+        path: "^nodes/operator/app/src/adapters/server/(?!index\\.ts$).*\\.ts$",
       },
       comment:
         "Import from @/adapters/server (index.ts), not internal adapter files. " +
@@ -343,10 +358,10 @@ module.exports = {
       name: "no-internal-test-adapter-imports",
       severity: "error",
       from: {
-        path: "^apps/web/src/(?!adapters/test/)",
+        path: "^nodes/operator/app/src/(?!adapters/test/)",
       },
       to: {
-        path: "^apps/web/src/adapters/test/(?!index\\.ts$).*\\.ts$",
+        path: "^nodes/operator/app/src/adapters/test/(?!index\\.ts$).*\\.ts$",
       },
       comment:
         "Import from @/adapters/test (index.ts), not internal test adapter files",
@@ -357,10 +372,10 @@ module.exports = {
       name: "no-internal-features-imports",
       severity: "error",
       from: {
-        path: "^apps/web/src/(?!features/)",
+        path: "^nodes/operator/app/src/(?!features/)",
       },
       to: {
-        path: "^apps/web/src/features/[^/]+/(mappers|utils|constants)/",
+        path: "^nodes/operator/app/src/features/[^/]+/(mappers|utils|constants)/",
       },
       comment:
         "Only import from features/*/services or features/*/components subdirectories",
@@ -373,10 +388,10 @@ module.exports = {
       name: "no-ai-facades-to-feature-services",
       severity: "error",
       from: {
-        path: "^apps/web/src/app/_facades/ai/",
+        path: "^nodes/operator/app/src/app/_facades/ai/",
       },
       to: {
-        path: "^apps/web/src/features/ai/services/",
+        path: "^nodes/operator/app/src/features/ai/services/",
       },
       comment:
         "AI app facades must import from features/ai/public.ts, not internal services",
@@ -394,7 +409,7 @@ module.exports = {
         path: "^packages/",
       },
       to: {
-        path: ["^apps/web/src/", "^services/"],
+        path: ["^nodes/operator/app/src/", "^services/"],
       },
       comment:
         "packages/ must be standalone; cannot depend on src/ or services/",
@@ -408,9 +423,49 @@ module.exports = {
         path: "^services/",
       },
       to: {
-        path: "^apps/web/src/",
+        path: "^nodes/operator/app/src/",
       },
       comment: "services/ cannot depend on Next.js app code in src/",
+    },
+
+    // nodes/ cannot import operator apps/ or services/
+    {
+      name: "node-not-operator",
+      severity: "error",
+      from: {
+        path: "^nodes/",
+      },
+      to: {
+        path: ["^apps/", "^services/"],
+      },
+      comment: "nodes/ must not depend on operator apps/ or services/",
+    },
+
+    // shared packages cannot depend on node-specific code
+    {
+      name: "shared-not-node",
+      severity: "error",
+      from: {
+        path: "^packages/",
+      },
+      to: {
+        path: "^nodes/",
+      },
+      comment: "packages/ are shared and must not depend on node-specific code",
+    },
+
+    // nodes cannot import other nodes (except itself)
+    {
+      name: "no-cross-node",
+      severity: "error",
+      from: {
+        path: "^nodes/([^/]+)/",
+      },
+      to: {
+        path: "^nodes/([^/]+)/",
+        pathNot: "^nodes/$1/",
+      },
+      comment: "node code must not import from another node directory",
     },
 
     // src/ cannot import from services/
@@ -418,7 +473,7 @@ module.exports = {
       name: "no-src-to-services",
       severity: "error",
       from: {
-        path: "^apps/web/src/",
+        path: "^nodes/operator/app/src/",
       },
       to: {
         path: "^services/",
@@ -432,7 +487,7 @@ module.exports = {
       name: "no-deep-package-imports",
       severity: "error",
       from: {
-        path: "^apps/web/src/",
+        path: "^nodes/operator/app/src/",
       },
       to: {
         path: "^packages/[^/]+/src/(?!index\\.ts$)",
@@ -516,7 +571,7 @@ module.exports = {
       name: "db-client-server-only",
       severity: "error",
       from: {
-        path: "^apps/web/src/(features|components|core|styles|assets)/",
+        path: "^nodes/operator/app/src/(features|components|core|styles|assets)/",
       },
       to: {
         path: "^packages/db-client/",
@@ -531,9 +586,9 @@ module.exports = {
       name: "no-service-db-package-import",
       severity: "error",
       from: {
-        path: "^apps/web/src/",
+        path: "^nodes/operator/app/src/",
         pathNot:
-          "^apps/web/src/adapters/server/db/drizzle\\.service-client\\.ts$",
+          "^nodes/operator/app/src/adapters/server/db/drizzle\\.service-client\\.ts$",
       },
       to: {
         path: "^packages/db-client/(src|dist)/service\\.(ts|js)$",
@@ -548,12 +603,12 @@ module.exports = {
       name: "no-service-db-adapter-import",
       severity: "error",
       from: {
-        path: "^apps/web/src/",
+        path: "^nodes/operator/app/src/",
         pathNot:
-          "^apps/web/src/(auth\\.ts|bootstrap/container\\.ts|bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts)$",
+          "^nodes/operator/app/src/(auth\\.ts|bootstrap/container\\.ts|bootstrap/jobs/syncGovernanceSchedules\\.job\\.ts)$",
       },
       to: {
-        path: "^apps/web/src/adapters/server/db/drizzle\\.service-client\\.ts$",
+        path: "^nodes/operator/app/src/adapters/server/db/drizzle\\.service-client\\.ts$",
       },
       comment:
         "Only auth.ts, container.ts, and governance job may import the service-db adapter (BYPASSRLS singleton)",

@@ -60,6 +60,8 @@ const { executeGraphActivity } = proxyActivities<SchedulerActivities>(
  * Supports all trigger types via trigger provenance fields.
  */
 export interface GraphRunWorkflowInput {
+  /** Originating node ID from repo-spec. Routes execution to correct node. */
+  nodeId: string;
   /** Graph ID to execute (format: provider:name, e.g. "langgraph:poet") */
   graphId: string;
   /** Execution grant ID for authorization (scheduled/webhook). Null for API-triggered runs. */
@@ -100,6 +102,7 @@ export async function GraphRunWorkflow(
   input: GraphRunWorkflowInput
 ): Promise<GraphRunResult> {
   const {
+    nodeId,
     graphId,
     executionGrantId,
     input: graphInput,
@@ -184,6 +187,7 @@ export async function GraphRunWorkflow(
   // 4. Execute graph via internal API
   try {
     const result = await executeGraphActivity({
+      nodeId,
       temporalScheduleId,
       graphId,
       executionGrantId: executionGrantId ?? null,

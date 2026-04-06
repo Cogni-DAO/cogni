@@ -26,7 +26,7 @@ describe("ESLint Config Canary", () => {
   it("UI governance stay enforced for features files", async (): Promise<void> => {
     const eslint = new ESLint({ cwd: process.cwd() });
     const cfg = await eslint.calculateConfigForFile(
-      "apps/web/src/features/home/components/X.tsx"
+      "nodes/operator/app/src/features/home/components/X.tsx"
     );
     const rules = cfg.rules ?? {};
 
@@ -39,7 +39,7 @@ describe("ESLint Config Canary", () => {
   it("kit layer inherits UI governance rules", async (): Promise<void> => {
     const eslint = new ESLint({ cwd: process.cwd() });
     const cfg = await eslint.calculateConfigForFile(
-      "apps/web/src/components/kit/inputs/Button.tsx"
+      "nodes/operator/app/src/components/kit/inputs/Button.tsx"
     );
     const rules = cfg.rules ?? {};
 
@@ -52,7 +52,7 @@ describe("ESLint Config Canary", () => {
   it("styles layer exempts UI governance but keeps CVA guard", async (): Promise<void> => {
     const eslint = new ESLint({ cwd: process.cwd() });
     const cfg = await eslint.calculateConfigForFile(
-      "apps/web/src/styles/ui.ts"
+      "nodes/operator/app/src/styles/ui.ts"
     );
     const rules = cfg.rules ?? {};
 
@@ -74,7 +74,7 @@ describe("ESLint Config Canary", () => {
   it("theme.ts follows styles exemptions + CVA guard", async (): Promise<void> => {
     const eslint = new ESLint({ cwd: process.cwd() });
     const cfg = await eslint.calculateConfigForFile(
-      "apps/web/src/styles/theme.ts"
+      "nodes/operator/app/src/styles/theme.ts"
     );
     const rules = cfg.rules ?? {};
 
@@ -90,7 +90,7 @@ describe("ESLint Config Canary", () => {
   it.skip("no-raw-tailwind rule enforced in source files", async () => {
     const eslint = new ESLint({ cwd: process.cwd() });
     const cfg = await eslint.calculateConfigForFile(
-      "apps/web/src/components/kit/Button.tsx"
+      "nodes/operator/app/src/components/kit/Button.tsx"
     );
     const rules = cfg.rules ?? {};
 

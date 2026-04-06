@@ -70,13 +70,13 @@ Agents search existing research findings before hitting the internet. When they 
 │   core__knowledge_read                              │
 │   core__knowledge_write                             │
 ├─────────────────────────────────────────────────────┤
-│ apps/web/src/adapters/server/knowledge/             │  ← PHASE 1 ADAPTER
+│ apps/operator/src/adapters/server/knowledge/             │  ← PHASE 1 ADAPTER
 │   markdown-knowledge.adapter.ts                     │
 │   Scans docs/research/*.md, parses frontmatter      │
 │   Keyword match on summary + tags + title + body    │
 │   Write = create/update markdown file               │
 ├─────────────────────────────────────────────────────┤
-│ apps/web/src/adapters/server/knowledge/             │  ← PHASE 2 ADAPTER (later)
+│ apps/operator/src/adapters/server/knowledge/             │  ← PHASE 2 ADAPTER (later)
 │   postgres-knowledge.adapter.ts                     │
 │   pgvector embeddings, SQL filters                  │
 │   Markdown files remain source of truth             │
@@ -191,7 +191,7 @@ This is enforced in the **brain system prompt**, not in code. Same pattern as ci
 - [ ] SEARCH_BEFORE_FETCH: Brain prompt instructs agents to search knowledge before web search
 - [ ] TRUST_NEVER_AUTO_PROMOTED: Agents can create `trust: draft`. Only humans set `trust: verified`
 - [ ] EXISTING_PATTERN: Follows exact RepoCapability → tool → adapter → bootstrap → container pattern
-- [ ] ARCHITECTURE_ALIGNMENT: Port in `packages/ai-tools`, adapter in `apps/web/src/adapters/server/`
+- [ ] ARCHITECTURE_ALIGNMENT: Port in `packages/ai-tools`, adapter in `apps/operator/src/adapters/server/`
 
 ### Files
 
@@ -200,15 +200,15 @@ This is enforced in the **brain system prompt**, not in code. Same pattern as ci
 - Create: `packages/ai-tools/src/tools/knowledge-read.ts` — core\_\_knowledge_read tool
 - Create: `packages/ai-tools/src/tools/knowledge-write.ts` — core\_\_knowledge_write tool
 - Modify: `packages/ai-tools/src/catalog.ts` — add knowledge tools to TOOL_CATALOG
-- Create: `apps/web/src/adapters/server/knowledge/markdown-knowledge.adapter.ts` — Phase 1 adapter
-- Create: `apps/web/src/adapters/test/knowledge/fake-knowledge.adapter.ts` — test double
-- Create: `apps/web/src/bootstrap/capabilities/knowledge.ts` — capability factory
-- Modify: `apps/web/src/bootstrap/ai/tool-bindings.ts` — wire knowledge tools
-- Modify: `apps/web/src/bootstrap/container.ts` — add knowledgeCapability
+- Create: `apps/operator/src/adapters/server/knowledge/markdown-knowledge.adapter.ts` — Phase 1 adapter
+- Create: `apps/operator/src/adapters/test/knowledge/fake-knowledge.adapter.ts` — test double
+- Create: `apps/operator/src/bootstrap/capabilities/knowledge.ts` — capability factory
+- Modify: `apps/operator/src/bootstrap/ai/tool-bindings.ts` — wire knowledge tools
+- Modify: `apps/operator/src/bootstrap/container.ts` — add knowledgeCapability
 - Modify: `packages/langgraph-graphs/src/graphs/brain/tools.ts` — add knowledge tool IDs
 - Modify: `packages/langgraph-graphs/src/graphs/brain/prompts.ts` — "search knowledge first"
 - Test: `packages/ai-tools/tests/tools/knowledge-search.test.ts` — tool contract tests
-- Test: `apps/web/src/adapters/server/knowledge/markdown-knowledge.adapter.test.ts` — adapter tests
+- Test: `apps/operator/src/adapters/server/knowledge/markdown-knowledge.adapter.test.ts` — adapter tests
 
 ### Phase 2: Postgres + pgvector (when grep stops working)
 

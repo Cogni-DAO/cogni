@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Argo CD non-HA install for single-node k3s with ksops secret decryption.
+# Applied during cluster bootstrap, not by Argo itself.
+#
+# Usage:
+#   kubectl create namespace argocd
+#   kubectl kustomize infra/k8s/argocd/ | kubectl apply -n argocd -f -
+#
+# Pin to a specific release for reproducibility:
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: argocd
+
+resources:
+  # Pin to Argo CD v2.13 (latest stable as of 2026-03).
+  # Non-HA is appropriate for single-node k3s crawl; HA is a P2 concern.
+  - https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+  # ksops CMP plugin ConfigMap
+  - ksops-cmp.yaml
+  # ApplicationSets — one per environment (canary, preview, production)
+  - canary-applicationset.yaml
+  - preview-applicationset.yaml
+  - production-applicationset.yaml
+
+patches:
+  # Add ksops sidecar to repo-server for SOPS/age secret decryption
+  - path: repo-server-patch.yaml
+  # 30s reconciliation for fast dev iteration (default is 180s)
+  - path: argocd-cm-patch.yaml

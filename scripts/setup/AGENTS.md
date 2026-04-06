@@ -66,7 +66,7 @@ pnpm setup dao       # DAO contract deployment
 ## Dependencies
 
 - **Current:** None
-- **Future:** Will use existing `infra/tofu/cherry/base/` Terraform configs
+- **Future:** Will use existing `infra/provision/cherry/base/` Terraform configs
 
 ## Change Protocol
 

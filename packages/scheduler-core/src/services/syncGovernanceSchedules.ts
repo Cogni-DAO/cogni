@@ -114,6 +114,8 @@ export interface GovernanceScheduleSyncDeps {
   ): Promise<string>;
   /** System tenant user ID (owner of governance schedules) */
   systemUserId: string;
+  /** Node ID from repo-spec (routes execution to correct node) */
+  nodeId: string;
   /** Temporal schedule lifecycle control */
   scheduleControl: ScheduleControlPort;
   /** Returns all Temporal schedule IDs with 'governance:' prefix */
@@ -249,6 +251,7 @@ export async function syncGovernanceSchedules(
 
     const desiredParams: CreateScheduleParams = {
       scheduleId,
+      nodeId: deps.nodeId,
       dbScheduleId,
       ownerUserId: deps.systemUserId,
       cron: schedule.cron,

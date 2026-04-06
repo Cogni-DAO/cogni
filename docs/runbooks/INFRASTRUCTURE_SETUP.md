@@ -29,7 +29,7 @@ Complete guide for provisioning VMs, configuring DNS, and setting up GitHub secr
 Generate ed25519 keypairs for each environment. These keys allow CI to SSH into VMs for deployment.
 
 ```bash
-cd infra/tofu/cherry/base
+cd infra/provision/cherry/base
 ```
 
 ### Preview Key
@@ -83,6 +83,46 @@ export CHERRY_PROJECT_ID="<your-project-id>"
 
 ---
 
+## Step 2b: Generate SOPS Age Keypair
+
+Each environment needs an age keypair for SOPS secret decryption in Argo CD.
+
+```bash
+# Install age if not present
+brew install age  # macOS
+
+# Generate keypair (one per environment)
+age-keygen -o age-key-preview.txt
+# Output: public key: age1abc...
+# File contains private key (AGE-SECRET-KEY-...)
+
+age-keygen -o age-key-production.txt
+```
+
+**Public key** → add to `infra/k8s/secrets/.sops.yaml` (committed to repo).
+**Private key** → passed as Terraform variable (never committed).
+
+```bash
+# Set as TF var for provisioning
+export TF_VAR_sops_age_private_key="$(cat age-key-preview.txt | grep 'AGE-SECRET-KEY')"
+
+# Also set GHCR token for k3s image pulls
+export TF_VAR_ghcr_deploy_token="<github-pat-with-packages-read>"
+```
+
+---
+
+## Step 2c: Set Repo Reference for Argo CD
+
+The bootstrap clones your repo to install Argo CD manifests. Set which branch to use:
+
+```bash
+# Default is "staging" — override if testing a feature branch
+export TF_VAR_cogni_repo_ref="staging"
+```
+
+---
+
 ## Step 3: Provision VMs
 
 > **Important**: Each environment has its own SSH keypair. The `TF_VAR_ssh_private_key` variable must match the public key in your tfvars file. If mismatched, the health check will fail with "SSH authentication failed".
@@ -95,13 +135,18 @@ export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_preview_deploy)"
 
 # Create tfvars file
 cat > terraform.preview.tfvars << EOF
-environment     = "preview"
-vm_name_prefix  = "cogni-template"
-project_id      = "${CHERRY_PROJECT_ID}"
-plan            = "B1-4-4gb-80s-shared"
-region          = "LT-Siauliai"
-public_key_path = "keys/cogni_template_preview_deploy.pub"
+environment          = "preview"
+vm_name_prefix       = "cogni-template"
+project_id           = "${CHERRY_PROJECT_ID}"
+plan                 = "B1-8-8gb-80s-shared"
+region               = "LT-Siauliai"
+public_key_path      = "keys/cogni_template_preview_deploy.pub"
+ghcr_deploy_username = "Cogni-1729"
+cogni_repo_url       = "https://github.com/Cogni-DAO/cogni-template.git"
+cogni_repo_ref       = "staging"
 EOF
+# Sensitive vars set via environment (TF_VAR_*):
+# TF_VAR_ssh_private_key, TF_VAR_ghcr_deploy_token, TF_VAR_sops_age_private_key
 
 # Initialize and create workspace
 tofu init
@@ -126,13 +171,18 @@ export TF_VAR_ssh_private_key="$(cat ~/.ssh/cogni_template_production_deploy)"
 
 # Create tfvars file
 cat > terraform.production.tfvars << EOF
-environment     = "production"
-vm_name_prefix  = "cogni-template"
-project_id      = "${CHERRY_PROJECT_ID}"
-plan            = "B1-4-4gb-80s-shared"
-region          = "LT-Siauliai"
-public_key_path = "keys/cogni_template_production_deploy.pub"
+environment          = "production"
+vm_name_prefix       = "cogni-template"
+project_id           = "${CHERRY_PROJECT_ID}"
+plan                 = "B1-8-8gb-80s-shared"
+region               = "LT-Siauliai"
+public_key_path      = "keys/cogni_template_production_deploy.pub"
+ghcr_deploy_username = "Cogni-1729"
+cogni_repo_url       = "https://github.com/Cogni-DAO/cogni-template.git"
+cogni_repo_ref       = "main"
 EOF
+# Sensitive vars set via environment (TF_VAR_*):
+# TF_VAR_ssh_private_key, TF_VAR_ghcr_deploy_token, TF_VAR_sops_age_private_key
 
 # Switch workspace
 tofu workspace new production || tofu workspace select production
@@ -152,11 +202,15 @@ echo "Production VM IP: $PROD_IP"
 
 Update A records at your domain registrar (e.g., Namecheap → Advanced DNS):
 
-| Host      | Type | Value         | TTL       |
-| --------- | ---- | ------------- | --------- |
-| `preview` | A    | `$PREVIEW_IP` | Automatic |
-| `@`       | A    | `$PROD_IP`    | Automatic |
-| `www`     | A    | `$PROD_IP`    | Automatic |
+| Host           | Type | Value         | TTL       | Purpose            |
+| -------------- | ---- | ------------- | --------- | ------------------ |
+| `preview`      | A    | `$PREVIEW_IP` | Automatic | Operator (staging) |
+| `@`            | A    | `$PROD_IP`    | Automatic | Operator (prod)    |
+| `www`          | A    | `$PROD_IP`    | Automatic | Redirect to `@`    |
+| `poly`         | A    | `$PROD_IP`    | Automatic | Poly node (prod)   |
+| `resy`         | A    | `$PROD_IP`    | Automatic | Resy node (prod)   |
+| `poly.preview` | A    | `$PREVIEW_IP` | Automatic | Poly (staging)     |
+| `resy.preview` | A    | `$PREVIEW_IP` | Automatic | Resy (staging)     |
 
 **Verify propagation** (may take 5-15 minutes):
 
@@ -416,8 +470,21 @@ sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
 
 ---
 
+## What Bootstrap Installs
+
+The `bootstrap.yaml` cloud-init script installs on each VM:
+
+| Component | Version                 | Purpose                             |
+| --------- | ----------------------- | ----------------------------------- |
+| Docker    | Latest (get.docker.com) | Compose infrastructure services     |
+| k3s       | v1.31.4+k3s1            | Kubernetes for app deployments      |
+| Argo CD   | v2.13.4 (non-HA)        | GitOps controller                   |
+| ksops CMP | v4.3.2                  | SOPS/age secret decryption for Argo |
+
+After bootstrap, the health check validates: Docker running, k3s node Ready, Argo CD server available.
+
 ## Future Roadmap
 
-- [ ] **Golden image via Packer**: Bake Docker+Compose into a snapshot image instead of boot-time installs. Eliminates nondeterministic failures from upstream repo/CDN issues. Cloud-init becomes config-only.
-- [ ] **Flaky LiteLLM Fix**: first deployment of the app on new infra tends to fail, for unhealthy litellm. re-deploy fixes. TODO: root cause and fix flakiness
-- [ ] **Workspace-environment guard**: Add a `precondition` in `main.tf` that validates `terraform.workspace == var.environment` to prevent applying the wrong tfvars in the wrong workspace (e.g., preview resources landing in production state).
+- [ ] **Golden image via Packer**: Bake Docker+k3s into a snapshot image instead of boot-time installs
+- [ ] **Flaky LiteLLM Fix**: first deployment on new infra tends to fail with unhealthy litellm
+- [ ] **Workspace-environment guard**: `precondition` in `main.tf` to validate `workspace == var.environment`

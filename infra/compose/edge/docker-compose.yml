@@ -19,8 +19,18 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # Allow Caddy to reach k3s NodePorts on the host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - DOMAIN=${DOMAIN}
+      - POLY_DOMAIN=${POLY_DOMAIN:-}
+      - RESY_DOMAIN=${RESY_DOMAIN:-}
+      # Per-node upstreams. Default to Docker DNS (CI/dev); override to
+      # host.docker.internal:<nodeport> for k3s edge deploys.
+      - OPERATOR_UPSTREAM=${OPERATOR_UPSTREAM:-app:3000}
+      - POLY_UPSTREAM=${POLY_UPSTREAM:-poly:3100}
+      - RESY_UPSTREAM=${RESY_UPSTREAM:-resy:3300}
     volumes:
       - ./configs/Caddyfile.tmpl:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

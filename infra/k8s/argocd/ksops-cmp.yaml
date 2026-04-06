@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ksops Config Management Plugin (CMP) configuration.
+# Mounted into the ksops sidecar container at /home/argocd/cmp-server/config/plugin.yaml.
+# Tells Argo CD repo-server to use ksops for decrypting SOPS-encrypted files.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ksops-cmp-plugin
+  namespace: argocd
+data:
+  plugin.yaml: |
+    apiVersion: argoproj.io/v1alpha1
+    kind: ConfigManagementPlugin
+    metadata:
+      name: ksops
+    spec:
+      generate:
+        command: ["sh", "-c"]
+        args:
+          - |
+            # Find all SOPS-encrypted files and decrypt them, then run kustomize
+            # ksops generates plain K8s manifests from .enc.yaml via SOPS decryption
+            find . -name '*.enc.yaml' -exec sops --decrypt {} \;
+      discover:
+        find:
+          glob: "**/*.enc.yaml"

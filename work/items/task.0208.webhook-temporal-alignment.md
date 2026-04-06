@@ -119,8 +119,8 @@ PrReviewWorkflow (Temporal):
 - `services/scheduler-worker/src/activities/` — new review activities
 - `services/scheduler-worker/src/worker.ts` — register new workflow in bundle
 - `services/scheduler-worker/src/bootstrap/` — env/container for GitHub creds
-- `apps/web/src/app/_facades/review/dispatch.server.ts` — simplify to Temporal start
-- `apps/web/src/features/review/` — may simplify or remove handler orchestration
+- `apps/operator/src/app/_facades/review/dispatch.server.ts` — simplify to Temporal start
+- `apps/operator/src/features/review/` — may simplify or remove handler orchestration
 - `packages/langgraph-graphs/` — ensure pr-review graph returns structured artifact
 - Tests
 

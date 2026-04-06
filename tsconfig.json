@@ -3,13 +3,14 @@
   "files": [],
   "include": [],
   "references": [
-    { "path": "./apps/web/tsconfig.app.json" },
+    { "path": "./nodes/operator/app/tsconfig.app.json" },
     { "path": "./packages/ai-core" },
     { "path": "./packages/ai-tools" },
     { "path": "./packages/aragon-osx" },
     { "path": "./packages/cogni-contracts" },
     { "path": "./packages/langgraph-graphs/tsconfig.build.json" },
     { "path": "./packages/graph-execution-core" },
+    { "path": "./packages/graph-execution-host" },
     { "path": "./packages/db-client" },
     { "path": "./packages/ids" },
     { "path": "./packages/db-schema" },
@@ -23,6 +24,12 @@
     { "path": "./packages/temporal-workflows" },
     { "path": "./packages/repo-spec" },
     { "path": "./packages/work-items" },
-    { "path": "./packages/dns-ops" }
+    { "path": "./packages/dns-ops" },
+    { "path": "./packages/node-core" },
+    { "path": "./packages/node-contracts" },
+    { "path": "./packages/node-shared" },
+    { "path": "./packages/knowledge-store" },
+    { "path": "./nodes/node-template/packages/knowledge" },
+    { "path": "./nodes/poly/packages/knowledge" }
   ]
 }

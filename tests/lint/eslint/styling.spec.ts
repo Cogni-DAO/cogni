@@ -19,7 +19,7 @@ import { lintFixture } from "./runEslint";
 describe("Token-Driven Styling Policy", () => {
   it("allows literal className with token-prefixed utilities", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/app/page.tsx",
+      "nodes/operator/app/src/app/page.tsx",
       `export default () => <div className="bg-background text-foreground border-border ring-offset-background flex gap-4 px-[var(--spacing-lg)]" />;`
     );
     expect(errors).toBe(0);
@@ -27,7 +27,7 @@ describe("Token-Driven Styling Policy", () => {
 
   it("blocks raw palette literals", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/app/page.tsx",
+      "nodes/operator/app/src/app/page.tsx",
       `export default () => <div className="bg-red-500 text-gray-600" />;`
     );
     expect(errors).toBeGreaterThan(0);
@@ -35,7 +35,7 @@ describe("Token-Driven Styling Policy", () => {
 
   it("blocks arbitrary values that are not tokenized", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/app/page.tsx",
+      "nodes/operator/app/src/app/page.tsx",
       `export default () => <div className="gap-[12px] px-[1.25rem]" />;`
     );
     expect(errors).toBeGreaterThan(0);
@@ -43,7 +43,7 @@ describe("Token-Driven Styling Policy", () => {
 
   it("allows CVA usage in kit", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/components/kit/inputs/Button.tsx",
+      "nodes/operator/app/src/components/kit/inputs/Button.tsx",
       `import { button } from "@/styles/ui"; export const Button = () => <button className={button({variant:"primary"})} />;`
     );
     expect(errors).toBe(0);
@@ -51,7 +51,7 @@ describe("Token-Driven Styling Policy", () => {
 
   it("allows literals in styles definitions", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/styles/ui/index.ts",
+      "nodes/operator/app/src/styles/ui/index.ts",
       `import { cva } from "class-variance-authority"; export const button = cva("flex gap-2");`,
       {
         ignoreRules: ["import/no-unresolved", "node/no-missing-import"],

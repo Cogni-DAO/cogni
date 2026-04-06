@@ -20,7 +20,7 @@ tags: [analytics, observability]
 
 2. **AI-first.** The primary consumer of PostHog data is AI agents querying the HogQL API (`POST /api/projects/:id/query/`). The PostHog dashboard UI is a debugging convenience, not the primary interface.
 
-3. **Server-side capture only (MVP).** Events are emitted via `capture()` from `apps/web/src/shared/analytics/capture.ts`. No frontend JS snippet yet (tracked in `proj.observability-hardening` P0).
+3. **Server-side capture only (MVP).** Events are emitted via `capture()` from `apps/operator/src/shared/analytics/capture.ts`. No frontend JS snippet yet (tracked in `proj.observability-hardening` P0).
 
 4. **Fire-and-forget.** `capture()` batches events (50 events or 5s) and HTTP POSTs to `/batch/`. Failures are silent — no app impact, but events are lost during PostHog outages.
 
@@ -81,16 +81,16 @@ capture({
 
 ### Event Registry
 
-Event names defined in `apps/web/src/shared/analytics/events.ts`. Payload schemas in `docs/analytics/events.v0.md`.
+Event names defined in `apps/operator/src/shared/analytics/events.ts`. Payload schemas in `docs/analytics/events.v0.md`.
 
 ## File Pointers
 
 | File                                               | Purpose                        |
 | -------------------------------------------------- | ------------------------------ |
-| `apps/web/src/shared/analytics/capture.ts`         | `capture()`, `initAnalytics()` |
-| `apps/web/src/shared/analytics/events.ts`          | Event name constants           |
-| `apps/web/src/shared/env/server-env.ts`            | Env var validation (Zod)       |
-| `apps/web/src/bootstrap/container.ts`              | `initAnalytics()` call site    |
+| `apps/operator/src/shared/analytics/capture.ts`    | `capture()`, `initAnalytics()` |
+| `apps/operator/src/shared/analytics/events.ts`     | Event name constants           |
+| `apps/operator/src/shared/env/server-env.ts`       | Env var validation (Zod)       |
+| `apps/operator/src/bootstrap/container.ts`         | `initAnalytics()` call site    |
 | `docs/analytics/events.v0.md`                      | Event payload schemas          |
 | `infra/compose/posthog/docker-compose.posthog.yml` | Self-hosted stack (dev only)   |
 

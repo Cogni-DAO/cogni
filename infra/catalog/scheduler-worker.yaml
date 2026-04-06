@@ -1,0 +1,4 @@
+name: scheduler-worker
+type: service
+port: 9000
+dockerfile: services/scheduler-worker/Dockerfile

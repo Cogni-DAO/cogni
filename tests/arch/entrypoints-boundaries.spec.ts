@@ -29,14 +29,14 @@ function runDepCruise(probeFilesOrDirs: string[]): {
   // For entry point validation, include all base layers so dependency-cruiser
   // can see both the caller and the target of imports (e.g., app → ports/llm.port.ts)
   const allBaseLayers = [
-    "apps/web/src/core",
-    "apps/web/src/ports",
-    "apps/web/src/adapters",
-    "apps/web/src/features",
-    "apps/web/src/app",
-    "apps/web/src/bootstrap",
-    "apps/web/src/shared",
-    "apps/web/src/components",
+    "nodes/operator/app/src/core",
+    "nodes/operator/app/src/ports",
+    "nodes/operator/app/src/adapters",
+    "nodes/operator/app/src/features",
+    "nodes/operator/app/src/app",
+    "nodes/operator/app/src/bootstrap",
+    "nodes/operator/app/src/shared",
+    "nodes/operator/app/src/components",
   ];
 
   const includeOnly = [...probeFilesOrDirs, ...callerLayers, ...allBaseLayers]
@@ -72,7 +72,7 @@ describe("Entry point enforcement", () => {
   describe("Canonical imports allowed", () => {
     it("allows importing from ports index", () => {
       const { exitCode, stderr } = runDepCruise([
-        "apps/web/src/ports/__arch_probes__/pass_entrypoint_imports_index.ts",
+        "nodes/operator/app/src/ports/__arch_probes__/pass_entrypoint_imports_index.ts",
       ]);
       if (exitCode !== 0) {
         console.error("STDERR:", stderr);
@@ -82,7 +82,7 @@ describe("Entry point enforcement", () => {
 
     it("allows importing from ports server (scheduler-core)", () => {
       const { exitCode, stderr } = runDepCruise([
-        "apps/web/src/ports/__arch_probes__/pass_entrypoint_imports_server.ts",
+        "nodes/operator/app/src/ports/__arch_probes__/pass_entrypoint_imports_server.ts",
       ]);
       if (exitCode !== 0) {
         console.error("STDERR:", stderr);
@@ -92,7 +92,7 @@ describe("Entry point enforcement", () => {
 
     it("allows importing from core public", () => {
       const { exitCode, stderr } = runDepCruise([
-        "apps/web/src/core/__arch_probes__/pass_entrypoint_imports_public.ts",
+        "nodes/operator/app/src/core/__arch_probes__/pass_entrypoint_imports_public.ts",
       ]);
       if (exitCode !== 0) {
         console.error("STDERR:", stderr);
@@ -102,7 +102,7 @@ describe("Entry point enforcement", () => {
 
     it("allows importing from adapters server index", () => {
       const { exitCode, stderr } = runDepCruise([
-        "apps/web/src/bootstrap/__arch_probes__/pass_entrypoint_imports_adapters_index.ts",
+        "nodes/operator/app/src/bootstrap/__arch_probes__/pass_entrypoint_imports_adapters_index.ts",
       ]);
       if (exitCode !== 0) {
         console.error("STDERR:", stderr);
@@ -112,7 +112,7 @@ describe("Entry point enforcement", () => {
 
     it("allows importing from features services", () => {
       const { exitCode, stderr } = runDepCruise([
-        "apps/web/src/app/__arch_probes__/pass_entrypoint_imports_features_services.ts",
+        "nodes/operator/app/src/app/__arch_probes__/pass_entrypoint_imports_features_services.ts",
       ]);
       if (exitCode !== 0) {
         console.error("STDERR:", stderr);
@@ -122,7 +122,7 @@ describe("Entry point enforcement", () => {
 
     it("allows importing from features components", () => {
       const { exitCode, stderr } = runDepCruise([
-        "apps/web/src/app/__arch_probes__/pass_app_imports_features_components.ts",
+        "nodes/operator/app/src/app/__arch_probes__/pass_app_imports_features_components.ts",
       ]);
       if (exitCode !== 0) {
         console.error("STDERR:", stderr);
@@ -134,7 +134,7 @@ describe("Entry point enforcement", () => {
   describe("Internal imports blocked", () => {
     it("blocks internal port file imports", () => {
       const { exitCode, stdout } = runDepCruise([
-        "apps/web/src/app/__arch_probes__/fail_entrypoint_imports_ports_internal.ts",
+        "nodes/operator/app/src/app/__arch_probes__/fail_entrypoint_imports_ports_internal.ts",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);
@@ -145,7 +145,7 @@ describe("Entry point enforcement", () => {
 
     it("blocks internal core file imports", () => {
       const { exitCode, stdout } = runDepCruise([
-        "apps/web/src/app/__arch_probes__/fail_entrypoint_imports_core_internal.ts",
+        "nodes/operator/app/src/app/__arch_probes__/fail_entrypoint_imports_core_internal.ts",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);
@@ -156,7 +156,7 @@ describe("Entry point enforcement", () => {
 
     it("blocks internal adapter file imports", () => {
       const { exitCode, stdout } = runDepCruise([
-        "apps/web/src/bootstrap/__arch_probes__/fail_entrypoint_imports_adapters_internal.ts",
+        "nodes/operator/app/src/bootstrap/__arch_probes__/fail_entrypoint_imports_adapters_internal.ts",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);
@@ -167,7 +167,7 @@ describe("Entry point enforcement", () => {
 
     it("blocks features mappers imports", () => {
       const { exitCode, stdout } = runDepCruise([
-        "apps/web/src/app/__arch_probes__/fail_entrypoint_imports_features_mappers.ts",
+        "nodes/operator/app/src/app/__arch_probes__/fail_entrypoint_imports_features_mappers.ts",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);
@@ -178,7 +178,7 @@ describe("Entry point enforcement", () => {
 
     it("blocks features utils imports", () => {
       const { exitCode, stdout } = runDepCruise([
-        "apps/web/src/app/__arch_probes__/fail_entrypoint_imports_features_utils.ts",
+        "nodes/operator/app/src/app/__arch_probes__/fail_entrypoint_imports_features_utils.ts",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);
@@ -189,7 +189,7 @@ describe("Entry point enforcement", () => {
 
     it("blocks features constants imports", () => {
       const { exitCode, stdout } = runDepCruise([
-        "apps/web/src/app/__arch_probes__/fail_entrypoint_imports_features_constants.ts",
+        "nodes/operator/app/src/app/__arch_probes__/fail_entrypoint_imports_features_constants.ts",
       ]);
       if (exitCode === 0) {
         console.log("STDOUT:", stdout);

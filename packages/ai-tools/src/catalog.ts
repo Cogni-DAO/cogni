@@ -15,12 +15,20 @@
  */
 
 import { getCurrentTimeBoundTool } from "./tools/get-current-time";
+import { knowledgeReadBoundTool } from "./tools/knowledge-read";
+import { knowledgeSearchBoundTool } from "./tools/knowledge-search";
+import { knowledgeWriteBoundTool } from "./tools/knowledge-write";
+import { marketListBoundTool } from "./tools/market-list";
 import { metricsQueryBoundTool } from "./tools/metrics-query";
 import { repoListBoundTool } from "./tools/repo-list";
 import { repoOpenBoundTool } from "./tools/repo-open";
 import { repoSearchBoundTool } from "./tools/repo-search";
 import { scheduleListBoundTool } from "./tools/schedule-list";
 import { scheduleManageBoundTool } from "./tools/schedule-manage";
+import { vcsCreateBranchBoundTool } from "./tools/vcs-create-branch";
+import { vcsGetCiStatusBoundTool } from "./tools/vcs-get-ci-status";
+import { vcsListPrsBoundTool } from "./tools/vcs-list-prs";
+import { vcsMergePrBoundTool } from "./tools/vcs-merge-pr";
 import { webSearchBoundTool } from "./tools/web-search";
 import { workItemQueryBoundTool } from "./tools/work-item-query";
 import { workItemTransitionBoundTool } from "./tools/work-item-transition";
@@ -97,12 +105,20 @@ export function createToolCatalog(
 export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   // Core tools (core__ prefix)
   getCurrentTimeBoundTool as CatalogBoundTool,
+  knowledgeReadBoundTool as CatalogBoundTool,
+  knowledgeSearchBoundTool as CatalogBoundTool,
+  knowledgeWriteBoundTool as CatalogBoundTool,
+  marketListBoundTool as CatalogBoundTool,
   metricsQueryBoundTool as CatalogBoundTool,
   repoListBoundTool as CatalogBoundTool,
   repoOpenBoundTool as CatalogBoundTool,
   repoSearchBoundTool as CatalogBoundTool,
   scheduleListBoundTool as CatalogBoundTool,
   scheduleManageBoundTool as CatalogBoundTool,
+  vcsCreateBranchBoundTool as CatalogBoundTool,
+  vcsGetCiStatusBoundTool as CatalogBoundTool,
+  vcsListPrsBoundTool as CatalogBoundTool,
+  vcsMergePrBoundTool as CatalogBoundTool,
   webSearchBoundTool as CatalogBoundTool,
   workItemQueryBoundTool as CatalogBoundTool,
   workItemTransitionBoundTool as CatalogBoundTool,

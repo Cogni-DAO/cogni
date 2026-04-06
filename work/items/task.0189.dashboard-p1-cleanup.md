@@ -112,17 +112,17 @@ Current top-level object is `graph_runs` (LangGraph execution). The correct prod
 
 ## Allowed Changes
 
-- `apps/web/src/contracts/ai.activity.v1.contract.ts` — add scope field
-- `apps/web/src/app/api/v1/activity/route.ts` — parse scope param
-- `apps/web/src/app/_facades/ai/activity.server.ts` — resolve billing account by scope
-- `apps/web/src/app/(app)/activity/_api/fetchActivity.ts` — accept scope param
-- `apps/web/src/app/(app)/activity/page.tsx` — redirect to /dashboard
-- `apps/web/src/app/(app)/dashboard/view.tsx` — pass tab to activity, clickable rows, terminology
-- `apps/web/src/app/(app)/dashboard/page.tsx` — remove auth requirement for public view (Phase C)
-- `apps/web/src/app/(app)/chat/page.tsx` — read `?thread=` searchParam
-- `apps/web/src/components/kit/data-display/RunCard.tsx` — expanded card variant (Phase B)
-- `apps/web/src/features/layout/components/AppSidebar.tsx` — remove Activity nav link
-- `apps/web/src/app/(app)/AGENTS.md` — update routes
+- `apps/operator/src/contracts/ai.activity.v1.contract.ts` — add scope field
+- `apps/operator/src/app/api/v1/activity/route.ts` — parse scope param
+- `apps/operator/src/app/_facades/ai/activity.server.ts` — resolve billing account by scope
+- `apps/operator/src/app/(app)/activity/_api/fetchActivity.ts` — accept scope param
+- `apps/operator/src/app/(app)/activity/page.tsx` — redirect to /dashboard
+- `apps/operator/src/app/(app)/dashboard/view.tsx` — pass tab to activity, clickable rows, terminology
+- `apps/operator/src/app/(app)/dashboard/page.tsx` — remove auth requirement for public view (Phase C)
+- `apps/operator/src/app/(app)/chat/page.tsx` — read `?thread=` searchParam
+- `apps/operator/src/components/kit/data-display/RunCard.tsx` — expanded card variant (Phase B)
+- `apps/operator/src/features/layout/components/AppSidebar.tsx` — remove Activity nav link
+- `apps/operator/src/app/(app)/AGENTS.md` — update routes
 
 ## Plan
 

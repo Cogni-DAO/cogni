@@ -249,6 +249,28 @@ export const scopeIdSchema = z.string().uuid();
 /** Human-friendly scope slug — lowercase, kebab, max 32 chars */
 export const scopeKeySchema = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/);
 
+// ---------------------------------------------------------------------------
+// Node registry (operator-only — declares child nodes in the monorepo)
+// ---------------------------------------------------------------------------
+
+/**
+ * Schema for a single node entry in the operator's nodes[] registry.
+ * Each entry points to a node directory containing its own .cogni/repo-spec.yaml.
+ * Per REPO_SPEC_AUTHORITY: operator repo-spec is the node discovery source.
+ */
+export const nodeRegistryEntrySchema = z.object({
+  /** Node UUID — must match the node's own repo-spec node_id */
+  node_id: z.string().uuid(),
+  /** Human-friendly display name (for logging, UI, dashboards) */
+  node_name: z.string().min(1),
+  /** Path relative to repo root (e.g., "." for operator, "nodes/poly" for poly) */
+  path: z.string().min(1),
+  /** Docker-internal endpoint for billing callback routing (optional — runtime config) */
+  endpoint: z.string().optional(),
+});
+
+export type NodeRegistryEntry = z.infer<typeof nodeRegistryEntrySchema>;
+
 /**
  * Schema for full .cogni/repo-spec.yaml structure.
  * Validates structure only; chain alignment checked in accessors via chainId parameter.
@@ -319,6 +341,9 @@ export const repoSpecSchema = z
 
     /** Whether gate errors/timeouts result in failure instead of neutral. */
     fail_on_error: z.boolean().optional().default(false),
+
+    /** Node registry — operator-only. Declares child nodes in the monorepo. */
+    nodes: z.array(nodeRegistryEntrySchema).optional(),
   })
   .passthrough();
 

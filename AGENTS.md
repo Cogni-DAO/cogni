@@ -37,6 +37,7 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - **Toolchain:** pnpm, Biome, ESLint, Prettier, Vitest, Playwright, SonarQube
 - **Observability:** Pino JSON → Alloy → local Loki (dev) or Grafana Cloud (preview/prod). MCP via grafana-local/grafana.
 - **CI entrypoint:** `pnpm check` (static) → `pnpm check:full` (stack tests)
+- **Node layout:** sovereign node code lives under `nodes/{node}/` (`app/`, `graphs/`, `.cogni/`)
 
 ## API Contracts are the Single Source of Truth
 
@@ -61,8 +62,11 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 ## Usage
 
 ```bash
-pnpm dev                      # start dev server
-pnpm dev:stack                # start dev server + infrastructure (main dev workflow)
+pnpm dev                      # start operator dev server
+pnpm dev:poly                 # start poly node (port 3100, requires dev:infra)
+pnpm dev:resy                 # start resy node (port 3300, requires dev:infra)
+pnpm dev:stack                # start operator + infrastructure (main dev workflow)
+pnpm dev:stack:full           # start operator + all nodes + infrastructure
 pnpm dev:stack:test           # start dev server + infrastructure for testing
 pnpm dev:stack:test:setup     # first time: create test DB + run migrations
 pnpm dev:infra:tb             # opt-in: start TigerBeetle (needs ~1.2GiB RAM)
@@ -89,7 +93,12 @@ pnpm test:stack:docker        # Full Stack tests (requires docker:test:stack run
 pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts <testfile> # run a specific stack test file
 pnpm format                   # prettier format fixes
 pnpm check:docs               # lint AGENTS.md documentation
+pnpm typecheck:node-template  # typecheck node-template app
+pnpm typecheck:poly           # typecheck poly node app
+pnpm typecheck:resy           # typecheck resy node app
 pnpm e2e                      # Black box end-to-end tests (run on pnpm docker:stack)
 ```
 
 **Fast variants:** Commands with `:fast` skip Docker rebuilds, using existing images for faster startup.
+
+**Multi-node:** See [docs/guides/multi-node-dev.md](docs/guides/multi-node-dev.md) for layout, commands, and testing guide.

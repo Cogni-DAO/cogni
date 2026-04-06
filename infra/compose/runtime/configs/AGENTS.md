@@ -30,7 +30,7 @@ Service configuration files for runtime stack services (LiteLLM proxy, Grafana A
 ## Public Surface
 
 - **Exports:** none
-- **Env/Config keys:** `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY`, `LITELLM_DATABASE_URL`, `GENERIC_LOGGER_ENDPOINT` (billing callback URL), `GENERIC_LOGGER_HEADERS` (billing callback auth), `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_LOKI_API_KEY`, `METRICS_TOKEN`, `PROMETHEUS_REMOTE_WRITE_URL`, `PROMETHEUS_USERNAME`, `PROMETHEUS_PASSWORD`
+- **Env/Config keys:** `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY`, `LITELLM_DATABASE_URL`, `COGNI_NODE_ENDPOINTS` (per-node billing callback routing), `BILLING_INGEST_TOKEN` (billing callback auth), `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_LOKI_API_KEY`, `METRICS_TOKEN`, `PROMETHEUS_REMOTE_WRITE_URL`, `PROMETHEUS_USERNAME`, `PROMETHEUS_PASSWORD`
 - **Files considered API:** litellm.config.yaml, alloy-config.alloy, alloy-config.metrics.alloy, grafana-provisioning/datasources/loki.yaml
 
 ## Responsibilities
@@ -74,6 +74,6 @@ Mounted as volumes in docker-compose.yml.
 ## Notes
 
 - litellm.config.yaml is single source of truth for model metadata and callback config
-- `generic_api` callback: LiteLLM fires `POST GENERIC_LOGGER_ENDPOINT` with `StandardLoggingPayload[]` on every successful LLM call. Auth via `GENERIC_LOGGER_HEADERS` (Bearer token). Env vars set on litellm service in docker-compose.
+- Billing callback: custom `CogniNodeRouter` callback class (`infra/images/litellm/cogni_callbacks.py`) routes each completion to the correct node's `/api/internal/billing/ingest` endpoint based on `node_id` in metadata. Configured via `COGNI_NODE_ENDPOINTS` env var. Auth via `BILLING_INGEST_TOKEN` (Bearer token).
 - App fetches from `/model/info` endpoint to read `model_info` fields
 - Adding models: update config + restart LiteLLM, app cache refreshes within 1h

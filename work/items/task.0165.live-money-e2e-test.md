@@ -28,7 +28,7 @@ external_refs:
 
 ## Requirements
 
-- New vitest config `apps/web/vitest.external-money.config.mts` — follows the external test pattern but does NOT use testcontainers. Expects the full `dev:stack` to be running (Postgres, TigerBeetle, app server)
+- New vitest config `apps/operator/vitest.external-money.config.mts` — follows the external test pattern but does NOT use testcontainers. Expects the full `dev:stack` to be running (Postgres, TigerBeetle, app server)
 - New pnpm script `test:external:money` — runs the money test suite; never part of CI or `check:full`
 - Env requirements in `.env.test`: `DATABASE_SERVICE_URL`, `TIGERBEETLE_ADDRESS`, `OPENROUTER_API_KEY`, `TEST_WALLET_PRIVATE_KEY`
 - Test is black-box against the running app — sends USDC via viem, authenticates via SIWE, calls HTTP API, then queries DB/TB/OpenRouter for assertions
@@ -46,8 +46,8 @@ external_refs:
 
 ## Allowed Changes
 
-- `apps/web/vitest.external-money.config.mts` (new)
-- `apps/web/tests/external/money/openrouter-topup-e2e.external.money.test.ts` (new)
+- `apps/operator/vitest.external-money.config.mts` (new)
+- `apps/operator/tests/external/money/openrouter-topup-e2e.external.money.test.ts` (new)
 - `package.json` (add `test:external:money` script)
 
 ## Validation

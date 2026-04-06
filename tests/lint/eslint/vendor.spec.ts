@@ -19,7 +19,7 @@ import { lintFixture } from "./runEslint";
 describe("Vendor & Styles Exemptions", () => {
   it("allows vendor literal classes", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/components/vendor/ui-primitives/shadcn/button.tsx",
+      "nodes/operator/app/src/components/vendor/ui-primitives/shadcn/button.tsx",
       `export const Button = () => <button className="flex gap-2 items-center" />;`
     );
     expect(errors).toBe(0);
@@ -27,7 +27,7 @@ describe("Vendor & Styles Exemptions", () => {
 
   it.skip("blocks vendor forbidden repo imports", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/components/vendor/ui-primitives/shadcn/button.tsx",
+      "nodes/operator/app/src/components/vendor/ui-primitives/shadcn/button.tsx",
       `import { internalUtil } from "@/shared/internal"; export default internalUtil;`
     );
     expect(errors).toBeGreaterThan(0);
@@ -35,7 +35,7 @@ describe("Vendor & Styles Exemptions", () => {
 
   it("allows styles layer literals and external imports", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/styles/ui/index.ts",
+      "nodes/operator/app/src/styles/ui/index.ts",
       `import { cva } from "class-variance-authority"; export const button = cva("flex gap-2");`,
       {
         ignoreRules: ["import/no-unresolved", "node/no-missing-import"],

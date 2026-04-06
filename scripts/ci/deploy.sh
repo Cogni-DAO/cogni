@@ -878,11 +878,6 @@ rsync -av -e "ssh $SSH_OPTS" \
   "$REPO_ROOT/infra/compose/runtime/" \
   root@"$VM_HOST":/opt/cogni-template-runtime/
 
-# Upload sandbox-proxy config (OpenClaw nginx)
-rsync -av -e "ssh $SSH_OPTS" \
-  "$REPO_ROOT/infra/compose/sandbox-proxy/" \
-  root@"$VM_HOST":/opt/cogni-template-runtime/sandbox-proxy/
-
 # Upload OpenClaw gateway config
 ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-runtime/openclaw"
 scp $SSH_OPTS \

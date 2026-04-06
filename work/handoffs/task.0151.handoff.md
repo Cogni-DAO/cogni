@@ -13,7 +13,7 @@ last_commit: be07f605
 
 ## Context
 
-- Move Next.js app from repo root (`src/`, root configs) into `apps/web/` as a pnpm workspace member
+- Move Next.js app from repo root (`src/`, root configs) into `apps/operator/` as a pnpm workspace member
 - Flatten `platform/` (3+ levels deep) into `infra/` + `scripts/`
 - Prerequisite for adding `apps/operator/` in GitOps roadmap (proj.cicd-services-gitops P2)
 - PR #547 open against `staging`: https://github.com/Cogni-DAO/node-template/pull/547
@@ -29,17 +29,17 @@ last_commit: be07f605
 
 ### Uncommitted files (from previous developer session)
 
-| File                                                                    | Change                                                                                     |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `package.json`                                                          | `COGNI_REPO_PATH=$(pwd)` prefix on `dev`, `dev:stack:test`, `build`, `start`               |
-| `apps/web/src/adapters/server/sandbox/llm-proxy-manager.ts`             | `TEMPLATE_PATH` → lazy `getTemplatePath()` (was crashing at import time via `serverEnv()`) |
-| `apps/web/tests/stack/ai/one-ledger-writer.stack.test.ts`               | `cwd: join(process.cwd(), "apps/web")` for grep commands                                   |
-| `apps/web/tests/stack/ai/stream-drain-enforcement.stack.test.ts`        | Same cwd fix                                                                               |
-| `apps/web/tests/stack/attribution/collect-epoch-pipeline.stack.test.ts` | Relative import depth fix (`../../../` → `../../../../../`)                                |
-| `.env.local.example`                                                    | `COGNI_REPO_PATH=../..` → `.` with comment update                                          |
-| `.env.test.example`                                                     | `COGNI_REPO_PATH=../..` → `.` with comment update                                          |
-| `.mcp.json`                                                             | Unrelated config change                                                                    |
-| `work/items/task.0151.monorepo-app-to-workspace.md`                     | Status field update                                                                        |
+| File                                                                         | Change                                                                                     |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `package.json`                                                               | `COGNI_REPO_PATH=$(pwd)` prefix on `dev`, `dev:stack:test`, `build`, `start`               |
+| `apps/operator/src/adapters/server/sandbox/llm-proxy-manager.ts`             | `TEMPLATE_PATH` → lazy `getTemplatePath()` (was crashing at import time via `serverEnv()`) |
+| `apps/operator/tests/stack/ai/one-ledger-writer.stack.test.ts`               | `cwd: join(process.cwd(), "apps/operator")` for grep commands                              |
+| `apps/operator/tests/stack/ai/stream-drain-enforcement.stack.test.ts`        | Same cwd fix                                                                               |
+| `apps/operator/tests/stack/attribution/collect-epoch-pipeline.stack.test.ts` | Relative import depth fix (`../../../` → `../../../../../`)                                |
+| `.env.local.example`                                                         | `COGNI_REPO_PATH=../..` → `.` with comment update                                          |
+| `.env.test.example`                                                          | `COGNI_REPO_PATH=../..` → `.` with comment update                                          |
+| `.mcp.json`                                                                  | Unrelated config change                                                                    |
+| `work/items/task.0151.monorepo-app-to-workspace.md`                          | Status field update                                                                        |
 
 ## Decisions Made
 
@@ -61,8 +61,8 @@ last_commit: be07f605
 
 - **COGNI_REPO_PATH conflict**: `.env.test` value leaks into Docker via `docker compose --env-file .env.test`, overriding the compose default `${COGNI_REPO_PATH:-/repo/current}`. The `$(pwd)` inline prefix in package.json only helps host-side scripts, not containerized processes.
 - **scheduler-worker Dockerfile fragility**: Lines 82-110 copy root `node_modules` and per-package `dist/`. Adding a new `@cogni/*` package requires updating root `package.json` deps AND the Dockerfile COPY list. `pnpm deploy` (proj.cicd-services-gitops P2) eliminates this.
-- **SonarCloud "new code" inflation**: The `src/` → `apps/web/src/` path change causes SonarCloud to treat all moved files as "new code," surfacing ~50 pre-existing issues. These are not regressions — mark as won't fix or adjust the new code baseline.
-- **Thread-stream noop stub** (`apps/web/src/shared/stubs/thread-stream-noop.ts`) is a containment measure. The real fix is `bug.0157`: dynamic import with `ssr: false` for the WalletConnect component subtree.
+- **SonarCloud "new code" inflation**: The `src/` → `apps/operator/src/` path change causes SonarCloud to treat all moved files as "new code," surfacing ~50 pre-existing issues. These are not regressions — mark as won't fix or adjust the new code baseline.
+- **Thread-stream noop stub** (`apps/operator/src/shared/stubs/thread-stream-noop.ts`) is a containment measure. The real fix is `bug.0157`: dynamic import with `ssr: false` for the WalletConnect component subtree.
 
 ## Pointers
 
@@ -70,9 +70,9 @@ last_commit: be07f605
 | -------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `work/items/task.0151.monorepo-app-to-workspace.md`      | Full task spec with checkpoint plan and R1-R3 review feedback            |
 | `work/projects/proj.cicd-services-gitops.md`             | Parent project, P2 has `pnpm deploy` follow-up                           |
-| `apps/web/src/shared/env/server-env.ts:205,270-283`      | `COGNI_REPO_PATH` Zod validation + `COGNI_REPO_ROOT` resolution          |
+| `apps/operator/src/shared/env/server-env.ts:205,270-283` | `COGNI_REPO_PATH` Zod validation + `COGNI_REPO_ROOT` resolution          |
 | `services/scheduler-worker/Dockerfile:82-110`            | Fragile multi-COPY that depends on root symlinks                         |
 | `infra/compose/runtime/docker-compose.dev.yml:69`        | `COGNI_REPO_PATH=${COGNI_REPO_PATH:-/repo/current}` default              |
-| `apps/web/next.config.ts`                                | `outputFileTracingRoot`, `turbopack.resolveAlias` for thread-stream stub |
+| `apps/operator/next.config.ts`                           | `outputFileTracingRoot`, `turbopack.resolveAlias` for thread-stream stub |
 | `work/items/bug.0157.walletconnect-pino-ssr-bundling.md` | Real fix for thread-stream (ssr: false)                                  |
 | PR #547                                                  | https://github.com/Cogni-DAO/node-template/pull/547                      |
