@@ -18,4 +18,7 @@ import { createNodeVitestConfig } from "@cogni/node-test-utils/vitest-configs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export default createNodeVitestConfig({ dirname: __dirname, kind: "component" });
+export default createNodeVitestConfig({
+  dirname: __dirname,
+  kind: "component",
+});
