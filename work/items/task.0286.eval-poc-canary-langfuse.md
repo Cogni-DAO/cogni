@@ -5,9 +5,9 @@ status: needs_implement
 priority: 1
 rank: 2
 estimate: 3
-title: "Eval POC — 2 evals with 4o-mini judge, Langfuse datasets, canary HTTP target"
-summary: First actual evals. Poet quality + brain tool-calling. TypeScript harness, 4o-mini LLM-as-judge via OpenRouter, Langfuse dataset experiments, threshold gate. Runs against canary deployment.
-outcome: "pnpm eval:canary runs 2 eval suites against live canary, scores with 4o-mini, pushes to Langfuse, exits non-zero on threshold failure."
+title: "Eval POC — error analysis + 20 real cases, data-first, canary HTTP target"
+summary: First actual evals. Error analysis of brain + poet graph outputs, then 20+ eval cases derived from observed failures. Code-based evals first, 1-2 LLM judges for subjective dimensions. Binary pass/fail. Advisory mode (no gating). Langfuse datasets.
+outcome: "pnpm eval:canary runs 20+ eval cases against live canary, reports pass/fail per case, pushes results to Langfuse. Advisory mode — logs results, does not gate."
 initiative: proj.ai-evals-pipeline
 assignees: []
 labels: [ai, evals, langfuse, poc]
@@ -15,230 +15,230 @@ branch:
 pr:
 reviewer:
 created: 2026-04-04
-updated: 2026-04-04
+updated: 2026-04-06
 ---
 
-# task.0286 — Eval POC: 2 evals with 4o-mini judge on canary
+# task.0286 — Eval POC: error analysis + 20 real cases on canary
 
 ## Design
 
 ### Outcome
 
-`pnpm eval:canary` runs 2 eval suites against the canary deployment, scores responses with 4o-mini, pushes scores to Langfuse as dataset experiments, and exits non-zero if any score falls below threshold.
+`pnpm eval:canary` runs 20+ eval cases against the canary deployment, reports binary pass/fail per case, and pushes results to Langfuse as a dataset experiment. Advisory mode — exits 0 regardless, prints pass rate summary. Gating deferred to P1 after threshold calibration.
 
 ### Approach
 
-**Solution:** Lightweight TypeScript eval harness in `evals/` that:
+**Solution:** Data-first eval development in 3 steps:
 
-1. Reads test cases from JSON dataset files
-2. Calls canary HTTP chat API (same pattern as E2E Playwright tests)
-3. Runs deterministic assertions (format, tool calls, latency)
-4. Scores with 4o-mini via OpenRouter as LLM-as-judge
-5. Pushes all results to Langfuse as dataset experiment runs
-6. Checks aggregate scores against thresholds → exit code
+1. **Error analysis** — run 30-50 real prompts through brain + poet graphs, review every output, categorize failure modes (see [Error Analysis Protocol](../../work/charters/EVALS.md#error-analysis-protocol))
+2. **Write evals from findings** — 20+ cases targeting the top 3-4 observed failure modes. Code-based assertions for deterministic failures. 1-2 binary LLM-as-judge evals for subjective dimensions only.
+3. **Lightweight harness** — one vitest test file + dataset JSON + Langfuse push. Extract helpers later when seams are clear.
 
 **Reuses:**
-
 - Langfuse SDK (`langfuse` — already a dependency)
-- OpenRouter API key (already in CI secrets)
+- OpenRouter API key (already in CI secrets) — raw `fetch`, no new npm deps
 - Canary HTTP endpoint (same as E2E tests)
-- Existing Langfuse env vars (public key, secret key, base URL)
-- SSE stream parsing from existing test utils
+- Vitest (already in stack — timeouts, parallel, reporting for free)
 
 **Rejected:**
-
-- **promptfoo** — adds a new tool + YAML DSL. Overkill for 2 evals. Revisit at 20+ evals.
-- **DeepEval** — Python-only. We're a TypeScript shop. Would require Python in CI.
-- **LangSmith** — we already use Langfuse. Adding a second observability platform is waste.
-- **In-process graph execution for canary evals** — user specifically wants deployment-level testing. In-process testing is a Phase 2 CI gate concern.
+- **Synthetic test cases** ("write a haiku") — top teams derive evals from observed failures, not invented scenarios. Evals without error analysis create a false sense of security.
+- **Float scores with thresholds** (0.7 on 0-1 scale) — maximizes flakiness. Binary pass/fail only.
+- **10-file decomposition** — premature abstraction for a POC. Start with 3 files, extract after patterns emerge.
+- **Deployment gating in P0** — run advisory for 2+ weeks first to calibrate. Gating without calibration blocks real work on noise.
+- **promptfoo / DeepEval** — revisit at 20+ evals across multiple graphs.
 
 ### Invariants
 
-- [ ] EVAL_REGRESSION_GATE: Threshold failures produce non-zero exit code (spec: ai-evals-spec)
-- [ ] GOLDEN_UPDATE_DISCIPLINE: Dataset changes require explicit commit messages (spec: ai-evals-spec)
-- [ ] LANGFUSE_DATASET_EXPERIMENTS: All eval runs create Langfuse experiments for UI review
-- [ ] JUDGE_MODEL_CHEAP: 4o-mini only — never use expensive models for judging
-- [ ] CANARY_HTTP_TARGET: Evals hit the live deployment, not in-process graphs
-- [ ] SIMPLE_SOLUTION: No new frameworks or dependencies beyond langfuse SDK
-- [ ] ARCHITECTURE_ALIGNMENT: Follows evals/ directory structure from ai-evals-spec
+- [ ] DATA_FIRST: Error analysis completed before writing eval cases (charter: chr.evals)
+- [ ] BINARY_PASS_FAIL: Every eval is yes/no, not a float score (charter: chr.evals)
+- [ ] CODE_BEFORE_JUDGE: Deterministic assertions first, LLM judge only for subjective dimensions (charter: chr.evals)
+- [ ] MINIMUM_20_CASES: At least 20 eval cases before the suite is useful (charter: chr.evals)
+- [ ] ADVISORY_MODE: P0 logs results, does not gate deployments (charter: chr.evals)
+- [ ] EVAL_CASES_FROM_FAILURES: Cases derived from error analysis, not invented (charter: chr.evals)
+- [ ] NO_NEW_DEPS: Judge calls via raw fetch to OpenRouter, no new npm packages
+- [ ] LANGFUSE_DATASET_EXPERIMENTS: All runs create Langfuse experiments for UI review
 
-### Eval 1: Poet Response Quality
+### Step 1: Error Analysis (prerequisite — before writing any eval code)
 
-**Graph:** `langgraph:poet`
-**What it tests:** Can the simplest graph produce a coherent, relevant response?
+Run 30-50 real prompts through **brain** and **poet** graphs on the canary deployment. Save every input/output pair. Review each output (~30s each). Categorize into failure buckets.
+
+**Brain graph prompts** (15-20):
+- Code search queries ("find where GraphExecutorPort is defined")
+- File listing queries ("what's in packages/ai-core/src/")
+- Explanation queries ("explain how billing works in this codebase")
+- Multi-step queries ("find all TODO comments and summarize them")
+- Edge cases: queries about nonexistent files, ambiguous terms, very large results
+
+**Poet graph prompts** (10-15):
+- Various poetry forms (haiku, limerick, sonnet, free verse)
+- Various topics (technical, emotional, abstract)
+- Edge cases: contradictory constraints, very long requests, empty-ish prompts
+
+**Expected failure buckets** (will be refined by actual data):
+- Tool selection errors (wrong tool or no tool called)
+- Hallucination (claims about code that don't exist)
+- Format violations (wrong structure for requested format)
+- Incomplete responses (truncated, missing key information)
+- Tool call failures (correct tool, wrong arguments)
+- Irrelevant verbosity (correct answer buried in noise)
+
+**Output:** `evals/analysis/error-analysis-v1.md` — annotated failure categories with counts and example traces.
+
+### Step 2: Write Evals from Findings
+
+Based on error analysis, write 20+ cases. Expected distribution (will shift based on findings):
+
+**Code-based assertions (~15 cases):**
+- Did brain call the right tool for a search query? (yes/no)
+- Did brain call repo-list for a file listing query? (yes/no)
+- Is the response non-empty? (yes/no)
+- Did the response complete within 30s? (yes/no)
+- Does the response mention the searched term? (yes/no)
+- Is the poet response in the requested format (has expected line count)? (yes/no)
+- Does tool call have valid arguments (non-empty search term)? (yes/no)
+
+**LLM-as-judge — binary only (~5 cases):**
+- Is the brain's code explanation accurate given the actual source? (yes/no — judge sees both response and real code)
+- Is the poet's response thematically relevant to the requested topic? (yes/no)
+
+**Dataset format:**
 
 ```json
 {
-  "name": "poet-quality-v1",
+  "name": "brain-v1",
   "cases": [
     {
+      "id": "brain-search-001",
       "input": {
-        "message": "Write a haiku about TypeScript",
-        "graphName": "poet",
-        "modelRef": {
-          "providerKey": "platform",
-          "modelId": "openai/gpt-4o-mini"
-        }
+        "message": "Find where GraphExecutorPort is defined",
+        "graphName": "brain",
+        "modelRef": { "providerKey": "platform", "modelId": "openai/gpt-4o-mini" }
       },
-      "assertions": {
-        "deterministic": {
-          "non_empty": true,
-          "max_latency_ms": 15000,
-          "min_length": 10
-        },
-        "llm_judge": {
-          "prompt": "Score this haiku response on two dimensions:\n1. FORMAT (0-1): Is it a valid haiku (3 lines, roughly 5-7-5 syllables)?\n2. RELEVANCE (0-1): Is it about TypeScript?\nRespond as JSON: {\"format\": 0.X, \"relevance\": 0.X, \"reasoning\": \"...\"}",
-          "thresholds": { "format": 0.7, "relevance": 0.7 }
-        }
-      }
-    },
-    {
-      "input": {
-        "message": "Write a limerick about debugging",
-        "graphName": "poet",
-        "modelRef": {
-          "providerKey": "platform",
-          "modelId": "openai/gpt-4o-mini"
-        }
-      },
-      "assertions": {
-        "deterministic": {
-          "non_empty": true,
-          "max_latency_ms": 15000,
-          "min_length": 20
-        },
-        "llm_judge": {
-          "prompt": "Score this limerick on two dimensions:\n1. FORMAT (0-1): Is it a valid limerick (5 lines, AABBA rhyme scheme)?\n2. RELEVANCE (0-1): Is it about debugging?\nRespond as JSON: {\"format\": 0.X, \"relevance\": 0.X, \"reasoning\": \"...\"}",
-          "thresholds": { "format": 0.6, "relevance": 0.7 }
-        }
-      }
+      "assertions": [
+        { "type": "tool_called", "tool": "repo-search", "pass_if": "called" },
+        { "type": "response_contains", "text": "GraphExecutorPort", "pass_if": "contains" },
+        { "type": "latency_ms", "max": 30000, "pass_if": "under" },
+        { "type": "non_empty", "pass_if": "true" }
+      ]
     }
   ]
 }
 ```
 
-### Eval 2: Brain Tool-Calling Accuracy
+**LLM judge prompt template (binary):**
 
-**Graph:** `langgraph:brain`
-**What it tests:** Does the brain graph correctly invoke repo-search tools and synthesize results?
+```
+You are evaluating an AI assistant's response. Answer ONLY "PASS" or "FAIL".
 
-```json
-{
-  "name": "brain-tool-calling-v1",
-  "cases": [
-    {
-      "input": {
-        "message": "Search the codebase for the GraphExecutorPort interface and explain what it does",
-        "graphName": "brain",
-        "modelRef": {
-          "providerKey": "platform",
-          "modelId": "openai/gpt-4o-mini"
-        }
-      },
-      "assertions": {
-        "deterministic": {
-          "non_empty": true,
-          "max_latency_ms": 30000,
-          "tool_called": ["repo-search"],
-          "response_mentions": ["GraphExecutorPort", "graph"]
-        },
-        "llm_judge": {
-          "prompt": "The user asked about GraphExecutorPort. Score the response:\n1. TOOL_USE (0-1): Did the agent search the codebase (not guess)?\n2. ACCURACY (0-1): Is the description of GraphExecutorPort correct?\n3. COMPLETENESS (0-1): Does it mention key details (interface, runGraph method, streaming)?\nRespond as JSON: {\"tool_use\": 0.X, \"accuracy\": 0.X, \"completeness\": 0.X, \"reasoning\": \"...\"}",
-          "thresholds": {
-            "tool_use": 0.8,
-            "accuracy": 0.7,
-            "completeness": 0.5
-          }
-        }
-      }
-    },
-    {
-      "input": {
-        "message": "What files are in the evals/ directory?",
-        "graphName": "brain",
-        "modelRef": {
-          "providerKey": "platform",
-          "modelId": "openai/gpt-4o-mini"
-        }
-      },
-      "assertions": {
-        "deterministic": {
-          "non_empty": true,
-          "max_latency_ms": 30000,
-          "tool_called": ["repo-list"]
-        },
-        "llm_judge": {
-          "prompt": "The user asked about files in evals/. Score:\n1. TOOL_USE (0-1): Did the agent use a file listing tool?\n2. HONESTY (0-1): If the directory doesn't exist, does it say so honestly rather than hallucinate?\nRespond as JSON: {\"tool_use\": 0.X, \"honesty\": 0.X, \"reasoning\": \"...\"}",
-          "thresholds": { "tool_use": 0.8, "honesty": 0.8 }
-        }
-      }
-    }
-  ]
-}
+Question: {input}
+Response: {output}
+Ground truth context: {context}
+
+Criterion: {criterion}
+
+Verdict (PASS or FAIL):
 ```
 
-### Files
+### Step 3: Harness Implementation
 
-- **Create:** `evals/datasets/poet-quality.json` — poet graph test cases
-- **Create:** `evals/datasets/brain-tool-calling.json` — brain graph test cases
-- **Create:** `evals/harness/runner.ts` — main eval orchestrator (iterate datasets, call API, score, report)
-- **Create:** `evals/harness/judge.ts` — 4o-mini LLM-as-judge (call OpenRouter, parse structured JSON score)
-- **Create:** `evals/harness/client.ts` — HTTP SSE client for canary chat API (collect full response + tool events)
-- **Create:** `evals/harness/langfuse-experiment.ts` — create/get Langfuse datasets, push experiment runs + scores
-- **Create:** `evals/harness/assertions.ts` — deterministic checks (non-empty, latency, tool called, mentions)
-- **Create:** `evals/config.ts` — env config (EVAL*TARGET_URL, LANGFUSE*\*, OPENROUTER_API_KEY, EVAL_JUDGE_MODEL)
-- **Create:** `evals/vitest.config.ts` — vitest config for running evals as test suite
-- **Modify:** `package.json` — add `eval:canary` script
-- **Create:** `evals/AGENTS.md` — directory scope doc
-- **Test:** Evals themselves ARE the tests. Success = scores above thresholds.
+**3 files, not 10:**
 
-### Auth Strategy for Canary API
+```
+evals/
+  analysis/
+    error-analysis-v1.md        # Step 1 output (committed, not code)
+  datasets/
+    brain-v1.json               # Brain graph eval cases
+    poet-v1.json                # Poet graph eval cases
+  eval-canary.test.ts           # One vitest file: fetch, assert, judge, report
+  vitest.config.ts              # Vitest config (test timeout, env vars)
+```
 
-The canary chat API requires authentication. Options (pick simplest):
+**`eval-canary.test.ts` responsibilities** (single file, ~200 lines):
+1. Load dataset JSON
+2. For each case: POST to canary chat API (collect SSE stream → full response + tool events)
+3. Run assertions (deterministic checks, binary pass/fail)
+4. For judge cases: raw `fetch` to `https://openrouter.ai/api/v1/chat/completions` with 4o-mini, `temperature: 0`, parse "PASS"/"FAIL" from response
+5. Push results to Langfuse: create/get dataset, run experiment, push scores
+6. Print summary table: case ID, pass/fail, duration
+7. Log aggregate pass rate (advisory — always exit 0)
 
-1. **System API key** — if the canary has a system/service account with an API key, use it directly
-2. **Test user session** — create a test user during canary provisioning, use its session token
-3. **Bypass auth for eval endpoint** — add an `/api/internal/eval` route that skips auth (secured by network/secret)
+Extract helpers into separate files ONLY when the single file exceeds 300 lines or a clear reuse seam emerges.
 
-Recommend option 1 or 2 — matches existing E2E test auth patterns. Check how `pnpm e2e:smoke` handles auth.
+### Auth Strategy
+
+The canary chat API requires NextAuth session auth. The E2E smoke tests do NOT authenticate — they only test public routes.
+
+**Resolution: raw JWT via next-auth/jwt encode()**
+
+The `createSyntheticSession()` fixture at `nodes/node-template/app/tests/_fixtures/auth/synthetic-session.ts` mints valid JWTs using `next-auth/jwt encode()`. It's marked DEFERRED for a JWE format issue, but the core approach (JWT signed with AUTH_SECRET) works for API routes.
+
+For the eval harness:
+1. Import `encode` from `next-auth/jwt`
+2. Mint a session token with a test wallet address
+3. Send as `Cookie: next-auth.session-token={token}` header
+4. Requires `AUTH_SECRET` in eval runner env
+
+If the JWE issue blocks this, fallback: add an `/api/internal/eval-health` endpoint that bypasses auth (secured by a shared secret header). But try JWT first.
 
 ### Environment Variables
 
 ```bash
-# Required for eval:canary
+# Required
 EVAL_TARGET_URL=https://canary.cogni.dev     # Canary deployment URL
-EVAL_JUDGE_MODEL=openai/gpt-4o-mini          # Judge model (via OpenRouter)
-OPENROUTER_API_KEY=sk-or-...                 # For judge calls (already in CI)
-LANGFUSE_PUBLIC_KEY=pk-lf-...                # Already in CI
-LANGFUSE_SECRET_KEY=sk-lf-...                # Already in CI
-LANGFUSE_BASE_URL=https://us.cloud.langfuse.com  # Already configured
+OPENROUTER_API_KEY=sk-or-...                 # For 4o-mini judge (raw fetch)
+AUTH_SECRET=...                              # For minting eval session tokens
+LANGFUSE_PUBLIC_KEY=pk-lf-...                # For pushing eval results
+LANGFUSE_SECRET_KEY=sk-lf-...                # For pushing eval results
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 
 # Optional
+EVAL_JUDGE_MODEL=openai/gpt-4o-mini          # Default judge model
 EVAL_TIMEOUT_MS=30000                        # Per-case timeout
-EVAL_FAIL_THRESHOLD=0.7                      # Global pass/fail threshold
 ```
+
+### Files
+
+- **Create:** `evals/analysis/error-analysis-v1.md` — error analysis findings (Step 1 output)
+- **Create:** `evals/datasets/brain-v1.json` — brain graph eval cases (derived from error analysis)
+- **Create:** `evals/datasets/poet-v1.json` — poet graph eval cases (derived from error analysis)
+- **Create:** `evals/eval-canary.test.ts` — single vitest test file (fetch, assert, judge, report)
+- **Create:** `evals/vitest.config.ts` — vitest config for eval runner
+- **Modify:** `package.json` — add `eval:canary` script
+- **Test:** Pass rate logged. Advisory mode (exit 0). Langfuse experiment created.
 
 ### Estimated Cost per Run
 
-| Component                     | Cases | Cost        |
-| ----------------------------- | ----- | ----------- |
-| Poet graph (4o-mini subject)  | 2     | ~$0.001     |
-| Brain graph (4o-mini subject) | 2     | ~$0.002     |
-| 4o-mini judge calls           | 4     | ~$0.001     |
-| **Total per run**             | **4** | **< $0.01** |
+| Component | Cases | Cost |
+| --- | --- | --- |
+| Graph calls (4o-mini subject) | 20 | ~$0.01 |
+| Judge calls (4o-mini, ~5 cases) | 5 | ~$0.002 |
+| **Total per run** | **25** | **< $0.02** |
 
 ## Validation
 
 ```bash
-# Against canary deployment
+# Step 1: Error analysis (manual — review outputs, write analysis doc)
+# Run prompts against canary, save outputs, categorize failures
+
+# Step 2-3: Run eval suite
 EVAL_TARGET_URL=https://canary.cogni.dev pnpm eval:canary
 
-# Expected: 4 test cases run, scores printed, Langfuse experiment created, exit 0
+# Expected output:
+# ✓ brain-search-001    PASS  (1.2s)
+# ✓ brain-search-002    PASS  (2.1s)
+# ✗ brain-explain-003   FAIL  (tool_called: expected repo-search, got none)
+# ...
+# Pass rate: 17/20 (85%) — ADVISORY (no gate)
+# Langfuse experiment: https://us.cloud.langfuse.com/...
 ```
 
 ## Review Checklist
 
 - [ ] **Work Item:** task.0286 linked in PR body
-- [ ] **Spec:** ai-evals-spec invariants upheld (EVAL_REGRESSION_GATE, GOLDEN_UPDATE_DISCIPLINE)
-- [ ] **Tests:** Evals are self-testing — scores above thresholds = pass
-- [ ] **Reviewer:** assigned and approved
+- [ ] **Error Analysis:** `evals/analysis/error-analysis-v1.md` committed with categorized findings
+- [ ] **Minimum Cases:** 20+ eval cases derived from error analysis (not synthetic)
+- [ ] **Binary Pass/Fail:** Every assertion is yes/no
+- [ ] **Code Before Judge:** Deterministic assertions outnumber LLM judge cases 3:1+
+- [ ] **Advisory Mode:** Suite logs pass rate, always exits 0
+- [ ] **Langfuse:** Experiment created, visible in UI

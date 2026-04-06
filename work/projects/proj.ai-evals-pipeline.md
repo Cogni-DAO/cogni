@@ -1,7 +1,7 @@
 ---
 id: proj.ai-evals-pipeline
 type: project
-primary_charter:
+primary_charter: chr.evals
 title: AI Evals Pipeline
 state: Active
 priority: 1
@@ -10,7 +10,7 @@ summary: Production eval pipeline — Langfuse datasets, LLM-as-judge scoring, c
 outcome: Automated eval pipeline that scores AI graphs after every canary deployment. Quality regressions block promotion.
 assignees: derekg1729
 created: 2026-04-04
-updated: 2026-04-04
+updated: 2026-04-06
 labels: [ai, evals, langfuse, cicd, observability]
 ---
 
@@ -18,7 +18,7 @@ labels: [ai, evals, langfuse, cicd, observability]
 
 ## Goal
 
-Ship a repeatable, automated eval pipeline that scores AI graph responses after every canary deployment. Langfuse is the eval platform. 4o-mini is the judge. Canary promotion to staging is gated on eval pass.
+Ship a repeatable, data-driven eval pipeline that scores AI graph responses after every canary deployment. Error analysis first, evals from observed failures, advisory mode before gating. Langfuse is the eval platform. User feedback closes the loop over time.
 
 ## Current State — Scorecard
 
@@ -52,47 +52,53 @@ Eval readiness:   0/8  MISSING
 
 ## Roadmap
 
-### Crawl (P0) — POC: 2 Evals on Canary
+### Crawl (P0) — Error Analysis + 20 Real Cases (Advisory Mode)
 
-**Goal:** Prove the pipeline works end-to-end with 2 evals.
+**Goal:** Look at real outputs, find what breaks, write evals for those failures. Advisory mode — no gating.
 
-| Deliverable                                                        | Status      | Est | Work Item |
-| ------------------------------------------------------------------ | ----------- | --- | --------- |
-| Eval harness (TypeScript runner, 4o-mini judge, Langfuse datasets) | Not Started | 3   | task.0286 |
-| Poet quality eval (format + relevance scoring)                     | Not Started | —   | task.0286 |
-| Brain tool-calling eval (tool use + accuracy scoring)              | Not Started | —   | task.0286 |
-| `pnpm eval:canary` command                                         | Not Started | —   | task.0286 |
+| Deliverable | Status | Est | Work Item |
+| --- | --- | --- | --- |
+| Error analysis: 30-50 real prompts through brain + poet | Not Started | 1 | task.0286 |
+| 20+ eval cases from observed failure modes (code-based + judge) | Not Started | 2 | task.0286 |
+| Lightweight vitest harness + Langfuse dataset push | Not Started | — | task.0286 |
+| `pnpm eval:canary` command (advisory, exit 0) | Not Started | — | task.0286 |
 
-### Walk (P1) — CI Gate + Canary Promotion Gate
+### Walk (P1) — Calibrate Thresholds + Enable Gating + User Feedback
 
-**Goal:** Evals block PRs and canary promotion automatically.
+**Goal:** After 2+ weeks advisory, calibrate thresholds. Enable gating. Wire user feedback.
 
-| Deliverable                                   | Status      | Est | Work Item            |
-| --------------------------------------------- | ----------- | --- | -------------------- |
-| `pnpm eval:check` for PR-level regression     | Not Started | 2   | (create at P1 start) |
-| Golden dataset expansion (10+ cases/graph)    | Not Started | 2   | (create at P1 start) |
-| GitHub Action in `e2e.yml`                    | Not Started | 1   | (create at P1 start) |
-| Canary → staging promotion gated on eval pass | Not Started | 1   | (create at P1 start) |
+| Deliverable | Status | Est | Work Item |
+| --- | --- | --- | --- |
+| Calibrate pass rate thresholds from advisory data | Not Started | 1 | (create at P1 start) |
+| Enable eval gating: exit non-zero on failure | Not Started | 1 | (create at P1 start) |
+| Expand to 50+ cases per graph | Not Started | 2 | (create at P1 start) |
+| GitHub Action in `e2e.yml` | Not Started | 1 | (create at P1 start) |
+| Canary → staging promotion gated on eval pass | Not Started | 1 | (create at P1 start) |
+| Thumbs up/down in chat UI → Langfuse score | Not Started | 2 | (create at P1 start) |
 
-### Run (P2) — Production Monitoring + Feedback Loop
+### Run (P2) — Production Monitoring + Feedback Flywheel
 
-**Goal:** Continuous quality monitoring on live traffic.
+**Goal:** Continuous quality monitoring. Downvoted responses auto-surface as eval candidates.
 
-| Deliverable                                | Status      | Est | Work Item            |
-| ------------------------------------------ | ----------- | --- | -------------------- |
-| Langfuse managed evaluators on live traces | Not Started | 2   | (create at P2 start) |
-| Score trend dashboard in Grafana           | Not Started | 1   | (create at P2 start) |
-| Alert rules for quality degradation        | Not Started | 1   | (create at P2 start) |
-| Feedback loop: prod edge cases → datasets  | Not Started | 2   | (create at P2 start) |
-| Multi-model A/B comparison                 | Not Started | 2   | (create at P2 start) |
-| Red teaming / adversarial testing          | Not Started | 3   | (create at P2 start) |
+| Deliverable | Status | Est | Work Item |
+| --- | --- | --- | --- |
+| Langfuse managed evaluators on live traces | Not Started | 2 | (create at P2 start) |
+| Score trend dashboard in Grafana | Not Started | 1 | (create at P2 start) |
+| Alert rules for quality degradation | Not Started | 1 | (create at P2 start) |
+| Weekly cron: downvoted traces → candidate eval cases | Not Started | 2 | (create at P2 start) |
+| Multi-model A/B comparison | Not Started | 2 | (create at P2 start) |
+| Red teaming / adversarial testing | Not Started | 3 | (create at P2 start) |
+| All-node eval matrix coverage (per chr.evals) | Not Started | 3 | (create at P2 start) |
 
 ## Constraints
 
-- **No new eval frameworks** (P0) — Langfuse SDK + TypeScript only. Revisit promptfoo/DeepEval at 20+ evals.
-- **4o-mini judge only** — never use expensive models for judging. Cost must stay < $0.01/run.
+- **Data first** — error analysis before writing any eval. No synthetic test cases without observed failures.
+- **Binary pass/fail** — no float scores with thresholds. Every eval is yes/no.
+- **Advisory before gating** — 2+ weeks advisory mode before enabling deployment gates.
+- **4o-mini judge, code first** — deterministic code assertions 3:1 ratio over LLM judge. Judge only for subjective dimensions.
 - **Canary HTTP target** — evals test the full deployment stack, not in-process graphs.
 - **No LangSmith** — we use Langfuse. One observability platform, not two.
+- **No new eval frameworks** (P0) — Langfuse SDK + raw fetch. Revisit promptfoo/DeepEval at scale.
 
 ## Dependencies
 
@@ -182,6 +188,7 @@ Test case input
 
 ## Related
 
+- [EVALS Charter](../charters/EVALS.md) — eval program principles, per-node matrix, feedback loop
 - [story.0089](items/story.0089.discord-bot-conversation-evals.md) — Discord-specific evals (subsumed by this project)
 - [task.0281](items/task.0281-canary-cicd-parity-staging-promotion.md) — canary CI/CD parity (prerequisite)
 - [AI Pipeline E2E](../docs/spec/ai-pipeline-e2e.md) — execution flow being evaluated
