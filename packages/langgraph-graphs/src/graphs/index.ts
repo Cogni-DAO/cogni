@@ -23,6 +23,11 @@ export {
   createFrontendTesterGraph,
   FRONTEND_TESTER_GRAPH_NAME,
 } from "./frontend-tester/graph";
+// Git Manager graph (git operations orchestrator)
+export {
+  createGitManagerGraph,
+  GIT_MANAGER_GRAPH_NAME,
+} from "./git-manager/graph";
 // Poet graph (poetic AI assistant)
 export { createPoetGraph, POET_GRAPH_NAME } from "./poet/graph";
 // Ponderer graph (philosophical thinker)
