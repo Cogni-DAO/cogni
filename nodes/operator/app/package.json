@@ -31,6 +31,7 @@
     "@cogni/node-core": "workspace:*",
     "@cogni/node-contracts": "workspace:*",
     "@cogni/node-shared": "workspace:*",
+    "@cogni/node-streams": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
     "@cogni/market-provider": "workspace:*",
     "@cogni/repo-spec": "workspace:*",

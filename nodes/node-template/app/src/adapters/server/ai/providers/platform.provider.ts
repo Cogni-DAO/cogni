@@ -60,6 +60,7 @@ export class PlatformModelProvider implements ModelProviderPort {
   readonly requiresConnection = false;
 
   private cache: CacheEntry | null = null;
+  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used via ??= assignment
   private refreshPromise: Promise<LiteLlmModelMeta[]> | null = null;
 
   constructor(private readonly llmService: LlmService) {}

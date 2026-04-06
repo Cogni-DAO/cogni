@@ -15,20 +15,24 @@
 | 0 | 1 | 1 | needs_merge | bug.0224 | Codex binary not found in Docker — standalone misses platform-specific optional dep | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 0 | 1 | 5 | needs_triage | bug.0242 | Codex MCP tool calls invisible to platform — no persistence, no observability, no history |  |  |
 | 0 | 1 | 3 | needs_merge | task.0242 | VCS tool plane + PR Manager agent | DAO Agentic Project Management | proj.agentic-project-management |
+| 0 | 1 | 2 | needs_merge | bug.0243 | Same-scope epoch selection re-selects receipts from prior epochs — credits double-counted |  |  |
 | 0 | 1 | 3 | needs_merge | task.0243 | Work item AI tools + actor eligibility + Operating Review agent | DAO Agentic Project Management | proj.agentic-project-management |
-| 0 | 1 | 5 | needs_closeout | task.0245 | Multi-node architecture — nodes/ directory, per-node graph packages, dep-cruiser boundaries | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | 1 | 5 | needs_closeout | task.0245 | Multi-node architecture — nodes/ directory, per-node graph packages, dep-cruiser boundaries | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 5 | needs_merge | task.0256 | Per-node billing pipeline: DB isolation + auth isolation + LiteLLM callback routing | Operator Plane | proj.operator-plane |
 | 0 | 1 | 3 | needs_merge | task.0257 | Fix node identity — wire node_id from repo-spec, not env var slug | Operator Plane | proj.operator-plane |
 | 0 | 1 | 2 | needs_triage | bug.0261 | CogniNodeRouter has four production reliability gaps — silent failures, no retry, unstructured logs |  |  |
 | 0 | 1 | 1 | needs_merge | task.0272 | Wire nodeId from repo-spec into logger base bindings and metrics default labels | Operator Plane | proj.operator-plane |
-| 0 | 1 | 2 | needs_triage | bug.0276 | K8s deployed app crashes to white — client-side exception after initial render | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | 1 | 2 | needs_triage | bug.0276 | K8s deployed app crashes to white — client-side exception after initial render | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 3 | needs_implement | task.0285 | Provision script resilience — credential reset, migrations, complete .env |  |  |
-| 0 | 1 | 3 | needs_implement | bug.0287 | Provision script incompatible with deploy branch model — 3 gaps |  |  |
+| 0 | 1 | 3 | needs_merge | bug.0287 | Provision script incompatible with deploy branch model — 3 gaps |  |  |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
-| 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD & Services GitOps | proj.cicd-services-gitops |
-| 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 2 | 1 | needs_merge | task.0293 | Gate canary→preview promotion on CI success | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
+| 0 | 3 | 2 | needs_merge | task.0294 | Policy-gated release: kill auto-release PR conveyor belt | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 3 | 3 | needs_design | task.0297 | Phase 3: AI oversight tools — brain reads node streams for self-monitoring | Operator Plane | proj.operator-plane |
 | 0 | 4 | 2 | needs_design | bug.0037 | Gateway proxy billing records $0 cost — x-litellm-response-cost header absent for streaming | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 5 | 3 | needs_design | bug.0056 | Thread switch aborts in-flight stream — credits consumed, response lost to user | Thread Persistence | proj.thread-persistence |
 | 0 | 6 | 2 | needs_implement | bug.0088 | OpenClaw gateway LLM calls missing billing headers — Discord + subagent calls unbilled |  |  |
@@ -54,7 +58,7 @@
 | 1 | 0 | 2 | needs_triage | task.0108 | Collection completeness verification for epoch ingestion | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 1 | 2 | needs_design | bug.0060 | Cost authority bug: OpenRouter billed cost not flowing through LiteLLM callback (response_cost=0) | Reliability & Uptime | proj.reliability |
 | 1 | 1 | 4 | needs_implement | task.0119 | Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel | Transparent Credit Payouts | proj.transparent-credit-payouts |
-| 1 | 1 | 3 | needs_review | task.0149 | GitOps k3s provisioning + scheduler-worker migration | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 1 | 3 | needs_review | task.0149 | GitOps k3s provisioning + scheduler-worker migration | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_implement | task.0154 | PR Review deployment finish — output polish, deployment verification, legacy bot retirement | VCS Integration | proj.vcs-integration |
 | 1 | 1 | 5 | needs_design | task.0202 | provisionNode Temporal workflow — zero-touch node launch | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 1 | 3 | needs_merge | task.0228 | MCP Client MVP — McpToolSource + Playwright browser agent | Agentic Interoperability | proj.agentic-interop |
@@ -64,22 +68,22 @@
 | 1 | 1 | 5 | needs_implement | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
-| 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_merge | task.0232 | dns-ops v0 — DNS layer for multi-node creation pipeline | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0236 | Dashboard statusLabel wiring — RunCard shows live phase from SSE | Premium Frontend UX | proj.premium-frontend-ux |
-| 1 | 2 | 3 | needs_review | task.0246 | Rename app workspace to apps/operator | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 2 | 3 | needs_review | task.0246 | Rename app workspace to apps/operator | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0253 | Port resy reservations feature from cogni-resy-helper fork | Operator Plane | proj.operator-plane |
 | 1 | 2 | 2 | needs_triage | bug.0255 | Node landing pages have broken sign-in flow | Operator Plane | proj.operator-plane |
-| 1 | 2 | 3 | needs_design | task.0282 | Secure secret delivery for CI/CD deploys — replace SSH command-line passing | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 2 | 3 | needs_design | task.0282 | Secure secret delivery for CI/CD deploys — replace SSH command-line passing | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0283 | Provision VM as GitHub Action — eliminate local .env.{env} dependency |  |  |
 | 1 | 2 | 3 | needs_implement | task.0286 | Eval POC — 2 evals with 4o-mini judge, Langfuse datasets, canary HTTP target |  |  |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
-| 1 | 3 | 5 | needs_design | task.0188 | Preview Controller — imperative preview deployments for AI agent e2e testing | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 3 | 5 | needs_design | task.0188 | Preview Controller — imperative preview deployments for AI agent e2e testing | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 3 | 3 | needs_merge | bug.0196 | Scheduled runs attributed to system tenant instead of schedule owner |  |  |
 | 1 | 3 | 5 | needs_design | task.0233 | Design: extract node-template from operator repo — identity split + repo-spec merge | Node Formation & Launch | proj.node-formation-ui |
-| 1 | 3 | 3 | needs_merge | task.0247 | Multi-node CI/CD deployment — Argo CD GitOps on k3s | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | 3 | 3 | needs_merge | task.0247 | Multi-node CI/CD deployment — Argo CD GitOps on k3s | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 3 | 2 | needs_implement | task.0254 | Upgrade poly node landing page onto full platform base | Operator Plane | proj.operator-plane |
 | 1 | 3 | 3 | needs_design | task.0259 | Unified rounded UI theming — buttons, cards, dialogs across all nodes | Operator Plane | proj.operator-plane |
 | 1 | 3 | 3 | needs_design | task.0278 | Git manager skill + GitHub App permissions for AI branch operations | Agentic Dev Setup | proj.agentic-dev-setup |
@@ -151,13 +155,14 @@
 | 2 | 3 | 5 | needs_design | story.0263 | Doltgres Node Lifecycle — clone/pull from remotes, repo-spec linking, permission model | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 4 | 2 | needs_triage | bug.0013 | Sandbox stack tests flaky — proxy container vanishes during readiness check | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
-| 2 | 5 | 1 | needs_review | bug.0275 | k8s migration Job fails — standalone app image lacks tsx + drizzle-kit | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 2 | 5 | 1 | needs_review | bug.0275 | k8s migration Job fails — standalone app image lacks tsx + drizzle-kit | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 8 | 2 | needs_design | task.0280 | Per-node DB isolation for worker activities — evaluate approach | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
 | 2 | 10 | 2 | needs_design | bug.0198 | Single Privy app shared across preview and production — no env isolation | Reliability & Uptime | proj.reliability |
 | 2 | 10 | 1 | needs_implement | bug.0201 | Runbook gap: secret changes require container recreation, not just workflow re-runs | Reliability & Uptime | proj.reliability |
+| 2 | 10 | 2 | needs_design | bug.0295 | VM IPs committed to public repo via deploy branch env-endpoints.yaml | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 11 | 3 | needs_triage | task.0048 | Sub-agent billing attribution — track which OpenClaw sub-agent made each LLM call | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 12 | 3 | needs_triage | task.0040 | Gateway memory curation worker — scan ephemeral state, persist valuable context, reset container | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 14 | 1 | needs_design | task.0079 | Create bot-generated Discord invite link for website |  |  |
@@ -225,7 +230,7 @@
 | 0 | bug.0146 | Epoch transition deadlock: grace period prevents new epoch creation, halting all collection |  |  |
 | 0 | bug.0149 | Epoch receipt scope too narrow + pendingSelectionDto fabricates inclusion |  |  |
 | 0 | bug.0151 | ensurePoolComponents crashes on duplicate key — Drizzle wraps PostgresError, catch block misses it |  |  |
-| 0 | task.0151 | Monorepo re-architecture: app to apps/operator, platform/ to infra/ + scripts/ | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | task.0151 | Monorepo re-architecture: app to apps/operator, platform/ to infra/ + scripts/ | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | bug.0153 | Check name mismatch: code creates 'Cogni PR Review' but branch protection requires 'Cogni Git PR Review' | VCS Integration | proj.vcs-integration |
 | 0 | task.0155 | packages/work-items — port interfaces, domain types, and status transition table | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | task.0156 | packages/work-items — MarkdownWorkItemAdapter + contract tests | DAO Agentic Project Management | proj.agentic-project-management |
@@ -236,7 +241,11 @@
 | 0 | task.0177 | Unified streaming API: chat endpoint → Temporal + Redis + idempotency | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | task.0178 | Delete old scheduled run path, prune dead tables, observability + documentation finish | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | bug.0186 | Chat disconnect persists truncated assistant response — move thread persistence to execution layer | Unified Graph Launch | proj.unified-graph-launch |
-| 0 | task.0244 | Absorb cogni-resy-helper into monorepo — make fork obsolete | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 0 | task.0244 | Absorb cogni-resy-helper into monorepo — make fork obsolete | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | task.0292 | Deploy branches: switch preview/production to direct commits (kill PR noise) | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | task.0295 | Phase 1: @cogni/node-streams package + operator SSE endpoint | Operator Plane | proj.operator-plane |
+| 0 | task.0296 | Phase 2: Generic backbone + operator/poly publishers + SSE endpoint | Operator Plane | proj.operator-plane |
+| 0 | task.0298 | Node stream frontend kit — useNodeStream hook + StreamCard + event renderers | Operator Plane | proj.operator-plane |
 | 1 | task.0006 | Collapse GraphProvider into GraphExecutorPort — single execution interface + namespace routing | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0007 | Billing enforcement decorator at GraphExecutorPort level | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0010 | OpenClaw gateway model selection — session-level override or agent-per-specialty | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
@@ -282,9 +291,9 @@
 | 1 | task.0144 | Typed Temporal pipeline composition — shared proxy configs, child workflows, stage I/O types | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | task.0145 | TigerBeetle Infrastructure + FinancialLedgerPort | Financial Ledger | proj.financial-ledger |
 | 1 | bug.0147 | Next.js 16.0.7 build fails: Turbopack scans thread-stream test fixtures via RainbowKit dep chain, webpack fallback blocked by node: barrel leaks |  |  |
-| 1 | task.0148 | GitOps foundation — Kustomize manifests, k3s IaC module, Argo CD bootstrap | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | task.0148 | GitOps foundation — Kustomize manifests, k3s IaC module, Argo CD bootstrap | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | task.0153 | PR Review Bot V0 — LangGraph graph + gate orchestrator for automated PR review | VCS Integration | proj.vcs-integration |
-| 1 | task.0160 | Scheduler-worker Dockerfile cache parity with app | CI/CD & Services GitOps | proj.cicd-services-gitops |
+| 1 | task.0160 | Scheduler-worker Dockerfile cache parity with app | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | task.0162 | Enable TypeScript LSP plugin for Claude Code | Development Workflows | proj.development-workflows |
 | 1 | task.0163 | Add voice-to-text input to chat composer |  |  |
 | 1 | task.0164 | OpenAI-compatible completions — document endpoint + surface agent status streams |  |  |

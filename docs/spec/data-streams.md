@@ -241,16 +241,55 @@ The awareness spec's invariant `OBSERVATION_APPEND_ONLY` still holds — but now
 | Temporal          | Running in dev stack                | Available                                            |
 | TimescaleDB       | Optional                            | `observation_events` works as plain table without it |
 
+## SSE Transport Layer (`@cogni/node-streams`)
+
+The `@cogni/node-streams` package provides the generic transport surface for shipping events to dashboards and AI agents. It is the **delivery layer**, not an ingestion system.
+
+### Package Exports
+
+- `NodeStreamPort<T>` — typed pub/sub over Redis Streams (MAXLEN-trimmed, cursor-based replay)
+- `RedisNodeStreamAdapter<T>` — ioredis implementation (XADD/XRANGE/XREAD BLOCK)
+- `encodeSSE<T>()` — converts `AsyncIterable<NodeStreamEntry<T>>` to SSE `ReadableStream`
+- Event types: `NodeEventBase`, `HealthEvent`, `CiStatusEvent`, `DeployEvent`, `ProcessHealthEvent`
+
+### Stream Key Families
+
+| Key Pattern                 | Content                                        | Who Publishes                                                                 |
+| --------------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `streams:{domain}:{source}` | Raw data from external sources                 | Temporal ingestion activities (MANDATORY per STREAM_THEN_EVALUATE)            |
+| `node:{nodeId}:events`      | Derived summaries + node-local process metrics | Temporal activities (summaries) + bootstrap setInterval (process_health only) |
+
+### SSE Endpoint
+
+`GET /api/v1/node/stream` — session-authed SSE endpoint per node.
+
+- Tails `node:{nodeId}:events` (the curated delivery feed, not raw source streams)
+- Supports `Last-Event-ID` header for cursor-based reconnection (SSE_RESUME_SAFE)
+- Temporal activities publish derived summaries here after writing to `streams:*`
+
+### Frontend Consumer
+
+- `useNodeStream()` — React hook using native EventSource (auto-reconnect, latest-by-type map)
+- `StreamCard` — universal card shell (status dot, type badge, source, age, children slot)
+- Per-type content components: `HealthEventContent`, `CiStatusEventContent`, `DeployEventContent`, `ProcessHealthEventContent`
+
+### Node-Local Exception: Process Health
+
+The `process_health` event is the **only** event type published from bootstrap `setInterval`. It uses `process.memoryUsage()` and `node:perf_hooks monitorEventLoopDelay` — genuinely node-local data with zero external dependencies.
+
+All external source monitoring (GitHub, Polymarket, Grafana, cross-node health probes) flows through ingestion-core + Temporal. Bootstrap publishers must NOT poll external sources.
+
 ## Non-Goals
 
 - WebSocket push (SSE is sufficient for v1; WebSocket is an upgrade path)
 - Cross-node stream federation (single-node MVP)
 - Stream replay beyond MAXLEN window (use Postgres for historical queries)
 - Real-time order execution triggered by streams (Run phase, not Walk)
+- Bootstrap publishers for external sources (use Temporal)
 
 ## Open Questions
 
 - [ ] Should sparse checkpoints use a separate `checkpoint_events` table or the same `observation_events` with a flag?
 - [ ] MAXLEN values need load testing — 2000 entries per source at 30s intervals ≈ 16h. Is that enough sliding window?
-- [ ] Should the SSE endpoint live in `apps/poly` or `apps/web`? (Currently leaning `apps/poly` since that's the prediction market UI.)
 - [ ] Redis persistence policy: `--save ""` (pure ephemeral) or `--save 60 1000` (periodic RDB for crash recovery)? Leaning ephemeral — the data repopulates on next poll cycle.
+- [x] ~~Should the SSE endpoint live in `apps/poly` or `apps/web`?~~ Each node has its own SSE endpoint at `/api/v1/node/stream`.

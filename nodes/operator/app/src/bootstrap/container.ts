@@ -36,6 +36,10 @@ import {
   initAnalytics,
   shutdownAnalytics,
 } from "@cogni/node-shared";
+import {
+  type NodeStreamPort,
+  RedisNodeStreamAdapter,
+} from "@cogni/node-streams";
 import { numberToPpm } from "@cogni/operator-wallet";
 import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
@@ -111,6 +115,7 @@ import { createVcsCapability } from "@/bootstrap/capabilities/vcs";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
+import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import type {
   AccountService,
   AiTelemetryPort,
@@ -209,6 +214,8 @@ export interface Container {
   workItemQuery: WorkItemQueryPort;
   /** Run event streaming — publish/subscribe via Redis Streams */
   runStream: RunStreamPort;
+  /** Node-level event streaming — undefined when REDIS_URL not set */
+  nodeStream: NodeStreamPort | undefined;
   /** Webhook source registrations — normalizers for webhook ingestion */
   webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
   /** Financial ledger — undefined when TIGERBEETLE_ADDRESS not set */
@@ -717,6 +724,19 @@ function createContainer(): Container {
     maxRetriesPerRequest: 3,
   });
   const runStream = new RedisRunStreamAdapter(redisClient);
+  const nodeStream = new RedisNodeStreamAdapter(redisClient);
+
+  // Process health publisher (node-local metrics only — external sources use Temporal)
+  const publisherAbort = new AbortController();
+  process.on("SIGTERM", () => publisherAbort.abort());
+  process.on("SIGINT", () => publisherAbort.abort());
+  startProcessHealthPublisher({
+    port: nodeStream,
+    streamKey: `node:${nodeId}:events`,
+    signal: publisherAbort.signal,
+    logger: log,
+    environment: env.DEPLOY_ENVIRONMENT ?? "local",
+  });
 
   return {
     log,
@@ -756,6 +776,7 @@ function createContainer(): Container {
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
     workItemQuery: workItemAdapter,
     runStream,
+    nodeStream,
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },

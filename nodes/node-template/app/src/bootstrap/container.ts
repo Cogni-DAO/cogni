@@ -28,6 +28,10 @@ import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import { numberToPpm } from "@cogni/operator-wallet";
 import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
+import {
+  type NodeStreamPort,
+  RedisNodeStreamAdapter,
+} from "@cogni/node-streams";
 import type { WorkItemQueryPort } from "@cogni/work-items";
 import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
 import {
@@ -94,6 +98,7 @@ import {
   createMetricsCapability,
   derivePrometheusQueryUrl,
 } from "@/bootstrap/capabilities/metrics";
+import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import { createRepoCapability } from "@/bootstrap/capabilities/repo";
 import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
@@ -206,6 +211,8 @@ export interface Container {
   workItemQuery: WorkItemQueryPort;
   /** Run event streaming — publish/subscribe via Redis Streams */
   runStream: RunStreamPort;
+  /** Node-level event streaming — undefined when REDIS_URL not set */
+  nodeStream: NodeStreamPort | undefined;
   /** Webhook source registrations — normalizers for webhook ingestion */
   webhookRegistrations: ReadonlyMap<string, DataSourceRegistration>;
   /** Financial ledger — undefined when TIGERBEETLE_ADDRESS not set */
@@ -709,6 +716,19 @@ function createContainer(): Container {
     maxRetriesPerRequest: 3,
   });
   const runStream = new RedisRunStreamAdapter(redisClient);
+  const nodeStream = new RedisNodeStreamAdapter(redisClient);
+
+  // Process health publisher (node-local metrics only — external sources use Temporal)
+  const publisherAbort = new AbortController();
+  process.on("SIGTERM", () => publisherAbort.abort());
+  process.on("SIGINT", () => publisherAbort.abort());
+  startProcessHealthPublisher({
+    port: nodeStream,
+    streamKey: `node:${nodeId}:events`,
+    signal: publisherAbort.signal,
+    logger: log,
+    environment: env.DEPLOY_ENVIRONMENT ?? "local",
+  });
 
   return {
     log,
@@ -748,6 +768,7 @@ function createContainer(): Container {
     attributionStore: new DrizzleAttributionAdapter(serviceDb, getScopeId()),
     workItemQuery: workItemAdapter,
     runStream,
+    nodeStream,
     get webhookRegistrations() {
       return getWebhookRegistrations();
     },

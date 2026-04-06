@@ -49,6 +49,11 @@ import {
   buildGroupedChartData,
 } from "@/components/kit/data-display/activity-chart-utils";
 import type { RunCardData } from "@/components/kit/data-display/RunCard";
+import {
+  ProcessHealthEventContent,
+  StreamCard,
+  useNodeStream,
+} from "@/features/node-stream";
 import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
@@ -281,6 +286,9 @@ export function DashboardView(): ReactElement {
         </ToggleGroup>
       </div>
 
+      {/* Node health from live stream */}
+      <NodeHealthCard />
+
       {/* Two-column top section: Agents + Work */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Left — Agents */}
@@ -487,5 +495,36 @@ export function DashboardView(): ReactElement {
         }}
       />
     </div>
+  );
+}
+
+/* ─── Node Health Card ─── */
+
+function NodeHealthCard(): ReactElement {
+  const { latest, status } = useNodeStream();
+  const ph = latest.get("process_health");
+
+  const data = ph
+    ? {
+        heapUsedMb: (ph.heapUsedMb as number) ?? 0,
+        rssMb: (ph.rssMb as number) ?? 0,
+        uptimeSeconds: (ph.uptimeSeconds as number) ?? 0,
+        eventLoopDelayMs: (ph.eventLoopDelayMs as number) ?? 0,
+        environment: String(ph.environment ?? "local"),
+      }
+    : null;
+
+  return (
+    <StreamCard event={ph}>
+      {data ? (
+        <ProcessHealthEventContent event={data} />
+      ) : (
+        <span className="text-muted-foreground text-sm">
+          {status === "connecting"
+            ? "Connecting to node stream…"
+            : "No process health data yet"}
+        </span>
+      )}
+    </StreamCard>
   );
 }
