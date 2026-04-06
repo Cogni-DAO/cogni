@@ -20,6 +20,7 @@ export type {
   NodeEvent,
   NodeEventBase,
   ProcessHealthEvent,
+  VcsActivityEvent,
 } from "./node-event.js";
 
 // Port interface + constants
