@@ -1,5 +1,5 @@
 ---
-id: task.0299
+id: task.0305
 type: task
 title: "Test infrastructure cleanup — deduplicate node tests + fix CI failures"
 status: needs_implement

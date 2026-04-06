@@ -1,9 +1,5 @@
 ---
-<<<<<<<< HEAD:work/items/task.0300.doltgres-eval-registry-seed-tables.md
 id: task.0300
-========
-id: task.0302
->>>>>>>> cbd2efaa3 (fix(docs): resolve duplicate task.0299 IDs — renumber to task.0301/0302):work/items/task.0302.doltgres-eval-registry-seed-tables.md
 type: task
 status: needs_design
 priority: 1

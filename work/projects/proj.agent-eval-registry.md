@@ -3,11 +3,11 @@ id: proj.agent-eval-registry
 type: project
 primary_charter: chr.evals
 title: Agent Eval Registry — Langfuse-Primary Evals + Doltgres Graph Catalog
-state: Active
+state: Done
 priority: 1
 estimate: 5
-summary: Langfuse owns eval data (datasets, experiments, scores). Doltgres owns the graph catalog (what agents exist). No dual-write — each system owns its domain. Agents query both via SDK/SQL.
-outcome: Every graph is registered in Doltgres. Every eval run is a Langfuse experiment. Agents query their own scores via Langfuse SDK. Cross-node discovery via graph_registry SQL.
+summary: "ABSORBED into proj.ai-evals-pipeline (P1.5 phase). Langfuse owns evals. Doltgres owns graph catalog. See proj.ai-evals-pipeline for the unified roadmap."
+outcome: "Consolidated — all deliverables now tracked in proj.ai-evals-pipeline."
 assignees: derekg1729
 created: 2026-04-06
 updated: 2026-04-06

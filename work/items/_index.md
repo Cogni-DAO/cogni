@@ -26,6 +26,8 @@
 | 0 | 1 | 3 | needs_implement | task.0285 | Provision script resilience — credential reset, migrations, complete .env |  |  |
 | 0 | 1 | 3 | needs_merge | bug.0287 | Provision script incompatible with deploy branch model — 3 gaps |  |  |
 | 0 | 1 | 2 | needs_triage | bug.0296 | provision-test-vm.sh Phase 6 creates incomplete k8s secrets — missing OAuth, Privy, and connection secrets | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 1 | 5 | needs_implement | task.0301 | Test infrastructure cleanup — deduplicate node tests + fix CI failures | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 1 | 5 | needs_implement | task.0305 | Test infrastructure cleanup — deduplicate node tests + fix CI failures | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -90,7 +92,7 @@
 | 1 | 3 | 3 | needs_design | task.0278 | Git manager skill + GitHub App permissions for AI branch operations | Agentic Dev Setup | proj.agentic-dev-setup |
 | 1 | 3 | 2 | needs_closeout | task.0279 | Node-aware execution routing — nodeId in workflow input + per-node API dispatch | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 3 | 5 | needs_design | task.0284 | Secrets single source of truth — External Secrets Operator + secret store |  |  |
-| 1 | 3 | 2 | needs_design | task.0299 | Doltgres graph registry — graph_registry table + catalog sync + eval:registry CLI |  |  |
+| 1 | 3 | 2 | needs_design | task.0300 | Doltgres graph registry — graph_registry table + catalog sync + eval:registry CLI |  |  |
 | 1 | 4 | 1 | needs_design | bug.0009 | Mock-LLM SSE streaming incompatible with OpenClaw pi-ai parser — gateway returns empty payloads | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 4 | 2 | needs_merge | bug.0197 | Scheduled runs accumulate messages in a single shared thread per schedule |  |  |
 | 1 | 4 | 5 | needs_design | task.0234 | Design: node repo creation + CI/CD onboarding pipeline | Node Formation & Launch | proj.node-formation-ui |
