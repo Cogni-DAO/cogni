@@ -143,15 +143,17 @@ loki.write "loki" {
 // =============================================================================
 // K8s Pod Log Collection (k3s)
 // =============================================================================
-// Tails pod logs from /var/log/pods/ for k3s-managed app pods (operator, poly, resy).
-// Only ships logs from cogni-* namespaces. Excludes kube-system and argocd.
-// Requires host mount: /var/log/pods:/var/log/pods:ro
+// Tails pod logs from /var/log/pods/ for k3s-managed pods.
+// Covers cogni-* namespaces (app pods, migration jobs) AND argocd namespace
+// (sync events, health transitions, controller errors).
+// Excludes kube-system. Requires host mount: /var/log/pods:/var/log/pods:ro
 // On VMs without k3s, local.file_match simply finds no files — zero overhead.
 
 local.file_match "k8s_pods" {
-  path_targets = [{
-    __path__ = "/var/log/pods/cogni-*/**/*.log",
-  }]
+  path_targets = [
+    { __path__ = "/var/log/pods/cogni-*/**/*.log" },
+    { __path__ = "/var/log/pods/argocd_*/**/*.log" },
+  ]
   sync_period = "10s"
 }
 
