@@ -19,6 +19,10 @@ const startMock = vi.fn().mockResolvedValue({});
 
 // vi.mock factories are hoisted — can't reference module imports.
 // Keep inline; fixture used in non-hoisted test helpers.
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "test-node-id",
+}));
+
 vi.mock("@/bootstrap/container", () => ({
   resolveAiAdapterDeps: vi.fn(),
   getTemporalWorkflowClient: vi.fn(async () => ({

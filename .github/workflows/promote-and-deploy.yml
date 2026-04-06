@@ -1,0 +1,556 @@
+name: Promote and Deploy
+
+# After Build Multi-Node succeeds: resolve digests from GHCR, update the
+# deploy branch (deploy/canary, deploy/preview, deploy/production),
+# deploy Compose infra via SSH, verify health, run E2E, promote to preview.
+# Single workflow — no workflow_run chaining (avoids head_branch bug).
+# All envs: direct push to deploy branch (git history is the audit trail).
+# App containers are managed by Argo CD (auto-syncs on deploy branch change).
+
+on:
+  workflow_run:
+    workflows: ["Build Multi-Node"]
+    types: [completed]
+    branches: [canary]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment (canary, preview, production)"
+        required: true
+        default: canary
+        type: choice
+        options: [canary, preview, production]
+      source_sha:
+        description: "SHA of source images (for cross-env promotion, e.g. canary→staging)"
+        required: false
+
+permissions:
+  contents: write
+  packages: read
+  actions: read
+
+concurrency:
+  group: promote-deploy-${{ github.event.workflow_run.head_branch || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ── Promote k8s overlays via direct commit to deploy branch ─────
+  promote-k8s:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    concurrency:
+      group: promote-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'canary' }}
+      cancel-in-progress: false
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      overlay: ${{ steps.env.outputs.overlay }}
+      head_sha: ${{ steps.env.outputs.head_sha }}
+      deploy_branch: ${{ steps.env.outputs.deploy_branch }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment }}"
+            # source_sha allows cross-env promotion (e.g. deploy canary's images to staging)
+            SHA="${{ inputs.source_sha || github.sha }}"
+          else
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            case "$BRANCH" in
+              canary)  ENV=canary ;;
+              staging) ENV=preview ;;
+              main)    ENV=production ;;
+              *)       echo "Unknown branch: $BRANCH"; exit 1 ;;
+            esac
+          fi
+
+          case "$ENV" in
+            canary)     OVERLAY=canary;     DEPLOY_BRANCH=deploy/canary ;;
+            preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/preview ;;
+            production) OVERLAY=production; DEPLOY_BRANCH=deploy/production ;;
+          esac
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "overlay=$OVERLAY" >> $GITHUB_OUTPUT
+          echo "head_sha=$SHA" >> $GITHUB_OUTPUT
+          echo "deploy_branch=$DEPLOY_BRANCH" >> $GITHUB_OUTPUT
+          echo "Promoting to $ENV (overlay: $OVERLAY, deploy branch: $DEPLOY_BRANCH, sha: ${SHA:0:8})"
+
+      # Checkout app source for scripts and overlay templates
+      - name: Checkout app source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.env.outputs.head_sha }}
+          fetch-depth: 1
+          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+          path: app-src
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Resolve all image digests
+        id: digests
+        env:
+          HEAD_SHA: ${{ steps.env.outputs.head_sha }}
+        run: |
+          IMAGE_NAME="ghcr.io/cogni-dao/cogni-template"
+          TAG="preview-${HEAD_SHA}"
+
+          resolve() {
+            local full_tag="${IMAGE_NAME}:${1}"
+            local digest
+            digest=$(docker buildx imagetools inspect "$full_tag" --raw 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null) || true
+            # Fallback: parse from --format if raw didn't work
+            if [ -z "$digest" ]; then
+              digest=$(docker buildx imagetools inspect "$full_tag" 2>/dev/null | grep -oP 'Digest:\s+\Ksha256:[a-f0-9]+' | head -1) || true
+            fi
+            if [ -z "$digest" ]; then
+              echo "❌ Failed to resolve digest for: $full_tag"
+              exit 1
+            fi
+            echo "${IMAGE_NAME}@${digest}"
+          }
+
+          OPERATOR_DIGEST=$(resolve "$TAG")
+          POLY_DIGEST=$(resolve "${TAG}-poly")
+          RESY_DIGEST=$(resolve "${TAG}-resy")
+          MIGRATOR_DIGEST=$(resolve "${TAG}-migrate")
+          SW_DIGEST=$(resolve "${TAG}-scheduler-worker")
+
+          echo "operator=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
+          echo "poly=$POLY_DIGEST" >> $GITHUB_OUTPUT
+          echo "resy=$RESY_DIGEST" >> $GITHUB_OUTPUT
+          echo "migrator=$MIGRATOR_DIGEST" >> $GITHUB_OUTPUT
+          echo "scheduler_worker=$SW_DIGEST" >> $GITHUB_OUTPUT
+
+          echo "✅ Resolved all digests:"
+          echo "  operator:         $OPERATOR_DIGEST"
+          echo "  poly:             $POLY_DIGEST"
+          echo "  resy:             $RESY_DIGEST"
+          echo "  migrator:         $MIGRATOR_DIGEST"
+          echo "  scheduler-worker: $SW_DIGEST"
+
+      # Checkout the deploy branch — promote-k8s-image.sh runs HERE, not on app-src.
+      # This preserves env-specific state (EndpointSlice IPs) written by provision.
+      - name: Checkout deploy branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.env.outputs.deploy_branch }}
+          fetch-depth: 1
+          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+          path: deploy-branch
+
+      - name: Sync base and catalog from app branch
+        run: |
+          # Base templates and catalog may change on the app branch.
+          # Overlays are NOT synced — they contain env-specific state (IPs)
+          # that provision wrote directly to the deploy branch.
+          # NOTE: New node overlay directories must be added to the deploy branch
+          # manually when a node is added (see docs/guides/node-formation-guide.md).
+          rsync -a --delete app-src/infra/k8s/base/ deploy-branch/infra/k8s/base/
+          rsync -a --delete app-src/infra/catalog/ deploy-branch/infra/catalog/
+
+      - name: Update overlay digests on deploy branch
+        env:
+          OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
+        working-directory: deploy-branch
+        run: |
+          echo "Promoting digests to overlay: $OVERLAY_ENV (on deploy branch)"
+
+          # promote-k8s-image.sh runs on the deploy branch checkout.
+          # It only touches image digest fields — never EndpointSlice IPs.
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app operator \
+            --digest "${{ steps.digests.outputs.operator }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app poly \
+            --digest "${{ steps.digests.outputs.poly }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app resy \
+            --digest "${{ steps.digests.outputs.resy }}" \
+            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+
+          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+            --env "$OVERLAY_ENV" \
+            --app scheduler-worker \
+            --digest "${{ steps.digests.outputs.scheduler_worker }}"
+
+      - name: Commit and push overlay changes to deploy branch
+        id: deploy-push
+        env:
+          OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
+          HEAD_SHA: ${{ steps.env.outputs.head_sha }}
+          DEPLOY_BRANCH: ${{ steps.env.outputs.deploy_branch }}
+        working-directory: deploy-branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          SHORT_SHA=$(echo "$HEAD_SHA" | cut -c1-8)
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No overlay changes (digests unchanged)"
+            echo "pushed=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Direct push to deploy branch — all environments.
+          # Deploy branches are machine-written state; git history is the audit trail.
+          # No PRs: they add no review value for automated digest updates.
+          git commit -m "promote: ${OVERLAY_ENV} ${SHORT_SHA}"
+          git push origin HEAD:${DEPLOY_BRANCH}
+          echo "pushed=true" >> $GITHUB_OUTPUT
+          echo "✅ Direct push to ${DEPLOY_BRANCH} for ${OVERLAY_ENV} ${SHORT_SHA}"
+
+  # ── Deploy Compose infrastructure ────────────────────────────────
+  deploy-infra:
+    runs-on: ubuntu-latest
+    needs: promote-k8s
+    environment: ${{ needs.promote-k8s.outputs.environment }}
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-infra-${{ needs.promote-k8s.outputs.environment }}
+      cancel-in-progress: false
+    env:
+      VM_HOST: ${{ secrets.VM_HOST }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      DEPLOY_ENVIRONMENT: ${{ needs.promote-k8s.outputs.environment }}
+      APP_ENV: production
+      COGNI_REPO_URL: https://github.com/${{ github.repository }}.git
+      COGNI_REPO_REF: ${{ needs.promote-k8s.outputs.head_sha }}
+      GIT_READ_USERNAME: Cogni-1729
+      GIT_READ_TOKEN: ${{ secrets.GIT_READ_TOKEN }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DATABASE_SERVICE_URL: ${{ secrets.DATABASE_SERVICE_URL }}
+      POSTGRES_ROOT_USER: ${{ secrets.POSTGRES_ROOT_USER }}
+      POSTGRES_ROOT_PASSWORD: ${{ secrets.POSTGRES_ROOT_PASSWORD }}
+      APP_DB_USER: ${{ secrets.APP_DB_USER }}
+      APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+      APP_DB_SERVICE_USER: ${{ secrets.APP_DB_SERVICE_USER }}
+      APP_DB_SERVICE_PASSWORD: ${{ secrets.APP_DB_SERVICE_PASSWORD }}
+      APP_DB_NAME: ${{ secrets.APP_DB_NAME }}
+      LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+      EVM_RPC_URL: ${{ secrets.EVM_RPC_URL }}
+      TEMPORAL_DB_USER: ${{ secrets.TEMPORAL_DB_USER }}
+      TEMPORAL_DB_PASSWORD: ${{ secrets.TEMPORAL_DB_PASSWORD }}
+      GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
+      GHCR_USERNAME: Cogni-1729
+      GRAFANA_CLOUD_LOKI_URL: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+      GRAFANA_CLOUD_LOKI_USER: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+      GRAFANA_CLOUD_LOKI_API_KEY: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+      METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+      PROMETHEUS_REMOTE_WRITE_URL: ${{ secrets.PROMETHEUS_REMOTE_WRITE_URL }}
+      PROMETHEUS_USERNAME: ${{ secrets.PROMETHEUS_USERNAME }}
+      PROMETHEUS_PASSWORD: ${{ secrets.PROMETHEUS_PASSWORD }}
+      PROMETHEUS_QUERY_URL: ${{ secrets.PROMETHEUS_QUERY_URL }}
+      PROMETHEUS_READ_USERNAME: ${{ secrets.PROMETHEUS_READ_USERNAME }}
+      PROMETHEUS_READ_PASSWORD: ${{ secrets.PROMETHEUS_READ_PASSWORD }}
+      LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+      LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+      LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+      SCHEDULER_API_TOKEN: ${{ secrets.SCHEDULER_API_TOKEN }}
+      BILLING_INGEST_TOKEN: ${{ secrets.BILLING_INGEST_TOKEN }}
+      INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
+      OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+      OPENCLAW_GITHUB_RW_TOKEN: ${{ secrets.OPENCLAW_GITHUB_RW_TOKEN }}
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+      GH_OAUTH_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+      GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+      DISCORD_OAUTH_CLIENT_ID: ${{ secrets.DISCORD_OAUTH_CLIENT_ID }}
+      DISCORD_OAUTH_CLIENT_SECRET: ${{ secrets.DISCORD_OAUTH_CLIENT_SECRET }}
+      GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+      GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+      GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
+      GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
+      GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
+      GH_REPOS: ${{ vars.GH_REPOS }}
+      GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+      PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+      PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+      PRIVY_SIGNING_KEY: ${{ secrets.PRIVY_SIGNING_KEY }}
+      CONNECTIONS_ENCRYPTION_KEY: ${{ secrets.CONNECTIONS_ENCRYPTION_KEY }}
+      POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+      POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+      COGNI_NODE_ENDPOINTS: ${{ secrets.COGNI_NODE_ENDPOINTS }}
+      COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.promote-k8s.outputs.head_sha }}
+
+      - name: Setup SSH
+        run: |
+          if [ -z "$VM_HOST" ]; then
+            echo "⚠️ No VM_HOST secret set — skipping infra deploy"
+            exit 0
+          fi
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.SSH_DEPLOY_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+          echo "Testing SSH connection to $VM_HOST..."
+          set +e
+          OUT=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6 root@"$VM_HOST" "echo SSH test successful" 2>&1)
+          RC=$?
+          set -e
+          echo "$OUT"
+          if [ $RC -ne 0 ]; then
+            echo "❌ SSH failed (rc=$RC)"
+            exit 1
+          fi
+          echo "✅ SSH connection successful"
+
+      - name: Deploy infrastructure
+        if: env.VM_HOST != ''
+        run: scripts/ci/deploy-infra.sh
+
+      - name: Upload deployment artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: infra-deployment-artifacts-${{ github.run_id }}
+          path: ${{ runner.temp }}/deploy-infra-${{ github.run_id }}/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: CI Telemetry
+        if: always()
+        uses: ./.github/actions/loki-ci-telemetry
+        with:
+          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          job_status: ${{ job.status }}
+
+  # ── Verify deployment ──────────────────────────────────────────
+  verify:
+    runs-on: ubuntu-latest
+    needs: [promote-k8s, deploy-infra]
+    environment: ${{ needs.promote-k8s.outputs.environment }}
+    env:
+      VM_HOST: ${{ secrets.VM_HOST }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      K8S_NAMESPACE: cogni-${{ needs.promote-k8s.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.promote-k8s.outputs.head_sha }}
+
+      - name: Poll health endpoints
+        run: |
+          if [ -z "$DOMAIN" ]; then
+            echo "⚠️ No DOMAIN variable set — skipping verify"
+            exit 0
+          fi
+
+          OPERATOR_URL="https://${DOMAIN}"
+          POLY_URL="https://poly-${DOMAIN}"
+          RESY_URL="https://resy-${DOMAIN}"
+
+          MAX_ATTEMPTS=30
+          SLEEP=15
+
+          poll_health() {
+            local name="$1"
+            local url="$2"
+            local attempt=1
+
+            echo "Polling $name at $url/readyz ..."
+            while [ $attempt -le $MAX_ATTEMPTS ]; do
+              STATUS=$(curl -sk -o /dev/null -w '%{http_code}' "$url/readyz" 2>/dev/null || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "✅ $name healthy (attempt $attempt)"
+                return 0
+              fi
+              echo "  $name: HTTP $STATUS (attempt $attempt/$MAX_ATTEMPTS)"
+              sleep $SLEEP
+              attempt=$((attempt + 1))
+            done
+            echo "❌ $name failed health check after $MAX_ATTEMPTS attempts"
+            return 1
+          }
+
+          # Poll all nodes in parallel
+          poll_health "operator" "$OPERATOR_URL" &
+          PID_OP=$!
+          poll_health "poly" "$POLY_URL" &
+          PID_POLY=$!
+          poll_health "resy" "$RESY_URL" &
+          PID_RESY=$!
+
+          FAILED=0
+          wait $PID_OP || FAILED=1
+          wait $PID_POLY || FAILED=1
+          wait $PID_RESY || FAILED=1
+
+          if [ $FAILED -ne 0 ]; then
+            echo "❌ One or more nodes failed health checks"
+            exit 1
+          fi
+          echo "✅ All nodes healthy"
+
+      - name: Smoke test
+        if: env.DOMAIN != ''
+        run: |
+          for url in "https://${DOMAIN}" "https://poly-${DOMAIN}" "https://resy-${DOMAIN}"; do
+            BODY=$(curl -sk "$url/livez" 2>/dev/null)
+            echo "$url/livez → $BODY"
+            if ! echo "$BODY" | grep -q '"status"'; then
+              echo "❌ $url/livez did not return expected JSON"
+              exit 1
+            fi
+          done
+          echo "✅ Smoke tests passed"
+
+      - name: Dump diagnostics on failure
+        if: failure() && env.VM_HOST != ''
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10"
+
+          echo "=== Argo CD Applications ==="
+          ssh $SSH_OPTS root@"$VM_HOST" "kubectl -n argocd get applications -o wide" 2>&1 || true
+          echo ""
+          echo "=== Pods ==="
+          ssh $SSH_OPTS root@"$VM_HOST" "kubectl -n $K8S_NAMESPACE get pods -o wide" 2>&1 || true
+          echo ""
+          echo "=== Events ==="
+          ssh $SSH_OPTS root@"$VM_HOST" "kubectl -n $K8S_NAMESPACE get events --sort-by=.lastTimestamp | tail -20" 2>&1 || true
+
+      - name: CI Telemetry
+        if: always()
+        uses: ./.github/actions/loki-ci-telemetry
+        with:
+          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          job_status: ${{ job.status }}
+
+  # ── E2E Smoke Tests ─────────────────────────────────────────────
+  # Runs after verify passes. Same workflow — no workflow_run chaining.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [promote-k8s, verify]
+    timeout-minutes: 10
+    environment: ${{ needs.promote-k8s.outputs.environment }}
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      TEST_BASE_URL: https://${{ vars.DOMAIN }}
+    steps:
+      - name: Check prerequisites
+        id: gate
+        run: |
+          if [ -z "$TEST_BASE_URL" ] || [ "$TEST_BASE_URL" = "https://" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "⚠️ DOMAIN not set in environment — skipping E2E"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Running E2E against $TEST_BASE_URL"
+          fi
+
+      - name: Checkout
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.promote-k8s.outputs.head_sha }}
+
+      - name: Setup Node.js
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        if: steps.gate.outputs.skip != 'true'
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        if: steps.gate.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        if: steps.gate.outputs.skip != 'true'
+        run: pnpm exec playwright install --with-deps
+
+      - name: Run Playwright smoke tests
+        if: steps.gate.outputs.skip != 'true'
+        run: pnpm e2e:smoke
+
+      - name: Upload E2E artifacts
+        if: always() && steps.gate.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-smoke-${{ github.run_id }}
+          path: e2e/artifacts/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: CI Telemetry
+        if: always()
+        uses: ./.github/actions/loki-ci-telemetry
+        with:
+          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          job_status: ${{ job.status }}
+
+  # ── Canary → Preview Promotion (CI-gated) ───────────────────────
+  # After canary E2E passes, check CI status and promote to preview.
+  # Only runs for canary environment. Uses job outputs — no head_branch guessing.
+  promote-to-preview:
+    runs-on: ubuntu-latest
+    needs: [promote-k8s, e2e]
+    if: needs.promote-k8s.outputs.environment == 'canary'
+    steps:
+      - name: Checkout (for scripts)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.promote-k8s.outputs.head_sha }}
+          fetch-depth: 1
+
+      - name: Promote to preview (CI-gated, locked snapshot model)
+        env:
+          GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+        run: |
+          scripts/ci/promote-to-preview.sh \
+            "${{ needs.promote-k8s.outputs.head_sha }}" \
+            "${{ github.repository }}" \
+            "deploy/preview" \
+            "$GH_TOKEN"

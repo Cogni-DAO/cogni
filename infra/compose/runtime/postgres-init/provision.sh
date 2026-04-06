@@ -169,9 +169,9 @@ function provision_node_db() {
   run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"$APP_USER\";"
   run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO \"$APP_USER\";"
 
-  # Service role grants
-  run_sql_as_root "$db_name" "GRANT CONNECT ON DATABASE \"$db_name\" TO \"$APP_SERVICE_USER\";"
-  run_sql_as_root "$db_name" "GRANT USAGE ON SCHEMA public TO \"$APP_SERVICE_USER\";"
+  # Service role grants — includes CREATE for migrations (drizzle-kit needs to create schemas + tables)
+  run_sql_as_root "$db_name" "GRANT CONNECT, CREATE ON DATABASE \"$db_name\" TO \"$APP_SERVICE_USER\";"
+  run_sql_as_root "$db_name" "GRANT USAGE, CREATE ON SCHEMA public TO \"$APP_SERVICE_USER\";"
   run_sql_as_root "$db_name" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO \"$APP_SERVICE_USER\";"
   run_sql_as_root "$db_name" "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO \"$APP_SERVICE_USER\";"
   run_sql_as_root "$db_name" "ALTER DEFAULT PRIVILEGES FOR ROLE \"$APP_USER\" IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO \"$APP_SERVICE_USER\";"

@@ -93,6 +93,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/.next/standalo
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/.next/static ./nodes/operator/app/.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/app/public ./nodes/operator/app/public
 
+# Repo-spec: node-specific DAO config (node_id, chain, governance).
+# Each node MUST copy its own .cogni — NOT root (which is operator's identity).
+COPY --from=builder --chown=nextjs:nodejs /app/nodes/operator/.cogni ./.cogni
+
 # Codex CLI for BYO-AI ChatGPT execution.
 # Standalone output tracing can't detect spawned binaries.
 # Install globally so pnpm resolves platform-specific optional deps (@openai/codex-linux-x64).

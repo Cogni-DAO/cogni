@@ -108,3 +108,7 @@ services/*/dist
 work/items/_index.md
 services/sandbox-openclaw/gateway-workspace/ideas/work/items/_index.md
 .local/
+
+# Temp files
+.playwright-cli/
+infra/provision/cherry/base/tfplan

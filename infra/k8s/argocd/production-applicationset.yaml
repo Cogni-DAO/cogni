@@ -12,7 +12,7 @@ spec:
   generators:
     - git:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        revision: main
+        revision: deploy/production
         files:
           - path: "infra/catalog/*.yaml"
   template:
@@ -25,7 +25,7 @@ spec:
       project: default
       source:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        targetRevision: main
+        targetRevision: deploy/production
         path: "infra/k8s/overlays/production/{{name}}"
       destination:
         server: https://kubernetes.default.svc

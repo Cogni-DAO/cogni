@@ -164,13 +164,10 @@ write_files:
       kubectl -n argocd wait --for=condition=Available \
         deployment/argocd-server --timeout=300s
 
-      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Applying ksops CMP plugin..."
-      kubectl apply -n argocd \
-        -f /tmp/cogni-repo/infra/k8s/argocd/ksops-cmp.yaml
-
-      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Patching repo-server with ksops sidecar..."
-      kubectl -n argocd patch deployment argocd-repo-server \
-        --patch-file /tmp/cogni-repo/infra/k8s/argocd/repo-server-patch.yaml
+      # ksops CMP plugin + repo-server sidecar patch removed.
+      # k8s secrets are created directly by provision script + deploy-infra.sh.
+      # SOPS/ksops will be replaced by ESO (task.0284).
+      echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] Argo CD installed (no ksops — secrets managed directly)"
 
       # ApplicationSets are NOT applied here — the provision script applies them
       # AFTER secrets, EndpointSlice IPs, and overlay fixes are all in place.

@@ -27,12 +27,22 @@ import { TreasuryBadge } from "@/features/treasury/components/TreasuryBadge";
 export function AppHeader(): ReactElement {
   return (
     <header className="border-border border-b bg-background py-3">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-background focus:p-2 focus:text-foreground"
+      >
+        Skip to main content
+      </a>
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div className="flex items-center justify-between gap-2 sm:gap-4">
           {/* Left side: Logo + Treasury */}
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <nav
+            aria-label="Primary"
+            className="flex min-w-0 items-center gap-3 sm:gap-4"
+          >
             <Link
               href="/"
+              aria-current="page"
               className="flex min-w-0 items-center gap-2 pl-4 sm:pl-0"
             >
               <Image
@@ -50,7 +60,7 @@ export function AppHeader(): ReactElement {
             <div className="flex">
               <TreasuryBadge />
             </div>
-          </div>
+          </nav>
 
           {/* Right side: GitHub + Wallet + Theme */}
           <div className="flex shrink-0 items-center gap-3">
@@ -58,9 +68,10 @@ export function AppHeader(): ReactElement {
               href="https://github.com/cogni-dao"
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Cogni on GitHub"
               className="hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
             >
-              <Github className="size-4" strokeWidth={1.5} />
+              <Github className="size-4" strokeWidth={1.5} aria-hidden="true" />
             </a>
 
             <WalletConnectButton variant="compact" className="sm:hidden" />

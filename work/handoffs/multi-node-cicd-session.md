@@ -32,19 +32,32 @@ created: 2026-04-03
 - `setup-secrets.ts` updated with canary environment
 - `docs/guides/multi-node-deploy.md` — deployment walkthrough
 
-## What's broken
+## Canary Status (2026-04-04T03:20Z)
 
-### P0: bug.0276 — App client-side crash
+| Component                     | Status       | Notes                                                                   |
+| ----------------------------- | ------------ | ----------------------------------------------------------------------- |
+| operator (test.cognidao.org)  | ✅ GREEN     | /readyz 200, sign-in works, AI chat works                               |
+| poly (poly-test.cognidao.org) | ⚠️ PARTIAL   | /readyz 200, sign-in works, AI chat 500 — LiteLLM unreachable           |
+| resy (resy-test.cognidao.org) | ⚠️ PARTIAL   | /readyz 200, sign-in works, AI chat 500 — LiteLLM unreachable           |
+| scheduler-worker              | ✅ Running   | Temporal connected                                                      |
+| Treasury widget               | ❌ 500       | EVM_RPC_URL not in k8s secret (operator only has it from .env.operator) |
+| Grafana logs                  | ❌ Not wired | Compose Alloy has creds but k8s pods have no log shipping               |
 
-**Root cause:** `COGNI_REPO_ROOT missing package.json, .cogni/repo-spec.yaml, and .git: /tmp`. The latest code validates COGNI_REPO_ROOT and throws when it's not a valid git repo. k8s pods don't have a git-sync sidecar, so COGNI_REPO_PATH falls back to /tmp which isn't a repo.
+### Remaining blockers for full green
 
-**Old images work** (deploy dev's manual builds used code before the strict validation). **New CI-built images crash** (built from latest integration/multi-node which has the validation).
+1. **Poly/resy LiteLLM** — ConfigMap has `LITELLM_BASE_URL=http://poly-litellm-external:4000` but there's only one shared LiteLLM on Compose. The k8s ExternalService for poly-litellm doesn't exist. Fix: either point all nodes at the same LiteLLM service or create per-node ExternalServices.
 
-**Fix:** Make COGNI_REPO_ROOT validation non-fatal. When the path isn't a valid repo, disable repo-dependent features (Brain core\_\_repo_search/read tools) instead of crashing. The deploy dev's PR #708 made COGNI_REPO_PATH optional in env schema but the downstream `repoSpec.server.ts` still throws.
+2. **Treasury EVM_RPC_URL** — the k8s secret doesn't have it. The provision script sets it but the readyz probe skips EVM check (paymentRailsActive=false for nodes without payments_in in repo-spec). Treasury API route still needs it.
 
-### P1: readyz returning 500
+3. **Grafana k8s pod logs** — Alloy DaemonSet or similar needed for k8s log shipping. Compose services ship logs but k8s pods don't.
 
-All 3 nodes return 500 on /readyz. This is downstream of bug.0276 — the readiness probe fails because the app's server-side rendering hits the COGNI_REPO_ROOT validation error.
+### Previously broken (now fixed)
+
+- ~~bug.0276 — App client-side crash~~ — Fixed: .cogni/repo-spec.yaml baked into Docker images
+- ~~readyz 500~~ — Fixed: EVM check skipped when payment rails inactive
+- ~~Poly/resy migrations~~ — Fixed: exit-0 skip removed, correct migrator digest
+- ~~Per-node repo-spec~~ — Fixed: Dockerfiles copy node-specific .cogni/
+- ~~Provision script re-run lockout~~ — Fixed: key reuse + known_hosts cleanup
 
 ## GitHub Environment: canary
 

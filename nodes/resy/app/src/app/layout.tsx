@@ -21,7 +21,7 @@ import Script from "next/script";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 
-import { Providers } from "./providers.client";
+import { Providers } from "./providers-loader.client";
 
 const manrope = Manrope({
   subsets: ["latin"],

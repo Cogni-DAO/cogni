@@ -116,6 +116,20 @@ npx tsx packages/dns-ops/scripts/test-live.ts
 dig <subdomain>.cognidao.org +short @1.1.1.1
 ```
 
+## Domain Ownership
+
+**cognidao.org** — Namecheap, expires **2027-04-06**. Renew annually.
+
+On 2026-04-05 the domain expired and all DNS stopped resolving for ~6 hours. Set a calendar reminder 30 days before expiry. See `work/charters/DOMAINS.md` for full domain inventory.
+
+### Canonical DNS mapping (keep these in sync):
+
+| Domain                                | IP            | Environment |
+| ------------------------------------- | ------------- | ----------- |
+| cognidao.org / www                    | 84.32.109.162 | Production  |
+| test / poly-test / resy-test          | 84.32.109.222 | Canary      |
+| preview / poly-preview / resy-preview | 84.32.110.92  | Preview     |
+
 ## Safety Rules
 
 ### NEVER modify these records:

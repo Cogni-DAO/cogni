@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ApplicationSet for canary environment.
+# Production-like runtime for AI e2e testing (Playwright).
+# Generates one Argo Application per catalog entry.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cogni-canary
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/canary
+        files:
+          - path: "infra/catalog/*.yaml"
+  template:
+    metadata:
+      name: "canary-{{name}}"
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        targetRevision: deploy/canary
+        path: "infra/k8s/overlays/canary/{{name}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cogni-canary
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

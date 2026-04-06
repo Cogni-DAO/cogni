@@ -48,6 +48,9 @@ export async function setup() {
   // Run provision.sh inside the container (where psql is available).
   // Creates app_user (DB owner, RLS enforced) + app_service (BYPASSRLS),
   // creates APP_DB_NAME database, grants DML to both roles.
+  // Install bash in alpine container (postgres:15-alpine ships only ash)
+  await c.exec(["sh", "-c", "apk add --no-cache bash > /dev/null 2>&1"]);
+
   const result = await c.exec([
     "bash",
     "-c",

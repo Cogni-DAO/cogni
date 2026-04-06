@@ -11,7 +11,20 @@ intent:
   name: cogni-resy
 
 cogni_dao:
-  chain_id: "8453" # Base mainnet — DAO not yet deployed
+  dao_contract: "0xF61c3fafD4D34b4568e7a500d92b28Ac175e83C6"
+  plugin_contract: "0x609B427f04C1C42De3e28898cb7b9Bad329e6b77"
+  signal_contract: "0x590FC79B9c925C377fA63F4AaF54cdbF4Ee273A1"
+  chain_id: "8453"
+  base_url: "https://proposal.cognidao.org"
 
 payments:
-  status: pending_activation
+  status: active
+
+payments_in:
+  credits_topup:
+    provider: cogni-usdc-backend-v1
+    receiving_address: "0xDe4dE5e40f7215E4606c3e422D28cf01f97C8c66"
+    allowed_chains:
+      - Base
+    allowed_tokens:
+      - USDC

@@ -28,6 +28,7 @@ import {
   InvalidCronExpressionError,
   InvalidTimezoneError,
 } from "@/ports/server";
+import { getNodeId } from "@/shared/config";
 // Credit gating removed — handled at execution time via PreflightCreditCheckDecorator
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
@@ -141,6 +142,7 @@ export const POST = wrapRouteHandlerWithLogging(
         toUserId(sessionUser.id),
         account.id,
         {
+          nodeId: getNodeId(),
           graphId: input.graphId,
           input: input.input,
           cron: input.cron,

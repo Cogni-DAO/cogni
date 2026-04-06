@@ -182,8 +182,8 @@ services:
         ]
       interval: 10s
       timeout: 3s
-      retries: 3
-      start_period: 30s
+      retries: 8
+      start_period: 120s
 
   mock-llm:
     image: zerob13/mock-openai-api:latest
@@ -209,6 +209,8 @@ services:
       - "443:443"
     environment:
       - DOMAIN=${DOMAIN}
+      - POLY_DOMAIN=${POLY_DOMAIN:-poly.localhost}
+      - RESY_DOMAIN=${RESY_DOMAIN:-resy.localhost}
     volumes:
       - ../edge/configs/Caddyfile.tmpl:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -588,10 +590,10 @@ services:
       # DATABASE_SERVICE_URL_DOCKER provides Docker-internal URL (postgres:5432) for test scripts.
       # Falls back to DATABASE_SERVICE_URL for production/non-test contexts.
       - DATABASE_URL=${DATABASE_SERVICE_URL_DOCKER:-${DATABASE_SERVICE_URL}}
-      # Internal API (scheduler-worker → app)
-      # Default: http://app:3000 for Docker-based stacks
-      # Override: http://host.docker.internal:3000 for test:stack:dev (app on host)
-      - APP_BASE_URL=${SCHEDULER_APP_BASE_URL:-http://app:3000}
+      # Per-node API endpoints (scheduler-worker → node apps)
+      # Default: Docker-internal DNS for each node
+      # Override: COGNI_NODE_ENDPOINTS for test:stack:dev (app on host)
+      - COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS:-operator=http://app:3000,poly=http://poly:3100,resy=http://resy:3300}
       - SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN?SCHEDULER_API_TOKEN is required}
       # GitHub App credentials (optional — required only for GitHub ingestion)
       # Bare passthrough: passes empty string "" when var is unset in host env.
@@ -639,7 +641,7 @@ services:
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
     volumes:
-      - ../../images/sandbox-proxy/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ./configs/nginx-gateway.conf.template:/etc/nginx/nginx.conf.template:ro
     command: >
       sh -c "envsubst '$$LITELLM_MASTER_KEY' < /etc/nginx/nginx.conf.template
       > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"

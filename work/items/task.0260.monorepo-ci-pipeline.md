@@ -90,6 +90,11 @@ when poly/resy become deploy-critical.
 - Remote cache (Vercel Turbo or self-hosted) enables cross-PR cache hits
 - No GitHub `paths:` filters on required workflows (causes pending-block)
 - Average PR CI time drops measurably vs current "test everything" approach
+- **Deduplicate image builds**: ci.yaml stack-test and build-multi-node.yml currently
+  build the same Dockerfile independently with separate GHA cache scopes (`stack-test`
+  vs `build-operator`). stack-test should pull images from GHCR after build-multi-node
+  pushes them, not rebuild. Trades parallelism for dedup — stack-test waits for build,
+  but skips ~3 min of redundant Docker builds per push to canary
 
 ## Allowed Changes
 

@@ -24,6 +24,7 @@ import { toUserId } from "@cogni/ids";
 import type { ScheduleUserPort } from "@cogni/scheduler-core";
 
 import { getExecutionScope } from "@/adapters/server";
+import { getNodeId } from "@/shared/config";
 
 /**
  * Dependencies for creating the schedule capability.
@@ -99,6 +100,7 @@ export function createScheduleCapability(
         userId,
         billingAccountId,
         {
+          nodeId: getNodeId(),
           graphId: input.graphId,
           input: input.input,
           cron: input.cron,

@@ -132,8 +132,9 @@ class CogniNodeRouter(CustomLogger):
             if self.billing_token:
                 headers["Authorization"] = f"Bearer {self.billing_token}"
 
+            ingest_url = endpoint.rstrip("/") + "/api/internal/billing/ingest"
             response = await self._client.post(
-                endpoint,
+                ingest_url,
                 content=json.dumps([payload]),
                 headers=headers,
             )

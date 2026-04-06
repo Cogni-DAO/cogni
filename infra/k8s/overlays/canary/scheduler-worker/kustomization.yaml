@@ -3,7 +3,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: cogni-staging
+namespace: cogni-canary
 
 resources:
   - ../../../base/scheduler-worker
@@ -13,7 +13,7 @@ resources:
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:63a03d720ed293efbaa6f0ee4531d3dc026fc6149597b6e3f49e15d92a5e9e35"
+    digest: "sha256:c8fa27bc2f8b8e57359fc5fd86f0f02429ed4d707fbfb4e1623ca1cac7375f15"
 
 patches:
   # Patch ConfigMap with staging-specific values
@@ -23,10 +23,10 @@ patches:
     patch: |
       - op: replace
         path: /data/TEMPORAL_NAMESPACE
-        value: "cogni-staging"
+        value: "cogni-canary"
       - op: replace
-        path: /data/APP_BASE_URL
-        value: "http://app:3000"
+        path: /data/COGNI_NODE_ENDPOINTS
+        value: "operator=http://operator-node-app:3000,poly=http://poly-node-app:3000,resy=http://resy-node-app:3000,4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://operator-node-app:3000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://poly-node-app:3000,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://resy-node-app:3000"
       - op: replace
         path: /data/IMAGE_DIGEST
         value: "staging-placeholder-scheduler-worker"
@@ -49,6 +49,20 @@ patches:
   - target:
       kind: EndpointSlice
       name: app-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: poly-app-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: resy-app-1
     patch: |
       - op: replace
         path: /endpoints/0/addresses

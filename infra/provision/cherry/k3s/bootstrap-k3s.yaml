@@ -102,12 +102,35 @@ write_files:
       rm -rf /tmp/age /tmp/age.tar.gz
       age --version
 
-      # Argo CD install — uncomment during task.0149
-      # echo "Installing Argo CD..."
-      # kubectl create namespace argocd || true
-      # kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
-      # echo "Waiting for Argo CD to be ready..."
-      # kubectl -n argocd wait --for=condition=Available deployment/argocd-server --timeout=300s
+      # Argo CD install
+      echo "Installing Argo CD..."
+      kubectl create namespace argocd || true
+      kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.4/manifests/install.yaml
+      echo "Waiting for Argo CD to be ready..."
+      kubectl -n argocd wait --for=condition=Available deployment/argocd-server --timeout=300s
+
+      # Apply ApplicationSets (canary/preview/production) from repo
+      echo "Cloning repo for Argo ApplicationSets..."
+      REPO_DIR="/tmp/cogni-bootstrap-repo"
+      rm -rf "$REPO_DIR"
+      git clone --depth=1 --branch "${git_branch:-canary}" \
+        "https://github.com/cogni-dao/cogni-template.git" "$REPO_DIR"
+
+      echo "Applying ApplicationSets..."
+      for appset in canary-applicationset.yaml preview-applicationset.yaml production-applicationset.yaml; do
+        if [[ -f "$REPO_DIR/infra/k8s/argocd/$appset" ]]; then
+          kubectl apply -f "$REPO_DIR/infra/k8s/argocd/$appset" -n argocd
+          echo "  Applied $appset"
+        fi
+      done
+      rm -rf "$REPO_DIR"
+
+      # Create app namespaces (Argo CreateNamespace=true handles this too, belt+suspenders)
+      for ns in cogni-canary cogni-preview cogni-production; do
+        kubectl create namespace "$ns" 2>/dev/null || true
+      done
+
+      echo "Argo CD ready. ApplicationSets applied."
 
       # Write success marker
       {

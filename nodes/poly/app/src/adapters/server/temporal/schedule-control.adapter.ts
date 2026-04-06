@@ -134,6 +134,7 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
           workflowId: params.scheduleId,
           args: [
             {
+              nodeId: params.nodeId,
               graphId: params.graphId,
               executionGrantId: params.executionGrantId,
               input: params.input,
@@ -237,6 +238,7 @@ export class TemporalScheduleControlAdapter implements ScheduleControlPort {
           workflowId: params.scheduleId,
           args: [
             {
+              nodeId: params.nodeId,
               graphId: params.graphId,
               executionGrantId: params.executionGrantId,
               input: params.input,

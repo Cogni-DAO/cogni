@@ -1,24 +1,24 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
-# ApplicationSet for staging environment.
+# ApplicationSet for preview environment.
+# Human e2e testing. Promoted from canary after AI e2e passes.
 # Generates one Argo Application per catalog entry.
-# Adding a new node/service = adding infra/catalog/{name}.yaml.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: cogni-staging
+  name: cogni-preview
   namespace: argocd
 spec:
   generators:
     - git:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        revision: staging
+        revision: deploy/preview
         files:
           - path: "infra/catalog/*.yaml"
   template:
     metadata:
-      name: "staging-{{name}}"
+      name: "preview-{{name}}"
       namespace: argocd
       finalizers:
         - resources-finalizer.argocd.argoproj.io
@@ -26,11 +26,11 @@ spec:
       project: default
       source:
         repoURL: https://github.com/cogni-dao/cogni-template.git
-        targetRevision: staging
-        path: "infra/k8s/overlays/staging/{{name}}"
+        targetRevision: deploy/preview
+        path: "infra/k8s/overlays/preview/{{name}}"
       destination:
         server: https://kubernetes.default.svc
-        namespace: cogni-staging
+        namespace: cogni-preview
       syncPolicy:
         automated:
           prune: true

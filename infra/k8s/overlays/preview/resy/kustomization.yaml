@@ -3,7 +3,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: cogni-staging
+namespace: cogni-preview
 
 resources:
   - ../../../base/node-app
@@ -13,7 +13,7 @@ namePrefix: resy-
 images:
   - name: ghcr.io/cogni-dao/cogni-template
     newName: ghcr.io/cogni-dao/cogni-template
-    digest: "sha256:0a425873badc0de164e205e6a22b98a632df94fae324f89f66462c4c21ed11ca"
+    digest: "sha256:1dc0e9a5a9ed8cf4e67ea96aeb8653afbc6b32bb6d9d34a24da2c2cfd9c8b7df"
   - name: ghcr.io/cogni-dao/cogni-template-migrate
     newName: ghcr.io/cogni-dao/cogni-template
     digest: "sha256:bf8d345cb62448ef5804aa0fedd2d6f088e7b98d5fc7d048fec79a210626c8c9"
@@ -27,7 +27,7 @@ patches:
     patch: |
       - op: replace
         path: /data/APP_ENV
-        value: "test"
+        value: "production"
       - op: replace
         path: /data/NODE_NAME
         value: "resy"
@@ -43,7 +43,13 @@ patches:
       - op: replace
         path: /data/REDIS_URL
         value: "redis://resy-redis-external:6379"
-  # NodePort assignment (resy = 30300, app listens on 3300)
+      - op: add
+        path: /data/NEXTAUTH_URL
+        value: "https://resy-preview.cognidao.org"
+      - op: add
+        path: /data/AUTH_TRUST_HOST
+        value: "true"
+  # NodePort + instance label on selector (prevents cross-node routing)
   - target:
       kind: Service
       name: node-app
@@ -54,7 +60,10 @@ patches:
       - op: replace
         path: /spec/ports/0/targetPort
         value: 3300
-  # Fix secret refs + container port (resy listens on 3300, not 3000)
+      - op: add
+        path: /spec/selector/app.kubernetes.io~1instance
+        value: "resy"
+  # Fix secret refs + container port + instance label
   - target:
       kind: Deployment
       name: node-app
@@ -65,6 +74,14 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/ports/0/containerPort
         value: 3300
+      - op: add
+        path: /spec/selector/matchLabels/app.kubernetes.io~1instance
+        value: "resy"
+      - op: add
+        path: /spec/template/metadata/labels/app.kubernetes.io~1instance
+        value: "resy"
+  # Migration: shared migrator image runs operator's schema (all nodes share one schema).
+  # Secret ref patched to resy's secret so DATABASE_URL points to cogni_resy.
   - target:
       kind: Job
       name: migrate-node-app
@@ -72,7 +89,7 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "resy-node-app-secrets"
-  # EndpointSlice IPs — node InternalIP (provision script updates this per-VM)
+  # EndpointSlice IPs + service-name label fix (namePrefix doesn't update label values)
   - target:
       kind: EndpointSlice
       name: postgres-external-1
@@ -80,6 +97,9 @@ patches:
       - op: replace
         path: /endpoints/0/addresses
         value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "resy-postgres-external"
   - target:
       kind: EndpointSlice
       name: temporal-external-1
@@ -87,6 +107,9 @@ patches:
       - op: replace
         path: /endpoints/0/addresses
         value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "resy-temporal-external"
   - target:
       kind: EndpointSlice
       name: litellm-external-1
@@ -94,6 +117,9 @@ patches:
       - op: replace
         path: /endpoints/0/addresses
         value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "resy-litellm-external"
   - target:
       kind: EndpointSlice
       name: redis-external-1
@@ -101,3 +127,6 @@ patches:
       - op: replace
         path: /endpoints/0/addresses
         value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "resy-redis-external"

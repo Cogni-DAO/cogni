@@ -26,7 +26,7 @@ describe("operator catalog entries", () => {
     expect(entry.displayName).toBe("Operating Review");
     expect(entry.systemPrompt).toBeDefined();
     expect(typeof entry.systemPrompt).toBe("string");
-    expect(entry.systemPrompt!.length).toBeGreaterThan(100);
+    expect((entry.systemPrompt ?? "").length).toBeGreaterThan(100);
     expect(entry.toolIds.length).toBeGreaterThan(0);
     expect(entry.graphFactory).toBe(createOperatorGraph);
   });
@@ -37,7 +37,7 @@ describe("operator catalog entries", () => {
     expect(entry.displayName).toBe("Git Reviewer");
     expect(entry.systemPrompt).toBeDefined();
     expect(typeof entry.systemPrompt).toBe("string");
-    expect(entry.systemPrompt!.length).toBeGreaterThan(100);
+    expect((entry.systemPrompt ?? "").length).toBeGreaterThan(100);
     expect(entry.graphFactory).toBe(createOperatorGraph);
   });
 
@@ -50,7 +50,7 @@ describe("operator catalog entries", () => {
 
   it("existing graph entries are unchanged", () => {
     // Verify original entries still exist and don't have systemPrompt
-    const poet = LANGGRAPH_CATALOG["poet"];
+    const poet = LANGGRAPH_CATALOG.poet;
     expect(poet).toBeDefined();
     expect(poet.displayName).toBe("Poet");
     expect(poet.systemPrompt).toBeUndefined();

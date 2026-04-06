@@ -34,6 +34,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmError } from "@/ports";
 
 // Mock auth
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "test-node-id",
+}));
+
 vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));

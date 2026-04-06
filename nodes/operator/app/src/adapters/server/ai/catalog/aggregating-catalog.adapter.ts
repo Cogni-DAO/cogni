@@ -36,7 +36,8 @@ export class AggregatingModelCatalog implements ModelCatalogPort {
 
     const models: ModelOption[] = [];
     for (let i = 0; i < results.length; i++) {
-      const result = results[i]!;
+      const result = results[i];
+      if (!result) continue;
       if (result.status === "fulfilled") {
         models.push(...result.value);
       } else {
@@ -48,10 +49,9 @@ export class AggregatingModelCatalog implements ModelCatalogPort {
     }
 
     // Apply capability filter
-    const filtered = params.requiredCapabilities
-      ? models.filter((m) =>
-          matchesCapabilities(m.capabilities, params.requiredCapabilities!)
-        )
+    const requiredCaps = params.requiredCapabilities;
+    const filtered = requiredCaps
+      ? models.filter((m) => matchesCapabilities(m.capabilities, requiredCaps))
       : models;
 
     // Compute default: use platform provider's tagged default, or first model

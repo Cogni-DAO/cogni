@@ -3,16 +3,19 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Script: scripts/ci/promote-k8s-image.sh
-# Purpose: Update k8s overlay with new image digest for any app/node, commit to branch.
+# Purpose: Update k8s overlay with new image digest for any app/node.
 # Note: sed uses GNU extensions (0, address). Runs in CI (ubuntu). Local use: review diff only.
 # Invariants:
 #   - IMAGE_IMMUTABILITY: Uses @sha256: digest, never mutable tags
 #   - MANIFEST_DRIVEN_DEPLOY: Promotion = overlay change → Argo CD syncs
-#   - Only updates staging overlay (production promotion is via release branch merge)
 # Usage:
 #   scripts/ci/promote-k8s-image.sh --app operator --digest ghcr.io/cogni-dao/cogni-template@sha256:abc...
 #   scripts/ci/promote-k8s-image.sh --app operator --digest ... --migrator-digest ...
 #   scripts/ci/promote-k8s-image.sh --env production --app operator --digest ...
+#   scripts/ci/promote-k8s-image.sh --no-commit --app operator --digest ...
+#
+# By default, auto-commits and pushes when running in CI (GITHUB_SHA set).
+# Pass --no-commit to update the file only — caller manages git operations.
 
 set -euo pipefail
 
@@ -28,6 +31,7 @@ APP=""
 DIGEST=""
 MIGRATOR_DIGEST=""
 ENV="staging"
+NO_COMMIT=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -35,6 +39,7 @@ while [[ $# -gt 0 ]]; do
     --digest) DIGEST="$2"; shift 2 ;;
     --migrator-digest) MIGRATOR_DIGEST="$2"; shift 2 ;;
     --env) ENV="$2"; shift 2 ;;
+    --no-commit) NO_COMMIT=true; shift ;;
     *) log_error "Unknown arg: $1"; exit 1 ;;
   esac
 done
@@ -81,17 +86,25 @@ if [[ -n "$MIGRATOR_DIGEST" ]]; then
   MIGRATOR_IMAGE_DIGEST="${MIGRATOR_DIGEST#*@}"
   log_info "  Migrator: $MIGRATOR_IMAGE_NAME"
   log_info "  Migrator digest: $MIGRATOR_IMAGE_DIGEST"
-  # Update the second image entry (migrator)
-  # Uses a different pattern to target the migrate placeholder
-  sed -i.bak "s|newTag: \".*-placeholder-.*-migrate\"|digest: \"${MIGRATOR_IMAGE_DIGEST}\"|" "$OVERLAY_FILE"
+  # Update the second image entry (migrator) — target the line after cogni-template-migrate
+  # Use awk to find the migrate image block and replace its digest line
+  awk -v new_digest="$MIGRATOR_IMAGE_DIGEST" -v new_name="$MIGRATOR_IMAGE_NAME" '
+    /name: .*cogni-template-migrate/ { in_migrate=1 }
+    in_migrate && /newName:/ { $0 = "    newName: " new_name; }
+    in_migrate && /digest:/ { $0 = "    digest: \"" new_digest "\""; in_migrate=0 }
+    in_migrate && /newTag:/ { $0 = "    digest: \"" new_digest "\""; in_migrate=0 }
+    { print }
+  ' "$OVERLAY_FILE" > "${OVERLAY_FILE}.tmp" && mv "${OVERLAY_FILE}.tmp" "$OVERLAY_FILE"
 fi
 
 rm -f "${OVERLAY_FILE}.bak"
 
 log_info "Updated $OVERLAY_FILE"
 
-# Commit and push if in CI
-if [[ -n "${GITHUB_SHA:-}" ]]; then
+# Commit and push if in CI and --no-commit not passed
+if [[ "$NO_COMMIT" == "true" ]]; then
+  log_info "Skipping commit (--no-commit). Caller manages git operations."
+elif [[ -n "${GITHUB_SHA:-}" ]]; then
   git config user.name "github-actions[bot]"
   git config user.email "github-actions[bot]@users.noreply.github.com"
   git add "$OVERLAY_FILE"

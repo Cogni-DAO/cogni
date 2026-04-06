@@ -33,6 +33,8 @@ const {
  * All fields from the webhook payload + billing context — no secrets.
  */
 export interface PrReviewWorkflowInput {
+  /** Originating node ID from repo-spec. Routes execution to correct node. */
+  nodeId: string;
   owner: string;
   repo: string;
   prNumber: number;
@@ -62,6 +64,7 @@ export async function PrReviewWorkflow(
   input: PrReviewWorkflowInput
 ): Promise<void> {
   const {
+    nodeId,
     owner,
     repo,
     prNumber,
@@ -120,6 +123,7 @@ export async function PrReviewWorkflow(
       workflowId: `graph-run:system:pr-review:${owner}/${repo}/${prNumber}/${headSha}`,
       args: [
         {
+          nodeId,
           graphId: `langgraph:pr-review`,
           executionGrantId: null,
           input: {

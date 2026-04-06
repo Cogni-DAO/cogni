@@ -1,3 +1,7 @@
+# DISABLED: Replaced by build-multi-node.yml + promote-and-deploy.yml chain.
+# Jobs set to if:false — kept for reference during migration.
+# See docs/spec/release-control-plane.md and task.0291.
+
 name: Staging Preview
 
 on:
@@ -16,6 +20,7 @@ concurrency:
 
 jobs:
   build:
+    if: false
     runs-on: ubuntu-latest
     outputs:
       image_name: ${{ steps.meta.outputs.image_name }}
@@ -127,6 +132,7 @@ jobs:
           job_status: ${{ job.status }}
 
   deploy:
+    if: false
     runs-on: ubuntu-latest
     needs: build
     environment:
@@ -257,6 +263,7 @@ jobs:
           job_status: ${{ job.status }}
 
   e2e:
+    if: false
     runs-on: ubuntu-latest
     needs: deploy
     timeout-minutes: 15
@@ -312,9 +319,9 @@ jobs:
           job_status: ${{ job.status }}
 
   promote:
+    if: false
     runs-on: ubuntu-latest
     needs: [build, deploy, e2e]
-    if: ${{ success() }}
     permissions:
       contents: write
       pull-requests: write

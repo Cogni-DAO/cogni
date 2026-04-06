@@ -13,14 +13,7 @@
 
 "use client";
 
-import {
-  Activity,
-  Briefcase,
-  CreditCard,
-  Github,
-  LayoutDashboard,
-  Vote,
-} from "lucide-react";
+import { Activity } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactElement } from "react";
@@ -38,21 +31,7 @@ import {
   SidebarSeparator,
 } from "@/components";
 import { ChatThreadsSidebarGroup } from "@/features/ai/chat/components/ChatThreadsSidebarGroup";
-
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/work", label: "Work", icon: Briefcase },
-  { href: "/gov", label: "Gov", icon: Vote },
-  { href: "/credits", label: "Credits", icon: CreditCard },
-] as const;
-
-const EXTERNAL_LINKS = [
-  {
-    href: "https://github.com/cogni-dao",
-    label: "GitHub",
-    icon: Github,
-  },
-] as const;
+import { nodeConfig } from "@/node-config";
 
 export function AppSidebar(): ReactElement {
   const pathname = usePathname();
@@ -79,7 +58,7 @@ export function AppSidebar(): ReactElement {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>
-            {NAV_ITEMS.map((item) => {
+            {nodeConfig.navItems.map((item) => {
               const isActive =
                 pathname === item.href ||
                 pathname.startsWith(`${item.href.replace(/\/$/, "")}/`);
@@ -108,7 +87,7 @@ export function AppSidebar(): ReactElement {
       <SidebarFooter>
         <SidebarSeparator />
         <SidebarMenu>
-          {EXTERNAL_LINKS.map((item) => (
+          {nodeConfig.externalLinks.map((item) => (
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton asChild tooltip={item.label}>
                 <a href={item.href} target="_blank" rel="noopener noreferrer">

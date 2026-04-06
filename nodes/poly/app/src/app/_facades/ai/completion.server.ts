@@ -35,6 +35,7 @@ import type {
   ChatMessage,
 } from "@cogni/node-contracts";
 import { mapAccountsPortErrorToFeature } from "@/features/accounts/public";
+import { getNodeId } from "@/shared/config";
 // Types from client-safe barrel (types only, no runtime)
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 // Import from public.server.ts - never from services/* directly (dep-cruiser enforced)
@@ -351,6 +352,7 @@ export async function completionStream(
       workflowId,
       args: [
         {
+          nodeId: getNodeId(),
           graphId,
           executionGrantId: null,
           input: {

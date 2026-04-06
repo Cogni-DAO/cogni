@@ -138,7 +138,7 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
     const result: Awaited<ReturnType<LlmService["completion"]>> = {
       message: {
         role: "assistant",
-        content: data.choices[0]!.message!.content!,
+        content: data.choices[0]?.message?.content ?? "",
       },
       usage: {
         promptTokens,
@@ -152,8 +152,8 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       resolvedDisplayName: humanizeModelId(resolvedModel),
     };
 
-    if (data.choices[0]!.finish_reason) {
-      result.finishReason = data.choices[0]!.finish_reason;
+    if (data.choices[0]?.finish_reason) {
+      result.finishReason = data.choices[0]?.finish_reason;
     }
 
     log.info(
@@ -341,7 +341,8 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
           streamParser.feed(decoder.decode(value, { stream: true }));
 
           while (eventQueue.length > 0) {
-            const event = eventQueue.shift()!;
+            const event = eventQueue.shift();
+            if (!event) break;
             if (event.data === "[DONE]") continue;
 
             let parsed: {
@@ -390,8 +391,9 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
                     args: "",
                   };
                 }
-                if (tc.function?.arguments) {
-                  toolCallAccum[tc.index]!.args += tc.function.arguments;
+                const accum = toolCallAccum[tc.index];
+                if (accum && tc.function?.arguments) {
+                  accum.args += tc.function.arguments;
                 }
               }
             }
