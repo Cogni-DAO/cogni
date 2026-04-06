@@ -58,20 +58,29 @@ pnpm db:setup:test          # Create test database + run migrations
    # or: fix/litellm-config-bug, chore/ci-playwright-cache, docs/update-readme, etc.
    ```
 
-4. **Run local checks before committing:**
+4. **Create or choose one real work item before a nontrivial PR:**
+   - Use exactly one primary Work Item ID from `work/items/`
+   - Keep the PR scoped to one reviewable story
+   - See `work/README.md` for the work-management rules
+
+5. **Run local checks before committing:**
 
    ```bash
    pnpm check
    ```
 
-5. **Use Conventional Commits:** `feat:`, `fix:`, `docs:`, `chore:`
+6. **Use Conventional Commits:** `feat:`, `fix:`, `docs:`, `chore:`
 
-6. **Open PRs to staging only:**
+7. **Open PRs to staging only:**
    - Push: `git push origin feat/xyz`
    - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni-template:staging`
+   - Hand-finish the PR body; `.contrib/` output is only a starting point
+   - Reference exactly one primary work item (for example `Work: task.xxxx`)
+   - List the exact local validation already run
+   - Split or defer unrelated work so the PR stays reviewable
    - PRs to `main` are blocked by design
 
-7. All CI and AI gates must pass for auto-merge.
+8. All CI and AI gates must pass for auto-merge.
 
 **Branch naming convention:**
 

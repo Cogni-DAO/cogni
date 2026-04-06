@@ -17,8 +17,10 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - **Compact progress:** Summarize after each step.
 - **Prune aggressively:** Delete noise, keep signal.
 - **Delegate cleanly:** Use subagents with narrow scopes.
+- **One PR, one primary work item:** Nontrivial PRs must reference exactly one Work Item ID from `work/items/` and stay PR-sized.
 - **Validate early:** Run `pnpm check:fast` during iteration (auto-fixes lint/format). Run targeted tests for what you changed.
 - **Validate once before commit:** Run `pnpm check` once as the pre-commit gate. Never run it more than once per session.
+- **Hand-finish PRs:** `.contrib/` output is only a starting point; before opening a nontrivial PR, include a reviewer-ready summary and explicit local validation evidence.
 - **Update docs:** Reflect any surface changes in AGENTS.md.
 - **Full Validation:** `pnpm check:full` runs in CI (~20 min). Check CI status on the PR after push — stack test success is the required gate.
 
