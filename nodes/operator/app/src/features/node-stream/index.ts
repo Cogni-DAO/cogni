@@ -17,6 +17,7 @@ export { DeployEventContent } from "./components/DeployEventContent";
 export { HealthEventContent } from "./components/HealthEventContent";
 export { ProcessHealthEventContent } from "./components/ProcessHealthEventContent";
 export { StreamCard } from "./components/StreamCard";
+export { VcsActivityEventContent } from "./components/VcsActivityEventContent";
 export type {
   ConnectionStatus,
   StreamEvent,
