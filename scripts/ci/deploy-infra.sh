@@ -744,7 +744,10 @@ INFRA_SERVICES="postgres litellm redis alloy temporal-postgres temporal temporal
 $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
 
 # Sandbox-openclaw services (separate profile)
-$RUNTIME_COMPOSE --profile sandbox-openclaw up -d openclaw-gateway llm-proxy-openclaw
+# Non-fatal: openclaw is non-functional in multi-node (git-sync exit 1 kills compose).
+# Keep starting it best-effort so the containers exist for future enablement.
+$RUNTIME_COMPOSE --profile sandbox-openclaw up -d openclaw-gateway llm-proxy-openclaw || \
+  log_info "⚠️  Sandbox-openclaw services failed to start (non-fatal, openclaw is non-functional in multi-node)"
 
 log_info "[$(date -u +%H:%M:%S)] Infra stack up complete"
 emit_deployment_event "infra_deployment.stack_up_complete" "success" "Infrastructure services started"
@@ -799,10 +802,13 @@ OLD_HASH="$(cat "$OPENCLAW_HASH_FILE" 2>/dev/null || true)"
 if [[ "$NEW_HASH" != "$OLD_HASH" ]]; then
   log_info "OpenClaw config changed (hash: ${NEW_HASH:0:12}...), recreating gateway..."
   emit_deployment_event "infra_deployment.openclaw_recreate" "in_progress" "Recreating OpenClaw gateway due to config change"
-  $RUNTIME_COMPOSE --profile sandbox-openclaw up -d --no-deps --force-recreate openclaw-gateway \
-    && echo "$NEW_HASH" > "$OPENCLAW_HASH_FILE"
-  log_info "OpenClaw gateway recreated with new config"
-  emit_deployment_event "infra_deployment.openclaw_recreate_complete" "success" "OpenClaw gateway recreated successfully"
+  if $RUNTIME_COMPOSE --profile sandbox-openclaw up -d --no-deps --force-recreate openclaw-gateway; then
+    echo "$NEW_HASH" > "$OPENCLAW_HASH_FILE"
+    log_info "OpenClaw gateway recreated with new config"
+    emit_deployment_event "infra_deployment.openclaw_recreate_complete" "success" "OpenClaw gateway recreated successfully"
+  else
+    log_info "⚠️  OpenClaw gateway recreate failed (non-fatal)"
+  fi
 else
   log_info "OpenClaw config unchanged (hash: ${NEW_HASH:0:12}...), no recreate needed"
 fi
