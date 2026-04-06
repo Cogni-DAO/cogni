@@ -1,8 +1,10 @@
 # Contributing
 
-Cogni is a unique open project: every pull request passes through **automated CI** and **AI-assisted review gates**.  
-If your code passes all checks, it will be merged automatically.  
-If it fails **only** the Cogni-Git-Review AI gate, a link will appear allowing you to **submit a DAO proposal** for human + token-holder review.  
+> **Quickstart**: Want the fastest path to a meaningful contribution? See [Contributor Quickstart](docs/guides/contributor-quickstart.md) — update a graph and see it on canary in 30 minutes.
+
+Cogni is a unique open project: every pull request passes through **automated CI** and **AI-assisted review gates**.
+If your code passes all checks, it will be merged automatically.
+If it fails **only** the Cogni-Git-Review AI gate, a link will appear allowing you to **submit a DAO proposal** for human + token-holder review.
 Use that path sparingly — voting is reserved for meaningful exceptions or governance-level changes.
 
 ---
@@ -39,7 +41,7 @@ pnpm db:setup:test          # Create test database + run migrations
 
 ## Workflow
 
-1. **Fork** the repo (default branch is `staging` — that's correct).
+1. **Fork** the repo.
 
 2. **Clone and set upstream:**
 
@@ -49,11 +51,11 @@ pnpm db:setup:test          # Create test database + run migrations
    git remote add upstream git@github.com:Cogni-DAO/cogni-template.git
    ```
 
-3. **Always branch from staging using Conventional Commit types:**
+3. **Always branch from canary using Conventional Commit types:**
 
    ```bash
-   git checkout staging
-   git reset --hard upstream/staging
+   git checkout canary
+   git reset --hard upstream/canary
    git checkout -b feat/ai-preview-health-checks
    # or: fix/litellm-config-bug, chore/ci-playwright-cache, docs/update-readme, etc.
    ```
@@ -66,9 +68,9 @@ pnpm db:setup:test          # Create test database + run migrations
 
 5. **Use Conventional Commits:** `feat:`, `fix:`, `docs:`, `chore:`
 
-6. **Open PRs to staging only:**
+6. **Open PRs to canary:**
    - Push: `git push origin feat/xyz`
-   - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni-template:staging`
+   - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni-template:canary`
    - PRs to `main` are blocked by design
 
 7. All CI and AI gates must pass for auto-merge.
