@@ -1,10 +1,9 @@
 name: Promote and Deploy
 
 # After Build Multi-Node succeeds: resolve digests from GHCR, update the
-# deploy branch (deploy/canary, deploy/staging, deploy/production),
+# deploy branch (deploy/canary, deploy/preview, deploy/production),
 # deploy Compose infra via SSH, verify health.
-# Canary: direct push to deploy branch (high-churn, no PR noise).
-# Other envs: PR + auto-merge for human-reviewable audit trail.
+# All envs: direct push to deploy branch (git history is the audit trail).
 # App containers are managed by Argo CD (auto-syncs on deploy branch change).
 
 on:
@@ -28,14 +27,13 @@ permissions:
   contents: write
   packages: read
   actions: read
-  pull-requests: write
 
 concurrency:
   group: promote-deploy-${{ github.event.workflow_run.head_branch || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  # ── Promote k8s overlays via deploy-branch PR ───────────────────
+  # ── Promote k8s overlays via direct commit to deploy branch ─────
   promote-k8s:
     runs-on: ubuntu-latest
     if: >-
@@ -70,7 +68,7 @@ jobs:
 
           case "$ENV" in
             canary)     OVERLAY=canary;     DEPLOY_BRANCH=deploy/canary ;;
-            preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/staging ;;
+            preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/preview ;;
             production) OVERLAY=production; DEPLOY_BRANCH=deploy/production ;;
           esac
 
@@ -193,14 +191,12 @@ jobs:
             --app scheduler-worker \
             --digest "${{ steps.digests.outputs.scheduler_worker }}"
 
-      - name: Commit overlay changes to deploy branch
-        id: deploy-pr
+      - name: Commit and push overlay changes to deploy branch
+        id: deploy-push
         env:
-          GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
           OVERLAY_ENV: ${{ steps.env.outputs.overlay }}
           HEAD_SHA: ${{ steps.env.outputs.head_sha }}
           DEPLOY_BRANCH: ${{ steps.env.outputs.deploy_branch }}
-          ENVIRONMENT: ${{ steps.env.outputs.environment }}
         working-directory: deploy-branch
         run: |
           git config user.name "github-actions[bot]"
@@ -212,47 +208,17 @@ jobs:
 
           if git diff --cached --quiet; then
             echo "No overlay changes (digests unchanged)"
-            echo "pr_merged=false" >> $GITHUB_OUTPUT
+            echo "pushed=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          # Canary: direct push (high-churn, no human review needed)
-          if [ "$ENVIRONMENT" = "canary" ]; then
-            git commit -m "promote: canary ${SHORT_SHA}"
-            git push origin HEAD:${DEPLOY_BRANCH}
-            echo "pr_merged=true" >> $GITHUB_OUTPUT
-            echo "✅ Direct push to ${DEPLOY_BRANCH} for canary ${SHORT_SHA}"
-            exit 0
-          fi
-
-          # All other environments: PR + auto-merge flow
-          BRANCH_NAME="promote/${OVERLAY_ENV}-${SHORT_SHA}-$(date +%s)"
-          git checkout -b "$BRANCH_NAME"
-          git commit -m "chore(cd): promote ${OVERLAY_ENV} overlays to ${SHORT_SHA}"
-
-          git push origin "$BRANCH_NAME"
-
-          PR_URL=$(gh pr create \
-            --base "${DEPLOY_BRANCH}" \
-            --head "$BRANCH_NAME" \
-            --title "chore(cd): promote ${OVERLAY_ENV} to ${SHORT_SHA}" \
-            --body "$(cat <<PREOF
-          Automated overlay promotion from app SHA \`${HEAD_SHA}\`.
-
-          **Changes**: Image digests updated for all nodes.
-          **Source**: Build Multi-Node workflow run.
-          **Auto-merge**: This PR will be merged automatically.
-          PREOF
-          )")
-
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-          echo "📋 Deploy PR created: $PR_URL"
-
-          # Merge immediately (deploy branches have no required checks)
-          gh pr merge "$PR_URL" --squash --delete-branch
-
-          echo "pr_merged=true" >> $GITHUB_OUTPUT
-          echo "✅ Deploy PR merged: $PR_URL"
+          # Direct push to deploy branch — all environments.
+          # Deploy branches are machine-written state; git history is the audit trail.
+          # No PRs: they add no review value for automated digest updates.
+          git commit -m "promote: ${OVERLAY_ENV} ${SHORT_SHA}"
+          git push origin HEAD:${DEPLOY_BRANCH}
+          echo "pushed=true" >> $GITHUB_OUTPUT
+          echo "✅ Direct push to ${DEPLOY_BRANCH} for ${OVERLAY_ENV} ${SHORT_SHA}"
 
   # ── Deploy Compose infrastructure ────────────────────────────────
   deploy-infra:

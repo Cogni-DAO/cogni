@@ -1,7 +1,8 @@
 name: E2E Smoke
 
 # Runs Playwright smoke tests after Promote and Deploy succeeds.
-# On staging: E2E success auto-creates a release/* branch + PR to main.
+# On canary success: checks CI status and promotes to preview if eligible.
+# Release PR creation is human-initiated via release.yml (not auto-triggered).
 
 on:
   workflow_run:
@@ -12,7 +13,6 @@ on:
 permissions:
   contents: write
   actions: read
-  pull-requests: write
 
 concurrency:
   group: e2e-${{ github.event.workflow_run.head_branch }}
@@ -39,14 +39,11 @@ jobs:
             echo "Running E2E against $TEST_BASE_URL"
           fi
 
-      # workflow_run.head_sha resolves to the default branch (staging) SHA,
-      # not the canary source SHA. Checkout the actual app branch so we get
-      # the correct test files matching the deployed code.
       - name: Checkout
         if: steps.gate.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Setup Node.js
         if: steps.gate.outputs.skip != 'true'
@@ -97,88 +94,27 @@ jobs:
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
 
-  # ── Canary → staging promotion ───────────────────────────────────
-  # After canary E2E passes, dispatch promote-and-deploy for staging
-  # using the SAME digests (no rebuild). This triggers the staging leg:
-  # promote-and-deploy (staging) → e2e (staging) → promote-release.
-  promote-to-staging:
+  # ── Canary → preview promotion (CI-gated) ────────────────────────
+  # After canary E2E passes, check CI status and promote to preview
+  # if eligible. Preview is a locked snapshot lane — if under review,
+  # only records the candidate SHA for later.
+  promote-to-preview:
     runs-on: ubuntu-latest
     needs: e2e
     if: ${{ github.event.workflow_run.head_branch == 'canary' }}
     steps:
-      - name: Trigger staging deployment with canary digests
-        env:
-          GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
-        run: |
-          echo "Promoting canary SHA ${{ github.event.workflow_run.head_sha }} → staging"
-          gh workflow run promote-and-deploy.yml \
-            --repo "${{ github.repository }}" \
-            --ref staging \
-            -f environment=preview \
-            -f source_sha=${{ github.event.workflow_run.head_sha }}
-
-  # ── Release promotion (staging only) ───────────────────────────
-  # After staging E2E passes, create a release/* branch + PR to main.
-  promote-release:
-    runs-on: ubuntu-latest
-    needs: e2e
-    if: ${{ github.event.workflow_run.head_branch == 'staging' }}
-    steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (for scripts)
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          ref: staging
-          token: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
 
-      - name: Compute release branch name
-        id: meta
-        env:
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          SHORT_SHA=$(echo "$HEAD_SHA" | cut -c1-8)
-          DATE=$(date -u +%Y%m%d)
-          echo "branch=release/${DATE}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-
-      - name: Create and push release branch
-        env:
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          git fetch origin
-          git checkout -B "${{ steps.meta.outputs.branch }}" "$HEAD_SHA"
-          git push origin "${{ steps.meta.outputs.branch }}"
-
-      - name: Create PR body
-        run: |
-          mkdir -p /tmp/pr
-          {
-            echo "## Automated Release Promotion"
-            echo ""
-            echo "### Commits in this release"
-            echo ""
-            git log --oneline origin/main..HEAD
-          } > /tmp/pr/body.md
-
-      - name: Derive PR title
-        id: title
-        run: |
-          git fetch origin main:origin/main
-          COMMITS=$(git log --pretty=%s origin/main..HEAD || true)
-          COUNT=$(printf "%s\n" "$COMMITS" | grep -c . || true)
-          if [ "$COUNT" -eq 1 ]; then
-            SUBJECT=$(printf "%s\n" "$COMMITS" | head -n1 | sed 's/ (#[0-9]\+)$//')
-            echo "title=$SUBJECT" >> $GITHUB_OUTPUT
-          else
-            DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            echo "title=release: $DATE" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create PR release/* -> main
+      - name: Promote to preview (CI-gated, locked snapshot model)
         env:
           GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
         run: |
-          gh pr create \
-            --base main \
-            --head "${{ steps.meta.outputs.branch }}" \
-            --title "${{ steps.title.outputs.title }}" \
-            --body-file /tmp/pr/body.md \
-          || gh pr view --head "${{ steps.meta.outputs.branch }}" >/dev/null
+          scripts/ci/promote-to-preview.sh \
+            "${{ github.event.workflow_run.head_sha }}" \
+            "${{ github.repository }}" \
+            "deploy/preview" \
+            "$GH_TOKEN"
