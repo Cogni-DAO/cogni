@@ -1,182 +1,220 @@
 ---
 id: task.0300
 type: task
-title: "Agent API Key Auth — Actor-Scoped Keys for Completions Endpoint"
-state: design
+title: "API Key Auth — Dual-Mode Bearer + Session on Completions"
+status: needs_implement
 priority: 1
-estimate: 3
-project: proj.agentic-interop
-summary: "Add API key authentication to /api/v1/chat/completions so agents (and CLI tools) can call graph completions without browser sessions. Keys are scoped to actor_id, inheriting billing and rate limits from the actor's billing_account."
+rank: 1
+estimate: 2
+summary: "Add app_api_keys table and dual-mode auth (session OR Bearer key) on /api/v1/chat/completions. Keys bind to user_id → billing_account_id. Enables agents, CLI tools, and external callers to use completions without browser sessions."
+outcome: "curl -H 'Authorization: Bearer sk_live_...' POST /api/v1/chat/completions works. Keys created via session-authenticated endpoint. Charges attributed to key owner's billing account."
+initiative: proj.agentic-interop
 assignees: [derekg1729]
+labels: [identity, auth, api, agents, interop]
+branch: worktree-task-agent-api-keys
+pr:
+reviewer:
 created: 2026-04-06
 updated: 2026-04-06
-labels: [identity, auth, api, agents, interop]
 ---
 
-# Agent API Key Auth — Actor-Scoped Keys for Completions Endpoint
+# API Key Auth — Dual-Mode Bearer + Session on Completions
 
-> Project: [proj.agentic-interop](../../work/projects/proj.agentic-interop.md)
+> Project: [proj.agentic-interop](../../work/projects/proj.agentic-interop.md) P0.0
+> Accelerates: [proj.accounts-api-keys](../../work/projects/proj.accounts-api-keys.md) P3
 > Identity model: [docs/spec/identity-model.md](../../docs/spec/identity-model.md)
-> x402 prototype: PR #646 (`origin/worktree-spike-0220-aimo-x402`)
-> Agent registry: [proj.agent-eval-registry](../../work/projects/proj.agent-eval-registry.md)
+> Accounts spec: [docs/spec/accounts-design.md](../../docs/spec/accounts-design.md)
 
 ## Problem
 
-All `/api/v1/` routes require `getSessionUser()` — a Next.js server-side session cookie. This means:
-
-1. **No programmatic access** — external agents, CLI tools, cron jobs, and other nodes cannot call our completions endpoint
-2. **No agent self-service** — agents cannot provision their own API access as part of their lifecycle
-3. **x402 prototype used a shim** — the x402 spike (PR #646) created a synthetic `SessionUser` from wallet address, acknowledging this gap (`task.0222 replaces with actor_id`)
-
-The identity model already defines `actor_id` (kind: `user | agent | system | org`) as the economic subject that earns, spends, and is attributed. API keys should bind to this primitive.
+All `/api/v1/` routes require `getSessionUser()` — a NextAuth server-side session cookie. External agents, CLI tools, cron jobs, and other nodes cannot call the completions endpoint.
 
 ## Design
 
-### Core: API Keys Bind to Actors
+### Outcome
 
+External callers (agents, CLI tools, curl) can call `POST /api/v1/chat/completions` with `Authorization: Bearer <key>` and get the same behavior as a browser session user — same billing, same graphs, same rate limits.
+
+### Approach
+
+**Solution**: Add `app_api_keys` table (as planned in proj.accounts-api-keys P3), add dual-mode auth resolution to the completions route. Keys bind to `user_id` → resolved to `billing_account_id` via existing `getOrCreateBillingAccountForUser()`. No new billing pipeline, no new identity primitives.
+
+**Reuses**:
+- `extractBearerToken()` + `safeCompare()` from `api/internal/graphs/[graphId]/runs/route.ts` (lines 72-96) — extract to shared utility
+- `getOrCreateBillingAccountForUser()` from AccountService — already resolves user → billing account
+- `wrapRouteHandlerWithLogging` auth modes pattern — add `"dual"` mode
+- `SessionUser` interface from `packages/node-shared` — API key resolution returns same shape
+- `virtual_keys` table already exists with `billingAccountId` FK — no new billing plumbing
+
+**Rejected**:
+- ~~actor_id FK~~ — actors table doesn't exist. Over-designs for future identity model. Bind to `user_id` (what exists), upgrade to `actor_id` when that table lands.
+- ~~argon2id hashing~~ — adds a native dependency. SHA-256 is sufficient for API key verification (keys are high-entropy random tokens, not passwords). LiteLLM and OpenRouter both use SHA-256 for key hashing.
+- ~~New rate limit system~~ — OpenRouter already rate-limits free models globally. Per-key RPM is premature. Use billing account credit check as the existing throttle.
+- ~~Agent self-provisioning / scope delegation~~ — P3+ concern per proj.accounts-api-keys. P0 = user creates keys via session-authenticated endpoint.
+- ~~Separate api_keys package~~ — single table + one adapter function. Shared package boundary not warranted until AccountService port absorbs key management.
+
+### Schema: `app_api_keys` table
+
+Per proj.accounts-api-keys P3 plan (lines 190-193), adapted for immediate use:
+
+```sql
+CREATE TABLE app_api_keys (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key_hash      TEXT NOT NULL,           -- SHA-256 hex digest
+  key_prefix    TEXT NOT NULL,           -- first 8 chars for identification
+  label         TEXT NOT NULL DEFAULT 'Default',
+  active        BOOLEAN NOT NULL DEFAULT true,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  revoked_at    TIMESTAMPTZ
+);
+
+-- RLS: user can only see/manage own keys
+-- Index on key_hash for fast lookup
+CREATE INDEX idx_app_api_keys_hash ON app_api_keys(key_hash) WHERE active = true AND revoked_at IS NULL;
 ```
-┌─────────────────────────────────────────────────────┐
-│  api_keys table                                     │
-│                                                     │
-│  id              UUID PK                            │
-│  actor_id        UUID FK → actors.id                │
-│  key_hash        TEXT NOT NULL (argon2id)            │
-│  key_prefix      TEXT NOT NULL (first 8 chars)       │
-│  display_name    TEXT                                │
-│  scopes          TEXT[] DEFAULT '{completions}'      │
-│  rate_limit_rpm  INT DEFAULT 60                      │
-│  expires_at      TIMESTAMPTZ                         │
-│  revoked_at      TIMESTAMPTZ                         │
-│  last_used_at    TIMESTAMPTZ                         │
-│  created_at      TIMESTAMPTZ DEFAULT NOW()           │
-│                                                     │
-│  CONSTRAINT: billing via actor → billing_account_id  │
-│  RLS: actor's billing_account_id                     │
-└─────────────────────────────────────────────────────┘
-```
 
-**Key format:** `cogni_<actor_kind_prefix>_<random>` (e.g., `cogni_ag_sk_abc123...`, `cogni_usr_sk_xyz789...`)
+**Key format**: `sk_live_<32 random hex chars>` (64 chars total)
+- `sk_live_` prefix identifies it as a Cogni app key in logs/debugging
+- 32 hex chars = 128 bits of entropy (sufficient for API key)
 
-- `cogni_ag_` = agent actor
-- `cogni_usr_` = user actor  
-- `cogni_sys_` = system actor
-- Prefix is parseable for routing/logging but auth always verifies against `key_hash`
+**No billing_account_id column** — resolved at auth time via `getOrCreateBillingAccountForUser(userId)`, same as session auth. Keeps one source of truth for user→billing mapping.
 
-### Auth Flow: Dual-Mode on Completions
+### Auth Resolution: Dual-Mode
 
 ```
 POST /api/v1/chat/completions
+  Authorization: Bearer sk_live_abc123...
   │
-  ├─ Authorization: Bearer cogni_ag_sk_... → API key auth
-  │   1. Extract key from header
-  │   2. Hash, lookup in api_keys (WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > NOW()))
-  │   3. Resolve actor_id → billing_account_id (existing actors table FK)
-  │   4. Construct SessionUser-equivalent context (actor_id, billing_account_id, tenantId)
-  │   5. Proceed to existing completion facade (unchanged)
+  ├─ 1. Check Authorization header
+  │    extractBearerToken(header)  ← reuse from internal route
+  │    if token starts with "sk_live_":
+  │      hash = sha256(token)
+  │      row = SELECT user_id FROM app_api_keys WHERE key_hash = hash AND active AND revoked_at IS NULL
+  │      if row → return SessionUser { id: row.user_id, walletAddress: null, displayName: null, avatarColor: null }
   │
-  └─ Cookie/Session → existing getSessionUser() (unchanged)
+  ├─ 2. Fallback: existing getSessionUser()
+  │    if session → return SessionUser (unchanged)
+  │
+  └─ 3. Neither → 401
 ```
 
-**No changes to the completion facade, graph execution, or billing pipeline.** The API key auth is a new entry point that resolves to the same `billing_account_id` context.
+The completion facade receives the same `SessionUser` type regardless of auth method. **Zero changes to facade, billing, or graph execution.**
 
-### Agent Self-Provisioning
+### Integration Point: `wrapRouteHandlerWithLogging`
 
-Agents with `kind=agent` can create API keys for themselves via tool or API:
+Add a new auth mode `"dual"` that tries Bearer key first, falls back to session:
 
+```typescript
+// New option:
+auth: {
+  mode: "dual",
+  getSessionUser,           // existing session resolver
+  resolveApiKey,            // new: (token: string) => Promise<SessionUser | null>
+}
+```
+
+Only the completions route uses `"dual"` initially. All other routes stay `"required"` (session-only) unchanged.
+
+### API Endpoints
+
+**Create key** (session-authenticated):
 ```
 POST /api/v1/auth/api-keys
-  Authorization: Bearer <parent_key_or_session>
-  Body: { actorId?: UUID, displayName: string, scopes: string[], expiresIn?: string }
-  
-  Response: { keyId: UUID, key: "cogni_ag_sk_...", expiresAt: string }
-  ⚠️ key is returned ONCE — not stored in plaintext
+  Cookie: next-auth session
+  Body: { label?: string }
+  Response: { id: UUID, key: "sk_live_...", keyPrefix: "sk_live_a", label: string, createdAt: string }
+  ⚠️ key returned ONCE — plaintext not stored
 ```
 
-**Scoping rules:**
-- User actors can create keys for themselves
-- User actors can create keys for agent actors they own (where `parent_actor_id` = user's actor)
-- Agent actors can create sub-keys with equal or narrower scopes (delegation)
-- System actors are provisioned by node operators only
-
-### Relationship to Agent Registry
-
-The `graph_registry` (from proj.agent-eval-registry) tracks **what agents exist**. This task tracks **how agents authenticate**. They connect via `actor_id`:
-
+**List keys** (session-authenticated):
 ```
-graph_registry.graph_id  →  registered in catalog (what it does)
-actors.id (kind=agent)   →  api_keys.actor_id (how it authenticates)
-                         →  charge_receipts.actor_id (what it spends)
-                         →  billing_account_id (who pays)
+GET /api/v1/auth/api-keys
+  Cookie: next-auth session
+  Response: { keys: [{ id, keyPrefix, label, active, createdAt, revokedAt }] }
 ```
 
-An agent's lifecycle becomes:
-1. Registered in `graph_registry` (catalog sync from catalog.ts)
-2. `actor_id` created (kind=agent, parent=operator user)
-3. API key provisioned (bound to actor_id)
-4. Agent calls `POST /api/v1/chat/completions` with Bearer key
-5. Charges attributed to actor_id → billing_account_id
-6. Eval scores tracked in Langfuse (keyed by graph_id)
+**Revoke key** (session-authenticated):
+```
+DELETE /api/v1/auth/api-keys/:id
+  Cookie: next-auth session
+  Response: { ok: true }
+  Sets revoked_at = NOW(), active = false
+```
 
-### Relationship to x402
+### Invariants
 
-API key auth and x402 are **complementary, not competing**:
+<!-- CODE REVIEW CRITERIA -->
 
-| Dimension | API Key Auth (this task) | x402 (proj.x402-e2e-migration) |
-|---|---|---|
-| Identity | actor_id (known, registered) | wallet address (pseudonymous) |
-| Payment | Post-pay via billing_account credits | Pre-pay per-request USDC |
-| Use case | Internal agents, CLI tools, node-to-node | External/anonymous agents, cross-org |
-| Auth header | `Authorization: Bearer cogni_...` | `X-Payment: <x402_proof>` |
+- [ ] NO_PLAINTEXT_SECRETS: key_hash stored, plaintext returned once at creation (spec: accounts-design)
+- [ ] NO_CLIENT_LITELLM_KEYS: app keys never reach browser storage or logs (spec: accounts-design)
+- [ ] ONE_USER_ONE_BILLING_ACCOUNT: key → user_id → billing_account via existing resolution (spec: accounts-design)
+- [ ] CUSTOMER_DATA_UNDER_CUSTOMER_ACCOUNT: RLS on app_api_keys by user_id (spec: accounts-design)
+- [ ] ZERO_FACADE_CHANGES: completion facade, billing pipeline, graph execution unchanged
+- [ ] SESSION_AUTH_UNBROKEN: existing session auth on all routes works identically
+- [ ] CONSTANT_TIME_COMPARISON: key hash comparison uses timingSafeEqual (reuse safeCompare)
 
-Both resolve to the same completion facade. The x402 shim from PR #646 (`synthetic SessionUser from wallet`) would instead create/lookup an actor with `kind=agent` and a wallet binding.
+### Files
 
-### Rate Limiting
+**Create:**
+- `packages/db-schema/src/api-keys.ts` — Drizzle schema for `app_api_keys`
+- `packages/db-schema/drizzle/migrations/XXXX_app_api_keys.sql` — migration
+- `nodes/node-template/app/src/bootstrap/http/resolve-api-key.ts` — Bearer → SessionUser resolver (uses extractBearerToken + DB lookup)
+- `nodes/node-template/app/src/app/api/v1/auth/api-keys/route.ts` — CRUD endpoints (POST, GET)
+- `nodes/node-template/app/src/app/api/v1/auth/api-keys/[id]/route.ts` — DELETE (revoke)
 
-Per-key rate limits (stored in `api_keys.rate_limit_rpm`) enforced at the route level:
-- Default: 60 rpm for agent keys, 120 rpm for user keys
-- Free-model keys: subject to OpenRouter global free-tier limits (50 req/day)
-- Checked via Redis sliding window (existing pattern from scheduled runs)
+**Modify:**
+- `nodes/node-template/app/src/bootstrap/http/wrapRouteHandlerWithLogging.ts` — add `"dual"` auth mode
+- `nodes/node-template/app/src/app/api/v1/chat/completions/route.ts` — switch from `auth: "required"` to `auth: "dual"`
+- `packages/db-schema/src/index.ts` — export new schema
 
-## Scope
+**Extract (from internal route → shared):**
+- `extractBearerToken()` and `safeCompare()` from `api/internal/graphs/[graphId]/runs/route.ts` → `packages/node-shared/src/auth/bearer.ts`
 
-### In Scope (P0)
-- `api_keys` table + migration
-- API key create/revoke/list endpoints (`/api/v1/auth/api-keys`)
-- Dual-mode auth on `POST /api/v1/chat/completions` (session OR Bearer key)
-- Key hashing (argon2id), prefix-based identification
-- Per-key rate limiting
-- Audit logging (key usage → existing observability pipeline)
+**Test:**
+- `nodes/operator/app/tests/contract/auth.api-keys.v1.contract.test.ts` — CRUD + key verification
+- `nodes/operator/app/tests/stack/ai/completions-api-key.stack.test.ts` — full round-trip: create key → Bearer auth → completion → charge_receipt
 
-### Out of Scope
-- OAuth 2.1 for MCP (proj.agentic-interop P0.1 — separate task)
-- x402 payment integration (proj.x402-e2e-migration)
-- Agent self-registration in graph_registry (proj.agent-eval-registry)
-- Cross-node key federation
-- Key rotation automation
+### Upgrade Path
+
+When `actors` table lands (identity-model.md):
+- Add `actor_id` column to `app_api_keys` (nullable FK)
+- Key creation resolves `user_id → actor_id` (kind=user)
+- Agent actors (kind=agent) get keys via parent user's session
+- No schema break — `user_id` stays as the stable FK
 
 ## Dependencies
 
-- **actors table must exist** — identity-model.md defines it, need to verify it's deployed
-- **PR #772** (Doltgres in compose) — not blocking, but agent registry alignment
-- **proj.agent-eval-registry** — graph_registry provides the catalog; this task provides the auth
+- **users + billing_accounts tables** — exist on canary ✅
+- **virtual_keys table** — exists, used for billing attribution ✅
+- **wrapRouteHandlerWithLogging** — exists, needs dual mode addition
+- **extractBearerToken / safeCompare** — exist in internal route, need extraction
 
 ## Test Plan
 
-1. **Contract test:** API key CRUD (create, list, revoke)
-2. **Contract test:** Bearer auth on completions → resolves actor_id → billing_account_id
-3. **Contract test:** Revoked/expired keys return 401
-4. **Contract test:** Rate limit enforcement (Redis sliding window)
-5. **Stack test:** Full round-trip — create key → call completions → verify charge_receipt has actor_id
-6. **Stack test:** Agent creates sub-key for itself (delegation)
-7. **Negative:** Session auth still works (no regression)
-8. **Negative:** Invalid/malformed keys return 401 (not 500)
+1. **Contract:** Create key → verify hash stored, plaintext NOT stored
+2. **Contract:** List keys → returns prefix only, not hash or plaintext
+3. **Contract:** Revoke key → sets revoked_at, active=false
+4. **Contract:** Bearer auth with valid key → resolves to correct user_id
+5. **Contract:** Bearer auth with revoked key → 401
+6. **Contract:** Bearer auth with invalid key → 401
+7. **Contract:** Session auth still works on completions (no regression)
+8. **Stack:** Create key via session → use key for Bearer completion → verify charge_receipt.billingAccountId matches user's account
 
-## Security Considerations
+## Security
 
-- Keys hashed with argon2id (not bcrypt — faster verification for per-request auth)
-- Plaintext key returned only at creation time
-- `key_prefix` stored for identification in logs/UI (never the full key)
-- RLS on api_keys via billing_account_id (tenant isolation)
-- Constant-time comparison for key verification
-- Max key length: 256 bytes (prevent abuse)
-- Keys inherit actor's billing_account RLS — no cross-tenant access
+- SHA-256 for key hashing (high-entropy tokens, not passwords — argon2id unnecessary)
+- Constant-time hash comparison via `timingSafeEqual`
+- Plaintext shown once at creation, never stored or logged
+- `key_prefix` (first 8 chars) stored for identification in UI/logs
+- RLS enforces user can only see/manage own keys
+- Max auth header length: 512 bytes (reuse from internal route)
+- Max token length: 256 bytes (reuse from internal route)
+
+## Validation
+
+- [ ] `pnpm check:fast` passes
+- [ ] Contract tests for key CRUD + Bearer auth resolution
+- [ ] Stack test: create key → Bearer completion → charge_receipt attributed to correct billing account
+- [ ] Session auth on completions works identically (no regression)
+- [ ] Revoked/invalid keys return 401
