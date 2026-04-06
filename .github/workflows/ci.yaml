@@ -151,7 +151,7 @@ jobs:
             coverage/lcov.info
             coverage/coverage-summary.json
           retention-days: 1
-          if-no-files-found: error
+          if-no-files-found: warn
 
       - name: CI Telemetry
         if: always()

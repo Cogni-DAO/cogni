@@ -22,7 +22,7 @@ export default [
       "*.config.cjs",
       "test*/**/fixtures/**",
       "**/__arch_probes__/**",
-      "nodes/operator/app/src/components/reui/**",
+      "nodes/*/app/src/components/reui/**",
       "**/*.md",
       "**/*.css",
       "**/.env*",
@@ -33,9 +33,9 @@ export default [
   // Parser config for UI files ONLY - no rules, just enables TS/JSX parsing
   {
     files: [
-      "nodes/operator/app/src/**/*.{ts,tsx}",
+      "nodes/*/app/src/**/*.{ts,tsx}",
       "tests/**/*.{ts,tsx}",
-      "nodes/operator/app/tests/**/*.{ts,tsx}",
+      "nodes/*/app/tests/**/*.{ts,tsx}",
     ],
     languageOptions: {
       parser: tsParser,
