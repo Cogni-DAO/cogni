@@ -41,7 +41,12 @@ import {
   buildScopedEnv,
   type CodexMcpConfig,
   generateConfigToml,
+  withInternalToolBridge,
 } from "./codex-mcp-config";
+import {
+  generateRunToken,
+  deleteRunToken,
+} from "@/mcp/run-scope-store";
 
 const log = makeLogger({ component: "CodexLlmAdapter" });
 
@@ -64,7 +69,14 @@ const log = makeLogger({ component: "CodexLlmAdapter" });
 export class CodexLlmAdapter implements LlmService {
   constructor(
     private readonly connection: ResolvedConnection,
-    private readonly mcpConfig?: CodexMcpConfig
+    private readonly mcpConfig?: CodexMcpConfig,
+    /** Per bug.0300: run context for internal MCP tool bridge */
+    private readonly runContext?: {
+      readonly runId: string;
+      readonly userId: string;
+      readonly graphId: string;
+      readonly toolIds: readonly string[];
+    }
   ) {}
 
   async completion(
@@ -87,20 +99,33 @@ export class CodexLlmAdapter implements LlmService {
     const connection = this.connection;
     const callLog = log.child({ model: params.model });
 
-    // NO_SILENT_TOOL_DROP: Log when tools are passed but cannot be used via params.tools.
-    // Codex uses MCP tools natively via config.toml, NOT via OpenAI function-calling format.
+    // Per bug.0300: tools are now available via internal MCP bridge (cogni_tools in config.toml).
+    // Downgrade to info when bridge is configured; keep warning when bridge absent (operator fault).
+    const hasMcpBridge =
+      this.mcpConfig && "cogni_tools" in this.mcpConfig;
     if (params.tools && params.tools.length > 0) {
-      callLog.warn(
-        {
-          toolCount: params.tools.length,
-          mcpServerCount: this.mcpConfig
-            ? Object.keys(this.mcpConfig).length
-            : 0,
-        },
-        "INVARIANT_DEVIATION: TOOLS_VIA_TOOLRUNNER — Codex adapter received tools via params.tools " +
-          "but cannot use OpenAI function-calling format. Tools stripped from LLM request. " +
-          "MCP tools available via config.toml."
-      );
+      if (hasMcpBridge) {
+        callLog.info(
+          {
+            toolCount: params.tools.length,
+            mcpBridge: true,
+          },
+          "Tools available via internal MCP bridge (cogni_tools). " +
+            "OpenAI function-calling format not used; Codex accesses tools via config.toml MCP."
+        );
+      } else {
+        callLog.warn(
+          {
+            toolCount: params.tools.length,
+            mcpServerCount: this.mcpConfig
+              ? Object.keys(this.mcpConfig).length
+              : 0,
+          },
+          "INVARIANT_DEVIATION: TOOLS_VIA_TOOLRUNNER — Codex adapter received tools via params.tools " +
+            "but no internal MCP bridge configured. Tools will NOT be available to Codex. " +
+            "Ensure cogni_tools MCP server is configured via withInternalToolBridge()."
+        );
+      }
     }
 
     type Deferred<T> = {
@@ -120,11 +145,25 @@ export class CodexLlmAdapter implements LlmService {
 
     const deferred = defer<LlmCompletionResult>();
 
+    // Per bug.0300: inject internal MCP tool bridge with ephemeral token
+    let effectiveMcpConfig = this.mcpConfig;
+    let mcpToken: string | undefined;
+    if (this.runContext) {
+      mcpToken = generateRunToken({
+        runId: this.runContext.runId,
+        userId: this.runContext.userId,
+        graphId: this.runContext.graphId,
+        toolIds: [...this.runContext.toolIds],
+      });
+      effectiveMcpConfig = withInternalToolBridge(effectiveMcpConfig);
+    }
+
     const stream = runCodexExec({
       messages: params.messages,
       ...(params.model ? { model: params.model } : {}),
       connection,
-      ...(this.mcpConfig ? { mcpConfig: this.mcpConfig } : {}),
+      ...(effectiveMcpConfig ? { mcpConfig: effectiveMcpConfig } : {}),
+      ...(mcpToken ? { mcpToken } : {}),
       log: callLog,
       onResult: deferred.resolve,
       onError: deferred.reject,
@@ -143,6 +182,7 @@ async function* runCodexExec(params: {
   model?: string;
   connection: ResolvedConnection;
   mcpConfig?: CodexMcpConfig;
+  mcpToken?: string;
   log: Logger;
   onResult: (r: LlmCompletionResult) => void;
   onError: (e: unknown) => void;
@@ -153,6 +193,7 @@ async function* runCodexExec(params: {
     model,
     connection,
     mcpConfig,
+    mcpToken,
     log: callLog,
     onResult,
     onError,
@@ -208,6 +249,10 @@ async function* runCodexExec(params: {
     const { env: currentEnv } = await import("node:process");
     const envRecord = buildScopedEnv(currentEnv, mcpConfig);
     envRecord.HOME = tempDir;
+    // Per bug.0300: inject ephemeral MCP token into scoped env
+    if (mcpToken) {
+      envRecord.COGNI_MCP_TOKEN = mcpToken;
+    }
 
     const codex = new Codex({
       env: envRecord,
@@ -337,6 +382,10 @@ async function* runCodexExec(params: {
     yield { type: "done" } as ChatDeltaEvent;
   } finally {
     rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    // Per bug.0300: clean up ephemeral MCP token
+    if (mcpToken) {
+      deleteRunToken(mcpToken);
+    }
   }
 }
 
