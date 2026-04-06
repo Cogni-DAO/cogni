@@ -110,14 +110,14 @@ jobs:
       # ── Turbo: per-workspace app + package tests ────────────────
       - name: App tests (affected)
         if: github.event_name == 'pull_request'
-        run: pnpm turbo run test --affected
+        run: pnpm turbo run test --affected --concurrency=1
         env:
           TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
           TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: App tests (full)
         if: github.event_name != 'pull_request'
-        run: pnpm turbo run test
+        run: pnpm turbo run test --concurrency=1
 
       # ── Root-level checks (not per-workspace, always run) ───────
       - name: Repository policy check

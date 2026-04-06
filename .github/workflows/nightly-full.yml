@@ -60,7 +60,7 @@ jobs:
           TURBO_FORCE: "true"
 
       - name: App tests (all workspaces)
-        run: pnpm turbo run test --force
+        run: pnpm turbo run test --force --concurrency=1
         env:
           TURBO_FORCE: "true"
 
