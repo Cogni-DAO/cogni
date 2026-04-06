@@ -31,6 +31,26 @@ Depends on:
 - task.0286 (eval harness) — Langfuse datasets/scores must exist before `eval:registry` can query them
 - Doltgres running in canary (`DOLTGRES_CONNECTION_STRING` in env)
 
+## Design Review Findings
+
+Architecture review (2026-04-06) raised these points for implementation:
+
+### 1. Package placement: knowledge-store is acceptable for P0
+
+With only `graph_registry` + `sync_state` (no eval tables — Langfuse owns those), extending `@cogni/knowledge-store` is proportionate. A separate `packages/eval-registry/` is warranted only if eval tables move to Doltgres later (P1+).
+
+### 2. Verify TEXT[] in Doltgres before using for tool_ids
+
+The Doltgres spike (task.0231) tested JSONB, TEXT, INTEGER, TIMESTAMPTZ. `TEXT[]` is untested. Fallback: `tool_ids JSONB DEFAULT '[]'` with the same `LIKE '%"tool"%'` workaround used for knowledge table tags.
+
+### 3. Sync is bootstrap + CLI (confirmed)
+
+Runs on container start before app accepts traffic. CLI for manual use. Hash-based skip prevents wasted commits. If sync fails: log warning, continue (stale registry is degraded, not fatal).
+
+### 4. Cross-node catalog (P1 — in project, not this task)
+
+The cross-node `knowledge_registry` DB with `catalog_entries`, `access_policies`, `index_cursors` is designed and tracked in `proj.agent-eval-registry` P1 section. Invariant: `CROSS_NODE_VIA_REGISTRY_ONLY` — cross-node reads go through `RegistryCapability`, never direct cross-DB queries.
+
 ## Validation
 
 ```bash
