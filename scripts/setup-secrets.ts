@@ -401,6 +401,18 @@ const SECRETS: Secret[] = [
     steps: ["Generate a new token", "Copy the full value"],
   },
 
+  // ── Optional: BYO-AI Connection Encryption ─────────────────────────────
+  {
+    name: "CONNECTIONS_ENCRYPTION_KEY",
+    required: false,
+    category: "BYO-AI (Connection Security)",
+    source: "agent",
+    description:
+      "AES-256 key for encrypting stored OAuth tokens (Codex, ChatGPT, etc.)",
+    steps: ["Auto-generated 32-byte hex key"],
+    generate: () => randHex(32),
+  },
+
   // ── Optional: GitHub App (PR Review Bot) ───────────────────────────────
   {
     name: "GH_REVIEW_APP_ID",
@@ -423,6 +435,19 @@ const SECRETS: Secret[] = [
       "General tab -> Generate a private key",
       "Then run: base64 -w0 < downloaded-key.pem",
       "Paste the base64 output",
+    ],
+  },
+
+  {
+    name: "GH_REPOS",
+    required: false,
+    category: "GitHub App (PR Review)",
+    source: "human",
+    description:
+      "Comma-separated list of repos for webhook registration + activity sources",
+    steps: [
+      'e.g. "Cogni-DAO/node-template,Cogni-DAO/openclaw"',
+      "Used by scheduler-worker GitHub activity source adapter",
     ],
   },
 
