@@ -92,7 +92,7 @@ export function generateConfigToml(config: CodexMcpConfig): string | undefined {
     }
     sections.push(lines.join("\n"));
   }
-  return sections.length > 0 ? sections.join("\n\n") + "\n" : undefined;
+  return sections.length > 0 ? `${sections.join("\n\n")}\n` : undefined;
 }
 
 /**

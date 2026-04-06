@@ -12,8 +12,6 @@
  * @internal
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
-
 import {
   capture,
   getBuffer,
@@ -23,6 +21,7 @@ import {
   resetAnalytics,
   shutdownAnalytics,
 } from "@cogni/node-shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 /** Creates a mock PostHog client that records calls. */
 function createMockClient(): PostHogClient & {

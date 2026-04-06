@@ -12,11 +12,10 @@
  * @public
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
 // Import from package path
 import * as clientLogger from "@cogni/node-shared";
 import { EVENT_NAMES } from "@cogni/node-shared";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("clientLogger", () => {
   // Store original console methods

@@ -20,6 +20,8 @@
 
 import { isAiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
+import { aiChatOperation, type ChatInput } from "@cogni/node-contracts";
+import { ChatValidationError } from "@cogni/node-shared";
 import type { UIMessage, UIMessageChunk } from "ai";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { nanoid } from "nanoid";
@@ -28,10 +30,6 @@ import { executionErrorToHttpStatus } from "@/app/_facades/ai/execution-error-ma
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import {
-  aiChatOperation,
-  type ChatInput,
-} from "@cogni/node-contracts";
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import {
   redactSecretsInMessages,
@@ -42,7 +40,6 @@ import {
   isLlmError,
   ThreadConflictError,
 } from "@/ports";
-import { ChatValidationError } from "@cogni/node-shared";
 import {
   aiChatStreamDurationMs,
   logRequestWarn,

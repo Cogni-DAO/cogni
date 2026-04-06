@@ -23,12 +23,11 @@ import {
   computeReceiptWeights,
   explodeToClaimants,
 } from "@cogni/attribution-ledger";
-
-import { getContainer } from "@/bootstrap/container";
 import type {
   EpochClaimantLineItemDto,
   EpochClaimantsOutput,
 } from "@cogni/node-contracts";
+import { getContainer } from "@/bootstrap/container";
 
 function toLineItemDto(params: {
   claimant: AttributionClaimant;

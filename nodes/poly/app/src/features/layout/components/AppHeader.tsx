@@ -23,10 +23,10 @@ import { TreasuryBadge } from "@/features/treasury/components/TreasuryBadge";
 
 export function AppHeader(): ReactElement {
   return (
-    <header className="border-border bg-background border-b py-3">
+    <header className="border-border border-b bg-background py-3">
       <a
         href="#main"
-        className="focus:bg-background focus:text-foreground sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:p-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-background focus:p-2 focus:text-foreground"
       >
         Skip to main content
       </a>
@@ -42,8 +42,8 @@ export function AppHeader(): ReactElement {
               aria-current="page"
               className="flex min-w-0 items-center gap-2 pl-4 sm:pl-0"
             >
-              <Activity className="text-primary size-5 shrink-0" />
-              <span className="hidden truncate text-xl font-bold md:inline">
+              <Activity className="size-5 shrink-0 text-primary" />
+              <span className="hidden truncate font-bold text-xl md:inline">
                 cogni<span className="text-primary">/poly</span>
               </span>
             </Link>
@@ -60,7 +60,7 @@ export function AppHeader(): ReactElement {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Cogni on GitHub"
-              className="text-muted-foreground hover:text-foreground hidden transition-colors lg:inline-flex"
+              className="hidden text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
             >
               <Github className="size-4" strokeWidth={1.5} aria-hidden="true" />
             </a>

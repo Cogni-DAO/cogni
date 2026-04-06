@@ -12,8 +12,8 @@
  * @internal
  */
 
-import { describe, expect, it } from "vitest";
 import { AssistantUiInputSchema } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("ai.chat.v1 contract validation", () => {
   describe("valid inputs", () => {

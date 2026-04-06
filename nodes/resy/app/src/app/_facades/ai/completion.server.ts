@@ -24,18 +24,16 @@
 import { createHash } from "node:crypto";
 import { AiExecutionError } from "@cogni/ai-core";
 import { toUserId } from "@cogni/ids";
+import type { ChatCompletionOutput, ChatMessage } from "@cogni/node-contracts";
+import type { SessionUser } from "@cogni/node-shared";
+import { EVENT_NAMES } from "@cogni/node-shared";
 import { WorkflowExecutionAlreadyStartedError } from "@temporalio/client";
 import {
   getContainer,
   getTemporalWorkflowClient,
   resolveAiAdapterDeps,
 } from "@/bootstrap/container";
-import type {
-  ChatCompletionOutput,
-  ChatMessage,
-} from "@cogni/node-contracts";
 import { mapAccountsPortErrorToFeature } from "@/features/accounts/public";
-import { getNodeId } from "@/shared/config";
 // Types from client-safe barrel (types only, no runtime)
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
 // Import from public.server.ts - never from services/* directly (dep-cruiser enforced)
@@ -46,9 +44,8 @@ import {
   isInsufficientCreditsPortError,
   isVirtualKeyNotFoundPortError,
 } from "@/ports";
-import type { SessionUser } from "@cogni/node-shared";
+import { getNodeId } from "@/shared/config";
 import type { RequestContext } from "@/shared/observability";
-import { EVENT_NAMES } from "@cogni/node-shared";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default graph for requests that don't specify one

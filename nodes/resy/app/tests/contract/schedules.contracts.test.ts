@@ -14,17 +14,17 @@
  */
 
 import {
+  ScheduleCreateInputSchema,
+  ScheduleResponseSchema,
+  ScheduleUpdateInputSchema,
+  schedulesListOperation,
+} from "@cogni/node-contracts";
+import {
   createSchedulePayload,
   createScheduleUpdatePayload,
   INVALID_PAYLOADS,
 } from "@tests/_fixtures/scheduling/fixtures";
 import { describe, expect, it } from "vitest";
-import {
-  ScheduleCreateInputSchema,
-  ScheduleResponseSchema,
-  schedulesListOperation,
-  ScheduleUpdateInputSchema,
-} from "@cogni/node-contracts";
 
 describe("schedules.create.v1 contract", () => {
   describe("ScheduleCreateInputSchema", () => {

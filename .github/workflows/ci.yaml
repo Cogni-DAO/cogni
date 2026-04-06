@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [canary, staging, main]
+    branches: [canary, main]
 
 permissions:
   contents: read
@@ -24,8 +24,33 @@ env:
   TEMPORAL_TASK_QUEUE: scheduler-tasks
 
 jobs:
-  # Fast gate: install → typecheck → lint
-  static:
+  # ── Scope detection (parallel, ~10s) ─────────────────────────────
+  # Determines whether expensive jobs (component, stack-test) are needed.
+  # Fail-open: if git diff fails, assume code changed and run everything.
+  scope-detect:
+    runs-on: ubuntu-latest
+    outputs:
+      code-changed: ${{ steps.detect.outputs.code }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+      - id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="HEAD~1"
+          fi
+          CHANGED=$(git diff --name-only "$BASE"...HEAD 2>/dev/null || echo "UNKNOWN")
+          if [ "$CHANGED" = "UNKNOWN" ] || echo "$CHANGED" | grep -qE '^(nodes/|packages/|services/|infra/|tests/)'; then
+            echo "code=true" >> $GITHUB_OUTPUT
+          else
+            echo "code=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ── Checks (merged static + unit) ───────────────────────────────
+  # Turbo --affected on PRs for typecheck/lint/test (skip unaffected workspaces).
+  # Full suite on push to protected branches (no --affected).
+  checks:
     runs-on: ubuntu-latest
     env:
       NODE_ENV: test
@@ -42,6 +67,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          # PRs: turbo --affected needs git history for diff
+          # Pushes: shallow is fine (full suite, no --affected)
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
 
       - name: Fetch base branch for turbo --affected
         if: github.event_name == 'pull_request'
@@ -57,60 +86,35 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # ── Build packages (NOT turbo — avoids next build on apps) ──
       - name: Build workspace packages
         run: pnpm packages:build
 
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: CI Telemetry
-        if: always()
-        uses: ./.github/actions/loki-ci-telemetry
-        with:
-          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
-          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
-          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
-          job_status: ${{ job.status }}
-
-  unit:
-    runs-on: ubuntu-latest
-    needs: static
-    env:
-      NODE_ENV: test
-      LITELLM_MASTER_KEY: build-key
-      AUTH_SECRET: tNf5lFM9yMhdgwS5yeQB8Y2kmigblBqobkvI2XN2brg=
-      SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
-      BILLING_INGEST_TOKEN: test-billing-ingest-token-for-ci-min32ch
-      INTERNAL_OPS_TOKEN: test-internal-ops-token-for-ci-min32
-      OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
-      OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
-      DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
-      POSTHOG_API_KEY: phc_test_key_for_ci
-      POSTHOG_HOST: http://localhost:18000
-
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
-
-      - name: Fetch base branch for turbo --affected
+      # ── Turbo: typecheck + lint ─────────────────────────────────
+      - name: Typecheck + Lint (affected)
         if: github.event_name == 'pull_request'
-        run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=1
+        run: pnpm turbo run typecheck lint --affected
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
-      - uses: pnpm/action-setup@c5ba7f7862a0f64c1b1a05fbac13e0b8e86ba08c # v4
+      - name: Typecheck + Lint (full)
+        if: github.event_name != 'pull_request'
+        run: pnpm turbo run typecheck lint
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+      # ── Turbo: per-workspace app + package tests ────────────────
+      - name: App tests (affected)
+        if: github.event_name == 'pull_request'
+        run: pnpm turbo run test --affected
+        env:
+          TURBO_SCM_BASE: ${{ github.event.pull_request.base.sha }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: App tests (full)
+        if: github.event_name != 'pull_request'
+        run: pnpm turbo run test
 
-      - name: Build workspace packages
-        run: pnpm packages:build
-
+      # ── Root-level checks (not per-workspace, always run) ───────
       - name: Repository policy check
         run: pnpm check:root-layout
 
@@ -132,6 +136,9 @@ jobs:
       - name: Architecture check
         run: pnpm arch:check
 
+      # ── Root tests + SonarCloud coverage ────────────────────────
+      # Runs root vitest.config.mts (packages/*/tests, services/*/tests, tests/)
+      # Disjoint from turbo test (which runs per-workspace app configs)
       - name: Unit + contract coverage tests
         run: pnpm test:ci
 
@@ -155,9 +162,11 @@ jobs:
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
 
+  # ── Component tests (conditional on code changes) ───────────────
   component:
     runs-on: ubuntu-latest
-    needs: static
+    needs: [checks, scope-detect]
+    if: needs.scope-detect.outputs.code-changed == 'true'
     env:
       NODE_ENV: test
       LITELLM_MASTER_KEY: build-key
@@ -214,10 +223,11 @@ jobs:
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
 
+  # ── SonarCloud analysis ─────────────────────────────────────────
   sonar:
     runs-on: ubuntu-latest
-    needs: unit
-    if: needs.unit.result == 'success'
+    needs: checks
+    if: needs.checks.result == 'success'
     permissions:
       contents: read
       pull-requests: write # Required for PR decoration
@@ -254,9 +264,11 @@ jobs:
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
 
+  # ── Stack tests (conditional on code changes) ───────────────────
   stack-test:
     runs-on: ubuntu-latest
-    needs: static
+    needs: [checks, scope-detect]
+    if: needs.scope-detect.outputs.code-changed == 'true'
     env:
       NODE_ENV: test
       APP_ENV: test

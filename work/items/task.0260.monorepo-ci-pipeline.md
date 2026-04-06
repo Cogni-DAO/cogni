@@ -2,7 +2,7 @@
 id: task.0260
 type: task
 title: "Monorepo CI pipeline — affected-scope testing + multi-node test lane"
-status: needs_design
+status: needs_implement
 priority: 0
 rank: 2
 estimate: 5
@@ -12,7 +12,7 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch:
+branch: feat/task-0260-turborepo-ci
 pr:
 reviewer:
 revision: 0

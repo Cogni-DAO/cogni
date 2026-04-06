@@ -14,13 +14,13 @@
  */
 
 import { toUserId } from "@cogni/ids";
-import type { z } from "zod";
-import { getContainer } from "@/bootstrap/container";
 import type {
   listThreadsOperation,
   loadThreadOperation,
 } from "@cogni/node-contracts";
 import type { SessionUser } from "@cogni/node-shared";
+import type { z } from "zod";
+import { getContainer } from "@/bootstrap/container";
 
 type ListThreadsInput = {
   sessionUser: SessionUser;

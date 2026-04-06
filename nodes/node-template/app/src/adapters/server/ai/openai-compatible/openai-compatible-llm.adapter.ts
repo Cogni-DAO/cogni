@@ -16,6 +16,11 @@
  * @internal
  */
 
+import {
+  computePromptHash,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_TEMPERATURE,
+} from "@cogni/node-shared";
 import { createParser, type EventSourceMessage } from "eventsource-parser";
 import { humanizeModelId } from "@/adapters/server/ai/providers/openai-compatible.provider";
 import {
@@ -25,11 +30,6 @@ import {
   type LlmService,
   type LlmToolCall,
 } from "@/ports";
-import {
-  computePromptHash,
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_TEMPERATURE,
-} from "@cogni/node-shared";
 import { makeLogger } from "@/shared/observability";
 
 const log = makeLogger({ component: "OpenAiCompatibleAdapter" });
@@ -138,7 +138,9 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
     const result: Awaited<ReturnType<LlmService["completion"]>> = {
       message: {
         role: "assistant",
-        content: data.choices[0]!.message!.content!,
+        // biome-ignore lint/style/noNonNullAssertion: required by OpenAI API shape
+        // biome-ignore lint/suspicious/noNonNullAssertedOptionalChain: OpenAI response always has choices[0]
+        content: data.choices[0]?.message?.content!,
       },
       usage: {
         promptTokens,
@@ -152,8 +154,8 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       resolvedDisplayName: humanizeModelId(resolvedModel),
     };
 
-    if (data.choices[0]!.finish_reason) {
-      result.finishReason = data.choices[0]!.finish_reason;
+    if (data.choices[0]?.finish_reason) {
+      result.finishReason = data.choices[0]?.finish_reason;
     }
 
     log.info(
@@ -341,6 +343,7 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
           streamParser.feed(decoder.decode(value, { stream: true }));
 
           while (eventQueue.length > 0) {
+            // biome-ignore lint/style/noNonNullAssertion: shift guaranteed non-empty by while guard
             const event = eventQueue.shift()!;
             if (event.data === "[DONE]") continue;
 
@@ -391,6 +394,7 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
                   };
                 }
                 if (tc.function?.arguments) {
+                  // biome-ignore lint/style/noNonNullAssertion: initialized in preceding if-block for this index
                   toolCallAccum[tc.index]!.args += tc.function.arguments;
                 }
               }

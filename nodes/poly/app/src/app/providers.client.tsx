@@ -13,20 +13,19 @@
 
 "use client";
 
-import { AuthProvider, QueryProvider } from "@cogni/node-app/providers";
+import {
+  AuthProvider,
+  createAppDarkTheme,
+  createAppLightTheme,
+  QueryProvider,
+} from "@cogni/node-app/providers";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { RainbowKitSiweNextAuthProvider } from "@rainbow-me/rainbowkit-siwe-next-auth";
 import { useTheme } from "next-themes";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { WagmiProvider } from "wagmi";
-
 import { wagmiConfig } from "@/shared/web3/wagmi.config";
-
-import {
-  createAppDarkTheme,
-  createAppLightTheme,
-} from "@cogni/node-app/providers";
 
 function RainbowKitThemeProvider({
   children,
@@ -45,7 +44,7 @@ function RainbowKitThemeProvider({
       mounted && resolvedTheme === "light"
         ? createAppLightTheme()
         : createAppDarkTheme(),
-    [mounted, resolvedTheme],
+    [mounted, resolvedTheme]
   );
 
   return <RainbowKitProvider theme={theme}>{children}</RainbowKitProvider>;

@@ -13,12 +13,12 @@
  */
 
 import { toUserId } from "@cogni/ids";
-import { getContainer } from "@/bootstrap/container";
 import type { CreditsSummaryOutput } from "@cogni/node-contracts";
+import type { SessionUser } from "@cogni/node-shared";
+import { getContainer } from "@/bootstrap/container";
 import { AuthUserNotFoundError } from "@/features/payments/errors";
 import { getCreditsSummary } from "@/features/payments/services/creditsSummary";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { SessionUser } from "@cogni/node-shared";
 import type { RequestContext } from "@/shared/observability";
 
 export async function getCreditsSummaryFacade(

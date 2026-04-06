@@ -12,9 +12,9 @@
  * @internal
  */
 
+import { aiModelsOperation } from "@cogni/node-contracts";
 import { loadModelsFixture } from "@tests/_fixtures/ai/fixtures";
 import { describe, expect, it } from "vitest";
-import { aiModelsOperation } from "@cogni/node-contracts";
 
 describe("ai.models.v1 contract validation", () => {
   it("should parse fixture via contract schema without errors", () => {
@@ -94,8 +94,8 @@ describe("ai.models.v1 contract validation", () => {
     if (fixture.defaultRef) {
       const match = fixture.models.find(
         (m) =>
-          m.ref.providerKey === fixture.defaultRef!.providerKey &&
-          m.ref.modelId === fixture.defaultRef!.modelId
+          m.ref.providerKey === fixture.defaultRef?.providerKey &&
+          m.ref.modelId === fixture.defaultRef?.modelId
       );
       expect(match).toBeDefined();
     }

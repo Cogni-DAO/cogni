@@ -10,28 +10,27 @@
  * @public
  */
 
-// --- App-local: server logger/metrics/redact (pino + prom-client runtime deps) ---
-export * from "./server";
-
 // --- Extracted: events, context, client (from @cogni/node-shared) ---
 // NOTE: logEvent/logRequestWarn/etc. come through ./server (which re-exports from @cogni/node-shared)
 export {
+  // Event payload types
+  type AiActivityQueryCompletedEvent,
+  type AiLlmCallEvent,
+  type Clock,
   // Client-side logging
   clientLogger,
   // Context
   createRequestContext,
-  type Clock,
-  type RequestContext,
   // Event registry
   EVENT_NAMES,
   type EventBase,
   type EventName,
-  // Event payload types
-  type AiActivityQueryCompletedEvent,
-  type AiLlmCallEvent,
   type PaymentsConfirmedEvent,
   type PaymentsIntentCreatedEvent,
   type PaymentsStateTransitionEvent,
   type PaymentsStatusReadEvent,
   type PaymentsVerifiedEvent,
+  type RequestContext,
 } from "@cogni/node-shared";
+// --- App-local: server logger/metrics/redact (pino + prom-client runtime deps) ---
+export * from "./server";

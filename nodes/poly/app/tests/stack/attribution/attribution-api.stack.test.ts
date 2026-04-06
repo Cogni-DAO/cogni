@@ -13,17 +13,17 @@
  */
 
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
-import type { SeededClosedEpoch } from "@tests/_fixtures/attribution/seed-attribution";
-import { seedClosedEpoch } from "@tests/_fixtures/attribution/seed-attribution";
-import { getSeedDb } from "@tests/_fixtures/db/seed-client";
-import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
-import { beforeAll, describe, expect, it } from "vitest";
 import {
   EpochClaimantsOutputSchema,
   EpochStatementOutputSchema,
   EpochUserProjectionsOutputSchema,
   ListEpochsOutputSchema,
 } from "@cogni/node-contracts";
+import type { SeededClosedEpoch } from "@tests/_fixtures/attribution/seed-attribution";
+import { seedClosedEpoch } from "@tests/_fixtures/attribution/seed-attribution";
+import { getSeedDb } from "@tests/_fixtures/db/seed-client";
+import { fetchStackTest } from "@tests/_fixtures/http/rate-limit-helpers";
+import { beforeAll, describe, expect, it } from "vitest";
 import { users } from "@/shared/db/schema";
 
 // ---------------------------------------------------------------------------

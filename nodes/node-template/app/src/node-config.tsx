@@ -1,3 +1,4 @@
+import type { NodeAppConfig } from "@cogni/node-app/extensions";
 import {
   Briefcase,
   CreditCard,
@@ -5,8 +6,6 @@ import {
   LayoutDashboard,
   Vote,
 } from "lucide-react";
-
-import type { NodeAppConfig } from "@cogni/node-app/extensions";
 
 /** Inline Discord icon — lucide-react does not include one. */
 function DiscordIcon({ className }: { className?: string }) {

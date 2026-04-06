@@ -13,6 +13,8 @@
  */
 
 import { randomUUID } from "node:crypto";
+import type { SessionUser } from "@cogni/node-shared";
+import { CHAIN_ID } from "@cogni/node-shared";
 import { makeTestCtx } from "@tests/_fakes";
 import { seedAuthenticatedUser } from "@tests/_fixtures/auth/db-helpers";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
@@ -27,9 +29,7 @@ import {
   getPaymentStatusFacade,
   submitPaymentTxHashFacade,
 } from "@/app/_facades/payments/attempts.server";
-import type { SessionUser } from "@cogni/node-shared";
 import { creditLedger, paymentAttempts } from "@/shared/db/schema";
-import { CHAIN_ID } from "@cogni/node-shared";
 
 describe("MVP Payment Scenarios (9 critical flows)", () => {
   let testUserId: string;

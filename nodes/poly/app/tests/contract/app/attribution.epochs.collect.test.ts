@@ -15,13 +15,13 @@
  * @internal
  */
 
-import { TEST_SESSION_USER_1 } from "@tests/_fakes/ids";
-import { testApiHandler } from "next-test-api-route-handler";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CollectTriggerCooldownResponseSchema,
   CollectTriggerResponseSchema,
 } from "@cogni/node-contracts";
+import { TEST_SESSION_USER_1 } from "@tests/_fakes/ids";
+import { testApiHandler } from "next-test-api-route-handler";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock session authentication
 vi.mock("@/app/_lib/auth/session", () => ({

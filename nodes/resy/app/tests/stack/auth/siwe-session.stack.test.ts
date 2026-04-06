@@ -12,13 +12,13 @@
  * @public
  */
 
+import { CHAIN_ID } from "@cogni/node-shared";
 import {
   getSession,
   siweLogin,
 } from "@tests/_fixtures/auth/nextauth-http-helpers";
 import { generateTestWallet } from "@tests/_fixtures/auth/siwe-helpers";
 import { describe, expect, it } from "vitest";
-import { CHAIN_ID } from "@cogni/node-shared";
 
 function baseUrl(path = ""): string {
   const root = process.env.TEST_BASE_URL ?? "http://localhost:3000";

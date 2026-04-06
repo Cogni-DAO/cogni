@@ -11,18 +11,17 @@
  * @public
  */
 
+import {
+  deleteThreadOperation,
+  loadThreadOperation,
+} from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
 import {
   deleteThreadFacade,
   loadThreadFacade,
 } from "@/app/_facades/ai/threads.server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import {
-  deleteThreadOperation,
-  loadThreadOperation,
-} from "@cogni/node-contracts";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";

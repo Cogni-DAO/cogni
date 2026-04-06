@@ -11,9 +11,8 @@
  * Links: Tests @/shared/util/account-id
  */
 
-import { describe, expect, it } from "vitest";
-
 import { deriveAccountIdFromApiKey } from "@cogni/node-shared";
+import { describe, expect, it } from "vitest";
 
 describe("deriveAccountIdFromApiKey", () => {
   describe("Deterministic Output", () => {

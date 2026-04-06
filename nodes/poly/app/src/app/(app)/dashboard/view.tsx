@@ -17,12 +17,16 @@
 
 "use client";
 
+import type {
+  ActivityGroupBy,
+  TimeRange,
+  WorkItemDto,
+} from "@cogni/node-contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Radio } from "lucide-react";
 import Link from "next/link";
 import type { ReactElement } from "react";
 import { useState } from "react";
-
 import {
   Badge,
   Card,
@@ -45,7 +49,6 @@ import {
   buildGroupedChartData,
 } from "@/components/kit/data-display/activity-chart-utils";
 import type { RunCardData } from "@/components/kit/data-display/RunCard";
-import type { ActivityGroupBy, TimeRange, WorkItemDto } from "@cogni/node-contracts";
 import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";

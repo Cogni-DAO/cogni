@@ -2,6 +2,9 @@
 
 # dependencies
 node_modules
+
+# turborepo
+.turbo
 /.pnp
 .pnp.*
 .yarn/*

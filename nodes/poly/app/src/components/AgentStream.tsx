@@ -149,6 +149,7 @@ export function AgentStream(): ReactElement {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // biome-ignore lint/style/noNonNullAssertion: modulo guarantees valid index
     const sequence = STREAM_SEQUENCES[seqIdx % STREAM_SEQUENCES.length]!;
     const timeouts: ReturnType<typeof setTimeout>[] = [];
 
@@ -164,6 +165,7 @@ export function AgentStream(): ReactElement {
     }
 
     // After sequence ends, pause then start next
+    // biome-ignore lint/style/noNonNullAssertion: sequence is non-empty by construction
     const lastEvent = sequence[sequence.length - 1]!;
     timeouts.push(
       setTimeout(() => {

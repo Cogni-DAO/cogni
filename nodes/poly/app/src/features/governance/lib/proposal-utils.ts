@@ -11,9 +11,8 @@
  * @public
  */
 
-import type { PublicClient } from "viem";
-
 import { CHAINS } from "@cogni/node-shared";
+import type { PublicClient } from "viem";
 
 // ---------------------------------------------------------------------------
 // Deeplink param validation

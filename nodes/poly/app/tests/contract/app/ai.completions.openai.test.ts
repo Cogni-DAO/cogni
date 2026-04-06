@@ -15,14 +15,14 @@
  * @public
  */
 
-import { describe, expect, it } from "vitest";
-import { chatMessagesToDtos } from "@/app/_facades/ai/completion.server";
 import {
   type ChatCompletionChunk,
   type ChatCompletionInput,
   type ChatCompletionOutput,
   chatCompletionsContract,
 } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
+import { chatMessagesToDtos } from "@/app/_facades/ai/completion.server";
 
 describe("OpenAI Chat Completions Contract", () => {
   describe("input schema", () => {

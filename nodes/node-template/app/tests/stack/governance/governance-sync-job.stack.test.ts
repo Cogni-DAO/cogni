@@ -13,6 +13,10 @@
 
 import { createHash } from "node:crypto";
 import { executionGrants } from "@cogni/db-schema";
+import {
+  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
+} from "@cogni/node-shared";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { getExecutionRequestsByPrefix } from "@tests/_fixtures/scheduling/db-helpers";
 import {
@@ -24,10 +28,6 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TemporalScheduleControlAdapter } from "@/adapters/server/temporal/schedule-control.adapter";
 import { runGovernanceSchedulesSyncJob } from "@/bootstrap/jobs/syncGovernanceSchedules.job";
-import {
-  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
-  COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@cogni/node-shared";
 
 describe("Governance Schedule Sync Job (Stack)", () => {
   const createdScheduleIds: string[] = [];

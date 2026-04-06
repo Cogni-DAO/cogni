@@ -13,6 +13,11 @@
 
 "use client";
 
+import type {
+  ActivityGroupBy,
+  aiActivityOperation,
+  TimeRange,
+} from "@cogni/node-contracts";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactElement } from "react";
@@ -35,11 +40,6 @@ import {
   buildAggregateChartData,
   buildGroupedChartData,
 } from "@/components/kit/data-display/activity-chart-utils";
-import type {
-  ActivityGroupBy,
-  aiActivityOperation,
-  TimeRange,
-} from "@cogni/node-contracts";
 import { useGovernanceStatus } from "@/features/governance/hooks/useGovernanceStatus";
 import { creditsToUsd } from "@/features/payments/public";
 import { fetchGovernanceActivity } from "../_api/fetchGovernanceActivity";

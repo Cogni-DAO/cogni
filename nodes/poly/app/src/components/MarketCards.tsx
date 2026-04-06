@@ -85,7 +85,9 @@ function ProbabilityBar({
 }: {
   outcomes: MarketOutcome[];
 }): ReactElement {
+  // biome-ignore lint/style/noNonNullAssertion: outcomes always has two entries (yes/no)
   const yes = outcomes[0]!;
+  // biome-ignore lint/style/noNonNullAssertion: outcomes always has two entries (yes/no)
   const no = outcomes[1]!;
 
   return (
@@ -156,10 +158,12 @@ function MarketCard({
           const drift = Math.random() > 0.5 ? 1 : -1;
           const newYes = Math.max(
             1,
-            Math.min(99, prev[0]!.probability + drift)
+            Math.min(99, prev[0]?.probability + drift)
           );
           return [
+            // biome-ignore lint/style/noNonNullAssertion: prev always has two entries (yes/no)
             { ...prev[0]!, probability: newYes },
+            // biome-ignore lint/style/noNonNullAssertion: prev always has two entries (yes/no)
             { ...prev[1]!, probability: 100 - newYes },
           ];
         });
@@ -194,9 +198,9 @@ function MarketCard({
         </div>
         <div className="shrink-0 text-right">
           <div className="font-bold font-mono text-foreground text-lg tabular-nums sm:text-xl">
-            {outcomes[0]!.probability}%
+            {outcomes[0]?.probability}%
           </div>
-          <ChangeBadge change={market.outcomes[0]!.change24h} />
+          <ChangeBadge change={market.outcomes[0]?.change24h} />
         </div>
       </div>
 

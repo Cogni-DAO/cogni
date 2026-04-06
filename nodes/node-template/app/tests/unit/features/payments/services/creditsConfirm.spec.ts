@@ -12,16 +12,15 @@
  * @public
  */
 
-import { createMockAccountService } from "@tests/_fakes";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { confirmCreditsPayment } from "@/features/payments/services/creditsConfirm";
-import type { CreditLedgerEntry, ServiceAccountService } from "@/ports";
 import {
   COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   PLATFORM_REVENUE_SHARE_REASON,
   WIDGET_PAYMENT_REASON,
 } from "@cogni/node-shared";
+import { createMockAccountService } from "@tests/_fakes";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { confirmCreditsPayment } from "@/features/payments/services/creditsConfirm";
+import type { CreditLedgerEntry, ServiceAccountService } from "@/ports";
 
 vi.mock("@/shared/env", () => ({
   serverEnv: () => ({ SYSTEM_TENANT_REVENUE_SHARE: 0.75 }),

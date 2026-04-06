@@ -13,6 +13,7 @@
  * @public
  */
 
+import { getDaoUrl } from "@cogni/node-shared";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { encodeFunctionData } from "viem";
@@ -23,7 +24,6 @@ import {
   useSwitchChain,
   useWriteContract,
 } from "wagmi";
-
 import {
   Alert,
   AlertDescription,
@@ -41,7 +41,6 @@ import {
   getChainName,
   validateDeeplinkParams,
 } from "@/features/governance/lib/proposal-utils";
-import { getDaoUrl } from "@cogni/node-shared";
 
 export function MergeProposal() {
   const searchParams = useSearchParams();

@@ -15,6 +15,7 @@
 "use client";
 
 import type { ModelRef } from "@cogni/ai-core";
+import type { Model } from "@cogni/node-contracts";
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
@@ -24,7 +25,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/kit/overlays/Dialog";
-import type { Model } from "@cogni/node-contracts";
 import { resolveModelIcon } from "@/features/ai/config/provider-icons";
 import { OpenAIIcon } from "@/features/ai/icons/providers/OpenAIIcon";
 import { cn } from "@/shared/util/cn";
@@ -195,7 +195,7 @@ export function ModelPicker({
 
   const displayName =
     backend === "chatgpt" && isChatGptModel
-      ? selectedChatGptModel!.name
+      ? selectedChatGptModel?.name
       : selectedOpenRouterModel?.label ||
         selectedOpenRouterModel?.ref.modelId ||
         "Select model";

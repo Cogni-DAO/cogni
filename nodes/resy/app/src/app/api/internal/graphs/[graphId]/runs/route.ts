@@ -26,6 +26,11 @@ import type { AiEvent } from "@cogni/ai-core";
 import { RUN_STREAM_DEFAULT_TTL_SECONDS } from "@cogni/graph-execution-core";
 import { toUserId } from "@cogni/ids";
 import { SYSTEM_ACTOR } from "@cogni/ids/system";
+import {
+  InternalGraphRunInputSchema,
+  type InternalGraphRunOutput,
+} from "@cogni/node-contracts";
+import { AnalyticsEvents, capture } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getContainer } from "@/bootstrap/container";
@@ -35,10 +40,6 @@ import {
 } from "@/bootstrap/graph-executor.factory";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
-  InternalGraphRunInputSchema,
-  type InternalGraphRunOutput,
-} from "@cogni/node-contracts";
-import {
   assembleAssistantMessage,
   executeStream,
   redactSecretsInMessages,
@@ -46,7 +47,6 @@ import {
 import { commitUsageFact } from "@/features/ai/services/billing";
 import { preflightCreditCheck } from "@/features/ai/services/preflight-credit-check";
 import type { PreflightCreditCheckFn } from "@/ports";
-
 import { isInsufficientCreditsPortError, ThreadConflictError } from "@/ports";
 import {
   isGrantExpiredError,
@@ -54,7 +54,6 @@ import {
   isGrantRevokedError,
   isGrantScopeMismatchError,
 } from "@/ports/server";
-import { AnalyticsEvents, capture } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env";
 
 export const dynamic = "force-dynamic";

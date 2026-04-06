@@ -13,14 +13,15 @@
  * @public
  */
 
+import { aiActivityOperation } from "@cogni/node-contracts";
+import {
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
+  deriveTimeRange,
+} from "@cogni/node-shared";
 import { NextResponse } from "next/server";
-
 import { getActivity } from "@/app/_facades/ai/activity.server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { aiActivityOperation } from "@cogni/node-contracts";
 import { getServerSessionUser } from "@/lib/auth/server";
-import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@cogni/node-shared";
-import { deriveTimeRange } from "@cogni/node-shared";
 
 export const dynamic = "force-dynamic";
 

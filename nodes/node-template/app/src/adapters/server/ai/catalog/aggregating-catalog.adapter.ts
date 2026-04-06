@@ -36,12 +36,13 @@ export class AggregatingModelCatalog implements ModelCatalogPort {
 
     const models: ModelOption[] = [];
     for (let i = 0; i < results.length; i++) {
+      // biome-ignore lint/style/noNonNullAssertion: array index guaranteed by loop bounds
       const result = results[i]!;
       if (result.status === "fulfilled") {
         models.push(...result.value);
       } else {
         log.error(
-          { err: result.reason, providerKey: this.providers[i]!.providerKey },
+          { err: result.reason, providerKey: this.providers[i]?.providerKey },
           "Provider failed to list models"
         );
       }
@@ -50,6 +51,7 @@ export class AggregatingModelCatalog implements ModelCatalogPort {
     // Apply capability filter
     const filtered = params.requiredCapabilities
       ? models.filter((m) =>
+          // biome-ignore lint/style/noNonNullAssertion: narrowed by ternary condition
           matchesCapabilities(m.capabilities, params.requiredCapabilities!)
         )
       : models;
