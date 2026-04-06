@@ -46,6 +46,8 @@ Verify is AMBER: TLS rate limit (resets hourly). Build Multi-Node + CI running o
 | 11  | **Argo EndpointSlice OutOfSync** — k8s adds metadata fields not in Git manifests                         | ⚠️ COSMETIC | —     | Fix: add `ignoreDifferences` for EndpointSlice metadata in ApplicationSet |
 | 12  | **Canary missing Prometheus metrics** — Alloy running but preview has no Alloy deployed                  | ⚠️ GAP      | —     | Preview has no metrics scraping; canary Loki flowing                      |
 | 13  | **VM IPs in public repo** — env-endpoints.yaml on deploy branches exposes bare VM IPs                    | ⚠️ SECURITY | —     | bug.0295: need floating IPs or DNS-only EndpointSlices                    |
+| 14  | **Affected-only builds** — CI rebuilds/retests everything on every PR, no scope detection                | ❌ RED      | —     | task.0260: Turborepo --affected, mandatory for fast monorepo iteration    |
+| 15  | **Stack tests + E2E not running on canary pipeline** — legacy staging-preview had full test coverage     | ❌ RED      | —     | Canary pipeline must reach parity: stack-test in CI, E2E after deploy     |
 
 ## Environment Status (2026-04-06)
 
