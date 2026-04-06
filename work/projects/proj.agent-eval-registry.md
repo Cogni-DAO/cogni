@@ -167,11 +167,11 @@ ORDER BY gr.tier, gr.display_name;
 
 | Deliverable                                        | Status      | Est | Work Item |
 | -------------------------------------------------- | ----------- | --- | --------- |
-| Add 4 tables to `@cogni/knowledge-store` schema    | Not Started | 2   | task.0298 |
-| Registry sync script (catalog.ts → graph_registry) | Not Started | 1   | task.0298 |
-| Eval harness dual-write (Langfuse + Doltgres)      | Not Started | 1   | task.0298 |
-| Seed eval_definitions for brain + pr-review        | Not Started | 1   | task.0298 |
-| `pnpm eval:registry` — print eval coverage matrix  | Not Started | —   | task.0298 |
+| Add 4 tables to `@cogni/knowledge-store` schema    | Not Started | 2   | task.0299 |
+| Registry sync script (catalog.ts → graph_registry) | Not Started | 1   | task.0299 |
+| Eval harness dual-write (Langfuse + Doltgres)      | Not Started | 1   | task.0299 |
+| Seed eval_definitions for brain + pr-review        | Not Started | 1   | task.0299 |
+| `pnpm eval:registry` — print eval coverage matrix  | Not Started | —   | task.0299 |
 
 ### Walk (P1) — Query API + Score Trends
 
