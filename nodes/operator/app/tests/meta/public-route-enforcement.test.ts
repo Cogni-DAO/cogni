@@ -13,10 +13,13 @@
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const PUBLIC_API_DIR = "nodes/operator/app/src/app/api/v1/public";
+// Derive paths from this file's location: nodes/{nodeName}/app/tests/meta/...
+const APP_DIR = resolve(__dirname, "../../src");
+const TESTS_DIR = resolve(__dirname, "..");
+const PUBLIC_API_DIR = join(APP_DIR, "app/api/v1/public");
 
 /**
  * Recursively find all route.ts files under a directory.
@@ -127,12 +130,18 @@ describe("Public API Namespace Enforcement", () => {
         .replace("/route.ts", "");
 
       // Check for contract test
-      const contractTestPath = `nodes/operator/app/tests/contract/app/${routeName.replace(/\//g, ".")}.test.ts`;
+      const contractTestPath = join(
+        TESTS_DIR,
+        `contract/app/${routeName.replace(/\//g, ".")}.test.ts`
+      );
       const contractTestExists =
         require("node:fs").existsSync(contractTestPath);
 
       // Check for stack test (optional but recommended)
-      const stackTestPath = `nodes/operator/app/tests/stack/public/${routeName.split("/").pop()}.stack.test.ts`;
+      const stackTestPath = join(
+        TESTS_DIR,
+        `stack/public/${routeName.split("/").pop()}.stack.test.ts`
+      );
       const stackTestExists = require("node:fs").existsSync(stackTestPath);
 
       if (!contractTestExists && !stackTestExists) {

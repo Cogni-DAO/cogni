@@ -40,6 +40,34 @@ vi.mock("@/bootstrap/http/rateLimiter", () => ({
   TokenBucketRateLimiter: vi.fn(),
 }));
 
+// Mock container to avoid env/repo-spec validation errors in contract tests
+vi.mock("@/bootstrap/container", () => ({
+  getContainer: vi.fn(() => ({
+    log: {
+      child: vi.fn(() => ({
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      })),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    },
+    clock: { now: () => new Date() },
+    config: {
+      unhandledErrorPolicy: "rethrow",
+      rateLimitBypass: {
+        enabled: false,
+        headerName: "x-stack-test",
+        headerValue: "1",
+      },
+      DEPLOY_ENVIRONMENT: "test",
+    },
+  })),
+}));
+
 import { getAnalyticsSummaryFacade } from "@/app/_facades/analytics/summary.server";
 // Import after mock
 import { GET } from "@/app/api/v1/public/analytics/summary/route";
