@@ -36,7 +36,7 @@ const EnvSchema = z.object({
     .min(32, "SCHEDULER_API_TOKEN must be at least 32 characters"),
 
   /** Per-node API endpoints for graph execution routing (required).
-   * Format: "operator=http://operator-app:3000,poly=http://poly-app:3100,resy=http://resy-app:3300" */
+   * Format: "operator=http://operator-app:3000,poly=http://poly-app:3000,resy=http://resy-app:3000" */
   COGNI_NODE_ENDPOINTS: z.string().min(1, "COGNI_NODE_ENDPOINTS is required"),
 
   /** GitHub App ID (optional — required only when GitHub ingestion is enabled) */
