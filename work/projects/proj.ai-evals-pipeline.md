@@ -56,39 +56,39 @@ Eval readiness:   0/8  MISSING
 
 **Goal:** Look at real outputs, find what breaks, write evals for those failures. Advisory mode — no gating.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Error analysis: 30-50 real prompts through brain + poet | Not Started | 1 | task.0286 |
-| 20+ eval cases from observed failure modes (code-based + judge) | Not Started | 2 | task.0286 |
-| Lightweight vitest harness + Langfuse dataset push | Not Started | — | task.0286 |
-| `pnpm eval:canary` command (advisory, exit 0) | Not Started | — | task.0286 |
+| Deliverable                                                     | Status      | Est | Work Item |
+| --------------------------------------------------------------- | ----------- | --- | --------- |
+| Error analysis: 30-50 real prompts through brain + pr-review    | Not Started | 1   | task.0286 |
+| 20+ eval cases from observed failure modes (code-based + judge) | Not Started | 2   | task.0286 |
+| Lightweight vitest harness + Langfuse dataset push              | Not Started | —   | task.0286 |
+| `pnpm eval:canary` command (advisory, exit 0)                   | Not Started | —   | task.0286 |
 
 ### Walk (P1) — Calibrate Thresholds + Enable Gating + User Feedback
 
 **Goal:** After 2+ weeks advisory, calibrate thresholds. Enable gating. Wire user feedback.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Calibrate pass rate thresholds from advisory data | Not Started | 1 | (create at P1 start) |
-| Enable eval gating: exit non-zero on failure | Not Started | 1 | (create at P1 start) |
-| Expand to 50+ cases per graph | Not Started | 2 | (create at P1 start) |
-| GitHub Action in `e2e.yml` | Not Started | 1 | (create at P1 start) |
-| Canary → staging promotion gated on eval pass | Not Started | 1 | (create at P1 start) |
-| Thumbs up/down in chat UI → Langfuse score | Not Started | 2 | (create at P1 start) |
+| Deliverable                                       | Status      | Est | Work Item            |
+| ------------------------------------------------- | ----------- | --- | -------------------- |
+| Calibrate pass rate thresholds from advisory data | Not Started | 1   | (create at P1 start) |
+| Enable eval gating: exit non-zero on failure      | Not Started | 1   | (create at P1 start) |
+| Expand to 50+ cases per graph                     | Not Started | 2   | (create at P1 start) |
+| GitHub Action in `e2e.yml`                        | Not Started | 1   | (create at P1 start) |
+| Canary → staging promotion gated on eval pass     | Not Started | 1   | (create at P1 start) |
+| Thumbs up/down in chat UI → Langfuse score        | Not Started | 2   | (create at P1 start) |
 
 ### Run (P2) — Production Monitoring + Feedback Flywheel
 
 **Goal:** Continuous quality monitoring. Downvoted responses auto-surface as eval candidates.
 
-| Deliverable | Status | Est | Work Item |
-| --- | --- | --- | --- |
-| Langfuse managed evaluators on live traces | Not Started | 2 | (create at P2 start) |
-| Score trend dashboard in Grafana | Not Started | 1 | (create at P2 start) |
-| Alert rules for quality degradation | Not Started | 1 | (create at P2 start) |
-| Weekly cron: downvoted traces → candidate eval cases | Not Started | 2 | (create at P2 start) |
-| Multi-model A/B comparison | Not Started | 2 | (create at P2 start) |
-| Red teaming / adversarial testing | Not Started | 3 | (create at P2 start) |
-| All-node eval matrix coverage (per chr.evals) | Not Started | 3 | (create at P2 start) |
+| Deliverable                                          | Status      | Est | Work Item            |
+| ---------------------------------------------------- | ----------- | --- | -------------------- |
+| Langfuse managed evaluators on live traces           | Not Started | 2   | (create at P2 start) |
+| Score trend dashboard in Grafana                     | Not Started | 1   | (create at P2 start) |
+| Alert rules for quality degradation                  | Not Started | 1   | (create at P2 start) |
+| Weekly cron: downvoted traces → candidate eval cases | Not Started | 2   | (create at P2 start) |
+| Multi-model A/B comparison                           | Not Started | 2   | (create at P2 start) |
+| Red teaming / adversarial testing                    | Not Started | 3   | (create at P2 start) |
+| All-node eval matrix coverage (per chr.evals)        | Not Started | 3   | (create at P2 start) |
 
 ## Constraints
 
@@ -144,7 +144,7 @@ Stage 3: Production Monitoring (continuous)
 ```
 evals/
   datasets/
-    poet-quality.json           # Poet graph test cases
+    pr-review-scoring.json      # PR-review graph test cases
     brain-tool-calling.json     # Brain graph test cases
   harness/
     runner.ts                   # Main eval orchestrator
