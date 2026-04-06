@@ -113,6 +113,7 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@cogni/node-test-utils": "workspace:*",
     "@types/uuid": "^11.0.0"
   }
 }

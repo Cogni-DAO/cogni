@@ -16,26 +16,11 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import tsconfigPaths from "vite-tsconfig-paths";
-import { defineConfig } from "vitest/config";
+import { createNodeVitestConfig } from "@cogni/node-test-utils/vitest-configs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export default defineConfig({
-  root: __dirname,
-  plugins: [tsconfigPaths({ projects: ["./tsconfig.test.json"] })],
-  test: {
-    include: ["tests/stack/internal/multi-node-*.stack.test.ts"],
-    environment: "node",
-    setupFiles: ["./tests/setup.ts"],
-    globalSetup: ["./tests/stack/setup/wait-for-probes-multi.ts"],
-    sequence: { concurrent: false },
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
-  },
-  resolve: {
-    alias: {
-      "@tests": path.resolve(__dirname, "./tests"),
-    },
-  },
+export default createNodeVitestConfig({
+  dirname: __dirname,
+  kind: "stack-multi",
 });

@@ -1,0 +1,33 @@
+{
+  "name": "@cogni/node-test-utils",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./vitest-configs": {
+      "types": "./src/vitest-configs/index.ts",
+      "import": "./src/vitest-configs/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  },
+  "peerDependencies": {
+    "dotenv": ">=16",
+    "dotenv-expand": ">=12",
+    "vite-tsconfig-paths": ">=4",
+    "vitest": ">=3"
+  },
+  "peerDependenciesMeta": {
+    "dotenv": {
+      "optional": true
+    },
+    "dotenv-expand": {
+      "optional": true
+    }
+  }
+}

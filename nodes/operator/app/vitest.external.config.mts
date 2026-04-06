@@ -13,41 +13,8 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { config } from "dotenv";
-import { expand } from "dotenv-expand";
-import tsconfigPaths from "vite-tsconfig-paths";
-import { defineConfig } from "vitest/config";
+import { createNodeVitestConfig } from "@cogni/node-test-utils/vitest-configs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env.test for DB config (testcontainers overrides DATABASE_URL at runtime)
-const env = config({ path: ".env.test" });
-expand(env);
-
-export default defineConfig({
-  root: __dirname,
-  plugins: [tsconfigPaths({ projects: ["./tsconfig.test.json"] })],
-  test: {
-    include: ["tests/external/**/*.external.test.ts"],
-    environment: "node",
-    setupFiles: ["./tests/setup.ts"],
-    globalSetup: ["./tests/component/setup/testcontainers-postgres.global.ts"],
-    // External tests mutate shared state (GitHub repo main branch, testcontainers DB).
-    // Run one file at a time to avoid merge races and epoch collisions.
-    pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        execArgv: ["--dns-result-order=ipv4first"],
-      },
-    },
-    sequence: { concurrent: false },
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
-  },
-  resolve: {
-    alias: {
-      "@tests": path.resolve(__dirname, "./tests"),
-    },
-  },
-});
+export default createNodeVitestConfig({ dirname: __dirname, kind: "external" });

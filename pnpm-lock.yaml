@@ -952,6 +952,9 @@ importers:
         specifier: ^5.0.9
         version: 5.0.11(@types/react@19.2.7)(immer@11.0.1)(react@19.0.0)(use-sync-external-store@1.6.0(react@19.0.0))
     devDependencies:
+      '@cogni/node-test-utils':
+        specifier: workspace:*
+        version: link:../../../packages/node-test-utils
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
@@ -1268,6 +1271,9 @@ importers:
         specifier: ^5.0.9
         version: 5.0.11(@types/react@19.2.7)(immer@11.0.1)(react@19.0.0)(use-sync-external-store@1.6.0(react@19.0.0))
     devDependencies:
+      '@cogni/node-test-utils':
+        specifier: workspace:*
+        version: link:../../../packages/node-test-utils
       '@types/three':
         specifier: ^0.183.1
         version: 0.183.1
@@ -1619,6 +1625,9 @@ importers:
         specifier: ^5.0.9
         version: 5.0.11(@types/react@19.2.7)(immer@11.0.1)(react@19.0.0)(use-sync-external-store@1.6.0(react@19.0.0))
     devDependencies:
+      '@cogni/node-test-utils':
+        specifier: workspace:*
+        version: link:../../../packages/node-test-utils
       '@types/uuid':
         specifier: ^11.0.0
         version: 11.0.0
@@ -2045,6 +2054,25 @@ importers:
         version: 8.5.1(@swc/core@1.15.10)(jiti@2.6.1)(postcss@8.5.6)(tsx@4.20.6)(typescript@5.9.3)(yaml@2.8.3)
       typescript:
         specifier: ^5.9.3
+        version: 5.9.3
+
+  packages/node-test-utils:
+    dependencies:
+      dotenv:
+        specifier: '>=16'
+        version: 17.2.3
+      dotenv-expand:
+        specifier: '>=12'
+        version: 12.0.3
+      vite-tsconfig-paths:
+        specifier: '>=4'
+        version: 5.1.4(typescript@5.9.3)(vite@7.2.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3))
+      vitest:
+        specifier: '>=3'
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@25.2.3)(happy-dom@20.0.10)(jiti@2.6.1)(jsdom@16.7.0(bufferutil@4.0.9)(utf-8-validate@5.0.10))(lightningcss@1.30.2)(msw@2.12.1(@types/node@25.2.3)(typescript@5.9.3))(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3)
+    devDependencies:
+      typescript:
+        specifier: ^5
         version: 5.9.3
 
   packages/operator-wallet:
@@ -26413,6 +26441,17 @@ snapshots:
       tsconfck: 3.1.6(typescript@5.9.3)
     optionalDependencies:
       vite: 7.2.1(@types/node@22.19.7)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3)
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
+
+  vite-tsconfig-paths@5.1.4(typescript@5.9.3)(vite@7.2.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3)):
+    dependencies:
+      debug: 4.4.3
+      globrex: 0.1.2
+      tsconfck: 3.1.6(typescript@5.9.3)
+    optionalDependencies:
+      vite: 7.2.1(@types/node@25.2.3)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.44.1)(tsx@4.20.6)(yaml@2.8.3)
     transitivePeerDependencies:
       - supports-color
       - typescript

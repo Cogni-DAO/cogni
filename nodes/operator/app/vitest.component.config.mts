@@ -14,32 +14,11 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { config } from "dotenv";
-import { expand } from "dotenv-expand";
-import tsconfigPaths from "vite-tsconfig-paths";
-import { defineConfig } from "vitest/config";
+import { createNodeVitestConfig } from "@cogni/node-test-utils/vitest-configs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env.test for component tests with variable expansion
-const env = config({ path: ".env.test" });
-expand(env);
-
-// Repo access: tests/setup.ts provides fallback for COGNI_REPO_PATH
-
-export default defineConfig({
-  root: __dirname,
-  plugins: [tsconfigPaths({ projects: ["./tsconfig.test.json"] })],
-  test: {
-    include: ["tests/component/**/*.int.test.ts"],
-    environment: "node",
-    setupFiles: ["./tests/setup.ts"],
-    globalSetup: ["./tests/component/setup/testcontainers-postgres.global.ts"],
-    sequence: { concurrent: false },
-  },
-  resolve: {
-    alias: {
-      "@tests": path.resolve(__dirname, "./tests"),
-    },
-  },
+export default createNodeVitestConfig({
+  dirname: __dirname,
+  kind: "component",
 });

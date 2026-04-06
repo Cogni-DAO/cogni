@@ -14,58 +14,8 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { config } from "dotenv";
-import { expand } from "dotenv-expand";
-import tsconfigPaths from "vite-tsconfig-paths";
-import { defineConfig } from "vitest/config";
+import { createNodeVitestConfig } from "@cogni/node-test-utils/vitest-configs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load .env.test first (defaults), then .env.local (overrides with real dev values).
-// dotenv won't overwrite existing vars, so load .env.local first for priority.
-const local = config({ path: ".env.local" });
-expand(local);
-const test = config({ path: ".env.test" });
-expand(test);
-
-// Fail fast if required env vars are missing
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(
-      `[external:money] ${name} is required. Add it to .env.test.`
-    );
-  }
-  return value;
-}
-
-requireEnv("DATABASE_SERVICE_URL");
-requireEnv("TIGERBEETLE_ADDRESS");
-requireEnv("OPENROUTER_API_KEY");
-requireEnv("TEST_WALLET_PRIVATE_KEY");
-
-export default defineConfig({
-  root: __dirname,
-  plugins: [tsconfigPaths({ projects: ["./tsconfig.test.json"] })],
-  test: {
-    include: ["tests/external/money/*.external.money.test.ts"],
-    environment: "node",
-    setupFiles: ["./tests/setup.ts"],
-    // No globalSetup — expects dev:stack already running (Postgres + TigerBeetle)
-    pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        execArgv: ["--dns-result-order=ipv4first"],
-      },
-    },
-    sequence: { concurrent: false },
-    testTimeout: 60_000,
-    hookTimeout: 30_000,
-  },
-  resolve: {
-    alias: {
-      "@tests": path.resolve(__dirname, "./tests"),
-    },
-  },
-});
+export default createNodeVitestConfig({ dirname: __dirname, kind: "external-money" });
