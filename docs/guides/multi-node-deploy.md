@@ -5,7 +5,7 @@ title: Multi-Node Deployment — k3s + Argo CD
 status: draft
 trust: draft
 summary: Provision a VM, set up GitHub environment secrets, and deploy operator + poly + resy via CI
-read_when: Setting up a new deployment environment (canary, staging, production), debugging CI/CD pipeline
+read_when: Setting up a new deployment environment (canary, preview, production), debugging CI/CD pipeline
 owner: derekg1729
 created: 2026-04-03
 verified: null
@@ -29,7 +29,7 @@ push to canary → build-multi-node.yml (build 5 images, push GHCR)
 
 **Two trust surfaces, one repo:**
 
-- **App branches** (canary, staging, main) — code changes, human-reviewed PRs
+- **App branches** (main, canary) — code changes, human-reviewed PRs
 - **Deploy branches** (deploy/canary, deploy/preview, deploy/production) — rendered deploy state, direct bot commits
 
 Argo CD watches `deploy/*` branches (orphan branches containing only `infra/catalog/`, `infra/k8s/base/`, and `infra/k8s/overlays/{env}/`). Compose runs infra (Postgres, Temporal, LiteLLM, Redis, Caddy). k3s + Argo CD runs apps (operator, poly, resy, scheduler-worker). See [cd-pipeline-e2e.md](../spec/cd-pipeline-e2e.md).

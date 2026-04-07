@@ -87,6 +87,12 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     name: "Git Manager",
     description: "Git operations orchestrator — reviews, scheduling, branches",
   },
+  {
+    graphId: "langgraph:scorecard" satisfies GraphId,
+    name: "Scorecard",
+    description:
+      "Project health analyst — finds live scorecards and displays KPIs as ASCII tables",
+  },
 ];
 
 /** Default graph ID - exported for page initialization */
