@@ -24,8 +24,14 @@ import {
   type ServerResponse,
 } from "node:http";
 import { createToolRunner, type ToolSourcePort } from "@cogni/ai-core";
+import { TOOL_CATALOG } from "@cogni/ai-tools";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type {
+  ServerNotification,
+  ServerRequest,
+} from "@modelcontextprotocol/sdk/types.js";
 
 import { type RunScope, resolveRunToken } from "./run-scope-store";
 
@@ -144,7 +150,11 @@ export function startMcpHttpServer(port = 3001): void {
             sessions.set(sid, transport);
           },
         });
-        await mcpServer.server.connect(transport);
+        // Cast: StreamableHTTPServerTransport satisfies Transport but exactOptionalPropertyTypes
+        // causes TS2379 on the onclose property. Runtime-safe cast.
+        await mcpServer.server.connect(
+          transport as Parameters<typeof mcpServer.server.connect>[0]
+        );
       }
 
       await transport.handleRequest(req, res);
@@ -184,73 +194,89 @@ function createMcpServerForScope(initialScope: RunScope): McpServer {
   );
 
   for (const spec of scopedSpecs) {
-    // Use registerTool (non-deprecated API) with JSON Schema inputSchema
-    server.registerTool(
-      spec.name,
-      {
-        description: spec.description,
-        inputSchema: spec.inputSchema as Record<string, unknown>,
-      },
-      async (args: Record<string, unknown>, extra) => {
-        // Resolve scope from bearer token via extra.authInfo (set by HTTP handler on req.auth)
-        const authInfo = extra.authInfo;
-        const scope = authInfo?.extra?.runScope as RunScope | undefined;
+    // Get Zod shape from TOOL_CATALOG (for MCP SDK registration).
+    // TOOL_CATALOG is read-only here — execution goes through ToolSourcePort.
+    // MCP SDK's tool() expects ZodRawShapeCompat (Record<string, ZodType>), which is
+    // the .shape of a ZodObject, not the ZodType itself.
+    const catalogEntry = TOOL_CATALOG[spec.name];
+    const zodType = catalogEntry?.contract.inputSchema;
+    const zodShape =
+      zodType && "shape" in zodType
+        ? (zodType as { shape: Record<string, unknown> }).shape
+        : undefined;
 
-        if (!scope) {
-          return {
-            content: [
-              { type: "text" as const, text: "Error: missing run scope" },
-            ],
-            isError: true,
-          };
-        }
+    // Use tool() with Zod schema — MCP SDK converts to JSON Schema internally
+    const cb = async (
+      args: Record<string, unknown>,
+      extra: RequestHandlerExtra<ServerRequest, ServerNotification>
+    ) => {
+      // Resolve scope from bearer token via extra.authInfo (set by HTTP handler on req.auth)
+      const authInfo = extra.authInfo;
+      const scope = authInfo?.extra?.runScope as RunScope | undefined;
 
-        if (!scope.toolIds.includes(spec.name)) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Tool '${spec.name}' not in graph manifest`,
-              },
-            ],
-            isError: true,
-          };
-        }
+      if (!scope) {
+        return {
+          content: [
+            { type: "text" as const, text: "Error: missing run scope" },
+          ],
+          isError: true,
+        };
+      }
 
-        if (!toolSource) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: "Error: tool source not available",
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        // Create a scoped toolRunner per call — no shared state
-        const toolRunner = createToolRunner(toolSource, () => {}, {
-          policy: {
-            decide: (_ctx, name) =>
-              scope.toolIds.includes(name) ? "allow" : "deny",
-          },
-          ctx: { runId: scope.runId },
-        });
-
-        const result = await toolRunner.exec(spec.name, args);
-
+      if (!scope.toolIds.includes(spec.name)) {
         return {
           content: [
             {
               type: "text" as const,
-              text: JSON.stringify(result.ok ? result.value : result),
+              text: `Tool '${spec.name}' not in graph manifest`,
             },
           ],
-          isError: !result.ok,
+          isError: true,
         };
       }
-    );
+
+      if (!toolSource) {
+        return {
+          content: [
+            { type: "text" as const, text: "Error: tool source not available" },
+          ],
+          isError: true,
+        };
+      }
+
+      // Create a scoped toolRunner per call — no shared state
+      const toolRunner = createToolRunner(toolSource, () => {}, {
+        policy: {
+          allowedTools: [...scope.toolIds],
+          decide: (_ctx, name) =>
+            scope.toolIds.includes(name) ? "allow" : "deny",
+        },
+        ctx: { runId: scope.runId },
+      });
+
+      const result = await toolRunner.exec(spec.name, args);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(result.ok ? result.value : result),
+          },
+        ],
+        isError: !result.ok,
+      };
+    };
+
+    // Register with Zod schema — all TOOL_CATALOG entries have inputSchema
+    if (zodShape) {
+      server.tool(spec.name, spec.description, zodShape, cb);
+    } else {
+      // Fallback: no schema, register as zero-arg tool (shouldn't happen for catalog tools)
+      logWarn(
+        `No Zod schema for tool ${spec.name} — registering without input validation`
+      );
+      server.tool(spec.name, spec.description, (_extra) => cb({}, _extra));
+    }
   }
 
   return server;
