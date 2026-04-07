@@ -130,12 +130,18 @@ describe("Public API Namespace Enforcement", () => {
         .replace("/route.ts", "");
 
       // Check for contract test
-      const contractTestPath = join(TESTS_DIR, `contract/app/${routeName.replace(/\//g, ".")}.test.ts`);
+      const contractTestPath = join(
+        TESTS_DIR,
+        `contract/app/${routeName.replace(/\//g, ".")}.test.ts`
+      );
       const contractTestExists =
         require("node:fs").existsSync(contractTestPath);
 
       // Check for stack test (optional but recommended)
-      const stackTestPath = join(TESTS_DIR, `stack/public/${routeName.split("/").pop()}.stack.test.ts`);
+      const stackTestPath = join(
+        TESTS_DIR,
+        `stack/public/${routeName.split("/").pop()}.stack.test.ts`
+      );
       const stackTestExists = require("node:fs").existsSync(stackTestPath);
 
       if (!contractTestExists && !stackTestExists) {
