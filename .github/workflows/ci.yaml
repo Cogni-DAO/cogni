@@ -95,6 +95,12 @@ jobs:
       - name: Typecheck + Lint (affected)
         if: github.event_name == 'pull_request'
         run: pnpm turbo run typecheck lint --affected
+        env:
+          # GITHUB_BASE_REF resolves to the local branch name (e.g. "canary") which
+          # doesn't exist in a detached-HEAD PR checkout. Point turbo at the remote
+          # tracking ref instead so it can compute the diff without any extra fetch.
+          TURBO_SCM_BASE: origin/${{ github.base_ref }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: Typecheck + Lint (full)
         if: github.event_name != 'pull_request'
@@ -104,6 +110,9 @@ jobs:
       - name: App tests (affected)
         if: github.event_name == 'pull_request'
         run: pnpm turbo run test --affected --concurrency=1
+        env:
+          TURBO_SCM_BASE: origin/${{ github.base_ref }}
+          TURBO_SCM_HEAD: ${{ github.sha }}
 
       - name: App tests (full)
         if: github.event_name != 'pull_request'
