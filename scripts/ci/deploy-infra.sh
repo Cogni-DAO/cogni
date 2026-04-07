@@ -448,9 +448,9 @@ ENV_EOF
 # Self-resolve LiteLLM image from GHCR tag if not already a GHCR ref.
 # This avoids depending on promote-and-deploy.yml workflow outputs
 # (workflow_run uses main's YAML, not canary's). SCRIPTS_ARE_THE_API.
-if [[ "$LITELLM_IMAGE" != ghcr.io/* ]] && [[ -n "${COMMIT_SHA:-}" ]] && [[ "$COMMIT_SHA" != "unknown" ]]; then
-  LITELLM_IMAGE="ghcr.io/cogni-dao/cogni-template:preview-${COMMIT_SHA}-litellm"
-  log_info "Resolved LiteLLM image from commit SHA: $LITELLM_IMAGE"
+if [[ "$LITELLM_IMAGE" != ghcr.io/* ]] && [[ -n "${COGNI_REPO_REF:-}" ]] && [[ "$COGNI_REPO_REF" != "unknown" ]]; then
+  LITELLM_IMAGE="ghcr.io/cogni-dao/cogni-template:preview-${COGNI_REPO_REF}-litellm"
+  log_info "Resolved LiteLLM image from COGNI_REPO_REF: $LITELLM_IMAGE"
 fi
 LITELLM_IMAGE=${LITELLM_IMAGE:-cogni-litellm:latest}
 
@@ -620,7 +620,7 @@ docker pull "$OPENCLAW_GATEWAY_IMAGE"
 docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"
 
 # Pull LiteLLM from GHCR (built in CI — bug.0298 / G12).
-# LITELLM_IMAGE was self-resolved above from COMMIT_SHA to a GHCR tag,
+# LITELLM_IMAGE was self-resolved above from COGNI_REPO_REF to a GHCR tag,
 # or remains "cogni-litellm:latest" for local dev/provision (no pull needed).
 if [[ "$LITELLM_IMAGE" == ghcr.io/* ]]; then
   log_info "Pulling LiteLLM image: $LITELLM_IMAGE"
