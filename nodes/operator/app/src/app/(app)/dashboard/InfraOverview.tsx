@@ -20,7 +20,11 @@ import {
 } from "@/components";
 import { Progress } from "@/components/kit/feedback/Progress";
 import type { StreamEvent } from "@/features/node-stream";
-import { useNodeStream } from "@/features/node-stream";
+import {
+  StreamCard,
+  useNodeStream,
+  VcsActivityEventContent,
+} from "@/features/node-stream";
 import { cn } from "@/shared/util/cn";
 
 type HealthStatus = "healthy" | "degraded" | "down" | "unknown" | "no_data";
@@ -84,7 +88,7 @@ const STREAM_SOURCES: StreamSource[] = [
   {
     name: "GitHub (webhook)",
     domain: "vcs",
-    maturity: 50,
+    maturity: 70,
     hasAdapter: true,
     hasTemporal: false,
     hasRedis: true,
@@ -680,8 +684,60 @@ export function InfraOverview(): ReactElement {
         <GitActivityFeed events={events} />
 
         <DataStreamScorecard />
+
+        <VcsActivityFeed events={events} />
       </CardContent>
     </Card>
+  );
+}
+
+/* ─── VCS Activity Feed ─── */
+
+function VcsActivityFeed({
+  events,
+}: {
+  events: readonly StreamEvent[];
+}): ReactElement {
+  const vcsEvents = events
+    .filter((e) => e.type === "vcs_activity")
+    .slice(-5)
+    .reverse();
+
+  if (vcsEvents.length === 0) {
+    return (
+      <div className="space-y-2">
+        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+          Recent VCS Activity
+        </h3>
+        <p className="text-muted-foreground text-xs">
+          No VCS events yet — waiting for GitHub webhooks
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+        Recent VCS Activity
+      </h3>
+      <div className="space-y-1.5">
+        {vcsEvents.map((event, i) => (
+          <StreamCard key={`${event.timestamp}-${i}`} event={event}>
+            <VcsActivityEventContent
+              event={{
+                eventType: String(event.eventType ?? ""),
+                action: String(event.action ?? ""),
+                prNumber: (event.prNumber as number | null) ?? null,
+                title: String(event.title ?? ""),
+                actor: String(event.actor ?? ""),
+                repo: String(event.repo ?? ""),
+              }}
+            />
+          </StreamCard>
+        ))}
+      </div>
+    </div>
   );
 }
 
