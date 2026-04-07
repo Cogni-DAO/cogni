@@ -240,30 +240,35 @@ This is already the designed flow. The graph builder skill just automates step 1
 ### Versioned Roadmap
 
 **v0: Claude Code skill** (this PR)
+
 - `/graph-builder` skill in `.claude/skills/graph-builder/`
 - Guides user through intent → template → name → prompt → tools
 - Generates 5-file graph scaffold + catalog entry
 - Zero auth, zero infra. User tests locally via `pnpm dev`
 
 **v0.1: Port to LangGraph agent on operator canary**
-- The graph builder *itself* becomes a graph in `LANGGRAPH_CATALOG`
+
+- The graph builder _itself_ becomes a graph in `LANGGRAPH_CATALOG`
 - Agent I/O: user message → clarifying questions → generated graph package
 - Output: git commit on a branch + PR to canary (via `core__vcs_create_branch` + file write tools)
 - Tests on dev/canary: talk to the builder agent, it outputs new agent packages
 - Key question: storage = git commit. Agent writes files, commits, opens PR. If approved, merge → canary auto-deploys → new agent is live.
 
 **v1: CLI with local execution**
+
 - Port to `cogni-contribute scaffold` CLI command
 - Add `cogni-contribute execute <graphId>` for local graph testing without full dev server
 - Challenge: needs LiteLLM running for LLM calls — may be too complex for v1. Consider a "dry-run" mode that validates the scaffold compiles without executing.
 
 **vN: Registry + deployment pipeline**
+
 - Agent-registry auto-registration on merge
 - `AgentRegistrationDocument` created automatically from catalog entry
 - Callable agent pointer returned to UI (graph ID + Langfuse trace link)
 - Promotion flow: canary → preview → production (per existing CD pipeline)
 
 **vLater: Evals + optimization**
+
 - Prompt A/B testing workflows
 - Eval harness for comparing graph output quality
 - Template marketplace (community-contributed graph patterns)
@@ -272,14 +277,14 @@ This is already the designed flow. The graph builder skill just automates step 1
 
 The 4 v0 templates (chat-assistant, tool-agent, researcher, structured-output) cover single-agent ReAct patterns only. This leaves major gaps:
 
-| Pattern | Status | vNext Research |
-|---------|--------|----------------|
-| Single ReAct agent | v0 templates | Done |
-| Sequential chains (A → B → C) | Not covered | Research n8n/flowise node-based graph UIs |
-| Parallel fan-out/fan-in | Not covered | LangGraph native support exists |
-| Multi-agent supervisor | Not covered | LangGraph `createSupervisor` pattern |
-| Human-in-the-loop | Not covered | LangGraph interrupt/resume |
-| Stateful workflows | Not covered | Research Temporal integration |
+| Pattern                       | Status       | vNext Research                            |
+| ----------------------------- | ------------ | ----------------------------------------- |
+| Single ReAct agent            | v0 templates | Done                                      |
+| Sequential chains (A → B → C) | Not covered  | Research n8n/flowise node-based graph UIs |
+| Parallel fan-out/fan-in       | Not covered  | LangGraph native support exists           |
+| Multi-agent supervisor        | Not covered  | LangGraph `createSupervisor` pattern      |
+| Human-in-the-loop             | Not covered  | LangGraph interrupt/resume                |
+| Stateful workflows            | Not covered  | Research Temporal integration             |
 
 **vNext research target**: Study n8n and flowise OSS node-based graph builders for visual chain/multi-agent composition UX. These tools have mature visual editors for DAG construction that could inform a future web UI for graph building.
 
@@ -312,13 +317,10 @@ Not yet — v0 is a single skill PR. If v1/v2 expand scope, create `proj.graph-b
 ### Tasks
 
 **v0 (this PR):**
+
 1. **Create `/graph-builder` skill** — `.claude/skills/graph-builder/SKILL.md` with guided flow + 4 templates. DONE.
 2. **Document in contributor guide** — Add "Creating Your First Agent" section to contributor quickstart.
 
-**v0.1 (next PR):**
-3. **Port builder to LangGraph agent** — Create `graph-builder` graph in `LANGGRAPH_CATALOG` that generates agent packages via tool calls + git commit.
-4. **Add `file_write` tool to ai-tools** — Builder agent needs to create files in the repo.
+**v0.1 (next PR):** 3. **Port builder to LangGraph agent** — Create `graph-builder` graph in `LANGGRAPH_CATALOG` that generates agent packages via tool calls + git commit. 4. **Add `file_write` tool to ai-tools** — Builder agent needs to create files in the repo.
 
-**v1:**
-5. **CLI scaffold command** — `cogni-contribute scaffold` with template selection + interactive prompts.
-6. **CLI execute command** — Local graph execution for testing (may require LiteLLM).
+**v1:** 5. **CLI scaffold command** — `cogni-contribute scaffold` with template selection + interactive prompts. 6. **CLI execute command** — Local graph execution for testing (may require LiteLLM).
