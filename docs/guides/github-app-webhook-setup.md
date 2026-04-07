@@ -46,7 +46,7 @@ tags: [github, webhooks, ingestion, review, setup]
 | Issues        | Read-only    | Attribution ingestion                       |
 | Pull requests | Read & write | PR review posts comments, PR Manager merges |
 
-4. **Subscribe to events:** Issues, Issue comment, Pull request, Pull request review, Push
+4. **Subscribe to events:** Issues, Issue comment, Pull request, Pull request review, Push, Workflow run
 
 5. Click **Create GitHub App**. Note the **App ID**.
 

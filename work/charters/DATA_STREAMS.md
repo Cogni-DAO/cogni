@@ -61,6 +61,8 @@ Track every data source from planned → fully observable. Each source progresse
 | **Discord**           | community         | ❌                    | ❌                      | ❌           | ❌          | ❌      | ❌         | ❌ none       | ❌            | **0%**   |
 | **PostHog**           | analytics         | ❌                    | ❌                      | ❌           | ❌          | ❌      | ❌         | ❌ none       | ❌            | **0%**   |
 
+**Note:** GitHub (webhook) now includes `workflow_run` → `CiStatusEvent` wiring. CI status events will flow once the GitHub App has the **Workflow run** subscription enabled (admin config change). Maturity unchanged until live.
+
 ### Core Data Streams (node AI activity aggregation)
 
 | Source                 | Domain   | Adapter                    | DB Storage         | API                 | UI Card          | Monitoring Agent | Maturity | Blockers                                                           |
