@@ -41,7 +41,7 @@ pnpm db:setup:test          # Create test database + run migrations
 
 ## Workflow
 
-1. **Fork** the repo.
+1. **Fork** the repo (default branch is `main`).
 
 2. **Clone and set upstream:**
 
@@ -51,11 +51,11 @@ pnpm db:setup:test          # Create test database + run migrations
    git remote add upstream git@github.com:Cogni-DAO/cogni-template.git
    ```
 
-3. **Always branch from canary using Conventional Commit types:**
+3. **Always branch from main using Conventional Commit types:**
 
    ```bash
-   git checkout canary
-   git reset --hard upstream/canary
+   git checkout main
+   git reset --hard upstream/main
    git checkout -b feat/ai-preview-health-checks
    # or: fix/litellm-config-bug, chore/ci-playwright-cache, docs/update-readme, etc.
    ```
@@ -71,7 +71,7 @@ pnpm db:setup:test          # Create test database + run migrations
 6. **Open PRs to canary:**
    - Push: `git push origin feat/xyz`
    - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni-template:canary`
-   - PRs to `main` are blocked by design
+   - PRs to `main` are blocked by design — `main` receives code only via `release/*` branches
 
 7. All CI and AI gates must pass for auto-merge.
 

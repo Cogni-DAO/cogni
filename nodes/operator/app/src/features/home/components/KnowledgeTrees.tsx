@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
 // @ts-nocheck — Three.js R3F JSX intrinsic elements not typed in strict mode
 "use client";
 
@@ -11,6 +14,13 @@ import * as THREE from "three";
 const TREE_COUNT = 5;
 const BACKGROUND_PARTICLES = 100;
 const BOUNDS_X = 11;
+
+// Ground network (codebases)
+const NET_NODE_COUNT = 60;
+const NET_BOUNDS = { x: 14, z: 5 };
+const NET_Y = -4.0; // same as tree root base
+const NET_CONNECT_DIST = 3.5;
+const NET_MAX_EDGES = 120;
 
 // Neon palette — each tree is a distinct organism
 const TREE_COLORS: { r: number; g: number; b: number }[] = [
@@ -117,6 +127,177 @@ function getAllTrees(): TreeBranch[][] {
 
 const ALL_TREES = getAllTrees();
 const ALL_BRANCHES = ALL_TREES.flat();
+
+/* ─── Ground network data ─────────────────────────── */
+
+interface NetNode {
+  x: number;
+  y: number;
+  z: number;
+  treeColorIdx: number; // nearest tree index for color tinting
+}
+
+interface NetEdge {
+  a: number;
+  b: number;
+}
+
+function buildGroundNetwork(seed: number): {
+  nodes: NetNode[];
+  edges: NetEdge[];
+} {
+  const rng = seedRandom(seed);
+  const nodes: NetNode[] = Array.from({ length: NET_NODE_COUNT }, () => {
+    const nx = (rng() - 0.5) * NET_BOUNDS.x * 2;
+    const nz = (rng() - 0.5) * NET_BOUNDS.z * 2;
+    // Assign nearest tree color
+    let minDist = Infinity;
+    let idx = 0;
+    for (let t = 0; t < TREE_ROOTS.length; t++) {
+      const d = Math.abs(TREE_ROOTS[t].x - nx);
+      if (d < minDist) {
+        minDist = d;
+        idx = t;
+      }
+    }
+    return { x: nx, y: NET_Y, z: nz, treeColorIdx: idx };
+  });
+
+  const edges: NetEdge[] = [];
+  for (let a = 0; a < nodes.length && edges.length < NET_MAX_EDGES; a++) {
+    for (let b = a + 1; b < nodes.length && edges.length < NET_MAX_EDGES; b++) {
+      const dx = nodes[a].x - nodes[b].x;
+      const dz = nodes[a].z - nodes[b].z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < NET_CONNECT_DIST) {
+        edges.push({ a, b });
+      }
+    }
+  }
+
+  return { nodes, edges };
+}
+
+const GROUND_NETWORK = buildGroundNetwork(54321);
+
+/* ─── Ground Network component (codebases) ──────────── */
+
+function GroundNet(): ReactElement {
+  // biome-ignore lint/style/noNonNullAssertion: three.js ref pattern
+  const lineRef = useRef<THREE.LineSegments>(null!);
+  // biome-ignore lint/style/noNonNullAssertion: three.js ref pattern
+  const nodeMeshRef = useRef<THREE.InstancedMesh>(null!);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
+  const { edgePosArray, edgeColArray, nodeColArray } = useMemo(() => {
+    const { nodes, edges } = GROUND_NETWORK;
+    const edgePos = new Float32Array(edges.length * 6);
+    const edgeCol = new Float32Array(edges.length * 6);
+
+    for (let i = 0; i < edges.length; i++) {
+      const na = nodes[edges[i].a];
+      const nb = nodes[edges[i].b];
+      const idx = i * 6;
+      edgePos[idx] = na.x;
+      edgePos[idx + 1] = na.y;
+      edgePos[idx + 2] = na.z;
+      edgePos[idx + 3] = nb.x;
+      edgePos[idx + 4] = nb.y;
+      edgePos[idx + 5] = nb.z;
+      // Blue-white tint for ground network
+      edgeCol[idx] = 0.2;
+      edgeCol[idx + 1] = 0.35;
+      edgeCol[idx + 2] = 0.6;
+      edgeCol[idx + 3] = 0.2;
+      edgeCol[idx + 4] = 0.35;
+      edgeCol[idx + 5] = 0.6;
+    }
+
+    const nodeCol = new Float32Array(nodes.length * 3);
+    for (let i = 0; i < nodes.length; i++) {
+      const c = TREE_COLORS[nodes[i].treeColorIdx % TREE_COLORS.length];
+      nodeCol[i * 3] = c.r * 0.3;
+      nodeCol[i * 3 + 1] = c.g * 0.3;
+      nodeCol[i * 3 + 2] = c.b * 0.3;
+    }
+
+    return {
+      edgePosArray: edgePos,
+      edgeColArray: edgeCol,
+      nodeColArray: nodeCol,
+    };
+  }, []);
+
+  useFrame(({ clock }) => {
+    const t = clock.getElapsedTime();
+    const geom = lineRef.current.geometry;
+    const colAttr = geom.getAttribute("color");
+    if (colAttr) {
+      const arr = colAttr.array as Float32Array;
+      const { edges } = GROUND_NETWORK;
+      for (let i = 0; i < edges.length; i++) {
+        const pulse = 0.3 + 0.7 * Math.abs(Math.sin(t * 0.4 + i * 0.25));
+        const idx = i * 6;
+        for (let c = 0; c < 6; c++) {
+          arr[idx + c] = edgeColArray[idx + c] * pulse;
+        }
+      }
+      colAttr.needsUpdate = true;
+    }
+
+    const { nodes } = GROUND_NETWORK;
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      dummy.position.set(n.x, n.y, n.z);
+      const s = 0.5 + 0.5 * Math.sin(t * 0.8 + i * 0.45);
+      dummy.scale.setScalar(s);
+      dummy.updateMatrix();
+      nodeMeshRef.current.setMatrixAt(i, dummy.matrix);
+    }
+    nodeMeshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  const { nodes, edges } = GROUND_NETWORK;
+
+  return (
+    <>
+      <lineSegments ref={lineRef}>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[edgePosArray, 3]}
+          />
+          <bufferAttribute attach="attributes-color" args={[edgeColArray, 3]} />
+        </bufferGeometry>
+        <lineBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.7}
+          blending={THREE.AdditiveBlending}
+        />
+      </lineSegments>
+      <instancedMesh
+        ref={nodeMeshRef}
+        args={[undefined, undefined, nodes.length]}
+      >
+        <sphereGeometry args={[0.055, 6, 6]}>
+          <instancedBufferAttribute
+            attach="attributes-color"
+            args={[nodeColArray, 3]}
+          />
+        </sphereGeometry>
+        <meshBasicMaterial
+          vertexColors
+          transparent
+          opacity={0.85}
+          blending={THREE.AdditiveBlending}
+        />
+      </instancedMesh>
+      {/* Suppress unused edges variable lint */}
+      {edges.length > 0 && null}
+    </>
+  );
+}
 
 /* ─── Tree Branches (glowing lines) ───────────────── */
 
@@ -561,6 +742,7 @@ function AmbientBokeh(): ReactElement {
 function Scene(): ReactElement {
   return (
     <>
+      <GroundNet />
       <TreeLines />
       <TreeNodes />
       <EnergyParticles />
