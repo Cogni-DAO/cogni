@@ -562,6 +562,7 @@ function GitActivityFeed({
             const action = String(ev.action ?? "");
             const actor = String(ev.actor ?? "");
             const prNumber = ev.prNumber as number | null;
+            const repo = String(ev.repo ?? "");
             const title = String(ev.title ?? "");
             const isSyncCollapse =
               action === "synchronize" && entry.collapseCount > 1;
@@ -581,9 +582,15 @@ function GitActivityFeed({
 
                 <div className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5">
                   {prNumber ? (
-                    <span className="shrink-0 font-mono text-foreground/80 text-xs">
+                    <a
+                      href={`https://github.com/${repo}/pull/${prNumber}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 font-mono text-foreground/80 text-xs hover:text-foreground hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       #{prNumber}
-                    </span>
+                    </a>
                   ) : null}
 
                   {isSyncCollapse ? (
