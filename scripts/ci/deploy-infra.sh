@@ -445,6 +445,15 @@ cat > /opt/cogni-template-edge/.env << ENV_EOF
 DOMAIN=${DOMAIN}
 ENV_EOF
 
+# Self-resolve LiteLLM image from GHCR tag if not already a GHCR ref.
+# This avoids depending on promote-and-deploy.yml workflow outputs
+# (workflow_run uses main's YAML, not canary's). SCRIPTS_ARE_THE_API.
+if [[ "$LITELLM_IMAGE" != ghcr.io/* ]] && [[ -n "${COMMIT_SHA:-}" ]] && [[ "$COMMIT_SHA" != "unknown" ]]; then
+  LITELLM_IMAGE="ghcr.io/cogni-dao/cogni-template:preview-${COMMIT_SHA}-litellm"
+  log_info "Resolved LiteLLM image from commit SHA: $LITELLM_IMAGE"
+fi
+LITELLM_IMAGE=${LITELLM_IMAGE:-cogni-litellm:latest}
+
 # Runtime env (full config — compose validates all vars even for services we don't start)
 RUNTIME_ENV=/opt/cogni-template-runtime/.env
 cat > "$RUNTIME_ENV" << ENV_EOF
@@ -482,7 +491,7 @@ POSTHOG_HOST=${POSTHOG_HOST}
 APP_IMAGE=${APP_IMAGE:-cogni-template-local}
 MIGRATOR_IMAGE=${MIGRATOR_IMAGE:-unused-by-infra-deploy}
 SCHEDULER_WORKER_IMAGE=${SCHEDULER_WORKER_IMAGE:-unused-by-infra-deploy}
-# LiteLLM image — built in CI, pushed to GHCR, pulled on deploy (bug.0298 / G12).
+# LiteLLM image — resolved before this heredoc via self-resolve logic (bug.0298 / G12).
 # Falls back to local build tag for dev/provision where LITELLM_IMAGE is unset.
 LITELLM_IMAGE=${LITELLM_IMAGE:-cogni-litellm:latest}
 ENV_EOF
@@ -611,8 +620,8 @@ docker pull "$OPENCLAW_GATEWAY_IMAGE"
 docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"
 
 # Pull LiteLLM from GHCR (built in CI — bug.0298 / G12).
-# LITELLM_IMAGE is a digest ref (ghcr.io/cogni-dao/cogni-template@sha256:...) in CI,
-# or "cogni-litellm:latest" for local dev/provision (no pull needed).
+# LITELLM_IMAGE was self-resolved above from COMMIT_SHA to a GHCR tag,
+# or remains "cogni-litellm:latest" for local dev/provision (no pull needed).
 if [[ "$LITELLM_IMAGE" == ghcr.io/* ]]; then
   log_info "Pulling LiteLLM image: $LITELLM_IMAGE"
   docker pull "$LITELLM_IMAGE"

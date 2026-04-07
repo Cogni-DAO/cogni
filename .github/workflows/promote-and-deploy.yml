@@ -48,7 +48,6 @@ jobs:
       overlay: ${{ steps.env.outputs.overlay }}
       head_sha: ${{ steps.env.outputs.head_sha }}
       deploy_branch: ${{ steps.env.outputs.deploy_branch }}
-      litellm_image: ${{ steps.digests.outputs.litellm }}
     steps:
       - name: Determine environment
         id: env
@@ -127,14 +126,12 @@ jobs:
           RESY_DIGEST=$(resolve "${TAG}-resy")
           MIGRATOR_DIGEST=$(resolve "${TAG}-migrate")
           SW_DIGEST=$(resolve "${TAG}-scheduler-worker")
-          LITELLM_DIGEST=$(resolve "${TAG}-litellm")
 
           echo "operator=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
           echo "poly=$POLY_DIGEST" >> $GITHUB_OUTPUT
           echo "resy=$RESY_DIGEST" >> $GITHUB_OUTPUT
           echo "migrator=$MIGRATOR_DIGEST" >> $GITHUB_OUTPUT
           echo "scheduler_worker=$SW_DIGEST" >> $GITHUB_OUTPUT
-          echo "litellm=$LITELLM_DIGEST" >> $GITHUB_OUTPUT
 
           echo "✅ Resolved all digests:"
           echo "  operator:         $OPERATOR_DIGEST"
@@ -142,7 +139,6 @@ jobs:
           echo "  resy:             $RESY_DIGEST"
           echo "  migrator:         $MIGRATOR_DIGEST"
           echo "  scheduler-worker: $SW_DIGEST"
-          echo "  litellm:          $LITELLM_DIGEST"
 
       # Checkout the deploy branch — promote-k8s-image.sh runs HERE, not on app-src.
       # This preserves env-specific state (EndpointSlice IPs) written by provision.
@@ -299,7 +295,6 @@ jobs:
       POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
       COGNI_NODE_ENDPOINTS: ${{ secrets.COGNI_NODE_ENDPOINTS }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
-      LITELLM_IMAGE: ${{ needs.promote-k8s.outputs.litellm_image }}
     steps:
       - uses: actions/checkout@v4
         with:
