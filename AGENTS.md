@@ -27,6 +27,7 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - **Validate early:** Run `pnpm check:fast` during iteration (auto-fixes lint/format). Run targeted tests for what you changed.
 - **Validate once before commit:** Run `pnpm check` once as the pre-commit gate. Never run it more than once per session.
 - **Update docs:** Reflect any surface changes in AGENTS.md.
+- **Worktree isolation:** Unless explicitly instructed by the user, assume you need to do your work in an isolated worktree. Check out the worktree from the default branch, and expect to PR your work to `canary`.
 - **Full Validation:** `pnpm check:full` runs in CI (~20 min). Check CI status on the PR after push — stack test success is the required gate.
 
 ## Agent Behavior
