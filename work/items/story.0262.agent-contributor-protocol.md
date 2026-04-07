@@ -58,22 +58,18 @@ idle → claimed → implementing → submitted → in_review → (approved | ch
 - **check_status(task_id)** — agent polls for review result without blocking.
 - **receive_feedback(task_id)** — agent gets structured review feedback (blocking issues, suggestions).
 
-### Communication mechanism
+### Communication mechanism — DECIDED
 
-Agents need a way to publish and subscribe to task state changes. Options to evaluate:
-
-- **Git-native**: status written to a well-known file (`work/items/<id>.md` frontmatter `status` field) + branch conventions. Agents poll via `git fetch`. Lowest infrastructure, highest latency.
-- **GitHub-native**: PR comments, PR labels, check runs. Review agent already uses webhooks. Agents use `gh` CLI. Medium infrastructure, medium latency.
-- **Event bus**: Redis pub/sub, GitHub Actions workflow_dispatch, or a lightweight webhook relay. Lowest latency, highest infrastructure.
+**Node streams.** Agents talk to Cogni via the same HTTP/SSE endpoints the dashboard consumes. No `gh` CLI, no local file scraping, no monorepo clone required. See spike.0263 for full rationale.
 
 ### External agent onboarding
 
-An external contributor's Claude Code agent should be able to:
+An external contributor's agent should be able to:
 
-1. Read the repo's `CLAUDE.md` and understand the contributor workflow
-2. Claim a task from `work/items/` (or be assigned one)
-3. Follow the protocol without custom tooling beyond `gh` CLI
-4. Submit work and receive review feedback through the same protocol
+1. Get an API token for a Cogni node
+2. Run `npx cogni tasks` to list available work
+3. Claim, implement (in their own repo/fork), and submit via CLI
+4. Receive review feedback through the same stream API
 
 ### Integration with Cogni operator review agent
 
@@ -94,14 +90,14 @@ The operator's AI review agent (story.0091, VCS tool plane from task.0242) alrea
 
 ## Plan
 
-High-level only — decomposition into tasks happens after triage + spike.
-
-- [ ] Spike: evaluate communication mechanisms (git-native vs GitHub-native vs event bus)
+- [x] Spike: evaluate communication mechanisms → decided: node streams (spike.0263)
+- [ ] Define work-item stream API endpoints (list, claim, submit, status)
+- [ ] Build stream-backed `cogni` CLI (npm-publishable, zero monorepo dependency)
+- [ ] Delete `packages/contributor-cli/` (dead filesystem scraper)
 - [ ] Define protocol spec with state machine, message formats, error handling
-- [ ] Implement MVP with GitHub-native approach (PR labels + comments + `gh` CLI)
-- [ ] Add structured review feedback format (JSON in PR comments or check run output)
+- [ ] Add structured review feedback via stream API
 - [ ] Document contributor workflow in CLAUDE.md for external agents
-- [ ] Wire Cogni review agent to accept agent-submitted PRs
+- [ ] Wire Cogni review agent to accept agent-submitted work via streams
 - [ ] Test with 3+ concurrent agents on a real multi-task workflow
 
 ## Validation
