@@ -71,6 +71,7 @@ export class GitHubWebhookNormalizer implements WebhookNormalizer {
     "issues",
     "issue_comment",
     "push",
+    "workflow_run",
   ] as const satisfies readonly string[];
 
   async verify(
@@ -106,6 +107,8 @@ export class GitHubWebhookNormalizer implements WebhookNormalizer {
         return this.normalizeIssueComment(payload);
       case "push":
         return this.normalizePush(payload);
+      case "workflow_run":
+        return this.normalizeWorkflowRun(payload);
       default:
         // Events we don't have a specific normalizer for are dropped.
         // Add normalizers here as we expand ingestion coverage.
@@ -402,6 +405,67 @@ export class GitHubWebhookNormalizer implements WebhookNormalizer {
           after,
           commitCount,
           repo: fullName,
+        },
+        payloadHash,
+        eventTime: new Date(eventTime),
+      },
+    ];
+  }
+
+  // -------------------------------------------------------------------------
+  // Workflow Run — CI/CD pipeline status (in_progress, completed)
+  // -------------------------------------------------------------------------
+
+  private async normalizeWorkflowRun(
+    payload: Record<string, unknown>
+  ): Promise<ActivityEvent[]> {
+    const action = payload.action as string;
+
+    // Skip "requested" — too noisy, only capture actionable states
+    if (action !== "completed" && action !== "in_progress") return [];
+
+    const run = payload.workflow_run as Record<string, unknown> | undefined;
+    if (!run) return [];
+
+    const fullName = repoFullName(payload);
+    if (!fullName) return [];
+
+    // workflow_run sender may be a bot (GitHub Actions); don't require User type
+    const sender = payload.sender as Record<string, unknown> | undefined;
+    const actor = extractActor(sender) ?? { id: "0", login: "github-actions" };
+
+    const runId = run.id as number;
+    const eventType =
+      action === "completed" ? "ci_completed" : "ci_in_progress";
+
+    const headCommit = run.head_commit as Record<string, unknown> | undefined;
+    const eventTime =
+      (headCommit?.timestamp as string) ?? new Date().toISOString();
+
+    const id = buildEventId("github", "workflow_run", fullName, runId, action);
+
+    const payloadHash = await hashCanonicalPayload({
+      authorId: actor.id,
+      id,
+      eventTime,
+    });
+
+    return [
+      {
+        id,
+        source: "github",
+        eventType,
+        platformUserId: actor.id,
+        platformLogin: actor.login,
+        artifactUrl: (run.html_url as string) ?? "",
+        metadata: {
+          workflowName: (run.name as string) ?? "",
+          branch: (run.head_branch as string) ?? "",
+          status: (run.status as string) ?? "",
+          conclusion: (run.conclusion as string) ?? null,
+          commitSha: (run.head_sha as string) ?? "",
+          repo: fullName,
+          action,
         },
         payloadHash,
         eventTime: new Date(eventTime),
