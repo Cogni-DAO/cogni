@@ -198,6 +198,7 @@
     "@cogni/graph-execution-host": "workspace:*",
     "@cogni/ids": "workspace:*",
     "@cogni/ingestion-core": "workspace:*",
+    "@cogni/knowledge-store": "workspace:^",
     "@cogni/node-core": "workspace:*",
     "@cogni/langgraph-graphs": "workspace:*",
     "@cogni/operator-wallet": "workspace:*",

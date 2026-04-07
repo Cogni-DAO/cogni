@@ -18,7 +18,7 @@ created: 2026-04-06
 updated: 2026-04-06
 ---
 
-# task.0299 — Doltgres graph registry + eval coverage CLI
+# task.0300 — Doltgres graph registry + eval coverage CLI
 
 ## Context
 

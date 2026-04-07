@@ -146,9 +146,9 @@ pnpm eval:registry
 
 | Deliverable                                                        | Status      | Est | Work Item |
 | ------------------------------------------------------------------ | ----------- | --- | --------- |
-| `graph_registry` + `sync_state` tables in `@cogni/knowledge-store` | Not Started | 1   | task.0299 |
-| Catalog sync script (catalog.ts → graph_registry, commit-cursor)   | Not Started | 1   | task.0299 |
-| `pnpm eval:registry` — combined matrix (Doltgres + Langfuse API)   | Not Started | 1   | task.0299 |
+| `graph_registry` + `sync_state` tables in `@cogni/knowledge-store` | Not Started | 1   | task.0300 |
+| Catalog sync script (catalog.ts → graph_registry, commit-cursor)   | Not Started | 1   | task.0300 |
+| `pnpm eval:registry` — combined matrix (Doltgres + Langfuse API)   | Not Started | 1   | task.0300 |
 
 ### Walk (P1) — Agent Eval Tools + Cross-Node Discovery + Cogni UI
 
