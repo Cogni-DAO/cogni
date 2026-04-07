@@ -190,30 +190,72 @@ _AI quality measurement and improvement loops._
 
 **Stage score: ~8%**
 
+### Stage 10: Automated Drive E2E
+
+_The meta-stage: does anything actually drive work items through the pipeline without a human pushing?_
+
+| Capability                        | Tool/Code                                | Maturity | Notes                                                           |
+| --------------------------------- | ---------------------------------------- | -------- | --------------------------------------------------------------- |
+| CI on every PR                    | GitHub Actions `ci.yaml`                 | **80%**  | Runs automatically; turborepo-scoped                            |
+| PR review bot                     | git-reviewer Check Run (task.0153)       | **40%**  | Exists; not wired as merge gate                                 |
+| Auto-deploy on canary merge       | `promote-and-deploy.yml`                 | **60%**  | Workflow runs; no post-deploy verification                      |
+| Scheduled dispatch infrastructure | `ScheduledSweepWorkflow` + activities    | **40%**  | Code exists and works; **no schedules registered**              |
+| Transition table enforcement      | `transitions.ts` + `WorkItemCommandPort` | **60%**  | Enforced at runtime; agents use `core__work_item_transition`    |
+| Work item lifecycle workflow      | None (Temporal-based FSM planned)        | **0%**   | Design: one long-running workflow per item; Temporal IS the FSM |
+| Staleness detection               | None                                     | **0%**   | No timer-based alerts when items are stuck                      |
+| Deploy verification feedback      | `deploy_verified` field exists           | **10%**  | Field defined; never set automatically                          |
+| Eval-driven quality gate          | None                                     | **0%**   | No automated quality regression detection                       |
+| Claim/release (double-dispatch)   | Ports defined, not called                | **10%**  | `claim()` and `release()` on CommandPort; sweep doesn't use     |
+
+**Stage score: ~20%**
+
+#### Design Direction: Temporal as State Machine
+
+The existing `ScheduledSweepWorkflow` + `GIT_REVIEWER_ROLE` + `fetchWorkItemsActivity` chain is 90% wired. The immediate unlock is registering schedules in `repo-spec.yaml`. The long-term architecture:
+
+```
+WorkItemLifecycleWorkflow(itemId)        ← one per work item
+├── Signal: advance(toStatus)            ← human/agent override
+├── Signal: block(reason)                ← escalation
+├── Query: getState()                    ← dashboard reads this
+├── Timer: staleAfter(48h)               ← auto-alert on stuck items
+└── Loop:
+    1. read status from frontmatter
+    2. if needs_* → child GraphRunWorkflow (dispatch agent)
+    3. await signal or timer
+    4. if timer fires → alert + auto-block
+    5. goto 1
+```
+
+Temporal provides persistence, retry, timeout, audit trail, and exactly-once dispatch for free. No bespoke FSM runtime needed.
+
+**Immediate unlock (no new code):** Add governance schedules to `.cogni/repo-spec.yaml` for `GIT_REVIEWER` and `WORK_ITEM_DISPATCH` roles. The `syncGovernanceSchedules()` function already creates Temporal schedules from config.
+
 ## Summary Matrix
 
 ```
-STAGE            SCORE   ██████████ (10 blocks = 100%)
-─────────────────────────────────────────────────────
-Ideation          25%    ██░░░░░░░░
-Design            50%    █████░░░░░
-Implementation    48%    ████░░░░░░
-Validation        36%    ███░░░░░░░
-Flighting         18%    █░░░░░░░░░
-Observability     32%    ███░░░░░░░
-Promotion         14%    █░░░░░░░░░
-Feedback          10%    █░░░░░░░░░
-Evaluation         8%    ░░░░░░░░░░
-─────────────────────────────────────────────────────
-OVERALL           27%    ██░░░░░░░░
+STAGE              SCORE   ██████████ (10 blocks = 100%)
+───────────────────────────────────────────────────────
+Ideation            25%    ██░░░░░░░░
+Design              50%    █████░░░░░
+Implementation      48%    ████░░░░░░
+Validation          36%    ███░░░░░░░
+Flighting           18%    █░░░░░░░░░
+Observability       32%    ███░░░░░░░
+Promotion           14%    █░░░░░░░░░
+Feedback            10%    █░░░░░░░░░
+Evaluation           8%    ░░░░░░░░░░
+Automated Drive     20%    ██░░░░░░░░  ← binding constraint
+───────────────────────────────────────────────────────
+OVERALL             26%    ██░░░░░░░░
 ```
 
 ## Immediate Next Steps
 
-1. Wire `workflow_run` webhook → `CiStatusEvent` → dashboard (PR #813 in progress)
-2. ~~Make PR numbers clickable in Git Activity feed (link to GitHub)~~ ✅ Done
-3. Add `deploy_verified` auto-set when deploy succeeds
-4. Schedule git-manager agent (even at 30min intervals)
+1. **Register work item schedules** — add `GIT_REVIEWER` + `WORK_ITEM_DISPATCH` to `repo-spec.yaml` governance schedules (0 new code; just config)
+2. Wire `workflow_run` webhook → `CiStatusEvent` → dashboard (PR #813 in progress)
+3. ~~Make PR numbers clickable in Git Activity feed (link to GitHub)~~ ✅ Done
+4. Design `WorkItemLifecycleWorkflow` — Temporal-native FSM per work item
 5. Design work-item-linked dashboard view (the "Active Work" panel)
 
 ## What This Charter Does NOT Own
