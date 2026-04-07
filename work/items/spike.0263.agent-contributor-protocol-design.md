@@ -28,58 +28,77 @@ external_refs:
 
 Parent: story.0262
 
-## Research Questions
+## Research Questions & Findings
 
-1. **Communication mechanism**: Which approach gives the best latency/infrastructure trade-off for agent-to-agent signaling?
-   - Git-native (work item frontmatter + `git fetch` polling)
-   - GitHub-native (PR labels, check runs, `gh` CLI)
-   - Event bus (Redis pub/sub, workflow_dispatch, webhook relay)
-   - Hybrid (git-native for state, GitHub for notifications)
+### 1. Communication mechanism — DECIDED: Node streams
 
-2. **Structured review feedback**: What format lets a reviewing agent post feedback that an implementing agent can parse and act on without human interpretation?
-   - JSON in PR comment (fenced code block)
-   - GitHub check run annotations (file:line granularity)
-   - Structured comment with markdown headings (current `/review-implementation` output)
-   - Machine-readable section in work item file
+**Decision:** Agents talk to Cogni via the same HTTP/SSE stream endpoints the dashboard uses. No `gh` CLI dependency. No local file scraping.
 
-3. **Task claiming / conflict prevention**: How do agents avoid working on the same task?
-   - Work item `assignees` field + branch naming convention
-   - GitHub issue assignment
-   - Lock file in `.cogni/claims/`
-   - Optimistic: branch existence = claim
+**Rejected alternatives:**
 
-4. **External agent trust model**: How does the review agent distinguish trusted internal agents from external contributors?
-   - GitHub actor identity (bot accounts, app installations)
-   - Signed commits
-   - PR label-based trust tiers
-   - `.cogni/contributors.yaml` allowlist
+- ~~Git-native (frontmatter polling)~~ — requires monorepo clone, filesystem coupling
+- ~~GitHub-native (`gh` CLI wrapper)~~ — adds platform lock-in, user wants to purge `gh` dependency
+- ~~Event bus (Redis/webhooks)~~ — unnecessary infra when nodes already serve streams
 
-5. **Existing art**: What do other multi-agent coding systems use?
-   - SWE-bench harness protocol
-   - Devin's task API
-   - GitHub Copilot Workspace's plan→implement→review flow
-   - OpenAI's Codex task queue model
-   - Claude Code's `RemoteTrigger` / scheduled agents
+**Why streams:** The nodes already expose `/api/streams/*` (health, vcs-activity, logs). Work items, task claiming, and review status are just more streams. One transport for everything — dashboard, CLI, external agents all consume the same API.
+
+**What the CLI becomes:**
+
+```bash
+cogni status                    # GET /api/streams/health
+cogni activity --node poly      # GET /api/streams/vcs-activity
+cogni tasks                     # GET /api/streams/work-items (new)
+cogni logs --follow             # GET /api/streams/logs (SSE)
+cogni claim <task_id>           # POST /api/work-items/<id>/claim (new)
+cogni submit <task_id>          # POST /api/work-items/<id>/submit (new)
+```
+
+### 2. Structured review feedback — DEFERRED
+
+Depends on stream API shape. Will follow from whatever format `/api/streams/review-status` returns.
+
+### 3. Task claiming — DEFERRED
+
+Server-side via `POST /api/work-items/<id>/claim`. Conflict prevention is a backend concern, not a CLI concern.
+
+### 4. External agent trust model — DEFERRED
+
+Auth via API key or token against the node. Trust tiers enforced server-side.
+
+### 5. Existing art — NOTED
+
+Claude Code's `RemoteTrigger` / scheduled agents is the closest model. External agent gets a token, hits the API.
+
+## Current state: `packages/contributor-cli/`
+
+**Status: DEAD CODE — delete when convenient.**
+
+The existing CLI (`cogni-contribute`) is a local filesystem scraper that reads `work/items/*.md` YAML from disk. It requires being inside the monorepo. This is the wrong abstraction — the replacement CLI will be an HTTP client against node stream endpoints.
 
 ## Allowed Changes
 
 - `docs/spec/agent-contributor-protocol.md` — the output spec
 - `work/items/` — update story.0262 with findings
+- `packages/contributor-cli/` — delete (filesystem scraper, replaced by stream client)
+- `.claude/skills/contribute/` — update to reference stream-backed CLI
 
 ## Plan
 
-- [ ] Audit current workflow: trace exactly what the human did during the task.0248 multi-agent session (this conversation is the primary source)
-- [ ] Evaluate communication mechanisms against criteria: latency, infrastructure cost, agent compatibility (Claude Code, Codex, custom), failure modes
-- [ ] Prototype GitHub-native approach: agent creates PR with structured summary → review agent triggered → posts structured feedback → implementing agent polls
-- [ ] Design structured review feedback format
-- [ ] Design external contributor onboarding (what goes in CLAUDE.md)
+- [x] Evaluate communication mechanisms (decision: node streams)
+- [x] Reject `gh` CLI / GitHub-native approach (user directive: purge gh dependency)
+- [x] Reject filesystem scraper approach (requires monorepo clone)
+- [ ] Define stream API endpoints for work items (GET list, POST claim/submit)
+- [ ] Build stream-backed CLI (`cogni` command, npm-publishable)
+- [ ] Delete `packages/contributor-cli/` (dead filesystem scraper)
 - [ ] Write protocol spec
-- [ ] Update story.0262 with recommended approach
+- [ ] Update story.0262 with final protocol
+- [ ] Document external agent onboarding in CLAUDE.md
 
 ## Validation
 
-- Protocol spec covers all 5 research questions with concrete recommendations
-- At least one mechanism prototyped end-to-end (agent submit → review → feedback retrieval)
+- CLI works via `npx cogni` against a running node (no monorepo clone needed)
+- External agent with only an API token can list tasks, claim, and submit
+- Same streams power both the dashboard UI and the CLI
 
 ## PR / Links
 
