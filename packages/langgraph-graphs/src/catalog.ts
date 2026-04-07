@@ -55,6 +55,11 @@ import {
   RESEARCH_GRAPH_NAME,
 } from "./graphs/research/graph";
 import { RESEARCH_TOOL_IDS } from "./graphs/research/tools";
+import {
+  createScorecardGraph,
+  SCORECARD_GRAPH_NAME,
+} from "./graphs/scorecard/graph";
+import { SCORECARD_TOOL_IDS } from "./graphs/scorecard/tools";
 import type { CreateGraphFn } from "./inproc/types";
 
 /**
@@ -206,6 +211,18 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     graphFactory: createOperatorGraph,
     systemPrompt: GIT_REVIEWER_PROMPT,
   },
+
+  /**
+   * Scorecard — project health and KPI analyst.
+   * Searches knowledge store, charters, and work items to produce ASCII status tables.
+   */
+  [SCORECARD_GRAPH_NAME]: {
+    displayName: "Scorecard",
+    description:
+      "Project health analyst — finds live scorecards and displays KPIs as ASCII status tables",
+    toolIds: SCORECARD_TOOL_IDS,
+    graphFactory: createScorecardGraph,
+  },
 } as const;
 
 /**
@@ -233,6 +250,7 @@ export const LANGGRAPH_GRAPH_IDS = {
   "operating-review": `${LANGGRAPH_PROVIDER_ID}:${OPERATING_REVIEW_GRAPH_NAME}`,
   "pr-manager": `${LANGGRAPH_PROVIDER_ID}:${PR_MANAGER_GRAPH_NAME}`,
   "git-reviewer": `${LANGGRAPH_PROVIDER_ID}:${GIT_REVIEWER_GRAPH_NAME}`,
+  scorecard: `${LANGGRAPH_PROVIDER_ID}:${SCORECARD_GRAPH_NAME}`,
 } as const;
 
 /**

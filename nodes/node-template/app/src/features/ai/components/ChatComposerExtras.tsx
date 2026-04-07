@@ -82,6 +82,12 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     description:
       "Periodic review — triages backlog, flags risks, produces structured briefs",
   },
+  {
+    graphId: "langgraph:scorecard" satisfies GraphId,
+    name: "Scorecard",
+    description:
+      "Project health analyst — finds live scorecards and displays KPIs as ASCII tables",
+  },
 ];
 
 /** Default graph ID - exported for page initialization */

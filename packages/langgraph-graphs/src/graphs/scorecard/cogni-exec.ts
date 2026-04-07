@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
+/**
+ * Module: `@cogni/langgraph-graphs/graphs/scorecard/cogni-exec`
+ * Purpose: Cogni executor entrypoint for scorecard graph.
+ * Scope: Thin entrypoint. Does NOT import catalog or read env.
+ * Invariants:
+ *   - HELPERS_DO_NOT_IMPORT_CATALOG: Uses makeCogniGraph with explicit toolIds
+ *   - NO_CROSSING_THE_STREAMS: Never imports initChatModel or reads env
+ * Side-effects: none
+ * Links: docs/research/graph-builder-skill.md
+ * @public
+ */
+
+import { makeCogniGraph } from "../../runtime/cogni/make-cogni-graph";
+import { SCORECARD_GRAPH_NAME, createScorecardGraph } from "./graph";
+import { SCORECARD_TOOL_IDS } from "./tools";
+
+export const scorecardGraph = makeCogniGraph({
+  name: SCORECARD_GRAPH_NAME,
+  createGraph: createScorecardGraph,
+  toolIds: SCORECARD_TOOL_IDS,
+});

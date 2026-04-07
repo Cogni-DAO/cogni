@@ -32,6 +32,8 @@ export { createPrReviewGraph, PR_REVIEW_GRAPH_NAME } from "./pr-review/graph";
 export { buildReviewUserMessage } from "./pr-review/prompts";
 // Research graph (deep research with web search)
 export { createResearchGraph, RESEARCH_GRAPH_NAME } from "./research/graph";
+// Scorecard graph (project health KPI analyst)
+export { createScorecardGraph, SCORECARD_GRAPH_NAME } from "./scorecard/graph";
 // Shared graph types
 export type {
   CreateReactAgentGraphOptions,
