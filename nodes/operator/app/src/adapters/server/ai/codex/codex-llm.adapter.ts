@@ -279,8 +279,6 @@ async function* runCodexExec(params: {
     let usage: { promptTokens: number; completionTokens: number } | undefined;
 
     for await (const event of events) {
-      // DEBUG bug.0300: log all Codex events to diagnose MCP connection
-      callLog.info({ eventType: event.type, eventKeys: Object.keys(event) }, `codex event: ${event.type}`);
       switch (event.type) {
         case "item.started": {
           if (event.item.type === "agent_message") {

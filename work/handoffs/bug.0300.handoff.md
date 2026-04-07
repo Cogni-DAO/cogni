@@ -10,22 +10,22 @@
 
 ## Goal
 
-Give Codex executor (ChatGPT backend) access to the same 11 core__ tools as the Cogni executor (VCS, schedule, work-item, repo). Currently all tools are silently dropped — agent is lobotomized.
+Give Codex executor (ChatGPT backend) access to the same 11 core\_\_ tools as the Cogni executor (VCS, schedule, work-item, repo). Currently all tools are silently dropped — agent is lobotomized.
 
 ## What Was Built
 
-Internal MCP Streamable HTTP server that bridges core__ tools to Codex:
+Internal MCP Streamable HTTP server that bridges core\_\_ tools to Codex:
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| MCP bridge | `adapters/server/mcp/tool-bridge.ts` | `http.createServer` on `127.0.0.1:1729/mcp`, real `StreamableHTTPServerTransport`, per-session `McpServer` |
-| Token store | `adapters/server/mcp/run-scope-store.ts` | Ephemeral per-run bearer token (UUID, TTL 30min, in-memory Map) |
-| Config injection | `codex-mcp-config.ts` | `withInternalToolBridge()` adds `cogni_tools` to Codex `config.toml` |
-| Adapter changes | `codex-llm.adapter.ts` | Token gen pre-spawn, cleanup in finally, fail-closed check |
-| Port extension | `model-provider.port.ts` | Optional `runContext` param on `createLlmService()` |
-| Bootstrap wiring | `container.ts` | Starts bridge at container init, extracts Zod schemas from `TOOL_CATALOG` |
-| Factory wiring | `graph-executor.factory.ts` | Threads `runId/userId/graphId/toolIds` to `createLlmService()` |
-| Spec update | `docs/spec/tool-use.md` | Invariant #1 rewritten — generic boundary adapter language |
+| Component        | File                                     | Purpose                                                                                                    |
+| ---------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| MCP bridge       | `adapters/server/mcp/tool-bridge.ts`     | `http.createServer` on `127.0.0.1:1729/mcp`, real `StreamableHTTPServerTransport`, per-session `McpServer` |
+| Token store      | `adapters/server/mcp/run-scope-store.ts` | Ephemeral per-run bearer token (UUID, TTL 30min, in-memory Map)                                            |
+| Config injection | `codex-mcp-config.ts`                    | `withInternalToolBridge()` adds `cogni_tools` to Codex `config.toml`                                       |
+| Adapter changes  | `codex-llm.adapter.ts`                   | Token gen pre-spawn, cleanup in finally, fail-closed check                                                 |
+| Port extension   | `model-provider.port.ts`                 | Optional `runContext` param on `createLlmService()`                                                        |
+| Bootstrap wiring | `container.ts`                           | Starts bridge at container init, extracts Zod schemas from `TOOL_CATALOG`                                  |
+| Factory wiring   | `graph-executor.factory.ts`              | Threads `runId/userId/graphId/toolIds` to `createLlmService()`                                             |
+| Spec update      | `docs/spec/tool-use.md`                  | Invariant #1 rewritten — generic boundary adapter language                                                 |
 
 ## What Works (verified locally)
 
@@ -40,16 +40,24 @@ Internal MCP Streamable HTTP server that bridges core__ tools to Codex:
 
 ### Auth/scope resolution in tool callbacks
 
-Codex connects to the MCP bridge but **tools are not being called**. Zero `[mcp-tool-bridge]` request logs during execution. The agent responds with text saying "core__vcs tools are not available" instead of calling them.
+Codex connects to the MCP bridge but **tools are not being called**. Zero `[mcp-tool-bridge]` request logs during execution. The agent responds with text saying "core\_\_vcs tools are not available" instead of calling them.
 
 **Hypothesis:** `tools/list` returns empty or the tool calls fail auth, because `extra.authInfo.extra.runScope` is not propagating through the `StreamableHTTPServerTransport`.
 
 **Where to look:**
 
 1. `tool-bridge.ts:89` — Add request logging at top of HTTP handler:
+
    ```typescript
-   logInfo(JSON.stringify({ method: req.method, url: req.url, hasAuth: !!req.headers.authorization }));
+   logInfo(
+     JSON.stringify({
+       method: req.method,
+       url: req.url,
+       hasAuth: !!req.headers.authorization,
+     })
+   );
    ```
+
    This tells you if Codex sends ANY requests to port 1729.
 
 2. `tool-bridge.ts:119` — `req.auth` is set here. Verify the SDK actually reads it and propagates to `extra.authInfo`.
