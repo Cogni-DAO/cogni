@@ -20,6 +20,7 @@
         "APP_ENV",
         "DATABASE_URL",
         "DATABASE_SERVICE_URL",
+        "COGNI_REPO_PATH",
         "LITELLM_MASTER_KEY",
         "AUTH_SECRET",
         "SCHEDULER_API_TOKEN",

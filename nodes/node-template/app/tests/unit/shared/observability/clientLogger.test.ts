@@ -12,9 +12,10 @@
  * @public
  */
 
-// Import from package path
-import * as clientLogger from "@cogni/node-shared";
-import { EVENT_NAMES } from "@cogni/node-shared";
+// Import from package path — use named export, not namespace import
+// `import * as ns from "@cogni/node-shared"` gives ns.clientLogger.debug (nested),
+// not ns.debug. The named export gives the clientLogger namespace directly.
+import { clientLogger, EVENT_NAMES } from "@cogni/node-shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("clientLogger", () => {

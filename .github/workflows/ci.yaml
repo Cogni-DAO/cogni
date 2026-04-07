@@ -59,6 +59,9 @@ jobs:
       # but serverEnv() validates format at import time. Stack tests override these.
       DATABASE_URL: postgresql://user:password@localhost:5432/cogni_test
       DATABASE_SERVICE_URL: postgresql://user_service:password@localhost:5432/cogni_test
+      # Repo root for getNodeId() / loadRepoSpec() in contract tests run via turbo.
+      # Turbo changes cwd to the package dir; tests/setup.ts falls back to cwd if unset.
+      COGNI_REPO_PATH: ${{ github.workspace }}
       LITELLM_MASTER_KEY: build-key
       AUTH_SECRET: tNf5lFM9yMhdgwS5yeQB8Y2kmigblBqobkvI2XN2brg=
       SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
