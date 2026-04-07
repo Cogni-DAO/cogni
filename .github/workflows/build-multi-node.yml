@@ -132,9 +132,21 @@ jobs:
           cache-from: type=gha,scope=build-scheduler-worker
           cache-to: type=gha,mode=max,scope=build-scheduler-worker
 
+      - name: Build and push litellm
+        id: build-litellm
+        uses: docker/build-push-action@v6
+        with:
+          context: infra/images/litellm
+          file: infra/images/litellm/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}-litellm
+          cache-from: type=gha,scope=build-litellm
+          cache-to: type=gha,mode=max,scope=build-litellm
+
       - name: Build summary
         run: |
           echo "## Multi-Node Build" >> $GITHUB_STEP_SUMMARY
           echo "**Commit:** \`${GITHUB_SHA}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Migrator digest:** \`${{ steps.build-migrator.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
           echo "**Scheduler-Worker digest:** \`${{ steps.build-sw.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**LiteLLM digest:** \`${{ steps.build-litellm.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY

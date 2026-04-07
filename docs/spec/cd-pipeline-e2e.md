@@ -277,16 +277,16 @@ Source of truth: `.cogni/repo-spec.yaml` (operator), `nodes/{name}/.cogni/repo-s
 
 ### 4.2 Image Build Matrix
 
-| App               | Dockerfile                             | Build Trigger                                    | Tag Format                                           |
-| ----------------- | -------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- |
-| operator          | `apps/operator/Dockerfile` (runner)    | Changes to `apps/operator/`, `packages/`, shared | `preview-{sha}` / `prod-{sha}`                       |
-| operator-migrator | `apps/operator/Dockerfile` (migrator)  | Changes to migrations, schema, drizzle config    | `preview-{sha}-migrate` + fingerprint tag            |
-| poly              | `nodes/poly/app/Dockerfile` (runner)   | Changes to `nodes/poly/`, `packages/`, shared    | `preview-{sha}-poly`                                 |
-| poly-migrator     | `nodes/poly/app/Dockerfile` (migrator) | Changes to migrations (shared schema)            | `preview-{sha}-poly-migrate`                         |
-| resy              | `nodes/resy/app/Dockerfile` (runner)   | Changes to `nodes/resy/`, `packages/`, shared    | `preview-{sha}-resy`                                 |
-| resy-migrator     | `nodes/resy/app/Dockerfile` (migrator) | Changes to migrations (shared schema)            | `preview-{sha}-resy-migrate`                         |
-| scheduler-worker  | `services/scheduler-worker/Dockerfile` | Changes to `services/scheduler-worker/`          | `preview-{sha}-scheduler-worker`                     |
-| litellm           | `infra/litellm/Dockerfile`             | Changes to `infra/litellm/`                      | `cogni-litellm:latest` (Compose-local, not GHCR yet) |
+| App               | Dockerfile                             | Build Trigger                                    | Tag Format                                    |
+| ----------------- | -------------------------------------- | ------------------------------------------------ | --------------------------------------------- |
+| operator          | `apps/operator/Dockerfile` (runner)    | Changes to `apps/operator/`, `packages/`, shared | `preview-{sha}` / `prod-{sha}`                |
+| operator-migrator | `apps/operator/Dockerfile` (migrator)  | Changes to migrations, schema, drizzle config    | `preview-{sha}-migrate` + fingerprint tag     |
+| poly              | `nodes/poly/app/Dockerfile` (runner)   | Changes to `nodes/poly/`, `packages/`, shared    | `preview-{sha}-poly`                          |
+| poly-migrator     | `nodes/poly/app/Dockerfile` (migrator) | Changes to migrations (shared schema)            | `preview-{sha}-poly-migrate`                  |
+| resy              | `nodes/resy/app/Dockerfile` (runner)   | Changes to `nodes/resy/`, `packages/`, shared    | `preview-{sha}-resy`                          |
+| resy-migrator     | `nodes/resy/app/Dockerfile` (migrator) | Changes to migrations (shared schema)            | `preview-{sha}-resy-migrate`                  |
+| scheduler-worker  | `services/scheduler-worker/Dockerfile` | Changes to `services/scheduler-worker/`          | `preview-{sha}-scheduler-worker`              |
+| litellm           | `infra/images/litellm/Dockerfile`      | Changes to `infra/images/litellm/`               | `preview-{sha}-litellm` (GHCR, digest-pinned) |
 
 ### 4.3 Promotion Flow
 
@@ -617,7 +617,7 @@ Both live in `infra/k8s/argocd/` and are applied during bootstrap.
 | #   | Gap                                              | Severity | Current State                                            | What's Needed                                                                  | Effort        |
 | --- | ------------------------------------------------ | -------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------- |
 | G11 | **COGNI_NODE_ENDPOINTS not in deploy workflows** | Blocker  | Missing from staging-preview.yml + deploy-production.yml | Add as env var (hardcoded or GitHub Secret)                                    | 0.5 hr        |
-| G12 | **LiteLLM image not versioned/pushed to GHCR**   | Medium   | `cogni-litellm:latest` built by Compose locally          | Build in CI, push to GHCR with digest pinning                                  | 0.5 day       |
+| G12 | ~~LiteLLM image not versioned/pushed to GHCR~~   | ✅ Fixed | Built in CI (`build-multi-node.yml`), pushed to GHCR     | bug.0298 — deploy-infra.sh pulls digest-pinned image                           | Done          |
 | G13 | **Per-node AUTH_SECRET not implemented**         | Medium   | Single shared AUTH_SECRET                                | Per-node AUTH_SECRET in env schema + SOPS secrets                              | 0.5 day       |
 | G14 | **No per-node DNS records**                      | Medium   | Single domain                                            | Create `poly.cognidao.org`, `resy.cognidao.org` A records                      | 1 hr          |
 | G15 | **No affected-only builds**                      | Medium   | CI rebuilds everything on every push                     | Turbo/Nx affected detection or Dockerfile path filtering                       | 1 day         |
@@ -771,7 +771,7 @@ These are added to root `package.json` and run in both `pnpm check` (local gate)
 | Task                                           | What        | Risk if Skipped           |
 | ---------------------------------------------- | ----------- | ------------------------- |
 | Set `COGNI_NODE_ENDPOINTS` in deploy workflows | G11         | LiteLLM crashes on deploy |
-| Pin LiteLLM image                              | G12 partial | Non-reproducible deploys  |
+| ~~Pin LiteLLM image~~                          | ✅ G12 done | Fixed by bug.0298         |
 
 ### Phase 1: Rebase + Node Manifests (Days 2-4)
 

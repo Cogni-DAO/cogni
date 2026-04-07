@@ -137,10 +137,10 @@ services:
       - "autoheal=false"
 
   litellm:
-    build:
-      context: ../../images/litellm
-      dockerfile: Dockerfile
-    image: cogni-litellm:latest
+    # Image built in CI, pushed to GHCR, pulled on deploy (bug.0298 / G12).
+    # LITELLM_IMAGE is a digest ref in deployed envs, or "cogni-litellm:latest" for local dev.
+    # Local dev uses docker-compose.dev.yml which adds build: context to build from source.
+    image: ${LITELLM_IMAGE:-cogni-litellm:latest}
     restart: unless-stopped
     labels:
       - "autoheal=true"

@@ -26,6 +26,7 @@
 | 0 | 1 | 3 | needs_implement | task.0285 | Provision script resilience — credential reset, migrations, complete .env |  |  |
 | 0 | 1 | 3 | needs_merge | bug.0287 | Provision script incompatible with deploy branch model — 3 gaps |  |  |
 | 0 | 1 | 2 | needs_triage | bug.0296 | provision-test-vm.sh Phase 6 creates incomplete k8s secrets — missing OAuth, Privy, and connection secrets | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 1 | 2 | needs_implement | bug.0298 | LiteLLM image never rebuilt on deploy — cogni_callbacks.py changes silently lost | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 5 | needs_implement | task.0301 | Test infrastructure cleanup — deduplicate node tests + fix CI failures | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 5 | needs_implement | task.0305 | Test infrastructure cleanup — deduplicate node tests + fix CI failures | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |

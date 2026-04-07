@@ -482,6 +482,9 @@ POSTHOG_HOST=${POSTHOG_HOST}
 APP_IMAGE=${APP_IMAGE:-cogni-template-local}
 MIGRATOR_IMAGE=${MIGRATOR_IMAGE:-unused-by-infra-deploy}
 SCHEDULER_WORKER_IMAGE=${SCHEDULER_WORKER_IMAGE:-unused-by-infra-deploy}
+# LiteLLM image — built in CI, pushed to GHCR, pulled on deploy (bug.0298 / G12).
+# Falls back to local build tag for dev/provision where LITELLM_IMAGE is unset.
+LITELLM_IMAGE=${LITELLM_IMAGE:-cogni-litellm:latest}
 ENV_EOF
 
 # Verify .env was written
@@ -606,6 +609,16 @@ OPENCLAW_GATEWAY_IMAGE="ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest"
 PNPM_STORE_IMAGE="ghcr.io/cogni-dao/node-template:pnpm-store-latest"
 docker pull "$OPENCLAW_GATEWAY_IMAGE"
 docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"
+
+# Pull LiteLLM from GHCR (built in CI — bug.0298 / G12).
+# LITELLM_IMAGE is a digest ref (ghcr.io/cogni-dao/cogni-template@sha256:...) in CI,
+# or "cogni-litellm:latest" for local dev/provision (no pull needed).
+if [[ "$LITELLM_IMAGE" == ghcr.io/* ]]; then
+  log_info "Pulling LiteLLM image: $LITELLM_IMAGE"
+  docker pull "$LITELLM_IMAGE"
+else
+  log_info "LiteLLM image is local ($LITELLM_IMAGE) — skipping pull"
+fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 3.6: Seed pnpm_store volume (idempotent, skip if hash matches)
