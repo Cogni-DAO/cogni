@@ -31,6 +31,12 @@ vi.mock("@/shared/env", () => ({
   }),
 }));
 
+// Mock getNodeId — completion facade passes nodeId to Temporal args; no real repo-spec needed
+vi.mock("@/shared/config/repoSpec.server", () => ({
+  getNodeId: () => "test-node",
+  loadRepoSpec: () => ({ nodeId: "test-node" }),
+}));
+
 describe("completion facade contract", () => {
   it("should return exact shape matching chatCompletionsContract.output (OpenAI ChatCompletion)", async () => {
     // Arrange - Use reusable fixture
