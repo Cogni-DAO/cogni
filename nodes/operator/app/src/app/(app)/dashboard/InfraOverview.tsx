@@ -20,11 +20,7 @@ import {
 } from "@/components";
 import { Progress } from "@/components/kit/feedback/Progress";
 import type { StreamEvent } from "@/features/node-stream";
-import {
-  StreamCard,
-  useNodeStream,
-  VcsActivityEventContent,
-} from "@/features/node-stream";
+import { useNodeStream } from "@/features/node-stream";
 import { cn } from "@/shared/util/cn";
 
 type HealthStatus = "healthy" | "degraded" | "down" | "unknown" | "no_data";
@@ -74,7 +70,7 @@ interface StreamSource {
 const STREAM_SOURCES: StreamSource[] = [
   {
     name: "GitHub (poll)",
-    domain: "vcs",
+    domain: "git",
     maturity: 20,
     hasAdapter: true,
     hasTemporal: true,
@@ -87,8 +83,8 @@ const STREAM_SOURCES: StreamSource[] = [
   },
   {
     name: "GitHub (webhook)",
-    domain: "vcs",
-    maturity: 70,
+    domain: "git",
+    maturity: 50,
     hasAdapter: true,
     hasTemporal: false,
     hasRedis: true,
@@ -402,39 +398,59 @@ function DataStreamScorecard(): ReactElement {
   );
 }
 
-/** Map VcsActivityEvent fields to a human-readable activity label. */
-function vcsActivityLabel(eventType: string, action: string): string {
-  switch (eventType) {
-    case "pull_request":
-      if (action === "merged") return "PR merged";
-      if (action === "opened") return "PR opened";
-      if (action === "closed") return "PR closed";
-      return `PR ${action}`;
-    case "push":
-      return "Push";
-    case "pull_request_review":
-      return "Review";
-    case "issues":
-      if (action === "opened") return "Issue opened";
-      if (action === "closed") return "Issue closed";
-      return `Issue ${action}`;
-    case "issue_comment":
-      return "Comment";
+/* ─── Git Activity Feed ───────────────────────────────────────────── */
+
+/** Format an ISO timestamp as a compact relative string. */
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (diffMs < 0) return "now";
+  const s = Math.floor(diffMs / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+/** Duration between two ISO timestamps in human form. */
+function durationBetween(oldest: string, newest: string): string {
+  const ms = new Date(newest).getTime() - new Date(oldest).getTime();
+  const m = Math.round(ms / 60_000);
+  if (m < 1) return "<1m";
+  if (m < 60) return `${m}m`;
+  return `${Math.round(m / 60)}h`;
+}
+
+/** Left-edge accent color for event action. */
+function activityAccent(action: string): string {
+  switch (action) {
+    case "merged":
+      return "bg-violet-500";
+    case "opened":
+    case "reopened":
+      return "bg-emerald-500";
+    case "closed":
+      return "bg-red-500";
+    case "approved":
+      return "bg-emerald-400";
+    case "changes_requested":
+      return "bg-amber-500";
     default:
-      return eventType;
+      return "bg-muted-foreground/30";
   }
 }
 
-/** Map action to a Badge intent for state display. */
-function vcsStateBadgeIntent(
+/** Badge intent for action type. */
+function actionBadgeIntent(
   action: string
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (action) {
     case "merged":
-    case "submitted":
     case "approved":
       return "default";
     case "opened":
+    case "reopened":
       return "secondary";
     case "closed":
       return "destructive";
@@ -443,27 +459,82 @@ function vcsStateBadgeIntent(
   }
 }
 
-/** Format an ISO timestamp as a relative time string (e.g. "2m ago"). */
-function relativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  if (diffMs < 0) return "just now";
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+/** Human label for a git event action. */
+function activityLabel(eventType: string, action: string): string {
+  switch (eventType) {
+    case "pull_request":
+      return action === "merged"
+        ? "merged"
+        : action === "opened"
+          ? "opened"
+          : action === "closed"
+            ? "closed"
+            : action;
+    case "push":
+      return "pushed";
+    case "pull_request_review":
+      return action === "approved"
+        ? "approved"
+        : action === "changes_requested"
+          ? "changes requested"
+          : "reviewed";
+    case "issues":
+      return action === "opened"
+        ? "opened"
+        : action === "closed"
+          ? "closed"
+          : action;
+    case "issue_comment":
+      return "commented";
+    default:
+      return eventType;
+  }
 }
 
-/** Derive a short ref string for a VCS event (PR number, branch, or title). */
-function vcsRef(event: StreamEvent): string {
-  const prNumber = event.prNumber as number | null;
-  if (prNumber) return `#${prNumber}`;
-  const title = event.title as string | undefined;
-  if (title) return title.length > 30 ? `${title.slice(0, 27)}...` : title;
-  return "\u2014";
+interface AggregatedEntry {
+  event: StreamEvent;
+  collapseCount: number;
+  oldestTimestamp: string;
+  newestTimestamp: string;
+  key: string;
+}
+
+/** Aggregate git events: collapse consecutive synchronize events for the same PR. */
+function aggregateGitEvents(
+  rawEvents: readonly StreamEvent[]
+): AggregatedEntry[] {
+  const gitEvents = rawEvents
+    .filter((e) => e.type === "vcs_activity")
+    .slice(-20);
+
+  const entries: AggregatedEntry[] = [];
+  for (const ev of gitEvents) {
+    const action = String(ev.action ?? "");
+    const prNumber = ev.prNumber as number | null;
+    const prev = entries[entries.length - 1];
+
+    if (
+      action === "synchronize" &&
+      prev?.event.action === "synchronize" &&
+      prNumber != null &&
+      (prev.event.prNumber as number | null) === prNumber
+    ) {
+      prev.collapseCount += 1;
+      prev.newestTimestamp = ev.timestamp;
+      prev.event = ev;
+      continue;
+    }
+
+    entries.push({
+      event: ev,
+      collapseCount: 1,
+      oldestTimestamp: ev.timestamp,
+      newestTimestamp: ev.timestamp,
+      key: `${ev.timestamp}-${entries.length}`,
+    });
+  }
+
+  return entries.reverse().slice(0, 10);
 }
 
 function GitActivityFeed({
@@ -471,74 +542,85 @@ function GitActivityFeed({
 }: {
   events: readonly StreamEvent[];
 }): ReactElement {
-  const vcsEvents = events
-    .filter((e) => e.type === "vcs_activity")
-    .slice(-8)
-    .reverse();
-
-  if (vcsEvents.length === 0) {
-    return (
-      <div className="space-y-2">
-        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-          Git Activity
-        </h3>
-        <p className="py-3 text-center text-muted-foreground/60 text-xs">
-          No git activity yet
-        </p>
-      </div>
-    );
-  }
+  const entries = aggregateGitEvents(events);
 
   return (
     <div className="space-y-2">
       <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
         Git Activity
       </h3>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-28">Activity</TableHead>
-            <TableHead className="w-28">Ref</TableHead>
-            <TableHead className="w-24">Actor</TableHead>
-            <TableHead className="w-20">State</TableHead>
-            <TableHead className="w-16 text-right">Time</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {vcsEvents.map((ev, i) => {
+
+      {entries.length === 0 ? (
+        <p className="py-6 text-center text-muted-foreground/40 text-xs">
+          Waiting for webhook events&hellip;
+        </p>
+      ) : (
+        <div className="space-y-px">
+          {entries.map((entry) => {
+            const ev = entry.event;
             const eventType = String(ev.eventType ?? "");
             const action = String(ev.action ?? "");
-            const actor = String(ev.actor ?? "\u2014");
+            const actor = String(ev.actor ?? "");
+            const prNumber = ev.prNumber as number | null;
+            const title = String(ev.title ?? "");
+            const isSyncCollapse =
+              action === "synchronize" && entry.collapseCount > 1;
+
             return (
-              <TableRow key={`${ev.timestamp}-${i}`}>
-                <TableCell className="py-1.5 text-xs">
-                  {vcsActivityLabel(eventType, action)}
-                </TableCell>
-                <TableCell className="py-1.5 font-mono text-xs">
-                  {vcsRef(ev)}
-                </TableCell>
-                <TableCell className="py-1.5 text-muted-foreground text-xs">
-                  {actor}
-                </TableCell>
-                <TableCell className="py-1.5">
-                  {eventType !== "push" ? (
-                    <Badge intent={vcsStateBadgeIntent(action)} size="sm">
-                      {action}
-                    </Badge>
+              <div
+                key={entry.key}
+                className="group flex items-center gap-0 rounded-sm transition-colors hover:bg-muted/40"
+              >
+                {/* Left accent bar */}
+                <div
+                  className={cn(
+                    "w-0.5 shrink-0 self-stretch rounded-l-sm",
+                    activityAccent(action)
+                  )}
+                />
+
+                <div className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5">
+                  {prNumber ? (
+                    <span className="shrink-0 font-mono text-foreground/80 text-xs">
+                      #{prNumber}
+                    </span>
+                  ) : null}
+
+                  {isSyncCollapse ? (
+                    <span className="shrink-0 text-muted-foreground text-xs">
+                      {entry.collapseCount} pushes in{" "}
+                      {durationBetween(
+                        entry.oldestTimestamp,
+                        entry.newestTimestamp
+                      )}
+                    </span>
                   ) : (
-                    <span className="text-muted-foreground/50 text-xs">
-                      {"\u2014"}
+                    <Badge intent={actionBadgeIntent(action)} size="sm">
+                      {activityLabel(eventType, action)}
+                    </Badge>
+                  )}
+
+                  <span className="min-w-0 truncate text-muted-foreground text-xs">
+                    {title}
+                  </span>
+
+                  <span className="flex-1" />
+
+                  {actor && (
+                    <span className="hidden shrink-0 text-muted-foreground/50 text-xs group-hover:inline">
+                      {actor}
                     </span>
                   )}
-                </TableCell>
-                <TableCell className="py-1.5 text-right text-muted-foreground text-xs tabular-nums">
-                  {relativeTime(ev.timestamp)}
-                </TableCell>
-              </TableRow>
+
+                  <span className="shrink-0 text-muted-foreground/40 text-xs tabular-nums">
+                    {relativeTime(entry.newestTimestamp)}
+                  </span>
+                </div>
+              </div>
             );
           })}
-        </TableBody>
-      </Table>
+        </div>
+      )}
     </div>
   );
 }
@@ -684,60 +766,8 @@ export function InfraOverview(): ReactElement {
         <GitActivityFeed events={events} />
 
         <DataStreamScorecard />
-
-        <VcsActivityFeed events={events} />
       </CardContent>
     </Card>
-  );
-}
-
-/* ─── VCS Activity Feed ─── */
-
-function VcsActivityFeed({
-  events,
-}: {
-  events: readonly StreamEvent[];
-}): ReactElement {
-  const vcsEvents = events
-    .filter((e) => e.type === "vcs_activity")
-    .slice(-5)
-    .reverse();
-
-  if (vcsEvents.length === 0) {
-    return (
-      <div className="space-y-2">
-        <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-          Recent VCS Activity
-        </h3>
-        <p className="text-muted-foreground text-xs">
-          No VCS events yet — waiting for GitHub webhooks
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <h3 className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-        Recent VCS Activity
-      </h3>
-      <div className="space-y-1.5">
-        {vcsEvents.map((event, i) => (
-          <StreamCard key={`${event.timestamp}-${i}`} event={event}>
-            <VcsActivityEventContent
-              event={{
-                eventType: String(event.eventType ?? ""),
-                action: String(event.action ?? ""),
-                prNumber: (event.prNumber as number | null) ?? null,
-                title: String(event.title ?? ""),
-                actor: String(event.actor ?? ""),
-                repo: String(event.repo ?? ""),
-              }}
-            />
-          </StreamCard>
-        ))}
-      </div>
-    </div>
   );
 }
 
