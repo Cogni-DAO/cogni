@@ -11,9 +11,8 @@
  * @public
  */
 
-import { describe, expect, it } from "vitest";
-
 import { setupVerifyOperation } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("setupVerifyOperation contract", () => {
   describe("input validation", () => {

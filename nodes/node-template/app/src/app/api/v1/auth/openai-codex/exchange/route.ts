@@ -19,16 +19,14 @@ import { randomUUID } from "node:crypto";
 import { withTenantScope } from "@cogni/db-client";
 import { connections } from "@cogni/db-schema";
 import { type UserId, userActor } from "@cogni/ids";
+import { aeadEncrypt, EVENT_NAMES } from "@cogni/node-shared";
 import { and, eq, isNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
-
 import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 import { getServerSessionUser } from "@/lib/auth/server";
-import { aeadEncrypt } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
-import { EVENT_NAMES } from "@cogni/node-shared";
 import {
   byoAuthDurationMs,
   byoAuthTotal,

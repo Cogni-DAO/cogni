@@ -11,8 +11,8 @@
  * @public
  */
 
-import { describe, expect, it } from "vitest";
 import { epochUserProjectionsOperation } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("ledger.epoch-user-projections.v1 contract", () => {
   it("should validate a well-formed user projections response", () => {

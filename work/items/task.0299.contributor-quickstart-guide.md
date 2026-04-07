@@ -69,6 +69,10 @@ pnpm check:docs
 - Related: PR #716 (contributor CLI + skill)
 - Spec: langgraph-patterns-spec
 
+## Future: Local Graph Execution for Evals
+
+The contributor CLI should let you run a graph locally after building it — `cogni-contribute run-graph poly-brain` — connecting to local LiteLLM for ad-hoc evals before pushing. This is vnext unless trivially easy. Track separately.
+
 ## Attribution
 
 -

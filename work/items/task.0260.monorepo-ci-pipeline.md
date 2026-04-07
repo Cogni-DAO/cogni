@@ -151,6 +151,8 @@ pnpm test:stack:multi
 - Supersedes: proj.cicd-services-gitops P5 (NX → Turborepo)
 - Depends on: task.0247 (node Docker images for Lane 2)
 - Related: task.0258 (multi-node stack tests — Lane 2 test suite)
+- PR: [#790](https://github.com/Cogni-DAO/node-template/pull/790)
+- Handoff: [handoff](../handoffs/task.0260.handoff.md)
 
 ## Attribution
 

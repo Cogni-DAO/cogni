@@ -11,12 +11,12 @@
  * @internal
  */
 
-import { describe, expect, it } from "vitest";
 import {
   deleteThreadOperation,
   listThreadsOperation,
   loadThreadOperation,
 } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("ai.threads.v1 contract validation", () => {
   // ─────────────────────────────────────────────

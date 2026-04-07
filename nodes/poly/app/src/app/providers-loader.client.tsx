@@ -18,7 +18,7 @@ import type { ReactNode } from "react";
 
 const DynamicProviders = dynamic(
   () => import("./providers.client").then((m) => m.Providers),
-  { ssr: false },
+  { ssr: false }
 );
 
 export function Providers({

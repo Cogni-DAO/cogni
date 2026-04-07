@@ -11,6 +11,10 @@
  * @public
  */
 
+import type {
+  ListThreadsOutput,
+  LoadThreadOutput,
+} from "@cogni/node-contracts";
 import {
   type UseMutationResult,
   type UseQueryResult,
@@ -18,10 +22,6 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type {
-  ListThreadsOutput,
-  LoadThreadOutput,
-} from "@cogni/node-contracts";
 
 const THREADS_KEY = "ai-threads";
 const THREAD_KEY = "ai-thread";

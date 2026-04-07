@@ -191,6 +191,7 @@ async function* runCodexExec(params: {
         mode: 0o600,
       });
       callLog.debug(
+        // biome-ignore lint/style/noNonNullAssertion: narrowed by enclosing if(configToml) guard
         { mcpServerCount: Object.keys(mcpConfig!).length },
         "Wrote Codex config.toml with MCP servers"
       );

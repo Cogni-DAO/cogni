@@ -11,14 +11,13 @@
  * @internal
  */
 
-import { describe, expect, it } from "vitest";
-
 import {
   INSUFFICIENT_CITATION_MESSAGE,
   needsCitationRetry,
   parseCitation,
   validateSources,
 } from "@cogni/node-shared";
+import { describe, expect, it } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Fixtures

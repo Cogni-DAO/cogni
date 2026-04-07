@@ -15,10 +15,10 @@
  */
 
 import { timingSafeEqual } from "node:crypto";
+import { GovernanceSchedulesSyncSummarySchema } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { runGovernanceSchedulesSyncJob } from "@/bootstrap/jobs/syncGovernanceSchedules.job";
-import { GovernanceSchedulesSyncSummarySchema } from "@cogni/node-contracts";
 import { serverEnv } from "@/shared/env";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 

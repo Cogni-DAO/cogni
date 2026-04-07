@@ -13,7 +13,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-
+import { CHAIN_ID } from "@cogni/node-shared";
 import {
   type DaoConfig,
   extractDaoConfig,
@@ -28,9 +28,7 @@ import {
   parseRepoSpec,
   type RepoSpec,
 } from "@cogni/repo-spec";
-
 import { serverEnv } from "@/shared/env";
-import { CHAIN_ID } from "@cogni/node-shared";
 
 export type {
   DaoConfig,
@@ -52,7 +50,9 @@ function loadRepoSpec(): RepoSpec {
 
   const repoRoot = serverEnv().COGNI_REPO_ROOT;
   if (!repoRoot) {
-    throw new Error("[repo-spec] COGNI_REPO_PATH not configured — repo-spec unavailable");
+    throw new Error(
+      "[repo-spec] COGNI_REPO_PATH not configured — repo-spec unavailable"
+    );
   }
   const repoSpecPath = path.join(repoRoot, ".cogni", "repo-spec.yaml");
 

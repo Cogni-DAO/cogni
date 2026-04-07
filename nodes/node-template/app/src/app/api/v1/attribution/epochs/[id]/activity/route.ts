@@ -11,6 +11,7 @@
  * @public
  */
 
+import { epochActivityOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {
@@ -19,7 +20,6 @@ import {
 } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { epochActivityOperation } from "@cogni/node-contracts";
 import { getNodeId } from "@/shared/config";
 import { EVENT_NAMES, logEvent } from "@/shared/observability";
 

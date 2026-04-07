@@ -12,9 +12,8 @@
  * @internal
  */
 
-import { describe, expect, it } from "vitest";
-
 import { metaLivezOutputSchema } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("/livez isolation contract", () => {
   it("should work without AUTH_SECRET", async () => {

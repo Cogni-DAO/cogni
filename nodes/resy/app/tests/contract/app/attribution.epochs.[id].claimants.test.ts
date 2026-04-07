@@ -11,9 +11,8 @@
  * @public
  */
 
-import { describe, expect, it } from "vitest";
-
 import { epochClaimantsOperation } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("ledger.epoch-claimants.v1 contract", () => {
   it("validates a finalized claimant attribution response", () => {

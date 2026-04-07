@@ -25,10 +25,10 @@ import { TreasuryBadge } from "@/features/treasury/components/TreasuryBadge";
 
 export function AppHeader(): ReactElement {
   return (
-    <header className="border-border bg-background border-b py-3">
+    <header className="border-border border-b bg-background py-3">
       <a
         href="#main"
-        className="focus:bg-background focus:text-foreground sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:p-2"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-background focus:p-2 focus:text-foreground"
       >
         Skip to main content
       </a>
@@ -52,7 +52,7 @@ export function AppHeader(): ReactElement {
                 height={24}
                 className="shrink-0"
               />
-              <span className="text-gradient-accent hidden truncate text-xl font-bold md:inline">
+              <span className="hidden truncate font-bold text-gradient-accent text-xl md:inline">
                 Cogni
               </span>
             </Link>
@@ -71,7 +71,7 @@ export function AppHeader(): ReactElement {
                 href="https://discord.gg/3b9sSyhZ4z"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-foreground hover:text-muted-foreground inline-flex items-center transition-colors"
+                className="inline-flex items-center text-foreground transition-colors hover:text-muted-foreground"
                 aria-label="Join our Discord"
               >
                 <span className="sr-only">Join our Discord</span>

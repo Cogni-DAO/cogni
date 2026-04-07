@@ -12,8 +12,8 @@
  * @public
  */
 
-import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { aiModelsOperation, type ModelsOutput } from "@cogni/node-contracts";
+import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 
 /**
  * Fetches available AI models list with tier information

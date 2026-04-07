@@ -16,16 +16,16 @@
  */
 
 import { executionGrants } from "@cogni/db-schema";
+import {
+  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
+} from "@cogni/node-shared";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { getTestTemporalClient } from "@tests/_fixtures/temporal/client";
 import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { POST } from "@/app/api/internal/ops/governance/schedules/sync/route";
-import {
-  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
-  COGNI_SYSTEM_PRINCIPAL_USER_ID,
-} from "@cogni/node-shared";
 
 const INTERNAL_OPS_TOKEN =
   process.env.INTERNAL_OPS_TOKEN ?? "test-internal-ops-token-min-32-chars";

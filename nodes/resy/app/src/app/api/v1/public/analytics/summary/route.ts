@@ -12,11 +12,10 @@
  * @public
  */
 
+import { analyticsSummaryOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
 import { getAnalyticsSummaryFacade } from "@/app/_facades/analytics/summary.server";
 import { wrapPublicRoute } from "@/bootstrap/http";
-import { analyticsSummaryOperation } from "@cogni/node-contracts";
 import { logRequestWarn, type RequestContext } from "@/shared/observability";
 
 export const dynamic = "force-dynamic";

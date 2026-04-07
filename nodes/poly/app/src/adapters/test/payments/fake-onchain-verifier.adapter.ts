@@ -12,12 +12,12 @@
  * @public
  */
 
+import { MIN_CONFIRMATIONS } from "@cogni/node-shared";
 import type {
   OnChainVerifier,
   PaymentErrorCode,
   VerificationResult,
 } from "@/ports";
-import { MIN_CONFIRMATIONS } from "@cogni/node-shared";
 
 /**
  * Fake on-chain verifier for testing

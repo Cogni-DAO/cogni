@@ -1,0 +1,92 @@
+name: Nightly Full Validation
+
+# Safety net: runs ALL checks without --affected filtering.
+# Catches turbo cache staleness, transitive dependency breakage,
+# and any --affected blind spots.
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 6 AM UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: 1
+  NODE_VERSION: "22"
+  TEMPORAL_ADDRESS: localhost:7233
+  TEMPORAL_NAMESPACE: cogni-test
+  TEMPORAL_TASK_QUEUE: scheduler-tasks
+
+jobs:
+  full-checks:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      LITELLM_MASTER_KEY: build-key
+      AUTH_SECRET: tNf5lFM9yMhdgwS5yeQB8Y2kmigblBqobkvI2XN2brg=
+      SCHEDULER_API_TOKEN: test-scheduler-api-token-for-ci-min32chars
+      BILLING_INGEST_TOKEN: test-billing-ingest-token-for-ci-min32ch
+      INTERNAL_OPS_TOKEN: test-internal-ops-token-for-ci-min32
+      OPENCLAW_GATEWAY_TOKEN: test-openclaw-gateway-token-for-ci-32ch
+      OPENCLAW_GITHUB_RW_TOKEN: test-github-rw-token
+      DISCORD_BOT_TOKEN: test-discord-bot-token-for-ci
+      POSTHOG_API_KEY: phc_test_key_for_ci
+      POSTHOG_HOST: http://localhost:18000
+
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+
+      - uses: pnpm/action-setup@c5ba7f7862a0f64c1b1a05fbac13e0b8e86ba08c # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: pnpm packages:build
+
+      # Full suite — no --affected, no turbo cache
+      - name: Typecheck + Lint (all workspaces)
+        run: pnpm turbo run typecheck lint --force
+        env:
+          TURBO_FORCE: "true"
+
+      - name: App tests (all workspaces)
+        run: pnpm turbo run test --force --concurrency=1
+        env:
+          TURBO_FORCE: "true"
+
+      - name: Repository policy check
+        run: pnpm check:root-layout
+
+      - name: REUSE SPDX compliance
+        uses: fsfe/reuse-action@772649cfa03a64a08c458c7cca9a6a473d74e7f9 # v6
+
+      - name: Validate chain configuration
+        run: pnpm validate:chain
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Architecture check
+        run: pnpm arch:check
+
+      - name: Unit + contract coverage tests
+        run: pnpm test:ci
+
+      - name: CI Telemetry
+        if: always()
+        uses: ./.github/actions/loki-ci-telemetry
+        with:
+          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          job_status: ${{ job.status }}

@@ -17,13 +17,13 @@ import {
   deriveAllocationAlgoRef,
   validateWeightConfig,
 } from "@cogni/attribution-ledger";
+import { reviewEpochOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
 import { toEpochDto } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { reviewEpochOperation } from "@cogni/node-contracts";
 import { getLedgerApprovers } from "@/shared/config";
 
 export const dynamic = "force-dynamic";

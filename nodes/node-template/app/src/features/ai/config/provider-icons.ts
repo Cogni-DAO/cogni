@@ -76,6 +76,7 @@ function getProviderKey(modelId: string): keyof typeof PROVIDER_ICONS {
 
   const key = match[1].toLowerCase();
   if (key in PROVIDER_ICONS) return key as keyof typeof PROVIDER_ICONS;
+  // biome-ignore lint/style/noNonNullAssertion: key existence verified by `in` check
   if (key in MODEL_PREFIX_TO_PROVIDER) return MODEL_PREFIX_TO_PROVIDER[key]!;
   return "default";
 }

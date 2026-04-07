@@ -39,8 +39,8 @@ export const CORE_TEST_ENV = {
   OPENCLAW_GATEWAY_TOKEN: "x".repeat(32),
   // OpenClaw git relay token (host-side push)
   OPENCLAW_GITHUB_RW_TOKEN: "ghp_test_token",
-  // Repo access (required in all envs — no cwd fallback)
-  COGNI_REPO_PATH: process.cwd(),
+  // Repo access — use explicit env var when set (e.g. CI via turbo); fall back to cwd for local dev
+  COGNI_REPO_PATH: process.env.COGNI_REPO_PATH ?? process.cwd(),
   // PostHog product analytics (required — test values, events silently dropped)
   POSTHOG_API_KEY: "phc_test_key",
   POSTHOG_HOST: "http://localhost:18000",
@@ -95,7 +95,7 @@ export const PRODUCTION_VALID_ENV = {
 export const MOCK_SERVER_ENV = {
   ...BASE_VALID_ENV,
   // Computed fields that serverEnv() adds (DATABASE_URL already in BASE_VALID_ENV)
-  COGNI_REPO_ROOT: process.cwd(),
+  COGNI_REPO_ROOT: process.env.COGNI_REPO_PATH ?? process.cwd(),
   isDev: false,
   isTest: true,
   isProd: false,

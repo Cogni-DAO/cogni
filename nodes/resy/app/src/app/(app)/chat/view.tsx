@@ -19,6 +19,7 @@
 "use client";
 
 import type { ModelRef } from "@cogni/ai-core";
+import type { ChatError } from "@cogni/node-contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import type { UIMessage } from "ai";
 import { useSearchParams } from "next/navigation";
@@ -31,7 +32,6 @@ import {
   useState,
 } from "react";
 import { ErrorAlert, Thread } from "@/components";
-import type { ChatError } from "@cogni/node-contracts";
 import { useChatSidebarStore } from "@/features/ai/chat/components/ChatSidebarContext";
 import { ChatRuntimeProvider } from "@/features/ai/chat/providers/ChatRuntimeProvider.client";
 import { toErrorAlertProps } from "@/features/ai/chat/utils/toErrorAlertProps";

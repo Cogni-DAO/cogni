@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
+import { chatCompletionsContract } from "@cogni/node-contracts";
 import {
   createMockAccountServiceWithDefaults,
   FakeAiTelemetryAdapter,
@@ -10,9 +11,7 @@ import {
 import { TEST_MODEL_ID } from "@tests/_fakes/ai/fakes";
 import { createRunStreamMock } from "@tests/_fixtures/ai/completion-facade-setup";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { chatCompletion } from "@/app/_facades/ai/completion.server";
-import { chatCompletionsContract } from "@cogni/node-contracts";
 import type { RequestContext } from "@/shared/observability";
 import { makeNoopLogger } from "@/shared/observability";
 

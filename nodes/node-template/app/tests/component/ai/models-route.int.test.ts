@@ -11,6 +11,7 @@
  * @internal
  */
 
+import { aiModelsOperation } from "@cogni/node-contracts";
 import {
   createModelsWithFree,
   loadModelsFixture,
@@ -18,7 +19,6 @@ import {
 import { generateTestWallet } from "@tests/_fixtures/auth/db-helpers";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { aiModelsOperation } from "@cogni/node-contracts";
 
 // Mock dependencies
 vi.mock("@/app/_lib/auth/session", () => ({
