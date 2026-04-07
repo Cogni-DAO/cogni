@@ -114,7 +114,7 @@ export class CodexLlmAdapter implements LlmService {
       // FAIL CLOSED: bridge not ready but tools are needed
       throw new Error(
         `MCP tool bridge not available — Codex executor cannot access ${params.tools!.length} core__ tools. ` +
-          "Ensure MCP_TOOL_BRIDGE_PORT is set and the bridge started in instrumentation.ts."
+          "Ensure MCP_TOOL_BRIDGE_PORT is set and the bridge started via bootstrap/container.ts."
       );
     } else if (hasTools && !this.runContext) {
       callLog.warn(

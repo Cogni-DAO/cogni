@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@mcp/run-scope-store`
+ * Module: `@adapters/server/mcp/run-scope-store`
  * Purpose: Ephemeral per-run bearer token store for MCP tool bridge authentication.
  * Scope: Stores RunScope keyed by opaque token. TTL enforced. Does NOT perform I/O.
  * Invariants:
