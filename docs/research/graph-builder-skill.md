@@ -237,27 +237,62 @@ This is already the designed flow. The graph builder skill just automates step 1
 
 ## Recommendation
 
-**Ship Option A (Claude Code skill) as v0.** It's the fastest path because:
+### Versioned Roadmap
 
-1. **Zero auth work** — runs locally, generates code
-2. **Zero infra work** — no new APIs, no deployment pipeline
-3. **Teaches the pattern** — user sees and owns the generated code
-4. **Real output** — produces compilable, testable, deployable graphs
-5. **1 PR** — skill file + 4 template generators + catalog update logic
+**v0: Claude Code skill** (this PR)
+- `/graph-builder` skill in `.claude/skills/graph-builder/`
+- Guides user through intent → template → name → prompt → tools
+- Generates 5-file graph scaffold + catalog entry
+- Zero auth, zero infra. User tests locally via `pnpm dev`
 
-**v1**: Port templates to `cogni-contribute scaffold` CLI command (after contributor-cli lands on main).
+**v0.1: Port to LangGraph agent on operator canary**
+- The graph builder *itself* becomes a graph in `LANGGRAPH_CATALOG`
+- Agent I/O: user message → clarifying questions → generated graph package
+- Output: git commit on a branch + PR to canary (via `core__vcs_create_branch` + file write tools)
+- Tests on dev/canary: talk to the builder agent, it outputs new agent packages
+- Key question: storage = git commit. Agent writes files, commits, opens PR. If approved, merge → canary auto-deploys → new agent is live.
 
-**v2**: Server-side builder API + agent-registry auto-registration + artifact output (graph ID pointer, Langfuse trace link).
+**v1: CLI with local execution**
+- Port to `cogni-contribute scaffold` CLI command
+- Add `cogni-contribute execute <graphId>` for local graph testing without full dev server
+- Challenge: needs LiteLLM running for LLM calls — may be too complex for v1. Consider a "dry-run" mode that validates the scaffold compiles without executing.
 
-**vLater**: Evals, prompt refinement workflows, A/B testing of prompts, template marketplace.
+**vN: Registry + deployment pipeline**
+- Agent-registry auto-registration on merge
+- `AgentRegistrationDocument` created automatically from catalog entry
+- Callable agent pointer returned to UI (graph ID + Langfuse trace link)
+- Promotion flow: canary → preview → production (per existing CD pipeline)
+
+**vLater: Evals + optimization**
+- Prompt A/B testing workflows
+- Eval harness for comparing graph output quality
+- Template marketplace (community-contributed graph patterns)
+
+### Template Evolution Note
+
+The 4 v0 templates (chat-assistant, tool-agent, researcher, structured-output) cover single-agent ReAct patterns only. This leaves major gaps:
+
+| Pattern | Status | vNext Research |
+|---------|--------|----------------|
+| Single ReAct agent | v0 templates | Done |
+| Sequential chains (A → B → C) | Not covered | Research n8n/flowise node-based graph UIs |
+| Parallel fan-out/fan-in | Not covered | LangGraph native support exists |
+| Multi-agent supervisor | Not covered | LangGraph `createSupervisor` pattern |
+| Human-in-the-loop | Not covered | LangGraph interrupt/resume |
+| Stateful workflows | Not covered | Research Temporal integration |
+
+**vNext research target**: Study n8n and flowise OSS node-based graph builders for visual chain/multi-agent composition UX. These tools have mature visual editors for DAG construction that could inform a future web UI for graph building.
 
 ## Open Questions
 
 - [ ] Should node-specific graphs (e.g., `nodes/poly/graphs/`) be scaffoldable too, or only operator-level graphs?
-- [ ] What subset of `@cogni/ai-tools` should be presented as selectable tools in the builder? (Full catalog is ~20+ tools — need curated list for new users.)
-- [ ] Should the skill auto-run `pnpm check:fast` after generation to validate the scaffold compiles?
+- [ ] What subset of `@cogni/ai-tools` should be presented as selectable tools in the builder? (Full catalog is 18 tools — all presented in v0 skill.)
+- [ ] Should the skill auto-run `pnpm packages:build` after generation to validate the scaffold compiles?
 - [ ] How should structured-output graphs (no ReAct loop) define their output schema in the builder flow?
 - [ ] Should we generate a basic test file alongside the graph scaffold?
+- [ ] v0.1: What tools does the builder-agent need to write files and commit? Likely needs a `file_write` tool (doesn't exist yet) plus `core__vcs_create_branch`.
+- [ ] v0.1: How does the builder-agent output get reviewed? Standard PR review? Or a specialized "agent audit" review?
+- [ ] vNext: What's the right visual graph builder UX? n8n-style node editor? Or code-first with visualization?
 
 ## Proposed Layout
 
@@ -274,8 +309,16 @@ Not yet — v0 is a single skill PR. If v1/v2 expand scope, create `proj.graph-b
 - **No new spec for v0** — skill follows existing graph conventions documented in catalog.ts and architecture.md
 - **v2 would need**: extension to agent-registry spec for auto-registration flow
 
-### Tasks (v0 scope)
+### Tasks
 
-1. **task: Create `/graph-builder` skill** — Skill file in `.claude/skills/graph-builder/`, 4 template generators, catalog update logic. Writes the 5-file graph scaffold + updates `LANGGRAPH_CATALOG`.
-2. **task: Add template tests** — Unit tests that generate each template and verify the output compiles (import check, no runtime needed).
-3. **task: Document in contributor guide** — Add "Creating Your First Agent" section to contributor quickstart.
+**v0 (this PR):**
+1. **Create `/graph-builder` skill** — `.claude/skills/graph-builder/SKILL.md` with guided flow + 4 templates. DONE.
+2. **Document in contributor guide** — Add "Creating Your First Agent" section to contributor quickstart.
+
+**v0.1 (next PR):**
+3. **Port builder to LangGraph agent** — Create `graph-builder` graph in `LANGGRAPH_CATALOG` that generates agent packages via tool calls + git commit.
+4. **Add `file_write` tool to ai-tools** — Builder agent needs to create files in the repo.
+
+**v1:**
+5. **CLI scaffold command** — `cogni-contribute scaffold` with template selection + interactive prompts.
+6. **CLI execute command** — Local graph execution for testing (may require LiteLLM).
