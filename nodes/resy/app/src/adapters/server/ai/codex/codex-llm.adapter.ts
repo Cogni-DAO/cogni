@@ -216,6 +216,9 @@ async function* runCodexExec(params: {
     const thread = codex.startThread({
       ...(model ? { model } : {}),
       sandboxMode: "read-only",
+      // Required for MCP tool calls over HTTP bridge (localhost:1729).
+      // Without this, Codex can list tools but cannot invoke them.
+      networkAccessEnabled: true,
       approvalPolicy: "never",
       skipGitRepoCheck: true,
     });
