@@ -147,6 +147,9 @@ services:
     networks:
       - internal
       - sandbox-internal
+    # Allow billing callbacks to reach k3s NodePorts on the host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Expose to all interfaces for k3s pods (EndpointSlice → node InternalIP:4000)
     ports:
       - "4000:4000"
