@@ -4,7 +4,7 @@ type: handoff
 work_item_id: proj.agentic-interop
 status: active
 created: 2026-02-22
-updated: 2026-02-22
+updated: 2026-04-08
 branch: worktree-spike-mcp-client
 last_commit: 88c39c96
 ---
@@ -15,6 +15,7 @@ last_commit: 88c39c96
 
 - **Goal**: Give Cogni's LangGraph agents the ability to call external MCP (Model Context Protocol) servers — making them consumers of the emerging agentic internet.
 - Research doc at `docs/research/agentic-internet-gap-analysis.md` catalogs the Feb 2026 industry landscape (MCP, A2A, x402, NIST standards) and maps gaps against our existing projects.
+- Monetization wedge research at `docs/research/2026-04-08-x402-agentic-microniches.md` ranks profitable x402 + graph execution microniches and recommends the first GTM wedge.
 - New project `work/projects/proj.agentic-interop.md` coordinates MCP server, agent identity, and A2A discovery across existing project boundaries.
 - This spike (Path A) wires `@langchain/mcp-adapters` directly into the LangGraph graph runner, bypassing our ToolRunner pipeline. It proves the integration works before the proper Path B implementation (`McpToolSource` implementing `ToolSourcePort`).
 - x402 payment protocol is deliberately excluded — it doesn't support streaming token billing (our primary cost center).
@@ -65,6 +66,7 @@ last_commit: 88c39c96
 | File / Resource                                                  | Why it matters                                                                            |
 | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `docs/research/agentic-internet-gap-analysis.md`                 | Industry landscape + gap analysis driving this work                                       |
+| `docs/research/2026-04-08-x402-agentic-microniches.md`           | Ranked microniche scoring + first wedge recommendation for x402 monetization              |
 | `work/projects/proj.agentic-interop.md`                          | Project roadmap: P0 MCP server, P1 agent cards + MCP client, P2 cross-agent delegation    |
 | `packages/langgraph-graphs/src/runtime/mcp/client.ts`            | MCP client wrapper — `loadMcpTools()` and `parseMcpConfigFromEnv()`                       |
 | `packages/langgraph-graphs/src/inproc/runner.ts`                 | Runner merge point — `extraTools` concatenated with contract tools (line ~123)            |
