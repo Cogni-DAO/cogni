@@ -24,8 +24,8 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - **Compact progress:** Summarize after each step.
 - **Prune aggressively:** Delete noise, keep signal.
 - **Delegate cleanly:** Use subagents with narrow scopes.
-- **Validate early:** Run `pnpm check:fast` during iteration (auto-fixes lint/format). Run targeted tests for what you changed.
-- **Validate once before commit:** Run `pnpm check` once as the pre-commit gate. Never run it more than once per session.
+- **Validate early:** Run `pnpm check:fast` during iteration (auto-fixes lint/format). Prefer affected and targeted node/package checks over broad repo-wide runs while prototyping.
+- **Validate once before commit:** Run `pnpm check` once as the pre-commit gate. Treat it as an expensive session-level gate, not the default inner-loop command.
 - **Update docs:** Reflect any surface changes in AGENTS.md.
 - **Worktree isolation:** Unless explicitly instructed by the user, assume you need to do your work in an isolated worktree. Check out the worktree from the default branch, and expect to PR your work to `canary`.
 - **Full Validation:** `pnpm check:full` runs in CI (~20 min). Check CI status on the PR after push — stack test success is the required gate.
@@ -36,6 +36,7 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 - Never modify outside assigned directories.
 - Keep context lean (<40% window); summarize often.
 - Purge incorrect info instead of propagating it.
+- Default implementation agents should optimize for clean, fast, checked code and targeted validation. Use specialist agents for higher-level test authoring, broad validation sweeps, and CI/debug follow-through.
 - If asked to install tools, run: `pnpm install --frozen-lockfile`
 
 ## Environment
