@@ -323,6 +323,12 @@ jobs:
           fi
           echo "✅ SSH connection successful"
 
+      - name: Wait for ArgoCD sync
+        if: env.VM_HOST != ''
+        env:
+          SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+        run: scripts/ci/wait-for-argocd.sh
+
       - name: Deploy infrastructure
         if: env.VM_HOST != ''
         run: scripts/ci/deploy-infra.sh
@@ -359,71 +365,13 @@ jobs:
         with:
           ref: ${{ needs.promote-k8s.outputs.head_sha }}
 
-      - name: Poll health endpoints
+      - name: Verify deployment
         run: |
           if [ -z "$DOMAIN" ]; then
             echo "⚠️ No DOMAIN variable set — skipping verify"
             exit 0
           fi
-
-          OPERATOR_URL="https://${DOMAIN}"
-          POLY_URL="https://poly-${DOMAIN}"
-          RESY_URL="https://resy-${DOMAIN}"
-
-          MAX_ATTEMPTS=30
-          SLEEP=15
-
-          poll_health() {
-            local name="$1"
-            local url="$2"
-            local attempt=1
-
-            echo "Polling $name at $url/readyz ..."
-            while [ $attempt -le $MAX_ATTEMPTS ]; do
-              STATUS=$(curl -sk -o /dev/null -w '%{http_code}' "$url/readyz" 2>/dev/null || echo "000")
-              if [ "$STATUS" = "200" ]; then
-                echo "✅ $name healthy (attempt $attempt)"
-                return 0
-              fi
-              echo "  $name: HTTP $STATUS (attempt $attempt/$MAX_ATTEMPTS)"
-              sleep $SLEEP
-              attempt=$((attempt + 1))
-            done
-            echo "❌ $name failed health check after $MAX_ATTEMPTS attempts"
-            return 1
-          }
-
-          # Poll all nodes in parallel
-          poll_health "operator" "$OPERATOR_URL" &
-          PID_OP=$!
-          poll_health "poly" "$POLY_URL" &
-          PID_POLY=$!
-          poll_health "resy" "$RESY_URL" &
-          PID_RESY=$!
-
-          FAILED=0
-          wait $PID_OP || FAILED=1
-          wait $PID_POLY || FAILED=1
-          wait $PID_RESY || FAILED=1
-
-          if [ $FAILED -ne 0 ]; then
-            echo "❌ One or more nodes failed health checks"
-            exit 1
-          fi
-          echo "✅ All nodes healthy"
-
-      - name: Smoke test
-        if: env.DOMAIN != ''
-        run: |
-          for url in "https://${DOMAIN}" "https://poly-${DOMAIN}" "https://resy-${DOMAIN}"; do
-            BODY=$(curl -sk "$url/livez" 2>/dev/null)
-            echo "$url/livez → $BODY"
-            if ! echo "$BODY" | grep -q '"status"'; then
-              echo "❌ $url/livez did not return expected JSON"
-              exit 1
-            fi
-          done
-          echo "✅ Smoke tests passed"
+          scripts/ci/verify-deployment.sh
 
       - name: Dump diagnostics on failure
         if: failure() && env.VM_HOST != ''
