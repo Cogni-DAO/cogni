@@ -27,7 +27,7 @@ export const GET = wrapPublicRoute(
     staleWhileRevalidateSeconds: 300,
   },
   async (_ctx, _request) => {
-    const { LITELLM_BASE_URL, LITELLM_MASTER_KEY } = serverEnv;
+    const { LITELLM_BASE_URL, LITELLM_MASTER_KEY } = serverEnv();
 
     let upstream: Response;
     try {

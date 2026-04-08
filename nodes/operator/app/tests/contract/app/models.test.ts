@@ -51,10 +51,10 @@ vi.mock("@/bootstrap/container", () => ({
 
 // Mock serverEnv with LiteLLM config
 vi.mock("@/shared/env", () => ({
-  serverEnv: {
+  serverEnv: () => ({
     LITELLM_BASE_URL: "http://litellm-test:4000",
     LITELLM_MASTER_KEY: "test-master-key",
-  },
+  }),
 }));
 
 import { GET } from "@/app/api/v1/public/models/route";
