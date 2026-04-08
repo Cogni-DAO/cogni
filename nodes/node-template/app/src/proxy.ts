@@ -54,9 +54,9 @@ function isAgentApiRoute(pathname: string): boolean {
 }
 
 function hasAgentBearer(req: NextRequest): boolean {
-  return req.headers
-    .get("authorization")
-    ?.startsWith(AGENT_BEARER_PREFIX) ?? false;
+  return (
+    req.headers.get("authorization")?.startsWith(AGENT_BEARER_PREFIX) ?? false
+  );
 }
 
 export async function proxy(req: NextRequest): Promise<NextResponse> {
@@ -77,7 +77,11 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
     (pathname.startsWith("/api/v1/") && !isAgentBearerRequest);
   const tokenSecret = authSecret || authOptions.secret;
 
-  if (!tokenSecret && pathname.startsWith("/api/v1/") && !isAgentBearerRequest) {
+  if (
+    !tokenSecret &&
+    pathname.startsWith("/api/v1/") &&
+    !isAgentBearerRequest
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
