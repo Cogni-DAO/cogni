@@ -37,21 +37,51 @@ function isAppRoute(pathname: string): boolean {
   );
 }
 
+const AGENT_BEARER_PREFIX = "Bearer cogni_ag_sk_v1_";
+
+function isPublicApiRoute(pathname: string): boolean {
+  return (
+    pathname.startsWith("/api/v1/public/") ||
+    pathname === "/api/v1/agent/register"
+  );
+}
+
+function isAgentApiRoute(pathname: string): boolean {
+  return (
+    pathname === "/api/v1/chat/completions" ||
+    pathname.startsWith("/api/v1/agent/")
+  );
+}
+
+function hasAgentBearer(req: NextRequest): boolean {
+  return (
+    req.headers.get("authorization")?.startsWith(AGENT_BEARER_PREFIX) ?? false
+  );
+}
+
 export async function proxy(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
+  const isPublicApi = isPublicApiRoute(pathname);
+  const isAgentBearerRequest = isAgentApiRoute(pathname) && hasAgentBearer(req);
 
   // Allow public namespace without authentication
-  if (pathname.startsWith("/api/v1/public/")) {
+  if (isPublicApi) {
     return NextResponse.next();
   }
 
   // Resolve token once — reused for both page and API checks.
   // Only call getToken when the route actually needs auth checking.
   const needsAuth =
-    pathname === "/" || isAppRoute(pathname) || pathname.startsWith("/api/v1/");
+    pathname === "/" ||
+    isAppRoute(pathname) ||
+    (pathname.startsWith("/api/v1/") && !isAgentBearerRequest);
   const tokenSecret = authSecret || authOptions.secret;
 
-  if (!tokenSecret && pathname.startsWith("/api/v1/")) {
+  if (
+    !tokenSecret &&
+    pathname.startsWith("/api/v1/") &&
+    !isAgentBearerRequest
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -82,6 +112,9 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
   // are responsible for their own auth enforcement.
   // Public unauthenticated endpoints must use /api/v1/public/* namespace.
   if (pathname.startsWith("/api/v1/")) {
+    if (isAgentBearerRequest) {
+      return NextResponse.next();
+    }
     if (!isLoggedIn) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

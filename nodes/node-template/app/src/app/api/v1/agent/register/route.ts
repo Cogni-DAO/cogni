@@ -3,12 +3,11 @@
 
 import { randomUUID } from "node:crypto";
 import { users } from "@cogni/db-schema";
-import type { UserId } from "@cogni/ids";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { registerAgentOperation } from "@cogni/node-contracts";
-import { getContainer, resolveAppDb } from "@/bootstrap/container";
 import { issueAgentApiKey } from "@/app/_lib/auth/request-identity";
+import { getContainer, resolveServiceDb } from "@/bootstrap/container";
 
 export const runtime = "nodejs";
 
@@ -19,7 +18,7 @@ export async function POST(request: Request) {
   }
   const input = parsed.data;
 
-  const db = resolveAppDb();
+  const db = resolveServiceDb();
   const id = randomUUID();
 
   await db.insert(users).values({
@@ -29,11 +28,11 @@ export async function POST(request: Request) {
   });
 
   const container = getContainer();
-  const accountService = container.accountsForUser(id as UserId);
-  const billingAccount = await accountService.getOrCreateBillingAccountForUser({
-    userId: id,
-    displayName: input.name,
-  });
+  const billingAccount =
+    await container.serviceAccountService.getOrCreateBillingAccountForUser({
+      userId: id,
+      displayName: input.name,
+    });
 
   const actorId = `user:${id}`;
   const apiKey = issueAgentApiKey({

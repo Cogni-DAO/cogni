@@ -4,7 +4,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SessionUser } from "@cogni/node-shared";
 import { headers } from "next/headers";
-import { getServerSessionUser } from "@/lib/auth/server";
+import { getSessionUser } from "@/app/_lib/auth/session";
 import { serverEnv } from "@/shared/env/server";
 
 type AgentTokenPayload = {
@@ -91,7 +91,7 @@ export async function resolveRequestIdentity(): Promise<SessionUser | null> {
   try {
     h = await headers();
   } catch {
-    return getServerSessionUser();
+    return getSessionUser();
   }
   const bearer = extractBearerToken(h.get("authorization"));
   if (bearer) {
@@ -109,5 +109,5 @@ export async function resolveRequestIdentity(): Promise<SessionUser | null> {
     return null;
   }
 
-  return getServerSessionUser();
+  return getSessionUser();
 }

@@ -19,14 +19,14 @@ vi.mock("@/app/_lib/auth/request-identity", () => ({
 }));
 
 vi.mock("@/bootstrap/container", () => ({
-  resolveAppDb: vi.fn(() => ({
+  resolveServiceDb: vi.fn(() => ({
     insert: mockInsert,
     select: mockSelect,
   })),
   getContainer: vi.fn(() => ({
-    accountsForUser: vi.fn(() => ({
+    serviceAccountService: {
       getOrCreateBillingAccountForUser: mockGetOrCreate,
-    })),
+    },
   })),
 }));
 
