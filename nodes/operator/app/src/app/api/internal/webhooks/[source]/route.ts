@@ -14,7 +14,7 @@
  * @internal
  */
 
-import type { VcsActivityEvent } from "@cogni/node-streams";
+import type { CiStatusEvent, VcsActivityEvent } from "@cogni/node-streams";
 import { NextResponse } from "next/server";
 import { dispatchPrReview } from "@/app/_facades/review/dispatch.server";
 import { getContainer } from "@/bootstrap/container";
@@ -163,6 +163,38 @@ export async function POST(
         });
     }
 
+    // 7. Publish CI status to node stream (fire-and-forget).
+    // Dashboard renders CiStatusEventContent for real-time CI pipeline visibility.
+    if (
+      source === "github" &&
+      eventType === "workflow_run" &&
+      container.nodeStream
+    ) {
+      const run = payload.workflow_run as Record<string, unknown> | undefined;
+      if (run) {
+        const headCommit = run.head_commit as
+          | Record<string, unknown>
+          | undefined;
+        const pullRequests = run.pull_requests as
+          | { number: number }[]
+          | undefined;
+        const ciEvent: CiStatusEvent = {
+          type: "ci_status",
+          timestamp: new Date().toISOString(),
+          source: "github-actions",
+          branch: String(run.head_branch ?? ""),
+          conclusion: (run.conclusion as string) ?? null,
+          workflowName: String(run.name ?? ""),
+          runUrl: String(run.html_url ?? ""),
+          commitSha: String(run.head_sha ?? ""),
+          commitMessage: String(headCommit?.message ?? ""),
+          prNumber: pullRequests?.[0]?.number ?? null,
+        };
+        container.nodeStream
+          .publish(`node:${getNodeId()}:events`, ciEvent)
+          .catch(() => {});
+      }
+    }
     return NextResponse.json(
       { ok: true, eventCount: result.eventCount },
       { status: 200 }
