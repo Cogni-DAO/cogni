@@ -173,6 +173,33 @@ describe("proxy — API route protection", () => {
     expect(res.status).toBe(200);
     expect(mockGetToken).not.toHaveBeenCalled();
   });
+
+  it("allows agent bearer on /api/v1/ai/chat (agent-first)", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/ai/chat"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
+  it("allows agent bearer on /api/v1/ai/models (agent-first)", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/ai/models"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
+  it("allows agent bearer on /api/v1/schedules/* (agent-first)", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/schedules/my-schedule"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
 });
 
 describe("proxy — unmatched routes", () => {
