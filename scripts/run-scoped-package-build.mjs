@@ -61,6 +61,9 @@ const globalBuildInputsTouched = didTouchGlobalBuildInputs(
   scopeHead
 );
 if (globalBuildInputsTouched) {
+  console.error(
+    `\u001b[31mWARN(task.0306): global build inputs changed (${scopeBase}...${scopeHead}); falling back to full pnpm packages:build.\u001b[0m`
+  );
   console.log(
     `Package build scope: full (global inputs changed: ${scopeBase}...${scopeHead})`
   );

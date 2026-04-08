@@ -83,4 +83,4 @@ pnpm check:agentsmd             # Validate all AGENTS.md files
 
 - Scripts must be idempotent and safe to re-run
 - AGENTS.md validator enforces hexagonal import standards for AGENTS.md
-- `run-scoped-package-build.mjs` falls back to a full `pnpm packages:build` when global build inputs change (root `package.json`, `pnpm-lock.yaml`, or `tsconfig*`).
+- `run-scoped-package-build.mjs` falls back to a full `pnpm packages:build` when global build inputs change (root `package.json`, `pnpm-lock.yaml`, or `tsconfig*`), emitting a red warning (`WARN(task.0306)`) so developers notice the scope expansion.
