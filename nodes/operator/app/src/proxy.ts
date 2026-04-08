@@ -5,7 +5,8 @@
  * Module: `@/proxy`
  * Purpose: Next.js 16 proxy (formerly middleware) for route protection.
  * Scope: Root-level proxy. Enforces session auth on /api/v1/* routes and page-level routing (redirect unauthenticated users away from app routes, redirect authenticated users from landing to /chat). Does not handle public infrastructure endpoints (e.g., /api/metrics, /api/health).
- * Invariants: /api/v1/public/* accessible without auth; other /api/v1/* require session.
+ * Invariants: /api/v1/public/* accessible without auth; /api/v1/* with cogni_ag_sk_v1_ bearer
+ *   passes through (route handler validates token); other /api/v1/* require session.
  *   Single authority for auth routing — no client-side redirect logic.
  * Side-effects: none
  * Links: docs/spec/security-auth.md
@@ -47,10 +48,9 @@ function isPublicApiRoute(pathname: string): boolean {
 }
 
 function isAgentApiRoute(pathname: string): boolean {
-  return (
-    pathname === "/api/v1/chat/completions" ||
-    pathname.startsWith("/api/v1/agent/")
-  );
+  // Any /api/v1/* route may accept machine bearer tokens — route handlers
+  // do the actual token validation and return 401 for invalid/missing creds.
+  return pathname.startsWith("/api/v1/");
 }
 
 function hasAgentBearer(req: NextRequest): boolean {
