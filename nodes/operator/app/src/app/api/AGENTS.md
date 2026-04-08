@@ -59,6 +59,9 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/users/me/ownership` [GET] - current ownership summary derived from linked identities
   - `/api/v1/work/items` [GET] - list work items with optional filters (SIWE auth)
   - `/api/v1/work/items/[id]` [GET] - get single work item by ID (SIWE auth)
+  - `/api/v1/agent/register` [POST] - unauthenticated machine actor registration (returns Bearer API key)
+  - `/api/v1/agent/runs` [GET] - machine-authenticated run list
+  - `/api/v1/agent/runs/[runId]/stream` [GET] - machine-authenticated run stream SSE
 - **Files considered API:** v1/_/route.ts, admin/_/route.ts
 
 ## Responsibilities
