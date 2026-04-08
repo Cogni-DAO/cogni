@@ -107,6 +107,11 @@ services/*/dist
 # Claude Code worktrees
 .claude/worktrees/
 
+# Ephemeral working directories (biome must not scan nested configs here)
+.worktrees/
+.tmp/
+.turbo/
+
 # Generated work index (derived from frontmatter — never hand-edit)
 work/items/_index.md
 services/sandbox-openclaw/gateway-workspace/ideas/work/items/_index.md
