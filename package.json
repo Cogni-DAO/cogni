@@ -14,6 +14,7 @@
     "check:fix": "bash scripts/check-all.sh --fix",
     "check:fast": "bash scripts/check-fast.sh",
     "check:fast:verbose": "bash scripts/check-fast.sh --verbose",
+    "check:prepush": "bash scripts/check-prepush.sh",
     "check:full": "bash scripts/check-full.sh",
     "check:full:fast": "bash scripts/check-full.sh --skip-build",
     "check:code": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",

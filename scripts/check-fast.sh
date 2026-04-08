@@ -80,6 +80,7 @@ fi
 run_check "packages:build" "node scripts/run-scoped-package-build.mjs"
 run_check "workspace:typecheck" "bash scripts/run-turbo-checks.sh typecheck"
 run_check "lint" "pnpm lint:fix"
+run_check "workspace:lint" "bash scripts/run-turbo-checks.sh lint"
 run_check "format" "pnpm format:check"
 run_check "workspace:test" "bash scripts/run-turbo-checks.sh test --concurrency=1"
 

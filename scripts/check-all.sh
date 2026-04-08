@@ -94,6 +94,7 @@ fi
 
 run_check "packages:build" "pnpm packages:build"
 run_check "workspace:typecheck" "bash scripts/run-turbo-checks.sh typecheck"
+run_check "workspace:lint" "bash scripts/run-turbo-checks.sh lint"
 
 if [ "$FIX_MODE" = true ]; then
   run_check "lint" "pnpm lint:fix"
