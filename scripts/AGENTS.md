@@ -84,3 +84,4 @@ pnpm check:agentsmd             # Validate all AGENTS.md files
 - Scripts must be idempotent and safe to re-run
 - AGENTS.md validator enforces hexagonal import standards for AGENTS.md
 - `run-scoped-package-build.mjs` falls back to a full `pnpm packages:build` when global build inputs change (root `package.json`, `pnpm-lock.yaml`, or `tsconfig*`), emitting a red warning (`WARN(task.0306)`) so developers notice the scope expansion.
+- `check-fast.sh` and `check-all.sh` run `workspace:lint` via `run-turbo-checks.sh` so local Husky checks catch the same per-workspace Biome/ESLint failures that CI's `turbo run lint` would catch.

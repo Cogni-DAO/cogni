@@ -117,7 +117,9 @@
 | 1 | 10 | 3 | needs_merge | bug.0195 | TigerBeetle unreachable in all envs — native client floods ~72M garbage log lines/day to Grafana Cloud | Financial Ledger | proj.financial-ledger |
 | 1 | 10 | 1 | needs_review | task.0210 | BYO-AI ChatGPT v0 — OAuth hardening + security review fixes | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | 10 | 1 | needs_implement | spike.0220 | Validate AiMo Network x402 passthrough — 402 flow, model coverage, E2E feasibility | x402 E2E Migration: Hyperbolic + Per-Request Settlement | proj.x402-e2e-migration |
+| 1 | 10 | 1 | needs_merge | task.0306 | Affected checks: warn on global-input full-build fallback | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 11 | 3 | needs_design | task.0045 | Enable OpenClaw subagent spawning — upstream header fix + Cogni config + delegation instructions | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
+| 1 | 11 | 1 | needs_merge | task.0307 | Unify local checks with CI workspace lint | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 12 | 2 | needs_design | task.0034 | Wire OpenClaw memory search + bootstrap files for cogni-template repo context | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 13 | 1 | needs_design | task.0018 | Dynamic agent catalog in UI + OpenClaw model sync | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 13 | 2 | needs_design | task.0077 | Discord billing user attribution — identify which Discord user triggered each LLM call | Messenger Channels | proj.messenger-channels |
