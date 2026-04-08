@@ -864,3 +864,10 @@ export function resolveSchedulingDeps(): SchedulingDeps {
 export function resolveAppDb(): Database {
   return getAppDb();
 }
+
+/**
+ * Resolve serviceDb for pre-auth or system-level writes that must bypass RLS.
+ */
+export function resolveServiceDb(): Database {
+  return getServiceDb();
+}

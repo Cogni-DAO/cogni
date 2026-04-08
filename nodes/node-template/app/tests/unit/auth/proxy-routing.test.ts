@@ -36,6 +36,14 @@ function makeRequest(path: string): NextRequest {
   return new NextRequest(new URL(path, "http://localhost:3000"));
 }
 
+function makeAgentRequest(path: string): NextRequest {
+  return new NextRequest(new URL(path, "http://localhost:3000"), {
+    headers: {
+      authorization: "Bearer cogni_ag_sk_v1_test.payload.signature",
+    },
+  });
+}
+
 function expectRedirectTo(res: Response, pathname: string): void {
   expect(res.status).toBe(307);
   const location = res.headers.get("location") ?? "";
@@ -121,6 +129,15 @@ describe("proxy — API route protection", () => {
     expect(mockGetToken).not.toHaveBeenCalled();
   });
 
+  it("allows /api/v1/agent/register without auth", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeRequest("/api/v1/agent/register"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
   it("rejects unauthenticated on /api/v1/*", async () => {
     mockGetToken.mockResolvedValue(null);
 
@@ -137,6 +154,51 @@ describe("proxy — API route protection", () => {
     const res = await proxy(makeRequest("/api/v1/users/me"));
 
     expect(res.status).toBe(200);
+  });
+
+  it("allows agent bearer on /api/v1/chat/completions", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/chat/completions"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
+  it("allows agent bearer on /api/v1/agent/runs", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/agent/runs"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
+  it("allows agent bearer on /api/v1/ai/chat (agent-first)", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/ai/chat"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
+  it("allows agent bearer on /api/v1/ai/models (agent-first)", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/ai/models"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
+  });
+
+  it("allows agent bearer on /api/v1/schedules/* (agent-first)", async () => {
+    mockGetToken.mockResolvedValue(null);
+
+    const res = await proxy(makeAgentRequest("/api/v1/schedules/my-schedule"));
+
+    expect(res.status).toBe(200);
+    expect(mockGetToken).not.toHaveBeenCalled();
   });
 });
 
