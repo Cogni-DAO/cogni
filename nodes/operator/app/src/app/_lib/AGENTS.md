@@ -29,8 +29,8 @@ Private app-layer helpers for route handlers. Provides server-side utilities lik
 
 ## Public Surface
 
-- **Exports:** models-cache (getCachedModels, isModelAllowed, getDefaultModelId), auth/session helpers
-- **Files considered API:** models-cache.ts, auth/session.ts
+- **Exports:** models-cache (getCachedModels, isModelAllowed, getDefaultModelId), auth/session helpers, request-identity resolver + agent key issuer
+- **Files considered API:** models-cache.ts, auth/session.ts, auth/request-identity.ts
 
 ## Responsibilities
 
