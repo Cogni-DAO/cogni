@@ -398,9 +398,8 @@ function DataStreamScorecard(): ReactElement {
   );
 }
 
-/* ─── Git Activity Feed ───────────────────────────────────────────── */
+/* ─── Git Activity Feed (PR-grouped) ─────────────────────────────── */
 
-/** Format an ISO timestamp as a compact relative string. */
 function relativeTime(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   if (diffMs < 0) return "now";
@@ -413,17 +412,8 @@ function relativeTime(iso: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
-/** Duration between two ISO timestamps in human form. */
-function durationBetween(oldest: string, newest: string): string {
-  const ms = new Date(newest).getTime() - new Date(oldest).getTime();
-  const m = Math.round(ms / 60_000);
-  if (m < 1) return "<1m";
-  if (m < 60) return `${m}m`;
-  return `${Math.round(m / 60)}h`;
-}
-
-/** Left-edge accent color for event action. */
-function activityAccent(action: string): string {
+/** Accent color for PR action. */
+function prAccent(action: string): string {
   switch (action) {
     case "merged":
       return "bg-violet-500";
@@ -432,22 +422,17 @@ function activityAccent(action: string): string {
       return "bg-emerald-500";
     case "closed":
       return "bg-red-500";
-    case "approved":
-      return "bg-emerald-400";
-    case "changes_requested":
-      return "bg-amber-500";
     default:
       return "bg-muted-foreground/30";
   }
 }
 
-/** Badge intent for action type. */
-function actionBadgeIntent(
+/** Badge intent for PR action. */
+function prBadgeIntent(
   action: string
 ): "default" | "secondary" | "destructive" | "outline" {
   switch (action) {
     case "merged":
-    case "approved":
       return "default";
     case "opened":
     case "reopened":
@@ -459,82 +444,98 @@ function actionBadgeIntent(
   }
 }
 
-/** Human label for a git event action. */
-function activityLabel(eventType: string, action: string): string {
-  switch (eventType) {
-    case "pull_request":
-      return action === "merged"
-        ? "merged"
-        : action === "opened"
-          ? "opened"
-          : action === "closed"
-            ? "closed"
-            : action;
-    case "push":
-      return "pushed";
-    case "pull_request_review":
-      return action === "approved"
-        ? "approved"
-        : action === "changes_requested"
-          ? "changes requested"
-          : "reviewed";
-    case "issues":
-      return action === "opened"
-        ? "opened"
-        : action === "closed"
-          ? "closed"
-          : action;
-    case "issue_comment":
-      return "commented";
-    default:
-      return eventType;
-  }
+/** CI conclusion → status dot color (reuses service health pattern). */
+function ciDotColor(conclusion: string | null): string {
+  if (conclusion === null) return "animate-pulse bg-warning";
+  if (conclusion === "success") return "bg-success";
+  if (conclusion === "failure" || conclusion === "timed_out")
+    return "bg-destructive";
+  if (conclusion === "cancelled") return "bg-muted-foreground/40";
+  return "bg-muted-foreground/20";
 }
 
-interface AggregatedEntry {
-  event: StreamEvent;
-  collapseCount: number;
-  oldestTimestamp: string;
-  newestTimestamp: string;
-  key: string;
+interface CiRun {
+  workflowName: string;
+  conclusion: string | null;
+  runUrl: string;
 }
 
-/** Aggregate git events: collapse consecutive synchronize events for the same PR. */
-function aggregateGitEvents(
-  rawEvents: readonly StreamEvent[]
-): AggregatedEntry[] {
-  const gitEvents = rawEvents
-    .filter((e) => e.type === "vcs_activity")
-    .slice(-20);
+interface PrGroup {
+  prNumber: number;
+  title: string;
+  action: string;
+  actor: string;
+  repo: string;
+  lastActivity: string;
+  ciRuns: CiRun[];
+  pushCount: number;
+}
 
-  const entries: AggregatedEntry[] = [];
-  for (const ev of gitEvents) {
-    const action = String(ev.action ?? "");
+/** Group stream events by PR number. Dedup CI runs by workflow name (keep latest). */
+function groupByPr(events: readonly StreamEvent[]): PrGroup[] {
+  const groups = new Map<number, PrGroup>();
+
+  for (const ev of events) {
     const prNumber = ev.prNumber as number | null;
-    const prev = entries[entries.length - 1];
+    if (!prNumber) continue;
 
-    if (
-      action === "synchronize" &&
-      prev?.event.action === "synchronize" &&
-      prNumber != null &&
-      (prev.event.prNumber as number | null) === prNumber
-    ) {
-      prev.collapseCount += 1;
-      prev.newestTimestamp = ev.timestamp;
-      prev.event = ev;
-      continue;
+    if (!groups.has(prNumber)) {
+      groups.set(prNumber, {
+        prNumber,
+        title: "",
+        action: "opened",
+        actor: "",
+        repo: "",
+        lastActivity: ev.timestamp,
+        ciRuns: [],
+        pushCount: 0,
+      });
+    }
+    const g = groups.get(prNumber)!;
+
+    if (ev.timestamp > g.lastActivity) g.lastActivity = ev.timestamp;
+
+    if (ev.type === "vcs_activity") {
+      const action = String(ev.action ?? "");
+      const title = String(ev.title ?? "");
+      const actor = String(ev.actor ?? "");
+      const repo = String(ev.repo ?? "");
+      if (title) g.title = title;
+      if (actor) g.actor = actor;
+      if (repo) g.repo = repo;
+      if (action === "synchronize") {
+        g.pushCount += 1;
+      } else if (
+        action === "merged" ||
+        action === "closed" ||
+        action === "opened" ||
+        action === "reopened"
+      ) {
+        g.action = action;
+      }
     }
 
-    entries.push({
-      event: ev,
-      collapseCount: 1,
-      oldestTimestamp: ev.timestamp,
-      newestTimestamp: ev.timestamp,
-      key: `${ev.timestamp}-${entries.length}`,
-    });
+    if (ev.type === "ci_status") {
+      const name = String(ev.workflowName ?? "");
+      const conclusion = (ev.conclusion as string | null) ?? null;
+      const runUrl = String(ev.runUrl ?? "");
+      if (name) {
+        const existing = g.ciRuns.findIndex((r) => r.workflowName === name);
+        if (existing >= 0) {
+          g.ciRuns[existing] = { workflowName: name, conclusion, runUrl };
+        } else {
+          g.ciRuns.push({ workflowName: name, conclusion, runUrl });
+        }
+      }
+    }
   }
 
-  return entries.reverse().slice(0, 10);
+  return [...groups.values()]
+    .sort(
+      (a, b) =>
+        new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+    )
+    .slice(0, 8);
 }
 
 function GitActivityFeed({
@@ -542,7 +543,7 @@ function GitActivityFeed({
 }: {
   events: readonly StreamEvent[];
 }): ReactElement {
-  const entries = aggregateGitEvents(events);
+  const prGroups = groupByPr(events);
 
   return (
     <div className="space-y-2">
@@ -550,82 +551,100 @@ function GitActivityFeed({
         Git Activity
       </h3>
 
-      {entries.length === 0 ? (
+      {prGroups.length === 0 ? (
         <p className="py-6 text-center text-muted-foreground/40 text-xs">
           Waiting for webhook events&hellip;
         </p>
       ) : (
-        <div className="space-y-px">
-          {entries.map((entry) => {
-            const ev = entry.event;
-            const eventType = String(ev.eventType ?? "");
-            const action = String(ev.action ?? "");
-            const actor = String(ev.actor ?? "");
-            const prNumber = ev.prNumber as number | null;
-            const repo = String(ev.repo ?? "");
-            const title = String(ev.title ?? "");
-            const isSyncCollapse =
-              action === "synchronize" && entry.collapseCount > 1;
-
-            return (
+        <div className="space-y-1">
+          {prGroups.map((pr) => (
+            <div
+              key={pr.prNumber}
+              className="group flex items-start gap-0 rounded-sm transition-colors hover:bg-muted/40"
+            >
+              {/* Left accent bar */}
               <div
-                key={entry.key}
-                className="group flex items-center gap-0 rounded-sm transition-colors hover:bg-muted/40"
-              >
-                {/* Left accent bar */}
-                <div
-                  className={cn(
-                    "w-0.5 shrink-0 self-stretch rounded-l-sm",
-                    activityAccent(action)
-                  )}
-                />
+                className={cn(
+                  "w-0.5 shrink-0 self-stretch rounded-l-sm",
+                  prAccent(pr.action)
+                )}
+              />
 
-                <div className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5">
-                  {prNumber ? (
-                    <a
-                      href={`https://github.com/${repo}/pull/${prNumber}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 font-mono text-foreground/80 text-xs hover:text-foreground hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      #{prNumber}
-                    </a>
-                  ) : null}
+              <div className="min-w-0 flex-1 px-2.5 py-1.5">
+                {/* Row 1: PR ref + action + title + time */}
+                <div className="flex items-center gap-2">
+                  <a
+                    href={`https://github.com/${pr.repo}/pull/${pr.prNumber}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 font-mono text-foreground/80 text-xs hover:text-foreground hover:underline"
+                  >
+                    #{pr.prNumber}
+                  </a>
 
-                  {isSyncCollapse ? (
-                    <span className="shrink-0 text-muted-foreground text-xs">
-                      {entry.collapseCount} pushes in{" "}
-                      {durationBetween(
-                        entry.oldestTimestamp,
-                        entry.newestTimestamp
-                      )}
-                    </span>
-                  ) : (
-                    <Badge intent={actionBadgeIntent(action)} size="sm">
-                      {activityLabel(eventType, action)}
-                    </Badge>
-                  )}
+                  <Badge intent={prBadgeIntent(pr.action)} size="sm">
+                    {pr.action}
+                  </Badge>
 
                   <span className="min-w-0 truncate text-muted-foreground text-xs">
-                    {title}
+                    {pr.title}
                   </span>
 
                   <span className="flex-1" />
 
-                  {actor && (
+                  {pr.actor && (
                     <span className="hidden shrink-0 text-muted-foreground/50 text-xs group-hover:inline">
-                      {actor}
+                      {pr.actor}
                     </span>
                   )}
 
                   <span className="shrink-0 text-muted-foreground/40 text-xs tabular-nums">
-                    {relativeTime(entry.newestTimestamp)}
+                    {relativeTime(pr.lastActivity)}
                   </span>
                 </div>
+
+                {/* Row 2: CI status dots + push count */}
+                {(pr.ciRuns.length > 0 || pr.pushCount > 1) && (
+                  <div className="mt-1 flex items-center gap-3">
+                    {pr.ciRuns.length > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground/50 text-xs">
+                          CI
+                        </span>
+                        {pr.ciRuns.map((ci) => (
+                          <a
+                            key={ci.workflowName}
+                            href={ci.runUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`${ci.workflowName}: ${ci.conclusion ?? "in progress"}`}
+                            className="group/ci flex items-center gap-1"
+                          >
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                ciDotColor(ci.conclusion)
+                              )}
+                            />
+                            <span className="text-muted-foreground/40 text-xs group-hover/ci:text-muted-foreground">
+                              {ci.workflowName.length > 12
+                                ? `${ci.workflowName.slice(0, 10)}…`
+                                : ci.workflowName}
+                            </span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {pr.pushCount > 1 && (
+                      <span className="text-muted-foreground/30 text-xs">
+                        {pr.pushCount} pushes
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
     </div>

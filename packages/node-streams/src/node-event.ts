@@ -41,6 +41,8 @@ export interface CiStatusEvent extends NodeEventBase {
   runUrl: string;
   commitSha: string;
   commitMessage: string;
+  /** PR number if the workflow run is associated with a pull request. */
+  prNumber: number | null;
 }
 
 /** Deployment lifecycle event (from Loki or webhook). */

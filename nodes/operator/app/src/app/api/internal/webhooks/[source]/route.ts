@@ -175,6 +175,9 @@ export async function POST(
         const headCommit = run.head_commit as
           | Record<string, unknown>
           | undefined;
+        const pullRequests = run.pull_requests as
+          | { number: number }[]
+          | undefined;
         const ciEvent: CiStatusEvent = {
           type: "ci_status",
           timestamp: new Date().toISOString(),
@@ -185,6 +188,7 @@ export async function POST(
           runUrl: String(run.html_url ?? ""),
           commitSha: String(run.head_sha ?? ""),
           commitMessage: String(headCommit?.message ?? ""),
+          prNumber: pullRequests?.[0]?.number ?? null,
         };
         container.nodeStream
           .publish(`node:${getNodeId()}:events`, ciEvent)
