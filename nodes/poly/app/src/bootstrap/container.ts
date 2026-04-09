@@ -36,13 +36,13 @@ import {
   initAnalytics,
   shutdownAnalytics,
 } from "@cogni/node-shared";
-import { numberToPpm } from "@cogni/operator-wallet";
-import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
-import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import {
   type NodeStreamPort,
   RedisNodeStreamAdapter,
 } from "@cogni/node-streams";
+import { numberToPpm } from "@cogni/operator-wallet";
+import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
+import type { ScheduleControlPort } from "@cogni/scheduler-core";
 import type { WorkItemQueryPort } from "@cogni/work-items";
 import { MarkdownWorkItemAdapter } from "@cogni/work-items/markdown";
 import {
@@ -109,13 +109,13 @@ import {
   createMetricsCapability,
   derivePrometheusQueryUrl,
 } from "@/bootstrap/capabilities/metrics";
-import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import { createRepoCapability } from "@/bootstrap/capabilities/repo";
 import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
+import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import type {
   AccountService,
   AiTelemetryPort,
