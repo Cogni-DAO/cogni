@@ -30,7 +30,23 @@ tags: [ci-cd, gitops, candidate-flight, agents]
 
 1. Confirm the PR is green on normal CI/build.
 2. Confirm the PR is up to date with `main`.
-3. Trigger flight explicitly: `flight-now` label or `workflow_dispatch`.
+3. Trigger flight explicitly:
+
+   ```bash
+   gh workflow run candidate-flight.yml \
+     --repo Cogni-DAO/node-template \
+     --field pr_number=<PR_NUMBER>
+   ```
+
+   Optionally pin a specific SHA:
+
+   ```bash
+   gh workflow run candidate-flight.yml \
+     --repo Cogni-DAO/node-template \
+     --field pr_number=<PR_NUMBER> \
+     --field head_sha=<SHA>
+   ```
+
 4. Read the lease on `deploy/candidate-a`.
 5. If occupied, report `candidate-a busy` and stop. Do not queue.
 6. If free or expired, acquire the lease.
