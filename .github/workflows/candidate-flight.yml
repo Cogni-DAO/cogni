@@ -1,0 +1,215 @@
+name: Candidate Flight
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to flight"
+        required: true
+        type: string
+      head_sha:
+        description: "Optional PR head SHA override"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  packages: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: candidate-flight-${{ inputs.pr_number }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: ghcr.io/cogni-dao/cogni-template
+  SLOT: candidate-a
+  OVERLAY_ENV: candidate-a
+
+jobs:
+  flight:
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    steps:
+      - name: Resolve PR metadata
+        id: meta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE_REF=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}" --jq '.base.ref')
+          HEAD_SHA_INPUT="${{ inputs.head_sha }}"
+          if [ -n "$HEAD_SHA_INPUT" ]; then
+            HEAD_SHA="$HEAD_SHA_INPUT"
+          else
+            HEAD_SHA=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}" --jq '.head.sha')
+          fi
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "image_tag=pr-${{ inputs.pr_number }}-${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "status_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout app source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ steps.meta.outputs.head_sha }}
+          fetch-depth: 0
+          path: app-src
+
+      - name: Require PR head to include base tip
+        working-directory: app-src
+        run: |
+          git fetch origin "${{ steps.meta.outputs.base_ref }}"
+          if ! git merge-base --is-ancestor "origin/${{ steps.meta.outputs.base_ref }}" HEAD; then
+            echo "PR #${{ inputs.pr_number }} is not up to date with ${{ steps.meta.outputs.base_ref }}"
+            exit 1
+          fi
+
+      - name: Report pending candidate-flight status
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ steps.meta.outputs.head_sha }}
+          STATE: pending
+          DESCRIPTION: Candidate flight in progress
+          TARGET_URL: ${{ steps.meta.outputs.status_url }}
+        run: bash app-src/scripts/ci/report-candidate-status.sh
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Resolve PR image digests
+        id: images
+        env:
+          IMAGE_TAG: ${{ steps.meta.outputs.image_tag }}
+          OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
+        run: bash app-src/scripts/ci/resolve-pr-build-images.sh
+
+      - name: Require at least one built image
+        if: steps.images.outputs.has_images != 'true'
+        run: |
+          echo "No pushed PR images found for ${{ steps.meta.outputs.image_tag }}"
+          exit 1
+
+      - name: Prepare deploy branch workspace
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" deploy-branch
+          cd deploy-branch
+          if git ls-remote --exit-code origin "refs/heads/deploy/${SLOT}" >/dev/null 2>&1; then
+            git fetch origin "deploy/${SLOT}"
+            git checkout -B "deploy/${SLOT}" "origin/deploy/${SLOT}"
+          else
+            git fetch origin "${{ steps.meta.outputs.head_sha }}"
+            git checkout -B "deploy/${SLOT}" "${{ steps.meta.outputs.head_sha }}"
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync base and catalog to deploy branch
+        run: |
+          rsync -a --delete app-src/infra/k8s/base/ deploy-branch/infra/k8s/base/
+          rsync -a --delete app-src/infra/catalog/ deploy-branch/infra/catalog/
+          rsync -a --delete app-src/infra/k8s/overlays/candidate-a/ deploy-branch/infra/k8s/overlays/candidate-a/
+
+      - name: Acquire candidate slot
+        id: acquire
+        continue-on-error: true
+        working-directory: deploy-branch
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+          HEAD_SHA: ${{ steps.meta.outputs.head_sha }}
+          RUN_ID: ${{ github.run_id }}
+          STATUS_URL: ${{ steps.meta.outputs.status_url }}
+        run: bash ../app-src/scripts/ci/acquire-candidate-slot.sh
+
+      - name: Stop when candidate-a is busy
+        if: steps.acquire.outputs.slot_busy == 'true'
+        run: |
+          echo "candidate-a busy with PR #${{ steps.acquire.outputs.busy_pr_number }}"
+          exit 1
+
+      - name: Promote resolved digests into candidate-a overlay
+        if: steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        env:
+          PAYLOAD_FILE: ${{ runner.temp }}/resolved-pr-images.json
+          OVERLAY_ENV: candidate-a
+        run: bash ../app-src/scripts/ci/promote-build-payload.sh
+
+      - name: Commit and push deploy/candidate-a
+        if: steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No deploy-state changes to push"
+            exit 0
+          fi
+          git commit -m "candidate-flight: pr-${{ inputs.pr_number }} ${{ steps.meta.outputs.head_sha }}"
+          git push origin "HEAD:deploy/${SLOT}"
+
+      - name: Wait for candidate readiness
+        if: steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+        run: bash app-src/scripts/ci/wait-for-candidate-ready.sh
+
+      - name: Run candidate smoke checks
+        if: steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+        run: bash app-src/scripts/ci/smoke-candidate.sh
+
+      - name: Release candidate slot after success
+        if: always() && success() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        env:
+          STATE: free
+        run: bash ../app-src/scripts/ci/release-candidate-slot.sh
+
+      - name: Release candidate slot after failure
+        if: always() && failure() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        env:
+          STATE: failed
+        run: bash ../app-src/scripts/ci/release-candidate-slot.sh
+
+      - name: Commit and push released candidate slot
+        if: always() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        run: |
+          git add "infra/control/candidate-lease.json"
+          if git diff --cached --quiet; then
+            echo "No released lease changes to push"
+            exit 0
+          fi
+          git commit -m "candidate-flight: release pr-${{ inputs.pr_number }} ${{ steps.meta.outputs.head_sha }}"
+          git push origin "HEAD:deploy/${SLOT}"
+
+      - name: Report successful candidate-flight status
+        if: success()
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ steps.meta.outputs.head_sha }}
+          STATE: success
+          DESCRIPTION: Candidate flight passed
+          TARGET_URL: ${{ steps.meta.outputs.status_url }}
+        run: bash app-src/scripts/ci/report-candidate-status.sh
+
+      - name: Report failed candidate-flight status
+        if: failure()
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ steps.meta.outputs.head_sha }}
+          STATE: failure
+          DESCRIPTION: Candidate flight failed
+          TARGET_URL: ${{ steps.meta.outputs.status_url }}
+        run: bash app-src/scripts/ci/report-candidate-status.sh

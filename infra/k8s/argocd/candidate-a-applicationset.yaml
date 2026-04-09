@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# ApplicationSet for candidate-a environment.
+# Single-slot pre-merge validation lane.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cogni-candidate-a
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        revision: deploy/candidate-a
+        files:
+          - path: "infra/catalog/*.yaml"
+  template:
+    metadata:
+      name: "candidate-a-{{name}}"
+      namespace: argocd
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/cogni-dao/cogni-template.git
+        targetRevision: deploy/candidate-a
+        path: "infra/k8s/overlays/candidate-a/{{name}}"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cogni-candidate-a
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

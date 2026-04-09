@@ -9,10 +9,10 @@
 #   - IMAGE_IMMUTABILITY: Uses @sha256: digest, never mutable tags
 #   - MANIFEST_DRIVEN_DEPLOY: Promotion = overlay change → Argo CD syncs
 # Usage:
-#   scripts/ci/promote-k8s-image.sh --app operator --digest ghcr.io/cogni-dao/cogni-template@sha256:abc...
-#   scripts/ci/promote-k8s-image.sh --app operator --digest ... --migrator-digest ...
+#   scripts/ci/promote-k8s-image.sh --env candidate-a --app operator --digest ghcr.io/cogni-dao/cogni-template@sha256:abc...
+#   scripts/ci/promote-k8s-image.sh --env candidate-a --app operator --digest ... --migrator-digest ...
 #   scripts/ci/promote-k8s-image.sh --env production --app operator --digest ...
-#   scripts/ci/promote-k8s-image.sh --no-commit --app operator --digest ...
+#   scripts/ci/promote-k8s-image.sh --env preview --no-commit --app operator --digest ...
 #
 # By default, auto-commits and pushes when running in CI (GITHUB_SHA set).
 # Pass --no-commit to update the file only — caller manages git operations.
@@ -30,7 +30,8 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 APP=""
 DIGEST=""
 MIGRATOR_DIGEST=""
-ENV="staging"
+ENV=""
+DEPLOY_BRANCH=""
 NO_COMMIT=false
 
 while [[ $# -gt 0 ]]; do
@@ -39,13 +40,14 @@ while [[ $# -gt 0 ]]; do
     --digest) DIGEST="$2"; shift 2 ;;
     --migrator-digest) MIGRATOR_DIGEST="$2"; shift 2 ;;
     --env) ENV="$2"; shift 2 ;;
+    --deploy-branch) DEPLOY_BRANCH="$2"; shift 2 ;;
     --no-commit) NO_COMMIT=true; shift ;;
     *) log_error "Unknown arg: $1"; exit 1 ;;
   esac
 done
 
-if [[ -z "$APP" || -z "$DIGEST" ]]; then
-  log_error "Usage: promote-k8s-image.sh --app <name> --digest <image@sha256:...>"
+if [[ -z "$APP" || -z "$DIGEST" || -z "$ENV" ]]; then
+  log_error "Usage: promote-k8s-image.sh --env <overlay> --app <name> --digest <image@sha256:...>"
   exit 1
 fi
 
@@ -105,6 +107,10 @@ log_info "Updated $OVERLAY_FILE"
 if [[ "$NO_COMMIT" == "true" ]]; then
   log_info "Skipping commit (--no-commit). Caller manages git operations."
 elif [[ -n "${GITHUB_SHA:-}" ]]; then
+  if [[ -z "$DEPLOY_BRANCH" ]]; then
+    log_error "--deploy-branch is required when commit/push mode is enabled"
+    exit 1
+  fi
   git config user.name "github-actions[bot]"
   git config user.email "github-actions[bot]@users.noreply.github.com"
   git add "$OVERLAY_FILE"
@@ -112,10 +118,9 @@ elif [[ -n "${GITHUB_SHA:-}" ]]; then
   if git diff --cached --quiet; then
     log_info "No changes to commit (digest unchanged)"
   else
-    BRANCH="${GITHUB_REF_NAME:-staging}"
     git commit -m "chore(cd): promote ${APP} to ${IMAGE_DIGEST:0:19}... [skip ci]"
-    git push origin "$BRANCH"
-    log_info "Committed and pushed digest update to $BRANCH"
+    git push origin "HEAD:${DEPLOY_BRANCH}"
+    log_info "Committed and pushed digest update to $DEPLOY_BRANCH"
   fi
 else
   log_info "Not in CI — skipping commit. Review changes manually:"

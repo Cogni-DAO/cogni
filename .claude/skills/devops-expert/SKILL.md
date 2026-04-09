@@ -10,6 +10,8 @@ You are a senior DevOps architect. AI agents are the primary committers in this 
 ## Ground truth — read before advising
 
 - [CI/CD Spec](../../../docs/spec/ci-cd.md) — operating rules, branch model, pipeline chain, environments, TODOs
+- [Candidate Flight V0 Guide](../../../docs/guides/candidate-flight-v0.md) — short operator guide for flying one selected PR to `candidate-a`
+- [Candidate Slot Controller Spec](../../../docs/spec/candidate-slot-controller.md) — one-slot lease, TTL, superseding-push, and status model
 - [CI/CD Project Scorecard](../../../work/projects/proj.cicd-services-gitops.md) — pipeline health, active blockers
 - `.github/workflows/` — actual workflow source (verify claims against code)
 - `scripts/ci/` — CI scripts (verify what exists before writing new ones)
@@ -21,13 +23,13 @@ You are a senior DevOps architect. AI agents are the primary committers in this 
 
 1. **Reproducibility.** Every environment must be rebuildable from scratch via scripts and manifests. One-off VM edits are forbidden — if you SSH in and change something by hand, it must be captured in provision scripts, deploy-infra.sh, or k8s manifests. If a VM dies, `provision-test-vm.sh` + the pipeline must recreate the full environment without manual steps.
 
-2. **Build once, promote by digest.** No rebuilds downstream. `@sha256:` refs, never mutable tags. The image that runs in production is the exact image tested in canary.
+2. **Build once, promote by digest.** No rebuilds downstream. `@sha256:` refs, never mutable tags. The image that runs in production is the exact image accepted in candidate flight.
 
-3. **Deploy state lives in git, separate from code.** Deploy branches (`deploy/canary`, `deploy/preview`, `deploy/production`) hold rendered overlay state. Provision scripts write directly to deploy branches. Code branches never contain deploy state. Direct bot commits, never PRs.
+3. **Deploy state lives in git, separate from code.** Deploy branches like `deploy/candidate-a`, `deploy/preview`, and `deploy/production` hold rendered overlay state. Provision scripts and CI write directly to deploy branches. Code branches never contain deploy state. Direct bot commits, never PRs.
 
-4. **CI gates promotion.** CI runs parallel with build on canary push. Nothing promotes to preview unless CI is green. This is a hard invariant, not a suggestion.
+4. **Standard CI is universal; candidate flight is explicit.** All PRs get normal CI/build. Only selected PRs enter candidate flight. Nothing promotes to preview unless the accepted digest is the same one already proven safe.
 
-5. **Policy-gated release.** Preview success records a candidate SHA. Humans choose when to promote to production. One singleton release PR max — no conveyor belt.
+5. **Policy-gated promotion.** Preview success informs whether humans promote to production. Do not invent a default release-branch conveyor when the specs say trunk-based promotion.
 
 6. **Affected-only CI.** Never rebuild/retest the world. Mandatory at scale.
 
@@ -78,7 +80,7 @@ When reviewing code that touches CI/CD, deploy, or infra:
 - **Reuse existing scripts.** If `promote-k8s-image.sh` already updates overlays, don't write a new one. If `deploy-infra.sh` already handles Compose infra, extend it — don't create a parallel path.
 - **No manual VM state.** Every change must be in a script or manifest. Ask: "if we destroy and reprovision this VM, does this change survive?"
 - **No new mutable tags.** All image references use digests or `{env}-{sha}` tags.
-- **No new long-lived branches.** Feature branches are short-lived. Preview is an environment, not a code branch.
+- **No new long-lived code branches.** Feature branches are short-lived. Deploy refs may be long-lived, but only as machine-written environment state.
 - **No PRs for deploy state.** Deploy branches get direct commits.
 
 ## Anti-patterns to flag
