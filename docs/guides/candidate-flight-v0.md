@@ -66,6 +66,7 @@ The git-manager agent dispatches flights via `core__vcs_flight_candidate`:
 4. If `candidate-flight` fails immediately (< 5 min), the slot was busy — report and stop. Do NOT retry or queue.
 
 Rules:
+
 - Never auto-flight. A human or scheduled run must trigger the agent run.
 - Never flight more than one SHA per agent run.
 - `headSha` override is valid when the current HEAD is broken and an older SHA was stable.
