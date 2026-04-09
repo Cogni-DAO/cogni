@@ -19,6 +19,7 @@ initiative: proj.cicd-services-gitops
 
 > Historical note: the original canary/staging-era version of this document has been preserved at [`docs/spec/cd-pipeline-e2e-legacy-canary.md`](./cd-pipeline-e2e-legacy-canary.md).
 > For branch-model axioms and the target operating rules, treat [`docs/spec/ci-cd.md`](./ci-cd.md) as the source of truth.
+> For the dedicated v0 slot-control design, see [`docs/spec/candidate-slot-controller.md`](./candidate-slot-controller.md).
 
 ## Status
 
@@ -234,11 +235,11 @@ This section replaces the old staging-first flow. The target model has two lanes
 | ---- | ----- | ---------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | PR   | 1     | **checks**             | `ci.yaml` runs affected static, unit, component, and stack checks as policy requires                       | Required status checks         |
 | PR   | 2     | **build**              | `build-multi-node.yml` builds immutable images for the PR head SHA, which is the authoritative v0 artifact | Tagged images + digests        |
-| PR   | 3     | **slot-acquire**       | Candidate controller assigns `candidate-a` or `candidate-b`                                                | Slot lease / lock              |
-| PR   | 4     | **promote-candidate**  | `promote-and-deploy.yml` writes digests to `deploy/candidate-*`                                            | Deploy-branch commit           |
-| PR   | 5     | **Argo sync**          | Argo reconciles candidate environment from deploy branch                                                   | Updated pods                   |
-| PR   | 6     | **validation**         | Thin smoke pack and any required flight checks run on the candidate slot                                   | Safe / unsafe signal           |
-| PR   | 7     | **merge**              | PR becomes mergeable only after candidate lane is green                                                    | Safe accepted merge            |
+| PR   | 3     | **ready-for-flight**   | Passing PR becomes eligible for manual candidate flight                                                    | PR ready for operator choice   |
+| PR   | 4     | **flight trigger**     | Human explicitly requests flight, for example with `flight-now` or `workflow_dispatch`                     | One PR selected for inspection |
+| PR   | 5     | **promote-candidate**  | `promote-and-deploy.yml` writes digests to `deploy/candidate-a`                                            | Deploy-branch commit           |
+| PR   | 6     | **Argo sync**          | Argo reconciles the candidate environment from deploy branch                                               | Updated pods                   |
+| PR   | 7     | **validation**         | Thin smoke pack and required flight checks run on the stable candidate slot                                | Flight result                  |
 | Main | 8     | **promote-preview**    | Accepted digest promotes from `main` to `deploy/preview` without rebuild                                   | Preview deploy-state commit    |
 | Main | 9     | **preview validation** | Post-merge validation runs against preview                                                                 | Preview signal                 |
 | Main | 10    | **promote-production** | Same digest promotes to `deploy/production` by policy                                                      | Production deploy-state commit |
@@ -250,7 +251,7 @@ For v0, the authoritative artifact is the **PR head SHA artifact**.
 That means:
 
 - `pull_request` builds the artifact that candidate validation exercises
-- candidate-slot validation proves that exact PR artifact safe
+- candidate-slot validation proves that exact PR artifact safe when a human explicitly sends that PR to flight
 - when the PR merges, the same digest promotes forward from `main`
 - preview and production consume that same accepted digest without rebuild
 
@@ -263,7 +264,7 @@ GitHub merge queue requires separate `merge_group` workflow triggers and require
 So v0 chooses:
 
 - **authoritative artifact:** PR head SHA
-- **pre-merge validation authority:** candidate-slot validation on the PR artifact
+- **pre-merge validation authority:** candidate-slot validation on the PR artifact when a human explicitly sends that PR to flight
 - **post-merge promotion:** same digest from `main`
 - **merge queue:** deferred to a later phase if concurrency pressure actually demands it
 
@@ -291,11 +292,12 @@ Promotion must be explicit and environment-driven, not branch-name-driven.
 PR update
   → ci.yaml
   → build-multi-node.yml
-  → candidate-slot controller chooses candidate-a or candidate-b
-  → promote-and-deploy.yml writes digests to deploy/candidate-*
+  → PR becomes ready for manual flight
+  → human triggers flight-now for one PR
+  → promote-and-deploy.yml writes digests to deploy/candidate-a
   → Argo syncs candidate slot
   → validation runs
-  → PR becomes mergeable
+  → human decides merge based on standard CI + candidate-flight result
 
 Merge to main
   → promote-and-deploy.yml writes same digest to deploy/preview
@@ -322,7 +324,7 @@ Merge to main
 
 Validation authority must be blunt, not implied.
 
-- **Required in v0:** branch protection plus the required candidate-lane checks
+- **Required in v0:** standard CI and build for all PRs, plus candidate-flight for PRs explicitly sent to flight
 - **Advisory in v0:** AI probes and broader exploratory validation
 - **Optional by policy:** extra human signoff for sensitive surfaces if enforced separately from CI
 
@@ -521,7 +523,6 @@ namespace: cogni-preview
 | ApplicationSet / Group | Watches                | Target Revision      | Namespace           |
 | ---------------------- | ---------------------- | -------------------- | ------------------- |
 | `cogni-candidate-a`    | `infra/catalog/*.yaml` | `deploy/candidate-a` | `cogni-candidate-a` |
-| `cogni-candidate-b`    | `infra/catalog/*.yaml` | `deploy/candidate-b` | `cogni-candidate-b` |
 | `cogni-preview`        | `infra/catalog/*.yaml` | `deploy/preview`     | `cogni-preview`     |
 | `cogni-production`     | `infra/catalog/*.yaml` | `deploy/production`  | `cogni-production`  |
 
@@ -531,7 +532,7 @@ If a separate post-merge soak environment exists later, add it explicitly here. 
 
 ApplicationSets alone are not enough. The control plane also needs:
 
-- a way to decide which candidate branch is currently assignable
+- a manual way to choose which PR is sent to candidate flight now
 - a lease model for in-use slots
 - cleanup semantics when a PR is superseded or closed
 
@@ -545,15 +546,15 @@ Deploy refs themselves should remain long-lived. The control boundary is not sho
 
 ### 10.1 Trunk-Alignment Gaps
 
-| #   | Gap                                                           | Severity | What Exists                                                                    | What's Needed                                                          | Effort   |
-| --- | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- | -------- |
-| G1  | **Candidate slot controller undefined**                       | Blocker  | Candidate-slot concept exists in prose only                                    | Define lock, TTL, cancellation, cleanup, and status ownership          | 1 day    |
-| G2  | **Validation authority too squishy**                          | Blocker  | Human and AI validation mentioned loosely                                      | State required vs advisory checks in v0                                | 0.5 day  |
-| G3  | **Preview semantics can drift back into gate behavior**       | High     | Preview exists, but legacy habits may reuse it as shared pre-merge bottleneck  | Keep preview post-merge only in workflow and docs                      | 0.5 day  |
-| G4  | **Legacy branch semantics remain in workflows and docs**      | High     | `staging`, `canary`, and `release/* -> main` assumptions still appear in files | Purge workflow, prompt, AGENTS, and namespace drift                    | 1-2 days |
-| G5  | **Deploy routing still inferred from branch names**           | High     | Current workflow logic still maps env from branch names                        | Make environment routing explicit and deploy-state driven              | 1 day    |
-| G6  | **Production can still drift from accepted artifact lineage** | High     | Legacy rebuild assumptions still exist in some paths                           | Ensure preview and production consume the accepted digest lineage      | 1 day    |
-| G7  | **Deploy branch access policy is not encoded yet**            | High     | Deploy refs exist, but push authority and no-PR policy are still implicit      | Restrict push to CI app or bot and document incident-only human bypass | 0.5 day  |
+| #   | Gap                                                           | Severity | What Exists                                                                    | What's Needed                                                                  | Effort   |
+| --- | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | -------- |
+| G1  | **Candidate slot controller undefined**                       | Blocker  | Candidate-flight concept exists in prose only                                  | Define manual trigger, lease, TTL, cancellation, cleanup, and status ownership | 1 day    |
+| G2  | **Validation authority too squishy**                          | Blocker  | Human and AI validation mentioned loosely                                      | State required vs advisory checks in v0                                        | 0.5 day  |
+| G3  | **Preview semantics can drift back into gate behavior**       | High     | Preview exists, but legacy habits may reuse it as shared pre-merge bottleneck  | Keep preview post-merge only in workflow and docs                              | 0.5 day  |
+| G4  | **Legacy branch semantics remain in workflows and docs**      | High     | `staging`, `canary`, and `release/* -> main` assumptions still appear in files | Purge workflow, prompt, AGENTS, and namespace drift                            | 1-2 days |
+| G5  | **Deploy routing still inferred from branch names**           | High     | Current workflow logic still maps env from branch names                        | Make environment routing explicit and deploy-state driven                      | 1 day    |
+| G6  | **Production can still drift from accepted artifact lineage** | High     | Legacy rebuild assumptions still exist in some paths                           | Ensure preview and production consume the accepted digest lineage              | 1 day    |
+| G7  | **Deploy branch access policy is not encoded yet**            | High     | Deploy refs exist, but push authority and no-PR policy are still implicit      | Restrict push to CI app or bot and document incident-only human bypass         | 0.5 day  |
 
 ### 10.2 Multi-Node Gaps That Still Matter
 
@@ -624,13 +625,13 @@ All node apps use `base/node-app/` as a shared Kustomize base. Overlays customiz
 
 ### 12.1 Workflow Ownership
 
-| File                                       | Current Burden                        | Target Role                                                     |
-| ------------------------------------------ | ------------------------------------- | --------------------------------------------------------------- |
-| `.github/workflows/ci.yaml`                | mixed PR and branch checks            | required PR checks for v0; add merge-group only later if needed |
-| `.github/workflows/build-multi-node.yml`   | branch-oriented build entrypoint      | authoritative PR-artifact build entrypoint                      |
-| `.github/workflows/promote-and-deploy.yml` | branch-inferred environment promotion | explicit candidate / preview / production deployment            |
-| `.github/workflows/e2e.yml`                | legacy chained E2E path               | either retire or narrow to a single explicit validation concern |
-| `.github/workflows/release.yml`            | legacy release conveyor               | re-evaluate; not default accepted-code path                     |
+| File                                       | Current Burden                        | Target Role                                                           |
+| ------------------------------------------ | ------------------------------------- | --------------------------------------------------------------------- |
+| `.github/workflows/ci.yaml`                | mixed PR and branch checks            | required PR checks for v0; add merge-group only later if needed       |
+| `.github/workflows/build-multi-node.yml`   | branch-oriented build entrypoint      | authoritative PR-artifact build entrypoint                            |
+| `.github/workflows/promote-and-deploy.yml` | branch-inferred environment promotion | explicit manual candidate flight plus preview / production deployment |
+| `.github/workflows/e2e.yml`                | legacy chained E2E path               | either retire or narrow to a single explicit validation concern       |
+| `.github/workflows/release.yml`            | legacy release conveyor               | re-evaluate; not default accepted-code path                           |
 
 ### 12.2 Build Matrix
 
@@ -669,6 +670,7 @@ The same interface should work for `candidate-b`, `preview`, and `production`.
 
 The workflow layer needs concrete hooks for:
 
+- trigger one explicit flight attempt
 - acquire slot
 - renew or hold lease while validation is running
 - release slot on success, failure, superseding push, PR close, or timeout
@@ -742,7 +744,7 @@ This may live in plain workflow logic, in a dedicated script, or in a git-manage
 - [x] **Freeze authoritative artifact rule**
       V0 uses the PR head SHA artifact as authoritative. Merge queue is explicitly deferred.
 - [ ] **Define candidate-slot operating rules**
-      Lock owner, lease, TTL, cancellation, cleanup, and overflow behavior when all slots are busy.
+      Lock the manual flight trigger, owner, lease, TTL, cancellation, cleanup, and busy behavior without building a queue.
 - [ ] **Define v0 validation authority**
       Pin which checks are required, which are advisory, and where optional human policy fits.
 - [ ] **Decide merge queue integration model later**

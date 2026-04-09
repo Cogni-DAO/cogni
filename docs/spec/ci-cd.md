@@ -75,11 +75,11 @@ The PR lane is authoritative for merge safety in v0.
 1. `pull_request` runs affected-only CI where available.
 2. CI builds an immutable image for the exact PR head SHA.
 3. The PR-head artifact is the authoritative v0 artifact.
-4. Automation assigns a fixed candidate slot such as `candidate-a` or `candidate-b`.
-5. CI commits the digest to the matching `deploy/candidate-*` branch.
-6. Argo syncs the already-running candidate environment.
-7. Required safety validation runs against that candidate slot.
-8. The PR becomes mergeable only after the candidate lane is green.
+4. Passing PRs become ready for manual candidate flight.
+5. A human explicitly chooses which PR to flight next.
+6. That chosen PR is deployed to `candidate-a` through `deploy/candidate-a`.
+7. Candidate validation runs against the stable slot URL.
+8. `candidate-flight` is authoritative for PRs explicitly sent to flight, but standard CI and build remain the universal merge gate in v0.
 
 ### Main Lane
 
@@ -96,7 +96,7 @@ Merge queue is deferred in v0. If the repo later adopts merge queue, the workflo
 
 ## Minimum Authoritative Validation For V0
 
-Do not block the rewrite on perfect black-box E2E maturity. The v0 required pre-merge gate is:
+Do not block the rewrite on perfect black-box E2E maturity. For PRs explicitly sent to candidate flight in v0, the required flight gate is:
 
 - affected-only static checks plus unit tests
 - successful image build for the exact PR SHA
@@ -119,12 +119,13 @@ Optional but non-authoritative in v0:
 
 ### Candidate Environments
 
-Candidate environments are fixed, pre-running slots reused across PRs. They exist to validate unknown code before merge without creating a new VM per PR.
+Candidate environments are fixed, pre-running slots reused across PRs. They exist to validate selected unknown code before merge without creating a new VM per PR.
 
-| Environment | Deploy Branch        | Purpose               |
-| ----------- | -------------------- | --------------------- |
-| candidate-a | `deploy/candidate-a` | pre-merge safety slot |
-| candidate-b | `deploy/candidate-b` | pre-merge safety slot |
+| Environment | Deploy Branch        | Purpose                      |
+| ----------- | -------------------- | ---------------------------- |
+| candidate-a | `deploy/candidate-a` | manual pre-merge safety slot |
+
+Start with `candidate-a` only. Add `candidate-b` later only after the one-slot prototype is proven stable.
 
 ### Promotion Environments
 
@@ -161,7 +162,7 @@ When implementation begins, workflow changes should follow these rules:
 Track these explicitly during the spec rewrite, following the CI/CD scorecard style of keeping unresolved questions visible:
 
 - [ ] **Candidate selection and slot control**
-      Define how candidate slots are assigned, reused, preempted, or serialized, and who owns lease, timeout, cleanup, and status reporting.
+      Define the manual flight trigger, lease, timeout, cleanup, and status ownership without building a queueing system into v0.
 - [ ] **E2E validation workflows**
       Decide what stays in the authoritative v0 gate versus what remains advisory, and define how smoke tests, richer black-box E2E, and post-merge validation divide across the PR lane and main lane.
 - [ ] **Git-manager agent as a first-class control-plane actor**
@@ -193,6 +194,7 @@ This spec does not require:
 ## Related Documentation
 
 - [CD Pipeline E2E](cd-pipeline-e2e.md) — trunk-alignment guide mapping legacy multi-node GitOps design to the target workflow and code-task changes
+- [Candidate Slot Controller](candidate-slot-controller.md) — v0 design for lease, TTL, superseding-push handling, and aggregate candidate-flight status
 - [CD Pipeline E2E Legacy Canary](cd-pipeline-e2e-legacy-canary.md) — historical canary/staging-era multi-node GitOps detail retained for reference during migration
 - [Node CI/CD Contract](node-ci-cd-contract.md) — CI/CD sovereignty invariants, file ownership
 - [Application Architecture](architecture.md) — Hexagonal design and code organization
