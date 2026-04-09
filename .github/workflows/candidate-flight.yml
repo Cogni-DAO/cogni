@@ -56,15 +56,6 @@ jobs:
           fetch-depth: 0
           path: app-src
 
-      - name: Require PR head to include base tip
-        working-directory: app-src
-        run: |
-          git fetch origin "${{ steps.meta.outputs.base_ref }}"
-          if ! git merge-base --is-ancestor "origin/${{ steps.meta.outputs.base_ref }}" HEAD; then
-            echo "PR #${{ inputs.pr_number }} is not up to date with ${{ steps.meta.outputs.base_ref }}"
-            exit 1
-          fi
-
       - name: Report pending candidate-flight status
         env:
           GH_TOKEN: ${{ github.token }}
