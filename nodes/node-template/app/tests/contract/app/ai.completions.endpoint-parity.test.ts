@@ -81,6 +81,10 @@ vi.mock("@/features/ai/public.server", async (importOriginal) => {
   };
 });
 
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "node_template",
+}));
+
 import { getSessionUser } from "@/app/_lib/auth/session";
 import {
   getContainer,

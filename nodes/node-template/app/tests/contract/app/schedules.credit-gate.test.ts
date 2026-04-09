@@ -56,6 +56,10 @@ vi.mock("@/bootstrap/container", () => ({
   })),
 }));
 
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "node_template",
+}));
+
 // Import after mocks
 import { getSessionUser } from "@/app/_lib/auth/session";
 import * as appHandler from "@/app/api/v1/schedules/route";

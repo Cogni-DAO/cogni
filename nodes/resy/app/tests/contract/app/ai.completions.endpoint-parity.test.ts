@@ -38,6 +38,10 @@ vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));
 
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "resy",
+}));
+
 // Mock bootstrap container (getContainer needed by wrapRouteHandlerWithLogging)
 vi.mock("@/bootstrap/container", () => ({
   resolveAiAdapterDeps: vi.fn(),

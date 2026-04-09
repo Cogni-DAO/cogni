@@ -49,6 +49,10 @@ vi.mock("@/bootstrap/container", () => ({
   })),
 }));
 
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "node_template",
+}));
+
 import { resolveAiAdapterDeps } from "@/bootstrap/container";
 
 const mockResolveAiAdapterDeps = vi.mocked(resolveAiAdapterDeps);

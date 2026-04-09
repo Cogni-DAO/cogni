@@ -11,6 +11,15 @@
  * @public
  */
 
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+
+const DEFAULT_COGNI_REPO_PATH = existsSync(
+  resolve(process.cwd(), ".cogni", "repo-spec.yaml")
+)
+  ? process.cwd()
+  : resolve(process.cwd(), "..");
+
 /**
  * Core env vars required by serverEnv() validation.
  * Does NOT include APP_ENV - let test suites control adapter wiring.
@@ -40,7 +49,7 @@ export const CORE_TEST_ENV = {
   // OpenClaw git relay token (host-side push)
   OPENCLAW_GITHUB_RW_TOKEN: "ghp_test_token",
   // Repo access (required in all envs — no cwd fallback)
-  COGNI_REPO_PATH: process.cwd(),
+  COGNI_REPO_PATH: DEFAULT_COGNI_REPO_PATH,
   // PostHog product analytics (required — test values, events silently dropped)
   POSTHOG_API_KEY: "phc_test_key",
   POSTHOG_HOST: "http://localhost:18000",
@@ -95,7 +104,7 @@ export const PRODUCTION_VALID_ENV = {
 export const MOCK_SERVER_ENV = {
   ...BASE_VALID_ENV,
   // Computed fields that serverEnv() adds (DATABASE_URL already in BASE_VALID_ENV)
-  COGNI_REPO_ROOT: process.cwd(),
+  COGNI_REPO_ROOT: DEFAULT_COGNI_REPO_PATH,
   isDev: false,
   isTest: true,
   isProd: false,

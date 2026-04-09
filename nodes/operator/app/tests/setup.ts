@@ -13,10 +13,18 @@
  */
 
 import "@testing-library/jest-dom/vitest";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { Agent, type Dispatcher, setGlobalDispatcher } from "undici";
 import { afterEach, beforeAll, vi } from "vitest";
 
 import { initOtelSdk } from "@/instrumentation";
+
+const DEFAULT_COGNI_REPO_PATH = existsSync(
+  resolve(process.cwd(), ".cogni", "repo-spec.yaml")
+)
+  ? process.cwd()
+  : resolve(process.cwd(), "..");
 
 // Set test tooling environment IMMEDIATELY at module load time
 // (before test file imports resolve - needed for contract tests that import route handlers)
@@ -33,7 +41,7 @@ Object.assign(process.env, {
   TEMPORAL_ADDRESS: process.env.TEMPORAL_ADDRESS ?? "localhost:7233",
   TEMPORAL_NAMESPACE: process.env.TEMPORAL_NAMESPACE ?? "test-namespace",
   // Repo access: integration tests use real RepoCapability, default to repo checkout
-  COGNI_REPO_PATH: process.env.COGNI_REPO_PATH ?? process.cwd(),
+  COGNI_REPO_PATH: process.env.COGNI_REPO_PATH ?? DEFAULT_COGNI_REPO_PATH,
 });
 
 // server-only throws at import time outside Next.js server context; stub it for Vitest

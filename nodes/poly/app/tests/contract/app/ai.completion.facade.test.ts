@@ -15,6 +15,10 @@ import { chatCompletion } from "@/app/_facades/ai/completion.server";
 import type { RequestContext } from "@/shared/observability";
 import { makeNoopLogger } from "@/shared/observability";
 
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "poly",
+}));
+
 const startMock = vi.fn().mockResolvedValue({});
 
 // vi.mock factories are hoisted — can't reference module imports.

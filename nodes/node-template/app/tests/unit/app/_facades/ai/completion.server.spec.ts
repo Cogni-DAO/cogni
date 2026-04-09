@@ -31,6 +31,10 @@ vi.mock("@/shared/env", () => ({
   }),
 }));
 
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "node_template",
+}));
+
 describe("completion facade contract", () => {
   it("should return exact shape matching chatCompletionsContract.output (OpenAI ChatCompletion)", async () => {
     // Arrange - Use reusable fixture
