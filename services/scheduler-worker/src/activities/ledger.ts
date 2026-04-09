@@ -622,8 +622,11 @@ export function createAttributionActivities(deps: AttributionActivityDeps) {
     );
 
     // 5. Collect unique platformUserIds by source for identity resolution
-    const idsBySource = new Map<string, Set<string>>();
+    const idsBySource = new Map<"github", Set<string>>();
     for (const { receipt } of unselected) {
+      if (receipt.source !== "github") {
+        continue;
+      }
       const ids = idsBySource.get(receipt.source) ?? new Set();
       ids.add(receipt.platformUserId);
       idsBySource.set(receipt.source, ids);

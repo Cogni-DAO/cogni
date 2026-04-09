@@ -13,7 +13,7 @@
  * @internal
  */
 
-import type { SweepWorkItem } from "@cogni/temporal-workflows/activity-types";
+import type { SweepWorkItem } from "@cogni/temporal-workflows";
 
 import { logWorkerEvent, WORKER_EVENT_NAMES } from "../observability/index.js";
 import type { Logger } from "../observability/logger.js";

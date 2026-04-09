@@ -17,6 +17,7 @@
  */
 
 import { SYSTEM_ACTOR } from "@cogni/ids/system";
+import type { GraphRunKind } from "@cogni/scheduler-core";
 import { ApplicationFailure, activityInfo } from "@temporalio/activity";
 import {
   activityDurationMs,
@@ -59,7 +60,7 @@ export interface ValidateGrantInput {
 export interface CreateGraphRunInput {
   runId: string;
   graphId?: string;
-  runKind?: string;
+  runKind?: GraphRunKind;
   triggerSource?: string;
   triggerRef?: string;
   requestedBy?: string;
