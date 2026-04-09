@@ -82,6 +82,11 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     description:
       "Periodic review — triages backlog, flags risks, produces structured briefs",
   },
+  {
+    graphId: "langgraph:git-manager" satisfies GraphId,
+    name: "Git Manager",
+    description: "Git operations orchestrator — reviews, scheduling, branches",
+  },
 ];
 
 /** Default graph ID - exported for page initialization */

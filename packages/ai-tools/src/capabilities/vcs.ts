@@ -10,7 +10,7 @@
  *   - VCS_WRITE_CAPABLE: Supports both read and write operations (merge, branch creation)
  *   - ADAPTER_SWAPPABLE: Interface supports Octokit (v0) or gh CLI (future sandbox agents)
  * Side-effects: none (interface only)
- * Links: task.0242, docs/guides/github-app-webhook-setup.md
+ * Links: task.0242, task.0297, docs/guides/github-app-webhook-setup.md
  * @public
  */
 
@@ -67,6 +67,15 @@ export interface CreateBranchResult {
   readonly sha: string;
 }
 
+/** Result of dispatching a candidate flight. */
+export interface CandidateFlightResult {
+  readonly dispatched: boolean;
+  readonly sha: string;
+  readonly prNumber: number;
+  readonly workflowUrl: string;
+  readonly message: string;
+}
+
 // ---------------------------------------------------------------------------
 // Capability interface
 // ---------------------------------------------------------------------------
@@ -110,4 +119,20 @@ export interface VcsCapability {
     branch: string;
     fromRef: string;
   }): Promise<CreateBranchResult>;
+
+  /**
+   * Dispatch a candidate-flight workflow for a specific build SHA.
+   *
+   * SHA is the primary identifier — the tool resolves the associated PR number if
+   * not supplied. The workflow requires a PR number for status posting and lease
+   * tracking; resolution happens before dispatch.
+   *
+   * Per NO_AUTO_FLIGHT: caller must explicitly invoke this. No auto-flight logic here.
+   */
+  flightCandidate(params: {
+    owner: string;
+    repo: string;
+    sha: string;
+    prNumber?: number;
+  }): Promise<CandidateFlightResult>;
 }

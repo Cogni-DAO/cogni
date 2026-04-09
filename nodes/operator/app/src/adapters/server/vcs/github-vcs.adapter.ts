@@ -4,18 +4,19 @@
 /**
  * Module: `@adapters/server/vcs/github-vcs`
  * Purpose: VcsCapability adapter using Octokit + GitHub App authentication.
- * Scope: Implements VcsCapability for GitHub API operations (list PRs, CI status, merge, create branch).
+ * Scope: Implements VcsCapability for GitHub API operations (list PRs, CI status, merge, create branch, flight candidate).
  * Invariants:
  *   - AUTH_VIA_APP: Uses @octokit/auth-app for GitHub App JWT + installation token management
  *   - INSTALLATION_CACHED: Installation ID resolved once per owner/repo and cached
  *   - TOKEN_AUTO_REFRESH: Octokit auth-app handles token caching and refresh automatically
  *   - ADAPTER_SWAPPABLE: Implements VcsCapability — can be swapped for gh CLI adapter later
  * Side-effects: IO (GitHub REST API)
- * Links: task.0242, services/scheduler-worker/src/adapters/ingestion/github-auth.ts
+ * Links: task.0242, task.0297, services/scheduler-worker/src/adapters/ingestion/github-auth.ts
  * @internal
  */
 
 import type {
+  CandidateFlightResult,
   CheckInfo,
   CiStatusResult,
   CreateBranchResult,
@@ -269,6 +270,67 @@ export class GitHubVcsAdapter implements VcsCapability {
     return {
       ref: refData.ref,
       sha: refData.object.sha,
+    };
+  }
+
+  async flightCandidate(params: {
+    owner: string;
+    repo: string;
+    sha: string;
+    prNumber?: number;
+  }): Promise<CandidateFlightResult> {
+    const octokit = await this.getOctokit(params.owner, params.repo);
+
+    // Resolve PR number from SHA when not supplied.
+    // GET /repos/{owner}/{repo}/commits/{sha}/pulls returns PRs containing this commit.
+    let resolvedPrNumber = params.prNumber;
+    if (resolvedPrNumber === undefined) {
+      const { data: prs } = await octokit.request(
+        "GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls",
+        {
+          owner: params.owner,
+          repo: params.repo,
+          commit_sha: params.sha,
+          mediaType: { previews: ["groot"] }, // required for this endpoint
+        }
+      );
+      const openPrs = (prs as Array<{ number: number; state: string }>).filter(
+        (pr) => pr.state === "open"
+      );
+      if (openPrs.length === 0) {
+        throw new Error(
+          `No open PR found for SHA ${params.sha} in ${params.owner}/${params.repo}. ` +
+            "Ensure PR Build has completed and the PR is still open."
+        );
+      }
+      resolvedPrNumber = openPrs[0].number;
+    }
+
+    // Dispatch the candidate-flight workflow.
+    // ref: "main" — workflow YAML lives on main (merged via PR #851), not staging.
+    // GitHub returns HTTP 204 with no body on success.
+    await octokit.request(
+      "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+      {
+        owner: params.owner,
+        repo: params.repo,
+        workflow_id: "candidate-flight.yml",
+        ref: "main",
+        inputs: {
+          pr_number: String(resolvedPrNumber),
+          head_sha: params.sha,
+        },
+      }
+    );
+
+    const workflowUrl = `https://github.com/${params.owner}/${params.repo}/actions/workflows/candidate-flight.yml`;
+
+    return {
+      dispatched: true,
+      sha: params.sha,
+      prNumber: resolvedPrNumber,
+      workflowUrl,
+      message: `Flight dispatched for PR #${resolvedPrNumber} @ ${params.sha.slice(0, 8)}`,
     };
   }
 

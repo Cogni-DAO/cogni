@@ -22,6 +22,11 @@ import {
   FRONTEND_TESTER_GRAPH_NAME,
 } from "./graphs/frontend-tester/graph";
 import {
+  createGitManagerGraph,
+  GIT_MANAGER_GRAPH_NAME,
+} from "./graphs/git-manager/graph";
+import { GIT_MANAGER_TOOL_IDS } from "./graphs/git-manager/tools";
+import {
   createOperatorGraph,
   GIT_REVIEWER_GRAPH_NAME,
   OPERATING_REVIEW_GRAPH_NAME,
@@ -206,6 +211,19 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     graphFactory: createOperatorGraph,
     systemPrompt: GIT_REVIEWER_PROMPT,
   },
+
+  /**
+   * Git Manager — git operations orchestrator.
+   * Monitors CI/PR data streams, dispatches reviews and coding agents,
+   * manages integration branches. Does NOT merge to privileged branches.
+   */
+  [GIT_MANAGER_GRAPH_NAME]: {
+    displayName: "Git Manager",
+    description:
+      "Git operations orchestrator — schedules reviews, dispatches dev agents, manages integration branches",
+    toolIds: GIT_MANAGER_TOOL_IDS,
+    graphFactory: createGitManagerGraph,
+  },
 } as const;
 
 /**
@@ -233,6 +251,7 @@ export const LANGGRAPH_GRAPH_IDS = {
   "operating-review": `${LANGGRAPH_PROVIDER_ID}:${OPERATING_REVIEW_GRAPH_NAME}`,
   "pr-manager": `${LANGGRAPH_PROVIDER_ID}:${PR_MANAGER_GRAPH_NAME}`,
   "git-reviewer": `${LANGGRAPH_PROVIDER_ID}:${GIT_REVIEWER_GRAPH_NAME}`,
+  "git-manager": `${LANGGRAPH_PROVIDER_ID}:${GIT_MANAGER_GRAPH_NAME}`,
 } as const;
 
 /**
