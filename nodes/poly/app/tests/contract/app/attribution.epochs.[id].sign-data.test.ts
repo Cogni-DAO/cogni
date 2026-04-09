@@ -11,8 +11,8 @@
  * @public
  */
 
-import { describe, expect, it } from "vitest";
 import { signDataOperation } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 const VALID_SIGN_DATA = {
   domain: {

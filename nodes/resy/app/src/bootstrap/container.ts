@@ -14,6 +14,7 @@
 
 import type { ToolSourcePort } from "@cogni/ai-core";
 import type {
+  KnowledgeCapability,
   MetricsCapability,
   RepoCapability,
   WebSearchCapability,
@@ -24,7 +25,17 @@ import type { FinancialLedgerPort } from "@cogni/financial-ledger";
 import { createTigerBeetleAdapter } from "@cogni/financial-ledger/adapters";
 import type { UserId } from "@cogni/ids";
 import { toUserId, userActor } from "@cogni/ids";
+import { createKnowledgeCapability } from "@cogni/knowledge-store";
+import {
+  buildDoltgresClient,
+  DoltgresKnowledgeStoreAdapter,
+} from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
+import {
+  COGNI_SYSTEM_PRINCIPAL_USER_ID,
+  initAnalytics,
+  shutdownAnalytics,
+} from "@cogni/node-shared";
 import { numberToPpm } from "@cogni/operator-wallet";
 import { PrivyOperatorWalletAdapter } from "@cogni/operator-wallet/adapters/privy";
 import type { ScheduleControlPort } from "@cogni/scheduler-core";
@@ -99,12 +110,6 @@ import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
-import type { KnowledgeCapability } from "@cogni/ai-tools";
-import { createKnowledgeCapability } from "@cogni/knowledge-store";
-import {
-  buildDoltgresClient,
-  DoltgresKnowledgeStoreAdapter,
-} from "@cogni/knowledge-store/adapters/doltgres";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
 import type {
   AccountService,
@@ -136,7 +141,6 @@ import type {
   GraphRunRepository,
   ScheduleUserPort,
 } from "@/ports/server";
-import { initAnalytics, shutdownAnalytics } from "@cogni/node-shared";
 import {
   getDaoTreasuryAddress,
   getNodeId,
@@ -144,7 +148,6 @@ import {
   getPaymentConfig,
   getScopeId,
 } from "@/shared/config";
-import { COGNI_SYSTEM_PRINCIPAL_USER_ID } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env/server-env";
 import { makeLogger } from "@/shared/observability";
 import { USDC_TOKEN_ADDRESS } from "@/shared/web3";
@@ -526,7 +529,9 @@ function createContainer(): Container {
   const repoCapability = createRepoCapability(env);
 
   // WorkItemCapability for AI tools (delegates to markdown adapter ports)
-  const workItemAdapter = new MarkdownWorkItemAdapter(env.COGNI_REPO_ROOT ?? "/nonexistent");
+  const workItemAdapter = new MarkdownWorkItemAdapter(
+    env.COGNI_REPO_ROOT ?? "/nonexistent"
+  );
   const workItemCapability = createWorkItemCapability({
     workItemQuery: workItemAdapter,
     workItemCommand: workItemAdapter,
@@ -562,7 +567,9 @@ function createContainer(): Container {
       connectionString: env.DOLTGRES_URL,
       applicationName: `cogni_knowledge_${env.SERVICE_NAME ?? "app"}`,
     });
-    const knowledgePort = new DoltgresKnowledgeStoreAdapter({ sql: doltClient });
+    const knowledgePort = new DoltgresKnowledgeStoreAdapter({
+      sql: doltClient,
+    });
     knowledgeCapability = createKnowledgeCapability(knowledgePort);
     log.info("Knowledge store configured (Doltgres)");
   } else {

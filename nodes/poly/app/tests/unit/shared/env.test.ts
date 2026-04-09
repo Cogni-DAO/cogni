@@ -67,6 +67,8 @@ describe("env schemas", () => {
     delete envWithoutDbUrl.DATABASE_URL;
 
     Object.assign(process.env, envWithoutDbUrl);
+    // Explicitly delete to prevent DATABASE_URL inherited from outer CI env leaking in
+    delete process.env.DATABASE_URL;
 
     const { serverEnv } = await import("@/shared/env/server");
 

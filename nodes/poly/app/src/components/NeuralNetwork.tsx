@@ -356,7 +356,6 @@ export function NeuralNetworkBackground(): ReactElement {
         camera={{ position: [0, 0, 7], fov: 60 }}
         dpr={[1, 1.5]}
         gl={{ antialias: false, alpha: true }}
-        style={{ background: "transparent" }}
       >
         <Scene />
       </Canvas>

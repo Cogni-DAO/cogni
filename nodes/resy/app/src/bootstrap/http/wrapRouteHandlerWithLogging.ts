@@ -16,10 +16,9 @@
  * @public
  */
 
-import { type NextRequest, NextResponse } from "next/server";
-
-import { withRootSpan } from "@/bootstrap/otel";
 import type { SessionUser } from "@cogni/node-shared";
+import { type NextRequest, NextResponse } from "next/server";
+import { withRootSpan } from "@/bootstrap/otel";
 import {
   createRequestContext,
   httpRequestDurationMs,

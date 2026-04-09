@@ -27,15 +27,15 @@ import type {
   GraphRunRequest,
   GraphRunResult,
 } from "@cogni/graph-execution-core";
-import type { UserId } from "@cogni/ids";
 import {
   BillingEnrichmentGraphExecutorDecorator,
+  type CommitUsageFactFn,
   NamespaceGraphRouter,
   ObservabilityGraphExecutorDecorator,
   PreflightCreditCheckDecorator,
   UsageCommitDecorator,
-  type CommitUsageFactFn,
 } from "@cogni/graph-execution-host";
+import type { UserId } from "@cogni/ids";
 import {
   LANGGRAPH_CATALOG,
   loadMcpTools,
@@ -114,7 +114,10 @@ export function createGraphExecutor(
   ]);
 
   // Create namespace router with all configured providers
-  const router = new NamespaceGraphRouter(providers, makeLogger({ component: "NamespaceGraphRouter" }));
+  const router = new NamespaceGraphRouter(
+    providers,
+    makeLogger({ component: "NamespaceGraphRouter" })
+  );
 
   return router;
 }

@@ -181,10 +181,10 @@ function MarketCard({
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-2">
-            <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+            <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-muted-foreground text-xs uppercase tracking-wider">
               {market.category}
             </span>
-            <span className="text-[10px] text-muted-foreground/50">
+            <span className="text-muted-foreground/50 text-xs">
               {market.platform}
             </span>
           </div>
@@ -205,10 +205,10 @@ function MarketCard({
 
       {/* Footer */}
       <div className="mt-3 flex items-center justify-between">
-        <span className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+        <span className="font-mono text-muted-foreground/60 text-xs uppercase tracking-wider">
           {market.volume} Vol.
         </span>
-        <span className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">
+        <span className="font-mono text-muted-foreground/60 text-xs uppercase tracking-wider">
           Resolves{" "}
           {new Date(market.resolves).toLocaleDateString("en-US", {
             month: "short",

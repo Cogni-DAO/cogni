@@ -1,12 +1,5 @@
-import {
-  Activity,
-  Briefcase,
-  CreditCard,
-  Github,
-  Vote,
-} from "lucide-react";
-
 import type { NodeAppConfig } from "@cogni/node-app/extensions";
+import { Activity, Briefcase, CreditCard, Github, Vote } from "lucide-react";
 
 export const nodeConfig: NodeAppConfig = {
   name: "Resy",

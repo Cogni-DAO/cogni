@@ -12,6 +12,7 @@
  * @public
  */
 
+import { chatCompletionsContract } from "@cogni/node-contracts";
 import { TEST_MODEL_ID, TEST_SESSION_USER_1 } from "@tests/_fakes";
 import {
   createContainerMock,
@@ -20,8 +21,6 @@ import {
   setupCompletionFacadeTest,
 } from "@tests/_fixtures/ai/completion-facade-setup";
 import { describe, expect, it, vi } from "vitest";
-
-import { chatCompletionsContract } from "@cogni/node-contracts";
 import type { RequestContext } from "@/shared/observability";
 import { makeNoopLogger } from "@/shared/observability";
 
@@ -30,6 +29,10 @@ vi.mock("@/shared/env", () => ({
   serverEnv: () => ({
     USER_PRICE_MARKUP_FACTOR: 1.5,
   }),
+}));
+
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "poly",
 }));
 
 describe("completion facade contract", () => {

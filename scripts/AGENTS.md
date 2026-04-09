@@ -36,9 +36,9 @@ Build-time scripts for migrations, seeds, type generation, development utilities
 ## Public Surface
 
 - **Exports:** none
-- **CLI (if any):** Migration, seed, database drop, and validation commands
-- **Env/Config keys:** Database connection, development flags
-- **Files considered API:** validate-agents-md.mjs (validation script), db/drop-test-db.ts (test database utility), diag-openclaw-sandbox.mjs (OpenClaw-in-sandbox diagnostic)
+- **CLI (if any):** Migration, seed, database drop, validation, and workspace-check/package-build orchestration commands
+- **Env/Config keys:** Database connection, development flags, `TURBO_SCM_BASE`/`TURBO_SCM_HEAD` scope overrides, CI-style test env fallbacks for `run-turbo-checks.sh`
+- **Files considered API:** validate-agents-md.mjs (validation script), db/drop-test-db.ts (test database utility), diag-openclaw-sandbox.mjs (OpenClaw-in-sandbox diagnostic), run-turbo-checks.sh (workspace-scoped local check helper), run-scoped-package-build.mjs (affected package prebuild helper)
 
 ## Ports (optional)
 
@@ -83,3 +83,5 @@ pnpm check:agentsmd             # Validate all AGENTS.md files
 
 - Scripts must be idempotent and safe to re-run
 - AGENTS.md validator enforces hexagonal import standards for AGENTS.md
+- `run-scoped-package-build.mjs` falls back to a full `pnpm packages:build` when global build inputs change, emitting a warning so developers notice the scope expansion.
+- `check-fast.sh` and `check-all.sh` run `workspace:lint` via `run-turbo-checks.sh` so local checks catch the same per-workspace Biome/ESLint failures that CI's workspace runs would catch.

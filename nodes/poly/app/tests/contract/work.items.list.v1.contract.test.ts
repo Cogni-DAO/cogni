@@ -11,12 +11,11 @@
  * @internal
  */
 
-import { describe, expect, it } from "vitest";
-
 import {
   WorkItemDtoSchema,
   workItemsListOperation,
 } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 const VALID_DTO = {
   id: "task.0001",

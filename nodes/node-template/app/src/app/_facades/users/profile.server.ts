@@ -15,14 +15,14 @@
 
 import { withTenantScope } from "@cogni/db-client";
 import { type UserId, userActor } from "@cogni/ids";
-import { eq } from "drizzle-orm";
-import { resolveAppDb } from "@/bootstrap/container";
 import type {
   ProfileReadOutput,
   ProfileUpdateInput,
   ProfileUpdateOutput,
 } from "@cogni/node-contracts";
 import type { SessionUser } from "@cogni/node-shared";
+import { eq } from "drizzle-orm";
+import { resolveAppDb } from "@/bootstrap/container";
 import { userBindings, userProfiles, users } from "@/shared/db/schema";
 
 /** Truncate wallet address for display: 0x1234…abcd */

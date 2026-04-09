@@ -11,8 +11,8 @@
  * @public
  */
 
-import type { ServiceAccountService } from "@/ports";
 import { COGNI_SYSTEM_BILLING_ACCOUNT_ID } from "@cogni/node-shared";
+import type { ServiceAccountService } from "@/ports";
 
 /**
  * Verify the system tenant billing account exists.

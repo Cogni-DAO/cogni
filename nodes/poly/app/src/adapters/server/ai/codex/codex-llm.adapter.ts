@@ -186,7 +186,7 @@ async function* runCodexExec(params: {
     // INVARIANT_DEVIATION: TOOLS_VIA_TOOLRUNNER — Codex calls MCP tools directly
     // via its own agent loop, bypassing toolRunner.exec().
     const configToml = mcpConfig ? generateConfigToml(mcpConfig) : undefined;
-    if (configToml) {
+    if (configToml && mcpConfig) {
       await writeFile(join(codexDir, "config.toml"), configToml, {
         mode: 0o600,
       });

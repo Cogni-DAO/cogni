@@ -10,29 +10,28 @@
  * @public
  */
 
-// App-local (wagmi/chains runtime dep)
-export * from "./evm-wagmi";
-
 // Extracted to @cogni/node-shared
 export {
   // Chain constants
   ACTIVE_CHAIN_KEY,
+  // Node formation
+  ARAGON_OSX_ADDRESSES,
   CHAIN_ID,
   CHAINS,
   type ChainKey,
-  USDC_TOKEN_ADDRESS,
-  VERIFY_THROTTLE_SECONDS,
+  DAO_FACTORY_ABI,
+  // ERC20 ABI
+  ERC20_ABI,
+  GOVERNANCE_ERC20_ABI,
   // Block explorer
   getDaoTreasuryUrl,
   getTransactionExplorerUrl,
-  // ERC20 ABI
-  ERC20_ABI,
-  // Node formation
-  ARAGON_OSX_ADDRESSES,
-  DAO_FACTORY_ABI,
-  GOVERNANCE_ERC20_ABI,
   SUPPORTED_CHAIN_IDS,
   type SupportedChainId,
   TOKEN_VOTING_ABI,
   TOKEN_VOTING_VERSION_TAG,
+  USDC_TOKEN_ADDRESS,
+  VERIFY_THROTTLE_SECONDS,
 } from "@cogni/node-shared";
+// App-local (wagmi/chains runtime dep)
+export * from "./evm-wagmi";

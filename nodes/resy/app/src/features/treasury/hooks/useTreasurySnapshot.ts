@@ -14,9 +14,8 @@
 
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-
 import type { TreasurySnapshotResponseV1 } from "@cogni/node-contracts";
+import { useQuery } from "@tanstack/react-query";
 
 const TREASURY_STALE_TIME_MS = 2 * 60 * 1000; // 2 minutes
 

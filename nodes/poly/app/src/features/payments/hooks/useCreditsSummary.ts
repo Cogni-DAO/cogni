@@ -12,8 +12,8 @@
  * @public
  */
 
-import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import type { CreditsSummaryOutput } from "@cogni/node-contracts";
+import { type UseQueryResult, useQuery } from "@tanstack/react-query";
 import { creditsSummaryClient } from "../api/creditsSummaryClient";
 
 export interface UseCreditsSummaryOptions {

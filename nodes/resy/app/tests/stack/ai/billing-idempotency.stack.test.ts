@@ -24,13 +24,13 @@ vi.mock("@/app/_lib/auth/session", () => ({
 }));
 
 import type { UserId } from "@cogni/ids";
+import type { SessionUser } from "@cogni/node-shared";
 import { createCompletionRequest } from "@tests/_fakes";
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { waitForReceipts } from "@tests/helpers/poll-db";
 import { UserDrizzleAccountService } from "@/adapters/server/accounts/drizzle.adapter";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { POST as completionPOST } from "@/app/api/v1/chat/completions/route";
-import type { SessionUser } from "@cogni/node-shared";
 import {
   billingAccounts,
   chargeReceipts,

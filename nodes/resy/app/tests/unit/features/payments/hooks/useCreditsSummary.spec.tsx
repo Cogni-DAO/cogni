@@ -14,12 +14,11 @@
  * @public
  */
 
+import type { CreditsSummaryOutput } from "@cogni/node-contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import type { CreditsSummaryOutput } from "@cogni/node-contracts";
 import { useCreditsSummary } from "@/features/payments/hooks/useCreditsSummary";
 
 // Mock the creditsSummaryClient module

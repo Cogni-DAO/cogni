@@ -19,14 +19,14 @@ import {
   explodeToClaimants,
   toReviewSubjectOverrides,
 } from "@cogni/attribution-ledger";
+import { signDataOperation } from "@cogni/node-contracts";
+import { CHAIN_ID } from "@cogni/node-shared";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { signDataOperation } from "@cogni/node-contracts";
 import { getNodeId, getScopeId } from "@/shared/config";
-import { CHAIN_ID } from "@cogni/node-shared";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

@@ -12,6 +12,10 @@
  */
 
 import {
+  FinalizeEpochInputSchema,
+  finalizeEpochOperation,
+} from "@cogni/node-contracts";
+import {
   Client,
   Connection,
   WorkflowExecutionAlreadyStartedError,
@@ -21,10 +25,6 @@ import { getSessionUser } from "@/app/_lib/auth/session";
 import { checkApprover } from "@/app/api/v1/attribution/_lib/approver-guard";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import {
-  FinalizeEpochInputSchema,
-  finalizeEpochOperation,
-} from "@cogni/node-contracts";
 import { getScopeId } from "@/shared/config";
 import { serverEnv } from "@/shared/env/server-env";
 

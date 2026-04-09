@@ -150,13 +150,13 @@ function SignalCard({
       <div className="mb-2 flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-1.5">
-            <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+            <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-muted-foreground text-xs uppercase tracking-wider">
               {signal.category}
             </span>
-            <span className="text-[10px] text-muted-foreground/40">
+            <span className="text-muted-foreground/40 text-xs">
               {signal.platform}
             </span>
-            <span className="text-[10px] text-muted-foreground/30">
+            <span className="text-muted-foreground/30 text-xs">
               {signal.timestamp}
             </span>
           </div>
@@ -168,7 +168,7 @@ function SignalCard({
         {/* Direction + confidence */}
         <div className="flex shrink-0 flex-col items-end gap-1">
           <span
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-xs uppercase tracking-wider ${
               isBullish ? "bg-up/10 text-up" : "bg-down/10 text-down"
             }`}
           >
@@ -179,7 +179,7 @@ function SignalCard({
             )}
             {signal.direction}
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-muted-foreground text-xs">
             {signal.confidence}% conf
           </span>
         </div>
@@ -195,7 +195,7 @@ function SignalCard({
         {signal.sources.map((src) => (
           <span
             key={src}
-            className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground/70"
+            className="rounded-sm bg-muted px-1.5 py-0.5 text-muted-foreground/70 text-xs"
           >
             {src}
           </span>

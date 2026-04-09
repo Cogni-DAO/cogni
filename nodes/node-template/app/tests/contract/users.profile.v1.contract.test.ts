@@ -11,9 +11,8 @@
  * @internal
  */
 
-import { describe, expect, it } from "vitest";
-
 import { profileUpdateOperation } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 const parse = (input: unknown) => profileUpdateOperation.input.safeParse(input);
 

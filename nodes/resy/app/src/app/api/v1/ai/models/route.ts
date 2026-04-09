@@ -11,11 +11,11 @@
  * @public
  */
 
+import { aiModelsOperation, type Model } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { aiModelsOperation, type Model } from "@cogni/node-contracts";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
 
 export const dynamic = "force-dynamic";

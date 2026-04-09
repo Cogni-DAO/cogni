@@ -13,11 +13,11 @@
 
 "use client";
 
+import { isValidAmountInput, parseDollarsToCents } from "@cogni/node-shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Info } from "lucide-react";
 import type { ReactElement } from "react";
 import { useState } from "react";
-
 import {
   Card,
   HintText,
@@ -31,7 +31,6 @@ import {
   useCreditsSummary,
   usePaymentFlow,
 } from "@/features/payments/public";
-import { isValidAmountInput, parseDollarsToCents } from "@cogni/node-shared";
 
 function formatDollars(credits: number): string {
   const dollars = creditsToUsd(credits);

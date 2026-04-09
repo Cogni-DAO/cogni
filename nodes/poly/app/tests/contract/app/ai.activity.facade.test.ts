@@ -13,11 +13,10 @@
  * @internal
  */
 
+import { aiActivityOperation } from "@cogni/node-contracts";
 import { TEST_GRAPH_NAME, TEST_SESSION_USER_1 } from "@tests/_fakes";
 import { describe, expect, it, vi } from "vitest";
-
 import { getActivity } from "@/app/_facades/ai/activity.server";
-import { aiActivityOperation } from "@cogni/node-contracts";
 
 // Mock dependencies — receipts-first (no usageService)
 vi.mock("@/bootstrap/container", () => ({

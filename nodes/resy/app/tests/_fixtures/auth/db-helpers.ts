@@ -13,8 +13,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { Database } from "@/adapters/server/db/client";
 import type { SessionUser } from "@cogni/node-shared";
+import type { Database } from "@/adapters/server/db/client";
 import { billingAccounts, users, virtualKeys } from "@/shared/db/schema";
 
 export interface SeedUserParams {

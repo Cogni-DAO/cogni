@@ -12,9 +12,8 @@
  * @public
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import type { CreditsSummaryOutput } from "@cogni/node-contracts";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { creditsSummaryClient } from "@/features/payments/api/creditsSummaryClient";
 
 describe("creditsSummaryClient", () => {

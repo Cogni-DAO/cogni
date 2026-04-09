@@ -12,6 +12,11 @@
  * @public
  */
 
+import {
+  CHAIN_ID,
+  MIN_CONFIRMATIONS,
+  USDC_TOKEN_ADDRESS,
+} from "@cogni/node-shared";
 import { getAddress, parseEventLogs } from "viem";
 import type {
   OnChainVerifier,
@@ -19,11 +24,6 @@ import type {
   VerificationResult,
 } from "@/ports";
 import { getPaymentConfig } from "@/shared/config/repoSpec.server";
-import {
-  CHAIN_ID,
-  MIN_CONFIRMATIONS,
-  USDC_TOKEN_ADDRESS,
-} from "@cogni/node-shared";
 import type { EvmOnchainClient } from "@/shared/web3/onchain/evm-onchain-client.interface";
 
 // ERC20 Transfer event ABI for decoding logs

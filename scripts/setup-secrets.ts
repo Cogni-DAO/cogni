@@ -804,8 +804,9 @@ function setSecret(name: string, value: string, env: string): boolean {
       encoding: "utf-8",
     });
     // Track for .env file generation
-    if (env in envSecretValues) {
-      envSecretValues[env]![name] = value;
+    const envSecrets = envSecretValues[env];
+    if (envSecrets) {
+      envSecrets[name] = value;
     }
     return true;
   } catch (e) {
@@ -874,11 +875,11 @@ function applyTransform(secret: Secret, value: string): string {
 const dbPasswords: Record<string, string> = {};
 
 function buildDSNs(envs: readonly string[]): void {
-  const appUser = dbPasswords["APP_DB_USER"] || "app_user";
-  const appPw = dbPasswords["APP_DB_PASSWORD"];
-  const svcUser = dbPasswords["APP_DB_SERVICE_USER"] || "app_service";
-  const svcPw = dbPasswords["APP_DB_SERVICE_PASSWORD"];
-  const dbName = dbPasswords["APP_DB_NAME"] || "cogni_template";
+  const appUser = dbPasswords.APP_DB_USER || "app_user";
+  const appPw = dbPasswords.APP_DB_PASSWORD;
+  const svcUser = dbPasswords.APP_DB_SERVICE_USER || "app_service";
+  const svcPw = dbPasswords.APP_DB_SERVICE_PASSWORD;
+  const dbName = dbPasswords.APP_DB_NAME || "cogni_template";
   const host = "postgres"; // Docker service name
 
   if (appPw) {
@@ -1223,10 +1224,7 @@ async function main() {
   }
 
   // Build DATABASE_URL and DATABASE_SERVICE_URL from collected passwords
-  if (
-    dbPasswords["APP_DB_PASSWORD"] ||
-    dbPasswords["APP_DB_SERVICE_PASSWORD"]
-  ) {
+  if (dbPasswords.APP_DB_PASSWORD || dbPasswords.APP_DB_SERVICE_PASSWORD) {
     console.log(
       `\n${"═".repeat(2)} ${BOLD}Derived Database URLs${RESET} ${"═".repeat(41)}`
     );

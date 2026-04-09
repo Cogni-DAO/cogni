@@ -16,6 +16,11 @@
  * @internal
  */
 
+import {
+  computePromptHash,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_TEMPERATURE,
+} from "@cogni/node-shared";
 import { createParser, type EventSourceMessage } from "eventsource-parser";
 import { humanizeModelId } from "@/adapters/server/ai/providers/openai-compatible.provider";
 import {
@@ -25,11 +30,6 @@ import {
   type LlmService,
   type LlmToolCall,
 } from "@/ports";
-import {
-  computePromptHash,
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_TEMPERATURE,
-} from "@cogni/node-shared";
 import { makeLogger } from "@/shared/observability";
 
 const log = makeLogger({ component: "OpenAiCompatibleAdapter" });
@@ -134,11 +134,17 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
     const promptTokens = Number(data.usage?.prompt_tokens) || 0;
     const completionTokens = Number(data.usage?.completion_tokens) || 0;
     const resolvedModel = data.model ?? model;
+    const firstChoice = data.choices[0];
+    const firstMessage = firstChoice?.message?.content;
+
+    if (typeof firstMessage !== "string") {
+      throw new LlmError("Invalid response from endpoint", "unknown");
+    }
 
     const result: Awaited<ReturnType<LlmService["completion"]>> = {
       message: {
         role: "assistant",
-        content: data.choices[0]!.message!.content!,
+        content: firstMessage,
       },
       usage: {
         promptTokens,
@@ -152,8 +158,8 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
       resolvedDisplayName: humanizeModelId(resolvedModel),
     };
 
-    if (data.choices[0]!.finish_reason) {
-      result.finishReason = data.choices[0]!.finish_reason;
+    if (firstChoice?.finish_reason) {
+      result.finishReason = firstChoice.finish_reason;
     }
 
     log.info(
@@ -341,7 +347,8 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
           streamParser.feed(decoder.decode(value, { stream: true }));
 
           while (eventQueue.length > 0) {
-            const event = eventQueue.shift()!;
+            const event = eventQueue.shift();
+            if (!event) continue;
             if (event.data === "[DONE]") continue;
 
             let parsed: {
@@ -391,7 +398,10 @@ export class OpenAiCompatibleLlmAdapter implements LlmService {
                   };
                 }
                 if (tc.function?.arguments) {
-                  toolCallAccum[tc.index]!.args += tc.function.arguments;
+                  const toolCall = toolCallAccum[tc.index];
+                  if (toolCall) {
+                    toolCall.args += tc.function.arguments;
+                  }
                 }
               }
             }

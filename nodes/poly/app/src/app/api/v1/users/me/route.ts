@@ -14,17 +14,16 @@
  * @public
  */
 
+import {
+  profileReadOperation,
+  profileUpdateOperation,
+} from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-
 import {
   readProfile,
   updateProfile,
 } from "@/app/_facades/users/profile.server";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import {
-  profileReadOperation,
-  profileUpdateOperation,
-} from "@cogni/node-contracts";
 import { getServerSessionUser } from "@/lib/auth/server";
 
 export const dynamic = "force-dynamic";

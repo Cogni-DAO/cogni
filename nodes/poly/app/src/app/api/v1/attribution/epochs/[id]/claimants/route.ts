@@ -11,12 +11,12 @@
  * @public
  */
 
+import { epochClaimantsOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { readFinalizedEpochClaimants } from "@/app/_facades/attribution/claimants.server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { epochClaimantsOperation } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

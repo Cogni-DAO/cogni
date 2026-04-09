@@ -32,6 +32,7 @@ import {
 } from "@cogni/financial-ledger";
 import { type ActorId, type UserId, userActor } from "@cogni/ids";
 import type { SourceSystem } from "@cogni/node-core";
+import { EVENT_NAMES, isValidUuid } from "@cogni/node-shared";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { Database } from "@/adapters/server/db/client";
 import {
@@ -53,8 +54,6 @@ import {
 } from "@/shared/db";
 import { serverEnv } from "@/shared/env";
 import { makeLogger } from "@/shared/observability";
-import { EVENT_NAMES } from "@cogni/node-shared";
-import { isValidUuid } from "@cogni/node-shared";
 
 const logger = makeLogger({ component: "DrizzleAccountService" });
 

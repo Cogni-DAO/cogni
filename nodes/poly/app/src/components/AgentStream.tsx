@@ -206,21 +206,18 @@ export function AgentStream(): ReactElement {
             ) : (
               <CheckCircle className="size-3 text-muted-foreground" />
             )}
-            <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+            <span className="font-mono text-muted-foreground text-xs uppercase tracking-wider">
               {isStreaming ? "Agent running" : "Scan complete"}
             </span>
           </div>
           <div className="flex-1" />
-          <span className="font-mono text-[10px] text-muted-foreground/50">
+          <span className="font-mono text-muted-foreground/50 text-xs">
             cogni/brain
           </span>
         </div>
 
         {/* Stream output */}
-        <div
-          ref={scrollRef}
-          className="h-[140px] overflow-y-auto px-4 py-3 sm:h-[160px]"
-        >
+        <div ref={scrollRef} className="h-36 overflow-y-auto px-4 py-3 sm:h-40">
           <AnimatePresence mode="popLayout">
             {events.map((event) => (
               <motion.div
@@ -259,10 +256,12 @@ export function AgentStream(): ReactElement {
               <span className="size-1 animate-pulse rounded-full bg-primary/60" />
               <span
                 className="size-1 animate-pulse rounded-full bg-primary/60"
+                // eslint-disable-next-line no-inline-styles/no-inline-styles -- Staggers static pulse timing without introducing one-off CSS helpers
                 style={{ animationDelay: "150ms" }}
               />
               <span
                 className="size-1 animate-pulse rounded-full bg-primary/60"
+                // eslint-disable-next-line no-inline-styles/no-inline-styles -- Staggers static pulse timing without introducing one-off CSS helpers
                 style={{ animationDelay: "300ms" }}
               />
             </motion.div>

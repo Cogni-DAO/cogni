@@ -22,6 +22,10 @@ vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));
 
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "resy",
+}));
+
 const mockAccountService = {
   getOrCreateBillingAccountForUser: vi.fn(),
   getBalance: vi.fn(),

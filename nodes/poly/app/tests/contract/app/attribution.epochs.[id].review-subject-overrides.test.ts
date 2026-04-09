@@ -11,12 +11,12 @@
  * @public
  */
 
-import { describe, expect, it } from "vitest";
 import {
   DeleteSubjectOverrideInputSchema,
   GetSubjectOverridesOutputSchema,
   PatchSubjectOverridesInputSchema,
 } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("ledger.get-review-subject-overrides.v1 contract", () => {
   it("validates a well-formed GET response with overrides", () => {

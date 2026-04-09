@@ -26,6 +26,7 @@ export const WORKER_EVENT_NAMES = {
   ACTIVITY_GRAPH_COMPLETED: "worker.activity.graph_completed",
   ACTIVITY_GRAPH_ERROR: "worker.activity.graph_error",
   ACTIVITY_RUN_UPDATED: "worker.activity.run_updated",
+  ACTIVITY_SWEEP_RESULT: "worker.activity.sweep_result",
 
   // Ledger activities — activities/ledger.ts
   LEDGER_EPOCH_ENSURED: "worker.ledger.epoch_ensured",

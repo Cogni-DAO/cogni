@@ -12,9 +12,8 @@
  * @public
  */
 
-import { NextResponse } from "next/server";
-
 import { OpenAPIV1 } from "@cogni/node-contracts";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-static";
 

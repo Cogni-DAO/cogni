@@ -25,6 +25,8 @@ export type {
   LedgerActivities,
   ReviewActivities,
   SchedulerActivities,
+  SweepActivities,
+  SweepWorkItem,
 } from "./activity-types.js";
 // Domain types (review)
 export type {

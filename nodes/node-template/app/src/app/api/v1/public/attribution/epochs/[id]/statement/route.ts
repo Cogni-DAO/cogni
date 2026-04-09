@@ -11,11 +11,11 @@
  * @public
  */
 
+import { epochStatementOperation } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { toStatementDto } from "@/app/api/v1/public/attribution/_lib/attribution-dto";
 import { getContainer } from "@/bootstrap/container";
 import { wrapPublicRoute } from "@/bootstrap/http";
-import { epochStatementOperation } from "@cogni/node-contracts";
 
 export const dynamic = "force-dynamic";
 

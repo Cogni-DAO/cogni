@@ -12,15 +12,13 @@
  * @public
  */
 
+import { CHAINS, EVENT_NAMES } from "@cogni/node-shared";
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/core";
 import type { Logger } from "pino";
 import { createPublicClient, http } from "viem";
 import { base, mainnet, sepolia } from "viem/chains";
-
 import { getDaoConfig } from "@/shared/config";
-import { EVENT_NAMES } from "@cogni/node-shared";
-import { CHAINS } from "@cogni/node-shared";
 
 import { handleSignal } from "./signal-handler";
 

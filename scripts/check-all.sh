@@ -3,9 +3,10 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Module: scripts/check-all.sh
-# Purpose: Runs ALL quality checks (typecheck, lint, format, test, docs, arch) to completion,
-#          never stopping at first failure. Provides structured output with timing,
-#          visual separation, and summary reporting optimized for AI developer workflows.
+# Purpose: Runs ALL quality checks to completion, never stopping at first failure.
+#          Workspace typecheck, lint, and tests use Turborepo `--affected` on feature branches;
+#          repo-wide lint, docs, layout, and architecture checks still run in full.
+#          Provides structured output with timing and summary reporting for AI workflows.
 # Usage: pnpm check          # Compact output (quiet mode)
 #        pnpm check:verbose  # Full banners + live streaming output
 #        pnpm check:fix      # Run with auto-fixers
@@ -91,8 +92,9 @@ if [ "$VERBOSE" = true ]; then
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 fi
 
-run_check "packages:build" "pnpm packages:build > /dev/null"
-run_check "typecheck" "pnpm typecheck"
+run_check "packages:build" "pnpm packages:build"
+run_check "workspace:typecheck" "bash scripts/run-turbo-checks.sh typecheck"
+run_check "workspace:lint" "bash scripts/run-turbo-checks.sh lint"
 
 if [ "$FIX_MODE" = true ]; then
   run_check "lint" "pnpm lint:fix"
@@ -104,10 +106,7 @@ fi
 
 run_check "ui-tokens" "bash scripts/check-ui-tokens.sh"
 
-# App tests run via nodes/operator/app config (resolves @/ from app node_modules).
-run_check "test:app" "pnpm vitest run --config nodes/operator/app/vitest.config.mts"
-run_check "test:packages:local" "pnpm test:packages:local"
-run_check "test:services:local" "pnpm test:services:local"
+run_check "workspace:test" "bash scripts/run-turbo-checks.sh test --concurrency=1"
 run_check "check:docs" "pnpm check:docs"
 run_check "check:root-layout" "pnpm check:root-layout"
 run_check "arch:check" "pnpm arch:check"

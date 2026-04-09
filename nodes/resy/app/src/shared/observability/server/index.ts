@@ -10,11 +10,6 @@
  * @public
  */
 
-// App-local (pino runtime, prom-client runtime)
-export * from "./logger";
-export * from "./metrics";
-export { REDACT_PATHS } from "./redact";
-
 // Extracted to @cogni/node-shared
 export {
   logEvent,
@@ -23,3 +18,7 @@ export {
   logRequestStart,
   logRequestWarn,
 } from "@cogni/node-shared";
+// App-local (pino runtime, prom-client runtime)
+export * from "./logger";
+export * from "./metrics";
+export { REDACT_PATHS } from "./redact";

@@ -11,8 +11,8 @@
  * @public
  */
 
-import { describe, expect, it } from "vitest";
 import { epochStatementOperation } from "@cogni/node-contracts";
+import { describe, expect, it } from "vitest";
 
 describe("ledger.epoch-statement.v1 contract", () => {
   it("should validate a well-formed statement response", () => {

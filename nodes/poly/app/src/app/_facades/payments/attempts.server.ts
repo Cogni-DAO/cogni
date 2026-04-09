@@ -13,13 +13,14 @@
  */
 
 import { toUserId } from "@cogni/ids";
-import { getAddress } from "viem";
-import { type Container, getContainer } from "@/bootstrap/container";
 import type {
   PaymentIntentOutput,
   PaymentStatusOutput,
   PaymentSubmitOutput,
 } from "@cogni/node-contracts";
+import type { SessionUser } from "@cogni/node-shared";
+import { getAddress } from "viem";
+import { type Container, getContainer } from "@/bootstrap/container";
 import type { PostCreditFundingDeps } from "@/features/payments/application/confirmCreditsPurchase";
 import {
   AuthUserNotFoundError,
@@ -31,7 +32,6 @@ import {
   submitTxHash,
 } from "@/features/payments/services/paymentService";
 import { getOrCreateBillingAccountForUser } from "@/lib/auth/mapping";
-import type { SessionUser } from "@cogni/node-shared";
 import { serverEnv } from "@/shared/env/server-env";
 import type {
   PaymentsIntentCreatedEvent,

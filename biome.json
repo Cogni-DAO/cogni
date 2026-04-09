@@ -8,8 +8,8 @@
   },
   "files": {
     "includes": [
-      "nodes/operator/app/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
-      "!nodes/operator/app/src/components/reui",
+      "nodes/*/app/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
+      "!nodes/*/app/src/components/reui",
       "packages/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "services/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",
       "tests/**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts,json}",

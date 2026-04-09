@@ -1,0 +1,40 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "typecheck": {
+      "inputs": ["src/**", "tests/**", "tsconfig*.json", "package.json"]
+    },
+    "lint": {
+      "inputs": ["src/**", "tests/**", "*.config.*", "package.json"]
+    },
+    "test": {
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "vitest*.config.*",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "env": [
+        "NODE_ENV",
+        "APP_ENV",
+        "DATABASE_URL",
+        "DATABASE_SERVICE_URL",
+        "COGNI_REPO_PATH",
+        "LITELLM_MASTER_KEY",
+        "AUTH_SECRET",
+        "SCHEDULER_API_TOKEN",
+        "BILLING_INGEST_TOKEN",
+        "INTERNAL_OPS_TOKEN",
+        "OPENCLAW_GATEWAY_TOKEN",
+        "OPENCLAW_GITHUB_RW_TOKEN",
+        "DISCORD_BOT_TOKEN",
+        "POSTHOG_API_KEY",
+        "POSTHOG_HOST",
+        "TEMPORAL_ADDRESS",
+        "TEMPORAL_NAMESPACE",
+        "TEMPORAL_TASK_QUEUE"
+      ]
+    }
+  }
+}

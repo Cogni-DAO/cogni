@@ -15,6 +15,8 @@
  * @public
  */
 
+import { chatCompletionsContract } from "@cogni/node-contracts";
+import { ChatErrorCode, ChatValidationError } from "@cogni/node-shared";
 import {
   createCompletionRequest,
   createMockAccountServiceWithDefaults,
@@ -29,14 +31,15 @@ import {
 } from "@tests/_fixtures/ai/completion-facade-setup";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { chatCompletionsContract } from "@cogni/node-contracts";
 import { LlmError } from "@/ports";
-import { ChatErrorCode, ChatValidationError } from "@cogni/node-shared";
 
 // Mock auth
 vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
+}));
+
+vi.mock("@/shared/config", () => ({
+  getNodeId: () => "resy",
 }));
 
 // Mock bootstrap container (getContainer needed by wrapRouteHandlerWithLogging)
