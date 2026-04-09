@@ -67,6 +67,7 @@ jobs:
 
       - name: Report pending candidate-flight status
         env:
+          GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ steps.meta.outputs.head_sha }}
           STATE: pending
@@ -197,6 +198,7 @@ jobs:
       - name: Report successful candidate-flight status
         if: success()
         env:
+          GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ steps.meta.outputs.head_sha }}
           STATE: success
@@ -207,6 +209,7 @@ jobs:
       - name: Report failed candidate-flight status
         if: failure()
         env:
+          GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           SHA: ${{ steps.meta.outputs.head_sha }}
           STATE: failure
