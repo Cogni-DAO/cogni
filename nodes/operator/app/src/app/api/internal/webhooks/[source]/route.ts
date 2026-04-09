@@ -14,6 +14,7 @@
  * @internal
  */
 
+import type { VcsActivityEvent } from "@cogni/node-streams";
 import { NextResponse } from "next/server";
 import { dispatchPrReview } from "@/app/_facades/review/dispatch.server";
 import { getContainer } from "@/bootstrap/container";
@@ -121,14 +122,45 @@ export async function POST(
 
     // 5. Fire-and-forget dispatches after successful verification.
     // Runs async — errors logged, never block webhook response.
+    // Parse body once for all downstream consumers.
+    const payload = JSON.parse(bodyBuffer.toString("utf-8"));
+
     if (source === "github" && eventType === "pull_request") {
-      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
       dispatchPrReview(payload, env, log);
     }
 
     if (source === "alchemy") {
-      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
       dispatchSignalExecution(payload, env, log);
+    }
+
+    // 6. Publish VCS activity summary to node stream (fire-and-forget).
+    // SSE consumers (dashboard, AI agents) see real-time VCS events.
+    if (source === "github" && result.eventCount > 0 && container.nodeStream) {
+      const action = String(payload?.action ?? "unknown");
+      const summary: VcsActivityEvent = {
+        type: "vcs_activity",
+        timestamp: new Date().toISOString(),
+        source: "github",
+        eventType,
+        action,
+        prNumber:
+          (payload?.pull_request?.number as number) ??
+          (payload?.issue?.number as number) ??
+          null,
+        title: String(
+          payload?.pull_request?.title ??
+            payload?.issue?.title ??
+            payload?.ref ??
+            ""
+        ),
+        actor: String(payload?.sender?.login ?? "unknown"),
+        repo: String(payload?.repository?.full_name ?? ""),
+      };
+      container.nodeStream
+        .publish(`node:${getNodeId()}:events`, summary)
+        .catch((err: unknown) => {
+          log.warn({ err }, "Stream publish failed for webhook event");
+        });
     }
 
     return NextResponse.json(
@@ -157,14 +189,14 @@ export async function POST(
       "webhook ingestion failed — dispatching review anyway"
     );
 
+    const fallbackPayload = JSON.parse(bodyBuffer.toString("utf-8"));
+
     if (source === "github" && eventType === "pull_request") {
-      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
-      dispatchPrReview(payload, env, log);
+      dispatchPrReview(fallbackPayload, env, log);
     }
 
     if (source === "alchemy") {
-      const payload = JSON.parse(bodyBuffer.toString("utf-8"));
-      dispatchSignalExecution(payload, env, log);
+      dispatchSignalExecution(fallbackPayload, env, log);
     }
 
     return NextResponse.json(
