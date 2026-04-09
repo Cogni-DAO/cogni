@@ -77,7 +77,7 @@
 | 1 | 2 | 3 | needs_design | task.0282 | Secure secret delivery for CI/CD deploys — replace SSH command-line passing | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0283 | Provision VM as GitHub Action — eliminate local .env.{env} dependency |  |  |
 | 1 | 2 | 3 | needs_implement | task.0286 | Eval POC — 2 evals with 4o-mini judge, Langfuse datasets, canary HTTP target |  |  |
-| 1 | 2 | 2 | needs_closeout | task.0297 | Add candidate-flight tool to VCS capability / git manager agent | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 2 | 2 | needs_merge | task.0297 | Add candidate-flight tool to VCS capability / git manager agent | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |

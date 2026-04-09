@@ -57,6 +57,20 @@ tags: [ci-cd, gitops, candidate-flight, agents]
 11. Release the lease when finished or cancelled.
 12. If the PR head changes, rerun flight on the new SHA.
 
+## Agent Flow (git-manager)
+
+The git-manager agent dispatches flights via `core__vcs_flight_candidate`:
+
+1. Call `core__vcs_get_ci_status({ prNumber })` — get `headSha` and verify PR Build is green.
+2. Call `core__vcs_flight_candidate({ owner, repo, sha: headSha })` — SHA is required; `prNumber` is optional (resolved from SHA if omitted).
+3. Call `core__vcs_get_ci_status` again after dispatch — watch for `candidate-flight` in `checks[]`.
+4. If `candidate-flight` fails immediately (< 5 min), the slot was busy — report and stop. Do NOT retry or queue.
+
+Rules:
+- Never auto-flight. A human or scheduled run must trigger the agent run.
+- Never flight more than one SHA per agent run.
+- `headSha` override is valid when the current HEAD is broken and an older SHA was stable.
+
 ## Required Prototype Checks
 
 - healthy pods

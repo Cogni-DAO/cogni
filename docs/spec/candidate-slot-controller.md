@@ -268,10 +268,11 @@ The PR status payload or PR comment should include the candidate URL once deploy
 
 Use plain workflows and scripts:
 
-- no git-manager agent required in v0
-- no long-running service required in v0
+- slot control lives in `candidate-flight.yml` — workflows and scripts, not a long-running service
+- git-manager agent is not required but can dispatch flight via `core__vcs_flight_candidate` (task.0297)
+- the agent dispatches only; lease acquisition and slot state remain workflow-owned
 
-Git-manager ownership can be reconsidered later if coordination complexity grows.
+Git-manager does not own the slot. It calls `workflow_dispatch` and observes `candidate-flight` status via `core__vcs_get_ci_status`. The lease file is written exclusively by workflow scripts.
 
 ### Script API
 
