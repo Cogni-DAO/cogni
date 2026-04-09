@@ -37,12 +37,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          BASE_REF=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}" --jq '.base.ref')
           HEAD_SHA_INPUT="${{ inputs.head_sha }}"
           if [ -n "$HEAD_SHA_INPUT" ]; then
             HEAD_SHA="$HEAD_SHA_INPUT"
           else
             HEAD_SHA=$(gh api "repos/${{ github.repository }}/pulls/${{ inputs.pr_number }}" --jq '.head.sha')
           fi
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
           echo "image_tag=pr-${{ inputs.pr_number }}-${HEAD_SHA}" >> "$GITHUB_OUTPUT"
           echo "status_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> "$GITHUB_OUTPUT"
@@ -51,8 +53,17 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
         with:
           ref: ${{ steps.meta.outputs.head_sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           path: app-src
+
+      - name: Require PR head to include base tip
+        working-directory: app-src
+        run: |
+          git fetch origin "${{ steps.meta.outputs.base_ref }}"
+          if ! git merge-base --is-ancestor "origin/${{ steps.meta.outputs.base_ref }}" HEAD; then
+            echo "PR #${{ inputs.pr_number }} is not up to date with ${{ steps.meta.outputs.base_ref }}"
+            exit 1
+          fi
 
       - name: Report pending candidate-flight status
         env:
@@ -106,6 +117,7 @@ jobs:
         run: |
           rsync -a --delete app-src/infra/k8s/base/ deploy-branch/infra/k8s/base/
           rsync -a --delete app-src/infra/catalog/ deploy-branch/infra/catalog/
+          rsync -a --delete app-src/infra/k8s/overlays/candidate-a/ deploy-branch/infra/k8s/overlays/candidate-a/
 
       - name: Acquire candidate slot
         id: acquire
@@ -156,6 +168,32 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN }}
         run: bash app-src/scripts/ci/smoke-candidate.sh
 
+      - name: Release candidate slot after success
+        if: always() && success() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        env:
+          STATE: free
+        run: bash ../app-src/scripts/ci/release-candidate-slot.sh
+
+      - name: Release candidate slot after failure
+        if: always() && failure() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        env:
+          STATE: failed
+        run: bash ../app-src/scripts/ci/release-candidate-slot.sh
+
+      - name: Commit and push released candidate slot
+        if: always() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
+        working-directory: deploy-branch
+        run: |
+          git add "infra/control/candidate-lease.json"
+          if git diff --cached --quiet; then
+            echo "No released lease changes to push"
+            exit 0
+          fi
+          git commit -m "candidate-flight: release pr-${{ inputs.pr_number }} ${{ steps.meta.outputs.head_sha }}"
+          git push origin "HEAD:deploy/${SLOT}"
+
       - name: Report successful candidate-flight status
         if: success()
         env:
@@ -175,17 +213,3 @@ jobs:
           DESCRIPTION: Candidate flight failed
           TARGET_URL: ${{ steps.meta.outputs.status_url }}
         run: bash app-src/scripts/ci/report-candidate-status.sh
-
-      - name: Release candidate slot after success
-        if: always() && success() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
-        working-directory: deploy-branch
-        env:
-          STATE: free
-        run: bash ../app-src/scripts/ci/release-candidate-slot.sh
-
-      - name: Release candidate slot after failure
-        if: always() && failure() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
-        working-directory: deploy-branch
-        env:
-          STATE: failed
-        run: bash ../app-src/scripts/ci/release-candidate-slot.sh

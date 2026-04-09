@@ -26,16 +26,6 @@ if [ -z "$IMAGE_TAG" ]; then
   exit 1
 fi
 
-if ! command -v docker >/dev/null 2>&1; then
-  log_error "docker is required"
-  exit 1
-fi
-
-if ! docker buildx version >/dev/null 2>&1; then
-  log_error "docker buildx is required"
-  exit 1
-fi
-
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 
 trimmed_targets=$(printf "%s" "$TARGETS" | tr -d '[:space:]')
@@ -51,8 +41,28 @@ if [ -z "$trimmed_targets" ]; then
     } >> "$GITHUB_OUTPUT"
   fi
 
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+      echo "## Built PR Images"
+      echo ""
+      echo "- Image name: \`$IMAGE_NAME\`"
+      echo "- Image tag: \`$IMAGE_TAG\`"
+      echo "- Targets: none"
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
+
   log_info "No image targets selected; wrote empty payload to $OUTPUT_FILE"
   exit 0
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  log_error "docker is required"
+  exit 1
+fi
+
+if ! docker buildx version >/dev/null 2>&1; then
+  log_error "docker buildx is required"
+  exit 1
 fi
 
 if [ -n "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_USERNAME:-}" ]; then

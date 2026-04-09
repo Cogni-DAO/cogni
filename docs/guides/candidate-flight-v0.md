@@ -41,11 +41,15 @@ tags: [ci-cd, gitops, candidate-flight, agents]
 11. Release the lease when finished or cancelled.
 12. If the PR head changes, rerun flight on the new SHA.
 
-## Required V0 Checks
+## Required Prototype Checks
 
 - healthy pods
-- readiness passes
-- one auth or session sanity path
+- `/readyz` returns `200` on operator, poly, and resy
+- `/livez` returns structured JSON on operator, poly, and resy
+
+## Follow-On Checks
+
+- auth or session sanity path
 - one chat or completion path
 - one scheduler or worker sanity path
 - one or two node-critical APIs

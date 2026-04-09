@@ -147,17 +147,19 @@ Once the slot is acquired:
 
 Validation runs against the stable candidate URL after Argo reports healthy sync or readiness is confirmed.
 
-Required v0 checks:
+Required prototype checks:
 
 - pods healthy
 - readiness passes
-- one auth or session sanity path
-- one chat or completion path
-- one scheduler or worker sanity path
-- one or two node-critical APIs
+- `/readyz` returns `200` on operator, poly, and resy
+- `/livez` returns structured JSON on operator, poly, and resy
 
 Optional but advisory in v0:
 
+- auth or session sanity paths
+- chat or completion probes
+- scheduler or worker sanity probes
+- one or two node-critical API probes
 - AI probes
 - broader exploratory E2E suites
 

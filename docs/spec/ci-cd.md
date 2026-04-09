@@ -96,21 +96,22 @@ Merge queue is deferred in v0. If the repo later adopts merge queue, the workflo
 
 ## Minimum Authoritative Validation For V0
 
-Do not block the rewrite on perfect black-box E2E maturity. For PRs explicitly sent to candidate flight in v0, the required flight gate is:
+Do not block the rewrite on perfect black-box E2E maturity. For PRs explicitly sent to candidate flight in the current prototype, the required flight gate is:
 
 - affected-only static checks plus unit tests
 - successful image build for the exact PR SHA
 - candidate deployment reaches healthy pods
-- a thin smoke pack passes:
-  - auth or session sanity
-  - health and readiness
-  - one chat or completion path
-  - one scheduler or worker sanity path
-  - one or two node-critical APIs
+- a prototype smoke pack passes:
+  - `/readyz` returns `200` on operator, poly, and resy
+  - `/livez` returns structured JSON on operator, poly, and resy
 - any human or AI validation needed to call the change safe
 
 Optional but non-authoritative in v0:
 
+- auth or session sanity paths
+- chat or completion probes
+- scheduler or worker sanity probes
+- one or two node-critical API probes
 - richer black-box E2E suites
 - AI probe jobs against the changed surface
 - broader post-merge soak analysis
