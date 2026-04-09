@@ -52,24 +52,31 @@ branch: task/0297-candidate-flight-vcs
 
 ### Outcome
 
-Git manager agent calls `core__vcs_flight_candidate(owner, repo, prNumber)` to dispatch the `candidate-flight.yml` workflow; the existing `core__vcs_get_ci_status` returns the `candidate-flight` check result — no new status-polling tool needed.
+Git manager agent calls `core__vcs_flight_candidate(owner, repo, sha)` to dispatch the `candidate-flight.yml` workflow for a specific build artifact. SHA is the primary identifier — the tool resolves the associated PR number. The existing `core__vcs_get_ci_status` returns the `candidate-flight` check result after dispatch.
 
 ### Approach
 
-**Solution**: One new tool (`core__vcs_flight_candidate`) + one new graph (`git-manager`).
+**Solution**: One new tool (`core__vcs_flight_candidate`) + cherry-pick PR #794 for git-manager graph + add flight tool to its tool set.
 
-The tool dispatches `candidate-flight.yml` via Octokit's workflow dispatch API. GitHub returns HTTP 204 (no body) on dispatch — the tool returns `{ dispatched: true, workflowUrl, message }`. The agent uses `core__vcs_get_ci_status` to read the resulting `candidate-flight` commit status.
+**SHA-first design**: The command operates on a build SHA (the artifact), not a PR number. A PR may have multiple builds (push 1 → sha-A, push 2 → sha-B, push 3 → sha-C). You want to fly a specific SHA, not "the current head of PR N". If you dispatch while push 4 is still building, its image doesn't exist yet and the flight fails. SHA-first forces the agent to reason about which build to fly.
+
+Tool input: `{ owner, repo, sha, prNumber? }` — SHA required, PR number optional. If `prNumber` not supplied, the adapter resolves it via `GET /repos/{owner}/{repo}/commits/{sha}/pulls`. The workflow requires `pr_number` for posting status and lease tracking, so it is always resolved before dispatch.
+
+The tool dispatches via `POST .../actions/workflows/candidate-flight.yml/dispatches` with `ref: "main"` (where the workflow file lives — not `staging` which is the PR target; the workflow YAML was merged to `main` via PR #851). Returns `{ dispatched: true, sha, prNumber, workflowUrl, message }`.
+
+**Cherry-pick strategy for git-manager**: PR #794 (`feat/git-manager`, merged to canary 2026-04-06, commit `c5743653`) has the complete graph source. Cherry-pick applies clean with zero conflicts. Implementation cherry-picks this commit, then adds `VCS_FLIGHT_CANDIDATE_NAME` to `GIT_MANAGER_TOOL_IDS`.
 
 **Reuses**:
 - `VcsCapability` interface — add one method (`flightCandidate`)
 - `GitHubVcsAdapter` — add one method using the same `getOctokit()` helper
-- `createBrainGraph` pattern — git-manager graph is identical shape
-- `pr-manager/tools.ts` pattern — git-manager tools.ts is same structure
+- PR #794 cherry-pick — provides git-manager graph, prompt, catalog entry
+- GitHub commits/pulls API — resolve PR from SHA (already using Octokit throughout)
 
 **Rejected**:
-- `getCandidateLease()` tool — not needed in V0; lease state is visible as a `candidate-flight` commit status entry in `getCiStatus` output. Lease reads add another GitHub contents API call for no new information the agent needs right now.
-- `getCandidateFlightStatus()` tool — fully redundant with `getCiStatus`; that tool already returns all commit statuses including `candidate-flight`.
+- `getCandidateLease()` tool — V0 relies on the workflow's own busy check. Dispatch fires; if slot is occupied the workflow fails fast and posts `candidate-flight: failure` on the SHA. Agent reads the failure from `getCiStatus` after dispatch — no pre-check needed.
+- `getCandidateFlightStatus()` tool — fully redundant with `getCiStatus`; that already returns all commit statuses including `candidate-flight`.
 - Separate `CandidateFlightCapability` interface — unnecessary complexity; one more method on `VcsCapability` is consistent with the existing pattern.
+- PR-number-first interface — a PR has many builds; the build (SHA) is the unit being flighted. Agent must reason about which SHA, not just "the PR".
 
 ### Invariants
 
@@ -87,57 +94,66 @@ The tool dispatches `candidate-flight.yml` via Octokit's workflow dispatch API. 
 ### Files
 
 ```
-packages/ai-tools/
-  Modify: src/capabilities/vcs.ts          — add CandidateFlightResult type + flightCandidate() to VcsCapability
-  Create: src/tools/vcs-flight-candidate.ts — schema, contract, impl factory, stub, bound tool
+Step 1 — cherry-pick c5743653 (PR #794, git-manager graph from canary):
+  Creates: packages/langgraph-graphs/src/graphs/git-manager/{tools,prompts,graph,server,cogni-exec}.ts
+  Modifies: packages/langgraph-graphs/src/catalog.ts (registers git-manager)
+  Modifies: packages/langgraph-graphs/src/graphs/index.ts
+  Also brings: docs/guides/git-management-playbook.md
+
+Step 2 — add VCS flight tool (packages/ai-tools):
+  Modify: src/capabilities/vcs.ts          — add CandidateFlightResult type + flightCandidate(sha, prNumber?) to VcsCapability
+  Create: src/tools/vcs-flight-candidate.ts — schema (sha required, prNumber optional), contract, impl factory, stub, bound tool
   Modify: src/catalog.ts                   — register vcsFlightCandidateBoundTool
   Modify: src/index.ts                     — export all new symbols
 
-nodes/operator/app/src/
-  Modify: adapters/server/vcs/github-vcs.adapter.ts  — implement flightCandidate via Octokit workflow dispatch
+Step 3 — adapter + wiring (nodes/operator):
+  Modify: adapters/server/vcs/github-vcs.adapter.ts  — implement flightCandidate: resolve prNumber from SHA if absent, dispatch workflow
   Modify: bootstrap/capabilities/vcs.ts               — add flightCandidate to stubVcsCapability
   Modify: bootstrap/ai/tool-bindings.ts               — wire VCS_FLIGHT_CANDIDATE_NAME
 
-nodes/node-template/app/src/
-  Modify: bootstrap/capabilities/vcs.ts               — add flightCandidate stub (interface compliance)
+Step 4 — stub compliance (other nodes):
+  Modify: nodes/node-template/app/src/bootstrap/capabilities/vcs.ts — add flightCandidate stub
+  Modify: nodes/resy/app/src/bootstrap/capabilities/vcs.ts          — add flightCandidate stub
 
-nodes/resy/app/src/
-  Modify: bootstrap/capabilities/vcs.ts               — add flightCandidate stub (interface compliance)
-
-packages/langgraph-graphs/src/
-  Create: graphs/git-manager/tools.ts      — GIT_MANAGER_TOOL_IDS (VCS flight + list + CI status + create branch + work item)
-  Create: graphs/git-manager/prompts.ts    — GIT_MANAGER_GRAPH_NAME + GIT_MANAGER_SYSTEM_PROMPT with candidate-flight section
-  Create: graphs/git-manager/graph.ts      — createGitManagerGraph (identical shape to brain/graph.ts)
-  Modify: graphs/index.ts                  — export GIT_MANAGER_GRAPH_NAME + createGitManagerGraph
+Step 5 — wire flight tool into git-manager:
+  Modify: packages/langgraph-graphs/src/graphs/git-manager/tools.ts — add VCS_FLIGHT_CANDIDATE_NAME to GIT_MANAGER_TOOL_IDS
 ```
 
 ### Key implementation notes
 
-**`flightCandidate` in GitHubVcsAdapter**:
+**`flightCandidate` signature**:
+```typescript
+flightCandidate(params: {
+  owner: string;
+  repo: string;
+  sha: string;         // required — the specific build artifact to fly
+  prNumber?: number;   // optional — resolved from SHA if not supplied
+}): Promise<CandidateFlightResult>
+// CandidateFlightResult: { dispatched: boolean; sha: string; prNumber: number; workflowUrl: string; message: string }
+```
+
+**SHA → PR resolution** (when `prNumber` not supplied):
+```typescript
+// GET /repos/{owner}/{repo}/commits/{sha}/pulls
+// Returns PRs associated with this commit. Take first open PR's number.
+// Error if none found — SHA has no associated open PR.
+```
+
+**Workflow dispatch**:
 ```typescript
 // POST /repos/{owner}/{repo}/actions/workflows/candidate-flight.yml/dispatches
-// ref: "main" (workflow runs from default branch)
-// inputs: { pr_number: String(prNumber), head_sha: headSha ?? "" }
-// Returns HTTP 204. Build return value from inputs:
-// { dispatched: true, workflowUrl: "https://github.com/{owner}/{repo}/actions/workflows/candidate-flight.yml", message: "Flight dispatched for PR #N" }
+// ref: "main"  ← workflow YAML lives on main (merged via PR #851), not staging
+// inputs: { pr_number: String(resolvedPrNumber), head_sha: sha }
+// HTTP 204 — build return from resolved inputs
 ```
 
-**git-manager tool set** (minimal for V0):
-```
-VCS_FLIGHT_CANDIDATE_NAME   — dispatch flight
-VCS_LIST_PRS_NAME           — survey open PRs
-VCS_GET_CI_STATUS_NAME      — check CI + candidate-flight status
-VCS_CREATE_BRANCH_NAME      — integration branch management
-WORK_ITEM_QUERY_NAME        — link PR to task
-REPO_OPEN_NAME              — read playbooks
-```
-
-**git-manager prompt**: Focused section:
-> Before flighting: verify PR is green on core__vcs_get_ci_status. If `candidate-flight` check is already `pending`, the slot is busy — report and stop. To flight: call `core__vcs_flight_candidate`. After dispatch: call `core__vcs_get_ci_status` again to observe the `candidate-flight` status as it resolves. Do NOT queue, auto-retry, or flight more than one PR per run.
+**git-manager flight prompt addition** (patch onto cherry-picked prompt):
+> **Candidate Flight**: To flight a build, you need the commit SHA — not just a PR number. A PR may have many builds; you are flying a specific artifact. Verify the build is complete (`getCiStatus` shows all checks green including `build`) before flighting. Call `core__vcs_flight_candidate({ sha })`. After dispatch, poll `getCiStatus` to watch `candidate-flight` resolve. If it fails immediately, the slot was busy — report and stop. Do NOT queue or auto-retry.
 
 ## Validation
 
-- `flightCandidate(846)` dispatches the workflow via Octokit and returns `{ dispatched: true, workflowUrl, message }`
-- Slot busy → `getCiStatus` shows `candidate-flight` as `pending`; agent reports and stops, does not dispatch
+- `flightCandidate({ sha: "abc123", owner, repo })` resolves PR number from SHA, dispatches workflow, returns `{ dispatched: true, sha, prNumber, workflowUrl, message }`
+- `flightCandidate({ sha, prNumber: 846, owner, repo })` skips PR lookup, dispatches directly
+- Slot busy → dispatch succeeds (HTTP 204), workflow fails fast, `getCiStatus` shows `candidate-flight: failure`; agent reports and stops
 - `getCiStatus(846)` returns `candidate-flight` check in `checks[]` after workflow posts status
 - TypeScript compiles across all three nodes (no interface mismatch on stub)
