@@ -43,7 +43,7 @@ patches:
         value: "redis://resy-redis-external:6379"
       - op: add
         path: /data/NEXTAUTH_URL
-        value: "https://resy-candidate-a.cognidao.org"
+        value: "https://resy-test.cognidao.org"
       - op: add
         path: /data/AUTH_TRUST_HOST
         value: "true"
@@ -89,7 +89,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-postgres-external"
@@ -99,7 +99,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-temporal-external"
@@ -109,7 +109,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-litellm-external"
@@ -119,7 +119,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-redis-external"
