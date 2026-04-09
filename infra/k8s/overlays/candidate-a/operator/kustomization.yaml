@@ -43,7 +43,7 @@ patches:
         value: "redis://operator-redis-external:6379"
       - op: add
         path: /data/NEXTAUTH_URL
-        value: "https://candidate-a.cognidao.org"
+        value: "https://test.cognidao.org"
       - op: add
         path: /data/AUTH_TRUST_HOST
         value: "true"
@@ -83,7 +83,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-postgres-external"
@@ -93,7 +93,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-temporal-external"
@@ -103,7 +103,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-litellm-external"
@@ -113,7 +113,7 @@ patches:
     patch: |
       - op: replace
         path: /endpoints/0/addresses
-        value: ["84.32.109.222"]
+        value: ["84.32.109.160"]
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "operator-redis-external"
