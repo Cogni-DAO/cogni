@@ -28,9 +28,8 @@ tags: [ci-cd, gitops, candidate-flight, agents]
 
 ## Operator Flow
 
-1. Confirm the PR is green on normal CI/build.
-2. Confirm the PR is up to date with `main`.
-3. Trigger flight explicitly:
+1. Confirm the PR is green on normal CI/build (`build-images` must have succeeded).
+2. Trigger flight explicitly:
 
    ```bash
    gh workflow run candidate-flight.yml \
@@ -47,15 +46,15 @@ tags: [ci-cd, gitops, candidate-flight, agents]
      --field head_sha=<SHA>
    ```
 
-4. Read the lease on `deploy/candidate-a`.
-5. If occupied, report `candidate-a busy` and stop. Do not queue.
-6. If free or expired, acquire the lease.
-7. Push the PR digest to `deploy/candidate-a`.
-8. Let Argo sync the stable candidate environment.
-9. Run the thin flight checks on the stable candidate URL.
-10. Post one aggregate `candidate-flight` result.
-11. Release the lease when finished or cancelled.
-12. If the PR head changes, rerun flight on the new SHA.
+3. Read the lease on `deploy/candidate-a`.
+4. If occupied, report `candidate-a busy` and stop. Do not queue.
+5. If free or expired, acquire the lease.
+6. Push the PR digest to `deploy/candidate-a`.
+7. Let Argo sync the stable candidate environment.
+8. Run the thin flight checks on the stable candidate URL.
+9. Post one aggregate `candidate-flight` result.
+10. Release the lease when finished or cancelled.
+11. If the PR head changes, rerun flight on the new SHA.
 
 ## Required Prototype Checks
 
