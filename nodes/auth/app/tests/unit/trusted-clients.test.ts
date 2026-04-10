@@ -15,10 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 function stubAuthHubEnv() {
   vi.stubEnv("NODE_ENV", "test");
   vi.stubEnv("AUTH_HUB_BASE_URL", "http://localhost:3400/api/auth");
-  vi.stubEnv(
-    "AUTH_HUB_SECRET",
-    "test-auth-hub-secret-at-least-32-characters"
-  );
+  vi.stubEnv("AUTH_HUB_SECRET", "test-auth-hub-secret-at-least-32-characters");
   vi.stubEnv(
     "AUTH_DATABASE_URL",
     "postgresql://app_service:service_password@localhost:55432/cogni_auth_test"

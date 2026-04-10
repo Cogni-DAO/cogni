@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
-import { Pool } from "pg";
-
 import { oauthProvider } from "@better-auth/oauth-provider";
-import { betterAuth } from "better-auth";
-import { jwt } from "better-auth/plugins";
 import {
   AUTH_HUB_GITHUB_ID_CLAIM,
   AUTH_HUB_GITHUB_LOGIN_CLAIM,
   AUTH_HUB_PROVIDER_CLAIM,
 } from "@cogni/node-shared";
+import { betterAuth } from "better-auth";
+import { jwt } from "better-auth/plugins";
+import { Pool } from "pg";
 
 import { authHubEnv } from "./env";
 import {
@@ -127,21 +126,6 @@ interface AuthHubApi {
         subject_type: "public";
       };
     }) => Promise<unknown>;
-    adminUpdateOAuthClient: (input: {
-      body: {
-        client_id: string;
-        update: {
-          redirect_uris: string[];
-          scope: string;
-          client_name: string;
-          grant_types: ("authorization_code" | "refresh_token")[];
-          response_types: "code"[];
-          type: "web";
-          skip_consent: true;
-          subject_type: "public";
-        };
-      };
-    }) => Promise<unknown>;
   };
 }
 
@@ -151,10 +135,10 @@ function toOAuthClientPayload(client: TrustedAuthHubClient) {
     scope: client.scopes.join(" "),
     client_name: client.name,
     token_endpoint_auth_method: "client_secret_basic" as const,
-    grant_types: [
-      "authorization_code",
-      "refresh_token",
-    ] as ("authorization_code" | "refresh_token")[],
+    grant_types: ["authorization_code", "refresh_token"] as (
+      | "authorization_code"
+      | "refresh_token"
+    )[],
     response_types: ["code"] as "code"[],
     type: client.type,
     skip_consent: client.skipConsent,
@@ -177,12 +161,6 @@ async function ensureAuthHubClientsInner(): Promise<void> {
 
   for (const client of getTrustedAuthHubClients()) {
     if (await oauthClientExists(client.clientId)) {
-      await authWithApi.api.adminUpdateOAuthClient({
-        body: {
-          client_id: client.clientId,
-          update: toOAuthClientPayload(client),
-        },
-      });
       continue;
     }
 

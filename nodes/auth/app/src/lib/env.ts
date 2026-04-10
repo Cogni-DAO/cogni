@@ -23,6 +23,7 @@ const authHubEnvSchema = z.object({
 let cachedEnv: z.infer<typeof authHubEnvSchema> | null = null;
 
 export function authHubEnv() {
+  // biome-ignore lint/style/noProcessEnv: auth hub env loader validates runtime env lazily
   cachedEnv ??= authHubEnvSchema.parse(process.env);
   return cachedEnv;
 }

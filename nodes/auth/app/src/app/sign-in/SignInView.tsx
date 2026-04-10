@@ -45,9 +45,15 @@ export function SignInView() {
         <h1 style={{ margin: "0.75rem 0 0.5rem", fontSize: "2rem" }}>
           Sign in with GitHub
         </h1>
-        <p style={{ margin: 0, color: "rgba(245,247,251,0.82)", lineHeight: 1.6 }}>
-          This hub owns the single GitHub callback and continues the authorization
-          flow back to the correct Cogni deployment after sign-in.
+        <p
+          style={{
+            margin: 0,
+            color: "rgba(245,247,251,0.82)",
+            lineHeight: 1.6,
+          }}
+        >
+          This hub owns the single GitHub callback and continues the
+          authorization flow back to the correct Cogni deployment after sign-in.
         </p>
         <button
           type="button"

@@ -59,9 +59,7 @@ export function ConsentView() {
       window.location.assign(data.redirect_uri);
     } catch (consentError) {
       setError(
-        consentError instanceof Error
-          ? consentError.message
-          : "Consent failed."
+        consentError instanceof Error ? consentError.message : "Consent failed."
       );
       setPending(false);
     }
@@ -101,10 +99,23 @@ export function ConsentView() {
         <h1 style={{ margin: "0.75rem 0 0.5rem", fontSize: "2rem" }}>
           Review requested access
         </h1>
-        <p style={{ margin: 0, color: "rgba(245,247,251,0.82)", lineHeight: 1.6 }}>
-          This local client is asking the shared auth hub for the following scopes.
+        <p
+          style={{
+            margin: 0,
+            color: "rgba(245,247,251,0.82)",
+            lineHeight: 1.6,
+          }}
+        >
+          This local client is asking the shared auth hub for the following
+          scopes.
         </p>
-        <ul style={{ margin: "1.5rem 0 0", paddingLeft: "1.25rem", lineHeight: 1.8 }}>
+        <ul
+          style={{
+            margin: "1.5rem 0 0",
+            paddingLeft: "1.25rem",
+            lineHeight: 1.8,
+          }}
+        >
           {requestedScopes.map((scope) => (
             <li key={scope}>{scope}</li>
           ))}

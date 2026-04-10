@@ -11,12 +11,12 @@
  * @public
  */
 
-import { TEST_USER_ID_1 } from "@tests/_fakes/ids";
 import {
   AUTH_HUB_GITHUB_ID_CLAIM,
   AUTH_HUB_GITHUB_LOGIN_CLAIM,
   AUTH_HUB_PROVIDER_CLAIM,
 } from "@cogni/node-shared";
+import { TEST_USER_ID_1 } from "@tests/_fakes/ids";
 import type { Account, User } from "next-auth";
 import { describe, expect, it, vi } from "vitest";
 
@@ -100,7 +100,8 @@ describe("OAuth signIn callback — early-return branches", () => {
 
     process.env.AUTH_HUB_ISSUER = "http://localhost:3400/api/auth";
     process.env.AUTH_HUB_CLIENT_ID = "cogni-poly-local-test";
-    process.env.AUTH_HUB_CLIENT_SECRET = "poly-local-test-client-secret-32chars";
+    process.env.AUTH_HUB_CLIENT_SECRET =
+      "poly-local-test-client-secret-32chars";
 
     try {
       const result = await signIn({

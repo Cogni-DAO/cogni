@@ -11,12 +11,12 @@
  * @public
  */
 
-import { TEST_USER_ID_1 } from "@tests/_fakes/ids";
 import {
   AUTH_HUB_GITHUB_ID_CLAIM,
   AUTH_HUB_GITHUB_LOGIN_CLAIM,
   AUTH_HUB_PROVIDER_CLAIM,
 } from "@cogni/node-shared";
+import { TEST_USER_ID_1 } from "@tests/_fakes/ids";
 import type { Account, User } from "next-auth";
 import { describe, expect, it, vi } from "vitest";
 

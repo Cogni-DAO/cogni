@@ -36,10 +36,16 @@ export default function HomePage() {
         <h1 style={{ margin: "0.75rem 0 0.5rem", fontSize: "2.25rem" }}>
           Auth Hub
         </h1>
-        <p style={{ margin: 0, color: "rgba(245,247,251,0.82)", lineHeight: 1.6 }}>
+        <p
+          style={{
+            margin: 0,
+            color: "rgba(245,247,251,0.82)",
+            lineHeight: 1.6,
+          }}
+        >
           This prototype centralizes GitHub OAuth for all local Cogni nodes.
-          Start sign-in from operator, poly, or resy and the hub will complete the
-          shared OAuth flow here.
+          Start sign-in from operator, poly, or resy and the hub will complete
+          the shared OAuth flow here.
         </p>
       </div>
     </main>
