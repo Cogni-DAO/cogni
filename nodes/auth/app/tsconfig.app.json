@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@cogni/node-shared": ["../../../packages/node-shared/src/index.ts"],
+      "@cogni/node-shared/*": ["../../../packages/node-shared/src/*"]
+    },
+    "plugins": [{ "name": "next" }]
+  },
+  "include": [
+    "next-env.d.ts",
+    ".next/types/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "exclude": ["**/dist/**", ".next/**", "node_modules/**", "coverage/**"]
+}

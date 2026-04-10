@@ -27,9 +27,10 @@ export * from "./auth";
 
 // --- Config (schema only — server accessor stays app-local) ---
 export * from "./config/repoSpec.schema";
-
 // --- Constants ---
 export * from "./constants";
+// --- Contracts ---
+export * from "./contracts/auth-hub-claims.contract";
 
 // --- Crypto ---
 export { type AeadAAD, aeadDecrypt, aeadEncrypt } from "./crypto/aead";

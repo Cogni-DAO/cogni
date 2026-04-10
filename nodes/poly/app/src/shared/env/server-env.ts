@@ -111,6 +111,9 @@ export const serverSchema = z.object({
   PINO_LOG_LEVEL: z
     .enum(["trace", "debug", "info", "warn", "error"])
     .default("info"),
+  AUTH_HUB_ISSUER: optionalUrl,
+  AUTH_HUB_CLIENT_ID: optionalString,
+  AUTH_HUB_CLIENT_SECRET: optionalString,
 
   // Metrics (Stage 9) - Prometheus scraping (min 32 chars to reduce weak-token risk)
   // Note: PROMETHEUS_* vars are Alloy-only (infra); app only needs the scrape token.

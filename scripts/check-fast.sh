@@ -79,6 +79,7 @@ fi
 # false errors when package source changes (e.g. adding a field to a port interface).
 run_check "packages:build" "pnpm packages:build"
 run_check "typecheck" "pnpm typecheck"
+run_check "typecheck:auth" "pnpm typecheck:auth"
 run_check "lint" "pnpm lint:fix"
 run_check "format" "pnpm format"
 run_check "test:app" "pnpm vitest run --config nodes/operator/app/vitest.config.mts"

@@ -418,7 +418,7 @@ services:
     networks:
       - cogni-edge
     ports:
-      - "127.0.0.1:3100:3100"
+      - "127.0.0.1:3110:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - loki_data:/loki

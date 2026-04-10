@@ -63,12 +63,13 @@ Provide a reproducible, open-source foundation for autonomous AI-powered organiz
 
 ```bash
 pnpm dev                      # start operator dev server
+pnpm dev:auth                 # start centralized auth hub (port 3400)
 pnpm dev:poly                 # start poly node (port 3100, requires dev:infra)
 pnpm dev:resy                 # start resy node (port 3300, requires dev:infra)
-pnpm dev:stack                # start operator + infrastructure (main dev workflow)
-pnpm dev:stack:full           # start operator + all nodes + infrastructure
-pnpm dev:stack:test           # start dev server + infrastructure for testing
-pnpm dev:stack:test:setup     # first time: create test DB + run migrations
+pnpm dev:stack                # start operator + auth hub + infrastructure (main dev workflow)
+pnpm dev:stack:full           # start operator + auth hub + all nodes + infrastructure
+pnpm dev:stack:test           # start operator + auth hub + infrastructure for testing
+pnpm dev:stack:test:setup     # first time: create test DBs + run node/auth migrations
 pnpm dev:infra:tb             # opt-in: start TigerBeetle (needs ~1.2GiB RAM)
 pnpm docker:dev:stack         # start all services containerized (with build)
 pnpm docker:dev:stack:fast    # start all services containerized (skip build for speed)
@@ -79,6 +80,7 @@ pnpm docker:stack:fast        # start full stack locally (skip build)
 pnpm build                    # build for production
 pnpm packages:build           # build workspace packages (tsup JS + tsc declarations)
 pnpm packages:clean           # clean package dist/ and .tsbuildinfo
+pnpm auth:migrate             # migrate centralized auth hub database
 pnpm check:fast               # typecheck + lint/format fix + unit tests (use during iteration)
 pnpm check                    # ALL static checks: type + lint + format + arch + docs + tests (once before commit)
 pnpm check:full               # CI-parity: docker build + stack launch + all test suites (~20 min, runs in CI)
@@ -86,6 +88,8 @@ pnpm check:full:fast          # Same as check:full but skip Docker rebuild
 pnpm test                     # run unit tests (no server required)
 pnpm test:external            # external API tests (requires GITHUB_TOKEN, not in CI)
 pnpm test:ci                  # run tests with test coverage statistics
+pnpm test:auth                # focused auth-hub + OAuth branch regression tests
+pnpm test:auth:e2e           # live browser validation for the centralized auth hub
 pnpm test:component           # Component tests (isolated testcontainers, no server)
 pnpm test:contract            # Contract tests (in-memory, no HTTP)
 pnpm test:stack:dev           # Full Stack tests (requires dev:stack:test running)
@@ -94,6 +98,7 @@ pnpm dotenv -e .env.test -- vitest run --config vitest.stack.config.mts <testfil
 pnpm format                   # prettier format fixes
 pnpm check:docs               # lint AGENTS.md documentation
 pnpm typecheck:node-template  # typecheck node-template app
+pnpm typecheck:auth           # typecheck auth hub app
 pnpm typecheck:poly           # typecheck poly node app
 pnpm typecheck:resy           # typecheck resy node app
 pnpm e2e                      # Black box end-to-end tests (run on pnpm docker:stack)

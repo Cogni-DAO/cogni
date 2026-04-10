@@ -11,6 +11,11 @@
  * @public
  */
 
+import {
+  AUTH_HUB_GITHUB_ID_CLAIM,
+  AUTH_HUB_GITHUB_LOGIN_CLAIM,
+  AUTH_HUB_PROVIDER_CLAIM,
+} from "@cogni/node-shared";
 import { TEST_USER_ID_1 } from "@tests/_fakes/ids";
 import type { Account, User } from "next-auth";
 import { describe, expect, it, vi } from "vitest";
@@ -86,6 +91,55 @@ describe("OAuth signIn callback — early-return branches", () => {
       email: undefined,
     });
     expect(result).toBe(false);
+  });
+
+  it("rejects malformed auth hub claims for GitHub", async () => {
+    const previousIssuer = process.env.AUTH_HUB_ISSUER;
+    const previousClientId = process.env.AUTH_HUB_CLIENT_ID;
+    const previousClientSecret = process.env.AUTH_HUB_CLIENT_SECRET;
+
+    process.env.AUTH_HUB_ISSUER = "http://localhost:3400/api/auth";
+    process.env.AUTH_HUB_CLIENT_ID = "cogni-operator-local-test";
+    process.env.AUTH_HUB_CLIENT_SECRET =
+      "operator-local-test-client-secret-32ch";
+
+    try {
+      const result = await signIn({
+        user: { id: TEST_USER_ID_1 } as User,
+        account: {
+          provider: "github",
+          type: "oauth",
+          providerAccountId: "123",
+        } as Account,
+        profile: {
+          sub: "not-a-uuid",
+          [AUTH_HUB_PROVIDER_CLAIM]: "github",
+          [AUTH_HUB_GITHUB_ID_CLAIM]: "123",
+          [AUTH_HUB_GITHUB_LOGIN_CLAIM]: "octocat",
+        },
+        credentials: undefined,
+        email: undefined,
+      });
+      expect(result).toBe(false);
+    } finally {
+      if (previousIssuer === undefined) {
+        delete process.env.AUTH_HUB_ISSUER;
+      } else {
+        process.env.AUTH_HUB_ISSUER = previousIssuer;
+      }
+
+      if (previousClientId === undefined) {
+        delete process.env.AUTH_HUB_CLIENT_ID;
+      } else {
+        process.env.AUTH_HUB_CLIENT_ID = previousClientId;
+      }
+
+      if (previousClientSecret === undefined) {
+        delete process.env.AUTH_HUB_CLIENT_SECRET;
+      } else {
+        process.env.AUTH_HUB_CLIENT_SECRET = previousClientSecret;
+      }
+    }
   });
 });
 

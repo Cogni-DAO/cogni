@@ -31,6 +31,11 @@
       "import": "./dist/billing.js",
       "default": "./dist/billing.js"
     },
+    "./connections": {
+      "types": "./dist/connections.d.ts",
+      "import": "./dist/connections.js",
+      "default": "./dist/connections.js"
+    },
     "./ai": {
       "types": "./dist/ai.d.ts",
       "import": "./dist/ai.js",
