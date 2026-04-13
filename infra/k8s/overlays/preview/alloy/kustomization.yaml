@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Alloy DaemonSet overlay for preview env.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-preview
+
+resources:
+  - ../../../base/alloy
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: alloy-config
+    patch: |
+      - op: replace
+        path: /data/DEPLOY_ENVIRONMENT
+        value: "preview"
+  - target:
+      kind: ClusterRoleBinding
+      name: alloy
+    patch: |
+      - op: replace
+        path: /subjects/0/namespace
+        value: "cogni-preview"

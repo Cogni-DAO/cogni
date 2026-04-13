@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Grafana Alloy — k8s-native observability agent.
+# Collects pod logs, kubelet cAdvisor metrics, host metrics (unix exporter),
+# app /api/metrics, and host journald logs. Ships to Grafana Cloud.
+#
+# This is NOT a node-app — it has no image build, no Dockerfile, no port.
+# The type=agent marker distinguishes it from type=node catalog entries so CI
+# build pipelines skip it (nothing to build; image is grafana/alloy:<tag> from
+# the DaemonSet manifest).
+#
+# Requires: Secret `alloy-secrets` in each cogni-{env} namespace. See
+# docs/guides/alloy-loki-setup.md for bootstrap.
+name: alloy
+type: agent
