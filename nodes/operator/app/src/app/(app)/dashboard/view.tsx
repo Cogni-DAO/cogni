@@ -59,6 +59,7 @@ import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
 import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
 import { fetchRuns } from "./_api/fetchRuns";
+import { InfraOverview } from "./InfraOverview";
 
 type Tab = "user" | "system";
 
@@ -423,6 +424,9 @@ export function DashboardView(): ReactElement {
           </CardContent>
         </Card>
       </div>
+
+      {/* Infrastructure overview */}
+      <InfraOverview />
 
       {/* Activity Section */}
       <div className="flex flex-col gap-4">
