@@ -1,4 +1,4 @@
-Goal: Produce a Conventional Commit PR title and a concise, factual PR summary for this branch, into the `staging` branch. Assume MVP quality unless evidence exists otherwise.
+Goal: Produce a Conventional Commit PR title and a concise, factual PR summary for this branch, into the `main` branch. Assume MVP quality unless evidence exists otherwise.
 
 Hard rules:
 
@@ -10,7 +10,7 @@ Hard rules:
 Process:
 
 1. Enumerate diffs:
-   - Get changed files and hunks (`git diff --name-status origin/staging...HEAD` and `git diff`).
+   - Get changed files and hunks (`git diff --name-status origin/main...HEAD` and `git diff`).
    - Read touched code and docs to understand what actually changed (imports, exports, behavior, configs, tests).
 
 2. Cohesion check:
@@ -24,7 +24,7 @@ Process:
    - Use the template below. Describe only what you can point to in the diff. No speculation.
 
 5. Pull Request:
-   - Create the PR to `staging` with the content you determined in 4.
+   - Create the PR to `main` with the content you determined in 4.
 
 Template to output:
 

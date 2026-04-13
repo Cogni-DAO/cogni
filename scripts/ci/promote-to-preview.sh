@@ -98,7 +98,7 @@ echo "✅ Preview state updated. Dispatching promote-and-deploy..."
 # Dispatch promote-and-deploy for preview environment
 gh workflow run promote-and-deploy.yml \
   --repo "$REPO" \
-  --ref canary \
+  --ref main \
   -f environment=preview \
   -f source_sha="$SHA"
 

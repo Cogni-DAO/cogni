@@ -124,7 +124,7 @@ Ask user to create A records. Verify with `dig +short <domain>`.
 
 **Goal:** Green CI run, app responding.
 
-1. Merge to `staging` to trigger Staging Preview workflow
+1. Merge to `main` to trigger canary promotion workflow
 2. Monitor: `gh run view <id> --json status,conclusion,jobs`
 3. On failure: check logs, fix, rerun
 4. **Checkpoint:** Preview green → repeat Phases 4-7 for production

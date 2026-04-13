@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
 # ApplicationSet for production environment.
-# Same pattern as staging — reads infra/catalog/*.yaml from main branch.
+# Same pattern as preview — reads infra/catalog/*.yaml from main branch.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:

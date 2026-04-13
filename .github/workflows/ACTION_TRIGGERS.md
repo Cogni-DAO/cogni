@@ -26,12 +26,12 @@ PRs **do not own** checks; commits do.
   ```yaml
   on:
     push:
-      branches: [staging, main]
+      branches: [main]
   ```
 
 **Typical uses:**
 
-- Run CI on protected branches (staging, main).
+- Run CI on protected branch (main).
 - Satisfy branch protection checks even if no PR event fired (e.g. bot-created release PRs).
 
 ### `on: pull_request`
@@ -43,13 +43,13 @@ PRs **do not own** checks; commits do.
   ```yaml
   on:
     pull_request:
-      branches: [staging, main]
+      branches: [main]
   ```
 
 **Typical uses:**
 
 - Run CI on feature/fork branches before merge.
-- Enforce checks on PRs to staging / main.
+- Enforce checks on PRs to main.
 
 ---
 
@@ -73,7 +73,7 @@ Stale names will sit as "Expected — waiting for status to be reported" forever
 **We want:**
 
 - CI on all PRs (including forks).
-- CI on pushes to staging and main (so release/promote flows are covered).
+- CI on pushes to main (so release/promote flows are covered).
 - No insane duplication.
 
 **Current standard for CI.yml:**
@@ -81,7 +81,7 @@ Stale names will sit as "Expected — waiting for status to be reported" forever
 ```yaml
 on:
   push:
-    branches: [staging, main]
+    branches: [main]
   pull_request:
     # default = all branches; PRs into any target branch
 ```
@@ -89,15 +89,13 @@ on:
 **Behavior:**
 
 - Feature/fork PR → pull_request runs CI.
-- Merge to staging → push runs CI on the merge commit.
-- Promote/release to main → push runs CI on the main commit, even if the release PR didn't fire a pull_request event.
+- Merge to main → push runs CI on the merge commit.
 - concurrency in the workflow cancels redundant runs for the same ref when you push new commits.
 
 **We accept:**
 
 1. 1 run on the feature PR,
-2. 1 run on the staging merge,
-3. 1 run on the main merge.
+2. 1 run on the main merge.
 
 That's normal for serious CI/CD.
 
@@ -110,12 +108,12 @@ For your second question: **yes**, your CI trigger should be updated to:
 ```yaml
 on:
   push:
-    branches: [staging, main]
+    branches: [main]
   pull_request:
 ```
 
 **That gives you:**
 
 - CI on all PRs (no branch filter = all).
-- CI on pushes to staging and main (so release/promote flows are covered even when PR events are weird).
+- CI on pushes to main (so release/promote flows are covered even when PR events are weird).
 - Limited duplication: different branches, different contexts; concurrency already cancels old runs for the same ref.

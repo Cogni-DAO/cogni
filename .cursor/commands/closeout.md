@@ -15,7 +15,7 @@ Read these before starting:
 
 ## Phase 1 — Scan & Plan
 
-Run `git diff --name-status origin/staging...HEAD` and read the changed files. From this single scan, build a change manifest:
+Run `git diff --name-status origin/main...HEAD` and read the changed files. From this single scan, build a change manifest:
 
 1. **Coherence check**: Do ALL changes align with the assigned work item? Flag any unrelated changes — they should be split into a separate branch before PR.
 

@@ -28,7 +28,7 @@ ghcr_deploy_username = "Cogni-1729"
 
 # Required: Repo reference for Argo CD manifest clone
 cogni_repo_url = "https://github.com/Cogni-DAO/node-template.git"
-cogni_repo_ref = "staging"
+cogni_repo_ref = "main"
 
 # Required: SOPS/age private key for k8s secret decryption
 # Generate: age-keygen -o age-key.txt

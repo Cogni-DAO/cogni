@@ -1,9 +1,9 @@
 name: Promote and Deploy
 
-# After Build Multi-Node succeeds: resolve digests from GHCR, update the
-# deploy branch (deploy/canary, deploy/preview, deploy/production),
-# deploy Compose infra via SSH, verify health, run E2E, promote to preview.
-# Single workflow — no workflow_run chaining (avoids head_branch bug).
+# Dispatched by promote-merged-pr.yml (primary path: PR merge → re-tag → dispatch here).
+# Also triggered by Build Multi-Node completing on main (fallback: CI-only PRs or direct pushes).
+# Updates deploy branch overlays with image digests, deploys Compose infra via SSH,
+# verifies health, runs E2E, and promotes to preview.
 # All envs: direct push to deploy branch (git history is the audit trail).
 # App containers are managed by Argo CD (auto-syncs on deploy branch change).
 
@@ -11,7 +11,7 @@ on:
   workflow_run:
     workflows: ["Build Multi-Node"]
     types: [completed]
-    branches: [canary]
+    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -21,7 +21,7 @@ on:
         type: choice
         options: [canary, preview, production]
       source_sha:
-        description: "SHA of source images (for cross-env promotion, e.g. canary→staging)"
+        description: "SHA of source images (PR head SHA — images must exist as preview-{sha} in GHCR)"
         required: false
 
 permissions:
@@ -60,10 +60,8 @@ jobs:
             BRANCH="${{ github.event.workflow_run.head_branch }}"
             SHA="${{ github.event.workflow_run.head_sha }}"
             case "$BRANCH" in
-              canary)  ENV=canary ;;
-              staging) ENV=preview ;;
-              main)    ENV=production ;;
-              *)       echo "Unknown branch: $BRANCH"; exit 1 ;;
+              main) ENV=canary ;;
+              *)    echo "Unknown branch for workflow_run: $BRANCH"; exit 1 ;;
             esac
           fi
 
@@ -106,7 +104,10 @@ jobs:
           IMAGE_NAME="ghcr.io/cogni-dao/cogni-template"
           TAG="preview-${HEAD_SHA}"
 
-          resolve() {
+          # Non-fatal: affected-only CI builds only changed services.
+          # Empty digest = service not in this build; promote-k8s-image skips it,
+          # leaving the existing digest in the overlay unchanged.
+          resolve_optional() {
             local full_tag="${IMAGE_NAME}:${1}"
             local digest
             digest=$(docker buildx imagetools inspect "$full_tag" --raw 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null) || true
@@ -115,17 +116,28 @@ jobs:
               digest=$(docker buildx imagetools inspect "$full_tag" 2>/dev/null | grep -oP 'Digest:\s+\Ksha256:[a-f0-9]+' | head -1) || true
             fi
             if [ -z "$digest" ]; then
-              echo "❌ Failed to resolve digest for: $full_tag"
-              exit 1
+              echo "⚠️  Image not found: $full_tag (not built in this run — overlay entry unchanged)"
+              echo ""
+              return 0
             fi
             echo "${IMAGE_NAME}@${digest}"
           }
 
-          OPERATOR_DIGEST=$(resolve "$TAG")
-          POLY_DIGEST=$(resolve "${TAG}-poly")
-          RESY_DIGEST=$(resolve "${TAG}-resy")
-          MIGRATOR_DIGEST=$(resolve "${TAG}-migrate")
-          SW_DIGEST=$(resolve "${TAG}-scheduler-worker")
+          # operator is always required — fail hard if missing
+          OPERATOR_DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:${TAG}" --raw 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null) || true
+          if [ -z "$OPERATOR_DIGEST" ]; then
+            OPERATOR_DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:${TAG}" 2>/dev/null | grep -oP 'Digest:\s+\Ksha256:[a-f0-9]+' | head -1) || true
+          fi
+          if [ -z "$OPERATOR_DIGEST" ]; then
+            echo "❌ Operator image not found: ${IMAGE_NAME}:${TAG}"
+            exit 1
+          fi
+          OPERATOR_DIGEST="${IMAGE_NAME}@${OPERATOR_DIGEST}"
+
+          POLY_DIGEST=$(resolve_optional "${TAG}-poly")
+          RESY_DIGEST=$(resolve_optional "${TAG}-resy")
+          MIGRATOR_DIGEST=$(resolve_optional "${TAG}-migrate")
+          SW_DIGEST=$(resolve_optional "${TAG}-scheduler-worker")
 
           echo "operator=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
           echo "poly=$POLY_DIGEST" >> $GITHUB_OUTPUT
@@ -133,12 +145,12 @@ jobs:
           echo "migrator=$MIGRATOR_DIGEST" >> $GITHUB_OUTPUT
           echo "scheduler_worker=$SW_DIGEST" >> $GITHUB_OUTPUT
 
-          echo "✅ Resolved all digests:"
+          echo "Resolved digests:"
           echo "  operator:         $OPERATOR_DIGEST"
-          echo "  poly:             $POLY_DIGEST"
-          echo "  resy:             $RESY_DIGEST"
-          echo "  migrator:         $MIGRATOR_DIGEST"
-          echo "  scheduler-worker: $SW_DIGEST"
+          echo "  poly:             ${POLY_DIGEST:-"(not built)"}"
+          echo "  resy:             ${RESY_DIGEST:-"(not built)"}"
+          echo "  migrator:         ${MIGRATOR_DIGEST:-"(not built)"}"
+          echo "  scheduler-worker: ${SW_DIGEST:-"(not built)"}"
 
       # Checkout the deploy branch — promote-k8s-image.sh runs HERE, not on app-src.
       # This preserves env-specific state (EndpointSlice IPs) written by provision.
@@ -169,28 +181,42 @@ jobs:
 
           # promote-k8s-image.sh runs on the deploy branch checkout.
           # It only touches image digest fields — never EndpointSlice IPs.
+          # Services with empty digest were not built in this run (affected-only CI);
+          # their existing overlay entry is left unchanged.
+
+          # operator always present (checked earlier)
+          MIGRATOR_DIGEST="${{ steps.digests.outputs.migrator }}"
           ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
             --env "$OVERLAY_ENV" \
             --app operator \
             --digest "${{ steps.digests.outputs.operator }}" \
-            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+            ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
 
-          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app poly \
-            --digest "${{ steps.digests.outputs.poly }}" \
-            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+          POLY_DIGEST="${{ steps.digests.outputs.poly }}"
+          if [ -n "$POLY_DIGEST" ]; then
+            ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+              --env "$OVERLAY_ENV" \
+              --app poly \
+              --digest "$POLY_DIGEST" \
+              ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
+          fi
 
-          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app resy \
-            --digest "${{ steps.digests.outputs.resy }}" \
-            --migrator-digest "${{ steps.digests.outputs.migrator }}"
+          RESY_DIGEST="${{ steps.digests.outputs.resy }}"
+          if [ -n "$RESY_DIGEST" ]; then
+            ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+              --env "$OVERLAY_ENV" \
+              --app resy \
+              --digest "$RESY_DIGEST" \
+              ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
+          fi
 
-          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app scheduler-worker \
-            --digest "${{ steps.digests.outputs.scheduler_worker }}"
+          SW_DIGEST="${{ steps.digests.outputs.scheduler_worker }}"
+          if [ -n "$SW_DIGEST" ]; then
+            ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+              --env "$OVERLAY_ENV" \
+              --app scheduler-worker \
+              --digest "$SW_DIGEST"
+          fi
 
       - name: Commit and push overlay changes to deploy branch
         id: deploy-push

@@ -195,6 +195,71 @@ Spec: docs/spec/feature.md#invariants (or Spec-Impact: none)
 - Missing `Work:` → merge blocked
 - Missing `Spec:` → warning (blocked if behavior/security/interface change)
 
+## Multi-Agent Pipeline
+
+Distinct specialized agents own each lifecycle stage. No single agent runs the full loop.
+
+```
+pr-manager      — VCS orchestration (listPrs, getCiStatus, flightCandidate)
+gov-engineering — dispatch loop: reads work queue → invokes /design, /implement, /closeout, /review-implementation
+pr-review       — code quality review on PR open/update
+qa-agent        — post-flight feature validation (task.0309)
+frontend-tester — Playwright click-through (delegated by qa-agent for UI paths)
+```
+
+**Post-merge flow (pr-manager + qa-agent):**
+
+```
+/review-implementation → done (PR merged)
+        ↓
+flightCandidate(pr_number)     [task.0297]
+        ↓
+candidate-a deployed (Argo syncs deploy branch)
+        ↓
+qa-agent:
+  getCandidateHealth()         [task.0308] → memory%, restarts, OOM scorecard
+  exercise: feature API call   [from work item ## Validation]
+  query Loki: observability    [confirm feature log signal at deployed SHA]
+        ↓
+deploy_verified = true         [set on work item by qa-agent]
+```
+
+### Feature Validation Contract
+
+Every task and bug **must** include a `## Validation` section before `/closeout` creates the PR:
+
+```markdown
+## Validation
+
+exercise: |
+POST https://test.cognidao.org/api/v1/ai/chat
+Authorization: Bearer <CANDIDATE_TOKEN>
+body: {"messages":[{"role":"user","content":"ping"}],"model":"gpt-4o-mini"}
+assert: response.status == 200, body contains "content"
+
+observability: |
+{namespace="cogni-candidate-a"} | json | msg="ai.llm_call_completed"
+expect: ≥1 entry within 60s of exercise
+
+smoke_cmd: |
+curl -sf https://test.cognidao.org/api/v1/health | jq '.status == "ok"'
+```
+
+The `exercise:` and `observability:` fields are the qa-agent's test specification. `smoke_cmd:` is optional CI shell fallback.
+
+### Deploy Verification
+
+`status: done` = PR merged (code gate — unchanged).
+
+`deploy_verified: true` = qa-agent confirmed post-flight (new — set autonomously):
+
+1. `candidate-flight` status = success on PR head SHA
+2. `getCandidateHealth()` returns: restarts=0, memory < 90% of limit, oom_kills=0
+3. Feature exercise passed (`exercise:` from work item)
+4. Observability signal confirmed in Loki at deployed SHA
+
+**E2E success for proj.cicd-services-gitops:** one work item reaches `deploy_verified=true` via fully automated pipeline. See [proj.cicd-services-gitops](../../work/projects/proj.cicd-services-gitops.md).
+
 ## Goal
 
 Define a status-driven lifecycle where every `needs_*` status maps to exactly one `/command`, enabling deterministic automation dispatch.
@@ -204,28 +269,31 @@ Define a status-driven lifecycle where every `needs_*` status maps to exactly on
 - Type taxonomy (see [docs-work-system](./docs-work-system.md))
 - Project management methodology
 - CI implementation details
-- Deploy verification automation (tracked via `deploy_verified` field, separate concern)
+- QA agent implementation (task.0309), flight tool (task.0297), health scorecard (task.0308)
 
 ## Invariants
 
-| Rule                      | Constraint                                                                                                                 |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| STATUS_COMMAND_MAP        | Every `needs_*` status has exactly one command. No ambiguity.                                                              |
-| BRANCH_REQUIRED           | `branch:` must be set when status ∈ {`needs_implement`, `needs_closeout`, `needs_merge`}. `/implement` creates if missing. |
-| PR_EVIDENCE_REQUIRED      | `pr:` must be set before entering `needs_merge`.                                                                           |
-| BLOCKED_EVIDENCE          | `blocked_by:` must be set when status = `blocked`.                                                                         |
-| CLEAN_WORKTREE_ON_EXIT    | `/implement` and `/closeout` must end with clean `git status`.                                                             |
-| COMMIT_ON_PROGRESS        | Commands that change repo files must end with ≥1 commit. Review-only commands are exempt.                                  |
-| CLAIM_REQUIRED            | Governance runner must set `claimed_by_run` before acting. Prevents double-dispatch.                                       |
-| LOOP_LIMIT                | `revision >= 5` → `blocked` with escalation note.                                                                          |
-| STORIES_ARE_INTAKE        | Stories go `done` after triage. Never enter implementation lifecycle.                                                      |
-| DEPLOY_TRACKED_SEPARATELY | `done` = merged. `deploy_verified` field tracks production deployment.                                                     |
-| PR_LINKS_ITEM             | Every code PR references exactly one primary work item (`task.*` or `bug.*`) and at least one spec, or `Spec-Impact: none` |
-| TRIAGE_OWNS_ROUTING       | Only `/triage` sets or changes the `project:` linkage on an idea or bug                                                    |
-| SPEC_NO_EXEC_PLAN         | Specs never contain roadmap, phases, tasks, owners, or timelines. At any `spec_state`                                      |
-| SPEC_STATE_LIFECYCLE      | `draft` → `proposed` → `active` → `deprecated`. No skipping                                                                |
-| ACTIVE_MEANS_CLEAN        | `spec_state: active` requires Open Questions empty and `verified:` current                                                 |
-| REVIEW_BEFORE_MERGE       | `/review-implementation` runs at `needs_merge` (reviews the PR, not pre-PR code)                                           |
+| Rule                     | Constraint                                                                                                                 |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| STATUS_COMMAND_MAP       | Every `needs_*` status has exactly one command. No ambiguity.                                                              |
+| BRANCH_REQUIRED          | `branch:` must be set when status ∈ {`needs_implement`, `needs_closeout`, `needs_merge`}. `/implement` creates if missing. |
+| PR_EVIDENCE_REQUIRED     | `pr:` must be set before entering `needs_merge`.                                                                           |
+| BLOCKED_EVIDENCE         | `blocked_by:` must be set when status = `blocked`.                                                                         |
+| CLEAN_WORKTREE_ON_EXIT   | `/implement` and `/closeout` must end with clean `git status`.                                                             |
+| COMMIT_ON_PROGRESS       | Commands that change repo files must end with ≥1 commit. Review-only commands are exempt.                                  |
+| CLAIM_REQUIRED           | Governance runner must set `claimed_by_run` before acting. Prevents double-dispatch.                                       |
+| LOOP_LIMIT               | `revision >= 5` → `blocked` with escalation note.                                                                          |
+| STORIES_ARE_INTAKE       | Stories go `done` after triage. Never enter implementation lifecycle.                                                      |
+| DEPLOY_VERIFIED_SEPARATE | `done` = merged (code gate). `deploy_verified` = qa-agent confirmed post-flight. Never conflate.                           |
+| VALIDATION_REQUIRED      | Every task/bug must have `## Validation` with `exercise:` + `observability:` before `/closeout` creates PR.                |
+| FEATURE_SMOKE_SCOPED     | qa-agent validation must exercise the specific feature, not just generic `/readyz`.                                        |
+| QA_READS_TASK            | qa-agent derives its test from the work item `## Validation` block — not from a separate test file.                        |
+| PR_LINKS_ITEM            | Every code PR references exactly one primary work item (`task.*` or `bug.*`) and at least one spec, or `Spec-Impact: none` |
+| TRIAGE_OWNS_ROUTING      | Only `/triage` sets or changes the `project:` linkage on an idea or bug                                                    |
+| SPEC_NO_EXEC_PLAN        | Specs never contain roadmap, phases, tasks, owners, or timelines. At any `spec_state`                                      |
+| SPEC_STATE_LIFECYCLE     | `draft` → `proposed` → `active` → `deprecated`. No skipping                                                                |
+| ACTIVE_MEANS_CLEAN       | `spec_state: active` requires Open Questions empty and `verified:` current                                                 |
+| REVIEW_BEFORE_MERGE      | `/review-implementation` runs at `needs_merge` (reviews the PR, not pre-PR code)                                           |
 
 ### File Pointers
 

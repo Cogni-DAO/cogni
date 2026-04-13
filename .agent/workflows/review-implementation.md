@@ -21,7 +21,7 @@ Then find every AGENTS.md in the file path tree of the files being changed (star
 
 1. Read the work item to understand the stated goal.
 2. Read linked specs (`spec_refs`) — these are the contract the code must satisfy.
-3. Run `git diff origin/staging...HEAD` to see the full diff.
+3. Run `git diff origin/main...HEAD` to see the full diff.
 4. Read each changed file in full (not just the diff) to understand context.
 
 ---

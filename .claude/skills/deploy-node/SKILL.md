@@ -118,7 +118,7 @@ ssh -i $SSH_KEY root@$VM_IP 'kubectl -n argocd get applications'
 # Should show: staging-operator, staging-poly, staging-resy, staging-scheduler-worker, staging-sandbox-openclaw
 ```
 
-**If 0 applications generated:** The ApplicationSet watches a specific branch (`staging` or `main`). If catalog files only exist on a feature branch, patch the ApplicationSet:
+**If 0 applications generated:** The ApplicationSet watches `main`. If catalog files only exist on a feature branch, patch the ApplicationSet:
 
 ```bash
 ssh -i $SSH_KEY root@$VM_IP "kubectl -n argocd get applicationset cogni-staging -o jsonpath='{.spec.generators[0].git.revision}'"

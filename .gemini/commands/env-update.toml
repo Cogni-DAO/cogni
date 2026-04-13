@@ -36,7 +36,7 @@ To get the variable from GitHub Secrets into the VM:
 ### A. GitHub Workflows
 
 - [ ] **`.github/workflows/deploy-production.yml`**: Map the secret/var to the `env` block of the `deploy` job.
-- [ ] **`.github/workflows/staging-preview.yml`**: Map the secret/var to the `env` block of the `deploy` job.
+- [ ] **`.github/workflows/promote-and-deploy.yml`**: Map the secret/var to the `env` block of the `deploy` job.
 
 ### B. Deployment Script (`deploy.sh`)
 
@@ -47,7 +47,7 @@ To get the variable from GitHub Secrets into the VM:
 
 ## 6. Setup Documentation
 
-- [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add the variable to the relevant secrets list so future fresh-clone setups know to provision it (e.g. under `production` or `staging` GitHub secrets).
+- [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add the variable to the relevant secrets list so future fresh-clone setups know to provision it (e.g. under `production` or `preview` GitHub secrets).
 
 ## 7. Special Cases: Isolated Services
 

@@ -12,7 +12,7 @@ Start by reading [Architecture](docs/spec/architecture.md), then reviewing files
 
 ## 1. Review Changed Files
 
-- List all staged (or branch) changes and group them by directory. Compare current branch against origin `staging` branch.
+- List all staged (or branch) changes and group them by directory. Compare current branch against origin `main` branch.
 - For each changed or new file, update the **top-of-file TSDoc header** if its behavior, inputs/outputs, or side-effects changed.
 - Use templates: `docs/templates/header_source_template.ts` (source), `header_test_template.ts` (tests), `header_e2e_template.ts` (e2e).
 - If only internal refactors or formatting changed, no documentation update is needed.

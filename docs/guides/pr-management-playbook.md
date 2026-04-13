@@ -20,13 +20,13 @@ tags: [agents, pr-manager, playbook, vcs, ci-cd]
 
 These are non-negotiable. ALL must pass before merging:
 
-| Gate              | Rule                                   |
-| ----------------- | -------------------------------------- |
-| Target branch     | `staging` only. NEVER merge to `main`. |
-| CI status         | ALL checks `success`. Zero exceptions. |
-| Draft             | Never merge draft PRs.                 |
-| Human PR approval | Requires ≥1 approving review.          |
-| Bot PR approval   | NOT required — CI green is sufficient. |
+| Gate              | Rule                                                                                               |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| Target branch     | `main`. Feature branches PR into main. Release branches (`release/*`) PR into main for production. |
+| CI status         | ALL checks `success`. Zero exceptions.                                                             |
+| Draft             | Never merge draft PRs.                                                                             |
+| Human PR approval | Requires ≥1 approving review.                                                                      |
+| Bot PR approval   | NOT required — CI green is sufficient.                                                             |
 
 ## PR Type Handling
 
@@ -63,7 +63,7 @@ Flag PRs with no activity for >7 days. Stale PRs are a throughput problem — th
 | CI fails on lockfile             | Flag: "needs human fix — lockfile mismatch"         |
 | CI fails on test                 | Flag: "needs author — test failure in [check name]" |
 | PR approved but CI stuck >1 hour | Flag: "CI may be hung — check [check name]"         |
-| Merge conflict                   | Flag: "needs rebase — merge conflict with staging"  |
+| Merge conflict                   | Flag: "needs rebase — merge conflict with main"     |
 | You're unsure                    | Skip. A missed cycle is harmless.                   |
 
 ## Patterns Log

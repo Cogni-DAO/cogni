@@ -66,7 +66,7 @@ variable "cogni_repo_url" {
 variable "cogni_repo_ref" {
   description = "Git branch/ref to clone for Argo CD manifests"
   type        = string
-  default     = "staging"
+  default     = "main"
 }
 
 # SOPS/age private key for Argo CD secret decryption.

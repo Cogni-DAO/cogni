@@ -39,7 +39,7 @@ pnpm db:setup:test          # Create test database + run migrations
 
 ## Workflow
 
-1. **Fork** the repo (default branch is `staging` — that's correct).
+1. **Fork** the repo (default branch is `main` — that's correct).
 
 2. **Clone and set upstream:**
 
@@ -49,11 +49,11 @@ pnpm db:setup:test          # Create test database + run migrations
    git remote add upstream git@github.com:Cogni-DAO/cogni-template.git
    ```
 
-3. **Always branch from staging using Conventional Commit types:**
+3. **Always branch from main using Conventional Commit types:**
 
    ```bash
-   git checkout staging
-   git reset --hard upstream/staging
+   git checkout main
+   git reset --hard upstream/main
    git checkout -b feat/ai-preview-health-checks
    # or: fix/litellm-config-bug, chore/ci-playwright-cache, docs/update-readme, etc.
    ```
@@ -66,10 +66,9 @@ pnpm db:setup:test          # Create test database + run migrations
 
 5. **Use Conventional Commits:** `feat:`, `fix:`, `docs:`, `chore:`
 
-6. **Open PRs to staging only:**
+6. **Open PRs to main:**
    - Push: `git push origin feat/xyz`
-   - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni-template:staging`
-   - PRs to `main` are blocked by design
+   - Open PR: `your-fork:feat/xyz → Cogni-DAO/cogni-template:main`
 
 7. All CI and AI gates must pass for auto-merge.
 

@@ -1,13 +1,14 @@
 name: Build Multi-Node
 
-# Builds all node apps + services, pushes to GHCR.
-# Canary-only: staging/production receive promoted digests, not fresh builds.
-# Downstream: promote-and-deploy.yml (workflow_run) handles overlay promotion + infra deploy.
+# Builds all node apps + services, pushes to GHCR as preview-{sha} images.
+# Fallback path: dispatched by promote-merged-pr.yml when a PR has no built images
+# (CI-only PR, direct push to main, or affected-only build that produced no containers).
+# Primary path: PR Build (pr-build.yml) builds pr-{N}-{sha} images; promote-merged-pr
+# re-tags them as preview-{sha} without rebuilding (BUILD_ONCE_PROMOTE).
 # Future: Turborepo --affected to skip unchanged nodes (task.0260).
 
 on:
-  push:
-    branches: [canary]
+  # Dispatched by promote-merged-pr.yml as fallback — not triggered by branch push.
   workflow_dispatch:
 
 permissions:

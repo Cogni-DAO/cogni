@@ -10,7 +10,7 @@ summary: Get the canary-first pipeline fully green — build→promote→deploy�
 outcome: One clean flow from push-to-canary through production with no rebuilds, E2E-gated promotion, and CI-gated preview
 assignees: derekg1729
 created: 2026-02-06
-updated: 2026-04-05
+updated: 2026-04-09
 labels: [deployment, infra, ci-cd]
 ---
 
@@ -63,6 +63,29 @@ Verify is AMBER: TLS rate limit (resets hourly). Build Multi-Node + CI running o
 | Prometheus metrics        | ⚠️ canary only         | ❌ no Alloy            |
 | GitHub secrets set        | ✅                     | ✅                     |
 | DNS A records correct     | ✅                     | ✅                     |
+
+## E2E Success Milestone (Project Completion Gate)
+
+Project is complete when one work item achieves `deploy_verified=true` via fully autonomous pipeline:
+
+```
+✅ PR merged (code gate — needs_implement → done)
+✅ candidate-flight dispatched by pr-manager (task.0297: flightCandidate)
+✅ getCandidateHealth() → healthy scorecard (task.0308: memory < 90%, restarts=0, oom_kills=0)
+✅ qa-agent: feature exercised (exercise: field from work item ## Validation)
+✅ Loki observability signal confirmed at deployed SHA (observability: field from work item)
+✅ deploy_verified = true set autonomously by qa-agent (task.0309)
+```
+
+**vNext gate (not in v0):** qa-agent posts `qa-validation` commit status on PR head SHA via GitHub App → becomes third PR merge gate alongside `build-images` and `candidate-flight`.
+
+### Active Tasks (Candidate Flight + QA Pipeline)
+
+| Task      | Title                                                                | Status       | Priority |
+| --------- | -------------------------------------------------------------------- | ------------ | -------- |
+| task.0309 | QA agent — reads task, exercises feature, confirms observability     | needs_design | 0        |
+| task.0308 | Deployment observability scorecard (getCandidateHealth, SHA in logs) | needs_design | 1        |
+| task.0297 | Add candidate-flight tool to VCS capability (flightCandidate)        | needs_design | 1        |
 
 ## Roadmap
 

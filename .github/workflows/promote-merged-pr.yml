@@ -1,0 +1,149 @@
+name: Promote Merged PR to Canary
+
+# Triggered on every push to main (i.e., after a PR merges).
+# Detects which PR was merged, resolves its pr-{N}-{sha} images from GHCR,
+# re-tags them as preview-{sha} (no rebuild), then dispatches promote-and-deploy
+# for the canary environment.
+#
+# If no PR images exist (CI-only PR or direct push), dispatches build-multi-node
+# as fallback so the canary pipeline still advances.
+#
+# This replaces the old canary-branch push → Build Multi-Node → promote-and-deploy
+# chain with a main-branch-native, BUILD_ONCE_PROMOTE-compliant flow.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: read
+  actions: write
+
+concurrency:
+  group: promote-merged-pr
+  cancel-in-progress: false
+
+env:
+  IMAGE_NAME: ghcr.io/cogni-dao/cogni-template
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Detect merged PR and head SHA
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          PR_NUMBER=$(echo "$COMMIT_MSG" | grep -oP '(?<=#)\d+' | head -1)
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number in commit message — direct push to main, falling back to build"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Get PR head SHA (the branch tip before merge, which was built as pr-{N}-{sha})
+          HEAD_SHA=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}" \
+            --jq '.head.sha' 2>/dev/null || true)
+
+          if [ -z "$HEAD_SHA" ]; then
+            echo "Could not resolve head SHA for PR #${PR_NUMBER} — PR may be deleted, falling back to build"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "image_tag=pr-${PR_NUMBER}-${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "Merged PR #${PR_NUMBER} head SHA ${HEAD_SHA:0:8}"
+
+      - name: Checkout app source
+        if: steps.pr.outputs.skip != 'true'
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+
+      - name: Set up Docker Buildx
+        if: steps.pr.outputs.skip != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: steps.pr.outputs.skip != 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Resolve PR image digests
+        id: images
+        if: steps.pr.outputs.skip != 'true'
+        env:
+          IMAGE_TAG: ${{ steps.pr.outputs.image_tag }}
+          OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
+        run: bash scripts/ci/resolve-pr-build-images.sh
+
+      # No PR images → CI-only PR (workflow/script/doc changes) or build not run.
+      # Dispatch build-multi-node so the canary environment still advances.
+      - name: Fallback — dispatch build-multi-node (no PR images)
+        if: steps.pr.outputs.skip != 'true' && steps.images.outputs.has_images != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+        run: |
+          echo "No PR images found for ${{ steps.pr.outputs.image_tag }} — dispatching build-multi-node fallback"
+          gh workflow run build-multi-node.yml \
+            --repo "${{ github.repository }}" \
+            --ref main
+          echo "✅ build-multi-node dispatched"
+
+      # Re-tag only the images that were actually built (affected-only CI may skip services).
+      # promote-and-deploy resolves preview-{sha} tags — this creates them without rebuilding.
+      - name: Re-tag PR images as preview-{sha} in GHCR
+        if: steps.pr.outputs.skip != 'true' && steps.images.outputs.has_images == 'true'
+        env:
+          PR_IMAGE_TAG: ${{ steps.pr.outputs.image_tag }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          RESOLVED_TARGETS: ${{ steps.images.outputs.resolved_targets }}
+        run: |
+          PREVIEW_TAG="preview-${HEAD_SHA}"
+
+          retag_if_built() {
+            local target="$1"
+            local src_suffix="$2"
+            local dst_suffix="$3"
+
+            if echo "$RESOLVED_TARGETS" | grep -qw "$target"; then
+              local src="${IMAGE_NAME}:${PR_IMAGE_TAG}${src_suffix}"
+              local dst="${IMAGE_NAME}:${PREVIEW_TAG}${dst_suffix}"
+              echo "Re-tagging ${target}: ${PR_IMAGE_TAG}${src_suffix} → ${PREVIEW_TAG}${dst_suffix}"
+              docker buildx imagetools create --tag "$dst" "$src"
+            else
+              echo "Skipping ${target} — not in PR build (not affected or not built)"
+            fi
+          }
+
+          retag_if_built "operator"         ""                  ""
+          retag_if_built "poly"             "-poly"             "-poly"
+          retag_if_built "resy"             "-resy"             "-resy"
+          retag_if_built "migrator"         "-migrate"          "-migrate"
+          retag_if_built "scheduler-worker" "-scheduler-worker" "-scheduler-worker"
+
+          echo "✅ Re-tag complete for preview-${HEAD_SHA:0:8}"
+
+      - name: Dispatch promote-and-deploy for canary
+        if: steps.pr.outputs.skip != 'true' && steps.images.outputs.has_images == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
+        run: |
+          gh workflow run promote-and-deploy.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f environment=canary \
+            -f source_sha=${{ steps.pr.outputs.head_sha }}
+          echo "✅ Dispatched promote-and-deploy (canary) for pr-${{ steps.pr.outputs.pr_number }} @ ${{ steps.pr.outputs.head_sha }}"

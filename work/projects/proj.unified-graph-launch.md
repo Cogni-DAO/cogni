@@ -130,4 +130,4 @@ Unify all graph execution triggers (API immediate, Temporal scheduled, webhook) 
 
 **Key design decision (2026-02-13):** Reconciler uses LiteLLM `/spend/logs` API as universal reference set, NOT a new `graph_runs` table. No existing app-side table covers all executor types (ai_invocation_summaries=InProc only, schedule_runs=Temporal only, ai_threads=conversation-scoped). `graph_runs` deferred to P1 for product/run lifecycle, not billing.
 
-**Branch:** Cut a clean branch from `staging` for implementation.
+**Branch:** Cut a clean branch from `main` for implementation.

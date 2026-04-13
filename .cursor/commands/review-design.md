@@ -18,7 +18,7 @@ Then find every AGENTS.md in the file path tree of the files being changed (star
 
 1. Read the work item to understand the stated goal and scope.
 2. Read linked specs (`spec_refs`) and the parent project if one exists.
-3. Run `git diff --name-status origin/staging...HEAD` to see all changed files.
+3. Run `git diff --name-status origin/main...HEAD` to see all changed files.
 4. Read the changed files to understand the design.
 
 ---
