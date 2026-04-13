@@ -44,8 +44,13 @@ write_files:
         - traefik
         - servicelb
 
-  # k3s GHCR private registry auth — node-level, all pods get access.
-  # Simpler than per-Deployment imagePullSecrets for single-node.
+  # k3s container registry config — node-level, all pods get access.
+  # - ghcr.io: auth for private cogni images (simpler than per-Deployment
+  #   imagePullSecrets for single-node).
+  # - docker.io: mirror via mirror.gcr.io (Google's pull-through cache) because
+  #   this VM's direct Docker Hub path is unreliable (IPv6 routing issues).
+  #   Required for vendor images like grafana/alloy (observability), else
+  #   pods fall back to direct docker.io and fail ImagePullBackOff.
   - path: /etc/rancher/k3s/registries.yaml
     owner: root:root
     permissions: "0600"
@@ -54,6 +59,10 @@ write_files:
         ghcr.io:
           endpoint:
             - "https://ghcr.io"
+        docker.io:
+          endpoint:
+            - "https://mirror.gcr.io"
+            - "https://registry-1.docker.io"
       configs:
         "ghcr.io":
           auth:
