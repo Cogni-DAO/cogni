@@ -38,6 +38,21 @@ vi.mock("@/shared/config", () => ({
   getNodeId: () => "test-node-id",
 }));
 
+// chat/completions imports resolveRequestIdentity directly. Mock at the leaves
+// (next/headers returns empty → no bearer → falls through to session fallback;
+// @/lib/auth/server returns the test session user) so the real resolver runs.
+// The legacy @/app/_lib/auth/session mock below is retained as a safety net
+// for any handler path that still reads from the alias.
+vi.mock("next/headers", async () => ({
+  headers: vi.fn(async () => ({ get: () => null })),
+}));
+vi.mock("@/lib/auth/server", () => ({
+  getServerSessionUser: vi.fn(),
+}));
+vi.mock("@/shared/env/server", () => ({
+  serverEnv: () => ({ AUTH_SECRET: "test-auth-secret-for-unit-tests" }),
+}));
+
 vi.mock("@/app/_lib/auth/session", () => ({
   getSessionUser: vi.fn(),
 }));
@@ -91,8 +106,13 @@ import {
   getTemporalWorkflowClient,
   resolveAiAdapterDeps,
 } from "@/bootstrap/container";
+import { getServerSessionUser } from "@/lib/auth/server";
 
+// Legacy alias-mock retained for defense in depth. The canonical mock for the
+// real resolver chain is mockGetServerSessionUser, which is what
+// resolveRequestIdentity actually calls on the cookie fallback path.
 const mockGetSessionUser = vi.mocked(getSessionUser);
+const mockGetServerSessionUser = vi.mocked(getServerSessionUser);
 const mockGetContainer = vi.mocked(getContainer);
 const mockGetTemporalWorkflowClient = vi.mocked(getTemporalWorkflowClient);
 const mockResolveAiAdapterDeps = vi.mocked(resolveAiAdapterDeps);
@@ -144,6 +164,7 @@ function setupMocks(
   );
 
   mockGetSessionUser.mockResolvedValue(TEST_SESSION_USER_1);
+  mockGetServerSessionUser.mockResolvedValue(TEST_SESSION_USER_1);
 
   mockResolveAiAdapterDeps.mockReturnValue({
     llmService: {} as never,
@@ -175,6 +196,7 @@ function setupMocksWithError(error: Error) {
   } as never);
 
   mockGetSessionUser.mockResolvedValue(TEST_SESSION_USER_1);
+  mockGetServerSessionUser.mockResolvedValue(TEST_SESSION_USER_1);
 
   mockResolveAiAdapterDeps.mockReturnValue({
     llmService: {} as never,
@@ -725,6 +747,7 @@ describe("OpenAI Endpoint Parity (POST /v1/chat/completions)", () => {
         clock: { now: () => new Date() },
       } as never);
       mockGetSessionUser.mockResolvedValue(null);
+      mockGetServerSessionUser.mockResolvedValue(null);
 
       const { POST } = await import("@/app/api/v1/chat/completions/route");
 
