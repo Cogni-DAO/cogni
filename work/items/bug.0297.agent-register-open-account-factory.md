@@ -79,14 +79,33 @@ Severity: **critical on any deploy that exposes `/api/v1/*` to untrusted network
 - [ ] Tests: contract (unauth → 401), contract (valid → 201), contract (replay → 401), stack test that proxies traffic end-to-end.
 - [ ] `pnpm check` once, commit, open PR.
 
-## Identity Model Gaps — deferred from PR #845
+## Identity Model Gaps — from PR #845 review
 
-Surfaced during implementation review of PR #845 against `docs/spec/identity-model.md`. Three
-surgical fixes landed in PR #845 (gaps 2, 3, 9 — purge the dead `actorId` path since it was
-inconsistent with the rest of the code). The six remaining gaps all require schema work or
-real design; they belong to this bug's scope because they all touch the register/onboarding
-seam. **Each TODO below is blocking for "true agent identity" — none is blocking for v0
-functionality today.**
+Surfaced during implementation review of PR #845 against `docs/spec/identity-model.md`. Nine
+gaps total. The three surgical ones shipped on PR 845 as a pure-deletion commit (`294179c14`,
+net -40 lines). The six remaining gaps all require schema work or real design; they belong to
+this bug's scope because they all touch the register/onboarding seam. **None of the deferred
+gaps is blocking for v0 functionality today** — the agent-first lane works end-to-end on PR 845.
+
+### Done on PR #845 (commit `294179c14`)
+
+- [x] **Gap 2 — `register` minted a non-UUID `actorId`.** The old code set
+      `` const actorId = `user:${id}` `` which is not a UUID and therefore not a valid
+      `ActorId` per `@cogni/ids`. Every other route in the agent-first lane computes
+      `userActor(toUserId(sessionUser.id))` (a plain UUID), so the register response
+      disagreed with every consumer. **Fix:** dropped from the register lane entirely.
+      Clients derive from `userId` until gap 1 lands the real actors table.
+- [x] **Gap 3 — JWT `actorId` field was write-only dead payload.**
+      `AgentTokenPayload.actorId` was set on issue, existence-checked on parse, and then
+      never read anywhere. The resolver built `SessionUser` from `payload.sub` only.
+      **Fix:** purged from the type, the issuer signature, the signing path, and the
+      parse validation.
+- [x] **Gap 9 — `registerAgentOperation.output` exposed redundant `actorId + userId`.**
+      The contract returned both keys in v0 where `actorId === userId` at runtime, violating
+      the spec's "prohibited overloading" invariant. **Fix:** removed `actorId` from the
+      zod output schema. v0 output is `{ userId, apiKey, billingAccountId }`.
+
+### Deferred (schema work — each blocking "true agent identity")
 
 - [ ] **Gap 1 — Land the `actors` table.** Spec describes an ECONOMIC LAYER (`actors`,
       `actor_bindings`, `budget_allocations`) with `kind IN (user | agent | system | org)` and
@@ -99,7 +118,7 @@ functionality today.**
       `actors` with `kind='agent'` (and, eventually, `parent_actor_id`).
 - [ ] **Gap 5 — Billing account tenancy is 1:1 per user, should be 1:N per actor.** Spec
       invariant: "multiple actors per tenant." Today `getOrCreateBillingAccountForUser({
-    userId })` mints a fresh billing account per registration, so every agent is its own
+userId })` mints a fresh billing account per registration, so every agent is its own
       tenancy island. Redesign once actor table exists so an agent can share its owner's
       billing account.
 - [ ] **Gap 6 — No persistence of issued API keys, no revocation list.** API keys are
