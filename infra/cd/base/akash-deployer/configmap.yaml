@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: akash-deployer-config
+  labels:
+    app: akash-deployer
+data:
+  PORT: "9100"
+  HOST: "0.0.0.0"
+  LOG_LEVEL: "info"
+  AKASH_NODE: "https://rpc.akashnet.net:443"
+  AKASH_CHAIN_ID: "akashnet-2"
+  AKASH_KEY_NAME: "deployer"
+  AKASH_KEYRING_BACKEND: "os"
+  AKASH_GAS_PRICES: "0.025uakt"
+  COSMOS_RPC_ENDPOINT: "https://rpc.akashnet.net:443"

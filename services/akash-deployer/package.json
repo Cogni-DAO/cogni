@@ -1,0 +1,30 @@
+{
+  "name": "@cogni/akash-deployer-service",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsup",
+    "postbuild": "node -e \"const fs=require('fs'); if(!fs.existsSync('dist/main.js')){console.error('ERROR: dist/main.js missing'); process.exit(1)}\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@akashnetwork/akashjs": "^0.10.0",
+    "@akashnetwork/chain-sdk": "1.0.0-alpha.27",
+    "@cogni/container-runtime": "workspace:*",
+    "@cosmjs/proto-signing": "^0.32.4",
+    "@cosmjs/stargate": "^0.32.4",
+    "pino": "^9.6.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5",
+    "vitest": "^3.0.0",
+    "@types/node": "^22.0.0"
+  }
+}

@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akash-deployer
+  labels:
+    app: akash-deployer
+    app.kubernetes.io/name: akash-deployer
+    app.kubernetes.io/component: deployer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: akash-deployer
+  template:
+    metadata:
+      labels:
+        app: akash-deployer
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: akash-deployer
+          image: ghcr.io/cogni-dao/akash-deployer:placeholder
+          ports:
+            - containerPort: 9100
+              name: http
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: akash-deployer-config
+            - secretRef:
+                name: akash-deployer-secrets
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

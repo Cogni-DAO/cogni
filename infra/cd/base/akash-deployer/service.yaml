@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: akash-deployer
+  labels:
+    app: akash-deployer
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9100
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    app: akash-deployer

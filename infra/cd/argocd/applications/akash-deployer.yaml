@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: akash-deployer
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Cogni-DAO/cogni-template.git
+    targetRevision: staging
+    path: infra/cd/base/akash-deployer
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: akash-deployer
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
