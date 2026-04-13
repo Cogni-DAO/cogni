@@ -11,7 +11,7 @@ outcome: "Register is closed by default: only a holder of a short-lived, admin-m
 spec_refs: [security-auth]
 assignees: derekg1729
 credit:
-project:
+project: proj.accounts-api-keys
 branch:
 pr:
 reviewer:
