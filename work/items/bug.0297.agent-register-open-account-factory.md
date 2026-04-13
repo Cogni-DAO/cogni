@@ -79,6 +79,52 @@ Severity: **critical on any deploy that exposes `/api/v1/*` to untrusted network
 - [ ] Tests: contract (unauth → 401), contract (valid → 201), contract (replay → 401), stack test that proxies traffic end-to-end.
 - [ ] `pnpm check` once, commit, open PR.
 
+## Identity Model Gaps — deferred from PR #845
+
+Surfaced during implementation review of PR #845 against `docs/spec/identity-model.md`. Three
+surgical fixes landed in PR #845 (gaps 2, 3, 9 — purge the dead `actorId` path since it was
+inconsistent with the rest of the code). The six remaining gaps all require schema work or
+real design; they belong to this bug's scope because they all touch the register/onboarding
+seam. **Each TODO below is blocking for "true agent identity" — none is blocking for v0
+functionality today.**
+
+- [ ] **Gap 1 — Land the `actors` table.** Spec describes an ECONOMIC LAYER (`actors`,
+      `actor_bindings`, `budget_allocations`) with `kind IN (user | agent | system | org)` and
+      `parent_actor_id` for hierarchy. None of it exists in `packages/db-schema/src/identity.ts`.
+      `@cogni/ids` currently casts `ActorId` to `UserId` with zero runtime difference. First
+      deliverable should be a migration that backfills `actors.id = users.id, kind='user'` for
+      every existing user so the `userActor(userId)` cast stays valid.
+- [ ] **Gap 4 — Register writes to `users` table with no kind discriminator.** Agents and
+      humans are indistinguishable in the DB today. Once gap 1 ships, register must write
+      `actors` with `kind='agent'` (and, eventually, `parent_actor_id`).
+- [ ] **Gap 5 — Billing account tenancy is 1:1 per user, should be 1:N per actor.** Spec
+      invariant: "multiple actors per tenant." Today `getOrCreateBillingAccountForUser({
+    userId })` mints a fresh billing account per registration, so every agent is its own
+      tenancy island. Redesign once actor table exists so an agent can share its owner's
+      billing account.
+- [ ] **Gap 6 — No persistence of issued API keys, no revocation list.** API keys are
+      self-contained HMAC tokens; no DB binding. Spec model has `actor_bindings` with a
+      provider discriminator — machine API keys should be bound as a new provider with a
+      revocation timestamp. Without this, revoking a compromised key requires rotating
+      `AUTH_SECRET` globally.
+- [ ] **Gap 7 — No `scope_id` captured at registration.** Every `activity_events` /
+      `epoch_allocations` row is keyed by `(node_id, scope_id)`. Register creates no scope
+      binding, so an agent's charge_receipts land in whatever default scope the runtime
+      assumes. Onboarding should record "this agent was registered under which project."
+- [ ] **Gap 8 — No idempotency on register.** Two POSTs with `{"name":"my-agent"}` create
+      two distinct users + two billing accounts + two bearers. Add `external_id` uniqueness
+      or an `Idempotency-Key` header.
+
+### Related to the invitation-token design above
+
+Some of these gaps collapse naturally into the invitation-token flow:
+
+- Gap 6 (revocation) — the invitation record IS the first binding entry; revoke = delete invitation.
+- Gap 8 (idempotency) — invitation tokens are single-use by design, so replayed redemption is already rejected.
+
+Gaps 1, 4, 5, 7 are orthogonal and may split into a separate task under `proj.accounts-api-keys`
+once the invitation flow design lands.
+
 ## Non-goals / Out of scope
 
 - Full OAuth device-code flow for agent onboarding. Defer until > 1 external agent operator exists.
