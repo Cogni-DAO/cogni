@@ -445,6 +445,15 @@ cat > /opt/cogni-template-edge/.env << ENV_EOF
 DOMAIN=${DOMAIN}
 ENV_EOF
 
+# Self-resolve LiteLLM image from GHCR tag if not already a GHCR ref.
+# This avoids depending on promote-and-deploy.yml workflow outputs
+# (workflow_run uses main's YAML, not canary's). SCRIPTS_ARE_THE_API.
+if [[ "$LITELLM_IMAGE" != ghcr.io/* ]] && [[ -n "${COGNI_REPO_REF:-}" ]] && [[ "$COGNI_REPO_REF" != "unknown" ]]; then
+  LITELLM_IMAGE="ghcr.io/cogni-dao/cogni-template:preview-${COGNI_REPO_REF}-litellm"
+  log_info "Resolved LiteLLM image from COGNI_REPO_REF: $LITELLM_IMAGE"
+fi
+LITELLM_IMAGE=${LITELLM_IMAGE:-cogni-litellm:latest}
+
 # Runtime env (full config — compose validates all vars even for services we don't start)
 RUNTIME_ENV=/opt/cogni-template-runtime/.env
 cat > "$RUNTIME_ENV" << ENV_EOF
@@ -482,6 +491,9 @@ POSTHOG_HOST=${POSTHOG_HOST}
 APP_IMAGE=${APP_IMAGE:-cogni-template-local}
 MIGRATOR_IMAGE=${MIGRATOR_IMAGE:-unused-by-infra-deploy}
 SCHEDULER_WORKER_IMAGE=${SCHEDULER_WORKER_IMAGE:-unused-by-infra-deploy}
+# LiteLLM image — resolved before this heredoc via self-resolve logic (bug.0298 / G12).
+# Falls back to local build tag for dev/provision where LITELLM_IMAGE is unset.
+LITELLM_IMAGE=${LITELLM_IMAGE:-cogni-litellm:latest}
 ENV_EOF
 
 # Verify .env was written
@@ -537,7 +549,7 @@ append_env_if_set "$RUNTIME_ENV" GRAFANA_SERVICE_ACCOUNT_TOKEN "${GRAFANA_SERVIC
 # LiteLLM runs in Docker Compose and must reach k8s node-app Services via NodePort.
 # k8s service names don't resolve from Compose — use host.docker.internal:NodePort.
 # Note: the k8s scheduler-worker gets its own COGNI_NODE_ENDPOINTS from the k8s overlay ConfigMap.
-LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000/api/internal/billing/ingest,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://host.docker.internal:30100/api/internal/billing/ingest,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://host.docker.internal:30300/api/internal/billing/ingest"
+LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.internal:30000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://host.docker.internal:30100,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://host.docker.internal:30300"
 printf '%s=%s\n' COGNI_NODE_ENDPOINTS "$LITELLM_NODE_ENDPOINTS" >> "$RUNTIME_ENV"
 # Multi-node DB provisioning
 append_env_if_set "$RUNTIME_ENV" COGNI_NODE_DBS "${COGNI_NODE_DBS-}"
@@ -607,6 +619,16 @@ PNPM_STORE_IMAGE="ghcr.io/cogni-dao/node-template:pnpm-store-latest"
 docker pull "$OPENCLAW_GATEWAY_IMAGE"
 docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"
 
+# Pull LiteLLM from GHCR (built in CI — bug.0298 / G12).
+# LITELLM_IMAGE was self-resolved above from COGNI_REPO_REF to a GHCR tag,
+# or remains "cogni-litellm:latest" for local dev/provision (no pull needed).
+if [[ "$LITELLM_IMAGE" == ghcr.io/* ]]; then
+  log_info "Pulling LiteLLM image: $LITELLM_IMAGE"
+  docker pull "$LITELLM_IMAGE"
+else
+  log_info "LiteLLM image is local ($LITELLM_IMAGE) — skipping pull"
+fi
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 3.6: Seed pnpm_store volume (idempotent, skip if hash matches)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -652,85 +674,9 @@ log_info "[$(date -u +%H:%M:%S)] DB provisioning complete"
 emit_deployment_event "infra_deployment.db_provision_complete" "success" "Database provisioned successfully"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 6.5: Create/update k8s secrets + rolling restart (bridge — task.0284 replaces)
-# k3s is on the same VM; kubectl is available. deploy-infra has ALL secrets
-# from GitHub Environment — unlike provision which only has agent-generated ones.
-# Uses --from-env-file for cleaner secret definitions.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-if command -v kubectl &>/dev/null; then
-  log_info "[$(date -u +%H:%M:%S)] Creating/updating k8s secrets..."
-  emit_deployment_event "infra_deployment.k8s_secrets_started" "in_progress" "Creating k8s secrets"
-
-  K8S_NS="cogni-${DEPLOY_ENVIRONMENT}"
-  kubectl create namespace "${K8S_NS}" 2>/dev/null || true
-  HOST_IP=$(hostname -I | awk '{print $1}')
-  log_info "  k8s namespace: ${K8S_NS}, host IP: ${HOST_IP}"
-
-  # ── Per-node secrets (operator, poly, resy) ────────────────────────────────
-  for node in operator poly resy; do
-    SECRET_FILE=$(mktemp)
-    cat > "$SECRET_FILE" <<SECEOF
-DATABASE_URL=postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
-DATABASE_SERVICE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
-AUTH_SECRET=${AUTH_SECRET}
-LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
-EVM_RPC_URL=${EVM_RPC_URL}
-POSTHOG_API_KEY=${POSTHOG_API_KEY}
-POSTHOG_HOST=${POSTHOG_HOST}
-OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
-SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
-BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN:-}
-INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN:-}
-METRICS_TOKEN=${METRICS_TOKEN:-}
-SECEOF
-    kubectl -n "${K8S_NS}" create secret generic "${node}-node-app-secrets" \
-      --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
-    rm -f "$SECRET_FILE"
-    log_info "  Applied ${node}-node-app-secrets"
-  done
-
-  # ── Scheduler-worker secret ────────────────────────────────────────────────
-  SECRET_FILE=$(mktemp)
-  cat > "$SECRET_FILE" <<SECEOF
-DATABASE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_operator?sslmode=disable
-SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
-SECEOF
-  kubectl -n "${K8S_NS}" create secret generic scheduler-worker-secrets \
-    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
-  rm -f "$SECRET_FILE"
-  log_info "  Applied scheduler-worker-secrets"
-
-  # ── Sandbox-openclaw secret ────────────────────────────────────────────────
-  # Key name: GITHUB_TOKEN (not OPENCLAW_GITHUB_RW_TOKEN) — matches k8s deployment envFrom
-  SECRET_FILE=$(mktemp)
-  cat > "$SECRET_FILE" <<SECEOF
-OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-GITHUB_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
-LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-SECEOF
-  kubectl -n "${K8S_NS}" create secret generic sandbox-openclaw-secrets \
-    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
-  rm -f "$SECRET_FILE"
-  log_info "  Applied sandbox-openclaw-secrets"
-
-  # ── Rolling restart — pods must restart to pick up changed secrets ──────────
-  kubectl -n "${K8S_NS}" rollout restart \
-    deployment/operator-node-app \
-    deployment/poly-node-app \
-    deployment/resy-node-app \
-    deployment/scheduler-worker 2>/dev/null || true
-  log_info "[$(date -u +%H:%M:%S)] k8s secrets applied, pods restarting"
-  emit_deployment_event "infra_deployment.k8s_secrets_complete" "success" "k8s secrets applied"
-else
-  log_warn "kubectl not found — skipping k8s secret creation (k3s may not be installed)"
-fi
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 7: Start/update infra services (rolling update, no down)
-# Only starts infrastructure services — app and scheduler-worker are managed by k8s.
+# Step 6.6: Start/update infra services (rolling update, no down)
+# Compose infra (Temporal, LiteLLM, Redis) must be up BEFORE k8s pods restart,
+# because k8s pods depend on these via EndpointSlice bridges.
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "[$(date -u +%H:%M:%S)] Starting infra services (rolling update)..."
 emit_deployment_event "infra_deployment.stack_up_started" "in_progress" "Starting infrastructure services"
@@ -744,23 +690,16 @@ INFRA_SERVICES="postgres litellm redis alloy temporal-postgres temporal temporal
 $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
 
 # Sandbox-openclaw services (separate profile)
-$RUNTIME_COMPOSE --profile sandbox-openclaw up -d openclaw-gateway llm-proxy-openclaw
+# Non-fatal: openclaw is non-functional in multi-node (git-sync exit 1 kills compose).
+# Keep starting it best-effort so the containers exist for future enablement.
+$RUNTIME_COMPOSE --profile sandbox-openclaw up -d openclaw-gateway llm-proxy-openclaw || \
+  log_info "⚠️  Sandbox-openclaw services failed to start (non-fatal, openclaw is non-functional in multi-node)"
 
 log_info "[$(date -u +%H:%M:%S)] Infra stack up complete"
 emit_deployment_event "infra_deployment.stack_up_complete" "success" "Infrastructure services started"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 7.5: Ensure Temporal namespace exists (idempotent)
-# App pods need cogni-${env} namespace registered in Temporal before /readyz passes.
-# Same script used by provision-test-vm.sh — one shared primitive.
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TEMPORAL_NAMESPACE="cogni-${DEPLOY_ENVIRONMENT}" \
-TEMPORAL_CONTAINER="cogni-runtime-temporal-1" \
-TEMPORAL_TIMEOUT=60 \
-  bash /tmp/ensure-temporal-namespace.sh
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 8: Checksum-gated restart for LiteLLM config changes
+# Step 6.6a: Checksum-gated restart for LiteLLM config changes
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HASH_DIR="/var/lib/cogni"
 LITELLM_CONFIG="/opt/cogni-template-runtime/configs/litellm.config.yaml"
@@ -786,7 +725,7 @@ else
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 8.2: Checksum-gated recreate for OpenClaw config changes
+# Step 6.6b: Checksum-gated recreate for OpenClaw config changes
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 OPENCLAW_CONFIG="/opt/cogni-template-runtime/openclaw/openclaw-gateway.json"
 OPENCLAW_HASH_FILE="$HASH_DIR/openclaw-gateway.sha256"
@@ -799,19 +738,20 @@ OLD_HASH="$(cat "$OPENCLAW_HASH_FILE" 2>/dev/null || true)"
 if [[ "$NEW_HASH" != "$OLD_HASH" ]]; then
   log_info "OpenClaw config changed (hash: ${NEW_HASH:0:12}...), recreating gateway..."
   emit_deployment_event "infra_deployment.openclaw_recreate" "in_progress" "Recreating OpenClaw gateway due to config change"
-  $RUNTIME_COMPOSE --profile sandbox-openclaw up -d --no-deps --force-recreate openclaw-gateway \
-    && echo "$NEW_HASH" > "$OPENCLAW_HASH_FILE"
-  log_info "OpenClaw gateway recreated with new config"
-  emit_deployment_event "infra_deployment.openclaw_recreate_complete" "success" "OpenClaw gateway recreated successfully"
+  if $RUNTIME_COMPOSE --profile sandbox-openclaw up -d --no-deps --force-recreate openclaw-gateway; then
+    echo "$NEW_HASH" > "$OPENCLAW_HASH_FILE"
+    log_info "OpenClaw gateway recreated with new config"
+    emit_deployment_event "infra_deployment.openclaw_recreate_complete" "success" "OpenClaw gateway recreated successfully"
+  else
+    log_info "⚠️  OpenClaw gateway recreate failed (non-fatal)"
+  fi
 else
   log_info "OpenClaw config unchanged (hash: ${NEW_HASH:0:12}...), no recreate needed"
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 8.5: OpenClaw readiness gate (fail deploy if crash-looping)
+# Step 6.6c: OpenClaw readiness gate (fail deploy if crash-looping)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# OpenClaw readiness gate — skip if gateway container doesn't exist or never started.
-# Not all environments run OpenClaw (e.g. preview may not have the image).
 OPENCLAW_CID=$($RUNTIME_COMPOSE --profile sandbox-openclaw ps -q openclaw-gateway 2>/dev/null || true)
 if [[ -n "$OPENCLAW_CID" ]] && docker inspect -f '{{.State.Status}}' "$OPENCLAW_CID" 2>/dev/null | grep -q "running"; then
   log_info "Waiting for OpenClaw readiness..."
@@ -821,7 +761,171 @@ else
 fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 9: Verify deployment
+# Step 6.7: Ensure Temporal namespace exists (idempotent)
+# App pods need cogni-${env} namespace registered in Temporal before /readyz passes.
+# Same script used by provision-test-vm.sh — one shared primitive.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TEMPORAL_NAMESPACE="cogni-${DEPLOY_ENVIRONMENT}" \
+TEMPORAL_CONTAINER="cogni-runtime-temporal-1" \
+TEMPORAL_TIMEOUT=60 \
+  bash /tmp/ensure-temporal-namespace.sh
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 6.8: Dependency reachability probes
+# Verify Compose services are reachable from k8s pods before restarting them.
+# These use the same EndpointSlice bridges the app pods will use.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if command -v kubectl &>/dev/null; then
+  K8S_NS="cogni-${DEPLOY_ENVIRONMENT}"
+  log_info "[$(date -u +%H:%M:%S)] Probing dependency reachability from k8s..."
+
+  probe_dependency() {
+    local name="$1" host="$2" port="$3"
+    local pod_name="probe-${name}-$(date +%s)"
+    kubectl -n "${K8S_NS}" delete pod "$pod_name" --ignore-not-found 2>/dev/null || true
+    if kubectl -n "${K8S_NS}" run --rm -i --restart=Never \
+      --image=busybox:1.36 "$pod_name" \
+      --timeout=30s -- nc -zw10 "$host" "$port" 2>/dev/null; then
+      log_info "  ✅ ${name} reachable at ${host}:${port}"
+    else
+      log_warn "  ⚠️  ${name} not reachable at ${host}:${port} from k8s (may recover after sync)"
+    fi
+  }
+
+  probe_dependency "temporal" "temporal" "7233"
+  probe_dependency "litellm" "$(hostname -I | awk '{print $1}')" "4000"
+  probe_dependency "redis" "$(hostname -I | awk '{print $1}')" "6379"
+fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 7: Create/update k8s secrets + rolling restart (bridge — task.0284 replaces)
+# k3s is on the same VM; kubectl is available. deploy-infra has ALL secrets
+# from GitHub Environment — unlike provision which only has agent-generated ones.
+# Uses --from-env-file for cleaner secret definitions.
+# NOTE: This runs AFTER compose infra is up (Step 6.6) and dependency
+# reachability is confirmed (Step 6.8). Long-term, secrets move to Git/Argo.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if command -v kubectl &>/dev/null; then
+  log_info "[$(date -u +%H:%M:%S)] Creating/updating k8s secrets..."
+  emit_deployment_event "infra_deployment.k8s_secrets_started" "in_progress" "Creating k8s secrets"
+
+  K8S_NS="cogni-${DEPLOY_ENVIRONMENT}"
+  kubectl create namespace "${K8S_NS}" 2>/dev/null || true
+  HOST_IP=$(hostname -I | awk '{print $1}')
+  log_info "  k8s namespace: ${K8S_NS}, host IP: ${HOST_IP}"
+
+  # ── Per-node secrets (operator, poly, resy) ────────────────────────────────
+  for node in operator poly resy; do
+    SECRET_FILE=$(mktemp)
+    cat > "$SECRET_FILE" <<SECEOF
+DATABASE_URL=postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
+DATABASE_SERVICE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
+AUTH_SECRET=${AUTH_SECRET}
+LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+EVM_RPC_URL=${EVM_RPC_URL}
+POSTHOG_API_KEY=${POSTHOG_API_KEY:-}
+POSTHOG_HOST=${POSTHOG_HOST:-}
+OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+OPENCLAW_GITHUB_RW_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
+SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
+BILLING_INGEST_TOKEN=${BILLING_INGEST_TOKEN:-}
+INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN:-}
+METRICS_TOKEN=${METRICS_TOKEN:-}
+CONNECTIONS_ENCRYPTION_KEY=${CONNECTIONS_ENCRYPTION_KEY:-}
+GH_OAUTH_CLIENT_ID=${GH_OAUTH_CLIENT_ID:-}
+GH_OAUTH_CLIENT_SECRET=${GH_OAUTH_CLIENT_SECRET:-}
+DISCORD_OAUTH_CLIENT_ID=${DISCORD_OAUTH_CLIENT_ID:-}
+DISCORD_OAUTH_CLIENT_SECRET=${DISCORD_OAUTH_CLIENT_SECRET:-}
+GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+PRIVY_APP_ID=${PRIVY_APP_ID:-}
+PRIVY_APP_SECRET=${PRIVY_APP_SECRET:-}
+PRIVY_SIGNING_KEY=${PRIVY_SIGNING_KEY:-}
+GH_WEBHOOK_SECRET=${GH_WEBHOOK_SECRET:-}
+GH_REVIEW_APP_ID=${GH_REVIEW_APP_ID:-}
+GH_REVIEW_APP_PRIVATE_KEY_BASE64=${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}
+GH_REPOS=${GH_REPOS:-}
+LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-}
+COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS:-}
+SECEOF
+    kubectl -n "${K8S_NS}" create secret generic "${node}-node-app-secrets" \
+      --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+    rm -f "$SECRET_FILE"
+    log_info "  Applied ${node}-node-app-secrets"
+  done
+
+  # ── Scheduler-worker secret ────────────────────────────────────────────────
+  SECRET_FILE=$(mktemp)
+  cat > "$SECRET_FILE" <<SECEOF
+DATABASE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_operator?sslmode=disable
+SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
+INTERNAL_OPS_TOKEN=${INTERNAL_OPS_TOKEN:-}
+COGNI_NODE_ENDPOINTS=${COGNI_NODE_ENDPOINTS:-}
+COGNI_NODE_DBS=${COGNI_NODE_DBS:-}
+GH_REVIEW_APP_ID=${GH_REVIEW_APP_ID:-}
+GH_REVIEW_APP_PRIVATE_KEY_BASE64=${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}
+GH_REPOS=${GH_REPOS:-}
+GH_WEBHOOK_SECRET=${GH_WEBHOOK_SECRET:-}
+SECEOF
+  kubectl -n "${K8S_NS}" create secret generic scheduler-worker-secrets \
+    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+  rm -f "$SECRET_FILE"
+  log_info "  Applied scheduler-worker-secrets"
+
+  # ── Sandbox-openclaw secret ────────────────────────────────────────────────
+  # Key name: GITHUB_TOKEN (not OPENCLAW_GITHUB_RW_TOKEN) — matches k8s deployment envFrom
+  SECRET_FILE=$(mktemp)
+  cat > "$SECRET_FILE" <<SECEOF
+OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
+GITHUB_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
+LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+SECEOF
+  kubectl -n "${K8S_NS}" create secret generic sandbox-openclaw-secrets \
+    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+  rm -f "$SECRET_FILE"
+  log_info "  Applied sandbox-openclaw-secrets"
+
+  log_info "[$(date -u +%H:%M:%S)] k8s secrets applied"
+  emit_deployment_event "infra_deployment.k8s_secrets_complete" "success" "k8s secrets applied"
+
+  # ── Rolling restart — pods must restart to pick up changed secrets ──────────
+  # This happens AFTER compose infra is up (Step 6.6) and dependency reachability
+  # is confirmed (Step 6.8), so pods boot into a healthy environment.
+  kubectl -n "${K8S_NS}" rollout restart \
+    deployment/operator-node-app \
+    deployment/poly-node-app \
+    deployment/resy-node-app \
+    deployment/scheduler-worker 2>/dev/null || true
+  log_info "[$(date -u +%H:%M:%S)] Pods restarting..."
+
+  # ── Wait for rollouts to complete — don't exit until pods are Running ──────
+  # Parallel wait: all 4 rollouts run concurrently, total timeout = max(individual), not sum.
+  ROLLOUT_PIDS=""
+  for deploy in operator-node-app poly-node-app resy-node-app scheduler-worker; do
+    kubectl -n "${K8S_NS}" rollout status "deployment/${deploy}" --timeout=300s 2>/dev/null &
+    ROLLOUT_PIDS="$ROLLOUT_PIDS $!"
+  done
+  ROLLOUT_FAILED=0
+  for pid in $ROLLOUT_PIDS; do
+    if ! wait "$pid"; then
+      ROLLOUT_FAILED=1
+    fi
+  done
+  if [ $ROLLOUT_FAILED -ne 0 ]; then
+    log_warn "One or more rollouts did not complete within 300s"
+  fi
+  log_info "[$(date -u +%H:%M:%S)] All rollouts complete"
+  emit_deployment_event "infra_deployment.rollouts_complete" "success" "All k8s deployments rolled out"
+else
+  log_warn "kubectl not found — skipping k8s secret creation (k3s may not be installed)"
+fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 8: Verify deployment
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Waiting for containers to be ready..."
 sleep 10
@@ -905,7 +1009,7 @@ log_info "deploy-infra-remote.sh verified on VM (sha256 match)"
 # Execute remote script with env vars
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ssh $SSH_OPTS root@"$VM_HOST" \
-    "DOMAIN='$DOMAIN' APP_ENV='$APP_ENV' DEPLOY_ENVIRONMENT='$DEPLOY_ENVIRONMENT' DATABASE_URL='$DATABASE_URL' DATABASE_SERVICE_URL='$DATABASE_SERVICE_URL' LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' AUTH_SECRET='$AUTH_SECRET' POSTGRES_ROOT_USER='$POSTGRES_ROOT_USER' POSTGRES_ROOT_PASSWORD='$POSTGRES_ROOT_PASSWORD' APP_DB_USER='$APP_DB_USER' APP_DB_PASSWORD='$APP_DB_PASSWORD' APP_DB_SERVICE_USER='$APP_DB_SERVICE_USER' APP_DB_SERVICE_PASSWORD='$APP_DB_SERVICE_PASSWORD' APP_DB_NAME='$APP_DB_NAME' EVM_RPC_URL='$EVM_RPC_URL' TEMPORAL_DB_USER='$TEMPORAL_DB_USER' TEMPORAL_DB_PASSWORD='$TEMPORAL_DB_PASSWORD' GHCR_DEPLOY_TOKEN='$GHCR_DEPLOY_TOKEN' GHCR_USERNAME='$GHCR_USERNAME' GRAFANA_CLOUD_LOKI_URL='${GRAFANA_CLOUD_LOKI_URL:-}' GRAFANA_CLOUD_LOKI_USER='${GRAFANA_CLOUD_LOKI_USER:-}' GRAFANA_CLOUD_LOKI_API_KEY='${GRAFANA_CLOUD_LOKI_API_KEY:-}' METRICS_TOKEN='${METRICS_TOKEN:-}' SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN:-}' BILLING_INGEST_TOKEN='${BILLING_INGEST_TOKEN:-}' INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN:-}' PROMETHEUS_REMOTE_WRITE_URL='${PROMETHEUS_REMOTE_WRITE_URL:-}' PROMETHEUS_USERNAME='${PROMETHEUS_USERNAME:-}' PROMETHEUS_PASSWORD='${PROMETHEUS_PASSWORD:-}' PROMETHEUS_QUERY_URL='${PROMETHEUS_QUERY_URL:-}' PROMETHEUS_READ_USERNAME='${PROMETHEUS_READ_USERNAME:-}' PROMETHEUS_READ_PASSWORD='${PROMETHEUS_READ_PASSWORD:-}' LANGFUSE_PUBLIC_KEY='${LANGFUSE_PUBLIC_KEY:-}' LANGFUSE_SECRET_KEY='${LANGFUSE_SECRET_KEY:-}' LANGFUSE_BASE_URL='${LANGFUSE_BASE_URL:-}' COGNI_REPO_URL='$COGNI_REPO_URL' COGNI_REPO_REF='$COGNI_REPO_REF' GIT_READ_USERNAME='$GIT_READ_USERNAME' GIT_READ_TOKEN='$GIT_READ_TOKEN' OPENCLAW_GATEWAY_TOKEN='$OPENCLAW_GATEWAY_TOKEN' OPENCLAW_GITHUB_RW_TOKEN='${OPENCLAW_GITHUB_RW_TOKEN:-}' GRAFANA_URL='${GRAFANA_URL:-}' GRAFANA_SERVICE_ACCOUNT_TOKEN='${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}' POSTHOG_API_KEY='$POSTHOG_API_KEY' POSTHOG_HOST='$POSTHOG_HOST' DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN:-}' GH_OAUTH_CLIENT_ID='${GH_OAUTH_CLIENT_ID:-}' GH_OAUTH_CLIENT_SECRET='${GH_OAUTH_CLIENT_SECRET:-}' DISCORD_OAUTH_CLIENT_ID='${DISCORD_OAUTH_CLIENT_ID:-}' DISCORD_OAUTH_CLIENT_SECRET='${DISCORD_OAUTH_CLIENT_SECRET:-}' GOOGLE_OAUTH_CLIENT_ID='${GOOGLE_OAUTH_CLIENT_ID:-}' GOOGLE_OAUTH_CLIENT_SECRET='${GOOGLE_OAUTH_CLIENT_SECRET:-}' GH_REVIEW_APP_ID='${GH_REVIEW_APP_ID:-}' GH_REVIEW_APP_PRIVATE_KEY_BASE64='${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}' GH_REPOS='${GH_REPOS:-}' GH_WEBHOOK_SECRET='${GH_WEBHOOK_SECRET:-}' PRIVY_APP_ID='${PRIVY_APP_ID:-}' PRIVY_APP_SECRET='${PRIVY_APP_SECRET:-}' PRIVY_SIGNING_KEY='${PRIVY_SIGNING_KEY:-}' CONNECTIONS_ENCRYPTION_KEY='${CONNECTIONS_ENCRYPTION_KEY:-}' COGNI_NODE_ENDPOINTS='${COGNI_NODE_ENDPOINTS:-}' COGNI_NODE_DBS='${COGNI_NODE_DBS:-}' COMMIT_SHA='${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}' DEPLOY_ACTOR='${GITHUB_ACTOR:-$(whoami)}' bash /tmp/deploy-infra-remote.sh"
+    "DOMAIN='$DOMAIN' APP_ENV='$APP_ENV' DEPLOY_ENVIRONMENT='$DEPLOY_ENVIRONMENT' DATABASE_URL='$DATABASE_URL' DATABASE_SERVICE_URL='$DATABASE_SERVICE_URL' LITELLM_MASTER_KEY='$LITELLM_MASTER_KEY' OPENROUTER_API_KEY='$OPENROUTER_API_KEY' AUTH_SECRET='$AUTH_SECRET' POSTGRES_ROOT_USER='$POSTGRES_ROOT_USER' POSTGRES_ROOT_PASSWORD='$POSTGRES_ROOT_PASSWORD' APP_DB_USER='$APP_DB_USER' APP_DB_PASSWORD='$APP_DB_PASSWORD' APP_DB_SERVICE_USER='$APP_DB_SERVICE_USER' APP_DB_SERVICE_PASSWORD='$APP_DB_SERVICE_PASSWORD' APP_DB_NAME='$APP_DB_NAME' EVM_RPC_URL='$EVM_RPC_URL' TEMPORAL_DB_USER='$TEMPORAL_DB_USER' TEMPORAL_DB_PASSWORD='$TEMPORAL_DB_PASSWORD' GHCR_DEPLOY_TOKEN='$GHCR_DEPLOY_TOKEN' GHCR_USERNAME='$GHCR_USERNAME' GRAFANA_CLOUD_LOKI_URL='${GRAFANA_CLOUD_LOKI_URL:-}' GRAFANA_CLOUD_LOKI_USER='${GRAFANA_CLOUD_LOKI_USER:-}' GRAFANA_CLOUD_LOKI_API_KEY='${GRAFANA_CLOUD_LOKI_API_KEY:-}' METRICS_TOKEN='${METRICS_TOKEN:-}' SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN:-}' BILLING_INGEST_TOKEN='${BILLING_INGEST_TOKEN:-}' INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN:-}' PROMETHEUS_REMOTE_WRITE_URL='${PROMETHEUS_REMOTE_WRITE_URL:-}' PROMETHEUS_USERNAME='${PROMETHEUS_USERNAME:-}' PROMETHEUS_PASSWORD='${PROMETHEUS_PASSWORD:-}' PROMETHEUS_QUERY_URL='${PROMETHEUS_QUERY_URL:-}' PROMETHEUS_READ_USERNAME='${PROMETHEUS_READ_USERNAME:-}' PROMETHEUS_READ_PASSWORD='${PROMETHEUS_READ_PASSWORD:-}' LANGFUSE_PUBLIC_KEY='${LANGFUSE_PUBLIC_KEY:-}' LANGFUSE_SECRET_KEY='${LANGFUSE_SECRET_KEY:-}' LANGFUSE_BASE_URL='${LANGFUSE_BASE_URL:-}' COGNI_REPO_URL='$COGNI_REPO_URL' COGNI_REPO_REF='$COGNI_REPO_REF' GIT_READ_USERNAME='$GIT_READ_USERNAME' GIT_READ_TOKEN='$GIT_READ_TOKEN' OPENCLAW_GATEWAY_TOKEN='$OPENCLAW_GATEWAY_TOKEN' OPENCLAW_GITHUB_RW_TOKEN='${OPENCLAW_GITHUB_RW_TOKEN:-}' GRAFANA_URL='${GRAFANA_URL:-}' GRAFANA_SERVICE_ACCOUNT_TOKEN='${GRAFANA_SERVICE_ACCOUNT_TOKEN:-}' POSTHOG_API_KEY='$POSTHOG_API_KEY' POSTHOG_HOST='$POSTHOG_HOST' DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN:-}' GH_OAUTH_CLIENT_ID='${GH_OAUTH_CLIENT_ID:-}' GH_OAUTH_CLIENT_SECRET='${GH_OAUTH_CLIENT_SECRET:-}' DISCORD_OAUTH_CLIENT_ID='${DISCORD_OAUTH_CLIENT_ID:-}' DISCORD_OAUTH_CLIENT_SECRET='${DISCORD_OAUTH_CLIENT_SECRET:-}' GOOGLE_OAUTH_CLIENT_ID='${GOOGLE_OAUTH_CLIENT_ID:-}' GOOGLE_OAUTH_CLIENT_SECRET='${GOOGLE_OAUTH_CLIENT_SECRET:-}' GH_REVIEW_APP_ID='${GH_REVIEW_APP_ID:-}' GH_REVIEW_APP_PRIVATE_KEY_BASE64='${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}' GH_REPOS='${GH_REPOS:-}' GH_WEBHOOK_SECRET='${GH_WEBHOOK_SECRET:-}' PRIVY_APP_ID='${PRIVY_APP_ID:-}' PRIVY_APP_SECRET='${PRIVY_APP_SECRET:-}' PRIVY_SIGNING_KEY='${PRIVY_SIGNING_KEY:-}' CONNECTIONS_ENCRYPTION_KEY='${CONNECTIONS_ENCRYPTION_KEY:-}' COGNI_NODE_ENDPOINTS='${COGNI_NODE_ENDPOINTS:-}' COGNI_NODE_DBS='${COGNI_NODE_DBS:-}' LITELLM_IMAGE='${LITELLM_IMAGE:-cogni-litellm:latest}' COMMIT_SHA='${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}' DEPLOY_ACTOR='${GITHUB_ACTOR:-$(whoami)}' bash /tmp/deploy-infra-remote.sh"
 
 emit_deployment_event "infra_deployment.complete" "success" "Infrastructure deployment completed"
 log_info "Infrastructure deployment complete!"
