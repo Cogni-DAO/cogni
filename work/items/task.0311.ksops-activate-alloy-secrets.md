@@ -18,33 +18,33 @@ outcome: "Every cogni-{env} namespace gets its alloy-secrets Secret from a SOPS-
 
 ## Context
 
-`feat/k8s-alloy-observability` lands an Alloy DaemonSet in each cogni-{env} cluster. Alloy needs a `alloy-secrets` Secret with seven keys (Loki/Prometheus basic auth + METRICS_TOKEN). That PR ships `.enc.yaml.example` templates for each env under `infra/k8s/secrets/{env}/` but **does not encrypt them** — because ksops has never been end-to-end activated in this repo:
+`feat/k8s-alloy-observability` lands an Alloy DaemonSet in each env's k3s cluster per [docs/spec/ci-cd.md](../../docs/spec/ci-cd.md) — `candidate-a` (pre-merge lane), `preview` (post-merge validation), `production`. Alloy needs a `alloy-secrets` Secret with seven keys (Loki/Prometheus basic auth + METRICS_TOKEN). That PR ships `.enc.yaml.example` templates for each env under `infra/k8s/secrets/{env}/` but **does not encrypt them** — because ksops has never been end-to-end activated in this repo:
 
 - `infra/k8s/argocd/ksops-cmp.yaml` — present, configured.
 - `infra/k8s/argocd/repo-server-patch.yaml` — present, wires the sidecar.
-- `infra/k8s/secrets/.sops.yaml` — has placeholder age keys (`age1canary_placeholder_replace_with_real_public_key`, etc.).
+- `infra/k8s/secrets/.sops.yaml` — has placeholder age keys.
 - No real encrypted `.enc.yaml` in git.
 - No cluster has a `sops-age-key` Secret in the `argocd` namespace.
 
-So Alloy bootstrap today = manual `kubectl create secret` on each cluster (documented in `docs/guides/alloy-loki-setup.md` Part 1). That's acceptable as v0 but violates the spirit of the `NO_SSH_PAST_GITOPS` constraint in `proj.cicd-services-gitops.md`.
+So Alloy bootstrap today = manual `kubectl create secret` on each cluster. SSH is explicitly authorized for candidate-a as an interim. Preview and production should land via the flow below, not via more SSH.
 
 This task activates ksops for the alloy-secrets use case specifically, as an interim before the larger task.0284 ESO migration.
 
 ## Scope
 
-1. **Generate age keys** (four — one per env):
-   - `age-keygen -o canary-age-key.txt`
-   - Same for candidate-a, preview, production.
+1. **Generate age keys** (three — one per env):
+   - `age-keygen -o candidate-a-age-key.txt`
+   - Same for preview, production.
 2. **Install private keys** into each cluster's `argocd` namespace:
    ```bash
-   kubectl --context cogni-canary -n argocd create secret generic sops-age-key \
-     --from-file=keys.txt=canary-age-key.txt
+   kubectl --context cogni-candidate-a -n argocd create secret generic sops-age-key \
+     --from-file=keys.txt=candidate-a-age-key.txt
    ```
    Repeat per cluster. Delete local private key files after install.
-3. **Update `.sops.yaml`** — replace placeholder `age: "age1<env>_placeholder..."` lines with real public keys.
+3. **Update `.sops.yaml`** — replace placeholder `age: "age1<env>_placeholder..."` lines with real public keys for candidate-a, preview, production.
 4. **Encrypt the example files:**
    ```bash
-   for env in canary candidate-a preview production; do
+   for env in candidate-a preview production; do
      cp infra/k8s/secrets/$env/alloy-secrets.enc.yaml.example \
         infra/k8s/secrets/$env/alloy-secrets.enc.yaml
      # Fill in real Grafana Cloud values
@@ -57,7 +57,7 @@ This task activates ksops for the alloy-secrets use case specifically, as an int
      - ../../../base/alloy
      - ../../../secrets/{env}/alloy-secrets.enc.yaml # ksops decrypts via CMP
    ```
-6. **Update `docs/guides/alloy-loki-setup.md`** — replace the manual `kubectl create secret` section with the ksops GitOps flow.
+6. **Update `docs/guides/alloy-loki-setup.md`** — replace the interim `kubectl create secret` bootstrap section with the ksops flow.
 7. **Update scorecard** — flip row #16 of `proj.cicd-services-gitops.md` from RED to GREEN.
 
 ## Constraints
@@ -79,8 +79,8 @@ This task activates ksops for the alloy-secrets use case specifically, as an int
 
 ## Acceptance
 
-- Four real encrypted `.enc.yaml` files committed in `infra/k8s/secrets/{canary,candidate-a,preview,production}/`.
-- `.sops.yaml` has four real age public keys (no `placeholder` strings).
-- Four `sops-age-key` Secrets installed in each env's `argocd` namespace (NOT in git — cluster-side one-time bootstrap).
-- `docs/guides/alloy-loki-setup.md` Part 1 replaces the manual bootstrap section with the ksops flow.
+- Three real encrypted `.enc.yaml` files committed in `infra/k8s/secrets/{candidate-a,preview,production}/`.
+- `.sops.yaml` has three real age public keys (no `placeholder` strings) for candidate-a, preview, production.
+- Three `sops-age-key` Secrets installed in each env's `argocd` namespace (NOT in git — cluster-side one-time bootstrap).
+- `docs/guides/alloy-loki-setup.md` replaces the interim `kubectl create secret` bootstrap section with the ksops flow.
 - Scorecard row #16 flips to 🟢.
