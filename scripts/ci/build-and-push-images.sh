@@ -100,6 +100,7 @@ build_target() {
         --platform "$PLATFORM" \
         --file nodes/operator/app/Dockerfile \
         --target runner \
+        --build-arg "BUILD_SHA=${git_sha}" \
         --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \
@@ -114,6 +115,7 @@ build_target() {
         --platform "$PLATFORM" \
         --file nodes/poly/app/Dockerfile \
         --target runner \
+        --build-arg "BUILD_SHA=${git_sha}" \
         --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \
@@ -128,6 +130,7 @@ build_target() {
         --platform "$PLATFORM" \
         --file nodes/resy/app/Dockerfile \
         --target runner \
+        --build-arg "BUILD_SHA=${git_sha}" \
         --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \

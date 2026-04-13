@@ -85,6 +85,10 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV LOG_FORMAT=json
 
+# Build SHA plumbing: CI passes --build-arg BUILD_SHA=${GITHUB_SHA}; app reads APP_BUILD_SHA at runtime.
+ARG BUILD_SHA="dev"
+ENV APP_BUILD_SHA=$BUILD_SHA
+
 LABEL org.opencontainers.image.title="cogni-template"
 
 # Copy standalone bundle (includes production dependencies)

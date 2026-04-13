@@ -18,8 +18,36 @@
  */
 
 import { NodeSDK } from "@opentelemetry/sdk-node";
+import pino from "pino";
 
 let sdk: NodeSDK | null = null;
+
+/**
+ * Emit one structured startup log with the image build SHA so grafana-based
+ * agents can correlate a running pod to its PR/commit. Self-contained pino
+ * instance because the shared logger sits behind the bootstrap/container
+ * wiring, which dep-cruiser forbids instrumentation.ts from importing.
+ */
+function logAppStarted(): void {
+  // biome-ignore lint/style/noProcessEnv: startup log emitted before config framework
+  if (process.env.APP_ENV === "test" || process.env.VITEST === "true") {
+    return;
+  }
+  const bootLogger = pino({
+    base: {
+      app: "cogni-template",
+      // biome-ignore lint/style/noProcessEnv: startup log before config framework
+      service: process.env.SERVICE_NAME ?? "app",
+    },
+    messageKey: "msg",
+    timestamp: pino.stdTimeFunctions.isoTime,
+  });
+  bootLogger.info(
+    // biome-ignore lint/style/noProcessEnv: build-time plumbing injected via Dockerfile ARG
+    { buildSha: process.env.APP_BUILD_SHA ?? "dev" },
+    "app started"
+  );
+}
 
 /**
  * Initialize OTel SDK with P0 configuration.
@@ -90,6 +118,7 @@ export async function register(): Promise<void> {
   }
 
   await initOtelSdk();
+  logAppStarted();
 
   // Dev mode (not test): warn if LiteLLM has stale test config from a previous session.
   // Inlined here (not in bootstrap/) because dep-cruiser forbids instrumentation→bootstrap imports.
