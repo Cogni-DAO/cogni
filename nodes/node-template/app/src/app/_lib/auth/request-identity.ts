@@ -4,7 +4,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SessionUser } from "@cogni/node-shared";
 import { headers } from "next/headers";
-import { getSessionUser } from "@/app/_lib/auth/session";
+import { getServerSessionUser } from "@/lib/auth/server";
 import { serverEnv } from "@/shared/env/server";
 
 type AgentTokenPayload = {
@@ -31,8 +31,12 @@ function safeCompare(a: string, b: string): boolean {
 
 function extractBearerToken(authHeader: string | null): string | null {
   if (!authHeader) return null;
-  const match = authHeader.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() ?? null;
+  // Avoid regex backtracking: use startsWith + slice (O(n), no ReDoS risk).
+  // Flagged by SonarQube on /^Bearer\s+(.+)$/i — the (.+) group allowed
+  // super-linear backtracking on crafted Authorization headers.
+  if (!authHeader.toLowerCase().startsWith("bearer ")) return null;
+  const token = authHeader.slice(7).trimStart();
+  return token || null;
 }
 
 function signPayload(payloadB64: string): string {
@@ -91,7 +95,7 @@ export async function resolveRequestIdentity(): Promise<SessionUser | null> {
   try {
     h = await headers();
   } catch {
-    return getSessionUser();
+    return getServerSessionUser();
   }
   const bearer = extractBearerToken(h.get("authorization"));
   if (bearer) {
@@ -109,5 +113,5 @@ export async function resolveRequestIdentity(): Promise<SessionUser | null> {
     return null;
   }
 
-  return getSessionUser();
+  return getServerSessionUser();
 }
