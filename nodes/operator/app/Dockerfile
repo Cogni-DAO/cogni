@@ -113,9 +113,10 @@ COPY --from=builder --chown=nextjs:nodejs /tmp/codex-native/@openai/ ./node_modu
 COPY --from=builder --chown=nextjs:nodejs /app/config/mcp.servers.json ./nodes/operator/app/config/mcp.servers.json
 
 # Build SHA plumbing: CI passes --build-arg BUILD_SHA=${GITHUB_SHA}; app reads APP_BUILD_SHA at runtime.
-# Placed last so cache invalidation from a new commit only rebuilds the final metadata layer,
+# Placed last so cache invalidation from a new commit only rebuilds the trailing metadata layer,
 # not the expensive upstream COPY + pnpm-add-codex layers.
-ARG BUILD_SHA="dev"
+# No default: if CI forgets to pass the arg, APP_BUILD_SHA is empty and the pod visibly reports it.
+ARG BUILD_SHA
 ENV APP_BUILD_SHA=$BUILD_SHA
 
 USER nextjs

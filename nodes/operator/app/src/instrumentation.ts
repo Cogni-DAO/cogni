@@ -42,11 +42,18 @@ function logAppStarted(): void {
     messageKey: "msg",
     timestamp: pino.stdTimeFunctions.isoTime,
   });
-  bootLogger.info(
-    // biome-ignore lint/style/noProcessEnv: build-time plumbing injected via Dockerfile ARG
-    { buildSha: process.env.APP_BUILD_SHA ?? "dev" },
-    "app started"
-  );
+  // biome-ignore lint/style/noProcessEnv: build-time plumbing injected via Dockerfile ARG
+  const buildSha = process.env.APP_BUILD_SHA;
+  if (buildSha) {
+    bootLogger.info({ buildSha }, "app started");
+  } else {
+    // No fallback string — emit at warn so missing/forgotten BUILD_SHA is visible
+    // rather than cloaked behind a placeholder.
+    bootLogger.warn(
+      { buildSha: null },
+      "app started (APP_BUILD_SHA unset — check CI --build-arg BUILD_SHA)"
+    );
+  }
 }
 
 /**

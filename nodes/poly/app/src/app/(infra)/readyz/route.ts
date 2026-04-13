@@ -114,7 +114,7 @@ export const GET = wrapRouteHandlerWithLogging(
         status: "healthy" as const,
         timestamp: new Date().toISOString(),
         // biome-ignore lint/style/noProcessEnv: build-time plumbing injected via Dockerfile ARG
-        version: process.env.APP_BUILD_SHA ?? "dev",
+        version: process.env.APP_BUILD_SHA || undefined,
       };
 
       const parsed = metaReadyzOperation.output.parse(payload);
