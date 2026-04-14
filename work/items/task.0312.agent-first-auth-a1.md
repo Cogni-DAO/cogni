@@ -235,6 +235,97 @@ This decoupling works because A2 only mutates (a) the storage of `actorId` (user
 ## Notes
 
 - **Multi-node scope**: operator + node-template + poly + resy all touch the same wrapper. Per MEMORY.md, `session.ts` / `request-identity.ts` are duplicated across nodes today; A1 does NOT de-duplicate them but DOES ensure all nodes ship the same new wrapper signature.
-- **Branch**: the spec lives on `design/agent-first-auth`; implementation branch is `feat/agent-first-auth-a1` (created at `/implement` start).
+- **Branch**: the spec lives on `design/agent-first-auth`; implementation branch is `feat/agent-first-auth-a1` (created at `/implement` start, branched from the design-branch tip so the docs + code land in one PR).
 - **Estimate 3**: the contract/wrapper/resolver is small; the grind is the route audit across ~50 files × 4 nodes. Ballpark half a day per node + half a day for the tests = ~3 days.
 - **Storage model during A1 is intentionally hacky**: `actorId = userId` via runtime cast. This is explicit in the wrapper's resolver, commented as "TEMPORARY — replaced in A2 by actors-table lookup." Do not propagate the assumption anywhere else; downstream code reads `principal.actorId` and must remain correct after A2's swap.
+
+## Plan
+
+Checkpoints are ordered so the tree stays green at every boundary. The wrapper ships BOTH old and new shapes as overloads (checkpoint 3); routes migrate incrementally (4–5); the legacy overload is deleted in checkpoint 7 once all routes are on the new shape. No "flag day" commit.
+
+- [ ] **Checkpoint 1 — `AuthPrincipal` types package**
+  - Milestone: `@cogni/node-shared` exports `AuthPrincipal`, `AuthPolicy`, `PrincipalType`. Any node app can `import { AuthPrincipal } from "@cogni/node-shared"`. No behavior change.
+  - Invariants: ACTOR_IS_PRINCIPAL, CONTRACTS_FIRST, LAYER_DEPENDENCY_DIRECTION
+  - Todos:
+    - [ ] Create `packages/node-shared/src/auth/principal.ts`
+    - [ ] Create `packages/node-shared/src/auth/index.ts` (barrel)
+    - [ ] Re-export from the package's top-level barrel
+    - [ ] Contract test: shape, non-null `actorId`, readonly fields, literal `principalType`
+  - Validation:
+    - [ ] `pnpm check:fast` green
+    - [ ] `pnpm test packages/node-shared` green
+
+- [ ] **Checkpoint 2 — `resolveAuthPrincipal` helper (operator)**
+  - Milestone: single function `resolveAuthPrincipal(policy)`, returns `AuthPrincipal | null`, reuses `resolveRequestIdentity` + `getServerSessionUser` as primitives. Not yet wired into the wrapper.
+  - Invariants: SPLIT_IDENTITY_PROOF_AUTHORIZATION, PRINCIPAL_NOT_SESSION_IN_HANDLERS
+  - Todos:
+    - [ ] Create `nodes/operator/app/src/app/_lib/auth/resolveAuthPrincipal.ts`
+    - [ ] `"authenticated"` branch: call `resolveRequestIdentity`, lift → `AuthPrincipal` with temporary `actorId = userId` cast (commented)
+    - [ ] `"session_only"` branch: call `getServerSessionUser`; reject if Authorization header was present (BEARER_CLAIMS_EXCLUSIVE)
+    - [ ] `"admin"` branch: `"authenticated"` + scope check
+    - [ ] `"public"` branch: returns null, handler never inspects
+    - [ ] Unit tests for all four paths
+  - Validation:
+    - [ ] `pnpm check:fast` green
+    - [ ] Unit tests green
+
+- [ ] **Checkpoint 3 — Operator wrapper accepts new AND old shapes**
+  - Milestone: `wrapRouteHandlerWithLogging` accepts either `auth: { mode, getSessionUser }` (legacy, unchanged) or `auth: AuthPolicy` (new literal). All existing routes compile unchanged. New routes can opt in.
+  - Invariants: DECORATOR_OWNS_STRATEGY, HEXAGONAL_ALIGNMENT
+  - Todos:
+    - [ ] Add new overload signatures for `"public" | "authenticated" | "session_only" | "admin"` literals
+    - [ ] Implementation dispatches on `typeof auth`: string → new path, object → legacy path
+    - [ ] Handler signature correctly typed per policy: `"public"` → no principal arg; rest → `AuthPrincipal` non-null
+    - [ ] `"admin"` returns 403 on missing scope
+    - [ ] Integration tests: all four policy paths
+  - Validation:
+    - [ ] `pnpm check:fast` green (all existing routes still compile)
+    - [ ] `tests/integration/wrapRouteHandlerWithLogging.int.test.ts` green
+
+- [ ] **Checkpoint 4 — Operator route audit**
+  - Milestone: every `/api/v1/*` route in operator uses the new `auth: AuthPolicy` literal. `v1/activity` moves from session-only to `"authenticated"`.
+  - Invariants: DEFAULT_IS_DUAL_ACCESS, NO_A2_BLEED
+  - Todos:
+    - [ ] Dual-access bucket (~35 routes) → `auth: "authenticated"`
+    - [ ] Session-only carve-out (~7 routes) → `auth: "session_only"`
+    - [ ] Admin (`governance/*`) → `auth: "admin"`
+    - [ ] Public seam (`agent/register`) → `auth: "public"`
+    - [ ] Remove `getSessionUser` / `getServerSessionUser` imports from every `/api/v1/**/route.ts`
+  - Validation:
+    - [ ] `pnpm check:fast` green
+    - [ ] `rg '@/app/_lib/auth/session' nodes/operator/app/src/app/api` empty
+    - [ ] `rg '@/lib/auth/server' nodes/operator/app/src/app/api/v1` empty
+
+- [ ] **Checkpoint 5 — Multi-node parity (node-template, poly, resy)**
+  - Milestone: same treatment for the other three nodes. All nodes ship the same wrapper signature and route shape.
+  - Todos:
+    - [ ] node-template: resolver + wrapper + route audit
+    - [ ] poly: resolver + wrapper + route audit
+    - [ ] resy: resolver + wrapper + route audit
+  - Validation:
+    - [ ] `pnpm check:fast` green
+    - [ ] All four per-node typecheck targets green
+
+- [ ] **Checkpoint 6 — Lint rule + security battery**
+  - Milestone: lint fails loudly on raw session access in route handlers; security test battery enforces every bucket × policy.
+  - Invariants: PRINCIPAL_NOT_SESSION_IN_HANDLERS
+  - Todos:
+    - [ ] `no-restricted-imports` in `eslint.config.mjs` scoped to `**/app/api/**/route.ts`; forbid `next/headers`, `@/lib/auth/server`, `next-auth`
+    - [ ] Verify rule by deliberately reverting one route's import locally
+    - [ ] Create `tests/stack/security/auth-bucket-enforcement.stack.test.ts` covering the full matrix from the Validation section above
+  - Validation:
+    - [ ] `pnpm lint` green
+    - [ ] Security test green
+
+- [ ] **Checkpoint 7 — Deprecation + docs + finalize**
+  - Milestone: legacy wrapper overload removed; `SessionUser` is a one-release alias; docs reflect the new shape; full `pnpm check` green; pushed.
+  - Todos:
+    - [ ] Delete legacy `{ mode, getSessionUser }` overload from all four node wrappers
+    - [ ] `SessionUser` → `type SessionUser = AuthPrincipal` with `@deprecated` JSDoc
+    - [ ] Delete or reduce `@/app/_lib/auth/session.ts` to a re-export
+    - [ ] Update `docs/guides/agent-api-validation.md` — remove stale shortcomings #2, #3
+    - [ ] `pnpm check` (single full run)
+    - [ ] status → `needs_closeout`, regenerate `_index.md`, commit, push
+  - Validation:
+    - [ ] `pnpm check` green (single pre-commit run)
+    - [ ] `pnpm check:docs` green

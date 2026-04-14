@@ -3,13 +3,14 @@
 
 /**
  * Module: `@shared/auth`
- * Purpose: Barrel export for shared auth types and pure helpers used across app and adapters.
- * Scope: Re-exports session identity types; does not implement runtime side effects.
+ * Purpose: Barrel export for shared auth types and pure helpers.
+ * Scope: Re-exports AuthPrincipal/AuthPolicy (principal.ts), SessionUser (session.ts, deprecated), and linkIntentStore; does not contain runtime side effects.
  * Invariants: Pure re-export, no mutations, no environment access.
  * Side-effects: none
- * Notes: Keep aligned with session.ts definitions; expand when auth surface grows.
- * Links: shared/auth/session
+ * Notes: principal.ts is the source of truth; SessionUser stays as a one-release alias until routes migrate.
+ * Links: shared/auth/principal, shared/auth/session, docs/spec/agent-first-auth.md
  * @public
  */
 export * from "./link-intent-store";
+export * from "./principal";
 export * from "./session";
