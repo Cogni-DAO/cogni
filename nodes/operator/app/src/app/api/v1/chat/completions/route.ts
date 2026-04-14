@@ -28,7 +28,7 @@ import {
   toOpenAiFinishReason,
 } from "@/app/_facades/ai/completion.server";
 import { executionErrorToOpenAiError } from "@/app/_facades/ai/execution-error-mapper";
-import { resolveRequestIdentity } from "@/app/_lib/auth/request-identity";
+import { getSessionUser } from "@/app/_lib/auth/session";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import { isAccountsFeatureError } from "@/features/accounts/public";
 import type { AiEvent, StreamFinalResult } from "@/features/ai/public";
@@ -386,7 +386,7 @@ function createOpenAiSseStream(
 export const POST = wrapRouteHandlerWithLogging(
   {
     routeId: "chat.completions",
-    auth: { mode: "required", getSessionUser: resolveRequestIdentity },
+    auth: { mode: "required", getSessionUser },
   },
   async (ctx, request, sessionUser) => {
     try {
