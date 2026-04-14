@@ -232,6 +232,10 @@ This decoupling works because A2 only mutates (a) the storage of `actorId` (user
 - `apiKey` TTL change
 - `bug.0297` downgrade
 
+## PR / Links
+
+- Handoff: [handoff](../handoffs/task.0312.handoff.md)
+
 ## Notes
 
 - **Multi-node scope**: operator + node-template + poly + resy all touch the same wrapper. Per MEMORY.md, `session.ts` / `request-identity.ts` are duplicated across nodes today; A1 does NOT de-duplicate them but DOES ensure all nodes ship the same new wrapper signature.
