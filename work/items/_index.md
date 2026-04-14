@@ -31,7 +31,7 @@
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |
-| 0 | 2 | 3 | needs_closeout | task.0293 | Flight merged-PR digests to preview with lock-gate | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 2 | 3 | needs_implement | task.0293 | Flight merged-PR digests to preview with lock-gate | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 3 | 2 | needs_design | bug.0062 | OpenClaw gateway: single webchat message can trigger multi-call GOVERN loop (call storm) | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 3 | 3 | needs_merge | bug.0232 | LlmService port silently drops tools — Codex adapter ignores params.tools, MCP tools invisible to Codex agents | Agentic Interoperability | proj.agentic-interop |
 | 0 | 3 | 2 | needs_merge | task.0294 | Policy-gated release: kill auto-release PR conveyor belt | CI/CD Pipeline | proj.cicd-services-gitops |

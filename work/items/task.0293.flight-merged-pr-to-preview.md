@@ -2,7 +2,8 @@
 id: task.0293
 type: task
 title: "Flight merged-PR digests to preview with lock-gate"
-status: needs_closeout
+status: needs_implement
+revision: 1
 priority: 0
 rank: 2
 estimate: 3
@@ -403,6 +404,48 @@ Four short paragraphs. No new invariants beyond what this task establishes.
 | 11  | **Two PRs merge within 2 seconds, both hit unlocked.** GH concurrency group serializes them so worker A runs first and commits `candidate-sha=A, review-state=dispatching`, dispatches promote-and-deploy. Worker B then runs, reads `dispatching`, writes `candidate-sha=B` only, does not dispatch.                                                                                              | Exactly one flight dispatched (for A). B is queued. `current-sha` will become A after e2e success; B drains on next unlock.                                                                                                                                                 |
 | 12  | **Concurrency group leak (e.g., force-dispatched twice).** Two workers enter the script in parallel, both read `unlocked`, both build a commit setting `review-state=dispatching`. Worker A pushes first. Worker B's push is rejected; its `push_with_retry --reread-lease` rebases, sees `dispatching` already set, demotes its commit to queue-only, sets `FLIGHT_LEASE_LOST=1`, skips dispatch. | Still exactly one flight dispatched. The three-value lease guarantees safety even if the GH concurrency group is bypassed.                                                                                                                                                  |
 | 13  | Workflow cancelled mid-`dispatching` (e.g., run cancelled before `lock-preview-on-success` or `unlock-preview-on-failure` runs)                                                                                                                                                                                                                                                                    | Preview is stuck in `dispatching`. Recovery: manual edit of `.promote-state/review-state` on `deploy/preview`, OR the next merge-to-main will still correctly queue (it reads `dispatching` as locked). A human must unlock eventually. Flagged as a known follow-up below. |
+
+## Review Feedback (revision 1 — 2026-04-14)
+
+### Blocking
+
+- [ ] **`unlock-preview-on-failure` misses `promote-k8s` failure** (`.github/workflows/promote-and-deploy.yml:536-544`).
+      If the `promote-k8s` job fails (overlay push, digest resolution, rsync, etc.), `deploy-infra` / `verify` / `e2e` all evaluate to `skipped`, not `failure`. Under the current `if`, the unlock job does not fire. Preview is left in `dispatching`. This is the exact dead-lock failure mode B1 was chartered to eliminate, just at a different step.
+      Fix: add `needs.promote-k8s.result == 'failure'` to the guard:
+      `yaml
+  if: |
+    always() &&
+    needs.promote-k8s.outputs.environment == 'preview' &&
+    (needs.promote-k8s.result == 'failure' ||
+     needs.deploy-infra.result == 'failure' ||
+     needs.verify.result == 'failure' ||
+     needs.e2e.result == 'failure')
+  `
+      Note: if `promote-k8s` fails before the `Determine environment` step emits outputs, the guard's `needs.promote-k8s.outputs.environment == 'preview'` is empty and the job still skips. That's a narrower catastrophic case; acceptable for v0 but document in the spec as "manual unlock required" if it happens.
+- [ ] **Update `docs/spec/ci-cd.md:156`** to match: the transition row "`dispatching → unlocked`" must list `promote-k8s` alongside `deploy-infra`, `verify`, `e2e`.
+
+### Non-blocking (optional — decide in this pass)
+
+- [ ] **Purge remaining canary references from `promote-and-deploy.yml`** to satisfy outcome #5:
+  - `L18` description text mentions canary
+  - `L20` `default: canary` → `default: preview`
+  - `L22` `options: [canary, preview, production]` → `[preview, production]` (or keep canary with description noting it's a manual-only safety valve)
+  - `L44` `|| 'canary'` fallback in concurrency group key
+  - `L70` `canary) OVERLAY=canary; DEPLOY_BRANCH=deploy/canary ;;` arm of the case statement
+  - `L10-14` `on.workflow_run.workflows: ["Build Multi-Node"]` — nothing dispatches build-multi-node anymore; trigger is dead
+- [ ] **Transitional checkout bug in `auto-merge-release-prs.yml`** — the unlock + drain steps rely on `scripts/ci/set-preview-review-state.sh` existing at the PR head. Release PRs cut from `deploy/preview` before task.0293 merges won't have that script. Pin the unlock+drain steps to `main`:
+      `yaml
+  - name: Checkout main (for scripts)
+    if: steps.merge.outcome == 'success'
+    uses: actions/checkout@v4
+    with:
+    ref: main
+    path: main-src
+    `  Then run`bash main-src/scripts/ci/set-preview-review-state.sh ...`.
+- [ ] **`flight-merged-pr-to-preview.yml` fetch-depth** — `fetch-depth: 0` at L46 is full-history, used only for the dispatch ancestor check. Change to `fetch-depth: 1` and rely on the inline `git fetch origin main --depth=100` at L61.
+- [ ] **`promote-to-preview.sh` L54-55** — unused `REVIEW_STATE` read; remove or repurpose.
+- [ ] **`set-preview-review-state.sh` L64, L66** — use `::warning::` annotation instead of plain echo for unexpected-transition warnings so they surface on the job summary.
+- [ ] **Drain on unlock-on-failure (symmetry)** — `unlock-preview-on-failure` could drain a queued `candidate-sha` the same way `auto-merge-release-prs.yml` does. Current asymmetry leaves queued SHAs stranded until a human or another merge intervenes. Low severity; could be a follow-up.
 
 ## Known follow-ups not in this task
 
