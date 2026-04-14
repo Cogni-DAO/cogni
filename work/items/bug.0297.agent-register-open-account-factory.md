@@ -26,20 +26,23 @@ external_refs:
 ---
 
 > **2026-04-14 direction change.** The original "admin-minted invitation token"
-> remediation (§ Plan below) is SUPERSEDED by the agent-first design at
-> [`docs/spec/agent-first-auth.md`](../../docs/spec/agent-first-auth.md).
-> The critical-severity exposure is closed in two phases:
+> remediation (§ Plan below) is SUPERSEDED by the agent-first auth contract at
+> [`docs/spec/agent-first-auth.md`](../../docs/spec/agent-first-auth.md). The
+> execution roadmap lives in [`proj.accounts-api-keys § Agent-First Auth
+Track`](../projects/proj.accounts-api-keys.md). The critical-severity
+> exposure is closed in two steps:
 >
-> 1. **Phase 1 — task.0312**: contract lock (AuthPrincipal + wrapper refactor +
->    `actors` table + IP rate limit + per-actor daily spend cap + 24h TTL).
->    Downgrades this bug from critical to medium.
-> 2. **Phase 2 — future task**: keypair proof-of-possession + 5-min proof-bound
->    access tokens. Closes this bug entirely.
+> 1. **Contract lock (task.0312)**: `AuthPrincipal` + wrapper refactor + `actors`
+>    table + IP rate limit + per-actor daily spend cap + 24h TTL on the issued
+>    bearer. Downgrades this bug from critical to medium.
+> 2. **Proof-of-possession follow-up (A3 in the project track)**: keypair
+>    registration + 5-minute proof-bound access tokens. Closes this bug
+>    entirely.
 >
 > The "Identity Model Gaps" section below (Gaps 1, 4, 5, 6, 7, 8) is still
-> valid; most gaps land naturally in Phase 1 (actors table → 1, 4; quota →
-> implicit idempotency bounding → 8; revoked_at → 6). Gaps 5 and 7 are
-> orthogonal and stay tracked here.
+> valid; most gaps land naturally under the contract lock (actors table → 1, 4;
+> quota → implicit idempotency bounding → 8; `revoked_at` → 6). Gaps 5 and 7
+> are orthogonal and stay tracked here.
 
 # Agent register endpoint is an open account factory
 

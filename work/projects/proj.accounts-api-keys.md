@@ -6,12 +6,12 @@ title: Accounts, API Keys & Wallet Authentication
 state: Active
 priority: 1
 estimate: 5
-summary: SIWE wallet authentication, session management, server-side API key storage, and session-based chat integration
-outcome: Users authenticate via SIWE, API keys never leave server, chat uses session cookies instead of Authorization headers
+summary: SIWE wallet authentication, session management, server-side API key storage, session-based chat integration, and the agent-first auth track (canonical AuthPrincipal + actors table + proof-of-possession tokens).
+outcome: Users authenticate via SIWE, API keys never leave server, chat uses session cookies instead of Authorization headers. Agents are first-class principals with platform-generated actorId, rate-limited self-service registration, and cryptographically proved short-lived access tokens.
 assignees: derekg1729
 created: 2026-02-06
-updated: 2026-02-06
-labels: [auth, wallet, accounts]
+updated: 2026-04-14
+labels: [auth, wallet, accounts, agent-first]
 ---
 
 # Accounts, API Keys & Wallet Authentication
@@ -212,6 +212,73 @@ Files: update `src/app/api/v1/ai/completion/route.ts`, `tests/stack/api/ai/compl
 | Organization/team billing accounts                   | Not Started | 3   | (create at P4 start) |
 | On-chain payment reconciliation (Ponder indexer)     | Not Started | 3   | (create at P4 start) |
 
+### Agent-First Auth Track
+
+**Goal:** Make the agent a first-class principal on every authenticated `/api/v1/*` route. Lock the auth contract first (canonical `AuthPrincipal`, wrapper policy strings, `actors` table), then harden the proof backend under a stable route-handler contract.
+
+**Contract (frozen):** [agent-first-auth spec](../../docs/spec/agent-first-auth.md) — defines `AuthPrincipal`, `AuthPolicy`, the `actors` schema, the route buckets, the register flow, and the quota envelope. Implementations of this track must satisfy the spec's Acceptance Checks.
+
+> Context: PR #845 shipped the agent-first API lane (routes, bearer plumbing, `agent/register` endpoint). Post-merge review surfaced `bug.0297` (register is an open account factory) and the identity-model gaps in `docs/spec/identity-model.md`. This track closes both by adopting the external-review recommendation: lock the contract now, harden the proof in a follow-up, bound blast radius with per-actor quotas rather than invitation-token gating.
+
+#### A1 — Contract lock (spec Acceptance Checks)
+
+**Goal:** `AuthPrincipal` is the canonical handler-facing identity, the wrapper declares auth via policy strings, `session_only` is the opt-in carve-out.
+
+| Deliverable                                                                                            | Status      | Est | Work Item |
+| ------------------------------------------------------------------------------------------------------ | ----------- | --- | --------- |
+| `AuthPrincipal` + `AuthPolicy` types in `packages/node-shared/src/auth`                                | Not Started | —   | task.0312 |
+| `wrapRouteHandlerWithLogging` accepts `auth: "public" \| "authenticated" \| "session_only" \| "admin"` | Not Started | —   | task.0312 |
+| `resolveAuthPrincipal` replaces `session.ts` + `request-identity.ts`                                   | Not Started | —   | task.0312 |
+| Route audit: flip all `/api/v1/*` routes to the new wrapper across 4 nodes                             | Not Started | —   | task.0312 |
+| Lint rule: ban raw session/`cookies`/`headers` in route-handler files                                  | Not Started | —   | task.0312 |
+| `SessionUser` kept as a one-release type alias                                                         | Not Started | —   | task.0312 |
+
+#### A2 — Register hardening + actors schema
+
+**Goal:** `bug.0297` drops from critical → medium. Register creates an `actors` row (not a `users` row), is rate-limited per source IP, and every actor has a daily spend + concurrency cap.
+
+| Deliverable                                                                                         | Status      | Est | Work Item     |
+| --------------------------------------------------------------------------------------------------- | ----------- | --- | ------------- |
+| `actors` table migration + users → actors backfill                                                  | Not Started | —   | (see A2 task) |
+| `agent.register.v1.contract.ts` output → `{ actorId, tenantId, policyTier, spendCapCents, apiKey }` | Not Started | —   | (see A2 task) |
+| Register IP rate-limit (existing `ioredis` client)                                                  | Not Started | —   | (see A2 task) |
+| Per-actor daily spend cap enforcement in LLM dispatch path                                          | Not Started | —   | (see A2 task) |
+| Per-actor concurrency cap enforcement                                                               | Not Started | —   | (see A2 task) |
+| `apiKey` TTL dropped from 30d to 24h; claims encode `actorId`                                       | Not Started | —   | (see A2 task) |
+
+> **A1 vs A2 split:** A1 locks the contract and is the safer/smaller atomic change. A2 addresses `bug.0297` and requires the schema. A2 is logically separable from A1 (`actorId` can temporarily be `users.id` during A1) but MUST follow A1 on the same branch to avoid churning the contract twice.
+
+#### A3 — Proof-of-possession (target)
+
+**Goal:** Replace the static 24h bearer with a keypair-proved, short-lived access token. Zero route changes — the wrapper swaps its proof backend behind the locked policy surface.
+
+| Deliverable                                                                     | Status      | Est | Work Item      |
+| ------------------------------------------------------------------------------- | ----------- | --- | -------------- |
+| `agent.register.v2.contract.ts` — input includes `publicKeyJwk`                 | Not Started | —   | (create at A3) |
+| `POST /api/v1/agent/token` — signed-challenge → short-lived access token        | Not Started | —   | (create at A3) |
+| Ed25519 signature verification, nonce replay store (Redis, TTL), ts skew window | Not Started | —   | (create at A3) |
+| Access tokens ttl=5min, `cnf` thumbprint claim                                  | Not Started | —   | (create at A3) |
+| Register v1 contract deprecated (still accepted until internal clients migrate) | Not Started | —   | (create at A3) |
+| `bug.0297` closed                                                               | Not Started | —   | (closed by A3) |
+
+#### A4 — DPoP sender-constrained tokens (target)
+
+**Goal:** Stolen access tokens are nearly unusable off-host (mitigates token theft in hostile networks).
+
+| Deliverable                                                    | Status      | Est | Work Item      |
+| -------------------------------------------------------------- | ----------- | --- | -------------- |
+| DPoP header parsing + verification in the wrapper              | Not Started | —   | (create at A4) |
+| Access tokens cryptographically bound to client key thumbprint | Not Started | —   | (create at A4) |
+
+#### A5 — Optional human linkage (target)
+
+**Goal:** A human session holder can claim an orphan agent-actor, adding delegation rights. Agents remain first-class principals that exist independently of their claimer.
+
+| Deliverable                                                       | Status      | Est | Work Item      |
+| ----------------------------------------------------------------- | ----------- | --- | -------------- |
+| `actors.owner_user_id` claim endpoint, SIWE-gated                 | Not Started | —   | (create at A5) |
+| `on_behalf` claim on access tokens for delegated-principal routes | Not Started | —   | (create at A5) |
+
 ## Constraints
 
 - **API key never leaves the server** — browser authenticates with HttpOnly session cookie only
@@ -226,7 +293,9 @@ Files: update `src/app/api/v1/ai/completion/route.ts`, `tests/stack/api/ai/compl
 ## As-Built Specs
 
 - [accounts-api-endpoints.md](../../docs/spec/accounts-api-endpoints.md) — MVP master-key-mode billing identity and LiteLLM endpoint usage
-- [security-auth.md](../../docs/spec/security-auth.md) — authentication architecture
+- [security-auth.md](../../docs/spec/security-auth.md) — authentication architecture (human session + app-api-keys track)
+- [agent-first-auth.md](../../docs/spec/agent-first-auth.md) — agent-first auth contract: `AuthPrincipal`, wrapper policies, `actors` schema, register flow
+- [identity-model.md](../../docs/spec/identity-model.md) — identity primitives (actorId, userId, tenantId, scope_id, node_id) and the prohibited-overloading rules
 - [accounts-design.md](../../docs/spec/accounts-design.md) — accounts and credits system
 - [billing-evolution.md](../../docs/spec/billing-evolution.md) — billing stages
 

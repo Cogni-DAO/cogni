@@ -5,125 +5,73 @@ title: "Agent-First Authentication & Identity"
 status: draft
 spec_state: proposed
 trust: draft
-summary: "Design for making the agent the first-class principal on /api/v1/*. Covers the minimal-path decorator hardening (what PR #845 already shipped vs. what's left), the agent-first register redesign (platform-generated actorId + agent-held keypair + short-lived proof-bound tokens), and the migration from the current HMAC bearer stopgap."
-read_when: "Designing or reviewing anything that touches /api/v1/agent/*, /api/v1/chat/completions, machine-agent registration, or the wrapRouteHandlerWithLogging auth parameter."
+summary: "Canonical contract for making the agent a first-class principal on /api/v1/*. Defines the AuthPrincipal type, the wrapRouteHandlerWithLogging policy surface (public | authenticated | session_only | admin), the actors table schema, the route bucket rules, the register-endpoint flow, and the quota envelope. Contract only — execution roadmap lives in proj.accounts-api-keys."
+read_when: "Designing or reviewing anything that touches /api/v1/agent/*, /api/v1/chat/completions, machine-agent registration, wrapRouteHandlerWithLogging's auth parameter, or the actors table."
 owner: derekg1729
 created: 2026-04-14
 tags: [auth, identity, agent-first, security]
+implements: proj.accounts-api-keys
 ---
 
 # Agent-First Authentication & Identity
 
 ## Goal
 
-Make the agent the first-class principal on every authenticated `/api/v1/*` route. Registration is an agent self-service seam (not a human-owned factory), identity is anchored in an agent-held cryptographic credential (not a shared static bearer), and the blast radius of an unauthenticated onboarding endpoint is bounded by per-actor quotas rather than gatekeeping the door.
+Make the agent a first-class principal on every authenticated `/api/v1/*` route. Registration is an agent self-service seam (not a human-owned factory), identity is anchored in a cryptographic credential the agent controls (not a shared static bearer), and the blast radius of an unauthenticated onboarding endpoint is bounded by per-actor quotas rather than gatekeeping the door.
 
 ## Non-Goals
 
-- Full OIDC / device-code flow for agent onboarding. Defer until >1 external agent operator exists.
-- Migration to a third-party workload-identity plane (SPIFFE/SPIRE). Track as a later option, not v0.
-- A2A / CB4A / CAAM interop. These are drafts, not settled practice — we shape our internal model to be compatible but do not adopt the wire formats yet.
+- Full OIDC / device-code flow for agent onboarding. Revisit only after there is >1 external agent operator.
+- Migration to a third-party workload-identity plane (SPIFFE/SPIRE). Tracked as a future option, not designed here.
+- A2A / CB4A / CAAM interop wire formats. Designed-in compatibility is OK; adoption is not.
 - Multi-node de-duplication of `request-identity.ts` / `session.ts` modules across `nodes/*`. Orthogonal cleanup.
-- Replacing the in-house HMAC codec with `jose` JWTs. Only if the proof-of-possession step below requires it.
+- Replacing the in-house HMAC codec with `jose` JWTs unless a downstream need forces it.
+- Designing the on-chain wallet/SIWE auth surface for humans. See [security-auth](./security-auth.md) and [proj.accounts-api-keys](../../work/projects/proj.accounts-api-keys.md) for the human track.
 
 ## Core Invariants
 
 1. **ACTOR_IS_PRINCIPAL** — `actorId` is the stable, canonical principal identifier across all authenticated routes. Every authenticated request resolves to an `AuthPrincipal` whose `actorId` is non-null. Humans and agents are distinguished by `principalType`, not by two parallel ID fields in business logic.
 2. **ACTOR_ID_IS_PUBLIC** — The `actorId` returned by register is a public identifier, not a secret. Proof-of-identity is a separate credential the agent controls.
-3. **PRINCIPAL_NOT_SESSION_IN_HANDLERS** — Route handlers MUST NOT ask "do I have a session?" They ask "what principal was authenticated?" Raw session access (`getServerSessionUser`, cookies, headers) is forbidden inside route handlers — the wrapper is the only place that reads the raw credential and constructs the `AuthPrincipal`. Enforced by lint / dep-cruiser rule.
-4. **SPLIT_IDENTITY_PROOF_AUTHORIZATION** — Three concerns that must not be conflated: (a) _identity_ = who is this (actorId / userId), (b) _proof_ = how did they prove it (session cookie, bearer, signed challenge, DPoP), (c) _authorization_ = what can they do (scopes, policy tier, spend cap). Business logic reads identity + authorization; it never inspects proof.
-5. **DECORATOR_OWNS_STRATEGY** — Route handlers declare auth **policy** (`"public" | "authenticated" | "session_only" | "admin"`), not the resolution function. The wrapper owns proof verification and returns a fully-constructed `AuthPrincipal`. Swapping the identity backend is one file.
-6. **DEFAULT_IS_DUAL_ACCESS** — The default `authenticated` policy accepts both agents and humans. `session_only` is the narrow, opt-in carve-out for routes that MUST reject machine identities (OAuth link flows, human profile, governance UI).
-7. **CREDENTIAL_IS_HELD_BY_AGENT** — The long-lived secret (keypair, when introduced in Phase 2) never leaves the agent. The platform holds only the public half and short-lived exchanged tokens.
-8. **TOKENS_ARE_SHORT_LIVED** — Post-Phase-2, access tokens on `/api/v1/*` expire in minutes. Revocation is implicit (TTL) before it is explicit (DB flag).
-9. **BOUNDED_BY_QUOTA_NOT_GATE** — Registration is rate-limited and every issued actor has a hard per-actor spend + concurrency ceiling. Open enrollment is safe when the ceiling is low enough that a mass-mint attack cannot exceed the operator's pre-paid LLM budget.
+3. **PRINCIPAL_NOT_SESSION_IN_HANDLERS** — Route handlers MUST NOT ask "do I have a session?"; they ask "what principal was authenticated?" Raw session access (`getServerSessionUser`, `cookies()`, `headers()`) is forbidden inside route-handler files under `**/app/api/**/route.ts`. The wrapper is the only place that reads raw credentials and constructs the `AuthPrincipal`. Enforced by lint / dep-cruiser rule.
+4. **SPLIT_IDENTITY_PROOF_AUTHORIZATION** — Three concerns must not be conflated: _identity_ = who is this (`actorId`, `userId`), _proof_ = how did they prove it (session cookie, bearer, signed challenge, DPoP), _authorization_ = what can they do (`scopes`, `policyTier`, spend cap). Business logic reads identity + authorization; it never inspects proof.
+5. **DECORATOR_OWNS_STRATEGY** — Route handlers declare auth **policy** as a string literal (`"public" | "authenticated" | "session_only" | "admin"`), never a resolver function. The wrapper owns proof verification and returns a fully-constructed `AuthPrincipal`. Swapping the identity backend touches one file.
+6. **DEFAULT_IS_DUAL_ACCESS** — The `authenticated` policy accepts both agents and humans and is the default for `/api/v1/*`. `session_only` is the narrow, opt-in carve-out for routes that MUST reject machine identities (OAuth link flows, human profile, governance UI).
+7. **CREDENTIAL_IS_HELD_BY_AGENT** — The long-lived agent secret (keypair) never leaves the agent. The platform holds only the public half and short-lived exchanged access tokens.
+8. **TOKENS_ARE_SHORT_LIVED** — Access tokens on `/api/v1/*` expire in minutes under the target state. Revocation is implicit (TTL) before it is explicit (DB flag).
+9. **BOUNDED_BY_QUOTA_NOT_GATE** — Registration is rate-limited and every issued actor has a hard per-actor spend + concurrency ceiling. Open enrollment is safe when the ceiling is low enough that a mass-mint attack cannot exceed the operator's pre-paid LLM budget envelope.
 10. **OPTIONAL_HUMAN_LINKAGE** — A human session holder may later claim an orphan agent-actor, adding delegation rights. The agent identity exists independently of that claim. Represented as `actors.owner_user_id`, nullable.
-
-## Current State (post PR #845) — audit
-
-PR #845 quietly fixed most of the "agent can't reach /api/v1/\*" problem that the validation guide still lists as open. The actual post-merge state of the operator node:
-
-```
-┌────────────────────────────────────────────────┬───────────────┬──────────────┐
-│ Route                                          │ Auth strategy │ Principal(s) │
-├────────────────────────────────────────────────┼───────────────┼──────────────┤
-│ POST /api/v1/agent/register                    │ none          │ anyone       │
-│ POST /api/v1/chat/completions                  │ agent-capable │ agent|human  │
-│ POST /api/v1/ai/chat                           │ agent-capable │ agent|human  │
-│ GET  /api/v1/ai/agents                         │ agent-capable │ agent|human  │
-│ GET  /api/v1/ai/models                         │ agent-capable │ agent|human  │
-│ GET  /api/v1/ai/runs  (+ /[id]/stream)         │ agent-capable │ agent|human  │
-│ GET  /api/v1/ai/threads (+ /[stateKey])        │ agent-capable │ agent|human  │
-│ GET  /api/v1/agent/runs (+ /[id]/stream)       │ agent-capable │ agent|human  │
-│ POST /api/v1/work/items (+ /[id])              │ agent-capable │ agent|human  │
-│ POST /api/v1/schedules (+ /[scheduleId])       │ agent-capable │ agent|human  │
-│ POST /api/v1/payments/intents                  │ agent-capable │ agent|human  │
-│ POST /api/v1/payments/attempts/[id] (+ submit) │ agent-capable │ agent|human  │
-│ GET  /api/v1/payments/credits/summary          │ agent-capable │ agent|human  │
-│ GET  /api/v1/attribution/epochs/*              │ agent-capable │ agent|human  │
-│ GET  /api/v1/node/stream                       │ agent-capable │ agent|human  │
-├────────────────────────────────────────────────┼───────────────┼──────────────┤
-│ GET  /api/v1/activity                          │ session-only  │ human        │
-│ GET  /api/v1/users/me (+ /ownership)           │ session-only  │ human        │
-│ GET  /api/v1/governance/status                 │ session-only  │ human        │
-│ GET  /api/v1/governance/activity               │ session-only  │ human        │
-│ *    /api/v1/auth/openai-codex/*               │ session-only  │ human (OAuth)│
-│ *    /api/v1/auth/openai-compatible/*          │ session-only  │ human (OAuth)│
-│ *    /api/auth/link/[provider]                 │ session-only  │ human (OAuth)│
-└────────────────────────────────────────────────┴───────────────┴──────────────┘
-```
-
-Observations:
-
-- **Agent-capable strategy already works.** `@/app/_lib/auth/session` re-exports `resolveRequestIdentity` as `getSessionUser`, and the wrapper's `auth: { mode: "required", getSessionUser }` parameter picks it up. The "decorator" exists; the only knob is which function a route passes.
-- **The validation guide is stale.** `docs/guides/agent-api-validation.md` lists "ai/chat rejects bearer" and "ai/agents has no machine path" as open shortcomings — both are false post-PR-845.
-- **Only one semantic hole on the agent-capable tier:** `v1/activity`. Everything else on the session-only tier is a legitimate carve-out (OAuth flows, human governance UI, human profile).
-- **The real remaining hole is `register`.** Open enrollment, no rate limit, 30-day static bearer, no per-actor ceiling. Tracked in `bug.0297` — remediation direction is being redesigned in this spec.
 
 ## Design
 
-### 1 — The canonical `AuthPrincipal` shape
+### The `AuthPrincipal` type
 
-One type, defined in `packages/node-shared`, replaces `SessionUser` as the handler-facing identity carrier.
+Canonical handler-facing identity carrier. Replaces `SessionUser` as the only type a route handler ever receives.
 
 ```ts
 // packages/node-shared/src/auth/principal.ts
 export type PrincipalType = "user" | "agent" | "system";
 
+export type AuthPolicy = "public" | "authenticated" | "session_only" | "admin";
+
 export type AuthPrincipal = Readonly<{
   principalType: PrincipalType;
   principalId: string; // stable, canonical id — always set
   actorId: string; // canonical actor UUID — always set
-  userId: string | null; // set when principalType === "user" OR when a user has claimed this actor
-  tenantId: string; // billing/ownership tenant
+  userId: string | null; // set when principalType === "user" OR a user has claimed this actor
+  tenantId: string; // billing / ownership tenant
   scopes: readonly string[]; // authorization grants
   policyTier: string; // rate/cap bucket ("default" for v0)
 }>;
 ```
 
-Invariant notes:
+Invariant notes tied to the type:
 
-- `actorId` is always set — for agents, it is the `actors.id`; for humans, it is the actor row that represents that user (post-schema-migration; temporarily equal to `users.id` during backfill).
+- `actorId` is always set — for agents it is the `actors.id`; for humans it is the actor row representing that user.
 - `userId` is only set when a user is involved (human session, or agent-owned-by-user via `owner_user_id`).
-- `scopes` is the authorization seam. Phase 1 ships with a hardcoded single scope per principal type; fine-grained scopes land later.
+- `scopes` is the authorization seam. Fine-grained scopes may land later; the initial vocabulary is `"user"`, `"agent"`, `"admin"`.
 - Handlers read `principal.actorId`, `principal.tenantId`, `principal.principalType`, `principal.scopes`. They MUST NOT inspect how the principal was proved.
 
-`SessionUser` is deprecated. We keep it as a type alias during the migration and delete it when all routes are flipped.
-
-### 2 — Decorator: declare policy, not the function
-
-Today:
-
-```ts
-wrapRouteHandlerWithLogging(
-  { routeId, auth: { mode: "required", getSessionUser } },
-  async (ctx, req, sessionUser) => { ... }
-)
-```
-
-Every route picks its own `getSessionUser` import; handlers receive `SessionUser`. Agent-first property is maintained by discipline, not by the type system.
-
-Proposed:
+### Decorator policy surface
 
 ```ts
 wrapRouteHandlerWithLogging(
@@ -132,12 +80,12 @@ wrapRouteHandlerWithLogging(
 )
 
 wrapRouteHandlerWithLogging(
-  { routeId, auth: "session_only" }, // narrow carve-out: OAuth flows, human profile, governance UI
+  { routeId, auth: "session_only" }, // narrow carve-out: OAuth, human profile, governance UI
   async (ctx, req, principal) => { ... /* principal.principalType === "user" */ }
 )
 
 wrapRouteHandlerWithLogging(
-  { routeId, auth: "public" }, // no principal — register, health
+  { routeId, auth: "public" }, // no principal argument — register, health
   async (ctx, req) => { ... }
 )
 
@@ -149,72 +97,42 @@ wrapRouteHandlerWithLogging(
 
 Rules enforced by the wrapper:
 
-- `"authenticated"` — resolves bearer OR session cookie → `AuthPrincipal`. 401 if neither. Default for `/api/v1/*`.
+- `"authenticated"` — resolves bearer OR session cookie → `AuthPrincipal`. 401 if neither.
 - `"session_only"` — resolves session cookie only. Rejects bearers with 401. Returns a `user`-typed principal.
-- `"public"` — handler signature has no `principal` argument. Type-level guarantee that the handler cannot accidentally read identity.
-- `"admin"` — like `"authenticated"` plus a scope check for `"admin"`. Denies with 403.
+- `"public"` — handler signature has no `principal` argument. Type-level guarantee the handler cannot read identity.
+- `"admin"` — `"authenticated"` plus a `"admin"` scope check. Denies with 403.
 - A route that omits `auth` is a TypeScript error (no silent default).
 
-Implementation scope:
+### Route bucket rules
+
+Every authenticated route falls into exactly one bucket by policy. The rules are the invariant; the specific route inventory at any point in time is an audit artifact owned by the implementing work item.
 
 ```
-packages/node-shared/src/auth/principal.ts               ← new AuthPrincipal type
-packages/node-shared/src/auth/policy.ts                  ← policy string union + type helpers
-nodes/*/app/src/bootstrap/http/wrapRouteHandlerWithLogging.ts
-                                                         ← owns all 4 policies; returns AuthPrincipal
-nodes/*/app/src/app/_lib/auth/resolveAuthPrincipal.ts    ← single resolver; replaces session.ts + request-identity.ts
-nodes/*/app/src/app/api/v1/**/route.ts                   ← remove getSessionUser imports, update handler sig
-eslint.config.mjs + depcruise                            ← forbid getServerSessionUser / cookies() / headers() in route.ts files
+┌───────────────────────────┬────────────────┬─────────────────────────────────────┐
+│ Bucket                    │ Policy         │ Rule                                │
+├───────────────────────────┼────────────────┼─────────────────────────────────────┤
+│ 1. Dual-access (default)  │ authenticated  │ Any request with a valid agent      │
+│                           │                │ bearer OR a valid human session     │
+│                           │                │ cookie is accepted. Used for all    │
+│                           │                │ /api/v1/* unless another bucket     │
+│                           │                │ is explicitly justified.            │
+├───────────────────────────┼────────────────┼─────────────────────────────────────┤
+│ 2. True human-only        │ session_only   │ The route provably cannot be        │
+│                           │                │ meaningful for a machine identity   │
+│                           │                │ (OAuth redirect handlers, human     │
+│                           │                │ profile, external identity link     │
+│                           │                │ completion). Documented reason      │
+│                           │                │ required.                           │
+├───────────────────────────┼────────────────┼─────────────────────────────────────┤
+│ 3. Internal/admin         │ admin          │ Requires the "admin" scope.         │
+│                           │                │ Governance, operator-only controls. │
+├───────────────────────────┼────────────────┼─────────────────────────────────────┤
+│ 4. Public seams           │ public         │ No principal. Rate-limited.         │
+│                           │                │ Onboarding and health endpoints.    │
+└───────────────────────────┴────────────────┴─────────────────────────────────────┘
 ```
 
-### 3 — Route bucket audit (as of PR #845 tip)
-
-All authenticated routes fall into exactly three buckets:
-
-```
-┌──────────────────────────────────────┬──────────────────┬────────────────────────┐
-│ Bucket                               │ Policy           │ Examples               │
-├──────────────────────────────────────┼──────────────────┼────────────────────────┤
-│ 1. Dual-access (default)             │ "authenticated"  │ ai/chat, ai/agents,    │
-│    agents + humans, no discrimination│                  │ ai/runs, ai/threads,   │
-│                                      │                  │ chat/completions,      │
-│                                      │                  │ work/items, schedules, │
-│                                      │                  │ payments/*,            │
-│                                      │                  │ attribution/*,         │
-│                                      │                  │ agent/runs, activity   │
-├──────────────────────────────────────┼──────────────────┼────────────────────────┤
-│ 2. True human-only                   │ "session_only"   │ users/me, users/me/    │
-│    agent identity forbidden          │                  │ ownership, auth/       │
-│                                      │                  │ openai-codex/*, auth/  │
-│                                      │                  │ openai-compatible/*,   │
-│                                      │                  │ auth/link/[provider]   │
-├──────────────────────────────────────┼──────────────────┼────────────────────────┤
-│ 3. Internal/admin                    │ "admin"          │ governance/status,     │
-│    requires admin scope              │                  │ governance/activity    │
-├──────────────────────────────────────┼──────────────────┼────────────────────────┤
-│ Plus:                                │                  │                        │
-│ 4. Public seams                      │ "public"         │ agent/register, health │
-└──────────────────────────────────────┴──────────────────┴────────────────────────┘
-```
-
-`v1/activity` moves from its current session-only import to `"authenticated"` — an agent should be able to see its own activity feed.
-
-### 4 — Register: agent-first onboarding
-
-Today's flow:
-
-```
-POST /api/v1/agent/register { name } → 201 { userId, apiKey, billingAccountId }
-```
-
-Problems:
-
-- Mints a row in `users` for an agent (category error per identity-model.md).
-- Mints a billing account per agent (Gap 5 in bug.0297 — should be 1:N actor per tenant).
-- Returns a 30-day HMAC bearer that is the sole credential — no proof of possession.
-- No rate limit, no quota, no actor-level spend ceiling.
-
-Proposed flow:
+### Register flow (target state)
 
 ```
 Agent side                                         Platform side
@@ -227,15 +145,15 @@ POST /api/v1/agent/register
                                              │
                                              ▼
                                        mint actorId (uuid, public)
-                                       store (actorId, publicKeyJwk,
-                                              created_at, policy_tier,
-                                              spend_cap_cents,
+                                       store (actorId, kind='agent',
+                                              publicKeyJwk, created_at,
+                                              policy_tier, spend_cap_cents,
                                               concurrency_cap)
                                        attach to default tenant
                                              │
                                              ▼
                                        audit log (Pino + route_id=agent.register)
-   ◄────────── 201 { actorId, policyTier, spendCapCents } ──────────
+   ◄────────── 201 { actorId, tenantId, policyTier, spendCapCents } ──────────
 
                 ─── later, on each request ───
 
@@ -248,154 +166,141 @@ POST /api/v1/agent/token                   │  check spend / concurrency headro
                                              │
                                              ▼
                                        mint short-lived access token
-                                       (HMAC JWT, sub=actorId, ttl=5min,
+                                       (sub=actorId, ttl=5min,
                                         aud=operator-node, cnf=pubkeyThumb)
    ◄────────── 200 { accessToken, expiresAt } ──────────
 
 Authorization: Bearer <accessToken>        ┌─► wrapper resolves token
                                            │  validates sig + exp + cnf
-GET /api/v1/ai/runs                 ───────┘  builds Principal{ actorId, … }
+GET /api/v1/ai/runs                 ───────┘  constructs AuthPrincipal{ actorId, … }
 ```
 
-Crucial properties:
+Target-state contract properties:
 
 - **`actorId` is public.** Returned in plaintext on register. Not a secret. Cannot be stolen in a way that grants access because access requires a signature from the held private key.
-- **No `users` row is created.** A new table, `actors`, holds the agent identity with `kind='agent'`. This unblocks Gap 1 from bug.0297's schema work.
-- **No `billing_account` is created per agent by default.** Agents attach to a default tenant on register; billing tenancy (Gap 5) can be designed orthogonally. The spend cap is a property of the actor, not a new billing account.
-- **Revocation is a DB field on `actors`.** `revoked_at` on the actor row flips all future token exchanges to 401. Short-lived access tokens mean the longest possible window for a stolen token is the TTL, not 30 days.
-- **`AUTH_SECRET` rotation is no longer the only kill switch.** Per-actor revocation exists.
+- **No `users` row is created for an agent.** The `actors` table holds the agent identity with `kind='agent'`.
+- **No new `billing_account` per agent by default.** Agents attach to a default tenant on register; tenancy design is orthogonal.
+- **Revocation is a DB field.** `revoked_at` on the actor row flips all future token exchanges to 401. Short-lived access tokens bound the window of a stolen token to the TTL, not 30 days.
+- **`AUTH_SECRET` rotation is not the only kill switch.** Per-actor revocation exists.
 
-Minimal storage (new):
+### `actors` table schema
 
 ```sql
 CREATE TABLE actors (
-  id             UUID PRIMARY KEY,          -- actorId
-  kind           TEXT NOT NULL CHECK (kind IN ('agent','user','system','org')),
-  display_name   TEXT,
-  public_key_jwk JSONB,                      -- agent kind only; null for human
-  tenant_id      UUID NOT NULL,              -- billing/tenancy attachment
-  policy_tier    TEXT NOT NULL DEFAULT 'default',
+  id                      UUID PRIMARY KEY,             -- actorId (public)
+  kind                    TEXT NOT NULL CHECK (kind IN ('agent','user','system','org')),
+  display_name            TEXT,
+  public_key_jwk          JSONB,                         -- agent kind only; null otherwise
+  owner_user_id           UUID REFERENCES users(id),    -- set when a human claims an agent
+  tenant_id               UUID NOT NULL,
+  policy_tier             TEXT NOT NULL DEFAULT 'default',
   spend_cap_cents_per_day INTEGER NOT NULL,
   concurrency_cap         INTEGER NOT NULL,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  revoked_at     TIMESTAMPTZ
+  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+  revoked_at              TIMESTAMPTZ
 );
 
 CREATE UNIQUE INDEX actors_pubkey_thumb_idx
-  ON actors ( (public_key_jwk->>'thumbprint') )
+  ON actors ((public_key_jwk->>'thumbprint'))
   WHERE kind = 'agent';
 ```
 
-### 5 — Token model evolution
+Backfill: every existing `users` row gets one `actors` row with `id = users.id`, `kind='user'`, default policy tier. This preserves the runtime cast (`userActor(toUserId(userId))`) during the transition and keeps `actorId` = `userId` for the already-existing principals.
 
-Phases — we lock the _contract_ first, then harden the _proof_. "Ship Phase 1 contract now; harden to keypair and proof-bound tokens immediately after."
+### Rate limit + quota envelope
 
-```
-┌─────────┬───────────────────────┬─────────────────────────┬──────────────────┬─────────────────────────┐
-│ Phase   │ What ships            │ Register shape          │ Access token     │ Incremental win         │
-├─────────┼───────────────────────┼─────────────────────────┼──────────────────┼─────────────────────────┤
-│ Phase 0 │ Today (PR #845)       │ { name }                │ HMAC bearer 30d  │ agent reaches /api/v1/* │
-│         │                       │ → { userId, apiKey, … } │                  │ BUT bug.0297 open       │
-├─────────┼───────────────────────┼─────────────────────────┼──────────────────┼─────────────────────────┤
-│ Phase 1 │ CONTRACT LOCK:        │ { name }                │ HMAC bearer 24h  │ actorId is canonical    │
-│  NOW    │  • AuthPrincipal type │ → { actorId, tenantId,  │ + cap + actorId  │ across all routes,      │
-│         │  • wrapper policies   │      policyTier,        │   encoded        │ wrapper owns proof,     │
-│         │  • actors table       │      spendCapCents }    │                  │ schema ready for proof, │
-│         │  • register→actor row │                         │                  │ bug.0297 downgraded     │
-│         │  • IP rate-limit      │                         │                  │                         │
-│         │  • per-actor caps     │                         │                  │                         │
-├─────────┼───────────────────────┼─────────────────────────┼──────────────────┼─────────────────────────┤
-│ Phase 2 │ Keypair proof-of-     │ { name, publicKeyJwk }  │ HMAC JWT, ttl=5m │ cryptographic proof,    │
-│  NEXT   │ possession exchange   │ → { actorId, … }        │ issued from      │ explicit revocation,    │
-│         │                       │                         │ /agent/token     │ stolen token window 5m  │
-├─────────┼───────────────────────┼─────────────────────────┼──────────────────┼─────────────────────────┤
-│ Phase 3 │ DPoP sender-          │ unchanged               │ sender-          │ stolen token is nearly  │
-│         │ constrained tokens    │                         │ constrained JWT  │ unusable off-host       │
-├─────────┼───────────────────────┼─────────────────────────┼──────────────────┼─────────────────────────┤
-│ Phase 4 │ Optional human        │ adds claim flow on      │ adds on_behalf   │ delegation model —      │
-│         │ linkage               │ existing actorId        │ claim            │ humans claim orphans    │
-└─────────┴───────────────────────┴─────────────────────────┴──────────────────┴─────────────────────────┘
-```
+These are the absolute rules; specific numbers are set per-deploy by operator config.
 
-**Phase 1 is the work item that will be filed as `task.0312`**. It ships three things in one atomic PR because they are each other's prerequisites: the `AuthPrincipal` type needs the `actors` table to be non-degenerate; the wrapper refactor needs the type; the route audit cannot happen without the wrapper. Splitting would leave the tree in a half-migrated state.
+- `/api/v1/agent/register` is rate-limited per source IP (bucket backed by the existing `ioredis` client). Over-cap → `429 Retry-After`.
+- Every `actors` row has a `spend_cap_cents_per_day` enforced in the LLM dispatch path before any provider call. Exceeding → `402` with a structured error shape.
+- Every `actors` row has a `concurrency_cap` limiting in-flight graph runs. Exceeding → `429`.
+- Register attempts (success + fail), token exchanges, and revocations emit structured Pino audit entries with `route_id`, source IP, and outcome.
 
-Phase 2 then swaps the proof backend under a stable contract — zero route changes.
+### Contract — current state
 
-### 6 — Rate limits and caps (Phase 1, applies always after)
-
-- `/api/v1/agent/register` — 5 req / minute / source IP, 100 req / hour / source IP. Over-cap → 429 with `Retry-After`. Buckets in Redis.
-- Per-actor daily spend cap (cents), checked in the LLM execution path before dispatch. Default tier = low enough that 1000 mass-minted actors cannot exceed the operator's daily LLM budget envelope.
-- Per-actor concurrency cap (in-flight graph runs). Default = 1. Raises require admin action.
-- Audit log: every register attempt (success + fail), every token exchange, every revocation. Pino envelope already exists; we add an event name.
-
-### 7 — Contract changes
-
-**Phase 1** (this spec's implementation task):
+`packages/node-contracts/src/agent.register.v1.contract.ts`
 
 ```
-packages/node-contracts/src/agent.register.v1.contract.ts
-  input:  { name }                       // unchanged
-  output: { actorId, tenantId, policyTier, spendCapCents, apiKey }
-          // NOTE: apiKey is a 24h HMAC bearer with actorId encoded.
-          //       Still issued at register-time because we haven't
-          //       introduced proof-of-possession yet. But the bearer
-          //       claims now carry actorId, not userId.
-
-packages/node-shared/src/auth/principal.ts  (NEW)
-  export type AuthPrincipal = { principalType; principalId; actorId; userId;
-                                tenantId; scopes; policyTier }
-  export type AuthPolicy = "public" | "authenticated" | "session_only" | "admin"
+input:  { name }
+output: { userId, apiKey, billingAccountId }
 ```
 
-**Phase 2** (separate PR, after Phase 1 lands):
+`wrapRouteHandlerWithLogging` (operator + multi-node):
 
 ```
-packages/node-contracts/src/agent.register.v2.contract.ts  (NEW)
-  input:  { name, publicKeyJwk: JsonWebKey }
-  output: { actorId, tenantId, policyTier, spendCapCents }
-          // No apiKey — access is gained via /agent/token proof exchange.
-
-packages/node-contracts/src/agent.token.v1.contract.ts     (NEW)
-  input:  { actorId, signedChallenge: { ts, nonce, routeId, sig } }
-  output: { accessToken, expiresAt }
+auth: { mode: "required" | "optional" | "none", getSessionUser: () => SessionUser | null }
+handler receives: SessionUser (mode=required) or SessionUser | null (mode=optional|none)
 ```
 
-Phase 1 → Phase 2 transition: both register contracts live side-by-side; the v1 shape is deprecated but accepted until all internal clients migrate.
+### Contract — target state
 
-### 8 — Validation plan (per phase)
+`packages/node-shared/src/auth/principal.ts`
 
-Phase 1:
+```
+export type AuthPrincipal = Readonly<{ principalType; principalId; actorId;
+                                       userId; tenantId; scopes; policyTier }>
+export type AuthPolicy    = "public" | "authenticated" | "session_only" | "admin"
+```
 
-- [ ] 1000 POSTs/min to `/api/v1/agent/register` from one IP → 429 after N, no new actor rows.
-- [ ] Fresh agent → 2nd completion of the day that exceeds `spendCapCents` → 402 / insufficient-budget, no LLM call dispatched.
-- [ ] HMAC bearer age assertion: `iat + 24h` on every newly-issued token.
+`packages/node-contracts/src/agent.register.v1.contract.ts`
 
-Phase 2:
+```
+input:  { name }
+output: { actorId, tenantId, policyTier, spendCapCents, apiKey }
+        // apiKey's claims encode actorId.
+```
 
-- [ ] Unit: sign challenge, exchange for access token, use on `/api/v1/ai/runs`.
-- [ ] Unit: expired challenge (ts > skew) → 401.
-- [ ] Unit: replayed nonce → 401.
-- [ ] Stack: revoke actor mid-stream → new requests 401, in-flight streams drain.
-- [ ] Stack: stolen access token reused after 5 min → 401.
+`packages/node-contracts/src/agent.register.v2.contract.ts` (target — replaces v1 when proof-of-possession ships)
 
-Phase 3:
+```
+input:  { name, publicKeyJwk: JsonWebKey }
+output: { actorId, tenantId, policyTier, spendCapCents }
+        // no apiKey — access via /agent/token proof exchange
+```
 
-- [ ] DPoP header missing or mismatched thumbprint → 401.
+`packages/node-contracts/src/agent.token.v1.contract.ts` (target — new)
+
+```
+input:  { actorId, signedChallenge: { ts, nonce, routeId, sig } }
+output: { accessToken, expiresAt }
+```
+
+`wrapRouteHandlerWithLogging`
+
+```
+auth: "public" | "authenticated" | "session_only" | "admin"
+handler receives: undefined ("public") or AuthPrincipal (all others, non-null)
+```
+
+## Acceptance Checks
+
+**Automated** (any implementation of this spec must satisfy):
+
+- Type check: no code outside `packages/node-shared/src/auth/` defines `AuthPrincipal`, `AuthPolicy`, or a parallel shape.
+- Lint: no file under `nodes/*/app/src/app/api/**/route.ts` imports `getServerSessionUser`, `cookies`, or `headers`.
+- Contract: `agent.register.v1.contract.ts` output includes `actorId` as the first field; no `userId` field.
+- DB: `actors` table exists; every row in `users` has a matching `actors` row; `kind IN ('agent','user','system','org')`; `CHECK` constraint active.
+- Wrapper test: `"session_only"` with a bearer token in the request → 401; `"authenticated"` with a valid bearer → `AuthPrincipal` with `principalType='agent'`; `"admin"` without `admin` scope → 403.
+
+**Manual** (operator-facing):
+
+- Load test `/api/v1/agent/register` at 1000 POST/min from one source IP: buckets trip `429`, `actors` row count stays bounded.
+- Raise a single actor's `spend_cap_cents_per_day` to a tiny value; two consecutive `/chat/completions` calls → second returns `402`.
+- Revoke an `actors` row mid-session; subsequent token exchanges return 401; Pino audit log shows revocation event.
 
 ## Related
 
-- [task.0312 — Agent-first auth Phase 1](../../work/items/task.0312.agent-first-auth-phase1.md) — the implementation task for this spec's Phase 1 (AuthPrincipal + wrapper + actors table).
-- [bug.0297 — Agent register open factory](../../work/items/bug.0297.agent-register-open-account-factory.md) — the security hole that triggered this spec. Its remediation direction is superseded by this spec: bounded-by-quota, not invitation-gated.
-- [Security & Authentication Spec](./security-auth.md) — still framed around session + app_api_keys. Superseded on the programmatic side by this spec; human track (app_api_keys for session-linked use) remains orthogonal.
-- [Identity Model](./identity-model.md) — defines `actorId` primitive; this spec is the first concrete schema implementing the `actors` table with `kind='agent'`.
-- [Agent API Validation Guide](../guides/agent-api-validation.md) — stale post-PR-845; refresh is part of the Phase 1 task closeout.
-- [proj.accounts-api-keys](../../work/projects/proj.accounts-api-keys.md) — user-wallet-and-apikey project. Orthogonal (human track). Cross-linked, not merged.
+- [proj.accounts-api-keys](../../work/projects/proj.accounts-api-keys.md) — parent project. Owns the roadmap, phase deliverables, and work-item decomposition for the agent-first auth track.
+- [bug.0297 — Agent register open factory](../../work/items/bug.0297.agent-register-open-account-factory.md) — the security hole that triggered this spec. Remediation direction (bounded-by-quota) is defined here; tracking and phasing lives in the project.
+- [security-auth](./security-auth.md) — human session + app-api-keys model. Orthogonal on the human track; superseded on the programmatic side by this spec.
+- [identity-model](./identity-model.md) — defines the `actorId` primitive abstractly; this spec is the first concrete schema for `kind='agent'`.
+- [agent-api-validation](../guides/agent-api-validation.md) — operator-facing validation guide. Kept in sync with the current-state contract above.
 
 ## Open Questions
 
-1. **Where do Phase 2 proof-verify functions live relative to `wrapRouteHandlerWithLogging`?** Preference: a pluggable `ProofVerifier` interface (Phase 2), with Phase 1 shipping a trivial `HmacBearerVerifier` that reads actorId from the token claims. Keeps the session-cookie path unchanged.
-2. **Do we need an on-disk public-key store in Phase 2, or is the `actors` table enough?** Preference: table only; public keys are not secrets, DB is durable, Redis is for nonces.
-3. **What is the default `spendCapCents_per_day`?** Needs an operator-facing number backed by the pre-paid LiteLLM budget envelope. Ballpark: $0.50/day/actor on first flight. Confirm with cost-control runbook before Phase 1 merge.
-4. **Tenant attachment on register — one default tenant, or scope-by-header?** Phase 1: one default tenant per node. Phase 2: may accept an invitation-style scope hint from a trusted internal caller.
-5. **Does `v1/activity` dual-access flip land in Phase 1 or ship separately?** Phase 1, bundled — it's a one-line import swap inside the same wrapper refactor.
-6. **Should we kill `SessionUser` in Phase 1 or leave it as a type alias for one release?** Preference: type-alias for one release, then delete. Avoids merge conflicts with in-flight feature branches.
+1. **`ProofVerifier` port shape.** Whether proof verification factors out to a pluggable port or stays inline in `wrapRouteHandlerWithLogging`. Preference: inline for the HMAC bearer path (one implementation today), extract to a port only when a second proof backend lands.
+2. **Public-key store.** Whether public keys live only in the `actors` table or also in a key/value cache. Preference: table only; public keys are not secrets; DB is durable; Redis is for nonces.
+3. **Default `spendCapCents_per_day`.** Must be set from the operator's pre-paid LLM budget envelope. Not a spec constant.
+4. **Tenant attachment on register.** One default tenant per node vs. accepting a `tenantKey` hint from a trusted internal caller. Default: one tenant.
+5. **Claim flow for human linkage.** Who mints the claim, and whether it requires a SIWE signature from the claiming user. Defer to the claim-flow design.
+6. **`SessionUser` retention window.** Whether `SessionUser` stays as a one-release type alias or is deleted immediately. Prefer one-release alias to reduce merge conflicts.
