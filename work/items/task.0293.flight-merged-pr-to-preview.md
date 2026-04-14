@@ -2,7 +2,7 @@
 id: task.0293
 type: task
 title: "Flight merged-PR digests to preview with lock-gate"
-status: needs_implement
+status: needs_closeout
 revision: 1
 priority: 0
 rank: 2
@@ -409,20 +409,24 @@ Four short paragraphs. No new invariants beyond what this task establishes.
 
 ### Blocking
 
-- [ ] **`unlock-preview-on-failure` misses `promote-k8s` failure** (`.github/workflows/promote-and-deploy.yml:536-544`).
+- [x] **`unlock-preview-on-failure` misses `promote-k8s` failure** (`.github/workflows/promote-and-deploy.yml:536-544`). — **Fixed in revision 1**: added `needs.promote-k8s.result == 'failure'` to the guard.
       If the `promote-k8s` job fails (overlay push, digest resolution, rsync, etc.), `deploy-infra` / `verify` / `e2e` all evaluate to `skipped`, not `failure`. Under the current `if`, the unlock job does not fire. Preview is left in `dispatching`. This is the exact dead-lock failure mode B1 was chartered to eliminate, just at a different step.
       Fix: add `needs.promote-k8s.result == 'failure'` to the guard:
       `yaml
-  if: |
-    always() &&
-    needs.promote-k8s.outputs.environment == 'preview' &&
-    (needs.promote-k8s.result == 'failure' ||
-     needs.deploy-infra.result == 'failure' ||
-     needs.verify.result == 'failure' ||
-     needs.e2e.result == 'failure')
-  `
+if: |
+  always() &&
+  needs.promote-k8s.outputs.environment == 'preview' &&
+  (needs.promote-k8s.result == 'failure' ||
+   needs.deploy-infra.result == 'failure' ||
+   needs.verify.result == 'failure' ||
+   needs.e2e.result == 'failure')
+`
       Note: if `promote-k8s` fails before the `Determine environment` step emits outputs, the guard's `needs.promote-k8s.outputs.environment == 'preview'` is empty and the job still skips. That's a narrower catastrophic case; acceptable for v0 but document in the spec as "manual unlock required" if it happens.
-- [ ] **Update `docs/spec/ci-cd.md:156`** to match: the transition row "`dispatching → unlocked`" must list `promote-k8s` alongside `deploy-infra`, `verify`, `e2e`.
+- [x] **Update `docs/spec/ci-cd.md:156`** to match: the transition row "`dispatching → unlocked`" must list `promote-k8s` alongside `deploy-infra`, `verify`, `e2e`. — **Fixed in revision 1**.
+
+### Non-blocking items deferred to follow-up
+
+The 6 non-blocking items below are acknowledged and left for a separate pass (or follow-up issues) to keep this PR focused on the blocker fix. None re-introduce the dead-lock risk.
 
 ### Non-blocking (optional — decide in this pass)
 

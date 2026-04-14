@@ -153,7 +153,7 @@ Transitions:
 | ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `unlocked → dispatching`  | `scripts/ci/promote-to-preview.sh`                          | merge to main (or manual flight dispatch); atomic with `candidate-sha` update |
 | `dispatching → reviewing` | `lock-preview-on-success` job in `promote-and-deploy.yml`   | preview deploy reaches E2E success; writes `current-sha`                      |
-| `dispatching → unlocked`  | `unlock-preview-on-failure` job in `promote-and-deploy.yml` | any of `deploy-infra`, `verify`, `e2e` fail                                   |
+| `dispatching → unlocked`  | `unlock-preview-on-failure` job in `promote-and-deploy.yml` | any of `promote-k8s`, `deploy-infra`, `verify`, `e2e` fail                    |
 | `reviewing → unlocked`    | `auto-merge-release-prs.yml`                                | release PR merges                                                             |
 
 On release-merge unlock, if `candidate-sha != current-sha` the workflow dispatches a fresh flight with `sha=candidate-sha` to drain the queue. A flight concurrency group (`flight-preview`) serializes entry to the `unlocked → dispatching` transition; the three-value lease is the correctness guarantee even if concurrency is bypassed.

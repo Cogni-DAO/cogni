@@ -536,10 +536,17 @@ jobs:
   unlock-preview-on-failure:
     runs-on: ubuntu-latest
     needs: [promote-k8s, deploy-infra, verify, e2e]
+    # Fires on any failure of the preview promotion chain, including promote-k8s
+    # itself. If promote-k8s fails after emitting outputs (overlay push, digest
+    # resolution, rsync), the downstream jobs evaluate to `skipped` not `failure`,
+    # so we must include promote-k8s.result explicitly. Catastrophic failure
+    # before the Determine environment step leaves outputs empty and this guard
+    # skips — that case requires manual unlock.
     if: |
       always() &&
       needs.promote-k8s.outputs.environment == 'preview' &&
-      (needs.deploy-infra.result == 'failure' ||
+      (needs.promote-k8s.result == 'failure' ||
+       needs.deploy-infra.result == 'failure' ||
        needs.verify.result == 'failure' ||
        needs.e2e.result == 'failure')
     steps:
