@@ -1,5 +1,16 @@
 name: Candidate Flight
 
+# Pre-merge flight for an open PR: acquires the candidate-a slot, promotes
+# the PR's digests into the deploy/candidate-a overlay, reconciles the Argo
+# CD ApplicationSet on the candidate-a VM from repo state, and (when
+# candidate-a has SSH + secrets wired up, guarded by has_vm) runs deploy-
+# infra on that VM to exercise Compose-layer changes under the same contract
+# as preview.
+#
+# The Reconcile ArgoCD ApplicationSet step mirrors promote-and-deploy's step
+# so candidate-a self-heals against AppSet template drift the same way
+# preview does. See scripts/ci/wait-for-argocd.sh for the wait contract.
+
 on:
   workflow_dispatch:
     inputs:

@@ -7,9 +7,20 @@
 #          Generates ALL secrets (same generators as setup-secrets.ts), provisions
 #          via OpenTofu, deploys Compose infra, verifies k3s + Argo CD.
 # Usage:
-#   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh canary
 #   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh preview
 #   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh production
+#   CHERRY_AUTH_TOKEN=<token> DOMAIN=test.cognidao.org \
+#     bash scripts/setup/provision-test-vm.sh candidate-a
+#   CHERRY_AUTH_TOKEN=<token> bash scripts/setup/provision-test-vm.sh candidate-b
+# Environments:
+#   preview, production     — long-lived post-merge lanes
+#   candidate-*             — pre-merge slots (candidate-a, candidate-b, ...).
+#                             Requires matching infra/k8s/argocd/
+#                             ${slot}-applicationset.yaml and
+#                             infra/k8s/overlays/${slot}/*. DNS defaults to
+#                             ${slot}.cognidao.org; pass DOMAIN=... to override
+#                             (candidate-a inherits test.cognidao.org from the
+#                             retired canary env).
 
 set -euo pipefail
 
@@ -23,18 +34,20 @@ DEPLOY_ENV=""
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) AUTO_APPROVE=true ;;
-    canary|preview|production) DEPLOY_ENV="$arg" ;;
+    preview|production) DEPLOY_ENV="$arg" ;;
+    candidate-*) DEPLOY_ENV="$arg" ;;
     *) echo "Unknown arg: $arg"; exit 1 ;;
   esac
 done
 
 if [[ -z "$DEPLOY_ENV" ]]; then
-  echo "Usage: provision-test-vm.sh <canary|preview|production> [--yes]"
+  echo "Usage: provision-test-vm.sh <preview|production|candidate-*> [--yes]"
   echo ""
-  echo "  canary      — test.cognidao.org, branch: canary"
-  echo "  preview     — preview.cognidao.org, branch: staging"
-  echo "  production  — cognidao.org, branch: main"
-  echo "  --yes       — skip confirmation prompt (for CI/automation)"
+  echo "  preview       — preview.cognidao.org"
+  echo "  production    — cognidao.org"
+  echo "  candidate-a   — test.cognidao.org (pass DOMAIN=test.cognidao.org)"
+  echo "  candidate-b   — candidate-b.cognidao.org (or pass DOMAIN)"
+  echo "  --yes         — skip confirmation prompt (for CI/automation)"
   exit 1
 fi
 

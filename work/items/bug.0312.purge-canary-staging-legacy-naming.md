@@ -7,8 +7,8 @@ priority: 1
 rank: 2
 estimate: 3
 created: 2026-04-14
-updated: 2026-04-14
-revision: 1
+updated: 2026-04-15
+revision: 2
 summary: "docs/spec/ci-cd.md (PR #851, 0e1395871) established the trunk-based model — candidate-a for pre-merge flight, preview + production for post-merge promotion, no canary environment. But the runtime workflows, 11 docs, 26 work items, and the live promote-and-deploy.yml all still use `canary` as the env name for what should be candidate-a (pre-merge) or preview (post-merge); 28 docs still reference the retired `staging` code branch. The drift blocks every future observability, deploy, and onboarding task from being spec-aligned."
 outcome: "One coherent naming across spec, workflows, scorecards, guides, and Loki/Prometheus labels: `candidate-a` for pre-merge flight slots, `preview` for post-merge validation, `production` for production. No `canary` environment. No `staging` code branch references. One canonical e2e CI/CD diagram in docs/spec/ci-cd.md that matches what the workflows actually do, with legacy terms retired or marked explicitly as historical."
 spec_refs:
@@ -25,9 +25,31 @@ related:
   - PR #859
   - PR #869
   - PR #870
+  - PR #874
 ---
 
 # bug.0312 — Purge canary/staging legacy naming; document the e2e CI/CD flow
+
+## Partial Progress (PR #874, 2026-04-15)
+
+PR #874 addressed the acute runtime symptoms that were blocking the preview lane end-to-end — it does NOT close this bug, but it unblocks Phase 2 and Phase 2.5 verification. What it landed:
+
+- Squash-merge resolver fix in `flight-preview.yml` (`pr-{N}-{prHeadSHA}` image lookup via `gh api pulls/{N}`) — every post-merge auto-dispatch had been aborting at "no pr-\* images" since PR #870 landed.
+- `scripts/ci/wait-for-argocd.sh` now waits on `status.sync.revision == deploy-branch SHA` + `Healthy`, with an active `kubectl patch` sync trigger after 30s of no progress. The old `sync.status == Synced` path timed out at 15 min every time because EndpointSlices drift continuously.
+- `promote-and-deploy.yml` lock/unlock-preview jobs check out `main` so `set-preview-review-state.sh` is always present regardless of the `source_sha` being deployed.
+- New "Reconcile ArgoCD ApplicationSet" step in both `promote-and-deploy.yml` and `candidate-flight.yml` — scp + `kubectl apply -f` of the env's AppSet YAML before wait-for-argocd, so future template drift (like the `deploy/staging → deploy/preview` rename that wedged preview for a week) self-heals on every CD run.
+- `promote-and-deploy.yml` dropped canary from `workflow_dispatch` inputs/options/case, the concurrency fallback, and the dead `workflow_run` trigger. `infra/k8s/argocd/kustomization.yaml` dropped `canary-applicationset.yaml` and the file was deleted. `scripts/setup/provision-test-vm.sh` dropped the `canary)` case and gained a `candidate-*)` glob so candidate-b/c/… slots spin up without script edits.
+
+Live VM fix applied same session (not part of the PR): `cogni-preview` ApplicationSet on 84.32.110.92 was patched from `deploy/staging` → `deploy/preview`. Preview apps now show `sync.revision` matching the deploy/preview tip.
+
+Still open (this bug's remaining scope):
+
+- **Phase 2 remaining**: `deploy/canary` branch deletion; GitHub environment rename `canary → candidate-a` (zero secrets on candidate-a env, blocks pre-merge deploy-infra).
+- **Phase 2.5 verification**: rows 1–3 + 7 of the handoff matrix still unverified (candidate-a Compose reconcile + Grafana evidence) — blocked on candidate-a secrets parity, not code.
+- **Phase 3**: docs + scorecard canary/staging purge across the 11 docs + 26 work items + `alloy-loki-setup.md` LogQL examples.
+- **Phase 4**: canonical e2e CI/CD diagram section in `docs/spec/ci-cd.md`.
+- **Phase 5**: skills + workflow prompts + agent guidance pass.
+- **Observability `env` label**: Loki label values still show `["ci"]` only — no VM compose alloy has shipped under `env=preview` or `env=candidate-a` since PR #869 widened the pod-log filter. Will exercise once the chain deploys cleanly end-to-end.
 
 ## Evidence
 

@@ -1,9 +1,17 @@
 name: Flight Preview
 
 # Triggered on every push to main (PR merged) or via workflow_dispatch(sha).
-# Re-tags pr-{N}-{sha} → preview-{sha} in GHCR (no rebuild) and then calls
-# scripts/ci/flight-preview.sh which handles the three-value lease gate:
-# unlocked → dispatching → reviewing. See task.0293 for the full model.
+# Re-tags pr-{N}-{prHeadSHA} → preview-{mainSHA} in GHCR (no rebuild) and then
+# calls scripts/ci/flight-preview.sh which handles the three-value lease gate:
+# unlocked → dispatching → reviewing. See task.0293 for the lease model.
+#
+# SHA resolution: HEAD_SHA is the commit on main (github.sha for push events,
+# inputs.sha for dispatch). For squash-merged PRs, pr-build.yml tagged images
+# against the PR's head SHA — a different commit that lives only on the closed
+# PR branch. This workflow resolves the PR head SHA via `gh api pulls/{N}` and
+# uses it for the source image lookup while keeping the main SHA as the
+# destination tag and as source_sha to promote-and-deploy. Without this
+# distinction every squash merge aborted at "no pr-* images".
 #
 # Direct pushes to main (no associated PR) are NOT a supported flight trigger:
 # the re-tag source images are pr-{N}-{sha}, and a direct push has no PR number.

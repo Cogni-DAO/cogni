@@ -1,8 +1,32 @@
 name: Promote and Deploy
 
 # Dispatched by flight-preview.yml (primary path: PR merge → re-tag → dispatch here).
-# Updates deploy branch overlays with image digests, deploys Compose infra via SSH,
-# verifies health, runs E2E, and drives the preview review-state lease.
+# Updates deploy branch overlays with image digests, reconciles the Argo CD
+# ApplicationSet on the VM from repo state, waits until Argo reports the new
+# deploy-branch SHA as Healthy, deploys Compose infra via SSH, verifies health,
+# runs E2E, and drives the preview review-state lease.
+#
+# Job outputs that downstream jobs care about:
+#   promote-k8s.deploy_branch_sha  — tip SHA of deploy/{env} after promote
+#                                    pushes. deploy-infra passes this to
+#                                    wait-for-argocd as the Argo reconcile
+#                                    target. On no-op promotes (overlay
+#                                    unchanged) this still carries the
+#                                    current deploy-branch tip so the wait
+#                                    step has a deterministic target.
+#   promote-k8s.head_sha           — source_sha the caller dispatched with
+#                                    (merge commit SHA for normal flow).
+#                                    Written into deploy/preview current-sha
+#                                    by lock-preview-on-success.
+#
+# Checkout refs (each job picks the right one):
+#   promote-k8s, deploy-infra, verify, e2e          — ref=head_sha
+#     (need overlay templates, compose bundles, and e2e specs from the
+#     source artifact commit)
+#   lock-preview-on-success, unlock-preview-on-failure — ref=main
+#     (set-preview-review-state.sh is orthogonal to the deploy artifact;
+#     checking out source_sha broke any dispatch with an off-main SHA)
+#
 # All envs: direct push to deploy branch (git history is the audit trail).
 # App containers are managed by Argo CD (auto-syncs on deploy branch change).
 
