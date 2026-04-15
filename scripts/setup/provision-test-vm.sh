@@ -39,19 +39,8 @@ if [[ -z "$DEPLOY_ENV" ]]; then
 fi
 
 case "$DEPLOY_ENV" in
-  canary)
-    BRANCH="canary"
-    DEPLOY_BRANCH="deploy/canary"
-    K8S_NAMESPACE="cogni-canary"
-    OVERLAY_DIR="canary"
-    APPSET_FILE="canary-applicationset.yaml"
-    DOMAIN="${DOMAIN:-test.cognidao.org}"
-    POLY_DOMAIN="${POLY_DOMAIN:-poly-test.cognidao.org}"
-    RESY_DOMAIN="${RESY_DOMAIN:-resy-test.cognidao.org}"
-    WORKSPACE="canary"
-    ;;
   preview)
-    BRANCH="staging"
+    BRANCH="main"
     DEPLOY_BRANCH="deploy/preview"
     K8S_NAMESPACE="cogni-preview"
     OVERLAY_DIR="preview"
@@ -74,12 +63,14 @@ case "$DEPLOY_ENV" in
     ;;
   *)
     echo "Unknown environment: $DEPLOY_ENV"
-    echo "Must be one of: canary, preview, production"
+    echo "Must be one of: preview, production"
+    echo "(canary was retired in bug.0312; candidate-a is the new pre-merge slot"
+    echo " and is provisioned by CI, not this script.)"
     exit 1
     ;;
 esac
 
-# Allow branch override (e.g., testing a feature branch on canary infra)
+# Allow branch override (e.g., testing a feature branch on preview infra)
 BRANCH="${COGNI_REPO_REF:-$BRANCH}"
 
 RED='\033[0;31m'

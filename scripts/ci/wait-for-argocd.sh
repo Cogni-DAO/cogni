@@ -26,11 +26,12 @@
 #   VM_HOST             (required) SSH target
 #   DEPLOY_ENVIRONMENT  (required) preview | candidate-a | production — used
 #                       for the `{env}-{app}` Application name convention
-#   EXPECTED_SHA        (optional) git SHA the caller expects Argo to report
-#                       as status.sync.revision. Defaults to COGNI_REPO_REF
-#                       (the SHA promote-and-deploy just pushed to deploy/{env}).
-#                       If unset and COGNI_REPO_REF is also unset, falls back
-#                       to legacy "just wait for Synced+Healthy" semantics.
+#   EXPECTED_SHA        (required) git SHA the caller expects Argo to report
+#                       as status.sync.revision — MUST be the deploy-branch
+#                       tip SHA (NOT the source-app commit). Argo tracks the
+#                       deploy branch, not main. Passing COGNI_REPO_REF here
+#                       is wrong — it will never match sync.revision and the
+#                       script will silently time out.
 #   ARGOCD_TIMEOUT      (optional, default 300) overall timeout in seconds
 #   ACTIVE_SYNC_AFTER   (optional, default 30) seconds of no-progress before
 #                       triggering an active sync via kubectl patch
@@ -40,7 +41,7 @@ set -euo pipefail
 
 VM_HOST="${VM_HOST:?VM_HOST is required}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:?DEPLOY_ENVIRONMENT is required}"
-EXPECTED_SHA="${EXPECTED_SHA:-${COGNI_REPO_REF:-}}"
+EXPECTED_SHA="${EXPECTED_SHA:?EXPECTED_SHA is required (deploy-branch tip SHA)}"
 SSH_OPTS="${SSH_OPTS:--i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6}"
 ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-300}"
 ACTIVE_SYNC_AFTER="${ACTIVE_SYNC_AFTER:-30}"
@@ -48,11 +49,7 @@ ACTIVE_SYNC_AFTER="${ACTIVE_SYNC_AFTER:-30}"
 # Catalog apps — must match infra/catalog/*.yaml (minus .yaml extension)
 APPS=(operator poly resy scheduler-worker sandbox-openclaw)
 
-if [ -n "$EXPECTED_SHA" ]; then
-  echo "⏳ Waiting for ArgoCD apps to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
-else
-  echo "⏳ Waiting for ArgoCD sync+health (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s, no EXPECTED_SHA — legacy mode)..."
-fi
+echo "⏳ Waiting for ArgoCD apps to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
 
 # SCP a remote script to the VM and execute it. Avoids heredoc quoting issues
 # and ensures all shell variables resolve on the remote.
@@ -99,22 +96,11 @@ wait_for_app() {
     HEALTH=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
     SYNC_PHASE=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
 
-    if [ -n "$EXPECTED_SHA" ]; then
-      # Revision-based wait (primary path).
-      if [ "$REV" = "$EXPECTED_SHA" ] && [ "$HEALTH" = "Healthy" ]; then
-        echo "  ✅ ${app_name} at ${REV:0:8} (Healthy)"
-        return 0
-      fi
-      echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
-    else
-      # Legacy fallback: wait for Synced+Healthy (top-level sync.status).
-      SYNC=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
-      if [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
-        echo "  ✅ ${app_name} synced and healthy"
-        return 0
-      fi
-      echo "    ${app_name}: sync=${SYNC} health=${HEALTH} (waiting...)"
+    if [ "$REV" = "$EXPECTED_SHA" ] && [ "$HEALTH" = "Healthy" ]; then
+      echo "  ✅ ${app_name} at ${REV:0:8} (Healthy)"
+      return 0
     fi
+    echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
 
     # Active-sync trigger: fire once, only after first grace period with no progress.
     if [ "$active_triggered" -eq 0 ] && [ $SECONDS -ge "$active_deadline" ]; then
