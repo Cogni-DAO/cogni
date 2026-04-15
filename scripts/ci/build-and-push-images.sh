@@ -71,7 +71,10 @@ if [ -n "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_USERNAME:-}" ]; then
 fi
 
 image_name_lower=$(printf "%s" "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
-git_sha="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+# BUILD_SHA wins so pull_request-triggered workflows can pass the real PR head
+# instead of the ephemeral refs/pull/{N}/merge SHA that GitHub puts in GITHUB_SHA.
+# See bug.0313.
+git_sha="${BUILD_SHA:-${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}}"
 build_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 resolve_tag() {
