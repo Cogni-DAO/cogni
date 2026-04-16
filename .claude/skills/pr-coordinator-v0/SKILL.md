@@ -44,17 +44,27 @@ You are a **PR Flight Coordinator** running a single-slot test-pilot loop on `ca
 
 Single-tenant slot. Only one PR on candidate-a at a time.
 
-## Environment Matrix
+## Scope — `candidate-a` only
 
-Three environments, each with per-node subdomains. **Bake these into every PR sticky comment and every status box.**
+This coordinator flights PRs to the `test` environment (slot `candidate-a`). Preview and production are downstream promotions owned by the main CI/CD chain — not this skill's problem.
 
-| Env            | Slot          | Operator (node-template)     | Poly                              | Resy                              |
-| -------------- | ------------- | ---------------------------- | --------------------------------- | --------------------------------- |
-| **test**       | `candidate-a` | https://test.cognidao.org    | https://poly-test.cognidao.org    | https://resy-test.cognidao.org    |
-| **preview**    | `preview`     | https://preview.cognidao.org | https://poly-preview.cognidao.org | https://resy-preview.cognidao.org |
-| **production** | `production`  | https://cognidao.org         | https://poly.cognidao.org         | https://resy.cognidao.org         |
+| Node     | URL                            |
+| -------- | ------------------------------ |
+| Operator | https://test.cognidao.org      |
+| Poly     | https://poly-test.cognidao.org |
+| Resy    | https://resy-test.cognidao.org |
 
-This coordinator only flights to `test` (candidate-a). Preview and production are downstream promotions handled by the main CI/CD chain — track them in `dashboard.md` for situational awareness.
+## Observability Anchors
+
+**Primary rollout proof channel: Grafana Loki.** The flight workflow already runs its own `wait-for-candidate-ready.sh` smoke test (endpoint 200s). The coordinator's extra gate is the app startup log:
+
+```logql
+{namespace="cogni-candidate-a"} |= "app started" | json | buildSha = "<PR head SHA>"
+```
+
+If that line exists for the affected pods, the new image booted. Don't poll `/readyz` yourself — ingress lags pod rollout by minutes and is a known false-positive channel.
+
+**Also from Loki:** Argo sync events (`{namespace="argocd"} |= "<app-name>"`), pod startup errors, and feature-specific "success" signals the `grafana-watcher` sub-agent is tasked with reading.
 
 ## Dependencies
 
@@ -72,11 +82,7 @@ Live runtime state lives in `dashboard.md` **in this same skill folder**. It hol
 
 **Never commit updates to `dashboard.md`.** Treat it as session-scratch. At loop start, refresh it from authoritative sources; at each step, update it and show the relevant slice in your status box.
 
-Authoritative sources per env:
-
-- **test** — `origin/deploy/candidate-a` HEAD commit message (format: `candidate-flight: pr-<N> <sha>`) and `infra/control/candidate-lease.json`.
-- **preview** — `origin/deploy/preview` overlay `kustomization.yaml` digests, mapped to PR SHA via GHCR package versions.
-- **production** — same as preview but `origin/deploy/production`.
+Authoritative source for candidate-a: `origin/deploy/candidate-a` HEAD commit message (format `candidate-flight: pr-<N> <sha>`) and `infra/control/candidate-lease.json`. Preview/prod state is out of scope — look it up only for situational awareness.
 
 ## The Loop
 
@@ -84,10 +90,8 @@ Authoritative sources per env:
 
 Scan open PRs in `Cogni-DAO/node-template`. Filter **ready to flight**:
 
-- All required CI checks green. **Expected-failing non-blocking checks** (mention in scorecard, do not halt on them):
-  - `require-pinned-release-branch` — fails on every non-release PR to main by design
-  - `SonarCloud Code Analysis` — currently always failing; policy fix pending
-- `PR Build` workflow succeeded AND images actually exist in GHCR as `pr-<N>-<SHA>-*` (operator, migrate, scheduler-worker, poly, resy). **Verify the images list is non-empty** — infra-only PRs pass `PR Build` vacuously with zero images pushed, so the app lever is the wrong workflow for them (see "Two Independent Levers for Candidate-A" below — use `candidate-flight-infra.yml` instead).
+- All required CI checks green. Expected-failing non-blocking: `require-pinned-release-branch` fails by design on every non-release PR to main; mention it in the scorecard, don't halt on it.
+- `PR Build` workflow succeeded AND images exist in GHCR as `pr-<N>-<SHA>-*`. If the image list is empty, the PR is infra-only — route it to the infra lever (`candidate-flight-infra.yml`) instead of the app lever.
 - Head SHA not currently the one flighted on candidate-a (check `deploy/candidate-a` last commit)
 
 Rank by: explicit user priority → label / title signal → smaller scope → newer push.
@@ -107,15 +111,17 @@ git show origin/deploy/candidate-a:infra/control/candidate-lease.json
 
 If `state == busy`, abort and report the owner PR. If `free`, proceed.
 
-### 3. Flight
+### 3. Flight — pick the right lever
 
-```bash
-gh workflow run candidate-flight.yml \
-  --repo Cogni-DAO/node-template \
-  -f pr_number=<N>
-```
+Two dispatchable workflows (see "Two Independent Levers" below). Route by what the PR changes:
 
-`gh run watch` the dispatched run. On success, post a sticky PR comment (pull URLs from the Environment Matrix):
+| PR changes                                | Command                                                                  |
+| ----------------------------------------- | ------------------------------------------------------------------------ |
+| App code (`nodes/`, `packages/`, `apps/`) | `gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=<N>` |
+| Infra only (`infra/compose/**`)           | merge PR → `gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/node-template` |
+| Both                                      | App lever; infra lever follows after merge                               |
+
+`gh run watch` the dispatched run. On success, post a sticky PR comment:
 
 ```
 🛩 Flighted to candidate-a (test)
@@ -133,30 +139,18 @@ QA window open. Say "score it" when done.
 
 On flight failure, collect the failing step's logs, summarize, **halt the loop**.
 
-### 3a. Proof of rollout (REQUIRED after every flight)
+### 3a. Proof of rollout (REQUIRED)
 
-`wait-for-candidate-ready.sh` (used by the flight workflow) only proves an endpoint answers 200. It does **not** prove the new image is running. **Never open the QA window until rollout is independently verified** via at least one of:
+The workflow's own `wait-for-candidate-ready.sh` is endpoint-only and passes before ingress switches over. The coordinator's gate is the **app startup log in Loki**:
 
-1. **Build SHA in `/readyz`** (preferred, post PR #865):
+```logql
+{namespace="cogni-candidate-a", pod=~"<app>-node-app-.*"}
+  |= "app started" | json | buildSha = "<PR head SHA>"
+```
 
-   ```bash
-   curl -sk https://test.cognidao.org/readyz | jq -r .version
-   # assert == <PR head SHA>
-   ```
+For each app the PR affects (poly / resy / operator), at least one matching line must exist from a pod started during the flight window. If no match within ~10 min post-flight, inspect Argo logs (`{namespace="argocd"} |= "candidate-a-<app>"`) for stuck sync operations, escalate.
 
-2. **Build SHA in Loki startup log** (preferred, post PR #865):
-
-   ```
-   {namespace="cogni-candidate-a"} |= "app started"
-   # parse JSON → assert buildSha == <PR head SHA>
-   ```
-
-3. **Fresh replicaset fingerprint** (fallback for pre-#865 builds):
-   - **Baseline before dispatch**: capture current operator pod names via `mcp__grafana__list_loki_label_values labelName=pod` (filter `operator-node-app-.*`)
-   - **Post-flight**: re-query, assert a new replicaset hash (different middle segment, e.g. `795fc4f9df` vs `667b949458`) within 90s
-   - If no new hash appears within 90s, Argo is stuck — force-sync with `kubectl -n argocd patch app candidate-a-<name> --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}'`, or halt
-
-If **none** of these prove rollout, halt the loop and escalate. Do not score under false pretenses. An unrolled flight is worse than a failed flight because it silently serves the previous build.
+**Don't `curl /readyz` yourself.** Ingress serves the old pod for minutes after Argo reports Healthy; `/readyz` is a known false-positive channel. The workflow already runs endpoint checks internally.
 
 ### 4. Observe
 
@@ -237,21 +231,7 @@ gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/node-template
 
 **Drift rule.** An agent or human who merges an `infra/compose/**` change to `main` is responsible for dispatching `candidate-flight-infra.yml` in the same turn. Preview/prod handles this automatically via `promote-and-deploy.yml`'s sequential jobs on every merge.
 
-The old "infra-only PRs can't ride candidate-flight" escape hatch is **obsolete** — use the infra lever instead. Manual direct commits to `deploy/candidate-a` are incident-only per `docs/spec/ci-cd.md` §axioms.
-
-### VM-state discipline (HARD RULE)
-
-Any live VM change (SSH edit of config, `kubectl apply`, `systemctl restart`, etc.) must be **captured in a git-resident provisioning script or k8s manifest in the same turn** as the SSH apply, and a PR opened for it. "VM hotfix + git-capture PR" is one atomic unit of work. A live VM edit without a corresponding git commit is a reproducibility violation: the next provision will drop the fix and the failure will recur silently.
-
-Reference scripts to check when capturing VM state:
-
-- `infra/provision/cherry/base/bootstrap.yaml` — base VM cloud-init
-- `infra/provision/cherry/k3s/bootstrap-k3s.yaml` — k3s VM cloud-init
-- `scripts/setup/provision-test-vm.sh` — provision orchestrator
-- `scripts/ci/deploy-infra.sh` — compose infra deploy
-- `infra/k8s/base/*`, `infra/k8s/overlays/*` — manifests
-
-If you're unsure where a piece of VM state is generated, grep the repo for a unique string from the file before editing the VM.
+Manual direct commits to `deploy/candidate-a` are incident-only per `docs/spec/ci-cd.md` §axioms. Any live VM change must be captured in a git-resident provisioning script or k8s manifest in the same turn — that's a repo-wide rule in the ci-cd spec, not a coordinator responsibility.
 
 ## Sub-agents
 
@@ -271,8 +251,8 @@ Use the `Agent` tool with `subagent_type: general-purpose`. Give each a tight, s
 - **Flight failures halt the loop.** Collect logs, escalate, do not auto-advance.
 - **Never `--admin` on merge.** Non-release PRs to main will always require human admin-merge until `release/*` policy lands — this is **expected, not a failure**. Post the scorecard, name it as the blocker, hand off to Derek.
 - **Verify rollout before opening QA window.** Run the Proof of Rollout ritual (step 3a) after every flight. An unrolled flight silently serves the previous build — worse than a hard failure.
-- **VM edits need git capture in the same turn.** See "VM-state discipline (HARD RULE)" below.
-- **Never commit `dashboard.md` updates.** It's session-scratch runtime state.
+- **Trust Loki, not `/readyz`.** Rollout proof = app-startup log with matching buildSha. Don't curl endpoints as a gate.
+- **Never commit `dashboard.md` updates.** Session-scratch runtime state.
 - **Never modify someone's in-flight branch.** Operate only on remote refs and candidate-a overlays.
 
 ## Interaction Style
