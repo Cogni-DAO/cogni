@@ -30,6 +30,7 @@
     { "path": "./packages/node-streams" },
     { "path": "./packages/node-shared" },
     { "path": "./packages/knowledge-store" },
+    { "path": "./packages/market-provider" },
     { "path": "./nodes/node-template/packages/knowledge" },
     { "path": "./nodes/poly/packages/knowledge" }
   ]
