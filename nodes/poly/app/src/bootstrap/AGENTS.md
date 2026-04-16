@@ -56,6 +56,7 @@ System setup installers were moved to `scripts/bootstrap/` and are out of scope 
   - `ContainerConfig` interface - Runtime config (unhandledErrorPolicy, rateLimitBypass, DEPLOY_ENVIRONMENT)
   - `UnhandledErrorPolicy` type - `"rethrow" | "respond_500"`
   - `getTemporalWorkflowClient()` - Process-wide Temporal WorkflowClient singleton (race-safe init, cleaned up by resetContainer)
+  - `resolveServiceDb()` - ServiceDb for pre-auth or system-level writes bypassing RLS
   - `resolveAiAdapterDeps()` - AI adapter dependencies for factory
   - `createGraphExecutor(completionStreamFn, userId)` - Factory for the static inner GraphExecutorPort router (from `graph-executor.factory.ts`)
   - `createScopedGraphExecutor({ executor, billing, preflightCheckFn, resolver, actorId, abortSignal?, broker?, commitByoUsage? })` - Per-run wrapper: resolves LlmService from ModelProviderResolverPort, applies billing/preflight/observability/usage-commit decorators, seeds ALS ExecutionScope

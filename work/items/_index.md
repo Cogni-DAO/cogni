@@ -82,7 +82,6 @@
 | 1 | 2 | 2 | needs_design | task.0297 | Add candidate-flight tool to VCS capability / git manager agent | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 1 | needs_implement | bug.0308 | Alloy DaemonSet hardcodes docker.io image — brittle under mirror failure, blocks ghcr.io-only clusters | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0308 | Deployment observability scorecard — build/log correlation + git manager health matrix | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 2 | 2 | needs_implement | task.0311 | Poly Knowledge Syntropy Seed — Close the Schema Gap + Polymarket Domain | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 2 | 3 | needs_design | bug.0312 | Purge canary and staging legacy naming from docs, workflows, and scorecards; document the e2e CI/CD flow | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
