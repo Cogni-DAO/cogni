@@ -45,7 +45,7 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 
 1. **Polymarket Data-API calls** — three thin methods on the existing `PolymarketAdapter`: `listTopTraders`, `listUserActivity`, `listUserPositions`. No new port, no new package.
 2. **v0 scoreboard tool** — one new LangGraph tool `core__wallet_top_traders` cloned from the `core__market_list` shape (`packages/ai-tools/src/tools/market-list.ts`). Activity score = simple blend of PnL × win-rate × log(volume); premature to over-engineer.
-3. **v0.1 mirror loop** — a single Temporal scheduled workflow (or `setInterval` if the node doesn't have Temporal wired yet — whichever is cheaper) that polls `listUserActivity(TARGET_WALLET)`, dedupes on `(wallet, fill_id)` in-memory, and for each new fill calls `@polymarket/clob-client` to place a matching GTC limit order sized at a fixed `MIRROR_USDC` env value. Guarded by `DRY_RUN` + hard-coded max daily notional.
+3. **v0.1 mirror loop** — a `@cogni/scheduler-core` job registered under `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts`, mirroring the shipped `syncGovernanceSchedules.job.ts` pattern. Every 30 s it polls `listUserActivity(TARGET_WALLET)`, dedupes on `(wallet, fill_id)`, and for each new fill calls `@polymarket/clob-client` to place a matching GTC limit order sized at `MIRROR_USDC`. Guarded by `DRY_RUN` (default `true`), hard daily cap, and `pg_advisory_lock` for single-writer safety across replicas.
 
 **Reuses:**
 
@@ -75,12 +75,20 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 - `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts` — bind the new tool.
 - `nodes/poly/graphs/src/graphs/poly-brain/tools.ts` — add to `POLY_BRAIN_TOOL_IDS`.
 
-**v0.1 mirror (new, small):**
+**v0.1 mirror (new, small — follows existing `bootstrap/jobs/*.job.ts` + `@cogni/scheduler-core` pattern):**
 
-- `nodes/poly/app/src/features/copy-trade/mirror-worker.ts` — the polling loop + `clob-client` call. Node-local, not a package — this is a prototype.
-- `nodes/poly/app/src/features/copy-trade/config.ts` — reads `COPY_TRADE_TARGET_WALLET`, `COPY_TRADE_MIRROR_USDC`, `COPY_TRADE_DRY_RUN`, `COPY_TRADE_MAX_DAILY_USDC` from env.
-- `.env.example` — document the four new env vars.
-- Runtime registration: whatever hook the poly app uses for background workers (likely `instrumentation.ts` or a scheduler-worker entrypoint — decide during implementation).
+- `nodes/poly/app/src/features/copy-trade/mirror-service.ts` — pure domain logic: dedupe `(wallet, fill_id)`, sizing, hard-cap check, decide-to-place. No I/O.
+- `nodes/poly/app/src/features/copy-trade/clob-executor.ts` — thin wrapper around `@polymarket/clob-client`. Takes a decided order, signs + places it (or no-ops under `DRY_RUN=true`). Owns the only import of the clob client and the proxy-wallet private key.
+- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — `scheduler-core` job that polls `listUserActivity(TARGET_WALLET)` every 30 s, calls the mirror-service, calls the clob-executor. Mirrors the shape of `syncGovernanceSchedules.job.ts`. Uses `pg_advisory_lock` so only one replica runs the loop.
+- `nodes/poly/app/src/shared/env/server-env.ts` — add `COPY_TRADE_*` env vars (all optional; feature inert when `COPY_TRADE_TARGET_WALLET` unset).
+- `.env.example` — document the new env vars.
+
+**Secret boundary (proxy-wallet keys):**
+
+- `POLY_PROXY_WALLET_ADDRESS` — on-chain proxy wallet holding USDC.e on Polygon (public).
+- `POLY_PROXY_SIGNER_PRIVATE_KEY` — the EOA private key that signs CLOB orders. **Loaded only inside `clob-executor.ts` via `serverEnv`. Never crosses into tool code, graph code, or any capability.**
+- `POLY_CLOB_API_KEY` / `POLY_CLOB_API_SECRET` / `POLY_CLOB_PASSPHRASE` — CLOB API credentials if Polymarket requires the L2 auth flow.
+- Manual one-time setup (documented in the PR, not automated): create the proxy wallet, sign Polymarket ToS, fund with USDC.e. Not in scope to automate for a prototype.
 
 **Tests:**
 
@@ -103,6 +111,10 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 - [ ] IDEMPOTENT_FILLS: in-memory `(wallet, fill_id)` dedupe; restart replays are logged, not re-executed
 - [ ] SIMPLE_SOLUTION: port patterns from OSS references; no ranking pipeline, no awareness-plane tables (spec: architecture)
 - [ ] SIMPLE_OVER_GENERIC: one target wallet, one sizing rule, one proxy wallet — no multi-tenancy
+- [ ] SCHEDULER_CORE_FOR_BACKGROUND: v0.1 loop runs as a `bootstrap/jobs/*.job.ts` via `@cogni/scheduler-core`, not a bespoke `setInterval` (spec: architecture)
+- [ ] SINGLE_WRITER: job acquires `pg_advisory_lock` so multi-replica deployments don't double-fire (mirrors `syncGovernanceSchedules.job.ts`)
+- [ ] SECRETS_STAY_IN_EXECUTOR: the proxy-wallet private key is imported only by `clob-executor.ts`; tool code, capability code, and the graph never touch it (spec: architecture)
+- [ ] LLM_STAYS_IN_GRAPH: the mirror loop contains no LLM calls; v0 scoreboard reasoning happens in `poly-brain` via the tool (spec: langgraph-patterns)
 
 ## Validation
 
