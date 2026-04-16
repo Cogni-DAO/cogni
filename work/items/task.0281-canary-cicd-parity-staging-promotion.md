@@ -1,13 +1,20 @@
 ---
 id: task.0281
 type: task
-status: needs_implement
+status: done
+superseded_by: task.0314
 priority: 1
 rank: 1
 estimate: 5
 title: "Canary CI/CD parity + staging promotion — no regression from staging-preview.yml"
 summary: Canary pipeline deploys app pods (Argo) but not Compose infra. staging-preview.yml deploys both. Close the gap in 4 incremental phases so canary proves the full production path, then promote through preview and production.
 outcome: One unified pipeline. Push to canary deploys infra + apps. Same digests promote through preview → production. staging-preview.yml retired.
+closeout_note: |
+  Superseded by task.0314 (2026-04-16). The ci-cd.md spec (PR #851) clarified
+  that Argo owns reconciliation and that pre-merge safety lives in `candidate-a`,
+  not `canary`. This task's direction ("add SSH-based compose deploy to every
+  candidate flight") inverted that axiom. task.0314 splits app and infra into
+  two independent levers instead, which is the spec-aligned shape.
 initiative: proj.cicd-services-gitops
 assignees: []
 labels: [ci-cd, infra, deployment, p0]

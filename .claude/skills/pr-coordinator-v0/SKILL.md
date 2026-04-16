@@ -87,7 +87,7 @@ Scan open PRs in `Cogni-DAO/node-template`. Filter **ready to flight**:
 - All required CI checks green. **Expected-failing non-blocking checks** (mention in scorecard, do not halt on them):
   - `require-pinned-release-branch` — fails on every non-release PR to main by design
   - `SonarCloud Code Analysis` — currently always failing; policy fix pending
-- `PR Build` workflow succeeded AND images actually exist in GHCR as `pr-<N>-<SHA>-*` (operator, migrate, scheduler-worker, poly, resy). **Verify the images list is non-empty** — infra-only PRs pass `PR Build` vacuously with zero images pushed, which the flight workflow cannot handle (see Manual Deploy Escape Hatch).
+- `PR Build` workflow succeeded AND images actually exist in GHCR as `pr-<N>-<SHA>-*` (operator, migrate, scheduler-worker, poly, resy). **Verify the images list is non-empty** — infra-only PRs pass `PR Build` vacuously with zero images pushed, so the app lever is the wrong workflow for them (see "Two Independent Levers for Candidate-A" below — use `candidate-flight-infra.yml` instead).
 - Head SHA not currently the one flighted on candidate-a (check `deploy/candidate-a` last commit)
 
 Rank by: explicit user priority → label / title signal → smaller scope → newer push.
@@ -154,7 +154,7 @@ On flight failure, collect the failing step's logs, summarize, **halt the loop**
 3. **Fresh replicaset fingerprint** (fallback for pre-#865 builds):
    - **Baseline before dispatch**: capture current operator pod names via `mcp__grafana__list_loki_label_values labelName=pod` (filter `operator-node-app-.*`)
    - **Post-flight**: re-query, assert a new replicaset hash (different middle segment, e.g. `795fc4f9df` vs `667b949458`) within 90s
-   - If no new hash appears within 90s, Argo is stuck — see Manual Deploy Escape Hatch step 5 for force-sync, or halt
+   - If no new hash appears within 90s, Argo is stuck — force-sync with `kubectl -n argocd patch app candidate-a-<name> --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}'`, or halt
 
 If **none** of these prove rollout, halt the loop and escalate. Do not score under false pretenses. An unrolled flight is worse than a failed flight because it silently serves the previous build.
 
@@ -214,24 +214,30 @@ gh pr review <N> --repo Cogni-DAO/node-template \
 
 After either outcome, append to `dashboard.md` "Recent Flights", re-enter Triage, and present the next candidate + alternates.
 
-## Manual Deploy Escape Hatch (rare, gated)
+## Two Independent Levers for Candidate-A (task.0314)
 
-Some PRs cannot ride `candidate-flight.yml` — most commonly **infra-only PRs** where `detect-affected.sh` builds zero images, causing the flight workflow to abort at the `Require at least one built image` gate. Examples: k8s overlay additions, DaemonSet bumps, kustomization-only changes.
+Candidate-a deploy has two orthogonal workflows. Pick the right one for the PR:
 
-**Manual deploy is allowed but NOT recommended.** Default preference: extend the PR with a trivial app-code touch to force `pr-build` to produce images, then dispatch the normal flight. Only fall back to manual deploy when that is genuinely not an option.
+| Lever     | Workflow                     | When to use                                                                                                                                                      |
+| --------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **App**   | `candidate-flight.yml`       | PR touches app code (nodes/, packages/, apps/). Promotes image digests to `deploy/candidate-a`; Argo CD reconciles pods. No VM SSH for compose.                  |
+| **Infra** | `candidate-flight-infra.yml` | Infra/compose-only PRs (infra/compose/\*\*, Caddy config, litellm config). Rsyncs from `main` (v0 default) and runs `compose up` on the VM. No digest promotion. |
 
-When manual deploy is the only path:
+Dispatch:
 
-1. Create a worktree on `origin/deploy/candidate-a`.
-2. Cherry-pick or rsync ONLY the relevant paths (overlay + base + catalog) from the source PR head — never sweep unrelated files.
-3. Commit with a message pointing back to the source PR and naming why the normal path was bypassed.
-4. Push `deploy/candidate-a`.
-5. Argo picks up the change on next poll (~3 min) or force-sync:
-   ```bash
-   kubectl -n argocd patch app candidate-a-<name> --type merge \
-     -p '{"operation":{"sync":{"revision":"HEAD"}}}'
-   ```
-6. Run the **Proof of rollout** ritual (step 3a) to confirm the change actually took effect. The flight workflow's readiness gate does not apply here — you are the gate.
+```bash
+# App lever
+gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=<N>
+
+# Infra lever (after infra PR merges to main)
+gh workflow run candidate-flight-infra.yml --repo Cogni-DAO/node-template
+```
+
+**Infra PRs are merge-then-deploy in v0.** The infra lever sources from `main` only — infra changes must merge first and then be dispatched to candidate-a. This is the documented tradeoff in task.0314; v1 may add per-PR ref passthrough.
+
+**Drift rule.** An agent or human who merges an `infra/compose/**` change to `main` is responsible for dispatching `candidate-flight-infra.yml` in the same turn. Preview/prod handles this automatically via `promote-and-deploy.yml`'s sequential jobs on every merge.
+
+The old "infra-only PRs can't ride candidate-flight" escape hatch is **obsolete** — use the infra lever instead. Manual direct commits to `deploy/candidate-a` are incident-only per `docs/spec/ci-cd.md` §axioms.
 
 ### VM-state discipline (HARD RULE)
 
@@ -265,7 +271,7 @@ Use the `Agent` tool with `subagent_type: general-purpose`. Give each a tight, s
 - **Flight failures halt the loop.** Collect logs, escalate, do not auto-advance.
 - **Never `--admin` on merge.** Non-release PRs to main will always require human admin-merge until `release/*` policy lands — this is **expected, not a failure**. Post the scorecard, name it as the blocker, hand off to Derek.
 - **Verify rollout before opening QA window.** Run the Proof of Rollout ritual (step 3a) after every flight. An unrolled flight silently serves the previous build — worse than a hard failure.
-- **VM edits need git capture in the same turn.** See Manual Deploy Escape Hatch → VM-state discipline.
+- **VM edits need git capture in the same turn.** See "VM-state discipline (HARD RULE)" below.
 - **Never commit `dashboard.md` updates.** It's session-scratch runtime state.
 - **Never modify someone's in-flight branch.** Operate only on remote refs and candidate-a overlays.
 

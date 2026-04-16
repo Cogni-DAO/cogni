@@ -3,10 +3,19 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Script: scripts/ci/deploy-infra.sh
-# Purpose: Deploy Compose infrastructure (postgres, litellm, temporal, redis, alloy, caddy)
-#          to a remote VM via SSH. App containers are managed by k8s/Argo CD — this script
-#          only handles infra services.
-# Ported from: scripts/ci/deploy.sh (sections listed in work/handoffs/task.0281.handoff.md)
+# Purpose: Infra lever (task.0314) — deploy Compose infrastructure (postgres,
+#          litellm, temporal, redis, alloy, caddy) to a remote VM via SSH. App
+#          containers are managed by k8s/Argo CD; this script only handles
+#          infra services.
+# Usage:
+#   deploy-infra.sh [--ref <git-ref>] [--dry-run]
+#     --ref <git-ref>  Source ref for infra/compose/** (default: main). Rsync
+#                      source is a detached `git worktree add` of this ref,
+#                      NOT the caller workflow's checkout. An app PR branched
+#                      before an infra change on main cannot ship stale compose
+#                      config to the VM.
+#     --dry-run        Validate config + worktree resolution, print planned
+#                      actions, exit 0 without any SSH.
 # Invariants:
 #   - DEPLOY_ENVIRONMENT must be set to 'candidate-a', 'preview', or 'production'
 #     (legacy 'canary' value is still accepted for backward compatibility during
@@ -14,13 +23,63 @@
 #   - App/migrator/scheduler-worker containers are NOT started (k8s handles those)
 #   - DB migrations are NOT run (k8s PreSync hook handles those)
 #   - SSH_KEEPALIVE: All SSH connections use ServerAliveInterval to survive long operations.
-# Links: Called by .github/workflows/build-multi-node.yml; uses infra/compose/
+#   - INFRA_REF_IS_EXPLICIT (task.0314): rsync source is a clean worktree of --ref,
+#     never the caller's working tree.
+# Callers:
+#   - .github/workflows/candidate-flight-infra.yml  (candidate-a infra lever)
+#   - .github/workflows/promote-and-deploy.yml      (preview/prod deploy-infra job)
 
 set -euo pipefail
 
-# Resolve repo root robustly
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Flag parsing
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# --ref <git-ref>  Source ref for infra/compose/** (default: main).
+#                  Rsync to the VM comes from a detached `git worktree add`
+#                  of this ref, NOT from whatever the caller has checked out.
+#                  This is the INFRA_REF_IS_EXPLICIT invariant (task.0314).
+# --dry-run        Resolve the source worktree and print planned actions
+#                  (rsync source, VM target, services) without any SSH.
+REF="main"
+DRY_RUN=false
+usage() {
+  echo "Usage: $0 [--ref <git-ref>] [--dry-run]" >&2
+  exit 2
+}
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ref)
+      if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+        echo "--ref requires a non-empty value (got: '${2:-<end-of-args>}')" >&2
+        usage
+      fi
+      REF="$2"
+      shift 2
+      ;;
+    --ref=*)
+      REF="${1#--ref=}"
+      if [[ -z "$REF" ]]; then
+        echo "--ref= requires a non-empty value" >&2
+        usage
+      fi
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    *)
+      echo "Unknown flag: $1" >&2
+      usage
+      ;;
+  esac
+done
+
+# Caller's working tree — used for git operations only (fetch + worktree add).
+# REPO_ROOT is set later from the detached worktree at --ref, so any pre-worktree
+# read of REPO_ROOT would be a bug — let `set -u` catch it.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CALLER_REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 on_fail() {
   code=$?
@@ -280,6 +339,38 @@ done
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ARTIFACT_DIR="${RUNNER_TEMP:-/tmp}/deploy-infra-${GITHUB_RUN_ID:-$$}"
 mkdir -p "$ARTIFACT_DIR"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Source worktree at --ref (the INFRA_REF_IS_EXPLICIT invariant)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# The VM rsync source is a clean, detached worktree of --ref — NOT the caller's
+# checkout. This eliminates the "stale PR checkout rsync" class of failure that
+# motivated task.0314 (see PR #879 flight loop on 2026-04-16).
+SRC_WORKTREE="$ARTIFACT_DIR/src-worktree"
+cleanup_worktree() {
+    if [[ -d "$SRC_WORKTREE" ]]; then
+        git -C "$CALLER_REPO" worktree remove --force "$SRC_WORKTREE" 2>/dev/null || rm -rf "$SRC_WORKTREE"
+    fi
+}
+trap cleanup_worktree EXIT
+
+log_info "Resolving source worktree at ref: $REF"
+# Fetch the ref to handle shallow clones (GHA typically checks out with fetch-depth=1)
+FETCH_STDERR=$(git -C "$CALLER_REPO" fetch origin "$REF" --depth=1 2>&1 >/dev/null) || \
+    log_warn "git fetch origin $REF failed: $FETCH_STDERR (will try local ref)"
+if git -C "$CALLER_REPO" rev-parse --verify "origin/$REF" >/dev/null 2>&1; then
+    git -C "$CALLER_REPO" worktree add --detach --quiet "$SRC_WORKTREE" "origin/$REF"
+elif git -C "$CALLER_REPO" rev-parse --verify "$REF" >/dev/null 2>&1; then
+    git -C "$CALLER_REPO" worktree add --detach --quiet "$SRC_WORKTREE" "$REF"
+else
+    log_fatal "Cannot resolve ref '$REF' — neither origin/$REF nor $REF exists locally (fetch stderr was: ${FETCH_STDERR:-<empty>})"
+fi
+REF_SHA=$(git -C "$SRC_WORKTREE" rev-parse HEAD)
+log_info "Source worktree at $REF_SHA ($SRC_WORKTREE)"
+
+# Assign REPO_ROOT to the detached worktree so all rsync/scp source paths
+# below come from the clean --ref tree, not the caller's checkout.
+REPO_ROOT="$SRC_WORKTREE"
 
 log_info "Deploying infrastructure to $ENVIRONMENT..."
 log_info "Domain: $DOMAIN"
@@ -892,6 +983,27 @@ LOCAL_SIZE=$(wc -c < "$ARTIFACT_DIR/deploy-infra-remote.sh")
 LOCAL_SHA=$(sha256sum "$ARTIFACT_DIR/deploy-infra-remote.sh" | awk '{print $1}')
 log_info "deploy-infra-remote.sh ready: ${LOCAL_SIZE} bytes, sha256=${LOCAL_SHA}"
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dry-run exit (no SSH, no rsync, no compose up)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "DRY RUN — no remote actions will be executed"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Environment:        $ENVIRONMENT"
+    echo "Ref:                $REF (SHA: $REF_SHA)"
+    echo "Source worktree:    $SRC_WORKTREE"
+    echo "Rsync targets:"
+    echo "    $REPO_ROOT/infra/compose/edge/     → root@$VM_HOST:/opt/cogni-template-edge/"
+    echo "    $REPO_ROOT/infra/compose/runtime/  → root@$VM_HOST:/opt/cogni-template-runtime/"
+    echo "Remote script:      $ARTIFACT_DIR/deploy-infra-remote.sh → /tmp/deploy-infra-remote.sh"
+    echo "Infra services managed by remote script: postgres, litellm, temporal, alloy, caddy (plus healthchecks)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info "Dry run complete — exiting before any VM contact"
+    exit 0
+fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Deploy bundles to VM via rsync
