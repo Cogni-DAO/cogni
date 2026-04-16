@@ -6,92 +6,27 @@
  * Purpose: Provides composer toolbar extras for chat including model selection, graph selection, and voice input.
  * Scope: Smart component managing model selection state, localStorage persistence, and API data synchronization. Does not implement model fetching or localStorage utilities (delegates to hooks and preferences module).
  * Invariants: Validates localStorage preference against API models.
- * Side-effects: global (localStorage via preferences module), IO (API fetch via useModels hook)
+ * Side-effects: global (localStorage via preferences module), IO (API fetch via useModels/useAgents hooks)
  * Notes: Designed to be passed as composerLeft slot to kit Thread.
- * Links: ModelPicker component, GraphPicker component, useModels hook, model-preference module
+ * Links: ModelPicker component, GraphPicker component, useModels hook, useAgents hook, model-preference module
  * @public
  */
 
 "use client";
 
 import type { GraphId, ModelRef } from "@cogni/ai-core";
-import { useEffect, useState } from "react";
-import {
-  type GraphOption,
-  GraphPicker,
-} from "@/features/ai/components/GraphPicker";
+import { useEffect, useMemo, useState } from "react";
+import { GraphPicker } from "@/features/ai/components/GraphPicker";
 import {
   CHATGPT_MODELS,
   ModelPicker,
 } from "@/features/ai/components/ModelPicker";
+import { useAgents } from "@/features/ai/hooks/useAgents";
 import { useModels } from "@/features/ai/hooks/useModels";
 import {
   setPreferredModelId,
   validatePreferredModel,
 } from "@/features/ai/preferences/model-preference";
-
-/**
- * TODO: P1 - Replace hardcoded graphs with API fetch from /api/v1/ai/agents
- * Per CATALOG_STATIC_IN_P0: graphs are static, no runtime discovery yet.
- * See AGENT_DISCOVERY.md Phase 2 checklist.
- */
-const AVAILABLE_GRAPHS: readonly GraphOption[] = [
-  {
-    graphId: "langgraph:poly-brain" satisfies GraphId,
-    name: "Poly Brain",
-    description: "Prediction market analyst with live market data",
-  },
-  {
-    graphId: "langgraph:brain" satisfies GraphId,
-    name: "Brain",
-    description: "Code-aware assistant with repo access",
-  },
-  {
-    graphId: "langgraph:poet" satisfies GraphId,
-    name: "Poet",
-    description: "Poetic AI assistant with structured verse",
-  },
-  {
-    graphId: "langgraph:ponderer" satisfies GraphId,
-    name: "Ponderer",
-    description: "Philosophical thinker",
-  },
-  {
-    graphId: "langgraph:research" satisfies GraphId,
-    name: "Research",
-    description: "Deep research with web search",
-  },
-  {
-    graphId: "sandbox:openclaw" satisfies GraphId,
-    name: "OpenClaw",
-    description: "Community-accessible OpenClaw container agent",
-  },
-  {
-    graphId: "langgraph:browser" satisfies GraphId,
-    name: "Browser",
-    description: "Web browsing agent with Playwright MCP",
-  },
-  {
-    graphId: "langgraph:frontend-tester" satisfies GraphId,
-    name: "Frontend Tester",
-    description: "QA agent — tests web UIs via Playwright",
-  },
-  {
-    graphId: "langgraph:operating-review" satisfies GraphId,
-    name: "Operating Review",
-    description:
-      "Periodic review — triages backlog, flags risks, produces structured briefs",
-  },
-  {
-    graphId: "langgraph:scorecard" satisfies GraphId,
-    name: "Scorecard",
-    description:
-      "Project health analyst — finds live scorecards and displays KPIs as ASCII tables",
-  },
-];
-
-/** Default graph ID - exported for page initialization */
-export const DEFAULT_GRAPH_ID: GraphId = "sandbox:openclaw";
 
 export interface ChatComposerExtrasProps {
   selectedModel: string;
@@ -107,11 +42,22 @@ export function ChatComposerExtras({
   onModelChange,
   defaultModelId,
   balance = 0,
-  selectedGraph = DEFAULT_GRAPH_ID,
+  selectedGraph,
   onGraphChange,
 }: Readonly<ChatComposerExtrasProps>) {
   const modelsQuery = useModels();
+  const agentsQuery = useAgents();
   const [localModel, setLocalModel] = useState(selectedModel);
+
+  const graphOptions = useMemo(
+    () =>
+      agentsQuery.data?.agents.map((agent) => ({
+        graphId: agent.graphId,
+        name: agent.name,
+        description: agent.description,
+      })) ?? [],
+    [agentsQuery.data]
+  );
 
   // Initialize from localStorage on mount, validate against API models
   useEffect(() => {
@@ -155,10 +101,11 @@ export function ChatComposerExtras({
         balance={balance}
       />
       <GraphPicker
-        graphs={AVAILABLE_GRAPHS}
-        value={selectedGraph}
+        graphs={graphOptions}
+        value={selectedGraph ?? null}
         onValueChange={handleGraphChange}
-        disabled={!onGraphChange}
+        disabled={!onGraphChange || (agentsQuery.isError && !agentsQuery.data)}
+        isLoading={agentsQuery.isPending && !agentsQuery.data}
       />
     </div>
   );

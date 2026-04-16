@@ -94,6 +94,18 @@ vi.mock("@/features/payments/public", () => ({
   useCreditsSummary: () => mockUseCreditsSummary(),
 }));
 
+const agentsData = {
+  agents: [
+    {
+      agentId: "sandbox:openclaw",
+      graphId: "sandbox:openclaw",
+      name: "OpenClaw",
+      description: "Community-accessible OpenClaw container agent",
+    },
+  ],
+  defaultAgentId: "sandbox:openclaw",
+};
+
 describe("ChatPage - No Client-Invented Model IDs", () => {
   let queryClient: QueryClient;
 
@@ -101,6 +113,7 @@ describe("ChatPage - No Client-Invented Model IDs", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    queryClient.setQueryData(["ai-agents"], agentsData);
     vi.clearAllMocks();
   });
 

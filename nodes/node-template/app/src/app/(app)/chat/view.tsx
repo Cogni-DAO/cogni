@@ -39,10 +39,10 @@ import { CHATGPT_MODELS } from "@/features/ai/components/ModelPicker";
 import {
   ChatComposerExtras,
   ChatErrorBubble,
-  DEFAULT_GRAPH_ID,
   getPreferredModelId,
   pickDefaultModel,
   setPreferredModelId,
+  useAgents,
   useDeleteThread,
   useLoadThread,
   useModels,
@@ -67,8 +67,25 @@ const ChatWelcomeWithHint = () => (
   </div>
 );
 
+function pickDefaultGraphId(
+  agents: ReadonlyArray<{ graphId: GraphId }>,
+  defaultAgentId: GraphId | null
+): GraphId | null {
+  if (defaultAgentId) {
+    const defaultAgent = agents.find(
+      (agent) => agent.graphId === defaultAgentId
+    );
+    if (defaultAgent) {
+      return defaultAgent.graphId;
+    }
+  }
+
+  return agents[0]?.graphId ?? null;
+}
+
 export function ChatView(): ReactNode {
   const modelsQuery = useModels();
+  const agentsQuery = useAgents();
   const { data: creditsData, isLoading: isCreditsLoading } =
     useCreditsSummary();
   // Display raw balance (including negative); no unsafe defaults
@@ -82,7 +99,7 @@ export function ChatView(): ReactNode {
   const [selectedModelRef, setSelectedModelRef] = useState<ModelRef | null>(
     null
   );
-  const [selectedGraph, setSelectedGraph] = useState(DEFAULT_GRAPH_ID);
+  const [selectedGraph, setSelectedGraph] = useState<GraphId | null>(null);
   const [chatError, setChatError] = useState<ChatError | null>(null);
   const [isBlocked, setIsBlocked] = useState(false);
 
@@ -161,6 +178,31 @@ export function ChatView(): ReactNode {
     defaultPreferredModelId,
   ]);
   // NOTE: selectedModelRef intentionally NOT in deps to prevent re-init loop
+
+  useEffect(() => {
+    if (!agentsQuery.data) return;
+
+    if (agentsQuery.data.agents.length === 0) {
+      setSelectedGraph(null);
+      return;
+    }
+
+    const defaultGraphId = pickDefaultGraphId(
+      agentsQuery.data.agents,
+      agentsQuery.data.defaultAgentId
+    );
+
+    setSelectedGraph((current) => {
+      if (
+        current &&
+        agentsQuery.data?.agents.some((agent) => agent.graphId === current)
+      ) {
+        return current;
+      }
+
+      return defaultGraphId;
+    });
+  }, [agentsQuery.data]);
 
   // Model change handler - marks user intent
   const handleModelChange = useCallback((ref: ModelRef) => {
@@ -264,11 +306,34 @@ export function ChatView(): ReactNode {
     ? toErrorAlertProps(chatError, !!defaultFreeModelId)
     : null;
 
+  const hasAgents = (agentsQuery.data?.agents.length ?? 0) > 0;
+  const isInitialAgentsLoad = agentsQuery.isPending && !hasAgents;
+
   // INV-UI-NO-PAID-DEFAULT-WHEN-ZERO: Gate rendering until init completes
-  if (!hasInitializedRef.current) {
+  if (
+    !hasInitializedRef.current ||
+    isInitialAgentsLoad ||
+    (hasAgents && !selectedGraph)
+  ) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (agentsQuery.isError && !hasAgents) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+        <div className="text-muted-foreground">Unable to load agents.</div>
+      </div>
+    );
+  }
+
+  if (!hasAgents) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+        <div className="text-muted-foreground">No agents available.</div>
       </div>
     );
   }
@@ -305,6 +370,13 @@ export function ChatView(): ReactNode {
   if (!selectedModelRef) {
     throw new Error(
       "INV-VIOLATION: selectedModelRef is null after initialization gate"
+    );
+  }
+
+  // Invariant: selectedGraph is guaranteed non-null after agent catalog gate
+  if (!selectedGraph) {
+    throw new Error(
+      "INV-VIOLATION: selectedGraph is null after agent catalog gate"
     );
   }
 

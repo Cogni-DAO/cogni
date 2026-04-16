@@ -98,6 +98,18 @@ vi.mock("@/features/payments/public", () => ({
   useCreditsSummary: () => mockUseCreditsSummary(),
 }));
 
+const agentsData = {
+  agents: [
+    {
+      agentId: "sandbox:openclaw",
+      graphId: "sandbox:openclaw",
+      name: "OpenClaw",
+      description: "Community-accessible OpenClaw container agent",
+    },
+  ],
+  defaultAgentId: "sandbox:openclaw",
+};
+
 describe("ChatPage - Zero Credits Invariant", () => {
   let queryClient: QueryClient;
 
@@ -105,6 +117,7 @@ describe("ChatPage - Zero Credits Invariant", () => {
     queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
+    queryClient.setQueryData(["ai-agents"], agentsData);
     vi.clearAllMocks();
   });
 

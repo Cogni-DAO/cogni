@@ -25,16 +25,14 @@ export {
 } from "./chat/hooks/useThreads";
 export type { ChatComposerExtrasProps } from "./components/ChatComposerExtras";
 // Model/graph selection components
-export {
-  ChatComposerExtras,
-  DEFAULT_GRAPH_ID,
-} from "./components/ChatComposerExtras";
+export { ChatComposerExtras } from "./components/ChatComposerExtras";
 // Chat error components
 export type { ChatErrorBubbleProps } from "./components/ChatErrorBubble";
 export { ChatErrorBubble } from "./components/ChatErrorBubble";
 export type { ModelPickerProps } from "./components/ModelPicker";
 export { ModelPicker } from "./components/ModelPicker";
-// Model data hooks
+// Model and agent data hooks
+export { useAgents } from "./hooks/useAgents";
 export { useModels } from "./hooks/useModels";
 // Model preferences
 export {

@@ -42,9 +42,10 @@ export interface GraphOption {
 
 export interface GraphPickerProps {
   graphs: readonly GraphOption[];
-  value: GraphId;
+  value?: GraphId | null;
   onValueChange: (graphId: GraphId) => void;
   disabled?: boolean;
+  isLoading?: boolean;
 }
 
 export function GraphPicker({
@@ -52,11 +53,15 @@ export function GraphPicker({
   value,
   onValueChange,
   disabled,
+  isLoading = false,
 }: Readonly<GraphPickerProps>) {
   const [open, setOpen] = useState(false);
 
   const selectedGraph = graphs.find((g) => g.graphId === value);
-  const displayName = selectedGraph?.name || "Select agent";
+  const displayName = isLoading
+    ? "Loading agents..."
+    : selectedGraph?.name ||
+      (graphs.length === 0 ? "No agents" : "Select agent");
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -64,6 +69,7 @@ export function GraphPicker({
         <button
           type="button"
           disabled={disabled}
+          aria-busy={isLoading}
           className={cn(
             // Base styles - rounded-full like model picker
             "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
@@ -106,42 +112,52 @@ export function GraphPicker({
         </DialogHeader>
 
         <div className="-mx-6 min-h-0 flex-1 overflow-y-auto px-6">
-          <div className="space-y-1">
-            {graphs.map((graph) => {
-              const isSelected = graph.graphId === value;
+          {isLoading ? (
+            <div className="py-6 text-center text-muted-foreground text-sm">
+              Loading available agents...
+            </div>
+          ) : graphs.length === 0 ? (
+            <div className="py-6 text-center text-muted-foreground text-sm">
+              No agents available
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {graphs.map((graph) => {
+                const isSelected = graph.graphId === value;
 
-              return (
-                <button
-                  key={graph.graphId}
-                  type="button"
-                  onClick={() => {
-                    onValueChange(graph.graphId);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left",
-                    "transition-colors hover:bg-accent",
-                    isSelected && "bg-accent"
-                  )}
-                >
-                  <Bot className="size-5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-medium text-sm">
-                      {graph.name}
-                    </div>
-                    {graph.description && (
-                      <div className="truncate text-muted-foreground text-xs">
-                        {graph.description}
-                      </div>
+                return (
+                  <button
+                    key={graph.graphId}
+                    type="button"
+                    onClick={() => {
+                      onValueChange(graph.graphId);
+                      setOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left",
+                      "transition-colors hover:bg-accent",
+                      isSelected && "bg-accent"
                     )}
-                  </div>
-                  {isSelected && (
-                    <Check className="size-4 shrink-0 text-primary" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                  >
+                    <Bot className="size-5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-sm">
+                        {graph.name}
+                      </div>
+                      {graph.description && (
+                        <div className="truncate text-muted-foreground text-xs">
+                          {graph.description}
+                        </div>
+                      )}
+                    </div>
+                    {isSelected && (
+                      <Check className="size-4 shrink-0 text-primary" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
