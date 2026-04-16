@@ -62,11 +62,6 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
     description: "Deep research with web search",
   },
   {
-    graphId: "sandbox:openclaw" satisfies GraphId,
-    name: "OpenClaw",
-    description: "Community-accessible OpenClaw container agent",
-  },
-  {
     graphId: "langgraph:browser" satisfies GraphId,
     name: "Browser",
     description: "Web browsing agent with Playwright MCP",
@@ -85,7 +80,7 @@ const AVAILABLE_GRAPHS: readonly GraphOption[] = [
 ];
 
 /** Default graph ID - exported for page initialization */
-export const DEFAULT_GRAPH_ID: GraphId = "sandbox:openclaw";
+export const DEFAULT_GRAPH_ID: GraphId = "langgraph:brain";
 
 export interface ChatComposerExtrasProps {
   selectedModel: string;

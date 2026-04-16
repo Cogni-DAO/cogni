@@ -5,8 +5,7 @@ metadata:
 data:
   openclaw.json: |
     {
-      "model": "openrouter/openai/gpt-4.1-mini",
-      "allowShell": true,
-      "allowBrowser": true,
-      "allowReadRepo": true
+      "gateway": {
+        "mode": "local"
+      }
     }

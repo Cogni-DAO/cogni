@@ -617,9 +617,7 @@ echo "${GHCR_DEPLOY_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --passw
 # Step 3.5: Pull sandbox images (may update on :latest)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 log_info "Pulling sandbox images..."
-OPENCLAW_GATEWAY_IMAGE="ghcr.io/cogni-dao/cogni-sandbox-openclaw:latest"
 PNPM_STORE_IMAGE="ghcr.io/cogni-dao/node-template:pnpm-store-latest"
-docker pull "$OPENCLAW_GATEWAY_IMAGE"
 docker pull "$PNPM_STORE_IMAGE" || log_warn "pnpm-store image not found, skipping"
 
 # Pull LiteLLM from GHCR (built in CI — bug.0298 / G12).
@@ -640,14 +638,8 @@ source /tmp/seed-pnpm-store.sh
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 4: Assert profile services exist (guard against silent compose drift)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RESOLVED_SERVICES=$($RUNTIME_COMPOSE --profile bootstrap --profile sandbox-openclaw config --services)
-for svc in openclaw-gateway llm-proxy-openclaw; do
-  if ! echo "$RESOLVED_SERVICES" | grep -q "^${svc}$"; then
-    log_error "Profile guardrail: service '$svc' not found in compose config."
-    exit 1
-  fi
-done
-log_info "Profile guardrail passed: openclaw-gateway, llm-proxy-openclaw resolved"
+RESOLVED_SERVICES=$($RUNTIME_COMPOSE --profile bootstrap config --services)
+log_info "Profile guardrail passed (sandbox-openclaw disabled)"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 5: Start/update postgres (must be healthy before provisioning)
@@ -657,7 +649,7 @@ if ! output="$($RUNTIME_COMPOSE up -d postgres 2>&1)"; then
   printf '%s\n' "$output" >&2
   if grep -qiE 'has active endpoints|error while removing network' <<<"$output"; then
     log_warn "Incremental reconcile failed due to network recreation; forcing full runtime teardown..."
-    $RUNTIME_COMPOSE --profile sandbox-openclaw down --remove-orphans --timeout 30
+    $RUNTIME_COMPOSE down --remove-orphans --timeout 30
     $RUNTIME_COMPOSE up -d postgres
   else
     exit 1
@@ -692,11 +684,7 @@ $RUNTIME_COMPOSE stop autoheal 2>/dev/null || true
 INFRA_SERVICES="postgres litellm redis alloy temporal-postgres temporal temporal-ui autoheal repo-init git-sync"
 $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
 
-# Sandbox-openclaw services (separate profile)
-# Non-fatal: openclaw is non-functional in multi-node (git-sync exit 1 kills compose).
-# Keep starting it best-effort so the containers exist for future enablement.
-$RUNTIME_COMPOSE --profile sandbox-openclaw up -d openclaw-gateway llm-proxy-openclaw || \
-  log_info "⚠️  Sandbox-openclaw services failed to start (non-fatal, openclaw is non-functional in multi-node)"
+# Sandbox-openclaw disabled — removed from k8s catalog and compose deploy path.
 
 log_info "[$(date -u +%H:%M:%S)] Infra stack up complete"
 emit_deployment_event "infra_deployment.stack_up_complete" "success" "Infrastructure services started"
@@ -727,41 +715,7 @@ else
   fi
 fi
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 6.6b: Checksum-gated recreate for OpenClaw config changes
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OPENCLAW_CONFIG="/opt/cogni-template-runtime/openclaw/openclaw-gateway.json"
-OPENCLAW_HASH_FILE="$HASH_DIR/openclaw-gateway.sha256"
-
-mkdir -p "$HASH_DIR"
-
-NEW_HASH="$(hash_file "$OPENCLAW_CONFIG")"
-OLD_HASH="$(cat "$OPENCLAW_HASH_FILE" 2>/dev/null || true)"
-
-if [[ "$NEW_HASH" != "$OLD_HASH" ]]; then
-  log_info "OpenClaw config changed (hash: ${NEW_HASH:0:12}...), recreating gateway..."
-  emit_deployment_event "infra_deployment.openclaw_recreate" "in_progress" "Recreating OpenClaw gateway due to config change"
-  if $RUNTIME_COMPOSE --profile sandbox-openclaw up -d --no-deps --force-recreate openclaw-gateway; then
-    echo "$NEW_HASH" > "$OPENCLAW_HASH_FILE"
-    log_info "OpenClaw gateway recreated with new config"
-    emit_deployment_event "infra_deployment.openclaw_recreate_complete" "success" "OpenClaw gateway recreated successfully"
-  else
-    log_info "⚠️  OpenClaw gateway recreate failed (non-fatal)"
-  fi
-else
-  log_info "OpenClaw config unchanged (hash: ${NEW_HASH:0:12}...), no recreate needed"
-fi
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# Step 6.6c: OpenClaw readiness gate (fail deploy if crash-looping)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OPENCLAW_CID=$($RUNTIME_COMPOSE --profile sandbox-openclaw ps -q openclaw-gateway 2>/dev/null || true)
-if [[ -n "$OPENCLAW_CID" ]] && docker inspect -f '{{.State.Status}}' "$OPENCLAW_CID" 2>/dev/null | grep -q "running"; then
-  log_info "Waiting for OpenClaw readiness..."
-  bash /tmp/healthcheck-openclaw.sh "$RUNTIME_COMPOSE --profile sandbox-openclaw"
-else
-  log_warn "OpenClaw gateway not running — skipping readiness gate"
-fi
+# Steps 6.6b–6.6c (OpenClaw config hash + readiness gate) removed — sandbox-openclaw disabled.
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 6.7: Ensure Temporal namespace exists (idempotent)
@@ -878,19 +832,7 @@ SECEOF
   rm -f "$SECRET_FILE"
   log_info "  Applied scheduler-worker-secrets"
 
-  # ── Sandbox-openclaw secret ────────────────────────────────────────────────
-  # Key name: GITHUB_TOKEN (not OPENCLAW_GITHUB_RW_TOKEN) — matches k8s deployment envFrom
-  SECRET_FILE=$(mktemp)
-  cat > "$SECRET_FILE" <<SECEOF
-OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN}
-GITHUB_TOKEN=${OPENCLAW_GITHUB_RW_TOKEN:-}
-LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-SECEOF
-  kubectl -n "${K8S_NS}" create secret generic sandbox-openclaw-secrets \
-    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
-  rm -f "$SECRET_FILE"
-  log_info "  Applied sandbox-openclaw-secrets"
+  # Sandbox-openclaw secret removed — sandbox-openclaw disabled.
 
   log_info "[$(date -u +%H:%M:%S)] k8s secrets applied"
   emit_deployment_event "infra_deployment.k8s_secrets_complete" "success" "k8s secrets applied"
@@ -970,23 +912,13 @@ rsync -av -e "ssh $SSH_OPTS" \
   "$REPO_ROOT/infra/compose/runtime/" \
   root@"$VM_HOST":/opt/cogni-template-runtime/
 
-# Upload OpenClaw gateway config
-ssh $SSH_OPTS root@"$VM_HOST" "mkdir -p /opt/cogni-template-runtime/openclaw"
-scp $SSH_OPTS \
-  "$REPO_ROOT/services/sandbox-openclaw/openclaw-gateway.json" \
-  root@"$VM_HOST":/opt/cogni-template-runtime/openclaw/openclaw-gateway.json
-
-# Upload OpenClaw gateway workspace (SOUL.md, GOVERN.md, AGENTS.md, etc.)
-rsync -av -e "ssh $SSH_OPTS" \
-  "$REPO_ROOT/services/sandbox-openclaw/gateway-workspace/" \
-  root@"$VM_HOST":/opt/cogni-template-runtime/openclaw/gateway-workspace/
+# OpenClaw config/workspace uploads removed — sandbox-openclaw disabled.
 
 # Upload deployment script
 scp $SSH_OPTS "$ARTIFACT_DIR/deploy-infra-remote.sh" root@"$VM_HOST":/tmp/deploy-infra-remote.sh
 
 # Upload healthcheck and bootstrap scripts (called from deploy-infra-remote.sh)
 scp $SSH_OPTS \
-  "$REPO_ROOT/scripts/ci/healthcheck-openclaw.sh" \
   "$REPO_ROOT/scripts/ci/seed-pnpm-store.sh" \
   "$REPO_ROOT/scripts/ci/ensure-temporal-namespace.sh" \
   root@"$VM_HOST":/tmp/

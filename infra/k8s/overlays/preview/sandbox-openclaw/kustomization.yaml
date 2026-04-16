@@ -8,4 +8,4 @@ resources:
 
 images:
   - name: ghcr.io/cogni-dao/cogni-sandbox-openclaw
-    newTag: "staging-placeholder-sandbox-openclaw"
+    newTag: "latest"
