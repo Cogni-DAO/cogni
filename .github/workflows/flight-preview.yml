@@ -126,14 +126,6 @@ jobs:
           OUTPUT_FILE: ${{ runner.temp }}/resolved-pr-images.json
         run: bash scripts/ci/resolve-pr-build-images.sh
 
-      - name: Abort when no PR images exist
-        if: steps.pr.outputs.skip != 'true' && steps.images.outputs.has_images != 'true'
-        run: |
-          echo "❌ No PR images found for ${{ steps.pr.outputs.image_tag }}"
-          echo "   pr-build.yml must run successfully on the PR before it can be flighted."
-          echo "   Re-run pr-build and re-dispatch this workflow with workflow_dispatch(sha)."
-          exit 1
-
       # Re-tag only the images that were actually built (affected-only CI may skip services).
       # promote-and-deploy resolves preview-{sha} tags — this creates them without rebuilding.
       # Source tags use pr_head_sha (matches pr-build.yml); destination uses head_sha
@@ -171,7 +163,7 @@ jobs:
           echo "✅ Re-tag complete for preview-${HEAD_SHA:0:8}"
 
       - name: Flight to preview (lock-gate aware)
-        if: steps.pr.outputs.skip != 'true' && steps.images.outputs.has_images == 'true'
+        if: steps.pr.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
         run: |

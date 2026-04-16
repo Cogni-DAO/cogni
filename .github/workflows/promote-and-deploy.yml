@@ -124,23 +124,17 @@ jobs:
               digest=$(docker buildx imagetools inspect "$full_tag" 2>/dev/null | grep -oP 'Digest:\s+\Ksha256:[a-f0-9]+' | head -1) || true
             fi
             if [ -z "$digest" ]; then
-              echo "⚠️  Image not found: $full_tag (not built in this run — overlay entry unchanged)"
+              echo "⚠️  Image not found: $full_tag (not built in this run — overlay entry unchanged)" >&2
               echo ""
               return 0
             fi
             echo "${IMAGE_NAME}@${digest}"
           }
 
-          # operator is always required — fail hard if missing
-          OPERATOR_DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:${TAG}" --raw 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null) || true
-          if [ -z "$OPERATOR_DIGEST" ]; then
-            OPERATOR_DIGEST=$(docker buildx imagetools inspect "${IMAGE_NAME}:${TAG}" 2>/dev/null | grep -oP 'Digest:\s+\Ksha256:[a-f0-9]+' | head -1) || true
-          fi
-          if [ -z "$OPERATOR_DIGEST" ]; then
-            echo "❌ Operator image not found: ${IMAGE_NAME}:${TAG}"
-            exit 1
-          fi
-          OPERATOR_DIGEST="${IMAGE_NAME}@${OPERATOR_DIGEST}"
+          # Operator image: required for node-code PRs, optional for infra-only.
+          # When absent (infra-only deploy), the overlay keeps its existing digest
+          # and promote-k8s is effectively a no-op for k8s apps.
+          OPERATOR_DIGEST=$(resolve_optional "${TAG}")
 
           POLY_DIGEST=$(resolve_optional "${TAG}-poly")
           RESY_DIGEST=$(resolve_optional "${TAG}-resy")
@@ -154,7 +148,7 @@ jobs:
           echo "scheduler_worker=$SW_DIGEST" >> $GITHUB_OUTPUT
 
           echo "Resolved digests:"
-          echo "  operator:         $OPERATOR_DIGEST"
+          echo "  operator:         ${OPERATOR_DIGEST:-"(not built)"}"
           echo "  poly:             ${POLY_DIGEST:-"(not built)"}"
           echo "  resy:             ${RESY_DIGEST:-"(not built)"}"
           echo "  migrator:         ${MIGRATOR_DIGEST:-"(not built)"}"
@@ -197,14 +191,16 @@ jobs:
           # a placeholder image that can never pull).
           PROMOTED=()
 
-          # operator always present (checked earlier)
           MIGRATOR_DIGEST="${{ steps.digests.outputs.migrator }}"
-          ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
-            --env "$OVERLAY_ENV" \
-            --app operator \
-            --digest "${{ steps.digests.outputs.operator }}" \
-            ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
-          PROMOTED+=(operator)
+          OPERATOR_DIGEST="${{ steps.digests.outputs.operator }}"
+          if [ -n "$OPERATOR_DIGEST" ]; then
+            ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
+              --env "$OVERLAY_ENV" \
+              --app operator \
+              --digest "$OPERATOR_DIGEST" \
+              ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
+            PROMOTED+=(operator)
+          fi
 
           POLY_DIGEST="${{ steps.digests.outputs.poly }}"
           if [ -n "$POLY_DIGEST" ]; then
@@ -268,7 +264,11 @@ jobs:
           # Direct push to deploy branch — all environments.
           # Deploy branches are machine-written state; git history is the audit trail.
           # No PRs: they add no review value for automated digest updates.
-          git commit -m "promote: ${OVERLAY_ENV} ${SHORT_SHA}"
+          if [ -z "$PROMOTED_CSV" ]; then
+            git commit -m "sync: base/catalog ${SHORT_SHA} (no image promotion)"
+          else
+            git commit -m "promote: ${OVERLAY_ENV} ${SHORT_SHA}"
+          fi
           git push origin HEAD:${DEPLOY_BRANCH}
           DEPLOY_SHA=$(git rev-parse HEAD)
           echo "pushed=true" >> $GITHUB_OUTPUT
@@ -402,8 +402,12 @@ jobs:
           ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
           echo "✅ ApplicationSet reconciled"
 
+      # Skip ArgoCD wait when no image digests were promoted (infra-only deploy).
+      # NOTE: rsync'd base/catalog changes may still trigger Argo reconciliation;
+      # those are not tracked in promoted_apps. Acceptable: deploy-infra is
+      # idempotent and handles its own infra-layer ordering.
       - name: Wait for ArgoCD sync
-        if: env.VM_HOST != ''
+        if: env.VM_HOST != '' && needs.promote-k8s.outputs.promoted_apps != ''
         env:
           SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
           # Argo tracks the deploy branch, not main. EXPECTED_SHA must be the
