@@ -37,7 +37,6 @@ import {
 } from "@cogni/graph-execution-host";
 import type { UserId } from "@cogni/ids";
 import {
-  LANGGRAPH_CATALOG,
   loadMcpTools,
   McpToolSource,
   parseMcpConfigFromEnv,
@@ -51,6 +50,7 @@ import {
   LangGraphInProcProvider,
 } from "@/adapters/server";
 import { runInScope } from "@/adapters/server/ai/execution-scope";
+import { POLY_MERGED_CATALOG } from "@/adapters/server/ai/langgraph/poly-catalog";
 import type {
   AiExecutionErrorCode,
   BillingContext,
@@ -545,7 +545,7 @@ function createInProcProvider(
  */
 function createDevProvider(apiUrl: string): LangGraphDevProvider {
   const client = createLangGraphDevClient({ apiUrl });
-  const availableGraphs = Object.keys(LANGGRAPH_CATALOG);
+  const availableGraphs = Object.keys(POLY_MERGED_CATALOG);
   return new LangGraphDevProvider(client, { availableGraphs });
 }
 

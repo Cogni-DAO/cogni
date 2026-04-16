@@ -31,7 +31,6 @@ import {
   createInProcGraphRunner,
   type GraphResult,
   type InProcGraphRequest,
-  LANGGRAPH_CATALOG,
   type ToolExecFn,
 } from "@cogni/langgraph-graphs";
 import { trace } from "@opentelemetry/api";
@@ -53,6 +52,7 @@ import { EVENT_NAMES, makeLogger } from "@/shared/observability";
 import type { CompletionUnitParams } from "../inproc-completion-unit.adapter";
 
 import type { LangGraphCatalog } from "./catalog";
+import { POLY_MERGED_CATALOG } from "./poly-catalog";
 
 /**
  * Provider ID for LangGraph in-process execution.
@@ -107,8 +107,9 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
   ) {
     this.log = makeLogger({ component: "LangGraphInProcProvider" });
 
-    // Use catalog from package (single source of truth)
-    this.catalog = LANGGRAPH_CATALOG as LangGraphCatalog<CreateGraphFn>;
+    // Use merged catalog: generic LANGGRAPH_CATALOG + poly-specific graphs.
+    // Poly-brain is registered via POLY_LANGGRAPH_CATALOG in @cogni/poly-graphs.
+    this.catalog = POLY_MERGED_CATALOG as LangGraphCatalog<CreateGraphFn>;
 
     this.log.debug(
       {

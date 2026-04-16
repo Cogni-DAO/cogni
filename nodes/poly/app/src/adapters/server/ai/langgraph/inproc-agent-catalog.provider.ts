@@ -15,11 +15,10 @@
  * @internal
  */
 
-import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
-
 import type { AgentDescriptor } from "@/ports";
 
 import type { AgentCatalogProvider } from "../agent-catalog.provider";
+import { POLY_MERGED_CATALOG } from "./poly-catalog";
 
 /**
  * LangGraph provider ID for namespacing.
@@ -56,7 +55,7 @@ export class LangGraphInProcAgentCatalogProvider
    * Per LANGGRAPH_SERVER_ALIGNED: uses 'name' field (not displayName).
    */
   private buildDescriptors(): readonly AgentDescriptor[] {
-    return Object.entries(LANGGRAPH_CATALOG).map(([graphName, entry]) => {
+    return Object.entries(POLY_MERGED_CATALOG).map(([graphName, entry]) => {
       const graphId = `${this.providerId}:${graphName}`;
       return {
         agentId: graphId, // P0: agentId === graphId

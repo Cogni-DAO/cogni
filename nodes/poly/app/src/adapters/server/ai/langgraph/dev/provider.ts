@@ -17,7 +17,6 @@
  * @internal
  */
 
-import { LANGGRAPH_CATALOG } from "@cogni/langgraph-graphs";
 import type { AiEvent } from "@cogni/node-core";
 // biome-ignore lint/style/noRestrictedImports: SDK allowed in langgraph dev adapter per OFFICIAL_SDK_ONLY invariant
 import type { Client } from "@langchain/langgraph-sdk";
@@ -31,6 +30,8 @@ import type {
   GraphRunResult,
 } from "@/ports";
 import { makeLogger } from "@/shared/observability";
+
+import { POLY_MERGED_CATALOG } from "../poly-catalog";
 
 import {
   type SdkStreamChunk,
@@ -157,14 +158,15 @@ export class LangGraphDevProvider implements GraphExecutorPort {
     const attempt = 0; // P0_ATTEMPT_FREEZE
 
     // P0 Contract: undefined => catalog default, [] => deny-all, [...] => exact
-    const entry = LANGGRAPH_CATALOG[graphName];
+    const entry =
+      POLY_MERGED_CATALOG[graphName as keyof typeof POLY_MERGED_CATALOG];
     let resolvedToolIds: readonly string[];
 
     if (!entry) {
       // Config bug: graph in availableGraphs but not in catalog
       this.log.error(
         { runId, graphName },
-        "Graph missing from LANGGRAPH_CATALOG; defaulting to deny-all"
+        "Graph missing from POLY_MERGED_CATALOG; defaulting to deny-all"
       );
       resolvedToolIds = [];
     } else if (toolIds === undefined) {
