@@ -36,7 +36,9 @@ Research (spike.0314) mapped the OSS and data landscape. Rather than decompose i
 
 Two working increments, shipped as **two PRs under this one task**:
 
-- **v0 (PR-A, read-only, merges independently) — scoreboard:** user asks `poly-brain` "who are the top Polymarket wallets right now?" → agent calls a new `core__wallet_top_traders` tool → response is a scored list with wallet, PnL, win-rate, volume, activity score.
+- **v0 (PR-A, read-only, merges independently) — scoreboard, chat + dashboard:**
+  - user asks `poly-brain` "who are the top Polymarket wallets right now?" → agent calls a new `core__wallet_top_traders` tool → scored list with wallet / PnL / win-rate / volume / activity score rendered as a markdown table in chat.
+  - `/(app)/dashboard` gets a new "Top Wallets" card — server-component table of the top ~10 wallets with the same columns, backed by the same `WalletCapability`.
 - **v0.1 (PR-B, behind feature flag) — shadow mirror of one wallet:** operator sets one target wallet in config. A 30-second scheduler-core job detects new fills, decides a mirror order, and — **only if every guard passes** — places it via `@polymarket/clob-client` from a Cogni-owned proxy wallet. Default mode is `DRY_RUN=true` (shadow): decisions logged and persisted, no CLOB call. Live mode requires flipping both a DB kill-switch row AND the env var.
 
 ### Approach
@@ -69,11 +71,14 @@ Two working increments, shipped as **two PRs under this one task**:
 **v0 scoreboard (new, small):**
 
 - `packages/market-provider/src/adapters/polymarket/data-api.ts` — three Data-API methods + Zod schemas.
-- `packages/ai-tools/src/tools/wallet-top-traders.ts` — `core__wallet_top_traders` tool.
-- `packages/ai-tools/src/index.ts` — export the tool id.
+- `packages/ai-tools/src/tools/wallet-top-traders.ts` — `core__wallet_top_traders` tool; return shape is a markdown table string so chat renders cleanly without bespoke formatting.
+- `packages/ai-tools/src/index.ts` — export the tool id + `WalletCapability` interface.
 - `nodes/poly/app/src/bootstrap/capabilities/wallet.ts` — capability resolver delegating to the adapter.
 - `nodes/poly/app/src/bootstrap/ai/tool-bindings.ts` — bind the new tool.
 - `nodes/poly/graphs/src/graphs/poly-brain/tools.ts` — add to `POLY_BRAIN_TOOL_IDS`.
+- `nodes/poly/app/src/app/(app)/dashboard/_components/top-wallets-card.tsx` — server component, renders the top ~10 wallets in a table (existing dashboard-card pattern).
+- `nodes/poly/app/src/app/(app)/dashboard/_api/top-wallets.ts` — reads `WalletCapability` from the container, returns a typed DTO to the card. Keeps dashboard layer out of adapter imports.
+- `nodes/poly/app/src/app/(app)/dashboard/page.tsx` — slot the new card into the existing grid.
 
 **v0.1 mirror (new, small — follows existing `bootstrap/jobs/*.job.ts` + `@cogni/scheduler-core` pattern):**
 
@@ -86,11 +91,12 @@ Two working increments, shipped as **two PRs under this one task**:
 - `nodes/poly/app/src/shared/env/server-env.ts` — add `COPY_TRADE_TARGET_WALLET`, `COPY_TRADE_MIRROR_USDC`, `COPY_TRADE_DRY_RUN` (default `true`), `COPY_TRADE_MAX_DAILY_USDC`, `COPY_TRADE_MAX_FILLS_PER_HOUR`, `COPY_TRADE_OPERATOR_JURISDICTION` (must be set; checked against a block-list), `POLY_ROLE`.
 - `.env.example` — document the new env vars.
 
-**Observability:**
+**Observability (in scope, not deferred):**
 
 - One Pino log per job tick with (new_fills, skipped_reason_counts, placed_count, cap_remaining).
 - Prometheus counters: `poly_copy_trade_fills_seen_total`, `poly_copy_trade_decisions_total{outcome=placed|skipped|error, reason=...}`, `poly_copy_trade_live_orders_total`, `poly_copy_trade_cap_hit_total{dimension=daily|hourly}`.
-- Grafana dashboard row (one new panel set) referenced in the PR description; no new dashboard file in this task.
+- One new Grafana dashboard JSON checked in alongside the code (single panel group: tick rate, decisions by outcome, cap-hit rate, last-fill-age). Without this the 2-week shadow soak has nothing to watch. ~20 min of work.
+- `poly_copy_trade_decisions` log table includes a **shadow `proportional_size_usdc` column** that records what proportional sizing would have decided, even though we act on fixed USDC. Preserves the option to re-analyze the soak data without a second run.
 
 **Secret boundary (proxy-wallet keys):**
 
@@ -107,12 +113,11 @@ Two working increments, shipped as **two PRs under this one task**:
 - Integration test: a full tick in shadow mode inserts a `poly_copy_trade_fills` row and does NOT import `@polymarket/clob-client`.
 - No live CLOB call in CI. The `DRY_RUN=false` path is exercised manually once, in a controlled run, and the `order_id` pasted into the PR description as evidence.
 
-**Verification of `@polymarket/clob-client` (do this before starting PR-B — 30 min, no code):**
+**Pre-PR-A prep (~1 hour, zero code — do this first):**
 
-- Confirm: proxy-wallet signing flow supported end-to-end in the TS SDK (not just Python).
-- Confirm: L2 API-key auth (`POLY_CLOB_API_KEY/SECRET/PASSPHRASE`) path exists.
-- Confirm: `NegRiskAdapter` / multi-outcome markets are addressable.
-- If any gap: either scope v0.1 to single-outcome markets only, or fall back to `viem` + `@polymarket/order-utils` for raw EIP-712 signing. Record the outcome in the PR description.
+- **Leaderboard curl (10 min):** hit the actual Data-API endpoint and confirm it returns PnL + win-rate per wallet, not just volume. If only volume is available, the activity-score formula becomes `volume × win-rate` with a `CONCERN` logged in the PR. Save the raw JSON as a test fixture.
+- **Clob-client TS SDK verification (30 min, no code):** **moved here from PR-B prep.** Read `@polymarket/clob-client` source + README and confirm: (a) proxy-wallet signing end-to-end in TS, (b) L2 API-key auth path exists, (c) `NegRiskAdapter` / multi-outcome markets are addressable. If any gap, either scope v0.1 to single-outcome markets or fall back to `viem` + `@polymarket/order-utils` for raw EIP-712. Record the outcome in a short note under `docs/research/` and reference it from the PR-B description. Doing this before PR-A because a SDK gap changes the shape of `clob-executor.ts` enough to re-inform PR-A's capability boundaries.
+- **Tool-output rendering check (5 min):** send a sample markdown table through the existing poly-brain tool-output path to confirm chat renders it cleanly. If it doesn't, the tool returns structured JSON and the app does the rendering on the dashboard side — adjust before writing the tool schema.
 
 ### Invariants
 
@@ -179,6 +184,11 @@ Two working increments, shipped as **two PRs under this one task**:
 - Slippage modeling beyond a live-book sanity check in the mirror log
 
 If any of these get requested mid-flight, create a follow-up task instead of expanding this one.
+
+## Alignment Decisions (confirmed by operator before `/implement`)
+
+- **Operator jurisdiction:** this prototype operates **single-operator only** — no user-facing mirroring, no retail exposure, no multi-tenant. The `LEGAL_GATE` invariant guards the operator's jurisdiction, not end-users'. Scope expansion requires explicit re-scoping in a new task.
+- **Proxy-wallet key custody:** before PR-B merges, the PR description must name (a) the human who holds the proxy-wallet private key, (b) where it lives (password manager / secrets vault / env file on one machine), (c) the rotation plan. "We'll figure it out later" is not acceptable for a key that signs on-chain transactions from a Cogni-controlled wallet.
 
 ## Notes on v0.1 → "is this worth productizing?"
 
