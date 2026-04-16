@@ -57,12 +57,21 @@ export TEMPORAL_ADDRESS="${TEMPORAL_ADDRESS:-localhost:7233}"
 export TEMPORAL_NAMESPACE="${TEMPORAL_NAMESPACE:-cogni-test}"
 export TEMPORAL_TASK_QUEUE="${TEMPORAL_TASK_QUEUE:-scheduler-tasks}"
 
+# Compact output for check:fast. Passing tasks suppress stdout; failing tasks
+# stream grouped output with no per-line package prefix. Override with
+# TURBO_LOG_MODE=full for debugging.
+if [ "${TURBO_LOG_MODE:-compact}" = "compact" ]; then
+  TURBO_LOG_FLAGS=(--output-logs=errors-only --log-order=grouped --log-prefix=none)
+else
+  TURBO_LOG_FLAGS=()
+fi
+
 if [ "$use_affected" = true ]; then
   export TURBO_SCM_BASE="$UPSTREAM_REF"
   export TURBO_SCM_HEAD="$HEAD_REF"
   echo "Turbo scope: affected (${TURBO_SCM_BASE}...${TURBO_SCM_HEAD})"
-  exec pnpm turbo run "$@" --affected
+  exec pnpm turbo run "$@" --affected "${TURBO_LOG_FLAGS[@]}"
 fi
 
 echo "Turbo scope: full"
-exec pnpm turbo run "$@"
+exec pnpm turbo run "$@" "${TURBO_LOG_FLAGS[@]}"

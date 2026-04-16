@@ -104,12 +104,19 @@ if [ "$VERBOSE" = true ]; then
 fi
 
 if [ "$VERBOSE" = false ] && [ ${#FAILED_NAMES[@]} -gt 0 ]; then
+  TAIL_LINES=${CHECK_FAST_TAIL:-60}
   echo ""
   for i in "${!FAILED_NAMES[@]}"; do
+    total=$(printf '%s\n' "${FAILED_OUTPUTS[$i]}" | wc -l | tr -d ' ')
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Output from failed check: ${FAILED_NAMES[$i]}"
+    if [ "$total" -gt "$TAIL_LINES" ]; then
+      omitted=$((total - TAIL_LINES))
+      echo "Output from failed check: ${FAILED_NAMES[$i]} — last ${TAIL_LINES}/${total} lines (${omitted} earlier omitted; --verbose or CHECK_FAST_TAIL=N for more)"
+    else
+      echo "Output from failed check: ${FAILED_NAMES[$i]} — ${total} lines"
+    fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "${FAILED_OUTPUTS[$i]}"
+    printf '%s\n' "${FAILED_OUTPUTS[$i]}" | tail -n "$TAIL_LINES"
     echo ""
   done
 fi
