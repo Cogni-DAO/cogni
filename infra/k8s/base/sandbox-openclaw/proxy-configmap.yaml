@@ -14,7 +14,7 @@ data:
 
     http {
         upstream litellm {
-            server litellm:4000;
+            server operator-litellm-external:4000;
             keepalive 8;
         }
 
