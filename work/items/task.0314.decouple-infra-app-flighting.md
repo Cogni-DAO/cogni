@@ -2,8 +2,8 @@
 id: task.0314
 type: task
 title: "Decouple infra flighting from app flighting — two independent levers"
-status: needs_closeout
-revision: 1
+status: needs_implement
+revision: 2
 priority: 0
 rank: 1
 estimate: 5
@@ -372,6 +372,17 @@ Purpose: verify no doc or runbook advertises behavior that no longer matches (e.
 5. Merge any small PR to main; confirm the merge→preview chain fires end-to-end identically to today's behavior (no new failure modes, lock-gate writes correct SHAs).
 
 ## Review Feedback
+
+### Revision 2 (2026-04-16) — REQUEST CHANGES
+
+**Blocking:**
+
+- **B1'** — `candidate-flight-infra.yml` declares `VM_HOST` at step level only. GHA evaluates step `if:` conditions against workflow+job env, NOT the step's own `env:`. So `if: env.VM_HOST != ''` on the Deploy step at L66 always evaluates false, and the Deploy step is **always skipped** even when VM_HOST is set. Workflow reports green vacuously — silent no-op. **Fix:** hoist `VM_HOST` (and preferably all secrets) to a job-level `env:` block, mirroring `promote-and-deploy.yml:280–307`. Remove the duplicated per-step env.
+
+**Nice-to-have:**
+
+- **S5** — `deploy-infra.sh --ref`: edge cases `--ref ""` and `--ref=value` fall through unhelpfully. Minor.
+- **S6** — Capture `git fetch` stderr so the L356 `log_fatal` on unresolvable ref is self-explanatory.
 
 ### Revision 1 (2026-04-16) — addressed
 
