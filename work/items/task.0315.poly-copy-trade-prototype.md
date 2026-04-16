@@ -8,7 +8,7 @@ estimate: 5
 rank: 5
 branch: research/poly-copy-trading-wallets
 summary: "One-shot prototype task. v0 (PR-A, this PR): poly-brain + dashboard answer 'who are the top Polymarket wallets?' via a new core__wallet_top_traders tool + /dashboard Top Wallets card backed by the Polymarket Data API. v0.1 (PR-B, not in this PR): single-wallet shadow mirror via @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
-outcome: "A running prototype in the poly node: (v0) ask poly-brain 'top wallets this week' and get a ranked, scored list inline in chat; (v0.1) set ONE tracked wallet via env/config, a 30-second poller detects new fills, a mirror order is placed on Polymarket via @polymarket/clob-client with a small fixed USDC size. All behind a DRY_RUN flag until we trust it."
+outcome: "A running prototype in the poly node: (v0) ask poly-brain 'top wallets this week' and get a ranked, scored list inline in chat; (v0.1) operator clicks a wallet on the dashboard Top Wallets card → a Polymarket user WebSocket streams that wallet's fills through Redis → a Temporal workflow mirrors each fill via the MarketProviderPort Run methods (Privy-signed on Polygon) at `mirror_usdc` size. Default per-target mode is paper; flipping to live + global kill-switch enabled triggers real orders. End-to-end latency from target's fill to our order placed: sub-2s on the hot path."
 spec_refs:
   - architecture
   - langgraph-patterns
@@ -66,15 +66,88 @@ Two working increments, shipped as **two PRs under this one task**:
 - **v0 (PR-A, read-only, merges independently) — scoreboard, chat + dashboard:**
   - user asks `poly-brain` "who are the top Polymarket wallets right now?" → agent calls a new `core__wallet_top_traders` tool → scored list with wallet / PnL / win-rate / volume / activity score rendered as a markdown table in chat.
   - `/(app)/dashboard` gets a new "Top Wallets" card — server-component table of the top ~10 wallets with the same columns, backed by the same `WalletCapability`.
-- **v0.1 (PR-B, behind feature flag) — shadow mirror of one wallet:** operator sets one target wallet in config. A 30-second scheduler-core job detects new fills, decides a mirror order, and — **only if every guard passes** — routes placement through the existing `MarketProviderPort`'s **Run-phase surface** (`placeOrder` / `cancelOrder` / `getOrder` — methods the port was designed to grow into, see port comment "Run: placeOrder(), getPositions() added when trading starts"). Two adapters implement the Run surface behind the same port: the **polymarket-clob** adapter (signs real orders via `@polymarket/clob-client` + a wallet key resolved from `MarketCredentials`) and a **paper** adapter (interface-defined here, body deferred — writes intents to a `paper_orders` table with a synthetic book-snapshot fill price). Default adapter for PR-B is polymarket-clob with `DRY_RUN=true` short-circuiting to a noop receipt; once the paper adapter ships, `DRY_RUN` becomes adapter selection, not an `if` inside the live adapter. Live mode requires `DRY_RUN=false` AND a DB kill-switch row flipped to `true`.
+- **v0.1 (PR-B, click-to-copy + realtime mirror) — shadow mirror of one wallet:** operator clicks a wallet on the Top Wallets dashboard card → row inserted into `poly_copy_trade_targets (wallet, mode='paper'|'live', mirror_usdc, max_daily_usdc, max_fills_per_hour, enabled, ...)`. A long-lived **Polymarket user WebSocket subscription** for each enabled target publishes `PolymarketFillObserved` events to the existing `@cogni/node-streams` bus. A subscriber consumes the stream, runs mirror-service decision logic, and — only if every guard passes — routes placement through the existing `MarketProviderPort`'s **Run-phase surface** (`placeOrder` / `cancelOrder` / `getOrder`). Adapter selection per-target: `mode='live'` → polymarket-clob adapter (Privy-signed on Polygon); `mode='paper'` → paper adapter (stub in PR-B, body in follow-up). A 5-min reconciliation job runs as a safety net for any WebSocket gaps. Live mode requires the target's `mode='live'` AND global kill-switch row `enabled=true`.
 
 ### Approach
 
-**Solution:** port patterns from `Polymarket/agents` + `GiordanoSouza/polymarket-copy-trading-bot` (see research doc). TS-only, no Python. Three pieces:
+**Solution:** port patterns from `Polymarket/agents` + `GiordanoSouza/polymarket-copy-trading-bot` (see research doc). TS-only, no Python.
 
-1. **Polymarket Data-API calls** — three thin methods on the existing `PolymarketAdapter`: `listTopTraders`, `listUserActivity`, `listUserPositions`. No new port, no new package (v0 / PR-A, already shipped).
-2. **v0 scoreboard tool** — one new LangGraph tool `core__wallet_top_traders` cloned from the `core__market_list` shape. (v0 / PR-A, already shipped.)
-3. **v0.1 mirror loop** — a `@cogni/scheduler-core` job registered under `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts`, mirroring the shipped `syncGovernanceSchedules.job.ts` pattern. Every 30 s it polls `listUserActivity(TARGET_WALLET)`, dedupes against `poly_copy_trade_fills (PK wallet, fill_id)`, decides a mirror order with **fixed-USDC sizing** (`MIRROR_USDC` per fill), and for each new fill calls `container.marketExecutor.placeOrder(intent)` if and only if every guard passes. Guards: `DRY_RUN=true` default (swaps the adapter, not a conditional inside the adapter), DB-row kill switch `poly_copy_trade_config.live_enabled`, `pg_advisory_lock` for single-writer safety, hard daily USDC + fills-per-hour caps, legal-gate env assertion. Feature flag: job inert unless `COPY_TRADE_TARGET_WALLET` is set.
+v0.1 composes four existing primitives — `@cogni/node-streams` (Redis live plane), Temporal (I/O + workflows), the existing `MarketProviderPort` (reads + Run-phase writes), and the existing `PrivyOperatorWalletAdapter` (extended for Polygon EIP-712 typed-data signing). The only new code is wiring + a per-target config table + a UI button.
+
+#### 1. Data flow — 3-tier, realtime, spec-aligned
+
+Follows the `STREAM_THEN_EVALUATE` + `TEMPORAL_OWNS_IO` invariants from [data-streams-spec](../../docs/spec/data-streams.md).
+
+```
+Tier 1 — External source (Polymarket CLOB user-channel WebSocket, per enabled target wallet)
+   │
+   │  Temporal activity `subscribePolymarketUserFills` (long-lived, one per enabled target)
+   │  — normalizes each frame to `PolymarketFillObserved`, XADDs with source_ref
+   ▼
+Tier 2 — `streams:copy-trade:polymarket-fills` (Redis stream, MAXLEN 2000, ~16h @ typical rate)
+   │     └── SSE tails this via `/api/v1/node/stream` → dashboard "Copy Trade Live" card
+   │
+   │  Temporal workflow `CopyTradeTriggerWorkflow` — pure, replay-safe
+   │  — reads `poly_copy_trade_targets` + last-N fills dedupe table
+   │  — applies: target-wallet match → already-placed dedupe → per-target caps → global kill switch
+   │  — on match: XADDs `triggers:copy-trade` + signals child workflow
+   ▼
+Tier 2 — `triggers:copy-trade` (Redis stream, MAXLEN 500) + `poly_copy_trade_fills` INSERT (commit point)
+   │
+   │  Child workflow `MirrorOrderWorkflow` — one activity call per decision
+   │  — activity: `container.marketProvider.placeOrder(intent)` via port
+   │  — idempotent by `client_order_id = hash(target_wallet || fill_id)`
+   ▼
+Tier 3 — Postgres: order_id + status written back to `poly_copy_trade_fills`; decision audit row in `poly_copy_trade_decisions`
+```
+
+Reconciliation safety net: a Temporal scheduled workflow every 5 min calls `listUserActivity(target)` on the Data API and XADDs any fills that don't appear in the last 16 h of the Redis stream. Missed WS frames flow through the normal pipeline from there. No bespoke reconciliation logic.
+
+#### 2. Config — DB-backed, not env vars (except CLOB secrets)
+
+Per-target config lives in a new table `poly_copy_trade_targets` so the operator can click-to-copy from the Top Wallets dashboard card (shipped in PR-A) and tune sizing without redeploy:
+
+```sql
+poly_copy_trade_targets (
+  id            uuid PRIMARY KEY,
+  wallet        text UNIQUE NOT NULL,         -- the tracked Polymarket proxy wallet
+  mode          text NOT NULL CHECK (mode IN ('paper','live')) DEFAULT 'paper',
+  mirror_usdc            numeric(10,2) NOT NULL DEFAULT 1.00,
+  max_daily_usdc         numeric(10,2) NOT NULL DEFAULT 10.00,
+  max_fills_per_hour     integer       NOT NULL DEFAULT 5,
+  enabled       boolean NOT NULL DEFAULT true,    -- per-target kill
+  added_by      text NOT NULL,                     -- user_id who clicked
+  added_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+)
+```
+
+Global kill switch: single-row table `poly_copy_trade_config.enabled` (boolean) — flipping to `false` halts ALL live placements within one workflow tick. Per-target `mode='paper'` or `enabled=false` halts just that target.
+
+Env vars shrink to the minimum: CLOB L2 secrets (appropriate for env/vault per user directive) + deployment role flag. The prior design's `COPY_TRADE_TARGET_WALLET`, `COPY_TRADE_MIRROR_USDC`, `COPY_TRADE_DRY_RUN`, `COPY_TRADE_MAX_DAILY_USDC`, `COPY_TRADE_MAX_FILLS_PER_HOUR`, `COPY_TRADE_OPERATOR_JURISDICTION`, `POLY_PROXY_SIGNER_PRIVATE_KEY` are all removed.
+
+#### 3. Click-to-copy UI
+
+Dashboard Top Wallets card (PR-A) gets a "Copy" action per row → POST `/api/v1/poly/copy-targets` with `{wallet}` + sensible defaults. A new sibling card "Copy Targets" lists active targets with live status (mode toggle, enable/disable, remove). The card subscribes to the existing `/api/v1/node/stream` SSE for live fill/decision events so the operator sees mirror activity in real time.
+
+#### 4. Port + signer — reuse what exists
+
+- **`MarketProviderPort` grows three Run-phase methods** (`placeOrder` / `cancelOrder` / `getOrder`) — exactly the extension anticipated by the port's own header comment ("Run: placeOrder(), getPositions() added when trading starts"). No new port, no new package.
+- **Signer = Privy, Polygon EIP-712 typed-data** — extend `PrivyOperatorWalletAdapter` with a `signPolymarketOrder(typedData)` method (Privy supports Polygon directly per user confirmation). The Polymarket market-provider adapter calls this via a narrow injected signer interface (`PolymarketOrderSigner`), so the market adapter never touches Privy config or key material. Zero new custody surface, zero new env vars for signing.
+- **Safe-proxy model explicit**: the Privy EOA signs orders; the **Polymarket Safe proxy** (deployed on first ToS acceptance) holds USDC.e and receives fills. Funding goes to the proxy, not the EOA. Both addresses surface in the adapter config so the dashboard can display the funded balance.
+
+#### 5. Paper-trading seam (stub only in this PR)
+
+`packages/market-provider/src/adapters/paper/` — interface wired, body throws `NotImplemented`. Reserved for the follow-up that adds a `paper_orders` table with synthetic book-snapshot fill prices. Container wiring already selects the adapter by `target.mode`, so the follow-up is a zero-touch swap for the pipeline code.
+
+#### 6. Scope note — PR split
+
+This is larger than a typical 5-point task. If it grows past ~10 days of work, split along the seam:
+
+- **PR-B1**: MarketProviderPort Run-phase extension + polymarket adapter Run methods + Privy `signPolymarketOrder` + Temporal workflows (ingester, trigger, mirror) + dedupe/decision tables + global kill switch. Target: single hardcoded wallet for first live order evidence.
+- **PR-B2**: `poly_copy_trade_targets` table + click-to-copy UI + Copy Targets card + per-target caps replacing hardcode. Unblocks multi-target + operator self-service.
+
+Ship as one PR if scope stays tight; split if B1 alone takes >1 week.
 
 **Strategic seam — grow `MarketProviderPort`, do NOT add a new package:**
 
@@ -132,13 +205,19 @@ Either path, the key lives inside the polymarket adapter; app/job code only sees
 - **A new `MarketExecutorPort` / `@cogni/market-executor` package** — considered, rejected. The existing `MarketProviderPort` was explicitly designed to grow into the Run phase, and splitting reads from writes would fragment the provider abstraction and duplicate `MarketCredentials`. Extend the existing port.
 - **Extending `OperatorWalletPort` with `placePolymarketOrder`** — rejected. Different effect (off-chain match vs. on-chain transfer), different chain, different idempotency. CLOB order placement belongs on the market port, not the wallet port. Wallet port remains for transfers; market port gains signing via its credential slot.
 - **`clob-executor.ts` inside `nodes/poly/app/`** (the prior design) — private-key loading inside app code violates `KEY_NEVER_IN_APP`. Moved into the polymarket market-provider adapter where key custody is the adapter's explicit responsibility.
-- **`DRY_RUN` as a conditional inside the live adapter** — the prior design had the executor no-op under `DRY_RUN=true`. Mixes two adapter identities in one module, leaves dead paths in the trader process, and prevents paper-tracking analysis. Replaced by a future paper-adapter swap at container wiring; for PR-B alone, `DRY_RUN=true` short-circuits inside the job (acceptable interim until the paper adapter ships).
-- Awareness-plane `ObservationEvent(kind=polymarket_wallet_trade)` — defer until N wallets + `poly-synth` analysis.
+- **`DRY_RUN` as a conditional inside the live adapter** — mixes adapter identities, prevents paper-tracking analysis. Replaced by per-target `mode` column → adapter selection at the port boundary.
+- **30 s scheduler-core poll as the primary trigger** — prior design. Violated `STREAM_THEN_EVALUATE`, lost ~15 s of fill-to-order latency on average (killing any realistic slippage edge), and ignored the existing Redis live plane + Temporal infra. Replaced by WebSocket → `streams:copy-trade:polymarket-fills` → Temporal trigger workflow.
+- **Bootstrap `setInterval` or long-lived Next.js process owning the WebSocket** — violates `TEMPORAL_OWNS_IO` and the `data-streams-spec` constraint that bootstrap publishers must NOT poll external sources. The WS subscriber is a Temporal activity with heartbeats.
+- **Awareness-plane `ObservationEvent` insert** — considered. Skipped for PR-B: `observation_events` is the AI-awareness durability table, not the right home for copy-trade fills. We use `triggers:copy-trade` (Redis) + `poly_copy_trade_fills` (Postgres, our own commit point) + `poly_copy_trade_decisions` (Postgres, our own audit) instead. If `poly-synth` later wants to analyze mirror activity, it reads these tables directly.
+- **Env-var per-target config** — considered. Rejected: operator must click-to-copy from the dashboard; env-var + redeploy per wallet change is the wrong UX. DB-backed `poly_copy_trade_targets` is the proper shape. Only CLOB L2 secrets and the `POLY_ROLE` deployment flag stay in env.
+- **Self-attested legal-gate env var (`COPY_TRADE_OPERATOR_JURISDICTION`)** — removed. Trivially bypassable, gave false assurance. Single-operator prototype; legal responsibility lives in the PR description's alignment-decisions checklist.
+- **Separate private-key env var (`POLY_PROXY_SIGNER_PRIVATE_KEY`)** — removed. Privy already holds the operator wallet key via HSM; the new Privy `signPolymarketOrder` method handles Polygon EIP-712. Zero new key-custody surface.
+- **A new `MarketExecutorPort` / `@cogni/market-executor` package** — rejected earlier; still the right call.
+- **Extending `OperatorWalletPort` with `placePolymarketOrder`** — rejected. Wallet port stays for transfers. But it *does* gain `signPolymarketOrder` (typed-data signing is a natural wallet capability, not a market one).
 - `poly_tracked_wallets` table / weekly ranking batch — unnecessary; Data-API leaderboard is live.
 - Importing any Python OSS — different runtime, viral licenses where applicable.
-- Goldsky subgraph / CLOB WebSocket / Polygon block-listener — 30 s HTTP poll is sufficient for prototype. **Documented tradeoff:** 30 s latency eats some slippage edge; if the shadow soak shows slippage is the killer, the fix is to swap the job for a WebSocket subscription behind the same port — mirror-service logic untouched.
-- Multi-wallet, category scoping, ranking sophistication — defer.
-- Real money by default — adapter selection defaults to paper.
+- Multi-wallet category scoping, ranking sophistication — defer.
+- Real money by default — per-target default is `mode='paper'`.
 
 ### Files
 
@@ -154,18 +233,60 @@ Either path, the key lives inside the polymarket adapter; app/job code only sees
 - `nodes/poly/app/src/app/(app)/dashboard/_api/top-wallets.ts` — reads `WalletCapability` from the container, returns a typed DTO to the card. Keeps dashboard layer out of adapter imports.
 - `nodes/poly/app/src/app/(app)/dashboard/page.tsx` — slot the new card into the existing grid.
 
-**v0.1 mirror (new, small — follows existing `bootstrap/jobs/*.job.ts` + `@cogni/scheduler-core` pattern):**
+**v0.1 mirror (realtime, Temporal + node-streams):**
 
-- `packages/market-provider/src/port/market-provider.port.ts` — extend `MarketProviderPort` with `placeOrder` / `cancelOrder` / `getOrder`; add `OrderIntent` / `OrderReceipt` / `OrderStatus` Zod schemas under `src/domain/`.
-- `packages/market-provider/src/adapters/polymarket/` — extend the existing adapter with the three Run methods. Lazy-loads `@polymarket/clob-client` only when a wallet-key credential is present. Adapter is the sole importer of the clob client and the only module that ever sees the wallet key in memory.
-- `packages/market-provider/src/adapters/paper/` — **stub only in this PR** (interface wired, body throws `NotImplemented`). Reserved for the paper-trading follow-up.
-- `nodes/poly/app/src/features/copy-trade/mirror-service.ts` — pure domain logic: persisted-dedupe query, sizing (fixed USDC), daily-cap check, fills-per-hour check, legal-gate check, kill-switch check → emits a `MirrorDecision` (`place` / `skip-reason`). Calls `container.marketProvider.placeOrder(intent)` when placing. No direct SDK imports.
-- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — `scheduler-core` job, polls `listUserActivity(TARGET_WALLET)` every 30 s, persists every decision (placed or skipped) with reason to Pino + a `poly_copy_trade_decisions` log table, acquires `pg_advisory_lock` to ensure single-writer.
-- `nodes/poly/app/src/shared/db/schema.ts` — add two tables:
-  - `poly_copy_trade_fills (wallet text, fill_id text, decided_at timestamptz, order_id text null, PRIMARY KEY (wallet, fill_id))` — the dedupe source of truth.
-  - `poly_copy_trade_config (singleton_id int PK = 1, live_enabled boolean not null default false, updated_at timestamptz, updated_by text)` — the runtime kill switch, must be `true` AND `DRY_RUN=false` for a real order to place.
-- `nodes/poly/app/src/shared/env/server-env.ts` — add `COPY_TRADE_TARGET_WALLET`, `COPY_TRADE_MIRROR_USDC`, `COPY_TRADE_DRY_RUN` (default `true`), `COPY_TRADE_MAX_DAILY_USDC`, `COPY_TRADE_MAX_FILLS_PER_HOUR`, `COPY_TRADE_OPERATOR_JURISDICTION` (must be set; checked against a block-list), `POLY_ROLE`.
-- `.env.example` — document the new env vars.
+*Port + adapters (`packages/market-provider`):*
+
+- `packages/market-provider/src/port/market-provider.port.ts` — extend `MarketProviderPort` with `placeOrder` / `cancelOrder` / `getOrder`.
+- `packages/market-provider/src/domain/order.ts` (new) — `OrderIntent` / `OrderReceipt` / `OrderStatus` Zod schemas + `PolymarketFillObserved` event schema.
+- `packages/market-provider/src/port/polymarket-order-signer.port.ts` (new) — narrow interface `{ signPolymarketOrder(typedData): Promise<Hex> }` that the polymarket adapter depends on. Decouples the market adapter from Privy.
+- `packages/market-provider/src/adapters/polymarket/` — extend existing adapter with Run methods; injects a `PolymarketOrderSigner` and the Safe-proxy address at construction. Sole importer of `@polymarket/clob-client`.
+- `packages/market-provider/src/adapters/paper/` — **stub only** (interface wired, body throws `NotImplemented`). Reserved for follow-up.
+
+*Signer (`packages/operator-wallet`):*
+
+- `packages/operator-wallet/src/port/operator-wallet.port.ts` — add `signPolymarketOrder(typedData: Eip712TypedData): Promise<Hex>`.
+- `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts` — implement the new method via Privy's Polygon typed-data signing. Parameterize chain scoping so the existing Base-specific methods continue to use `BASE_CAIP2` and the new method uses `POLYGON_CAIP2` (`eip155:137`). Expose `PolymarketOrderSigner` in the container by narrowing the full `OperatorWalletPort`.
+
+*Temporal workflows + activities (`nodes/poly/app/src/features/copy-trade/`):*
+
+- `activities/subscribePolymarketUserFills.activity.ts` — long-lived activity, one instance per enabled target. Opens the Polymarket user WebSocket, normalizes frames, XADDs to `streams:copy-trade:polymarket-fills` with `source_ref={wallet, fill_id}`. Heartbeats so Temporal can restart on drop.
+- `activities/placeMirrorOrder.activity.ts` — calls `container.marketProvider.placeOrder(intent)`. Idempotent via `client_order_id`. Writes `order_id` + status back to `poly_copy_trade_fills`.
+- `workflows/CopyTradeIngesterWorkflow.ts` — parent workflow: on each enable/disable event from `poly_copy_trade_targets`, starts or cancels a child activity per wallet.
+- `workflows/CopyTradeTriggerWorkflow.ts` — tails the fills stream (via activity that XREAD-BLOCKs), evaluates pure triggers against target-match + dedupe + caps + global kill, on match signals `MirrorOrderWorkflow` and XADDs `triggers:copy-trade`.
+- `workflows/MirrorOrderWorkflow.ts` — single activity `placeMirrorOrder`, retry-safe, writes `poly_copy_trade_decisions` audit row on completion.
+- `workflows/ReconcileFillsWorkflow.ts` — scheduled every 5 min; Data-API `listUserActivity(target)` diff against Redis stream's last 16 h; missing fills XADDed into the normal pipeline.
+
+*DB schema (poly-local; if reusable cross-node, promote to `@cogni/db-schema/copy-trade`):*
+
+- `nodes/poly/app/src/shared/db/schema.ts` — add:
+  - `poly_copy_trade_targets` (per-wallet config, schema above)
+  - `poly_copy_trade_config` (singleton_id=1, `enabled boolean`) — global kill switch
+  - `poly_copy_trade_fills (target_id uuid, fill_id text, observed_at timestamptz, client_order_id text, order_id text null, status text, PRIMARY KEY (target_id, fill_id))` — dedupe + commit point
+  - `poly_copy_trade_decisions (id uuid, target_id uuid, fill_id text, outcome text, reason text null, intent jsonb, receipt jsonb null, decided_at timestamptz)` — audit log
+
+*UI (`nodes/poly/app/src/app/(app)/dashboard/`):*
+
+- `_components/top-wallets-card.tsx` — add "Copy" button per row (wired to server action).
+- `_components/copy-targets-card.tsx` (new) — lists `poly_copy_trade_targets`, mode toggle, enable/disable/remove, live decision feed via existing `useNodeStream()`.
+- `_api/copy-targets.ts` (new) — server action CRUD on targets table. RBAC: operator role only.
+- `_components/copy-trade-live-feed.tsx` (new) — subscribes to `/api/v1/node/stream`, filters on `copy_trade_fill` / `copy_trade_decision` event types.
+
+*Node-streams event types (`packages/market-provider/src/domain/` + poly node union):*
+
+- Extend the poly node's `NodeEvent` union with `PolymarketFillObserved` + `CopyTradeDecisionMade` (for the curated `node:{nodeId}:events` stream the dashboard already consumes).
+
+*Container wiring (`nodes/poly/app/src/bootstrap/`):*
+
+- `container.ts` — construct `PolymarketMarketProviderAdapter` with the Privy-backed `PolymarketOrderSigner` when `POLY_ROLE === 'trader'`. In any other role, the adapter is constructed read-only (no signer) and `placeOrder` throws if called — web replicas never load `@polymarket/clob-client` or Privy Polygon signing.
+- `capabilities/market.ts` (existing) — unchanged signature, now returns a port with Run methods available when the trader role is wired.
+
+*Env vars — shrunk:*
+
+- `nodes/poly/app/src/shared/env/server-env.ts` — add only:
+  - `POLY_ROLE` (deployment-role flag: `'trader' | 'web' | 'scheduler'`)
+  - `POLY_CLOB_API_KEY`, `POLY_CLOB_API_SECRET`, `POLY_CLOB_PASSPHRASE` (CLOB L2 auth — correct place for these per secrets-in-vault directive)
+- `.env.example` — document the four above. Remove all prior `COPY_TRADE_*` proposals.
 
 **Observability (in scope, not deferred):**
 
@@ -174,12 +295,14 @@ Either path, the key lives inside the polymarket adapter; app/job code only sees
 - One new Grafana dashboard JSON checked in alongside the code (single panel group: tick rate, decisions by outcome, cap-hit rate, last-fill-age). Without this the 2-week shadow soak has nothing to watch. ~20 min of work.
 - `poly_copy_trade_decisions` log table includes a **shadow `proportional_size_usdc` column** that records what proportional sizing would have decided, even though we act on fixed USDC. Preserves the option to re-analyze the soak data without a second run.
 
-**Secret boundary (proxy-wallet keys):**
+**Secret boundary:**
 
-- `POLY_PROXY_WALLET_ADDRESS` — on-chain proxy wallet holding USDC.e on Polygon (public).
-- Signer: resolved via `MarketCredentials.walletKey`. **Preferred path (subject to spike):** Privy operator wallet signs Polygon EIP-712 CLOB orders — zero new key surface. **Fallback path:** `POLY_PROXY_SIGNER_PRIVATE_KEY` env var, loaded only inside the Polymarket adapter when constructed with a wallet-key credential. Never crosses into tool code, graph code, or the mirror job.
-- `POLY_CLOB_API_KEY` / `POLY_CLOB_API_SECRET` / `POLY_CLOB_PASSPHRASE` — CLOB API credentials if Polymarket requires the L2 auth flow.
-- Manual one-time setup (documented in the PR, not automated): create the proxy wallet, sign Polymarket ToS, fund with USDC.e. Not in scope to automate for a prototype.
+- **Signing key**: held by Privy (existing operator wallet HSM). Neither the market adapter nor app code ever sees raw key material. Polygon EIP-712 typed-data signing is a new named method on `OperatorWalletPort` / `PrivyOperatorWalletAdapter`.
+- **Addresses (public, stored with the Privy wallet config or in a small new adapter-config area):**
+  - `signer_address` — the Privy-managed EOA that signs CLOB orders. Holds no funds.
+  - `safe_proxy_address` — the Polymarket Safe proxy deployed on ToS acceptance. **Holds USDC.e and receives fills.** Resolved once via `@polymarket/clob-client.getSafeAddress()` or derived at adapter construction.
+- **CLOB L2 credentials** (env/vault, per directive to keep CLOB secrets in env): `POLY_CLOB_API_KEY`, `POLY_CLOB_API_SECRET`, `POLY_CLOB_PASSPHRASE`. Only loaded when `POLY_ROLE === 'trader'`.
+- **Manual one-time setup** (documented in the PR, not automated): accept Polymarket ToS with the Privy EOA, record the Safe proxy address, fund the proxy (not the EOA) with USDC.e on Polygon, fund the EOA with a few POL for occasional gas (cancels/withdrawals).
 
 **Tests:**
 
@@ -205,21 +328,23 @@ Either path, the key lives inside the polymarket adapter; app/job code only sees
 - [ ] CONTRACT_IS_SOT: Zod schemas for Data-API + tool input/output (spec: architecture)
 - [ ] CAPABILITY_NOT_ADAPTER: the tool imports the capability interface, not the adapter
 - [ ] TOOL_ID_NAMESPACED: `core__wallet_top_traders`, `effect: read_only` (spec: architecture)
-- [ ] DRY_RUN_DEFAULT: `COPY_TRADE_DRY_RUN` defaults to `true`; real trades require an explicit flip
-- [ ] DEDUPE_PERSISTED: dedupe via `poly_copy_trade_fills` Postgres table keyed `(wallet, fill_id)`, NOT in-memory — restart crash does not double-fire
-- [ ] KILL_SWITCH_DB_ROW: a real order requires `poly_copy_trade_config.live_enabled = true` AND `DRY_RUN=false` — an operator flips the DB row to halt instantly without redeploy
-- [ ] HARD_CAP_DAILY: job enforces `COPY_TRADE_MAX_DAILY_USDC`
-- [ ] HARD_CAP_HOURLY: job enforces `COPY_TRADE_MAX_FILLS_PER_HOUR`
-- [ ] LEGAL_GATE: `COPY_TRADE_OPERATOR_JURISDICTION` must be set and not in the block-list (`US` included) for any live order; shadow mode runs regardless
-- [ ] KEY_IN_ADAPTER_ONLY: the Polymarket adapter is the only module that imports `@polymarket/clob-client` or materializes a wallet-key credential; web / scheduler-sync replicas constructed without `walletKey` never load the clob SDK (lazy-import boundary)
-- [ ] PORT_IS_EXISTING: Run-phase methods extend the existing `MarketProviderPort`; no new port package is introduced
-- [ ] CREDENTIALS_VIA_PORT: signer material flows through `MarketCredentials.walletKey`; app/job code never touches raw keys
-- [ ] IDEMPOTENT_BY_CLIENT_ID: `OrderIntent.client_order_id` is derived deterministically from `(tracked_wallet, tracked_fill_id)`; duplicate placement is a no-op at the adapter
-- [ ] SIMPLE_SOLUTION: port patterns from OSS references; no ranking pipeline, no awareness-plane tables (spec: architecture)
-- [ ] SIMPLE_OVER_GENERIC: one target wallet, one sizing rule (fixed USDC per fill), one proxy wallet — no multi-tenancy
-- [ ] SCHEDULER_CORE_FOR_BACKGROUND: v0.1 loop runs as a `bootstrap/jobs/*.job.ts` via `@cogni/scheduler-core`, not a bespoke `setInterval` (spec: architecture)
-- [ ] SINGLE_WRITER: job acquires `pg_advisory_lock` so multi-replica deployments don't double-fire (mirrors `syncGovernanceSchedules.job.ts`)
-- [ ] SECRETS_STAY_IN_EXECUTOR: the proxy-wallet private key is imported only by `clob-executor.ts`; tool code, capability code, and the graph never touch it (spec: architecture)
+- [ ] DEFAULT_MODE_PAPER: new targets default to `mode='paper'`; flipping to `'live'` is explicit per-target
+- [ ] DEDUPE_PERSISTED: dedupe via `poly_copy_trade_fills` Postgres table keyed `(target_id, fill_id)`, NOT in-memory — restart does not double-fire
+- [ ] GLOBAL_KILL_DB_ROW: `poly_copy_trade_config.enabled=false` halts ALL live placements within one workflow tick, no redeploy
+- [ ] PER_TARGET_KILL: `poly_copy_trade_targets.enabled=false` halts that target; `mode='paper'` routes through the paper adapter
+- [ ] HARD_CAP_DAILY: trigger workflow enforces `target.max_daily_usdc`
+- [ ] HARD_CAP_HOURLY: trigger workflow enforces `target.max_fills_per_hour`
+- [ ] KEY_IN_ADAPTER_ONLY: `@polymarket/clob-client` is imported only by the Polymarket market-provider adapter; Polygon EIP-712 signing lives only inside `PrivyOperatorWalletAdapter`; web / non-trader replicas load neither
+- [ ] PORT_IS_EXISTING: Run-phase methods extend the existing `MarketProviderPort`; no new port package
+- [ ] SIGNER_VIA_PORT: polymarket adapter receives a narrow `PolymarketOrderSigner` by constructor injection; never imports Privy or env directly
+- [ ] IDEMPOTENT_BY_CLIENT_ID: `client_order_id = hash(target_id || fill_id)`; duplicate placements are a no-op at the CLOB
+- [ ] STREAM_THEN_EVALUATE: every Polymarket fill is XADDed to `streams:copy-trade:polymarket-fills` before trigger evaluation (spec: data-streams)
+- [ ] TEMPORAL_OWNS_IO: WebSocket subscription, stream reads/writes, and DB writes all happen in Temporal activities; workflow code is pure (spec: data-streams)
+- [ ] TRIGGERS_ARE_PURE: `CopyTradeTriggerWorkflow` is a pure, replay-safe function of stream entries + DB snapshot (spec: data-streams)
+- [ ] REDIS_MAXLEN_ENFORCED: `streams:copy-trade:polymarket-fills` MAXLEN 2000; `triggers:copy-trade` MAXLEN 500 (spec: data-streams)
+- [ ] SOURCE_REF_ALWAYS: every Redis entry carries `{target_wallet, fill_id}` for drill-back (spec: data-streams)
+- [ ] CONFIG_IN_DB: per-target sizing + mode + caps live in `poly_copy_trade_targets`, not env vars
+- [ ] SECRETS_MINIMAL_ENV: only CLOB L2 secrets + `POLY_ROLE` are env/vault; no private key in env (Privy holds it)
 - [ ] LLM_STAYS_IN_GRAPH: the mirror loop contains no LLM calls; v0 scoreboard reasoning happens in `poly-brain` via the tool (spec: langgraph-patterns)
 - [ ] OBSERVABILITY_COMMITMENT: every decision (placed / skipped-reason / error) emits a Pino log and increments a Prometheus counter (spec: architecture)
 
@@ -233,14 +358,16 @@ Either path, the key lives inside the polymarket adapter; app/job code only sees
 
 **v0.1 (merge gates — all must pass before PR-B merges):**
 
-- [ ] With `DRY_RUN=true` and a live target wallet, the job persists a `MirrorDecision(outcome=shadow)` row within ≤60 s of a real fill on that wallet
-- [ ] With `DRY_RUN=false` + `live_enabled=true` in a controlled run, a real mirror order is placed on Polymarket for `MIRROR_USDC` and the `order_id` is persisted in `poly_copy_trade_fills`
-- [ ] Flipping `poly_copy_trade_config.live_enabled = false` stops further live orders within one poll cycle, no redeploy required
-- [ ] Unit test: restarting mid-burst does not double-fire — dedupe-table insert is the commit point
-- [ ] Unit test: daily USDC cap blocks further orders once hit
-- [ ] Unit test: hourly fills cap blocks further orders once hit
-- [ ] Unit test: legal-gate rejects when `COPY_TRADE_OPERATOR_JURISDICTION` is in the block-list
-- [ ] Replica without `POLY_ROLE=trader` starts cleanly and does NOT materialize the signer key in memory (tested by an absence-of-module-load assertion)
+- [ ] Click "Copy" on the dashboard Top Wallets card → row appears in `poly_copy_trade_targets` with `mode='paper'` default
+- [ ] With `mode='paper'` on a live target, a real fill XADDs to `streams:copy-trade:polymarket-fills` within ≤2 s; the trigger workflow writes a `poly_copy_trade_decisions` row with `outcome='paper'`; dashboard's "Copy Trade Live" feed renders the event
+- [ ] With `mode='live'` + `poly_copy_trade_config.enabled=true` in a controlled run, a real mirror order is placed on Polymarket for `mirror_usdc` and the `order_id` is persisted in `poly_copy_trade_fills`
+- [ ] Flipping `poly_copy_trade_config.enabled=false` halts further live orders within one workflow tick, no redeploy
+- [ ] Replay test: Temporal workflow rerun with the same stream state produces identical decisions (TRIGGERS_ARE_PURE)
+- [ ] Unit test: `client_order_id` collision → adapter returns existing `OrderReceipt` without placing (IDEMPOTENT_BY_CLIENT_ID)
+- [ ] Unit test: per-target daily + hourly caps block further placements once hit
+- [ ] Unit test: `mode='paper'` routes through paper adapter stub (throws `NotImplemented` in PR-B; follow-up fills in the body)
+- [ ] Reconciliation test: kill the WS activity mid-burst → reconcile-workflow XADDs missed fills within 5 min; no dedupe violation
+- [ ] Replica without `POLY_ROLE=trader` starts cleanly and does NOT load `@polymarket/clob-client` or Privy Polygon signing (absence-of-module-load assertion)
 
 **Overall merge gate:**
 
