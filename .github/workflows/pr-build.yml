@@ -51,6 +51,10 @@ jobs:
           TARGETS: ${{ steps.detect.outputs.targets }}
           GHCR_USERNAME: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Force the real PR head SHA into BUILD_SHA. On pull_request triggers,
+          # GITHUB_SHA is the ephemeral refs/pull/{N}/merge commit, which /readyz
+          # would otherwise report as a phantom version. See bug.0313.
+          BUILD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/ci/build-and-push-images.sh
 
       - name: Write build manifest

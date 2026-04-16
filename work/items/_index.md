@@ -67,6 +67,7 @@
 | 1 | 1 | 2 | needs_design | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 1 | 3 | needs_merge | task.0241 | Schedule Management AI Tools + Planner UI | Scheduler Evolution | proj.scheduler-evolution |
 | 1 | 1 | 5 | needs_implement | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
+| 1 | 1 | 1 | needs_implement | bug.0313 | pr-build bakes BUILD_SHA from ephemeral pull_request merge commit — /readyz version ≠ image tag | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
