@@ -14,9 +14,14 @@
  */
 
 import {
+  KNOWLEDGE_READ_NAME,
+  KNOWLEDGE_SEARCH_NAME,
+  KNOWLEDGE_WRITE_NAME,
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
   REPO_SEARCH_NAME,
+  SCHEDULE_LIST_NAME,
+  SCHEDULE_MANAGE_NAME,
 } from "@cogni/ai-tools";
 
 /**
@@ -24,9 +29,14 @@ import {
  * Single source of truth - imported by server.ts, cogni-exec.ts, and catalog.ts.
  */
 export const BRAIN_TOOL_IDS = [
+  KNOWLEDGE_SEARCH_NAME,
+  KNOWLEDGE_READ_NAME,
+  KNOWLEDGE_WRITE_NAME,
   REPO_LIST_NAME,
   REPO_SEARCH_NAME,
   REPO_OPEN_NAME,
+  SCHEDULE_LIST_NAME,
+  SCHEDULE_MANAGE_NAME,
 ] as const;
 
 /**

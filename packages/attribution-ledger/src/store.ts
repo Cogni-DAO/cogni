@@ -17,7 +17,7 @@
  * - EPOCH_CLOSE_ON_TRANSITION: transitionEpochForWindow closes stale open epoch + creates new epoch atomically. No grace period.
  * - STATEMENT_FROM_FINAL_ONLY: allocation for statements consumes only status='locked' evaluations and claimant records.
  * - CLAIMANT_RESOLUTION_REQUIRED: upsertDraftClaimants, lockClaimantsForEpoch, loadLockedClaimants manage the epoch_receipt_claimants lifecycle.
- * - SELECTION_POLICY_AUTHORITY: getSelectionCandidates has no time-window filter — the selection policy decides epoch membership, not the query.
+ * - SELECTION_POLICY_AUTHORITY: getSelectionCandidates excludes receipts already selected in prior same-scope epochs but has no time-window filter — the selection policy decides epoch membership within remaining candidates.
  * Side-effects: none
  * Links: docs/spec/attribution-ledger.md
  * @public

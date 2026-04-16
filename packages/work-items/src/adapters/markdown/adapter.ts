@@ -221,6 +221,9 @@ function matchesQuery(item: WorkItem, query: WorkQuery): boolean {
     });
     if (!found) return false;
   }
+  if (query.actor && item.actor !== query.actor && item.actor !== "either") {
+    return false;
+  }
   if (query.text) {
     const t = query.text.toLowerCase();
     const searchable = `${item.title} ${item.summary ?? ""}`.toLowerCase();
@@ -323,6 +326,7 @@ export class MarkdownWorkItemAdapter
       type: input.type,
       title: input.title,
       status: "needs_triage",
+      actor: "either",
       priority: 0,
       rank: 99,
       estimate: 0,

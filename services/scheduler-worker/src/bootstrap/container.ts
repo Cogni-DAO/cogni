@@ -61,10 +61,31 @@ export interface ServiceContainer {
   grantAdapter: ExecutionGrantWorkerPort;
   runAdapter: GraphRunRepository;
   config: {
-    appBaseUrl: string;
+    nodeEndpoints: Map<string, string>;
     schedulerApiToken: string;
   };
   logger: Logger;
+}
+
+/**
+ * Parse COGNI_NODE_ENDPOINTS env var into a Map<nodeId, baseUrl>.
+ * Format: "operator=http://operator-app:3000,poly=http://poly-app:3100"
+ */
+function parseNodeEndpoints(raw: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const pair of raw.split(",")) {
+    const [key, ...rest] = pair.trim().split("=");
+    const value = rest.join("="); // Handle URLs with = in them
+    if (key && value) {
+      map.set(key.trim(), value.trim());
+    }
+  }
+  if (map.size === 0) {
+    throw new Error(
+      "COGNI_NODE_ENDPOINTS must contain at least one node=url pair"
+    );
+  }
+  return map;
 }
 
 /**
@@ -149,7 +170,7 @@ export function createContainer(config: Env, logger: Logger): ServiceContainer {
       logger.child?.({ component: "run-adapter" }) ?? logger
     ),
     config: {
-      appBaseUrl: config.APP_BASE_URL,
+      nodeEndpoints: parseNodeEndpoints(config.COGNI_NODE_ENDPOINTS),
       schedulerApiToken: config.SCHEDULER_API_TOKEN,
     },
     logger,

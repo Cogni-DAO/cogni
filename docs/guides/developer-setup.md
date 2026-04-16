@@ -40,6 +40,7 @@ You are setting up the Cogni-Template repo for the first time, or need a referen
    ```bash
    cp .env.local.example .env.local
    cp .env.test.example .env.test
+   cp .env.docker.example .env.docker   # docker:dev:stack container-internal overrides
    ```
 
 3. **Setup development database:**
@@ -98,9 +99,14 @@ pnpm dev:smee
 
 # 5. Trigger real GitHub events — creates a merged PR + closed issue (Terminal 3)
 pnpm dev:trigger-github
+
+# 6. (Optional) Top up billing credits so paid OpenRouter models are usable
+pnpm dev:seed:money
 ```
 
 Receipts appear in `/gov/epoch` within seconds. The seeded open epoch covers the current week, so new webhook receipts show up immediately.
+
+`dev:seed:money` gives all billing accounts $100 in credits. Idempotent — safe to re-run. Requires a billing account (log in first, then run it).
 
 ## PR Review Bot (optional)
 

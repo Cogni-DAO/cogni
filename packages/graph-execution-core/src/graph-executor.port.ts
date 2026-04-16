@@ -21,6 +21,7 @@ import type {
   AiExecutionErrorCode,
   GraphId,
   Message,
+  ModelRef,
 } from "@cogni/ai-core";
 
 import type { ExecutionContext } from "./execution-context";
@@ -39,8 +40,8 @@ export interface GraphRunRequest {
   readonly graphId: GraphId;
   /** Input messages */
   readonly messages: Message[];
-  /** Model identifier */
-  readonly model: string;
+  /** Fully-resolved model reference (provider + model + optional connection) */
+  readonly modelRef: ModelRef;
   /**
    * Thread key for multi-turn conversation state.
    * Semantics are adapter-specific:

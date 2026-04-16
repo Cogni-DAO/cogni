@@ -174,7 +174,7 @@ export const graphRuns = pgTable(
     triggerSource: text("trigger_source"),
     /** Upstream delivery/schedule ID for provenance */
     triggerRef: text("trigger_ref"),
-    /** User ID or 'cogni_system' who requested the run */
+    /** User ID (UUID) of the principal who requested/owns this run */
     requestedBy: text("requested_by"),
     /** Intended execution time (the cron slot) — only for scheduled runs */
     scheduledFor: timestamp("scheduled_for", { withTimezone: true }),

@@ -1,0 +1,8 @@
+# Argo CD ConfigMap overrides for dev/canary environments.
+# 30s reconciliation for fast iteration; production should use 180s (default).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+data:
+  timeout.reconciliation: "30s"

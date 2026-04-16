@@ -23,7 +23,7 @@ describe.skip("Bootstrap Layer DI Composition", () => {
   describe("Allowed imports", () => {
     it("allows bootstrap importing adapters", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import { LiteLlmAdapter, SystemClock } from "@/adapters/server"; export const container = { llm: new LiteLlmAdapter(), clock: new SystemClock() };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -32,7 +32,7 @@ describe.skip("Bootstrap Layer DI Composition", () => {
 
     it("allows bootstrap importing port types", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import type { LlmService, Clock } from "@/ports"; export type Container = { llm: LlmService; clock: Clock };`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -41,7 +41,7 @@ describe.skip("Bootstrap Layer DI Composition", () => {
 
     it("allows bootstrap importing shared utilities", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/bootstrap/di-container.ts",
+        "nodes/operator/app/src/bootstrap/di-container.ts",
         `import { validateConfig } from "@/shared"; export const initContainer = () => validateConfig();`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -53,7 +53,7 @@ describe.skip("Bootstrap Layer DI Composition", () => {
     it.skip("blocks bootstrap importing features", async () => {
       // SKIP: ESLint boundaries plugin false negative - will address in future
       const { errors, messages } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import { execute } from "@/features/ai/services/complete"; export default execute;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -65,7 +65,7 @@ describe.skip("Bootstrap Layer DI Composition", () => {
 
     it("blocks bootstrap importing core directly", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import { Message } from "@/core"; export default Message;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -80,7 +80,7 @@ describe.skip("Bootstrap Layer DI Composition", () => {
       // configured to block this specific case. Skip for now until boundaries
       // configuration is reviewed.
       const { errors, messages } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import { middleware } from "@/app/middleware"; export default middleware;`,
         { focusRulePrefixes: ["boundaries/"] }
       );
@@ -92,7 +92,7 @@ describe.skip("Bootstrap Layer DI Composition", () => {
 
     it("blocks bootstrap importing components", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import { Button } from "@/components"; export default Button;`,
         { focusRulePrefixes: ["boundaries/"] }
       );

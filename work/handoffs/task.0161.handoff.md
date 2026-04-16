@@ -63,7 +63,7 @@ last_commit: 8d63f999
 | `docs/spec/governance-signal-execution.md`          | As-built spec — invariants, schemas, file pointers for signal execution.  |
 | `docs/design/governance-integration-crawl.md`       | Original design doc — architecture rationale for the consolidation.       |
 | `docs/guides/alchemy-webhook-setup.md`              | How to set up Alchemy webhooks + SMEE tunnel for local dev.               |
-| `apps/web/src/features/governance/AGENTS.md`        | Public surface of the governance feature (exports, routes, boundaries).   |
+| `apps/operator/src/features/governance/AGENTS.md`   | Public surface of the governance feature (exports, routes, boundaries).   |
 | `work/items/task.0159.governance-e2e-validation.md` | Next work item — e2e test plan with Sepolia contract addresses.           |
 | `cogni-git-admin/e2e/` (sister repo)                | Reference e2e suite with Playwright tests for the live-fire flow.         |
 | `.cogni/repo-spec.yaml` lines 40-45                 | DAO contract addresses — update `base_url` before deploy.                 |

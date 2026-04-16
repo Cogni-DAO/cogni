@@ -46,7 +46,7 @@ The LSP advantage is **precision, not speed** — ripgrep is already fast (milli
 
 **LSP complements grep** for this codebase due to:
 
-1. **Path aliases everywhere** — grep cannot resolve `@/shared` → `apps/web/src/shared`
+1. **Path aliases everywhere** — grep cannot resolve `@/shared` → `apps/operator/src/shared`
 2. **Contract-first architecture** — `z.infer` chains require semantic type following
 3. **Monorepo with 16 packages** — cross-workspace dependency analysis needs LSP
 

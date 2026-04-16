@@ -6,96 +6,87 @@ title: "External Entity Onboarding Skill — DAO-in-a-Box for AI Experiments"
 state: Active
 priority: 0
 estimate: 4
-summary: Internet-connected skill file that takes external AI experiment teams from zero to sovereign Cogni node — DAO formation, repo-spec identity, payment activation, and deploy
-outcome: External teams invoke a skill that generates their repo-spec.yaml, walks them through DAO formation + payment activation, scaffolds agentic dev tooling, and guides them to first deploy
+summary: Internet-connected skill file + node-template subdir scaffold that gives external AI experiment teams the keys to becoming a Cogni DAO — from repo setup through deployment
+outcome: External teams can invoke a single skill (online or sandbox-delivered) that scaffolds their repo, configures their DAO identity, sets up agentic dev tooling, and guides them to first deploy
 assignees:
   - cogni-dev
 created: 2026-03-22
-updated: 2026-03-23
+updated: 2026-03-22
 labels:
   - onboarding
   - community
   - skills
   - external
-  - payments
-  - dao
 ---
 
 # External Entity Onboarding Skill — DAO-in-a-Box for AI Experiments
 
-> Related: `/node-setup` skill (internal), `proj.ai-operator-wallet`, `proj.transparent-credit-payouts`
+> Related: `/node-setup` skill (internal), `proj.agentic-interop`, `proj.oss-research-node`
 
 ## Goal
 
-Many AI experiments want to become DAOs. Their engineering teams need a turnkey path from "we have a repo" to "we're a deployed, sovereign Cogni node with active billing." The **center of gravity** is the DAO identity (`repo-spec.yaml`) and the billing pipeline (Split contract + USDC credit top-ups) — everything else (work management, agent config, CI) is secondary scaffolding.
+Many AI experiments want to become DAOs. Their engineering teams need a turnkey path from "we have a repo" to "we're a deployed, sovereign Cogni node." Today, `/node-setup` is internal-only and assumes the operator is already inside this repo. This project creates an **external-facing skill** that can be delivered as an internet-accessible file, run through a sandbox (OpenClaw), ported into their git repo, and maintained on their main branch — a complete **online skill -> sandbox -> git -> main** pipeline.
 
-Today, `/node-setup` is internal-only and assumes the operator is already inside a cogni-template fork. This project creates an **external-facing skill** delivered via: **online skill -> sandbox -> git -> main**.
-
-The skill must work for teams with zero Cogni context. It must be opinionated about the economic foundation (DAO + payments are non-negotiable) but flexible about their existing codebase structure.
+The skill must work for teams with zero Cogni context. It should be opinionated about structure (node-template subdir layout) but flexible about their existing codebase. It's the "keys to success" document for external engineering teams.
 
 ## Roadmap
 
-### Crawl (P0) — Repo-Spec Generation + DAO Formation + Payment Activation
+### Crawl (P0) — Standalone Skill File + Subdir Scaffold
 
-**Goal:** A self-contained, internet-fetchable skill file that generates `repo-spec.yaml`, walks the team through DAO formation, and activates the billing pipeline. This is the economic spine — without it, the node can't receive payments or govern itself.
+**Goal:** A single, internet-accessible skill markdown file that an external team can point Claude Code or Codex at. It scaffolds the Cogni node-template subdir structure into their existing repo and walks them through DAO formation.
 
-| Deliverable                                                                                                                                                 | Status      | Est | Work Item |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
-| Audit `/node-setup` SKILL.md — extract the DAO + payments flow as standalone                                                                                | Not Started | 1   | —         |
-| Skill Phase 1: generate `.cogni/repo-spec.yaml` with `node_id`, `scope_id`, `scope_key`, `cogni_dao`                                                        | Not Started | 2   | —         |
-| Skill Phase 2: DAO formation — link to cognidao.org/setup/dao wizard, capture contract addresses back into repo-spec                                        | Not Started | 2   | —         |
-| Skill Phase 3: operator wallet — Privy setup, `operator_wallet.address` into repo-spec                                                                      | Not Started | 1   | —         |
-| Skill Phase 4: payment activation — `node:activate-payments`, Split contract deploy, `payments.status: active` + `payments_in.credits_topup` into repo-spec | Not Started | 2   | —         |
-| Skill Phase 5: governance schedules — configure `governance.schedules[]` (charters, crons, entrypoints)                                                     | Not Started | 1   | —         |
-| Repo-spec validation gate: skill runs `@cogni/repo-spec` schema validation after each phase                                                                 | Not Started | 1   | —         |
-| Host skill file at stable URL (GitHub raw or docs site)                                                                                                     | Not Started | 1   | —         |
-| Test: fresh repo + skill invocation produces valid `repo-spec.yaml` that passes schema validation                                                           | Not Started | 2   | —         |
+| Deliverable                                                                                                 | Status      | Est | Work Item |
+| ----------------------------------------------------------------------------------------------------------- | ----------- | --- | --------- |
+| Audit `/node-setup` SKILL.md — extract what's reusable vs internal-only                                     | Not Started | 1   | —         |
+| Define the node-template subdir layout (`.cogni/`, `work/`, `docs/`, `CLAUDE.md`, `AGENTS.md`, infra/)      | Not Started | 2   | —         |
+| Write `external-onboarding.skill.md` — self-contained, internet-fetchable skill file                        | Not Started | 3   | —         |
+| Skill covers: repo identity injection, `.cogni/repo-spec.yaml` generation, DAO wizard link, env scaffolding | Not Started | 2   | —         |
+| Skill covers: CLAUDE.md + AGENTS.md generation tailored to their project                                    | Not Started | 2   | —         |
+| Skill covers: agentic dev setup (both Claude Code and Codex entry points)                                   | Not Started | 2   | —         |
+| Host skill file at a stable URL (GitHub raw or docs site)                                                   | Not Started | 1   | —         |
+| Test: fresh repo + skill invocation produces valid scaffold that passes `pnpm check:docs` equivalent        | Not Started | 2   | —         |
 
-### Walk (P1) — Subdir Scaffold + Agentic Dev Tooling + Sandbox Delivery
+### Walk (P1) — Sandbox Delivery + Interactive Onboarding
 
-**Goal:** With billing active, scaffold the rest: agentic dev config (Claude Code + Codex), node-template subdir layout, and sandbox-delivered interactive onboarding.
+**Goal:** External teams can onboard through a sandbox OpenClaw session that runs the skill interactively, producing a PR to their repo.
 
-| Deliverable                                                                                                      | Status      | Est | Work Item            |
-| ---------------------------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| Subdir scaffold: `.claude/`, `CLAUDE.md`, `AGENTS.md`, `work/`, `docs/` layout                                   | Not Started | 2   | (create at P1 start) |
-| Agentic dev setup: generate CLAUDE.md + codex.md tailored to their project (depends on `proj.agentic-dev-setup`) | Not Started | 2   | (create at P1 start) |
-| Activity ledger config: `activity_ledger` section in repo-spec (epoch length, sources, pool config)              | Not Started | 1   | (create at P1 start) |
-| PR review gates: `gates[]` config in repo-spec (review-limits, ai-rule)                                          | Not Started | 1   | (create at P1 start) |
-| OpenClaw workspace config for interactive onboarding agent (SOUL.md + channel routing)                           | Not Started | 2   | (create at P1 start) |
-| Sandbox agent drives the onboarding conversation, produces PR to external repo via git relay                     | Not Started | 3   | (create at P1 start) |
-| Test: end-to-end sandbox onboarding of a fresh GitHub repo through to `payments.status: active`                  | Not Started | 3   | (create at P1 start) |
+| Deliverable                                                                            | Status      | Est | Work Item            |
+| -------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| OpenClaw workspace config for onboarding agent (SOUL.md + channel routing)             | Not Started | 2   | (create at P1 start) |
+| Sandbox agent reads the external skill file and drives the conversation                | Not Started | 2   | (create at P1 start) |
+| Git relay integration: sandbox produces a PR to the external team's repo               | Not Started | 2   | (create at P1 start) |
+| Interactive credential collection: prompt for API keys, wallet addresses, domain names | Not Started | 1   | (create at P1 start) |
+| Onboarding status dashboard: track which phases the entity has completed               | Not Started | 2   | (create at P1 start) |
+| Test: end-to-end sandbox onboarding of a fresh GitHub repo                             | Not Started | 3   | (create at P1 start) |
 
-### Run (P2+) — Self-Service Portal + Infrastructure Provisioning
+### Run (P2+) — Self-Service Portal + Partnership Pipeline
 
-**Goal:** External entities self-serve through a web portal. The skill extends to cover infrastructure provisioning and deployment.
+**Goal:** External entities can self-serve through a web portal. The onboarding skill evolves into a partnership pipeline.
 
-| Deliverable                                                                                    | Status      | Est | Work Item            |
-| ---------------------------------------------------------------------------------------------- | ----------- | --- | -------------------- |
-| Web portal: "Start your DAO" flow (form -> sandbox session -> PR with repo-spec)               | Not Started | 3   | (create at P2 start) |
-| Infrastructure provisioning: VM setup, SSH keys, DNS (extracted from `/node-setup` Phases 4-7) | Not Started | 3   | (create at P2 start) |
-| GitHub Secrets automation: CI/CD secret injection for preview + production envs                | Not Started | 2   | (create at P2 start) |
-| Post-onboarding health: verify deploy, DNS, payments active, `/readyz` returns 200             | Not Started | 2   | (create at P2 start) |
-| Skill versioning: external teams pin to a skill version, get upgrade notifications             | Not Started | 2   | (create at P2 start) |
-| Partnership tracking: which entities onboarded, node status, payment activity                  | Not Started | 2   | (create at P2 start) |
+| Deliverable                                                                                      | Status      | Est | Work Item            |
+| ------------------------------------------------------------------------------------------------ | ----------- | --- | -------------------- |
+| Web portal: "Start your DAO" flow (form -> sandbox session -> PR)                                | Not Started | 3   | (create at P2 start) |
+| Skill versioning: external teams pin to a skill version, get upgrade notifications               | Not Started | 2   | (create at P2 start) |
+| Post-onboarding health checks: verify deployment, DNS, payments are active                       | Not Started | 2   | (create at P2 start) |
+| Partnership tracking: which entities onboarded, their node status, contribution metrics          | Not Started | 2   | (create at P2 start) |
+| Skill auto-update: when node-template evolves, downstream skill consumers get migration guidance | Not Started | 3   | (create at P2 start) |
 
 ## Constraints
 
 - The skill file must be fully self-contained — no dependencies on being inside this repo at invocation time
 - Skill must work with both Claude Code and Codex (no tool-specific assumptions beyond file read/write/shell)
-- External teams keep sovereignty over their repo — the skill scaffolds into their repo, it does not take over root
-- `repo-spec.yaml` schema is the contract — skill output must pass `@cogni/repo-spec` Zod validation
+- External teams keep sovereignty over their repo — the skill scaffolds a subdir, it does not take over root
+- Node-template subdir layout must be stable and documented before the skill references it
 - Skill must not embed secrets, API keys, or credentials — only prompt for them interactively
-- DAO formation + payment activation are P0 — everything else (work management, CI, agent config) is P1+
 - The sandbox delivery path (P1) reuses existing OpenClaw + git relay infrastructure from `proj.sandboxed-agents`
 
 ## Dependencies
 
 - [ ] `/node-setup` SKILL.md — existing skill to audit and extract from
-- [ ] `@cogni/repo-spec` package — Zod schema for repo-spec validation (exists, stable)
-- [ ] DAO formation wizard at cognidao.org/setup/dao — must be publicly accessible
-- [ ] `node:activate-payments` command — must work outside cogni-template fork context
 - [ ] `proj.sandboxed-agents` — git relay for sandbox -> PR pipeline (P1)
-- [ ] `proj.agentic-dev-setup` — agentic tooling setup section of the skill (P1)
+- [ ] `.cogni/repo-spec.yaml` schema — must be stable before external teams depend on it
+- [ ] DAO formation wizard at cognidao.org/setup/dao — must be publicly accessible
+- [ ] `proj.agentic-dev-setup` — agentic tooling setup section of the skill depends on this project's outputs
 
 ## As-Built Specs
 
@@ -103,68 +94,46 @@ The skill must work for teams with zero Cogni context. It must be opinionated ab
 
 ## Design Notes
 
-### The repo-spec is the identity spine
-
-Everything flows from `.cogni/repo-spec.yaml`:
-
-```yaml
-node_id: "uuid" # Unique node identity — scopes all DB tables
-scope_id: "uuid" # Stable opaque scope — DB FK
-scope_key: "my-project" # Human-friendly slug
-
-cogni_dao:
-  chain_id: "8453" # Base mainnet
-  dao_contract: "0x..." # DAO address (from formation wizard)
-  plugin_contract: "0x..."
-  signal_contract: "0x..."
-
-operator_wallet:
-  address: "0x..." # Privy-managed operator wallet
-
-payments:
-  status: active # pending_activation -> active
-
-payments_in:
-  credits_topup:
-    provider: "cogni-usdc-backend-v1"
-    receiving_address: "0x..." # Split contract (DAO wallet)
-    allowed_chains: ["Base"]
-    allowed_tokens: ["USDC"]
-
-governance:
-  schedules:
-    - charter: ENGINEERING
-      cron: "0 9 * * 1"
-      timezone: UTC
-      entrypoint: heartbeat
-```
-
-Without this file, nothing works — no billing, no governance, no identity. The skill's P0 job is to generate this file correctly for an external team's context.
-
 ### Tool source port pipeline: online skill -> sandbox -> git -> main
 
-1. **Online skill** — Markdown file at stable URL. External team's agent fetches it.
-2. **Sandbox** — OpenClaw agent loads the skill, drives interactive onboarding.
-3. **Git** — Sandbox produces PR to external repo via git relay.
-4. **Main** — Team reviews, merges. They now have a sovereign node identity.
+The delivery pipeline has four stages:
 
-### Payment activation is non-negotiable in P0
+1. **Online skill** — A markdown file hosted at a stable URL. External team fetches it (or their agent does). Contains all instructions for scaffolding a Cogni node inside their repo.
+2. **Sandbox** — An OpenClaw agent loads the skill and drives the onboarding conversation interactively. Asks questions, fills templates, validates structure.
+3. **Git** — The sandbox produces changes via the git relay (from `proj.sandboxed-agents`). Creates a PR to the external team's repo with the scaffolded structure.
+4. **Main** — Team reviews and merges. They now have the node-template subdir in their repo and can run `/node-setup` locally for the remaining infra phases.
 
-The whole point of becoming a Cogni DAO is economic sovereignty. A node without active payments is just a repo with a config file. The skill must guide teams through:
+### Node-template subdir layout (draft)
 
-1. Privy operator wallet setup (3 credentials: App ID, App Secret, Signing Key)
-2. `node:activate-payments` command (deploys Split contract on Base)
-3. Verification: `payments.status: active` in repo-spec
+When injected into an external repo, the Cogni scaffold creates:
 
-This is the hard part — it involves real money, real contracts, real keys. The skill must be extremely clear about what each step does and what can go wrong.
+```
+their-repo/
+  .cogni/
+    repo-spec.yaml          # DAO identity, payments config
+  .claude/
+    skills/                  # Skill files for their agents
+    settings.json            # Claude Code permissions + hooks
+  work/
+    projects/                # Their roadmap
+    _templates/              # Work item templates
+  docs/
+    AGENTS.md                # Root agent instructions
+    guides/                  # Operational guides
+  CLAUDE.md                  # Agent entry point
+  AGENTS.md                  # Subdir agents (if monorepo)
+```
+
+This mirrors the cogni-template structure but scoped to a subdir that doesn't conflict with their existing project layout.
 
 ### Why a skill file, not a CLI tool?
 
-1. **Zero install** — team points their existing AI agent at a URL
-2. **Agent-native** — markdown instructions, the language agents understand
-3. **Dual-runtime** — works with Claude Code (SKILL.md) and Codex (AGENTS.md) without separate tooling
+1. **Zero install** — the team just points their existing AI agent at a URL
+2. **Agent-native** — the skill speaks the language agents already understand (markdown instructions)
+3. **Composable** — skills can reference other skills, build on each other
 4. **Updatable** — change the hosted file, all future invocations get the update
+5. **Dual-runtime** — works with Claude Code (SKILL.md convention) and Codex (AGENTS.md convention) without separate tooling
 
 ### Relationship to `/node-setup`
 
-`/node-setup` is the internal skill for operators already inside a cogni-template fork. This new skill is the **pre-fork** path for external repos. After P0 (repo-spec + DAO + payments), the external team has a sovereign node. P1 adds the development scaffolding. P2 adds infrastructure provisioning (which is where `/node-setup` Phases 4-7 get reused).
+`/node-setup` is the internal skill for operators who've already forked cogni-template. This new skill is the **pre-fork** path: it brings the template to an existing external repo. After P0 scaffolding, the external team can then use `/node-setup` for the remaining infrastructure phases (payments, VMs, deploy).

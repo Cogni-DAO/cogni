@@ -27,7 +27,7 @@ Provide a deterministic, cacheable build pipeline where workspace packages build
 
 - Graph-scoped builds with turbo prune (deferred, tracked in proj.cicd-services-gitops.md)
 - Runtime-only env validation (deferred)
-- Moving app to `apps/web` workspace package (deferred)
+- Moving app to `apps/operator` workspace package (deferred)
 
 ## Core Invariants
 

@@ -14,6 +14,15 @@
  * @public
  */
 
+// Knowledge capability (per knowledge-data-plane spec)
+export type {
+  KnowledgeCapability,
+  KnowledgeEntry,
+  KnowledgeListParams,
+  KnowledgeSearchParams,
+  KnowledgeWriteParams,
+} from "./knowledge";
+export { CONFIDENCE } from "./knowledge";
 // Metrics capability (per GOVERNED_METRICS invariant)
 export type {
   MetricDataPoint,
@@ -36,12 +45,28 @@ export type {
   RepoSearchResult,
 } from "./repo";
 export { makeRepoCitation, REPO_CITATION_REGEX } from "./repo";
+// Schedule management capability
+export type {
+  ScheduleCapability,
+  ScheduleCreateParams,
+  ScheduleInfo,
+  ScheduleUpdateParams,
+} from "./schedule";
 // Export capability interfaces (defined here, NOT in ai-core)
 export type {
   AuthCapability,
   ClockCapability,
   ToolCapabilities,
 } from "./types";
+// VCS capability (per VCS_WRITE_CAPABLE)
+export type {
+  CheckInfo,
+  CiStatusResult,
+  CreateBranchResult,
+  MergeResult,
+  PrSummary,
+  VcsCapability,
+} from "./vcs";
 // Web search capability
 export type {
   WebSearchCapability,
@@ -50,6 +75,14 @@ export type {
   WebSearchResultItem,
   WebSearchTopic,
 } from "./web-search";
+// Work item capability
+export type {
+  WorkItemAssignee,
+  WorkItemCapability,
+  WorkItemInfo,
+  WorkItemQueryParams,
+  WorkItemTransitionResult,
+} from "./work-item";
 
 import type { AuthCapability, ClockCapability } from "./types";
 

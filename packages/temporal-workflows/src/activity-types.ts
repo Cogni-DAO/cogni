@@ -39,6 +39,7 @@ export interface SchedulerActivities {
   }): Promise<void>;
 
   executeGraphActivity(input: {
+    nodeId: string;
     temporalScheduleId?: string;
     graphId: string;
     executionGrantId: string | null;
@@ -90,6 +91,38 @@ export interface ReviewActivities {
   }>;
 
   postReviewResultActivity(input: Record<string, unknown>): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
+// Sweep Activities (queue-sweeping agent roles)
+// ---------------------------------------------------------------------------
+
+/** Work item summary returned by fetchWorkItemsActivity. */
+export interface SweepWorkItem {
+  id: string;
+  title: string;
+  status: string;
+  priority?: number;
+  rank?: number;
+  summary?: string;
+}
+
+export interface SweepActivities {
+  /** Fetch work items matching the role's queue filter, sorted by priority. */
+  fetchWorkItemsActivity(input: {
+    statuses?: string[];
+    labels?: string[];
+    types?: string[];
+  }): Promise<SweepWorkItem[]>;
+
+  /** Log sweep result and optionally post to Discord. */
+  processSweepResultActivity(input: {
+    roleId: string;
+    itemId: string;
+    itemTitle: string;
+    outcome: "success" | "error" | "no_op";
+    runId: string;
+  }): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

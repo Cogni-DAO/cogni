@@ -33,11 +33,15 @@ export type ScheduleOverlapPolicyHint = "skip" | "buffer_one" | "allow_all";
 export interface CreateScheduleParams {
   /** Temporal schedule ID (caller-supplied) */
   readonly scheduleId: string;
+  /** Originating node ID from repo-spec. Stored in workflow args for execution routing. */
+  readonly nodeId: string;
   /**
    * DB schedule UUID for schedules that have a row in `schedules`.
    * Set null/undefined only for legacy Temporal-only schedules.
    */
   readonly dbScheduleId?: string | null;
+  /** User ID of the schedule owner — written as requestedBy on produced runs. */
+  readonly ownerUserId: string;
   /** Cron expression (5-field) */
   readonly cron: string;
   /** IANA timezone */

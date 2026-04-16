@@ -1,0 +1,17 @@
+{
+  "name": "@cogni/node-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./providers": "./src/providers/index.ts",
+    "./extensions": "./src/extensions/index.ts"
+  },
+  "peerDependencies": {
+    "react": ">=19",
+    "next-auth": ">=4",
+    "@tanstack/react-query": ">=5",
+    "@rainbow-me/rainbowkit": ">=2"
+  }
+}

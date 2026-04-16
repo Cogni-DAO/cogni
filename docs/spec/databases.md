@@ -43,9 +43,16 @@ pnpm dev:stack                # Same as above, but hits real LiteLLM/OpenRouter
 
 **Database Security Model**: Two-user PostgreSQL architecture separating administrative and application access.
 
-**Development Database:** `${APP_DB_NAME}` (typically `cogni_template_dev`)  
-**Test Database:** `${APP_DB_NAME}` (typically `cogni_template_stack_test`)
-**Production Database:** `${APP_DB_NAME}` (typically `cogni_template_preview` or `cogni_template_production`)
+**Per-Node Databases (DB_PER_NODE):** Each node gets its own database on a shared Postgres server. The database IS the node boundary — no tenancy columns. See [Multi-Node Tenancy](multi-node-tenancy.md).
+
+| Environment | Databases                                                         | Configured via                   |
+| ----------- | ----------------------------------------------------------------- | -------------------------------- |
+| Development | `cogni_operator`, `cogni_poly`, `cogni_resy`                      | `COGNI_NODE_DBS` in `.env.local` |
+| Test        | `cogni_template_stack_test`, `cogni_poly_test`, `cogni_resy_test` | `COGNI_NODE_DBS` in `.env.test`  |
+| CI          | `cogni_template_test`                                             | `COGNI_NODE_DBS` in `ci.yaml`    |
+| Production  | `cogni_operator` (single-node for now)                            | `COGNI_NODE_DBS` in deploy env   |
+
+`COGNI_NODE_DBS` is required — `provision.sh` fails fast if not set. No defaults, no fallback chain.
 
 All stack deployment modes use the same migration tooling but connect to appropriate database instances. Test environments always use the test database and reset it between test runs.
 
@@ -57,16 +64,18 @@ To ensure a repeatable and consistent database state across environments (especi
 
 In `docker-compose.dev.yml`, the `db-provision` service handles:
 
-1.  **Idempotent Database Creation**: Automatically creates `APP_DB_NAME` (e.g., `cogni_template_dev`) and `LITELLM_DB_NAME` (e.g., `litellm_dev`) if they do not exist.
-2.  **Isolation**: Ensures LiteLLM has its own isolated database to prevent schema collisions with the main application.
+1. **Per-node database creation**: Iterates over `COGNI_NODE_DBS` (comma-separated), creates each database with `app_user` ownership and RLS role hardening.
+2. **LiteLLM database creation**: Creates `LITELLM_DB_NAME` (root-owned, shared across nodes).
+3. **Role provisioning**: Creates `app_user` (RLS enforced) and `app_service` (BYPASSRLS) roles, shared across all node databases.
 
-This service is gated behind the `bootstrap` profile and runs only when explicitly requested or on fresh stack bring-up if configured.
+Both `COGNI_NODE_DBS` and `LITELLM_DB_NAME` are required — `provision.sh` fails immediately if either is missing.
+
+This service is gated behind the `bootstrap` profile and runs only when explicitly requested.
 
 ### Development vs. Production Roles
 
-- **Development (MVP):** For simplicity, the local development environment connects to Postgres using the `superuser` (`postgres`) credentials. This avoids complex role management during rapid iteration but means the app has theoretical power to DROP tables.
-  - _Note:_ `provision.sh` in dev currently skips role hardening to align with this MVP choice.
-- **Production:** Production deployments MUST use the Two-User Model described below (Root vs. App User) with restricted privileges. The application user should NOT have `DROP` or `TRUNCATE` permissions on the schema in production.
+- **Development:** Local dev connects via `app_user` (RLS enforced) and `app_service` (BYPASSRLS). `provision.sh` applies RLS role hardening to all node databases.
+- **Production:** Same two-user model. The application user should NOT have `DROP` or `TRUNCATE` permissions on the schema in production.
 
 ## Current Schema Baseline (Phase 0)
 
@@ -109,26 +118,33 @@ Per [Database RLS Spec](database-rls.md) design decision 7, the runtime app requ
 
 See [Database RLS Spec](database-rls.md) for the dual-client architecture and static import enforcement.
 
-**Container Configuration**: The postgres container runs initialization scripts on first startup:
+**Container Configuration**: The `db-provision` service runs `provision.sh`:
 
-- Creates application database (`APP_DB_NAME`)
-- Creates application user (`APP_DB_USER`) with database-specific permissions
-- Application connects via `DATABASE_URL` using app user credentials
+- Creates roles: `app_user` (RLS), `app_service` (BYPASSRLS)
+- Iterates `COGNI_NODE_DBS`: creates each database with ownership + RLS hardening
+- Creates `LITELLM_DB_NAME`: root-owned, shared LiteLLM database
 
-**Provisioning Variable Mapping** (used by `provision.sh`, not by runtime app):
+**Provisioning Variables** (used by `provision.sh`, not by runtime app):
 
-```bash
-# Container postgres service
-POSTGRES_USER=${POSTGRES_ROOT_USER}      # Container's POSTGRES_USER
-POSTGRES_PASSWORD=${POSTGRES_ROOT_PASSWORD}
-POSTGRES_DB=postgres                      # Default database for user creation
+| Variable                  | Purpose                             | Required         |
+| ------------------------- | ----------------------------------- | ---------------- |
+| `POSTGRES_ROOT_USER`      | Superuser for role/DB creation      | Yes              |
+| `POSTGRES_ROOT_PASSWORD`  | Superuser password                  | Yes              |
+| `COGNI_NODE_DBS`          | Comma-separated node database names | Yes (no default) |
+| `LITELLM_DB_NAME`         | LiteLLM database name               | Yes (no default) |
+| `APP_DB_USER`             | Application role name               | Yes              |
+| `APP_DB_PASSWORD`         | Application role password           | Yes              |
+| `APP_DB_SERVICE_USER`     | Service role name                   | Yes              |
+| `APP_DB_SERVICE_PASSWORD` | Service role password               | Yes              |
 
-# Application service (explicit DSNs, not component pieces)
-DATABASE_URL=${DATABASE_URL}             # app_user role, RLS enforced
-DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}  # app_service role, BYPASSRLS
-```
+**Runtime Variables** (used by app, never by provisioning):
 
-> **Note:** The runtime app no longer uses `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DB_HOST`, or `DB_PORT`. These are provisioning-only variables consumed by `provision.sh`.
+| Variable               | Purpose                      |
+| ---------------------- | ---------------------------- |
+| `DATABASE_URL`         | app_user role (RLS enforced) |
+| `DATABASE_SERVICE_URL` | app_service role (BYPASSRLS) |
+
+> **Note:** The runtime app never receives `POSTGRES_ROOT_*`, `APP_DB_*`, or `COGNI_NODE_DBS`. These are provisioning-only.
 
 ## 2. Migration Strategy
 
@@ -142,11 +158,17 @@ DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}  # app_service role, BYPASSRLS
 
 **Migration Commands:**
 
-- `pnpm db:migrate` - Alias for `db:migrate:dev` (default: dev environment)
-- `pnpm db:migrate:dev` - Direct: drizzle-kit with `.env.local` (dev database)
-- `pnpm db:migrate:test` - Direct: drizzle-kit with `.env.test` (test database)
-- `pnpm db:migrate:direct` - Direct: drizzle-kit using DATABASE_URL from current environment
-- `pnpm db:migrate:container` - Container-only: used inside migrator Docker image
+- `pnpm db:migrate` — Alias for `db:migrate:dev` (operator dev database)
+- `pnpm db:migrate:dev` — drizzle-kit with `.env.local` (operator dev database)
+- `pnpm db:migrate:poly` — drizzle-kit with `DATABASE_URL_POLY` from `.env.local`
+- `pnpm db:migrate:resy` — drizzle-kit with `DATABASE_URL_RESY` from `.env.local`
+- `pnpm db:migrate:nodes` — runs `db:migrate:dev` + `db:migrate:poly` + `db:migrate:resy`
+- `pnpm db:migrate:test` — drizzle-kit with `.env.test` (operator test database)
+- `pnpm db:migrate:test:poly` — drizzle-kit with `DATABASE_URL_POLY` from `.env.test`
+- `pnpm db:migrate:test:resy` — drizzle-kit with `DATABASE_URL_RESY` from `.env.test`
+- `pnpm db:migrate:test:nodes` — runs all 3 test DB migrations
+- `pnpm db:migrate:direct` — drizzle-kit using `DATABASE_URL` from current environment
+- `pnpm db:migrate:container` — container-only: used inside migrator Docker image
 
 **Execution Contexts:**
 
@@ -157,36 +179,46 @@ DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}  # app_service role, BYPASSRLS
 
 ### 2.1 Local Development
 
-**Database:** `cogni_template_dev`
+**Databases:** `cogni_operator`, `cogni_poly`, `cogni_resy` (per `COGNI_NODE_DBS`)
 
 **Environment:** `.env.local`
 
 **Commands:**
 
 ```bash
-pnpm db:migrate              # Migrate dev database directly with drizzle-kit
-pnpm dev:stack               # Start app using same database
+pnpm db:setup:nodes          # Provision + migrate + seed all 3 node DBs
+pnpm db:migrate:nodes        # Migrate all 3 node DBs
+pnpm dev:stack               # Start operator using cogni_operator
+pnpm dev:stack:full           # Start operator + poly + resy (each on its own DB)
 ```
 
 ### 2.2 Host Stack Tests
 
-**Database:** `cogni_template_stack_test` (host Postgres)
+**Databases:** `cogni_template_stack_test` (single-node), + `cogni_poly_test`, `cogni_resy_test` (multi-node)
 
-**Environment:** `.env.local` + `.env.test` (override)
+**Environment:** `.env.test`
 
 **Commands:**
 
 ```bash
-pnpm dev:stack:test:setup    # Create database + run migrations
-pnpm test:stack:dev          # Run vitest stack tests against host app
-pnpm dev:stack:test:reset    # Nuclear reset (drop + recreate + migrate)
+# Single-node
+pnpm dev:stack:test:setup     # Provision + migrate operator test DB
+pnpm dev:stack:test           # Start operator in test mode
+pnpm test:stack:dev           # Run single-node stack tests
+
+# Multi-node
+pnpm dev:stack:test:full:setup  # Provision + migrate all 3 test DBs
+pnpm dev:stack:test:full        # Start operator + poly + resy in test mode
+pnpm test:stack:multi           # Run multi-node isolation tests
 ```
 
 **Details:**
 
-- `dev:stack:test:setup` creates `cogni_template_stack_test` and runs migrations using test environment
-- `test:stack:dev` uses `vitest.stack.config.mts` (loads `.env.local` then `.env.test`)
-- `reset-db.ts` truncates tables in the **host** stack DB between tests
+- `test:stack:dev` uses `vitest.stack.config.mts` with `.env.test`
+- `test:stack:multi` uses `vitest.stack-multi.config.mts` with `.env.test`
+- `reset-db.ts` truncates tables in the operator test DB between test suites
+- Multi-node tests seed and clean their own data per-test (no global reset)
+- See [Full-Stack Testing Guide](../guides/full-stack-testing.md) for details
 
 ### 2.3 Docker Dev Stack
 
@@ -280,8 +312,10 @@ env:
   POSTGRES_ROOT_PASSWORD: ${{ secrets.POSTGRES_ROOT_PASSWORD }}
   APP_DB_USER: ${{ secrets.APP_DB_USER }}
   APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
-  APP_DB_NAME: ${{ secrets.APP_DB_NAME }}
-  DATABASE_URL: ${{ secrets.DATABASE_URL }} # Uses APP_DB_* credentials
+  COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }} # Required, comma-separated
+  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  DATABASE_SERVICE_URL: ${{ secrets.DATABASE_SERVICE_URL }}
+  COGNI_NODE_ENDPOINTS: ${{ secrets.COGNI_NODE_ENDPOINTS }} # Per-node billing routing
   LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
   OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
   AUTH_SECRET: ${{ secrets.AUTH_SECRET }}

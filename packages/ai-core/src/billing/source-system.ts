@@ -18,6 +18,11 @@
  * Used for generic linking in charge_receipts (source_system + source_reference).
  * Per GRAPH_EXECUTION.md: each adapter has a source system for billing attribution.
  */
-export const SOURCE_SYSTEMS = ["litellm", "anthropic_sdk"] as const;
+export const SOURCE_SYSTEMS = [
+  "litellm",
+  "anthropic_sdk",
+  "codex",
+  "ollama",
+] as const;
 
 export type SourceSystem = (typeof SOURCE_SYSTEMS)[number];

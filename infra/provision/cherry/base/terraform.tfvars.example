@@ -1,0 +1,37 @@
+# Cherry Servers Configuration Example
+# Generated automatically by provision-test-vm.sh — this file is for reference only.
+
+# Required: Environment name (canary, preview, production)
+environment = "preview"
+
+# Required: VM name prefix (hostname becomes "${environment}-${vm_name_prefix}")
+vm_name_prefix = "cogni"
+
+# Required: Your Cherry Servers project ID
+project_id = "YOUR_PROJECT_ID"
+
+# Required: Server plan (6GB is max Cherry VPS; sufficient for k3s + Argo CD)
+plan = "B1-6-6gb-100s-shared"
+
+# Required: Region
+region = "LT-Siauliai"
+
+# Required: SSH public key path (relative to this directory)
+public_key_path = "keys/cogni_preview_deploy.pub"
+
+# Optional: SSH private key for bootstrap health check
+# ssh_private_key = ""  # Set via TF_VAR_ssh_private_key or terraform.auto.tfvars
+
+# Required: GHCR registry auth for k3s private image pulls
+ghcr_deploy_username = "Cogni-1729"
+# ghcr_deploy_token = ""  # Set via TF_VAR_ghcr_deploy_token (sensitive)
+
+# Required: Repo reference for Argo CD manifest clone
+cogni_repo_url = "https://github.com/Cogni-DAO/node-template.git"
+cogni_repo_ref = "staging"
+
+# Required: SOPS/age private key for k8s secret decryption
+# Generate: age-keygen -o age-key.txt
+# Public key → infra/k8s/secrets/.sops.yaml
+# Private key → this variable
+# sops_age_private_key = ""  # Set via TF_VAR_sops_age_private_key (sensitive)

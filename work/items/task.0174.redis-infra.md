@@ -30,7 +30,7 @@ Redis 7 is available as a service in all runtime stacks (dev, test, prod). The a
 
 ### Approach
 
-**Solution**: Add Redis 7 service to docker-compose, add `ioredis` dependency to `apps/web`, wire `REDIS_URL` env var through compose + app config.
+**Solution**: Add Redis 7 service to docker-compose, add `ioredis` dependency to `apps/operator`, wire `REDIS_URL` env var through compose + app config.
 
 **Reuses**: Existing docker-compose patterns (healthcheck, network, named volumes). Existing env var passthrough pattern.
 
@@ -44,8 +44,8 @@ Per spec [unified-graph-launch.md §7](../../docs/spec/unified-graph-launch.md):
 
 - Modify: `infra/compose/runtime/docker-compose.yml` — add `redis` service with healthcheck, `internal` network, `depends_on` from app
 - Modify: `infra/compose/runtime/docker-compose.dev.yml` — add Redis port exposure for local dev (both dev and test stacks use this file)
-- Modify: `apps/web/package.json` — add `ioredis` dependency (ships its own types; no `@types/ioredis`)
-- Modify: `apps/web/src/shared/env/server-env.ts` — add `REDIS_URL` as optional with default `redis://localhost:6379`
+- Modify: `apps/operator/package.json` — add `ioredis` dependency (ships its own types; no `@types/ioredis`)
+- Modify: `apps/operator/src/shared/env/server-env.ts` — add `REDIS_URL` as optional with default `redis://localhost:6379`
 - Modify: `.env.local.example` — document `REDIS_URL`
 - Modify: docker-compose env sections — add `REDIS_URL` passthrough
 
@@ -68,7 +68,7 @@ Per spec [unified-graph-launch.md §7](../../docs/spec/unified-graph-launch.md):
 - [ ] **Checkpoint 2: ioredis + env config**
   - Milestone: ioredis installed, REDIS_URL in server-env.ts and .env.local.example
   - Todos:
-    - [ ] Add `ioredis` to `apps/web/package.json`
+    - [ ] Add `ioredis` to `apps/operator/package.json`
     - [ ] Add `REDIS_URL` optional field to `serverSchema` in `server-env.ts`
     - [ ] Document `REDIS_URL` in `.env.local.example`
   - Validation: `pnpm check` passes

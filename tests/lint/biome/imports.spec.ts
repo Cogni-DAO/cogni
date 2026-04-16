@@ -22,7 +22,7 @@ import { lintFixture } from "./runBiome";
 describe.skip("Features Import Boundaries", () => {
   it("allows feature importing components", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/features/home/components/Terminal.tsx",
+      "nodes/operator/app/src/features/home/components/Terminal.tsx",
       `import { Button } from "@/components"; export const Terminal = () => <Button />;`
     );
     expect(errors).toBe(0);
@@ -30,7 +30,7 @@ describe.skip("Features Import Boundaries", () => {
 
   it("blocks feature importing styles directly", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/features/auth/components/LoginForm.tsx",
+      "nodes/operator/app/src/features/auth/components/LoginForm.tsx",
       `import { button } from "@/styles/ui"; export const LoginForm = () => <div className={button()} />;`
     );
     expect(errors).toBeGreaterThan(0);
@@ -38,7 +38,7 @@ describe.skip("Features Import Boundaries", () => {
 
   it("blocks feature importing container, grid, section from styles/ui", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/features/home/components/HomeHeroSection.tsx",
+      "nodes/operator/app/src/features/home/components/HomeHeroSection.tsx",
       `import { container, grid, section } from "@/styles/ui"; export const HomeHero = () => <div className={container()} />;`
     );
     expect(errors).toBeGreaterThan(0);
@@ -46,7 +46,7 @@ describe.skip("Features Import Boundaries", () => {
 
   it.skip("blocks cross-feature imports", async () => {
     const { errors } = await lintFixture(
-      "apps/web/src/features/auth/components/LoginForm.tsx",
+      "nodes/operator/app/src/features/auth/components/LoginForm.tsx",
       `import { Terminal } from "@/features/home/components/Terminal"; export default Terminal;`
     );
     expect(errors).toBeGreaterThan(0);
@@ -56,7 +56,7 @@ describe.skip("Features Import Boundaries", () => {
     // SKIP: ESLint fails to block parent-relative imports
     // Expected: >0 errors (should be blocked), Actual: 0 errors (allowed by plugin)
     const { errors, messages } = await lintFixture(
-      "apps/web/src/features/auth/components/LoginForm.tsx",
+      "nodes/operator/app/src/features/auth/components/LoginForm.tsx",
       `import { utils } from "../../../shared/util"; export default utils;`,
       { focusRulePrefixes: ["no-restricted-imports"] }
     );

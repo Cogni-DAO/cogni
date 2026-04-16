@@ -85,7 +85,7 @@ export interface GraphRunRepository {
   /**
    * Lists runs for a user, ordered by started_at DESC with cursor-based pagination.
    * @param actorId - Actor performing the operation (for RLS SET LOCAL / audit trail)
-   * @param userId - Filter to runs where requested_by = userId
+   * @param userId - Used for RLS tenant scoping (sets app.current_user_id)
    * @param opts - Filtering and pagination options
    */
   listRunsByUser: (
@@ -99,4 +99,16 @@ export interface GraphRunRepository {
       cursor?: string;
     }
   ) => Promise<GraphRun[]>;
+
+  /**
+   * Patches the stateKey on a run record.
+   * Used when stateKey is derived after run creation (e.g., scheduled runs
+   * where stateKey is computed by the internal API, not the workflow).
+   * @param actorId - Actor performing the operation (for RLS SET LOCAL / audit trail)
+   */
+  patchRunStateKey: (
+    actorId: ActorId,
+    runId: string,
+    stateKey: string
+  ) => Promise<void>;
 }

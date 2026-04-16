@@ -22,18 +22,25 @@ tags: [observability]
 
 ## Architecture
 
-src/shared/observability/
+**Current location:** `src/shared/observability/` (per-node copy)
+**Target location:** `@cogni/node-shared` (PURE_LIBRARY capability package, task.0248)
+
+```
+shared/observability/           # → @cogni/node-shared/observability
 ├── events/
-│ ├── index.ts # EVENT_NAMES registry + EventName + EventBase
-│ ├── ai.ts # AiLlmCallEvent (strict payload)
-│ └── payments.ts # Payment event payloads (strict)
-├── server/ # Pino-based (was logging/)
-│ ├── logger.ts # Factory only
-│ ├── logEvent.ts # Type-safe wrapper
-│ └── helpers.ts # Request lifecycle
-└── client/ # Console-based (no shipping)
-├── logger.ts # Browser logger
-└── index.ts
+│   ├── index.ts                # EVENT_NAMES registry + EventName + EventBase
+│   ├── ai.ts                   # AiLlmCallEvent (strict payload)
+│   └── payments.ts             # Payment event payloads (strict)
+├── server/                     # Pino-based
+│   ├── logger.ts               # Factory: makeLogger({ nodeId }) — binds nodeId to every line
+│   ├── logEvent.ts             # Type-safe wrapper
+│   ├── metrics.ts              # prom-client registry (node_id default label)
+│   └── helpers.ts              # Request lifecycle
+├── context/                    # RequestContext factory (reqId, traceId)
+└── client/                     # Console-based (no shipping)
+    ├── logger.ts               # Browser logger
+    └── index.ts
+```
 
 **Flow:** App (JSON stdout) → Docker → Alloy → Loki (local dev or cloud)
 
@@ -107,20 +114,70 @@ src/shared/observability/
 
 - `app="cogni-template"` - Always
 - `env="local|preview|production|ci"` - From DEPLOY_ENVIRONMENT
-- `service="app|litellm|caddy|deployment"` - Docker service name
+- `service="app|poly|resy|litellm|caddy|deployment"` - Docker compose service name (one per node container when multi-node deploys)
 - `stream="stdout|stderr"` - Log stream
 
-**High-cardinality fields** (in JSON, NOT labels): `reqId`, `traceId`, `spanId`, `langfuseTraceId`, `litellmCallId`, `userId`, `billingAccountId`, `model`, `time`
+**High-cardinality fields** (in JSON, NOT labels): `nodeId`, `reqId`, `traceId`, `spanId`, `langfuseTraceId`, `litellmCallId`, `userId`, `billingAccountId`, `model`, `time`
+
+---
+
+## Multi-Node Identity
+
+**Invariant: NODE_IDENTITY_IN_OBSERVABILITY** — Every log line and every metric series from a node process MUST carry that node's identity. Without this, multi-node production debugging is impossible.
+
+**Source of truth:** `.cogni/repo-spec.yaml` → `node_id` (UUID). This is the same identity used for billing routing, ledger scoping, and inter-node communication. See [Multi-Node Tenancy](multi-node-tenancy.md).
+
+**Resolution chain:**
+
+```
+.cogni/repo-spec.yaml   (canonical, committed)
+       ↓
+getNodeId()              (shared/config — reads repo-spec, caches)
+       ↓
+bootstrap/container.ts   (resolves BEFORE logger creation)
+       ↓
+makeLogger({ nodeId })   (binds to pino base — every log line inherits)
+metricsRegistry          (node_id default label — every metric series inherits)
+```
+
+**Rules:**
+
+| Rule                          | Detail                                                                                                                                                                                                                  |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| REPO_SPEC_IS_SOURCE           | `nodeId` comes from `getNodeId()` (repo-spec), never from a hand-authored env var. Both live in `@cogni/node-shared`.                                                                                                   |
+| NODEID_IN_JSON_NOT_LABEL      | `nodeId` is a structured JSON field in log lines, NOT an indexed Loki label. Filter via `\| json \| nodeId="..."`. At current scale (3 nodes) `node_id` as a Prometheus metric label is acceptable.                     |
+| SERVICE_IS_NODE_DISCRIMINATOR | In Docker compose, each node gets a distinct service name (`app`, `poly`, `resy`). Alloy extracts this as the low-cardinality indexed `service` label. This is the primary Loki index discriminator for node filtering. |
+| EVENTS_ARE_DOMAIN_SCOPED      | Event names are domain-scoped (`ai.*`, `payments.*`, `adapter.*`), never node-scoped. Do NOT create `poly.ai.*` or `resy.payments.*` event names. Node identity is in the `nodeId` field, not the event name.           |
+| INTERNODE_LOGS_BOTH_SIDES     | Inter-node calls (billing callbacks, SSO, future federation) MUST log both `sourceNodeId` and `targetNodeId` so cross-node flows are traceable.                                                                         |
+
+**Operator vs node visibility:**
+
+| Audience             | Sees                              | How                                                                     |
+| -------------------- | --------------------------------- | ----------------------------------------------------------------------- |
+| Operator dashboards  | All nodes' metrics + logs         | Grafana queries across all `node_id` / `service` values                 |
+| Node agent (AI)      | Own node's data only              | Grafana MCP queries filtered to `nodeId="<self>"` or `service="<name>"` |
+| Cross-node debugging | Correlated by `reqId` / `traceId` | LogQL join on `reqId` across services                                   |
+
+**Python services (LiteLLM, etc.):** Must emit structured JSON logs with `nodeId` field. Plain-text Python `logging` output is not acceptable — it doesn't parse in Loki's JSON pipeline. Use a JSON formatter. See [bug.0261](../../work/items/bug.0261.cogni-node-router-production-reliability.md).
+
+**Implementation status:**
+
+- [x] `makeLogger()` receives `nodeId` from container bootstrap (resolves via `getNodeId()`) — task.0272
+- [x] `metricsRegistry.setDefaultLabels()` includes `node_id` from `readNodeIdForMetrics()` — task.0272
+- [ ] Both `getNodeId()` and logger/metrics factory in `@cogni/node-shared` (task.0248)
+- [ ] Alloy allowlist updated for per-node service names (task.0247)
+- [ ] Python services emit JSON logs (bug.0261)
 
 ---
 
 ## Context Propagation
 
-`reqId` and trace context propagate through all adapters, tools, and graphs:
+`reqId`, `nodeId`, and trace context propagate through all adapters, tools, and graphs:
 
+- `nodeId` bound to logger at bootstrap — inherited by all child loggers automatically
 - `reqId` attached as OTel span attribute (`cogni.request_id`)
 - `reqId` + `traceId` forwarded in LiteLLM metadata for correlation
-- Child loggers inherit `reqId` + `traceId` from RequestContext
+- Child loggers inherit `reqId` + `traceId` + `nodeId` from parent bindings
 
 ---
 
@@ -157,14 +214,20 @@ clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_STREAM_ERROR, { messageId });
 **LogQL Queries:**
 
 ```logql
-# All production errors
+# All production errors (operator only)
 {app="cogni-template", env="production", service="app"} | json | level="error"
 
-# Trace specific request
-{service="app"} | json | reqId="abc-123"
+# All production errors (all nodes)
+{app="cogni-template", env="production"} | json | level="error"
 
-# AI calls
-{service="app"} | json | event="ai.llm_call_completed"
+# Filter to a specific node by UUID
+{service="poly"} | json | nodeId="5ed2d64f-2745-4676-983b-2fb7e05b2eba"
+
+# Trace specific request across nodes
+{app="cogni-template"} | json | reqId="abc-123"
+
+# AI calls on a specific node
+{service="resy"} | json | event="ai.llm_call_completed"
 ```
 
 ---
@@ -213,9 +276,12 @@ clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_STREAM_ERROR, { messageId });
 
 **Not Yet Implemented:**
 
+- ✅ `nodeId` in logger base bindings and metrics default labels (NODE_IDENTITY_IN_OBSERVABILITY — task.0272)
 - ❌ Client logs not collected (console-only, no shipping pipeline)
 - ❌ No Grafana dashboards
 - ❌ No OTel trace exporter (SDK initialized, no OTLP endpoint)
+- ❌ Python services (LiteLLM callbacks) emit plain-text logs, not JSON (bug.0261)
+- ❌ No `internode.*` event names in registry (needed when inter-node communication grows)
 
 **Technical Debt:**
 
@@ -231,6 +297,7 @@ clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_STREAM_ERROR, { messageId });
 3. **Fail-closed reqId:** logEvent() throws if reqId missing (never emit malformed events)
 4. **No sensitive data:** Redact paths cover passwords, keys, tokens; never log prompts or full request bodies
 5. **Streaming determinism:** Every SSE request emits exactly one terminal event (completed OR finalization_lost)
+6. **NODE_IDENTITY_IN_OBSERVABILITY:** Every log line and metric series carries `nodeId` from repo-spec. See [Multi-Node Identity](#multi-node-identity).
 
 ---
 

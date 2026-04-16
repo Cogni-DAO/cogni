@@ -9,12 +9,17 @@
 
 ## Purpose
 
-Infrastructure as Code configurations for cloud providers, services, and deployment stacks using OpenTofu.
+Everything about how the system runs. Split by responsibility, not by tool.
 
 ## Pointers
 
-- [tofu/cherry/](tofu/cherry/): Cherry Servers deployment configs
-- [compose/](compose/): Docker Compose service stacks
+- [CD Pipeline E2E](../docs/spec/cd-pipeline-e2e.md): Full deployment specification
+- [catalog/](catalog/): Renderer-agnostic app/node inventory
+- [k8s/](k8s/): Kubernetes deployment manifests (Argo CD + Kustomize)
+- [compose/](compose/): Docker Compose stacks (VM-shared infra runtime)
+- [images/](images/): Infra-owned Docker image build contexts
+- [provision/](provision/): Substrate/bootstrap (OpenTofu, cloud-init)
+- [akash/](akash/): Future Akash SDL renderer
 
 ## Boundaries
 
@@ -28,42 +33,40 @@ Infrastructure as Code configurations for cloud providers, services, and deploym
 
 ## Public Surface
 
-- **Exports:** none
-- **CLI (if any):** tofu commands in provider directories
-- **Env/Config keys:** `CHERRY_AUTH_TOKEN`, provider auth tokens, deployment variables
-- **Files considered API:** `tofu/*/variables.tf`, `compose/*/docker-compose*.yml`
+- **Exports:** Kustomize overlays (k8s/), Docker Compose stacks (compose/), Terraform modules (provision/)
+- **CLI:** `kubectl kustomize infra/k8s/overlays/{env}/{app}/`, `tofu plan` in `infra/provision/cherry/base/`
 
 ## Responsibilities
 
-- This directory **does**: Define deployments, service configurations, infrastructure provisioning
-- This directory **does not**: Contain application logic, business rules, or UI components
+- This directory **does**: Define deployment manifests, infrastructure config, image builds, app catalog
+- This directory **does not**: Contain application code, business logic, or test suites
 
-## Usage
+## Directory Responsibilities
 
-Minimal local commands:
-
-```bash
-cd tofu/cherry/base && tofu plan
-```
+| Directory    | Answers                                 | Changes when...                     |
+| ------------ | --------------------------------------- | ----------------------------------- |
+| `catalog/`   | What apps/nodes exist?                  | A new node is added                 |
+| `k8s/`       | How do apps deploy to Kubernetes?       | Image digests or manifests change   |
+| `compose/`   | What infra services run on the VM?      | Infrastructure config changes       |
+| `images/`    | How are infra-owned images built?       | LiteLLM/proxy code changes          |
+| `provision/` | How is the VM created and bootstrapped? | Cloud provider or bootstrap changes |
+| `akash/`     | How do apps deploy to Akash?            | (Future — SDL renderer)             |
 
 ## Standards
 
-- Split providers into base (VM) and app (deployment) configurations
-- Use templatefile() for dynamic configurations
-- All providers require example tfvars files
-
-## Dependencies
-
-- **Internal:** compose/, tofu/
-- **External:** OpenTofu, cloud provider APIs
+- `catalog/` stays thin — name, type, port, env keys. No platform-specific fields.
+- `k8s/` and `akash/` are peer renderers. Both read from `catalog/`.
+- `compose/` is for infra services intentionally kept off-cluster.
+- `images/` contains only Dockerfiles and build contexts, not runtime config.
+- `provision/` owns VM lifecycle. Runtime manifests go in renderers.
 
 ## Change Protocol
 
-- Update this file when **provider interfaces** or **template formats** change
-- Bump **Last reviewed** date
-- Update example tfvars when variable schemas change
+- Update this file when **top-level directory structure changes**
+- Adding a new renderer: create `infra/{renderer}/` as peer to `k8s/`
 
 ## Notes
 
-- Providers split between immutable (base/) and mutable deployment resources
-- Compose stacks split: runtime (app + infra), edge (Caddy TLS), sandbox-proxy (nginx)
+- `infra/cd/` was renamed to `infra/k8s/` and `infra/tofu/` to `infra/provision/` in the CD pipeline implementation
+- `infra/litellm/` moved to `infra/images/litellm/`, `infra/compose/sandbox-proxy/` to `infra/images/sandbox-proxy/`
+- See `docs/spec/cd-pipeline-e2e.md` §0 for the rationale behind the directory layout

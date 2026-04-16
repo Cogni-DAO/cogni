@@ -14,7 +14,12 @@
  * @public
  */
 
-import type { AiEvent, AiExecutionErrorCode, ToolExecFn } from "@cogni/ai-core";
+import type {
+  AiEvent,
+  AiExecutionErrorCode,
+  ToolExecFn,
+  ToolSpec,
+} from "@cogni/ai-core";
 import type { ToolContract } from "@cogni/ai-tools";
 // Import shared graph types from graphs/types.ts (single source of truth)
 import type {
@@ -112,6 +117,13 @@ export interface InProcRunnerOptions<TTool = unknown> {
     ToolContract<string, unknown, unknown, unknown>
   >;
 
+  /**
+   * MCP tool specs (JSON Schema based) to expose to the LLM.
+   * These are wrapped as LangChain tools that delegate to toolExecFn,
+   * flowing through the same toolRunner pipeline as native tools.
+   */
+  readonly mcpToolSpecs?: readonly ToolSpec[];
+
   /** Graph execution request */
   readonly request: InProcGraphRequest;
 
@@ -123,6 +135,12 @@ export interface InProcRunnerOptions<TTool = unknown> {
     readonly prompt?: string;
     readonly schema: unknown;
   };
+
+  /**
+   * Optional system prompt passed to graph factory.
+   * Used by operator graphs where the prompt is catalog-driven, not hardcoded.
+   */
+  readonly systemPrompt?: string;
 }
 
 /**

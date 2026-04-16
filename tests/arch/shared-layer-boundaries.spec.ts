@@ -50,8 +50,8 @@ function runDepCruise(probeDirs: string[]): {
 describe("Shared layer boundaries", () => {
   it("blocks shared from importing features", () => {
     const { exitCode, stdout } = runDepCruise([
-      "apps/web/src/shared/__arch_probes__",
-      "apps/web/src/features/__arch_probes__",
+      "nodes/operator/app/src/shared/__arch_probes__",
+      "nodes/operator/app/src/features/__arch_probes__",
     ]);
     if (exitCode === 0) {
       console.log("STDOUT:", stdout);

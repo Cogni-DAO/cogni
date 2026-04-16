@@ -18,8 +18,8 @@ import { defineWorkspace } from "vitest/config";
 export default defineWorkspace([
   // Root tests (tests/**)
   "./vitest.config.mts",
-  // App-specific tests (apps/web/tests/**)
-  "./apps/web/vitest.*.config.mts",
+  // Node app tests (nodes/*/app/tests/**)
+  "./nodes/*/app/vitest.*.config.mts",
   // Package-local tests
   "./packages/*/vitest.config.ts",
   // Service-local tests

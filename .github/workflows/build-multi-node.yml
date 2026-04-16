@@ -1,0 +1,140 @@
+name: Build Multi-Node
+
+# Builds all node apps + services, pushes to GHCR.
+# Canary-only: staging/production receive promoted digests, not fresh builds.
+# Downstream: promote-and-deploy.yml (workflow_run) handles overlay promotion + infra deploy.
+# Future: Turborepo --affected to skip unchanged nodes (task.0260).
+
+on:
+  push:
+    branches: [canary]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+concurrency:
+  group: build-multi-node-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  # ── Per-node matrix build ──────────────────────────────────────
+  build-nodes:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [operator, poly, resy]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          # Canonical GHCR package name. github.repository returns the redirect
+          # (node-template) but GHCR stores as cogni-template. docker push follows
+          # redirects but imagetools inspect does not.
+          IMAGE_NAME="ghcr.io/cogni-dao/cogni-template"
+          IMAGE_TAG="preview-${GITHUB_SHA}"
+          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tag
+        id: tag
+        run: |
+          NODE="${{ matrix.node }}"
+          IMAGE_NAME="${{ steps.meta.outputs.image_name }}"
+          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}"
+
+          if [ "$NODE" = "operator" ]; then
+            # Operator uses the base tag (backwards compatible)
+            FULL_TAG="${IMAGE_NAME}:${IMAGE_TAG}"
+          else
+            FULL_TAG="${IMAGE_NAME}:${IMAGE_TAG}-${NODE}"
+          fi
+          echo "full_tag=$FULL_TAG" >> $GITHUB_OUTPUT
+
+      - name: Build and push ${{ matrix.node }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: nodes/${{ matrix.node }}/app/Dockerfile
+          target: runner
+          push: true
+          tags: ${{ steps.tag.outputs.full_tag }}
+          cache-from: type=gha,scope=build-${{ matrix.node }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.node }}
+
+      - name: Verify push
+        run: |
+          docker buildx imagetools inspect "${{ steps.tag.outputs.full_tag }}" --format '{{.Manifest.Digest}}'
+          echo "✅ ${{ matrix.node }} pushed: ${{ steps.tag.outputs.full_tag }}"
+
+  # ── Services build (parallel with nodes) ───────────────────────
+  build-services:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          IMAGE_NAME="ghcr.io/cogni-dao/cogni-template"
+          IMAGE_TAG="preview-${GITHUB_SHA}"
+          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push migrator
+        id: build-migrator
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: nodes/operator/app/Dockerfile
+          target: migrator
+          push: true
+          tags: ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}-migrate
+          cache-from: type=gha,scope=build-migrator
+          cache-to: type=gha,mode=max,scope=build-migrator
+
+      - name: Build and push scheduler-worker
+        id: build-sw
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/scheduler-worker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.image_name }}:${{ steps.meta.outputs.image_tag }}-scheduler-worker
+          cache-from: type=gha,scope=build-scheduler-worker
+          cache-to: type=gha,mode=max,scope=build-scheduler-worker
+
+      - name: Build summary
+        run: |
+          echo "## Multi-Node Build" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${GITHUB_SHA}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Migrator digest:** \`${{ steps.build-migrator.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Scheduler-Worker digest:** \`${{ steps.build-sw.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY

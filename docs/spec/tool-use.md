@@ -34,7 +34,7 @@ Define the tool execution invariants, semantic types, wire format adapters, poli
 
 ## Core Invariants
 
-1. **TOOLS_VIA_TOOLRUNNER**: All tool execution flows through `toolRunner.exec()` for ALL executors (InProc, langgraph dev, server). LangChain tool wrappers (`@cogni/langgraph-graphs`) must delegate to `toolRunner.exec()` to preserve validation/redaction pipeline. No direct tool implementation calls. No executor-specific bypass paths.
+1. **TOOLS_VIA_TOOLRUNNER**: All tool execution flows through `toolRunner.exec()` for ALL executors (InProc, langgraph dev, server). LangChain tool wrappers (`@cogni/langgraph-graphs`) must delegate to `toolRunner.exec()` to preserve validation/redaction pipeline. No direct tool implementation calls. No executor-specific bypass paths. **Documented deviation:** Codex SDK (`CodexLlmAdapter`) calls MCP tools directly via its own agent loop (config.toml). Mitigated by: server-level scoping, $0 billing (user-funded), output stays in agent loop. See `INVARIANT_DEVIATION: TOOLS_VIA_TOOLRUNNER` in `codex-llm.adapter.ts`.
 
 2. **TOOLS_IN_PACKAGES**: Tool contracts + implementations in `@cogni/ai-tools`. Semantic types (`ToolSpec`, `ToolInvocationRecord`) in `@cogni/ai-core/tooling/`. Wire adapters (OpenAI/Anthropic encoders/decoders) in adapters layer. LangChain wrappers in `@cogni/langgraph-graphs/runtime`. Binding in composition roots only. No tool definitions in `src/**`.
 

@@ -2,7 +2,7 @@
 id: task.0189
 type: task
 title: "Dashboard P0→P1 bridge: thread linking, page consolidation, public Cogni Live, streaming status"
-status: needs_implement
+status: needs_merge
 priority: 1
 rank: 7
 estimate: 5
@@ -13,8 +13,8 @@ spec_refs:
 assignees: []
 credit:
 project: proj.live-dashboard
-branch:
-pr:
+branch: task-0189-dashboard-p1-bridge
+pr: https://github.com/Cogni-DAO/node-template/pull/626
 reviewer:
 revision: 0
 blocked_by: []
@@ -37,10 +37,42 @@ P0 (task.0184) shipped a static dashboard with agents table, work items, and act
 3. Cogni Live (system runs) is auth-gated but should be public ("watch Cogni work")
 4. Agent status is just "Completed"/"Running" — no AI-generated status text or streaming preview
 5. Thread persistence feels flaky — multiple runs to same thread show as separate entries
-
 6. Run cards have no click-through — clicking a Cogni Live run should drill into the graph run stream (Redis SSE). The `runId` is available, the stream endpoint exists at `/api/v1/ai/runs/{runId}/stream`.
 
 This task bridges P0→P1 by closing these gaps.
+
+## Design Review Findings (2026-03-25)
+
+Critical bugs discovered during design review that must be fixed before building new features:
+
+### BUG: Activity charts ignore system scope (P0)
+
+When "Cogni Live" tab is active, runs table shows system runs (`graph_runs` via `scope=system`), but activity charts show the **logged-in user's personal spend** (`charge_receipts` via user's billing account). The activity contract has no `scope` parameter — the two data paths are completely disconnected.
+
+- `ai.activity.v1.contract.ts` — no scope field in input
+- `activity/route.ts` — no scope param parsed
+- `activity.server.ts:193-201` — always resolves to authenticated user's billing account
+- `dashboard/view.tsx:201-211` — `fetchActivity` never receives tab state
+
+### BUG: Terminology mismatch
+
+Section header says "Agents" but displays `graph_runs`. Per `temporal-patterns.md`, an Agent is an `AgentDefinition` (config). A run is a run.
+
+### RESOLVED: GUID-in-table bug
+
+Fixed in prior commit (15ddb4bc) — `dedupeByThread` was using `run.id` (UUID) as key. Now uses `run.stateKey ?? run.runId ?? run.id`.
+
+### RESOLVED: Thread dedup (Checkpoint 6)
+
+Same fix as GUID bug. `dedupeByThread` now correctly deduplicates by stateKey for chat runs and keeps system/webhook runs unique.
+
+### NOT A BUG: RLS system scope
+
+`withTenantScope` correctly sets `app.current_user_id` to `COGNI_SYSTEM_PRINCIPAL_USER_ID` for `scope=system` queries. If system runs don't appear, no webhook triggers have fired in this environment.
+
+### Architecture note: Workflow-first visibility (future)
+
+Current top-level object is `graph_runs` (LangGraph execution). The correct product abstraction is **Workflow** (Temporal) as the top-level, with graph runs as drill-down detail. For now: rename UI labels to neutral "runs", document the target model in `temporal-patterns.md`. Do NOT add `workflow_runs` table until 2-3 real multi-step workflows need parent-level visibility.
 
 ## Requirements
 
@@ -80,52 +112,64 @@ This task bridges P0→P1 by closing these gaps.
 
 ## Allowed Changes
 
-- `apps/web/src/app/(app)/chat/page.tsx` — read `?thread=` searchParam
-- `apps/web/src/app/(app)/dashboard/view.tsx` — public view, clickable rows, expanded running card
-- `apps/web/src/app/(app)/dashboard/page.tsx` — remove auth requirement for public view
-- `apps/web/src/app/(app)/activity/page.tsx` — redirect to /dashboard
-- `apps/web/src/components/kit/data-display/RunCard.tsx` — expanded card variant
-- `apps/web/src/features/layout/components/AppSidebar.tsx` — remove Activity nav link
-- `apps/web/src/app/(app)/AGENTS.md` — update routes
-- Navigation and sidebar changes
+- `apps/operator/src/contracts/ai.activity.v1.contract.ts` — add scope field
+- `apps/operator/src/app/api/v1/activity/route.ts` — parse scope param
+- `apps/operator/src/app/_facades/ai/activity.server.ts` — resolve billing account by scope
+- `apps/operator/src/app/(app)/activity/_api/fetchActivity.ts` — accept scope param
+- `apps/operator/src/app/(app)/activity/page.tsx` — redirect to /dashboard
+- `apps/operator/src/app/(app)/dashboard/view.tsx` — pass tab to activity, clickable rows, terminology
+- `apps/operator/src/app/(app)/dashboard/page.tsx` — remove auth requirement for public view (Phase C)
+- `apps/operator/src/app/(app)/chat/page.tsx` — read `?thread=` searchParam
+- `apps/operator/src/components/kit/data-display/RunCard.tsx` — expanded card variant (Phase B)
+- `apps/operator/src/features/layout/components/AppSidebar.tsx` — remove Activity nav link
+- `apps/operator/src/app/(app)/AGENTS.md` — update routes
 
 ## Plan
 
-- [ ] **Checkpoint 1: Thread deep-linking**
-  - Wire `useSearchParams` in chat page to read `?thread=` and set `activeThreadKey`
-  - Make dashboard agent rows clickable with `onClick` → `router.push('/chat?thread=...')`
-  - Validation: click agent row → navigates to chat with that thread loaded
+### Phase A: Fix broken foundation (this PR)
 
-- [ ] **Checkpoint 2: Page consolidation**
-  - Replace `/activity` page with redirect to `/dashboard`
+- [ ] **Checkpoint 1: Activity scope fix (P0 bug)**
+  - Add `scope?: "user" | "system"` to `ai.activity.v1.contract.ts` input
+  - Activity route + facade: when `scope=system`, use `COGNI_SYSTEM_BILLING_ACCOUNT_ID`
+  - Dashboard view: pass current `tab` to `fetchActivity`
+  - `fetchActivity` sends `scope=system` when tab is system
+  - Validation: switch to "System Runs" → charts reflect system spend, not user spend
+
+- [ ] **Checkpoint 2: Page consolidation + terminology**
+  - Replace `/activity` page with 308 redirect to `/dashboard`
   - Remove Activity from sidebar nav
+  - Rename "Agents" section header → "Recent Runs"
+  - Rename "Cogni Live" → "System Runs"
   - Update AGENTS.md routes list
-  - Validation: `/activity` → 308 redirect to `/dashboard`; sidebar shows no Activity link
+  - Validation: `/activity` → redirect; sidebar clean; labels correct
 
-- [ ] **Checkpoint 3: Public Cogni Live**
-  - Dashboard page: if no session, render public view (Cogni Live only, no My Runs tab)
-  - Fetch system runs without auth (or with a public API variant)
-  - Activity charts: show system-only data for public view
-  - Validation: unauthenticated user sees Cogni Live agents and charts
+- [ ] **Checkpoint 3: Thread deep-linking**
+  - Run rows with `stateKey` → `Link href="/chat?thread={stateKey}"`
+  - Chat page reads `?thread=<stateKey>` searchParam to load thread
+  - Rows without stateKey show no link
+  - Validation: click run row → navigates to chat with that thread loaded
 
-- [ ] **Checkpoint 4: Streaming status labels**
-  - Populate `statusLabel` from stream events in the relay pump (deterministic phase: text_delta→"Thinking", tool_call_start→"Using tools")
-  - Expanded running card component: shows status label, elapsed timer, content preview placeholder
-  - Dashboard: running agents render as expanded card; completed agents as table rows
-  - Validation: trigger a run, see "Thinking" / "Using tools" status on dashboard
+- [x] **Checkpoint 4: Thread dedup audit** — RESOLVED
+  - Fixed in prior commit (15ddb4bc). `dedupeByThread` now correct.
+
+### Phase B: Streaming & drill-down (separate PR)
 
 - [ ] **Checkpoint 5: Run card click-through to stream**
-  - New page or modal at `/dashboard/runs/[runId]` that subscribes to `GET /api/v1/ai/runs/{runId}/stream`
-  - Running runs: live SSE subscription showing events as they arrive
-  - Completed runs: replay from Redis (within TTL) or show final status
-  - Cogni Live rows and My Runs rows both link to this view
-  - Validation: click a system run → see stream events or final result
+  - New page at `/dashboard/runs/[runId]` subscribing to SSE endpoint
+  - Running runs: live SSE; Completed runs: replay from Redis or final status
+  - Validation: click a run → see stream events or final result
 
-- [ ] **Checkpoint 6: Thread dedup audit**
-  - Investigate: are duplicate entries a data issue or a display issue?
-  - If display: verify dedupeByThread logic handles edge cases (null stateKey, same graphId different threads)
-  - If data: file separate bug
-  - Validation: multiple messages to same agent → one row in agents table
+- [ ] **Checkpoint 6: Streaming status labels**
+  - Populate `statusLabel` from stream events (text_delta→"Thinking", tool_call_start→"Using tools")
+  - Expanded running card component with status label + elapsed timer
+  - Validation: trigger a run, see live status on dashboard
+
+### Phase C: Public access (separate PR)
+
+- [ ] **Checkpoint 7: Public Cogni Live**
+  - Dashboard page: if no session, render public view (System Runs only, read-only)
+  - Public view shows: runs table (system only) + activity charts (system only). No work items.
+  - Validation: unauthenticated user sees system runs and charts
 
 ## Validation
 

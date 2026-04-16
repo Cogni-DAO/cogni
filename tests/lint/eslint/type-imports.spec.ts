@@ -21,7 +21,7 @@ describe.skip("Type Import Consistency", () => {
   describe("Type-only port imports", () => {
     it("allows type-only port imports in features", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/features/ai/services/complete.ts",
+        "nodes/operator/app/src/features/ai/services/complete.ts",
         `import type { LlmService, Clock } from "@/ports"; export const service = (llm: LlmService, clock: Clock) => {};`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -30,7 +30,7 @@ describe.skip("Type Import Consistency", () => {
 
     it("blocks runtime port imports in features", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/ai/services/complete.ts",
+        "nodes/operator/app/src/features/ai/services/complete.ts",
         `import { LlmService, Clock } from "@/ports"; export const service = (llm: LlmService, clock: Clock) => {};`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -44,7 +44,7 @@ describe.skip("Type Import Consistency", () => {
 
     it("allows type-only core imports in adapters", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/adapters/server/ai/litellm.adapter.ts",
+        "nodes/operator/app/src/adapters/server/ai/litellm.adapter.ts",
         `import type { Message } from "@/core"; export class LiteLlmAdapter { process(msg: Message) {} };`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -53,7 +53,7 @@ describe.skip("Type Import Consistency", () => {
 
     it("allows type-only port imports in adapters", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/adapters/server/ai/openai.adapter.ts",
+        "nodes/operator/app/src/adapters/server/ai/openai.adapter.ts",
         `import type { LlmService } from "@/ports"; export class OpenAIAdapter implements LlmService {};`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -66,7 +66,7 @@ describe.skip("Type Import Consistency", () => {
       // SKIP: ESLint incorrectly blocks ports re-exporting their own interfaces
       // Expected: 0 errors (should be allowed), Actual: >0 errors (blocked by plugin)
       const { errors } = await lintFixture(
-        "apps/web/src/ports/index.ts",
+        "nodes/operator/app/src/ports/index.ts",
         `export type { LlmService } from './llm.port'; export type { Clock } from './clock.port';`
       );
       expect(errors).toBe(0);
@@ -76,7 +76,7 @@ describe.skip("Type Import Consistency", () => {
       // SKIP: This test needs custom rule implementation that doesn't exist yet
       // Expected: Custom rule to detect re-exports, Actual: No such rule implemented
       const { errors, messages } = await lintFixture(
-        "apps/web/src/ports/llm.port.ts",
+        "nodes/operator/app/src/ports/llm.port.ts",
         `import type { Message } from "@/core"; export type { Message }; export interface LlmService { process(msg: Message): Promise<Message>; }`,
         { focusRulePrefixes: ["boundaries/", "no-restricted-syntax"] }
       );
@@ -90,7 +90,7 @@ describe.skip("Type Import Consistency", () => {
       // SKIP: ESLint incorrectly blocks features→core canonical imports
       // Expected: 0 errors (should be allowed), Actual: >0 errors (blocked by plugin)
       const { errors } = await lintFixture(
-        "apps/web/src/features/ai/services/complete.ts",
+        "nodes/operator/app/src/features/ai/services/complete.ts",
         `import { Message } from "@/core"; export const processMessage = (msg: Message) => msg;`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -99,7 +99,7 @@ describe.skip("Type Import Consistency", () => {
 
     it("enforces consistent type imports for interfaces", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/chat/services/message.ts",
+        "nodes/operator/app/src/features/chat/services/message.ts",
         `import { MessageRepository } from "@/ports"; export const service = (repo: MessageRepository) => {};`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -117,7 +117,7 @@ describe.skip("Type Import Consistency", () => {
       // SKIP: ESLint incorrectly blocks mixed imports in features
       // Expected: 0 errors (should be allowed), Actual: >0 errors (blocked by plugin)
       const { errors } = await lintFixture(
-        "apps/web/src/features/ai/services/complete.ts",
+        "nodes/operator/app/src/features/ai/services/complete.ts",
         `import { Message } from "@/core"; import type { LlmService } from "@/ports"; export const execute = (llm: LlmService, input: Message): Promise<Message> => llm.process(input);`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -126,7 +126,7 @@ describe.skip("Type Import Consistency", () => {
 
     it("blocks mixed imports when only types needed", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/features/data/services/query.ts",
+        "nodes/operator/app/src/features/data/services/query.ts",
         `import { UserRepository, User } from "@/ports"; export const service = (repo: UserRepository): User => null as any;`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -140,7 +140,7 @@ describe.skip("Type Import Consistency", () => {
 
     it("allows value imports when actually used at runtime", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/features/validation/services/schema.ts",
+        "nodes/operator/app/src/features/validation/services/schema.ts",
         `import { defaultSchema } from "@/shared"; export const validate = (data: unknown) => defaultSchema.parse(data);`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -151,7 +151,7 @@ describe.skip("Type Import Consistency", () => {
   describe("Bootstrap type dependencies", () => {
     it("allows bootstrap importing adapter implementations", async () => {
       const { errors } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import { LiteLlmAdapter } from "@/adapters/server"; import type { LlmService } from "@/ports"; export const container: { llm: LlmService } = { llm: new LiteLlmAdapter() };`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );
@@ -160,7 +160,7 @@ describe.skip("Type Import Consistency", () => {
 
     it("enforces type-only imports for port interfaces in bootstrap", async () => {
       const { errors, messages } = await lintFixture(
-        "apps/web/src/bootstrap/container.ts",
+        "nodes/operator/app/src/bootstrap/container.ts",
         `import { LlmService } from "@/ports"; export const container: { llm: LlmService } = null as any;`,
         { focusRulePrefixes: ["@typescript-eslint/consistent-type-imports"] }
       );

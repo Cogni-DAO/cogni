@@ -34,9 +34,9 @@ export default [
   // NOTE: src/styles/** and src/theme/** excluded - they're definition files with separate rules (see lines 107-223)
   {
     files: [
-      "apps/web/src/app/**/*.{ts,tsx}",
-      "apps/web/src/components/**/*.{ts,tsx}",
-      "apps/web/src/features/**/*.{ts,tsx}",
+      "nodes/operator/app/src/app/**/*.{ts,tsx}",
+      "nodes/operator/app/src/components/**/*.{ts,tsx}",
+      "nodes/operator/app/src/features/**/*.{ts,tsx}",
     ],
     plugins: {
       "ui-governance": uiGovernance,
@@ -106,7 +106,7 @@ export default [
   // EXEMPTIONS: Vendor and styles layers
   // ========================================
   {
-    files: ["apps/web/src/components/vendor/**/*.{ts,tsx}", "apps/web/src/styles/**/*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/components/vendor/**/*.{ts,tsx}", "nodes/operator/app/src/styles/**/*.{ts,tsx}"],
     rules: {
       "ui-governance/no-raw-colors": "off",
       "ui-governance/no-arbitrary-non-token-values": "off",
@@ -123,13 +123,13 @@ export default [
 
   // Block new component files outside kit/ during cleanup phase
   {
-    files: ["apps/web/src/components/**/*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/components/**/*.{ts,tsx}"],
     ignores: [
-      "apps/web/src/components/kit/**",
-      "apps/web/src/components/vendor/**",
-      "apps/web/src/components/index.ts",
-      "apps/web/src/components/AGENTS.md",
-      "apps/web/src/components/__arch_probes__/**",
+      "nodes/operator/app/src/components/kit/**",
+      "nodes/operator/app/src/components/vendor/**",
+      "nodes/operator/app/src/components/index.ts",
+      "nodes/operator/app/src/components/AGENTS.md",
+      "nodes/operator/app/src/components/__arch_probes__/**",
     ],
     rules: {
       "no-restricted-syntax": [
@@ -145,7 +145,7 @@ export default [
 
   // Block new UI library imports during cleanup phase
   {
-    files: ["apps/web/src/**/*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -169,7 +169,7 @@ export default [
   // Features layer: block adapter/vendor/styles, allow same-feature imports
   // Note: Cross-feature boundaries enforced by depcruiser (ARCHITECTURE_ENFORCEMENT_GAPS.md)
   {
-    files: ["apps/web/src/features/**/*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/features/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -190,7 +190,7 @@ export default [
 
   // App layer: block direct adapter imports and vendor imports
   {
-    files: ["apps/web/src/app/**/*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/app/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -206,7 +206,7 @@ export default [
 
   // Styles layer: enforce CVA variant discipline
   {
-    files: ["apps/web/src/styles/**/*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/styles/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -229,7 +229,7 @@ export default [
 
   // Kit layer: enforce tailwind-merge restrictions
   {
-    files: ["apps/web/src/components/kit/**/*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/components/kit/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -249,7 +249,7 @@ export default [
 
   // Shared cn utility: allow tailwind-merge
   {
-    files: ["apps/web/src/shared/util/cn.ts"],
+    files: ["nodes/operator/app/src/shared/util/cn.ts"],
     rules: {
       "no-restricted-imports": "off",
     },
@@ -261,7 +261,7 @@ export default [
 
   // Layout.tsx: allow global Tailwind CSS import
   {
-    files: ["apps/web/src/app/layout.tsx"],
+    files: ["nodes/operator/app/src/app/layout.tsx"],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -284,7 +284,7 @@ export default [
 
   // Next.js font files: allow inline styles
   {
-    files: ["apps/web/src/**/font*.{ts,tsx}"],
+    files: ["nodes/operator/app/src/**/font*.{ts,tsx}"],
     rules: {
       "no-inline-styles/no-inline-styles": "off",
     },
@@ -310,7 +310,7 @@ export default [
 
   // Theme initialization script: allow document.documentElement
   {
-    files: ["apps/web/public/theme-init.js"],
+    files: ["nodes/operator/app/public/theme-init.js"],
     rules: {
       "no-restricted-properties": "off",
     },

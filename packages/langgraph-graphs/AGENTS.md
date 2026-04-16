@@ -36,13 +36,16 @@ LangGraph graph definitions and runtime utilities for agentic AI execution. Cont
 }
 ```
 
-**External deps:** `@langchain/core`, `@langchain/langgraph`, `zod`. Imports `@cogni/ai-core`, `@cogni/ai-tools`.
+**External deps:** `@langchain/core`, `@langchain/langgraph`, `@langchain/mcp-adapters`, `zod`. Imports `@cogni/ai-core`, `@cogni/ai-tools`.
 
 ## Public Surface
 
 - **Exports (subpaths):**
   - `@cogni/langgraph-graphs` — Barrel re-export of common types plus:
     - `LANGGRAPH_CATALOG` — Graph catalog with registered graphs and metadata
+    - `McpToolSource` — ToolSourcePort implementation for MCP-discovered tools
+    - `loadMcpTools()`, `parseMcpConfigFromEnv()` — MCP client connection + config parsing
+    - `McpHttpServerConfig`, `McpSseServerConfig`, `McpStdioServerConfig` — Transport config types
   - `@cogni/langgraph-graphs/inproc` — InProc execution runner:
     - `createInProcGraphRunner()` — Generic InProc graph runner factory
     - `InProcRunnerOptions`, `InProcGraphRequest`, `GraphResult` (includes optional `structuredOutput`) — Runner types
@@ -58,7 +61,11 @@ LangGraph graph definitions and runtime utilities for agentic AI execution. Cont
     - `createBrainGraph()` — Code-aware ReAct agent with repo tools (list, search, open)
     - `createResearchGraph()` — 3-node MVP research graph (plan_queries → web_search_fanout → rank_and_report)
     - `createPrReviewGraph()` — Single-call structured output graph for PR review (no tools, `responseFormat` for typed metrics)
-    - `POET_GRAPH_NAME`, `PONDERER_GRAPH_NAME`, `BRAIN_GRAPH_NAME`, `RESEARCH_GRAPH_NAME`, `PR_REVIEW_GRAPH_NAME` — Graph name constants
+    - `createBrowserGraph()` — Browser automation agent via Playwright MCP (mcpServerIds: ["playwright"])
+    - `createFrontendTesterGraph()` — QA agent for UI testing via Playwright MCP
+    - `PR_MANAGER_GRAPH_NAME`, `PR_MANAGER_PROMPT` — PR Manager agent (merge bot, reads evolving playbook)
+    - `PR_MANAGER_TOOL_IDS` — VCS tools + repo_open (for playbook) + work_item_query
+    - `POET_GRAPH_NAME`, `PONDERER_GRAPH_NAME`, `BRAIN_GRAPH_NAME`, `RESEARCH_GRAPH_NAME`, `PR_REVIEW_GRAPH_NAME`, `BROWSER_GRAPH_NAME`, `FRONTEND_TESTER_GRAPH_NAME` — Graph name constants
     - `InvokableGraph<I,O>`, `MessageGraphInput`, `MessageGraphOutput` — Type firewall
     - `GraphInvokeOptions`, `CreateReactAgentGraphOptions` — Factory types
   - **Per-graph tools:** `src/graphs/*/tools.ts` exports `*_TOOL_IDS` constants (e.g., `BRAIN_TOOL_IDS`, `BrainToolId`)

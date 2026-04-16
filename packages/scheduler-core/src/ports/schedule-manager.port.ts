@@ -91,6 +91,8 @@ export function isInvalidTimezoneError(
 }
 
 export interface CreateScheduleInput {
+  /** Originating node ID from repo-spec. Routes execution to correct node. */
+  nodeId: string;
   graphId: string;
   input: unknown;
   cron: string;

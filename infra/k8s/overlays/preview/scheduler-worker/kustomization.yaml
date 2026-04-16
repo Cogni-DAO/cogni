@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-preview
+
+resources:
+  - ../../../base/scheduler-worker
+
+# Image digest — updated by promote-k8s-image.sh on each CI push.
+# Argo CD ApplicationSet points here; digest change → auto-sync.
+images:
+  - name: ghcr.io/cogni-dao/cogni-template
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:b34cdf7cc148dbc8cd3912dc7ae8c12d3fde1419abd4350ce36bcffbc19a4cca"
+
+patches:
+  # Patch ConfigMap with staging-specific values
+  - target:
+      kind: ConfigMap
+      name: scheduler-worker-config
+    patch: |
+      - op: replace
+        path: /data/TEMPORAL_NAMESPACE
+        value: "cogni-preview"
+      - op: replace
+        path: /data/COGNI_NODE_ENDPOINTS
+        value: "operator=http://operator-node-app:3000,poly=http://poly-node-app:3000,resy=http://resy-node-app:3000,4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://operator-node-app:3000,5ed2d64f-2745-4676-983b-2fb7e05b2eba=http://poly-node-app:3000,f6d2a17d-b7f6-4ad1-a86b-f0ad2380999e=http://resy-node-app:3000"
+      - op: replace
+        path: /data/IMAGE_DIGEST
+        value: "staging-placeholder-scheduler-worker"
+
+  # EndpointSlice IPs — node InternalIP (provision script updates this per-VM)
+  - target:
+      kind: EndpointSlice
+      name: temporal-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: postgres-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: app-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: poly-app-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+  - target:
+      kind: EndpointSlice
+      name: resy-app-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]

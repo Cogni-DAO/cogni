@@ -116,12 +116,12 @@ The `/work` dashboard reads work items through the `WorkItemQueryPort` via a pro
 ### Blocking
 
 1. **Missing tests** — Design promised contract schema tests and facade unit tests. Create:
-   - `apps/web/tests/unit/contracts/work.items.list.v1.test.ts` — validate schema accepts valid DTO and rejects invalid
-   - `apps/web/tests/unit/facades/work-items.test.ts` — mock `WorkItemQueryPort`, verify `listWorkItems()` and `getWorkItem()` map correctly
+   - `apps/operator/tests/unit/contracts/work.items.list.v1.test.ts` — validate schema accepts valid DTO and rejects invalid
+   - `apps/operator/tests/unit/facades/work-items.test.ts` — mock `WorkItemQueryPort`, verify `listWorkItems()` and `getWorkItem()` map correctly
 
 2. **AGENTS.md not updated** — Per change protocol:
-   - `apps/web/src/contracts/AGENTS.md` Public Surface: add `work.items.list.v1`, `work.items.get.v1`
-   - `apps/web/src/app/api/AGENTS.md` Routes: add `GET /api/v1/work/items`, `GET /api/v1/work/items/[id]`
+   - `apps/operator/src/contracts/AGENTS.md` Public Surface: add `work.items.list.v1`, `work.items.get.v1`
+   - `apps/operator/src/app/api/AGENTS.md` Routes: add `GET /api/v1/work/items`, `GET /api/v1/work/items/[id]`
 
 ## Validation
 

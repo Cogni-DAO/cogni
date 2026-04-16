@@ -11,7 +11,12 @@
  * @public
  */
 
-import type { GateConfig, OperatorWalletSpec, RepoSpec } from "./schema.js";
+import type {
+  GateConfig,
+  NodeRegistryEntry,
+  OperatorWalletSpec,
+  RepoSpec,
+} from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // Accessor result types
@@ -267,4 +272,16 @@ export function extractOperatorWalletConfig(
  */
 export function extractDaoTreasuryAddress(spec: RepoSpec): string | undefined {
   return spec.cogni_dao.dao_contract;
+}
+
+// ---------------------------------------------------------------------------
+// Node registry accessors (operator-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract node registry from operator repo-spec.
+ * Returns empty array if nodes[] is not present (non-operator repo-specs).
+ */
+export function extractNodes(spec: RepoSpec): readonly NodeRegistryEntry[] {
+  return spec.nodes ?? [];
 }

@@ -1,0 +1,130 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-preview
+
+resources:
+  - ../../../base/node-app
+
+namePrefix: operator-
+
+images:
+  - name: ghcr.io/cogni-dao/cogni-template
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:fa272b9a9b0409f05d637c96a50eeefae01119718aa1800819b63aeb8776da23"
+  - name: ghcr.io/cogni-dao/cogni-template-migrate
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:f0b7b6e9fcea0b86957ce628a1874338f874e226ed56152d645c8eb374accbce"
+
+patches:
+  # Node-specific ConfigMap values.
+  # DNS names must match prefixed Service names (namePrefix applies to all resources).
+  - target:
+      kind: ConfigMap
+      name: node-app-config
+    patch: |
+      - op: replace
+        path: /data/APP_ENV
+        value: "production"
+      - op: replace
+        path: /data/NODE_NAME
+        value: "operator"
+      - op: replace
+        path: /data/TEMPORAL_NAMESPACE
+        value: "cogni-preview"
+      - op: replace
+        path: /data/LITELLM_BASE_URL
+        value: "http://operator-litellm-external:4000"
+      - op: replace
+        path: /data/TEMPORAL_ADDRESS
+        value: "operator-temporal-external:7233"
+      - op: replace
+        path: /data/REDIS_URL
+        value: "redis://operator-redis-external:6379"
+      - op: add
+        path: /data/NEXTAUTH_URL
+        value: "https://preview.cognidao.org"
+      - op: add
+        path: /data/AUTH_TRUST_HOST
+        value: "true"
+  # NodePort assignment (operator = 30000) + instance label on selector.
+  # Instance label prevents cross-node service routing: namePrefix only renames
+  # resource names, not labels/selectors, so without this every Service
+  # round-robins across all node-app pods.
+  - target:
+      kind: Service
+      name: node-app
+    patch: |
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30000
+      - op: add
+        path: /spec/selector/app.kubernetes.io~1instance
+        value: "operator"
+  # Fix secret refs + instance label on matchLabels and pod template.
+  - target:
+      kind: Deployment
+      name: node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/envFrom/1/secretRef/name
+        value: "operator-node-app-secrets"
+      - op: add
+        path: /spec/selector/matchLabels/app.kubernetes.io~1instance
+        value: "operator"
+      - op: add
+        path: /spec/template/metadata/labels/app.kubernetes.io~1instance
+        value: "operator"
+  - target:
+      kind: Job
+      name: migrate-node-app
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "operator-node-app-secrets"
+  # EndpointSlice IPs + service-name label fix.
+  # namePrefix renames Services but NOT the kubernetes.io/service-name label
+  # inside EndpointSlices. Without this fix, DNS can't associate the
+  # EndpointSlice with the prefixed Service → NXDOMAIN.
+  - target:
+      kind: EndpointSlice
+      name: postgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "operator-postgres-external"
+  - target:
+      kind: EndpointSlice
+      name: temporal-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "operator-temporal-external"
+  - target:
+      kind: EndpointSlice
+      name: litellm-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "operator-litellm-external"
+  - target:
+      kind: EndpointSlice
+      name: redis-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "operator-redis-external"

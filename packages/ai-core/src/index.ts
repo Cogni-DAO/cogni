@@ -58,6 +58,9 @@ export type {
   MessageRole,
   MessageToolCall,
 } from "./message/types";
+// Model types
+export type { ModelCapabilities, ModelRef } from "./model/model-ref";
+export { ModelCapabilitiesSchema, ModelRefSchema } from "./model/model-ref";
 // Span types (observability)
 export type { AiSpanHandle, AiSpanPort } from "./tooling/ai-span";
 // Tool source port

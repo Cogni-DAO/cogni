@@ -2,15 +2,14 @@
 id: spec.node-ci-cd-contract
 type: spec
 title: Node CI/CD Contract
-status: draft
-spec_state: draft
-trust: draft
+status: active
+trust: reviewed
 summary: CI/CD sovereignty invariants, merge gate checks, workflow entrypoints, and file ownership classification
 read_when: Modifying CI workflows, adding checks to merge gate, or planning multi-node CI extraction
 implements: []
 owner: cogni-dev
 created: 2025-12-22
-verified: null
+verified: 2026-04-04
 tags:
   - ci-cd
   - deployment
@@ -29,8 +28,7 @@ Define the CI/CD invariants, merge gate, and file ownership boundaries that ensu
 ## Non-Goals
 
 - Reusable workflow extraction (see [proj.ci-cd-reusable](../../work/projects/proj.ci-cd-reusable.md))
-- Jenkins migration (see initiative P2)
-- External rails kit (see initiative P3)
+- Jenkins migration (gated on Dolt CI/CD requirements)
 
 ---
 
@@ -46,35 +44,38 @@ Define the CI/CD invariants, merge gate, and file ownership boundaries that ensu
 
 5. **SCRIPTS_ARE_THE_API**: Workflows orchestrate by calling named pnpm scripts; no inline command duplication.
 
+6. **BUILD_ONCE_PROMOTE_DIGEST**: Images build on canary. Staging and production deploy the exact same digests. No per-environment rebuilds.
+
+7. **SINGLE_RESPONSIBILITY**: Each workflow file owns one concern (build, promote+deploy, E2E+release). No monoliths.
+
 ---
 
 ## Design
 
 ### Merge Gate (Required for PR Merge)
 
-| Check                               | Local | CI            |
-| ----------------------------------- | ----- | ------------- |
-| `pnpm typecheck`                    | yes   | static job    |
-| `pnpm lint`                         | yes   | static job    |
-| `pnpm format:check`                 | yes   | unit job      |
-| `pnpm test:ci` (unit/contract/meta) | yes   | unit job      |
-| `pnpm arch:check`                   | yes   | static job    |
-| `pnpm test:component`               | yes   | component job |
+| Check                               | Local            | CI             |
+| ----------------------------------- | ---------------- | -------------- |
+| `pnpm typecheck`                    | yes              | static job     |
+| `pnpm lint`                         | yes              | static job     |
+| `pnpm format:check`                 | yes              | unit job       |
+| `pnpm test:ci` (unit/contract/meta) | yes              | unit job       |
+| `pnpm arch:check`                   | yes              | unit job       |
+| `pnpm test:component`               | yes              | component job  |
+| `pnpm test:stack:docker`            | no (needs infra) | stack-test job |
 
-**Optional** (not blocking): `pnpm test:stack:docker`, e2e, coverage upload.
-
-### Update Flow (Current State)
-
-No shared kit. Each node owns its workflows directly. `ci.yaml` runs the same checks as `pnpm check` but parallelized across jobs.
+**Optional** (not blocking): coverage upload, SonarCloud scan.
 
 ### Workflow Entrypoints
 
-| File                                      | Type | Secrets | Trigger               | Commands                                                     |
-| ----------------------------------------- | ---- | ------- | --------------------- | ------------------------------------------------------------ |
-| `.github/workflows/ci.yaml`               | CI   | No      | PR, push staging/main | typecheck, lint, format, test:ci, test:component, arch:check |
-| `.github/workflows/build-prod.yml`        | CD   | Yes     | push main             | build.sh, test-image.sh, push.sh                             |
-| `.github/workflows/staging-preview.yml`   | CD   | Yes     | push staging          | pnpm check, build.sh, deploy.sh, e2e                         |
-| `.github/workflows/deploy-production.yml` | CD   | Yes     | workflow_run          | deploy.sh                                                    |
+| File                     | Type | Secrets            | Trigger                                  | Concern                                           |
+| ------------------------ | ---- | ------------------ | ---------------------------------------- | ------------------------------------------------- |
+| `ci.yaml`                | CI   | No                 | PR; push canary/staging/main             | typecheck, lint, unit, component, stack-test      |
+| `build-multi-node.yml`   | CD   | Yes (GHCR)         | push canary                              | Build + push images                               |
+| `promote-and-deploy.yml` | CD   | Yes (SSH, secrets) | workflow_run on build; workflow_dispatch | Promote overlays + deploy infra + verify          |
+| `e2e.yml`                | CD   | Yes (PAT)          | workflow_run on promote-and-deploy       | E2E smoke + canary→staging promotion + release PR |
+| `build-prod.yml`         | CD   | Yes (GHCR)         | push main                                | Build production images (legacy)                  |
+| `deploy-production.yml`  | CD   | Yes (SSH, secrets) | workflow_run on build-prod               | Deploy to production (legacy)                     |
 
 ### Local Gates
 
@@ -96,32 +97,27 @@ No shared kit. Each node owns its workflows directly. `ci.yaml` runs the same ch
 | `.prettierrc`                  | Formatting                  |
 | `tsconfig*.json`               | Path aliases                |
 | `scripts/check-*.sh`           | Local gate definitions      |
-| `Dockerfile`                   | Image definition            |
+| `nodes/*/app/Dockerfile`       | Image definition            |
 
 **Rails-Eligible (future extraction candidates):**
 
-| Path                                 | Purpose              |
-| ------------------------------------ | -------------------- |
-| `.github/actions/loki-ci-telemetry/` | CI telemetry capture |
-| `.github/actions/loki-push/`         | Loki push            |
-| `scripts/ci/build.sh`                | Docker build         |
-| `scripts/ci/push.sh`                 | GHCR push            |
-| `scripts/ci/test-image.sh`           | Image liveness test  |
+| Path                                 | Purpose               |
+| ------------------------------------ | --------------------- |
+| `.github/actions/loki-ci-telemetry/` | CI telemetry capture  |
+| `.github/actions/loki-push/`         | Loki push             |
+| `scripts/ci/build.sh`                | Docker build          |
+| `scripts/ci/push.sh`                 | GHCR push             |
+| `scripts/ci/test-image.sh`           | Image liveness test   |
+| `scripts/ci/promote-k8s-image.sh`    | Overlay digest update |
+| `scripts/ci/deploy-infra.sh`         | Compose infra deploy  |
 
 **Ownership split:** Nodes own scripts and policy configs. Kit owns invocation conventions (when to call, how to parallelize, what to cache).
 
 ### Key Decisions
 
-#### 1. Why Jenkins Is an Option
+#### 1. Why Canary-First
 
-| Concern        | GitHub Actions     | Jenkins      |
-| -------------- | ------------------ | ------------ |
-| OSS            | Proprietary runner | Fully OSS    |
-| Self-host      | Limited            | Full control |
-| Cost at scale  | Per-minute billing | Own infra    |
-| Vendor lock-in | GitHub-specific    | Portable     |
-
-Key driver: Dolt CI/CD requires persistent state, branch-aware pipelines, and merge conflict resolution that GitHub Actions cannot provide.
+Canary replaces staging as the primary integration branch. Benefits: multi-node testing from day one, k8s/Argo deployment model, build-once-promote-digest. Staging receives promoted digests, not fresh builds.
 
 #### 2. Why In-Repo Seam First
 
@@ -133,12 +129,15 @@ Centralizing lint/depcruise configs causes fork friction, policy fights, and los
 
 ### File Pointers
 
-| File                        | Purpose                          |
-| --------------------------- | -------------------------------- |
-| `.github/workflows/ci.yaml` | CI entrypoint                    |
-| `scripts/check-fast.sh`     | `pnpm check:fast` implementation |
-| `scripts/check-all.sh`      | `pnpm check` implementation      |
-| `scripts/check-full.sh`     | `pnpm check:full` implementation |
+| File                                       | Purpose                          |
+| ------------------------------------------ | -------------------------------- |
+| `.github/workflows/ci.yaml`                | CI entrypoint                    |
+| `.github/workflows/build-multi-node.yml`   | Image build                      |
+| `.github/workflows/promote-and-deploy.yml` | Promote + deploy + verify        |
+| `.github/workflows/e2e.yml`                | E2E + promotion chain            |
+| `scripts/check-fast.sh`                    | `pnpm check:fast` implementation |
+| `scripts/check-all.sh`                     | `pnpm check` implementation      |
+| `scripts/check-full.sh`                    | `pnpm check:full` implementation |
 
 ## Acceptance Checks
 
@@ -149,15 +148,12 @@ Centralizing lint/depcruise configs causes fork friction, policy fights, and los
 
 **Manual:**
 
-1. Verify `.github/workflows/ci.yaml` calls only pnpm scripts (no inline commands)
+1. Verify `ci.yaml` calls only pnpm scripts (no inline commands)
 2. Verify CD workflows skip gracefully when secrets are missing (fork mode)
-
-## Open Questions
-
-_(none)_
+3. Verify canary E2E success triggers staging promotion without manual intervention
 
 ## Related
 
-- [ci-cd.md](./ci-cd.md) — CI/CD specification
+- [ci-cd.md](./ci-cd.md) — CI/CD pipeline specification
 - [check-full.md](./check-full.md) — check:full CI-parity gate
 - [Project: Reusable CI/CD Rails](../../work/projects/proj.ci-cd-reusable.md)

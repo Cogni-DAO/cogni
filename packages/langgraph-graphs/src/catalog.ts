@@ -16,6 +16,24 @@
 
 import { BRAIN_GRAPH_NAME, createBrainGraph } from "./graphs/brain/graph";
 import { BRAIN_TOOL_IDS } from "./graphs/brain/tools";
+import { BROWSER_GRAPH_NAME, createBrowserGraph } from "./graphs/browser/graph";
+import {
+  createFrontendTesterGraph,
+  FRONTEND_TESTER_GRAPH_NAME,
+} from "./graphs/frontend-tester/graph";
+import {
+  createOperatorGraph,
+  GIT_REVIEWER_GRAPH_NAME,
+  OPERATING_REVIEW_GRAPH_NAME,
+} from "./graphs/operator/graph";
+import {
+  GIT_REVIEWER_PROMPT,
+  OPERATING_REVIEW_PROMPT,
+} from "./graphs/operator/prompts";
+import {
+  GIT_REVIEWER_TOOL_IDS,
+  OPERATING_REVIEW_TOOL_IDS,
+} from "./graphs/operator/tools";
 import { createPoetGraph, POET_GRAPH_NAME } from "./graphs/poet/graph";
 import { POET_TOOL_IDS } from "./graphs/poet/tools";
 import {
@@ -23,6 +41,11 @@ import {
   PONDERER_GRAPH_NAME,
 } from "./graphs/ponderer/graph";
 import { PONDERER_TOOL_IDS } from "./graphs/ponderer/tools";
+import {
+  PR_MANAGER_GRAPH_NAME,
+  PR_MANAGER_PROMPT,
+} from "./graphs/pr-manager/prompts";
+import { PR_MANAGER_TOOL_IDS } from "./graphs/pr-manager/tools";
 import {
   createPrReviewGraph,
   PR_REVIEW_GRAPH_NAME,
@@ -32,6 +55,11 @@ import {
   RESEARCH_GRAPH_NAME,
 } from "./graphs/research/graph";
 import { RESEARCH_TOOL_IDS } from "./graphs/research/tools";
+import {
+  createScorecardGraph,
+  SCORECARD_GRAPH_NAME,
+} from "./graphs/scorecard/graph";
+import { SCORECARD_TOOL_IDS } from "./graphs/scorecard/tools";
 import type { CreateGraphFn } from "./inproc/types";
 
 /**
@@ -43,9 +71,13 @@ import type { CreateGraphFn } from "./inproc/types";
 interface CatalogEntry {
   readonly displayName: string;
   readonly description: string;
-  /** Tool IDs this graph may use. Providers resolve from TOOL_CATALOG. */
+  /** Native tool IDs this graph may use. Providers resolve from TOOL_CATALOG. */
   readonly toolIds: readonly string[];
+  /** MCP server names whose tools this graph may use. Empty = no MCP tools. */
+  readonly mcpServerIds?: readonly string[];
   readonly graphFactory: CreateGraphFn;
+  /** Optional system prompt for operator graphs (catalog-driven, not hardcoded). */
+  readonly systemPrompt?: string;
 }
 
 /**
@@ -114,6 +146,83 @@ export const LANGGRAPH_CATALOG: Readonly<Record<string, CatalogEntry>> = {
     toolIds: [],
     graphFactory: createPrReviewGraph,
   },
+
+  /**
+   * Browser graph - web browsing agent via Playwright MCP.
+   * No native tools — all tools come from MCP servers.
+   */
+  [BROWSER_GRAPH_NAME]: {
+    displayName: "Browser",
+    description: "Web browsing agent with Playwright MCP browser access",
+    toolIds: [],
+    mcpServerIds: ["playwright"],
+    graphFactory: createBrowserGraph,
+  },
+
+  /**
+   * Frontend tester graph - QA agent that drives Playwright to verify UI behavior.
+   * Navigates, interacts, screenshots, and reports pass/fail per test case.
+   */
+  [FRONTEND_TESTER_GRAPH_NAME]: {
+    displayName: "Frontend Tester",
+    description:
+      "QA agent that tests web UIs via Playwright and monitors system health via Grafana",
+    toolIds: [],
+    mcpServerIds: ["playwright", "grafana"],
+    graphFactory: createFrontendTesterGraph,
+  },
+
+  /**
+   * Operating Review — periodic planner-of-record for backlog health.
+   * Runs every 12h to triage, flag stuck items, and produce structured briefs.
+   */
+  [OPERATING_REVIEW_GRAPH_NAME]: {
+    displayName: "Operating Review",
+    description:
+      "Periodic review — triages backlog, flags risks, produces structured briefs",
+    toolIds: OPERATING_REVIEW_TOOL_IDS as readonly string[],
+    graphFactory: createOperatorGraph,
+    systemPrompt: OPERATING_REVIEW_PROMPT,
+  },
+
+  /**
+   * PR Manager — recurring agent that merges ready PRs and reports blockers.
+   * Complements the webhook-triggered PR Review (quality) with lifecycle management.
+   * v0: merge bot (auto-merge green PRs). v-next: spawns developer agents to fix CI.
+   */
+  [PR_MANAGER_GRAPH_NAME]: {
+    displayName: "PR Manager",
+    description:
+      "Merge bot — auto-merges green PRs, flags blockers, tracks PR throughput",
+    toolIds: PR_MANAGER_TOOL_IDS as readonly string[],
+    graphFactory: createOperatorGraph,
+    systemPrompt: PR_MANAGER_PROMPT,
+  },
+
+  /**
+   * Git Reviewer — queue observer for merge-ready items.
+   * Reports status based on work item metadata (no GitHub API access).
+   */
+  [GIT_REVIEWER_GRAPH_NAME]: {
+    displayName: "Git Reviewer",
+    description:
+      "Queue observer — reports merge-ready item status from metadata",
+    toolIds: GIT_REVIEWER_TOOL_IDS as readonly string[],
+    graphFactory: createOperatorGraph,
+    systemPrompt: GIT_REVIEWER_PROMPT,
+  },
+
+  /**
+   * Scorecard — project health and KPI analyst.
+   * Searches knowledge store, charters, and work items to produce ASCII status tables.
+   */
+  [SCORECARD_GRAPH_NAME]: {
+    displayName: "Scorecard",
+    description:
+      "Project health analyst — finds live scorecards and displays KPIs as ASCII status tables",
+    toolIds: SCORECARD_TOOL_IDS,
+    graphFactory: createScorecardGraph,
+  },
 } as const;
 
 /**
@@ -136,6 +245,12 @@ export const LANGGRAPH_GRAPH_IDS = {
   ponderer: `${LANGGRAPH_PROVIDER_ID}:${PONDERER_GRAPH_NAME}`,
   research: `${LANGGRAPH_PROVIDER_ID}:${RESEARCH_GRAPH_NAME}`,
   "pr-review": `${LANGGRAPH_PROVIDER_ID}:${PR_REVIEW_GRAPH_NAME}`,
+  browser: `${LANGGRAPH_PROVIDER_ID}:${BROWSER_GRAPH_NAME}`,
+  "frontend-tester": `${LANGGRAPH_PROVIDER_ID}:${FRONTEND_TESTER_GRAPH_NAME}`,
+  "operating-review": `${LANGGRAPH_PROVIDER_ID}:${OPERATING_REVIEW_GRAPH_NAME}`,
+  "pr-manager": `${LANGGRAPH_PROVIDER_ID}:${PR_MANAGER_GRAPH_NAME}`,
+  "git-reviewer": `${LANGGRAPH_PROVIDER_ID}:${GIT_REVIEWER_GRAPH_NAME}`,
+  scorecard: `${LANGGRAPH_PROVIDER_ID}:${SCORECARD_GRAPH_NAME}`,
 } as const;
 
 /**

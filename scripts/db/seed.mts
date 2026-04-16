@@ -738,8 +738,6 @@ async function seedLinkedUsersAndBindings(
 
 const SYSTEM_USER_ID = "00000000-0000-4000-a000-000000000001";
 const SYSTEM_BILLING_ACCOUNT_ID = "00000000-0000-4000-b000-000000000000";
-/** Must match the literal used by scheduled-run.workflow.ts — NOT the UUID */
-const SYSTEM_REQUESTED_BY = "cogni_system";
 const GOVERNANCE_GRAPH_ID = "sandbox:openclaw";
 const GOVERNANCE_MODEL = "kimi-k2.5";
 
@@ -748,13 +746,17 @@ interface RunProfile {
   graphId: string;
   model: string;
   provider: string;
+  /** Billing source system. "litellm" for platform, "codex"/"ollama" for BYO. */
+  sourceSystem: "litellm" | "codex" | "ollama";
   minLatencyMs: number;
   maxLatencyMs: number;
   minTokensIn: number;
   maxTokensIn: number;
   minTokensOut: number;
   maxTokensOut: number;
+  /** Cost per 1K input tokens. 0 for BYO providers (zero platform cost). */
   costPerKTokenIn: number;
+  /** Cost per 1K output tokens. 0 for BYO providers (zero platform cost). */
   costPerKTokenOut: number;
   /** Fraction of runs that fail (0.0-1.0) */
   errorRate: number;
@@ -764,6 +766,7 @@ const HEARTBEAT_PROFILE: RunProfile = {
   graphId: GOVERNANCE_GRAPH_ID,
   model: GOVERNANCE_MODEL,
   provider: "openrouter",
+  sourceSystem: "litellm",
   minLatencyMs: 3000,
   maxLatencyMs: 8000,
   minTokensIn: 800,
@@ -779,6 +782,7 @@ const LEDGER_INGEST_PROFILE: RunProfile = {
   graphId: GOVERNANCE_GRAPH_ID,
   model: GOVERNANCE_MODEL,
   provider: "openrouter",
+  sourceSystem: "litellm",
   minLatencyMs: 8000,
   maxLatencyMs: 25000,
   minTokensIn: 2000,
@@ -793,10 +797,12 @@ const LEDGER_INGEST_PROFILE: RunProfile = {
 // ── User AI Activity Profiles ──────────────────────────────────
 
 const USER_AGENT_PROFILES: RunProfile[] = [
+  // ── Platform (LiteLLM → OpenRouter) ──
   {
     graphId: "langgraph:poet",
     model: "claude-sonnet-4-20250514",
     provider: "anthropic",
+    sourceSystem: "litellm",
     minLatencyMs: 4000,
     maxLatencyMs: 15000,
     minTokensIn: 1500,
@@ -811,6 +817,7 @@ const USER_AGENT_PROFILES: RunProfile[] = [
     graphId: "langgraph:ponderer",
     model: "claude-sonnet-4-20250514",
     provider: "anthropic",
+    sourceSystem: "litellm",
     minLatencyMs: 6000,
     maxLatencyMs: 30000,
     minTokensIn: 3000,
@@ -825,6 +832,7 @@ const USER_AGENT_PROFILES: RunProfile[] = [
     graphId: "codex:poet",
     model: "gpt-4o-mini",
     provider: "openai",
+    sourceSystem: "litellm",
     minLatencyMs: 2000,
     maxLatencyMs: 8000,
     minTokensIn: 800,
@@ -839,6 +847,7 @@ const USER_AGENT_PROFILES: RunProfile[] = [
     graphId: "codex:spark",
     model: "gpt-4o-mini",
     provider: "openai",
+    sourceSystem: "litellm",
     minLatencyMs: 1500,
     maxLatencyMs: 6000,
     minTokensIn: 500,
@@ -848,6 +857,68 @@ const USER_AGENT_PROFILES: RunProfile[] = [
     costPerKTokenIn: 0.00015,
     costPerKTokenOut: 0.0006,
     errorRate: 0.04,
+  },
+  // ── BYO: ChatGPT subscription via Codex SDK ──
+  {
+    graphId: "langgraph:poet",
+    model: "gpt-5.4",
+    provider: "openai-chatgpt",
+    sourceSystem: "codex",
+    minLatencyMs: 3000,
+    maxLatencyMs: 12000,
+    minTokensIn: 1000,
+    maxTokensIn: 6000,
+    minTokensOut: 400,
+    maxTokensOut: 2500,
+    costPerKTokenIn: 0, // Zero platform cost — user's subscription
+    costPerKTokenOut: 0,
+    errorRate: 0.05,
+  },
+  {
+    graphId: "langgraph:ponderer",
+    model: "gpt-5.3-codex",
+    provider: "openai-chatgpt",
+    sourceSystem: "codex",
+    minLatencyMs: 2000,
+    maxLatencyMs: 8000,
+    minTokensIn: 800,
+    maxTokensIn: 4000,
+    minTokensOut: 300,
+    maxTokensOut: 1500,
+    costPerKTokenIn: 0,
+    costPerKTokenOut: 0,
+    errorRate: 0.04,
+  },
+  // ── BYO: Local LLM via OpenAI-compatible endpoint (Ollama) ──
+  {
+    graphId: "langgraph:poet",
+    model: "llama3.1:8b",
+    provider: "ollama",
+    sourceSystem: "ollama",
+    minLatencyMs: 1000,
+    maxLatencyMs: 5000,
+    minTokensIn: 500,
+    maxTokensIn: 3000,
+    minTokensOut: 200,
+    maxTokensOut: 1500,
+    costPerKTokenIn: 0, // Zero platform cost — user's hardware
+    costPerKTokenOut: 0,
+    errorRate: 0.08,
+  },
+  {
+    graphId: "langgraph:ponderer",
+    model: "deepseek-r1:14b",
+    provider: "ollama",
+    sourceSystem: "ollama",
+    minLatencyMs: 2000,
+    maxLatencyMs: 10000,
+    minTokensIn: 1000,
+    maxTokensIn: 5000,
+    minTokensOut: 500,
+    maxTokensOut: 3000,
+    costPerKTokenIn: 0, // Zero platform cost — user's hardware
+    costPerKTokenOut: 0,
+    errorRate: 0.06,
   },
 ];
 
@@ -909,7 +980,7 @@ function generateScheduledRuns(params: {
       runKind: "system_scheduled",
       triggerSource: "temporal_schedule",
       triggerRef: params.temporalScheduleId,
-      requestedBy: SYSTEM_REQUESTED_BY,
+      requestedBy: SYSTEM_USER_ID,
       scheduledFor,
       startedAt,
       completedAt,
@@ -937,6 +1008,9 @@ function generateScheduledRuns(params: {
         (tokensOut / 1000) * params.profile.costPerKTokenOut;
       const chargedCredits = BigInt(Math.ceil(costUsd * 1_000_000));
 
+      const isByo = params.profile.sourceSystem !== "litellm";
+      const usageUnitId = isByo ? `${runId}/0/byo` : randomUUID();
+
       charges.push({
         receipt: {
           billingAccountId: SYSTEM_BILLING_ACCOUNT_ID,
@@ -944,18 +1018,18 @@ function generateScheduledRuns(params: {
           runId,
           attempt: 0,
           ingressRequestId: runId,
-          litellmCallId: randomUUID(),
+          litellmCallId: isByo ? null : usageUnitId,
           chargedCredits,
           responseCostUsd: costUsd.toFixed(6),
           provenance: "response",
           chargeReason: "llm_usage",
-          sourceSystem: "litellm",
-          sourceReference: `${runId}/0/${randomUUID()}`,
+          sourceSystem: params.profile.sourceSystem,
+          sourceReference: `${runId}/0/${usageUnitId}`,
           receiptKind: "llm",
           createdAt: completedAt,
         },
         detail: {
-          providerCallId: randomUUID(),
+          providerCallId: isByo ? null : usageUnitId,
           model: params.profile.model,
           provider: params.profile.provider,
           tokensIn,
@@ -1313,6 +1387,11 @@ async function seedUserActivity(
             (tokensOut / 1000) * profile.costPerKTokenOut;
           const chargedCredits = BigInt(Math.ceil(costUsd * 1_000_000));
 
+          // DETERMINISTIC_BYO_USAGE_ID: platform uses litellmCallId,
+          // BYO uses deterministic ${runId}/${attempt}/byo
+          const isByo = profile.sourceSystem !== "litellm";
+          const usageUnitId = isByo ? `${runId}/0/byo` : randomUUID();
+
           charges.push({
             receipt: {
               billingAccountId: account.billingAccountId,
@@ -1320,18 +1399,18 @@ async function seedUserActivity(
               runId,
               attempt: 0,
               ingressRequestId: runId,
-              litellmCallId: randomUUID(),
+              litellmCallId: isByo ? null : usageUnitId,
               chargedCredits,
               responseCostUsd: costUsd.toFixed(6),
               provenance: "response",
               chargeReason: "llm_usage",
-              sourceSystem: "litellm",
-              sourceReference: `${runId}/0/${randomUUID()}`,
+              sourceSystem: profile.sourceSystem,
+              sourceReference: `${runId}/0/${usageUnitId}`,
               receiptKind: "llm",
               createdAt: completedAt,
             },
             detail: {
-              providerCallId: randomUUID(),
+              providerCallId: isByo ? null : usageUnitId,
               model: profile.model,
               provider: profile.provider,
               tokensIn,

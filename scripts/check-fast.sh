@@ -75,10 +75,13 @@ if [ "$VERBOSE" = true ]; then
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 fi
 
+# Rebuild package declarations before typecheck — stale dist/*.d.ts causes
+# false errors when package source changes (e.g. adding a field to a port interface).
+run_check "packages:build" "pnpm packages:build"
 run_check "typecheck" "pnpm typecheck"
 run_check "lint" "pnpm lint:fix"
 run_check "format" "pnpm format"
-run_check "test:app" "pnpm vitest run --config apps/web/vitest.config.mts"
+run_check "test:app" "pnpm vitest run --config nodes/operator/app/vitest.config.mts"
 run_check "test:packages:local" "pnpm test:packages:local"
 run_check "test:services:local" "pnpm test:services:local"
 

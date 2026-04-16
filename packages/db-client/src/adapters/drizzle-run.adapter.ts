@@ -9,6 +9,7 @@
  * - Per SINGLE_RUN_LEDGER: one table for all execution types
  * - UNIQUE(schedule_id, scheduled_for) WHERE schedule_id IS NOT NULL prevents duplicate scheduled runs
  * - withTenantScope called on every method (uniform invariant, no-op on serviceDb)
+ * - listRunsByUser relies on RLS for row visibility (no app-level requestedBy filter)
  * Side-effects: IO (database operations)
  * Links: ports/scheduling/schedule-run.port.ts, docs/spec/unified-graph-launch.md
  * @public
@@ -207,6 +208,19 @@ export class DrizzleGraphRunAdapter implements GraphRunRepository {
     });
   }
 
+  async patchRunStateKey(
+    actorId: ActorId,
+    runId: string,
+    stateKey: string
+  ): Promise<void> {
+    await withTenantScope(this.db, actorId, async (tx) => {
+      await tx
+        .update(graphRuns)
+        .set({ stateKey })
+        .where(eq(graphRuns.runId, runId));
+    });
+  }
+
   async listRunsByUser(
     actorId: ActorId,
     userId: string,
@@ -220,7 +234,13 @@ export class DrizzleGraphRunAdapter implements GraphRunRepository {
     const pageSize = Math.min(opts?.limit ?? 20, 100);
 
     return withTenantScope(this.db, actorId, async (tx) => {
-      const conditions = [eq(graphRuns.requestedBy, userId)];
+      // requestedBy filter scopes to the queried principal. RLS provides the
+      // security boundary (user sees own runs + schedule-owned runs), but this
+      // WHERE clause ensures user-scope queries don't return system runs and
+      // system-scope queries don't return user runs. Defense-in-depth.
+      const conditions: ReturnType<typeof eq>[] = [
+        eq(graphRuns.requestedBy, userId),
+      ];
 
       if (opts?.status) {
         conditions.push(eq(graphRuns.status, opts.status));

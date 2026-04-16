@@ -104,8 +104,8 @@ fi
 
 run_check "ui-tokens" "bash scripts/check-ui-tokens.sh"
 
-# App tests run via apps/web config (resolves @/ from app node_modules).
-run_check "test:app" "pnpm vitest run --config apps/web/vitest.config.mts"
+# App tests run via nodes/operator/app config (resolves @/ from app node_modules).
+run_check "test:app" "pnpm vitest run --config nodes/operator/app/vitest.config.mts"
 run_check "test:packages:local" "pnpm test:packages:local"
 run_check "test:services:local" "pnpm test:services:local"
 run_check "check:docs" "pnpm check:docs"

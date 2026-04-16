@@ -32,7 +32,7 @@ external_refs:
 
 ## Context
 
-task.0176 checkpoint 2 (GraphRunWorkflow) is blocked: scheduler-worker cannot import `GraphExecutorPort` from `apps/web/src/` — dep-cruiser enforces `PACKAGES_NO_SRC_IMPORTS`.
+task.0176 checkpoint 2 (GraphRunWorkflow) is blocked: scheduler-worker cannot import `GraphExecutorPort` from `apps/operator/src/` — dep-cruiser enforces `PACKAGES_NO_SRC_IMPORTS`.
 
 ## Design (finalized 2026-03-14, after 3 rounds of architect review)
 
@@ -103,7 +103,7 @@ See plan file for detailed checkpoint breakdown.
 
 ```bash
 pnpm check
-pnpm dotenv -e .env.test -- vitest run --config apps/web/vitest.stack.config.mts
+pnpm dotenv -e .env.test -- vitest run --config apps/operator/vitest.stack.config.mts
 ```
 
 Manual validation:

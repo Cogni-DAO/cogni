@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Production runtime configuration directory copied to VM hosts for container orchestration and database initialization. Contains app + postgres + litellm + alloy + temporal + git-sync services, plus OpenClaw gateway services (`llm-proxy-openclaw`, `openclaw-gateway`) under the `sandbox-openclaw` compose profile. Edge (Caddy) is in separate `../edge/` project.
+Production runtime configuration directory copied to VM hosts for container orchestration and database initialization. Contains app + postgres + litellm + alloy + temporal + git-sync services, OpenClaw gateway services under the `sandbox-openclaw` profile, and Playwright MCP server under the `mcp-playwright` profile (dev-only). Edge (Caddy) is in separate `../edge/` project.
 
 ## Pointers
 
@@ -17,7 +17,7 @@ Production runtime configuration directory copied to VM hosts for container orch
 - [docker-compose.dev.yml](docker-compose.dev.yml): Development container stack (includes local loki, grafana)
 - [postgres-init/](postgres-init/): Database initialization scripts
 - [configs/](configs/): Service configuration templates (litellm, alloy, temporal)
-- [sandbox-proxy/](../sandbox-proxy/): nginx gateway config template for OpenClaw LLM proxy (rsync'd by deploy.sh)
+- [sandbox-proxy/](../../images/sandbox-proxy/): nginx gateway config template for OpenClaw LLM proxy (rsync'd by deploy.sh)
 - [docker-daemon.json](docker-daemon.json): Docker daemon log limits (reference only, applied via bootstrap.yaml)
 - [Edge stack](../edge/): TLS termination (Caddy) - separate compose project, never stopped during deploys
 
@@ -35,7 +35,7 @@ Production runtime configuration directory copied to VM hosts for container orch
 
 - **Exports:** none
 - **CLI (if any):** docker-compose commands
-- **Env/Config keys:** `APP_IMAGE`, `MIGRATOR_IMAGE`, `APP_ENV`, `DEPLOY_ENVIRONMENT`, `COGNI_REPO_URL` (git-sync), `COGNI_REPO_REF` (git-sync, pinned SHA), `GIT_READ_USERNAME` (git-sync), `GIT_READ_TOKEN` (git-sync, Contents:Read PAT), `COGNI_REPO_PATH` (app, `/repo/current`), `COGNI_REPO_SHA` (app), `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SERVICE_USER`, `APP_DB_SERVICE_PASSWORD`, `APP_DB_NAME`, `DATABASE_URL` (explicit DSN, app_user), `DATABASE_SERVICE_URL` (explicit DSN, app_service), `APP_BASE_URL`, `NEXTAUTH_URL`, `AUTH_SECRET`, `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY`, `LITELLM_DATABASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`, `LANGFUSE_TRACING_ENVIRONMENT` (derived from DEPLOY_ENVIRONMENT), `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_LOKI_API_KEY`, `METRICS_TOKEN` (app+alloy), `BILLING_INGEST_TOKEN` (app+litellm, callback auth), `INTERNAL_OPS_TOKEN` (app internal ops auth), `GENERIC_LOGGER_ENDPOINT` (litellm), `GENERIC_LOGGER_HEADERS` (litellm), `PROMETHEUS_REMOTE_WRITE_URL` (alloy), `PROMETHEUS_USERNAME` (alloy), `PROMETHEUS_PASSWORD` (alloy), `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE`, `TEMPORAL_DB_USER`, `TEMPORAL_DB_PASSWORD`, `TEMPORAL_DB_HOST`, `TEMPORAL_DB_PORT`
+- **Env/Config keys:** `APP_IMAGE`, `MIGRATOR_IMAGE`, `APP_ENV`, `DEPLOY_ENVIRONMENT`, `COGNI_REPO_URL` (git-sync), `COGNI_REPO_REF` (git-sync, pinned SHA), `GIT_READ_USERNAME` (git-sync), `GIT_READ_TOKEN` (git-sync, Contents:Read PAT), `COGNI_REPO_PATH` (app, `/repo/current`), `COGNI_REPO_SHA` (app), `POSTGRES_ROOT_USER`, `POSTGRES_ROOT_PASSWORD`, `APP_DB_USER`, `APP_DB_PASSWORD`, `APP_DB_SERVICE_USER`, `APP_DB_SERVICE_PASSWORD`, `APP_DB_NAME`, `DATABASE_URL` (explicit DSN, app_user), `DATABASE_SERVICE_URL` (explicit DSN, app_service), `APP_BASE_URL`, `NEXTAUTH_URL`, `AUTH_SECRET`, `LITELLM_MASTER_KEY`, `OPENROUTER_API_KEY`, `LITELLM_DATABASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL`, `LANGFUSE_TRACING_ENVIRONMENT` (derived from DEPLOY_ENVIRONMENT), `GRAFANA_CLOUD_LOKI_URL`, `GRAFANA_CLOUD_LOKI_USER`, `GRAFANA_CLOUD_LOKI_API_KEY`, `METRICS_TOKEN` (app+alloy), `BILLING_INGEST_TOKEN` (app+litellm, callback auth), `INTERNAL_OPS_TOKEN` (app internal ops auth), `COGNI_NODE_ENDPOINTS` (litellm, per-node callback routing), `PROMETHEUS_REMOTE_WRITE_URL` (alloy), `PROMETHEUS_USERNAME` (alloy), `PROMETHEUS_PASSWORD` (alloy), `TEMPORAL_ADDRESS`, `TEMPORAL_NAMESPACE`, `TEMPORAL_TASK_QUEUE`, `TEMPORAL_DB_USER`, `TEMPORAL_DB_PASSWORD`, `TEMPORAL_DB_HOST`, `TEMPORAL_DB_PORT`
 - **Files considered API:** `docker-compose.yml`, `postgres-init/*.sh`, `configs/alloy-config.alloy`, `sandbox-proxy/nginx-gateway.conf.template`, `openclaw/openclaw-gateway.json`
 
 ## Responsibilities
@@ -126,3 +126,11 @@ docker compose --project-name cogni-runtime logs -f app
 - `temporal-ui`: Web UI for debugging schedules (localhost:8233)
 - Namespace auto-created via `DEFAULT_NAMESPACE=cogni-{APP_ENV}`
 - Port forwarding: 127.0.0.1:7233 (gRPC), 127.0.0.1:8233 (UI)
+
+**Playwright MCP (profile: mcp-playwright, dev-only):**
+
+- `playwright-mcp`: Browser automation MCP server on `cogni-edge`, port 127.0.0.1:3003→3003
+- Image: `mcr.microsoft.com/playwright/mcp`, Streamable HTTP on `/mcp`
+- Env: `MCP_PLAYWRIGHT_URL` on app service (default: `http://playwright-mcp:3003/mcp`)
+- Start: `pnpm dev:infra:mcp`
+- Not in production compose — dev-only. See [MCP Control Plane Spec](../../../docs/spec/mcp-control-plane.md)

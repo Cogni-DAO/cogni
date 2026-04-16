@@ -41,7 +41,7 @@ The internal API route's `extractScheduleId()` function parses schedule IDs from
 
 Per-request `Connection.connect()` is ~50-100ms — unacceptable on the chat hot path. The finalize route has a TODO for this exact problem.
 
-**Decision:** Add a lazy `WorkflowClient` singleton to the apps/web container (`bootstrap/container.ts`), matching the pattern used by `ScheduleControlAdapter`. The chat route gets the client from the container.
+**Decision:** Add a lazy `WorkflowClient` singleton to the apps/operator container (`bootstrap/container.ts`), matching the pattern used by `ScheduleControlAdapter`. The chat route gets the client from the container.
 
 ### Latency acknowledgment
 
@@ -74,17 +74,17 @@ The current chat route has ~120 lines of accumulator logic (text_delta, tool par
 - Multiple concurrent runs produce independent SSE streams
 - `GraphRunWorkflow` handles `user_immediate` runKind (remove NotImplemented guard)
 - `executeGraphActivity` supports API-originated idempotency keys (`api:{requestId}`)
-- Temporal `WorkflowClient` singleton in apps/web container (no per-request connections)
+- Temporal `WorkflowClient` singleton in apps/operator container (no per-request connections)
 
 ## Allowed Changes
 
-- `apps/web/src/app/_facades/ai/completion.server.ts` — convergence point: `completionStream()` switches to workflow start + Redis subscribe (both chat and completions routes inherit)
-- `apps/web/src/app/api/v1/ai/chat/route.ts` — thread persistence accumulator adapts to Redis-backed stream
-- `apps/web/src/app/api/v1/chat/completions/route.ts` — minimal: consumes same facade, no execution logic change
-- `apps/web/src/features/ai/services/ai_runtime.ts` — remove RunEventRelay (dead: pump moved to internal API, fanout moved to Redis)
-- `apps/web/src/contracts/` — update/add contracts as needed
-- `apps/web/src/bootstrap/container.ts` — add Temporal WorkflowClient singleton
-- `apps/web/src/app/api/internal/graphs/[graphId]/runs/route.ts` — generalize for API-originated inputs (stateKey passthrough, conditional schedule logic)
+- `apps/operator/src/app/_facades/ai/completion.server.ts` — convergence point: `completionStream()` switches to workflow start + Redis subscribe (both chat and completions routes inherit)
+- `apps/operator/src/app/api/v1/ai/chat/route.ts` — thread persistence accumulator adapts to Redis-backed stream
+- `apps/operator/src/app/api/v1/chat/completions/route.ts` — minimal: consumes same facade, no execution logic change
+- `apps/operator/src/features/ai/services/ai_runtime.ts` — remove RunEventRelay (dead: pump moved to internal API, fanout moved to Redis)
+- `apps/operator/src/contracts/` — update/add contracts as needed
+- `apps/operator/src/bootstrap/container.ts` — add Temporal WorkflowClient singleton
+- `apps/operator/src/app/api/internal/graphs/[graphId]/runs/route.ts` — generalize for API-originated inputs (stateKey passthrough, conditional schedule logic)
 - `services/scheduler-worker/src/workflows/graph-run.workflow.ts` — remove NotImplemented guard, handle user_immediate runKind (skip grant validation when executionGrantId is null)
 - `services/scheduler-worker/src/activities/index.ts` — make temporalScheduleId optional in ExecuteGraphInput, support `api:{runId}` idempotency key format
 - Tests
@@ -92,7 +92,7 @@ The current chat route has ~120 lines of accumulator logic (text_delta, tool par
 ## Plan
 
 - [x] **Checkpoint 1: Temporal client + workflow unblock**
-  - Add lazy `WorkflowClient` singleton to apps/web container
+  - Add lazy `WorkflowClient` singleton to apps/operator container
   - Remove NotImplemented guard in `GraphRunWorkflow` for non-scheduled runs
   - Make `temporalScheduleId` optional in `ExecuteGraphInput`; derive idempotency key as `api:{runId}` when absent
   - Skip `validateGrantActivity` when `executionGrantId` is null (API runs)
@@ -137,7 +137,7 @@ pnpm test
 
 **Blocking:**
 
-1. **Race condition in `getTemporalWorkflowClient()`** (`apps/web/src/bootstrap/container.ts:245-258`): Two concurrent callers during startup both see `_workflowClient === null`, both call `Connection.connect()`, first connection is overwritten and leaked. On the chat hot path, this WILL happen under load. Fix: store the pending promise so concurrent callers coalesce on the same connection.
+1. **Race condition in `getTemporalWorkflowClient()`** (`apps/operator/src/bootstrap/container.ts:245-258`): Two concurrent callers during startup both see `_workflowClient === null`, both call `Connection.connect()`, first connection is overwritten and leaked. On the chat hot path, this WILL happen under load. Fix: store the pending promise so concurrent callers coalesce on the same connection.
 
 **Non-blocking:**
 

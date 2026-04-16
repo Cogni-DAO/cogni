@@ -38,7 +38,7 @@ export interface ActivityDeps {
   grantAdapter: ExecutionGrantWorkerPort;
   runAdapter: GraphRunRepository;
   config: {
-    appBaseUrl: string;
+    nodeEndpoints: Map<string, string>;
     schedulerApiToken: string;
   };
   logger: Logger;
@@ -75,6 +75,7 @@ export interface CreateGraphRunInput {
  * Input for executeGraphActivity.
  */
 export interface ExecuteGraphInput {
+  nodeId: string;
   temporalScheduleId?: string;
   graphId: string;
   executionGrantId: string | null;
@@ -240,6 +241,7 @@ export function createActivities(deps: ActivityDeps) {
     input: ExecuteGraphInput
   ): Promise<ExecuteGraphOutput> {
     const {
+      nodeId,
       temporalScheduleId,
       graphId,
       executionGrantId,
@@ -254,7 +256,14 @@ export function createActivities(deps: ActivityDeps) {
       ? `${temporalScheduleId}:${scheduledFor}`
       : `api:${runId}`;
 
-    const url = `${config.appBaseUrl}/api/internal/graphs/${graphId}/runs`;
+    const nodeUrl = config.nodeEndpoints.get(nodeId);
+    if (!nodeUrl) {
+      throw ApplicationFailure.nonRetryable(
+        `Unknown nodeId "${nodeId}" — not in COGNI_NODE_ENDPOINTS`,
+        "UNKNOWN_NODE"
+      );
+    }
+    const url = `${nodeUrl}/api/internal/graphs/${graphId}/runs`;
 
     logWorkerEvent(logger, WORKER_EVENT_NAMES.ACTIVITY_GRAPH_EXECUTING, {
       ...correlation,

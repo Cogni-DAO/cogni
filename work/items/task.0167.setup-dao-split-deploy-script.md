@@ -102,7 +102,7 @@ repo-spec must have all of:
 
 ## Allowed Changes
 
-- `apps/web/src/app/api/setup/verify/route.ts` — `buildRepoSpecYaml` adds payments.status
+- `apps/operator/src/app/api/setup/verify/route.ts` — `buildRepoSpecYaml` adds payments.status
 - `scripts/node-activate-payments.ts` (new)
 - `package.json` — add `node:activate-payments` script
 - `docs/spec/node-formation.md` — activation boundary section

@@ -28,6 +28,13 @@ export type Revision = string;
 
 export type WorkItemType = "task" | "bug" | "story" | "spike" | "subtask";
 
+// ── Actor eligibility ────────────────────────────────
+// Routing hint for work selection: "safe for autonomous AI handling" (ai),
+// "requires human judgement" (human), or "either can handle" (either).
+// This is NOT provenance, ownership, or assignment — use `assignees` for that.
+
+export type ActorKind = "human" | "ai" | "either";
+
 // ── Status ────────────────────────────────────────────
 // From docs/spec/development-lifecycle.md — 9 statuses, each needs_* maps to one /command.
 
@@ -89,6 +96,7 @@ export type WorkItem = {
   readonly parentId?: WorkItemId;
   readonly assignees: readonly SubjectRef[];
   readonly externalRefs: readonly ExternalRef[];
+  readonly actor: ActorKind;
   readonly labels: readonly string[];
   readonly specRefs: readonly string[];
   readonly branch?: string;
@@ -114,6 +122,7 @@ export type WorkQuery = {
   readonly projectId?: WorkItemId;
   readonly relatedTo?: WorkItemId;
   readonly text?: string;
+  readonly actor?: ActorKind;
   readonly limit?: number;
   readonly cursor?: string;
 };

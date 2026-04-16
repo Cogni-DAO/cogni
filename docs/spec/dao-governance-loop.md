@@ -294,43 +294,43 @@ The `extra` field is ABI-encoded: `(uint256 nonce, uint256 deadline, string para
 
 **PR Review (Subsystem 1):**
 
-| File                                                      | Purpose                                                          |
-| --------------------------------------------------------- | ---------------------------------------------------------------- |
-| `apps/web/src/features/review/services/review-handler.ts` | Orchestrator: evidence → gates → check run → comment + deep link |
-| `apps/web/src/features/review/gate-orchestrator.ts`       | Run gates in order, aggregate results                            |
-| `apps/web/src/features/review/summary-formatter.ts`       | Markdown for check run + PR comment                              |
-| `apps/web/src/features/review/gates/ai-rule.ts`           | LLM-based rule evaluation gate                                   |
-| `apps/web/src/features/review/gates/review-limits.ts`     | Numeric limits gate (file count, diff size)                      |
+| File                                                           | Purpose                                                          |
+| -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `apps/operator/src/features/review/services/review-handler.ts` | Orchestrator: evidence → gates → check run → comment + deep link |
+| `apps/operator/src/features/review/gate-orchestrator.ts`       | Run gates in order, aggregate results                            |
+| `apps/operator/src/features/review/summary-formatter.ts`       | Markdown for check run + PR comment                              |
+| `apps/operator/src/features/review/gates/ai-rule.ts`           | LLM-based rule evaluation gate                                   |
+| `apps/operator/src/features/review/gates/review-limits.ts`     | Numeric limits gate (file count, diff size)                      |
 
 **Proposal Launcher (Subsystem 2):**
 
-| File                                                                | Purpose                                    |
-| ------------------------------------------------------------------- | ------------------------------------------ |
-| `apps/web/src/app/(public)/propose/merge/page.tsx`                  | Server component wrapper                   |
-| `apps/web/src/app/(public)/propose/merge/merge-proposal.client.tsx` | Client: wallet connect → createProposal tx |
-| `apps/web/src/features/governance/lib/proposal-utils.ts`            | Deeplink validation, gas estimation        |
-| `apps/web/src/features/governance/lib/proposal-abis.ts`             | CogniSignal + TokenVoting contract ABIs    |
+| File                                                                     | Purpose                                    |
+| ------------------------------------------------------------------------ | ------------------------------------------ |
+| `apps/operator/src/app/(public)/propose/merge/page.tsx`                  | Server component wrapper                   |
+| `apps/operator/src/app/(public)/propose/merge/merge-proposal.client.tsx` | Client: wallet connect → createProposal tx |
+| `apps/operator/src/features/governance/lib/proposal-utils.ts`            | Deeplink validation, gas estimation        |
+| `apps/operator/src/features/governance/lib/proposal-abis.ts`             | CogniSignal + TokenVoting contract ABIs    |
 
 **Signal Executor (Subsystem 3):**
 
-| File                                                           | Purpose                                         |
-| -------------------------------------------------------------- | ----------------------------------------------- |
-| `apps/web/src/adapters/server/ingestion/alchemy-webhook.ts`    | HMAC verify + normalize to ActivityEvent[]      |
-| `apps/web/src/features/governance/signal-types.ts`             | Zod schemas: Signal, ActionResult, RepoRef      |
-| `apps/web/src/features/governance/signal-parser.ts`            | Decode CogniAction from tx receipt logs         |
-| `apps/web/src/features/governance/actions.ts`                  | GitHub action handlers (merge, grant, revoke)   |
-| `apps/web/src/features/governance/services/signal-handler.ts`  | Orchestrator: RPC → decode → validate → execute |
-| `apps/web/src/features/governance/services/signal-dispatch.ts` | Fire-and-forget entry from webhook route        |
+| File                                                                | Purpose                                         |
+| ------------------------------------------------------------------- | ----------------------------------------------- |
+| `apps/operator/src/adapters/server/ingestion/alchemy-webhook.ts`    | HMAC verify + normalize to ActivityEvent[]      |
+| `apps/operator/src/features/governance/signal-types.ts`             | Zod schemas: Signal, ActionResult, RepoRef      |
+| `apps/operator/src/features/governance/signal-parser.ts`            | Decode CogniAction from tx receipt logs         |
+| `apps/operator/src/features/governance/actions.ts`                  | GitHub action handlers (merge, grant, revoke)   |
+| `apps/operator/src/features/governance/services/signal-handler.ts`  | Orchestrator: RPC → decode → validate → execute |
+| `apps/operator/src/features/governance/services/signal-dispatch.ts` | Fire-and-forget entry from webhook route        |
 
 **Shared Infrastructure:**
 
-| File                                                       | Purpose                                      |
-| ---------------------------------------------------------- | -------------------------------------------- |
-| `.cogni/repo-spec.yaml`                                    | DAO contracts, chain, gates, payment rails   |
-| `packages/repo-spec/src/schema.ts`                         | Zod schema with EVM address validation       |
-| `packages/repo-spec/src/accessors.ts`                      | `extractDaoConfig()`, `extractGatesConfig()` |
-| `apps/web/src/shared/config/repoSpec.server.ts`            | Cached repo-spec loader + getDaoConfig()     |
-| `apps/web/src/app/api/internal/webhooks/[source]/route.ts` | Webhook receiver (GitHub + Alchemy)          |
+| File                                                            | Purpose                                      |
+| --------------------------------------------------------------- | -------------------------------------------- |
+| `.cogni/repo-spec.yaml`                                         | DAO contracts, chain, gates, payment rails   |
+| `packages/repo-spec/src/schema.ts`                              | Zod schema with EVM address validation       |
+| `packages/repo-spec/src/accessors.ts`                           | `extractDaoConfig()`, `extractGatesConfig()` |
+| `apps/operator/src/shared/config/repoSpec.server.ts`            | Cached repo-spec loader + getDaoConfig()     |
+| `apps/operator/src/app/api/internal/webhooks/[source]/route.ts` | Webhook receiver (GitHub + Alchemy)          |
 
 ### Infrastructure Requirements
 
@@ -347,9 +347,9 @@ The `extra` field is ABI-encoded: `(uint256 nonce, uint256 deadline, string para
 **Automated (unit tests — pass today):**
 
 ```bash
-pnpm test apps/web/tests/unit/features/governance/
-pnpm test apps/web/tests/unit/adapters/ingestion/alchemy-webhook.test.ts
-pnpm test apps/web/tests/unit/features/review/summary-formatter.test.ts
+pnpm test apps/operator/tests/unit/features/governance/
+pnpm test apps/operator/tests/unit/adapters/ingestion/alchemy-webhook.test.ts
+pnpm test apps/operator/tests/unit/features/review/summary-formatter.test.ts
 ```
 
 **E2E validation (requires running infrastructure):**

@@ -49,7 +49,7 @@ const CHARGE_REASONS = [
   "promo_credit_consumption",
 ] as const;
 
-const SOURCE_SYSTEMS = ["litellm", "anthropic_sdk"] as const;
+const SOURCE_SYSTEMS = ["litellm", "anthropic_sdk", "codex", "ollama"] as const;
 
 /**
  * Virtual keys table - scope/FK handle for billing attribution.

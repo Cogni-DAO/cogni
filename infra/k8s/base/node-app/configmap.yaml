@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# Non-secret configuration shared by all node apps.
+# Overlays patch environment-specific values (APP_ENV, APP_BASE_URL, etc.)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-app-config
+data:
+  # Patched by overlay
+  APP_ENV: "preview"
+  NODE_NAME: "node-app"
+  # Internal service URLs (same for all nodes on same VM)
+  LITELLM_BASE_URL: "http://litellm-external:4000"
+  TEMPORAL_ADDRESS: "temporal-external:7233"
+  TEMPORAL_NAMESPACE: "cogni-preview"
+  TEMPORAL_TASK_QUEUE: "scheduler-tasks"
+  REDIS_URL: "redis://redis-external:6379"
+  # Repo-spec baked into image at /app/.cogni/repo-spec.yaml (no git-sync needed).
+  # Updated every CI build via COPY in Dockerfile.
+  COGNI_REPO_PATH: "/app"

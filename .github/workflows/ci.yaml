@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [staging, main]
+    branches: [canary, staging, main]
 
 permissions:
   contents: read
@@ -258,16 +258,16 @@ jobs:
       # Service role (BYPASSRLS) - matches DATABASE_SERVICE_URL user
       APP_DB_SERVICE_USER: user_service
       APP_DB_SERVICE_PASSWORD: service_password
-      # Database name
-      APP_DB_NAME: cogni_template_test
+      # Database names (required, no defaults)
       POSTGRES_DB: cogni_template_test
+      COGNI_NODE_DBS: cogni_template_test
       # Image naming base (APP_IMAGE/MIGRATOR_IMAGE derived in step below)
       IMAGE_NAME: cogni-template-ci
       IMAGE_TAG: ${{ github.sha }}
       DOMAIN: localhost
       LITELLM_MASTER_KEY: test-key
       LITELLM_BASE_URL: http://localhost:4000
-      GENERIC_LOGGER_ENDPOINT: http://app:3000/api/internal/billing/ingest
+      COGNI_NODE_ENDPOINTS: operator=http://app:3000,4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://app:3000
       OPENROUTER_API_KEY: test-key
       EVM_RPC_URL: https://base-mainnet.g.alchemy.com/v2/fake-test-key
       TEST_BASE_URL: https://localhost/
@@ -368,7 +368,7 @@ jobs:
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
         with:
           context: .
-          file: ./apps/web/Dockerfile
+          file: ./nodes/operator/app/Dockerfile
           target: runner
           tags: ${{ env.APP_IMAGE }}
           load: true
@@ -387,7 +387,7 @@ jobs:
         if: steps.pull_migrator.outcome != 'success'
         with:
           context: .
-          file: ./apps/web/Dockerfile
+          file: ./nodes/operator/app/Dockerfile
           target: migrator
           tags: ${{ env.MIGRATOR_IMAGE }}
           load: true
