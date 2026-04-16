@@ -2,7 +2,7 @@
 id: task.0314
 type: task
 title: "Decouple infra flighting from app flighting — two independent levers"
-status: needs_closeout
+status: done
 revision: 2
 priority: 0
 rank: 1
