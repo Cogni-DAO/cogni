@@ -241,10 +241,6 @@ jobs:
           APP_DB_SERVICE_PASSWORD: ${{ secrets.APP_DB_SERVICE_PASSWORD }}
           APP_DB_NAME: ${{ secrets.APP_DB_NAME }}
           LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
-          # Pin LITELLM_IMAGE to the local tag so deploy-infra.sh doesn't try to
-          # resolve `preview-{pr-sha}-litellm` from GHCR (that tag doesn't exist
-          # for PR builds). Candidate-flight validates infra config, not image.
-          LITELLM_IMAGE: cogni-litellm:latest
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           EVM_RPC_URL: ${{ secrets.EVM_RPC_URL }}
