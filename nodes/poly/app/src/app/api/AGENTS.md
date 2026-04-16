@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-03-05
+- **Last reviewed:** 2026-04-16
 - **Status:** draft
 
 ## Purpose
@@ -55,6 +55,10 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/attribution/epochs/[id]/user-projections` [GET, PATCH=410] - read per-user unsigned projections; edits are deprecated
   - `/api/v1/attribution/epochs/[id]/review-subject-overrides` [GET, PATCH, DELETE] - review-time subject overrides (SIWE + approver)
   - `/api/v1/attribution/epochs/[id]/pool-components` [POST] - record pool component (SIWE + approver)
+  - `/.well-known/agent.json` [GET] - agent discovery document (public, no auth)
+  - `/api/v1/agent/register` [POST] - machine agent registration, returns API key (public, no auth)
+  - `/api/v1/agent/runs` [GET] - agent-first alias for /api/v1/ai/runs (bearer auth)
+  - `/api/v1/agent/runs/{runId}/stream` [GET] - agent-first alias for run stream (bearer auth)
   - `/api/v1/users/me` [GET, PATCH] - current profile
   - `/api/v1/users/me/ownership` [GET] - current ownership summary derived from linked identities
   - `/api/v1/work/items` [GET] - list work items with optional filters (SIWE auth)

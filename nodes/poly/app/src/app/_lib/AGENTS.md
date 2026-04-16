@@ -29,8 +29,8 @@ Private app-layer helpers for route handlers. Provides server-side utilities lik
 
 ## Public Surface
 
-- **Exports:** models-cache (getCachedModels, isModelAllowed, getDefaultModelId), auth/session helpers
-- **Files considered API:** models-cache.ts, auth/session.ts
+- **Exports:** models-cache (getCachedModels, isModelAllowed, getDefaultModelId), auth/session (getSessionUser → resolveRequestIdentity), auth/request-identity (issueAgentApiKey, resolveRequestIdentity)
+- **Files considered API:** models-cache.ts, auth/session.ts, auth/request-identity.ts
 
 ## Responsibilities
 
@@ -64,4 +64,5 @@ pnpm typecheck
 ## Notes
 
 - models-cache.ts: Fetches from LiteLLM /model/info, 1h cache with SWR
-- auth/session.ts: Session resolution helpers for route handlers
+- auth/session.ts: Re-exports resolveRequestIdentity as getSessionUser (bearer-first, session-cookie fallback)
+- auth/request-identity.ts: HMAC bearer token resolver + issuer for machine agent auth

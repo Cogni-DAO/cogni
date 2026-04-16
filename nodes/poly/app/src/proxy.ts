@@ -5,7 +5,8 @@
  * Module: `@/proxy`
  * Purpose: Next.js 16 proxy (formerly middleware) for route protection.
  * Scope: Root-level proxy. Enforces session auth on /api/v1/* routes and page-level routing (redirect unauthenticated users away from app routes, redirect authenticated users from landing to /chat). Does not handle public infrastructure endpoints (e.g., /api/metrics, /api/health).
- * Invariants: /api/v1/public/* accessible without auth; other /api/v1/* require session.
+ * Invariants: /api/v1/public/* accessible without auth; /api/v1/* with cogni_ag_sk_v1_ bearer
+ *   passes through (route handler validates token); other /api/v1/* require session.
  *   Single authority for auth routing — no client-side redirect logic.
  * Side-effects: none
  * Links: docs/spec/security-auth.md
@@ -37,21 +38,50 @@ function isAppRoute(pathname: string): boolean {
   );
 }
 
+const AGENT_BEARER_PREFIX = "Bearer cogni_ag_sk_v1_";
+
+function isPublicApiRoute(pathname: string): boolean {
+  return (
+    pathname.startsWith("/api/v1/public/") ||
+    pathname === "/api/v1/agent/register"
+  );
+}
+
+function isAgentApiRoute(pathname: string): boolean {
+  // Any /api/v1/* route may accept machine bearer tokens — route handlers
+  // do the actual token validation and return 401 for invalid/missing creds.
+  return pathname.startsWith("/api/v1/");
+}
+
+function hasAgentBearer(req: NextRequest): boolean {
+  return (
+    req.headers.get("authorization")?.startsWith(AGENT_BEARER_PREFIX) ?? false
+  );
+}
+
 export async function proxy(req: NextRequest): Promise<NextResponse> {
   const { pathname } = req.nextUrl;
+  const isPublicApi = isPublicApiRoute(pathname);
+  const isAgentBearerRequest = isAgentApiRoute(pathname) && hasAgentBearer(req);
 
   // Allow public namespace without authentication
-  if (pathname.startsWith("/api/v1/public/")) {
+  if (isPublicApi) {
     return NextResponse.next();
   }
 
   // Resolve token once — reused for both page and API checks.
   // Only call getToken when the route actually needs auth checking.
   const needsAuth =
-    pathname === "/" || isAppRoute(pathname) || pathname.startsWith("/api/v1/");
+    pathname === "/" ||
+    isAppRoute(pathname) ||
+    (pathname.startsWith("/api/v1/") && !isAgentBearerRequest);
   const tokenSecret = authSecret || authOptions.secret;
 
-  if (!tokenSecret && pathname.startsWith("/api/v1/")) {
+  if (
+    !tokenSecret &&
+    pathname.startsWith("/api/v1/") &&
+    !isAgentBearerRequest
+  ) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -82,6 +112,9 @@ export async function proxy(req: NextRequest): Promise<NextResponse> {
   // are responsible for their own auth enforcement.
   // Public unauthenticated endpoints must use /api/v1/public/* namespace.
   if (pathname.startsWith("/api/v1/")) {
+    if (isAgentBearerRequest) {
+      return NextResponse.next();
+    }
     if (!isLoggedIn) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

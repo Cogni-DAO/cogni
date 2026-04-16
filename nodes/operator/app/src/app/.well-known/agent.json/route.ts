@@ -49,8 +49,21 @@ export async function GET(request: Request) {
     auth: { type: "bearer", keyPrefix: "cogni_ag_sk_v1_" },
     endpoints: {
       completions: `${origin}/api/v1/chat/completions`,
+      graphs: `${origin}/api/v1/ai/agents`,
       runs: `${origin}/api/v1/agent/runs`,
       runStream: `${origin}/api/v1/agent/runs/{runId}/stream`,
+    },
+    defaults: {
+      model: "gpt-4o-mini",
+      graph_name: "poet",
+    },
+    usage: {
+      note: "completions requires graph_name for newly registered agents",
+      example: {
+        model: "gpt-4o-mini",
+        graph_name: "poet",
+        messages: [{ role: "user", content: "Hello" }],
+      },
     },
   });
 }
