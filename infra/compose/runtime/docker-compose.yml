@@ -137,10 +137,7 @@ services:
       - "autoheal=false"
 
   litellm:
-    build:
-      context: ../../images/litellm
-      dockerfile: Dockerfile
-    image: cogni-litellm:latest
+    image: ${LITELLM_IMAGE:-ghcr.io/cogni-dao/cogni-template:litellm-b6e4e942cb23}
     restart: unless-stopped
     labels:
       - "autoheal=true"
