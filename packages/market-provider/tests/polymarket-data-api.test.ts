@@ -98,6 +98,28 @@ describe("PolymarketDataApiClient.listTopTraders", () => {
     const client = new PolymarketDataApiClient({ fetch: fetchImpl });
     await expect(client.listTopTraders()).rejects.toThrow();
   });
+
+  it("aborts and throws a timeout error when the upstream stalls past timeoutMs", async () => {
+    // fetchImpl respects AbortSignal: rejects with an AbortError when the
+    // controller fires. Without the timeout wrapper, this promise would hang
+    // indefinitely — which is exactly the production failure mode that ate
+    // 8-minute dashboard requests in dev.
+    const fetchImpl = vi.fn(
+      (_url: string, init?: { signal?: AbortSignal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            const err = new Error("aborted");
+            err.name = "AbortError";
+            reject(err);
+          });
+        })
+    );
+    const client = new PolymarketDataApiClient({
+      fetch: fetchImpl as unknown as typeof fetch,
+      timeoutMs: 20,
+    });
+    await expect(client.listTopTraders()).rejects.toThrow(/timeout after 20ms/);
+  });
 });
 
 describe("PolymarketDataApiClient.listUserActivity", () => {

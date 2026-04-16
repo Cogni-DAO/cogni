@@ -94,9 +94,15 @@ export function TopWalletsCard(): ReactElement {
     <Card>
       <CardHeader className="px-5 py-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-            Top Polymarket Wallets
-          </CardTitle>
+          <div className="flex flex-col gap-0.5">
+            <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+              Top Polymarket Wallets
+            </CardTitle>
+            <p className="text-muted-foreground/70 text-xs">
+              PnL from Polymarket Data API — includes unrealized mark-to-market;
+              may diverge from the profile page's realized-only figure.
+            </p>
+          </div>
           <ToggleGroup
             type="single"
             value={timePeriod}
@@ -136,7 +142,12 @@ export function TopWalletsCard(): ReactElement {
                 <TableHead>User</TableHead>
                 <TableHead>Wallet</TableHead>
                 <TableHead className="text-right">Volume</TableHead>
-                <TableHead className="text-right">PnL</TableHead>
+                <TableHead
+                  className="text-right"
+                  title="Realized + unrealized mark-to-market PnL from the Data API"
+                >
+                  PnL (MTM)
+                </TableHead>
                 <TableHead className="text-right">ROI</TableHead>
                 <TableHead className="text-right"># Trades</TableHead>
               </TableRow>

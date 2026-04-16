@@ -21,6 +21,9 @@ import type {
   WalletTopTradersOutput,
 } from "@cogni/ai-tools";
 import { PolymarketDataApiClient } from "@cogni/market-provider/adapters/polymarket";
+import { makeLogger } from "@/shared/observability";
+
+const log = makeLogger({ component: "wallet-capability" });
 
 /**
  * Cap applied to the enrichment /trades call per wallet.
@@ -65,15 +68,23 @@ export function createWalletCapability(config?: {
         entries.map(async (e): Promise<WalletTopTraderItem> => {
           // Enrichment is best-effort: if /trades fails for one wallet,
           // surface 0 rather than failing the whole scoreboard.
-          let trades: Awaited<ReturnType<typeof client.listUserActivity>> = [];
+          // Logged so a systemic upstream failure (rate limit, outage) is
+          // visible rather than appearing as "all wallets have 0 trades".
+          let numTrades = 0;
           try {
-            trades = await client.listUserActivity(e.proxyWallet, {
+            const trades = await client.listUserActivity(e.proxyWallet, {
               limit: TRADES_ENRICHMENT_LIMIT,
             });
-          } catch {
-            trades = [];
+            numTrades = trades.length;
+          } catch (err) {
+            log.warn(
+              {
+                wallet: e.proxyWallet,
+                err: err instanceof Error ? err.message : String(err),
+              },
+              "wallet-top-traders enrichment: /trades call failed; numTrades reported as 0"
+            );
           }
-          const numTrades = trades.length;
           const numTradesCapped = numTrades >= TRADES_ENRICHMENT_LIMIT;
           const roiPct = e.vol > 0 ? (e.pnl / e.vol) * 100 : null;
 

@@ -30,7 +30,15 @@ export interface PolymarketDataApiClientConfig {
   baseUrl?: string;
   /** Optional fetch implementation for tests (default: global fetch). */
   fetch?: typeof fetch;
+  /**
+   * Hard timeout per request in milliseconds (default 5000).
+   * Protects downstream callers (dashboards, scheduler jobs) from upstream stalls —
+   * empirically the API returns in <300ms, so 5s is generous but bounds the worst case.
+   */
+  timeoutMs?: number;
 }
+
+const DEFAULT_TIMEOUT_MS = 5000;
 
 export interface ListTopTradersParams {
   /** Rolling time window honored by the API. `ALL` is all-time. */
@@ -62,10 +70,12 @@ export interface ListUserActivityParams {
 export class PolymarketDataApiClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(config?: PolymarketDataApiClientConfig) {
     this.baseUrl = config?.baseUrl ?? DEFAULT_DATA_API_BASE_URL;
     this.fetchImpl = config?.fetch ?? fetch;
+    this.timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   async listTopTraders(
@@ -109,13 +119,28 @@ export class PolymarketDataApiClient {
   }
 
   private async fetchJson(url: URL): Promise<unknown> {
-    const response = await this.fetchImpl(url.toString());
-    if (!response.ok) {
-      throw new Error(
-        `Polymarket Data API error: ${response.status} ${response.statusText} (${url.pathname})`
-      );
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await this.fetchImpl(url.toString(), {
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(
+          `Polymarket Data API error: ${response.status} ${response.statusText} (${url.pathname})`
+        );
+      }
+      return await response.json();
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error(
+          `Polymarket Data API timeout after ${this.timeoutMs}ms (${url.pathname})`
+        );
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-    return response.json();
   }
 }
 
