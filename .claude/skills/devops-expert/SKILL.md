@@ -75,6 +75,20 @@ You are a senior DevOps architect. AI agents are the primary committers in this 
 | `infra/provision/cherry/`     | OpenTofu modules for Cherry Servers VMs                  |
 | `infra/provision/cherry/k3s/` | k3s bootstrap (cloud-init, Argo CD, ksops)               |
 
+### VM SSH keys (`.local/`, gitignored)
+
+`provision-test-vm.sh` writes SSH keys and VM metadata to `.local/`:
+
+| File                          | Purpose                                |
+| ----------------------------- | -------------------------------------- |
+| `.local/{env}-vm-key`         | SSH private key for `root@<VM_IP>`     |
+| `.local/{env}-vm-ip`          | VM IP address (single line)            |
+| `.local/{env}-vm-age-key`     | SOPS age key for k8s secret decryption |
+| `.local/{env}-vm-secrets.env` | Extra env vars not in `.env.{env}`     |
+
+SSH usage: `ssh -i .local/preview-vm-key root@$(cat .local/preview-vm-ip)`
+Environments provisioned: `canary` (= candidate-a, 84.32.109.160), `preview`, `production`.
+
 ## Enforcement rules
 
 When reviewing code that touches CI/CD, deploy, or infra:

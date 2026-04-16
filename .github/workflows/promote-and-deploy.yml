@@ -65,6 +65,7 @@ jobs:
       head_sha: ${{ steps.env.outputs.head_sha }}
       deploy_branch: ${{ steps.env.outputs.deploy_branch }}
       deploy_branch_sha: ${{ steps.deploy-push.outputs.deploy_branch_sha }}
+      promoted_apps: ${{ steps.deploy-push.outputs.promoted_apps }}
     steps:
       - name: Determine environment
         id: env
@@ -191,6 +192,11 @@ jobs:
           # Services with empty digest were not built in this run (affected-only CI);
           # their existing overlay entry is left unchanged.
 
+          # Track which apps actually get new digests so wait-for-argocd
+          # only blocks on apps that changed (not e.g. sandbox-openclaw with
+          # a placeholder image that can never pull).
+          PROMOTED=()
+
           # operator always present (checked earlier)
           MIGRATOR_DIGEST="${{ steps.digests.outputs.migrator }}"
           ../app-src/scripts/ci/promote-k8s-image.sh --no-commit \
@@ -198,6 +204,7 @@ jobs:
             --app operator \
             --digest "${{ steps.digests.outputs.operator }}" \
             ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
+          PROMOTED+=(operator)
 
           POLY_DIGEST="${{ steps.digests.outputs.poly }}"
           if [ -n "$POLY_DIGEST" ]; then
@@ -206,6 +213,7 @@ jobs:
               --app poly \
               --digest "$POLY_DIGEST" \
               ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
+            PROMOTED+=(poly)
           fi
 
           RESY_DIGEST="${{ steps.digests.outputs.resy }}"
@@ -215,6 +223,7 @@ jobs:
               --app resy \
               --digest "$RESY_DIGEST" \
               ${MIGRATOR_DIGEST:+--migrator-digest "$MIGRATOR_DIGEST"}
+            PROMOTED+=(resy)
           fi
 
           SW_DIGEST="${{ steps.digests.outputs.scheduler_worker }}"
@@ -223,7 +232,11 @@ jobs:
               --env "$OVERLAY_ENV" \
               --app scheduler-worker \
               --digest "$SW_DIGEST"
+            PROMOTED+=(scheduler-worker)
           fi
+
+          # Export for deploy-push step
+          echo "PROMOTED_CSV=$(IFS=,; echo "${PROMOTED[*]}")" >> $GITHUB_ENV
 
       - name: Commit and push overlay changes to deploy branch
         id: deploy-push
@@ -247,6 +260,7 @@ jobs:
             # deterministic target (== the same SHA Argo is already reconciled to).
             DEPLOY_SHA=$(git rev-parse HEAD)
             echo "deploy_branch_sha=$DEPLOY_SHA" >> $GITHUB_OUTPUT
+            echo "promoted_apps=${PROMOTED_CSV}" >> $GITHUB_OUTPUT
             echo "ℹ️  deploy_branch_sha=${DEPLOY_SHA} (unchanged)"
             exit 0
           fi
@@ -259,7 +273,8 @@ jobs:
           DEPLOY_SHA=$(git rev-parse HEAD)
           echo "pushed=true" >> $GITHUB_OUTPUT
           echo "deploy_branch_sha=$DEPLOY_SHA" >> $GITHUB_OUTPUT
-          echo "✅ Direct push to ${DEPLOY_BRANCH} for ${OVERLAY_ENV} ${SHORT_SHA} (deploy-branch SHA: ${DEPLOY_SHA:0:8})"
+          echo "promoted_apps=${PROMOTED_CSV}" >> $GITHUB_OUTPUT
+          echo "✅ Direct push to ${DEPLOY_BRANCH} for ${OVERLAY_ENV} ${SHORT_SHA} (deploy-branch SHA: ${DEPLOY_SHA:0:8}, promoted: ${PROMOTED_CSV})"
 
   # ── Deploy Compose infrastructure ────────────────────────────────
   deploy-infra:
@@ -394,6 +409,10 @@ jobs:
           # Argo tracks the deploy branch, not main. EXPECTED_SHA must be the
           # deploy-branch tip SHA written by promote-k8s, not the source-app SHA.
           EXPECTED_SHA: ${{ needs.promote-k8s.outputs.deploy_branch_sha }}
+          # Only wait for apps that got new digests in this promotion.
+          # Apps not promoted (e.g. sandbox-openclaw with placeholder image)
+          # are not expected to become Healthy and would false-fail the wait.
+          PROMOTED_APPS: ${{ needs.promote-k8s.outputs.promoted_apps }}
         run: scripts/ci/wait-for-argocd.sh
 
       - name: Deploy infrastructure
