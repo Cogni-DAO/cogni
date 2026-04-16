@@ -448,13 +448,10 @@ cat > /opt/cogni-template-edge/.env << ENV_EOF
 DOMAIN=${DOMAIN}
 ENV_EOF
 
-# Self-resolve LiteLLM image from GHCR tag if not already a GHCR ref.
-# This avoids depending on promote-and-deploy.yml workflow outputs
-# (workflow_run uses main's YAML, not canary's). SCRIPTS_ARE_THE_API.
-if [[ "$LITELLM_IMAGE" != ghcr.io/* ]] && [[ -n "${COGNI_REPO_REF:-}" ]] && [[ "$COGNI_REPO_REF" != "unknown" ]]; then
-  LITELLM_IMAGE="ghcr.io/cogni-dao/cogni-template:preview-${COGNI_REPO_REF}-litellm"
-  log_info "Resolved LiteLLM image from COGNI_REPO_REF: $LITELLM_IMAGE"
-fi
+# LiteLLM image is built from infra/images/litellm/ and changes rarely.
+# Use the caller's LITELLM_IMAGE if set, otherwise the local build tag.
+# Do NOT derive from COGNI_REPO_REF — litellm is infra, not an app image,
+# and preview-{appSHA}-litellm tags don't exist in the pr-build pipeline.
 LITELLM_IMAGE=${LITELLM_IMAGE:-cogni-litellm:latest}
 
 # Runtime env (full config — compose validates all vars even for services we don't start)
