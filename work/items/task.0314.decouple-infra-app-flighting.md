@@ -27,6 +27,7 @@ blocks:
   - proj.cicd-services-gitops blocker #19 (deploy-infra unconditional)
 branch: task/0314-decouple-infra-app-flighting
 pr: https://github.com/Cogni-DAO/node-template/pull/883
+deploy_verified: true
 created: 2026-04-16
 updated: 2026-04-16
 labels: [ci-cd, deployment, spec-alignment, p0]
