@@ -45,11 +45,20 @@ EXPECTED_SHA="${EXPECTED_SHA:?EXPECTED_SHA is required (deploy-branch tip SHA)}"
 SSH_OPTS="${SSH_OPTS:--i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6}"
 ARGOCD_TIMEOUT="${ARGOCD_TIMEOUT:-300}"
 ACTIVE_SYNC_AFTER="${ACTIVE_SYNC_AFTER:-30}"
+PROMOTED_APPS="${PROMOTED_APPS:-}"
 
-# Catalog apps — must match infra/catalog/*.yaml (minus .yaml extension)
-APPS=(operator poly resy scheduler-worker sandbox-openclaw)
-
-echo "⏳ Waiting for ArgoCD apps to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
+# If caller specified which apps were promoted, wait only for those.
+# Apps not promoted in this run keep their existing overlay digest and are
+# not expected to change health — waiting for them adds false negatives
+# (e.g. sandbox-openclaw with a placeholder image that can never pull).
+# Falls back to full catalog for backwards compatibility.
+if [ -n "$PROMOTED_APPS" ]; then
+  IFS=',' read -r -a APPS <<< "$PROMOTED_APPS"
+  echo "⏳ Waiting for promoted apps (${PROMOTED_APPS}) to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
+else
+  APPS=(operator poly resy scheduler-worker sandbox-openclaw)
+  echo "⏳ Waiting for all catalog apps to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
+fi
 
 # SCP a remote script to the VM and execute it. Avoids heredoc quoting issues
 # and ensures all shell variables resolve on the remote.

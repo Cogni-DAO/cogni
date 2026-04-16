@@ -155,3 +155,92 @@ If row 1 fails at the new deploy-infra step, the most likely cause is a missing 
 - [ ] Row 8: Grafana Prometheus shows `up{env="preview"}` > 0
 
 When all eight are checked, mark bug.0312 Phase 2.5 `✅ DONE` in `work/projects/proj.cicd-services-gitops.md` row #6 and update the Environment Status table's "Compose infra healthy" cell for `Candidate-A` from `✅ (frozen at provision)` to `✅ (CI-reconciled)`.
+
+---
+
+## Session addendum — 2026-04-15 runtime findings
+
+Live investigation against main `c5db7f232` (post-#869, post-#870) surfaced concrete state a fresh agent needs before running the verification matrix above.
+
+### Confirmed state (read before acting)
+
+| Finding                                         | Detail                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `candidate-a` env secrets                       | **0 secrets set** — complete empty state, not partial. `preview` has ~40. `gh secret list --env candidate-a` returns empty.                                                                                                                                                                                                                                                                                            |
+| Deploy-infra step on candidate-flight           | ✅ live on main (`.github/workflows/candidate-flight.yml:186-259`). **Skipped on every flight** because `steps.ssh-setup.outputs.has_vm == 'false'` → `VM_HOST` unset.                                                                                                                                                                                                                                                 |
+| Candidate Flight end-to-end                     | ✅ works through smoke test. Dispatched `pr_number=865` → `deploy/candidate-a` overlay updated → Argo synced → `/readyz` 200 → lease released. Missing only the compose deploy-infra step.                                                                                                                                                                                                                             |
+| Flight Preview auto-trigger                     | ❌ **broken for every squash-merged PR**. Resolver builds `image_tag=pr-{N}-{mergeSHA}` but `pr-build.yml` tags as `pr-{N}-{PR_head_SHA}`. On squash merge these never match → resolver aborts at "Abort when no PR images exist". Both #869 and #870 hit this on their own post-merge auto-flight.                                                                                                                    |
+| Promote and Deploy (workflow_dispatch fallback) | ⚠️ partial. With `source_sha=6d901954` (off-main, has complete `preview-*` set), `promote-k8s` ✅, `deploy-infra` ❌ cancelled at "Wait for ArgoCD sync" after 15min. Argo on preview VM never reconciled the new overlay digests. `unlock-preview-on-failure` then failed with `scripts/ci/set-preview-review-state.sh: No such file or directory` — the task.0293 script doesn't exist at the off-main checkout ref. |
+| Build Multi-Node                                | Last success 2026-04-08. Has not run since. New CD chain (`flight-preview.yml`) never dispatches it as a fallback — the old `promote-merged-pr.yml` fallback path was removed in task.0293.                                                                                                                                                                                                                            |
+| GHCR tag inventory                              | `pr-*` tags exist for PRs: 656, 845, 848, 849, 850, 851, 856, 857, 859, 865, 868. Complete 5-target sets for 845/848/849/850/851/857/859/865/868. **None for #869 or #870** (both are infra/CI-only — `pr-build.yml` vacuously passed without pushing images).                                                                                                                                                         |
+| Main rebase consequence                         | Every SHA with a complete `preview-*` image set in GHCR except `53d9e3301e2b` (#785, ancient) is **off origin/main**. New CD dispatch to preview cannot be satisfied by existing artifacts without either re-tagging pr-_ → preview-_ or a full rebuild.                                                                                                                                                               |
+| VM health                                       | All six endpoints (test/preview × operator/poly/resy) return `/readyz 200`. `preview.cognidao.org/readyz` reports `{"version":"0"}` → still serving a pre-#865 build (before the build-SHA embed).                                                                                                                                                                                                                     |
+| Grafana Loki label `env`                        | Returns `["ci"]` only. No VM streams under `env=candidate-a` or `env=preview`. Compose alloy has never shipped from either VM since #869 widened the pod-log filter.                                                                                                                                                                                                                                                   |
+
+### What worked (this session's evidence)
+
+```bash
+# Candidate Flight dispatch — ran to completion, lease released cleanly.
+gh workflow run candidate-flight.yml --repo Cogni-DAO/node-template -f pr_number=865
+# → run 24480504763 success
+# → deploy/candidate-a HEAD: 3a8527580 candidate-flight: release pr-865 e7c23cf47302735…
+# → candidate-a /readyz 200 on all three nodes
+# → "Deploy Compose infra to candidate-a VM" step: SKIPPED (has_vm=false)
+```
+
+### What failed (this session's negative evidence)
+
+```bash
+# Promote and Deploy dispatched for preview with a known-complete preview-* SHA.
+gh workflow run promote-and-deploy.yml --repo Cogni-DAO/node-template \
+  -f environment=preview \
+  -f source_sha=6d901954ea53d345e81d1526d6baa393c890d021
+# → run 24480505655
+# → promote-k8s  ✅  (overlay digest push to deploy/preview succeeded)
+# → deploy-infra ❌  cancelled at 15min on "Wait for ArgoCD sync"
+# → unlock-preview-on-failure ❌  `scripts/ci/set-preview-review-state.sh: No such file or directory`
+# → preview `/readyz` still reports version=0 (unchanged)
+# → preview lease ended up at `unlocked` despite the script error (previous state)
+```
+
+### Unblock sequence for the next agent
+
+**Phase A — Secrets parity (pre-requisite for row 1 of verification matrix):**
+
+1. Determine the candidate-a VM host. Per proj.cicd-services-gitops.md Environment Status table: `84.32.109.160` (separate VM from preview `84.32.110.92`).
+2. **Confirm the target SSH pubkey is already installed on candidate-a VM's `~root/.ssh/authorized_keys`** before pushing any key secret. Per the user's security memory: _SSH keys require server-side pubkey FIRST_. Ask before writing.
+3. Run the diff from "Secret inventory" section above — should show ~40 missing secrets.
+4. `gh secret set --env candidate-a` for each missing name. Values must match preview's values **except** `VM_HOST` (per-VM).
+5. Re-dispatch `candidate-flight.yml -f pr_number=<N>` for any PR with complete pr-\* images. Expect `Deploy Compose infra to candidate-a VM` to run this time.
+6. Execute verification matrix rows 1-3 + 7.
+
+**Phase B — Fix Flight Preview squash-merge resolver (blocks rows 4-6):**
+
+The bug is in `scripts/ci/resolve-pr-build-images.sh` (or flight-preview.yml directly): `IMAGE_TAG=pr-${PR_NUMBER}-${HEAD_SHA}` uses the push SHA (merge commit) rather than the PR's _head_ SHA. Fix options:
+
+- **Option 1**: Resolve PR head SHA via `gh api repos/{}/pulls/{N}` and use that in `IMAGE_TAG`.
+- **Option 2**: Have `pr-build.yml` additionally tag images with the expected merge commit SHA at merge time (not viable — merge commit isn't known at build time).
+- **Option 3**: Add a fallback path that dispatches `Build Multi-Node` when pr-\* lookup fails (restores pre-task.0293 behavior for infra-only PRs).
+
+Option 1 is the smallest change. Option 3 is what task.0293's predecessor did; removed intentionally per task.0293 design.
+
+**Phase C — Close the CI-only/infra-only PR gap:**
+
+PRs that only touch `.github/`, `infra/`, `docs/`, `work/`, or `scripts/ci/` will NEVER produce `pr-*` images (pr-build.yml's affected-detection skips image builds). Either:
+
+- Amend `pr-build.yml` to always produce images (kills affected-only optimization).
+- Or extend Option 3 above to dispatch a from-scratch Build Multi-Node as fallback only for infra/CI-only PRs.
+- Or accept this class of PR cannot be flighted to candidate-a — document that for infra-only changes, promotion happens directly on merge via Build Multi-Node dispatch + Promote and Deploy.
+
+This is the structural gap behind proj.cicd-services-gitops.md blocker #12 and the Candidate-A Compose infra gap callout (line 68).
+
+### Ownership handoff
+
+A fresh agent taking this on should:
+
+1. Read `docs/spec/ci-cd.md § Preview Review Lock` + `work/items/bug.0312.*` first (spec truth).
+2. Execute Phase A (secrets parity) as an independent PR — it's the cheapest unblock and gets candidate-a deploy-infra shipping real evidence.
+3. File Phase B as a separate bug against the task.0293 design hole; should not be bundled with Phase A.
+4. Phase C is a design decision, not a code fix — needs an RFC-class PR against `docs/spec/ci-cd.md` that declares the policy for infra-only PRs.
+
+Open question for the user before Phase A starts: **is `SSH_DEPLOY_KEY` shared between candidate-a and preview, or does candidate-a need its own key generated + installed?** Answer determines whether Phase A is 1 secret or 3.

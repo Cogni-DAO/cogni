@@ -612,9 +612,18 @@ for node in operator poly resy; do
 done
 
 # Scheduler-worker secret
+# NOTE: COGNI_NODE_ENDPOINTS and COGNI_NODE_DBS belong in the configmap (set
+# by Kustomize overlay), NOT here. Putting them in the secret shadows the
+# configmap value (envFrom order: configmap first, secret second → secret wins)
+# and caused CrashLoopBackOff when the secret had UUID-only keys without
+# "operator=" named entry. See scorecard row 20.
 ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} create secret generic scheduler-worker-secrets \
   --from-literal=DATABASE_URL='${DATABASE_SERVICE_URL}' \
   --from-literal=SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN}' \
+  --from-literal=GH_REVIEW_APP_ID='${GH_REVIEW_APP_ID:-}' \
+  --from-literal=GH_REVIEW_APP_PRIVATE_KEY_BASE64='${GH_REVIEW_APP_PRIVATE_KEY_BASE64:-}' \
+  --from-literal=GH_WEBHOOK_SECRET='${GH_WEBHOOK_SECRET:-}' \
+  --from-literal=INTERNAL_OPS_TOKEN='${INTERNAL_OPS_TOKEN}' \
   --dry-run=client -o yaml | kubectl apply -f -"
 log_info "  Created scheduler-worker-secrets"
 
