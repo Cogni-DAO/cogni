@@ -164,6 +164,10 @@
 | 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
 | 2 | 5 | 1 | needs_review | bug.0275 | k8s migration Job fails — standalone app image lacks tsx + drizzle-kit | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 5 | 2 | needs_design | task.0310 | Rename k8s staging namespace and overlays to preview | CI/CD Pipeline | proj.cicd-services-gitops |
+| 2 | 5 | 1 | needs_design | task.0315 | Polymarket Data-API read methods — leaderboard, activity, positions | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 5 | 2 | needs_design | task.0316 | Poly wallet-ranking batch job + poly_tracked_wallets table | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 5 | 2 | needs_design | task.0317 | Live wallet poller → ObservationEvent(kind=polymarket_wallet_trade) | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 5 | 2 | needs_design | spike.0318 | Validate copy-signal edge vs market baseline (2-week instrumentation) | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 8 | 2 | needs_design | task.0280 | Per-node DB isolation for worker activities — evaluate approach | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
@@ -324,6 +328,7 @@
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
+| 2 | spike.0314 | Research: copy-trading existing Polymarket wallets from the poly node | Cogni Poly | proj.poly-prediction-bot |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | bug.0194 | Internal graph API conflates stateKey with runId — headless runs create phantom threads | Unified Graph Launch | proj.unified-graph-launch |
 
