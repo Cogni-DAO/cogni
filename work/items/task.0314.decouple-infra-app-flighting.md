@@ -2,7 +2,7 @@
 id: task.0314
 type: task
 title: "Decouple infra flighting from app flighting — two independent levers"
-status: needs_implement
+status: needs_closeout
 priority: 0
 rank: 1
 estimate: 5
@@ -41,7 +41,7 @@ labels: [ci-cd, deployment, spec-alignment, p0]
 
 Two independent regressions result:
 
-**R1. Every app-only flight pays the infra cost.** ~5–8 min per flight, unconditionally. Violates ci-cd.md axiom: *Argo owns reconciliation. CI writes desired state to git; Argo syncs from git.*
+**R1. Every app-only flight pays the infra cost.** ~5–8 min per flight, unconditionally. Violates ci-cd.md axiom: _Argo owns reconciliation. CI writes desired state to git; Argo syncs from git._
 
 **R2. The infra rsync source is the PR's own checkout.** App PRs branched before an infra change ship stale compose config to the VM, even though they didn't touch infra. PR #879 (poly agent API — app-only) failed twice on this: its `docker-compose.yml` predated #880's litellm GHCR fix, and deploy-infra rsynced the stale file. Resolution required rebasing #879 on main. That rebase requirement is not documented anywhere and is a silent foot-gun.
 
@@ -196,17 +196,17 @@ gh workflow run candidate-flight-infra.yml -f ref=main
 
 ```yaml
 # promote-and-deploy.yml — deploy-infra job only
-  deploy-infra:
-    needs: promote-k8s
-    if:   needs.promote-k8s.result == 'success'
-    steps:
-      - name: Checkout app source
-        uses: actions/checkout@v4
-        with:
-          ref: main                      # ← was: ${{ steps.env.outputs.head_sha }}
-          # Everything else stays.
-      - name: Deploy Compose infra
-        run: bash scripts/ci/deploy-infra.sh   # now defaults to --ref main; no args change
+deploy-infra:
+  needs: promote-k8s
+  if: needs.promote-k8s.result == 'success'
+  steps:
+    - name: Checkout app source
+      uses: actions/checkout@v4
+      with:
+        ref: main # ← was: ${{ steps.env.outputs.head_sha }}
+        # Everything else stays.
+    - name: Deploy Compose infra
+      run: bash scripts/ci/deploy-infra.sh # now defaults to --ref main; no args change
 ```
 
 Why this is enough: the job previously rsynced from its own checkout (= merge commit SHA). Since `deploy-infra.sh` still calls `$REPO_ROOT` internally, checking out `main` means it rsyncs from main. Even simpler than passing `--ref` explicitly — the script's new default wins.
@@ -217,23 +217,25 @@ Downstream `verify`, `lock-preview-on-success`, `unlock-preview-on-failure` jobs
 
 Two independent locks, by design:
 
-| Lever | Lock | Mechanism | Why |
-|---|---|---|---|
-| `flight-app.sh candidate-a` | digest slot | existing `infra/control/candidate-lease.json` on `deploy/candidate-a` (atomic commit push) | one PR owns the slot's deployed digest at a time |
-| `flight-infra.sh *` | VM compose dir | GHA `concurrency: group: infra-${env}` (cancel-in-progress: false) | prevents overlapping rsync/compose up; VM-level state |
-| `promote-and-deploy.yml` | env-level | existing `concurrency: group: promote-deploy-${env}` | unchanged from today |
+| Lever                       | Lock           | Mechanism                                                                                  | Why                                                   |
+| --------------------------- | -------------- | ------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `flight-app.sh candidate-a` | digest slot    | existing `infra/control/candidate-lease.json` on `deploy/candidate-a` (atomic commit push) | one PR owns the slot's deployed digest at a time      |
+| `flight-infra.sh *`         | VM compose dir | GHA `concurrency: group: infra-${env}` (cancel-in-progress: false)                         | prevents overlapping rsync/compose up; VM-level state |
+| `promote-and-deploy.yml`    | env-level      | existing `concurrency: group: promote-deploy-${env}`                                       | unchanged from today                                  |
 
 Locks are orthogonal. A running app flight does NOT block an infra reconcile on the same env, and vice versa — they touch different state (git deploy branch vs VM compose dir). If an agent wants both to run atomically it dispatches app first, waits, then infra.
 
 ### Script boundaries — I/O contract
 
 **`scripts/ci/flight-app.sh`**:
+
 - Inputs (env vars from workflow secrets layer): `GITHUB_TOKEN`, `IMAGE_NAME`, `GHCR_DEPLOY_TOKEN`, `GHCR_USERNAME`, SSH key for `reconcile-argocd-appset`, `VM_HOST`.
 - Inputs (flags): `--pr N` OR `--source-sha SHA`, `--env {candidate-a|preview|production}`.
 - Outputs: exit 0 on success, non-zero on failure. Writes `$GITHUB_OUTPUT` with `deploy_branch_sha`, `head_sha`, `image_tag` if `$GITHUB_OUTPUT` is set.
 - Side effects: commits to `deploy/{env}`, reconciles AppSet, waits for Argo.
 
 **`scripts/ci/flight-infra.sh`**:
+
 - Inputs (env vars): all the runtime secrets currently passed through the SSH heredoc in `deploy-infra.sh:944`.
 - Inputs (flags): `--env {candidate-a|preview|production}`, `--ref <git-ref>` (default: `main`).
 - Outputs: exit 0/non-zero.
@@ -284,12 +286,12 @@ No backwards-compat work — nothing is renamed or deleted, so existing callers 
 
 **Dispatch surface:**
 
-| Workflow | Purpose | Touches VM? | Touches Argo? |
-|---|---|---|---|
-| `candidate-flight.yml` (existing, -1 step) | Fly a PR's app digests to candidate-a | No | Yes |
-| `candidate-flight-infra.yml` (new) | Reconcile candidate-a VM compose from a git ref | Yes | No |
-| `promote-and-deploy.yml` (existing, 1-line diff) | Merge-triggered preview/prod promotion | Yes | Yes |
-| `flight-preview.yml` (existing, untouched) | Merge-to-main → dispatch promote-and-deploy with lease | No directly | No directly |
+| Workflow                                         | Purpose                                                | Touches VM? | Touches Argo? |
+| ------------------------------------------------ | ------------------------------------------------------ | ----------- | ------------- |
+| `candidate-flight.yml` (existing, -1 step)       | Fly a PR's app digests to candidate-a                  | No          | Yes           |
+| `candidate-flight-infra.yml` (new)               | Reconcile candidate-a VM compose from a git ref        | Yes         | No            |
+| `promote-and-deploy.yml` (existing, 1-line diff) | Merge-triggered preview/prod promotion                 | Yes         | Yes           |
+| `flight-preview.yml` (existing, untouched)       | Merge-to-main → dispatch promote-and-deploy with lease | No directly | No directly   |
 
 **Behaviors guaranteed:**
 
