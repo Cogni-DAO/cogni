@@ -2,7 +2,7 @@
 id: task.0314
 type: task
 title: "Decouple infra flighting from app flighting — two independent levers"
-status: needs_implement
+status: needs_closeout
 revision: 1
 priority: 0
 rank: 1
@@ -373,7 +373,19 @@ Purpose: verify no doc or runbook advertises behavior that no longer matches (e.
 
 ## Review Feedback
 
-### Revision 1 (2026-04-16) — REQUEST CHANGES
+### Revision 1 (2026-04-16) — addressed
+
+All five items addressed in commit following this note. Summary:
+
+- **B1** — `candidate-flight-infra.yml` now has a `Setup SSH` step identical in shape to `promote-and-deploy.yml`'s (writes `~/.ssh/deploy_key`, `ssh-keyscan`, connection probe, `VM_HOST` empty-check → `exit 0`). Deploy-Compose step gated on `env.VM_HOST != ''`.
+- **S1** — `promote-and-deploy.yml` deploy-infra job checkout reverted to `ref: head_sha` (source-SHA invariant preserved for AppSet reconcile + wait-for-argocd). The script gets `--ref main` explicitly at the call site.
+- **S2** — `deploy-infra.sh` `--ref` parsing now rejects `--ref` with no value or with another flag as value; clear error message, exits 2.
+- **S3** — `promote-and-deploy.yml:430` now invokes `scripts/ci/deploy-infra.sh --ref main` explicitly instead of relying on the script's default.
+- **S4** — Dropped the placeholder `REPO_ROOT="$CALLER_REPO"` assignment; `REPO_ROOT` is now only set from the detached worktree, so any accidental pre-worktree read would hit `set -u` and fail loudly.
+
+Local dry-run confirmed still working end-to-end post-changes.
+
+### Revision 1 (2026-04-16) — REQUEST CHANGES (original)
 
 **Blocking:**
 

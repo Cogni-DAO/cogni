@@ -28,7 +28,7 @@
 | 0 | 1 | 3 | needs_design | task.0296 | Candidate slot controller v0 — one-slot PR flight control plane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 1 | needs_implement | bug.0307 | Operator OOM on candidate-a — memory limit too low, manual canary bump never landed in overlay | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 4 | needs_design | task.0309 | QA agent — reads work item, exercises feature, confirms observability post-flight | CI/CD Pipeline | proj.cicd-services-gitops |
-| 0 | 1 | 5 | needs_implement | task.0314 | Decouple infra flighting from app flighting — two independent levers | CI/CD Pipeline | proj.cicd-services-gitops |
+| 0 | 1 | 5 | needs_closeout | task.0314 | Decouple infra flighting from app flighting — two independent levers | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_merge | task.0258 | Multi-node stack test infrastructure — per-node billing + data isolation tests | Operator Plane | proj.operator-plane |
 | 0 | 2 | 5 | needs_design | task.0260 | Monorepo CI pipeline — affected-scope testing + multi-node test lane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 2 | 3 | needs_design | task.0277 | Deployment validation skill — verify system account, a2a connectivity, full health | CI/CD Pipeline | proj.cicd-services-gitops |

@@ -45,6 +45,11 @@ DRY_RUN=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ref)
+      if [[ $# -lt 2 || "$2" == --* ]]; then
+        echo "--ref requires a value (got: '${2:-<end-of-args>}')" >&2
+        echo "Usage: $0 [--ref <git-ref>] [--dry-run]" >&2
+        exit 2
+      fi
       REF="$2"
       shift 2
       ;;
@@ -60,15 +65,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Resolve repo root robustly (caller's working tree — used for git operations only)
+# Caller's working tree — used for git operations only (fetch + worktree add).
+# REPO_ROOT is set later from the detached worktree at --ref, so any pre-worktree
+# read of REPO_ROOT would be a bug — let `set -u` catch it.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CALLER_REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
-
-# REPO_ROOT is reassigned below to the detached worktree at --ref once ARTIFACT_DIR
-# exists. Until then, anything that reads REPO_ROOT would be wrong — the whole
-# script uses REPO_ROOT only for rsync/scp of source tree files (lines ~903-923),
-# all of which run AFTER the worktree is set up.
-REPO_ROOT="$CALLER_REPO"
 
 on_fail() {
   code=$?
@@ -358,7 +359,8 @@ fi
 REF_SHA=$(git -C "$SRC_WORKTREE" rev-parse HEAD)
 log_info "Source worktree at $REF_SHA ($SRC_WORKTREE)"
 
-# Reassign REPO_ROOT so all subsequent rsync/scp source paths use the clean worktree.
+# Assign REPO_ROOT to the detached worktree so all rsync/scp source paths
+# below come from the clean --ref tree, not the caller's checkout.
 REPO_ROOT="$SRC_WORKTREE"
 
 log_info "Deploying infrastructure to $ENVIRONMENT..."

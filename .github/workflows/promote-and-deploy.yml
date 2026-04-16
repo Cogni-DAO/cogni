@@ -351,15 +351,15 @@ jobs:
       COGNI_NODE_ENDPOINTS: ${{ secrets.COGNI_NODE_ENDPOINTS }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
     steps:
-      # task.0314: checkout `main`, not head_sha. deploy-infra.sh now sources
-      # infra/compose/** from a detached `git worktree add` of its `--ref` flag
-      # (default `main`), so the caller no longer rsyncs from its own checkout.
-      # This checkout exists only to run the script; the rsync source is the
-      # worktree the script builds.
+      # Checkout the source-artifact SHA for AppSet YAML, wait-for-argocd
+      # inputs, and other job-internal files. deploy-infra.sh itself sources
+      # infra/compose/** from a detached `git worktree add --ref main` so
+      # infra rsync is independent of head_sha (task.0314). This separation
+      # preserves the source-SHA invariant for the rest of the job while
+      # still fixing the stale-PR-rsync failure mode.
       - uses: actions/checkout@v4
         with:
-          ref: main
-          fetch-depth: 0
+          ref: ${{ needs.promote-k8s.outputs.head_sha }}
 
       - name: Setup SSH
         run: |
@@ -427,7 +427,7 @@ jobs:
 
       - name: Deploy infrastructure
         if: env.VM_HOST != ''
-        run: scripts/ci/deploy-infra.sh
+        run: scripts/ci/deploy-infra.sh --ref main
 
       - name: Upload deployment artifacts
         if: always()
