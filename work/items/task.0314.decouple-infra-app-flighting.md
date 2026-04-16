@@ -296,19 +296,98 @@ No backwards-compat path — `candidate-flight.yml` is agent-triggered, not user
 - [ ] **SIMPLE_SOLUTION** — no new OSS, no new runtimes. All existing scripts reused.
 - [ ] **ARCHITECTURE_ALIGNMENT** — spec-aligns to ci-cd.md's already-written lane model.
 
+### Desired End State
+
+**Workflows an agent or human can dispatch:**
+
+| Workflow | Purpose | Dispatches | Touches VM? | Touches Argo? |
+|---|---|---|---|---|
+| `candidate-flight-app.yml` | Fly a PR's app digests to candidate-a | `workflow_dispatch { pr_number }` | No | Yes |
+| `candidate-flight-infra.yml` | Reconcile candidate-a VM compose from a git ref | `workflow_dispatch { ref (default: main) }` | Yes | No |
+| `promote-and-deploy.yml` | Merge-triggered preview/prod promotion (unchanged 5-job graph) | `flight-preview.yml` → `workflow_dispatch` | Yes | Yes |
+| `flight-preview.yml` | Merge-to-main → dispatch promote-and-deploy with lease | `push: main` | No directly | No directly |
+
+**Scripts owning all non-trivial logic:**
+
+| Script | Purpose | Callers |
+|---|---|---|
+| `scripts/ci/flight-app.sh` | Resolve digests → overlay commit → Argo reconcile → verify | `candidate-flight-app.yml`, `promote-and-deploy.yml` (via `--phase promote-only`) |
+| `scripts/ci/flight-infra.sh` | `git worktree add <ref>` → rsync → SSH → compose up → tree-hash stamp | `candidate-flight-infra.yml`, `promote-and-deploy.yml` |
+
+**Behaviors guaranteed:**
+
+- App flights never SSH a VM. Infra flights never commit to a `deploy/*` branch. They are composable; they are never coupled.
+- Infra rsync source is a named git ref (default `main`), never a PR checkout.
+- Preview/prod merge-on-main behavior is byte-identical: same 5-job graph, same lease, same lock-gate transitions.
+- An app PR branched before an infra change on main can be flown to candidate-a without rebasing — its stale compose file is never touched.
+- Flight duration: app lever <2 min when GHCR digests exist; infra lever ~5 min.
+
 ### Files
 
-- Create: `scripts/ci/flight-app.sh` — umbrella script for app lever, ~60 lines, composes existing scripts.
-- Create: `scripts/ci/flight-infra.sh` — rename of `deploy-infra.sh` + `--ref` parameter.
-- Create: `.github/workflows/candidate-flight-app.yml` — thin dispatcher for app lever.
-- Create: `.github/workflows/candidate-flight-infra.yml` — thin dispatcher for infra lever.
-- Modify: `.github/workflows/promote-and-deploy.yml` — replace inline promote+deploy-infra with script calls.
-- Delete: `.github/workflows/candidate-flight.yml` — replaced by the two new files.
-- Delete: `scripts/ci/deploy-infra.sh` — replaced by `flight-infra.sh` (git history preserves; update any stale references in `AGENTS.md` + docs).
-- Modify: `work/items/task.0281-canary-cicd-parity-staging-promotion.md` — `status: done` with supersede note pointing at task.0314.
-- Modify: `work/projects/proj.cicd-services-gitops.md` — mark blockers #18 and #19 ✅ DONE, add reference to task.0314.
-- Modify: `docs/spec/ci-cd.md` — update workflow inventory if it names the files; the axioms need no change (this task spec-aligns to them).
-- Test: manual dispatch matrix — `candidate-flight-app` on app-only PR (no SSH in logs), `candidate-flight-infra` standalone (no overlay changes in `deploy/candidate-a`), `promote-and-deploy` on a preview promotion (both run, lock-gate intact).
+**Create (new code):**
+
+- `scripts/ci/flight-app.sh` — umbrella script for app lever, ~60 lines, composes existing scripts. Supports `--phase promote-only`.
+- `scripts/ci/flight-infra.sh` — successor to `deploy-infra.sh` with `--ref` + `--dry-run` + `.tree-hash` stamp.
+- `.github/workflows/candidate-flight-app.yml` — thin dispatcher for app lever.
+- `.github/workflows/candidate-flight-infra.yml` — thin dispatcher for infra lever.
+
+**Modify (rewire internals, preserve contracts):**
+
+- `.github/workflows/promote-and-deploy.yml` — swap `promote-k8s` and `deploy-infra` job step-contents for script calls. Job graph, outputs, `needs:`, `if:`, lock-gate untouched.
+
+**Delete:**
+
+- `.github/workflows/candidate-flight.yml` — replaced by the two new candidate workflows.
+- `scripts/ci/deploy-infra.sh` — replaced by `flight-infra.sh` (git history preserves).
+
+**Work items:**
+
+- `work/items/task.0281-canary-cicd-parity-staging-promotion.md` — set `status: done`, add supersede note → task.0314.
+- `work/projects/proj.cicd-services-gitops.md` — mark blockers **#18** (PAT-dispatched workflow chain) and **#19** (deploy-infra unconditional) ✅ DONE; add a row in the completed-tasks section for task.0314.
+- `work/items/_index.md` — regen.
+
+### Documentation & Guides to Update
+
+**Specs (contracts and invariants):**
+
+- `docs/spec/ci-cd.md` — three surgical updates:
+  1. Line ~82 (Minimum Authoritative Validation): `candidate-flight` → `candidate-flight-app` (clarify the app lever is the merge gate; infra lever is orthogonal).
+  2. Line ~156 (Preview Review Lock transitions table): the `unlock-preview-on-failure` row cites `promote-k8s`, `deploy-infra`, `verify`, `e2e` — still accurate since job names don't change; re-verify after implementation.
+  3. Workflow inventory (if one exists after this refactor — add if missing): enumerate the four workflows + two umbrella scripts + deletion list so future readers see the lane topology at a glance.
+
+**Scorecards and planning:**
+
+- `work/projects/proj.cicd-services-gitops.md` — Pipeline Health box (line ~26) currently says `build → promote → deploy-infra → verify → e2e → preview → release → production`. Update to reflect two-lever topology: `build → app-flight + infra-flight (independent) → verify → preview → release → production`. Move blockers #18 and #19 out of Active Blockers into a completed/supersedes reference.
+
+**Agent skills (operational runbooks):**
+
+- `.claude/skills/pr-coordinator-v0/SKILL.md` — four call-sites need updating:
+  1. Line 77 (Dashboard authoritative sources): commit message format `candidate-flight: pr-<N> <sha>` — verify the new `flight-app.sh` preserves this commit subject, update if it changes.
+  2. Line 113 (Flight step): `gh workflow run candidate-flight.yml` → `candidate-flight-app.yml`.
+  3. Line 219 (Manual Deploy Escape Hatch): the "infra-only PR can't ride candidate-flight" gap is CLOSED by `candidate-flight-infra.yml`. Rewrite this subsection: "Infra-only PRs (no built images) now ride the infra lever directly — `gh workflow run candidate-flight-infra.yml -f ref=<PR branch>` once v1 adds per-ref support. For v0 (main-only), merge first and then dispatch infra lever from main." Remove the "manual cherry-pick to candidate-a" workaround.
+  4. Line 245 (VM-state discipline references): `scripts/ci/deploy-infra.sh` → `scripts/ci/flight-infra.sh`.
+
+**AGENTS.md files (sibling docs):**
+
+- `scripts/ci/AGENTS.md` — rename references, add the two umbrella scripts and their composition pattern.
+- `infra/compose/runtime/AGENTS.md` — update any pointer to `deploy-infra.sh` → `flight-infra.sh`.
+- `.github/workflows/AGENTS.md` (if present) — update workflow inventory.
+
+**Runbooks (grep pass required):**
+
+- `docs/runbooks/*.md` — grep for `candidate-flight.yml`, `deploy-infra.sh`, `deploy-infra`; fix every hit.
+
+**Callers audit** (runs as step 1 of Migration Plan above) — full grep:
+
+```bash
+rg -l "candidate-flight\.yml|deploy-infra\.sh|scripts/ci/deploy-infra" \
+  --glob '!work/items/_index.md' \
+  --glob '!.claude/worktrees/**'
+```
+
+Every file in that list must be handled in the same PR.
+
+**Test coverage:** manual dispatch matrix (see Validation section) is the authoritative proof. No new unit/integration tests — the system under test is the workflow graph itself.
 
 ## Validation
 
