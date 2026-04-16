@@ -1,10 +1,10 @@
 ---
 id: task.0315
 type: task
-title: "Poly copy-trade prototype — v0 top-wallet scoreboard, v0.1 live 1-wallet mirror"
+title: "Poly copy-trade prototype — v0 top-wallet scoreboard, v0.1 shadow 1-wallet mirror"
 status: needs_implement
 priority: 2
-estimate: 3
+estimate: 5
 rank: 5
 summary: "One-shot prototype task. v0: poly-brain answers 'who are the top Polymarket wallets and what are their activity scores?' via a new core__wallet_top_traders tool backed by the Polymarket Data API. v0.1: pick one wallet, mirror its new fills from a Cogni-owned proxy wallet using @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
 outcome: "A running prototype in the poly node: (v0) ask poly-brain 'top wallets this week' and get a ranked, scored list inline in chat; (v0.1) set ONE tracked wallet via env/config, a 30-second poller detects new fills, a mirror order is placed on Polymarket via @polymarket/clob-client with a small fixed USDC size. All behind a DRY_RUN flag until we trust it."
@@ -34,10 +34,10 @@ Research (spike.0314) mapped the OSS and data landscape. Rather than decompose i
 
 ### Outcome
 
-Two working increments behind feature flags, both driven from `poly-brain`:
+Two working increments, shipped as **two PRs under this one task**:
 
-- **v0 — scoreboard:** user asks `poly-brain` "who are the top Polymarket wallets right now?" → agent calls a new `core__wallet_top_traders` tool → response is a scored list with wallet, PnL, win-rate, volume, activity score.
-- **v0.1 — one-wallet mirror:** operator sets one target wallet in config. A 30-second poller detects new fills on that wallet. Each fill triggers a proportional mirror order via `@polymarket/clob-client` from a Cogni-owned proxy wallet. Runs `DRY_RUN=true` by default — logs the order it _would_ place without hitting the CLOB.
+- **v0 (PR-A, read-only, merges independently) — scoreboard:** user asks `poly-brain` "who are the top Polymarket wallets right now?" → agent calls a new `core__wallet_top_traders` tool → response is a scored list with wallet, PnL, win-rate, volume, activity score.
+- **v0.1 (PR-B, behind feature flag) — shadow mirror of one wallet:** operator sets one target wallet in config. A 30-second scheduler-core job detects new fills, decides a mirror order, and — **only if every guard passes** — places it via `@polymarket/clob-client` from a Cogni-owned proxy wallet. Default mode is `DRY_RUN=true` (shadow): decisions logged and persisted, no CLOB call. Live mode requires flipping both a DB kill-switch row AND the env var.
 
 ### Approach
 
@@ -45,7 +45,7 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 
 1. **Polymarket Data-API calls** — three thin methods on the existing `PolymarketAdapter`: `listTopTraders`, `listUserActivity`, `listUserPositions`. No new port, no new package.
 2. **v0 scoreboard tool** — one new LangGraph tool `core__wallet_top_traders` cloned from the `core__market_list` shape (`packages/ai-tools/src/tools/market-list.ts`). Activity score = simple blend of PnL × win-rate × log(volume); premature to over-engineer.
-3. **v0.1 mirror loop** — a `@cogni/scheduler-core` job registered under `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts`, mirroring the shipped `syncGovernanceSchedules.job.ts` pattern. Every 30 s it polls `listUserActivity(TARGET_WALLET)`, dedupes on `(wallet, fill_id)`, and for each new fill calls `@polymarket/clob-client` to place a matching GTC limit order sized at `MIRROR_USDC`. Guarded by `DRY_RUN` (default `true`), hard daily cap, and `pg_advisory_lock` for single-writer safety across replicas.
+3. **v0.1 mirror loop** — a `@cogni/scheduler-core` job registered under `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts`, mirroring the shipped `syncGovernanceSchedules.job.ts` pattern. Every 30 s it polls `listUserActivity(TARGET_WALLET)`, dedupes against a new Postgres table `poly_copy_trade_fills(wallet, fill_id, decided_at, order_id)` (PK `(wallet, fill_id)`), decides a mirror order with **fixed-USDC sizing** (`MIRROR_USDC` per fill — _not_ proportional to the tracked wallet; chosen as the simpler of the two products), and for each new fill calls `@polymarket/clob-client` if and only if every guard passes. Guards: `DRY_RUN` default `true`, DB-row kill switch `poly_copy_trade_config.live_enabled`, `pg_advisory_lock` for single-writer safety, hard daily USDC cap, hard fills-per-hour cap, legal-gate env assertion. Feature flag: job inert unless `COPY_TRADE_TARGET_WALLET` is set. Private-key load gated on `process.env.POLY_ROLE === 'trader'` so web replicas never hold the signer key.
 
 **Reuses:**
 
@@ -77,11 +77,20 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 
 **v0.1 mirror (new, small — follows existing `bootstrap/jobs/*.job.ts` + `@cogni/scheduler-core` pattern):**
 
-- `nodes/poly/app/src/features/copy-trade/mirror-service.ts` — pure domain logic: dedupe `(wallet, fill_id)`, sizing, hard-cap check, decide-to-place. No I/O.
-- `nodes/poly/app/src/features/copy-trade/clob-executor.ts` — thin wrapper around `@polymarket/clob-client`. Takes a decided order, signs + places it (or no-ops under `DRY_RUN=true`). Owns the only import of the clob client and the proxy-wallet private key.
-- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — `scheduler-core` job that polls `listUserActivity(TARGET_WALLET)` every 30 s, calls the mirror-service, calls the clob-executor. Mirrors the shape of `syncGovernanceSchedules.job.ts`. Uses `pg_advisory_lock` so only one replica runs the loop.
-- `nodes/poly/app/src/shared/env/server-env.ts` — add `COPY_TRADE_*` env vars (all optional; feature inert when `COPY_TRADE_TARGET_WALLET` unset).
+- `nodes/poly/app/src/features/copy-trade/mirror-service.ts` — pure domain logic: persisted-dedupe query, sizing (fixed USDC), daily-cap check, fills-per-hour check, legal-gate check, kill-switch check → emits a `MirrorDecision` (`place` / `skip-reason`). No I/O beyond the one dedupe-table query.
+- `nodes/poly/app/src/features/copy-trade/clob-executor.ts` — thin wrapper around `@polymarket/clob-client`. **Only** importer of the clob client and the proxy-wallet private key. Module loads via lazy dynamic `import()` gated on `process.env.POLY_ROLE === 'trader'` so web / scheduler-sync replicas never materialize the key in memory. No-ops under `DRY_RUN=true`.
+- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — `scheduler-core` job, polls `listUserActivity(TARGET_WALLET)` every 30 s, persists every decision (placed or skipped) with reason to Pino + a `poly_copy_trade_decisions` log table, acquires `pg_advisory_lock` to ensure single-writer.
+- `nodes/poly/app/src/shared/db/schema.ts` — add two tables:
+  - `poly_copy_trade_fills (wallet text, fill_id text, decided_at timestamptz, order_id text null, PRIMARY KEY (wallet, fill_id))` — the dedupe source of truth.
+  - `poly_copy_trade_config (singleton_id int PK = 1, live_enabled boolean not null default false, updated_at timestamptz, updated_by text)` — the runtime kill switch, must be `true` AND `DRY_RUN=false` for a real order to place.
+- `nodes/poly/app/src/shared/env/server-env.ts` — add `COPY_TRADE_TARGET_WALLET`, `COPY_TRADE_MIRROR_USDC`, `COPY_TRADE_DRY_RUN` (default `true`), `COPY_TRADE_MAX_DAILY_USDC`, `COPY_TRADE_MAX_FILLS_PER_HOUR`, `COPY_TRADE_OPERATOR_JURISDICTION` (must be set; checked against a block-list), `POLY_ROLE`.
 - `.env.example` — document the new env vars.
+
+**Observability:**
+
+- One Pino log per job tick with (new_fills, skipped_reason_counts, placed_count, cap_remaining).
+- Prometheus counters: `poly_copy_trade_fills_seen_total`, `poly_copy_trade_decisions_total{outcome=placed|skipped|error, reason=...}`, `poly_copy_trade_live_orders_total`, `poly_copy_trade_cap_hit_total{dimension=daily|hourly}`.
+- Grafana dashboard row (one new panel set) referenced in the PR description; no new dashboard file in this task.
 
 **Secret boundary (proxy-wallet keys):**
 
@@ -94,7 +103,16 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 
 - Contract tests for the three adapter methods (fixture-based).
 - One stack test asserting `poly-brain` can invoke `core__wallet_top_traders` end-to-end.
-- One unit test for the mirror worker's dedupe + sizing logic (no live CLOB call in CI).
+- Unit tests for mirror-service: persisted dedupe, daily cap, hourly cap, legal gate, kill-switch — one test per skip-reason branch.
+- Integration test: a full tick in shadow mode inserts a `poly_copy_trade_fills` row and does NOT import `@polymarket/clob-client`.
+- No live CLOB call in CI. The `DRY_RUN=false` path is exercised manually once, in a controlled run, and the `order_id` pasted into the PR description as evidence.
+
+**Verification of `@polymarket/clob-client` (do this before starting PR-B — 30 min, no code):**
+
+- Confirm: proxy-wallet signing flow supported end-to-end in the TS SDK (not just Python).
+- Confirm: L2 API-key auth (`POLY_CLOB_API_KEY/SECRET/PASSPHRASE`) path exists.
+- Confirm: `NegRiskAdapter` / multi-outcome markets are addressable.
+- If any gap: either scope v0.1 to single-outcome markets only, or fall back to `viem` + `@polymarket/order-utils` for raw EIP-712 signing. Record the outcome in the PR description.
 
 ### Invariants
 
@@ -102,19 +120,24 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 
 - [ ] TS_ONLY_RUNTIME: no Python, no IPC, no new runtime
 - [ ] NO_NEW_PACKAGE: all new code lives in existing `packages/market-provider`, `packages/ai-tools`, or `nodes/poly/app`
-- [ ] NO_NEW_PORT: no new port interfaces — adapter-local methods + app-local capability
+- [ ] NO_NEW_PORT_PACKAGE: no new `packages/*-port` — a `WalletCapability` interface exported from `packages/ai-tools` alongside `MarketCapability` is OK; a full port package is not
 - [ ] CONTRACT_IS_SOT: Zod schemas for Data-API + tool input/output (spec: architecture)
 - [ ] CAPABILITY_NOT_ADAPTER: the tool imports the capability interface, not the adapter
 - [ ] TOOL_ID_NAMESPACED: `core__wallet_top_traders`, `effect: read_only` (spec: architecture)
 - [ ] DRY_RUN_DEFAULT: `COPY_TRADE_DRY_RUN` defaults to `true`; real trades require an explicit flip
-- [ ] HARD_CAP: mirror-worker enforces `COPY_TRADE_MAX_DAILY_USDC` and refuses further orders past the cap
-- [ ] IDEMPOTENT_FILLS: in-memory `(wallet, fill_id)` dedupe; restart replays are logged, not re-executed
+- [ ] DEDUPE_PERSISTED: dedupe via `poly_copy_trade_fills` Postgres table keyed `(wallet, fill_id)`, NOT in-memory — restart crash does not double-fire
+- [ ] KILL_SWITCH_DB_ROW: a real order requires `poly_copy_trade_config.live_enabled = true` AND `DRY_RUN=false` — an operator flips the DB row to halt instantly without redeploy
+- [ ] HARD_CAP_DAILY: job enforces `COPY_TRADE_MAX_DAILY_USDC`
+- [ ] HARD_CAP_HOURLY: job enforces `COPY_TRADE_MAX_FILLS_PER_HOUR`
+- [ ] LEGAL_GATE: `COPY_TRADE_OPERATOR_JURISDICTION` must be set and not in the block-list (`US` included) for any live order; shadow mode runs regardless
+- [ ] KEY_IN_TRADER_ROLE_ONLY: `clob-executor.ts` loads the proxy-wallet private key only when `POLY_ROLE === 'trader'`; web / other-role replicas never materialize it (dynamic import boundary)
 - [ ] SIMPLE_SOLUTION: port patterns from OSS references; no ranking pipeline, no awareness-plane tables (spec: architecture)
-- [ ] SIMPLE_OVER_GENERIC: one target wallet, one sizing rule, one proxy wallet — no multi-tenancy
+- [ ] SIMPLE_OVER_GENERIC: one target wallet, one sizing rule (fixed USDC per fill), one proxy wallet — no multi-tenancy
 - [ ] SCHEDULER_CORE_FOR_BACKGROUND: v0.1 loop runs as a `bootstrap/jobs/*.job.ts` via `@cogni/scheduler-core`, not a bespoke `setInterval` (spec: architecture)
 - [ ] SINGLE_WRITER: job acquires `pg_advisory_lock` so multi-replica deployments don't double-fire (mirrors `syncGovernanceSchedules.job.ts`)
 - [ ] SECRETS_STAY_IN_EXECUTOR: the proxy-wallet private key is imported only by `clob-executor.ts`; tool code, capability code, and the graph never touch it (spec: architecture)
 - [ ] LLM_STAYS_IN_GRAPH: the mirror loop contains no LLM calls; v0 scoreboard reasoning happens in `poly-brain` via the tool (spec: langgraph-patterns)
+- [ ] OBSERVABILITY_COMMITMENT: every decision (placed / skipped-reason / error) emits a Pino log and increments a Prometheus counter (spec: architecture)
 
 ## Validation
 
@@ -124,17 +147,24 @@ Two working increments behind feature flags, both driven from `poly-brain`:
 - [ ] Stack test exercises the tool end-to-end against a recorded fixture
 - [ ] Contract test covers malformed Data-API response (fails closed)
 
-**v0.1:**
+**v0.1 (merge gates — all must pass before PR-B merges):**
 
-- [ ] With `DRY_RUN=true` and a live target wallet, the mirror worker logs a would-be order within ≤60 s of a real fill on that wallet
-- [ ] With `DRY_RUN=false`, a real mirror order is placed on Polymarket for the configured `MIRROR_USDC` amount (manually verified once, in a controlled run)
-- [ ] Hard cap refuses further orders after hitting `COPY_TRADE_MAX_DAILY_USDC`
-- [ ] Restarting the worker does not re-execute already-processed fills (in-memory dedupe survives the poll window; cross-restart re-runs are acceptable for a prototype and logged loudly)
+- [ ] With `DRY_RUN=true` and a live target wallet, the job persists a `MirrorDecision(outcome=shadow)` row within ≤60 s of a real fill on that wallet
+- [ ] With `DRY_RUN=false` + `live_enabled=true` in a controlled run, a real mirror order is placed on Polymarket for `MIRROR_USDC` and the `order_id` is persisted in `poly_copy_trade_fills`
+- [ ] Flipping `poly_copy_trade_config.live_enabled = false` stops further live orders within one poll cycle, no redeploy required
+- [ ] Unit test: restarting mid-burst does not double-fire — dedupe-table insert is the commit point
+- [ ] Unit test: daily USDC cap blocks further orders once hit
+- [ ] Unit test: hourly fills cap blocks further orders once hit
+- [ ] Unit test: legal-gate rejects when `COPY_TRADE_OPERATOR_JURISDICTION` is in the block-list
+- [ ] Replica without `POLY_ROLE=trader` starts cleanly and does NOT materialize the signer key in memory (tested by an absence-of-module-load assertion)
 
-**Overall:**
+**Overall merge gate:**
 
 - [ ] `pnpm check` passes
-- [ ] A 2-week shadow run (`DRY_RUN=true`) produces enough data to decide whether to invest in a real copy-trade feature — this is the exit criterion for writing follow-up tasks
+
+**Post-merge sign-off (NOT a merge gate — tracked separately):**
+
+- After PR-B merges, run a 2-week `DRY_RUN=true` shadow soak against one well-chosen wallet. Compare shadow-decision PnL against the target wallet's realized PnL at `observed_at + 5 s` book prices. If slippage-adjusted edge survives, create real follow-up tasks with evidence. If not, revert the `live_enabled` path and leave v0 in place.
 
 ## Out of Scope (explicitly — push back if scope creeps)
 
