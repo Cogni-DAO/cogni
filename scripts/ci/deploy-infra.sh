@@ -18,9 +18,44 @@
 
 set -euo pipefail
 
-# Resolve repo root robustly
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Flag parsing
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# --ref <git-ref>  Source ref for infra/compose/** (default: main).
+#                  Rsync to the VM comes from a detached `git worktree add`
+#                  of this ref, NOT from whatever the caller has checked out.
+#                  This is the INFRA_REF_IS_EXPLICIT invariant (task.0314).
+# --dry-run        Resolve the source worktree and print planned actions
+#                  (rsync source, VM target, services) without any SSH.
+REF="main"
+DRY_RUN=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --ref)
+      REF="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    *)
+      echo "Unknown flag: $1" >&2
+      echo "Usage: $0 [--ref <git-ref>] [--dry-run]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# Resolve repo root robustly (caller's working tree — used for git operations only)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CALLER_REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# REPO_ROOT is reassigned below to the detached worktree at --ref once ARTIFACT_DIR
+# exists. Until then, anything that reads REPO_ROOT would be wrong — the whole
+# script uses REPO_ROOT only for rsync/scp of source tree files (lines ~903-923),
+# all of which run AFTER the worktree is set up.
+REPO_ROOT="$CALLER_REPO"
 
 on_fail() {
   code=$?
@@ -280,6 +315,38 @@ done
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ARTIFACT_DIR="${RUNNER_TEMP:-/tmp}/deploy-infra-${GITHUB_RUN_ID:-$$}"
 mkdir -p "$ARTIFACT_DIR"
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Source worktree at --ref (the INFRA_REF_IS_EXPLICIT invariant)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# The VM rsync source is a clean, detached worktree of --ref — NOT the caller's
+# checkout. This eliminates the "stale PR checkout rsync" class of failure that
+# motivated task.0314 (see PR #879 flight loop on 2026-04-16).
+SRC_WORKTREE="$ARTIFACT_DIR/src-worktree"
+cleanup_worktree() {
+    if [[ -d "$SRC_WORKTREE" ]]; then
+        git -C "$CALLER_REPO" worktree remove --force "$SRC_WORKTREE" 2>/dev/null || rm -rf "$SRC_WORKTREE"
+    fi
+}
+trap cleanup_worktree EXIT
+
+log_info "Resolving source worktree at ref: $REF"
+# Fetch the ref to handle shallow clones (GHA typically checks out with fetch-depth=1)
+if ! git -C "$CALLER_REPO" fetch origin "$REF" --depth=1 --quiet 2>/dev/null; then
+    log_warn "git fetch origin $REF failed; will try local ref"
+fi
+if git -C "$CALLER_REPO" rev-parse --verify "origin/$REF" >/dev/null 2>&1; then
+    git -C "$CALLER_REPO" worktree add --detach --quiet "$SRC_WORKTREE" "origin/$REF"
+elif git -C "$CALLER_REPO" rev-parse --verify "$REF" >/dev/null 2>&1; then
+    git -C "$CALLER_REPO" worktree add --detach --quiet "$SRC_WORKTREE" "$REF"
+else
+    log_fatal "Cannot resolve ref '$REF' (tried origin/$REF and $REF)"
+fi
+REF_SHA=$(git -C "$SRC_WORKTREE" rev-parse HEAD)
+log_info "Source worktree at $REF_SHA ($SRC_WORKTREE)"
+
+# Reassign REPO_ROOT so all subsequent rsync/scp source paths use the clean worktree.
+REPO_ROOT="$SRC_WORKTREE"
 
 log_info "Deploying infrastructure to $ENVIRONMENT..."
 log_info "Domain: $DOMAIN"
@@ -892,6 +959,27 @@ LOCAL_SIZE=$(wc -c < "$ARTIFACT_DIR/deploy-infra-remote.sh")
 LOCAL_SHA=$(sha256sum "$ARTIFACT_DIR/deploy-infra-remote.sh" | awk '{print $1}')
 log_info "deploy-infra-remote.sh ready: ${LOCAL_SIZE} bytes, sha256=${LOCAL_SHA}"
 
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Dry-run exit (no SSH, no rsync, no compose up)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "DRY RUN — no remote actions will be executed"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Environment:        $ENVIRONMENT"
+    echo "Ref:                $REF (SHA: $REF_SHA)"
+    echo "Source worktree:    $SRC_WORKTREE"
+    echo "Rsync targets:"
+    echo "    $REPO_ROOT/infra/compose/edge/     → root@$VM_HOST:/opt/cogni-template-edge/"
+    echo "    $REPO_ROOT/infra/compose/runtime/  → root@$VM_HOST:/opt/cogni-template-runtime/"
+    echo "Remote script:      $ARTIFACT_DIR/deploy-infra-remote.sh → /tmp/deploy-infra-remote.sh"
+    echo "Infra services managed by remote script: postgres, litellm, temporal, alloy, caddy (plus healthchecks)"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    log_info "Dry run complete — exiting before any VM contact"
+    exit 0
+fi
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Deploy bundles to VM via rsync

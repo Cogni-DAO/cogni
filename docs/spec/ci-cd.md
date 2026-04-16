@@ -170,6 +170,21 @@ When implementation begins, workflow changes should follow these rules:
 4. **No duplicate orchestration**. E2E, promote, and deploy ownership should be clear rather than split across overlapping workflow graphs.
 5. **No legacy branch guidance in prompts or docs**. Agents should not be told to diff against or PR into `staging` or a long-lived `canary` branch.
 
+### App and infra levers are independent (task.0314)
+
+Candidate-a deploy has two orthogonal levers; either can be dispatched independently:
+
+| Workflow                     | Role        | Touches Argo (k8s pods) | Touches VM compose |
+| ---------------------------- | ----------- | ----------------------- | ------------------ |
+| `candidate-flight.yml`       | App lever   | Yes                     | No                 |
+| `candidate-flight-infra.yml` | Infra lever | No                      | Yes                |
+
+- **App lever** writes image digests to `deploy/candidate-a`; Argo CD reconciles pods. No VM SSH for compose. This upholds the `Argo owns reconciliation` axiom.
+- **Infra lever** rsyncs `infra/compose/**` from a named git ref (default `main`) to the candidate-a VM and runs `compose up`. It never writes to a `deploy/*` branch.
+- `scripts/ci/deploy-infra.sh` accepts `--ref <git-ref>` (default `main`) and `--dry-run`. The rsync source is a detached `git worktree add` of the ref, NOT the caller workflow's checkout — app PRs branched before an infra change can be flown without rebasing.
+
+For `promote-and-deploy.yml` (preview/prod merge path), the existing 5-job graph (`promote-k8s → deploy-infra → verify → lock-preview-on-success / unlock-preview-on-failure`) is unchanged. Only the `deploy-infra` job's `Checkout` step now uses `ref: main` so it picks up `deploy-infra.sh`'s new default.
+
 ## Deploy Branch Rules
 
 - Deploy branches are long-lived, machine-written environment-state refs.

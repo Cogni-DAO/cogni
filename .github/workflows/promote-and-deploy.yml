@@ -351,9 +351,15 @@ jobs:
       COGNI_NODE_ENDPOINTS: ${{ secrets.COGNI_NODE_ENDPOINTS }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
     steps:
+      # task.0314: checkout `main`, not head_sha. deploy-infra.sh now sources
+      # infra/compose/** from a detached `git worktree add` of its `--ref` flag
+      # (default `main`), so the caller no longer rsyncs from its own checkout.
+      # This checkout exists only to run the script; the rsync source is the
+      # worktree the script builds.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.promote-k8s.outputs.head_sha }}
+          ref: main
+          fetch-depth: 0
 
       - name: Setup SSH
         run: |

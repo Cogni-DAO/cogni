@@ -1,0 +1,107 @@
+name: Candidate Flight — Infra
+
+# Infra-only reconciliation of the candidate-a VM's Compose stack.
+# This workflow is the INFRA LEVER (task.0314): it rsyncs infra/compose/** from
+# a named git ref (default: main) to the candidate-a VM, runs compose up, and
+# waits for healthchecks. It does NOT promote any app digests and does NOT
+# commit to deploy/candidate-a — that's the job of candidate-flight.yml (the
+# APP LEVER).
+#
+# The two levers are orthogonal: dispatch either without blocking the other.
+# See docs/spec/ci-cd.md "Argo owns reconciliation" axiom.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to source infra/compose/** from (default: main)"
+        required: false
+        default: main
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-flight-infra-candidate-a
+  cancel-in-progress: false
+
+jobs:
+  flight-infra:
+    runs-on: ubuntu-latest
+    environment: candidate-a
+    steps:
+      - name: Checkout (for scripts)
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Deploy Compose infra to candidate-a VM
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          DOMAIN: ${{ vars.DOMAIN }}
+          DEPLOY_ENVIRONMENT: candidate-a
+          APP_ENV: production
+          COGNI_REPO_URL: https://github.com/${{ github.repository }}.git
+          COGNI_REPO_REF: ${{ inputs.ref }}
+          GIT_READ_USERNAME: Cogni-1729
+          GIT_READ_TOKEN: ${{ secrets.GIT_READ_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_SERVICE_URL: ${{ secrets.DATABASE_SERVICE_URL }}
+          POSTGRES_ROOT_USER: ${{ secrets.POSTGRES_ROOT_USER }}
+          POSTGRES_ROOT_PASSWORD: ${{ secrets.POSTGRES_ROOT_PASSWORD }}
+          APP_DB_USER: ${{ secrets.APP_DB_USER }}
+          APP_DB_PASSWORD: ${{ secrets.APP_DB_PASSWORD }}
+          APP_DB_SERVICE_USER: ${{ secrets.APP_DB_SERVICE_USER }}
+          APP_DB_SERVICE_PASSWORD: ${{ secrets.APP_DB_SERVICE_PASSWORD }}
+          APP_DB_NAME: ${{ secrets.APP_DB_NAME }}
+          LITELLM_MASTER_KEY: ${{ secrets.LITELLM_MASTER_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          EVM_RPC_URL: ${{ secrets.EVM_RPC_URL }}
+          TEMPORAL_DB_USER: ${{ secrets.TEMPORAL_DB_USER }}
+          TEMPORAL_DB_PASSWORD: ${{ secrets.TEMPORAL_DB_PASSWORD }}
+          GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
+          GHCR_USERNAME: Cogni-1729
+          GRAFANA_CLOUD_LOKI_URL: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          GRAFANA_CLOUD_LOKI_USER: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          GRAFANA_CLOUD_LOKI_API_KEY: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          PROMETHEUS_REMOTE_WRITE_URL: ${{ secrets.PROMETHEUS_REMOTE_WRITE_URL }}
+          PROMETHEUS_USERNAME: ${{ secrets.PROMETHEUS_USERNAME }}
+          PROMETHEUS_PASSWORD: ${{ secrets.PROMETHEUS_PASSWORD }}
+          PROMETHEUS_QUERY_URL: ${{ secrets.PROMETHEUS_QUERY_URL }}
+          PROMETHEUS_READ_USERNAME: ${{ secrets.PROMETHEUS_READ_USERNAME }}
+          PROMETHEUS_READ_PASSWORD: ${{ secrets.PROMETHEUS_READ_PASSWORD }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+          SCHEDULER_API_TOKEN: ${{ secrets.SCHEDULER_API_TOKEN }}
+          BILLING_INGEST_TOKEN: ${{ secrets.BILLING_INGEST_TOKEN }}
+          INTERNAL_OPS_TOKEN: ${{ secrets.INTERNAL_OPS_TOKEN }}
+          OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+          OPENCLAW_GITHUB_RW_TOKEN: ${{ secrets.OPENCLAW_GITHUB_RW_TOKEN }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          GH_OAUTH_CLIENT_ID: ${{ secrets.GH_OAUTH_CLIENT_ID }}
+          GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+          DISCORD_OAUTH_CLIENT_ID: ${{ secrets.DISCORD_OAUTH_CLIENT_ID }}
+          DISCORD_OAUTH_CLIENT_SECRET: ${{ secrets.DISCORD_OAUTH_CLIENT_SECRET }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          GRAFANA_URL: ${{ secrets.GRAFANA_URL }}
+          GRAFANA_SERVICE_ACCOUNT_TOKEN: ${{ secrets.GRAFANA_SERVICE_ACCOUNT_TOKEN }}
+          GH_REVIEW_APP_ID: ${{ secrets.GH_REVIEW_APP_ID }}
+          GH_REVIEW_APP_PRIVATE_KEY_BASE64: ${{ secrets.GH_REVIEW_APP_PRIVATE_KEY_BASE64 }}
+          GH_REPOS: ${{ vars.GH_REPOS }}
+          GH_WEBHOOK_SECRET: ${{ secrets.GH_WEBHOOK_SECRET }}
+          PRIVY_APP_ID: ${{ secrets.PRIVY_APP_ID }}
+          PRIVY_APP_SECRET: ${{ secrets.PRIVY_APP_SECRET }}
+          PRIVY_SIGNING_KEY: ${{ secrets.PRIVY_SIGNING_KEY }}
+          CONNECTIONS_ENCRYPTION_KEY: ${{ secrets.CONNECTIONS_ENCRYPTION_KEY }}
+          POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
+          POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
+          COGNI_NODE_ENDPOINTS: ${{ secrets.COGNI_NODE_ENDPOINTS }}
+          COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
+        run: bash scripts/ci/deploy-infra.sh --ref "${{ inputs.ref || 'main' }}"
