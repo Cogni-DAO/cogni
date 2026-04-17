@@ -29,9 +29,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   type AttributionActivityDeps,
   createAttributionActivities,
-} from "../../../../../services/scheduler-worker/src/activities/ledger";
-import { GitHubSourceAdapter } from "../../../../../services/scheduler-worker/src/adapters/ingestion/github";
-import { GitHubAppTokenProvider } from "../../../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
+} from "../../../../../../services/scheduler-worker/src/activities/ledger";
+import { GitHubSourceAdapter } from "../../../../../../services/scheduler-worker/src/adapters/ingestion/github";
+import { GitHubAppTokenProvider } from "../../../../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
 import {
   cleanupPromotionFixtures,
   createPromotionFixtures,

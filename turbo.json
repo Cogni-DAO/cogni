@@ -35,6 +35,42 @@
         "TEMPORAL_NAMESPACE",
         "TEMPORAL_TASK_QUEUE"
       ]
+    },
+    "test:external": {
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "vitest*.config.*",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "env": [
+        "NODE_ENV",
+        "APP_ENV",
+        "DATABASE_URL",
+        "GH_REVIEW_APP_ID",
+        "GH_REVIEW_APP_PRIVATE_KEY_BASE64",
+        "GITHUB_TOKEN",
+        "GH_TOKEN",
+        "E2E_GITHUB_REPO",
+        "OLLAMA_URL"
+      ]
+    },
+    "test:external:money": {
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "vitest*.config.*",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "env": [
+        "NODE_ENV",
+        "APP_ENV",
+        "DATABASE_URL",
+        "OPENROUTER_PROVISIONING_KEY",
+        "OPENROUTER_WALLET_SEED_PHRASE"
+      ]
     }
   }
 }

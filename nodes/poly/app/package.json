@@ -8,7 +8,9 @@
     "start": "next start -p 3100 -H 0.0.0.0",
     "lint": "biome check . && eslint src/app src/components src/features src/styles --report-unused-disable-directives --max-warnings=0 --no-error-on-unmatched-pattern",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:external": "vitest run --config vitest.external.config.mts",
+    "test:external:money": "vitest run --config vitest.external-money.config.mts"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.12.10",

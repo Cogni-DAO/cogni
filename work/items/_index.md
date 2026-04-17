@@ -188,6 +188,7 @@
 | 2 | 99 | 3 | needs_implement | task.0126 | Fluence Provider Base — VM Provisioning via REST API |  |  |
 | 2 | 99 | 2 | needs_triage | spike.0146 | OtoCo testnet validation — verify Base Sepolia contracts, createSeries events, GovernanceERC20 token attachment | Node Formation & Launch | proj.node-formation-ui |
 | 2 | 99 | 2 | needs_triage | bug.0222 | Graph execution sends tools to models that declare capabilities.tools: false | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
+| 2 | 99 | 2 | needs_triage | bug.0314 | External tests fail when only .env.test is loaded — need EVM_RPC_URL, smee webhook delivery, or safer skip-gates | System Test Architecture | proj.system-test-architecture |
 | 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 10 | 2 | needs_design | bug.0262 | Operator Postgres env vars lack _OPERATOR suffix — inconsistent with multi-node pattern | Cogni Poly | proj.poly-prediction-bot |
@@ -197,7 +198,7 @@
 | 3 | 99 | 1 | needs_triage | task.0098 | Temporal retry workflow for failed identity bindings + scheduled backstop | User Identity Bindings + DID Readiness | proj.decentralized-identity |
 | 3 | 99 | 1 | needs_triage | bug.0150 | getAllReceipts query is unbounded — will degrade at scale |  |  |
 | 3 | 99 | 2 | needs_triage | spike.0239 | Three.js agent observatory — prototype + performance budget | Premium Frontend UX | proj.premium-frontend-ux |
-| 3 | 99 | 2 | needs_triage | task.0316 | Add per-node test:external lanes (poly, resy, node-template) | System Test Architecture | proj.system-test-architecture |
+| 3 | 99 | 2 | needs_review | task.0316 | Wire per-node test:external lanes + move Ollama specs | System Test Architecture | proj.system-test-architecture |
 
 > Sort: priority ASC → rank ASC
 

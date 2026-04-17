@@ -61,7 +61,7 @@ function requireEnv(name: string): string {
 }
 
 const TEST_BASE_URL = (
-  process.env.TEST_BASE_URL ?? "http://localhost:3000"
+  process.env.TEST_BASE_URL ?? "http://localhost:3200"
 ).replace(/\/$/, "");
 const DATABASE_SERVICE_URL = requireEnv("DATABASE_SERVICE_URL");
 const TIGERBEETLE_ADDRESS = requireEnv("TIGERBEETLE_ADDRESS");

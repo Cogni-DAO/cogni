@@ -23,9 +23,9 @@ import {
 } from "@cogni/repo-spec";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createAttributionActivities } from "../../../../../services/scheduler-worker/src/activities/ledger";
-import { GitHubSourceAdapter } from "../../../../../services/scheduler-worker/src/adapters/ingestion/github";
-import { GitHubAppTokenProvider } from "../../../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
+import { createAttributionActivities } from "../../../../../../services/scheduler-worker/src/activities/ledger";
+import { GitHubSourceAdapter } from "../../../../../../services/scheduler-worker/src/adapters/ingestion/github";
+import { GitHubAppTokenProvider } from "../../../../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
 import type { GitHubFixtures } from "./_github-fixture-helper";
 import {
   acquireSharedFixtures,

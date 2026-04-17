@@ -87,7 +87,7 @@ export async function setup() {
   process.env.APP_ENV = "test";
 
   // Run migrations as app_user (DB owner, same as production)
-  execSync("pnpm db:migrate:direct", { stdio: "inherit" });
+  execSync("pnpm -w db:migrate:direct", { stdio: "inherit" });
 
   // ── Preflight: verify service role can connect (BYPASSRLS) ─────────────
   const serviceCheck = await c.exec([

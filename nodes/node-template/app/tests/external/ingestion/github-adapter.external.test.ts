@@ -22,8 +22,8 @@ import {
 import { getSeedDb } from "@tests/_fixtures/db/seed-client";
 import { seedTestActor } from "@tests/_fixtures/stack/seed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { GitHubSourceAdapter } from "../../../../../services/scheduler-worker/src/adapters/ingestion/github";
-import { GitHubAppTokenProvider } from "../../../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
+import { GitHubSourceAdapter } from "../../../../../../services/scheduler-worker/src/adapters/ingestion/github";
+import { GitHubAppTokenProvider } from "../../../../../../services/scheduler-worker/src/adapters/ingestion/github-auth";
 import type { GitHubFixtures } from "./_github-fixture-helper";
 import {
   acquireSharedFixtures,

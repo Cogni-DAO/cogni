@@ -2,19 +2,19 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@tests/unit/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.spec`
- * Purpose: Integration test for OpenAiCompatibleLlmAdapter against local Ollama.
- * Scope: Validates LlmService contract (completion + streaming) against a real OpenAI-compatible endpoint. Does not test error paths or SSRF.
- * Invariants: Requires Ollama running on localhost:11434 with a model pulled.
+ * Module: `@tests/external/ai/openai-compatible-llm.adapter.external.test`
+ * Purpose: External integration test for OpenAiCompatibleLlmAdapter against a local OpenAI-compatible endpoint (Ollama).
+ * Scope: Validates LlmService contract (completion + streaming). Opt-in via `pnpm test:external`; skipped when Ollama is unreachable or its first model cannot serve a completion.
+ * Invariants: Requires Ollama at `$OLLAMA_URL` (default localhost:11434) with a working pulled model. Not part of default CI.
  * Side-effects: IO (HTTP to local Ollama)
- * Links: openai-compatible-llm.adapter.ts
+ * Links: src/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter.ts
  * @internal
  */
 
 import { describe, expect, it } from "vitest";
 import { OpenAiCompatibleLlmAdapter } from "@/adapters/server/ai/openai-compatible/openai-compatible-llm.adapter";
 
-const OLLAMA_URL = "http://localhost:11434";
+const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434";
 
 // Skip unless Ollama is up, has a pulled model, AND that model can actually
 // serve a completion. Previous probe (`fetch(/)`) unskipped on any HTTP
