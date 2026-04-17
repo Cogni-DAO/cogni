@@ -186,6 +186,7 @@
 | 2 | 99 | 3 | needs_implement | task.0126 | Fluence Provider Base — VM Provisioning via REST API |  |  |
 | 2 | 99 | 2 | needs_triage | spike.0146 | OtoCo testnet validation — verify Base Sepolia contracts, createSeries events, GovernanceERC20 token attachment | Node Formation & Launch | proj.node-formation-ui |
 | 2 | 99 | 2 | needs_triage | bug.0222 | Graph execution sends tools to models that declare capabilities.tools: false | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
+| 2 | 99 | 2 | needs_triage | bug.0314 | External tests fail when only .env.test is loaded — need EVM_RPC_URL, smee webhook delivery, or safer skip-gates | System Test Architecture | proj.system-test-architecture |
 | 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 10 | 2 | needs_design | bug.0262 | Operator Postgres env vars lack _OPERATOR suffix — inconsistent with multi-node pattern | Cogni Poly | proj.poly-prediction-bot |
