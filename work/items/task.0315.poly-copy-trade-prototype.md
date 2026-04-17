@@ -2,11 +2,11 @@
 id: task.0315
 type: task
 title: "Poly copy-trade prototype — v0 top-wallet scoreboard, v0.1 shadow 1-wallet mirror"
-status: needs_closeout
+status: needs_implement
 priority: 2
 estimate: 5
 rank: 5
-branch: research/poly-copy-trading-wallets
+branch: design/poly-copy-trade-pr-b
 summary: "One-shot prototype task. v0 (PR-A, this PR): poly-brain + dashboard answer 'who are the top Polymarket wallets?' via a new core__wallet_top_traders tool + /dashboard Top Wallets card backed by the Polymarket Data API. v0.1 (PR-B, not in this PR): single-wallet shadow mirror via @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
 outcome: "A running prototype in the poly node. v0 (PR-A, shipped): ask poly-brain 'top wallets this week' and get a ranked list in chat + dashboard. v0.1 = four phases on a stable `decide()` boundary — P1 ships first live Polymarket order_id on one hardcoded target via disposable 30s poll scaffolding; P2 adds click-to-copy UI (DB-authoritative-when-populated, env fallback retained); P3 ships paper-adapter body so paper PnL over a real shadow soak becomes the evidence gate; P4 upgrades to WS → Redis streams → Temporal, gated on P3 evidence that edge survives slippage."
 spec_refs:
@@ -15,7 +15,7 @@ spec_refs:
 assignees: derekg1729
 project: proj.poly-prediction-bot
 created: 2026-04-17
-updated: 2026-04-18
+updated: 2026-04-16
 labels: [poly, polymarket, follow-wallet, copy-trading, prototype]
 external_refs:
   - docs/research/poly-copy-trading-wallets.md
@@ -30,7 +30,6 @@ external_refs:
 ## Plan
 
 **v0 — PR-A checkpoints (shipped):**
-
 
 - [x] **Checkpoint 1 — market-provider Data-API client** ✅ PR-A
   - Milestone: `PolymarketDataApiClient` class in `@cogni/market-provider`, verified against the saved fixture.
@@ -58,7 +57,7 @@ external_refs:
 
 **v0.1 — four phases (each = one PR):**
 
-- [ ] **Phase 0 — Pre-flight** (~30 min, no code). Record Temporal-worker presence; commit `fill_id` schema decision in the P1 migration header.
+- [x] **Phase 0 — Pre-flight** (no code). Findings recorded below ("Phase 0 — Findings"). P1 migration header will cite them verbatim.
 - [ ] **Phase 1 — PR-B1 — First live order** (~1 week). Stable boundary (`decide()` + `clob-executor` + port Run methods + Privy `signPolymarketOrder` + DB tables) + disposable 30s poll scaffolding. 🎯 Real `order_id` on one hardcoded target.
 - [ ] **Phase 2 — PR-B2 — Click-to-copy UI** (~4 days). `poly_copy_trade_targets` table + dashboard "Copy" button + Copy Targets card. DB-authoritative-when-populated; env fallback retained. Env-removal filed as follow-up.
 - [ ] **Phase 3 — PR-B3 — Paper-adapter body** (~3 days). 14-day soak produces the Phase 4 GO/NO-GO evidence. Sunsets the project if no edge.
@@ -89,7 +88,11 @@ The thing that does not change between v0.1 and v1 is the decision function:
 
 ```ts
 // nodes/poly/app/src/features/copy-trade/decide.ts  (pure, zero I/O)
-function decide(fill: Fill, config: TargetConfig, state: RuntimeState): MirrorDecision
+function decide(
+  fill: Fill,
+  config: TargetConfig,
+  state: RuntimeState
+): MirrorDecision;
 ```
 
 - `Fill` = normalized `{target_wallet, fill_id, market_id, outcome, side, price, size_usdc, observed_at}`.
@@ -150,12 +153,27 @@ poly_copy_trade_decisions (
 
 ### Phase 0 — Pre-flight (no code, ~30 min)
 
-| Check | Deliverable                                                                                                  |
-| ----- | ------------------------------------------------------------------------------------------------------------ |
-| 0.1   | Is a Temporal worker hosted in `POLY_ROLE=trader` today? One-line answer in PR-B1 description. Not a P1 blocker — affects P4 sizing. |
+| Check | Deliverable                                                                                                                                                                                                                                                                                                                                                                                               |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.1   | Is a Temporal worker hosted in `POLY_ROLE=trader` today? One-line answer in PR-B1 description. Not a P1 blocker — affects P4 sizing.                                                                                                                                                                                                                                                                      |
 | 0.2   | **Concrete schema decision** for `poly_copy_trade_fills.fill_id`: does Data-API `listUserActivity` emit the same identifier a future user-channel WS frame will emit? Output is a one-line decision committed in the P1 migration's header comment: "`fill_id` IS the canonical `<shape>`" OR "`fill_id` IS a composite `{source, native_id}`". One sentence of rationale. Not observations — a decision. |
 
 **🎯 Phase 0 E2E validation:** The Phase 1 schema migration file header contains the chosen `fill_id` shape + rationale; PR-B1 references it.
+
+### Phase 0 — Findings
+
+**0.1 — Temporal worker presence:** Temporal is deployed repo-wide; a generic `scheduler-worker` runs platform-wide schedules. **No poly-specific Temporal worker exists today.** Implication: P1–P3 need none (scheduler-core hosts the disposable poll). P4 must introduce a poly-owned trader worker (registered in `POLY_ROLE=trader`) alongside the WS ingester activity — this work is already listed under P4 Files. No P1 blocker.
+
+**0.2 — `fill_id` shape decision:** **`fill_id` IS a composite `"<source>:<native_id>"` text.** Namespaced sources with per-source native id:
+
+- `data-api` → native_id = `${transactionHash}:${asset}:${side}`
+- `clob-ws` (P4) → native_id = operator `trade_id` (exact shape confirmed when WS frames land)
+
+  Canonical example: `"data-api:0xabc…def:0x7e…9a:BUY"`.
+
+  **Rationale:** Data-API `/trades` (verified against `polymarket.data-api.types.ts`) surfaces on-chain-settled trades with `transactionHash + asset + side + timestamp` but **no operator-assigned match id**. A future CLOB WS user channel emits an operator `trade_id` from a separate identifier space that does not round-trip to a settlement tx hash. Attempting a canonical id via timestamp+price+size hashing is fragile (batching, rounding, ordering). Composite ids are explicit about source lineage and let P1 (DA) and P4 (WS) PKs coexist without bilingual dedupe.
+
+**Implication for P4 cutover (amendment).** A composite-keyed PK does NOT prevent two-source double-placement on a single logical match (DA row and WS row are distinct PKs). Therefore during the 48 h P4 dual-run, the DA poll runs in **observe-only** mode — `decide()` is still called and its outcome recorded to `poly_copy_trade_decisions`, but the executor is NOT invoked. WS is the sole placing path throughout the dual-run. The idempotency gate becomes provable by construction (single placing path → zero duplicate `(target_id, fill_id)` rows with non-null `order_id`), and the existing `decision_paths_diverged` counter captures observability divergence without doubling fills. This amendment is reflected in the Phase 4 subsection below.
 
 ---
 
@@ -179,6 +197,7 @@ poly_copy_trade_decisions (
 **Signer:** Privy operator wallet gains `signPolymarketOrder` (Polygon EIP-712). Polygon support confirmed by operator. Market adapter depends only on the narrow `PolymarketOrderSigner` interface — no Privy imports, no env reads.
 
 **Safe-proxy model** (documented in PR, manual ops):
+
 - `signer_address` = Privy EOA (signs orders, holds no funds).
 - `safe_proxy_address` = Polymarket Safe proxy (holds USDC.e, receives fills), deployed on ToS acceptance. Resolved once via `clob-client.getSafeAddress()` at adapter construction.
 - One-time: accept ToS with EOA; fund the **proxy** (not the EOA) with ~$20 USDC.e on Polygon; fund the EOA with a few POL for occasional gas.
@@ -255,7 +274,7 @@ poly_copy_trade_decisions (
 
 **Dual-run cutover:**
 
-1. Deploy WS+Temporal alongside the poll. Both paths route through the same `decide()` + `clob-executor`; `client_order_id` idempotency + `poly_copy_trade_fills` PK dedupe ensure at-most-once placement.
+1. Deploy WS+Temporal alongside the poll. **DA poll runs in observe-only mode** during dual-run (calls `decide()`, records to `poly_copy_trade_decisions`, does NOT invoke `clob-executor`) — forced by the P0.2 composite `fill_id` decision, which makes DA and WS rows distinct PKs for the same logical match. WS is the sole placing path. `client_order_id` idempotency + `poly_copy_trade_fills` PK dedupe still backstop at-most-once on the WS path.
 2. Run 48 h dual-run.
 3. **Cutover gate (idempotency-based, NOT agreement-based):**
 
@@ -406,14 +425,14 @@ Per-phase unit + integration tests are listed inline under each Phase's Files bl
 - [ ] SCAFFOLDING_LABELED: every disposable file's header states `@scaffolding` + `Deleted-in-phase: N`. Must include the phase number at which deletion occurs.
 - [ ] DB_AUTHORITATIVE_WHEN_POPULATED (P2+): once `poly_copy_trade_targets` has ≥1 enabled row, the env fallback is NOT consulted; env only fires when DB is empty.
 - [ ] ENV_FALLBACK_LOGGED (P2): every tick that consults env instead of DB emits a warn log + flips the `env_fallback_in_use` gauge to 1.
-- [ ] ENV_REMOVAL_DEFERRED (P2): the `COPY_TRADE_*` env vars are NOT removed in the same PR as the UI; a follow-up deprecation work-item is filed at P2 closeout.
+- [ ] ENV*REMOVAL_DEFERRED (P2): the `COPY_TRADE*\*` env vars are NOT removed in the same PR as the UI; a follow-up deprecation work-item is filed at P2 closeout.
 - [ ] DEDUPE_PERSISTED: `poly_copy_trade_fills` PK `(target_id, fill_id)` is the commit point; in-memory dedupe is forbidden.
 - [ ] GLOBAL_KILL_DB_ROW: flipping `poly_copy_trade_config.enabled=false` halts live placements within one poll/workflow cycle.
 - [ ] PER_TARGET_KILL (P2+): `poly_copy_trade_targets.enabled=false` halts that target; `mode='paper'` routes through the paper adapter (body from P3 on).
 - [ ] HARD_CAP_DAILY / HARD_CAP_HOURLY: enforced by `decide()` against `TargetConfig` caps.
 - [ ] IDEMPOTENT_BY_CLIENT_ID: `client_order_id = hash(target_id || fill_id)`; CLOB dedupes at placement; PK dedupes at commit.
 - [ ] DECIDE_OBSERVED: every `decide()` outcome emits Pino + `decisions_total{outcome, reason}`. Poll-mechanism metrics are NOT instrumented (tech-debt avoidance).
-- [ ] FILL_ID_SHAPE_DECIDED: the Phase 1 migration header declares the canonical `fill_id` shape (P0.2 output). No bilingual dedupe across phases.
+- [ ] FILL_ID_SHAPE_DECIDED: the Phase 1 migration header declares the canonical `fill_id` shape per P0.2: composite `"<source>:<native_id>"` where `source ∈ {data-api, clob-ws}` and `data-api` native_id = `${transactionHash}:${asset}:${side}`. No bilingual dedupe across phases.
 - [ ] CLOB_SECRETS_MINIMAL_ENV: only CLOB L2 secrets + `POLY_ROLE` in env; no private keys.
 - [ ] OBSERVATION_EVENTS_DEFERRED: no writes to `observation_events` from copy-trade code until the named second-consumer trigger fires.
 - [ ] STREAM_THEN_EVALUATE (P4): every WS frame XADDs before trigger evaluation (spec: data-streams).
@@ -430,8 +449,8 @@ Per-phase unit + integration tests are listed inline under each Phase's Files bl
 
 **Phase 0 — Pre-flight gate (no code):**
 
-- [ ] Phase 1 schema migration header declares the `fill_id` shape + one sentence of rationale.
-- [ ] PR-B1 description records whether a Temporal worker currently runs in `POLY_ROLE=trader`.
+- [x] `fill_id` shape + rationale recorded in Phase 0 — Findings (composite `"<source>:<native_id>"`; P1 migration header cites this verbatim).
+- [x] Temporal-worker presence recorded: platform `scheduler-worker` runs; no poly-specific worker today. P4 adds one.
 
 **🎯 Phase 1 — First live order:**
 
