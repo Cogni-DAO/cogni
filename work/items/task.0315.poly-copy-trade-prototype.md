@@ -619,6 +619,62 @@ Pre-implementation SDK reads against `node_modules/.pnpm/@privy-io+node@0.10.1..
 
    Plan addendum: `pnpm add -F @cogni/operator-wallet @polymarket/clob-client` at the start of CP2 implementation. Pin the version; add the dep to `packages/operator-wallet/AGENTS.md` under External deps. The shim + experiment script import directly from this package.
 
+### CP2 revision 4 (2026-04-17) — use `@privy-io/node/viem`, delete the shim
+
+Second pre-implementation grep (prompted by reviewer feedback "are we using the right amount of OSS") discovered `@privy-io/node` ships a first-party viem adapter at the `/viem` subpath export. `createViemAccount(client, { walletId, address, authorizationContext })` returns a viem `LocalAccount` that **already implements every translation v3 proposed to hand-build**.
+
+**Evidence — `node_modules/@privy-io/node/viem.js:38-58`** (verbatim):
+
+```js
+signTypedData: async (typedData) => {
+  const { message, domain, types, primaryType } = replaceBigInts(
+    typedData,
+    toHex
+  );
+  const { signature } = await client
+    .wallets()
+    .ethereum()
+    .signTypedData(walletId, {
+      params: {
+        typed_data: { domain, message, primary_type: primaryType, types },
+      },
+      ...(authorizationContext
+        ? { authorization_context: authorizationContext }
+        : {}),
+    });
+  return signature;
+};
+```
+
+That covers: camelCase→snake_case translation, `authorization_context` passthrough, `.signature` unwrap, `LocalAccount`-shaped output. A viem `LocalAccount` is exactly what `@polymarket/clob-client`'s constructor accepts as a signer — no shim required.
+
+**v3 → v4 delta:**
+
+| v3 artifact                                             | v4 disposition                                                                                                                  |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `PrivyOperatorWalletAdapter.signPolymarketOrder` body   | **Deleted from CP2 scope.** Stub stays (CP1-committed); real signing flows via `createViemAccount` outside the adapter.         |
+| `polymarket-signer-shim.ts`                             | **Deleted.** `createViemAccount` IS the shim.                                                                                   |
+| camelCase→snake_case translation                        | Delegated to `@privy-io/node/viem`.                                                                                             |
+| `POLYGON_ALLOWED_CHAIN_IDS` guard + CHAIN_MISMATCH test | **Deleted.** `new ClobClient(host, 137, account)` owns chain context; Privy signs whatever `domain.chainId` clob-client builds. |
+| Three mocked unit tests                                 | Collapses to one: the experiment script itself is the proof (real HSM signature → `viem.verifyTypedData` → address match).      |
+| `@polymarket/clob-client` install in CP2                | **Keep** (v3 decision stands).                                                                                                  |
+| Live experiment script                                  | **Keep** — shrinks to ~20 lines; no hand-rolled envelope.                                                                       |
+
+**CP1 dead-surface acknowledgement:** `OperatorWalletPort.signPolymarketOrder` and `packages/market-provider/src/port/polymarket-order-signer.port.ts` were added in CP1 under the assumption that signing would flow through our port. With `createViemAccount` doing the work, these two surfaces become unused. **Not removed in CP2** (scope). Tracked for CP3: when the polymarket market-provider adapter is wired, it will take a viem `LocalAccount` in its constructor (not a `PolymarketOrderSigner`). The port file + `signPolymarketOrder` port method are deleted in CP3 as part of that wiring. Noted as a follow-up line in CP3's Todos.
+
+**CP2 deliverables (revision 4):**
+
+1. `pnpm add -F @cogni/operator-wallet @polymarket/clob-client viem` (viem already transitive via `@privy-io/node` peer dep; explicit is cleaner). Update `packages/operator-wallet/AGENTS.md` External deps.
+2. `scripts/experiments/sign-polymarket-order.ts` — imports `createViemAccount` from `@privy-io/node/viem`, instantiates `new ClobClient(host, 137, account)`, calls `createOrder(...)` in a dry-run configuration, feeds the resulting typed-data + signature to `viem.verifyTypedData` against `expectedAddress`. Prints PASS + signature hex. Zero funds, zero gas, zero USDC, zero ToS, zero on-chain.
+3. Paste experiment output into the PR as CP2 evidence.
+
+**No new adapter code, no new shim, no new unit tests.** CP2 is pure wiring + one experiment script + one doc update. If `createOrder` dry-run rejects (e.g., needs a funded Safe proxy to even build the envelope), fall back to building an order-utils envelope manually and signing via `account.signTypedData(envelope)` — still no shim, still uses `createViemAccount`.
+
+**Risk notes:**
+
+- `ClobClient.createOrder` may refuse without L2 API credentials. If so, the experiment uses `@polymarket/order-utils`'s envelope builder directly + `account.signTypedData(envelope)`. This is the graceful fallback; confirm during implementation.
+- Privy's `LocalAccount` is derived from `authorizationContext` passed at account-creation time, not per-call. Confirm this matches our existing `this.authContext` usage pattern. (Expected: yes — authorizationContext is constructed once from operator credentials.)
+
 No blockers. Ready to write CP2 code.
 
 ## Alignment Decisions (confirmed by operator before `/implement`)
