@@ -56,6 +56,7 @@ Standalone workspace package (`@cogni/operator-wallet`) providing Privy-managed 
 ## Notes
 
 - `fundOpenRouterTopUp` validates 5 gates before submitting any transaction — all BigInt arithmetic.
-- `signPolymarketOrder` is a CP1 stub in this revision; the real Polygon (`eip155:137`) impl lands in task.0315 Phase 1 CP2. Existing Base methods remain pinned to `BASE_CAIP2` — the adapter is chain-parameterized per use-case, not globally.
+- `signPolymarketOrder` on the port is **dead surface as of task.0315 P1 CP2 (rev 4)** — retained as a CP1 stub to avoid scope creep, scheduled for deletion in CP3. CLOB order signing flows through `@privy-io/node/viem`'s `createViemAccount` (returns a viem `LocalAccount`) wired directly into `@polymarket/clob-client`, not through this adapter. Existing Base methods remain pinned to `BASE_CAIP2` — the adapter is chain-parameterized per use-case for transfers only.
+- CP2 evidence: `scripts/experiments/sign-polymarket-order.ts` — proves the Privy-HSM → clob-client signing seam on Polygon (chainId 137) with zero hand-rolled translation, zero shim, zero on-chain activity. `@polymarket/clob-client` is a root devDependency (only the experiment script consumes it); it will move to `packages/market-provider` as an optional peerDep in CP3.
 - SIMULATE_BEFORE_BROADCAST deferred to Privy infrastructure (SDK has no pre-sign simulation hook).
 - Transfers ABI in `src/domain/transfers-abi.ts` matches deployed contract `0x03059433BCdB6144624cC2443159D9445C32b7a8` on Base.
