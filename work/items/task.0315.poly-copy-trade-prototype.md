@@ -7,7 +7,7 @@ priority: 2
 estimate: 5
 rank: 5
 branch: design/poly-copy-trade-pr-b
-revision: 1
+revision: 2
 summary: "One-shot prototype task. v0 (PR-A, this PR): poly-brain + dashboard answer 'who are the top Polymarket wallets?' via a new core__wallet_top_traders tool + /dashboard Top Wallets card backed by the Polymarket Data API. v0.1 (PR-B, not in this PR): single-wallet shadow mirror via @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
 outcome: "A running prototype in the poly node. v0 (PR-A, shipped): ask poly-brain 'top wallets this week' and get a ranked list in chat + dashboard. v0.1 = four phases on a stable `decide()` boundary — P1 ships first live Polymarket order_id on one hardcoded target via disposable 30s poll scaffolding; P2 adds click-to-copy UI (DB-authoritative-when-populated, env fallback retained); P3 ships paper-adapter body so paper PnL over a real shadow soak becomes the evidence gate; P4 upgrades to WS → Redis streams → Temporal, gated on P3 evidence that edge survives slippage."
 spec_refs:
@@ -167,12 +167,16 @@ poly_copy_trade_decisions (
 
 **0.2 — `fill_id` shape decision:** **`fill_id` IS a composite `"<source>:<native_id>"` text.** Namespaced sources with per-source native id:
 
-- `data-api` → native_id = `${transactionHash}:${asset}:${side}`
-- `clob-ws` (P4) → native_id = operator `trade_id` (exact shape confirmed when WS frames land)
+- `data-api` → native_id = `${transactionHash}:${asset}:${side}:${timestamp}`
+  - **Empty-hash rows are REJECTED at normalization** (skipped with a warn log + `data_api_empty_tx_hash_total` counter increment). `transactionHash` is declared `.optional().default("")` in `polymarket.data-api.types.ts` defensively; in practice the Polymarket Data-API populates it for every settled trade. A trade without a settlement tx hash cannot be reliably deduped cross-source and cannot have been mirrored anyway.
+  - `timestamp` (unix seconds from the Data-API response) is included in the native_id to disambiguate multi-match settlements within a single Polygon tx (one tx can settle several matches against the same `(asset, side)` within a second of each other — without `timestamp` they'd collapse to the same PK and silently drop).
+- `clob-ws` (P4) → native_id = operator `trade_id` (**exact shape committed in the P4 migration header** before the WS ingester activity lands — see `FILL_ID_SHAPE_DECIDED` invariant).
 
-  Canonical example: `"data-api:0xabc…def:0x7e…9a:BUY"`.
+  Canonical example: `"data-api:0xabc…def:0x7e…9a:BUY:1713302400"`.
 
   **Rationale:** Data-API `/trades` (verified against `polymarket.data-api.types.ts`) surfaces on-chain-settled trades with `transactionHash + asset + side + timestamp` but **no operator-assigned match id**. A future CLOB WS user channel emits an operator `trade_id` from a separate identifier space that does not round-trip to a settlement tx hash. Attempting a canonical id via timestamp+price+size hashing is fragile (batching, rounding, ordering). Composite ids are explicit about source lineage and let P1 (DA) and P4 (WS) PKs coexist without bilingual dedupe.
+
+  **Uniqueness invariant for DA native_id.** `(transactionHash, asset, side, timestamp)` is unique within the Data-API response surface because: (a) empty hashes are rejected (see above); (b) one tx affects a user's balance for one `(asset, side)` at one settlement timestamp (Polygon block timestamp at 1-second resolution). Batched settlements that share a tx hash are disambiguated by per-match `timestamp` values in the Data-API record. If a collision ever occurs, the PK violation is caught, logged with both rows, and surfaces to the operator — preferable to silent drops.
 
 **Implication for P4 cutover (amendment).** A composite-keyed PK does NOT prevent two-source double-placement on a single logical match (DA row and WS row are distinct PKs). Therefore during the 48 h P4 dual-run, the DA poll runs in **observe-only** mode — `decide()` is still called and its outcome recorded to `poly_copy_trade_decisions`, but the executor is NOT invoked. WS is the sole placing path throughout the dual-run. The idempotency gate becomes provable by construction (single placing path → zero duplicate `(target_id, fill_id)` rows with non-null `order_id`), and the existing `decision_paths_diverged` counter captures observability divergence without doubling fills. This amendment is reflected in the Phase 4 subsection below.
 
@@ -265,11 +269,11 @@ poly_copy_trade_decisions (
 
 **Permanent:**
 
-- Temporal worker wiring in `POLY_ROLE=trader` (if P0.1 showed it was missing).
+- Temporal worker wiring in `POLY_ROLE=trader` — **new worker** (P0.1 confirmed no poly-specific worker exists today; the platform `scheduler-worker` does not host poly activities).
 - `subscribePolymarketUserFills` activity — long-lived WS, normalizes frames to the **same `Fill` shape** `decide()` already consumes, XADDs to `streams:copy-trade:polymarket-fills` with `source_ref={target_wallet, fill_id}`. Heartbeats.
 - `CopyTradeTriggerWorkflow` — tails the stream (XREAD BLOCK via activity), **calls the existing `decide()`**, pure/replay-safe; on `place` signals `MirrorOrderWorkflow` and XADDs `triggers:copy-trade`.
 - `MirrorOrderWorkflow` — single activity = the existing `clob-executor` call.
-- `ReconcileFillsWorkflow` — 5 min scheduled; Data-API diff vs. stream's last 16 h; missing fills XADDed into the normal pipeline.
+- `ReconcileFillsWorkflow` — 5 min scheduled; Data-API diff vs. stream's last 16 h; missing fills XADDed into the normal pipeline. **Cross-source join key** (also used by the P4 cutover gate): `(target_wallet, market_id, side, size_usdc, observed_at ± 300 s)`. The 300 s window accommodates the delay between CLOB operator match time and Polygon settlement block timestamp (typically 5–60 s, with a safety margin for network congestion).
 - Dashboard card: swap SELECT-backed component for `/api/v1/node/stream` SSE reader. Renders identical decision-row list.
 - Node-stream event types: `PolymarketFillObserved`, `CopyTradeDecisionMade`.
 
@@ -277,23 +281,50 @@ poly_copy_trade_decisions (
 
 1. Deploy WS+Temporal alongside the poll. **DA poll runs in observe-only mode** during dual-run (calls `decide()`, records to `poly_copy_trade_decisions`, does NOT invoke `clob-executor`) — forced by the P0.2 composite `fill_id` decision, which makes DA and WS rows distinct PKs for the same logical match. WS is the sole placing path. `client_order_id` idempotency + `poly_copy_trade_fills` PK dedupe still backstop at-most-once on the WS path.
 2. Run 48 h dual-run.
-3. **Cutover gate (idempotency-based, NOT agreement-based):**
+3. **Cutover gate — three-part, logical-match based** (the earlier single `GROUP BY fill_id HAVING COUNT(*)>1` query was vacuous given composite PKs + observe-only DA path: same logical match produces distinct `fill_id`s across sources, and only WS populates `order_id`, so the query is unreachable by construction. Replaced with):
+
+   **(a) Zero double-placements per logical match.** Join rows that refer to the same real-world fill (cross-source match key: `(target_wallet, market_id, side, size_usdc, observed_at ± 300 s)` — see Non-blocking note below for rationale of the window):
 
    ```sql
-   SELECT target_id, fill_id, COUNT(*)
-   FROM poly_copy_trade_fills
-   WHERE decided_at > '<dual-run-start>'
-   GROUP BY target_id, fill_id
-   HAVING COUNT(*) > 1;
+   WITH matched AS (
+     SELECT
+       d.target_id,
+       d.intent->>'market_id'   AS market_id,
+       d.intent->>'side'        AS side,
+       (d.intent->>'size_usdc')::numeric AS size_usdc,
+       date_trunc('second', d.decided_at) AS ts_bucket,
+       f.fill_id,
+       f.order_id
+     FROM poly_copy_trade_decisions d
+     JOIN poly_copy_trade_fills f USING (target_id, fill_id)
+     WHERE d.decided_at > '<dual-run-start>'
+   )
+   SELECT target_id, market_id, side, size_usdc,
+          COUNT(*) FILTER (WHERE order_id IS NOT NULL) AS placed_count
+   FROM matched
+   GROUP BY target_id, market_id, side, size_usdc,
+            width_bucket(EXTRACT(epoch FROM ts_bucket)::int, 0, 2147483647, 10000) -- ~5-min buckets
+   HAVING COUNT(*) FILTER (WHERE order_id IS NOT NULL) > 1;
    ```
 
-   Must return **zero rows**. Every distinct `Fill` produced exactly one row with exactly one `order_id`, regardless of which path observed it first. Decision discrepancies (poll saw it, WS missed, or vice versa) are **expected** and are logged via a `decision_paths_diverged` counter — they must not cause double-fires. 100 % decision agreement is NOT the gate (different observation windows naturally disagree on timing).
+   Must return **zero rows**. By construction during observe-only dual-run this is trivial — but the query is intentionally the same one that runs post-cutover when WS is the only path, so it catches regressions if the observe-only gating is ever inverted.
+
+   **(b) WS placement coverage ≥ 95 %.** WS must have placed at least 95 % of fills the observe-only DA path reported (logical-match-joined). Below that threshold the WS ingester is dropping fills and the cutover is NOT cleared — file a bug and extend the dual-run.
+
+   ```sql
+   -- rough shape: for each logical match observed by DA, did WS place an order?
+   -- Passes if (matches_with_ws_order / matches_observed_by_da) ≥ 0.95 over the full 48 h window.
+   ```
+
+   **(c) `decision_paths_diverged` counter ≤ 5 % of total decisions.** Divergence beyond that suggests one source is systematically missing fills and needs investigation before cutover.
+
+   100 % decision agreement is NOT the gate (different observation windows naturally disagree on timing). The three sub-gates together assert: no double-placements (a), WS isn't silently dropping (b), divergence stays within explained bounds (c).
 
 4. Delete `copyTradeMirror.job.ts`. Delete the SQL-backed dashboard card. File the env-fallback deprecation PR promised at P2 closeout.
 
 **🎯 Phase 4 E2E validation (ONE scenario):**
 
-> During the 48 h dual-run, every tracked wallet fill produces exactly ONE `poly_copy_trade_fills` row with exactly ONE `order_id` (cutover SQL above returns zero rows). The dashboard live feed (SSE path) renders the decision in <2 s of the WS-observed fill. Kill the WS activity mid-burst → the reconcile workflow XADDs the missed fills within 5 min; normal pipeline places them; no dedupe violation.
+> During the 48 h dual-run, all three cutover sub-gates pass: (a) the logical-match SQL returns zero rows; (b) WS placement coverage ≥ 95 % of DA-observed matches; (c) `decision_paths_diverged` counter ≤ 5 % of total decisions. The dashboard live feed (SSE path) renders the decision in <2 s of the WS-observed fill. Kill the WS activity mid-burst → the reconcile workflow XADDs the missed fills within 5 min; normal pipeline places them; no dedupe violation.
 
 ---
 
@@ -379,7 +410,7 @@ Do NOT land in any phase above. Land when the **second consumer** arrives (e.g.,
 
 **Phase 4 — Streaming upgrade (gated on P3):**
 
-- `nodes/poly/app/src/adapters/server/temporal/worker.ts` — new worker wiring for `POLY_ROLE=trader` (if P0.1 showed it missing).
+- `nodes/poly/app/src/adapters/server/temporal/worker.ts` — **new worker** for `POLY_ROLE=trader` (P0.1 confirmed no poly-specific worker exists today).
 - `nodes/poly/app/src/features/copy-trade/activities/subscribePolymarketUserFills.activity.ts` — long-lived WS, normalizes frames to `Fill`, XADDs to `streams:copy-trade:polymarket-fills`.
 - `nodes/poly/app/src/features/copy-trade/activities/placeMirrorOrder.activity.ts` — calls existing `clob-executor`.
 - `nodes/poly/app/src/features/copy-trade/workflows/CopyTradeIngesterWorkflow.ts` — starts/cancels per-target WS activities on target enable/disable events.
@@ -393,9 +424,14 @@ Do NOT land in any phase above. Land when the **second consumer** arrives (e.g.,
 
 ### Observability
 
-- Every `decide()` outcome: Pino log + Prometheus `decisions_total{outcome, reason}` counter.
-- Additional counters: `live_orders_total`, `cap_hit_total{dimension=daily|hourly}`, `env_fallback_in_use` (gauge, flips to 1 when P2 fallback fires).
-- Grafana dashboard JSON: single panel group covering decisions by outcome, cap-hit rate, last-fill age, live-order throughput. Lands in Phase 2 (once the surface is stable).
+- Every `decide()` outcome: Pino log + Prometheus `decisions_total{outcome, reason, source}` counter. `source ∈ {data-api, clob-ws}` — the source label is introduced in P1 (always `data-api`), carried through every phase, and becomes the divergence dimension during P4 dual-run (required so observe-only DA decisions don't double-count the `active` path in dashboards).
+- Additional counters:
+  - `live_orders_total{source}` — distinguishes P1 DA-placed orders from P4 WS-placed orders; enables the WS-coverage gate (P4 cutover sub-gate (b)).
+  - `cap_hit_total{dimension=daily|hourly}`.
+  - `data_api_empty_tx_hash_total` (P1+) — increments every time a Data-API trade with empty `transactionHash` is rejected at normalization (per the P0.2 uniqueness invariant). A sustained non-zero rate suggests Data-API behavior has changed and the `fill_id` shape needs re-evaluation.
+  - `decision_paths_diverged` (P4) — increments when a logical-match join (same key as `ReconcileFillsWorkflow`) finds a fill observed by only one of {DA, WS} within the dual-run window. Feeds cutover sub-gate (c).
+  - `env_fallback_in_use` (gauge, flips to 1 when P2 fallback fires).
+- Grafana dashboard JSON: single panel group covering decisions by outcome + source, cap-hit rate, last-fill age, live-order throughput by source, empty-hash reject rate, divergence rate. Lands in Phase 2 (once the surface is stable); P4 extends with the divergence panel.
 - Poll-mechanism metrics are NOT instrumented. The scaffolding is disposable; dashboard panels for it would become tech debt.
 
 ### Secret boundary
@@ -432,14 +468,16 @@ Per-phase unit + integration tests are listed inline under each Phase's Files bl
 - [ ] PER_TARGET_KILL (P2+): `poly_copy_trade_targets.enabled=false` halts that target; `mode='paper'` routes through the paper adapter (body from P3 on).
 - [ ] HARD_CAP_DAILY / HARD_CAP_HOURLY: enforced by `decide()` against `TargetConfig` caps.
 - [ ] IDEMPOTENT_BY_CLIENT_ID: `client_order_id = hash(target_id || fill_id)`; CLOB dedupes at placement; PK dedupes at commit.
-- [ ] DECIDE_OBSERVED: every `decide()` outcome emits Pino + `decisions_total{outcome, reason}`. Poll-mechanism metrics are NOT instrumented (tech-debt avoidance).
-- [ ] FILL_ID_SHAPE_DECIDED: the Phase 1 migration header declares the canonical `fill_id` shape per P0.2: composite `"<source>:<native_id>"` where `source ∈ {data-api, clob-ws}` and `data-api` native_id = `${transactionHash}:${asset}:${side}`. No bilingual dedupe across phases.
+- [ ] DECIDE_OBSERVED: every `decide()` outcome emits Pino + `decisions_total{outcome, reason, source}`. The `source` label is mandatory from P1 onwards (always `data-api` in P1–P3; adds `clob-ws` in P4). Poll-mechanism metrics are NOT instrumented (tech-debt avoidance).
+- [ ] FILL_ID_SHAPE_DECIDED: the Phase 1 migration header declares the `data-api` `fill_id` shape per P0.2: composite `"<source>:<native_id>"` where `source ∈ {data-api, clob-ws}` and `data-api` native_id = `${transactionHash}:${asset}:${side}:${timestamp}` with empty-hash rows rejected at normalization. **The Phase 4 migration header MUST commit the final `clob-ws` native_id shape before the WS ingester activity lands** (shape is confirmed at P4 implementation time, not speculatively in P1). No bilingual dedupe across phases.
+- [ ] DA_EMPTY_HASH_REJECTED (P1+): Data-API trades with empty `transactionHash` are skipped at the normalizer with a warn log + `data_api_empty_tx_hash_total` counter increment. Never inserted into `poly_copy_trade_fills`. Uniqueness of the DA `fill_id` depends on this rejection.
 - [ ] CLOB_SECRETS_MINIMAL_ENV: only CLOB L2 secrets + `POLY_ROLE` in env; no private keys.
 - [ ] OBSERVATION_EVENTS_DEFERRED: no writes to `observation_events` from copy-trade code until the named second-consumer trigger fires.
 - [ ] STREAM_THEN_EVALUATE (P4): every WS frame XADDs before trigger evaluation (spec: data-streams).
 - [ ] TEMPORAL_OWNS_IO (P4): WS subscription + stream reads/writes + DB writes all in Temporal activities (spec: data-streams).
 - [ ] TRIGGERS_ARE_PURE (P4): `CopyTradeTriggerWorkflow` is pure/replay-safe and calls `decide()` (spec: data-streams).
-- [ ] CUTOVER_IDEMPOTENCY_GATE (P4): 48 h dual-run produces zero duplicate `(target_id, fill_id)` rows in `poly_copy_trade_fills`. Decision-path agreement is NOT the gate.
+- [ ] CUTOVER_IDEMPOTENCY_GATE (P4): 48 h dual-run passes all three sub-gates — (a) logical-match SQL finds zero logical matches with >1 non-null `order_id`; (b) WS placement coverage ≥ 95 % of DA-observed matches (via the same cross-source join key used by `ReconcileFillsWorkflow`); (c) `decision_paths_diverged` ≤ 5 % of total decisions. Decision-path agreement is NOT the gate.
+- [ ] OBSERVE_ONLY_DUAL_RUN_P4: during the 48 h P4 dual-run, `clob-executor` is invoked solely from the WS path. The DA poll records `decide()` outcomes to `poly_copy_trade_decisions` (for divergence analysis) but MUST NOT invoke the executor. This is the only mechanism preventing composite-PK double-placement and is enforced by code (a `dryRun: boolean` gate on the DA code path that flips to `true` during dual-run) rather than prose alone.
 
 ## Validation
 
@@ -479,7 +517,7 @@ Per-phase unit + integration tests are listed inline under each Phase's Files bl
 
 **🎯 Phase 4 — Streaming upgrade (only if P3 gate = GO):**
 
-- [ ] 48 h dual-run: the cutover SQL query `SELECT target_id, fill_id, COUNT(*) FROM poly_copy_trade_fills WHERE decided_at > <dual_run_start> GROUP BY 1,2 HAVING COUNT(*) > 1` returns zero rows.
+- [ ] 48 h dual-run: all three cutover sub-gates pass — (a) logical-match SQL returns zero rows; (b) WS placement coverage ≥ 95 % of DA-observed matches; (c) `decision_paths_diverged` ≤ 5 % of total decisions.
 - [ ] Dashboard SSE path renders a decision in <2 s of the WS-observed fill.
 - [ ] Kill WS activity mid-burst → reconcile workflow XADDs missed fills within 5 min; normal pipeline places them; no dedupe violation.
 - [ ] Post-cutover: `copyTradeMirror.job.ts` deleted; SQL-backed dashboard card deleted; env-fallback deprecation PR opened.
@@ -525,6 +563,22 @@ Phase 0 findings are directionally sound but have substantive issues that will b
 7. **Stale conditional phrasing** (L267, L381). "(if P0.1 showed it was missing)" — P0.1 is definitive. Replace with a direct statement.
 
 Non-blocking: in P4 reconcile prose, pre-commit the cross-source join key (likely `(target_wallet, conditionId, side, size, timestamp ± Δ)`) so the reconcile activity has an unambiguous target when implemented.
+
+### Response to revision 1 (revision 2, 2026-04-16)
+
+All seven items addressed. P1 is unblocked pending operator ack of the uniqueness rationale.
+
+1. **`fill_id` uniqueness — both fixes applied.** Empty-hash rows are rejected at normalization (new `DA_EMPTY_HASH_REJECTED` invariant + `data_api_empty_tx_hash_total` counter). `timestamp` added to the DA native_id to disambiguate same-tx multi-match settlements. New shape: `"data-api:${transactionHash}:${asset}:${side}:${timestamp}"`. Rationale paragraph added to Phase 0 Findings explaining why this combination is unique within the Data-API surface.
+2. **P4 cutover — replaced with three-sub-gate logical-match approach.** (a) SQL joins decisions+fills by `(target_wallet, market_id, side, size_usdc, observed_at ± 300 s)` and asserts ≤1 non-null `order_id` per logical match; (b) WS placement coverage ≥ 95 % of DA-observed matches; (c) `decision_paths_diverged` ≤ 5 %. Validation checkbox + P4 E2E scenario updated to match. Updated `CUTOVER_IDEMPOTENCY_GATE` invariant to cite all three.
+3. **`decision_paths_diverged` declared.** Added to Observability counter list with definition (logical-match join key identical to `ReconcileFillsWorkflow`).
+4. **`decisions_total` source label.** Added `source ∈ {data-api, clob-ws}` label, introduced in P1 and carried through every phase. Applied the same label to `live_orders_total` so the WS-coverage gate has a direct counter. Updated `DECIDE_OBSERVED` invariant.
+5. **`OBSERVE_ONLY_DUAL_RUN_P4` invariant added.** Enforced in code via a `dryRun: boolean` flag on the DA path (not prose). Called out that this is the only mechanism preventing composite-PK double-placement.
+6. **`FILL_ID_SHAPE_DECIDED` strengthened.** Now requires the P4 migration header to commit the final `clob-ws` native_id shape before the WS ingester activity lands. Explicit non-goal: do NOT speculatively commit the `clob-ws` shape in P1.
+7. **Stale conditionals removed.** Both "if P0.1 showed" sites (L268 Permanent, L382 Files) rewritten as direct statements — "new worker (P0.1 confirmed no poly-specific worker exists today)".
+
+Non-blocking note applied: `ReconcileFillsWorkflow` now specifies the join key in-line as `(target_wallet, market_id, side, size_usdc, observed_at ± 300 s)`, with rationale on the 300 s window (operator-match-to-Polygon-settlement delay typically 5–60 s; safety margin for network congestion). The P4 cutover gate uses the identical key.
+
+Incidental fix: L429 had a corrupted `ENV*REMOVAL_DEFERRED` / `COPY_TRADE*\*` from prior markdown-escape damage; restored to `ENV_REMOVAL_DEFERRED` / `COPY_TRADE_*`.
 
 ## Alignment Decisions (confirmed by operator before `/implement`)
 
