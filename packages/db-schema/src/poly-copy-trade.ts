@@ -6,9 +6,11 @@
  * Purpose: Schema for the Polymarket copy-trade prototype — fills ledger, global kill-switch singleton, append-only decisions log.
  * Scope: Table definitions only (task.0315 Phase 1 CP3.3). Does not contain queries, RLS policies, or runtime logic. System-owned tables (single-operator prototype) — no tenant-scoped RLS.
  * Invariants:
- *   - FILL_ID_SHAPE_DECIDED: composite `"<source>:<native_id>"` per task.0315 P0.2; see table comments below for the per-source shape.
+ *   - FILL_ID_SHAPE_DECIDED: composite `"<source>:<native_id>"` per task.0315 P0.2; enforced at the schema layer via `poly_copy_trade_fills_fill_id_shape` CHECK.
  *   - IDEMPOTENT_BY_CLIENT_ID: `client_order_id` computed via `clientOrderIdFor` in `@cogni/market-provider/domain/client-order-id` (pinned).
  *   - GLOBAL_KILL_DB_ROW: `poly_copy_trade_config.enabled DEFAULT false` = fail-closed; SELECT failure is treated as `enabled = false` at the poll.
+ *   - STATUS_ENUM_AT_SCHEMA: fills.status and decisions.outcome are CHECK-constrained to their canonical value sets — a buggy writer can't silently persist a stray casing or synonym.
+ *   - ORDER_ID_UNIQUE_WHEN_PRESENT: partial unique index on fills.order_id catches any executor bug that would attribute a platform order id to two rows.
  * Side-effects: none (schema definitions only)
  * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP3.3)
  * @public
@@ -25,6 +27,7 @@ import {
   smallint,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -67,8 +70,27 @@ export const polyCopyTradeFills = pgTable(
     // Dashboard card query: `SELECT ... ORDER BY observed_at DESC LIMIT 50`.
     index("poly_copy_trade_fills_observed_at_idx").on(table.observedAt),
     // `client_order_id` is unique-by-construction across all rows (deterministic
-    // from the PK pair); unique index lets the executor detect repeat submits.
+    // from the PK pair); index lets the executor detect repeat submits.
     index("poly_copy_trade_fills_client_order_id_idx").on(table.clientOrderId),
+    // Executor-bug canary — Polymarket order ids are unique by construction, so
+    // two fills ever carrying the same `order_id` indicates the mirror path
+    // double-submitted. Partial index skips the (common) null rows.
+    uniqueIndex("poly_copy_trade_fills_order_id_unique")
+      .on(table.orderId)
+      .where(sql`${table.orderId} IS NOT NULL`),
+    // Defend the dedupe gate — fill_id MUST be "<source>:<native_id>" with a
+    // known source (FILL_ID_SHAPE_DECIDED). A typo like "dataapi:..." would
+    // silently bypass cross-source dedupe; this CHECK makes that impossible.
+    check(
+      "poly_copy_trade_fills_fill_id_shape",
+      sql`${table.fillId} ~ '^(data-api|clob-ws):.+'`
+    ),
+    // Enumerate the canonical OrderStatus set at the schema layer so a buggy
+    // writer can't silently persist, e.g., "LIVE" or "Placed".
+    check(
+      "poly_copy_trade_fills_status_check",
+      sql`${table.status} IN ('pending','open','filled','partial','canceled','error')`
+    ),
   ]
 );
 
@@ -124,6 +146,11 @@ export const polyCopyTradeDecisions = pgTable(
     index("poly_copy_trade_decisions_target_fill_idx").on(
       table.targetId,
       table.fillId
+    ),
+    // Enumerate the `decide()` return branches at the schema layer.
+    check(
+      "poly_copy_trade_decisions_outcome_check",
+      sql`${table.outcome} IN ('placed','skipped','error')`
     ),
   ]
 );

@@ -3579,7 +3579,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "poly_copy_trade_decisions_outcome_check": {
+          "name": "poly_copy_trade_decisions_outcome_check",
+          "value": "\"poly_copy_trade_decisions\".\"outcome\" IN ('placed','skipped','error')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.poly_copy_trade_fills": {
@@ -3673,6 +3678,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "poly_copy_trade_fills_order_id_unique": {
+          "name": "poly_copy_trade_fills_order_id_unique",
+          "columns": [
+            {
+              "expression": "order_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"poly_copy_trade_fills\".\"order_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {},
@@ -3684,7 +3705,16 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "poly_copy_trade_fills_fill_id_shape": {
+          "name": "poly_copy_trade_fills_fill_id_shape",
+          "value": "\"poly_copy_trade_fills\".\"fill_id\" ~ '^(data-api|clob-ws):.+'"
+        },
+        "poly_copy_trade_fills_status_check": {
+          "name": "poly_copy_trade_fills_status_check",
+          "value": "\"poly_copy_trade_fills\".\"status\" IN ('pending','open','filled','partial','canceled','error')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.user_profiles": {
