@@ -7,7 +7,7 @@ created: 2026-04-17
 updated: 2026-04-17
 branch: design/poly-copy-trade-pr-b
 worktree: /Users/derek/dev/cogni-template-poly-copy-trade-pr-b
-last_commit: 92b10f52b
+last_commit: bf0e1794c
 ---
 
 # Handoff: task.0315 Phase 1 — CP3.2+ (CLOB adapter + wiring)
