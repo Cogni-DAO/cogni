@@ -148,7 +148,7 @@ The workflow's own `wait-for-candidate-ready.sh` is endpoint-only and passes bef
   |= "app started" | json | buildSha = "<PR head SHA>"
 ```
 
-For each app the PR affects (poly / resy / operator), at least one matching line must exist from a pod started during the flight window. If no match within ~10 min post-flight, inspect Argo logs (`{namespace="argocd"} |= "candidate-a-<app>"`) for stuck sync operations, escalate.
+For each app the PR affects (poly / resy / operator): **first** poll Argo logs (`{namespace="argocd"} |= "candidate-a-<app>"`) until you see `Progressing → Healthy` for the flight's commit SHA. **Then** query the `app started` log and confirm `buildSha` exactly matches the PR head SHA. Do not report rollout success until both are observed — pod-hash changes, `/readyz` 200s, and "new pod appeared" are not proof. If Argo hasn't gone Healthy within ~10 min, escalate.
 
 **Don't `curl /readyz` yourself.** Ingress serves the old pod for minutes after Argo reports Healthy; `/readyz` is a known false-positive channel. The workflow already runs endpoint checks internally.
 
