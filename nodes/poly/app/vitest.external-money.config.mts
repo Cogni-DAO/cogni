@@ -23,9 +23,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load .env.test first (defaults), then .env.local (overrides with real dev values).
 // dotenv won't overwrite existing vars, so load .env.local first for priority.
-const local = config({ path: ".env.local" });
+const local = config({ path: path.resolve(__dirname, "../../../.env.local") });
 expand(local);
-const test = config({ path: ".env.test" });
+const test = config({ path: path.resolve(__dirname, "../../../.env.test") });
 expand(test);
 
 // Fail fast if required env vars are missing

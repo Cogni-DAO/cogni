@@ -21,7 +21,7 @@ import { defineConfig } from "vitest/config";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Load .env.test for DB config (testcontainers overrides DATABASE_URL at runtime)
-const env = config({ path: ".env.test" });
+const env = config({ path: path.resolve(__dirname, "../../../.env.test") });
 expand(env);
 
 export default defineConfig({
