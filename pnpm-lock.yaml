@@ -50,15 +50,24 @@ importers:
       '@cogni/ingestion-core':
         specifier: workspace:*
         version: link:packages/ingestion-core
+      '@cogni/knowledge-store':
+        specifier: workspace:^
+        version: link:packages/knowledge-store
       '@cogni/langgraph-graphs':
         specifier: workspace:*
         version: link:packages/langgraph-graphs
       '@cogni/node-core':
         specifier: workspace:*
         version: link:packages/node-core
+      '@cogni/node-template-knowledge':
+        specifier: workspace:*
+        version: link:nodes/node-template/packages/knowledge
       '@cogni/operator-wallet':
         specifier: workspace:*
         version: link:packages/operator-wallet
+      '@cogni/poly-knowledge':
+        specifier: workspace:*
+        version: link:nodes/poly/packages/knowledge
       '@cogni/repo-spec':
         specifier: workspace:*
         version: link:packages/repo-spec
