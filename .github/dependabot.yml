@@ -1,0 +1,109 @@
+version: 2
+
+# Dependabot configuration for a pnpm workspace monorepo.
+#
+# Problem: by default, Dependabot opens one PR per package.json it finds.
+# In a pnpm workspace there is a single pnpm-lock.yaml at the repo root, so
+# per-workspace PRs produce an outdated lockfile and fail `pnpm install
+# --frozen-lockfile` in CI.
+#
+# Fix: scan only the root package.json and use `groups` to batch related
+# updates into a single PR (one lockfile regen, one CI run, one review).
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+      include: scope
+    groups:
+      next-ecosystem:
+        patterns:
+          - "next"
+          - "next-*"
+          - "@next/*"
+          - "eslint-config-next"
+      react-ecosystem:
+        patterns:
+          - "react"
+          - "react-*"
+          - "@types/react"
+          - "@types/react-dom"
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+          - "radix-ui"
+      assistant-ui:
+        patterns:
+          - "@assistant-ui/*"
+      dnd-kit:
+        patterns:
+          - "@dnd-kit/*"
+      opentelemetry:
+        patterns:
+          - "@opentelemetry/*"
+      octokit:
+        patterns:
+          - "@octokit/*"
+      temporal:
+        patterns:
+          - "@temporalio/*"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      drizzle:
+        patterns:
+          - "drizzle-*"
+      vitest-stack:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "happy-dom"
+      langchain-langgraph:
+        patterns:
+          - "@langchain/*"
+          - "langfuse"
+      viem-wagmi:
+        patterns:
+          - "viem"
+          - "wagmi"
+          - "@wagmi/*"
+          - "@rainbow-me/*"
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "build(ci)"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: America/New_York
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "build(docker)"
