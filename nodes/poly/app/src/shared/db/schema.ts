@@ -18,6 +18,7 @@ export * from "@cogni/db-schema/attribution";
 export * from "@cogni/db-schema/auth";
 export * from "@cogni/db-schema/billing";
 export * from "@cogni/db-schema/identity";
+export * from "@cogni/db-schema/poly-copy-trade";
 export * from "@cogni/db-schema/profile";
 // Core FK targets (users, billingAccounts)
 export * from "@cogni/db-schema/refs";

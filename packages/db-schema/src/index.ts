@@ -18,6 +18,7 @@ export * from "./auth";
 export * from "./billing";
 export * from "./connections";
 export * from "./identity";
+export * from "./poly-copy-trade";
 export * from "./profile";
 export * from "./refs";
 export * from "./scheduling";

@@ -11,6 +11,8 @@
  * @public
  */
 
+// Idempotency-key helper (task.0315 CP3.3) — pinned for executor + WS path.
+export { clientOrderIdFor } from "./domain/client-order-id.js";
 // Order domain (Run phase — added task.0315 Phase 1)
 export {
   type Fill,
