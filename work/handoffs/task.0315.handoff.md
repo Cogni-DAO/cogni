@@ -27,13 +27,14 @@ last_commit: 92b10f52b
 
 ## Current State
 
-- **Shipped (4 commits on branch):**
+- **Shipped (5 commits on branch):**
   - `8293eb665` — CP1 types + ports (Run-phase `MarketProviderPort`, `OrderIntent`/`OrderReceipt`/`OrderStatus`/`Fill` Zod, `PolymarketOrderSigner` port, `OperatorWalletPort.signPolymarketOrder` stub)
   - `00fea90f9` — CP2 off-chain EIP-712 signing proof via `@privy-io/node/viem`
   - `a018fea4c` — Polymarket-account-setup guide + `derive-polymarket-api-keys` + `probe-polymarket-account` scripts
   - `c8ef5ca5c` — **CP3.1** on-chain USDC.e allowance approvals for {Exchange, Neg-Risk Exchange, Neg-Risk Adapter}, all MaxUint256
+  - **CP3.1.5** (this commit) — delete dead signer surface + `walletKey` + fix Safe-proxy doc per design-review 2026-04-17
 - **Operator wallet on Polygon mainnet:** 20.43 USDC.e funded · ~9.99 POL gas · L2 CLOB creds registered · 3 allowances at max. A real BUY order is technically placeable today; only the adapter code path is missing.
-- **Dead surface awaiting CP3.4:** CP1 shipped `OperatorWalletPort.signPolymarketOrder` + `PolymarketOrderSigner` port under the assumption signing would flow through the wallet port. CP2 rev 4 replaced that with `createViemAccount`. The port method + 4 fake-adapter impls + contract test case are scheduled for deletion in CP3.4.
+- **CP3.1.5 cleaned up dead surface** (pulled forward from original CP3.4 per design-review 2026-04-17): deleted `PolymarketOrderSigner` port + `OperatorWalletPort.signPolymarketOrder` + CP1 stub + 4 `FakeOperatorWalletAdapter` impls + resy contract test case + duplicated `Eip712TypedData` type + `MarketCredentials.walletKey` escape hatch. `PaperAdapter.provider` is now constructor-configurable.
 
 ## Decisions Made
 
@@ -45,11 +46,11 @@ last_commit: 92b10f52b
 
 ## Next Actions
 
-- [ ] **CP3.2 — CLOB adapter** (~1 day). Implement `placeOrder` / `cancelOrder` / `getOrder` in `packages/market-provider/src/adapters/polymarket/clob.adapter.ts` using `ClobClient`. Constructor takes viem `LocalAccount` + `ApiKeyCreds`. Add `DA_EMPTY_HASH_REJECTED` normalizer. Contract test vs recorded clob-client response fixture. Move `@polymarket/clob-client` to market-provider as optional peerDep.
+- [x] **CP3.1.5 — Delete dead surface** ✅ pulled forward from original CP3.4. See "Current State" above.
+- [ ] **CP3.2 — CLOB adapter** (~1 day). Implement `placeOrder` / `cancelOrder` / `getOrder` in `packages/market-provider/src/adapters/polymarket/clob.adapter.ts` using `ClobClient`. Constructor takes viem `LocalAccount` + `ApiKeyCreds`. Add `DA_EMPTY_HASH_REJECTED` normalizer. Contract test vs recorded clob-client response fixture. **AC**: `@polymarket/clob-client` moves to `packages/market-provider` as optional peerDep.
 - [ ] **CP3.2 live dry-rehearsal script** `scripts/experiments/place-polymarket-order.ts` that places (and immediately cancels) one $1-minimum BUY via the new adapter. This is CP5's dress rehearsal.
-- [ ] **CP3.3 — DB migrations** (~½ day). Drizzle migration for `poly_copy_trade_fills (wallet, fill_id, decided_at, order_id, PK(wallet,fill_id))`, `poly_copy_trade_config (singleton, live_enabled, updated_at, updated_by)`, `poly_copy_trade_decisions` (append-only log). Migration header cites the P0.2 `fill_id` composite schema verbatim.
-- [ ] **CP3.4 — Delete dead surface** (~½ day). Remove `OperatorWalletPort.signPolymarketOrder`, `packages/market-provider/src/port/polymarket-order-signer.port.ts`, the CP1 stub, 4 `FakeOperatorWalletAdapter` impls, the `operator-wallet.contract.test.ts` CP1 case. Update `packages/operator-wallet/AGENTS.md` — the "dead surface" note becomes "deleted in CP3.4".
-- [ ] **CP4** (~4 days). Pure `decide()` + heavy unit tests; `clob-executor` with dynamic import gated on `POLY_ROLE=trader`; 30s poll job (`@scaffolding`, `Deleted-in-phase: 4`); SELECT-backed dashboard card (`@scaffolding`); container wiring; env vars.
+- [ ] **CP3.3 — DB migrations** (~½ day). Drizzle migrations for `poly_copy_trade_fills`, `poly_copy_trade_config` (singleton, `enabled DEFAULT false` = fail-closed), `poly_copy_trade_decisions` (append-only log). Migration header pins BOTH the P0.2 composite `fill_id` shape AND `client_order_id = keccak256(utf8Bytes(target_id + ':' + fill_id))` verbatim.
+- [ ] **CP4** (~4 days). Pure `decide()` + heavy unit tests (include fail-closed kill-switch branch); `clob-executor` with dynamic import gated on `POLY_ROLE=trader`; 30s poll job (`@scaffolding`, `Deleted-in-phase: 4`); SELECT-backed dashboard card (`@scaffolding`); container wiring; env vars.
 - [ ] **CP5** (manual, ~1h). Deploy PR #890 to canary. DRY_RUN soak → flip live with tight caps → capture real `order_id` → paste into PR.
 - [ ] **Merge gate for PR #890:** one real `order_id` + one live→shadow halt proven + PR description names proxy-wallet key custodian.
 

@@ -44,7 +44,3 @@ export {
   type MarketProviderPort,
   OrderNotSupportedError,
 } from "./port/market-provider.port.js";
-export type {
-  Eip712TypedData,
-  PolymarketOrderSigner,
-} from "./port/polymarket-order-signer.port.js";

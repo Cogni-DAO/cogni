@@ -9,7 +9,7 @@
 
 ## Purpose
 
-Standalone workspace package (`@cogni/market-provider`) providing a typed port for prediction market platforms (Polymarket, Kalshi). Covers the full provider lifecycle: read markets (Crawl) and submit orders (Run — Polymarket only). Adapters use constructor-injected credentials aligned with the tenant-connections spec. A narrow `PolymarketOrderSigner` port decouples the Polymarket CLOB adapter from wallet-custody internals.
+Standalone workspace package (`@cogni/market-provider`) providing a typed port for prediction market platforms (Polymarket, Kalshi). Covers the full provider lifecycle: read markets (Crawl) and submit orders (Run — Polymarket only). Adapters use constructor-injected credentials aligned with the tenant-connections spec. The CLOB adapter takes a viem `LocalAccount` (from `@privy-io/node/viem#createViemAccount`) via constructor — no custom signer port (see task.0315 CP3.1.5).
 
 ## Pointers
 
@@ -41,7 +41,7 @@ Standalone workspace package (`@cogni/market-provider`) providing a typed port f
 
 **Root barrel** (`@cogni/market-provider`):
 
-- Types: `MarketProviderPort`, `MarketCredentials`, `MarketProviderConfig`, `NormalizedMarket`, `MarketProvider`, `ListMarketsParams`, `MarketOutcome`, `PolymarketOrderSigner`, `Eip712TypedData`, `OrderIntent`, `OrderReceipt`, `OrderStatus`, `OrderSide`, `Fill`, `FillSource`
+- Types: `MarketProviderPort`, `MarketCredentials`, `MarketProviderConfig`, `NormalizedMarket`, `MarketProvider`, `ListMarketsParams`, `MarketOutcome`, `OrderIntent`, `OrderReceipt`, `OrderStatus`, `OrderSide`, `Fill`, `FillSource`
 - Schemas: `NormalizedMarketSchema`, `MarketProviderSchema`, `ListMarketsParamsSchema`, `MarketOutcomeSchema`, `OrderIntentSchema`, `OrderReceiptSchema`, `OrderStatusSchema`, `OrderSideSchema`, `FillSchema`, `FillSourceSchema`
 - Errors: `OrderNotSupportedError`
 - Pure fns: `normalizePolymarketMarket()`, `normalizeKalshiMarket()`
@@ -65,13 +65,13 @@ Standalone workspace package (`@cogni/market-provider`) providing a typed port f
 
 ## Responsibilities
 
-- This directory **does**: define port interface, Zod domain schemas (Crawl + Run), pure normalizers, platform REST adapters, and the narrow `PolymarketOrderSigner` port that wallet-custody packages satisfy.
+- This directory **does**: define port interface, Zod domain schemas (Crawl + Run), pure normalizers, and platform REST adapters.
 - This directory **does not**: load env vars, manage lifecycle, persist to DB, hold key material, or know about Privy / any specific wallet backend.
 
 ## Notes
 
 - `MarketProviderPort` now carries Run methods (`placeOrder`, `cancelOrder`, `getOrder`). Adapters that do not implement trading (Kalshi, paper stub pre-P3, baseline Polymarket Gamma reader) throw `OrderNotSupportedError` — they satisfy the port at compile time without risking accidental order placement.
 - KalshiAdapter is READ-ONLY. It NEVER calls POST/PUT endpoints. The Kalshi API key may have real money — no order placement.
-- Baseline `PolymarketAdapter` uses only public Gamma API — no wallet operations. A CLOB adapter (to be added in CP3) wraps `@polymarket/clob-client` and depends on `PolymarketOrderSigner` via constructor injection.
+- Baseline `PolymarketAdapter` uses only public Gamma API — no wallet operations. A CLOB adapter (to be added in CP3.2) wraps `@polymarket/clob-client` and takes a viem `LocalAccount` + `ApiKeyCreds` via constructor injection. `@polymarket/clob-client` moves from root devDeps to this package as optional peerDep in CP3.2.
 - Walk phase will add `getPrices()`, `getOrderbook()` methods when the pipeline needs them.
 - PollAdapter (Walk) delegates to this port for HTTP calls — one client per platform, not two.

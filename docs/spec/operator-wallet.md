@@ -147,18 +147,6 @@ interface OperatorWalletPort {
    * @throws if contract not allowlisted, sender mismatch, or value exceeds cap
    */
   fundOpenRouterTopUp(intent: TransferIntent): Promise<string>;
-
-  /**
-   * Sign a Polymarket CLOB order's EIP-712 typed-data payload via the HSM.
-   * Enforces `typedData.domain.chainId === 137` (Polygon). Deliberately named
-   * (not a generic signTypedData) to preserve NO_GENERIC_SIGNING.
-   *
-   * Added task.0315 Phase 1 for copy-trade Run phase. The CLOB adapter in
-   * `@cogni/market-provider` depends on the narrow `PolymarketOrderSigner`
-   * port — not on Privy internals — and this method is how the wallet adapter
-   * satisfies that contract.
-   */
-  signPolymarketOrder(typedData: Eip712TypedData): Promise<`0x${string}`>;
 }
 ```
 

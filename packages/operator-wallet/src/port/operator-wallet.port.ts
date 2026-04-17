@@ -3,11 +3,10 @@
 
 /**
  * Module: `@cogni/operator-wallet/port`
- * Purpose: Operator wallet port — narrow, typed interface for outbound on-chain payments and scoped signing primitives.
- * Scope: Defines the operator wallet interface, TransferIntent type, and Polymarket-scoped EIP-712 typed-data envelope. Does not implement custody logic or hold key material.
+ * Purpose: Operator wallet port — narrow, typed interface for outbound on-chain payments.
+ * Scope: Defines the operator wallet interface and TransferIntent type. Does not implement custody logic or hold key material.
  * Invariants:
  *   - NO_GENERIC_SIGNING — the port has no `signTransaction(calldata)` / `signMessage(bytes)` surface.
- *     Each signing method is scoped to a named use-case (`signPolymarketOrder` enforces Polygon CLOB domain).
  *   - KEY_NEVER_IN_APP — no raw key material.
  * Side-effects: none (interface definition only)
  * Links: docs/spec/operator-wallet.md, work/items/task.0315.poly-copy-trade-prototype.md
@@ -59,33 +58,13 @@ export interface TransferIntent {
 }
 
 /**
- * EIP-712 typed-data envelope for Polymarket CLOB orders.
- *
- * Mirrors the shape of `@cogni/market-provider`'s `Eip712TypedData` so a Privy
- * adapter can satisfy `PolymarketOrderSigner` without the wallet package importing
- * from the market-provider package (and vice versa). Only the Polymarket-scoped
- * signer method on the wallet port depends on this type.
- */
-export interface Eip712TypedData {
-  readonly domain: {
-    readonly name: string;
-    readonly version: string;
-    readonly chainId: number;
-    readonly verifyingContract: string;
-  };
-  readonly types: Readonly<
-    Record<
-      string,
-      ReadonlyArray<{ readonly name: string; readonly type: string }>
-    >
-  >;
-  readonly primaryType: string;
-  readonly message: Readonly<Record<string, unknown>>;
-}
-
-/**
- * Operator wallet port — a bounded payments actuator and a scoped signer.
+ * Operator wallet port — a bounded payments actuator.
  * Each outbound transaction type gets a named method. No raw signing surface.
+ *
+ * Polymarket CLOB order signing is NOT on this port: it is handled directly
+ * in the trader-role runtime via `@privy-io/node/viem#createViemAccount`,
+ * which produces a viem `LocalAccount` that `@polymarket/clob-client` consumes
+ * natively. Wrapping that in a bespoke port added no value — see task.0315 CP2.
  */
 export interface OperatorWalletPort {
   /** Return the operator wallet's public address (checksummed) */
@@ -112,19 +91,4 @@ export interface OperatorWalletPort {
    * @throws if contract not allowlisted, sender mismatch, or value exceeds cap
    */
   fundOpenRouterTopUp(intent: TransferIntent): Promise<string>;
-
-  /**
-   * Sign a Polymarket CLOB order's EIP-712 typed-data payload via the HSM.
-   * Enforces that `typedData.domain.chainId` is Polygon (137) — signing with
-   * any other chainId MUST throw. The method is deliberately named (not a
-   * generic `signTypedData`) to preserve NO_GENERIC_SIGNING.
-   *
-   * Used by the Polymarket CLOB adapter through the narrow
-   * `PolymarketOrderSigner` port (`@cogni/market-provider`), so the market
-   * adapter has no Privy imports.
-   *
-   * @returns 0x-prefixed hex-encoded 65-byte signature.
-   * @throws on chainId mismatch.
-   */
-  signPolymarketOrder(typedData: Eip712TypedData): Promise<`0x${string}`>;
 }

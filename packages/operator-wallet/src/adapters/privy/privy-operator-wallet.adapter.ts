@@ -27,7 +27,6 @@ import {
   TRANSFERS_ABI,
 } from "../../domain/transfers-abi.js";
 import type {
-  Eip712TypedData,
   OperatorWalletPort,
   TransferIntent,
 } from "../../port/operator-wallet.port.js";
@@ -345,19 +344,5 @@ export class PrivyOperatorWalletAdapter implements OperatorWalletPort {
       });
 
     return result.hash;
-  }
-
-  /**
-   * Phase 1 CP1 stub. Real Polygon EIP-712 signing lands in CP2 and uses
-   * `POLYGON_CAIP2 = "eip155:137"` — existing methods above stay pinned to
-   * `BASE_CAIP2` (the adapter becomes chain-parameterized per use-case, not
-   * globally).
-   */
-  signPolymarketOrder(_typedData: Eip712TypedData): Promise<`0x${string}`> {
-    return Promise.reject(
-      new Error(
-        "[OperatorWallet] signPolymarketOrder is a CP1 stub — real Polygon EIP-712 impl lands in CP2 (task.0315 Phase 1)."
-      )
-    );
   }
 }

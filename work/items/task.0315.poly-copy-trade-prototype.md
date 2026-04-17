@@ -69,7 +69,11 @@ external_refs:
     - **Live-testable deliverable** (evidence gate): `scripts/experiments/sign-polymarket-order.ts` constructs a real Polymarket CLOB order via **`@polymarket/order-utils`** (or `@polymarket/clob-client`'s order-building helper — whichever is the exported surface), then either (A) passes the produced `Eip712TypedData` to `adapter.signPolymarketOrder` directly for a minimal proof, or (B) — preferred — instantiates `new ClobClient(host, chainId, shim)` and calls `clobClient.createOrder({...})` in dry-run mode to prove the full seam (builder + shim + adapter + Privy all talk). Then verify the 65-byte signature against `expectedAddress` via `viem.verifyTypedData()`. Zero on-chain cost, no USDC, no Safe proxy, no ToS required — `createOrder` only signs.
     - **Why OSS envelope construction, not hand-rolled**: Polymarket has revved the order struct (neg-risk adapter added `signatureType: uint8`; CTF exchange verifyingContract varies per market class). Hand-rolling the envelope in CP2 risks going stale while `order-utils` stays current — and CP3's "green" would only prove a primitive we already trusted instead of the full CP3 path. Adopting `@polymarket/order-utils` here is the OSS-first move the reviewer flagged.
     - Script output + signature hex + clob-client's logged envelope pasted into the PR as CP2 evidence.
-  - [ ] **CP3** — polymarket adapter Run methods via `@polymarket/clob-client`; signer + `safe_proxy_address` via constructor. New `poly_copy_trade_{fills,config,decisions}` tables with migration header citing the P0.2 `fill_id` shape verbatim. `DA_EMPTY_HASH_REJECTED` enforced at a normalizer. Contract test against a recorded clob-client fixture.
+  - [ ] **CP3** — split into sub-CPs:
+    - **CP3.1** ✅ on-chain USDC.e MaxUint256 allowances for {Exchange, Neg-Risk Exchange, Neg-Risk Adapter}.
+    - **CP3.1.5** ✅ delete dead signer surface (CP1 `PolymarketOrderSigner` port + `OperatorWalletPort.signPolymarketOrder` + stub + 4 fakes + contract test) — pulled forward from original CP3.4 per design-review 2026-04-17.
+    - **CP3.2** polymarket CLOB adapter Run methods via `@polymarket/clob-client`. Constructor takes viem `LocalAccount` + `ApiKeyCreds`. `DA_EMPTY_HASH_REJECTED` normalizer. Contract test vs recorded clob-client fixture. Move `@polymarket/clob-client` to `packages/market-provider` as optional peerDep (**explicit AC**).
+    - **CP3.3** Drizzle migrations for `poly_copy_trade_{fills,config,decisions}`. Migration header cites the P0.2 `fill_id` shape verbatim AND pins `client_order_id` hash: `keccak256(utf8Bytes(target_id + ':' + fill_id))` truncated to 32 bytes (0x + 64 hex). `poly_copy_trade_config.enabled` defaults to `false` (fail-closed).
   - [ ] **CP4** — pure `decide()` + heavy unit tests (skip branches + caps + idempotency); `clob-executor` dynamic-import-gated on `POLY_ROLE=trader`; disposable 30 s poll job (`@scaffolding` / `Deleted-in-phase: 4`); SELECT-backed dashboard card (`@scaffolding`); container wiring + env vars; absence-of-module-load assertion for non-trader replicas.
 - [ ] **Phase 2 — PR-B2 — Click-to-copy UI** (~4 days). `poly_copy_trade_targets` table + dashboard "Copy" button + Copy Targets card. DB-authoritative-when-populated; env fallback retained. Env-removal filed as follow-up.
 - [ ] **Phase 3 — PR-B3 — Paper-adapter body** (~3 days). 14-day soak produces the Phase 4 GO/NO-GO evidence. Sunsets the project if no edge.
@@ -120,11 +124,10 @@ Written in Phase 1 unless otherwise noted. No later phase modifies these — onl
 
 - `packages/market-provider/src/port/market-provider.port.ts` — Run-phase methods `placeOrder` / `cancelOrder` / `getOrder`.
 - `packages/market-provider/src/domain/order.ts` — `OrderIntent` / `OrderReceipt` / `OrderStatus` / `Fill` Zod schemas.
-- `packages/market-provider/src/port/polymarket-order-signer.port.ts` — narrow signer interface the market adapter depends on.
-- `packages/market-provider/src/adapters/polymarket/` — Run methods via `@polymarket/clob-client`. Sole importer of the CLOB SDK. Constructor-injected signer.
-- `packages/operator-wallet/src/{port,adapters/privy}` — `signPolymarketOrder(typedData)` on Polygon EIP-712. Extends the existing adapter; reuses existing HSM custody.
+- `packages/market-provider/src/adapters/polymarket/clob.adapter.ts` — Run methods via `@polymarket/clob-client`. Sole importer of the CLOB SDK. Constructor takes viem `LocalAccount` + `ApiKeyCreds` (no custom signer port — CP3.1.5 deleted `PolymarketOrderSigner` as dead surface).
+- `packages/operator-wallet/` — **no Polymarket surface**. Privy adapter gains no new methods; CLOB signing uses `@privy-io/node/viem#createViemAccount` directly in the trader-role runtime.
 - `nodes/poly/app/src/features/copy-trade/decide.ts` — pure function, heavy unit tests.
-- `nodes/poly/app/src/features/copy-trade/clob-executor.ts` — takes a `MirrorIntent`, returns `{order_id}` or throws. Dynamic-import-gated on `POLY_ROLE === 'trader'`; sole importer of the signer bridge.
+- `nodes/poly/app/src/features/copy-trade/clob-executor.ts` — takes a `MirrorIntent`, returns `{order_id}` or throws. Dynamic-import-gated on `POLY_ROLE === 'trader'`; sole importer of `@polymarket/clob-client` + `createViemAccount`.
 - `nodes/poly/app/src/shared/db/schema.ts` — `poly_copy_trade_fills`, `poly_copy_trade_config`, `poly_copy_trade_decisions`. Schema below.
 - `packages/market-provider/src/adapters/paper/` — adapter shape frozen in P1 (throws `NotImplemented`); body lands in Phase 3.
 - Observability on `decide()` outcomes only: Pino log + Prometheus `decisions_total{outcome, reason}` counter per call. Poll-mechanism metrics are **not** instrumented.
@@ -136,7 +139,7 @@ poly_copy_trade_fills (
   target_id    uuid        NOT NULL,   -- P1: synthetic UUID per env target; P2: FK to poly_copy_trade_targets
   fill_id      text        NOT NULL,   -- shape decided in Phase 0.2 (committed in this migration's header)
   observed_at  timestamptz NOT NULL,
-  client_order_id text     NOT NULL,   -- hash(target_id || fill_id)
+  client_order_id text     NOT NULL,   -- keccak256(utf8Bytes(target_id || ':' || fill_id)), 0x-prefixed 64 hex
   order_id     text        NULL,       -- NULL until placeOrder completes
   status       text        NOT NULL,
   PRIMARY KEY (target_id, fill_id)
@@ -210,19 +213,19 @@ poly_copy_trade_decisions (
 - `POLY_CLOB_API_KEY`, `POLY_CLOB_API_SECRET`, `POLY_CLOB_PASSPHRASE` (CLOB L2 auth — stay in env/vault across all phases).
 - `COPY_TRADE_TARGET_WALLET`, `COPY_TRADE_MODE` (`paper` | `live`), `COPY_TRADE_MIRROR_USDC`, `COPY_TRADE_MAX_DAILY_USDC`, `COPY_TRADE_MAX_FILLS_PER_HOUR` — scaffolding, removed after P2.
 
-**Signer:** Privy operator wallet gains `signPolymarketOrder` (Polygon EIP-712). Polygon support confirmed by operator. Market adapter depends only on the narrow `PolymarketOrderSigner` interface — no Privy imports, no env reads.
+**Signer:** Privy-managed EOA via `@privy-io/node/viem#createViemAccount` → viem `LocalAccount` consumed directly by `@polymarket/clob-client`. No bespoke `PolymarketOrderSigner` port, no wallet-port method — CP2 probing confirmed the EOA path works directly against the CLOB. The CP1 `signPolymarketOrder` port stub was deleted in CP3.1.5 as dead surface. See [docs/guides/polymarket-account-setup.md](../../docs/guides/polymarket-account-setup.md).
 
-**Safe-proxy model** (documented in PR, manual ops):
+**Custody model — direct-EOA path** (no Safe proxy, verified 2026-04-17):
 
-- `signer_address` = Privy EOA (signs orders, holds no funds).
-- `safe_proxy_address` = Polymarket Safe proxy (holds USDC.e, receives fills), deployed on ToS acceptance. Resolved once via `clob-client.getSafeAddress()` at adapter construction.
-- One-time: accept ToS with EOA; fund the **proxy** (not the EOA) with ~$20 USDC.e on Polygon; fund the EOA with a few POL for occasional gas.
+- `operator EOA` = Privy HSM-custodied wallet, **holds USDC.e and receives fills directly**. Polymarket's CLOB accepts direct-EOA accounts created via `createOrDeriveApiKey`.
+- **No Safe proxy, no ToS browser step, no `getSafeAddress()` call.** The Safe-proxy model documented in Polymarket's UI docs is for their browser-onboarded accounts; an API-first EOA path bypasses it.
+- One-time: `derive-polymarket-api-keys` (idempotent) → `approve-polymarket-allowances` (MaxUint256 for Exchange, Neg-Risk Exchange, Neg-Risk Adapter) → fund the EOA with USDC.e on Polygon + a few POL for gas. Operator wallet `0xdCCa8…5056` is onboarded as of CP3.1.
 
 **Explicitly deferred from P1:** WebSocket ingester, Redis streams, Temporal workflows, Temporal worker wiring, `ObservationEvent` table, node-stream event types, reconciliation workflow, multi-target, click-to-copy UI, paper-adapter body, Grafana dashboards for the poll itself.
 
 **🎯 Phase 1 E2E validation (ONE scenario):**
 
-> Set `COPY_TRADE_TARGET_WALLET=<high-volume Polymarket wallet>`, `COPY_TRADE_MODE=live`, `UPDATE poly_copy_trade_config SET enabled=true`. Within 60 s of that wallet's next real fill, a row appears in `poly_copy_trade_fills` with a non-null `order_id`, AND the Polymarket web UI under the Cogni Safe proxy shows an open position for `$1 USDC` on the same market. Paste `order_id` + screenshot into the PR.
+> Set `COPY_TRADE_TARGET_WALLET=<high-volume Polymarket wallet>`, `COPY_TRADE_MODE=live`, `UPDATE poly_copy_trade_config SET enabled=true`. Within 60 s of that wallet's next real fill, a row appears in `poly_copy_trade_fills` with a non-null `order_id`, AND the Polymarket web UI under the Cogni operator EOA (`0xdCCa8…5056`) shows an open position for `$1 USDC` on the same market. Paste `order_id` + screenshot into the PR.
 
 ---
 
@@ -361,13 +364,13 @@ Do NOT land in any phase above. Land when the **second consumer** arrives (e.g.,
 - **Paper-adapter body after streaming** (prior ordering). Rejected: P4's gate becomes "handful of $1 live orders", too noisy to base a 1.5-week investment decision on. Paper body moves before streaming so the 14-day soak becomes real evidence.
 - **Env-var removal in the UI PR (P2).** Rejected per reviewer: P2's job is the UI surface; ripping out P1's working env path in the same change increases blast radius for no scope win. DB-authoritative-when-populated with env fallback ships in P2; env-removal is a separate deprecation PR.
 - **"100 % decision agreement" as P4 cutover gate.** Rejected: poll and WS have different observation windows and will naturally disagree on timing/order; demanding 100 % agreement is unachievable. Replaced by idempotency gate: zero double-fires, exactly one `order_id` per `Fill`.
-- **Extending `OperatorWalletPort` with `placePolymarketOrder`.** Wallet port stays for transfers; it gains `signPolymarketOrder` (a signer primitive). Order placement belongs on `MarketProviderPort`.
+- **Extending `OperatorWalletPort` with `placePolymarketOrder`.** Wallet port stays transfer-only. Order placement belongs on `MarketProviderPort`.
 - **New `MarketExecutorPort` / `@cogni/market-executor` package.** `MarketProviderPort` was designed to grow Run methods; splitting read/write fragments credentials and provider abstraction.
-- **`clob-executor.ts` importing the signer key directly.** Signing lives in the Privy adapter; `clob-executor` imports the narrow `PolymarketOrderSigner` via the container.
+- **Custom `PolymarketOrderSigner` port + `OperatorWalletPort.signPolymarketOrder` method.** Initially added in CP1; deleted in CP3.1.5 as dead surface once CP2 proved `@privy-io/node/viem#createViemAccount` produces a viem `LocalAccount` that `@polymarket/clob-client` consumes natively. No hand-rolled translation, no shim.
 - **`DRY_RUN` flag as a conditional inside the live adapter.** Replaced by per-target `mode` column — adapter swap at the container boundary, no mixed identities.
 - **Awareness-plane `ObservationEvent` insert in P1/P2/P3/P4.** Deferred with named trigger (above). Premature abstraction against a single consumer.
 - **Self-attested legal-gate env var.** Trivially bypassable theater. Legal responsibility in the PR alignment-decisions checklist.
-- **Separate `POLY_PROXY_SIGNER_PRIVATE_KEY` env var.** Privy HSM holds the key via `signPolymarketOrder`. No new key surface.
+- **Separate `POLY_PROXY_SIGNER_PRIVATE_KEY` env var.** Privy HSM holds the key; `createViemAccount` routes signs through the HSM. No new key surface.
 - Importing any Python OSS — different runtime, viral licenses where applicable.
 - `poly_tracked_wallets` / weekly ranking batch — Data-API leaderboard is live.
 - Category scoping, ranking sophistication — defer.
@@ -387,13 +390,11 @@ Do NOT land in any phase above. Land when the **second consumer** arrives (e.g.,
 
 - `packages/market-provider/src/port/market-provider.port.ts` — extend with `placeOrder` / `cancelOrder` / `getOrder`.
 - `packages/market-provider/src/domain/order.ts` — `OrderIntent` / `OrderReceipt` / `OrderStatus` / `Fill` Zod schemas.
-- `packages/market-provider/src/port/polymarket-order-signer.port.ts` — narrow `{ signPolymarketOrder(typedData): Promise<Hex> }`.
-- `packages/market-provider/src/adapters/polymarket/` — Run methods via `@polymarket/clob-client`; signer + safe-proxy-address injected at construction.
-- `packages/market-provider/src/adapters/paper/` — interface scaffolded, body throws `NotImplemented`.
-- `packages/operator-wallet/src/port/operator-wallet.port.ts` — add `signPolymarketOrder(typedData): Promise<Hex>`.
-- `packages/operator-wallet/src/adapters/privy/privy-operator-wallet.adapter.ts` — implement for Polygon EIP-712 (parameterize chain scope: existing methods stay `BASE_CAIP2`, new method uses `POLYGON_CAIP2=eip155:137`).
+- `packages/market-provider/src/adapters/polymarket/clob.adapter.ts` — Run methods via `@polymarket/clob-client`; viem `LocalAccount` + `ApiKeyCreds` injected at construction. **`@polymarket/clob-client` moves to this package as optional peerDep in CP3.2 (explicit AC).**
+- `packages/market-provider/src/adapters/paper/` — interface scaffolded, body throws `NotImplemented`. `providerIdentity` is constructor-configurable (default `polymarket`).
+- `packages/operator-wallet/` — **no changes.** Polymarket signing does not live on this port; `createViemAccount` is called directly from `clob-executor.ts`.
 - `nodes/poly/app/src/features/copy-trade/decide.ts` — pure `decide()`, heavy unit tests.
-- `nodes/poly/app/src/features/copy-trade/clob-executor.ts` — takes `MirrorIntent`, returns `{order_id}`. Dynamic-import-gated on `POLY_ROLE === 'trader'`.
+- `nodes/poly/app/src/features/copy-trade/clob-executor.ts` — takes `MirrorIntent`, returns `{order_id}`. Dynamic-import-gated on `POLY_ROLE === 'trader'`. Sole importer of `@polymarket/clob-client` + `@privy-io/node/viem#createViemAccount`.
 - `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — `@scaffolding` / `Deleted-in-phase: 4`. 30 s poll → normalize → `decide()` → executor.
 - `nodes/poly/app/src/app/(app)/dashboard/_components/copy-trade-activity-card.tsx` — `@scaffolding` / `Deleted-in-phase: 4`. SELECT-backed card.
 - `nodes/poly/app/src/shared/db/schema.ts` — add `poly_copy_trade_fills`, `poly_copy_trade_config`, `poly_copy_trade_decisions`. Migration header declares the Phase 0.2 `fill_id` shape.
@@ -447,10 +448,10 @@ Do NOT land in any phase above. Land when the **second consumer** arrives (e.g.,
 
 ### Secret boundary
 
-- Signing key: Privy HSM only. Neither the market adapter nor app code sees raw key material. `signPolymarketOrder` is a named method on the wallet port.
-- `signer_address` (EOA, holds no funds), `safe_proxy_address` (holds USDC.e, receives fills). Stored with the Privy wallet config; surfaced through the adapter.
+- Signing key: Privy HSM only. Neither the market adapter nor app code sees raw key material. The trader-role runtime obtains a viem `LocalAccount` via `createViemAccount(privy, {...})` that routes signs through the HSM; `@polymarket/clob-client` consumes that account natively.
+- Single operator EOA holds USDC.e and receives fills (no Safe proxy — see "Custody model" above). Stored with the Privy wallet config; exposed via `OperatorWalletPort.getAddress()`.
 - CLOB L2 credentials: env/vault across all phases, per operator directive. Only loaded when `POLY_ROLE === 'trader'`.
-- One-time manual ops (PR description, not automated): accept Polymarket ToS with the EOA, record the Safe proxy, fund the **proxy** with USDC.e, fund the EOA with a few POL for gas.
+- One-time manual ops (PR description, not automated): run `derive-polymarket-api-keys`, run `approve-polymarket-allowances`, fund the EOA with USDC.e + a few POL for gas.
 
 ### Tests
 
@@ -467,18 +468,18 @@ Per-phase unit + integration tests are listed inline under each Phase's Files bl
 
 - [ ] STABLE_BOUNDARY: `decide()` is pure, zero I/O, and no phase after P1 modifies it — only grows its callers.
 - [ ] DECIDE_NOT_DUPLICATED: poll (P1), DB-driven poll (P2), and Temporal trigger (P4) all call the same `decide()` module.
-- [ ] CLOB_EXECUTOR_SOLE_SIGNER: `clob-executor.ts` is the only importer of the signer bridge and `@polymarket/clob-client`; dynamic-import-gated on `POLY_ROLE === 'trader'`.
-- [ ] SIGNER_VIA_PORT: market adapter depends only on the narrow `PolymarketOrderSigner` interface; no Privy or env imports.
+- [ ] CLOB_EXECUTOR_SOLE_SIGNER: `clob-executor.ts` is the only importer of `@polymarket/clob-client` and `@privy-io/node/viem`; dynamic-import-gated on `POLY_ROLE === 'trader'`.
+- [ ] SIGNER_VIA_LOCAL_ACCOUNT: the CLOB adapter takes a viem `LocalAccount` (from `createViemAccount`) via constructor; no Privy imports in the adapter, no env reads, no custom signer port.
 - [ ] PORT_IS_EXISTING: Run-phase methods extend the existing `MarketProviderPort`; no new port package.
 - [ ] SCAFFOLDING_LABELED: every disposable file's header states `@scaffolding` + `Deleted-in-phase: N`. Must include the phase number at which deletion occurs.
 - [ ] DB_AUTHORITATIVE_WHEN_POPULATED (P2+): once `poly_copy_trade_targets` has ≥1 enabled row, the env fallback is NOT consulted; env only fires when DB is empty.
 - [ ] ENV_FALLBACK_LOGGED (P2): every tick that consults env instead of DB emits a warn log + flips the `env_fallback_in_use` gauge to 1.
 - [ ] ENV*REMOVAL_DEFERRED (P2): the `COPY_TRADE*\*` env vars are NOT removed in the same PR as the UI; a follow-up deprecation work-item is filed at P2 closeout.
 - [ ] DEDUPE_PERSISTED: `poly_copy_trade_fills` PK `(target_id, fill_id)` is the commit point; in-memory dedupe is forbidden.
-- [ ] GLOBAL_KILL_DB_ROW: flipping `poly_copy_trade_config.enabled=false` halts live placements within one poll/workflow cycle.
+- [ ] GLOBAL_KILL_DB_ROW: flipping `poly_copy_trade_config.enabled=false` halts live placements within one poll/workflow cycle. **Fail-closed**: if the config SELECT fails (DB unreachable / timeout), the poll treats `enabled` as `false` and skips placement, emitting `kill_switch_fail_closed_total`. Migration header sets `enabled DEFAULT false`.
 - [ ] PER_TARGET_KILL (P2+): `poly_copy_trade_targets.enabled=false` halts that target; `mode='paper'` routes through the paper adapter (body from P3 on).
 - [ ] HARD_CAP_DAILY / HARD_CAP_HOURLY: enforced by `decide()` against `TargetConfig` caps.
-- [ ] IDEMPOTENT_BY_CLIENT_ID: `client_order_id = hash(target_id || fill_id)`; CLOB dedupes at placement; PK dedupes at commit.
+- [ ] IDEMPOTENT_BY_CLIENT_ID: `client_order_id = keccak256(utf8Bytes(target_id + ':' + fill_id))` as a 0x-prefixed 32-byte hex (64 hex chars). Function pinned in the CP3.3 migration header alongside the `fill_id` shape; both the executor and any future WS path MUST use this exact function. CLOB dedupes at placement; PK dedupes at commit.
 - [ ] DECIDE_OBSERVED: every `decide()` outcome emits Pino + `decisions_total{outcome, reason, source}`. The `source` label is mandatory from P1 onwards (always `data-api` in P1–P3; adds `clob-ws` in P4). Poll-mechanism metrics are NOT instrumented (tech-debt avoidance).
 - [ ] FILL_ID_SHAPE_DECIDED: the Phase 1 migration header declares the `data-api` `fill_id` shape per P0.2: composite `"<source>:<native_id>"` where `source ∈ {data-api, clob-ws}` and `data-api` native_id = `${transactionHash}:${asset}:${side}:${timestamp}` with empty-hash rows rejected at normalization. **The Phase 4 migration header MUST commit the final `clob-ws` native_id shape before the WS ingester activity lands** (shape is confirmed at P4 implementation time, not speculatively in P1). No bilingual dedupe across phases.
 - [ ] DA_EMPTY_HASH_REJECTED (P1+): Data-API trades with empty `transactionHash` are skipped at the normalizer with a warn log + `data_api_empty_tx_hash_total` counter increment. Never inserted into `poly_copy_trade_fills`. Uniqueness of the DA `fill_id` depends on this rejection.
@@ -681,7 +682,7 @@ No blockers. Ready to write CP2 code.
 
 - **Single-operator prototype.** No user-facing mirroring, no retail exposure, no multi-tenant. Scope expansion requires re-scoping in a new task.
 - **Legal responsibility is the operator's**, tracked in the PR description's alignment-decisions checklist, not an env-var gate.
-- **Key custody is Privy HSM.** No private-key env var. `signer_address` is the Privy-managed EOA; `safe_proxy_address` is the Polymarket Safe proxy. Rotation plan is Privy's standard HSM rotation.
+- **Key custody is Privy HSM.** No private-key env var. Direct-EOA path against the Polymarket CLOB (no Safe proxy — see "Custody model" in Phase 1). Rotation plan is Privy's standard HSM rotation.
 
 ## Notes on "is this worth productizing?"
 

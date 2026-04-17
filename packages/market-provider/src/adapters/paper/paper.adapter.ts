@@ -16,6 +16,7 @@
 import type { OrderIntent, OrderReceipt } from "../../domain/order.js";
 import type {
   ListMarketsParams,
+  MarketProvider,
   NormalizedMarket,
 } from "../../domain/schemas.js";
 import type {
@@ -24,6 +25,12 @@ import type {
 } from "../../port/market-provider.port.js";
 
 export interface PaperAdapterConfig extends MarketProviderConfig {
+  /**
+   * The underlying platform this paper adapter simulates. Labels telemetry +
+   * `decisions_total{source=...}` so a paper Kalshi run isn't mis-reported as
+   * `polymarket`. Defaults to `polymarket` — P1 only mirrors Polymarket.
+   */
+  providerIdentity?: MarketProvider;
   /**
    * Delay (seconds) between observed_at and book-snapshot time used to derive
    * the synthetic fill price. Default in P3: 5.
@@ -44,15 +51,14 @@ export interface PaperAdapterConfig extends MarketProviderConfig {
  * ahead of Phase 3 landing its body.
  */
 export class PaperAdapter implements MarketProviderPort {
-  // The underlying platform this paper adapter simulates. Copy-trade mirroring
-  // in P1 only targets Polymarket, so the paper surface reports "polymarket".
-  readonly provider = "polymarket" as const;
+  readonly provider: MarketProvider;
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- stored when body lands in P3
   private readonly config: PaperAdapterConfig;
 
   constructor(config: PaperAdapterConfig = {}) {
     this.config = config;
+    this.provider = config.providerIdentity ?? "polymarket";
   }
 
   listMarkets(_params?: ListMarketsParams): Promise<NormalizedMarket[]> {

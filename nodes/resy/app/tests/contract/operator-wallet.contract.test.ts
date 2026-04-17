@@ -73,29 +73,6 @@ describe("OperatorWalletPort contract", () => {
     expect(adapter.lastFundTopUpIntent).toEqual(FAKE_INTENT);
   });
 
-  it("signPolymarketOrder returns a 65-byte hex signature and records the typed-data", async () => {
-    const typedData = {
-      domain: {
-        name: "Polymarket CTF Exchange",
-        version: "1",
-        chainId: 137,
-        verifyingContract: "0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E",
-      },
-      types: {
-        Order: [
-          { name: "salt", type: "uint256" },
-          { name: "maker", type: "address" },
-          { name: "taker", type: "address" },
-        ],
-      },
-      primaryType: "Order",
-      message: { salt: "1", maker: "0x0", taker: "0x0" },
-    } as const;
-    const sig = await adapter.signPolymarketOrder(typedData);
-    expect(sig).toMatch(/^0x[a-fA-F0-9]{130}$/);
-    expect(adapter.lastSignPolymarketTypedData).toEqual(typedData);
-  });
-
   it("satisfies OperatorWalletPort interface", () => {
     // TypeScript compile-time check — if this doesn't compile, the port contract is broken
     const port: OperatorWalletPort = adapter;
@@ -103,7 +80,6 @@ describe("OperatorWalletPort contract", () => {
     expect(port.getSplitAddress).toBeDefined();
     expect(port.distributeSplit).toBeDefined();
     expect(port.fundOpenRouterTopUp).toBeDefined();
-    expect(port.signPolymarketOrder).toBeDefined();
   });
 });
 

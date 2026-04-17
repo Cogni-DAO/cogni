@@ -39,7 +39,7 @@ Standalone workspace package (`@cogni/operator-wallet`) providing Privy-managed 
 
 ## Public Surface
 
-- **Exports:** `OperatorWalletPort`, `TransferIntent`, `Eip712TypedData`, `PrivyOperatorWalletAdapter`, `PrivyOperatorWalletConfig`, `calculateSplitAllocations`, `SPLIT_TOTAL_ALLOCATION`, `OPENROUTER_CRYPTO_FEE_PPM`
+- **Exports:** `OperatorWalletPort`, `TransferIntent`, `PrivyOperatorWalletAdapter`, `PrivyOperatorWalletConfig`, `calculateSplitAllocations`, `SPLIT_TOTAL_ALLOCATION`, `OPENROUTER_CRYPTO_FEE_PPM`
 - **Routes:** none
 - **Env/Config keys:** `PRIVY_APP_ID`, `PRIVY_APP_SECRET`, `PRIVY_SIGNING_KEY`, `OPERATOR_MAX_TOPUP_USD` (consumed by `apps/operator` bootstrap, not by this package directly)
 
@@ -50,13 +50,13 @@ Standalone workspace package (`@cogni/operator-wallet`) providing Privy-managed 
 
 ## Responsibilities
 
-- This directory **does**: implement `distributeSplit()` and `fundOpenRouterTopUp()` via Privy HSM on Base; implement `signPolymarketOrder()` on Polygon (EIP-712 typed-data signing, scoped to the Polymarket CLOB domain); validate signing gates (SENDER_MATCH, DESTINATION_ALLOWLIST, CHAIN_MISMATCH, MIN_TOPUP, MAX_TOPUP_CAP); encode ERC-20 approve + Coinbase Commerce `transferTokenPreApproved` calldata.
-- This directory **does not**: hold raw key material, manage env vars, orchestrate charge creation, persist state, interact with databases, or expose a generic `signTypedData`/`signMessage` surface (NO_GENERIC_SIGNING — every signing method is named for its use-case).
+- This directory **does**: implement `distributeSplit()` and `fundOpenRouterTopUp()` via Privy HSM on Base; validate signing gates (SENDER_MATCH, DESTINATION_ALLOWLIST, CHAIN_MISMATCH, MIN_TOPUP, MAX_TOPUP_CAP); encode ERC-20 approve + Coinbase Commerce `transferTokenPreApproved` calldata.
+- This directory **does not**: hold raw key material, manage env vars, orchestrate charge creation, persist state, interact with databases, or expose a generic `signTypedData`/`signMessage` surface (NO_GENERIC_SIGNING — every signing method is named for its use-case). Polymarket CLOB order signing does NOT live here — it flows through `@privy-io/node/viem#createViemAccount` directly in the trader-role runtime (task.0315 CP2).
 
 ## Notes
 
 - `fundOpenRouterTopUp` validates 5 gates before submitting any transaction — all BigInt arithmetic.
-- `signPolymarketOrder` on the port is **dead surface as of task.0315 P1 CP2 (rev 4)** — retained as a CP1 stub to avoid scope creep, scheduled for deletion in CP3. CLOB order signing flows through `@privy-io/node/viem`'s `createViemAccount` (returns a viem `LocalAccount`) wired directly into `@polymarket/clob-client`, not through this adapter. Existing Base methods remain pinned to `BASE_CAIP2` — the adapter is chain-parameterized per use-case for transfers only.
-- CP2 evidence: `scripts/experiments/sign-polymarket-order.ts` — proves the Privy-HSM → clob-client signing seam on Polygon (chainId 137) with zero hand-rolled translation, zero shim, zero on-chain activity. `@polymarket/clob-client` is a root devDependency (only the experiment script consumes it); it will move to `packages/market-provider` as an optional peerDep in CP3.
+- Polymarket CLOB order signing does **not** live on this port. `@privy-io/node/viem#createViemAccount` returns a viem `LocalAccount` that `@polymarket/clob-client` consumes natively — the CP1 `signPolymarketOrder` port method + stub were deleted in CP3.1.5 as dead surface. Existing Base methods remain pinned to `BASE_CAIP2`; no chain parameterization needed today.
+- CP2 evidence: `scripts/experiments/sign-polymarket-order.ts` — proves the Privy-HSM → clob-client signing seam on Polygon (chainId 137) with zero hand-rolled translation, zero shim, zero on-chain activity. `@polymarket/clob-client` is a root devDependency (only the experiment script consumes it); it moves to `packages/market-provider` as an optional peerDep in CP3.2.
 - SIMULATE_BEFORE_BROADCAST deferred to Privy infrastructure (SDK has no pre-sign simulation hook).
 - Transfers ABI in `src/domain/transfers-abi.ts` matches deployed contract `0x03059433BCdB6144624cC2443159D9445C32b7a8` on Base.

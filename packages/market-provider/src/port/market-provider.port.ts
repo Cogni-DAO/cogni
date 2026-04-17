@@ -25,14 +25,16 @@ import type {
  * Credentials abstraction — resolved from connections table or env shim.
  * Intentionally opaque: adapters interpret per-provider.
  * CONNECTION_ID_ONLY: callers never see raw tokens in the port interface.
+ *
+ * Polymarket CLOB order signing does NOT flow through here — the Run-phase
+ * adapter takes a viem `LocalAccount` (from `@privy-io/node/viem#createViemAccount`)
+ * via constructor injection. No raw key material on the port surface.
  */
 export interface MarketCredentials {
   /** For API key auth (Kalshi) */
   readonly apiKey?: string;
   /** For RSA signing auth (Kalshi) — PEM-encoded RSA private key */
   readonly apiSecret?: string;
-  /** For wallet signing auth (Polymarket trading — Run phase) */
-  readonly walletKey?: string;
 }
 
 /** Config injected at construction — no env loading in adapters (PACKAGES_NO_ENV) */

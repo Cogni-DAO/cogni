@@ -20,7 +20,6 @@ export {
   SPLIT_TOTAL_ALLOCATION,
 } from "./domain/split-allocation.js";
 export type {
-  Eip712TypedData,
   OperatorWalletPort,
   TransferIntent,
 } from "./port/operator-wallet.port.js";
