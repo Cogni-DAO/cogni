@@ -100,12 +100,15 @@ export class PolymarketClobAdapter implements MarketProviderPort {
     const shareSize = intent.size_usdc / intent.limit_price;
     const side = intent.side === "BUY" ? Side.BUY : Side.SELL;
 
-    // B1 — fetch per-market tickSize + negRisk rather than hardcoding. Polymarket has
-    // markets with 0.001 / 0.0001 tick sizes, and neg-risk markets route through a
-    // different Exchange contract; a stale hardcode silently produces bad signatures.
-    const [tickSize, negRisk] = await Promise.all([
+    // B1 — fetch per-market tickSize + negRisk + feeRateBps rather than hardcoding.
+    // Polymarket has markets with 0.001 / 0.0001 tick sizes, neg-risk markets route
+    // through a different Exchange contract, and live markets today reject
+    // feeRateBps=0 with "fee rate for the market must be 1000". A stale hardcode
+    // either rejects at the CLOB or produces a bad EIP-712 signature.
+    const [tickSize, negRisk, feeRateBps] = await Promise.all([
       this.client.getTickSize(tokenId),
       this.client.getNegRisk(tokenId),
+      this.client.getFeeRateBps(tokenId),
     ]);
 
     const postOnly = intent.attributes?.post_only === true;
@@ -116,7 +119,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         price: intent.limit_price,
         size: shareSize,
         side,
-        feeRateBps: 0,
+        feeRateBps,
       },
       { tickSize, negRisk },
       OrderType.GTC,

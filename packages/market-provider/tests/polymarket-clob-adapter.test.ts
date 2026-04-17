@@ -138,9 +138,11 @@ describe("PolymarketClobAdapter", () => {
     getOrder?: ReturnType<typeof vi.fn>;
     getTickSize?: ReturnType<typeof vi.fn>;
     getNegRisk?: ReturnType<typeof vi.fn>;
+    getFeeRateBps?: ReturnType<typeof vi.fn>;
   }) {
     stub.getTickSize ??= vi.fn().mockResolvedValue("0.01");
     stub.getNegRisk ??= vi.fn().mockResolvedValue(false);
+    stub.getFeeRateBps ??= vi.fn().mockResolvedValue(0);
     const adapter = Object.create(
       PolymarketClobAdapter.prototype
     ) as PolymarketClobAdapter;
@@ -207,6 +209,25 @@ describe("PolymarketClobAdapter", () => {
     ];
     expect(opts.tickSize).toBe("0.001");
     expect(opts.negRisk).toBe(true);
+  });
+
+  it("placeOrder fetches per-market feeRateBps and forwards it (B1b)", async () => {
+    const getFeeRateBps = vi.fn().mockResolvedValue(1000);
+    const createAndPostOrder = vi.fn().mockResolvedValue({
+      orderID: "0xfee",
+      status: "live",
+    });
+    const adapter = makeAdapter({ createAndPostOrder, getFeeRateBps });
+    await adapter.placeOrder(BASE_INTENT);
+    expect(getFeeRateBps).toHaveBeenCalledWith(
+      BASE_INTENT.attributes?.token_id
+    );
+    const [userOrder] = createAndPostOrder.mock.calls[0] as [
+      { feeRateBps: number },
+      unknown,
+      string,
+    ];
+    expect(userOrder.feeRateBps).toBe(1000);
   });
 
   it("placeOrder forwards attributes.post_only=true to the CLOB (B5 safety)", async () => {
