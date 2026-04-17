@@ -58,7 +58,16 @@ export interface ModelProviderPort {
   listModels(ctx: ProviderContext): Promise<ModelOption[]>;
 
   /** Create an LlmService instance for graph execution */
-  createLlmService(connection?: ResolvedConnection): LlmService;
+  createLlmService(
+    connection?: ResolvedConnection,
+    /** Per bug.0300: optional run context for MCP tool bridge scoping */
+    runContext?: {
+      readonly runId: string;
+      readonly userId: string;
+      readonly graphId: string;
+      readonly toolIds: readonly string[];
+    }
+  ): LlmService;
 
   /** Per-model policy: does using this model consume platform credits? */
   requiresPlatformCredits(ref: ModelRef): Promise<boolean>;

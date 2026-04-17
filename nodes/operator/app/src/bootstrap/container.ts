@@ -19,6 +19,7 @@ import type {
   RepoCapability,
   WebSearchCapability,
 } from "@cogni/ai-tools";
+import { TOOL_CATALOG } from "@cogni/ai-tools";
 import type { AttributionStore } from "@cogni/attribution-ledger";
 import { DrizzleAttributionAdapter } from "@cogni/db-client";
 import type { FinancialLedgerPort } from "@cogni/financial-ledger";
@@ -93,6 +94,7 @@ import {
   PlatformModelProvider,
 } from "@/adapters/server/ai/providers";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
+import { startMcpToolBridge } from "@/adapters/server/mcp/tool-bridge";
 import { ServiceDrizzlePaymentAttemptRepository } from "@/adapters/server/payments/drizzle-payment-attempt.adapter";
 import { OpenRouterFundingAdapter } from "@/adapters/server/treasury/openrouter-funding.adapter";
 import { SplitTreasurySettlementAdapter } from "@/adapters/server/treasury/split-treasury-settlement.adapter";
@@ -270,6 +272,14 @@ let _workflowClientPromise: Promise<{
 export function getContainer(): Container {
   if (!_container) {
     _container = createContainer();
+    // Per bug.0300: start MCP tool bridge for Codex executor.
+    // bootstrap → adapters is allowed by dep-cruiser.
+    // biome-ignore lint/style/noProcessEnv: startup config before env framework
+    if (process.env.APP_ENV !== "test") {
+      // biome-ignore lint/style/noProcessEnv: port config
+      const mcpPort = Number(process.env.MCP_TOOL_BRIDGE_PORT) || 1729;
+      startMcpToolBridgeForContainer(_container, mcpPort);
+    }
   }
   return _container;
 }
@@ -871,4 +881,31 @@ export function resolveAppDb(): Database {
  */
 export function resolveServiceDb(): Database {
   return getServiceDb();
+}
+
+/**
+ * Start MCP tool bridge for Codex executor (bug.0300).
+ * Called once from getContainer() after container is built.
+ * Extracts Zod schemas from TOOL_CATALOG (read-only) and passes them
+ * alongside the runtime-bound ToolSourcePort to the bridge adapter.
+ */
+function startMcpToolBridgeForContainer(
+  container: Container,
+  port: number
+): void {
+  // Extract Zod shapes from TOOL_CATALOG for MCP SDK tool registration.
+  // TOOL_CATALOG is imported at module scope (line 21) — this is a read-only
+  // schema extraction, not execution. Tool execution goes through ToolSourcePort.
+  const zodSchemas = new Map<string, Record<string, unknown>>();
+  for (const [toolId, boundTool] of Object.entries(TOOL_CATALOG)) {
+    const zodType = boundTool.contract.inputSchema;
+    if (zodType && "shape" in zodType) {
+      zodSchemas.set(
+        toolId,
+        (zodType as { shape: Record<string, unknown> }).shape
+      );
+    }
+  }
+
+  startMcpToolBridge({ toolSource: container.toolSource, zodSchemas }, port);
 }

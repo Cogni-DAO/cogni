@@ -55,6 +55,8 @@ const ENV_WHITELIST = new Set([
   "TMPDIR",
   "USER",
   "SHELL",
+  // Per bug.0300: ephemeral per-run token for internal MCP tool bridge
+  "COGNI_MCP_TOKEN",
 ]);
 
 /**
@@ -158,4 +160,27 @@ export function mcpServersToCodexConfig(
   }
 
   return Object.keys(config).length > 0 ? config : undefined;
+}
+
+/**
+ * Add the internal Cogni MCP tool bridge to an existing CodexMcpConfig.
+ *
+ * Per bug.0300: Exposes core__ tools (VCS, schedule, work-item, etc.) to Codex
+ * via a same-process MCP Streamable HTTP server. Auth via ephemeral bearer token.
+ *
+ * @param existing - Existing CodexMcpConfig (may be undefined)
+ * @param port - MCP bridge port (default: 1729, via MCP_TOOL_BRIDGE_PORT env)
+ * @returns Updated config with cogni_tools entry
+ */
+export function withInternalToolBridge(
+  existing: CodexMcpConfig | undefined,
+  port = 1729
+): CodexMcpConfig {
+  return {
+    ...(existing ?? {}),
+    cogni_tools: {
+      url: `http://localhost:${port}/mcp`,
+      bearerTokenEnvVar: "COGNI_MCP_TOKEN",
+    },
+  };
 }

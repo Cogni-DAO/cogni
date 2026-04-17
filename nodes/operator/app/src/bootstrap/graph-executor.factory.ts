@@ -221,7 +221,13 @@ export function createScopedGraphExecutor(params: {
               actorId: params.actorId,
               tenantId: params.billing.billingAccountId,
             });
-            llmService = provider.createLlmService(connection);
+            // Per bug.0300: pass run context for MCP tool bridge scoping
+            llmService = provider.createLlmService(connection, {
+              runId: req.runId,
+              userId: params.actorId,
+              graphId: req.graphId,
+              toolIds: [...(req.toolIds ?? [])],
+            });
           } catch (err) {
             container.log.error(
               {

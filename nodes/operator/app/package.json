@@ -42,6 +42,7 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@langchain/langgraph-sdk": "^0.0.32",
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "@octokit/auth-app": "^7.1.4",
     "@octokit/core": "^6.1.4",
     "@octokit/webhooks-methods": "^6.0.0",

@@ -18,6 +18,8 @@ const nextConfig: NextConfig = {
     "@cogni/financial-ledger",
     // Codex: subprocess spawns native binary — standalone tracing prunes platform optional deps
     "@openai/codex-sdk",
+    // MCP SDK: tool bridge server uses Node http.createServer (bug.0300)
+    "@modelcontextprotocol/sdk",
     "@openai/codex",
     "@openai/codex-linux-x64",
     // Heavy server-only deps — prevent per-route duplication in dev

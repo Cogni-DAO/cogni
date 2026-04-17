@@ -74,13 +74,21 @@ export class CodexModelProvider implements ModelProviderPort {
     }));
   }
 
-  createLlmService(connection?: ResolvedConnection): LlmService {
+  createLlmService(
+    connection?: ResolvedConnection,
+    runContext?: {
+      readonly runId: string;
+      readonly userId: string;
+      readonly graphId: string;
+      readonly toolIds: readonly string[];
+    }
+  ): LlmService {
     if (!connection) {
       throw new Error(
         "CodexModelProvider.createLlmService requires a resolved connection"
       );
     }
-    return new CodexLlmAdapter(connection, this.mcpConfig);
+    return new CodexLlmAdapter(connection, this.mcpConfig, runContext);
   }
 
   async requiresPlatformCredits(_ref: ModelRef): Promise<boolean> {
