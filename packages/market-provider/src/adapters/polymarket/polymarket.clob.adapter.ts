@@ -406,12 +406,13 @@ export function mapOrderResponseToReceipt(
   const rawStatus = r.status ?? "pending";
   const status = normalizePolymarketStatus(rawStatus);
 
-  // For BUY, makingAmount is USDC paid; for SELL it's shares delivered (takingAmount is USDC).
-  const filledUsdcAtomic =
-    intent.side === "BUY" ? r.makingAmount : r.takingAmount;
-  const filled_size_usdc = filledUsdcAtomic
-    ? Number(filledUsdcAtomic) / 1_000_000
-    : 0;
+  // B6 — Polymarket CLOB OrderResponse returns makingAmount/takingAmount as
+  // DECIMAL USDC strings (e.g. "4.98473"), not atomic 1e6 units. An earlier
+  // revision divided by 1,000,000 and produced filled_size_usdc off by a
+  // factor of ~1M (observed live on 2026-04-17 fill 0x61f7ae0d…b58a).
+  // For BUY, makingAmount is USDC paid; for SELL, takingAmount is USDC received.
+  const filledUsdcRaw = intent.side === "BUY" ? r.makingAmount : r.takingAmount;
+  const filled_size_usdc = filledUsdcRaw ? Number(filledUsdcRaw) : 0;
 
   return {
     order_id: r.orderID,

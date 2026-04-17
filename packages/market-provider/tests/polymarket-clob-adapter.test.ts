@@ -70,19 +70,21 @@ describe("mapOrderResponseToReceipt", () => {
     expect(receipt.filled_size_usdc).toBe(0);
   });
 
-  it("converts makingAmount atomic units to USDC dollars on BUY", () => {
+  it("treats BUY makingAmount as decimal USDC dollars (B6)", () => {
+    // Polymarket returns decimal USDC on the placement response
+    // (e.g. "4.98473" — NOT atomic 4984730). Observed live 2026-04-17.
     const receipt = mapOrderResponseToReceipt(
-      { orderID: "0xorder2", status: "matched", makingAmount: "1000000" },
+      { orderID: "0xorder2", status: "matched", makingAmount: "4.98473" },
       BASE_INTENT
     );
-    expect(receipt.filled_size_usdc).toBe(1);
+    expect(receipt.filled_size_usdc).toBeCloseTo(4.98473, 6);
     expect(receipt.status).toBe("filled");
   });
 
-  it("uses takingAmount for SELL-side receipts", () => {
+  it("treats SELL takingAmount as decimal USDC dollars (B6)", () => {
     const sellIntent: OrderIntent = { ...BASE_INTENT, side: "SELL" };
     const receipt = mapOrderResponseToReceipt(
-      { orderID: "0xorder3", status: "matched", takingAmount: "500000" },
+      { orderID: "0xorder3", status: "matched", takingAmount: "0.5" },
       sellIntent
     );
     expect(receipt.filled_size_usdc).toBe(0.5);
@@ -176,7 +178,7 @@ describe("PolymarketClobAdapter", () => {
     const createAndPostOrder = vi.fn().mockResolvedValue({
       orderID: "0xresp",
       status: "live",
-      makingAmount: "1000000",
+      makingAmount: "1",
     });
     const adapter = makeAdapter({ createAndPostOrder });
 
