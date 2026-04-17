@@ -1,5 +1,13 @@
 name: Require pinned release PRs to main
 
+# Gates release/* PRs to main. The pinned-SHA check guarantees the release
+# branch still points at the SHA that was flighted + reviewed on preview,
+# so "Update branch" or extra commits can't quietly rewrite a release.
+#
+# Non-release PRs (feature/*, fix/*, etc.) are allowed and not evaluated
+# here — the trunk-based model in docs/spec/ci-cd.md lets feature PRs merge
+# to main directly when safe.
+
 on:
   pull_request:
     branches: [main]
@@ -7,27 +15,22 @@ on:
     branches: [release/*]
 
 permissions:
-  contents: read # needed for checkout
+  contents: read
 
 jobs:
   require-pinned-release-branch:
+    # Only evaluate release/* heads. Feature PRs skip this job entirely.
+    if: >-
+      ${{ github.event_name == 'push' ||
+          startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-latest
     steps:
-      - name: Fail PR if head is not release/*
-        if: ${{ github.event_name == 'pull_request' && !startsWith(github.head_ref, 'release/') }}
-        run: |
-          echo "Only branches matching release/* may open PRs into main."
-          echo "Create a PR into staging, then a release/* branch, then PR release/* → main."
-          exit 1
-
       - uses: actions/checkout@v4
-        if: ${{ github.event_name == 'push' || startsWith(github.head_ref, 'release/') }}
         with:
           fetch-depth: 0
           ref: ${{ github.event_name == 'pull_request' && github.head_ref || '' }}
 
       - name: Fail if release head != pinned SHA
-        if: ${{ github.event_name == 'push' || startsWith(github.head_ref, 'release/') }}
         run: |
           if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
             BRANCH="${GITHUB_HEAD_REF}"
@@ -35,20 +38,16 @@ jobs:
             BRANCH="${GITHUB_REF_NAME:-${GITHUB_REF#refs/heads/}}"
           fi
 
-          # Extract the short SHA suffix from release/YYYYMMDD-<shortsha>
           PIN=$(echo "$BRANCH" | sed -E 's/^release\/[0-9]{8}-([0-9a-f]{8})$/\1/')
-          if [ -z "$PIN" ]; then
-            echo "ERROR: Branch name $BRANCH does not match expected release pattern."
-            echo "Expected: release/YYYYMMDD-<8-char-sha>"
+          if [ -z "$PIN" ] || [ "$PIN" = "$BRANCH" ]; then
+            echo "ERROR: Branch name $BRANCH does not match release/YYYYMMDD-<8-char-sha>"
             exit 1
           fi
 
           HEAD_SHORT=$(git rev-parse --short=8 HEAD)
-
           if [ "$HEAD_SHORT" != "$PIN" ]; then
             echo "ERROR: Release branch head $HEAD_SHORT does not match pinned SHA $PIN."
-            echo "This branch has been modified after promotion (e.g., 'Update branch' or extra commits)."
-            echo "Close this PR and re-run staging-preview to create a new release/*."
+            echo "Close this PR and re-dispatch release.yml to cut a fresh release/*."
             exit 1
           fi
 
