@@ -13,6 +13,7 @@
 
 import {
   MARKET_LIST_NAME,
+  POLY_PLACE_TRADE_NAME,
   WALLET_TOP_TRADERS_NAME,
   WEB_SEARCH_NAME,
 } from "@cogni/ai-tools";
@@ -21,10 +22,13 @@ import {
  * Tool IDs for poly-brain graph.
  * market_list: browse/search live prediction markets
  * wallet_top_traders: scoreboard of top Polymarket wallets by PnL (day/week/month/all)
+ * poly_place_trade: place ONE BUY on Polymarket via the Cogni operator wallet
+ *   (external_side_effect — real money; LLM should invoke only on explicit user request)
  * web_search: research events that affect market prices
  */
 export const POLY_BRAIN_TOOL_IDS = [
   MARKET_LIST_NAME,
+  POLY_PLACE_TRADE_NAME,
   WALLET_TOP_TRADERS_NAME,
   WEB_SEARCH_NAME,
 ] as const;

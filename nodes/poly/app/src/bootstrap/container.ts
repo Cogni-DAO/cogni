@@ -109,6 +109,7 @@ import {
   createMetricsCapability,
   derivePrometheusQueryUrl,
 } from "@/bootstrap/capabilities/metrics";
+import { createPolyTradeCapability } from "@/bootstrap/capabilities/poly-trade";
 import { createRepoCapability } from "@/bootstrap/capabilities/repo";
 import { createScheduleCapability } from "@/bootstrap/capabilities/schedule";
 import { stubVcsCapability } from "@/bootstrap/capabilities/vcs";
@@ -571,6 +572,40 @@ function createContainer(): Container {
   // WalletCapability for AI tools (Polymarket wallet scoreboard — public Data API)
   const walletCapability = createWalletCapability();
 
+  // PolyTradeCapability for the core__poly_place_trade agent tool.
+  // Returns `undefined` if OPERATOR_WALLET_ADDRESS / POLY_CLOB_* / PRIVY_* are
+  // incomplete; downstream tool binding installs the ai-tools stub in that case
+  // (which throws a clear message instead of crashing bootstrap).
+  const hasPrivy = Boolean(
+    env.PRIVY_APP_ID && env.PRIVY_APP_SECRET && env.PRIVY_SIGNING_KEY
+  );
+  const hasPolyClob = Boolean(
+    env.POLY_CLOB_API_KEY &&
+      env.POLY_CLOB_API_SECRET &&
+      env.POLY_CLOB_PASSPHRASE
+  );
+  const polyTradeCapability = createPolyTradeCapability({
+    logger: log,
+    host: env.POLY_CLOB_HOST,
+    operatorWalletAddress: env.OPERATOR_WALLET_ADDRESS as
+      | `0x${string}`
+      | undefined,
+    creds: hasPolyClob
+      ? {
+          apiKey: env.POLY_CLOB_API_KEY as string,
+          apiSecret: env.POLY_CLOB_API_SECRET as string,
+          passphrase: env.POLY_CLOB_PASSPHRASE as string,
+        }
+      : undefined,
+    privy: hasPrivy
+      ? {
+          appId: env.PRIVY_APP_ID as string,
+          appSecret: env.PRIVY_APP_SECRET as string,
+          signingKey: env.PRIVY_SIGNING_KEY as string,
+        }
+      : undefined,
+  });
+
   // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL_POLY)
   // When configured, wraps KnowledgeStorePort with auto-commit on writes.
   // When not configured, tools throw "not configured" at invocation time.
@@ -605,6 +640,7 @@ function createContainer(): Container {
     knowledgeCapability,
     marketCapability,
     metricsCapability,
+    polyTradeCapability,
     webSearchCapability,
     repoCapability,
     scheduleCapability,

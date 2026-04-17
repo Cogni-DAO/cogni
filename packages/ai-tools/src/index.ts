@@ -169,6 +169,22 @@ export {
   metricsQueryStubImplementation,
 } from "./tools/metrics-query";
 export {
+  createPolyPlaceTradeImplementation,
+  POLY_PLACE_TRADE_NAME,
+  type PolyPlaceTradeDeps,
+  type PolyPlaceTradeInput,
+  PolyPlaceTradeInputSchema,
+  type PolyPlaceTradeOutput,
+  PolyPlaceTradeOutputSchema,
+  type PolyPlaceTradeReceipt,
+  type PolyPlaceTradeRedacted,
+  type PolyPlaceTradeRequest,
+  type PolyTradeCapability,
+  polyPlaceTradeBoundTool,
+  polyPlaceTradeContract,
+  polyPlaceTradeStubImplementation,
+} from "./tools/poly-place-trade";
+export {
   createRepoListImplementation,
   REPO_LIST_NAME,
   type RepoListDeps,

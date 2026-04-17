@@ -78,7 +78,7 @@ external_refs:
   - [ ] **CP4** — wire the app so it auto-mirrors fills. Five sub-CPs on branch `feat/poly-copy-trade-cp4`:
     - **CP4.1** ✅ pure `decide()` + Polymarket Data-API → `Fill` normalizer (commit `63f9f0868`). 18 unit tests.
     - **CP4.2** ✅ `createClobExecutor(deps)` with injected `placeOrder` seam — the stack-test mock point (commit `33288f220`). 5 unit tests.
-    - **CP4.25** ⚪ runs-next — "app can place a trade" capability. Permanent code (no `@scaffolding` markers): container factory + env + single admin-gated HTTP route. Any caller (curl, chat tool, future poll loop, future UI button) can trigger a placement — the adapter + Privy + sinks are wired once. Deliberately decoupled from autonomous copy-trading so this CP is independently valuable and independently testable. See "CP4.25 Design" section below.
+    - [x] **CP4.25** ✅ "app can place a trade" capability shipped as the `core__poly_place_trade` AI tool. Any registered agent invokes it via the existing chat/LLM path (no bespoke admin ops route — the design pivoted once it was clear per-user auth was out of scope for the prototype). Permanent code (no `@scaffolding` markers): `PolyTradeCapability` port + sync/lazy-async factory matching the `getTemporalWorkflowClient` precedent + env + prom-client sinks + Biome `noRestrictedImports` rule. Poly-brain's `POLY_BRAIN_TOOL_IDS` now includes the tool; non-poly nodes register the ai-tools stub so the shared `TOOL_CATALOG` iteration doesn't throw.
     - **CP4.3** ⚪ autonomous copy-trade loop, reuses the CP4.25 capability — in-process `setInterval` poll on the trader pod + DB repo + internal ops route wrapping one tick + stack test proving `Data-API → decide() → capability.executor → fills/decisions`. See "CP4.3 Design" section below. **NO platform governance schedule** — scheduling is container-local; user controls on/off via the kill-switch DB row.
     - **CP4.4** ⚪ (absorbed into CP4.25) — env vars + adapter instantiation + ESLint rule ship there, not here. Kept as a row to preserve numbering; actual scope folded into CP4.25.
     - **CP4.5** ⚪ read-only activity dashboard card (scaffolding; deleted in P4).
@@ -249,6 +249,7 @@ poly_copy_trade_decisions (
 **Scope:**
 
 - `nodes/poly/app/src/bootstrap/capabilities/copy-trade.ts` — **permanent** factory. Signature:
+
   ```ts
   createCopyTradeCapability(config: {
     role: PolyRole;
@@ -265,6 +266,7 @@ poly_copy_trade_decisions (
   - When `placeOrderOverride` is set: skip dynamic imports; wrap the override in `createClobExecutor` directly. Used by stack tests.
   - Non-trader roles: return `undefined`.
   - **Test-fixture hook is the `placeOrderOverride` param** (reviewer callout #1, option c). Stack test bootstrap passes it; production bootstrap never does.
+
 - `nodes/poly/app/src/bootstrap/capabilities/metrics.ts` (new if absent) — shared `MetricsPort → prom-client` adapter using `registry.getSingleMetric(name) ?? new Counter/Histogram(...)` for hot-reload safety.
 - `nodes/poly/app/src/shared/env/server-env.ts` — add `POLY_ROLE` (`trader|web|scheduler`, default `web`) and the trader-required triple `POLY_CLOB_API_KEY` / `POLY_CLOB_API_SECRET` / `POLY_CLOB_PASSPHRASE`. `OPERATOR_WALLET_ADDRESS` is already the polymarket-signer convention (used by CP3.1 allowance script + CP3.2 dress rehearsal) — reuse it; `POLY_OPERATOR_WALLET_ADDRESS` alias is a follow-up. Zod-refinement: trader role with missing creds or malformed wallet address fails boot with a clear message.
 - `nodes/poly/app/src/app/api/internal/ops/poly/place/route.ts` — **permanent** POST endpoint:

@@ -237,6 +237,22 @@ export const serverSchema = z.object({
   PRIVY_APP_SECRET: optionalString,
   PRIVY_SIGNING_KEY: optionalString,
 
+  // Polymarket CLOB trade placement — Optional
+  // Required only when `core__poly_place_trade` tool is exposed to agents.
+  // Per task.0315 CP4.25: the poly-trade capability is constructed when ALL of
+  // OPERATOR_WALLET_ADDRESS + POLY_CLOB_API_KEY + POLY_CLOB_API_SECRET +
+  // POLY_CLOB_PASSPHRASE + the Privy triple are set. Otherwise the tool is
+  // registered with a stub that throws a clear error.
+  OPERATOR_WALLET_ADDRESS: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional(),
+  POLY_CLOB_API_KEY: optionalString,
+  POLY_CLOB_API_SECRET: optionalString,
+  POLY_CLOB_PASSPHRASE: optionalString,
+  // Override CLOB host for dev/testnet (default: https://clob.polymarket.com)
+  POLY_CLOB_HOST: optionalUrl,
+
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.
   OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().default(500),
