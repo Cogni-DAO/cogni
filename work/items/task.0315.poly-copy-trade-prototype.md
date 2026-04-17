@@ -7,7 +7,7 @@ priority: 2
 estimate: 5
 rank: 5
 branch: design/poly-copy-trade-pr-b
-revision: 2
+revision: 3
 summary: "One-shot prototype task. v0 (PR-A, this PR): poly-brain + dashboard answer 'who are the top Polymarket wallets?' via a new core__wallet_top_traders tool + /dashboard Top Wallets card backed by the Polymarket Data API. v0.1 (PR-B, not in this PR): single-wallet shadow mirror via @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
 outcome: "A running prototype in the poly node. v0 (PR-A, shipped): ask poly-brain 'top wallets this week' and get a ranked list in chat + dashboard. v0.1 = four phases on a stable `decide()` boundary — P1 ships first live Polymarket order_id on one hardcoded target via disposable 30s poll scaffolding; P2 adds click-to-copy UI (DB-authoritative-when-populated, env fallback retained); P3 ships paper-adapter body so paper PnL over a real shadow soak becomes the evidence gate; P4 upgrades to WS → Redis streams → Temporal, gated on P3 evidence that edge survives slippage."
 spec_refs:
@@ -60,8 +60,15 @@ external_refs:
 
 - [x] **Phase 0 — Pre-flight** (no code). Findings recorded below ("Phase 0 — Findings"). P1 migration header will cite them verbatim.
 - [ ] **Phase 1 — PR-B1 — First live order** (~1 week). Four checkpoints on the design branch (`design/poly-copy-trade-pr-b`, PR #890). 🎯 Real `order_id` on one hardcoded target.
-  - [ ] **CP1** — types + ports (`MarketProviderPort` Run methods, `OrderIntent/OrderReceipt/OrderStatus/Fill` Zod, `PolymarketOrderSigner` port, `OperatorWalletPort.signPolymarketOrder`, paper-adapter stub). Package-land only, no runtime wiring. Unit tests on Zod round-trip.
-  - [ ] **CP2** — Privy Polygon EIP-712 signer. Chain-parameterize existing adapter (BASE_CAIP2 for transfers, new POLYGON_CAIP2 for Polymarket order signing). Mocked-Privy unit test.
+  - [x] **CP1** — types + ports (`MarketProviderPort` Run methods, `OrderIntent/OrderReceipt/OrderStatus/Fill` Zod, `PolymarketOrderSigner` port, `OperatorWalletPort.signPolymarketOrder`, paper-adapter stub). Package-land only, no runtime wiring. Unit tests on Zod round-trip. ✅ commit `8293eb665`.
+  - [ ] **CP2** — Privy Polygon EIP-712 signer + viem-compat shim + real `clob-client`-driven experiment. **Design-reviewed 2026-04-17 (revision 2):** CP2 must prove CP3's actual seam, not a primitive.
+    - **Adapter method** — implement `signPolymarketOrder(typedData)` via `@privy-io/node` `wallets().ethereum().signTypedData(walletId, input)` (verified exists in SDK v0.10.1 — `resources/wallets/wallets.d.ts:542`). **SDK gotcha**: Privy input uses `primary_type` (snake_case) not `primaryType`; adapter must translate our `Eip712TypedData` (camelCase per EIP-712 convention) → Privy's `EthereumSignTypedDataRpcInput.Params.TypedData` shape. **Verify before writing** (5-min SDK read): (a) whether `authorization_context` is a valid field on `signTypedData` input (it is on `sendTransaction` — not documented in our source read yet); (b) exact response field name on `EthereumSignTypedDataRpcResponse.Data` (draft assumes `.signature`). Both flagged as unconfirmed in the draft body; must be resolved before commit.
+    - **Chain allow-set, NOT single-value hardcode** — declare `POLYGON_ALLOWED_CHAIN_IDS = new Set([137])` (Polygon mainnet today). Doc-comment notes that adding Amoy (`80002`) behind a dev-only env gate is trivial when CP4 wants a testnet dress rehearsal. `signPolymarketOrder` MUST reject `!POLYGON_ALLOWED_CHAIN_IDS.has(typedData.domain.chainId)` at line 1, before calling Privy. Existing Base methods remain pinned to `BASE_CAIP2` (unchanged).
+    - **viem-compat signer shim (new deliverable)** — `packages/operator-wallet/src/adapters/privy/polymarket-signer-shim.ts` exposes `makePolymarketSignerForClobClient(adapter) → { address, signTypedData, _signTypedData }` where the two signing methods take `(domain, types, value)` per viem/ethers-v5 convention and internally route through our narrow `signPolymarketOrder(Eip712TypedData)`. This is the shape `@polymarket/clob-client` calls internally. **Shipping the shim in CP2 (not CP3)** is what makes CP2 a real proof of CP3's path instead of a primitive test.
+    - **Mocked-Privy unit tests**: (a) chain-100 typedData → CHAIN_MISMATCH error, zero Privy method calls; (b) chain-137 typedData → translation to `primary_type` snake_case is correct; (c) shim `_signTypedData(domain, types, value)` reassembles to the same `Eip712TypedData` the adapter expects.
+    - **Live-testable deliverable** (evidence gate): `scripts/experiments/sign-polymarket-order.ts` constructs a real Polymarket CLOB order via **`@polymarket/order-utils`** (or `@polymarket/clob-client`'s order-building helper — whichever is the exported surface), then either (A) passes the produced `Eip712TypedData` to `adapter.signPolymarketOrder` directly for a minimal proof, or (B) — preferred — instantiates `new ClobClient(host, chainId, shim)` and calls `clobClient.createOrder({...})` in dry-run mode to prove the full seam (builder + shim + adapter + Privy all talk). Then verify the 65-byte signature against `expectedAddress` via `viem.verifyTypedData()`. Zero on-chain cost, no USDC, no Safe proxy, no ToS required — `createOrder` only signs.
+    - **Why OSS envelope construction, not hand-rolled**: Polymarket has revved the order struct (neg-risk adapter added `signatureType: uint8`; CTF exchange verifyingContract varies per market class). Hand-rolling the envelope in CP2 risks going stale while `order-utils` stays current — and CP3's "green" would only prove a primitive we already trusted instead of the full CP3 path. Adopting `@polymarket/order-utils` here is the OSS-first move the reviewer flagged.
+    - Script output + signature hex + clob-client's logged envelope pasted into the PR as CP2 evidence.
   - [ ] **CP3** — polymarket adapter Run methods via `@polymarket/clob-client`; signer + `safe_proxy_address` via constructor. New `poly_copy_trade_{fills,config,decisions}` tables with migration header citing the P0.2 `fill_id` shape verbatim. `DA_EMPTY_HASH_REJECTED` enforced at a normalizer. Contract test against a recorded clob-client fixture.
   - [ ] **CP4** — pure `decide()` + heavy unit tests (skip branches + caps + idempotency); `clob-executor` dynamic-import-gated on `POLY_ROLE=trader`; disposable 30 s poll job (`@scaffolding` / `Deleted-in-phase: 4`); SELECT-backed dashboard card (`@scaffolding`); container wiring + env vars; absence-of-module-load assertion for non-trader replicas.
 - [ ] **Phase 2 — PR-B2 — Click-to-copy UI** (~4 days). `poly_copy_trade_targets` table + dashboard "Copy" button + Copy Targets card. DB-authoritative-when-populated; env fallback retained. Env-removal filed as follow-up.
@@ -583,6 +590,22 @@ All seven items addressed. P1 is unblocked pending operator ack of the uniquenes
 Non-blocking note applied: `ReconcileFillsWorkflow` now specifies the join key in-line as `(target_wallet, market_id, side, size_usdc, observed_at ± 300 s)`, with rationale on the 300 s window (operator-match-to-Polygon-settlement delay typically 5–60 s; safety margin for network congestion). The P4 cutover gate uses the identical key.
 
 Incidental fix: L429 had a corrupted `ENV*REMOVAL_DEFERRED` / `COPY_TRADE*\*` from prior markdown-escape damage; restored to `ENV_REMOVAL_DEFERRED` / `COPY_TRADE_*`.
+
+### CP2 review feedback (revision 3, 2026-04-17)
+
+External design reviewer flagged the CP2 plan as REQUEST CHANGES because the proposed experiment would hand-roll the Polymarket CLOB order envelope instead of using OSS, and the narrow `PolymarketOrderSigner` port shape doesn't plug into `@polymarket/clob-client` (which expects a viem-WalletClient / ethers-v5 `Signer` with `signTypedData(domain, types, value)` or `_signTypedData`). Net effect: CP2-green wouldn't actually prove CP3's path.
+
+All four reviewer items folded into the CP2 bullet above:
+
+1. **OSS-First (experiment script)** — CP2 experiment now imports `@polymarket/order-utils` (or the clob-client order-building helper) to construct the envelope. Hand-rolling the struct risked going stale against neg-risk adapter revs (`signatureType: uint8`) and per-market-class verifyingContract variation. Task bullet now calls out this rationale explicitly.
+
+2. **Architecture — viem-compat signer shim lands in CP2, not CP3** — new deliverable `packages/operator-wallet/src/adapters/privy/polymarket-signer-shim.ts` exposes `{ address, signTypedData, _signTypedData }` matching the shape `@polymarket/clob-client` calls. CP2 experiment preferably drives `new ClobClient(host, chainId, shim).createOrder({...})` dry-run (createOrder only signs, zero funds move), proving builder + shim + adapter + Privy all talk. Adapter method + shim + unit tests + experiment now one CP2 scope.
+
+3. **Chain allow-set instead of single-value** — `POLYGON_ALLOWED_CHAIN_IDS = new Set([137])` with a doc comment for Amoy (80002) testnet rehearsal headroom. Trivial to add now; annoying to retrofit when CP4 wants dress rehearsal.
+
+4. **SDK fields must be verified before adapter body** — `authorization_context` acceptance on `signTypedData` input and the exact `EthereumSignTypedDataRpcResponse.Data` response field name (draft assumed `.signature`) both explicitly listed as "verify before writing" in the bullet. 5-min SDK read against `node_modules/@privy-io/node/resources/wallets/wallets.d.ts` — avoids a debug cycle.
+
+Net: CP2 ships one adapter method + one shim + three mocked unit tests + one live clob-client-driven experiment. Still scoped small; structurally proves CP3's full seam.
 
 ## Alignment Decisions (confirmed by operator before `/implement`)
 
