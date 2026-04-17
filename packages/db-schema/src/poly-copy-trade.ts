@@ -6,11 +6,9 @@
  * Purpose: Schema for the Polymarket copy-trade prototype — fills ledger, global kill-switch singleton, append-only decisions log.
  * Scope: Table definitions only (task.0315 Phase 1 CP3.3). Does not contain queries, RLS policies, or runtime logic. System-owned tables (single-operator prototype) — no tenant-scoped RLS.
  * Invariants:
- *   - FILL_ID_SHAPE_DECIDED: composite `"<source>:<native_id>"` per task.0315 P0.2; enforced at the schema layer via `poly_copy_trade_fills_fill_id_shape` CHECK.
- *   - IDEMPOTENT_BY_CLIENT_ID: `client_order_id` computed via `clientOrderIdFor` in `@cogni/market-provider/domain/client-order-id` (pinned).
- *   - GLOBAL_KILL_DB_ROW: `poly_copy_trade_config.enabled DEFAULT false` = fail-closed; SELECT failure is treated as `enabled = false` at the poll.
- *   - STATUS_ENUM_AT_SCHEMA: fills.status and decisions.outcome are CHECK-constrained to their canonical value sets — a buggy writer can't silently persist a stray casing or synonym.
- *   - ORDER_ID_UNIQUE_WHEN_PRESENT: partial unique index on fills.order_id catches any executor bug that would attribute a platform order id to two rows.
+ *   - FILL_ID_SHAPE_DECIDED: composite `<source>:<native_id>` per task.0315 P0.2, enforced by CHECK.
+ *   - IDEMPOTENT_BY_CLIENT_ID: `client_order_id = clientOrderIdFor(target_id, fill_id)` (pinned helper).
+ *   - GLOBAL_KILL_DB_ROW: `config.enabled DEFAULT false` = fail-closed; SELECT failure treated as false.
  * Side-effects: none (schema definitions only)
  * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP3.3)
  * @public
