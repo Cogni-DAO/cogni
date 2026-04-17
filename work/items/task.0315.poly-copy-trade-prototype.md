@@ -7,7 +7,7 @@ priority: 2
 estimate: 5
 rank: 5
 branch: design/poly-copy-trade-pr-b
-revision: 3
+revision: 4
 summary: "One-shot prototype task. v0 (PR-A, this PR): poly-brain + dashboard answer 'who are the top Polymarket wallets?' via a new core__wallet_top_traders tool + /dashboard Top Wallets card backed by the Polymarket Data API. v0.1 (PR-B, not in this PR): single-wallet shadow mirror via @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
 outcome: "A running prototype in the poly node. v0 (PR-A, shipped): ask poly-brain 'top wallets this week' and get a ranked list in chat + dashboard. v0.1 = four phases on a stable `decide()` boundary — P1 ships first live Polymarket order_id on one hardcoded target via disposable 30s poll scaffolding; P2 adds click-to-copy UI (DB-authoritative-when-populated, env fallback retained); P3 ships paper-adapter body so paper PnL over a real shadow soak becomes the evidence gate; P4 upgrades to WS → Redis streams → Temporal, gated on P3 evidence that edge survives slippage."
 spec_refs:
@@ -677,6 +677,31 @@ That covers: camelCase→snake_case translation, `authorization_context` passthr
 - Privy's `LocalAccount` is derived from `authorizationContext` passed at account-creation time, not per-call. Confirm this matches our existing `this.authContext` usage pattern. (Expected: yes — authorizationContext is constructed once from operator credentials.)
 
 No blockers. Ready to write CP2 code.
+
+## Review Feedback (revision 4, 2026-04-17 — post-CP3.2 review)
+
+CP3.1.5 (`efbf49901`) approved — clean deletion. CP3.2 (`3b9e1797a`) architecture sound; 5 blocking correctness issues + 5 non-blocking suggestions. Address before CP4 or CP5 live-test.
+
+### Blocking (must fix before CP5 dress rehearsal)
+
+- [ ] **CP3.2-R4-B1 — Tick-size + neg-risk must be per-market.** `PolymarketClobAdapter.placeOrder` (L111) hardcodes `{ tickSize: "0.01", negRisk: false }`. Fetch via `ClobClient.getTickSize(tokenID)` + `ClobClient.getNegRisk(tokenID)` before `createAndPostOrder`. Hardcoded values will silently misroute against most real markets (0.001-tick liquid markets, neg-risk multi-outcome markets).
+- [ ] **CP3.2-R4-B2 — Guard must reject `success: false`.** `mapOrderResponseToReceipt` (L172) checks only `!r.orderID`. `ClobClient.OrderResponse` can have `success: false` + `errorMsg` + `orderID` all populated on rejection. Change to `if (r.success === false || !r.orderID) throw ...`. Add a unit test for the rejection-with-orderID case.
+- [ ] **CP3.2-R4-B3 — `mapOpenOrderToReceipt` corrupts `client_order_id` semantics.** L222 sets `client_order_id: open.id` (the platform id) to satisfy the Zod `min(1)` constraint. Callers correlating `getOrder` results back to their own bookkeeping via `client_order_id` will break. Options: (a) change `getOrder` signature to `(orderId: string, clientOrderId: string): Promise<OrderReceipt>` and echo the arg; (b) make `OrderReceipt.client_order_id` nullable in the schema; (c) rename the field to `platform_order_id` for the openOrder case. Pick one — CP4 `decide()` will trip over this.
+- [ ] **CP3.2-R4-B4 — Missing recorded-fixture contract test.** Task spec AC says "Contract test against a recorded clob-client fixture." Current tests mock `createAndPostOrder` directly (valid pattern, but doesn't catch clob-client response-schema drift). Add `packages/market-provider/tests/fixtures/clob-create-order-success.json` + `clob-create-order-rejected.json` recorded from the CP5 dress run, and a test that feeds each through `mapOrderResponseToReceipt`.
+- [ ] **CP3.2-R4-B5 — Dress-rehearsal place-then-cancel race.** `scripts/experiments/place-polymarket-order.ts` L141/L160 relies on "far-below-market; should not fill." If the market has any seller at ≤0.01, the BUY fills in the ~100ms before the cancel fires and the cancel noops silently. Fix: either `OrderType.FOK` (fill-or-kill, atomic) OR check `receipt.status === "filled" || receipt.filled_size_usdc > 0` after placement and log a loud warning with share count. FOK is cleaner.
+
+### Non-blocking suggestions
+
+- [ ] **CP3.2-R4-S1 — Validate `funderAddress` matches signer address** in `PolymarketClobAdapter` constructor. Prevents cryptic "unapproved spender" errors from a caller-side config bug.
+- [ ] **CP3.2-R4-S2 — Pre-flight balance/allowance probe** in the dress-rehearsal script. Reuse `probe-polymarket-account.ts` logic; 2s check, bails cleanly if state regressed.
+- [ ] **CP3.2-R4-S3 — Tick-step validation** for `POLY_DRESS_REHEARSAL_PRICE`. Fetch tick for the given token; reject if `price % tickSize !== 0`. Same dependency as B1.
+- [ ] **CP3.2-R4-S4 — Replace `Object.create(...prototype)` test hack** in `polymarket-clob-adapter.test.ts:126-135`. Either accept a pre-built `ClobClient` as optional constructor arg (clean test seam) or use `vi.spyOn` on the prototype. Current pattern breaks silently if the adapter gains constructor state.
+- [ ] **CP3.2-R4-S5 — Document float-precision model** on `PolymarketClobAdapter.placeOrder` size conversion (`size_usdc / limit_price`). For `price=0.33`, 1 USDC → 3.0303… shares; clob-client rounds on send but the round-trip is inexact. Inline comment or docblock note.
+
+### Out of scope for this review
+
+- CP3.3 DB migrations (`poly_copy_trade_{fills,config,decisions}`) — currently in uncommitted WIP in the worktree; review when the commit lands.
+- CP4 `decide()` + executor + poll — not yet started.
 
 ## Alignment Decisions (confirmed by operator before `/implement`)
 
