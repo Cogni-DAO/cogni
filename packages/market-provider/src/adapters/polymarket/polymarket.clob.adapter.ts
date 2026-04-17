@@ -100,6 +100,16 @@ export class PolymarketClobAdapter implements MarketProviderPort {
     const shareSize = intent.size_usdc / intent.limit_price;
     const side = intent.side === "BUY" ? Side.BUY : Side.SELL;
 
+    // B1 — fetch per-market tickSize + negRisk rather than hardcoding. Polymarket has
+    // markets with 0.001 / 0.0001 tick sizes, and neg-risk markets route through a
+    // different Exchange contract; a stale hardcode silently produces bad signatures.
+    const [tickSize, negRisk] = await Promise.all([
+      this.client.getTickSize(tokenId),
+      this.client.getNegRisk(tokenId),
+    ]);
+
+    const postOnly = intent.attributes?.post_only === true;
+
     const response: unknown = await this.client.createAndPostOrder(
       {
         tokenID: tokenId,
@@ -108,8 +118,10 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         side,
         feeRateBps: 0,
       },
-      { tickSize: "0.01", negRisk: false },
-      OrderType.GTC
+      { tickSize, negRisk },
+      OrderType.GTC,
+      /* deferExec */ undefined,
+      /* postOnly */ postOnly || undefined
     );
 
     return mapOrderResponseToReceipt(response, intent);
@@ -169,9 +181,12 @@ export function mapOrderResponseToReceipt(
   intent: OrderIntent
 ): OrderReceipt {
   const r = response as ClobOrderResponseLike;
-  if (!r.orderID) {
+  // B2 — Polymarket returns `{success: false, errorMsg, orderID: "..."}` for
+  // rejections (orderID can be populated even when the order was not accepted).
+  // Treat an explicit `success === false` as a hard failure regardless of orderID.
+  if (r.success === false || !r.orderID) {
     throw new Error(
-      `PolymarketClobAdapter.placeOrder: CLOB response missing orderID (errorMsg="${r.errorMsg ?? ""}")`
+      `PolymarketClobAdapter.placeOrder: CLOB rejected order (success=${String(r.success)}, orderID=${r.orderID ?? "<missing>"}, errorMsg="${r.errorMsg ?? ""}")`
     );
   }
 

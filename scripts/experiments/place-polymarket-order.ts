@@ -137,10 +137,15 @@ async function main(): Promise<void> {
     `[cp3.2] Placing BUY ${sizeUsdc} USDC @ ${limitPrice} on token ${tokenId.slice(
       0,
       14
-    )}... (far-below-market; should not fill)`
+    )}... (GTC post-only at far-below-market; cannot match → CLOB rejects if it would take)`
   );
   console.log(`[cp3.2] host=${host} client_order_id=${client_order_id}`);
 
+  // B5 — post-only GTC: CLOB rejects the order if it would take (match against
+  // the book) instead of resting. At a far-below-market BUY price the order
+  // cannot match anyway, but post-only is the belt-and-suspenders guard against
+  // a place-then-cancel race if market conditions changed between our price
+  // selection and submission. If it rests, we cancel it below.
   const receipt = await adapter.placeOrder({
     provider: "polymarket",
     market_id: `prediction-market:polymarket:dress-rehearsal-${tokenId}`,
@@ -149,7 +154,7 @@ async function main(): Promise<void> {
     size_usdc: sizeUsdc,
     limit_price: limitPrice,
     client_order_id,
-    attributes: { token_id: tokenId },
+    attributes: { token_id: tokenId, post_only: true },
   });
 
   console.log(
@@ -157,9 +162,13 @@ async function main(): Promise<void> {
   );
   console.log(`[cp3.2] receipt: ${JSON.stringify(receipt, null, 2)}`);
 
-  console.log(`[cp3.2] Cancelling ${receipt.order_id}...`);
-  await adapter.cancelOrder(receipt.order_id);
-  console.log("[cp3.2] Cancel submitted.");
+  if (receipt.filled_size_usdc > 0) {
+    console.error(
+      `[cp3.2] FATAL: dress rehearsal order reported a fill (filled_size_usdc=${receipt.filled_size_usdc}). ` +
+        "The guard assumption (far-below-market post-only cannot match) was violated."
+    );
+    process.exit(2);
+  }
 
   console.log("[cp3.2] --- PR evidence ---");
   console.log(

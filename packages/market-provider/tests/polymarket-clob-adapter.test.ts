@@ -86,7 +86,21 @@ describe("mapOrderResponseToReceipt", () => {
         { status: "error", errorMsg: "rejected" },
         BASE_INTENT
       )
-    ).toThrow(/missing orderID/);
+    ).toThrow(/CLOB rejected order/);
+  });
+
+  it("throws when CLOB returns success=false even with an orderID populated (B2)", () => {
+    expect(() =>
+      mapOrderResponseToReceipt(
+        {
+          orderID: "0xpresent",
+          success: false,
+          status: "error",
+          errorMsg: "insufficient allowance",
+        },
+        BASE_INTENT
+      )
+    ).toThrow(/success=false/);
   });
 
   it("preserves rawStatus in attributes for debugging", () => {
@@ -122,7 +136,11 @@ describe("PolymarketClobAdapter", () => {
     createAndPostOrder?: ReturnType<typeof vi.fn>;
     cancelOrder?: ReturnType<typeof vi.fn>;
     getOrder?: ReturnType<typeof vi.fn>;
+    getTickSize?: ReturnType<typeof vi.fn>;
+    getNegRisk?: ReturnType<typeof vi.fn>;
   }) {
+    stub.getTickSize ??= vi.fn().mockResolvedValue("0.01");
+    stub.getNegRisk ??= vi.fn().mockResolvedValue(false);
     const adapter = Object.create(
       PolymarketClobAdapter.prototype
     ) as PolymarketClobAdapter;
@@ -165,6 +183,57 @@ describe("PolymarketClobAdapter", () => {
     expect(receipt.order_id).toBe("0xresp");
     expect(receipt.client_order_id).toBe(BASE_INTENT.client_order_id);
     expect(receipt.filled_size_usdc).toBe(1);
+  });
+
+  it("placeOrder fetches per-market tickSize + negRisk and forwards them (B1)", async () => {
+    const getTickSize = vi.fn().mockResolvedValue("0.001");
+    const getNegRisk = vi.fn().mockResolvedValue(true);
+    const createAndPostOrder = vi.fn().mockResolvedValue({
+      orderID: "0xresp",
+      status: "live",
+    });
+    const adapter = makeAdapter({
+      createAndPostOrder,
+      getTickSize,
+      getNegRisk,
+    });
+    await adapter.placeOrder(BASE_INTENT);
+    expect(getTickSize).toHaveBeenCalledWith(BASE_INTENT.attributes?.token_id);
+    expect(getNegRisk).toHaveBeenCalledWith(BASE_INTENT.attributes?.token_id);
+    const [, opts] = createAndPostOrder.mock.calls[0] as [
+      unknown,
+      { tickSize: string; negRisk: boolean },
+      string,
+    ];
+    expect(opts.tickSize).toBe("0.001");
+    expect(opts.negRisk).toBe(true);
+  });
+
+  it("placeOrder forwards attributes.post_only=true to the CLOB (B5 safety)", async () => {
+    const createAndPostOrder = vi.fn().mockResolvedValue({
+      orderID: "0xpo",
+      status: "live",
+    });
+    const adapter = makeAdapter({ createAndPostOrder });
+    await adapter.placeOrder({
+      ...BASE_INTENT,
+      attributes: { ...BASE_INTENT.attributes, post_only: true },
+    });
+    // positional args: (userOrder, options, orderType, deferExec, postOnly)
+    const call = createAndPostOrder.mock.calls[0] as unknown[];
+    expect(call[2]).toBe("GTC");
+    expect(call[4]).toBe(true);
+  });
+
+  it("placeOrder omits postOnly by default", async () => {
+    const createAndPostOrder = vi.fn().mockResolvedValue({
+      orderID: "0xdef",
+      status: "live",
+    });
+    const adapter = makeAdapter({ createAndPostOrder });
+    await adapter.placeOrder(BASE_INTENT);
+    const call = createAndPostOrder.mock.calls[0] as unknown[];
+    expect(call[4]).toBeUndefined();
   });
 
   it("placeOrder rejects when token_id attribute is missing", async () => {
