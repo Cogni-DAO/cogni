@@ -8,7 +8,7 @@ summary: Trunk-based CI/CD where PRs prove safety in fixed candidate slots befor
 read_when: Understanding deployment pipelines, release workflow, or CI configuration
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-04-16
+verified: 2026-04-17
 tags: []
 ---
 
@@ -88,7 +88,18 @@ The main lane is authoritative for promotion, not for pre-merge acceptance.
 1. Merge to `main` records the accepted PR SHA.
 2. The same proven digest promotes forward without rebuild.
 3. `preview` is the first required post-merge promotion lane in v0.
-4. Production promotion happens from the same digest by policy.
+4. Production promotion happens from the same digest by policy:
+   - `release.yml` (manual dispatch) cuts a `release/*` PR from the preview
+     current-sha into `main`; merging it is the code-truth gate.
+   - `promote-to-production.yml` (manual dispatch) opens a review PR
+     `promote-prod/* → deploy/production` carrying preview's overlay digests
+     and base/catalog synced from `main`, plus a commit-delta + validation
+     block in the body.
+   - Merging that PR pushes `deploy/production`, which triggers
+     `promote-and-deploy.yml` via `on: push: deploy/production` for
+     deploy-infra + verify. `source_sha` is read from
+     `.promote-state/source-sha` on the deploy branch.
+   - Argo CD reconciles production pods from `deploy/production`.
 
 If a post-merge soak lane is retained later, it must be modeled as an explicitly named environment with a distinct purpose. The term `canary` must not be reused for pre-merge acceptance.
 

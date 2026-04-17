@@ -42,6 +42,14 @@ on:
       source_sha:
         description: "SHA of source images (PR head SHA — images must exist as preview-{sha} in GHCR)"
         required: false
+  # Production auto-trigger: when promote-to-production.yml's PR merges,
+  # deploy/production receives a commit that bumps overlay digests and writes
+  # .promote-state/source-sha. This trigger reads that file to learn the
+  # source-artifact SHA and kicks off the deploy-infra + verify chain.
+  # Preview uses flight-preview.yml dispatch; we scope the push trigger to
+  # deploy/production only so preview keeps its three-value review lease.
+  push:
+    branches: [deploy/production]
 
 permissions:
   contents: write
@@ -49,7 +57,12 @@ permissions:
   actions: read
 
 concurrency:
-  group: promote-deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+  group: >-
+    promote-deploy-${{
+      github.event_name == 'push' && 'production' ||
+      (github.event_name == 'workflow_dispatch' && inputs.environment) ||
+      github.ref_name
+    }}
   cancel-in-progress: false
 
 jobs:
@@ -57,7 +70,7 @@ jobs:
   promote-k8s:
     runs-on: ubuntu-latest
     concurrency:
-      group: promote-${{ inputs.environment }}
+      group: promote-${{ github.event_name == 'push' && 'production' || inputs.environment }}
       cancel-in-progress: false
     outputs:
       environment: ${{ steps.env.outputs.environment }}
@@ -67,11 +80,34 @@ jobs:
       deploy_branch_sha: ${{ steps.deploy-push.outputs.deploy_branch_sha }}
       promoted_apps: ${{ steps.deploy-push.outputs.promoted_apps }}
     steps:
+      # For push-to-deploy/production, the source-artifact SHA is written into
+      # .promote-state/source-sha by scripts/ci/promote-to-production.sh. Read
+      # it via the GH API at the pushed commit — no full checkout needed yet.
+      - name: Resolve source_sha on push-to-production
+        id: push-src
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RAW=$(gh api "repos/${{ github.repository }}/contents/.promote-state/source-sha?ref=${{ github.sha }}" --jq '.content' 2>/dev/null || true)
+          if [ -z "$RAW" ]; then
+            echo "❌ Push to deploy/production lacks .promote-state/source-sha — dispatch promote-and-deploy.yml manually with source_sha."
+            exit 1
+          fi
+          SRC=$(echo "$RAW" | base64 -d | tr -d '[:space:]')
+          echo "source_sha=$SRC" >> "$GITHUB_OUTPUT"
+          echo "Resolved push-to-production source_sha=${SRC:0:8}"
+
       - name: Determine environment
         id: env
         run: |
-          ENV="${{ inputs.environment }}"
-          SHA="${{ inputs.source_sha || github.sha }}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            ENV="production"
+            SHA="${{ steps.push-src.outputs.source_sha }}"
+          else
+            ENV="${{ inputs.environment }}"
+            SHA="${{ inputs.source_sha || github.sha }}"
+          fi
 
           case "$ENV" in
             preview)    OVERLAY=preview;    DEPLOY_BRANCH=deploy/preview ;;
