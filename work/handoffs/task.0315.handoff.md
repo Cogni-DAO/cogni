@@ -6,10 +6,17 @@ status: active
 created: 2026-04-17
 updated: 2026-04-17
 branch: design/poly-copy-trade-pr-b
-last_commit: c8ef5ca5c
+worktree: /Users/derek/dev/cogni-template-poly-copy-trade-pr-b
+last_commit: 92b10f52b
 ---
 
 # Handoff: task.0315 Phase 1 — CP3.2+ (CLOB adapter + wiring)
+
+## Where to work
+
+- **Worktree:** `/Users/derek/dev/cogni-template-poly-copy-trade-pr-b` (separate from the main repo clone at `/Users/derek/dev/cogni-template`)
+- **Branch:** `design/poly-copy-trade-pr-b` (PR [#890](https://github.com/Cogni-DAO/node-template/pull/890))
+- **Env:** `.env.local` is symlinked from the main worktree — required for all `scripts/experiments/*` runs. Do not `cd` into the main worktree to work on this task; stay in the design worktree so commits land on the right branch.
 
 ## Context
 
