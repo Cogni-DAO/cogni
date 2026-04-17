@@ -14,6 +14,7 @@ outcome: |
   - Downstream `build-manifest.json` artifact has the same name + shape as today; candidate-flight + resolve-pr-build-images.sh unchanged.
   - Both upload-artifact steps use `overwrite: true` so "Re-run failed jobs" works (v4 otherwise errors on duplicate artifact names).
   - Verified green on a live PR with at least one multi-target build to prove parallelism.
+  - `docs/guides/create-service.md` refreshed to match the new pipeline — explicit wire-up checklist (detect-affected, build/resolve scripts, Argo catalog, k8s base, wait-for-argocd), k8s-first Step 10 (probes, PDB, sync-waves), IMAGE_IMMUTABILITY + BUILD_ONCE_PROMOTE callouts in Step 6, health-probes spec link in Step 4.
 spec_refs:
   - docs/spec/ci-cd.md
 assignees: []

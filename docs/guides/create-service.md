@@ -8,7 +8,7 @@ summary: Step-by-step checklist for creating a new deployable service in service
 read_when: Creating a new service in the services/ directory.
 owner: derekg1729
 created: 2026-02-06
-verified: 2026-02-06
+verified: 2026-04-17
 tags: [deployment, infra]
 ---
 
@@ -125,6 +125,8 @@ This is a Node.js ESM requirement when using `bundle: false`. TypeScript resolve
 If the service needs node identity (`node_id`, `scope_id`, `chain_id`) or governance config: add `@cogni/repo-spec` as a workspace dependency, bake `.cogni/repo-spec.yaml` into the Dockerfile runner stage, and read it at bootstrap. See [`packages/repo-spec/AGENTS.md`](../../packages/repo-spec/AGENTS.md) for the public API and [`services/scheduler-worker/src/bootstrap/container.ts`](../../services/scheduler-worker/src/bootstrap/container.ts) for the reference implementation.
 
 ### 4. Health Endpoints
+
+> **Contract:** [docs/spec/health-probes.md](../spec/health-probes.md) — liveness vs. readiness separation, worker drain semantics, probe ownership.
 
 - [ ] Create `src/health.ts` using minimal `node:http` (no framework):
 
@@ -248,6 +250,13 @@ Workers must stop claiming new jobs immediately on SIGTERM regardless of orchest
 5. Exit 0 (clean) or 1 (error)
 
 ### 6. Dockerfile
+
+> **Image discipline (enforced by the pipeline):**
+>
+> - **IMAGE_IMMUTABILITY** — The image you build is tagged by SHA, never `:latest`. PR lane: `pr-{N}-{sha}-{service}`. Promotion: `preview-{sha}-{service}` → `prod-{sha}-{service}`.
+> - **BUILD_ONCE_PROMOTE** — `pr-build.yml` builds once; `flight-preview.yml` and `promote-and-deploy.yml` re-tag the same digest. Your Dockerfile must be digest-stable (no timestamps, no random IDs, no git-state writes at build time).
+>
+> If your service can't satisfy both, fix the Dockerfile before going further — every downstream stage assumes these hold.
 
 **Packaging models:** Choose exactly one per service:
 
@@ -381,46 +390,67 @@ volumes:
 
 ### 9. Repo Integration
 
-**Dev stack integration** (required):
+> **Production runs on k3s via Argo CD.** Docker Compose is local-dev only. A new service reaches production only after it's wired into the CI target list, the k8s base, and the Argo catalog — all three are required. Missing any one silently green-lights CI and never deploys.
 
-- [ ] Add service to `dev:infra` script in root `package.json` (appends to compose service list)
-- [ ] Add to `docker-compose.dev.yml` (see template below)
+#### 9a. Wire into the PR build matrix
 
-**Individual service scripts** (optional, for isolated development):
+`pr-build.yml` runs a detect → build (matrix) → manifest pipeline. Each matrix leg builds one target in parallel. To make your service a target:
 
-- [ ] Add root scripts to `package.json`:
-  ```json
-  "<name>:build": "pnpm --filter @cogni/<name>-service build",
-  "<name>:dev": "dotenv -e .env.local -- pnpm --filter @cogni/<name>-service dev",
-  "<name>:docker:build": "docker build -f services/<name>/Dockerfile -t <name>-local ."
-  ```
+- [ ] **Register the target** in `scripts/ci/detect-affected.sh`:
+  - Append to `ALL_TARGETS=(...)`
+  - Add a path pattern under the case-statement so edits trigger a rebuild:
+    ```bash
+    services/<name>/*)
+      add_target <name>
+      ;;
+    ```
+- [ ] **Add a build recipe** in `scripts/ci/build-and-push-images.sh`:
+  - `resolve_tag()` case — defines the tag suffix (e.g. `-<name>`)
+  - `build_target()` case — `docker buildx build` against your Dockerfile
+- [ ] **Add a digest resolver** in `scripts/ci/resolve-pr-build-images.sh`:
+  - Same `resolve_tag` case (must mirror the build script)
+- [ ] **Add to the dispatch fallback** `.github/workflows/build-multi-node.yml` (called by `promote-merged-pr.yml` when a PR produced no images):
+  - Either add to the services block or extend the matrix, matching the pattern used by `scheduler-worker` / `migrator`.
 
-> **Note:** The primary dev workflow is `pnpm dev:stack` which starts all services via compose. Individual `<name>:dev` scripts are useful for debugging a single service in isolation but are not required for MVP.
+**Verify locally:** Touch a file under `services/<name>/` and run `scripts/ci/detect-affected.sh` with `TURBO_SCM_BASE=origin/main TURBO_SCM_HEAD=HEAD`. Your service should appear in the `targets` CSV and `targets_json` array.
 
-- [ ] Add to `docker-compose.dev.yml`:
+#### 9b. Wire into the Argo catalog
+
+Argo CD ApplicationSets are catalog-driven (task.0247). The catalog is the single declaration; each environment (candidate-a, preview, production) templates from it.
+
+- [ ] **Add `infra/catalog/<name>.yaml`** — minimal shape (see `infra/catalog/scheduler-worker.yaml` as reference):
   ```yaml
-  <name>:
-    build:
-      context: ../../../..
-      dockerfile: services/<name>/Dockerfile
-    env_file: ../../../../.env.local
-    depends_on:
-      postgres:
-        condition: service_healthy
-    # Add healthcheck once health endpoints exist
+  name: <name>
+  type: service # or "node" for node-scoped apps
+  port: 9000 # health/main port
+  dockerfile: services/<name>/Dockerfile
   ```
-- [ ] Add to production `docker-compose.yml` (when ready for deployment)
-- [ ] Add to CI/CD pipeline (see [CI/CD Services Roadmap](../../work/projects/proj.cicd-services-gitops.md)):
-  - Build: `pnpm --filter @cogni/<name>-service build`
-  - Test: `pnpm --filter @cogni/<name>-service test`
-  - Docker build and push to GHCR with immutable SHA tags
-  - Wire into deploy workflow (P0 stopgap: extend existing scripts; P1+: GitOps)
+- [ ] **Add k8s base** at `infra/k8s/base/<name>/`:
+  - `deployment.yaml`, `service.yaml`, `kustomization.yaml`
+  - Reference `services/scheduler-worker` for a worker-style service
+  - Apply the security context from Step 7
+- [ ] **Verify the AppSet picks it up** — the per-env ApplicationSet (`infra/k8s/argocd/candidate-a-applicationset.yaml` etc.) generates one Application per catalog entry; no per-service Application file should be added by hand.
+- [ ] **Add to `scripts/ci/wait-for-argocd.sh`** `APPS=(...)` list so flights wait for your service to reach Healthy before declaring success.
 
-### 10. Deployment Criticality
+#### 9c. Dev stack (local Docker Compose)
 
-- [ ] Classify: **critical** (deploy fails if unhealthy) or **optional** (best-effort)
-- [ ] If critical: add a post-deploy health gate in `scripts/ci/` and wire it into `deploy.sh` after `compose up`
-- [ ] If using compose profiles: add a profile guardrail asserting the service resolves in `compose config --services` — compose silently ignores profiles for missing services
+- [ ] Add the service to `infra/compose/docker-compose.dev.yml` (check current path — layout has moved since original guide)
+- [ ] Add root `package.json` script if solo iteration helps:
+  ```json
+  "<name>:dev": "dotenv -e .env.local -- pnpm --filter @cogni/<name>-service dev"
+  ```
+
+> Compose is the dev path. Never add a service to Compose without also completing 9a + 9b — Compose coverage alone means the service won't ship.
+
+### 10. Deployment Criticality (K8s)
+
+Classify the service as **critical** (a flight fails if it can't reach Healthy) or **optional** (best-effort). Then:
+
+- [ ] **Probes** — `readinessProbe` and `livenessProbe` in `infra/k8s/base/<name>/deployment.yaml` pointing at `/readyz` and `/livez`. Tune `initialDelaySeconds` and `periodSeconds` — probe ownership belongs to the manifest, never `HEALTHCHECK` in the Dockerfile.
+- [ ] **If critical** — include the service name in `scripts/ci/wait-for-argocd.sh` `APPS=(...)`. `candidate-flight.yml`, `flight-preview.yml`, and `promote-and-deploy.yml` all block until every listed app reports `sync.revision == deploy-branch SHA && health.status == Healthy`.
+- [ ] **If optional / in-flight** — keep it out of the `APPS` list so a broken optional service doesn't block the whole flight. See bug.0312 context in `proj.cicd-services-gitops.md` (openclaw placeholder image tag was exactly this failure mode).
+- [ ] **Pod Disruption Budget** (if the service has more than 1 replica or hosts stateful work) — add `poddisruptionbudget.yaml` with `minAvailable: 1` so rolling updates don't take the service fully offline.
+- [ ] **Sync-wave ordering** (if the service has a start-up dependency like a migration) — use Argo `argocd.argoproj.io/sync-wave` annotations. Migrations run in wave 0; services depending on them run in wave 1+.
 
 ### 11. Documentation
 
