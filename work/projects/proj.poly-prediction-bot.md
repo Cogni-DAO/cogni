@@ -10,8 +10,8 @@ summary: Build an autonomous prediction market bot that ingests live market data
 outcome: A self-improving prediction market intelligence system — from read-only market access through autonomous analysis to simulated trading with tracked P&L.
 assignees: derekg1729
 created: 2026-03-31
-updated: 2026-04-01
-labels: [poly, prediction-markets, ai, langgraph, temporal]
+updated: 2026-04-17
+labels: [poly, prediction-markets, ai, langgraph, temporal, copy-trading]
 ---
 
 # Cogni Poly — Prediction Market Intelligence Bot
@@ -63,10 +63,11 @@ Build a prediction market bot that starts by reading and searching live markets 
 
 | Deliverable                                                                | Status      | Est | Work Item            |
 | -------------------------------------------------------------------------- | ----------- | --- | -------------------- |
+| Follow-a-wallet v0 — single-operator copy-trade prototype (PR #890)        | In Review   | 5   | task.0315            |
+| Multi-tenant wallet auth — per-user EOA + RLS + durable trade grants       | Not Started | 5   | task.0318            |
 | Paper trading engine — simulated order execution against live odds         | Not Started | 4   | (create at P2 start) |
 | Position tracking + P&L ledger (integrated with `@cogni/financial-ledger`) | Not Started | 3   | (create at P2 start) |
 | Balance sheet dashboard — portfolio view, historical returns, Sharpe ratio | Not Started | 3   | (create at P2 start) |
-| Follow-a-wallet — track and mirror top Polymarket wallets                  | Not Started | 3   | (create at P2 start) |
 | Strategy backtesting — replay historical signals against resolved markets  | Not Started | 3   | (create at P2 start) |
 | DAO governance integration — community votes on risk parameters, strategy  | Not Started | 2   | (create at P2 start) |
 | Human-in-the-loop approval flow — signal → approve → execute               | Not Started | 3   | (create at P2 start) |
