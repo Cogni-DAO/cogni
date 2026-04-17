@@ -1,5 +1,5 @@
 ---
-id: task.0316
+id: task.0317
 type: task
 title: "Per-node LangGraph catalogs — factory library + node-owned catalog registry"
 status: needs_design
