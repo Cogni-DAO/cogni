@@ -102,7 +102,14 @@ ID convention: `pm:{category}:{slug}`. All entries use `domain: 'prediction-mark
 ✅ pnpm check:docs — 576 files, 576 unique IDs
 ```
 
-## Out of Scope / Follow-ups
+## Known limitations of this task
+
+**This ships local-dev seeding only.** The delivery mechanism (`scripts/db/seed-doltgres.mts` invoked via `pnpm db:seed:doltgres:poly`) does not run on candidate-a / preview / prod VMs. The three root workspace deps added here (`@cogni/knowledge-store`, `@cogni/node-template-knowledge`, `@cogni/poly-knowledge`) are a boundary violation — they exist so the root-level seed script can resolve node packages, but belong inside the poly-app once the Dolt-native delivery path lands. Both issues are tracked:
+
+- **[spike.0318](./spike.0318.dolthub-knowledge-seeding-design.md)** — DoltHub-backed seeding design (per-node repos under `cogni/` org, `dolt_clone` on provision, content-ownership decision)
+- **[task.0319](./task.0319.dolthub-seed-delivery.md)** — implementation of the spike outcome; removes the root-dep hack and replaces the row-INSERT script
+
+## Out of Scope / Other Follow-ups
 
 1. **Storage-expert agent** — bridges awareness-plane `ObservationEvent` → promoted `knowledge` entries (task.0227 shipped the source; promotion path is unbuilt).
 2. **MCP ingestion job** — per `docs/research/poly-strategy-knowledge-ingestion-mcp.md`: Firecrawl + curated seed URL list → new `knowledge` entries at `status='candidate'` when that column lands.

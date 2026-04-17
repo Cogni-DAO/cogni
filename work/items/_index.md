@@ -67,6 +67,7 @@
 | 1 | 1 | 2 | needs_design | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 1 | 3 | needs_merge | task.0241 | Schedule Management AI Tools + Planner UI | Scheduler Evolution | proj.scheduler-evolution |
 | 1 | 1 | 1 | needs_implement | bug.0313 | pr-build bakes BUILD_SHA from ephemeral pull_request merge commit — /readyz version ≠ image tag | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 2 | needs_triage | spike.0318 | Spike: DoltHub-Backed Knowledge Seeding — Design + Ownership Model | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -82,6 +83,7 @@
 | 1 | 2 | 1 | needs_implement | bug.0308 | Alloy DaemonSet hardcodes docker.io image — brittle under mirror failure, blocks ghcr.io-only clusters | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0308 | Deployment observability scorecard — build/log correlation + git manager health matrix | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | bug.0312 | Purge canary and staging legacy naming from docs, workflows, and scorecards; document the e2e CI/CD flow | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 2 | 3 | needs_design | task.0319 | Implement DoltHub-Backed Seed Delivery for `knowledge_<node>` | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 3 | 1 | needs_design | bug.0011 | Gateway streaming truncates output mid-sentence in UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 3 | 3 | needs_design | task.0099 | Node + scope identity infra: repo-spec, DB persistence, scope_id columns, boot-time drift protection |  |  |
 | 1 | 3 | 3 | needs_research | spike.0119 | Quarterly people-centric attribution review — evaluation payload, governance input, and signal collection | Transparent Credit Payouts | proj.transparent-credit-payouts |
