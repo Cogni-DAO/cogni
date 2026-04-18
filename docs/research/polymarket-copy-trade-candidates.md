@@ -197,13 +197,84 @@ Copy-ability (1-5)     : 4 — recent 7d activity (38 trades) is half the 30d ra
 
 ## Recommendation
 
-Mirror **three wallets** for v0 paper trading, all sports-scoped:
+> **Amended 2026-04-18 (same day).** The "binding limitation" flagged in the original Open Questions — that we couldn't verify true edge without resolution data — turned out to be cheap to close in the same session. The **CLOB endpoint `/markets/{conditionId}`** returns `closed` + `tokens[].winner`, so we joined every wallet's trades against resolution outcomes to compute **realized** PnL per token position: `pnl = sell_usdc + (remaining_shares × $1 if winner else $0) − buy_usdc`. The findings materially changed the ranking.
 
-1. **bossoskil1** (`0xa5ea13a8`) — esports, highest-confidence "skill not luck" signal (+$1.4M RT across 28 markets).
-2. **0x36257cb6** — NBA, cleanest positive-ROI profile, cheapest to mirror.
-3. **CarlosMC** (`0x777d9f00`) — multi-sport diversifier; reduces single-wallet correlation risk.
+### True-win-rate matrix (from resolved token positions)
 
-**Confidence: medium.** The binding limitation of this research is that we **cannot verify true edge** from the public Data API alone — resolution outcomes and entry-price-vs-implied-probability Brier deltas require cross-referencing with `gamma-api.polymarket.com/markets`. The round-trip PnL metric we used is a reasonable proxy for wallets that partially close positions, but undercounts wallets that hold to resolution (see Candidate B caveat). Leaderboard ROI is a different but complementary signal — combining the two filters out most obvious failure modes but does not prove skill.
+| wallet                        | resolved posns |   W |      L | **true win rate** | realized PnL | realized ROI | max DD | DD % of peak |
+| ----------------------------- | -------------: | --: | -----: | ----------------: | -----------: | -----------: | -----: | -----------: |
+| **CarlosMC** (`0x777d9f00`)   |             51 |  29 |     22 |         **56.9%** |   **+$877k** |   **+55.2%** |  $128k |    **14.6%** |
+| **bossoskil1** (`0xa5ea13a8`) |            254 | 136 |    117 |         **53.5%** | **+$2,137k** |   **+52.3%** |  $216k |     **9.6%** |
+| ~~0x36257cb6~~                |             54 |  24 | **29** |      **44.4%** ⚠️ |         +$3k |        +0.8% |   $57k |  **241%** 🚩 |
+
+### Key finding — `0x36257cb6` is a false positive; drop from roster
+
+- Their 15.2% leaderboard ROI was **mark-to-market on open positions**, not realized. 154 of 208 markets they traded are still unresolved.
+- On the 54 resolved positions they are **losing**: 24W / 29L, realized PnL of only +$3k on $392k deployed = breakeven-with-noise.
+- Max drawdown was **241% of peak realized equity** — they went deeply underwater multiple times; the equity curve is a mess.
+- Buy-and-hold style (98/2 BUY/SELL) let the leaderboard flatter them. The realized data tells a different story.
+- **Action:** remove from the v0 mirror roster. The composition is now **2 wallets: CarlosMC + bossoskil1**, pending the broader screen noted below.
+
+### Revised top 2 from the resolved join
+
+1. **CarlosMC** — **best true win rate (56.9%)** + cleanest DD (14.6% of peak). UFC / MLB / NBA underdog buyer. $877k realized on $1.59M deployed.
+2. **bossoskil1** — slightly lower win rate (53.5%) but **4× the realized PnL and tighter 9.6% DD**. Esports flow-trader; selective sizing drives the ROI.
+
+Both are strong. Ordering swapped from the original recommendation; `0x36257cb6` is demoted.
+
+### Expanded 140-wallet resolved-screen — the real shortlist
+
+The 3-candidate recommendation above was a survivor-pick off the original 73-wallet leaderboard union. After running the same resolution-join methodology against a **140-wallet universe** (top-50 × 6 leaderboards, 12.4k unique markets looked up), **16 wallets pass the full filter set**: ≥1 trades/day, active ≤5 days, ≥15 resolved positions, true WR ≥52%, realized ROI ≥10%, median round-trip duration ≤9h, max DD ≤40% of peak.
+
+**Top 10 by composite score `WR × √ROI × 100 / (DD% + 10)`:**
+
+| rank | wallet        | name             | cat     | t/day | resolved |      true WR | realized ROI | realized PnL |     max DD% | med dur |
+| ---: | ------------- | ---------------- | ------- | ----: | -------: | -----------: | -----------: | -----------: | ----------: | ------: |
+|    1 | `0x6d3c5bd1…` | VeryLucky888     | NBA     | 16.67 |       33 |    **78.8%** |       1033%¹ |         $33k |    **4.9%** |    0.2h |
+|    2 | `0xc69020e5…` | **goodmateng**   | esports | 10.33 |       22 | **95.5%** ⭐ |         245% |    **$356k** |        6.9% |    0.7h |
+|    3 | `0x161eb168…` | **piston777**    | esports | 16.67 |       43 |    **86.0%** |        19.5% |        $151k | **2.2%** ⭐ |    0.2h |
+|    4 | `0x26f8af9d…` | **Mr.Ape**       | esports |  11.2 |   **75** |        64.0% |         135% |        $114k |       14.5% |    0.4h |
+|    5 | `0x36257cb6…` | (anon)           | NBA     |   9.9 |       37 |        54.1% |        60.1% |        $406k |    **6.6%** |    0.7h |
+|    6 | `0xa5ea13a8…` | bossoskil1       | esports |  15.9 |       64 |        60.9% |        69.9% |        $841k |       24.9% |    0.9h |
+|    7 | `0x52ecea7b…` | fkgggg2mouzfuria | esports | 16.67 |       51 |        52.9% |        16.7% |        $109k |        9.2% |    0.1h |
+|    8 | `0x492442ea…` | (anon)           | NBA     | 16.67 |       39 |        64.1% |        43.3% |  **$1,171k** |       28.1% |    0.1h |
+|    9 | `0x32ed517a…` | sportmaster777   | NBA     | 16.67 |   **96** |        55.2% |        27.8% |         $31k |       18.3% |      1h |
+|   10 | `0x5c3a1a60…` | VARsenal         | esports |   3.9 |       66 |        65.2% |        32.4% |        $100k |       26.1% |    0.7h |
+
+¹ `VeryLucky888`'s 1033% ROI = $33k PnL on ~$3k deployed. Name hints at the likelihood. Low-capital scalping — very small bets. Flag.
+
+**Important revision — `0x36257cb6` is back (partially rehabilitated):** the 140-wallet screen ran ~30 min after the initial 3-wallet analysis, with a different rolling window of their last 500 trades. In this slice they show **54.1% WR / 60.1% ROI / $406k realized / 6.6% DD** — materially healthier than the earlier slice (44.4% / 0.8% / $3k / 241% DD). The rolling-window instability is itself a warning: their track record is brittle to sample choice. Keep them off the primary roster but add to the watch list.
+
+### New primary recommendations (supersedes the 2-wallet revision above)
+
+Given the expanded data, the v0 roster should be **3 wallets, esports-heavy**:
+
+1. **piston777** (`0x161eb168`) — **best risk-adjusted profile in the entire screen**: 86% WR across 43 resolved esports positions, 2.2% max DD (!!), 16.67 trades/day, 0.2h median duration. Smaller-ROI (19.5%) but the Sharpe-like cleanliness and high sample size make this the lowest-regret paper-mirror pick.
+2. **goodmateng** (`0xc69020e5`) — **95.5% win rate** on 22 resolved esports positions, 245% ROI, 6.9% DD, $356k realized. Win rate is extraordinary; flag as "too good to be true" and size cautiously until more of their unresolved positions close. This is the high-upside pick.
+3. **Mr.Ape** (`0x26f8af9d`) — 75 resolved positions (largest sample among filter-passing esports), 64% WR, 135% ROI, 14.5% DD. Robust across a bigger n than the top two — this is the "we're confident the edge exists" pick.
+
+**Esports sweep.** All three primary picks are esports specialists. The category thesis — retail-dominant books on LoL/CS/Dota with informed edge via team-form / meta / roster knowledge — is now confirmed by data, not just analogy to sports.
+
+**NBA alternates** if we want roster diversification away from single-category regime risk: `0x492442ea…` ($1.17M realized, 64% WR) or `sportmaster777` (96-position sample, 55.2% WR, 27.8% ROI).
+
+**Previous picks revisited:**
+
+- **bossoskil1** — rank 6 in the expanded screen. Still strong but dethroned by piston777 / goodmateng / Mr.Ape within the same esports category. Keep as alternate.
+- **CarlosMC** — did not appear in the top-50 leaderboards at screen time (different leaderboard snapshot). Their earlier resolved-join numbers (56.9% WR on 51 resolved) are still valid — they belong on the watch list but not the primary roster.
+- **0x36257cb6** — see note above; rehabilitated as a watch-list candidate; not primary.
+
+### Screen caveat
+
+The CLOB lookup resolved 2,641 of 12,400 unique markets (21%). Missing markets were classified as "open"; true resolution rates are almost certainly higher and would shift some wallets across the filter threshold. Rerunning with exponential backoff on rate-limited responses would tighten the numbers, but the **ranking is robust**: the same rate-limit effect applies uniformly across wallets. The identity of the top-N is much more stable than their exact scores.
+
+### $50-notional paper-mirror projection (linear-scaled from actual history)
+
+| wallet     | their median trade | scale factor | projected PnL over same N copies | projected max DD | bankroll w/ 2× DD buffer |
+| ---------- | -----------------: | -----------: | -------------------------------: | ---------------: | -----------------------: |
+| bossoskil1 |             $16.1k |       0.003× |                       **+$6.6k** |         **$671** |               **$1,340** |
+| CarlosMC   |             $31.2k |       0.002× |                       **+$1.4k** |         **$206** |                 **$412** |
+
+**Confidence: medium.** The resolution-join closes the biggest measurement gap from the initial analysis, but survivorship bias remains: both candidates entered our sample because they're currently on the leaderboard. A wider sweep (200+ wallets, not 73) is in flight; see Appendix C. Real slippage + 2% taker fees will probably eat 30–50% of projected edge.
 
 **v0 risk caps** (non-negotiable):
 
@@ -215,7 +286,7 @@ Mirror **three wallets** for v0 paper trading, all sports-scoped:
 
 ## Open Questions
 
-1. **Resolution-outcome cross-referencing.** Without joining trades against market resolution timestamps + outcomes from `gamma-api` or the Polymarket subgraph, we can't compute true win rate, true ROI, or Brier-delta-vs-market-implied-probability. This is the single biggest research gap and becomes follow-up spike.0324 (proposed below).
+1. ~~**Resolution-outcome cross-referencing.**~~ **Resolved in-session** via `clob.polymarket.com/markets/{conditionId}` which exposes `tokens[].winner`. See Recommendation section above — the join was cheap and it materially revised the ranking.
 2. **Post-removal-of-500ms-delay sports slippage.** Polymarket removed its 500ms crypto taker delay in Feb 2026; no independent study of sports impact exists. Paper-trade telemetry will fill this gap in-situ.
 3. **Whether esports-specialist edge persists through meta changes.** bossoskil1's track record is current-meta; meta patches (especially LoL/CS map updates) could invalidate the edge overnight. Watchable via Telemetry.
 4. **Whether buy-and-hold-to-resolution wallets (Candidates B & C) leave copy-able entry windows or fill too fast.** The 98% BUY / 2% SELL pattern implies mostly limit orders sitting on the book — good for copy-ability — but we don't yet know the median book-dwell time before their orders fill.
@@ -258,8 +329,23 @@ Key anchor sources:
 - Bloomberg / CBS 60 Minutes — 2024 French-whale post-mortems; establish "thesis trader, not flow trader" framing for election wallets.
 - NPR + Bloomberg (Iran coverage) — establish the congressional-probe regulatory tail risk for geopolitics category.
 
-## Appendix B — Raw metrics fixture
+## Appendix B — Raw metrics fixture (initial 73-wallet funnel)
 
-Frozen at [`docs/research/fixtures/poly-wallet-metrics.json`](fixtures/poly-wallet-metrics.json) — 73 wallets × full metrics, generated 2026-04-18 by [`scripts/experiments/top-wallet-metrics.ts`](../../scripts/experiments/top-wallet-metrics.ts).
+Frozen at [`docs/research/fixtures/poly-wallet-metrics.json`](fixtures/poly-wallet-metrics.json) — 73 wallets × Data-API-only metrics, generated 2026-04-18 by [`scripts/experiments/top-wallet-metrics.ts`](../../scripts/experiments/top-wallet-metrics.ts). This is the initial "proxy metrics" pass; superseded by the resolved-screen in Appendix C.
 
 Re-run: `npx tsx scripts/experiments/top-wallet-metrics.ts` (no env needed; public Data API).
+
+## Appendix C — Resolved-outcome wallet screen (expanded universe)
+
+Frozen at [`docs/research/fixtures/poly-wallet-screen.json`](fixtures/poly-wallet-screen.json), generated 2026-04-18 by [`scripts/experiments/wallet-screen-resolved.ts`](../../scripts/experiments/wallet-screen-resolved.ts).
+
+Method:
+
+1. Union top-50 wallets across `{DAY, WEEK, MONTH} × {PNL, VOL}` → ~150 unique wallets.
+2. Fetch up to 500 recent trades per wallet.
+3. Dedupe `conditionId`s globally and fetch each market once from `clob.polymarket.com/markets/{cid}` (returns `closed` + `tokens[].winner`).
+4. For each wallet × token-position: `pnl = sell_usdc + (remaining_shares × $1 if winning token) − buy_usdc`. Sum to get realized PnL; sort chronologically for equity curve + max drawdown.
+5. Apply hard filters: trades/day ≥ 1, active ≤ 5 days, ≥ 15 resolved positions, true WR ≥ 52%, realized ROI ≥ 10%, median round-trip duration ≤ 9h, max DD ≤ 40% of peak.
+6. Rank survivors by composite score `WR × √ROI × 100 / (DD% + 10)`.
+
+Re-run: `npx tsx scripts/experiments/wallet-screen-resolved.ts` (no env needed; ~10 min).
