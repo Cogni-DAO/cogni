@@ -385,10 +385,14 @@ CMD ["pnpm", "db:migrate:<node>:container"]
 
 **CI wiring (see `scripts/ci/`):**
 
-- `detect-affected.sh` emits per-node migrator targets (`operator-migrator`, `poly-migrator`, `resy-migrator`) in addition to app targets.
-- `build-and-push-images.sh` builds each migrator from its own Dockerfile's `migrator` stage with distinct GHA cache scopes.
-- `compute_migrator_fingerprint.sh` takes a node arg and hashes only that node's inputs.
-- `promote-build-payload.sh` pairs each node with its own migrator digest (`operator-migrator` digest → operator overlay, etc.).
+Adding a new build-target name requires updating this full chain — missing any one step causes silent failure modes (target gets built but never promoted, or promoted but never resolved on re-flight).
+
+- `detect-affected.sh` — emits the target name when its paths change.
+- `build-and-push-images.sh` — builds the image tag from a Dockerfile stage with a distinct GHA cache scope.
+- `merge-build-fragments.sh` — `canonical_order` array must include the target for stable JSON ordering across matrix leg merges.
+- `compute_migrator_fingerprint.sh` — (migrators only) takes a node arg and hashes only that node's inputs for content-addressed image caching.
+- `resolve-pr-build-images.sh` — `ALL_TARGETS` + `resolve_tag()` must know about the tag shape, or the flight's PR-image resolver silently drops the target from the promoted payload (bug.0321 documents the vacuous-green failure mode this produces).
+- `promote-build-payload.sh` — pairs each app with its companion migrator digest (`operator-migrator` digest → operator overlay, etc.).
 
 ### 4.2 Drizzle Configuration
 
