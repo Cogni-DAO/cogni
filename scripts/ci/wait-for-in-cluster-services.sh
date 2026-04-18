@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 #
-# wait-for-in-cluster-services.sh — gate the flight on health of services
-# that don't expose an Ingress (scheduler-worker et al). Complements
-# wait-for-candidate-ready.sh + smoke-candidate.sh which cover node-apps
-# over HTTPS. See docs/spec/ci-cd.md → "Minimum Authoritative Validation".
+# wait-for-in-cluster-services.sh — assert every k8s Deployment the flight
+# just promoted has rolled to its new ReplicaSet. Complements the HTTPS
+# /readyz probes in wait-for-candidate-ready.sh, which are served by any
+# running pod (old or new) and so do not verify a rollout actually
+# happened. See docs/spec/ci-cd.md → "Minimum Authoritative Validation".
 #
 # Env:
 #   VM_HOST             (required) SSH target for the candidate VM
@@ -30,8 +31,9 @@ SSH_OPTS=(
   -o ServerAliveCountMax=6
 )
 
-# Add future no-Ingress deployments here when they need gating.
-SERVICES=(scheduler-worker)
+# All k8s Deployments managed by candidate-a / preview / production overlays.
+# Add a new deployment name here when a new service lands in the catalog.
+SERVICES=(operator-node-app poly-node-app resy-node-app scheduler-worker)
 
 NS="cogni-${DEPLOY_ENVIRONMENT}"
 
