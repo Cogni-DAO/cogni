@@ -25,6 +25,10 @@ export {
   getTestOnChainVerifier,
   resetTestOnChainVerifier,
 } from "./payments/fake-onchain-verifier.adapter";
+export {
+  FakePolymarketClobAdapter,
+  type FakePolymarketClobConfig,
+} from "./poly-trade/fake-polymarket-clob.adapter";
 export { FakeRepoAdapter } from "./repo/fake-repo.adapter";
 export {
   FakeOperatorWalletAdapter,

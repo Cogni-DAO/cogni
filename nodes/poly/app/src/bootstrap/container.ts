@@ -586,6 +586,7 @@ function createContainer(): Container {
   );
   const polyTradeCapability = createPolyTradeCapability({
     logger: log,
+    isTestMode: env.isTestMode,
     host: env.POLY_CLOB_HOST,
     operatorWalletAddress: env.OPERATOR_WALLET_ADDRESS as
       | `0x${string}`

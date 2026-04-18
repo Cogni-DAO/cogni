@@ -126,11 +126,10 @@ describe("createPolyPlaceTradeImplementation", () => {
     return { cap: { placeTrade }, placeTrade };
   }
 
-  it("forwards the input to the capability with BUY-only side", async () => {
+  it("forwards the input to the capability with BUY-only side — tool does NOT generate client_order_id", async () => {
     const { cap, placeTrade } = makeCapability();
     const impl = createPolyPlaceTradeImplementation({
       polyTradeCapability: cap,
-      now: () => 1713300000000,
     });
 
     const out = await impl.execute(VALID_INPUT, {});
@@ -143,38 +142,21 @@ describe("createPolyPlaceTradeImplementation", () => {
     expect(request.outcome).toBe(VALID_INPUT.outcome);
     expect(request.size_usdc).toBe(VALID_INPUT.size_usdc);
     expect(request.limit_price).toBe(VALID_INPUT.limit_price);
-    expect(typeof request.client_order_id).toBe("string");
-    expect(request.client_order_id.startsWith("0x")).toBe(true);
-    expect(request.client_order_id).toHaveLength(66);
+    // client_order_id is NOT in the request — it's the capability's
+    // responsibility to generate via the pinned clientOrderIdFor helper.
+    expect("client_order_id" in request).toBe(false);
     expect(out).toEqual(RECEIPT);
   });
 
-  it("generates a distinct client_order_id per invocation clock", async () => {
-    const { cap, placeTrade } = makeCapability();
-    let t = 0;
+  it("output matches the PolyPlaceTradeOutputSchema", async () => {
+    const { cap } = makeCapability();
     const impl = createPolyPlaceTradeImplementation({
       polyTradeCapability: cap,
-      now: () => {
-        t += 1;
-        return t;
-      },
     });
-    await impl.execute(VALID_INPUT, {});
-    await impl.execute(VALID_INPUT, {});
-    const id1 = placeTrade.mock.calls[0]?.[0].client_order_id;
-    const id2 = placeTrade.mock.calls[1]?.[0].client_order_id;
-    expect(id1).not.toBe(id2);
-  });
-
-  it("honors a custom generateClientOrderId", async () => {
-    const { cap, placeTrade } = makeCapability();
-    const custom: `0x${string}` = `0x${"ab".repeat(32)}`;
-    const impl = createPolyPlaceTradeImplementation({
-      polyTradeCapability: cap,
-      generateClientOrderId: () => custom,
-    });
-    await impl.execute(VALID_INPUT, {});
-    expect(placeTrade.mock.calls[0]?.[0].client_order_id).toBe(custom);
+    const out = await impl.execute(VALID_INPUT, {});
+    // Defensive — if the capability ever drifts (extra field, wrong type),
+    // this catches it at the tool boundary rather than leaking to the agent.
+    expect(() => PolyPlaceTradeOutputSchema.parse(out)).not.toThrow();
   });
 
   it("propagates capability errors to the caller", async () => {

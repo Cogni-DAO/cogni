@@ -3,16 +3,17 @@
 
 /**
  * Module: `@bootstrap/capabilities/poly-trade`
- * Purpose: Factory for `PolyTradeCapability` — binds the PolymarketClobAdapter (+ Privy signer + pino + prom-client sinks) behind the agent-callable `core__poly_place_trade` AI tool. Sole legal importer of `@polymarket/clob-client` and `@privy-io/node/viem` in this app. Returns `undefined` when CLOB / Privy / operator-wallet env is not fully configured, so non-trader pods register a stub.
+ * Purpose: Factory for `PolyTradeCapability` — binds the PolymarketClobAdapter (+ Privy signer + pino + prom-client sinks) behind the agent-callable `core__poly_place_trade` AI tool. Test mode substitutes `FakePolymarketClobAdapter` from `@/adapters/test/`. Sole legal importer of `@polymarket/clob-client` and `@privy-io/node/viem` in this app.
  * Scope: Runtime wiring only. Does not read env directly (server-env supplies strings); does not persist anything; does not place orders itself. Holds the adapter + Privy wallet lifecycle for the process.
  * Invariants:
- *   - LAZY_INIT_MATCHES_TEMPORAL — factory is sync (returns `PolyTradeCapability | undefined` after env-presence check). Dynamic imports + Privy wallet resolution happen inside `placeTrade` on first call and are memoized. Matches the `getTemporalWorkflowClient` pattern in container.ts.
- *   - CAPABILITY_FAIL_LOUD — Privy wallet resolution errors throw on first `placeTrade` invocation with a clear message, not silently. (Bootstrap-time fail-fast deferred; the async `register()` hook could call a warm-up if ops needs it.)
- *   - NO_STATIC_CLOB_IMPORT — uses `await import(...)` so deployments without CLOB creds never pull in `@polymarket/clob-client`.
- *   - TEST_HOOK_IS_FACTORY_PARAM — `placeOrderOverride` is the sole mechanism for test substitution; production callers never pass it. Override path skips dynamic imports entirely.
- *   - PROM_REGISTRY_SHARED — counters + histograms register on the app's singleton registry via `getOrCreate` helpers; no duplicate-registration errors across HMR / test boots.
+ *   - ENV_IS_SOLE_SWITCH — production factory branches only on env.isTestMode and env-presence. No per-call test knobs on the public config interface. Matches the `createRepoCapability` / `createMetricsCapability` pattern.
+ *   - LAZY_INIT_MATCHES_TEMPORAL — production path is sync to construct; dynamic imports + Privy wallet resolution happen inside `placeTrade` on first call and memoize. Matches `getTemporalWorkflowClient` in container.ts.
+ *   - CAPABILITY_FAIL_LOUD — Privy wallet resolution errors throw on first `placeTrade` invocation with a clear message; the capability logs a boot-time `env_ok` positive signal before that point so ops sees "configured" without waiting for the first trade.
+ *   - NO_STATIC_CLOB_IMPORT — uses `await import(...)` in production; deployments without CLOB creds never pull in `@polymarket/clob-client`. Enforced additionally by Biome `noRestrictedImports`.
+ *   - PROM_REGISTRY_SHARED — counters + histograms register on the app's singleton registry with idempotent get-or-create helpers; no duplicate-registration errors across HMR / test boots.
  *   - BUY_ONLY — the capability rejects SELL until CTF setApprovalForAll is wired (out of prototype scope).
  *   - KEY_NEVER_IN_APP — CLOB L2 creds + Privy signing key stay in env; the adapter holds them in-memory only for the lifetime of the process.
+ *   - HARDCODED_WALLET_SECRETS_OK — per task.0315 prototype constraint, the env → single-operator Privy-wallet resolution block is the ONE place where non-multi-tenant wiring is allowed. Every other branch (test fake; tool invocation; executor wrap) is production-generic.
  * Side-effects: none on factory call; on first `placeTrade` invocation: Privy wallet list pagination to resolve `operatorWalletAddress`, then HTTPS to Polymarket CLOB on each subsequent call.
  * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.25)
  * @internal
@@ -23,15 +24,17 @@ import type {
   PolyPlaceTradeRequest,
   PolyTradeCapability,
 } from "@cogni/ai-tools";
-import type {
-  LoggerPort,
-  MetricsPort,
-  OrderIntent,
-  OrderReceipt,
+import {
+  clientOrderIdFor,
+  type LoggerPort,
+  type MetricsPort,
+  type OrderIntent,
+  type OrderReceipt,
 } from "@cogni/market-provider";
 import type { Counter, Histogram } from "prom-client";
 import client from "prom-client";
 
+import { FakePolymarketClobAdapter } from "@/adapters/test";
 import { createClobExecutor } from "@/features/copy-trade/clob-executor";
 import type { Logger } from "@/shared/observability/server";
 import { metricsRegistry } from "@/shared/observability/server";
@@ -53,6 +56,12 @@ export interface PrivyEnv {
 export interface CreatePolyTradeCapabilityConfig {
   /** Pino child logger from the container; factory binds component context. */
   logger: Logger;
+  /**
+   * `env.APP_ENV === 'test'` — when true, the factory returns a capability
+   * backed by `FakePolymarketClobAdapter` from `@/adapters/test/`. Matches
+   * the `createRepoCapability` / `createMetricsCapability` convention.
+   */
+  isTestMode: boolean;
   /** Polymarket CLOB host. Defaults to `https://clob.polymarket.com`. */
   host?: string | undefined;
   /** The operator EOA (0x…40 hex). Must already be funded + approved on Polygon. */
@@ -61,83 +70,93 @@ export interface CreatePolyTradeCapabilityConfig {
   creds?: PolyCredsEnv | undefined;
   /** Privy env; all three required. */
   privy?: PrivyEnv | undefined;
-  /**
-   * TEST ONLY — bypasses dynamic CLOB / Privy imports and wraps the supplied
-   * `placeOrder` function in the executor. Production bootstrap never sets this.
-   */
-  placeOrderOverride?:
-    | ((intent: OrderIntent) => Promise<OrderReceipt>)
-    | undefined;
 }
 
 const DEFAULT_CLOB_HOST = "https://clob.polymarket.com";
+
+/** Placeholder address used in test mode so receipts carry a stable profile URL. */
+const TEST_MODE_OPERATOR_ADDRESS =
+  "0x1111111111111111111111111111111111111111" as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prom-client sinks (shared registry; idempotent across hot reload)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Stable metric names. Dashboards + Prom recording rules reference these. */
-export const POLY_TRADE_METRICS = {
-  placeTotal: "poly_trade_place_total",
-  placeDurationMs: "poly_trade_place_duration_ms",
-} as const;
+/**
+ * Default histogram buckets for CLOB placement latency (ms). Covers local
+ * sub-100ms happy paths all the way to 30s worst-case network failures.
+ */
+const DEFAULT_DURATION_BUCKETS_MS = [
+  50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000,
+];
 
-function getOrCreateCounter<T extends string>(
-  name: string,
-  help: string,
-  labelNames: readonly T[]
-): Counter<T> {
-  const existing = metricsRegistry.getSingleMetric(name);
-  if (existing) return existing as Counter<T>;
-  return new client.Counter({
-    name,
-    help,
-    labelNames: labelNames as T[],
-    registers: [metricsRegistry],
-  });
-}
-
-function getOrCreateHistogram<T extends string>(
-  name: string,
-  help: string,
-  labelNames: readonly T[],
-  buckets: number[]
-): Histogram<T> {
-  const existing = metricsRegistry.getSingleMetric(name);
-  if (existing) return existing as Histogram<T>;
-  return new client.Histogram({
-    name,
-    help,
-    labelNames: labelNames as T[],
-    buckets,
-    registers: [metricsRegistry],
-  });
-}
-
-/** Build a MetricsPort that emits into the app's shared registry. */
+/**
+ * Generic, lazy, registry-backed MetricsPort shim.
+ *
+ * Why generic: this capability wraps TWO emitters — the CP4.2 executor
+ * (`poly_copy_trade_execute_{total,duration_ms}`) and the PR #890 adapter
+ * (`poly_clob_{place,cancel,get_order}_{total,duration_ms}`). Hard-coding any
+ * subset in the shim silently drops the rest. Lazy per-name creation avoids
+ * that and accepts any future emitter without code changes.
+ *
+ * `getSingleMetric(name) ?? new client.Counter/Histogram(...)` keeps the
+ * shim safe across HMR / test boots that re-enter the factory.
+ */
 function buildMetricsPort(): MetricsPort {
-  const placeTotal = getOrCreateCounter(
-    POLY_TRADE_METRICS.placeTotal,
-    "Polymarket CLOB trade placements issued by the agent-callable tool, by result",
-    ["result"] as const
-  );
-  const placeDurationMs = getOrCreateHistogram(
-    POLY_TRADE_METRICS.placeDurationMs,
-    "Polymarket CLOB trade placement latency in milliseconds, by result",
-    ["result"] as const,
-    [50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000]
-  );
+  const counters = new Map<string, Counter<string>>();
+  const histograms = new Map<string, Histogram<string>>();
+
+  function getCounter(
+    name: string,
+    labels: Record<string, string> | undefined
+  ): Counter<string> {
+    const cached = counters.get(name);
+    if (cached) return cached;
+    const existing = metricsRegistry.getSingleMetric(name);
+    if (existing) {
+      const hit = existing as Counter<string>;
+      counters.set(name, hit);
+      return hit;
+    }
+    const created = new client.Counter({
+      name,
+      help: `${name} — emitted via PolyTradeCapability`,
+      labelNames: Object.keys(labels ?? {}),
+      registers: [metricsRegistry],
+    });
+    counters.set(name, created);
+    return created;
+  }
+
+  function getHistogram(
+    name: string,
+    labels: Record<string, string> | undefined
+  ): Histogram<string> {
+    const cached = histograms.get(name);
+    if (cached) return cached;
+    const existing = metricsRegistry.getSingleMetric(name);
+    if (existing) {
+      const hit = existing as Histogram<string>;
+      histograms.set(name, hit);
+      return hit;
+    }
+    const created = new client.Histogram({
+      name,
+      help: `${name} — emitted via PolyTradeCapability`,
+      labelNames: Object.keys(labels ?? {}),
+      buckets: DEFAULT_DURATION_BUCKETS_MS,
+      registers: [metricsRegistry],
+    });
+    histograms.set(name, created);
+    return created;
+  }
 
   return {
     incr(name, labels) {
-      if (name === POLY_TRADE_METRICS.placeTotal) {
-        placeTotal.inc(labels ?? {});
-      }
+      getCounter(name, labels).inc(labels ?? {});
     },
     observeDurationMs(name, ms, labels) {
-      if (name === POLY_TRADE_METRICS.placeDurationMs) {
-        placeDurationMs.observe(labels ?? {}, ms);
-      }
+      getHistogram(name, labels).observe(labels ?? {}, ms);
     },
   };
 }
@@ -167,7 +186,7 @@ function adaptLogger(pinoLogger: Logger): LoggerPort {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Profile URL helper (used on every receipt)
+// Profile URL helper
 // ─────────────────────────────────────────────────────────────────────────────
 
 function profileUrl(address: string): string {
@@ -175,38 +194,128 @@ function profileUrl(address: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Factory
+// Pure composition — adapter-agnostic capability builder
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CreateFromAdapterDeps {
+  /** `MarketProviderPort.placeOrder` — production adapter OR `FakePolymarketClobAdapter`. */
+  placeOrder: (intent: OrderIntent) => Promise<OrderReceipt>;
+  /** Operator EOA (used for the receipt's profile_url). */
+  operatorWalletAddress: `0x${string}`;
+  /** Pino logger (factory wraps in a LoggerPort + adds executor child). */
+  logger: Logger;
+  /** Optional shared metrics shim; factory builds one if omitted. */
+  metrics?: MetricsPort;
+}
+
+/**
+ * Pure composition: wrap any `placeOrder` function in the CP4.2 executor
+ * (structured logs + bounded-label metrics) and map the tool's
+ * `PolyPlaceTradeRequest` through → `OrderIntent` → `OrderReceipt` → `PolyPlaceTradeReceipt`.
+ *
+ * Client-order-id is generated here via the pinned `clientOrderIdFor` helper
+ * from `@cogni/market-provider`. Every placement path (this tool, CP4.3's
+ * autonomous poll, a future WS ingester) must produce compatible keys so the
+ * composite PK on `poly_copy_trade_fills` dedupes correctly (CP3.3 invariant).
+ *
+ * This function is called from BOTH the production path (real Polymarket
+ * adapter) and the test path (`FakePolymarketClobAdapter`). It contains zero
+ * environment awareness; the env branch lives in `createPolyTradeCapability`.
+ *
+ * @public
+ */
+export function createPolyTradeCapabilityFromAdapter(
+  deps: CreateFromAdapterDeps
+): PolyTradeCapability {
+  const metrics = deps.metrics ?? buildMetricsPort();
+  const loggerPort = adaptLogger(
+    deps.logger.child({ component: "poly-clob-adapter" })
+  );
+  const executor = createClobExecutor({
+    placeOrder: deps.placeOrder,
+    logger: loggerPort,
+    metrics,
+  });
+  const operatorAddress = deps.operatorWalletAddress;
+
+  return {
+    async placeTrade(
+      request: PolyPlaceTradeRequest
+    ): Promise<PolyPlaceTradeReceipt> {
+      if (request.side !== "BUY") {
+        throw new Error(
+          "poly-trade: SELL orders are out of scope for the prototype (requires CTF setApprovalForAll)."
+        );
+      }
+      // `target_id="agent"` marks the placement as tool-initiated; when CP4.3
+      // lands, the autonomous path passes the target wallet's synthetic UUID
+      // here. Both routes share the pinned hash function.
+      const client_order_id = clientOrderIdFor(
+        "agent",
+        `${request.tokenId}:${Date.now()}`
+      );
+      const intent: OrderIntent = {
+        provider: "polymarket",
+        market_id: `prediction-market:polymarket:${request.conditionId}`,
+        outcome: request.outcome,
+        side: "BUY",
+        size_usdc: request.size_usdc,
+        limit_price: request.limit_price,
+        client_order_id,
+        attributes: { token_id: request.tokenId },
+      };
+      const receipt = await executor(intent);
+      return {
+        order_id: receipt.order_id,
+        client_order_id: receipt.client_order_id,
+        status: receipt.status,
+        filled_size_usdc: receipt.filled_size_usdc,
+        submitted_at: receipt.submitted_at,
+        profile_url: profileUrl(operatorAddress),
+      };
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Production entry — env-driven. THE ONE allowed hardcoding for wallet
+// secrets lives below in `buildRealPlaceOrder`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build a `PolyTradeCapability` if the env has everything needed to place real
- * orders on Polymarket. Returns `undefined` when any required piece is missing —
- * the tool binding then registers the ai-tools stub, which throws a clear error
- * if an agent tries to call the tool on an unconfigured pod.
+ * Build a `PolyTradeCapability` from environment. Three outcomes:
  *
- * **Sync + lazy-init** (matches `getTemporalWorkflowClient` in container.ts):
- * the factory only checks env presence. The first `placeTrade(...)` call does
- * the dynamic imports + Privy wallet resolution and memoizes the result.
- * Subsequent calls reuse the cached adapter.
+ * - **`env.isTestMode === true`** → capability backed by `FakePolymarketClobAdapter`.
+ *   No dynamic imports, no network, no Privy.
+ * - **Env incomplete** (missing `operatorWalletAddress` / `creds` / `privy`) → returns
+ *   `undefined`. The tool binding installs the ai-tools stub which throws a clear
+ *   error if an agent tries to place on an unconfigured pod.
+ * - **Env complete** → returns a capability that lazily resolves the Privy
+ *   wallet + builds the real `PolymarketClobAdapter` on first `placeTrade()`.
+ *   Matches `getTemporalWorkflowClient` — sync factory, async first-call init.
  *
  * @public
  */
 export function createPolyTradeCapability(
   config: CreatePolyTradeCapabilityConfig
 ): PolyTradeCapability | undefined {
-  // Test / override path — skip all dynamic imports.
-  if (config.placeOrderOverride) {
-    const metrics = buildMetricsPort();
-    const placeOrder = config.placeOrderOverride;
-    const operatorAddress =
-      config.operatorWalletAddress ??
-      ("0x0000000000000000000000000000000000000000" as const);
-    const executor = createClobExecutor({
-      placeOrder,
-      logger: adaptLogger(config.logger),
-      metrics,
+  // Test mode — canonical fake from @/adapters/test/. No env-decoding required;
+  // matches createRepoCapability(env.isTestMode → FakeRepoAdapter) pattern.
+  if (config.isTestMode) {
+    const fake = new FakePolymarketClobAdapter();
+    const operator = config.operatorWalletAddress ?? TEST_MODE_OPERATOR_ADDRESS;
+    config.logger.info(
+      {
+        event: "poly.trade.capability.test_mode",
+        operator_wallet_address: operator,
+      },
+      "poly-trade capability wired to FakePolymarketClobAdapter (APP_ENV=test)"
+    );
+    return createPolyTradeCapabilityFromAdapter({
+      placeOrder: fake.placeOrder.bind(fake),
+      operatorWalletAddress: operator,
+      logger: config.logger,
     });
-    return wrapExecutor(executor, operatorAddress);
   }
 
   if (!config.operatorWalletAddress || !config.creds || !config.privy) {
@@ -223,90 +332,71 @@ export function createPolyTradeCapability(
   }
 
   // Capture narrowed values for the closure — control-flow narrowing does not
-  // propagate through `async function getExecutor()`.
+  // propagate through the `async` placeOrder builder below.
   const operatorWalletAddress: `0x${string}` = config.operatorWalletAddress;
   const creds: PolyCredsEnv = config.creds;
   const privy: PrivyEnv = config.privy;
   const host = config.host ?? DEFAULT_CLOB_HOST;
 
-  // Lazy-init executor — first call to placeTrade builds the adapter.
-  const metrics = buildMetricsPort();
-  const loggerPort = adaptLogger(
-    config.logger.child({ component: "poly-clob-adapter" })
+  // Boot-time positive signal — env shape is valid and the capability WILL be
+  // constructed on first invocation. Ops can alert on the absence of this
+  // line on trader pods without waiting for the first agent-initiated trade.
+  config.logger.info(
+    {
+      event: "poly.trade.capability.env_ok",
+      operator_wallet_address: operatorWalletAddress,
+      host,
+    },
+    "poly-trade capability env validated (adapter + Privy wallet will init on first placeTrade)"
   );
-  let cachedExecutor:
+
+  // Lazy-init: wrap a deferred builder so we don't pull in @polymarket/clob-client
+  // until someone actually calls placeTrade().
+  let cachedPlaceOrder:
     | ((intent: OrderIntent) => Promise<OrderReceipt>)
     | undefined;
   let initPromise:
     | Promise<(intent: OrderIntent) => Promise<OrderReceipt>>
     | undefined;
 
-  async function getExecutor(): Promise<
-    (intent: OrderIntent) => Promise<OrderReceipt>
-  > {
-    if (cachedExecutor) return cachedExecutor;
-    initPromise ??= buildRealExecutor({
-      operatorWalletAddress,
-      creds,
-      privy,
-      host,
-      logger: config.logger,
-      loggerPort,
-      metrics,
-    });
-    cachedExecutor = await initPromise;
-    return cachedExecutor;
+  async function lazyPlaceOrder(intent: OrderIntent): Promise<OrderReceipt> {
+    if (!cachedPlaceOrder) {
+      initPromise ??= buildRealPlaceOrder({
+        operatorWalletAddress,
+        creds,
+        privy,
+        host,
+        logger: config.logger,
+      });
+      cachedPlaceOrder = await initPromise;
+    }
+    return cachedPlaceOrder(intent);
   }
 
-  return {
-    async placeTrade(
-      request: PolyPlaceTradeRequest
-    ): Promise<PolyPlaceTradeReceipt> {
-      if (request.side !== "BUY") {
-        throw new Error(
-          "poly-trade: SELL orders are out of scope for the prototype (requires CTF setApprovalForAll)."
-        );
-      }
-      const executor = await getExecutor();
-      const intent: OrderIntent = {
-        provider: "polymarket",
-        market_id: `prediction-market:polymarket:${request.conditionId}`,
-        outcome: request.outcome,
-        side: "BUY",
-        size_usdc: request.size_usdc,
-        limit_price: request.limit_price,
-        client_order_id: request.client_order_id,
-        attributes: { token_id: request.tokenId },
-      };
-      const receipt = await executor(intent);
-      return {
-        order_id: receipt.order_id,
-        client_order_id: receipt.client_order_id,
-        status: receipt.status,
-        filled_size_usdc: receipt.filled_size_usdc,
-        submitted_at: receipt.submitted_at,
-        profile_url: profileUrl(operatorWalletAddress),
-      };
-    },
-  };
+  return createPolyTradeCapabilityFromAdapter({
+    placeOrder: lazyPlaceOrder,
+    operatorWalletAddress,
+    logger: config.logger,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// First-call init — resolves Privy wallet, builds viem client + adapter
+// THE ONE allowed hardcoding — single-operator Privy wallet resolution.
+// Everything below constructs the real PolymarketClobAdapter from env-resolved
+// secrets. Per task.0315 prototype constraint, this is intentionally
+// single-tenant; multi-operator support is P2 (task.0318).
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface BuildRealExecutorDeps {
+interface BuildRealPlaceOrderDeps {
   operatorWalletAddress: `0x${string}`;
   creds: PolyCredsEnv;
   privy: PrivyEnv;
   host: string;
   logger: Logger;
-  loggerPort: LoggerPort;
-  metrics: MetricsPort;
 }
 
-async function buildRealExecutor(
-  deps: BuildRealExecutorDeps
+async function buildRealPlaceOrder(
+  deps: BuildRealPlaceOrderDeps
 ): Promise<(intent: OrderIntent) => Promise<OrderReceipt>> {
   // Dynamic imports — keep `@polymarket/clob-client` + `@privy-io/node` out of
   // bundles that don't configure the capability.
@@ -358,6 +448,14 @@ async function buildRealExecutor(
   // Same cast rationale as above — dual-peerDep viem typing.
   // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
   const signerAny: any = walletClient;
+
+  // The adapter's own LoggerPort + MetricsPort fields echo the same sinks the
+  // executor uses, so adapter-internal events (place/cancel/get_order) land in
+  // the same Loki stream as executor events.
+  const metricsForAdapter = buildMetricsPort();
+  const loggerForAdapter = adaptLogger(
+    deps.logger.child({ component: "poly-clob-adapter" })
+  );
   const adapter = new PolymarketClobAdapter({
     signer: signerAny,
     creds: {
@@ -367,8 +465,8 @@ async function buildRealExecutor(
     },
     funderAddress: deps.operatorWalletAddress,
     host: deps.host,
-    logger: deps.loggerPort,
-    metrics: deps.metrics,
+    logger: loggerForAdapter,
+    metrics: metricsForAdapter,
   });
 
   deps.logger.info(
@@ -381,50 +479,5 @@ async function buildRealExecutor(
     "poly-trade capability initialized (first placeTrade call)"
   );
 
-  return createClobExecutor({
-    placeOrder: adapter.placeOrder.bind(adapter),
-    logger: deps.loggerPort,
-    metrics: deps.metrics,
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Executor → PolyTradeCapability shim (override path only; the real/lazy path
-// inlines this logic so it doesn't pay for executor resolution twice).
-// ─────────────────────────────────────────────────────────────────────────────
-
-function wrapExecutor(
-  executor: (intent: OrderIntent) => Promise<OrderReceipt>,
-  operatorAddress: `0x${string}`
-): PolyTradeCapability {
-  return {
-    async placeTrade(
-      request: PolyPlaceTradeRequest
-    ): Promise<PolyPlaceTradeReceipt> {
-      if (request.side !== "BUY") {
-        throw new Error(
-          "poly-trade: SELL orders are out of scope for the prototype (requires CTF setApprovalForAll)."
-        );
-      }
-      const intent: OrderIntent = {
-        provider: "polymarket",
-        market_id: `prediction-market:polymarket:${request.conditionId}`,
-        outcome: request.outcome,
-        side: "BUY",
-        size_usdc: request.size_usdc,
-        limit_price: request.limit_price,
-        client_order_id: request.client_order_id,
-        attributes: { token_id: request.tokenId },
-      };
-      const receipt = await executor(intent);
-      return {
-        order_id: receipt.order_id,
-        client_order_id: receipt.client_order_id,
-        status: receipt.status,
-        filled_size_usdc: receipt.filled_size_usdc,
-        submitted_at: receipt.submitted_at,
-        profile_url: profileUrl(operatorAddress),
-      };
-    },
-  };
+  return adapter.placeOrder.bind(adapter);
 }

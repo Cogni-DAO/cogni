@@ -7,13 +7,14 @@
  *   Polymarket copy-trade prototype. Custody-isolated from the production
  *   billing operator wallet (`OPERATOR_WALLET_ADDRESS`) used by
  *   distributeSplit / fundOpenRouterTopUp.
- * Scope: One-shot CLI. Reads PRIVY_APP_ID/_SECRET/_SIGNING_KEY from the
+ * Scope: One-shot CLI. Does not fund the wallet or approve allowances (those are separate scripts). Reads PRIVY_APP_ID/_SECRET/_SIGNING_KEY from the
  *   existing .env.local (same Privy app as the billing wallet — address-level
  *   isolation only; full app-level isolation is a future hardening). Creates
- *   a new wallet and prints the env-var lines to paste into .env.local.
+ *   a new wallet and prints env-var lines to paste into .env.local. Does not
+ *   fund the wallet or approve any allowances — those are separate scripts.
  * Invariants: KEY_NEVER_IN_APP — no private key material emitted. Does NOT
  *   modify .cogni/repo-spec.yaml (prototype, not a node payment activation).
- * Side-effects: One Privy `wallets().create()` call; stdout.
+ * Side-effects: IO (Privy API, stdout)
  * Links: work/items/task.0315.poly-copy-trade-prototype.md
  * @public
  */

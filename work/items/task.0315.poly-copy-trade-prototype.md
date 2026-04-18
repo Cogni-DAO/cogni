@@ -868,6 +868,42 @@ CP3.1.5 (`efbf49901`) approved — clean deletion. CP3.2 (`3b9e1797a`) architect
 - CP3.3 DB migrations (`poly_copy_trade_{fills,config,decisions}`) — currently in uncommitted WIP in the worktree; review when the commit lands.
 - CP4 `decide()` + executor + poll — not yet started.
 
+## Review Feedback (revision 5, 2026-04-17 — post-CP4.25 review)
+
+Reviewed commit `21bc70747` (CP4.25 — agent-callable `core__poly_place_trade`). Tests green (19 new, 1234 total), typecheck clean, CI green. APPROVED for prototype scope, with follow-up fixes landed in a subsequent commit on this branch.
+
+### Architectural pivot acknowledged
+
+Design called for an admin HTTP route + `INTERNAL_OPS_TOKEN`; implementation shipped as an agent-callable AI tool surfaced through poly-brain's tool catalog. Defensible for the single-operator prototype:
+
+- Trigger gate becomes "authenticated chat user + LLM system-prompt gate" instead of bearer-token. Weaker in principle (prompt injection risk) but practically equivalent for a single-user prototype behind auth.
+- Eliminates the admin-route + per-call token infra that nothing else in the codebase uses.
+- Natural-language placement from chat → no bespoke UI work.
+- No runtime kill-switch — disabling the tool requires removing env vars + redeploy. **CP4.3 must gate the same capability on `poly_copy_trade_config.enabled`**, otherwise the DB kill-switch has no effect on the chat-tool path.
+
+### Review findings addressed in follow-up commit
+
+Reviewer raised 6 issues; 6 landed as a follow-up, 1 deferred:
+
+- ✅ **`clientOrderIdFor` drift (high).** Tool was using a bespoke polynomial hash; followed-up moves generation to the capability layer and uses the pinned keccak helper from `@cogni/market-provider`. Tool no longer carries a `client_order_id` field or generator.
+- ✅ **MetricsPort shim dropped metrics (medium).** Original shim matched on two hardcoded names, silently swallowing the CP4.2 executor's `poly_copy_trade_execute_*` and the PR #890 adapter's `poly_clob_*` emissions. Replaced with a generic lazy pass-through keyed on metric name.
+- ✅ **Test-override knob leaked into production config.** `placeOrderOverride` removed from `CreatePolyTradeCapabilityConfig`. Factory now follows the established pattern (`createRepoCapability` / `createMetricsCapability`): branches on `env.isTestMode` and substitutes `FakePolymarketClobAdapter` from `@/adapters/test/poly-trade/`.
+- ✅ **Capability factory split for single-responsibility.** `createPolyTradeCapabilityFromAdapter(deps)` is the pure composition path (wraps any `placeOrder` in the CP4.2 executor + metrics + generates `client_order_id`). `createPolyTradeCapability(config)` is the env-driven entry (test-mode → fake, incomplete env → undefined, complete env → lazy real). The real Privy+CLOB wiring is the ONE intentionally-hardcoded single-operator block.
+- ✅ **Biome rule widening reverted.** Original single-path `@polymarket/clob-client` restriction preserved. The test-adapter pattern removes the motivation for widening (fake doesn't depend on the restricted package).
+- ✅ **Boot-time env-ok log added.** Positive observability signal at factory construction so ops can alert on the absence of `poly.trade.capability.env_ok` on trader pods without waiting for the first agent-initiated trade.
+- ⊘ **Stale CP4.25 Design section in this doc.** The "Phase 1 CP4.25 Design" section (line ~241) still describes the HTTP route + 503 semantics + `ADMIN_GATED_ROUTE` invariant that didn't ship. Deferred to `/closeout` for a docs sweep.
+
+### Items tagged for CP4.3
+
+- **Kill-switch must gate the tool path**, not just the autonomous loop. Add a kill-switch read before every `placeTrade` call in the capability, or fold the gate into `createPolyTradeCapabilityFromAdapter` so every caller (tool, autonomous loop) inherits it.
+- Reviewer-flagged fixes still pending: price adjustment seam, empty `token_id` → `market_unknown` skip, `outcome || "YES"` fallback replaced with explicit `missing_outcome` skip. All already pinned in the CP4.3 Design section.
+
+### Follow-up items for P2
+
+- **Rename `OPERATOR_WALLET_ADDRESS` → `POLY_PROTO_OPERATOR_ADDRESS`** (separate commit by the secrets-isolation track; already-staged env var added as additive, legacy name kept intact until factory rename completes in one place).
+- **Tighten `@cogni/market-provider` package boundary** — currently exports `PolymarketClobAdapter` class from its public surface. Consider moving the class to a separate package (`@cogni/polymarket-adapter`) so the Biome rule becomes redundant; alternatively narrow the subpath export. Not blocking CP4.25.
+- **Named `ClobRejectionError` class** — CP4.2 executor classifies rejections via string-match on `"CLOB rejected order"`. Fragile; should be a proper error subclass so the metric bucket doesn't depend on adapter message text.
+
 ## Alignment Decisions (confirmed by operator before `/implement`)
 
 - **Single-operator prototype.** No user-facing mirroring, no retail exposure, no multi-tenant. Scope expansion requires re-scoping in a new task.

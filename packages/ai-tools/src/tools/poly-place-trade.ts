@@ -27,8 +27,12 @@ import type { BoundTool, ToolContract, ToolImplementation } from "../types";
 
 /**
  * Placement request handed to the capability. The tool populates every field
- * from validated user input; the capability is responsible for orderbook
- * lookups (tickSize / negRisk / feeRateBps) + signing + CLOB submission.
+ * from validated user input; the capability is responsible for the
+ * `client_order_id` idempotency key (generated via the pinned
+ * `clientOrderIdFor` helper from `@cogni/market-provider` so that any future
+ * caller — this tool, CP4.3's autonomous poll, a P4 WS ingester — produces
+ * compatible keys for the `poly_copy_trade_fills` PK) as well as orderbook
+ * lookups (tickSize / negRisk / feeRateBps), signing, and CLOB submission.
  */
 export interface PolyPlaceTradeRequest {
   /** Polymarket conditionId (binary-market id), 0x-prefixed 64 hex. */
@@ -43,8 +47,6 @@ export interface PolyPlaceTradeRequest {
   size_usdc: number;
   /** Limit price on the outcome share, strictly in (0, 1). */
   limit_price: number;
-  /** Caller idempotency key; the capability echoes it on the receipt. */
-  client_order_id: `0x${string}`;
 }
 
 /**
@@ -195,57 +197,30 @@ export const polyPlaceTradeContract: ToolContract<
 
 export interface PolyPlaceTradeDeps {
   polyTradeCapability: PolyTradeCapability;
-  /**
-   * Deterministic `client_order_id` generator. Default uses keccak256 on a
-   * label + tokenId + timestamp; callers override in tests for stable vectors.
-   */
-  generateClientOrderId?: (tokenId: string, nowMs?: number) => `0x${string}`;
-  /** `() => Date.now()`; overridable for tests. */
-  now?: () => number;
 }
 
 /**
- * Default `client_order_id` — matches the shape of the CP3.3 pinned helper
- * (target_id + ':' + fill_id) where here `target_id` = "agent" (constant
- * prototype value) and `fill_id` = `tokenId + ':' + timestamp`. Not imported
- * from `@cogni/market-provider` to keep `@cogni/ai-tools` dep-free; the
- * capability is free to overwrite this if it wants a different scheme.
+ * The tool does not generate `client_order_id` — that's the capability's job,
+ * using the pinned `clientOrderIdFor` helper from `@cogni/market-provider`.
+ * Keeping the key generation at the capability layer ensures the tool, CP4.3's
+ * autonomous poll, and any future WS ingester all write compatible keys into
+ * `poly_copy_trade_fills` (composite PK dedupe depends on it).
  */
-function defaultClientOrderId(tokenId: string, nowMs: number): `0x${string}` {
-  // Simple 32-byte hex from deterministic components. The capability will
-  // commonly regenerate this via the pinned keccak helper, so this is just a
-  // floor value; capability implementations may overwrite on the receipt.
-  const payload = `agent:${tokenId}:${nowMs}`;
-  // biome-ignore lint/style/useTemplate: concat is clearer here
-  let hash = 0n;
-  for (let i = 0; i < payload.length; i++) {
-    hash = (hash * 131n + BigInt(payload.charCodeAt(i))) & ((1n << 256n) - 1n);
-  }
-  const hex = hash.toString(16).padStart(64, "0");
-  return `0x${hex}` as `0x${string}`;
-}
-
 export function createPolyPlaceTradeImplementation(
   deps: PolyPlaceTradeDeps
 ): ToolImplementation<PolyPlaceTradeInput, PolyPlaceTradeOutput> {
-  const now = deps.now ?? (() => Date.now());
-  const genId = deps.generateClientOrderId ?? defaultClientOrderId;
-
   return {
     execute: async (
       input: PolyPlaceTradeInput
     ): Promise<PolyPlaceTradeOutput> => {
-      const client_order_id = genId(input.tokenId, now());
-      const receipt = await deps.polyTradeCapability.placeTrade({
+      return await deps.polyTradeCapability.placeTrade({
         conditionId: input.conditionId,
         tokenId: input.tokenId,
         outcome: input.outcome,
         side: "BUY",
         size_usdc: input.size_usdc,
         limit_price: input.limit_price,
-        client_order_id,
       });
-      return receipt;
     },
   };
 }
