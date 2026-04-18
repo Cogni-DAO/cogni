@@ -59,14 +59,14 @@ RUN --mount=type=cache,id=next-cache-poly,target=/app/nodes/poly/app/.next/cache
     pnpm --filter @cogni/poly-app build
 
 # Migrator — poly-only migration image (task.0322).
-# Carries only poly's schema + migrations + drizzle.poly.config.ts, plus shared
+# Carries only poly's schema + migrations + nodes/poly/drizzle.config.ts, plus shared
 # packages/db-schema/src for core tables.
 FROM base AS migrator
 WORKDIR /app
 
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/drizzle.poly.config.ts ./
+COPY --from=builder /app/nodes/poly/drizzle.config.ts ./nodes/poly/drizzle.config.ts
 COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
 COPY --from=builder /app/nodes/poly/app/src/shared/db ./nodes/poly/app/src/shared/db
 COPY --from=builder /app/nodes/poly/app/src/adapters/server/db/migrations ./nodes/poly/app/src/adapters/server/db/migrations

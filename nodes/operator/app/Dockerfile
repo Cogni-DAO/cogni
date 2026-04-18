@@ -66,8 +66,7 @@ WORKDIR /app
 
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/drizzle.operator.config.ts ./
+COPY --from=builder /app/nodes/operator/drizzle.config.ts ./nodes/operator/drizzle.config.ts
 COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
 COPY --from=builder /app/nodes/operator/app/src/shared/db ./nodes/operator/app/src/shared/db
 COPY --from=builder /app/nodes/operator/app/src/adapters/server/db/migrations ./nodes/operator/app/src/adapters/server/db/migrations

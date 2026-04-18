@@ -58,14 +58,14 @@ RUN --mount=type=cache,id=next-cache-resy,target=/app/nodes/resy/app/.next/cache
     pnpm --filter @cogni/resy-app build
 
 # Migrator — resy-only migration image (task.0322).
-# Carries only resy's schema + migrations + drizzle.resy.config.ts, plus shared
+# Carries only resy's schema + migrations + nodes/resy/drizzle.config.ts, plus shared
 # packages/db-schema/src for core tables.
 FROM base AS migrator
 WORKDIR /app
 
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/drizzle.resy.config.ts ./
+COPY --from=builder /app/nodes/resy/drizzle.config.ts ./nodes/resy/drizzle.config.ts
 COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
 COPY --from=builder /app/nodes/resy/app/src/shared/db ./nodes/resy/app/src/shared/db
 COPY --from=builder /app/nodes/resy/app/src/adapters/server/db/migrations ./nodes/resy/app/src/adapters/server/db/migrations
