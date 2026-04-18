@@ -252,6 +252,10 @@ Use the `Agent` tool with `subagent_type: general-purpose`. Give each a tight, s
 - **Never `--admin` on merge.** Non-release PRs to main will always require human admin-merge until `release/*` policy lands — this is **expected, not a failure**. Post the scorecard, name it as the blocker, hand off to Derek.
 - **Verify rollout before opening QA window.** Run the Proof of Rollout ritual (step 3a) after every flight. An unrolled flight silently serves the previous build — worse than a hard failure.
 - **Trust Loki, not `/readyz`.** Rollout proof = app-startup log with matching buildSha. Don't curl endpoints as a gate.
+- **Read `flight-preview.yml`'s checks correctly.** On merge to main, two jobs appear in the commit's checks list:
+  - `flight ✓` + `deploy-preview ✓` — preview actually deployed. Proof-of-rollout applies to `cogni-preview` pods.
+  - `flight ✓` + `deploy-preview ⊘ skipped` — preview lease was locked (a prior SHA still `reviewing`/`dispatching`). The merged SHA is queued as `deploy/preview:.promote-state/candidate-sha`, **nothing rolled**. Do not proof-of-rollout preview for this SHA — it won't match. Wait for the prior reviewer to release the lease (or `set-preview-review-state.sh unlocked`) for the drain to fire.
+  - `flight ✗` — hard failure. Escalate.
 - **Never commit `dashboard.md` updates.** Session-scratch runtime state.
 - **Never modify someone's in-flight branch.** Operate only on remote refs and candidate-a overlays.
 

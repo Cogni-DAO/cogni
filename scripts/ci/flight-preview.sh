@@ -38,11 +38,44 @@ set -euo pipefail
 #       as a green success.
 #
 # Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token>
+#
+# GH Actions integration: when invoked inside a GitHub Actions step, the
+# runner sets $GITHUB_OUTPUT and $GITHUB_STEP_SUMMARY. This script writes
+# a `status=dispatched|queued` line to $GITHUB_OUTPUT and a markdown
+# banner to $GITHUB_STEP_SUMMARY at every terminal path, so the workflow
+# can gate downstream jobs on the output and operators get a visible
+# outcome in the job summary. Workflow step becomes pure orchestration.
 
 SHA="${1:?Usage: flight-preview.sh <sha> <repo> <deploy-branch> <gh-token>}"
 REPO="${2:?}"
 DEPLOY_BRANCH="${3:-deploy/preview}"
 GH_TOKEN="${4:-${GH_TOKEN:-}}"
+
+# Emit `status=<value>` to $GITHUB_OUTPUT when running under Actions.
+# No-op from a plain shell so CLI/test callers aren't surprised.
+emit_status() {
+  local value="$1"
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "status=${value}" >> "$GITHUB_OUTPUT"
+  fi
+}
+
+# Append a markdown outcome block to $GITHUB_STEP_SUMMARY when running
+# under Actions.
+emit_summary() {
+  local outcome="$1" detail="$2"
+  if [ -z "${GITHUB_STEP_SUMMARY:-}" ]; then
+    return 0
+  fi
+  {
+    echo "## Flight Preview"
+    echo ""
+    echo "- Outcome: **${outcome}**"
+    echo "- SHA: \`${SHORT_SHA:-unknown}\`"
+    echo "- Deploy branch: \`${DEPLOY_BRANCH}\`"
+    echo "- Detail: ${detail}"
+  } >> "$GITHUB_STEP_SUMMARY"
+}
 
 if [ -z "$GH_TOKEN" ]; then
   echo "❌ GH_TOKEN required (arg 4 or env)"
@@ -135,8 +168,12 @@ if [ "${WILL_DISPATCH:-0}" = "1" ] && [ "$FLIGHT_LEASE_LOST" = "0" ]; then
     -f environment=preview \
     -f source_sha="$SHA"
   echo "✅ Preview flight dispatched for ${SHORT_SHA}"
+  emit_status "dispatched"
+  emit_summary "dispatched" "promote-and-deploy kicked off; \`deploy-preview\` job in this workflow will run."
   exit 0
 fi
 
 echo "ℹ️  Queue-only: candidate-sha=${SHORT_SHA} recorded; no dispatch (review-state locked)"
+emit_status "queued"
+emit_summary "queued" "Preview lease was locked (a prior SHA is \`dispatching\` or \`reviewing\`). candidate-sha updated; no deploy fired this run. \`deploy-preview\` job will show as skipped."
 exit 2

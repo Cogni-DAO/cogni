@@ -48,11 +48,12 @@ jobs:
   flight:
     runs-on: ubuntu-latest
     outputs:
-      # One of: dispatched | queued | skipped. Consumed by the
-      # dispatched-confirmation job below so the checks-list UI
-      # visibly distinguishes "deployed" from "queued behind a lease"
-      # (the latter shows as a skipped job instead of a green one).
-      status: ${{ steps.status.outputs.status }}
+      # Emitted by scripts/ci/flight-preview.sh into $GITHUB_OUTPUT.
+      # Values: dispatched | queued | (empty when the flight step was
+      # gated off, e.g. workflow_dispatch with a non-PR SHA).
+      # Consumed by the deploy-preview job so a queued run surfaces as a
+      # visibly-skipped entry in the checks list instead of a green one.
+      status: ${{ steps.flight.outputs.status }}
       pr_number: ${{ steps.pr.outputs.pr_number }}
       head_sha: ${{ steps.pr.outputs.head_sha }}
     steps:
@@ -192,60 +193,31 @@ jobs:
 
           echo "✅ Re-tag complete for preview-${HEAD_SHA:0:8}"
 
+      # The script writes `status=dispatched|queued` to $GITHUB_OUTPUT and a
+      # markdown banner to $GITHUB_STEP_SUMMARY — no decision logic lives in
+      # this workflow. Exit 0 = dispatched, 1 = error, 2 = queued.
       - name: Flight to preview (lock-gate aware)
         id: flight
         if: steps.pr.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.ACTIONS_AUTOMATION_BOT_PAT }}
-        run: |
-          # flight-preview.sh exit codes:
-          #   0 = dispatched, 1 = error (bubble up), 2 = queued-only.
-          set +e
-          bash scripts/ci/flight-preview.sh \
-            "${{ steps.pr.outputs.head_sha }}" \
-            "${{ github.repository }}" \
-            "deploy/preview" \
-            "$GH_TOKEN"
-          rc=$?
-          set -e
-          case "$rc" in
-            0) echo "flight_status=dispatched" >> "$GITHUB_OUTPUT" ;;
-            2) echo "flight_status=queued"     >> "$GITHUB_OUTPUT" ;;
-            *) exit "$rc" ;;
-          esac
+        run: bash scripts/ci/flight-preview.sh
+          "${{ steps.pr.outputs.head_sha }}"
+          "${{ github.repository }}"
+          "deploy/preview"
+          "$GH_TOKEN"
+        continue-on-error: true
 
-      - name: Set job status
-        id: status
-        env:
-          PR_SKIPPED: ${{ steps.pr.outputs.skip }}
-          FLIGHT_STATUS: ${{ steps.flight.outputs.flight_status }}
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+      - name: Propagate flight failure
+        if: steps.flight.outcome == 'failure' && steps.flight.outputs.status == ''
         run: |
-          if [ "$PR_SKIPPED" = "true" ]; then
-            STATUS="skipped"
-          else
-            STATUS="${FLIGHT_STATUS:-skipped}"
-          fi
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          {
-            echo "## Flight Preview"
-            echo ""
-            echo "- Outcome: **${STATUS}**"
-            if [ -n "$PR_NUMBER" ]; then
-              echo "- PR: #${PR_NUMBER}"
-              echo "- SHA: \`${HEAD_SHA:0:8}\`"
-            fi
-            case "$STATUS" in
-              dispatched) echo "- promote-and-deploy dispatched — deploy-preview job will run." ;;
-              queued)     echo "- Lease was locked (prior SHA still under review). Candidate-sha updated; no deploy fired this run." ;;
-              skipped)    echo "- Workflow_dispatch with a non-PR SHA. No flight attempted." ;;
-            esac
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::flight-preview.sh exited non-zero without emitting a status — check the Flight step log."
+          exit 1
 
-  # A visibly-skipped job when flight didn't dispatch. In the checks list this
-  # shows up as a grey "skipped" entry next to "flight" — making queue-only
-  # and dispatched runs optically different without overloading exit codes.
+  # Deploy-preview is gated on the flight script's `status` output, not on
+  # step conclusions. A queued run emits `status=queued`, leaving this job
+  # visibly skipped in the checks list; a dispatched run emits
+  # `status=dispatched` and this job runs to confirm.
   deploy-preview:
     needs: flight
     if: needs.flight.outputs.status == 'dispatched'
@@ -257,4 +229,4 @@ jobs:
           HEAD_SHA: ${{ needs.flight.outputs.head_sha }}
         run: |
           echo "✅ promote-and-deploy dispatched for PR #${PR_NUMBER} (${HEAD_SHA:0:8})."
-          echo "Watch run: gh run list --workflow=promote-and-deploy.yml --limit 1"
+          echo "Watch: gh run list --workflow=promote-and-deploy.yml --limit 1"
