@@ -182,11 +182,11 @@ The mirror-coordinator is the **only** file that imports from both `wallet-watch
 
 ### Env + DB
 
-| File                                                                            | Purpose                                                                                              |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `nodes/poly/app/src/shared/env/server-env.ts`                                   | `POLY_ROLE`, `POLY_PROTO_*` wallet/creds env — shape is multi-tenant-ready, content is single-tenant |
-| `packages/db-schema/src/poly-copy-trade.ts`                                     | Drizzle definitions for `poly_copy_trade_{fills,config,decisions}` (table rename deferred to P2)     |
-| `nodes/operator/app/src/adapters/server/db/migrations/0027_silent_nextwave.sql` | Migration 0027 — fail-closed kill-switch seeded `enabled=false`; no RLS on these tables              |
+| File                                                                            | Purpose                                                                                                                                                                              |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `nodes/poly/app/src/shared/env/server-env.ts`                                   | `POLY_PROTO_*` wallet/creds env + `COPY_TRADE_TARGET_WALLET` — the ONE runtime input. All other v0 parameters (mode, mirror size, caps, poll cadence) are hardcoded in the job shim. |
+| `packages/db-schema/src/poly-copy-trade.ts`                                     | Drizzle definitions for `poly_copy_trade_{fills,config,decisions}` (table rename deferred to P2)                                                                                     |
+| `nodes/operator/app/src/adapters/server/db/migrations/0027_silent_nextwave.sql` | Migration 0027 — fail-closed kill-switch seeded `enabled=false`; no RLS on these tables                                                                                              |
 
 ## Invariants
 
@@ -209,7 +209,7 @@ All invariants are enforced either by code (header comments + Biome `noRestricte
 ### Ordering + at-most-once
 
 - **`INSERT_BEFORE_PLACE`** _(order-ledger.ts + mirror-coordinator.ts)_ — `order-ledger.insertPending(cid, target_id, fill_id, intent)` runs **before** `placeIntent(intent)`. Crash between insert and place leaves a pending row whose `client_order_id` will be in the next tick's `already_placed_ids`, so `decide()` returns `skip/already_placed`. This is the at-most-once argument — do not reorder.
-- **`SINGLE_WRITER`** _(copy-trade-mirror.job.ts)_ — exactly one process runs the poll at any time. Enforced by `POLY_ROLE=trader` + `replicas=1` (joint invariant). Boot logs `event:poly.mirror.poll.singleton_claim`; counter `poly_mirror_poll_ticks_total` is alertable on rate-from-multiple-pods in Loki.
+- **`SINGLE_WRITER`** _(copy-trade-mirror.job.ts)_ — exactly one process runs the poll at any time. Enforced by `replicas=1` on the poly deployment. Boot logs `event:poly.mirror.poll.singleton_claim`; counter `poly_mirror_poll_ticks_total` is alertable on rate-from-multiple-pods in Loki.
 - **`BUY_ONLY`** _(poly-trade.ts + decide.ts indirectly)_ — prototype rejects SELL at the capability boundary (requires CTF `setApprovalForAll`, out of scope).
 
 ### Single-tenant isolation boundary (where Phase 2 multi-tenant slots in)

@@ -21,7 +21,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
-import { targetIdFromWallet } from "@/bootstrap/jobs/copy-trade-mirror.job";
+import { buildMirrorTargetConfig } from "@/bootstrap/jobs/copy-trade-mirror.job";
 import { createOrderLedger } from "@/features/trading";
 import { serverEnv } from "@/shared/env/server-env";
 
@@ -40,7 +40,7 @@ export const GET = wrapRouteHandlerWithLogging(
     const targets: PolyCopyTradeTarget[] = [];
     if (env.COPY_TRADE_TARGET_WALLET) {
       const target_wallet = env.COPY_TRADE_TARGET_WALLET as `0x${string}`;
-      const target_id = targetIdFromWallet(target_wallet);
+      const config = buildMirrorTargetConfig(target_wallet);
       // In v0 the `poly_copy_trade_config.enabled` singleton IS the
       // per-target monitoring flag (one wallet, one bit). P2 moves this
       // onto `poly_copy_trade_targets.enabled` per row. `snapshotState`
@@ -50,14 +50,14 @@ export const GET = wrapRouteHandlerWithLogging(
         db: getContainer().serviceDb as unknown as NodePgDatabase,
         logger: ctx.log,
       });
-      const snapshot = await ledger.snapshotState(target_id);
+      const snapshot = await ledger.snapshotState(config.target_id);
       targets.push({
-        target_id,
+        target_id: config.target_id,
         target_wallet,
-        mode: env.COPY_TRADE_MODE,
-        mirror_usdc: env.COPY_TRADE_MIRROR_USDC,
-        max_daily_usdc: env.COPY_TRADE_MAX_DAILY_USDC,
-        max_fills_per_hour: env.COPY_TRADE_MAX_FILLS_PER_HOUR,
+        mode: config.mode,
+        mirror_usdc: config.mirror_usdc,
+        max_daily_usdc: config.max_daily_usdc,
+        max_fills_per_hour: config.max_fills_per_hour,
         enabled: snapshot.enabled,
         source: "env",
       });

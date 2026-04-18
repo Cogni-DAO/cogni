@@ -251,27 +251,15 @@ export const serverSchema = z.object({
   POLY_CLOB_PASSPHRASE: optionalString,
   POLY_CLOB_HOST: optionalUrl,
 
-  // Deployment role gate (task.0315 KEY_IN_TRADER_ROLE_ONLY). When set to
-  // "trader" on a pod with complete Polymarket env, the autonomous 30s
-  // mirror poll starts at boot. All other roles skip the poll (capability
-  // is still constructable for the agent-tool path if env is complete).
-  POLY_ROLE: z
-    .enum(["trader", "web", "scheduler", "unknown"])
-    .default("unknown"),
-
-  // Copy-trade scaffolding (task.0315 Phase 1, @scaffolding, Deleted-in-phase: 4)
-  // P2 replaces with DB-backed `poly_copy_trade_targets`. Env fallback
-  // retained through P2, removed in a follow-up deprecation PR.
+  // Copy-trade scaffolding (task.0315 Phase 1, @scaffolding, Deleted-in-phase: 4).
+  // `COPY_TRADE_TARGET_WALLET` is the ONE runtime input for v0 — every other
+  // knob (mode, mirror size, caps, poll cadence, role-gating) is hardcoded in
+  // `bootstrap/jobs/copy-trade-mirror.job.ts`. P2 replaces the env fallback
+  // with DB-backed `poly_copy_trade_targets`.
   COPY_TRADE_TARGET_WALLET: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
     .optional(),
-  COPY_TRADE_MODE: z.enum(["paper", "live"]).default("paper"),
-  COPY_TRADE_MIRROR_USDC: z.coerce.number().positive().default(1),
-  COPY_TRADE_MAX_DAILY_USDC: z.coerce.number().positive().default(10),
-  COPY_TRADE_MAX_FILLS_PER_HOUR: z.coerce.number().int().positive().default(5),
-  /** Poll cadence in ms. Default 30s per Phase 1 spec. */
-  COPY_TRADE_POLL_MS: z.coerce.number().int().positive().default(30_000),
 
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.

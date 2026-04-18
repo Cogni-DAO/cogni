@@ -3,7 +3,7 @@
 
 /**
  * Module: `@bootstrap/jobs/copy-trade-mirror.job`
- * Purpose: Disposable 30s scheduler that drives `mirror-coordinator.runOnce()`. Boot-guarded by `POLY_ROLE === "trader"` + bundle/target presence. Uses `setInterval` (not `@cogni/scheduler-core` — that package is governance-schedule machinery, not a tick library). In-memory cursor + one-shot singleton claim.
+ * Purpose: Disposable 30s scheduler that drives `mirror-coordinator.runOnce()`. Boot-guarded by Polymarket-capability-bundle presence + `COPY_TRADE_TARGET_WALLET`. Uses `setInterval` (not `@cogni/scheduler-core` — that package is governance-schedule machinery, not a tick library). In-memory cursor + one-shot singleton claim.
  * Scope: Wiring + cadence only. Does not build adapters (container injects), does not own decision logic, does not touch DB directly. One function: `startMirrorPoll(deps) → stop()`.
  * Invariants:
  *   - SCAFFOLDING_LABELED — this file and its wiring are `@scaffolding` / `Deleted-in-phase: 4`. P4's cutover PR deletes this file + the env-based target config.
@@ -41,8 +41,45 @@ export const MIRROR_JOB_METRICS = {
 /** How far back to initialize the first-tick cursor (seconds). */
 const WARMUP_BACKLOG_SEC = 60;
 
+/**
+ * Hardcoded v0 scaffolding parameters. For a single-operator hardcoded
+ * prototype, env-knobs-per-value buys nothing. Change the number in code,
+ * redeploy. Deleted-in-phase: 4 alongside the rest of this file.
+ *
+ * Reasoning:
+ * - 30s poll cadence = conservative for copy-trade latency goals; Phase 4
+ *   moves to a WS push model and these numbers become irrelevant.
+ * - $1 mirror, $10/day, 5/hour = matches the Phase 1 E2E validation scenario
+ *   + keeps a misbehaving target from bankrupting the operator prototype.
+ */
+const MIRROR_POLL_MS = 30_000;
+const MIRROR_USDC = 1;
+const MIRROR_MAX_DAILY_USDC = 10;
+const MIRROR_MAX_FILLS_PER_HOUR = 5;
+
+/**
+ * Build the v0 `TargetConfig` from an env-supplied target wallet. All other
+ * fields are hardcoded scaffolding. P2 replaces this factory with a
+ * per-tenant DB resolver over `poly_copy_trade_targets`.
+ *
+ * @public
+ */
+export function buildMirrorTargetConfig(
+  targetWallet: `0x${string}`
+): TargetConfig {
+  return {
+    target_id: targetIdFromWallet(targetWallet),
+    target_wallet: targetWallet,
+    mode: "live", // paper adapter body lands in P3; v0 only places live
+    mirror_usdc: MIRROR_USDC,
+    max_daily_usdc: MIRROR_MAX_DAILY_USDC,
+    max_fills_per_hour: MIRROR_MAX_FILLS_PER_HOUR,
+    enabled: true, // overwritten per-tick by the runtime kill-switch snapshot
+  };
+}
+
 export interface MirrorJobDeps {
-  /** Target config — P1 builds from env; P2 reads from DB. */
+  /** Target config — P1 builds via `buildMirrorTargetConfig`; P2 reads from DB. */
   target: TargetConfig;
   /** Injected source (Data-API adapter) — P4 swaps in WS. */
   source: WalletActivitySource;
@@ -50,8 +87,6 @@ export interface MirrorJobDeps {
   ledger: OrderLedger;
   /** Raw placement seam from `createPolyTradeCapability().placeIntent`. */
   placeIntent: MirrorCoordinatorDeps["placeIntent"];
-  /** Poll cadence (ms). Default 30_000. */
-  pollMs?: number;
   /** Structured log sink. */
   logger: LoggerPort;
   /** Metrics sink. */
@@ -75,8 +110,6 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
     mode: deps.target.mode,
   });
 
-  const pollMs = deps.pollMs ?? 30_000;
-
   // First-tick cursor — avoid replaying a target's historical activity at boot.
   let cursor: number | undefined =
     Math.floor(Date.now() / 1000) - WARMUP_BACKLOG_SEC;
@@ -84,7 +117,7 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
   log.info(
     {
       event: EVENT_NAMES.POLY_MIRROR_POLL_SINGLETON_CLAIM,
-      poll_ms: pollMs,
+      poll_ms: MIRROR_POLL_MS,
       initial_cursor: cursor,
       warmup_backlog_sec: WARMUP_BACKLOG_SEC,
     },
@@ -130,7 +163,7 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
 
   const handle = setInterval(() => {
     void tick();
-  }, pollMs);
+  }, MIRROR_POLL_MS);
 
   return function stop() {
     clearInterval(handle);
