@@ -67,6 +67,7 @@
 | 1 | 1 | 2 | needs_design | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 1 | 3 | needs_merge | task.0241 | Schedule Management AI Tools + Planner UI | Scheduler Evolution | proj.scheduler-evolution |
 | 1 | 1 | 1 | needs_implement | bug.0313 | pr-build bakes BUILD_SHA from ephemeral pull_request merge commit — /readyz version ≠ image tag | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 1 | needs_merge | bug.0315 | deploy-infra.sh silently overrides overlay ConfigMap COGNI_NODE_ENDPOINTS with LiteLLM-flavored value — scheduler-worker crashloops on every rebuild | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -199,7 +200,7 @@
 | 3 | 99 | 1 | needs_triage | bug.0150 | getAllReceipts query is unbounded — will degrade at scale |  |  |
 | 3 | 99 | 2 | needs_triage | spike.0239 | Three.js agent observatory — prototype + performance budget | Premium Frontend UX | proj.premium-frontend-ux |
 | 3 | 99 | 2 | needs_review | task.0316 | Wire per-node test:external lanes + move Ollama specs | System Test Architecture | proj.system-test-architecture |
-| 3 | 99 | 3 | needs_triage | task.0320 | Per-node candidate flighting (partial overlay promotion) | CI/CD Pipeline | proj.cicd-services-gitops |
+| 3 | 99 | 3 | needs_triage | task.0320 | Per-node candidate flighting (partial promotion + per-node leases) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | 99 | 2 | needs_review | task.0321 | Parallelize pr-build.yml via per-target matrix | CI/CD Pipeline | proj.cicd-services-gitops |
 
 > Sort: priority ASC → rank ASC
