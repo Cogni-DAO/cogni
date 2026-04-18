@@ -409,7 +409,7 @@ volumes:
   - `build_target()` case — `docker buildx build` against your Dockerfile
 - [ ] **Add a digest resolver** in `scripts/ci/resolve-pr-build-images.sh`:
   - Same `resolve_tag` case (must mirror the build script)
-- [ ] **Add to the dispatch fallback** `.github/workflows/build-multi-node.yml` (called by `promote-merged-pr.yml` when a PR produced no images):
+- [ ] **Add to the dispatch fallback** `.github/workflows/build-multi-node.yml` (manual fallback for rebuilding all targets — currently dispatched by hand when affected-only detection misses something):
   - Node-scoped services go in the `build-nodes` matrix; utility services go as a step in the `build-services` job — match the pattern `scheduler-worker` / `migrator` already use.
 
 **Verify locally:** Touch a file under `services/<name>/` and run `scripts/ci/detect-affected.sh` with `TURBO_SCM_BASE=origin/main TURBO_SCM_HEAD=HEAD`. Your service should appear in the `targets` CSV and `targets_json` array.
