@@ -339,6 +339,7 @@
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
 | 2 | spike.0314 | Research: copy-trading existing Polymarket wallets from the poly node | Cogni Poly | proj.poly-prediction-bot |
+| 2 | spike.0323 | Research: Polymarket copy-trade candidate identification | Cogni Poly | proj.poly-prediction-bot |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | bug.0194 | Internal graph API conflates stateKey with runId — headless runs create phantom threads | Unified Graph Launch | proj.unified-graph-launch |
 

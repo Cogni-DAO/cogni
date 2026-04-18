@@ -44,6 +44,7 @@ Serious setup: **three co-equal paths, any one can trigger the mirror, discrepan
 - Polymarket Data-API polling at 30s as a third audit trail — fires discrepancy alarm if a fill shows up there but not in either live path
 
 Design questions to answer:
+
 - Which path is primary for mirror-fire? Voting scheme?
 - How are dedupes keyed across paths? (`fill_id` shape is already frozen — does it hold up when on-chain logs produce a different native_id?)
 - Failure modes: primary silently gapped vs. backup spurious — how does the system tell them apart?
@@ -53,12 +54,14 @@ Design questions to answer:
 Current plan: every order is a round-trip to Privy's HSM for EIP-712 signing. P99 latency ~800ms. Fine for demo. **Fatal for size:** target fires → we see it in 2s → Privy sign in 800ms → RPC submit in 500ms = 3.3s worst case. By then the market has moved.
 
 Serious setup:
+
 - Privy retains **custody of the master key** (good — don't break that)
 - **Hot signer** holds a short-lived delegated key (Privy's authorization-key model supports this cleanly — we already use it for per-wallet scoping)
 - Signer is co-located with the submission path (same VM / same k8s node as the Polygon RPC)
 - Key rotation every N hours via Privy API; blast radius per key = whatever the wallet holds
 
 Design questions:
+
 - What's the delegation scope? (Per-market? Per-size? Per-time?)
 - Polygon RPC strategy — dedicated node, 3-of-n race, or a service like bloxroute?
 - Rotation triggered by time, by volume, by both? Graceful key-swap without dropping in-flight orders?
@@ -70,6 +73,7 @@ Current plan: operator adds a target via a dashboard "Copy" button. Target stays
 Serious setup: a separate worker that **continuously scores every tracked wallet** on a rolling window and auto-rotates the top-N into the active-targets list. Dropped targets have their positions wound down over a scheduled exit path.
 
 Scoring inputs (preliminary):
+
 - Rolling PnL (e.g. 30-day)
 - Sharpe vs the index of all Polymarket traders
 - Positive-selection rate vs counterfactual ("did they beat random?")
@@ -77,6 +81,7 @@ Scoring inputs (preliminary):
 - Volume — too-low excluded (signal too sparse), too-high excluded (slippage absorbs edge)
 
 Design questions:
+
 - What N? What rotation cadence?
 - Exit path for dropped targets — hold positions to natural resolution? Market-sell?
 - Interaction with the manual "operator picked this wallet" flow — additive or overridable?
@@ -88,6 +93,7 @@ Current plan: Phase 3 runs a 14-day paper soak, Phase 4 fires if the soak "showe
 What "showed edge" means is UNDEFINED in task.0315. This is the soft underbelly of the whole project: we could ship Phase 4 on a paper soak that merely had positive PnL during a bull market in prediction-market activity, which is not evidence of copy-trade edge.
 
 Serious definition:
+
 - **Baseline 1: no-trade** — did we make money? (Required but not sufficient)
 - **Baseline 2: random-subset copy** — did copying these specific wallets beat copying a random subset of active wallets of similar volume?
 - **Baseline 3: index** — did our picks beat the equal-weighted PnL of all actively-trading wallets above a minimum volume threshold?
@@ -101,11 +107,13 @@ If we can't beat all three baselines at 90%+ confidence over 14 days, P4 does no
 Current plan: we assume targets are unaware / indifferent. This is wrong the moment we scale.
 
 If a target wallet notices it's being copied, it can:
+
 - Place fake orders, wait for us to mirror, cancel before fill → we're stuck with a position they don't have
 - Trade inverse of their "public" signal using a separate wallet → we always take the losing side
 - Submit many small orders quickly → our rate limits either drop some (we miss real trades) or overload us (we spam the CLOB and get banned)
 
 Design mitigations:
+
 - **Randomized delay** — 0–500ms before mirror fires. Kills the deterministic-copy tell.
 - **Randomized rounding** — don't mirror exact size, round to nearest $X where X is wallet-specific or random. Kills size-signature tells.
 - **Target deactivation on signal degradation** — if a target's selection rate drops below a threshold, auto-pause (automated bait detection)

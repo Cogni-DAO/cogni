@@ -1,0 +1,3750 @@
+{
+  "collectedAt": "2026-04-18T19:18:14.848Z",
+  "metrics": [
+    {
+      "wallet": "0x8a6c6811e8937f9e8afc1b9249fa540262c30b3f",
+      "userName": "0x8a6C6811e8937F9E8aFc1b9249FA540262c30b3f-1771776258725",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "16"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "19"
+        }
+      ],
+      "lbMaxVol": 13732268.118484002,
+      "lbMaxPnl": -272807.10825762275,
+      "lbRoiPct": -2.11,
+      "tradeCount": 500,
+      "tradeCount7d": 304,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 142,
+      "top3Markets": [
+        {
+          "title": "Rangers vs. Stars",
+          "trades": 32
+        },
+        {
+          "title": "Clippers vs. Trail Blazers",
+          "trades": 31
+        },
+        {
+          "title": "Spread: Hornets (-13.5)",
+          "trades": 22
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.576,
+        "other": 0.424
+      },
+      "buyShare": 0.654,
+      "sellShare": 0.346,
+      "medianTradeUsdc": 7342.5,
+      "p90TradeUsdc": 75000,
+      "realizedRoundTripPnlUsdc": 2898167.56,
+      "roundTripCoverageMarkets": 68,
+      "notes": []
+    },
+    {
+      "wallet": "0xccc1afdec8b8a8d7770eeabc0041b610c621889d",
+      "userName": "66601",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "6"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "14"
+        }
+      ],
+      "lbMaxVol": 16563901.356205998,
+      "lbMaxPnl": 329.0185736947884,
+      "lbRoiPct": -0.01,
+      "tradeCount": 500,
+      "tradeCount7d": 343,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.2,
+      "uniqueMarkets": 142,
+      "top3Markets": [
+        {
+          "title": "Genius FDV above $500M one day after launch?",
+          "trades": 24
+        },
+        {
+          "title": "Connecticut Huskies vs. Illinois Fighting Illini",
+          "trades": 17
+        },
+        {
+          "title": "US forces enter Iran by April 30?",
+          "trades": 16
+        }
+      ],
+      "categoryMix": {
+        "other": 0.59,
+        "politics": 0.28,
+        "geopolitics": 0.042,
+        "sports": 0.068,
+        "crypto": 0.012,
+        "macro": 0.008
+      },
+      "buyShare": 0.548,
+      "sellShare": 0.452,
+      "medianTradeUsdc": 46.02,
+      "p90TradeUsdc": 664.6,
+      "realizedRoundTripPnlUsdc": -193327.09,
+      "roundTripCoverageMarkets": 63,
+      "notes": []
+    },
+    {
+      "wallet": "0xbaa2bcb5439e985ce4ccf815b4700027d1b92c73",
+      "userName": "denizz",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "20"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "21"
+        }
+      ],
+      "lbMaxVol": 12442461.996129999,
+      "lbMaxPnl": 1016952.6141660833,
+      "lbRoiPct": 8.17,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 63,
+      "top3Markets": [
+        {
+          "title": "Will Trump agree to Iranian enrichment of uranium in April?",
+          "trades": 43
+        },
+        {
+          "title": "US x Iran permanent peace deal by April 22, 2026?",
+          "trades": 38
+        },
+        {
+          "title": "Iran agrees to surrender enriched uranium stockpile by April 30, 2026?",
+          "trades": 36
+        }
+      ],
+      "categoryMix": {
+        "other": 0.492,
+        "politics": 0.188,
+        "geopolitics": 0.32
+      },
+      "buyShare": 0.602,
+      "sellShare": 0.398,
+      "medianTradeUsdc": 500.83,
+      "p90TradeUsdc": 5871.9,
+      "realizedRoundTripPnlUsdc": -54251.91,
+      "roundTripCoverageMarkets": 36,
+      "notes": []
+    },
+    {
+      "wallet": "0x5d58e38cd0a7e6f5fa67b7f9c2f70dd70df09a15",
+      "userName": "Dhdhsjsj",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "1"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "3"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "12"
+        }
+      ],
+      "lbMaxVol": 45242648.31558201,
+      "lbMaxPnl": -620461.7462876778,
+      "lbRoiPct": -1.37,
+      "tradeCount": 500,
+      "tradeCount7d": 430,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 93,
+      "top3Markets": [
+        {
+          "title": "Carlos Alcaraz vs. Jannik Sinner: Total Sets O/U 2.5",
+          "trades": 30
+        },
+        {
+          "title": "Wuning 2: Fajing Sun vs Giles Hussey",
+          "trades": 23
+        },
+        {
+          "title": "Rolex Monte Carlo Masters: Carlos Alcaraz vs Jannik Sinner",
+          "trades": 23
+        }
+      ],
+      "categoryMix": {
+        "other": 0.77,
+        "awards": 0.126,
+        "sports": 0.1,
+        "crypto": 0.004
+      },
+      "buyShare": 0.77,
+      "sellShare": 0.23,
+      "medianTradeUsdc": 2079.48,
+      "p90TradeUsdc": 85003.34,
+      "realizedRoundTripPnlUsdc": 5666363.66,
+      "roundTripCoverageMarkets": 33,
+      "notes": []
+    },
+    {
+      "wallet": "0x5d05b1f588780423488a09d9aefeb64df54d6320",
+      "userName": "SP888",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "20"
+        }
+      ],
+      "lbMaxVol": 35913501.917589,
+      "lbMaxPnl": 7793.404871040953,
+      "lbRoiPct": 0.02,
+      "tradeCount": 500,
+      "tradeCount7d": 261,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.2,
+      "uniqueMarkets": 58,
+      "top3Markets": [
+        {
+          "title": "US x Iran meeting by April 10, 2026?",
+          "trades": 75
+        },
+        {
+          "title": "Trump announces end of military operations against Iran by April 15th?",
+          "trades": 53
+        },
+        {
+          "title": "US x Iran ceasefire by April 7?",
+          "trades": 47
+        }
+      ],
+      "categoryMix": {
+        "politics": 0.16,
+        "other": 0.576,
+        "geopolitics": 0.264
+      },
+      "buyShare": 0.588,
+      "sellShare": 0.412,
+      "medianTradeUsdc": 21.21,
+      "p90TradeUsdc": 247.51,
+      "realizedRoundTripPnlUsdc": 8940.68,
+      "roundTripCoverageMarkets": 31,
+      "notes": []
+    },
+    {
+      "wallet": "0xc8ab97a9089a9ff7e6ef0688e6e591a066946418",
+      "userName": "ArmageddonRewardsBilly",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "16"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "24"
+        }
+      ],
+      "lbMaxVol": 33781398.537524,
+      "lbMaxPnl": -195181.9470249672,
+      "lbRoiPct": -0.58,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 369,
+      "top3Markets": [
+        {
+          "title": "US x Iran meeting by April 10, 2026?",
+          "trades": 10
+        },
+        {
+          "title": "Will \"Donk\" be said during the PGL Bucharest 2026 Grand Final?",
+          "trades": 6
+        },
+        {
+          "title": "Warriors vs. Clippers",
+          "trades": 5
+        }
+      ],
+      "categoryMix": {
+        "geopolitics": 0.07,
+        "other": 0.588,
+        "macro": 0.01,
+        "entertainment": 0.004,
+        "politics": 0.296,
+        "crypto": 0.014,
+        "sports": 0.012,
+        "awards": 0.006
+      },
+      "buyShare": 0.254,
+      "sellShare": 0.746,
+      "medianTradeUsdc": 22.39,
+      "p90TradeUsdc": 3105.21,
+      "realizedRoundTripPnlUsdc": -302104.44,
+      "roundTripCoverageMarkets": 27,
+      "notes": []
+    },
+    {
+      "wallet": "0x6d3c5bd13984b2de47c3a88ddc455309aab3d294",
+      "userName": "VeryLucky888",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "22"
+        }
+      ],
+      "lbMaxVol": 1762139.874537002,
+      "lbMaxPnl": 802.1372753324395,
+      "lbRoiPct": 0.05,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 169,
+      "top3Markets": [
+        {
+          "title": "Will SSC Napoli win on 2026-04-18?",
+          "trades": 23
+        },
+        {
+          "title": "Will Chelsea FC win on 2026-04-18?",
+          "trades": 15
+        },
+        {
+          "title": "Will Brighton & Hove Albion FC win on 2026-04-18?",
+          "trades": 15
+        }
+      ],
+      "categoryMix": {
+        "other": 0.912,
+        "sports": 0.088
+      },
+      "buyShare": 0.396,
+      "sellShare": 0.604,
+      "medianTradeUsdc": 490,
+      "p90TradeUsdc": 1253.43,
+      "realizedRoundTripPnlUsdc": -1201.17,
+      "roundTripCoverageMarkets": 25,
+      "notes": []
+    },
+    {
+      "wallet": "0xa5ea13a81d2b7e8e424b182bdc1db08e756bd96a",
+      "userName": "bossoskil1",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "15"
+        },
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "7"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "8"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "23"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "10"
+        }
+      ],
+      "lbMaxVol": 18365096.999459002,
+      "lbMaxPnl": 1603999.9508109523,
+      "lbRoiPct": 8.03,
+      "tradeCount": 500,
+      "tradeCount7d": 187,
+      "tradeCount30d": 477,
+      "tradesPerDay30d": 15.9,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 256,
+      "top3Markets": [
+        {
+          "title": "LoL: Sentinels vs Cloud9 (BO3) - LCS Regular Season",
+          "trades": 10
+        },
+        {
+          "title": "Counter-Strike: OG vs BESTIA (BO3) - Roman Imperium Cup Playoffs",
+          "trades": 8
+        },
+        {
+          "title": "LoL: LNG Esports vs EDward Gaming (BO3) - LPL Group Nirvana",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "awards": 0.392,
+        "other": 0.478,
+        "geopolitics": 0.02,
+        "sports": 0.11
+      },
+      "buyShare": 0.868,
+      "sellShare": 0.132,
+      "medianTradeUsdc": 3113.74,
+      "p90TradeUsdc": 44055,
+      "realizedRoundTripPnlUsdc": 1408094.88,
+      "roundTripCoverageMarkets": 28,
+      "notes": []
+    },
+    {
+      "wallet": "0x63a51cbb37341837b873bc29d05f482bc2988e33",
+      "userName": "noMoohyun523",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "11"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "18"
+        }
+      ],
+      "lbMaxVol": 39080199.606985,
+      "lbMaxPnl": 347489.81245193235,
+      "lbRoiPct": 0.89,
+      "tradeCount": 500,
+      "tradeCount7d": 212,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.7,
+      "uniqueMarkets": 99,
+      "top3Markets": [
+        {
+          "title": "Los Angeles Angels vs. Cincinnati Reds",
+          "trades": 35
+        },
+        {
+          "title": "San Diego Padres vs. Pittsburgh Pirates: O/U 8.5",
+          "trades": 31
+        },
+        {
+          "title": "Map Handicap: B8 (-1.5) vs Passion UA (+1.5)",
+          "trades": 18
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.168,
+        "other": 0.772,
+        "awards": 0.06
+      },
+      "buyShare": 0.828,
+      "sellShare": 0.172,
+      "medianTradeUsdc": 15652.49,
+      "p90TradeUsdc": 97609.43,
+      "realizedRoundTripPnlUsdc": 2940878.89,
+      "roundTripCoverageMarkets": 22,
+      "notes": []
+    },
+    {
+      "wallet": "0x43e98f912cd6ddadaad88d3297e78c0648e688e5",
+      "userName": "ashash111",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "20"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "13"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "4"
+        }
+      ],
+      "lbMaxVol": 66749743.95080401,
+      "lbMaxPnl": 32562.279677159597,
+      "lbRoiPct": 0.05,
+      "tradeCount": 402,
+      "tradeCount7d": 84,
+      "tradeCount30d": 334,
+      "tradesPerDay30d": 11.13,
+      "daysSinceLastTrade": 0.2,
+      "uniqueMarkets": 112,
+      "top3Markets": [
+        {
+          "title": "US forces enter Iran by April 30?",
+          "trades": 31
+        },
+        {
+          "title": "Will Cape Verde win the 2026 FIFA World Cup?",
+          "trades": 15
+        },
+        {
+          "title": "Will the Fed increase interest rates by 25+ bps after the March 2026 meeting?",
+          "trades": 13
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.144,
+        "politics": 0.259,
+        "other": 0.483,
+        "crypto": 0.025,
+        "macro": 0.075,
+        "geopolitics": 0.015
+      },
+      "buyShare": 0.438,
+      "sellShare": 0.562,
+      "medianTradeUsdc": 40.15,
+      "p90TradeUsdc": 621.29,
+      "realizedRoundTripPnlUsdc": -23459.56,
+      "roundTripCoverageMarkets": 64,
+      "notes": []
+    },
+    {
+      "wallet": "0x6480542954b70a674a74bd1a6015dec362dc8dc5",
+      "userName": "tripping",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "23"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "2"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "6"
+        }
+      ],
+      "lbMaxVol": 60078826.58418299,
+      "lbMaxPnl": 24541.727368577303,
+      "lbRoiPct": 0.04,
+      "tradeCount": 500,
+      "tradeCount7d": 100,
+      "tradeCount30d": 314,
+      "tradesPerDay30d": 10.47,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 155,
+      "top3Markets": [
+        {
+          "title": "Will the Fed increase interest rates by 25+ bps after the March 2026 meeting?",
+          "trades": 31
+        },
+        {
+          "title": "Will Bitcoin reach $150,000 in March?",
+          "trades": 18
+        },
+        {
+          "title": "US forces enter Iran by April 30?",
+          "trades": 16
+        }
+      ],
+      "categoryMix": {
+        "awards": 0.006,
+        "other": 0.536,
+        "politics": 0.216,
+        "geopolitics": 0.042,
+        "macro": 0.128,
+        "crypto": 0.046,
+        "sports": 0.026
+      },
+      "buyShare": 0.604,
+      "sellShare": 0.396,
+      "medianTradeUsdc": 67.33,
+      "p90TradeUsdc": 837.2,
+      "realizedRoundTripPnlUsdc": -82110.72,
+      "roundTripCoverageMarkets": 71,
+      "notes": []
+    },
+    {
+      "wallet": "0xfea31bc088000ff909be1dfd8d0e3f2c7ef2d227",
+      "userName": "newdogbeginning",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "13"
+        }
+      ],
+      "lbMaxVol": 1389119.726044,
+      "lbMaxPnl": 132545.92332532213,
+      "lbRoiPct": 9.54,
+      "tradeCount": 500,
+      "tradeCount7d": 434,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 168,
+      "top3Markets": [
+        {
+          "title": "Will Cameron Young win the 2026 Masters tournament?",
+          "trades": 33
+        },
+        {
+          "title": "Will Russell Henley win the 2026 Masters tournament?",
+          "trades": 30
+        },
+        {
+          "title": "Will France win the 2026 FIFA World Cup?",
+          "trades": 25
+        }
+      ],
+      "categoryMix": {
+        "other": 0.866,
+        "sports": 0.124,
+        "crypto": 0.01
+      },
+      "buyShare": 0.554,
+      "sellShare": 0.446,
+      "medianTradeUsdc": 101.05,
+      "p90TradeUsdc": 7020,
+      "realizedRoundTripPnlUsdc": -146983.92,
+      "roundTripCoverageMarkets": 13,
+      "notes": []
+    },
+    {
+      "wallet": "0xfc25f141ed27bb1787338d2c4e7f51e3a15e1f7f",
+      "userName": ".Sisyphus",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "21"
+        }
+      ],
+      "lbMaxVol": 1810666.1682140003,
+      "lbMaxPnl": 2042.9537193442857,
+      "lbRoiPct": 0.11,
+      "tradeCount": 500,
+      "tradeCount7d": 229,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 413,
+      "top3Markets": [
+        {
+          "title": "Warriors vs. Suns",
+          "trades": 7
+        },
+        {
+          "title": "LoL: DN SOOPers Challengers vs T1 Academy - Game 2 Winner",
+          "trades": 5
+        },
+        {
+          "title": "LoL: HANJIN BRION Challengers vs KT Rolster Challengers - Game 2 Winner",
+          "trades": 5
+        }
+      ],
+      "categoryMix": {
+        "other": 0.4,
+        "sports": 0.346,
+        "awards": 0.252,
+        "geopolitics": 0.002
+      },
+      "buyShare": 0.944,
+      "sellShare": 0.056,
+      "medianTradeUsdc": 426.23,
+      "p90TradeUsdc": 8734.4,
+      "realizedRoundTripPnlUsdc": 201840.21,
+      "roundTripCoverageMarkets": 9,
+      "notes": []
+    },
+    {
+      "wallet": "0xc21ea96be762bb55041529af6e386e7c53b80215",
+      "userName": "Just2SeeULaugh",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "7"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "11"
+        }
+      ],
+      "lbMaxVol": 46692235.007562,
+      "lbMaxPnl": 71914.47340455317,
+      "lbRoiPct": 0.15,
+      "tradeCount": 500,
+      "tradeCount7d": 21,
+      "tradeCount30d": 297,
+      "tradesPerDay30d": 9.9,
+      "daysSinceLastTrade": 0.9,
+      "uniqueMarkets": 288,
+      "top3Markets": [
+        {
+          "title": "Will Argentina win the 2026 FIFA World Cup?",
+          "trades": 8
+        },
+        {
+          "title": "Will Meta dip to $640 in April?",
+          "trades": 8
+        },
+        {
+          "title": "Will Andrew Tate post 0-99 posts from March 6 to March 13, 2026?",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "crypto": 0.11,
+        "other": 0.63,
+        "politics": 0.164,
+        "geopolitics": 0.04,
+        "macro": 0.038,
+        "sports": 0.018
+      },
+      "buyShare": 0.5,
+      "sellShare": 0.5,
+      "medianTradeUsdc": 28.03,
+      "p90TradeUsdc": 549.19,
+      "realizedRoundTripPnlUsdc": 3147.48,
+      "roundTripCoverageMarkets": 32,
+      "notes": []
+    },
+    {
+      "wallet": "0xed107a85a4585a381e48c7f7ca4144909e7dd2e5",
+      "userName": "bobe2",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "10"
+        }
+      ],
+      "lbMaxVol": 2781092.7344440003,
+      "lbMaxPnl": 1064.4000305223421,
+      "lbRoiPct": 0.04,
+      "tradeCount": 500,
+      "tradeCount7d": 58,
+      "tradeCount30d": 300,
+      "tradesPerDay30d": 10,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 218,
+      "top3Markets": [
+        {
+          "title": "Will the US officially declare war on Iran by March 31, 2026?",
+          "trades": 19
+        },
+        {
+          "title": "Will Trump nominate Judy Shelton as the next Fed chair?",
+          "trades": 19
+        },
+        {
+          "title": "Will Trump visit China by April 30?",
+          "trades": 18
+        }
+      ],
+      "categoryMix": {
+        "other": 0.498,
+        "macro": 0.086,
+        "geopolitics": 0.094,
+        "politics": 0.316,
+        "entertainment": 0.002,
+        "awards": 0.004
+      },
+      "buyShare": 0.95,
+      "sellShare": 0.05,
+      "medianTradeUsdc": 2900.23,
+      "p90TradeUsdc": 46976.13,
+      "realizedRoundTripPnlUsdc": -1227876.39,
+      "roundTripCoverageMarkets": 13,
+      "notes": []
+    },
+    {
+      "wallet": "0x2b3ff45c91540e46fae1e0c72f61f4b049453446",
+      "userName": "Mentallyillgambld",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "23"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "22"
+        }
+      ],
+      "lbMaxVol": 3558239.5519779995,
+      "lbMaxPnl": 960487.1981589651,
+      "lbRoiPct": 26.99,
+      "tradeCount": 291,
+      "tradeCount7d": 0,
+      "tradeCount30d": 231,
+      "tradesPerDay30d": 7.7,
+      "daysSinceLastTrade": 9.1,
+      "uniqueMarkets": 111,
+      "top3Markets": [
+        {
+          "title": "Lakers vs. Pistons",
+          "trades": 17
+        },
+        {
+          "title": "Tennessee Volunteers vs. Virginia Cavaliers",
+          "trades": 16
+        },
+        {
+          "title": "Spread: Duke Blue Devils (-12.5)",
+          "trades": 11
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.546,
+        "other": 0.412,
+        "awards": 0.041
+      },
+      "buyShare": 0.897,
+      "sellShare": 0.103,
+      "medianTradeUsdc": 6937.17,
+      "p90TradeUsdc": 58317.22,
+      "realizedRoundTripPnlUsdc": 900020.86,
+      "roundTripCoverageMarkets": 27,
+      "notes": []
+    },
+    {
+      "wallet": "0x9e9c8b080659b08c3474ea761790a20982e26421",
+      "userName": "meetgoodlife",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "3"
+        }
+      ],
+      "lbMaxVol": 67758116.278001,
+      "lbMaxPnl": 7511.235285106734,
+      "lbRoiPct": 0.01,
+      "tradeCount": 204,
+      "tradeCount7d": 3,
+      "tradeCount30d": 204,
+      "tradesPerDay30d": 6.8,
+      "daysSinceLastTrade": 4.5,
+      "uniqueMarkets": 57,
+      "top3Markets": [
+        {
+          "title": "US forces enter Iran by April 30?",
+          "trades": 65
+        },
+        {
+          "title": "US x Iran ceasefire by April 7?",
+          "trades": 9
+        },
+        {
+          "title": "US forces enter Iran by March 31?",
+          "trades": 9
+        }
+      ],
+      "categoryMix": {
+        "other": 0.583,
+        "politics": 0.27,
+        "macro": 0.044,
+        "geopolitics": 0.059,
+        "sports": 0.039,
+        "awards": 0.005
+      },
+      "buyShare": 0.505,
+      "sellShare": 0.495,
+      "medianTradeUsdc": 45.68,
+      "p90TradeUsdc": 625.24,
+      "realizedRoundTripPnlUsdc": -21114.62,
+      "roundTripCoverageMarkets": 28,
+      "notes": []
+    },
+    {
+      "wallet": "0x36257cb65f199caa86f7d30625bbc1250a981187",
+      "userName": "0x36257cb65f199caa86f7d30625bbc1250a981187",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "4"
+        },
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "17"
+        }
+      ],
+      "lbMaxVol": 2072175.152696,
+      "lbMaxPnl": 315898.81569727365,
+      "lbRoiPct": 15.17,
+      "tradeCount": 308,
+      "tradeCount7d": 158,
+      "tradeCount30d": 297,
+      "tradesPerDay30d": 9.9,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 208,
+      "top3Markets": [
+        {
+          "title": "Trail Blazers vs. Nuggets",
+          "trades": 12
+        },
+        {
+          "title": "Timberwolves vs. Nuggets",
+          "trades": 9
+        },
+        {
+          "title": "Timberwolves vs. Nuggets: O/U 230.5",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "other": 0.737,
+        "sports": 0.26,
+        "crypto": 0.003
+      },
+      "buyShare": 0.977,
+      "sellShare": 0.023,
+      "medianTradeUsdc": 2200,
+      "p90TradeUsdc": 9922.3,
+      "realizedRoundTripPnlUsdc": 58854.03,
+      "roundTripCoverageMarkets": 7,
+      "notes": []
+    },
+    {
+      "wallet": "0x32ccd9015a900fde62040162a04bedf093c668b3",
+      "userName": "pilotlady",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "18"
+        }
+      ],
+      "lbMaxVol": 669778.7495919999,
+      "lbMaxPnl": 94646.6992782196,
+      "lbRoiPct": 14.13,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 158,
+      "top3Markets": [
+        {
+          "title": "Will Tigres de la UANL win on 2026-04-17?",
+          "trades": 46
+        },
+        {
+          "title": "Brisbane Roar FC vs. Melbourne City FC: O/U 1.5",
+          "trades": 44
+        },
+        {
+          "title": "Will OGC Nice win on 2026-04-18?",
+          "trades": 19
+        }
+      ],
+      "categoryMix": {
+        "other": 0.96,
+        "sports": 0.024,
+        "awards": 0.016
+      },
+      "buyShare": 0.992,
+      "sellShare": 0.008,
+      "medianTradeUsdc": 17.95,
+      "p90TradeUsdc": 382.46,
+      "realizedRoundTripPnlUsdc": 52424.33,
+      "roundTripCoverageMarkets": 2,
+      "notes": []
+    },
+    {
+      "wallet": "0xb45a797faa52b0fd8adc56d30382022b7b12192c",
+      "userName": "bcda",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "24"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "20"
+        }
+      ],
+      "lbMaxVol": 21573709.046194002,
+      "lbMaxPnl": 1027822.2901146119,
+      "lbRoiPct": 4.76,
+      "tradeCount": 500,
+      "tradeCount7d": 161,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 170,
+      "top3Markets": [
+        {
+          "title": "Kings vs. Nets",
+          "trades": 25
+        },
+        {
+          "title": "Penguins vs. Blues",
+          "trades": 24
+        },
+        {
+          "title": "Wild vs. Blues",
+          "trades": 15
+        }
+      ],
+      "categoryMix": {
+        "other": 0.838,
+        "sports": 0.158,
+        "geopolitics": 0.004
+      },
+      "buyShare": 0.996,
+      "sellShare": 0.004,
+      "medianTradeUsdc": 3797.89,
+      "p90TradeUsdc": 33286.32,
+      "realizedRoundTripPnlUsdc": -170442.8,
+      "roundTripCoverageMarkets": 2,
+      "notes": []
+    },
+    {
+      "wallet": "0x777d9f00c2b4f7b829c9de0049ca3e707db05143",
+      "userName": "CarlosMC",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "13"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "15"
+        }
+      ],
+      "lbMaxVol": 8764430.132935999,
+      "lbMaxPnl": 1274111.0960222099,
+      "lbRoiPct": 13.82,
+      "tradeCount": 500,
+      "tradeCount7d": 38,
+      "tradeCount30d": 247,
+      "tradesPerDay30d": 8.23,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 214,
+      "top3Markets": [
+        {
+          "title": "Creighton Bluejays vs. St. John's Red Storm: O/U 155.5",
+          "trades": 14
+        },
+        {
+          "title": "Will Türkiye win on 2026-03-26?",
+          "trades": 12
+        },
+        {
+          "title": "Tottenham Hotspur FC vs. Arsenal FC: O/U 2.5",
+          "trades": 11
+        }
+      ],
+      "categoryMix": {
+        "other": 0.708,
+        "sports": 0.284,
+        "awards": 0.008
+      },
+      "buyShare": 0.982,
+      "sellShare": 0.018,
+      "medianTradeUsdc": 3368.43,
+      "p90TradeUsdc": 29834.06,
+      "realizedRoundTripPnlUsdc": 75428.18,
+      "roundTripCoverageMarkets": 8,
+      "notes": []
+    },
+    {
+      "wallet": "0xe16d3f2a5807999b358affd9445c3a09e45e5e30",
+      "userName": "0xE16D3F2A5807999b358aFfD9445C3a09E45E5e30-1776429210592",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "8"
+        },
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "25"
+        }
+      ],
+      "lbMaxVol": 1674208.0014060002,
+      "lbMaxPnl": 183520.0758864914,
+      "lbRoiPct": 7.18,
+      "tradeCount": 323,
+      "tradeCount7d": 323,
+      "tradeCount30d": 323,
+      "tradesPerDay30d": 10.77,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 22,
+      "top3Markets": [
+        {
+          "title": "Dota 2: Team Liquid vs GamerLegion - Game 2 Winner",
+          "trades": 48
+        },
+        {
+          "title": "Dota 2: Team Spirit vs Vici Gaming - Game 1 Winner",
+          "trades": 32
+        },
+        {
+          "title": "Dota 2: Team Spirit vs Vici Gaming - Game 2 Winner",
+          "trades": 28
+        }
+      ],
+      "categoryMix": {
+        "other": 0.204,
+        "awards": 0.796
+      },
+      "buyShare": 0.988,
+      "sellShare": 0.012,
+      "medianTradeUsdc": 986.19,
+      "p90TradeUsdc": 9862,
+      "realizedRoundTripPnlUsdc": 66037.04,
+      "roundTripCoverageMarkets": 4,
+      "notes": []
+    },
+    {
+      "wallet": "0xee00ba338c59557141789b127927a55f5cc5cea1",
+      "userName": "S-Works",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "2"
+        },
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "15"
+        }
+      ],
+      "lbMaxVol": 2176482.50729,
+      "lbMaxPnl": 450177.7159359533,
+      "lbRoiPct": 20.67,
+      "tradeCount": 500,
+      "tradeCount7d": 28,
+      "tradeCount30d": 207,
+      "tradesPerDay30d": 6.9,
+      "daysSinceLastTrade": 0.6,
+      "uniqueMarkets": 319,
+      "top3Markets": [
+        {
+          "title": "Counter-Strike: MOUZ vs Astralis (BO3) - ESL Pro League Stage 2",
+          "trades": 7
+        },
+        {
+          "title": "Counter-Strike: PARIVISION vs Monte (BO3) - ESL Pro League Stage 1",
+          "trades": 7
+        },
+        {
+          "title": "Wizards vs. Knicks",
+          "trades": 6
+        }
+      ],
+      "categoryMix": {
+        "other": 0.706,
+        "sports": 0.128,
+        "awards": 0.166
+      },
+      "buyShare": 0.964,
+      "sellShare": 0.036,
+      "medianTradeUsdc": 2150.59,
+      "p90TradeUsdc": 27599.99,
+      "realizedRoundTripPnlUsdc": -51606.19,
+      "roundTripCoverageMarkets": 7,
+      "notes": []
+    },
+    {
+      "wallet": "0xbddf61af533ff524d27154e589d2d7a81510c684",
+      "userName": "Countryside",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "14"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "14"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "23"
+        }
+      ],
+      "lbMaxVol": 28607587.135684997,
+      "lbMaxPnl": 1243831.1769935556,
+      "lbRoiPct": 3.06,
+      "tradeCount": 499,
+      "tradeCount7d": 15,
+      "tradeCount30d": 140,
+      "tradesPerDay30d": 4.67,
+      "daysSinceLastTrade": 0.4,
+      "uniqueMarkets": 325,
+      "top3Markets": [
+        {
+          "title": "Warriors vs. 76ers",
+          "trades": 10
+        },
+        {
+          "title": "Cavaliers vs. Raptors",
+          "trades": 8
+        },
+        {
+          "title": "76ers vs. Warriors",
+          "trades": 6
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.621,
+        "other": 0.375,
+        "awards": 0.004
+      },
+      "buyShare": 0.964,
+      "sellShare": 0.036,
+      "medianTradeUsdc": 5088.14,
+      "p90TradeUsdc": 37877.43,
+      "realizedRoundTripPnlUsdc": -516858.65,
+      "roundTripCoverageMarkets": 12,
+      "notes": []
+    },
+    {
+      "wallet": "0x3b5c629f114098b0dee345fb78b7a3a013c7126e",
+      "userName": "SMCAOMCRL",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "18"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "21"
+        }
+      ],
+      "lbMaxVol": 35777446.401685,
+      "lbMaxPnl": -203320.7751286049,
+      "lbRoiPct": -0.75,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 105,
+      "top3Markets": [
+        {
+          "title": "Porsche Tennis Grand Prix: Elena Rybakina vs Diana Shnaider",
+          "trades": 49
+        },
+        {
+          "title": "Porsche Tennis Grand Prix: Leylah Fernandez vs Zeynep Sonmez",
+          "trades": 47
+        },
+        {
+          "title": "Porsche Tennis Grand Prix: Karolina Muchova vs Coco Gauff",
+          "trades": 43
+        }
+      ],
+      "categoryMix": {
+        "other": 0.914,
+        "sports": 0.076,
+        "awards": 0.01
+      },
+      "buyShare": 0.994,
+      "sellShare": 0.006,
+      "medianTradeUsdc": 255.07,
+      "p90TradeUsdc": 1594.5,
+      "realizedRoundTripPnlUsdc": 1650.28,
+      "roundTripCoverageMarkets": 1,
+      "notes": []
+    },
+    {
+      "wallet": "0x5c3a1a602848565bb16165fcd460b00c3d43020b",
+      "userName": "VARsenal",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "22"
+        }
+      ],
+      "lbMaxVol": 299854.50965,
+      "lbMaxPnl": 83737.12011255161,
+      "lbRoiPct": 27.93,
+      "tradeCount": 445,
+      "tradeCount7d": 27,
+      "tradeCount30d": 118,
+      "tradesPerDay30d": 3.93,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 347,
+      "top3Markets": [
+        {
+          "title": "T20 World Cup: England vs New Zealand",
+          "trades": 5
+        },
+        {
+          "title": "Spread: Bucks (-2.5)",
+          "trades": 5
+        },
+        {
+          "title": "Will Matt Fitzpatrick win the 2026 Masters tournament?",
+          "trades": 4
+        }
+      ],
+      "categoryMix": {
+        "other": 0.744,
+        "awards": 0.009,
+        "sports": 0.234,
+        "crypto": 0.013
+      },
+      "buyShare": 0.87,
+      "sellShare": 0.13,
+      "medianTradeUsdc": 2201.62,
+      "p90TradeUsdc": 12781.46,
+      "realizedRoundTripPnlUsdc": -52218.62,
+      "roundTripCoverageMarkets": 17,
+      "notes": []
+    },
+    {
+      "wallet": "0xb6d6e99d3bfe055874a04279f659f009fd57be17",
+      "userName": "JPMorgan101",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "25"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "25"
+        }
+      ],
+      "lbMaxVol": 3731070.761481,
+      "lbMaxPnl": 846963.0136148414,
+      "lbRoiPct": 22.7,
+      "tradeCount": 500,
+      "tradeCount7d": 7,
+      "tradeCount30d": 82,
+      "tradesPerDay30d": 2.73,
+      "daysSinceLastTrade": 3,
+      "uniqueMarkets": 167,
+      "top3Markets": [
+        {
+          "title": "Bitcoin Up or Down - March 12, 8:00AM-8:05AM ET",
+          "trades": 27
+        },
+        {
+          "title": "Bitcoin Up or Down - March 12, 12:40PM-12:45PM ET",
+          "trades": 23
+        },
+        {
+          "title": "Bitcoin Up or Down - March 12, 12:45PM-12:50PM ET",
+          "trades": 21
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.212,
+        "other": 0.3,
+        "awards": 0.002,
+        "crypto": 0.486
+      },
+      "buyShare": 0.664,
+      "sellShare": 0.336,
+      "medianTradeUsdc": 99.84,
+      "p90TradeUsdc": 2084.15,
+      "realizedRoundTripPnlUsdc": 1382158.21,
+      "roundTripCoverageMarkets": 63,
+      "notes": []
+    },
+    {
+      "wallet": "0xe40ea00e74059c76c0035c919ef6b99c3e25a94d",
+      "userName": "restart77",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "20"
+        }
+      ],
+      "lbMaxVol": 13387602.330784999,
+      "lbMaxPnl": 202757.74463585447,
+      "lbRoiPct": 1.51,
+      "tradeCount": 500,
+      "tradeCount7d": 26,
+      "tradeCount30d": 87,
+      "tradesPerDay30d": 2.9,
+      "daysSinceLastTrade": 0.2,
+      "uniqueMarkets": 138,
+      "top3Markets": [
+        {
+          "title": "Will Cape Verde win the 2026 FIFA World Cup?",
+          "trades": 22
+        },
+        {
+          "title": "Will Bitcoin reach $150,000 in January?",
+          "trades": 21
+        },
+        {
+          "title": "Will Congo DR win the 2026 FIFA World Cup?",
+          "trades": 13
+        }
+      ],
+      "categoryMix": {
+        "other": 0.508,
+        "crypto": 0.426,
+        "sports": 0.064,
+        "politics": 0.002
+      },
+      "buyShare": 0.652,
+      "sellShare": 0.348,
+      "medianTradeUsdc": 779.65,
+      "p90TradeUsdc": 18527.39,
+      "realizedRoundTripPnlUsdc": -1237471.7,
+      "roundTripCoverageMarkets": 44,
+      "notes": []
+    },
+    {
+      "wallet": "0xc2e7800b5af46e6093872b177b7a5e7f0563be51",
+      "userName": "beachboy4",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "4"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "4"
+        }
+      ],
+      "lbMaxVol": 14455276.546912998,
+      "lbMaxPnl": 2667154.4256820045,
+      "lbRoiPct": 18.45,
+      "tradeCount": 500,
+      "tradeCount7d": 17,
+      "tradeCount30d": 211,
+      "tradesPerDay30d": 7.03,
+      "daysSinceLastTrade": 5.8,
+      "uniqueMarkets": 71,
+      "top3Markets": [
+        {
+          "title": "Will Arsenal FC win on 2026-03-14?",
+          "trades": 33
+        },
+        {
+          "title": "Will Liverpool FC win on 2026-01-31?",
+          "trades": 30
+        },
+        {
+          "title": "Will Juventus FC win on 2026-01-25?",
+          "trades": 19
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.38,
+        "other": 0.612,
+        "politics": 0.008
+      },
+      "buyShare": 0.994,
+      "sellShare": 0.006,
+      "medianTradeUsdc": 27481.36,
+      "p90TradeUsdc": 209222.29,
+      "realizedRoundTripPnlUsdc": -485237.04,
+      "roundTripCoverageMarkets": 3,
+      "notes": []
+    },
+    {
+      "wallet": "0x5ae14dc9e0cf9df72de8d873dcea05aacb799fad",
+      "userName": "ohuhusos",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "3"
+        }
+      ],
+      "lbMaxVol": 56161.776409,
+      "lbMaxPnl": 385101.92011511826,
+      "lbRoiPct": 685.7,
+      "tradeCount": 293,
+      "tradeCount7d": 128,
+      "tradeCount30d": 293,
+      "tradesPerDay30d": 9.77,
+      "daysSinceLastTrade": 0.9,
+      "uniqueMarkets": 88,
+      "top3Markets": [
+        {
+          "title": "Hawks vs. Heat",
+          "trades": 37
+        },
+        {
+          "title": "Baltimore Orioles vs. Chicago White Sox: O/U 7.5",
+          "trades": 15
+        },
+        {
+          "title": "Los Angeles Angels vs. New York Yankees: O/U 9.5",
+          "trades": 13
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.331,
+        "other": 0.669
+      },
+      "buyShare": 0.997,
+      "sellShare": 0.003,
+      "medianTradeUsdc": 4863.66,
+      "p90TradeUsdc": 32702.98,
+      "realizedRoundTripPnlUsdc": -263952.5,
+      "roundTripCoverageMarkets": 1,
+      "notes": []
+    },
+    {
+      "wallet": "0x93abbc022ce98d6f45d4444b594791cc4b7a9723",
+      "userName": "gatorr",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "11"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "15"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "12"
+        }
+      ],
+      "lbMaxVol": 6690164.368293,
+      "lbMaxPnl": 1438513.0748760947,
+      "lbRoiPct": 21.5,
+      "tradeCount": 500,
+      "tradeCount7d": 14,
+      "tradeCount30d": 184,
+      "tradesPerDay30d": 6.13,
+      "daysSinceLastTrade": 0.7,
+      "uniqueMarkets": 324,
+      "top3Markets": [
+        {
+          "title": "Mavericks vs. Cavaliers: O/U 235.5",
+          "trades": 13
+        },
+        {
+          "title": "Cavaliers vs. Nets",
+          "trades": 8
+        },
+        {
+          "title": "Spread: Pelicans (-11.5)",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.634,
+        "crypto": 0.018,
+        "other": 0.33,
+        "macro": 0.012,
+        "geopolitics": 0.006
+      },
+      "buyShare": 0.992,
+      "sellShare": 0.008,
+      "medianTradeUsdc": 6301.06,
+      "p90TradeUsdc": 31029.05,
+      "realizedRoundTripPnlUsdc": -7819.41,
+      "roundTripCoverageMarkets": 2,
+      "notes": []
+    },
+    {
+      "wallet": "0x83d22814af497297b3023897a6e3a25cfcf7d196",
+      "userName": "NorthBalticMan9",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "20"
+        }
+      ],
+      "lbMaxVol": 386409.559996,
+      "lbMaxPnl": 88470.52440292994,
+      "lbRoiPct": 22.9,
+      "tradeCount": 500,
+      "tradeCount7d": 51,
+      "tradeCount30d": 290,
+      "tradesPerDay30d": 9.67,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 184,
+      "top3Markets": [
+        {
+          "title": "Will Stade de Reims win on 2026-03-09?",
+          "trades": 19
+        },
+        {
+          "title": "Will US Sassuolo Calcio win on 2026-03-09?",
+          "trades": 15
+        },
+        {
+          "title": "Will CD Tolima win on 2026-03-23?",
+          "trades": 13
+        }
+      ],
+      "categoryMix": {
+        "other": 0.932,
+        "sports": 0.068
+      },
+      "buyShare": 0.998,
+      "sellShare": 0.002,
+      "medianTradeUsdc": 1926.44,
+      "p90TradeUsdc": 16467.12,
+      "realizedRoundTripPnlUsdc": -3821.5,
+      "roundTripCoverageMarkets": 1,
+      "notes": []
+    },
+    {
+      "wallet": "0xd4f904ecac0ff22ac6601de6b972d4f8b6b4f619",
+      "userName": "avenger",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "6"
+        }
+      ],
+      "lbMaxVol": 2050,
+      "lbMaxPnl": 208631.11823375613,
+      "lbRoiPct": 10177.13,
+      "tradeCount": 500,
+      "tradeCount7d": 19,
+      "tradeCount30d": 49,
+      "tradesPerDay30d": 1.63,
+      "daysSinceLastTrade": 1.3,
+      "uniqueMarkets": 218,
+      "top3Markets": [
+        {
+          "title": "Will Elon Musk post 240-259 tweets from December 9 to December 16, 2025?",
+          "trades": 18
+        },
+        {
+          "title": "Will Elon Musk post 320-339 tweets from December 16 to December 23, 2025?",
+          "trades": 17
+        },
+        {
+          "title": "Will Elon Musk post 340-359 tweets from December 16 to December 23, 2025?",
+          "trades": 17
+        }
+      ],
+      "categoryMix": {
+        "other": 0.44,
+        "crypto": 0.234,
+        "sports": 0.024,
+        "awards": 0.274,
+        "geopolitics": 0.016,
+        "politics": 0.012
+      },
+      "buyShare": 0.85,
+      "sellShare": 0.15,
+      "medianTradeUsdc": 423.6,
+      "p90TradeUsdc": 5198.92,
+      "realizedRoundTripPnlUsdc": -93343.78,
+      "roundTripCoverageMarkets": 20,
+      "notes": []
+    },
+    {
+      "wallet": "0xf195721ad850377c96cd634457c70cd9e8308057",
+      "userName": "lo34567Taipe",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "10"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "11"
+        }
+      ],
+      "lbMaxVol": 19.75,
+      "lbMaxPnl": 1460111.1735041854,
+      "lbRoiPct": 7392817.64,
+      "tradeCount": 254,
+      "tradeCount7d": 0,
+      "tradeCount30d": 80,
+      "tradesPerDay30d": 2.67,
+      "daysSinceLastTrade": 11.6,
+      "uniqueMarkets": 54,
+      "top3Markets": [
+        {
+          "title": "Will the Vegas Golden Knights win the 2026 NHL Stanley Cup?",
+          "trades": 29
+        },
+        {
+          "title": "Will the Tampa Bay Lightning win the 2026 NHL Stanley Cup?",
+          "trades": 20
+        },
+        {
+          "title": "Sharks vs. Oilers",
+          "trades": 15
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.343,
+        "other": 0.657
+      },
+      "buyShare": 0.89,
+      "sellShare": 0.11,
+      "medianTradeUsdc": 7104.34,
+      "p90TradeUsdc": 55520.8,
+      "realizedRoundTripPnlUsdc": -99416.04,
+      "roundTripCoverageMarkets": 5,
+      "notes": []
+    },
+    {
+      "wallet": "0x05f6027ceb5b8db472bb716d3ed574c199118cec",
+      "userName": "islav900",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "23"
+        }
+      ],
+      "lbMaxVol": 179999.98726599998,
+      "lbMaxPnl": 79199.994397,
+      "lbRoiPct": 44,
+      "tradeCount": 97,
+      "tradeCount7d": 0,
+      "tradeCount30d": 62,
+      "tradesPerDay30d": 2.07,
+      "daysSinceLastTrade": 15,
+      "uniqueMarkets": 36,
+      "top3Markets": [
+        {
+          "title": "Thunder vs. 76ers",
+          "trades": 14
+        },
+        {
+          "title": "Aston Villa FC vs. Lille OSC: Both Teams to Score",
+          "trades": 8
+        },
+        {
+          "title": "Spurs vs. Grizzlies",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "other": 0.784,
+        "sports": 0.216
+      },
+      "buyShare": 0.794,
+      "sellShare": 0.206,
+      "medianTradeUsdc": 20888.68,
+      "p90TradeUsdc": 100800,
+      "realizedRoundTripPnlUsdc": -101926.31,
+      "roundTripCoverageMarkets": 8,
+      "notes": []
+    },
+    {
+      "wallet": "0xdb27bf2ac5d428a9c63dbc914611036855a6c56e",
+      "userName": "DrPufferfish",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "7"
+        }
+      ],
+      "lbMaxVol": 1037246.800937,
+      "lbMaxPnl": 186533.84998013818,
+      "lbRoiPct": 17.98,
+      "tradeCount": 500,
+      "tradeCount7d": 47,
+      "tradeCount30d": 87,
+      "tradesPerDay30d": 2.9,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 302,
+      "top3Markets": [
+        {
+          "title": "Will Rory McIlroy win the 2026 Masters tournament?",
+          "trades": 18
+        },
+        {
+          "title": "Thunder vs. Raptors",
+          "trades": 12
+        },
+        {
+          "title": "Indian Premier League: Sunrisers Hyderabad vs Rajasthan Royals",
+          "trades": 10
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.572,
+        "other": 0.428
+      },
+      "buyShare": 0.97,
+      "sellShare": 0.03,
+      "medianTradeUsdc": 5038.3,
+      "p90TradeUsdc": 47738.02,
+      "realizedRoundTripPnlUsdc": -255571.02,
+      "roundTripCoverageMarkets": 3,
+      "notes": []
+    },
+    {
+      "wallet": "0x2785e7022dc20757108204b13c08cea8613b70ae",
+      "userName": "poorsob",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "12"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "14"
+        }
+      ],
+      "lbMaxVol": 43146000.182977,
+      "lbMaxPnl": 124750.71428575888,
+      "lbRoiPct": 0.29,
+      "tradeCount": 209,
+      "tradeCount7d": 9,
+      "tradeCount30d": 49,
+      "tradesPerDay30d": 1.63,
+      "daysSinceLastTrade": 1.7,
+      "uniqueMarkets": 100,
+      "top3Markets": [
+        {
+          "title": "Will Israel launch a major ground offensive in Lebanon by March 31?",
+          "trades": 10
+        },
+        {
+          "title": "US forces enter Iran by April 30?",
+          "trades": 8
+        },
+        {
+          "title": "Will Israel take military action in Gaza on March 18, 2026?",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "geopolitics": 0.172,
+        "other": 0.455,
+        "macro": 0.019,
+        "politics": 0.124,
+        "crypto": 0.22,
+        "entertainment": 0.01
+      },
+      "buyShare": 0.876,
+      "sellShare": 0.124,
+      "medianTradeUsdc": 10790.23,
+      "p90TradeUsdc": 256286.88,
+      "realizedRoundTripPnlUsdc": -153670.13,
+      "roundTripCoverageMarkets": 9,
+      "notes": []
+    },
+    {
+      "wallet": "0x5d189e816b4149be00977c1a3c8840374aec4972",
+      "userName": "gloriafoster",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "12"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "9"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "15"
+        }
+      ],
+      "lbMaxVol": 42119819.752667,
+      "lbMaxPnl": -2267.280324328424,
+      "lbRoiPct": -0.07,
+      "tradeCount": 261,
+      "tradeCount7d": 1,
+      "tradeCount30d": 46,
+      "tradesPerDay30d": 1.53,
+      "daysSinceLastTrade": 0.4,
+      "uniqueMarkets": 108,
+      "top3Markets": [
+        {
+          "title": "Nuggets vs. Grizzlies",
+          "trades": 33
+        },
+        {
+          "title": "Will Oprah Winfrey win the 2028 Democratic presidential nomination?",
+          "trades": 11
+        },
+        {
+          "title": "Will Andrew Yang win the 2028 Democratic presidential nomination?",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "other": 0.732,
+        "sports": 0.165,
+        "awards": 0.031,
+        "politics": 0.023,
+        "macro": 0.046,
+        "crypto": 0.004
+      },
+      "buyShare": 0.897,
+      "sellShare": 0.103,
+      "medianTradeUsdc": 312.55,
+      "p90TradeUsdc": 3600,
+      "realizedRoundTripPnlUsdc": -33925.55,
+      "roundTripCoverageMarkets": 10,
+      "notes": []
+    },
+    {
+      "wallet": "0xd99f3bec8e060ada0aef0c4057695dd5bc22fcdc",
+      "userName": "BakerMcKenzie",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "16"
+        }
+      ],
+      "lbMaxVol": 41332605.97378,
+      "lbMaxPnl": 57705.927900778355,
+      "lbRoiPct": 0.14,
+      "tradeCount": 40,
+      "tradeCount7d": 33,
+      "tradeCount30d": 40,
+      "tradesPerDay30d": 1.33,
+      "daysSinceLastTrade": 0.4,
+      "uniqueMarkets": 12,
+      "top3Markets": [
+        {
+          "title": "Iran x Israel/US conflict ends by April 7?",
+          "trades": 9
+        },
+        {
+          "title": "Iran x Israel/US conflict ends by April 15?",
+          "trades": 5
+        },
+        {
+          "title": "Will the Iranian regime fall by April 30?",
+          "trades": 4
+        }
+      ],
+      "categoryMix": {
+        "geopolitics": 0.4,
+        "politics": 0.05,
+        "other": 0.425,
+        "macro": 0.1,
+        "crypto": 0.025
+      },
+      "buyShare": 0.8,
+      "sellShare": 0.2,
+      "medianTradeUsdc": 3868.93,
+      "p90TradeUsdc": 341488.54,
+      "realizedRoundTripPnlUsdc": -4465559.68,
+      "roundTripCoverageMarkets": 7,
+      "notes": []
+    },
+    {
+      "wallet": "0x9ac2536ed93f8fe8ce91d9662b03bcbb19ccbe3d",
+      "userName": "0x9ac2536ed93f8fe8ce91d9662b03bcbb19ccbe3d",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "24"
+        },
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "24"
+        }
+      ],
+      "lbMaxVol": 1691943.977951,
+      "lbMaxPnl": 75964.4642139358,
+      "lbRoiPct": 4.49,
+      "tradeCount": 39,
+      "tradeCount7d": 39,
+      "tradeCount30d": 39,
+      "tradesPerDay30d": 1.3,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 3,
+      "top3Markets": [
+        {
+          "title": "Barcelona Open: Andrey Rublev vs Hamad Medjedovic",
+          "trades": 17
+        },
+        {
+          "title": "Will France win the 2026 FIFA World Cup?",
+          "trades": 12
+        },
+        {
+          "title": "Will Spain win the 2026 FIFA World Cup?",
+          "trades": 10
+        }
+      ],
+      "categoryMix": {
+        "other": 1
+      },
+      "buyShare": 0.564,
+      "sellShare": 0.436,
+      "medianTradeUsdc": 3776.77,
+      "p90TradeUsdc": 26356.86,
+      "realizedRoundTripPnlUsdc": 309600.75,
+      "roundTripCoverageMarkets": 3,
+      "notes": []
+    },
+    {
+      "wallet": "0x7d432573460a076b35deb3e1eb15c09fde236d78",
+      "userName": "tongyiju",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "25"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 75047.99026848446,
+      "lbRoiPct": 0,
+      "tradeCount": 32,
+      "tradeCount7d": 1,
+      "tradeCount30d": 28,
+      "tradesPerDay30d": 0.93,
+      "daysSinceLastTrade": 5.7,
+      "uniqueMarkets": 17,
+      "top3Markets": [
+        {
+          "title": "US forces enter Iran by March 31?",
+          "trades": 5
+        },
+        {
+          "title": "US forces enter Iran by December 31?",
+          "trades": 3
+        },
+        {
+          "title": "Will WTI Crude Oil (WTI) hit (HIGH) $110 in April?",
+          "trades": 3
+        }
+      ],
+      "categoryMix": {
+        "geopolitics": 0.219,
+        "politics": 0.094,
+        "other": 0.594,
+        "crypto": 0.094
+      },
+      "buyShare": 0.781,
+      "sellShare": 0.219,
+      "medianTradeUsdc": 5124.5,
+      "p90TradeUsdc": 283200.25,
+      "realizedRoundTripPnlUsdc": -164452.85,
+      "roundTripCoverageMarkets": 3,
+      "notes": []
+    },
+    {
+      "wallet": "0xc35049bc7b6bd28a49a40b261466ca91aad63669",
+      "userName": "ScroooogeMcDuck",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "17"
+        }
+      ],
+      "lbMaxVol": 315409.021383,
+      "lbMaxPnl": 94725.42677387444,
+      "lbRoiPct": 30.03,
+      "tradeCount": 500,
+      "tradeCount7d": 30,
+      "tradeCount30d": 55,
+      "tradesPerDay30d": 1.83,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 332,
+      "top3Markets": [
+        {
+          "title": "LoL: Galions Sharks vs French Flair - Game 1 Winner",
+          "trades": 8
+        },
+        {
+          "title": "Will FC Barcelona win on 2026-01-11?",
+          "trades": 7
+        },
+        {
+          "title": "Lakers vs. Suns",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "other": 0.746,
+        "sports": 0.16,
+        "awards": 0.094
+      },
+      "buyShare": 0.998,
+      "sellShare": 0.002,
+      "medianTradeUsdc": 1840,
+      "p90TradeUsdc": 15414.74,
+      "realizedRoundTripPnlUsdc": -23.51,
+      "roundTripCoverageMarkets": 1,
+      "notes": []
+    },
+    {
+      "wallet": "0x59a0744db1f39ff3afccd175f80e6e8dfc239a09",
+      "userName": "Blessed-Sunshine",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "17"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "16"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 1202926.5392165454,
+      "lbRoiPct": 0,
+      "tradeCount": 62,
+      "tradeCount7d": 0,
+      "tradeCount30d": 30,
+      "tradesPerDay30d": 1,
+      "daysSinceLastTrade": 21.8,
+      "uniqueMarkets": 30,
+      "top3Markets": [
+        {
+          "title": "Spread: Raptors (-4.5)",
+          "trades": 6
+        },
+        {
+          "title": "Hawks vs. Rockets",
+          "trades": 5
+        },
+        {
+          "title": "Pacers vs. Knicks: O/U 222.5",
+          "trades": 5
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.839,
+        "other": 0.161
+      },
+      "buyShare": 0.984,
+      "sellShare": 0.016,
+      "medianTradeUsdc": 14079.9,
+      "p90TradeUsdc": 88570.84,
+      "realizedRoundTripPnlUsdc": -228.48,
+      "roundTripCoverageMarkets": 1,
+      "notes": []
+    },
+    {
+      "wallet": "0x2663daca3cecf3767ca1c3b126002a8578a8ed1f",
+      "userName": "Q96s3kwozynxpau",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "10"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "9"
+        }
+      ],
+      "lbMaxVol": 51474440.834166996,
+      "lbMaxPnl": 76879.27066738921,
+      "lbRoiPct": 0.14,
+      "tradeCount": 500,
+      "tradeCount7d": 1,
+      "tradeCount30d": 18,
+      "tradesPerDay30d": 0.6,
+      "daysSinceLastTrade": 4.8,
+      "uniqueMarkets": 108,
+      "top3Markets": [
+        {
+          "title": "Will Germany win the 2026 FIFA World Cup?",
+          "trades": 38
+        },
+        {
+          "title": "Will Portugal win the 2026 FIFA World Cup?",
+          "trades": 36
+        },
+        {
+          "title": "Will the Los Angeles Rams win Super Bowl 2026?",
+          "trades": 33
+        }
+      ],
+      "categoryMix": {
+        "other": 0.942,
+        "politics": 0.032,
+        "sports": 0.026
+      },
+      "buyShare": 0.02,
+      "sellShare": 0.98,
+      "medianTradeUsdc": 33.28,
+      "p90TradeUsdc": 247.37,
+      "realizedRoundTripPnlUsdc": 143.65,
+      "roundTripCoverageMarkets": 2,
+      "notes": []
+    },
+    {
+      "wallet": "0x02e7f29f3e612a95a9ccca7131ce7dd5d56b59e5",
+      "userName": "CAR-GangVersion",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "9"
+        }
+      ],
+      "lbMaxVol": 2820489.62,
+      "lbMaxPnl": 1404.834950000062,
+      "lbRoiPct": 0.05,
+      "tradeCount": 13,
+      "tradeCount7d": 0,
+      "tradeCount30d": 13,
+      "tradesPerDay30d": 0.43,
+      "daysSinceLastTrade": 17.2,
+      "uniqueMarkets": 5,
+      "top3Markets": [
+        {
+          "title": "Will the Iranian regime fall by March 31?",
+          "trades": 5
+        },
+        {
+          "title": "US forces enter Iran by March 31?",
+          "trades": 3
+        },
+        {
+          "title": "Netanyahu out by March 31?",
+          "trades": 3
+        }
+      ],
+      "categoryMix": {
+        "other": 0.923,
+        "geopolitics": 0.077
+      },
+      "buyShare": 0.923,
+      "sellShare": 0.077,
+      "medianTradeUsdc": 46271.14,
+      "p90TradeUsdc": 840449.39,
+      "realizedRoundTripPnlUsdc": -1104112.88,
+      "roundTripCoverageMarkets": 1,
+      "notes": []
+    },
+    {
+      "wallet": "0x2eb10cb8596bf8c8ef409f72cfb5eb6438054ea4",
+      "userName": "Lacosteboy",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "1"
+        },
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "13"
+        }
+      ],
+      "lbMaxVol": 2315243.333219,
+      "lbMaxPnl": 486731.6579171057,
+      "lbRoiPct": 21.02,
+      "tradeCount": 29,
+      "tradeCount7d": 29,
+      "tradeCount30d": 29,
+      "tradesPerDay30d": 0.97,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 3,
+      "top3Markets": [
+        {
+          "title": "Will 1. FC Union Berlin win on 2026-04-18?",
+          "trades": 16
+        },
+        {
+          "title": "Will RB Leipzig win on 2026-04-18?",
+          "trades": 11
+        },
+        {
+          "title": "Will Brentford FC win on 2026-04-18?",
+          "trades": 2
+        }
+      ],
+      "categoryMix": {
+        "other": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 16701.33,
+      "p90TradeUsdc": 143173,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x2a2c53bd278c04da9962fcf96490e17f3dfb9bc1",
+      "userName": "0x2a2C53bD278c04DA9962Fcf96490E17F3DfB9Bc1-1772479215461",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "5"
+        },
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "2"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "5"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "1"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "5"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "1"
+        }
+      ],
+      "lbMaxVol": 114393232.30649203,
+      "lbMaxPnl": 2521392.353862136,
+      "lbRoiPct": 2.2,
+      "tradeCount": 500,
+      "tradeCount7d": 432,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 172,
+      "top3Markets": [
+        {
+          "title": "Rolex Monte Carlo Masters: Carlos Alcaraz vs Jannik Sinner",
+          "trades": 36
+        },
+        {
+          "title": "Will Rory McIlroy win the 2026 Masters tournament?",
+          "trades": 30
+        },
+        {
+          "title": "Warriors vs. Suns",
+          "trades": 24
+        }
+      ],
+      "categoryMix": {
+        "other": 0.656,
+        "awards": 0.04,
+        "sports": 0.296,
+        "crypto": 0.008
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 2267.06,
+      "p90TradeUsdc": 40456.54,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x6a72f61820b26b1fe4d956e17b6dc2a1ea3033ee",
+      "userName": "kch123",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "9"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "16"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "19"
+        }
+      ],
+      "lbMaxVol": 15526303.954105,
+      "lbMaxPnl": 1206074.4159551375,
+      "lbRoiPct": 6.66,
+      "tradeCount": 500,
+      "tradeCount7d": 195,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 1.6,
+      "uniqueMarkets": 111,
+      "top3Markets": [
+        {
+          "title": "Oilers vs. Utah",
+          "trades": 31
+        },
+        {
+          "title": "Avalanche vs. Flames",
+          "trades": 16
+        },
+        {
+          "title": "Oilers vs. Kings",
+          "trades": 15
+        }
+      ],
+      "categoryMix": {
+        "other": 0.908,
+        "sports": 0.092
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 320.75,
+      "p90TradeUsdc": 19011.02,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xa71093cafc0c099b4ccab24c3cb8018d817923c4",
+      "userName": "Talvez10",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "10"
+        }
+      ],
+      "lbMaxVol": 212998.80429499998,
+      "lbMaxPnl": 164685.92943863742,
+      "lbRoiPct": 77.32,
+      "tradeCount": 500,
+      "tradeCount7d": 76,
+      "tradeCount30d": 415,
+      "tradesPerDay30d": 13.83,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 323,
+      "top3Markets": [
+        {
+          "title": "Will Real Sociedad de Fútbol win on 2026-04-11?",
+          "trades": 8
+        },
+        {
+          "title": "Oilers vs. Sharks",
+          "trades": 7
+        },
+        {
+          "title": "Predators vs. Kings",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "other": 0.66,
+        "sports": 0.34
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 6947.54,
+      "p90TradeUsdc": 35937.76,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x38f0b76ed812c24166a4f6293f991ac4b9972768",
+      "userName": "initial77a",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "12"
+        }
+      ],
+      "lbMaxVol": 350800.71108499996,
+      "lbMaxPnl": 137328.75285526688,
+      "lbRoiPct": 39.15,
+      "tradeCount": 108,
+      "tradeCount7d": 94,
+      "tradeCount30d": 108,
+      "tradesPerDay30d": 3.6,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 48,
+      "top3Markets": [
+        {
+          "title": "RC Celta de Vigo vs. Real Oviedo: O/U 2.5",
+          "trades": 9
+        },
+        {
+          "title": "Cruzeiro EC vs. Grêmio FBPA: O/U 2.5",
+          "trades": 4
+        },
+        {
+          "title": "Will TSG 1899 Hoffenheim win on 2026-04-18?",
+          "trades": 4
+        }
+      ],
+      "categoryMix": {
+        "other": 0.944,
+        "sports": 0.056
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 3839.16,
+      "p90TradeUsdc": 17730,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xe934f2d7d6358c6c86bfdd5848f1e90412e9640b",
+      "userName": "Feveey",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "16"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 121355.72150094016,
+      "lbRoiPct": 0,
+      "tradeCount": 76,
+      "tradeCount7d": 10,
+      "tradeCount30d": 76,
+      "tradesPerDay30d": 2.53,
+      "daysSinceLastTrade": 0.9,
+      "uniqueMarkets": 39,
+      "top3Markets": [
+        {
+          "title": "Spurs vs. Clippers",
+          "trades": 10
+        },
+        {
+          "title": "Spurs vs. Nuggets",
+          "trades": 8
+        },
+        {
+          "title": "Spread: Magic (-7.5)",
+          "trades": 5
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.697,
+        "other": 0.289,
+        "awards": 0.013
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 30121.71,
+      "p90TradeUsdc": 149772.46,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xf5f92940519a72da460b1c2a606bc1230f0e87b0",
+      "userName": "kekasaur",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "19"
+        }
+      ],
+      "lbMaxVol": 332777.468093,
+      "lbMaxPnl": 92004.73184130571,
+      "lbRoiPct": 27.65,
+      "tradeCount": 416,
+      "tradeCount7d": 55,
+      "tradeCount30d": 295,
+      "tradesPerDay30d": 9.83,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 149,
+      "top3Markets": [
+        {
+          "title": "Will Macarthur FC win on 2026-04-02?",
+          "trades": 18
+        },
+        {
+          "title": "Will CA Platense win on 2026-03-10?",
+          "trades": 14
+        },
+        {
+          "title": "Will Colorado Rapids SC win on 2026-03-21?",
+          "trades": 12
+        }
+      ],
+      "categoryMix": {
+        "other": 0.923,
+        "sports": 0.077
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 1024.68,
+      "p90TradeUsdc": 8893.01,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xc8075693f48668a264b9fa313b47f52712fcc12b",
+      "userName": "texaskid",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "PNL",
+          "rank": "21"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "12"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "13"
+        }
+      ],
+      "lbMaxVol": 12591360.924953999,
+      "lbMaxPnl": 1363215.9250561765,
+      "lbRoiPct": 10.57,
+      "tradeCount": 500,
+      "tradeCount7d": 92,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.1,
+      "uniqueMarkets": 235,
+      "top3Markets": [
+        {
+          "title": "Rockets vs. Grizzlies: O/U 228.5",
+          "trades": 20
+        },
+        {
+          "title": "Spread: Nuggets (-11.5)",
+          "trades": 17
+        },
+        {
+          "title": "Spread: Atlanta Braves (-1.5)",
+          "trades": 13
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.474,
+        "other": 0.526
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 1978.34,
+      "p90TradeUsdc": 26834.24,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x507e52ef684ca2dd91f90a9d26d149dd3288beae",
+      "userName": "GamblingIsAllYouNeed",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "3"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "22"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "5"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "5"
+        }
+      ],
+      "lbMaxVol": 61103888.937028,
+      "lbMaxPnl": 970554.8664877043,
+      "lbRoiPct": 1.36,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 98,
+      "top3Markets": [
+        {
+          "title": "Indian Premier League: Sunrisers Hyderabad vs Chennai Super Kings",
+          "trades": 56
+        },
+        {
+          "title": "Indian Premier League: Royal Challengers Bangalore vs Delhi Capitals",
+          "trades": 47
+        },
+        {
+          "title": "Counter-Strike: FURIA vs Vitality - Map 1 Winner",
+          "trades": 22
+        }
+      ],
+      "categoryMix": {
+        "other": 0.668,
+        "awards": 0.316,
+        "sports": 0.016
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 136.39,
+      "p90TradeUsdc": 872.28,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x204f72f35326db932158cba6adff0b9a1da95e14",
+      "userName": "swisstony",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "4"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "9"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "6"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "14"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "7"
+        }
+      ],
+      "lbMaxVol": 58266878.12314503,
+      "lbMaxPnl": 1505728.1164176287,
+      "lbRoiPct": 2.27,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 148,
+      "top3Markets": [
+        {
+          "title": "Will Le Havre AC win on 2026-04-18?",
+          "trades": 21
+        },
+        {
+          "title": "Spread: Cavaliers (-8.5)",
+          "trades": 20
+        },
+        {
+          "title": "Kansas City Royals vs. New York Yankees: O/U 8.5",
+          "trades": 14
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.23,
+        "other": 0.77
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 21.56,
+      "p90TradeUsdc": 301.04,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x2005d16a84ceefa912d4e380cd32e7ff827875ea",
+      "userName": "RN1",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "5"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "6"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "4"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "7"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "2"
+        }
+      ],
+      "lbMaxVol": 91449147.39558102,
+      "lbMaxPnl": 2071907.4599424088,
+      "lbRoiPct": 2.22,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 200,
+      "top3Markets": [
+        {
+          "title": "Raptors vs. Cavaliers: O/U 219.5",
+          "trades": 30
+        },
+        {
+          "title": "Porsche Tennis Grand Prix: Elena Rybakina vs Mirra Andreeva",
+          "trades": 13
+        },
+        {
+          "title": "Raptors vs. Cavaliers",
+          "trades": 11
+        }
+      ],
+      "categoryMix": {
+        "other": 0.896,
+        "sports": 0.092,
+        "awards": 0.012
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 23.45,
+      "p90TradeUsdc": 480.73,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x37c1874a60d348903594a96703e0507c518fc53a",
+      "userName": "CemeterySun",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "8"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "15"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "24"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "10"
+        }
+      ],
+      "lbMaxVol": 49057832.16938599,
+      "lbMaxPnl": 855794.0902336386,
+      "lbRoiPct": 1.74,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 129,
+      "top3Markets": [
+        {
+          "title": "Will Austin FC win on 2026-04-18?",
+          "trades": 60
+        },
+        {
+          "title": "Warriors vs. Clippers",
+          "trades": 32
+        },
+        {
+          "title": "Hornets vs. Magic",
+          "trades": 21
+        }
+      ],
+      "categoryMix": {
+        "other": 0.524,
+        "sports": 0.476
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 229.07,
+      "p90TradeUsdc": 2499.05,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xfe787d2da716d60e8acff57fb87eb13cd4d10319",
+      "userName": "ferrariChampions2026",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "11"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "8"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "8"
+        }
+      ],
+      "lbMaxVol": 57250161.96211299,
+      "lbMaxPnl": 393496.33215461415,
+      "lbRoiPct": 0.69,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 125,
+      "top3Markets": [
+        {
+          "title": "Guangdong Southern Tigers vs. Fujian Sturgeons",
+          "trades": 32
+        },
+        {
+          "title": "Jiangsu Dragons vs. Shanxi Loongs",
+          "trades": 30
+        },
+        {
+          "title": "Raptors vs. Cavaliers",
+          "trades": 21
+        }
+      ],
+      "categoryMix": {
+        "other": 0.942,
+        "sports": 0.058
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 70.62,
+      "p90TradeUsdc": 1199.97,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x4133bcbad1d9c41de776646696f41c34d0a65e70",
+      "userName": "EF203F2IPFC2ICP20W-CP3",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "14"
+        }
+      ],
+      "lbMaxVol": 2290758.387195001,
+      "lbMaxPnl": 26376.78008081409,
+      "lbRoiPct": 1.15,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 205,
+      "top3Markets": [
+        {
+          "title": "FC Lorient vs. Olympique de Marseille: O/U 2.5",
+          "trades": 13
+        },
+        {
+          "title": "Eintracht Frankfurt vs. RB Leipzig: O/U 3.5",
+          "trades": 10
+        },
+        {
+          "title": "FC Lorient vs. Olympique de Marseille: O/U 3.5",
+          "trades": 9
+        }
+      ],
+      "categoryMix": {
+        "other": 0.8,
+        "sports": 0.2
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 29.37,
+      "p90TradeUsdc": 657.63,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x9b9ff79cdc3c6dc3abbc494b06ea577567bea26a",
+      "userName": "BigFishSushiChief",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "18"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "22"
+        }
+      ],
+      "lbMaxVol": 12711780.811869,
+      "lbMaxPnl": 5652.709907794286,
+      "lbRoiPct": 0.04,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 16,
+      "top3Markets": [
+        {
+          "title": "Will the Philadelphia 76ers win the 2026 NBA Finals?",
+          "trades": 32
+        },
+        {
+          "title": "Will the Minnesota Timberwolves win the 2026 NBA Finals?",
+          "trades": 32
+        },
+        {
+          "title": "Will the Toronto Raptors win the 2026 NBA Finals?",
+          "trades": 32
+        }
+      ],
+      "categoryMix": {
+        "sports": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 20.96,
+      "p90TradeUsdc": 52.84,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xb27bc932bf8110d8f78e55da7d5f0497a18b5b82",
+      "userName": "0xB27BC932bf8110D8F78e55da7d5f0497A18B5b82-1772569391020",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "DAY",
+          "orderBy": "VOL",
+          "rank": "19"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "24"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "25"
+        }
+      ],
+      "lbMaxVol": 33029932.042526998,
+      "lbMaxPnl": 482180.21158760804,
+      "lbRoiPct": 1.46,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0.2,
+      "uniqueMarkets": 159,
+      "top3Markets": [
+        {
+          "title": "Bitcoin Up or Down - April 16, 11:45AM-11:50AM ET",
+          "trades": 25
+        },
+        {
+          "title": "Bitcoin Up or Down - April 16, 12:05PM-12:10PM ET",
+          "trades": 19
+        },
+        {
+          "title": "Bitcoin Up or Down - April 16, 12:45PM-12:50PM ET",
+          "trades": 16
+        }
+      ],
+      "categoryMix": {
+        "crypto": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 54.27,
+      "p90TradeUsdc": 195.32,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x492442eab586f242b53bda933fd5de859c8a3782",
+      "userName": "0x492442EaB586F242B53bDa933fD5dE859c8A3782-1766317541188",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "1"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "1"
+        }
+      ],
+      "lbMaxVol": 27970686.499865998,
+      "lbMaxPnl": 7434236.192479499,
+      "lbRoiPct": 25.48,
+      "tradeCount": 500,
+      "tradeCount7d": 26,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 2.7,
+      "uniqueMarkets": 118,
+      "top3Markets": [
+        {
+          "title": "Spread: Bulls (-6.5)",
+          "trades": 15
+        },
+        {
+          "title": "Connecticut Huskies vs. Michigan Wolverines: O/U 146.5",
+          "trades": 14
+        },
+        {
+          "title": "Spread: Heat (-18.5)",
+          "trades": 14
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.636,
+        "other": 0.364
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 7279.82,
+      "p90TradeUsdc": 68913.53,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x02227b8f5a9636e895607edd3185ed6ee5598ff7",
+      "userName": "HorizonSplendidView",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "2"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "2"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 4598456.548919337,
+      "lbRoiPct": 0,
+      "tradeCount": 206,
+      "tradeCount7d": 0,
+      "tradeCount30d": 0,
+      "tradesPerDay30d": 0,
+      "daysSinceLastTrade": 38,
+      "uniqueMarkets": 20,
+      "top3Markets": [
+        {
+          "title": "Will Liverpool FC win on 2026-02-08?",
+          "trades": 35
+        },
+        {
+          "title": "Will Manchester City FC win on 2026-02-21?",
+          "trades": 21
+        },
+        {
+          "title": "Will Paris Saint-Germain FC win on 2026-03-11?",
+          "trades": 17
+        }
+      ],
+      "categoryMix": {
+        "other": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 19199.78,
+      "p90TradeUsdc": 85000,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xefbc5fec8d7b0acdc8911bdd9a98d6964308f9a2",
+      "userName": "reachingthesky",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "3"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "3"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 3742635.156562068,
+      "lbRoiPct": 0,
+      "tradeCount": 65,
+      "tradeCount7d": 0,
+      "tradeCount30d": 0,
+      "tradesPerDay30d": 0,
+      "daysSinceLastTrade": 31,
+      "uniqueMarkets": 8,
+      "top3Markets": [
+        {
+          "title": "Will Eintracht Frankfurt win on 2026-03-14?",
+          "trades": 22
+        },
+        {
+          "title": "Will Paris Saint-Germain FC win on 2026-03-17?",
+          "trades": 16
+        },
+        {
+          "title": "Will Rayo Vallecano de Madrid win on 2026-03-16?",
+          "trades": 10
+        }
+      ],
+      "categoryMix": {
+        "other": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 23000,
+      "p90TradeUsdc": 141420.24,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xee613b3fc183ee44f9da9c05f53e2da107e3debf",
+      "userName": "sovereign2013",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "7"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "25"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "8"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "13"
+        }
+      ],
+      "lbMaxVol": 44872225.90579,
+      "lbMaxPnl": 1854769.202186935,
+      "lbRoiPct": 4.12,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 134,
+      "top3Markets": [
+        {
+          "title": "Porsche Tennis Grand Prix: Elena Rybakina vs Leylah Fernandez",
+          "trades": 34
+        },
+        {
+          "title": "Colorado Rockies vs. Houston Astros",
+          "trades": 22
+        },
+        {
+          "title": "Santa Cruz: Valerio Aboian vs Thiago Seyboth Wild",
+          "trades": 21
+        }
+      ],
+      "categoryMix": {
+        "other": 0.864,
+        "sports": 0.136
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 79.17,
+      "p90TradeUsdc": 1738.13,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x0720803c7cb0d0c5a928787b3b7ea148c6831cdb",
+      "userName": "pinkblanket",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "11"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 1422455.4749775468,
+      "lbRoiPct": 0,
+      "tradeCount": 167,
+      "tradeCount7d": 0,
+      "tradeCount30d": 0,
+      "tradesPerDay30d": 0,
+      "daysSinceLastTrade": 39,
+      "uniqueMarkets": 16,
+      "top3Markets": [
+        {
+          "title": "Will RB Leipzig win on 2026-02-21?",
+          "trades": 41
+        },
+        {
+          "title": "Will Getafe CF win on 2026-02-22?",
+          "trades": 20
+        },
+        {
+          "title": "Will SS Lazio win on 2026-02-21?",
+          "trades": 19
+        }
+      ],
+      "categoryMix": {
+        "other": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 13555.42,
+      "p90TradeUsdc": 168524.4,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xead152b855effa6b5b5837f53b24c0756830c76a",
+      "userName": "elkmonkey",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "18"
+        },
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "17"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "17"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "17"
+        }
+      ],
+      "lbMaxVol": 39929103.15211301,
+      "lbMaxPnl": 1195030.4374676761,
+      "lbRoiPct": 2.99,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 75,
+      "top3Markets": [
+        {
+          "title": "Rockets vs. Lakers",
+          "trades": 50
+        },
+        {
+          "title": "Will Chelsea FC win on 2026-04-18?",
+          "trades": 42
+        },
+        {
+          "title": "Senators vs. Hurricanes",
+          "trades": 38
+        }
+      ],
+      "categoryMix": {
+        "other": 0.834,
+        "sports": 0.166
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 10.57,
+      "p90TradeUsdc": 110.27,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x8f037a2e4fd49d11267f4ab874ab7ba745ac64d6",
+      "userName": "Anointed-Connect",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "19"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "18"
+        }
+      ],
+      "lbMaxVol": 485859.47447399993,
+      "lbMaxPnl": 1169618.991993832,
+      "lbRoiPct": 240.73,
+      "tradeCount": 500,
+      "tradeCount7d": 3,
+      "tradeCount30d": 290,
+      "tradesPerDay30d": 9.67,
+      "daysSinceLastTrade": 1.8,
+      "uniqueMarkets": 241,
+      "top3Markets": [
+        {
+          "title": "UFC Fight Night: Renato Moicano vs. Chris Duncan (Lightweight, Main Card)",
+          "trades": 38
+        },
+        {
+          "title": "Credit One Charleston Open: Shuai Zhang vs Yulia Starodubtseva",
+          "trades": 25
+        },
+        {
+          "title": "Spurs vs. Kings: O/U 233.5",
+          "trades": 7
+        }
+      ],
+      "categoryMix": {
+        "other": 0.474,
+        "sports": 0.526
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 1660.74,
+      "p90TradeUsdc": 24002.3,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xdc876e6873772d38716fda7f2452a78d426d7ab6",
+      "userName": "432614799197",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "PNL",
+          "rank": "21"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "9"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 1495977.460859552,
+      "lbRoiPct": 0,
+      "tradeCount": 500,
+      "tradeCount7d": 0,
+      "tradeCount30d": 0,
+      "tradesPerDay30d": 0,
+      "daysSinceLastTrade": 40,
+      "uniqueMarkets": 89,
+      "top3Markets": [
+        {
+          "title": "Will Sevilla FC win on 2026-03-08?",
+          "trades": 64
+        },
+        {
+          "title": "Will AC Milan win on 2026-03-08?",
+          "trades": 43
+        },
+        {
+          "title": "Will FC St. Pauli 1910 win on 2026-03-08?",
+          "trades": 35
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.354,
+        "other": 0.638,
+        "geopolitics": 0.008
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 433.57,
+      "p90TradeUsdc": 7332.99,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xeebde7a0e019a63e6b476eb425505b7b3e6eba30",
+      "userName": "Bonereaper",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "WEEK",
+          "orderBy": "VOL",
+          "rank": "21"
+        },
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "19"
+        }
+      ],
+      "lbMaxVol": 38156232.87346799,
+      "lbMaxPnl": 478430.28036292666,
+      "lbRoiPct": 1.25,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 22,
+      "top3Markets": [
+        {
+          "title": "Bitcoin Up or Down - April 18, 2:50PM-2:55PM ET",
+          "trades": 48
+        },
+        {
+          "title": "Ethereum Up or Down - April 18, 2:55PM-3:00PM ET",
+          "trades": 45
+        },
+        {
+          "title": "Bitcoin Up or Down - April 18, 2:45PM-3:00PM ET",
+          "trades": 45
+        }
+      ],
+      "categoryMix": {
+        "crypto": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 3.99,
+      "p90TradeUsdc": 21.67,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x019782cab5d844f02bafb71f512758be78579f3c",
+      "userName": "majorexploiter",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "PNL",
+          "rank": "6"
+        }
+      ],
+      "lbMaxVol": 0,
+      "lbMaxPnl": 2416975.0291252104,
+      "lbRoiPct": 0,
+      "tradeCount": 60,
+      "tradeCount7d": 0,
+      "tradeCount30d": 0,
+      "tradesPerDay30d": 0,
+      "daysSinceLastTrade": 48.1,
+      "uniqueMarkets": 3,
+      "top3Markets": [
+        {
+          "title": "Will Arsenal FC win on 2026-03-01?",
+          "trades": 35
+        },
+        {
+          "title": "Will Stade Rennais FC 1901 win on 2026-02-28?",
+          "trades": 23
+        },
+        {
+          "title": "Will Liverpool FC win on 2026-02-28?",
+          "trades": 2
+        }
+      ],
+      "categoryMix": {
+        "other": 1
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 32500,
+      "p90TradeUsdc": 130000,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0x68146921df11eab44296dc4e58025ca84741a9e7",
+      "userName": "LynxTitan",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "22"
+        }
+      ],
+      "lbMaxVol": 35662174.37944001,
+      "lbMaxPnl": 183656.47556096996,
+      "lbRoiPct": 0.51,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 37,
+      "top3Markets": [
+        {
+          "title": "Will the Utah Mammoth win the 2026 NHL Stanley Cup?",
+          "trades": 49
+        },
+        {
+          "title": "Will the Boston Bruins win the 2026 NHL Stanley Cup?",
+          "trades": 40
+        },
+        {
+          "title": "Will the Vegas Golden Knights win the 2026 NHL Stanley Cup?",
+          "trades": 38
+        }
+      ],
+      "categoryMix": {
+        "sports": 0.972,
+        "other": 0.028
+      },
+      "buyShare": 0.986,
+      "sellShare": 0.014,
+      "medianTradeUsdc": 7.63,
+      "p90TradeUsdc": 29.82,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    },
+    {
+      "wallet": "0xe1d6b51521bd4365769199f392f9818661bd907c",
+      "userName": "0xe1D6b51521Bd4365769199f392F9818661BD907",
+      "leaderboardAppearances": [
+        {
+          "timePeriod": "MONTH",
+          "orderBy": "VOL",
+          "rank": "23"
+        }
+      ],
+      "lbMaxVol": 35306656.517984994,
+      "lbMaxPnl": 507239.32644306397,
+      "lbRoiPct": 1.44,
+      "tradeCount": 500,
+      "tradeCount7d": 500,
+      "tradeCount30d": 500,
+      "tradesPerDay30d": 16.67,
+      "daysSinceLastTrade": 0,
+      "uniqueMarkets": 32,
+      "top3Markets": [
+        {
+          "title": "Ethereum Up or Down - April 18, 2:45PM-3:00PM ET",
+          "trades": 63
+        },
+        {
+          "title": "Solana Up or Down - April 18, 2:45PM-3:00PM ET",
+          "trades": 61
+        },
+        {
+          "title": "Solana Up or Down - April 18, 2:40PM-2:45PM ET",
+          "trades": 35
+        }
+      ],
+      "categoryMix": {
+        "other": 0.102,
+        "crypto": 0.898
+      },
+      "buyShare": 1,
+      "sellShare": 0,
+      "medianTradeUsdc": 13.55,
+      "p90TradeUsdc": 60.94,
+      "realizedRoundTripPnlUsdc": 0,
+      "roundTripCoverageMarkets": 0,
+      "notes": []
+    }
+  ]
+}
