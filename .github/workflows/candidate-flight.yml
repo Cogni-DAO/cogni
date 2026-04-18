@@ -227,6 +227,16 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN }}
         run: bash app-src/scripts/ci/wait-for-candidate-ready.sh
 
+      - name: Wait for in-cluster services
+        if: |
+          steps.acquire.outcome == 'success' &&
+          steps.acquire.outputs.slot_busy != 'true' &&
+          steps.ssh-setup.outputs.has_vm == 'true'
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          DEPLOY_ENVIRONMENT: candidate-a
+        run: bash app-src/scripts/ci/wait-for-in-cluster-services.sh
+
       - name: Run candidate smoke checks
         if: steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
         env:

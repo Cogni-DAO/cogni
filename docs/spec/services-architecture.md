@@ -94,6 +94,18 @@ Create a service when the code:
 
 Worker services (like `scheduler-worker`) do **not** require a product HTTP server — only a minimal health endpoint for orchestrator probes.
 
+### Configuration source of truth
+
+Service config that varies per environment (routing tables, feature flags, endpoints) belongs in the k8s overlay **ConfigMap**, not a Secret, and not in `deploy-infra.sh`. The `deploy-infra.sh` secret blocks should contain only opaque secrets (tokens, passwords, keys).
+
+Concrete rule for `scheduler-worker`:
+
+- `COGNI_NODE_ENDPOINTS` lives in `infra/k8s/overlays/<env>/scheduler-worker/kustomization.yaml` under `/data/COGNI_NODE_ENDPOINTS` with the named-key format (`operator=<url>,poly=<url>,resy=<url>,...`) that the service's boot check requires.
+- `deploy-infra.sh` must **not** write `COGNI_NODE_ENDPOINTS` into `scheduler-worker-secrets`. k8s `envFrom` applies secrets after configmaps (later-wins), so a secret-side override silently wins over the ConfigMap.
+- The GH-Actions env-level secret also named `COGNI_NODE_ENDPOINTS` is LiteLLM-flavored (UUID → billing-ingest URL) and is consumed only by Compose LiteLLM via `deploy-infra.sh`'s runtime-env file. Do not reuse that value elsewhere; rename upstream if/when the collision is worth unpicking.
+
+Same rule applies to any future in-cluster service: non-secret routing config goes in the overlay ConfigMap, gated into the flight by a kubectl rollout check (`scripts/ci/wait-for-in-cluster-services.sh`).
+
 ### Service Structure
 
 ```
