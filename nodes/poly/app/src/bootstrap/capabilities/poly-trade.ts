@@ -228,9 +228,12 @@ export function createPolyTradeCapabilityFromAdapter(
   deps: CreateFromAdapterDeps
 ): PolyTradeCapability {
   const metrics = deps.metrics ?? buildMetricsPort();
-  const loggerPort = adaptLogger(
-    deps.logger.child({ component: "poly-clob-adapter" })
-  );
+  // No `component` binding here — the real adapter binds
+  // `component: "poly-clob-adapter"` in its own constructor (PR #890). The
+  // CP4.2 executor adds `subcomponent: "copy-trade-executor"` on top. In
+  // test mode, the fake adapter doesn't bind a component, so executor log
+  // lines correctly appear without the misleading adapter label.
+  const loggerPort = adaptLogger(deps.logger);
   const executor = createClobExecutor({
     placeOrder: deps.placeOrder,
     logger: loggerPort,
@@ -350,6 +353,11 @@ export function createPolyTradeCapability(
     "poly-trade capability env validated (adapter + Privy wallet will init on first placeTrade)"
   );
 
+  // Single MetricsPort shared by the executor + adapter — both write to the
+  // same prom-client registry, so one shim is sufficient and avoids a second
+  // in-memory cache.
+  const metrics = buildMetricsPort();
+
   // Lazy-init: wrap a deferred builder so we don't pull in @polymarket/clob-client
   // until someone actually calls placeTrade().
   let cachedPlaceOrder:
@@ -367,6 +375,7 @@ export function createPolyTradeCapability(
         privy,
         host,
         logger: config.logger,
+        metrics,
       });
       cachedPlaceOrder = await initPromise;
     }
@@ -377,6 +386,7 @@ export function createPolyTradeCapability(
     placeOrder: lazyPlaceOrder,
     operatorWalletAddress,
     logger: config.logger,
+    metrics,
   });
 }
 
@@ -393,6 +403,8 @@ interface BuildRealPlaceOrderDeps {
   privy: PrivyEnv;
   host: string;
   logger: Logger;
+  /** Shared metrics shim — same instance the executor uses. */
+  metrics: MetricsPort;
 }
 
 async function buildRealPlaceOrder(
@@ -449,13 +461,12 @@ async function buildRealPlaceOrder(
   // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
   const signerAny: any = walletClient;
 
-  // The adapter's own LoggerPort + MetricsPort fields echo the same sinks the
-  // executor uses, so adapter-internal events (place/cancel/get_order) land in
-  // the same Loki stream as executor events.
-  const metricsForAdapter = buildMetricsPort();
-  const loggerForAdapter = adaptLogger(
-    deps.logger.child({ component: "poly-clob-adapter" })
-  );
+  // Adapter uses the SAME MetricsPort the executor uses (passed in via deps)
+  // so there's one Prom-shim cache per capability, not two. Adapter binds its
+  // own `component: "poly-clob-adapter"` in its constructor; the logger passed
+  // in here stays component-free so the outer executor-side binding doesn't
+  // collide.
+  const loggerForAdapter = adaptLogger(deps.logger);
   const adapter = new PolymarketClobAdapter({
     signer: signerAny,
     creds: {
@@ -466,7 +477,7 @@ async function buildRealPlaceOrder(
     funderAddress: deps.operatorWalletAddress,
     host: deps.host,
     logger: loggerForAdapter,
-    metrics: metricsForAdapter,
+    metrics: deps.metrics,
   });
 
   deps.logger.info(

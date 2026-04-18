@@ -24,18 +24,16 @@ export interface FakePolymarketClobConfig {
    * classification (message containing "CLOB rejected order" → rejected).
    */
   rejectWith?: Error;
-  /**
-   * Optional hook fired before the receipt/error decision. Lets tests assert
-   * on the exact intent shape without wrapping the adapter.
-   */
-  onCall?: (intent: OrderIntent) => void;
 }
 
-const DEFAULT_RECEIPT: OrderReceipt = {
+/**
+ * `client_order_id` is always overwritten in `placeOrder` to echo the intent's
+ * key (matches how the real adapter maps CLOB responses). Keeping it out of
+ * the default avoids implying the default value would ever reach a caller.
+ */
+const DEFAULT_RECEIPT: Omit<OrderReceipt, "client_order_id"> = {
   order_id:
     "0xfake000000000000000000000000000000000000000000000000000000000001",
-  client_order_id:
-    "0xfake000000000000000000000000000000000000000000000000000000000002",
   status: "filled",
   filled_size_usdc: 1,
   submitted_at: "2026-04-17T00:00:00.000Z",
@@ -56,7 +54,6 @@ export class FakePolymarketClobAdapter {
 
   async placeOrder(intent: OrderIntent): Promise<OrderReceipt> {
     this.calls.push(intent);
-    this.config.onCall?.(intent);
     if (this.config.rejectWith) throw this.config.rejectWith;
     const base = this.config.receipt ?? DEFAULT_RECEIPT;
     // Echo the intent's client_order_id on the receipt — matches how the real

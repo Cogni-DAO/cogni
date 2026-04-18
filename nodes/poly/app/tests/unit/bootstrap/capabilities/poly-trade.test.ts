@@ -201,21 +201,31 @@ describe("createPolyTradeCapabilityFromAdapter", () => {
     ).rejects.toThrow(/CLOB rejected/);
   });
 
-  it("factory can be called multiple times (prom-registry hot-reload safe)", () => {
+  it("factory can be called multiple times (prom-registry hot-reload safe)", async () => {
     const fake = new FakePolymarketClobAdapter();
-    // This would throw "A metric with the name ... has already been registered"
-    // if the generic MetricsPort shim's getOrCreate wasn't idempotent.
-    expect(() => {
-      createPolyTradeCapabilityFromAdapter({
-        placeOrder: fake.placeOrder.bind(fake),
-        operatorWalletAddress: OPERATOR,
-        logger: LOGGER,
-      });
-      createPolyTradeCapabilityFromAdapter({
-        placeOrder: fake.placeOrder.bind(fake),
-        operatorWalletAddress: OPERATOR,
-        logger: LOGGER,
-      });
-    }).not.toThrow();
+    const request = {
+      conditionId: CONDITION_ID,
+      tokenId: "12345",
+      outcome: "Yes",
+      side: "BUY" as const,
+      size_usdc: 1,
+      limit_price: 0.5,
+    };
+    // Call placeTrade on both so the MetricsPort actually registers counters
+    // against the shared prom-client registry. Without this, the counters are
+    // never created and the "metric already registered" regression wouldn't
+    // fire regardless of how many factory instances exist.
+    const cap1 = createPolyTradeCapabilityFromAdapter({
+      placeOrder: fake.placeOrder.bind(fake),
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+    });
+    await cap1.placeTrade(request);
+    const cap2 = createPolyTradeCapabilityFromAdapter({
+      placeOrder: fake.placeOrder.bind(fake),
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+    });
+    await expect(cap2.placeTrade(request)).resolves.toBeDefined();
   });
 });
