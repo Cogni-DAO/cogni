@@ -18,7 +18,7 @@ credit:
 project: proj.cicd-services-gitops
 initiative:
 branch: fix/scheduler-worker-endpoints-override
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/913
 related:
   - PR #900
   - PR #913
