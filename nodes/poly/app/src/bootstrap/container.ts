@@ -573,13 +573,11 @@ function createContainer(): Container {
   const walletCapability = createWalletCapability();
 
   // PolyTradeCapability for the core__poly_place_trade agent tool.
-  // Reads POLY_PROTO_* env (custody-isolated from the production billing
-  // wallet wired below). Returns `undefined` if POLY_PROTO_WALLET_ADDRESS /
-  // POLY_PROTO_PRIVY_SIGNING_KEY / POLY_CLOB_* / PRIVY_APP_ID/_SECRET are
-  // incomplete; downstream tool binding installs the ai-tools stub in that
-  // case (which throws a clear message instead of crashing bootstrap).
-  const hasProtoPrivy = Boolean(
-    env.PRIVY_APP_ID && env.PRIVY_APP_SECRET && env.POLY_PROTO_PRIVY_SIGNING_KEY
+  // Returns `undefined` if OPERATOR_WALLET_ADDRESS / POLY_CLOB_* / PRIVY_* are
+  // incomplete; downstream tool binding installs the ai-tools stub in that case
+  // (which throws a clear message instead of crashing bootstrap).
+  const hasPrivy = Boolean(
+    env.PRIVY_APP_ID && env.PRIVY_APP_SECRET && env.PRIVY_SIGNING_KEY
   );
   const hasPolyClob = Boolean(
     env.POLY_CLOB_API_KEY &&
@@ -590,7 +588,7 @@ function createContainer(): Container {
     logger: log,
     isTestMode: env.isTestMode,
     host: env.POLY_CLOB_HOST,
-    operatorWalletAddress: env.POLY_PROTO_WALLET_ADDRESS as
+    operatorWalletAddress: env.OPERATOR_WALLET_ADDRESS as
       | `0x${string}`
       | undefined,
     creds: hasPolyClob
@@ -600,11 +598,11 @@ function createContainer(): Container {
           passphrase: env.POLY_CLOB_PASSPHRASE as string,
         }
       : undefined,
-    privy: hasProtoPrivy
+    privy: hasPrivy
       ? {
           appId: env.PRIVY_APP_ID as string,
           appSecret: env.PRIVY_APP_SECRET as string,
-          signingKey: env.POLY_PROTO_PRIVY_SIGNING_KEY as string,
+          signingKey: env.PRIVY_SIGNING_KEY as string,
         }
       : undefined,
   });
