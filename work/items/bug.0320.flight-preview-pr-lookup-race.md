@@ -17,7 +17,7 @@ credit:
 project: proj.cicd-services-gitops
 initiative:
 branch: fix/flight-preview-pr-lookup-race
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/915
 related:
   - bug.0315
   - bug.0316
