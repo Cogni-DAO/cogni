@@ -77,9 +77,26 @@ jobs:
             HEAD_SHA="$PUSH_SHA"
           fi
 
-          # Canonical "find PR that produced this commit" — GitHub's API for it.
-          PR_NUMBER=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/pulls" \
-            --jq '.[0].number // empty' 2>/dev/null || true)
+          # Primary resolution: parse `(#NNN)` from the commit subject. GitHub's
+          # merge-commit and squash-merge titles always end with this suffix,
+          # and reading it from local git is instant and not subject to the
+          # commits/{sha}/pulls API's post-merge indexing lag — which silently
+          # skipped every auto-flight in the 2026-04-18 incident window (see
+          # work/items/bug.0320.flight-preview-pr-lookup-race.md).
+          SUBJECT=$(git log -1 --format=%s "$HEAD_SHA" 2>/dev/null || echo "")
+          PR_NUMBER=$(printf '%s' "$SUBJECT" | sed -nE 's/.*\(#([0-9]+)\)[[:space:]]*$/\1/p')
+
+          # Fallback: retry the API a few times for the rare case the title
+          # doesn't carry the suffix (e.g., human-edited merge commits).
+          if [ -z "$PR_NUMBER" ]; then
+            for i in 1 2 3 4 5; do
+              PR_NUMBER=$(gh api "repos/${{ github.repository }}/commits/${HEAD_SHA}/pulls" \
+                --jq '.[0].number // empty' 2>/dev/null || true)
+              [ -n "$PR_NUMBER" ] && break
+              echo "  commits/${HEAD_SHA:0:8}/pulls empty (attempt $i/5); retry in 3s..."
+              sleep 3
+            done
+          fi
 
           if [ -z "$PR_NUMBER" ]; then
             echo "ℹ️  No PR associated with ${HEAD_SHA:0:8} — direct push to main is not a supported flight trigger"
