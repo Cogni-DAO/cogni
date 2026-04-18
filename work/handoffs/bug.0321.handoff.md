@@ -6,7 +6,7 @@ status: active
 created: 2026-04-18
 updated: 2026-04-18
 branch: fix/flight-preview-queue-visible
-last_commit: 6cdb5d95b
+last_commit: 9ed58908e
 ---
 
 # Handoff: CICD silent-green — three remaining paths
@@ -20,7 +20,7 @@ last_commit: 6cdb5d95b
 
 ## Current State
 
-- `fix/flight-preview-queue-visible` branch carries PR #921 (flight-preview queue-only → visibly skipped) + bug.0321 filing. Tail commit `6cdb5d95b`.
+- `fix/flight-preview-queue-visible` branch carries PR #921 (flight-preview queue-only → visibly skipped) + bug.0321 filing + handoff + a prettier-format fixup. Tail commit `9ed58908e`.
 - Three remaining gaps are NOT yet addressed by any open PR.
 - The `devops-expert` and `pr-coordinator-v0` skills have been updated with the three-outcome contract, new authoritative gate scripts, and new anti-patterns. Read those first — they describe the working mental model.
 - Preview is currently pinned at `c644f177` in `reviewing` state with stale pods (operator/poly on `66ea27978`, resy on `79dd9eb72`). Orthogonal operational catch-up; not part of this bug.
