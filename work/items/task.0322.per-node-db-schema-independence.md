@@ -171,7 +171,11 @@ Rule: **core = strict intersection of what every node needs**. When in doubt, no
 - [ ] **Step 1** — Commit the Table Classification. PR touches only this task file.
 - [ ] **Step 2** — Move `poly-copy-trade.ts` to `nodes/poly/app/schema/copy-trade.ts`. Create `nodes/{operator,poly,resy}/app/schema/index.ts` each re-exporting `@cogni/db-schema` + any node-local tables. Move operator-only tables (PR-time discovery) to `nodes/operator/app/schema/`.
 - [ ] **Step 3** — Create `drizzle.{operator,poly,resy}.config.ts`. Each points at its own schema glob and its own existing migrations dir. Update `package.json` `db:migrate:*` scripts to use the per-node configs.
-- [ ] **Step 4** — Run `pnpm db:migrate:poly` locally on a fresh `cogni_poly` test DB. Should replay 0000–0026 (and later the poly-specific 0027) cleanly. Same for operator, resy. No new migrations generated — schemas match.
+- [ ] **Step 4** — Run `pnpm db:migrate:poly` on TWO DBs:
+  1. A fresh local `cogni_poly_p0_test` DB → should apply 0000–0027 cleanly, poly tables exist.
+  2. A `pg_dump`-restored snapshot of **candidate-a's live `cogni_poly`** → must be a no-op (proves hash compatibility on a DB with the real historical migration rows, not just a local dev DB that may have been migrated differently).
+  Repeat both for operator and resy. The snapshot validation is the non-negotiable proof — local-already-migrated isn't sufficient.
+- [ ] **Step 4a** — Add `README.md` in each node's migrations dir explaining: migrations are node-owned; shared-era duplicates (specifically `0027_silent_nextwave.sql` in operator AND poly) are intentional; `__drizzle_migrations` rows reference these files by hash, so deleting one breaks migrate across node DBs. Tripwire to prevent a future "cleanup" PR from deleting the intentional duplicate.
 
 ### Phase 2 — CI + migrator image wiring (one PR, ~half-day)
 - [ ] **Step 5** — Extend `scripts/ci/compute_migrator_fingerprint.sh` input paths to `nodes/*/app/schema/**`, `nodes/*/app/src/adapters/server/db/migrations/**`, `drizzle.*.config.ts`. **Silent failure mode otherwise** — a poly-local schema change leaves the migrator cache valid and the new migration never runs.
