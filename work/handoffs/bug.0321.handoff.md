@@ -52,17 +52,17 @@ last_commit: 6cdb5d95b
 
 ## Pointers
 
-| File / Resource                                    | Why it matters                                                                                                    |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `work/items/bug.0321.cicd-silent-green-remaining.md` | Canonical scope, acceptance, per-gap fix sketches.                                                                |
-| `docs/spec/ci-cd.md`                               | Trunk-based axioms. Lease model in `#preview-review-lock`. Don't design around it, design with it.                |
-| `.claude/skills/devops-expert/SKILL.md`            | Flight-preview outcome contract + the three anti-patterns you must not re-introduce.                              |
-| `.claude/skills/pr-coordinator-v0/SKILL.md`        | Checks-list outcome matrix (flight ✓ / deploy-preview ⊘ etc). Mirror this mental model when reading CI.           |
-| `.github/workflows/flight-preview.yml`             | Reference implementation of the split-job outcome pattern. Copy the shape for gap #2.                             |
-| `scripts/ci/flight-preview.sh`                     | Reference implementation of the `emit_status`/`emit_summary` helpers gated on `$GITHUB_OUTPUT`. Copy for gap #1.  |
-| `scripts/ci/wait-for-argocd.sh`                    | Already exists; read the header for `EXPECTED_SHA` contract before wiring into candidate-flight.                  |
-| `scripts/ci/promote-build-payload.sh`              | Needs `promoted_apps` output added for gap #1.                                                                    |
-| `scripts/ci/verify-buildsha.sh`                    | Preview-only today. Pattern to extend to per-node verification for gap #3.                                        |
-| `scripts/ci/promote-to-production.sh`              | Where the per-node source-sha map would be written for gap #3.                                                    |
-| PR #921 (this branch)                              | Merge before starting the gap PRs — gap fixes build on top.                                                       |
-| [task.0293](../items/task.0293.main-preview-flight-lease.md) | Lease model history. Read before touching `lock-preview-on-success` for gap #2.                                   |
+| File / Resource                                              | Why it matters                                                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `work/items/bug.0321.cicd-silent-green-remaining.md`         | Canonical scope, acceptance, per-gap fix sketches.                                                               |
+| `docs/spec/ci-cd.md`                                         | Trunk-based axioms. Lease model in `#preview-review-lock`. Don't design around it, design with it.               |
+| `.claude/skills/devops-expert/SKILL.md`                      | Flight-preview outcome contract + the three anti-patterns you must not re-introduce.                             |
+| `.claude/skills/pr-coordinator-v0/SKILL.md`                  | Checks-list outcome matrix (flight ✓ / deploy-preview ⊘ etc). Mirror this mental model when reading CI.          |
+| `.github/workflows/flight-preview.yml`                       | Reference implementation of the split-job outcome pattern. Copy the shape for gap #2.                            |
+| `scripts/ci/flight-preview.sh`                               | Reference implementation of the `emit_status`/`emit_summary` helpers gated on `$GITHUB_OUTPUT`. Copy for gap #1. |
+| `scripts/ci/wait-for-argocd.sh`                              | Already exists; read the header for `EXPECTED_SHA` contract before wiring into candidate-flight.                 |
+| `scripts/ci/promote-build-payload.sh`                        | Needs `promoted_apps` output added for gap #1.                                                                   |
+| `scripts/ci/verify-buildsha.sh`                              | Preview-only today. Pattern to extend to per-node verification for gap #3.                                       |
+| `scripts/ci/promote-to-production.sh`                        | Where the per-node source-sha map would be written for gap #3.                                                   |
+| PR #921 (this branch)                                        | Merge before starting the gap PRs — gap fixes build on top.                                                      |
+| [task.0293](../items/task.0293.main-preview-flight-lease.md) | Lease model history. Read before touching `lock-preview-on-success` for gap #2.                                  |
