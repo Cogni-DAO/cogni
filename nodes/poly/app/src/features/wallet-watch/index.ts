@@ -17,4 +17,4 @@ export {
   type PolymarketActivitySourceDeps,
   WALLET_WATCH_METRICS,
   type WalletActivitySource,
-} from "./polymarket-source.js";
+} from "./polymarket-source";

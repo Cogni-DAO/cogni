@@ -19,8 +19,8 @@ export {
   type CopyTradeExecutor,
   type CopyTradeExecutorDeps,
   createClobExecutor,
-} from "./clob-executor.js";
-export { createOrderLedger, type OrderLedgerDeps } from "./order-ledger.js";
+} from "./clob-executor";
+export { createOrderLedger, type OrderLedgerDeps } from "./order-ledger";
 export type {
   InsertPendingInput,
   LedgerRow,
@@ -29,4 +29,4 @@ export type {
   OrderLedger,
   RecordDecisionInput,
   StateSnapshot,
-} from "./order-ledger.types.js";
+} from "./order-ledger.types";

@@ -27,8 +27,8 @@ import {
 import type { OrderLedger } from "@/features/trading";
 import type { WalletActivitySource } from "@/features/wallet-watch";
 
-import { decide } from "./decide.js";
-import type { MirrorReason, TargetConfig } from "./types.js";
+import { decide } from "./decide";
+import type { MirrorReason, TargetConfig } from "./types";
 
 /** Metric names emitted by the coordinator. */
 export const MIRROR_COORDINATOR_METRICS = {

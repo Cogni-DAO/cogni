@@ -32,7 +32,7 @@ import type {
   OrderLedger,
   RecordDecisionInput,
   StateSnapshot,
-} from "./order-ledger.types.js";
+} from "./order-ledger.types";
 
 /** Dependencies injected at the `bootstrap/container.ts` boundary. */
 export interface OrderLedgerDeps {
