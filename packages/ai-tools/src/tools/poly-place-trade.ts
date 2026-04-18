@@ -64,12 +64,39 @@ export interface PolyPlaceTradeReceipt {
 }
 
 /**
+ * One open order surfaced to the agent. Narrow subset of the market-provider
+ * `OrderReceipt` plus the market/token ids so the LLM can cross-reference.
+ */
+export interface PolyOpenOrder {
+  order_id: string;
+  status: "pending" | "open" | "filled" | "partial" | "canceled" | "error";
+  side: "BUY" | "SELL";
+  market: string;
+  token_id: string;
+  outcome: string;
+  price: number;
+  original_size_shares: number;
+  filled_size_shares: number;
+  created_at: number;
+}
+
+/**
+ * Optional server-side filter for `listOpenOrders`. When omitted, returns
+ * every open order on the operator EOA.
+ */
+export interface PolyListOpenOrdersRequest {
+  token_id?: string;
+  market?: string;
+}
+
+/**
  * Minimal capability the poly-app container wires. The real implementation
  * (in `bootstrap/capabilities/poly-trade.ts`) injects the Privy signer + CLOB
  * adapter; the tool layer never sees those.
  */
 export interface PolyTradeCapability {
   placeTrade(request: PolyPlaceTradeRequest): Promise<PolyPlaceTradeReceipt>;
+  listOpenOrders(request?: PolyListOpenOrdersRequest): Promise<PolyOpenOrder[]>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,7 +263,7 @@ export const polyPlaceTradeStubImplementation: ToolImplementation<
   execute: async (): Promise<PolyPlaceTradeOutput> => {
     throw new Error(
       "core__poly_place_trade stub invoked — container did not inject PolyTradeCapability. " +
-        "Verify POLY_CLOB_* + PRIVY_* + OPERATOR_WALLET_ADDRESS are configured on this pod."
+        "Verify POLY_CLOB_* + POLY_PROTO_* are configured on this pod."
     );
   },
 };

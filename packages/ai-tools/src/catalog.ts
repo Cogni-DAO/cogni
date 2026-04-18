@@ -20,6 +20,7 @@ import { knowledgeSearchBoundTool } from "./tools/knowledge-search";
 import { knowledgeWriteBoundTool } from "./tools/knowledge-write";
 import { marketListBoundTool } from "./tools/market-list";
 import { metricsQueryBoundTool } from "./tools/metrics-query";
+import { polyListOrdersBoundTool } from "./tools/poly-list-orders";
 import { polyPlaceTradeBoundTool } from "./tools/poly-place-trade";
 import { repoListBoundTool } from "./tools/repo-list";
 import { repoOpenBoundTool } from "./tools/repo-open";
@@ -112,6 +113,7 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   knowledgeWriteBoundTool as CatalogBoundTool,
   marketListBoundTool as CatalogBoundTool,
   metricsQueryBoundTool as CatalogBoundTool,
+  polyListOrdersBoundTool as CatalogBoundTool,
   polyPlaceTradeBoundTool as CatalogBoundTool,
   repoListBoundTool as CatalogBoundTool,
   repoOpenBoundTool as CatalogBoundTool,

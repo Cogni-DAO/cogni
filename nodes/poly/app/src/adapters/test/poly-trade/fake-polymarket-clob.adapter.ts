@@ -24,6 +24,10 @@ export interface FakePolymarketClobConfig {
    * classification (message containing "CLOB rejected order" → rejected).
    */
   rejectWith?: Error;
+  /** Canned open-orders list for `listOpenOrders`. Defaults to empty. */
+  openOrders?: OrderReceipt[];
+  /** If set, `listOpenOrders` rejects with this error. */
+  listRejectWith?: Error;
 }
 
 /**
@@ -59,5 +63,13 @@ export class FakePolymarketClobAdapter {
     // Echo the intent's client_order_id on the receipt — matches how the real
     // adapter maps response → OrderReceipt via `mapOrderResponseToReceipt`.
     return { ...base, client_order_id: intent.client_order_id };
+  }
+
+  async listOpenOrders(_params?: {
+    tokenId?: string;
+    market?: string;
+  }): Promise<OrderReceipt[]> {
+    if (this.config.listRejectWith) throw this.config.listRejectWith;
+    return this.config.openOrders ?? [];
   }
 }

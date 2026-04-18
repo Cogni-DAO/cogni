@@ -45,6 +45,8 @@ export const POLY_CLOB_METRICS = {
   cancelDurationMs: "poly_clob_cancel_duration_ms",
   getOrderTotal: "poly_clob_get_order_total",
   getOrderDurationMs: "poly_clob_get_order_duration_ms",
+  listOpenOrdersTotal: "poly_clob_list_open_orders_total",
+  listOpenOrdersDurationMs: "poly_clob_list_open_orders_duration_ms",
 } as const;
 
 /**
@@ -348,6 +350,70 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       throw err;
     }
   }
+
+  async listOpenOrders(params?: {
+    tokenId?: string;
+    market?: string;
+  }): Promise<OrderReceipt[]> {
+    const start = Date.now();
+    const apiParams: { asset_id?: string; market?: string } = {};
+    if (params?.tokenId) apiParams.asset_id = params.tokenId;
+    if (params?.market) apiParams.market = params.market;
+    this.log.debug(
+      {
+        event: "poly.clob.list_open_orders",
+        phase: "start",
+        token_id: params?.tokenId,
+        market: params?.market,
+      },
+      "listOpenOrders: start"
+    );
+    try {
+      const open = await this.client.getOpenOrders(apiParams);
+      const rows: OrderReceipt[] = Array.isArray(open)
+        ? open.map(mapOpenOrderToReceipt)
+        : [];
+      const duration_ms = Date.now() - start;
+      this.metrics.incr(POLY_CLOB_METRICS.listOpenOrdersTotal, {
+        result: "ok",
+      });
+      this.metrics.observeDurationMs(
+        POLY_CLOB_METRICS.listOpenOrdersDurationMs,
+        duration_ms,
+        { result: "ok" }
+      );
+      this.log.debug(
+        {
+          event: "poly.clob.list_open_orders",
+          phase: "ok",
+          duration_ms,
+          count: rows.length,
+        },
+        "listOpenOrders: ok"
+      );
+      return rows;
+    } catch (err) {
+      const duration_ms = Date.now() - start;
+      this.metrics.incr(POLY_CLOB_METRICS.listOpenOrdersTotal, {
+        result: "error",
+      });
+      this.metrics.observeDurationMs(
+        POLY_CLOB_METRICS.listOpenOrdersDurationMs,
+        duration_ms,
+        { result: "error" }
+      );
+      this.log.error(
+        {
+          event: "poly.clob.list_open_orders",
+          phase: "error",
+          duration_ms,
+          error: truncErr(err),
+        },
+        "listOpenOrders: error"
+      );
+      throw err;
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +501,14 @@ interface ClobOpenOrderLike {
   original_size: string;
   size_matched: string;
   price: string;
+  /** conditionId. Present on `getOpenOrders` rows, absent on `getOrder`. */
+  market?: string;
+  /** ERC-1155 asset id. Present on `getOpenOrders` rows. */
+  asset_id?: string;
+  /** Human outcome label. Present on `getOpenOrders` rows. */
+  outcome?: string;
+  /** Unix seconds. Present on `getOpenOrders` rows. */
+  created_at?: number;
 }
 
 export function mapOpenOrderToReceipt(open: ClobOpenOrderLike): OrderReceipt {
@@ -446,18 +520,29 @@ export function mapOpenOrderToReceipt(open: ClobOpenOrderLike): OrderReceipt {
     ? priceNum * matchedShares
     : 0;
 
+  const submitted_at =
+    typeof open.created_at === "number" && open.created_at > 0
+      ? new Date(open.created_at * 1000).toISOString()
+      : new Date().toISOString();
+
   return {
     order_id: open.id,
     client_order_id: open.id, // no separate client_order_id on the platform receipt
     status,
     filled_size_usdc,
-    submitted_at: new Date().toISOString(),
+    submitted_at,
     attributes: {
       rawStatus: open.status,
       side: open.side,
       originalSize: open.original_size,
       sizeMatched: open.size_matched,
       price: open.price,
+      ...(open.market ? { market: open.market } : {}),
+      ...(open.asset_id ? { tokenId: open.asset_id } : {}),
+      ...(open.outcome ? { outcome: open.outcome } : {}),
+      ...(typeof open.created_at === "number"
+        ? { createdAt: open.created_at }
+        : {}),
     },
   };
 }

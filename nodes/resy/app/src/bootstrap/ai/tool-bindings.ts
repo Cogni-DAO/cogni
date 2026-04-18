@@ -50,7 +50,9 @@ import {
   KNOWLEDGE_WRITE_NAME,
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
+  POLY_LIST_ORDERS_NAME,
   POLY_PLACE_TRADE_NAME,
+  polyListOrdersStubImplementation,
   polyPlaceTradeStubImplementation,
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
@@ -138,6 +140,10 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     // reason as wallet_top_traders.
     [POLY_PLACE_TRADE_NAME]:
       polyPlaceTradeStubImplementation as AnyToolImplementation,
+
+    // Poly list-orders: poly-only tool. Stub here for the same reason.
+    [POLY_LIST_ORDERS_NAME]:
+      polyListOrdersStubImplementation as AnyToolImplementation,
 
     [METRICS_QUERY_NAME]: createMetricsQueryImplementation({
       metricsCapability: deps.metricsCapability,

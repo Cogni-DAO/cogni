@@ -33,6 +33,7 @@ import {
   createKnowledgeWriteImplementation,
   createMarketListImplementation,
   createMetricsQueryImplementation,
+  createPolyListOrdersImplementation,
   createPolyPlaceTradeImplementation,
   createRepoListImplementation,
   createRepoOpenImplementation,
@@ -54,7 +55,9 @@ import {
   KNOWLEDGE_WRITE_NAME,
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
+  POLY_LIST_ORDERS_NAME,
   POLY_PLACE_TRADE_NAME,
+  polyListOrdersStubImplementation,
   polyPlaceTradeStubImplementation,
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
@@ -154,6 +157,12 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
           polyTradeCapability: deps.polyTradeCapability,
         })
       : polyPlaceTradeStubImplementation) as AnyToolImplementation,
+
+    [POLY_LIST_ORDERS_NAME]: (deps.polyTradeCapability
+      ? createPolyListOrdersImplementation({
+          polyTradeCapability: deps.polyTradeCapability,
+        })
+      : polyListOrdersStubImplementation) as AnyToolImplementation,
 
     [WEB_SEARCH_NAME]: createWebSearchImplementation({
       webSearchCapability: deps.webSearchCapability,

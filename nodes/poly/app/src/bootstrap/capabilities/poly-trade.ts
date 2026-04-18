@@ -20,6 +20,8 @@
  */
 
 import type {
+  PolyListOpenOrdersRequest,
+  PolyOpenOrder,
   PolyPlaceTradeReceipt,
   PolyPlaceTradeRequest,
   PolyTradeCapability,
@@ -200,6 +202,11 @@ function profileUrl(address: string): string {
 export interface CreateFromAdapterDeps {
   /** `MarketProviderPort.placeOrder` — production adapter OR `FakePolymarketClobAdapter`. */
   placeOrder: (intent: OrderIntent) => Promise<OrderReceipt>;
+  /** `listOpenOrders` — production adapter OR fake. */
+  listOpenOrders: (params?: {
+    tokenId?: string;
+    market?: string;
+  }) => Promise<OrderReceipt[]>;
   /** Operator EOA (used for the receipt's profile_url). */
   operatorWalletAddress: `0x${string}`;
   /** Pino logger (factory wraps in a LoggerPort + adds executor child). */
@@ -277,6 +284,46 @@ export function createPolyTradeCapabilityFromAdapter(
         profile_url: profileUrl(operatorAddress),
       };
     },
+    async listOpenOrders(
+      request?: PolyListOpenOrdersRequest
+    ): Promise<PolyOpenOrder[]> {
+      const params: { tokenId?: string; market?: string } = {};
+      if (request?.token_id) params.tokenId = request.token_id;
+      if (request?.market) params.market = request.market;
+      const receipts = await deps.listOpenOrders(
+        Object.keys(params).length > 0 ? params : undefined
+      );
+      return receipts.map(receiptToPolyOpenOrder);
+    },
+  };
+}
+
+function receiptToPolyOpenOrder(r: OrderReceipt): PolyOpenOrder {
+  const attrs = r.attributes ?? {};
+  const readStr = (k: string): string | undefined => {
+    const v = attrs[k];
+    return typeof v === "string" ? v : undefined;
+  };
+  const readNum = (k: string): number | undefined => {
+    const v = attrs[k];
+    return typeof v === "number" ? v : undefined;
+  };
+  const priceStr = readStr("price");
+  const originalSizeStr = readStr("originalSize");
+  const sizeMatchedStr = readStr("sizeMatched");
+  const sideStr = (readStr("side") ?? "BUY").toUpperCase();
+  const side: PolyOpenOrder["side"] = sideStr === "SELL" ? "SELL" : "BUY";
+  return {
+    order_id: r.order_id,
+    status: r.status,
+    side,
+    market: readStr("market") ?? "",
+    token_id: readStr("tokenId") ?? "",
+    outcome: readStr("outcome") ?? "",
+    price: priceStr ? Number(priceStr) : 0,
+    original_size_shares: originalSizeStr ? Number(originalSizeStr) : 0,
+    filled_size_shares: sizeMatchedStr ? Number(sizeMatchedStr) : 0,
+    created_at: readNum("createdAt") ?? 0,
   };
 }
 
@@ -316,6 +363,7 @@ export function createPolyTradeCapability(
     );
     return createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
+      listOpenOrders: fake.listOpenOrders.bind(fake),
       operatorWalletAddress: operator,
       logger: config.logger,
     });
@@ -359,31 +407,46 @@ export function createPolyTradeCapability(
   const metrics = buildMetricsPort();
 
   // Lazy-init: wrap a deferred builder so we don't pull in @polymarket/clob-client
-  // until someone actually calls placeTrade().
-  let cachedPlaceOrder:
-    | ((intent: OrderIntent) => Promise<OrderReceipt>)
-    | undefined;
-  let initPromise:
-    | Promise<(intent: OrderIntent) => Promise<OrderReceipt>>
-    | undefined;
+  // until someone actually calls the capability.
+  type AdapterMethods = {
+    placeOrder: (intent: OrderIntent) => Promise<OrderReceipt>;
+    listOpenOrders: (params?: {
+      tokenId?: string;
+      market?: string;
+    }) => Promise<OrderReceipt[]>;
+  };
+  let cached: AdapterMethods | undefined;
+  let initPromise: Promise<AdapterMethods> | undefined;
+
+  async function ensureMethods(): Promise<AdapterMethods> {
+    if (cached) return cached;
+    initPromise ??= buildRealAdapterMethods({
+      operatorWalletAddress,
+      creds,
+      privy,
+      host,
+      logger: config.logger,
+      metrics,
+    });
+    cached = await initPromise;
+    return cached;
+  }
 
   async function lazyPlaceOrder(intent: OrderIntent): Promise<OrderReceipt> {
-    if (!cachedPlaceOrder) {
-      initPromise ??= buildRealPlaceOrder({
-        operatorWalletAddress,
-        creds,
-        privy,
-        host,
-        logger: config.logger,
-        metrics,
-      });
-      cachedPlaceOrder = await initPromise;
-    }
-    return cachedPlaceOrder(intent);
+    const m = await ensureMethods();
+    return m.placeOrder(intent);
+  }
+  async function lazyListOpenOrders(params?: {
+    tokenId?: string;
+    market?: string;
+  }): Promise<OrderReceipt[]> {
+    const m = await ensureMethods();
+    return m.listOpenOrders(params);
   }
 
   return createPolyTradeCapabilityFromAdapter({
     placeOrder: lazyPlaceOrder,
+    listOpenOrders: lazyListOpenOrders,
     operatorWalletAddress,
     logger: config.logger,
     metrics,
@@ -397,7 +460,7 @@ export function createPolyTradeCapability(
 // single-tenant; multi-operator support is P2 (task.0318).
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface BuildRealPlaceOrderDeps {
+interface BuildRealAdapterMethodsDeps {
   operatorWalletAddress: `0x${string}`;
   creds: PolyCredsEnv;
   privy: PrivyEnv;
@@ -407,9 +470,15 @@ interface BuildRealPlaceOrderDeps {
   metrics: MetricsPort;
 }
 
-async function buildRealPlaceOrder(
-  deps: BuildRealPlaceOrderDeps
-): Promise<(intent: OrderIntent) => Promise<OrderReceipt>> {
+async function buildRealAdapterMethods(
+  deps: BuildRealAdapterMethodsDeps
+): Promise<{
+  placeOrder: (intent: OrderIntent) => Promise<OrderReceipt>;
+  listOpenOrders: (params?: {
+    tokenId?: string;
+    market?: string;
+  }) => Promise<OrderReceipt[]>;
+}> {
   // Dynamic imports — keep `@polymarket/clob-client` + `@privy-io/node` out of
   // bundles that don't configure the capability.
   const { PolymarketClobAdapter } = await import(
@@ -490,5 +559,8 @@ async function buildRealPlaceOrder(
     "poly-trade capability initialized (first placeTrade call)"
   );
 
-  return adapter.placeOrder.bind(adapter);
+  return {
+    placeOrder: adapter.placeOrder.bind(adapter),
+    listOpenOrders: adapter.listOpenOrders.bind(adapter),
+  };
 }

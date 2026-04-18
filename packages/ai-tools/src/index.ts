@@ -169,8 +169,23 @@ export {
   metricsQueryStubImplementation,
 } from "./tools/metrics-query";
 export {
+  createPolyListOrdersImplementation,
+  POLY_LIST_ORDERS_NAME,
+  type PolyListOrdersDeps,
+  type PolyListOrdersInput,
+  PolyListOrdersInputSchema,
+  type PolyListOrdersOutput,
+  PolyListOrdersOutputSchema,
+  type PolyListOrdersRedacted,
+  polyListOrdersBoundTool,
+  polyListOrdersContract,
+  polyListOrdersStubImplementation,
+} from "./tools/poly-list-orders";
+export {
   createPolyPlaceTradeImplementation,
   POLY_PLACE_TRADE_NAME,
+  type PolyListOpenOrdersRequest,
+  type PolyOpenOrder,
   type PolyPlaceTradeDeps,
   type PolyPlaceTradeInput,
   PolyPlaceTradeInputSchema,
