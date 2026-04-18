@@ -14,8 +14,6 @@ spec_refs:
   - architecture
 assignees: []
 project: proj.poly-prediction-bot
-created: 2026-04-18
-updated: 2026-04-18
 labels: [poly, polymarket, copy-trading, design, phase4, adversarial]
 ---
 
