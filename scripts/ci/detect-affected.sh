@@ -157,15 +157,9 @@ else
       nodes/node-template/*)
         selection_reason="non-deployable-node-template-change:${path}"
         ;;
-      drizzle.config.ts | drizzle.operator.config.ts)
-        add_target operator-migrator
-        ;;
-      drizzle.poly.config.ts)
-        add_target poly-migrator
-        ;;
-      drizzle.resy.config.ts)
-        add_target resy-migrator
-        ;;
+      # Per-node drizzle configs live at nodes/<node>/drizzle.config.ts and are
+      # handled by the nodes/<node>/* catchall above (adds node + node-migrator).
+      # No drizzle-specific case needed.
     esac
   done <<< "$changed_paths"
 fi

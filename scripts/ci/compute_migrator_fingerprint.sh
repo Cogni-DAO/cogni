@@ -25,8 +25,7 @@ fi
 case "$NODE" in
     operator)
         MIGRATOR_INPUTS=(
-            "drizzle.config.ts"
-            "drizzle.operator.config.ts"
+            "nodes/operator/drizzle.config.ts"
             "packages/db-schema/src"
             "nodes/operator/app/src/shared/db"
             "nodes/operator/app/src/adapters/server/db/migrations"
@@ -37,7 +36,7 @@ case "$NODE" in
         ;;
     poly)
         MIGRATOR_INPUTS=(
-            "drizzle.poly.config.ts"
+            "nodes/poly/drizzle.config.ts"
             "packages/db-schema/src"
             "nodes/poly/app/src/shared/db"
             "nodes/poly/app/src/adapters/server/db/migrations"
@@ -48,7 +47,7 @@ case "$NODE" in
         ;;
     resy)
         MIGRATOR_INPUTS=(
-            "drizzle.resy.config.ts"
+            "nodes/resy/drizzle.config.ts"
             "packages/db-schema/src"
             "nodes/resy/app/src/shared/db"
             "nodes/resy/app/src/adapters/server/db/migrations"
