@@ -6,8 +6,8 @@ status: needs_implement
 priority: 2
 estimate: 5
 rank: 5
-branch: feat/poly-copy-trade-cp4
-revision: 5
+branch: design/poly-copy-trade-pr-b
+revision: 4
 summary: "One-shot prototype task. v0 (PR-A, this PR): poly-brain + dashboard answer 'who are the top Polymarket wallets?' via a new core__wallet_top_traders tool + /dashboard Top Wallets card backed by the Polymarket Data API. v0.1 (PR-B, not in this PR): single-wallet shadow mirror via @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
 outcome: "A running prototype in the poly node. v0 (PR-A, shipped): ask poly-brain 'top wallets this week' and get a ranked list in chat + dashboard. v0.1 = four phases on a stable `decide()` boundary — P1 ships first live Polymarket order_id on one hardcoded target via disposable 30s poll scaffolding; P2 adds click-to-copy UI (DB-authoritative-when-populated, env fallback retained); P3 ships paper-adapter body so paper PnL over a real shadow soak becomes the evidence gate; P4 upgrades to WS → Redis streams → Temporal, gated on P3 evidence that edge survives slippage."
 spec_refs:
@@ -16,7 +16,7 @@ spec_refs:
 assignees: derekg1729
 project: proj.poly-prediction-bot
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-04-16
 labels: [poly, polymarket, follow-wallet, copy-trading, prototype]
 external_refs:
   - docs/research/poly-copy-trading-wallets.md
@@ -61,7 +61,7 @@ external_refs:
 - [x] **Phase 0 — Pre-flight** (no code). Findings recorded below ("Phase 0 — Findings"). P1 migration header will cite them verbatim.
 - [ ] **Phase 1 — PR-B1 — First live order** (~1 week). Four checkpoints on the design branch (`design/poly-copy-trade-pr-b`, PR #890). 🎯 Real `order_id` on one hardcoded target.
   - [x] **CP1** — types + ports (`MarketProviderPort` Run methods, `OrderIntent/OrderReceipt/OrderStatus/Fill` Zod, `PolymarketOrderSigner` port, `OperatorWalletPort.signPolymarketOrder`, paper-adapter stub). Package-land only, no runtime wiring. Unit tests on Zod round-trip. ✅ commit `8293eb665`.
-  - [x] **CP2** — Privy Polygon EIP-712 signer + viem-compat shim + real `clob-client`-driven experiment. **Design-reviewed 2026-04-17 (revision 2):** CP2 must prove CP3's actual seam, not a primitive.
+  - [ ] **CP2** — Privy Polygon EIP-712 signer + viem-compat shim + real `clob-client`-driven experiment. **Design-reviewed 2026-04-17 (revision 2):** CP2 must prove CP3's actual seam, not a primitive.
     - **Adapter method** — implement `signPolymarketOrder(typedData)` via `@privy-io/node` `wallets().ethereum().signTypedData(walletId, input)` (verified exists in SDK v0.10.1 — `resources/wallets/wallets.d.ts:542`). **SDK gotcha**: Privy input uses `primary_type` (snake_case) not `primaryType`; adapter must translate our `Eip712TypedData` (camelCase per EIP-712 convention) → Privy's `EthereumSignTypedDataRpcInput.Params.TypedData` shape. **Verify before writing** (5-min SDK read): (a) whether `authorization_context` is a valid field on `signTypedData` input (it is on `sendTransaction` — not documented in our source read yet); (b) exact response field name on `EthereumSignTypedDataRpcResponse.Data` (draft assumes `.signature`). Both flagged as unconfirmed in the draft body; must be resolved before commit.
     - **Chain allow-set, NOT single-value hardcode** — declare `POLYGON_ALLOWED_CHAIN_IDS = new Set([137])` (Polygon mainnet today). Doc-comment notes that adding Amoy (`80002`) behind a dev-only env gate is trivial when CP4 wants a testnet dress rehearsal. `signPolymarketOrder` MUST reject `!POLYGON_ALLOWED_CHAIN_IDS.has(typedData.domain.chainId)` at line 1, before calling Privy. Existing Base methods remain pinned to `BASE_CAIP2` (unchanged).
     - **viem-compat signer shim (new deliverable)** — `packages/operator-wallet/src/adapters/privy/polymarket-signer-shim.ts` exposes `makePolymarketSignerForClobClient(adapter) → { address, signTypedData, _signTypedData }` where the two signing methods take `(domain, types, value)` per viem/ethers-v5 convention and internally route through our narrow `signPolymarketOrder(Eip712TypedData)`. This is the shape `@polymarket/clob-client` calls internally. **Shipping the shim in CP2 (not CP3)** is what makes CP2 a real proof of CP3's path instead of a primitive test.
@@ -69,19 +69,28 @@ external_refs:
     - **Live-testable deliverable** (evidence gate): `scripts/experiments/sign-polymarket-order.ts` constructs a real Polymarket CLOB order via **`@polymarket/order-utils`** (or `@polymarket/clob-client`'s order-building helper — whichever is the exported surface), then either (A) passes the produced `Eip712TypedData` to `adapter.signPolymarketOrder` directly for a minimal proof, or (B) — preferred — instantiates `new ClobClient(host, chainId, shim)` and calls `clobClient.createOrder({...})` in dry-run mode to prove the full seam (builder + shim + adapter + Privy all talk). Then verify the 65-byte signature against `expectedAddress` via `viem.verifyTypedData()`. Zero on-chain cost, no USDC, no Safe proxy, no ToS required — `createOrder` only signs.
     - **Why OSS envelope construction, not hand-rolled**: Polymarket has revved the order struct (neg-risk adapter added `signatureType: uint8`; CTF exchange verifyingContract varies per market class). Hand-rolling the envelope in CP2 risks going stale while `order-utils` stays current — and CP3's "green" would only prove a primitive we already trusted instead of the full CP3 path. Adopting `@polymarket/order-utils` here is the OSS-first move the reviewer flagged.
     - Script output + signature hex + clob-client's logged envelope pasted into the PR as CP2 evidence.
-  - [x] **CP3** — split into sub-CPs, shipped in PR #890:
+  - [ ] **CP3** — split into sub-CPs:
     - **CP3.1** ✅ on-chain USDC.e MaxUint256 allowances for {Exchange, Neg-Risk Exchange, Neg-Risk Adapter}.
     - **CP3.1.5** ✅ delete dead signer surface (CP1 `PolymarketOrderSigner` port + `OperatorWalletPort.signPolymarketOrder` + stub + 4 fakes + contract test) — pulled forward from original CP3.4 per design-review 2026-04-17.
-    - **CP3.2** ✅ polymarket CLOB adapter Run methods via `@polymarket/clob-client`; per-market tickSize/negRisk/feeRateBps fetched live (commits `f1e8143e8` / `2217244db`); `@polymarket/clob-client` + `viem` moved to `packages/market-provider` as optional peerDeps.
-    - **CP3.3** ✅ Drizzle migrations for `poly_copy_trade_{fills,config,decisions}` + pinned `clientOrderIdFor` golden-vector helper. `enabled` defaults to `false` (fail-closed).
-    - **Follow-ups closed during dress rehearsal:** B1 (per-market config fetches), B2 (success=false rejection gate), B5 (post-only dress-rehearsal with filled=0 assertion), B6 (`makingAmount`/`takingAmount` are decimal USDC, not atomic). Observability ports on the adapter (`LoggerPort` / `MetricsPort` with no-op defaults). Live dress-rehearsal + live take-fill evidence captured in PR #890 body.
-  - [ ] **CP4** — wire the app so it auto-mirrors fills. Five sub-CPs on branch `feat/poly-copy-trade-cp4`:
-    - **CP4.1** ✅ pure `decide()` + Polymarket Data-API → `Fill` normalizer (commit `63f9f0868`). 18 unit tests.
-    - **CP4.2** ✅ `createClobExecutor(deps)` with injected `placeOrder` seam — the stack-test mock point (commit `33288f220`). 5 unit tests.
-    - [x] **CP4.25** ✅ "app can place a trade" capability shipped as the `core__poly_place_trade` AI tool. Any registered agent invokes it via the existing chat/LLM path (no bespoke admin ops route — the design pivoted once it was clear per-user auth was out of scope for the prototype). Permanent code (no `@scaffolding` markers): `PolyTradeCapability` port + sync/lazy-async factory matching the `getTemporalWorkflowClient` precedent + env + prom-client sinks + Biome `noRestrictedImports` rule. Poly-brain's `POLY_BRAIN_TOOL_IDS` now includes the tool; non-poly nodes register the ai-tools stub so the shared `TOOL_CATALOG` iteration doesn't throw.
-    - **CP4.3** ⚪ autonomous copy-trade loop, reuses the CP4.25 capability — in-process `setInterval` poll on the trader pod + DB repo + internal ops route wrapping one tick + stack test proving `Data-API → decide() → capability.executor → fills/decisions`. See "CP4.3 Design" section below. **NO platform governance schedule** — scheduling is container-local; user controls on/off via the kill-switch DB row.
-    - **CP4.4** ⚪ (absorbed into CP4.25) — env vars + adapter instantiation + ESLint rule ship there, not here. Kept as a row to preserve numbering; actual scope folded into CP4.25.
-    - **CP4.5** ⚪ read-only activity dashboard card (scaffolding; deleted in P4).
+    - **CP3.2** polymarket CLOB adapter Run methods via `@polymarket/clob-client`. Constructor takes viem `LocalAccount` + `ApiKeyCreds`. `DA_EMPTY_HASH_REJECTED` normalizer. Contract test vs recorded clob-client fixture. Move `@polymarket/clob-client` to `packages/market-provider` as optional peerDep (**explicit AC**).
+    - **CP3.3** Drizzle migrations for `poly_copy_trade_{fills,config,decisions}`. Migration header cites the P0.2 `fill_id` shape verbatim AND pins `client_order_id` hash: `keccak256(utf8Bytes(target_id + ':' + fill_id))` truncated to 32 bytes (0x + 64 hex). `poly_copy_trade_config.enabled` defaults to `false` (fail-closed).
+  - [ ] **CP4** — split into sub-CPs. **CP4.1/4.2/4.25 shipped on main via PR #900 (squash `b0765ef99`).** CP4.3+CP4.5 land on the fresh branch `feat/poly-mirror-v0`, restructured into three layers per the refined design (2026-04-18). See [docs/spec/poly-copy-trade-phase1.md](../../docs/spec/poly-copy-trade-phase1.md) for the layer map + invariants.
+    - **CP4.1** ✅ pure `decide()` — `features/copy-trade/{decide,types}.ts`. Shipped in PR #900.
+    - **CP4.2** ✅ `clob-executor` seam — shipped in PR #900 at `features/copy-trade/clob-executor.ts`; MOVED to `features/trading/clob-executor.ts` in CP4.3a (not copy-trade-specific).
+    - **CP4.25** ✅ agent-callable tool stack — `core__poly_place_trade` / `list_orders` / `cancel_order` via `bootstrap/capabilities/poly-trade.ts`. Single-tenant Privy-wallet resolution isolated in `buildRealAdapterMethods()` (`HARDCODED_WALLET_SECRETS_OK`). Shipped in PR #900.
+    - [ ] **CP4.3 — Autonomous 30s mirror poll** (three-layer decomposition; `@scaffolding` only on the job shim).
+      - **CP4.3a — `PolyTradeBundle` seam split.** `createPolyTradeCapability()` returns `{ capability, placeIntent }`. `placeIntent(OrderIntent)` is the raw placement seam (caller-supplied `client_order_id`, wrapped by the same executor + adapter the agent tool uses). Agent path unchanged. Capability-factory test asserts both paths share ONE lazy-init adapter (`buildRealAdapterMethods` called once).
+      - **CP4.3b — `features/trading/` (generic).** NEW layer. `trading/clob-executor.ts` (moved from `copy-trade/`), `trading/order-ledger.ts` (`insertPending` / `markOrderId` / `markError` / `snapshotState`), `trading/order-ledger.types.ts`. AGENTS.md: MUST NOT import `copy-trade/` or `wallet-watch/`. Vocabulary: "order," "intent," "receipt," "ledger."
+      - **CP4.3c — `features/wallet-watch/` (generic).** NEW layer. `wallet-watch/polymarket-source.ts` (Data-API `listUserActivity` + cursor), `wallet-watch/activity-poll.ts` (pure `nextFills(source, since) → {fills, newSince}`). Emits `Fill[]` only — no policy concepts. AGENTS.md: MUST NOT import `copy-trade/` or `trading/`.
+      - **CP4.3d — `features/copy-trade/mirror-coordinator.ts` (thin).** NEW. Pure `runOnce(deps)` glues `wallet-watch` → `decide` → `trading`. The ONLY file that imports from both `trading/` and `wallet-watch/`. Replaces the monolithic `poll.ts` / `state-reader.ts` / `fill-recorder.ts` / `normalize-activity.ts` files from the pre-split plan. Coordinator tests cover (a) idempotent re-run (b) insert-then-crash resume (c) kill-switch off (d) empty-tx reject (e) cap-hit.
+      - **CP4.3e — Job shim + bootstrap wiring.** `bootstrap/jobs/copy-trade-mirror.job.ts` (`@scaffolding` / `Deleted-in-phase: 4`) — scheduler-core 30s tick → `mirror-coordinator.runOnce()`. Boot-guarded by `POLY_ROLE === "trader"`; logs `event:poly.mirror.poll.singleton_claim`; counter `poly_mirror_poll_ticks_total`. `SINGLE_WRITER` invariant = `POLY_ROLE=trader` + `replicas=1` (joint). No scheduler-worker split in P1.
+      - **Metrics added in CP4.3:** `poly_mirror_decisions_total{outcome,reason,source="data-api"}`, `poly_mirror_kill_switch_fail_closed_total`, `poly_mirror_data_api_empty_tx_hash_total`, `poly_mirror_poll_ticks_total`. Prefix is `poly_mirror_*` (not `poly_copy_trade_*`) to track the layer: coordinator emits, ledger/watcher don't.
+    - [ ] **CP4.5 — Read-only dashboard card** (generic ledger view; instance is `@scaffolding` / `Deleted-in-phase: 4`).
+      - File: `app/(app)/dashboard/_components/order-activity-card.tsx`. Generic recent-orders card over `order-ledger`, takes a filter prop. Server component, `revalidate: 5`. The copy-trade-filtered instance (`target_id IS NOT NULL`) is the `@scaffolding` instance. The generic card survives P4.
+      - Query: `SELECT decided_at, target_wallet, market_id, side, size_usdc, limit_price, status, order_id FROM poly_copy_trade_fills ORDER BY decided_at DESC LIMIT 50`.
+      - **RLS:** migration 0027 documents "No RLS on these tables" — same DB client the ledger writes with. No new policy required.
+      - Row link: `order_id` → `https://polymarket.com/profile/<operator>/trade/<order_id>` for live rows.
+    - **Out of scope (explicitly):** retroactive ledger writes from the agent-tool path (follow-up), multi-tenant Privy wallet resolution, per-target DB rows, paper-adapter body, WS ingester, SSE card, Grafana dashboard JSON, index tuning, DB table rename from `poly_copy_trade_*` to layer-neutral names (deferred to P2).
 - [ ] **Phase 2 — PR-B2 — Click-to-copy UI** (~4 days). `poly_copy_trade_targets` table + dashboard "Copy" button + Copy Targets card. DB-authoritative-when-populated; env fallback retained. Env-removal filed as follow-up.
 - [ ] **Phase 3 — PR-B3 — Paper-adapter body** (~3 days). 14-day soak produces the Phase 4 GO/NO-GO evidence. Sunsets the project if no edge.
 - [ ] **Phase 4 — PR-B4 — Streaming upgrade** (~1.5 weeks, **gated on P3 evidence**). WS → Redis streams → Temporal trigger → existing `decide()`. Dual-run 48h; cutover gate = zero double-fires.
@@ -211,10 +220,8 @@ poly_copy_trade_decisions (
 
 **Disposable scaffolding** — each file's header MUST include `@scaffolding` + `Deleted-in-phase: 4`:
 
-- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — single `runCopyTradeMirrorOnce(deps)` function. Reads kill-switch row (fail-closed on DB error); builds `RuntimeState` from `poly_copy_trade_fills`; calls `listUserActivity(COPY_TRADE_TARGET_WALLET, {sinceTs})` → normalizer → `decide()` → on `place` invokes the injected executor; writes `fills`+`decisions` rows. ~150 lines. No retry hardening, no poll-specific Grafana panels.
-- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.scheduler.ts` — container-local `setInterval(runCopyTradeMirrorOnce, 30_000)`, started only when `POLY_ROLE === 'trader'`, cancelled on SIGTERM. **NO `ScheduleControlPort` / no Temporal / no governance schedule.** Precedent: `bootstrap/publishers.ts` uses `setInterval` for the health publisher; this poll follows the same pattern. User enablement is the kill-switch DB row (`poly_copy_trade_config.enabled`) — the interval runs whenever the trader pod is up, but only `decide()` returns `place` when the row is `true`.
-- `nodes/poly/app/src/app/api/internal/ops/copy-trade/mirror/route.ts` — internal ops route invoking `runCopyTradeMirrorOnce()` on demand. Lets an operator (or a stack test) trigger a single tick without waiting for the interval. Same admin-role gate pattern as `ops/governance/schedules/sync/route.ts`.
-- `nodes/poly/app/src/app/(app)/dashboard/_components/copy-trade-activity-card.tsx` — server component, `SELECT * FROM poly_copy_trade_fills ORDER BY observed_at DESC LIMIT 50` with 5 s revalidate. No SSE, no streams. No kill-switch toggle (P1 flips via psql). Phase 4 replaces with SSE reader; React surface unchanged.
+- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — `@cogni/scheduler-core` 30 s poll calling `listUserActivity(ENV_TARGET_WALLET)` → normalizes to `Fill` → invokes `decide()` → on `place` calls `clob-executor`. ~80 lines. No retry hardening, no scheduling tuning, no poll-specific Grafana panels.
+- `nodes/poly/app/src/app/(app)/dashboard/_components/copy-trade-activity-card.tsx` — server component, `SELECT * FROM poly_copy_trade_fills ORDER BY decided_at DESC LIMIT 50` with 5 s revalidate. No SSE, no streams. Phase 4 replaces with SSE reader; React surface unchanged.
 
 **Env vars** (scaffolding-tier; fallback-retained in P2, removed in a dedicated deprecation PR after P2):
 
@@ -235,162 +242,6 @@ poly_copy_trade_decisions (
 **🎯 Phase 1 E2E validation (ONE scenario):**
 
 > Set `COPY_TRADE_TARGET_WALLET=<high-volume Polymarket wallet>`, `COPY_TRADE_MODE=live`, `UPDATE poly_copy_trade_config SET enabled=true`. Within 60 s of that wallet's next real fill, a row appears in `poly_copy_trade_fills` with a non-null `order_id`, AND the Polymarket web UI under the Cogni operator EOA (`0xdCCa8…5056`) shows an open position for `$1 USDC` on the same market. Paste `order_id` + screenshot into the PR.
-
----
-
-### Phase 1 CP4.25 Design — "app can place a trade" capability
-
-**Outcome.** The running poly trader pod accepts an `OrderIntent` over an admin-gated HTTP route and returns a real Polymarket `OrderReceipt`. No autonomous decision-making — the caller (curl, poly-brain chat tool, future poll loop, future dashboard button) supplies the intent. The heavy wiring (Privy signer, CLOB adapter, pino logger, prom counters, env validation, ESLint isolation) lands here once so every future caller gets it for free.
-
-**Approach.** One permanent capability factory + env schema + one thin ops route + one stack test. Reuses the CP4.2 `createClobExecutor` seam — the factory binds `PolymarketClobAdapter.placeOrder` to that executor shape.
-
-**Why split from CP4.3.** The poll loop is autonomous decision-making (fill discovery, dedupe, caps, DB writes). The place-a-trade capability is just "signed order → CLOB". Bundling them means CP4.3 can't ship until the full autonomy stack is done. Splitting means candidate-a can demonstrate "app places a live order" the day CP4.25 merges, and CP4.3's stack test reuses the capability without re-wiring adapters.
-
-**Scope:**
-
-- `nodes/poly/app/src/bootstrap/capabilities/copy-trade.ts` — **permanent** factory. Signature:
-
-  ```ts
-  createCopyTradeCapability(config: {
-    role: PolyRole;
-    creds?: ApiKeyCreds;
-    operatorWalletAddress?: `0x${string}`;
-    logger: LoggerPort;
-    metrics: MetricsPort;
-    /** TEST ONLY — bypasses Privy + adapter construction. Never populated in production bootstrap. */
-    placeOrderOverride?: MarketProviderPort["placeOrder"];
-  }): CopyTradeCapability | undefined
-  ```
-
-  - When `role === 'trader'` and no override: dynamic-imports `@cogni/market-provider/adapters/polymarket` + `@privy-io/node/viem#createViemAccount`, resolves the operator Privy wallet by `operatorWalletAddress`, constructs `PolymarketClobAdapter` with a real pino child logger + `MetricsPort`, and wraps `adapter.placeOrder.bind(adapter)` in `createClobExecutor`. **Fail-fast**: if the Privy wallet cannot be resolved, throw at boot — NOT at first request. Log `{event:"poly.capability.ready", wallet_id, address}` on success.
-  - When `placeOrderOverride` is set: skip dynamic imports; wrap the override in `createClobExecutor` directly. Used by stack tests.
-  - Non-trader roles: return `undefined`.
-  - **Test-fixture hook is the `placeOrderOverride` param** (reviewer callout #1, option c). Stack test bootstrap passes it; production bootstrap never does.
-
-- `nodes/poly/app/src/bootstrap/capabilities/metrics.ts` (new if absent) — shared `MetricsPort → prom-client` adapter using `registry.getSingleMetric(name) ?? new Counter/Histogram(...)` for hot-reload safety.
-- `nodes/poly/app/src/shared/env/server-env.ts` — add `POLY_ROLE` (`trader|web|scheduler`, default `web`) and the trader-required triple `POLY_CLOB_API_KEY` / `POLY_CLOB_API_SECRET` / `POLY_CLOB_PASSPHRASE`. `OPERATOR_WALLET_ADDRESS` is already the polymarket-signer convention (used by CP3.1 allowance script + CP3.2 dress rehearsal) — reuse it; `POLY_OPERATOR_WALLET_ADDRESS` alias is a follow-up. Zod-refinement: trader role with missing creds or malformed wallet address fails boot with a clear message.
-- `nodes/poly/app/src/app/api/internal/ops/poly/place/route.ts` — **permanent** POST endpoint:
-  - Validates body against `OrderIntentSchema` from `@cogni/market-provider`.
-  - Auth: existing admin/internal-ops pattern (same as `ops/governance/schedules/sync/route.ts`).
-  - Returns **501** (not 503) if `POLY_ROLE !== 'trader'` or the capability is undefined — permanent for the pod, not a retry-later condition (reviewer callout #9).
-  - Calls `container.copyTrade.placeOrder(intent)` and returns the `OrderReceipt` as JSON.
-  - **Route-layer structured log** at every phase (reviewer callout #2), bounded enum to keep Prom/Loki labels clean:
-    ```ts
-    // phase: "start" | "ok" | "zod_reject" | "auth_reject" | "capability_missing" | "error"
-    log.info(
-      {
-        event: "poly.ops.place",
-        phase,
-        client_order_id,
-        caller_ip,
-        result,
-        duration_ms,
-      },
-      `ops.place: ${phase}`
-    );
-    ```
-    Adapter-layer + executor-layer logs continue to fire inside the capability on their own events.
-  - Rate limit: 1 request per 5s per token (reviewer callout #4). Reuses existing rate-limit middleware if present; otherwise a simple in-memory token bucket scoped to this route.
-  - Body size cap: 8KB. `OrderIntent` is ~500B; no legitimate caller sends more (reviewer callout #5).
-- `.eslintrc` `no-restricted-imports` rule — `@polymarket/clob-client` and `polymarket.clob.adapter` can only be imported from `bootstrap/capabilities/copy-trade.ts`. Replaces the absence-of-module-load runtime test (reviewer pushback).
-- **k8s overlay:** trader deployment pinned to `replicas: 1` in `infra/.../poly/overlays/<env>/` (reviewer callout #8). SINGLE_WRITER topology commits to reality; CP4.3 inherits.
-- **Factory unit tests** (reviewer callout #7), distinct from the stack test:
-  - `POLY_ROLE=web` → factory returns `undefined`, no CLOB imports touched.
-  - `POLY_ROLE=trader` + missing creds → Zod refinement throws at boot with a clear message (not a Privy/adapter runtime error).
-  - `POLY_ROLE=trader` + unknown `OPERATOR_WALLET_ADDRESS` → factory throws at boot.
-  - Hot-reload: calling the factory twice against the same prom registry does NOT throw "metric already registered."
-- **Stack test** `tests/stack/poly/poly-place.stack.test.ts` — spins the poly node via the `placeOrderOverride` hook above. Posts a valid `OrderIntent` to the ops route, asserts: (a) the fake received the intent verbatim, (b) the route returned the canned receipt, (c) route-layer log emitted with `phase:"ok"` and matching `client_order_id`, (d) adapter/executor layer logs also emitted (structured-log-layering preserved). Separate subtests:
-  - POST on `POLY_ROLE=web` container returns **501** + `phase:"capability_missing"` log.
-  - Malformed `OrderIntent` → **400** + `phase:"zod_reject"` log.
-  - Missing `INTERNAL_OPS_TOKEN` → **401** + `phase:"auth_reject"` log.
-  - Rapid repeat within 5s → **429** (rate-limit).
-
-**Invariants** (review criteria):
-
-- `CAPABILITY_GATED_BY_ROLE` — the CLOB adapter + Privy wallet are constructed ONLY when `POLY_ROLE === 'trader'`. Web + scheduler replicas have no CLOB code loaded.
-- `NO_STATIC_CLOB_IMPORT` — enforced by ESLint `no-restricted-imports`. The capability factory is the sole legal importer.
-- `ADMIN_GATED_ROUTE` — the ops route uses the existing internal-ops auth middleware. No public trade placement.
-- `NO_BUSINESS_LOGIC_IN_ROUTE` — the route validates, calls `executor(intent)`, returns. No decide(), no DB writes, no dedupe. Those belong to CP4.3.
-- `CONTRACT_IS_SOT` — the route's request shape IS `OrderIntentSchema`; no parallel DTO.
-- `KILL_SWITCH_IS_AUTONOMY_ONLY` (reviewer callout) — the ops route bypasses `poly_copy_trade_config.enabled` by design. The kill-switch gates the autonomous loop in CP4.3; the ops route is the operator's manual override path and must keep working even when autonomy is off.
-- `CAPABILITY_FAIL_FAST` — Privy wallet-resolution errors at bootstrap crash the pod (loud, debuggable) rather than returning 500 on first request.
-- `TEST_HOOK_IS_FACTORY_PARAM` — the fake `placeOrder` substitution goes through `createCopyTradeCapability({placeOrderOverride})`, NOT env vars or container post-boot mutation. The stack test and CP4.3's stack test share this single mechanism.
-- `SINGLE_TRADER_REPLICA` — trader-role k8s overlay pins `replicas: 1`. No two-writer race for manual or autonomous placements.
-
-**🎯 CP4.25 E2E validation** (candidate-a milestone):
-
-> Deploy CP4.25 to candidate-a with `POLY_ROLE=trader` + CLOB creds + operator wallet mounted. From a dev laptop with `INTERNAL_OPS_TOKEN`:
->
-> ```
-> curl -X POST https://poly-test.cognidao.org/api/internal/ops/poly/place \
->   -H "Authorization: Bearer $INTERNAL_OPS_TOKEN" \
->   -H "Content-Type: application/json" \
->   -d '{"provider":"polymarket","market_id":"...","outcome":"Yes","side":"BUY","size_usdc":5,"limit_price":0.99,"client_order_id":"0x...","attributes":{"token_id":"..."}}'
-> ```
->
-> Returns `200 {"order_id":"0x...", ...}` with a real Polymarket CLOB id. Operator profile `polymarket.com/profile/0xdCCa8…5056` shows the new position. Proves: running app issues a signed order. No autonomy, no loop, no decide() — just placement capability.
-
-**Rejected (out of scope for CP4.25):**
-
-- Autonomous fill discovery (poll or WS) — CP4.3.
-- `decide()` wiring — CP4.3.
-- `poly_copy_trade_fills` / `poly_copy_trade_decisions` writes — CP4.3.
-- Already-placed idempotency dedupe — CP4.3 (the route trusts the caller's `client_order_id`; CP4.3 enforces it via DB PK).
-- Kill-switch enforcement — CP4.3 (route works regardless of `poly_copy_trade_config.enabled`; autonomy gates on it).
-- Cap enforcement — CP4.3.
-- Dashboard card — CP4.5.
-
-**Sizing.** ~400 LOC. One reviewable commit. Independently merge-worthy before CP4.3 starts.
-
----
-
-### Phase 1 CP4.3 Design — in-process poll (no governance schedule)
-
-**Outcome.** The running poly trader pod auto-mirrors a single target wallet's fills onto Polymarket. Enablement is a single SQL flip by the user (`UPDATE poly_copy_trade_config SET enabled = true`). Turn-off is the inverse.
-
-**Approach.** Single `setInterval(runCopyTradeMirrorOnce, 30_000)` in the trader pod, started on `instrumentation.ts` when `POLY_ROLE === 'trader'`, cancelled on SIGTERM. No `ScheduleControlPort`, no Temporal, no governance infra, no grants, no advisory lock — one writer, one pod, one target. Reuses the `setInterval` pattern already used by `bootstrap/publishers.ts` for the health publisher.
-
-**Why NOT ScheduleControlPort (rejected).** `ScheduleControlPort` + `syncGovernanceSchedules` is designed for repo-spec-managed, platform-wide graph executions with grants + billing actors. Registering a 30 s in-process poll through it means a Temporal workflow round-trip every tick, Temporal dev/stack-test dependency, and a governance schedule row — all scaffolding that gets deleted in P4. **No governance wiring for a disposable user-scoped loop.**
-
-**Why NOT per-user session control (rejected).** P1 has one operator (`0xdCCa8…5056`) and one target wallet. A REST endpoint with session-scoped auth, state machines, or per-user target configs is P2 scope (`poly_copy_trade_targets` table + click-to-copy UI). For P1 the kill-switch row is the user interface.
-
-**Reviewer-flagged fixes baked into CP4.3 scope (not a later phase):**
-
-1. **Price adjustment seam.** `decide()` stays pure; the poll is responsible for producing a realistic `limit_price` before calling `decide()`. Poll orchestration fetches `ClobClient.getOrderBook(tokenId).asks[0]` for the target market and passes that as the effective limit price on the `Fill` handed to `decide()`. On empty ask book the poll returns the new `market_unknown` skip path (no `decide()` call needed — there's nothing to price against). Rationale: keeps `decide()` a pure pipeline stage; book-state is upstream input.
-2. **Empty `token_id` → `market_unknown` skip in `decide()`.** Minimal patch to `decide.ts::buildIntent` — if `fill.attributes.asset` is empty, return `{action: 'skip', reason: 'market_unknown'}`. `market_unknown` is already in the `MirrorReason` enum for this exact class of data-quality miss.
-3. **Reject empty `outcome` in normalizer.** `polymarket.normalize-fill.ts` currently falls back to `"YES"` when `trade.outcome` is empty — a 50/50 guess on binary markets. Replace with explicit `{ok: false, reason: "missing_outcome"}` (new enum value); caller buckets as a normalization skip. Add a unit test.
-
-**Depends on CP4.25.** CP4.3 consumes `container.copyTrade.placeOrder` — the executor wired in CP4.25's capability factory. CP4.3 adds zero new adapter-construction code.
-
-**Scope (commit-sized deliverables):**
-
-- `nodes/poly/app/src/features/copy-trade/decide.ts` — fix (2) above.
-- `packages/market-provider/src/adapters/polymarket/polymarket.normalize-fill.ts` — fix (3) above.
-- `nodes/poly/app/src/shared/db/copy-trade.repo.ts` — typed SELECT/INSERT helpers for the three tables. No business logic.
-- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.job.ts` — `runCopyTradeMirrorOnce(deps)` orchestration. Reads kill-switch (fail-closed), computes `RuntimeState`, fetches `listUserActivity(sinceTs)` → normalize → orderbook-adjusted price → `decide()` → on `place` invokes `container.copyTrade.placeOrder(intent)` → writes `fills`+`decisions` rows.
-- `nodes/poly/app/src/bootstrap/jobs/copyTradeMirror.scheduler.ts` — lifecycle module exporting `startCopyTradeLoop({intervalMs, run})` + `stopCopyTradeLoop()`. Pure `setInterval` wrapper, no Temporal.
-- `nodes/poly/app/src/app/api/internal/ops/copy-trade/mirror/route.ts` — POST endpoint invoking `runCopyTradeMirrorOnce()`. Admin-role gated via existing middleware. Distinct from CP4.25's `/ops/poly/place` — this one runs a full autonomy tick, not a single placement.
-- `tests/stack/poly/copy-trade-mirror.stack.test.ts` — stack test: stubs `PolymarketDataApiClient.listUserActivity` with a canned BUY fixture, substitutes the capability's `placeOrder` with a fake returning a canned receipt, hits the ops route, asserts one `fills` row with non-null `order_id` + one `decisions` row. Separate subtest: `enabled=false` → `decisions.outcome='skipped'`, zero `fills.order_id`. Separate subtest: idempotent re-run produces zero new rows.
-- Unit tests for: orderbook-price adjustment (poll orchestration), kill-switch read-error → fail-closed, `market_unknown` short-circuit when token_id is empty, new `missing_outcome` normalizer branch.
-
-**Invariants** (review criteria):
-
-- `FAIL_CLOSED` — kill-switch DB read error ⇒ treat as `enabled=false` + pino error log + `poly_copy_trade_kill_switch_read_errors_total` counter increment. Never default to enabled.
-- `SINGLE_WRITER` — only one trader pod runs the interval. No advisory lock. Enforced by pod topology, not in code.
-- `SCAFFOLDING_MARKED` — every CP4.3 file header carries `@scaffolding` + `Deleted-in-phase: 4`.
-- `NO_GOVERNANCE_SCHEDULE` — no import of `ScheduleControlPort`, no registration of any Temporal schedule for this loop. Caught at review.
-- `EXECUTOR_SEAM_INTACT` — poll invokes executor via the `placeOrder` function seam shipped in CP4.2; stack test substitutes without monkey-patching.
-- `INTENT_BASED_CAPS` — caps count intents, not realized fills (per CP4.1 `decide.ts` header). Revisit P3.
-
-**Rejected (out of scope for CP4.3):**
-
-- Temporal schedule / governance wiring — explicitly not what P1 needs.
-- Per-user target auth (session, RBAC) — P2, task.0318.
-- Dashboard kill-switch toggle — P2 (P1 uses psql).
-- Grafana dashboard JSON — follow-up work item; counter names are stable, dashboard is mechanical.
-- Absence-of-module-load runtime test — replaced by ESLint `no-restricted-imports` rule in CP4.25.
-- Container wiring / env vars / adapter construction / ESLint rule — all now live in CP4.25, not here.
-- Multi-target — `COPY_TRADE_TARGET_WALLET` stays singular in P1; list goes into the `poly_copy_trade_targets` table in P2.
 
 ---
 
@@ -866,43 +717,7 @@ CP3.1.5 (`efbf49901`) approved — clean deletion. CP3.2 (`3b9e1797a`) architect
 ### Out of scope for this review
 
 - CP3.3 DB migrations (`poly_copy_trade_{fills,config,decisions}`) — currently in uncommitted WIP in the worktree; review when the commit lands.
-- CP4 `decide()` + executor + poll — not yet started.
-
-## Review Feedback (revision 5, 2026-04-17 — post-CP4.25 review)
-
-Reviewed commit `21bc70747` (CP4.25 — agent-callable `core__poly_place_trade`). Tests green (19 new, 1234 total), typecheck clean, CI green. APPROVED for prototype scope, with follow-up fixes landed in a subsequent commit on this branch.
-
-### Architectural pivot acknowledged
-
-Design called for an admin HTTP route + `INTERNAL_OPS_TOKEN`; implementation shipped as an agent-callable AI tool surfaced through poly-brain's tool catalog. Defensible for the single-operator prototype:
-
-- Trigger gate becomes "authenticated chat user + LLM system-prompt gate" instead of bearer-token. Weaker in principle (prompt injection risk) but practically equivalent for a single-user prototype behind auth.
-- Eliminates the admin-route + per-call token infra that nothing else in the codebase uses.
-- Natural-language placement from chat → no bespoke UI work.
-- No runtime kill-switch — disabling the tool requires removing env vars + redeploy. **CP4.3 must gate the same capability on `poly_copy_trade_config.enabled`**, otherwise the DB kill-switch has no effect on the chat-tool path.
-
-### Review findings addressed in follow-up commit
-
-Reviewer raised 6 issues; 6 landed as a follow-up, 1 deferred:
-
-- ✅ **`clientOrderIdFor` drift (high).** Tool was using a bespoke polynomial hash; followed-up moves generation to the capability layer and uses the pinned keccak helper from `@cogni/market-provider`. Tool no longer carries a `client_order_id` field or generator.
-- ✅ **MetricsPort shim dropped metrics (medium).** Original shim matched on two hardcoded names, silently swallowing the CP4.2 executor's `poly_copy_trade_execute_*` and the PR #890 adapter's `poly_clob_*` emissions. Replaced with a generic lazy pass-through keyed on metric name.
-- ✅ **Test-override knob leaked into production config.** `placeOrderOverride` removed from `CreatePolyTradeCapabilityConfig`. Factory now follows the established pattern (`createRepoCapability` / `createMetricsCapability`): branches on `env.isTestMode` and substitutes `FakePolymarketClobAdapter` from `@/adapters/test/poly-trade/`.
-- ✅ **Capability factory split for single-responsibility.** `createPolyTradeCapabilityFromAdapter(deps)` is the pure composition path (wraps any `placeOrder` in the CP4.2 executor + metrics + generates `client_order_id`). `createPolyTradeCapability(config)` is the env-driven entry (test-mode → fake, incomplete env → undefined, complete env → lazy real). The real Privy+CLOB wiring is the ONE intentionally-hardcoded single-operator block.
-- ✅ **Biome rule widening reverted.** Original single-path `@polymarket/clob-client` restriction preserved. The test-adapter pattern removes the motivation for widening (fake doesn't depend on the restricted package).
-- ✅ **Boot-time env-ok log added.** Positive observability signal at factory construction so ops can alert on the absence of `poly.trade.capability.env_ok` on trader pods without waiting for the first agent-initiated trade.
-- ⊘ **Stale CP4.25 Design section in this doc.** The "Phase 1 CP4.25 Design" section (line ~241) still describes the HTTP route + 503 semantics + `ADMIN_GATED_ROUTE` invariant that didn't ship. Deferred to `/closeout` for a docs sweep.
-
-### Items tagged for CP4.3
-
-- **Kill-switch must gate the tool path**, not just the autonomous loop. Add a kill-switch read before every `placeTrade` call in the capability, or fold the gate into `createPolyTradeCapabilityFromAdapter` so every caller (tool, autonomous loop) inherits it.
-- Reviewer-flagged fixes still pending: price adjustment seam, empty `token_id` → `market_unknown` skip, `outcome || "YES"` fallback replaced with explicit `missing_outcome` skip. All already pinned in the CP4.3 Design section.
-
-### Follow-up items for P2
-
-- **Rename `OPERATOR_WALLET_ADDRESS` → `POLY_PROTO_OPERATOR_ADDRESS`** (separate commit by the secrets-isolation track; already-staged env var added as additive, legacy name kept intact until factory rename completes in one place).
-- **Tighten `@cogni/market-provider` package boundary** — currently exports `PolymarketClobAdapter` class from its public surface. Consider moving the class to a separate package (`@cogni/polymarket-adapter`) so the Biome rule becomes redundant; alternatively narrow the subpath export. Not blocking CP4.25.
-- **Named `ClobRejectionError` class** — CP4.2 executor classifies rejections via string-match on `"CLOB rejected order"`. Fragile; should be a proper error subclass so the metric bucket doesn't depend on adapter message text.
+- CP4.1 `decide()` + CP4.2 `clob-executor` + CP4.25 agent-tool stack — shipped on main via PR #900 (squash `b0765ef99`). CP4.3 (autonomous mirror poll, three-layer decomposition) + CP4.5 (dashboard card) pending on fresh branch `feat/poly-mirror-v0`; design captured in [docs/spec/poly-copy-trade-phase1.md](../../docs/spec/poly-copy-trade-phase1.md).
 
 ## Alignment Decisions (confirmed by operator before `/implement`)
 
