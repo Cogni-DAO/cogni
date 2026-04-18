@@ -91,7 +91,7 @@ export function OperatorWalletCard(): ReactElement {
                 {formatShortWallet(data.wallet)}
               </a>
               <CopyAddressButton address={data.wallet} />
-              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs uppercase tracking-wide">
                 USDC.e · Polygon
               </span>
             </div>

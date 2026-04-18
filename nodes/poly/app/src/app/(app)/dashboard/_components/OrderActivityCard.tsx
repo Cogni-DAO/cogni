@@ -206,7 +206,7 @@ export function OrderActivityCard(): ReactElement {
                       {row.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="max-w-[28ch] truncate font-medium text-sm">
+                  <TableCell className="max-w-56 truncate font-medium text-sm">
                     {row.marketTitle ?? (
                       <span className="font-mono text-muted-foreground text-xs">
                         {row.marketId
