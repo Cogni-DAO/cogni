@@ -16,7 +16,7 @@ spec_refs:
 assignees: derekg1729
 project: proj.poly-prediction-bot
 created: 2026-04-17
-updated: 2026-04-16
+updated: 2026-04-18
 labels: [poly, polymarket, follow-wallet, copy-trading, prototype]
 external_refs:
   - docs/research/poly-copy-trading-wallets.md
