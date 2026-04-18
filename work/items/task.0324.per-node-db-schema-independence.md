@@ -2,7 +2,7 @@
 id: task.0324
 type: task
 title: Per-node DB schema split (minimal — no new tooling)
-status: needs_implement
+status: needs_merge
 priority: 2
 rank: 50
 estimate: 2
@@ -14,10 +14,10 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.database-ops
-branch:
-pr:
+branch: task.0322-per-node-db-schema-split
+pr: https://github.com/Cogni-DAO/node-template/pull/916
 reviewer:
-revision: 2
+revision: 3
 blocked_by:
 deploy_verified: false
 created: 2026-04-18
