@@ -237,41 +237,18 @@ export const serverSchema = z.object({
   PRIVY_APP_SECRET: optionalString,
   PRIVY_SIGNING_KEY: optionalString,
 
-  // Polymarket CLOB trade placement — Optional
-  // Required only when `core__poly_place_trade` tool is exposed to agents.
-  // Per task.0315 CP4.25: the poly-trade capability is constructed when ALL of
-  // POLY_PROTO_WALLET_ADDRESS + POLY_PROTO_PRIVY_SIGNING_KEY +
-  // POLY_CLOB_API_KEY + POLY_CLOB_API_SECRET + POLY_CLOB_PASSPHRASE +
-  // PRIVY_APP_ID + PRIVY_APP_SECRET are set. Otherwise the tool is
-  // registered with a stub that throws a clear error.
-  //
-  // POLY_PROTO_WALLET_ADDRESS is a DEDICATED Privy wallet for the Polymarket
-  // copy-trade prototype. It is NOT the production operator wallet
-  // (OPERATOR_WALLET_ADDRESS, used by distributeSplit / fundOpenRouterTopUp
-  // on Base). The two wallets share PRIVY_APP_ID + PRIVY_APP_SECRET (same
-  // Privy app) but have SEPARATE per-wallet authorization signing keys —
-  // PRIVY_SIGNING_KEY signs for the production operator wallet,
-  // POLY_PROTO_PRIVY_SIGNING_KEY signs for the prototype wallet. Custody
-  // isolation: production operator holds real billing funds on Base; the
-  // proto wallet holds only ~$20 USDC.e on Polygon for this experiment.
-  // See work/items/task.0315 — never collapse these names.
-  //
-  // The legacy OPERATOR_WALLET_ADDRESS field below remains in this schema
-  // only until the reviewer's poly-trade capability-factory refactor lands;
-  // a follow-up commit will remove it once the factory reads POLY_PROTO_*.
-  POLY_PROTO_WALLET_ADDRESS: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
+  // Polymarket prototype wallet — fully independent from the production
+  // operator wallet (PRIVY_* above). See docs/guides/polymarket-account-setup.md.
+  POLY_PROTO_PRIVY_APP_ID: optionalString,
+  POLY_PROTO_PRIVY_APP_SECRET: optionalString,
   POLY_PROTO_PRIVY_SIGNING_KEY: optionalString,
-  OPERATOR_WALLET_ADDRESS: z
+  POLY_PROTO_WALLET_ADDRESS: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
     .optional(),
   POLY_CLOB_API_KEY: optionalString,
   POLY_CLOB_API_SECRET: optionalString,
   POLY_CLOB_PASSPHRASE: optionalString,
-  // Override CLOB host for dev/testnet (default: https://clob.polymarket.com)
   POLY_CLOB_HOST: optionalUrl,
 
   // Operator wallet top-up cap (USD)

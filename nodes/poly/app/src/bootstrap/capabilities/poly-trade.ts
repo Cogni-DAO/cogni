@@ -435,7 +435,7 @@ async function buildRealPlaceOrder(
   }
   if (!walletId) {
     throw new Error(
-      `[poly-trade] FAIL: Privy has no wallet matching OPERATOR_WALLET_ADDRESS ${deps.operatorWalletAddress}. ` +
+      `[poly-trade] FAIL: Privy has no wallet matching POLY_PROTO_WALLET_ADDRESS ${deps.operatorWalletAddress}. ` +
         "Verify PRIVY_APP_ID / PRIVY_APP_SECRET and that the EOA was created under this Privy app."
     );
   }
