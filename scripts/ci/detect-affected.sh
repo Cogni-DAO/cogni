@@ -134,8 +134,18 @@ else
         add_target operator
         add_target migrator
         ;;
+      nodes/poly/app/src/shared/db/* | \
+      nodes/poly/app/src/adapters/server/db/migrations/*)
+        add_target poly
+        add_target migrator
+        ;;
       nodes/poly/*)
         add_target poly
+        ;;
+      nodes/resy/app/src/shared/db/* | \
+      nodes/resy/app/src/adapters/server/db/migrations/*)
+        add_target resy
+        add_target migrator
         ;;
       nodes/resy/*)
         add_target resy
@@ -145,6 +155,13 @@ else
         ;;
       nodes/node-template/*)
         selection_reason="non-deployable-node-template-change:${path}"
+        ;;
+      drizzle.config.ts | \
+      drizzle.operator.config.ts | \
+      drizzle.poly.config.ts | \
+      drizzle.resy.config.ts)
+        # Per-node drizzle configs (task.0322) — any change triggers migrator rebuild
+        add_target migrator
         ;;
     esac
   done <<< "$changed_paths"

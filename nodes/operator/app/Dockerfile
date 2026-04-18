@@ -58,17 +58,37 @@ RUN --mount=type=cache,id=next-cache,target=/app/nodes/operator/app/.next/cache,
     pnpm --filter operator build
 
 # Migrator – minimal image for database migrations via drizzle-kit
+# Single image serves all nodes (task.0322). Overlay selects which node to migrate
+# via the Job's command override (e.g. command: ["pnpm","db:migrate:poly:container"]).
 FROM base AS migrator
 WORKDIR /app
 
 # Copy from builder (includes built workspace packages)
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
+
+# Per-node drizzle configs (task.0322)
 COPY --from=builder /app/drizzle.config.ts ./
+COPY --from=builder /app/drizzle.operator.config.ts ./
+COPY --from=builder /app/drizzle.poly.config.ts ./
+COPY --from=builder /app/drizzle.resy.config.ts ./
+
+# Shared schema package (all three per-node configs read from here)
+COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
+
+# Per-node schema barrels + db-url helper + migration dirs
+# Operator
 COPY --from=builder /app/nodes/operator/app/src/shared/db ./nodes/operator/app/src/shared/db
 COPY --from=builder /app/nodes/operator/app/src/adapters/server/db/migrations ./nodes/operator/app/src/adapters/server/db/migrations
+# Poly
+COPY --from=builder /app/nodes/poly/app/src/shared/db ./nodes/poly/app/src/shared/db
+COPY --from=builder /app/nodes/poly/app/src/adapters/server/db/migrations ./nodes/poly/app/src/adapters/server/db/migrations
+# Resy
+COPY --from=builder /app/nodes/resy/app/src/shared/db ./nodes/resy/app/src/shared/db
+COPY --from=builder /app/nodes/resy/app/src/adapters/server/db/migrations ./nodes/resy/app/src/adapters/server/db/migrations
 
-# Run canonical migration script (drizzle-kit migrate)
+# Default CMD migrates operator (legacy behavior). Overlays override command
+# per-node: db:migrate:poly:container / db:migrate:resy:container.
 CMD ["pnpm", "db:migrate:container"]
 
 # Runner – lean production image

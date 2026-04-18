@@ -83,6 +83,11 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "resy-node-app-secrets"
+      # task.0322: migrator image is one image serving all nodes; overlay selects
+      # which node to migrate by overriding the container command.
+      - op: add
+        path: /spec/template/spec/containers/0/command
+        value: ["pnpm", "db:migrate:resy:container"]
   - target:
       kind: EndpointSlice
       name: postgres-external-1

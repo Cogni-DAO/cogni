@@ -77,6 +77,11 @@ patches:
       - op: replace
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "operator-node-app-secrets"
+      # task.0322: explicit per-node migrate command (even for operator — mirrors
+      # poly/resy pattern; image default CMD is kept as a safety fallback).
+      - op: add
+        path: /spec/template/spec/containers/0/command
+        value: ["pnpm", "db:migrate:operator:container"]
   - target:
       kind: EndpointSlice
       name: postgres-external-1
