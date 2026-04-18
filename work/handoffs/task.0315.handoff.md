@@ -7,81 +7,97 @@ created: 2026-04-18
 updated: 2026-04-18
 branch: feat/poly-mirror-v0
 worktree: /Users/derek/dev/cogni-template-mirror
-last_commit: 7825650da
+last_commit: 8b009843b
 ---
 
-# Handoff: task.0315 Phase 1 — CP4.3 mirror poll + CP4.5-replacement read APIs
+# Handoff: task.0315 — PR #920 ready for merge; mirror needs ONE env var to actually run
 
-## Where to work
+## The one thing you need to know
 
-- **Worktree:** `/Users/derek/dev/cogni-template-mirror` (separate from main clone at `/Users/derek/dev/cogni-template`)
-- **Branch:** `feat/poly-mirror-v0` — opens a fresh PR into `main`; PR #900 merged as squash `b0765ef99`, so CP4.1 / CP4.2 / CP4.25 are already on main.
-- **Env:** `.env.local` symlinked from the main worktree.
-- **Stale worktrees (prune at your leisure):** `/Users/derek/dev/cogni-template-cp4` (on the now-deleted `feat/poly-copy-trade-cp4` branch), `/Users/derek/dev/cogni-template-pr900` (detached).
+**Nothing I did in this branch actually trades yet.** The code is merged-ready, but every deployment where you want the autonomous mirror to run needs ONE env var set + ONE psql line:
 
-## Context
+```bash
+kubectl set env deployment/poly COPY_TRADE_TARGET_WALLET=0x<target-wallet>
+# wait for pod restart
+psql -h <poly-db-host> -U <user> -d cogni_poly \
+  -c "UPDATE poly_copy_trade_config SET enabled=true WHERE singleton_id=1;"
+```
 
-- **Mission:** Polymarket copy-trade prototype. v0 (PR-A) shipped a top-wallets scoreboard in an earlier PR. v0.1 (PR #900) shipped the agent-callable `core__poly_place_trade` tool + DB migration + CLOB adapter. **This branch (`feat/poly-mirror-v0`) ships the autonomous 30s mirror poll and the read APIs the frontend dev's new dashboard consumes.**
-- **Strategy:** stable-`decide()`-boundary design, decomposed into three layers per the refined design (see spec): `features/trading/` (generic placement + order ledger), `features/wallet-watch/` (generic Polymarket observation), `features/copy-trade/` (thin coordinator + policy).
-- **Operator wallet** is the HSM-custodied Privy EOA `0xdCCa8D85603C2CC47dc6974a790dF846f8695056` — onboarded + funded + approved on Polygon mainnet. Dress rehearsal + a live $5 take-fill already happened on `main`; CP5 canary verifies the container-issued path.
+That's it. Not in any deploy manifest (deliberate — this is `@scaffolding`, Deleted-in-phase: 4). When you don't set the env var, the poll skips boot + logs `poly.mirror.poll.skipped` and the app runs normally.
 
-## Current State
+## What shipped on this branch (PR #920)
 
-**Shipped on branch (7 commits since `origin/main`):**
+13 commits, all green locally. CI pending on `8b009843b` at push time.
 
-| Commit      | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `e97552ddc` | Phase 1 spec + task retargeting — three-layer decomposition; `poly_mirror_*` metric prefix; CP4.5 dashboard card replaced with read APIs for the frontend dev's track.                                                                                                                                                                                                                                                                                                        |
-| `078d9d3f7` | **CP4.3a — seam split.** `createPolyTradeCapability()` returns `PolyTradeBundle { capability, placeIntent, operatorWalletAddress }`. Both paths share ONE lazy adapter + ONE Privy wallet. Capability-factory test asserts `SEAM_SHARES_ADAPTER`.                                                                                                                                                                                                                             |
-| `6a8edfb9d` | **CP4.3b — `features/trading/` layer.** Moves `clob-executor` out of `copy-trade/` (it's not copy-trade-specific). Adds `order-ledger.ts` + `order-ledger.types.ts` port + Drizzle adapter over `poly_copy_trade_{fills,decisions,config}`. `FakeOrderLedger` in `adapters/test/trading/`. Layer invariant `TRADING_IS_GENERIC` documented in AGENTS.md.                                                                                                                      |
-| `2d33410fe` | **CP4.3c — `features/wallet-watch/` layer.** `WalletActivitySource` port + `createPolymarketActivitySource` Data-API adapter. `WALLET_WATCH_IS_GENERIC`. Empty-tx rejection + bounded-label skip counter. 5-scenario unit tests.                                                                                                                                                                                                                                              |
-| `086ec2ab0` | **CP4.3d — `mirror-coordinator.ts`.** Pure `runOnce(deps)` glues wallet-watch → decide → trading. `INSERT_BEFORE_PLACE` enforced. 9-scenario test suite (idempotent re-run, insert-then-crash resume, kill-switch off, fail-closed on DB error, empty page, daily-cap, rate-cap, happy path). Also fixes cap-math bug: caps filter on `created_at` (intent time), not `observed_at` (upstream fill time).                                                                     |
-| `4feaccbb8` | **CP4.3e — scheduler job + bootstrap wiring.** `bootstrap/jobs/copy-trade-mirror.job.ts` (`@scaffolding` / `Deleted-in-phase: 4`). 30s `setInterval`, gated by `POLY_ROLE=trader` + bundle + target wallet. Singleton claim log + counter. `targetIdFromWallet` derives a deterministic UUIDv5 from the wallet address. Env additions: `POLY_ROLE`, `COPY_TRADE_*`. Lazy-imports `features/trading` + `features/wallet-watch` so non-trader pods never pull in the machinery. |
-| `7825650da` | **CP4.5-replacement — three read APIs for the frontend dev.** `/api/v1/poly/copy-trade/targets`, `/api/v1/poly/copy-trade/orders`, `/api/v1/poly/wallet/balance`. Contracts in `packages/node-contracts/src/poly.*.v1.contract.ts`. Container exposes `polyTradeBundle` so the balance route can reuse `capability.listOpenOrders()` without rebuilding the adapter. Every route has a `TODO(HARDCODED_USER)` pointing at P2.                                                 |
+1. `e97552ddc` Phase 1 spec + three-layer retargeting
+2. `078d9d3f7` cp4.3a — `PolyTradeBundle` seam split (agent tool + poll share ONE adapter)
+3. `6a8edfb9d` cp4.3b — `features/trading/` layer (executor move + order-ledger)
+4. `2d33410fe` cp4.3c — `features/wallet-watch/` layer (polymarket-source)
+5. `086ec2ab0` cp4.3d — mirror-coordinator (thin copy-trade glue, 9-scenario tests)
+6. `4feaccbb8` cp4.3e — scheduler job + bootstrap wiring
+7. `7825650da` read APIs: `GET /api/v1/poly/{copy-trade/targets, copy-trade/orders, wallet/balance}`
+8. `b0392c953` closeout handoff (now stale — this file supersedes)
+9. `33328c7bf` review fixes B1 wrong URL / B2 normalizer wedge / C1 uuidv5 / C2 monitor flag
+10. `da70036f7` container.serviceDb routing (lint fix)
+11. `f7a4314f4` **MUST_FIX_P2 flag** on task.0315 P2 — RLS + tenant-scoping required before multi-tenant
+12. `0bbe25bc8` Turbopack `.js`-extension import fix (unblocked poly build)
+13. `da894ee7a` self-review APPROVE marker
+14. `85862333d` observability pass — 17 events registered in `EVENT_NAMES`, errorCode on every error log, debug noise trimmed
+15. `8b009843b` **env cleanup** — deleted `POLY_ROLE`, `COPY_TRADE_MODE`, `MIRROR_USDC`, `MAX_DAILY_USDC`, `MAX_FILLS_PER_HOUR`, `POLL_MS`. Only `COPY_TRADE_TARGET_WALLET` remains. Defaults hardcoded in `bootstrap/jobs/copy-trade-mirror.job.ts`.
 
-**Test status:** 317 passed / 11 skipped / 0 failed across `tests/unit/bootstrap` + `tests/unit/features`. `pnpm typecheck` clean. `pnpm check:fast` green pre-push.
+## CP5 — what's left to actually observe a live mirror trade
 
-## Decisions Made
+Not my work to do from this session, but concrete:
 
-- **Three-layer decomposition.** `trading/` and `wallet-watch/` are GENERIC and survive Phase 4; `copy-trade/` is a thin coordinator that P4 replaces with a Temporal workflow while reusing the same trading + decide surfaces.
-- **Use `setInterval`, not `@cogni/scheduler-core`.** The scheduler-core package is governance-schedule machinery (Temporal + cron + grants), not a tick library. Since the poll is `@scaffolding / Deleted-in-phase: 4`, a 4-line `setInterval` is the correct fit; P4 replaces with Temporal. Documented inside `copy-trade-mirror.job.ts`.
-- **`SINGLE_WRITER` invariant.** `POLY_ROLE=trader` + `replicas=1` is the joint deployment invariant. Boot log `event:poly.mirror.poll.singleton_claim` + counter `poly_mirror_poll_ticks_total` make a duplicate-pod setup Loki-visible. No DB-lock leader election in v0 (deferred to P2 if horizontal scaling is ever needed).
-- **In-memory cursor with 60s warm-up backlog.** First-tick cursor = `now - 60s` so the poll doesn't replay months of a target's historical activity through `decide()` at boot. Cursor resets on process restart — fine for v0 (at-most-once is backed by the DB ledger, not the cursor).
-- **Caps filter by `created_at`, not `observed_at`.** `INTENT_BASED_CAPS` means "what we submitted today," not "what the target filled today." Applied to both Drizzle adapter + FakeOrderLedger. Surfaced by the mirror-coordinator cap-hit test.
-- **Agent-tool placements are NOT in the ledger in v0.** The agent path still flows through the executor but doesn't write `poly_copy_trade_fills` rows. Tracked as explicit follow-up (one call-site change in `capabilities/poly-trade.ts::placeTrade`); kept out of this PR to minimize blast radius.
-- **`noopMetrics` for the poll in v0.** Real prom-client wiring for `poly_mirror_*` lands when a Grafana dashboard justifies it (P2).
-- **`HARDCODED_USER` TODOs on every read API.** Multi-tenant scoping lands in P2 when `poly_copy_trade_targets.owner_id` exists. `src/bootstrap/capabilities/poly-trade.ts::buildRealAdapterMethods` is still the ONE allowed place for single-tenant wallet resolution (`HARDCODED_WALLET_SECRETS_OK`).
+1. **Merge PR #920** once CI is green.
+2. **Pick a deployment** to enable mirror on (candidate-a or dedicated prototype env).
+3. **Set the env:** `kubectl set env deployment/poly COPY_TRADE_TARGET_WALLET=0x<real-high-volume-wallet> -n <ns>`.
+4. **Wait for pod restart.** Tail logs, confirm `poly.mirror.poll.singleton_claim` appears **exactly once**. If multiple instances log it, replicas>1 → fix before proceeding (SINGLE_WRITER breaks).
+5. **Flip the kill-switch:** `psql ... -c "UPDATE poly_copy_trade_config SET enabled=true WHERE singleton_id=1;"`. Takes effect on the next poll tick (≤30s).
+6. **Watch:** `poly_copy_trade_fills` for the first row with non-null `order_id`. Target wallet's profile on polymarket.com + our operator profile should both show the mirrored position.
+7. **Paste evidence** (order_id, tx hash, screenshots) into the PR or a follow-up issue.
+8. **Turn off when done:** `UPDATE poly_copy_trade_config SET enabled=false;` + optional `kubectl set env ... COPY_TRADE_TARGET_WALLET-` to remove the env.
 
-## Next Actions (remaining for PR close + CP5)
+## Hardcoded v0 constants (edit-in-code, redeploy to change)
 
-- [ ] **Push + open PR** against `main` from `feat/poly-mirror-v0`.
-- [ ] **`pnpm check` once before push** — the CLAUDE.md pre-commit gate.
-- [ ] **CI validates the PR.** Watch for `workspace:test` flakes under load (the shared vitest pool occasionally times out on `analytics.summary` + `treasury.snapshot` + `container.spec`; they pass in isolation).
-- [ ] **Frontend dev** consumes the three read APIs to build the dashboard panels (monitored wallets / order ledger / wallet balance). No further backend work expected for the UI.
-- [ ] **CP5 (manual, ~1h, gated on merge):** Deploy to canary. Tail `poly` container logs for `event:poly.mirror.poll.singleton_claim` (confirms single writer). Flip `poly_copy_trade_config.enabled=true` via `psql`. Observe container-issued `order_id` land in `poly_copy_trade_fills`. Paste evidence into the PR.
-- [ ] **Follow-up items (not in this PR):**
-  - Agent-tool placements should also write to `order-ledger` so the dashboard shows both paths. One call-site change.
-  - Real prom-client wiring for `poly_mirror_*` when dashboards justify it.
-  - Multi-tenant wallet resolution (task.0315 P2) — swap the body of `buildRealAdapterMethods()` for a per-connection lookup.
+`bootstrap/jobs/copy-trade-mirror.job.ts:44-57`:
 
-## Risks / Gotchas
+- `MIRROR_POLL_MS = 30_000`
+- `MIRROR_USDC = 1`
+- `MIRROR_MAX_DAILY_USDC = 10`
+- `MIRROR_MAX_FILLS_PER_HOUR = 5`
+- `mode: "live"` (paper adapter body = P3)
+- Warmup backlog = 60s (first-tick cursor skips the last minute of target history to avoid replay)
 
-- **Biome import ordering.** The formatter will re-sort `import` blocks on every `pnpm format`. Don't re-order manually; let Biome win. This affected every commit on this branch.
-- **Commit message constraints.** `body-max-line-length: 100` + `subject-case` rules (lowercase start, no banned words like "complete"/"comprehensive"/"full"). Use the HEREDOC + hard-wrap pattern.
-- **Polygon public RPCs round-robin.** `balance/route.ts` uses the default `viem` transport (public RPC). Not a concern for read-only balance queries, but if read staleness becomes user-visible, swap to a pinned RPC via `http(rpcUrl)`.
-- **Cursor reset on restart.** The poll replays the last 60s of the target's activity on boot. Each row is dedupe'd by `(target_id, fill_id)` composite PK, so no double-placement — but briefly higher CPU on the first tick after a deploy. If this becomes painful, persist cursor to `poly_copy_trade_config` via a new column. Deferred.
-- **Balance endpoint hits the chain synchronously.** Each request does three concurrent reads (USDC balance, POL balance, Polymarket open orders). Typical latency ~1–3s. If the dashboard polls it frequently, add a short TTL cache. Not yet.
+## Known gaps (carryover + my misses)
+
+- **MUST_FIX_P2**: RLS + `owner_user_id` column + `withTenantScope` migration before P2 multi-tenant ships. Currently the three read APIs use `Container.serviceDb` (BYPASSRLS). Documented in `docs/spec/poly-copy-trade-phase1.md` + `task.0315.poly-copy-trade-prototype.md` P2 bullet + JSDoc on the `Container.serviceDb` field.
+- **Agent-tool placements NOT in order-ledger.** The agent path (`core__poly_place_trade`) places orders but doesn't write to `poly_copy_trade_fills`. One call-site change in `bootstrap/capabilities/poly-trade.ts::placeTrade` — omitted to keep this PR scoped. Dashboard will show ONLY autonomous mirror orders.
+- **`poly_mirror_*` metrics are `noopMetrics`.** Defined in code, not wired. Pull `buildMetricsPort` from `poly-trade.ts` to wire real prom-client when Grafana panels exist.
+- **`placeIntent` has no timeout.** If Polymarket hangs, the tick hangs. Dedupe saves correctness; next tick's `setInterval` still fires. Add `AbortController` when it becomes a real problem.
+- **Cursor resets on process restart.** First-tick cursor = `now - 60s`. Any fill observed in the 60s before restart is missed. v0 accepts; persisted cursor is trivial (one column on `poly_copy_trade_config`).
+- **Kill-switch flip is a manual psql step.** We could auto-seed `enabled=true` via a migration or have startup auto-flip when untouched, but migration 0027 is already on main and the manual gate is honest for a money-handling prototype. Leave as-is.
+- **Balance endpoint rebuilds viem client per request.** Cache at module scope if dashboard polls cause latency.
+
+## What you DON'T need to do
+
+- Rename "kill-switch" to "monitoring-active" across the code. Naming is bad but touches `decide.ts` + the decisions.reason column values + tests. Cosmetic churn. Skip until P2.
+- Re-review B1/B2/C1/C2. All resolved, tests cover regressions, scored APPROVE at `da894ee7a`.
+- Write a doc. You (Derek) explicitly said no.
 
 ## Pointers
 
-| File / Resource                                                                                                               | Why it matters                                                                                                   |
-| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| [docs/spec/poly-copy-trade-phase1.md](../../docs/spec/poly-copy-trade-phase1.md)                                              | Phase 1 spec — file layout by layer, invariants, E2E scenarios, deferred pointers.                               |
-| [work/items/task.0315.poly-copy-trade-prototype.md](../items/task.0315.poly-copy-trade-prototype.md)                          | Canonical task — CP4.1 / 4.2 / 4.25 done on main; CP4.3a–e + CP4.5-replacement done on this branch. CP5 pending. |
-| `nodes/poly/app/src/features/copy-trade/mirror-coordinator.ts`                                                                | The thin glue. Start here when debugging a tick.                                                                 |
-| `nodes/poly/app/src/features/trading/order-ledger.ts`                                                                         | Drizzle adapter + the `CAPS_COUNT_INTENTS` filter on `created_at`.                                               |
-| `nodes/poly/app/src/features/wallet-watch/polymarket-source.ts`                                                               | Data-API wrapper + normalizer call site.                                                                         |
-| `nodes/poly/app/src/bootstrap/jobs/copy-trade-mirror.job.ts`                                                                  | Scheduler job. `@scaffolding` / `Deleted-in-phase: 4`.                                                           |
-| `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts`                                                                     | Single-tenant wallet resolution boundary (`buildRealAdapterMethods`).                                            |
-| `packages/node-contracts/src/poly.*.v1.contract.ts`                                                                           | The three read-API contracts the frontend dev consumes.                                                          |
-| `packages/db-schema/src/poly-copy-trade.ts` + `nodes/operator/app/src/adapters/server/db/migrations/0027_silent_nextwave.sql` | Ledger schema. No RLS.                                                                                           |
+| File                                                | Why                                                                                      |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `bootstrap/jobs/copy-trade-mirror.job.ts`           | Job shim + v0 hardcoded constants + UUIDv5 target-id helper                              |
+| `features/copy-trade/mirror-coordinator.ts`         | Pure `runOnce(deps)` — the glue                                                          |
+| `features/trading/order-ledger.ts`                  | Drizzle adapter + caps filter on `created_at` (CAPS_COUNT_INTENTS)                       |
+| `features/wallet-watch/polymarket-source.ts`        | Data-API wrapper + normalize-error catch                                                 |
+| `bootstrap/capabilities/poly-trade.ts`              | `PolyTradeBundle` factory + `buildRealAdapterMethods` (single-tenant isolation boundary) |
+| `packages/node-contracts/src/poly.*.v1.contract.ts` | 3 read-API contracts                                                                     |
+| `docs/spec/poly-copy-trade-phase1.md`               | Phase 1 spec — layer boundaries, invariants, scenarios                                   |
+| `work/items/task.0315.poly-copy-trade-prototype.md` | Parent task, includes MUST_FIX_P2                                                        |
+
+## PR
+
+https://github.com/Cogni-DAO/node-template/pull/920
