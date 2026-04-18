@@ -3,47 +3,18 @@
 
 /**
  * Module: `drizzle.config`
- * Purpose: Drizzle ORM configuration for database migrations and schema generation via drizzle-kit.
- * Scope: Database migration configuration and schema paths. Does not handle runtime database connections.
- * Invariants: Schema path matches actual database schema location; migration output directory exists
- * Side-effects: IO (file system operations during migration generation)
- * Notes: Migrations run as app_user (DB owner). Seed migrations use set_config() for RLS context.
- *        Falls back from DATABASE_URL to buildDatabaseUrl helper; strict mode enabled for schema validation
- * Links: Used by pnpm db:generate and pnpm db:migrate scripts
+ * Purpose: Root drizzle-kit config. Aliases operator's per-node config so legacy scripts
+ *          (`pnpm db:generate`, `pnpm db:migrate:dev`) keep working without --config flags.
+ * Scope: CLI boundary. Does not handle runtime DB I/O.
+ * Invariants: This file must remain a re-export of drizzle.operator.config.ts. Per-node
+ *             work uses drizzle.<node>.config.ts explicitly.
+ * Side-effects: IO (filesystem via drizzle-kit)
+ * Notes: task.0322 split the root config into per-node configs (operator/poly/resy). This
+ *        alias exists for backward compatibility with scripts and tooling (check-root-layout,
+ *        biome ignore lists, knip ignore lists). Callers that want explicit per-node behavior
+ *        should invoke drizzle-kit with `--config=drizzle.<node>.config.ts`.
+ * Links: work/items/task.0322.per-node-db-schema-independence.md
  * @public
  */
 
-import { defineConfig } from "drizzle-kit";
-
-import {
-  buildDatabaseUrl,
-  type DbEnvInput,
-} from "./nodes/operator/app/src/shared/db/db-url";
-
-function getDatabaseUrl(): string {
-  const directUrl = process.env.DATABASE_URL?.trim();
-  if (directUrl) {
-    try {
-      new URL(directUrl);
-      return directUrl;
-    } catch {
-      // swallow and fall back to component pieces
-    }
-  }
-
-  // Fall back to constructing from individual pieces (canonical local dev)
-  return buildDatabaseUrl(process.env as DbEnvInput);
-}
-
-export default defineConfig({
-  // All schema lives in @cogni/db-schema package (ESM-only, no CJS build)
-  // drizzle-kit runs via tsx which handles ESM + TS natively
-  schema: "./packages/db-schema/src/**/*.ts",
-  out: "./nodes/operator/app/src/adapters/server/db/migrations",
-  dialect: "postgresql",
-  dbCredentials: {
-    url: getDatabaseUrl(),
-  },
-  verbose: true,
-  strict: true,
-});
+export { default } from "./drizzle.operator.config";
