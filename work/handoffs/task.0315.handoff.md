@@ -47,6 +47,7 @@ This handoff is for the **next dev implementing CP4.3 + CP4.5**. Assume Phase 1 
 **Why:** bounded blast radius per copy, per day. The point of v0.1 is proving the SEAM (observe → decide → place → record), not capturing alpha. Size scaling is a Phase 3+ concern after the paper-adapter soak produces edge evidence.
 
 Implementation shape:
+
 - `TargetConfig.mirror_usdc` in the schema is kept (future scaling), but the CP4.3 `decide()` caller PIN it to `market_min_usdc` which the executor looks up from the Polymarket market metadata on the same fetch that today provides tickSize / negRisk / feeRateBps.
 - Add `market_min_usdc` to the Polymarket market-meta cache the adapter already maintains (or to the existing CP3 order-metadata fetch — whichever is fewer new calls).
 
@@ -88,21 +89,26 @@ Read-only server component on `/(app)/dashboard`. Queries `poly_copy_trade_decis
 ## Architecture constraints (non-negotiable)
 
 ### 1. Do NOT touch operator-wallet code
+
 `OPERATOR_WALLET_ADDRESS` + `PRIVY_SIGNING_KEY` are the production billing wallet (Base distributeSplit / OpenRouter top-ups). The Polymarket path reads exclusively from `POLY_PROTO_*` env and its own Privy signing key. Never cross these.
 
 ### 2. Single CLOB-client importer
+
 `@polymarket/clob-client` may be imported ONLY from:
+
 - `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts`
 - `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts` (dynamic import only)
 
 Biome `noRestrictedImports` enforces this. If CP4.3 needs a second importer, prefer extending the adapter over adding a new one.
 
 ### 3. CP4.3 must NOT add new ai-tools
+
 Autonomy = server-side. No new agent tools for the poll/decide/place loop. (A future agent tool `core__poly_copy_trade_targets_list` etc. can come in Phase 2.) Every new ai-tool today costs stubs on 3 non-poly nodes per bug.0319.
 
 ### 4. Always minimum bet per copy (see above)
 
 ### 5. Capability-not-adapter
+
 CP4.3's loop calls `container.copyTradeCapability.placeTrade(intent)` — NOT `PolymarketClobAdapter.placeOrder` directly. Same invariant the CP4.25 tool follows.
 
 ## Wallet state (as of 2026-04-18)
@@ -136,12 +142,12 @@ Propagate to `canary` + `production` before flighting CP4.3 beyond candidate-a. 
 
 ## Known follow-ups (all filed, all non-blocking for CP4.3)
 
-| ID        | Title                                                                    | Blocks? |
-|-----------|--------------------------------------------------------------------------|---------|
-| bug.0317  | candidate-flight-infra.yml checkout hardcoded to main                    | no — workaround is SSH hotfix, same as this flight |
-| bug.0318  | rename canary → candidate-a in .local/ + provision scripts               | no |
-| bug.0319  | split @cogni/ai-tools into per-node packages                             | no, but makes CP4.3 painless if you land it first — no new tool ceremony needed for follow-up agent-facing tools |
-| $16.32 stuck in 0x1Db192…47Dc (old dashboard wallet, Privy locked)       | Privy support ticket open | no |
+| ID                                                                 | Title                                                      | Blocks?                                                                                                          |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| bug.0317                                                           | candidate-flight-infra.yml checkout hardcoded to main      | no — workaround is SSH hotfix, same as this flight                                                               |
+| bug.0318                                                           | rename canary → candidate-a in .local/ + provision scripts | no                                                                                                               |
+| bug.0319                                                           | split @cogni/ai-tools into per-node packages               | no, but makes CP4.3 painless if you land it first — no new tool ceremony needed for follow-up agent-facing tools |
+| $16.32 stuck in 0x1Db192…47Dc (old dashboard wallet, Privy locked) | Privy support ticket open                                  | no                                                                                                               |
 
 ## Validation procedure for CP4.3 on candidate-a
 
@@ -164,7 +170,7 @@ Propagate to `canary` + `production` before flighting CP4.3 beyond candidate-a. 
 - **Polymarket CLOB has no update op.** Cancel + replace. `core__poly_cancel_order` is idempotent (already-canceled / already-filled id → success no-op).
 - **viem dual-peerDep `as any` casts** in `bootstrap/capabilities/poly-trade.ts` — not a bug, cross-peerDep drift. Don't try to remove without upgrading both sides atomically.
 - **First tool invocation is 1–3s** — dynamic import + Privy wallet resolution. Expected.
-- **Kill-switch failure mode:** if POLY_PROTO_* env is missing, the capability is undefined and tools register as stubs that throw on invocation. Pod boots fine; nothing trades. This is the intentional soft-kill path.
+- **Kill-switch failure mode:** if POLY*PROTO*\* env is missing, the capability is undefined and tools register as stubs that throw on invocation. Pod boots fine; nothing trades. This is the intentional soft-kill path.
 
 ## Pointers
 
