@@ -93,7 +93,6 @@ jobs:
       CONNECTIONS_ENCRYPTION_KEY: ${{ secrets.CONNECTIONS_ENCRYPTION_KEY }}
       POSTHOG_API_KEY: ${{ secrets.POSTHOG_API_KEY }}
       POSTHOG_HOST: ${{ secrets.POSTHOG_HOST }}
-      COGNI_NODE_ENDPOINTS: ${{ secrets.COGNI_NODE_ENDPOINTS }}
       COGNI_NODE_DBS: ${{ secrets.COGNI_NODE_DBS }}
     steps:
       - name: Checkout (for scripts)

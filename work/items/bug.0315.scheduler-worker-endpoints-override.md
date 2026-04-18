@@ -77,6 +77,10 @@ Automatic via `kubectl apply`'s three-way merge on the next `deploy-infra.sh` ru
 - [ ] Re-flight #900; confirm new `Wait for in-cluster services` step passes
 - [ ] Next preview/prod promotion self-heals on its own `deploy-infra` run
 
+## Review Feedback (applied in-review)
+
+**R1 (2026-04-18)** — self-review caught asymmetric dead-wire removal. `secrets.COGNI_NODE_ENDPOINTS` was removed from `promote-and-deploy.yml` but the equivalent line at `candidate-flight-infra.yml:96` was missed. Both workflows dispatch the same `deploy-infra.sh`, which no longer reads the env var (post-fix line 644 uses the hardcoded `$LITELLM_NODE_ENDPOINTS` literal). Fix: removed the passthrough from `candidate-flight-infra.yml` for symmetry.
+
 ## Lessons / follow-ups
 
 - Name collision between LiteLLM-flavored `COGNI_NODE_ENDPOINTS` (compose env) and scheduler-worker-flavored `COGNI_NODE_ENDPOINTS` (k8s ConfigMap) is the underlying hazard. A rename (`LITELLM_NODE_BILLING_ROUTES` or similar) would eliminate the ambiguity but has broader blast radius — deferred.
