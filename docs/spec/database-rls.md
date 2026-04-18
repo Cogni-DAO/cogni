@@ -207,7 +207,7 @@ Local dev MUST provision and use two distinct DB roles:
 
 1. **Provisioning before app start**: `docker-compose` runs `db-provision` (via `--profile bootstrap`) which creates roles/grants/policies. The `pnpm docker:stack:setup` command runs this before the main stack.
 
-2. **No DSN construction in runtime**: `src/shared/env/server.ts` requires both `DATABASE_URL` and `DATABASE_SERVICE_URL` as explicit env vars. The `buildDatabaseUrl` fallback path was removed — that function is now tooling-only (drizzle.config.ts, test scripts). `docker-compose.yml` passes DSNs through (`${DATABASE_URL}`, `${DATABASE_SERVICE_URL}`) instead of constructing them from parts.
+2. **No DSN construction in runtime**: `src/shared/env/server.ts` requires both `DATABASE_URL` and `DATABASE_SERVICE_URL` as explicit env vars. The `buildDatabaseUrl` fallback path was removed from runtime; per-node drizzle configs (`nodes/<node>/drizzle.config.ts`, task.0324) also read `DATABASE_URL` directly and throw if unset. `buildDatabaseUrl` remains in `nodes/<node>/app/src/shared/db/db-url.ts` for test scripts only (`reset-db.ts`, `drop-test-db.ts`). `docker-compose.yml` passes DSNs through (`${DATABASE_URL}`, `${DATABASE_SERVICE_URL}`) instead of constructing them from parts.
 
 3. **Example files show distinct users**: `.env.local.example` and `.env.test.example` now show literal DSNs with `app_user` and `app_service` (not shell variable interpolation of the same credentials).
 
