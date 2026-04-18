@@ -50,6 +50,12 @@ import {
   KNOWLEDGE_WRITE_NAME,
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
+  POLY_CANCEL_ORDER_NAME,
+  POLY_LIST_ORDERS_NAME,
+  POLY_PLACE_TRADE_NAME,
+  polyCancelOrderStubImplementation,
+  polyListOrdersStubImplementation,
+  polyPlaceTradeStubImplementation,
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
   REPO_SEARCH_NAME,
@@ -131,6 +137,18 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     // node-template brain does not expose this tool to its graph.
     [WALLET_TOP_TRADERS_NAME]:
       walletTopTradersStubImplementation as AnyToolImplementation,
+
+    // Poly place-trade: poly-only tool. Stub for the same reason as above.
+    [POLY_PLACE_TRADE_NAME]:
+      polyPlaceTradeStubImplementation as AnyToolImplementation,
+
+    // Poly list-orders: poly-only tool. Stub here for the same reason.
+    [POLY_LIST_ORDERS_NAME]:
+      polyListOrdersStubImplementation as AnyToolImplementation,
+
+    // Poly cancel-order: poly-only tool. Stub here for the same reason.
+    [POLY_CANCEL_ORDER_NAME]:
+      polyCancelOrderStubImplementation as AnyToolImplementation,
 
     [METRICS_QUERY_NAME]: createMetricsQueryImplementation({
       metricsCapability: deps.metricsCapability,

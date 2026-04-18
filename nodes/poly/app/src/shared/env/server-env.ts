@@ -237,6 +237,20 @@ export const serverSchema = z.object({
   PRIVY_APP_SECRET: optionalString,
   PRIVY_SIGNING_KEY: optionalString,
 
+  // Polymarket prototype wallet — fully independent from the production
+  // operator wallet (PRIVY_* above). See docs/guides/polymarket-account-setup.md.
+  POLY_PROTO_PRIVY_APP_ID: optionalString,
+  POLY_PROTO_PRIVY_APP_SECRET: optionalString,
+  POLY_PROTO_PRIVY_SIGNING_KEY: optionalString,
+  POLY_PROTO_WALLET_ADDRESS: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional(),
+  POLY_CLOB_API_KEY: optionalString,
+  POLY_CLOB_API_SECRET: optionalString,
+  POLY_CLOB_PASSPHRASE: optionalString,
+  POLY_CLOB_HOST: optionalUrl,
+
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.
   OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().default(500),

@@ -18,6 +18,7 @@ import type {
   KnowledgeCapability,
   MarketCapability,
   MetricsCapability,
+  PolyTradeCapability,
   RepoCapability,
   ScheduleCapability,
   ToolImplementation,
@@ -32,6 +33,9 @@ import {
   createKnowledgeWriteImplementation,
   createMarketListImplementation,
   createMetricsQueryImplementation,
+  createPolyCancelOrderImplementation,
+  createPolyListOrdersImplementation,
+  createPolyPlaceTradeImplementation,
   createRepoListImplementation,
   createRepoOpenImplementation,
   createRepoSearchImplementation,
@@ -52,6 +56,12 @@ import {
   KNOWLEDGE_WRITE_NAME,
   MARKET_LIST_NAME,
   METRICS_QUERY_NAME,
+  POLY_CANCEL_ORDER_NAME,
+  POLY_LIST_ORDERS_NAME,
+  POLY_PLACE_TRADE_NAME,
+  polyCancelOrderStubImplementation,
+  polyListOrdersStubImplementation,
+  polyPlaceTradeStubImplementation,
   REPO_LIST_NAME,
   REPO_OPEN_NAME,
   REPO_SEARCH_NAME,
@@ -75,11 +85,17 @@ export interface ToolBindingDeps {
   readonly knowledgeCapability: KnowledgeCapability;
   readonly marketCapability: MarketCapability;
   readonly metricsCapability: MetricsCapability;
-  readonly webSearchCapability: WebSearchCapability;
+  /**
+   * Optional — when undefined the `core__poly_place_trade` tool is registered
+   * with a stub that throws a clear error on invocation. Happens when
+   * OPERATOR_WALLET_ADDRESS / POLY_CLOB_* / PRIVY_* env is incomplete.
+   */
+  readonly polyTradeCapability?: PolyTradeCapability | undefined;
   readonly repoCapability: RepoCapability;
   readonly scheduleCapability: ScheduleCapability;
   readonly vcsCapability: VcsCapability;
   readonly walletCapability: WalletCapability;
+  readonly webSearchCapability: WebSearchCapability;
   readonly workItemCapability: WorkItemCapability;
 }
 
@@ -135,6 +151,27 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     [METRICS_QUERY_NAME]: createMetricsQueryImplementation({
       metricsCapability: deps.metricsCapability,
     }) as AnyToolImplementation,
+
+    // core__poly_place_trade: real impl when env is complete; stub otherwise
+    // (stub throws a clear error message on invocation). Matches the knowledge-
+    // store pattern of "install a no-op when the backing port is absent".
+    [POLY_PLACE_TRADE_NAME]: (deps.polyTradeCapability
+      ? createPolyPlaceTradeImplementation({
+          polyTradeCapability: deps.polyTradeCapability,
+        })
+      : polyPlaceTradeStubImplementation) as AnyToolImplementation,
+
+    [POLY_LIST_ORDERS_NAME]: (deps.polyTradeCapability
+      ? createPolyListOrdersImplementation({
+          polyTradeCapability: deps.polyTradeCapability,
+        })
+      : polyListOrdersStubImplementation) as AnyToolImplementation,
+
+    [POLY_CANCEL_ORDER_NAME]: (deps.polyTradeCapability
+      ? createPolyCancelOrderImplementation({
+          polyTradeCapability: deps.polyTradeCapability,
+        })
+      : polyCancelOrderStubImplementation) as AnyToolImplementation,
 
     [WEB_SEARCH_NAME]: createWebSearchImplementation({
       webSearchCapability: deps.webSearchCapability,

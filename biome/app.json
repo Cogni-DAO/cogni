@@ -27,6 +27,26 @@
     },
     {
       "includes": [
+        "nodes/poly/app/src/**/*.{ts,tsx}",
+        "!nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@polymarket/clob-client": "Import @polymarket/clob-client only from bootstrap/capabilities/poly-trade.ts. All placement code must go through PolyTradeCapability (task.0315 CP4.25)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
         "nodes/*/app/src/app/**/page.tsx",
         "nodes/*/app/src/app/**/layout.tsx",
         "nodes/*/app/src/app/**/loading.tsx",

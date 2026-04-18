@@ -44,6 +44,12 @@ export {
   PolymarketUserTradeSchema,
   PolymarketUserTradesResponseSchema,
 } from "./polymarket.data-api.types.js";
+export {
+  normalizePolymarketDataApiFill,
+  type PolymarketNormalizeResult,
+  type PolymarketNormalizeSkipReason,
+  polymarketDataApiFillId,
+} from "./polymarket.normalize-fill.js";
 export { normalizePolymarketMarket } from "./polymarket.normalizer.js";
 export {
   type PolymarketRawMarket,
