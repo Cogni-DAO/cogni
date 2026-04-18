@@ -133,6 +133,18 @@ Already tracked in DATABASE_RLS_SPEC.md P1:
 
 **Scope boundary:** DSN host changes + network topology. No app code changes. No RLS changes.
 
+### Per-Node Schema Independence
+
+**Goal:** Each node owns its DB schema — no cross-node table leak, no shared migration numbering.
+
+| Deliverable                                                        | Status      | Est | Work Item |
+| ------------------------------------------------------------------ | ----------- | --- | --------- |
+| Minimal drizzle split — per-node schema dirs + per-node configs    | needs_implement | 2   | task.0322 |
+| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)    | needs_implement | 1   | task.0322 (Phase 3) |
+| **Future:** Atlas + GitOps migrations (declarative schema, CRD)    | needs_design    | 5   | task.0323 |
+
+task.0322 is the current-priority minimal fix (no new tooling). task.0323 preserves the Atlas adoption plan for when contributor scale or destructive-change linting warrants the investment.
+
 ### P3 — DSN-Only Provisioning
 
 **Goal:** 3 DSNs become the only database secrets.

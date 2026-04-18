@@ -1,404 +1,276 @@
 ---
 id: task.0322
 type: task
-title: Per-node DB schema independence via Atlas + Drizzle
+title: Per-node DB schema split (minimal — no new tooling)
 status: needs_implement
 priority: 2
 rank: 50
-estimate: 8
-summary: Split the shared DB schema into per-node composite schemas (shared core + node-local tables) managed by Atlas with Drizzle `external_schema`. One Atlas Operator reconciles migrations via `AtlasMigration` CRs; Argo CD owns the manifests. Replaces the original bespoke two-phase drizzle-kit runner design.
-outcome: Each node's DB contains only tables it needs, Atlas owns migration state in `atlas_schema_revisions`, and new schema changes flow from `packages/db-core/src/schema` → `drizzle-kit export` → `atlas migrate diff` → `AtlasMigration` CR → per-node DB. One parameterized migrator image serves all nodes. Candidate-a validated first, then preview, then prod.
+estimate: 2
+summary: Move node-specific tables out of the shared schema package into per-node schema dirs. Each node gets its own drizzle config and owns its migration history. No new packages, no new migration tables, no bespoke wrapper, no Atlas. One-day change.
+outcome: poly's tables stop leaking into resy's DB. Each node's drizzle-kit generate/migrate acts on its own schema + its own migrations dir. Standard `__drizzle_migrations` table per DB, untouched. Prod poly/resy migration Jobs stop being `exit 0` no-ops.
 spec_refs:
-  - ci-cd-spec
   - databases-spec
+  - ci-cd-spec
 assignees:
 credit:
-project: proj.cicd-services-gitops
+project: proj.database-ops
 branch:
 pr:
 reviewer:
-revision: 1
+revision: 2
 blocked_by:
 deploy_verified: false
 created: 2026-04-18
 updated: 2026-04-18
-labels: [db, monorepo, architecture, cicd, atlas]
+labels: [db, monorepo, cicd]
 external_refs:
-  - https://atlasgo.io/guides/orms/drizzle/existing-project
-  - https://atlasgo.io/guides/deploying/k8s-argo
-  - https://atlasgo.io/atlas-schema/projects
 ---
 
-# Per-node DB schema independence (Atlas + Drizzle)
+# Per-node DB schema split (minimal)
 
-## Decision: ADOPT Atlas
+## Decision: minimal drizzle-split, no new tooling
 
-Spike completed 2026-04-18. Atlas + Drizzle is an officially supported integration (Jan 2025 partnership) with a paved path for our exact shape: existing Drizzle project with populated `__drizzle_migrations` → Atlas-managed per-node DBs with composite schemas → Argo CD reconciliation. Evidence in § Spike Summary. This task's original bespoke two-phase drizzle-kit runner design is archived as § Rejected Alternative.
+Prior revisions of this plan proposed a `packages/db-migrator` wrapper (r1) then Atlas adoption (r2 ADOPT verdict). Both rejected: they solve a bigger problem than we have. The actual problem is one shared schema package leaking poly tables into resy's DB and claiming migration numbers any node could collide with.
+
+The smallest fix: **stop sharing the schema file**. Each node points drizzle-kit at its own schema glob and its own migrations dir. Standard `__drizzle_migrations` table, standard drizzle-kit migrator, no new packages. The cost is roughly 30 seconds of `cp` when a core-table migration needs to land in every node — which happens rarely at our scale and matches the byte-identical duplicates we already have today.
+
+Atlas adoption is preserved as a future upgrade in **task.0323** — pick it up when contributor count grows or destructive-change linting becomes worth the Go binary.
 
 ## Context — current state (audited 2026-04-18)
 
 | Aspect | Reality |
 |---|---|
-| Per-node DBs (dev + k8s) | ✅ `cogni_template_dev`, `cogni_poly`, `cogni_resy`. Dev URLs in `package.json:42-43`. Prod overlays patch per-node secrets. |
-| Schema source | ⚠️ Single shared `packages/db-schema` package. Every node's DB contains every node's tables (poly's `polyCopyTradeConfig` lives in resy's DB). |
-| Per-node migration dirs | ⚠️ Exist but are byte-identical copies of operator's 0000-0026. Operator ahead at 0027. No per-node extension mechanism. |
-| Migration runner (dev) | ⚠️ `db:migrate:poly` / `db:migrate:resy` swap `DATABASE_URL` then run root drizzle-kit against operator's out dir. Node migrations aren't isolated. |
-| K8s migration Job (candidate-a + preview) | ⚠️ Shared operator migrator image applied against each node's DB via Argo PreSync hook. |
-| K8s migration Job (production) | 🚩 Poly/resy overlays set `exit 0`. No prod migrations ever. `infra/k8s/overlays/production/{poly,resy}/kustomization.yaml:95`. |
-| Doc accuracy | ✅ Corrected in Step 1 of this task. |
+| Per-node DBs | ✅ `cogni_template_dev`, `cogni_poly`, `cogni_resy` — separate DBs already exist, dev and k8s |
+| Shared schema | ⚠️ `packages/db-schema` — poly-copy-trade tables live here, land in every node's DB |
+| Per-node migration dirs | ⚠️ Exist, byte-identical copies of operator's 0000–0026. Operator has 0027 (poly-copy-trade). |
+| Per-node drizzle config | ❌ Single root `drizzle.config.ts` writes to operator's dir only |
+| `db:migrate:poly` / `:resy` | ⚠️ Swap `DATABASE_URL`, run root drizzle-kit — same migrations applied to every DB |
+| Prod poly/resy migration Jobs | 🚩 `exit 0` no-ops. `infra/k8s/overlays/production/{poly,resy}/kustomization.yaml:95` |
+| Doc accuracy | ✅ Fixed in Step 1 (Phase 0 below) |
 
-## Spike Summary — why Atlas (not bespoke)
+## Design
 
-Researched 2026-04-18. Three narrow questions, each answered with Atlas doc evidence:
-
-### Q1 — Three DBs with differing schemas?
-
-`composite_schema` ([atlasgo.io/atlas-schema/projects](https://atlasgo.io/atlas-schema/projects)) composes multiple schema sources into one unified graph. We use it per-node: each node's `env` block unions `@cogni/db-core` (Drizzle `external_schema`) + that node's local Drizzle `external_schema`.
-
-Atlas's `for_each` multi-tenant primitive is NOT for us — that assumes homogeneous schemas across tenants (all share one `migration.dir`). We want heterogeneous; `composite_schema` + per-node `env` is the right primitive.
-
-**Unverified assumption (single remaining risk):** Drizzle `external_schema` composes cleanly INSIDE a `composite_schema`. Docs show composite with SQLAlchemy/Ent/HCL/SQL but not Drizzle explicitly. Mechanism should transfer (both use `external_schema`), but is verified by the first implementation PR. Fallback if it fails: three independent per-node Atlas projects (duplicated core HCL — still simpler than bespoke runner).
-
-### Q2 — Operator + Argo CD?
-
-Official guide: [atlasgo.io/guides/deploying/k8s-argo](https://atlasgo.io/guides/deploying/k8s-argo). Clean ownership split: Argo owns manifests, Atlas Operator owns `AtlasMigration` CR execution. Recommended sync waves: DB resources → migrations → app.
-
-**Mandatory gotcha:** Argo has no built-in health check for `AtlasMigration` CRD. Without a custom Lua health check in `argocd-cm`, the app-pod sync wave ships before migrations complete. Fix is a one-time ConfigMap patch (Step 3 below).
-
-k3s-specific issues: none documented, none expected. Candidate-a is vanilla k3s via our OpenTofu bootstrap.
-
-### Q3 — Atlas binary in CI?
-
-Negligible. ~78 MB Go binary, speaks Postgres wire protocol natively (no drivers baked). Install via `curl -sSf https://atlasgo.sh | sh` or use `arigaio/atlas:latest-extended-alpine` base. Atlas replaces `drizzle-kit migrate` only; we still need Node + drizzle-kit for `drizzle-kit export` (emits schema for Atlas to read). Migrator image becomes multi-stage: Node stage for export, Atlas binary copied in.
-
-### Bootstrap path for candidate-a's existing DBs
-
-[atlasgo.io/guides/orms/drizzle/existing-project](https://atlasgo.io/guides/orms/drizzle/existing-project) walks this exact scenario. `atlas migrate apply --baseline <timestamp>` tells Atlas the DB is already at that version; skip replay. `atlas_schema_revisions` becomes the new source of truth; legacy `__drizzle_migrations` is left in place for rollback safety.
-
-**This is the killer feature vs bespoke.** The bespoke plan required hand-rolled copy-forward logic from `__drizzle_migrations` → `__drizzle_migrations_core` with careful idempotency + a one-shot script + inlined runtime check. Atlas gives us `--baseline <ts>` as one flag. ~300 LOC of risky code we don't write.
-
-### Tradeoff math (why this wins)
-
-| Dimension | Atlas | Bespoke (rejected) |
-|---|---|---|
-| Lines we own | ~200 HCL + Dockerfile patch | ~500 TS + test suite |
-| Baseline adoption | `--baseline <ts>` flag | Hand-rolled copy-forward from `__drizzle_migrations` |
-| Schema composition | `composite_schema` (documented) | Ad-hoc two-dir runner |
-| Drift detection | `atlas schema diff` out of box | Would be another task |
-| Argo CD integration | Official guide + CRD | Standard PreSync Job |
-| Argo CD health check | One Lua snippet (mandatory) | Standard Job health (free) |
-| Team familiarity | Zero | Drizzle (existing) |
-| Binary in image | +78 MB | None |
-| Failure mode | Vendor escape hatch (standard postgres wire) | We own every bug |
-
-Atlas wins on bootstrap + composition + drift — the three primitives we'd otherwise hand-roll. Bespoke wins only on familiarity and image-size. We're choosing to trade ~1 week of learning Atlas HCL against ~2 weeks of writing + testing the bespoke bootstrap correctly.
-
-## Design — target architecture
-
-### Repo layout
+### Shape
 
 ```
-packages/db-core/                        # shared platform tables ONLY
-  src/schema/
-    auth.ts  billing.ts  identity.ts  ...
-  AGENTS.md                              # "schema only, no migrations dir in source"
+packages/db-schema/                 # keep name; contents shrink to core-only tables
+  src/
+    auth.ts  billing.ts  identity.ts  ai.ts  connections.ts  refs.ts  ...
+    index.ts                        # barrel
+    # poly-copy-trade.ts REMOVED from here
 
-nodes/poly/app/
-  schema/                                # poly-local tables
-    copy-trade.ts                        # moved from packages/db-schema
-  src/adapters/server/db/
-    client.ts                            # Drizzle DML (unchanged shape)
+nodes/poly/app/schema/              # NEW — poly-local tables only
+  copy-trade.ts                     # moved from packages/db-schema
+  index.ts                          # import + re-export @cogni/db-schema/* PLUS local tables
 
-nodes/operator/app/
-  schema/                                # operator-local (DAO formation)
+nodes/operator/app/schema/          # NEW — operator-local (DAO formation, if any)
+  index.ts                          # same pattern
 
-nodes/resy/app/
-  schema/                                # empty for now; exists for future
+nodes/resy/app/schema/              # NEW — empty for now, exists for symmetry
+  index.ts                          # re-exports @cogni/db-schema/* only
 
-atlas/                                   # Atlas HCL + generated migrations
-  atlas.hcl                              # env blocks: operator, poly, resy
-  operator/migrations/                   # per-node migration dirs (Atlas-generated)
-  poly/migrations/
-  resy/migrations/
+nodes/<node>/app/src/adapters/server/db/migrations/  # EACH node owns its own history
+  # existing 0000-0026 (or 0000-0027 for operator) STAY — this IS the node's history now
+  # no wipe, no copy, no renumber
+
+drizzle.operator.config.ts          # NEW — schema: nodes/operator/app/schema, out: operator's migrations
+drizzle.poly.config.ts              # NEW — schema: nodes/poly/app/schema, out: poly's migrations
+drizzle.resy.config.ts              # NEW — schema: nodes/resy/app/schema, out: resy's migrations
+drizzle.config.ts                   # DELETE (or keep as alias to drizzle.operator.config.ts during rollout)
 ```
 
-### `atlas.hcl` sketch
+### What stays standard
 
-```hcl
-data "external_schema" "core" {
-  program = ["pnpm", "drizzle-kit", "export",
-             "--dialect", "postgresql",
-             "--schema", "./packages/db-core/src/schema"]
-}
-data "external_schema" "poly_local" {
-  program = ["pnpm", "drizzle-kit", "export",
-             "--dialect", "postgresql",
-             "--schema", "./nodes/poly/app/schema"]
-}
-data "composite_schema" "poly_full" {
-  schema "public" { from = data.external_schema.core.url }
-  schema "public" { from = data.external_schema.poly_local.url }
-}
-env "poly" {
-  src        = data.composite_schema.poly_full.url
-  dev        = "docker://postgres/16/dev"
-  migration { dir = "file://atlas/poly/migrations" }
-}
-# ... same shape for operator, resy
+- `__drizzle_migrations` — one table per DB, drizzle-kit default. No custom migration-table name, no per-package namespacing.
+- `drizzle-kit migrate` — the default migrator. No wrapper code.
+- `drizzle-kit generate` — default generator. Run per-node when that node's schema changes.
+- Existing migrator image (`nodes/operator/app/Dockerfile` target `migrator`) — stays. Needs one parameterization (see Step 4).
+
+### Per-node schema composition
+
+Each node's `nodes/<node>/app/schema/index.ts` is the single entry point drizzle-kit reads:
+
+```ts
+// nodes/poly/app/schema/index.ts
+export * from "@cogni/db-schema";     // core platform tables
+export * from "./copy-trade";         // poly-local
 ```
 
-### Migration flow
+Drizzle-kit follows the barrel, picks up both sets, diffs against the DB, emits one migration file in that node's `migrations/` dir. No composite-schema tooling needed.
 
-1. Dev edits `packages/db-core/src/schema/*.ts` or `nodes/<node>/app/schema/*.ts`
-2. `pnpm atlas:diff --env <node>` → emits new SQL file in `atlas/<node>/migrations/`
-3. PR review includes the generated SQL
-4. Merge → pr-build rebuilds migrator image (digest promoted through candidate-a → preview → prod)
-5. Argo syncs `AtlasMigration` CR → Operator applies to that node's DB → reports `Ready` → app wave proceeds
+### The one gotcha — existing leaked tables
 
-### One parameterized migrator image
+`packages/db-schema` currently exports `poly-copy-trade.ts`. Moving it out means:
 
-Single image, multi-stage Dockerfile (packages/db-migrator/Dockerfile):
+- **Poly DB** — tables already exist from migration 0027; now live in `nodes/poly/app/schema/`. `drizzle-kit generate` on poly's new config sees matching schema, emits no diff. Good.
+- **Operator DB + resy DB** — tables `poly_copy_trade_*` exist from migration 0027 but are NOT in those nodes' new schema. `drizzle-kit generate` would emit `DROP TABLE` migrations.
+  - **Don't drop.** The tables are harmless orphans. Inspect the generated diff and delete the DROP statements before committing, OR manually edit the generated SQL to make it a no-op.
+  - The dropped migration file stays in the migrations dir but contains no-op SQL. Records the "this drift was inspected and accepted" decision.
+  - Follow-up cleanup task (low priority) can add explicit DROP migrations for operator + resy if we ever care about the leftover tables.
 
-```dockerfile
-FROM node:22-alpine AS exporter          # emits Drizzle schema for Atlas to read
-WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile --filter='./packages/db-core...'
-COPY packages/db-core ./packages/db-core
-COPY nodes ./nodes
+### Prod migration Jobs — un-no-op
 
-FROM arigaio/atlas:latest-extended-alpine
-COPY --from=exporter /app /app
-COPY atlas /app/atlas
-WORKDIR /app
-ENTRYPOINT ["atlas"]
-```
+`infra/k8s/overlays/production/{poly,resy}/kustomization.yaml:95` currently sets `exit 0`. Remove, so Argo PreSync runs the shared operator migrator image against `cogni_poly` / `cogni_resy` (preview already does this). First prod run will be idempotent: either applies 0000–0026 fresh (if DBs are empty) or no-ops (if someone hand-migrated).
 
-The `AtlasMigration` CR references this image; each node's CR sets `--env=<node>`. One image, one digest, BUILD_ONCE_PROMOTE preserved.
+**Gate this with DB inspection first** (Step 5 below) — we don't know prod DB state today.
 
-### Argo CD health check (one-time ConfigMap patch)
+### Migrator image stays as-is (one parameterization)
 
-```yaml
-# infra/k8s/bootstrap/argocd-cm-patch.yaml
-data:
-  resource.customizations.health.db.atlasgo.io_AtlasMigration: |
-    hs = {}
-    if obj.status ~= nil and obj.status.conditions ~= nil then
-      for _, c in ipairs(obj.status.conditions) do
-        if c.type == "Ready" and c.status == "True" then
-          hs.status = "Healthy"; hs.message = c.message; return hs
-        end
-      end
-    end
-    hs.status = "Progressing"; hs.message = "Waiting for migration"; return hs
-```
+Current: `nodes/operator/app/Dockerfile` target `migrator`. One image, used by every node's overlay. Parameterize by `DATABASE_URL` (already the case) — when we want the migrator to run against poly's schema, we need it to invoke `drizzle-kit migrate --config drizzle.poly.config.ts` instead of the default. Options:
 
-Applied once per Argo CD instance. Without this, sync waves silently race.
+- **A:** Pass `DRIZZLE_CONFIG` env var to the migrator container; `db:migrate:container` script reads it.
+- **B:** Overlays patch the Job's `command` to `["pnpm", "db:migrate:poly:container"]` / `:resy` / `:operator`.
+
+Option B is simpler; Option A is cleaner. Pick B for now — one-line overlay patch per node, no env plumbing.
 
 ## Invariants
 
-- **ATLAS_OWNS_MIGRATION_STATE** — only `atlas_schema_revisions` is authoritative. Legacy `__drizzle_migrations` remains in DBs post-bootstrap as a read-only artifact; dropped in a follow-up after 30 days stable.
-- **COMPOSITE_SCHEMA_PER_NODE** — every node has its own `env` block in `atlas.hcl` with a `composite_schema` unioning `@cogni/db-core` + its local schema. No homogeneous-tenant shortcut.
-- **NODE_LOCAL_TABLES_NEVER_IN_CORE** — `packages/db-core/src/schema/` contains only tables every node needs. Table classification is committed before Step 2.
-- **ONE_MIGRATOR_IMAGE** — one Dockerfile at `packages/db-migrator/Dockerfile`, one image, parameterized by `--env=<node>`.
-- **BASELINE_ONCE_PER_DB** — `atlas migrate apply --baseline <ts>` runs exactly once per DB per environment at cutover. Subsequent runs are normal `apply`.
+- **NO_CROSS_NODE_TABLE_LEAK** — poly's tables are defined in `nodes/poly/app/schema/` only; same for operator/resy. Adding a table to the wrong place is a review-blocking error.
+- **CORE_TABLES_IN_CORE_PACKAGE** — `packages/db-schema` contains only tables every node needs. Rule of thumb: intersection, not union.
+- **EACH_NODE_OWNS_ITS_MIGRATION_HISTORY** — `nodes/<node>/app/src/adapters/server/db/migrations/` is that node's authoritative history. Don't copy files across nodes without intent.
+- **STANDARD_DRIZZLE_MIGRATIONS_TABLE** — every DB uses drizzle-kit's default `__drizzle_migrations`. No renamed tables, no per-package tables.
 
-## Table Classification (committed before Step 2)
+## Table Classification (commit before any code move)
 
-| Domain file | Tables | Destination | Rationale |
-|---|---|---|---|
-| `auth.ts` | users, sessions, accounts, verificationTokens | `@cogni/db-core` | Every node needs NextAuth. |
-| `identity.ts`, `profile.ts` | (enumerate in PR) | `@cogni/db-core` | Platform identity. |
-| `billing.ts` | (enumerate in PR) | `@cogni/db-core` | Every node bills. |
-| `ai.ts`, `ai-threads.ts` | (enumerate in PR) | `@cogni/db-core` | Every node runs AI. |
-| `connections.ts` | (enumerate in PR) | `@cogni/db-core` | BYO-AI. |
-| `refs.ts`, `scheduling.ts`, `attribution.ts` | (enumerate in PR) | `@cogni/db-core` | Platform-wide. |
-| `poly-copy-trade.ts` | polyCopyTradeConfig, polyCopyTradeDecisions, polyCopyTradeFills | **`nodes/poly/app/schema/`** | Poly-only. Currently in shared `@cogni/db-schema`. |
-| DAO formation tables | (enumerate in PR) | **`nodes/operator/app/schema/`** | Operator admin surface. |
+| Today's location | Domain file | Destination |
+|---|---|---|
+| `packages/db-schema/src/` | `auth.ts` | stay (core) |
+| `packages/db-schema/src/` | `identity.ts`, `profile.ts` | stay (core) |
+| `packages/db-schema/src/` | `billing.ts` | stay (core) |
+| `packages/db-schema/src/` | `ai.ts`, `ai-threads.ts` | stay (core) |
+| `packages/db-schema/src/` | `connections.ts` | stay (core) |
+| `packages/db-schema/src/` | `refs.ts`, `scheduling.ts`, `attribution.ts` | stay (core) |
+| `packages/db-schema/src/` | **`poly-copy-trade.ts`** | **→ `nodes/poly/app/schema/copy-trade.ts`** |
+| `packages/db-schema/src/` | DAO formation tables (if distinct) | → `nodes/operator/app/schema/` (PR-time discovery) |
 
 Rule: **core = strict intersection of what every node needs**. When in doubt, node-local.
 
 ## Allowed Changes
 
-- `packages/db-schema/` → renamed to `packages/db-core/` (core tables only)
-- `packages/db-migrator/` (new — multi-stage Dockerfile + atlas CLI wrapper scripts)
-- `packages/db-core/AGENTS.md` (new)
-- `nodes/*/app/schema/` (new, node-local tables)
-- `nodes/*/app/src/adapters/server/db/migrations/` — **deleted entirely**. Atlas owns migration files under `atlas/<node>/migrations/`.
-- `atlas/` (new, atlas.hcl + generated per-node migration dirs)
-- `drizzle.config.ts` — replaced/deprecated. Drizzle is used only via `drizzle-kit export` inside Atlas `external_schema` programs.
-- `package.json` scripts:
-  - `db:migrate:<node>` → `atlas migrate apply --env <node> --url $DATABASE_URL`
-  - `db:diff:<node>` → `atlas migrate diff --env <node> <name>`
-  - `db:status:<node>` → `atlas migrate status --env <node>`
-- `infra/k8s/base/node-app/migration-job.yaml` → **deleted**. Replaced by `AtlasMigration` CR in each node's overlay.
-- `infra/k8s/bootstrap/argocd-cm-patch.yaml` (new — Lua health check)
-- `infra/k8s/bootstrap/atlas-operator.yaml` (new — Helm chart reference for the Operator)
-- `scripts/ci/compute_migrator_fingerprint.sh` — hash inputs: `packages/db-core/src/**`, `packages/db-migrator/**`, `nodes/*/app/schema/**`, `atlas/**`, `package.json`, `pnpm-lock.yaml`
-- `scripts/ci/detect-affected.sh` — `add_target migrator` trigger paths extended
-- `scripts/ci/build-and-push-images.sh` — migrator build step points at `packages/db-migrator/Dockerfile`
-- `.github/workflows/build-multi-node.yml` — migrator leg updated
-- `scripts/db/seed-money.mts` + `seed.mts` — split per-node where tables moved (non-blocking follow-up)
-- `docs/spec/databases.md`, `docs/spec/ci-cd.md`, `docs/guides/multi-node-dev.md` — reflect Atlas-owned migrations
+- `packages/db-schema/src/poly-copy-trade.ts` — **delete** (file moves to nodes/poly)
+- `packages/db-schema/src/index.ts` — drop the `poly-copy-trade` export
+- `nodes/<node>/app/schema/` — NEW dirs, index.ts + any node-local table files
+- `nodes/<node>/app/src/adapters/server/db/migrations/` — unchanged (each node now owns whatever is in its own dir)
+- `drizzle.<node>.config.ts` — NEW per deployed node (operator, poly, resy)
+- `drizzle.config.ts` — keep as operator alias during rollout, delete in a follow-up
+- `package.json` scripts — `db:migrate:poly` / `:resy` / `:dev` call drizzle-kit with their own config files
+- `nodes/operator/app/Dockerfile` migrator stage — copy all node schema dirs + all node migration dirs + all drizzle configs (so the same image can migrate any node)
+- `infra/k8s/base/node-app/migration-job.yaml` + overlays — overlay patches the `command` to run the right node's migrate script
+- `infra/k8s/overlays/production/{poly,resy}/kustomization.yaml` — **remove `exit 0`** (gated on Step 5 DB inspection)
+- `scripts/ci/compute_migrator_fingerprint.sh` — hash inputs add `nodes/*/app/schema/**`, `nodes/*/app/src/adapters/server/db/migrations/**`, `drizzle.*.config.ts`
+- `scripts/ci/detect-affected.sh` — `add_target migrator` triggers on the same path set
+- `docs/spec/databases.md` — surgical update of § 2 Migration Strategy (per-node commands + per-node migration ownership)
+- `docs/guides/multi-node-dev.md` — already corrected in Phase 0
 
 ## Plan
 
-### Phase A — Validation on candidate-a (1 PR, ~2 days)
+### Phase 0 — Doc truth-up (DONE)
+- [x] **Step 0** — `docs/guides/multi-node-dev.md` DB/Auth section corrected to match reality.
 
-- [x] **Step 0 — Atlas spike complete.** Decision: ADOPT. Evidence above. No standalone decision doc (spike output folded into this task per content-boundaries rule).
-- [x] **Step 1 — Doc truth-up.** ✅ Done: `docs/guides/multi-node-dev.md` DB/Auth section corrected.
-- [ ] **Step 2 — Install Atlas Operator on candidate-a k3s.** Add `infra/k8s/bootstrap/atlas-operator.yaml` (Helm chart ref). Apply via cloud-init or manual one-shot. Verify `kubectl -n atlas-operator-system get pods` shows Running.
-- [ ] **Step 3 — Argo CD Lua health check ConfigMap patch.** Apply `infra/k8s/bootstrap/argocd-cm-patch.yaml` to candidate-a's Argo CD. Without this, app-pod sync wave races migration completion.
-- [ ] **Step 4 — Commit Table Classification.** Enumerate every current table in the Classification table above. Classification-only PR, no code moves yet.
-- [ ] **Step 5 — Write initial `atlas.hcl` + run first baseline on cogni_poly (SNAPSHOT of candidate-a's DB, not live).** This is the Q1 mechanism validation:
-  1. `pg_dump $CANDIDATE_A_POLY_URL > /tmp/poly-snapshot.sql`; restore to local `cogni_poly_test`
-  2. Write `atlas.hcl` with `env "poly"` only (Phase A scope)
-  3. Move `poly-copy-trade.ts` to `nodes/poly/app/schema/`
-  4. Rename `packages/db-schema` → `packages/db-core` (poly-copy-trade already moved out)
-  5. Run `atlas migrate diff --env poly initial_poly_baseline` — **this is the verification that `composite_schema` + Drizzle `external_schema` compose**. Expect one SQL file unioning core + poly-local.
-  6. Run `atlas migrate apply --env poly --url postgres://...cogni_poly_test --baseline <ts>` — **must not alter any tables**. Verify `atlas migrate status` reports Synced.
-  7. Run `atlas schema diff --env poly --from "file://atlas/poly/migrations" --to postgres://...cogni_poly_test --exclude "atlas_schema_revisions"` — must report no changes.
+### Phase 1 — Schema split (one PR, ~half-day)
+- [ ] **Step 1** — Commit the Table Classification. PR touches only this task file.
+- [ ] **Step 2** — Move `poly-copy-trade.ts` to `nodes/poly/app/schema/copy-trade.ts`. Create `nodes/{operator,poly,resy}/app/schema/index.ts` each re-exporting `@cogni/db-schema` + any node-local tables. Move operator-only tables (PR-time discovery) to `nodes/operator/app/schema/`.
+- [ ] **Step 3** — Create `drizzle.{operator,poly,resy}.config.ts`. Each points at its own schema glob and its own existing migrations dir. Update `package.json` `db:migrate:*` scripts to use the per-node configs.
+- [ ] **Step 4** — Run `pnpm db:migrate:poly` locally on a fresh `cogni_poly` test DB. Should replay 0000–0026 (and later the poly-specific 0027) cleanly. Same for operator, resy. No new migrations generated — schemas match.
 
-  **If any of (5)/(6)/(7) fails**: Drizzle + composite_schema doesn't work as assumed. Fall back plan: three independent per-node Atlas projects with duplicated core HCL (still simpler than bespoke runner). Don't revert to bespoke plan — it was rejected for stronger reasons.
+### Phase 2 — CI + migrator image wiring (one PR, ~half-day)
+- [ ] **Step 5** — Extend `scripts/ci/compute_migrator_fingerprint.sh` input paths to `nodes/*/app/schema/**`, `nodes/*/app/src/adapters/server/db/migrations/**`, `drizzle.*.config.ts`. **Silent failure mode otherwise** — a poly-local schema change leaves the migrator cache valid and the new migration never runs.
+- [ ] **Step 6** — Extend `scripts/ci/detect-affected.sh` `add_target migrator` trigger to the same paths.
+- [ ] **Step 7** — `nodes/operator/app/Dockerfile` migrator stage copies all nodes' schema + migrations + the three drizzle configs. One image, selects via overlay.
+- [ ] **Step 8** — `infra/k8s/base/node-app/migration-job.yaml` + each overlay patch `command` to the right per-node migrate script. Preview migrates with the new model; should be zero diff vs today (same 0000-0026 applied).
 
-- [ ] **Step 6 — `AtlasMigration` CR for poly on candidate-a.** Write `infra/k8s/overlays/candidate-a/poly/atlas-migration.yaml`. Wire to the migrator image built by PR CI. Verify Argo sync applies it, Operator runs `atlas migrate apply` against live candidate-a `cogni_poly`, migration reports Healthy, app wave proceeds.
-
-### Phase B — Extend to operator + resy on candidate-a (1 PR, ~1 day)
-
-- [ ] **Step 7 — Extend `atlas.hcl`** with `env "operator"` + `env "resy"`. Move operator-local (DAO formation) tables to `nodes/operator/app/schema/`. Resy has no local tables today — env block still exists with empty node-local schema.
-- [ ] **Step 8 — Baseline operator + resy DBs on candidate-a.** Same snapshot-first approach as Step 5. Both DBs get `atlas migrate apply --baseline <ts>`.
-- [ ] **Step 9 — `AtlasMigration` CRs for operator + resy on candidate-a.** Full candidate-a now uses Atlas for all three nodes. Argo PreSync hooks (legacy Jobs) are deleted in this PR.
-
-### Phase C — CI wiring (1 PR, ~1 day)
-
-- [ ] **Step 10 — Migrator image + CI triggers.** Same four CI integration items flagged by devops-expert review:
-  - `packages/db-migrator/Dockerfile` (multi-stage Node + Atlas)
-  - `scripts/ci/compute_migrator_fingerprint.sh` — inputs: `packages/db-core/src/**`, `packages/db-migrator/**`, `nodes/*/app/schema/**`, `atlas/**`, `package.json`, `pnpm-lock.yaml`. **Silent failure mode otherwise:** a node schema change leaves the migrator cache valid, stale image gets promoted, new migration never runs.
-  - `scripts/ci/detect-affected.sh:135` — extend `add_target migrator` to all paths above.
-  - `scripts/ci/build-and-push-images.sh:146-155` — point migrator target at `packages/db-migrator/Dockerfile`. Update `.github/workflows/build-multi-node.yml` migrator leg too.
-- [ ] **Step 11 — `pnpm db:*` scripts.** Replace `db:migrate:dev`/`db:migrate:poly`/`db:migrate:resy` with `db:migrate --env=<node>` backed by Atlas CLI. Add `db:diff:<node>`, `db:status:<node>`.
-
-### Phase D — Preview rollout (1 PR, ~0.5 day)
-
-- [ ] **Step 12 — Roll to preview.** Install Atlas Operator + Argo Lua patch on preview k3s. Baseline preview DBs (same snapshot-first approach as candidate-a). Sync `AtlasMigration` CRs via `deploy/preview`.
-
-### Phase E — Production cutover (1 PR, dedicated deploy day)
-
-- [ ] **Step 13 — Prod DB state inspection.** Prod poly/resy migration Jobs have been `exit 0` since inception (`infra/k8s/overlays/production/{poly,resy}/kustomization.yaml:95`) — DBs are in unknown state. Before any changes:
-  1. SSH into prod VM; `pg_dump --schema-only` for all three prod DBs.
-  2. Inspect each: does `__drizzle_migrations` table exist? How many rows? What hashes?
+### Phase 3 — Prod un-no-op (one PR, gated)
+- [ ] **Step 9** — Inspect prod DBs BEFORE removing `exit 0`:
+  1. SSH to prod VM; `pg_dump --schema-only` for each prod DB (`cogni_template_dev`, `cogni_poly`, `cogni_resy`).
+  2. Does `__drizzle_migrations` exist? How many rows? Hashes match our repo's SQL files?
   3. Classify:
-     - **(A) Fresh DB, no `__drizzle_migrations`** → Atlas applies from scratch (no `--baseline`, or baseline `0`).
-     - **(B) Populated, all hashes match our `packages/db-core/migrations` → `atlas/**` translation** → baseline with recorded timestamp.
+     - **(A) Empty DB, no `__drizzle_migrations`** → first migrate run applies 0000–0026 fresh. Fine.
+     - **(B) Populated, hashes match** → migrate run is a no-op. Fine.
      - **(C) Populated, hashes diverge** → **STOP.** Reconcile manually before proceeding.
-  4. Only after every prod DB is in state (A) or (B), land the prod-cutover PR.
-- [ ] **Step 14 — Prod cutover PR.** Install Atlas Operator + Argo Lua patch on prod k3s. Delete `exit 0` no-ops in prod poly/resy overlays (replaced by `AtlasMigration` CRs). Monitor first prod promote-and-deploy cycle via Loki.
+  4. Only after every prod DB is (A) or (B), land the overlay PR removing `exit 0`.
+  5. Monitor first prod promote-and-deploy cycle via Loki.
 
-### Phase F — Cleanup (follow-up tasks, non-blocking)
-
-- [ ] **Step 15 — Spec updates.** `docs/spec/databases.md` absorbs migration contract invariants. `docs/spec/ci-cd.md` adds Atlas migration to v0 Minimum Authoritative Validation.
-- [ ] **Step 16 — Seed split.** `scripts/db/seed-money.mts` gains node awareness. Non-blocking.
-- [ ] **Step 17 — Drop legacy `__drizzle_migrations` after 30 days stable.** Followup cleanup once confidence is high.
+### Phase 4 — Spec surgical update (follow-up PR, non-blocking)
+- [ ] **Step 10** — `docs/spec/databases.md` § 2 Migration Strategy: per-node commands, per-node migration ownership, the "core table migration → duplicate into every node's dir" workflow. Link to this task for history.
 
 ## Validation
 
-### Per-node independence (Phase B end)
-
+### Schema isolation proved
 ```bash
-pnpm db:status --env poly      # expect: Synced, atlas_schema_revisions has N rows
-pnpm db:status --env resy      # expect: Synced, fewer rows than poly (no node-local migrations)
+pnpm db:migrate:poly
+pnpm db:migrate:resy
 
 psql $DATABASE_URL_RESY -c "select * from poly_copy_trade_fills limit 1;"
-# expect: ERROR relation does not exist (isolation proved — poly tables NOT in resy DB)
+# expect: ERROR (until we deliberately add the table to resy, it never arrives)
 
-psql $DATABASE_URL_POLY -c "select count(*) from atlas_schema_revisions;"  # > 0
-psql $DATABASE_URL_POLY -c "select count(*) from __drizzle_migrations;"    # legacy table still present (rollback safety)
+psql $DATABASE_URL_POLY -c "select count(*) from poly_copy_trade_fills;"
+# expect: 0 or N (table exists, lives in poly's schema now)
 ```
 
-### Baseline idempotency (Phase A Step 6)
-
+### Migration history per node
 ```bash
-# First apply on legacy-populated DB
-atlas migrate apply --env poly --url $TEST_DB --baseline <ts>
-# expect: 0 DDL statements executed, atlas_schema_revisions populated
+psql $DATABASE_URL_POLY   -c "select count(*) from __drizzle_migrations;"   # ~27
+psql $DATABASE_URL_RESY   -c "select count(*) from __drizzle_migrations;"   # ~27
+psql $DATABASE_URL        -c "select count(*) from __drizzle_migrations;"   # ~27
 
-# Second apply (no changes)
-atlas migrate apply --env poly --url $TEST_DB
-# expect: "No migrations to apply"
+# Add a core table → core migration lands in operator first
+pnpm db:generate:operator
+# Copy the new .sql file to nodes/poly/app/src/adapters/server/db/migrations/ and nodes/resy/...
+# (or regenerate per-node; same result since schemas include the new core table)
+pnpm db:migrate:poly    # applies new migration
+pnpm db:migrate:resy    # applies new migration
 ```
 
-### Argo wave ordering (Phase A Step 6)
-
+### Collision test
 ```bash
-kubectl -n poly get atlasmigration poly-migration -w
-# expect: Progressing → Ready before poly-app Deployment reaches Healthy
+# Branch A: add a core table → operator generates NNNN_foo.sql, poly/resy regenerate same
+# Branch B: add a poly-local table → poly generates NNNN_bar.sql (its own history)
+# Merge both: no conflict. Different nodes' migration dirs are independent.
 ```
 
 ### Observability
+- Migration runs use existing Pino logging from drizzle-kit.
+- First prod migrate Job run (Phase 3) watched in Loki: expect "migrations applied: 0" on hash-match DBs or a clean 0000-0026 apply on empty DBs.
 
-- Atlas Operator emits events; Argo surfaces them in UI.
-- Operator pod logs captured by our existing Alloy → Loki pipeline under namespace `atlas-operator-system`. Confirm after Step 2.
-- Migration success/failure signals through Argo health → `promote-and-deploy.yml` `lock-preview-on-success` / `unlock-preview-on-failure` gates (no change needed).
+## Non-goals (this task)
 
-### Collision test (Phase C done)
-
-```bash
-# Branch A: add a core table
-# Branch B: add a poly-local table
-# Merge both into main in either order
-pnpm check  # expect passes — atlas migrate diff emits independent files per env
-```
+- **No `@cogni/db-migrator` package.** Standard drizzle-kit does the job.
+- **No bootstrap script.** Existing `__drizzle_migrations` stays valid (same table, same hashes).
+- **No second migration table per DB.** One table, the default.
+- **No Atlas.** Tracked for future in task.0323.
+- **No semver on `packages/db-schema`.** Monorepo — `git pull` is the propagation.
+- **No timestamp migration IDs.** Sequential stays; rare collisions resolved by renumbering.
+- **No schema DAG linting.** Add dep-cruiser rule later if node schemas start cross-importing.
 
 ## Review Checklist
 
 - [ ] **Work Item:** `task.0322` linked in PR body
-- [ ] **Phase A first:** candidate-a poly end-to-end before any other node touches
-- [ ] **Table Classification:** concrete list committed before any code move (Step 4)
-- [ ] **Baseline tested on SNAPSHOT first:** never baseline a live DB without a snapshot rehearsal
-- [ ] **Composite schema proven:** Step 5 generated a migration file unioning core + poly-local without errors
-- [ ] **Argo Lua health check:** applied BEFORE any `AtlasMigration` CR is synced (else silent race)
-- [ ] **Single migrator image:** one Dockerfile, `--env=<node>` arg
-- [ ] **Migrator CI inputs:** fingerprint + detect-affected cover all node schemas + atlas/ dir
-- [ ] **Prod cutover gated:** Step 13 DB inspection completed before Step 14 PR opens
-- [ ] **Specs:** `databases.md`, `ci-cd.md`, `multi-node-dev.md` reflect Atlas-owned migrations
-- [ ] **No runtime in `@cogni/db-core`:** package contains schema `.ts` only; no migration dir in source tree (migrations live under `atlas/`)
+- [ ] **Table Classification:** committed before code moves (Step 1)
+- [ ] **No cross-node table leak:** poly tables only in poly's schema; verified by grep
+- [ ] **Standard migrations table:** no custom `migrations.table` in any drizzle config
+- [ ] **Prod cutover gated:** Step 9 DB inspection done before overlay removes `exit 0`; prod cutover is a dedicated PR
+- [ ] **Migrator CI inputs:** fingerprint + detect-affected cover all node schemas (silent staleness otherwise)
+- [ ] **No new packages:** no `packages/db-migrator`, no `@cogni/db-core` rename
 - [ ] **Reviewer:** assigned and approved
-
-## Design review history
-
-- **2026-04-18 — original self-review + Codex review + devops-expert review.** Produced the bespoke two-phase drizzle-kit runner plan (now § Rejected Alternative). Surfaced three blockers (bootstrap path, 0027 routing, "core" undefined) plus Atlas evaluation gap.
-- **2026-04-18 — Atlas spike.** Read [atlasgo.io/guides/orms/drizzle/existing-project](https://atlasgo.io/guides/orms/drizzle/existing-project), [atlas-schema/projects](https://atlasgo.io/atlas-schema/projects), [guides/deploying/k8s-argo](https://atlasgo.io/guides/deploying/k8s-argo), multi-tenant blog. Verdict: ADOPT. Replaced Phases B–E of original plan with Atlas-shaped equivalents. Candidate-a validation becomes Step 5's composite_schema proof instead of a conditional gate.
 
 ## Open questions
 
-1. **composite_schema + Drizzle `external_schema` verification.** Step 5 is the test. If it fails, fall back to three independent per-node Atlas projects (not back to bespoke).
-2. **Rollback semantics.** Atlas has `atlas migrate down` but our DBs are stateful — rollback = DB restore from backup for anything touching prod data. Document in `docs/spec/databases.md`.
-3. **Schema DAG linting.** Node schema files should import only from `@cogni/db-core`, never another node. Add dep-cruiser rule in Phase B or follow-up.
-4. **Legacy `__drizzle_migrations` cleanup timing.** Step 17 — 30 days post-prod-cutover feels right; revisit at cutover.
+1. **Operator-local tables.** PR-time discovery: are there currently any operator-only tables (DAO formation?) distinct from core? If so, they move to `nodes/operator/app/schema/`. Addressed in Step 2.
+2. **Operator/resy harmless-orphan poly tables.** Accepted for now — `poly_copy_trade_*` remain in those DBs from migration 0027 but are unused. Follow-up cleanup task can drop them when someone cares.
+3. **Future: Atlas adoption.** See **task.0323**. Triggers: contributor count > ~3 regularly touching schema, or destructive-change linting at PR time becomes a priority.
 
-## Rejected Alternative — bespoke two-phase drizzle-kit runner
+## Design review history
 
-Original design (archived; retained here because the review history references it). Summary:
-
-- New `packages/db-migrator` with `runCoreMigrations(db)` + `runNodeMigrations(db, nodeName)` hand-rolled TS
-- Two migration tables per DB: `__drizzle_migrations_core` + `__drizzle_migrations_<node>`
-- Bootstrap logic: copy hash/created_at rows forward from legacy `__drizzle_migrations` to `__drizzle_migrations_core` on first run; detect poly 0027 hash and re-route to `__drizzle_migrations_poly`
-- Single parameterized migrator image via `--node=<name>`
-- Django/Medusa.js pattern (per-package migration history)
-
-**Rejected because** Atlas gives us the same architectural shape (per-node schemas, composition, single image, BUILD_ONCE_PROMOTE preserved) with:
-- Documented `--baseline` flag replacing hand-rolled copy-forward (~300 LOC + tests we don't write)
-- Documented composite_schema replacing ad-hoc two-dir runner
-- Official Argo CD integration with one known fix (Lua health check)
-- `atlas schema diff` for drift detection that we'd otherwise punt
-
-The only bespoke-over-Atlas argument was "zero new tools, team already knows drizzle." Weighed against ~1–2 weeks of careful bootstrap testing, Atlas wins decisively.
+- **2026-04-18 r1** — bespoke two-phase drizzle-kit runner with `__drizzle_migrations_core` + `__drizzle_migrations_<node>` tables, a new `packages/db-migrator`, and a legacy-DB bootstrap script. Rejected as over-engineered.
+- **2026-04-18 r2** — Atlas adoption (composite_schema + AtlasMigration CRD + Argo Lua health check). Rejected as over-tooled for current scale; preserved as task.0323.
+- **2026-04-18 r3 (current)** — minimal schema-split. Standard drizzle-kit per node, no new tooling, ~2d total. External reviewer framing: "stop sharing the schema file. Start sharing nothing."
 
 ## PR / Links
 
-- Project: [proj.cicd-services-gitops.md](../projects/proj.cicd-services-gitops.md)
-- Related: task.0260 (monorepo CI), task.0315 (poly copy-trade — node-local routing test case), task.0317 (per-node graph catalogs — analogous per-node pattern), task.0320 (per-node candidate flighting)
-- Atlas docs: [existing-project](https://atlasgo.io/guides/orms/drizzle/existing-project), [composite_schema](https://atlasgo.io/atlas-schema/projects), [argo CD](https://atlasgo.io/guides/deploying/k8s-argo)
+- Project: [proj.database-ops.md](../projects/proj.database-ops.md)
+- Spec (to be updated): [databases.md](../../docs/spec/databases.md) § 2 Migration Strategy
+- Future upgrade: **task.0323** (Atlas + GitOps migrations)
+- Related: task.0260 (monorepo CI), task.0315 (poly copy-trade — the test case), task.0317 (per-node graph catalogs)
 
 ## Attribution
 

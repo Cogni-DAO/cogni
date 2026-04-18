@@ -97,7 +97,6 @@ Project is complete when one work item achieves `deploy_verified=true` via fully
 | task.0309 | QA agent — reads task, exercises feature, confirms observability     | needs_design    | 0        |
 | task.0308 | Deployment observability scorecard (getCandidateHealth, SHA in logs) | needs_design    | 1        |
 | task.0297 | Add candidate-flight tool to VCS capability (flightCandidate)        | needs_design    | 1        |
-| task.0322 | Per-node DB schema independence (db-core + per-node extensions)      | needs_implement | 2        |
 
 ## Roadmap
 
