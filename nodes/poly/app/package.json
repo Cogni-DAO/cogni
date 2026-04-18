@@ -28,6 +28,7 @@
     "@cogni/cogni-contracts": "workspace:*",
     "@cogni/db-client": "workspace:*",
     "@cogni/db-schema": "workspace:*",
+    "@cogni/poly-db-schema": "workspace:*",
     "@cogni/financial-ledger": "workspace:*",
     "@cogni/ids": "workspace:*",
     "@cogni/knowledge-store": "workspace:*",

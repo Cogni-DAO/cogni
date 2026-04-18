@@ -28,7 +28,7 @@ function requireDatabaseUrl(): string {
 export default defineConfig({
   schema: [
     "./packages/db-schema/src/**/*.ts",
-    "./nodes/poly/app/src/shared/db/copy-trade.ts",
+    "./nodes/poly/packages/db-schema/src/**/*.ts",
   ],
   out: "./nodes/poly/app/src/adapters/server/db/migrations",
   dialect: "postgresql",

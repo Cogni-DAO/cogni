@@ -21,5 +21,6 @@ export * from "@cogni/db-schema/identity";
 export * from "@cogni/db-schema/profile";
 export * from "@cogni/db-schema/refs";
 export * from "@cogni/db-schema/scheduling";
-// Poly-local tables (relocated from @cogni/db-schema by task.0324)
-export * from "./copy-trade";
+// Poly-local tables — own workspace package so scheduler-worker / Temporal
+// worker / other services can import without reaching into app internals.
+export * from "@cogni/poly-db-schema";
