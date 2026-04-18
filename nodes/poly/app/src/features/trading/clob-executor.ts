@@ -2,15 +2,16 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/copy-trade/clob-executor`
- * Purpose: Thin feature-layer wrapper that adapts `MarketProviderPort.placeOrder` into a single `(intent) => receipt` function with structured logs + bounded-label metrics. The caller supplies the `placeOrder` function (mock seam for tests; real adapter in `bootstrap/capabilities/copy-trade.ts`).
- * Scope: Pure composition. Does not instantiate adapters, does not read env, does not import `@polymarket/clob-client` or `@privy-io/node` (those live behind the `bootstrap/capabilities/copy-trade.ts` dynamic-import boundary).
+ * Module: `@features/trading/clob-executor`
+ * Purpose: Generic Polymarket placement seam. Adapts `MarketProviderPort.placeOrder` into a single `(intent) => receipt` function with structured logs + bounded-label metrics. Shared across every placement path in the poly app — agent tool (via `bootstrap/capabilities/poly-trade.ts`), autonomous mirror-coordinator (CP4.3), and future WS ingester (P4).
+ * Scope: Pure composition. Does not instantiate adapters, does not read env, does not import `@polymarket/clob-client` or `@privy-io/node` (those live behind the `bootstrap/capabilities/poly-trade.ts` dynamic-import boundary).
  * Invariants:
  *   - EXECUTOR_SEAM_IS_PLACE_ORDER_FN — callers inject `placeOrder`, not the adapter instance. Stack tests substitute without monkey-patching.
- *   - NO_STATIC_CLOB_IMPORT — this module MUST NOT import `@polymarket/clob-client`; ESLint enforces at review.
+ *   - NO_STATIC_CLOB_IMPORT — this module MUST NOT import `@polymarket/clob-client`; Biome `noRestrictedImports` enforces at review.
  *   - BOUNDED_METRIC_RESULT — the `result` label is one of {ok, rejected, error}.
+ *   - TRADING_IS_GENERIC — MUST NOT import from `features/copy-trade/` or `features/wallet-watch/`.
  * Side-effects: logger + metrics calls only (both are caller-supplied sinks; default no-op).
- * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.2)
+ * Links: work/items/task.0315.poly-copy-trade-prototype.md (moved from `features/copy-trade/` in CP4.3b; original at CP4.2)
  * @public
  */
 
@@ -21,13 +22,21 @@ import type {
   OrderReceipt,
 } from "@cogni/market-provider";
 
-/** Metric names emitted by the executor. Dashboards reference these. */
-export const COPY_TRADE_EXECUTOR_METRICS = {
+/**
+ * Metric names emitted by the executor. Dashboards reference these.
+ * Names retain the `poly_copy_trade_execute_*` prefix from PR #900 for
+ * prom-series continuity; the executor itself is generic (any placement path),
+ * so `CLOB_EXECUTOR_METRICS` is the canonical name going forward.
+ */
+export const CLOB_EXECUTOR_METRICS = {
   placeTotal: "poly_copy_trade_execute_total",
   placeDurationMs: "poly_copy_trade_execute_duration_ms",
 } as const;
 
-export interface CopyTradeExecutorDeps {
+/** @deprecated Renamed to `CLOB_EXECUTOR_METRICS` in CP4.3b. Kept as alias. */
+export const COPY_TRADE_EXECUTOR_METRICS = CLOB_EXECUTOR_METRICS;
+
+export interface ClobExecutorDeps {
   /**
    * The mockable seam. In production `bootstrap/capabilities/copy-trade.ts`
    * binds `PolymarketClobAdapter.placeOrder`. In stack/unit tests callers
@@ -40,7 +49,13 @@ export interface CopyTradeExecutorDeps {
   metrics: MetricsPort;
 }
 
-export type CopyTradeExecutor = (intent: OrderIntent) => Promise<OrderReceipt>;
+/** @deprecated Renamed to `ClobExecutorDeps` in CP4.3b. Kept as alias. */
+export type CopyTradeExecutorDeps = ClobExecutorDeps;
+
+export type ClobExecutor = (intent: OrderIntent) => Promise<OrderReceipt>;
+
+/** @deprecated Renamed to `ClobExecutor` in CP4.3b. Kept as alias. */
+export type CopyTradeExecutor = ClobExecutor;
 
 /**
  * Build the executor function. Structured-log shape:
@@ -53,9 +68,7 @@ export type CopyTradeExecutor = (intent: OrderIntent) => Promise<OrderReceipt>;
  * The adapter throws a message containing `"CLOB rejected order"` on
  * rejection — the executor parses that prefix to bucket correctly.
  */
-export function createClobExecutor(
-  deps: CopyTradeExecutorDeps
-): CopyTradeExecutor {
+export function createClobExecutor(deps: ClobExecutorDeps): ClobExecutor {
   // `subcomponent` (not `component`) so pino bindings layer cleanly with the
   // downstream adapter's `component: "poly-clob-adapter"` child — we want both
   // fields visible in Loki, not shadowed.

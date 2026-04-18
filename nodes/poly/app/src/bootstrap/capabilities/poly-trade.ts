@@ -37,7 +37,7 @@ import type { Counter, Histogram } from "prom-client";
 import client from "prom-client";
 
 import { FakePolymarketClobAdapter } from "@/adapters/test";
-import { createClobExecutor } from "@/features/copy-trade/clob-executor";
+import { createClobExecutor } from "@/features/trading/clob-executor";
 import type { Logger } from "@/shared/observability/server";
 import { metricsRegistry } from "@/shared/observability/server";
 
