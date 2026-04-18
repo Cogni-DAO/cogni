@@ -99,7 +99,12 @@ jobs:
           fi
 
           if [ -z "$PR_NUMBER" ]; then
-            echo "ℹ️  No PR associated with ${HEAD_SHA:0:8} — direct push to main is not a supported flight trigger"
+            if [ "$EVENT_NAME" = "push" ]; then
+              echo "::error::flight-preview triggered by push to main but no PR resolvable for ${HEAD_SHA:0:8} after primary (commit subject) + fallback (API 5×3s) lookups. Direct pushes to main are incident-only per docs/spec/ci-cd.md. If this push is intentional, dispatch flight-preview.yml manually with an explicit sha input after the commit you want flighted is on main."
+              exit 1
+            fi
+            # workflow_dispatch with a non-PR SHA (incident recovery path) — skip cleanly.
+            echo "ℹ️  Dispatched with SHA ${HEAD_SHA:0:8} that has no PR — skipping."
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi

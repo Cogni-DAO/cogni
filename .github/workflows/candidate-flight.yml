@@ -243,6 +243,15 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN }}
         run: bash app-src/scripts/ci/smoke-candidate.sh
 
+      # NOTE: buildSha verification (scripts/ci/verify-buildsha.sh) is
+      # intentionally NOT wired here. That script needs the concrete set of
+      # nodes whose digest was actually promoted in this flight to avoid
+      # false-failing untouched nodes (affected-only CI rebuilds a subset).
+      # `scripts/ci/promote-build-payload.sh` does not yet emit that list.
+      # Until it does, the authoritative per-app rollout gate is
+      # wait-for-in-cluster-services above. Follow-up: emit promoted_apps from
+      # promote-build-payload.sh and wire verify-buildsha here.
+
       - name: Release candidate slot after success
         if: always() && success() && steps.acquire.outcome == 'success' && steps.acquire.outputs.slot_busy != 'true'
         working-directory: deploy-branch

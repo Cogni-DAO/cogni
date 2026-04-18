@@ -272,6 +272,24 @@ jobs:
           git push origin HEAD:${DEPLOY_BRANCH}
           DEPLOY_SHA=$(git rev-parse HEAD)
           echo "pushed=true" >> $GITHUB_OUTPUT
+
+      - name: Summarise promotion
+        env:
+          ENV: ${{ steps.env.outputs.environment }}
+          HEAD_SHA: ${{ steps.env.outputs.head_sha }}
+          DEPLOY_SHA: ${{ steps.deploy-push.outputs.deploy_branch_sha }}
+          PROMOTED: ${{ steps.deploy-push.outputs.promoted_apps }}
+        run: |
+          {
+            echo "## Promote-and-Deploy (${ENV})"
+            echo ""
+            echo "- Source SHA: \`${HEAD_SHA}\`"
+            echo "- Deploy-branch SHA: \`${DEPLOY_SHA}\`"
+            echo "- Promoted apps: ${PROMOTED:-_(none)_}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$PROMOTED" ]; then
+            echo "::warning::No image digests promoted. Downstream verify-buildsha step will fail if pods serve a different SHA than ${HEAD_SHA:0:8}."
+          fi
           echo "deploy_branch_sha=$DEPLOY_SHA" >> $GITHUB_OUTPUT
           echo "promoted_apps=${PROMOTED_CSV}" >> $GITHUB_OUTPUT
           echo "✅ Direct push to ${DEPLOY_BRANCH} for ${OVERLAY_ENV} ${SHORT_SHA} (deploy-branch SHA: ${DEPLOY_SHA:0:8}, promoted: ${PROMOTED_CSV})"
@@ -565,6 +583,28 @@ jobs:
       - name: Run Playwright smoke tests
         if: steps.gate.outputs.skip != 'true'
         run: pnpm e2e:smoke
+
+      # Authoritative gate: promoted pods serve the SHA the flight promoted.
+      # /readyz.version is the BUILD_SHA baked in by pr-build.yml (bug.0313) —
+      # equal to the source-sha the flight dispatched with.
+      #
+      # Preview-only. Production promotions are cross-PR: promote-to-production
+      # copies preview's overlay digests (which can mix different PR head SHAs
+      # across nodes), so a single EXPECTED_BUILDSHA is meaningless there.
+      # Follow-up: a prod-side verifier that reads each node's overlay digest
+      # and checks the corresponding baked SHA.
+      #
+      # NODES is scoped to promoted_apps so untouched nodes (legitimately still
+      # on a prior PR's build) are not false-failed.
+      - name: Verify buildSha on endpoints
+        if: |
+          steps.gate.outputs.skip != 'true' &&
+          needs.promote-k8s.outputs.environment == 'preview'
+        env:
+          DOMAIN: ${{ vars.DOMAIN }}
+          EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.head_sha }}
+          NODES: ${{ needs.promote-k8s.outputs.promoted_apps }}
+        run: bash scripts/ci/verify-buildsha.sh
 
       - name: Upload E2E artifacts
         if: always() && steps.gate.outputs.skip != 'true'
