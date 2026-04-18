@@ -92,9 +92,6 @@ is_global_build_input() {
     tsconfig.app.json | \
     tsconfig.scripts.json | \
     config/* | \
-    scripts/ci/build.sh | \
-    scripts/ci/build-service.sh | \
-    scripts/ci/push.sh | \
     scripts/ci/build-and-push-images.sh | \
     scripts/ci/detect-affected.sh | \
     scripts/ci/write-build-manifest.sh)
@@ -118,7 +115,6 @@ else
     fi
 
     case "$path" in
-      .github/workflows/build-multi-node.yml | \
       .github/workflows/pr-build.yml)
         add_all_targets
         selection_reason="workflow-build-change:${path}"

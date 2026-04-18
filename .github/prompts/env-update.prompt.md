@@ -31,34 +31,26 @@ If the variable is needed by other services:
 
 - [ ] **`.github/workflows/ci.yaml`**: Add the variable (with a test-safe value) to **every** `env:` block that already contains similar tokens (e.g. `SCHEDULER_API_TOKEN`). There are typically 4 blocks: `static`, `component`, `contract`, and `stack` jobs. Missing a single block will cause that CI job to fail on `serverEnv()` validation.
 
-## 5. Deployment Pipeline (Production/Preview)
+## 5. Deployment Pipeline (VM + k3s)
 
-To get the variable from GitHub Secrets into the VM:
+To get the variable from GitHub Secrets into each environment's VM:
 
-### A. GitHub Workflows
+### A. GitHub environment secrets
 
-- [ ] **`.github/workflows/deploy-production.yml`**: Map the secret/var to the `env` block of the `deploy` job.
-- [ ] **`.github/workflows/staging-preview.yml`**: Map the secret/var to the `env` block of the `deploy` job.
+Add the variable to the `candidate-a`, `preview`, and `production` GitHub environments (`gh secret set` or via `pnpm setup:secrets --env <name>`). The active deploy path reads secrets from `github.event.inputs.environment`-scoped secrets when running `candidate-flight.yml` / `promote-and-deploy.yml`.
 
-### B. Deployment Script (`deploy.sh`)
+### B. Compose infra rsync
 
-- [ ] **`scripts/ci/deploy.sh`**:
-  1.  Add it to `REQUIRED_SECRETS` (if it's a secret) or `REQUIRED_ENV_VARS` (if it's a config).
-  2.  Add it to the `cat > /opt/cogni-template-runtime/.env << ENV_EOF` block (Step 1).
-  3.  Add it to the `ssh ... bash /tmp/deploy-remote.sh` command (at the bottom of the file) to pass it to the remote script.
+- [ ] **`infra/compose/runtime/docker-compose.yml`** (or `.dev.yml` if dev-only): add to the service's `environment` block so the variable propagates when `scripts/ci/deploy-infra.sh` rsyncs compose to the VM.
+
+### C. k8s Deployment env
+
+- [ ] **`infra/k8s/base/<component>/deployment.yaml`**: add to `envFrom.secretRef` or direct `env:` entry. For node-app Deployments, the secret ref `node-app-secrets` is patched per-overlay to `{operator,poly,resy}-node-app-secrets` and those secrets are written by `pnpm setup:secrets`.
 
 ## 6. Setup Documentation
 
-- [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add the variable to the relevant secrets list so future fresh-clone setups know to provision it (e.g. under `production` or `staging` GitHub secrets).
-
-## 7. Special Cases: Isolated Services
-
-If the variable is for a standalone service running in its own Docker Compose project:
-
-- [ ] **Docker Compose**: Update the service's compose file.
-- [ ] **`deploy.sh` (Step 1)**: Add the variable to the _specific_ `.env` file generation block for that service.
-- [ ] **`deploy.sh` (Compose Command)**: **CRITICAL**: Ensure the `docker compose` command for that service explicitly uses `--env-file /path/to/service/.env`.
-  - _Reason_: Isolated services often run from a shared script context and won't automatically find their `.env` file unless explicitly told.
+- [ ] **`scripts/setup/SETUP_DESIGN.md`**: Add the variable to the relevant secrets list so future fresh-clone setups know to provision it.
+- [ ] **`scripts/setup-secrets.ts`** (if the var is a secret): add to the per-environment secret writer so `pnpm setup:secrets --env <name>` picks it up.
 
 ## See Also
 
