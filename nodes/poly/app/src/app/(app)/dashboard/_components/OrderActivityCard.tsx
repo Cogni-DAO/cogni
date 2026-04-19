@@ -218,11 +218,11 @@ export function OrderActivityCard(): ReactElement {
                 const href = row.market_tx_hash
                   ? `https://polygonscan.com/tx/${row.market_tx_hash}`
                   : null;
-                const display =
-                  row.market_title ??
-                  (row.market_id
-                    ? `${row.market_id.slice(-12)}`
-                    : "(unknown market)");
+                // Historic rows pre-dating the title-stash (PR #918) have no
+                // market_title. Show a friendly placeholder rather than a
+                // truncated conditionId hex — the full id is still available
+                // via the cell `title` attribute for devs.
+                const display = row.market_title ?? "—";
 
                 return (
                   <TableRow
@@ -249,7 +249,7 @@ export function OrderActivityCard(): ReactElement {
                     </TableCell>
                     <TableCell
                       className="font-medium text-sm"
-                      title={row.market_title ?? undefined}
+                      title={row.market_title ?? row.market_id ?? undefined}
                     >
                       {display}
                     </TableCell>

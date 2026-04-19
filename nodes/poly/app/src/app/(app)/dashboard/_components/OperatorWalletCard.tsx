@@ -167,7 +167,7 @@ export function OperatorWalletCard(): ReactElement {
                   </span>
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="inline-block size-2 rounded-sm bg-primary/70" />
+                  <span className="inline-block size-2 rounded-sm bg-[hsl(var(--chart-1))]/70" />
                   Positions{" "}
                   <span className="text-foreground tabular-nums">
                     {formatUsdc(data.usdc_positions_mtm)}
@@ -191,7 +191,7 @@ export function OperatorWalletCard(): ReactElement {
                 title={`Locked: ${formatUsdc(data.usdc_locked)}`}
               />
               <div
-                className="bg-primary/70"
+                className="bg-[hsl(var(--chart-1))]/70"
                 style={{ width: `${positionsPct}%` }}
                 title={`Positions (MTM): ${formatUsdc(data.usdc_positions_mtm)}`}
               />

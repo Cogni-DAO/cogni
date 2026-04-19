@@ -3,140 +3,69 @@ id: task.0315.handoff
 type: handoff
 work_item_id: task.0315
 status: active
-created: 2026-04-18
-updated: 2026-04-18
-branch: feat/poly-mirror-v0
-worktree: /Users/derek/dev/cogni-template-mirror
-last_commit: 8b009843b
+created: 2026-04-19
+updated: 2026-04-19
+branch: main
+last_commit: df95f6c3a
 ---
 
-# Handoff: task.0315 — PR #920 ready for merge; mirror needs ONE env var to actually run
+# Handoff: poly copy-trade — preview live on BeefSlayer, 3 open UI/adapter bugs
 
-## The one thing you need to know
+## Context
 
-**Nothing I did in this branch actually trades yet.** The code is merged-ready, but every deployment where you want the autonomous mirror to run needs ONE env var set + ONE psql line:
+- PR #918 merged to main 2026-04-19 — shipped dashboard slice (Operator Wallet, Active Orders, Monitored Wallets) + task.0323 hardening cherry-picks (CTF approvals, reconciler, closePosition, close-vs-short).
+- Preview is live on PR #918's code. Running operator wallet `0x7A33…0aEB`. Mirror target set per [spike.0323 research](../../docs/research/polymarket-copy-trade-candidates.md) to **BeefSlayer** (`0x331bf91c132af9d921e1908ca0979363fc47193f`, weather-markets specialist, 78% WR n=118, 10.7% max DD).
+- Candidate-a frozen — kill switch `poly_copy_trade_config.enabled = false`. No new orders placed there.
+- 2 orphan positions sit on operator wallet from earlier candidate-a mirror (LeBron 2028 YES 500 shares / $3.25, Iran peace YES 5 shares / $0.78). Can't SELL them — see risk #1 below.
+- Three UI/adapter bugs surfaced during preview validation — captured as the follow-up bug listed in §Decisions.
 
-```bash
-kubectl set env deployment/poly COPY_TRADE_TARGET_WALLET=0x<target-wallet>
-# wait for pod restart
-psql -h <poly-db-host> -U <user> -d cogni_poly \
-  -c "UPDATE poly_copy_trade_config SET enabled=true WHERE singleton_id=1;"
-```
+## Current State
 
-That's it. Not in any deploy manifest (deliberate — this is `@scaffolding`, Deleted-in-phase: 4). When you don't set the env var, the poll skips boot + logs `poly.mirror.poll.skipped` and the app runs normally.
+- Preview: `https://poly-preview.cognidao.org` → readyz version `0e75b4a65e41…` (PR #918 HEAD build).
+- Preview pod env contains all 9 poly-proto/clob vars + `POLYGON_RPC_URL` + `COPY_TRADE_TARGET_WALLET=0x331bf91c…` — seeded manually per task.0318 decision ([deferred env-update for vars RLS will delete](../items/task.0318.poly-wallet-multi-tenant-auth.md)).
+- Preview kill switch: `enabled=true` as of 2026-04-19T10:10:43Z. Mirror polling every 30s, last tick ok, 0 fills observed (BeefSlayer hadn't traded in the warmup window yet).
+- Candidate-a kill switch: `enabled=false` as of 2026-04-19T10:10:39Z.
+- Preview poly image overlay was manually promoted on the `deploy/preview` branch (commit `8bf684644`) because PR #924's flight rebuilt poly from pre-#918 code; a proper promote-and-deploy re-run on current main will overwrite that with the correct digest next merge.
+- Dashboard renders on preview with live Alchemy RPC balances. Three visible regressions listed in §Next Actions.
 
-## What shipped on this branch (PR #920)
+## Decisions Made
 
-13 commits, all green locally. CI pending on `8b009843b` at push time.
+- **Preview env secrets seeded manually, not propagated through CI**: codified in [task.0318 §"Env vars this task deletes"](../items/task.0318.poly-wallet-multi-tenant-auth.md#env-vars-this-task-deletes-current-single-operator-scaffolding). Avoided env-update churn on vars RLS will remove.
+- **BeefSlayer as preview v0 target**: selected for clean category (weather, no insider-flag risk), largest resolved sample in the v3 cross-category screen. See [polymarket-copy-trade-candidates.md §"v0 paper-mirror roster"](../../docs/research/polymarket-copy-trade-candidates.md).
+- **Orphan positions left to resolve naturally**: Iran market resolves 2026-04-22 (3d); LeBron 2028 is a write-off. SELL adapter bug makes force-close uneconomical. Logged as bug to file.
+- **Bug #918 follow-ups consolidated into one bug** (not 3): adapter SELL failure + market-title hash fallback + stacked-bar color collision are the same release surface area.
 
-1. `e97552ddc` Phase 1 spec + three-layer retargeting
-2. `078d9d3f7` cp4.3a — `PolyTradeBundle` seam split (agent tool + poll share ONE adapter)
-3. `6a8edfb9d` cp4.3b — `features/trading/` layer (executor move + order-ledger)
-4. `2d33410fe` cp4.3c — `features/wallet-watch/` layer (polymarket-source)
-5. `086ec2ab0` cp4.3d — mirror-coordinator (thin copy-trade glue, 9-scenario tests)
-6. `4feaccbb8` cp4.3e — scheduler job + bootstrap wiring
-7. `7825650da` read APIs: `GET /api/v1/poly/{copy-trade/targets, copy-trade/orders, wallet/balance}`
-8. `b0392c953` closeout handoff (now stale — this file supersedes)
-9. `33328c7bf` review fixes B1 wrong URL / B2 normalizer wedge / C1 uuidv5 / C2 monitor flag
-10. `da70036f7` container.serviceDb routing (lint fix)
-11. `f7a4314f4` **MUST_FIX_P2 flag** on task.0315 P2 — RLS + tenant-scoping required before multi-tenant
-12. `0bbe25bc8` Turbopack `.js`-extension import fix (unblocked poly build)
-13. `da894ee7a` self-review APPROVE marker
-14. `85862333d` observability pass — 17 events registered in `EVENT_NAMES`, errorCode on every error log, debug noise trimmed
-15. `8b009843b` **env cleanup** — deleted `POLY_ROLE`, `COPY_TRADE_MODE`, `MIRROR_USDC`, `MAX_DAILY_USDC`, `MAX_FILLS_PER_HOUR`, `POLL_MS`. Only `COPY_TRADE_TARGET_WALLET` remains. Defaults hardcoded in `bootstrap/jobs/copy-trade-mirror.job.ts`.
+## Next Actions
 
-## CP5 — what's left to actually observe a live mirror trade
+- [ ] File consolidated bug covering: (a) `PolymarketClobAdapter` SELL on neg_risk markets returns empty-error (`success=undefined, orderID=<missing>, errorMsg=""`) despite all approvals / valid tick / notional; (b) Active Orders "Market" column falls back to truncated conditionId for pre-stash rows (expected, but UX is worse than "(unknown)"); (c) Operator Wallet stacked bar shows positions segment indistinguishable from available because both `--primary` (HSL 160 65% 45%) and `--color-success` (HSL 142 71% 45%) are near-green. Use a `--chart-N` token or amber/cyan for positions.
+- [ ] Fix (a) adapter bug: trace CLOB raw response, verify neg-risk verifyingContract + EIP-712 domain are set correctly on SELL signing path. Likely in `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts` around line 180–215.
+- [ ] Fix (c) in `nodes/poly/app/src/app/(app)/dashboard/_components/OperatorWalletCard.tsx` — swap `bg-primary/70` to a distinct chart token (e.g. `bg-[hsl(var(--chart-3))]/70` = amber).
+- [ ] Fix (b): either (i) backfill `attributes.title` for historic rows via a one-off Gamma-lookup script, or (ii) render a friendlier placeholder than `slice(-12)` of the hash.
+- [ ] After adapter fix lands, retry SELL on the LeBron/Iran orphans. If Iran has resolved by then, redeem via CTF instead.
+- [ ] Replace manual preview secret seeding with CI propagation once [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) ships RLS — at that point env vars listed there are deleted entirely.
+- [ ] Watch preview for BeefSlayer fills over the next 24–48h; first mirror order is the real edge-validation signal.
 
-**This is live money on a real target wallet. Read the "before you turn it on" section below BEFORE running the kubectl line.**
+## Risks / Gotchas
 
-### Before you turn it on
-
-- **Pick the target wallet deliberately.** You're copying a real human's Polymarket trades 1-for-1 (fixed $1 notional each, capped $10/day). If they buy a dumb market, you buy it too. There is no "smart" filter. Candidates: one of the high-PnL wallets from the existing Top Wallets dashboard card.
-- **Verify operator wallet state.** `0xdCCa8D85603C2CC47dc6974a790dF846f8695056` on Polygon must have: USDC.e > $20, POL > 0.5 (gas), CLOB creds derived, USDC.e allowance at `MaxUint256` for the three Polymarket exchange contracts. PR #900 onboarded this; re-verify via `scripts/experiments/probe-polymarket-account.ts`.
-- **Coordinate with the frontend dev.** The 3 read APIs return empty/degraded shapes until a target is set + enabled. The dashboard panels will look broken until CP5 actually runs. Tell them "flip going live at &lt;time&gt;."
-- **Plan the stop point.** Don't "set it and see what happens." Decide up front: stop after N hours, or after first placed order + manual review, or after hitting daily cap. Calendar reminder. Nothing alerts if you walk away.
-
-### The command sequence
-
-1. Merge PR #920 once CI is green.
-2. Pick the deployment (candidate-a or a dedicated prototype env).
-3. Set the env: `kubectl set env deployment/poly COPY_TRADE_TARGET_WALLET=0x<wallet> -n <ns>`.
-4. Wait for pod restart. Tail logs, confirm `poly.mirror.poll.singleton_claim` appears **exactly once**. Multiple instances = `replicas>1` = SINGLE_WRITER broken, fix before continuing.
-5. Flip the enable switch: `psql ... -c "UPDATE poly_copy_trade_config SET enabled=true WHERE singleton_id=1;"`. Takes effect within one poll tick (≤30s).
-6. **Watch actively.** First real mirrored fill lands in `poly_copy_trade_fills` with non-null `order_id`. Verify on polymarket.com both the target's profile (the fill they made) and the operator profile `0xdCCa8…5056` (our mirror).
-7. Paste evidence — `order_id`, Polygon tx hash, screenshots — into the PR or a follow-up issue.
-
-### Stopping + rollback
-
-- **Normal stop:** `UPDATE poly_copy_trade_config SET enabled=false;`. Effective within one tick. Pending orders stay open on Polymarket — they're active limit orders, not automatically cancelled.
-- **Cancel open orders manually:** via the agent tool (`core__poly_cancel_order` in poly-brain chat — takes an `order_id`), OR directly through Polymarket's UI logged in as the operator EOA.
-- **Clean up ledger rows:** `poly_copy_trade_fills` rows with `status='open'` aren't auto-transitioned to `canceled` in v0. Either accept the stale status (they don't hurt anything) or manually UPDATE them to match the actual CLOB state.
-- **Full teardown:** `kubectl set env ... COPY_TRADE_TARGET_WALLET-` removes the env. Next pod restart, mirror skips boot entirely.
-
-### If something goes wrong
-
-- **Wrong market mirrored:** cancel via agent tool or Polymarket UI. The `enabled=false` flip stops future placements but doesn't touch existing orders.
-- **Mirror stuck, no new fills:** check Loki for `poly.mirror.source_error` + `poly.wallet_watch.normalize_error`. Source timeout = Data-API flaked; normalize = Polymarket schema drifted.
-- **Operator wallet draining faster than expected:** `enabled=false` immediately, then `SELECT * FROM poly_copy_trade_fills ORDER BY created_at DESC` — the caps are intent-based, not fill-based, so a target that fills repeatedly at high sizes won't exceed our caps but COULD drain USDC on slippage. Manual review.
-
-### What to watch during the first 48 hours
-
-**Nothing alerts automatically.** You are the alert. Minimum:
-
-- Daily: `SELECT status, COUNT(*) FROM poly_copy_trade_fills WHERE created_at > now() - interval '1 day' GROUP BY status`. Expect a mix of `filled` / `open`. `error` > 0 = read the row.
-- Daily: operator USDC.e balance on Polygon. Delta should roughly track placements × (filled price vs limit price).
-- Daily: Loki query `{container="poly"} |= "poly.mirror.poll.tick_error" | json`. Expect zero. Any hit = bug.
-
-## Hardcoded v0 constants (edit-in-code, redeploy to change)
-
-`bootstrap/jobs/copy-trade-mirror.job.ts:44-57`:
-
-- `MIRROR_POLL_MS = 30_000`
-- `MIRROR_USDC = 1`
-- `MIRROR_MAX_DAILY_USDC = 10`
-- `MIRROR_MAX_FILLS_PER_HOUR = 5`
-- `mode: "live"` (paper adapter body = P3)
-- Warmup backlog = 60s (first-tick cursor skips the last minute of target history to avoid replay)
-
-## Known gaps (carryover + my misses)
-
-**Security / hygiene (must fix before growing scope):**
-
-- **MUST*FIX_P2 — RLS on `poly_copy_trade*\*`.** Three tables landed as system-owned with BYPASSRLS on the read APIs. Shipping P2 multi-tenant on top of this = security regression. The 5-step migration (add `owner_user_id`, enable RLS + policy, `withTenantScope` writes, app-role reads, delete `Container.serviceDb`) is flagged in `task.0315.poly-copy-trade-prototype.md` P2 bullet + JSDoc on the `Container.serviceDb` field. **Not yet a separate task item — ask Derek whether to file it.**
-
-**Operational (you will hit these):**
-
-- **No automated alerting.** No Grafana alerts wired for `poly.mirror.poll.tick_error` or unexpected placement spikes. The "watch during first 48 hours" checklist above is manual. Filing a real alert is a P2 concern.
-- **No cursor persistence.** Pod restart = last 60s of target activity is missed (first-tick cursor = `now-60s`). Trivial to fix (one column on `poly_copy_trade_config`), deferred.
-- **`placeIntent` has no timeout.** If Polymarket hangs, the tick hangs. Dedupe saves correctness (next tick still fires); in-flight promises leak. Add `AbortController` when it bites.
-- **Balance endpoint rebuilds viem client per request.** Cache at module scope if dashboard latency becomes a user complaint.
-
-**Scope omissions (deliberate, tracked):**
-
-- **Agent-tool placements NOT in order-ledger.** `core__poly_place_trade` (shipped PR #900) places orders but doesn't write to `poly_copy_trade_fills`. One call-site change in `bootstrap/capabilities/poly-trade.ts::placeTrade` — kept out to scope this PR. Dashboard + `/api/v1/poly/copy-trade/orders` show ONLY autonomous mirror orders today.
-- **`poly_mirror_*` metrics are `noopMetrics`.** Metric names defined in code but not wired to prom. Extract `buildMetricsPort` from `poly-trade.ts` when Grafana panels are worth building.
-- **Paper mode isn't implemented.** P3 adds the paper adapter body; v0 only places real orders. `mode: "live"` hardcoded in `buildMirrorTargetConfig`.
-
-## What you DON'T need to do
-
-- Rename "kill-switch" to "monitoring-active" across the code. Naming is bad but touches `decide.ts` + the decisions.reason column values + tests. Cosmetic churn. Skip until P2.
-- Re-review B1/B2/C1/C2. All resolved, tests cover regressions, scored APPROVE at `da894ee7a`.
-- Write a doc. Derek explicitly said no.
-- Back-fill a retroactive flight-runbook. The "CP5" section above IS the runbook — everything ops needs is between the `kubectl` line and the rollback instructions.
+- **Adapter SELL bug blocks ALL close-position flows on neg_risk markets.** Every position we open in a neg-risk market becomes roach-motel until the bug lands. Cancel path (pre-fill) works; post-fill SELL does not.
+- **Preview `deploy/preview` branch is ahead of what promote-and-deploy will produce next merge.** The manual `ops:` commit will be overwritten on the next promote run unless the promoter re-picks the correct digest. Watch for poly image regression on the next post-merge preview deploy.
+- **Pre-#918 ledger rows have no `attributes.title`** — permanent UX degradation until backfilled. Rows from the mirror post-#918 will populate correctly via `decide.ts` title passthrough.
+- **CTF ERC-1155 approvals landed for operator wallet via `approve-polymarket-allowances.ts` run 2026-04-19** — same wallet now works across candidate-a + preview. Don't re-provision Privy; you'll churn allowances.
+- **Preview wallet is the SAME as candidate-a** (`0x7A33…0aEB`). Cross-env positions can interfere if both mirrors run concurrently. Candidate-a is frozen; don't re-enable without coordinating.
 
 ## Pointers
 
-| File                                                | Why                                                                                      |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `bootstrap/jobs/copy-trade-mirror.job.ts`           | Job shim + v0 hardcoded constants + UUIDv5 target-id helper                              |
-| `features/copy-trade/mirror-coordinator.ts`         | Pure `runOnce(deps)` — the glue                                                          |
-| `features/trading/order-ledger.ts`                  | Drizzle adapter + caps filter on `created_at` (CAPS_COUNT_INTENTS)                       |
-| `features/wallet-watch/polymarket-source.ts`        | Data-API wrapper + normalize-error catch                                                 |
-| `bootstrap/capabilities/poly-trade.ts`              | `PolyTradeBundle` factory + `buildRealAdapterMethods` (single-tenant isolation boundary) |
-| `packages/node-contracts/src/poly.*.v1.contract.ts` | 3 read-API contracts                                                                     |
-| `docs/spec/poly-copy-trade-phase1.md`               | Phase 1 spec — layer boundaries, invariants, scenarios                                   |
-| `work/items/task.0315.poly-copy-trade-prototype.md` | Parent task, includes MUST_FIX_P2                                                        |
-
-## PR
-
-https://github.com/Cogni-DAO/node-template/pull/920
+| File / Resource                                                                                                                 | Why it matters                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [PR #918](https://github.com/Cogni-DAO/node-template/pull/918)                                                                  | Merged dashboard + hardening scope                                                                                                                         |
+| [spike.0323 research](../../docs/research/polymarket-copy-trade-candidates.md)                                                  | BeefSlayer rationale + v0 roster methodology                                                                                                               |
+| [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md#env-vars-this-task-deletes-current-single-operator-scaffolding) | Env vars manually seeded on preview (deferred by design)                                                                                                   |
+| [poly-dev-expert skill](../../.claude/skills/poly-dev-expert/SKILL.md)                                                          | Runbook — wallet roles, approvals, empty-error-SELL symptom                                                                                                |
+| `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts`                                                   | Adapter SELL bug lives here (L180–230 neg-risk path)                                                                                                       |
+| `nodes/poly/app/src/app/(app)/dashboard/_components/OperatorWalletCard.tsx`                                                     | Stacked bar color collision (bg-primary vs bg-success)                                                                                                     |
+| `nodes/poly/app/src/app/(app)/dashboard/_components/OrderActivityCard.tsx`                                                      | Market-title fallback logic (L185-190)                                                                                                                     |
+| `nodes/poly/app/src/features/copy-trade/decide.ts`                                                                              | Title/tx_hash passthrough into intent.attributes (post-#918)                                                                                               |
+| `nodes/poly/app/src/features/trading/order-ledger.ts`                                                                           | Attribute allow-list on write (L135-160)                                                                                                                   |
+| `scripts/experiments/privy-polymarket-order.ts`                                                                                 | Reproduce SELL bug: `place --side SELL --size 2.5 --price 0.005 --token-id <LeBron-YES>`                                                                   |
+| Kill switch                                                                                                                     | `docker exec cogni-runtime-postgres-1 psql -U postgres -d cogni_poly -c "UPDATE poly_copy_trade_config SET enabled=<bool>…"` (from preview/candidate-a VM) |
+| Grafana Loki                                                                                                                    | `{namespace="cogni-preview",app="poly"} \|~ "poly.mirror.decision"` — watch for first placed-mirror                                                        |

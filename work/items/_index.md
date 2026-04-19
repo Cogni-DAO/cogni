@@ -148,7 +148,8 @@
 | 1 | 25 | 3 | needs_implement | task.0130 | Tokenomics Crawl: Budget Policy + kill Score UI | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 2 | needs_closeout | task.0165 | Live money e2e test — full OpenRouter top-up chain on Base mainnet | AI Operator Wallet | proj.ai-operator-wallet |
 | 1 | 40 | 3 | needs_triage | bug.0322 | Runs made on poly are visible via operator's /api/v1/agent/runs (cross-node data pollution) | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 50 | 1 | needs_implement | task.0328 | Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health) | Cogni Poly | proj.poly-prediction-bot |
+| 1 | 50 | 1 | needs_review | task.0328 | Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health) | Cogni Poly | proj.poly-prediction-bot |
+| 1 | 50 | 2 | needs_triage | bug.0329 | Polymarket CLOB adapter SELL on neg_risk markets returns empty error — positions unclosable | Cogni Poly | proj.poly-prediction-bot |
 | 1 | 99 | 3 | needs_triage | story.0089 | Discord Bot Conversation Evals |  |  |
 | 1 | 99 | 5 | needs_triage | story.0091 | Clawdbot as High-Level Manager Agent |  |  |
 | 1 | 99 | 4 | needs_design | story.0116 | DAO Gateway MVP — multi-tenant AI billing gateway for external projects | Operator Plane | proj.operator-plane |
