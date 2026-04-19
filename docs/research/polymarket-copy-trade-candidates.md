@@ -418,6 +418,53 @@ Because the v2 screen aborted, the final ranking below is synthesized from:
 
 The earlier "esports is the winner" finding was a sampling artifact — the original 140-wallet universe used the uncategorized leaderboard which over-represents sports categories. With category-balanced sampling (top-10 per category × 8 categories), tech wallets trading tech-prediction + geopolitical-adjacent markets outrank esports on every axis.
 
+### D.7 Per-category reliability breakdown (v3 data, copy-tradeable filter)
+
+Same v3 dataset grouped by leaderboard category, filtered to **median duration ≤ 9h** for copy-tradeability (30s-poll mirror can't handle multi-day holds). Long-hold specialists noted but excluded from primary roster.
+
+| category       | best copy-tradeable wallet         |       n |        WR |   ROI |   PnL |      DD% |   dur | category verdict                                    |
+| -------------- | ---------------------------------- | ------: | --------: | ----: | ----: | -------: | ----: | --------------------------------------------------- |
+| **TECH** ⭐⭐  | **tourists** (`0xc6dd7225…`)       |      14 | **85.7%** | 47.9% | $193k |   **0%** |  0.1h | cleanest picks overall                              |
+| TECH           | ProfessionalPunter (`0x22e4248b…`) |      37 |     83.8% | 97.4% | $148k |     5.6% | 1.08h | second-best tech                                    |
+| **WEATHER** ⭐ | **BeefSlayer** (`0x331bf91c…`)     | **118** |   **78%** | 27.3% |   $5k |    10.7% | 0.48h | large sample, clean curve                           |
+| WEATHER        | HondaCivic (`0x15ceffed…`)         | **181** |     57.5% |  2.3% |   $4k | **0.2%** |  0.1h | largest n in entire screen; low ROI but ultra-clean |
+| **CULTURE**    | **0xa8fac068…** (anon)             |      34 |     79.4% | 33.1% |  $42k | **1.8%** | 6.38h | MrBeast-adjacent markets                            |
+| CULTURE        | alohaa (`0x02b4401a…`)             |     117 | **98.3%** | 1225% |   $2k |     3.2% | 3.24h | tiny-capital scalping; skip                         |
+| **FINANCE**    | **aldynspeedruns** (`0xff30ac5b…`) |      72 |     63.9% | 50.8% | $109k |     8.8% | 0.91h | solid                                               |
+| POLITICS       | SP888 (`0x5d05b1f5…`)              |      17 |     88.2% |   81% |   $5k | **0.7%** | 17.8h | borderline duration                                 |
+| SPORTS         | (none pass cleanly)                |       — |         — |     — |     — |        — |     — | see below                                           |
+| CRYPTO         | (none pass)                        |       — |         — |     — |     — |        — |     — | all top wallets 28–141% DD — latency arb            |
+| ECONOMICS      | (all long-hold)                    |       — |         — |     — |     — |        — |     — | 37h–382h medians; not copyable                      |
+
+### D.8 Sports wallet degradation on full-sample data
+
+When the v3 screen gave the full sports-category slice (not just the esports-biased uncategorized leaderboard), the sports wallets look materially worse than the earlier Appendix C analysis suggested:
+
+| wallet     |  n (v3) |    WR |   ROI |       DD% | was reported as                         |
+| ---------- | ------: | ----: | ----: | --------: | --------------------------------------- |
+| bossoskil1 | **101** | 50.5% | 13.2% | **53.2%** | 60.9% WR / 69.9% ROI / 24.9% DD at n=64 |
+| 0x492442ea |      62 | 54.8% |   17% |   **94%** | 64.1% / 43.3% / 28.1% at n=39           |
+| Dhdhsjsj   |      38 | 42.1% | 48.1% |       28% | (not previously analyzed)               |
+
+**Interpretation:** the original resolved-screen's rate-limiting (2,641/12,400 markets, 21% coverage) disproportionately missed the losing trades, flattering win rates. With 5,281 closed markets resolved in v3 (better coverage of the sports subset), the drawdowns reveal themselves. **Esports/sports wallets are less reliable than previously stated.** Goodmateng (82.3% WR / 1.5% DD at n=141) still looks clean in the 30d-only slice; but for cross-category paper-mirror scope, tech/weather wallets are the safer first pick.
+
+### D.9 Final actionable roster (revised from D.6)
+
+Supersedes every prior recommendation in this doc.
+
+**v0 paper-mirror roster — 4 wallets, 4 categories:**
+
+| rank | wallet                               | category | why                                                                   |
+| ---: | ------------------------------------ | -------- | --------------------------------------------------------------------- |
+|    1 | **ProfessionalPunter** `0x22e4248b…` | tech     | n=37, 83.8% WR, 97% ROI, 5.6% DD, 1h duration — best balanced profile |
+|    2 | **tourists** `0xc6dd7225…`           | tech     | 85.7% WR, 0% DD — highest precision but low n=14; size conservatively |
+|    3 | **BeefSlayer** `0x331bf91c…`         | weather  | n=118, 78% WR, 10.7% DD — largest-sample weather specialist           |
+|    4 | **aldynspeedruns** `0xff30ac5b…`     | finance  | n=72, 63.9% WR, 8.8% DD — diversifier                                 |
+
+**Keep as watch-list:** goodmateng (esports, still elite on 30d-only slice), HondaCivic (weather, ultra-low DD at n=181 but near-zero ROI — acts like a control/benchmark).
+
+**Drop from roster:** Mr.Ape, piston777, all NBA picks — sports reliability didn't hold up on fuller resolution coverage.
+
 **Original esports v0 roster — kept as reference below for historical comparison.** The Mr.Ape/goodmateng/piston777 findings remain valid _within esports_, but not the category-agnostic best picks.
 
 ---
