@@ -5,6 +5,6 @@
  * @public
  */
 
-export { knowledge, KNOWLEDGE_TABLE_DDL, KNOWLEDGE_INDEXES_DDL } from "./schema.js";
+export { knowledge } from "./schema.js";
 export { BASE_KNOWLEDGE_SEEDS } from "@cogni/node-template-knowledge";
 export { POLY_KNOWLEDGE_SEEDS } from "./seeds/poly.js";

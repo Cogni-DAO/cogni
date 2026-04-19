@@ -2,15 +2,15 @@
 id: knowledge-data-plane-spec
 type: spec
 title: "Knowledge Data Plane — Doltgres-Backed Expertise for Node-Template"
-status: draft
-spec_state: proposed
+status: active
+spec_state: active
 trust: draft
-summary: "Separates hot operational awareness (Postgres) from cold curated knowledge (Doltgres). The awareness plane owns what the AI sees right now. The knowledge plane owns what the AI has learned — strategies, prompt versions, evaluations, evidence. Doltgres is a Postgres drop-in with git-like versioning (commit, log, diff). Same Drizzle schemas, same pg driver — just add commit/push/sync workflows."
-read_when: Designing a knowledge store for a Cogni node, choosing where data lives (awareness vs knowledge), understanding the promotion boundary, or forking the node-template.
+summary: "Separates hot operational awareness (Postgres) from cold curated knowledge (Doltgres). Doltgres is a Postgres-wire-compatible Dolt server with git-like versioning (dolt_commit, dolt_log, dolt_diff). Per-node `knowledge_<node>` databases. Agents read/write via three core tools (knowledge_search, knowledge_read, knowledge_write) backed by a KnowledgeStorePort + DoltgresKnowledgeStoreAdapter. Schema applied via drizzle-kit migrator (k8s PreSync Job); every write auto-commits."
+read_when: Designing a knowledge store for a Cogni node, choosing where data lives (awareness vs knowledge), understanding the promotion boundary, debugging Doltgres RBAC or query protocol quirks, or forking the node-template.
 implements:
 owner: derekg1729
 created: 2026-03-31
-verified:
+verified: 2026-04-19
 tags: [knowledge, dolt, node-template, awareness, data-plane, cogni-template]
 ---
 
@@ -119,9 +119,9 @@ Doltgres is a Postgres-compatible database with native git-like versioning. It's
 
 **What's new:** Workflows for committing, logging, and (future) pushing/syncing knowledge data. These are additional SQL calls, not a different database engine.
 
-### MVP Scope
+### Surface today
 
-Single branch (`main`), commit-based versioning. Read, write, commit, log, diff. No branching, no remotes, no merge workflows. Get comfortable with Doltgres's commit model first.
+Single branch (`main`), commit-based versioning. Read, write, commit, log, diff. No branching, no remotes, no merge workflows.
 
 ### Versioning Workflows
 
@@ -179,25 +179,11 @@ Everything that exists today (`packages/db-schema/src/*.ts`) plus the awareness 
 
 ### What lives in Doltgres (knowledge plane)
 
-Curated expertise that compounds over time. The table set is a **starter kit** — not a fixed schema. New tables are added as the node matures. Domain specificity lives in row content, not table structure.
-
-**MVP — domain knowledge (immediate value):**
+Curated expertise that compounds over time. The table set is open — domain specificity lives in row content (`domain`, `tags`), not in table structure. Nodes add companion tables only when a domain needs genuinely new columns (see SCHEMA_GENERIC_CONTENT_SPECIFIC).
 
 | Table       | Purpose                                                               |
 | ----------- | --------------------------------------------------------------------- |
 | `knowledge` | Domain-specific facts, claims, and curated assertions with provenance |
-
-**Next — strategies (Walk phase):**
-
-| Table                  | Purpose                                      |
-| ---------------------- | -------------------------------------------- |
-| `strategies`           | Named decision approaches with metadata      |
-| `strategy_versions`    | Versioned content: params, thresholds, notes |
-| `strategy_evaluations` | Eval results linking versions to outcomes    |
-
-**Later — prompts (Run phase, with Langfuse integration):**
-
-Versioned prompts live in Langfuse for prompt engineering workflows. Doltgres stores the durable archive and cross-node distribution. Exact schema TBD when Run phase starts.
 
 ### Domain Extension Pattern
 
@@ -227,11 +213,11 @@ If a domain truly needs domain-specific columns, it adds a **companion table** (
 
 ## Knowledge Schema
 
-Postgres-native types, snake_case columns, Drizzle conventions. Doltgres is Postgres-compatible, so these work unchanged. The schema is a **starter kit** — tables are added as the node's needs grow.
+Postgres-native types, snake_case columns, Drizzle conventions. Doltgres is Postgres-compatible, so these work unchanged.
 
-### `knowledge` — domain-specific facts and claims (MVP)
+### `knowledge` — domain-specific facts and claims
 
-The immediately most valuable table. Curated domain knowledge that agents reference during reasoning.
+Curated domain knowledge that agents reference during reasoning.
 
 | Column           | Type        | Constraints           | Description                                                     |
 | ---------------- | ----------- | --------------------- | --------------------------------------------------------------- |
@@ -251,18 +237,6 @@ Examples:
 - `{ domain: "prediction-market", title: "Fed rate cut base rate", content: "Historical frequency of Fed rate cuts in election years is ~35%", source_type: "external", source_ref: "https://..." }`
 - `{ domain: "reservations", title: "Le Bernardin cancellation pattern", content: "Cancellations spike 24h before for Tuesday-Thursday prime slots", source_type: "derived" }`
 
-### Future tables (added when needed)
-
-**Walk phase — strategies:**
-
-- `strategies` — named decision approaches
-- `strategy_versions` — versioned params, thresholds, notes
-- `strategy_evaluations` — eval results vs outcomes
-
-**Run phase — prompts (with Langfuse):**
-
-- Versioned prompts live in Langfuse for prompt engineering workflows. Doltgres stores the durable archive for cross-node distribution. Schema TBD when Run phase starts.
-
 ---
 
 ## Port Interface
@@ -271,24 +245,30 @@ Examples:
 interface KnowledgeStorePort {
   // Read
   getKnowledge(id: string): Promise<Knowledge | null>;
-  listKnowledge(domain: string, tags?: string[]): Promise<Knowledge[]>;
-  searchKnowledge(domain: string, query: string): Promise<Knowledge[]>;
+  listKnowledge(
+    domain: string,
+    opts?: { tags?: string[]; limit?: number }
+  ): Promise<Knowledge[]>;
+  searchKnowledge(
+    domain: string,
+    query: string,
+    opts?: { limit?: number }
+  ): Promise<Knowledge[]>;
+  listDomains(): Promise<string[]>;
 
   // Write
-  addKnowledge(entry: NewKnowledge): Promise<Knowledge>;
-  updateKnowledge(
-    id: string,
-    update: Partial<NewKnowledge>
-  ): Promise<Knowledge>;
+  addKnowledge(entry: NewKnowledge): Promise<Knowledge>; // insert-only
+  upsertKnowledge(entry: NewKnowledge): Promise<Knowledge>; // insert-or-update by id
 
   // Doltgres versioning
   commit(message: string): Promise<string>; // returns commit hash
   log(limit?: number): Promise<DoltCommit[]>;
+  diff(from: string, to: string, table?: string): Promise<DoltDiffEntry[]>;
   currentCommit(): Promise<string>;
 }
 ```
 
-Adapter: `DoltgresKnowledgeStoreAdapter` — uses `sql.unsafe()` for all queries (Doltgres doesn't support the extended query protocol). Scoped to the node's database.
+Adapter: `DoltgresKnowledgeStoreAdapter` (`packages/knowledge-store/src/adapters/doltgres/index.ts`). Scoped to one node's knowledge database.
 
 ---
 
@@ -447,14 +427,11 @@ One Doltgres server process. Each node gets its own database. Same pattern as Po
 ┌─────────────────────────────────────────────────────────┐
 │ Shared Doltgres Server                                   │
 │                                                         │
-│  knowledge_operator    ← operator base knowledge         │
-│                          ships with node-template         │
+│  knowledge_operator    ← operator's sovereign store      │
 │                                                         │
 │  knowledge_poly        ← poly node's sovereign store     │
-│                          seeded from knowledge_operator   │
 │                                                         │
 │  knowledge_resy        ← resy node's sovereign store     │
-│                          seeded from knowledge_operator   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -467,17 +444,15 @@ One Doltgres server process. Each node gets its own database. Same pattern as Po
 ### Node Provision Flow
 
 1. Node's Postgres database created (awareness plane — existing step)
-2. Node's Doltgres knowledge database created: `CREATE DATABASE knowledge_{node_name}`
-3. Schema applied (same Drizzle DDL — Doltgres is Postgres-compatible)
-4. Base knowledge seeded from `knowledge_operator`
-5. Initial commit: `SELECT dolt_commit('-Am', 'seeded from knowledge_operator')`
-6. `KnowledgeStorePort` adapter connects to `knowledge_{node_name}`
+2. Doltgres knowledge database created by compose `doltgres-provision` service: `CREATE DATABASE knowledge_{node_name}` (+ reader/writer roles, vestigial until Doltgres RBAC works)
+3. Schema applied by the node's drizzle-kit migrator as a k8s PreSync Job (see `infra/k8s/base/poly-doltgres/`); the Job also runs `stamp-commit.mjs` after `drizzle-kit migrate` to capture the DDL in `dolt_log`
+4. Node boots empty (NODES_BOOT_EMPTY); no operator seed
+5. `KnowledgeStorePort` adapter connects to `knowledge_{node_name}` via `DOLTGRES_URL_<NODE>` (superuser, per RUNTIME_URL_IS_SUPERUSER)
 
 ### Node Customization
 
-- Node adds rows via `KnowledgeStorePort.addStrategyVersion()` etc. — standard Drizzle writes
-- Custom strategies have `domain` matching the node's domain
-- After writes, node commits: `SELECT dolt_commit('-Am', 'added poly strategy v2')`
+- Agents accumulate knowledge via `core__knowledge_write` (see Agent Access). Every write auto-commits via the capability layer
+- Custom entries have `domain` matching the node's domain
 - All node-written knowledge is **node-private** by default
 
 ### Pinning Analysis to Knowledge State
@@ -489,45 +464,55 @@ SELECT hashof('HEAD') as knowledge_commit;
 
 Given same observations + same knowledge commit → same analysis outputs.
 
-### Future: Branching, Remotes, Sharing
-
-Not in MVP. Once comfortable with single-branch commit/log/diff:
-
-- **Branching** — `SELECT dolt_checkout('-b', 'experiment/...')` for prompt experiments within a node's own database
-- **Remotes** — `SELECT dolt_push(...)` / `dolt_pull(...)` for cross-node knowledge sharing
-- **Commons** — optional shared Doltgres remote where nodes explicitly promote validated knowledge
-
 ---
 
 ## Invariants
 
-| Rule                            | Constraint                                                                                                                                                                  |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AWARENESS_HOT_KNOWLEDGE_COLD    | Live operational data stays in Postgres. Curated expertise lives in Doltgres.                                                                                               |
-| KNOWLEDGE_SOVEREIGN_BY_DEFAULT  | Node knowledge is local and private by default. Cross-node sharing is explicit promotion, never default visibility. Monorepo code sharing does not imply knowledge sharing. |
-| DOLTGRES_PER_NODE_DATABASE      | Each node gets its own Doltgres database (`knowledge_{node_name}`). Per-node databases, not shared tables or branch-per-node.                                               |
-| PROMOTE_NOT_MIRROR              | Knowledge is promoted from awareness via explicit gate. Only reviewed, repeated, or outcome-backed artifacts cross the boundary.                                            |
-| PORT_BEFORE_BACKEND             | All knowledge access goes through `KnowledgeStorePort`. Consumers use standard Drizzle queries.                                                                             |
-| SCHEMA_GENERIC_CONTENT_SPECIFIC | Domain specificity lives in row content (`domain`, `params` JSON), not table structure.                                                                                     |
-| KNOWLEDGE_VERSION_PINNED        | Analysis runs record `knowledge_commit` (Doltgres commit hash). Same inputs + same knowledge → same outputs.                                                                |
-| FORK_TAKES_KNOWLEDGE            | When a node self-hosts, it takes its Doltgres database with full commit history.                                                                                            |
+| Rule                            | Constraint                                                                                                                                                                                |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AWARENESS_HOT_KNOWLEDGE_COLD    | Live operational data stays in Postgres. Curated expertise lives in Doltgres.                                                                                                             |
+| KNOWLEDGE_SOVEREIGN_BY_DEFAULT  | Node knowledge is local and private by default. Cross-node sharing is explicit promotion, never default visibility. Monorepo code sharing does not imply knowledge sharing.               |
+| DOLTGRES_PER_NODE_DATABASE      | Each node gets its own Doltgres database (`knowledge_{node_name}`). Per-node databases, not shared tables or branch-per-node.                                                             |
+| PROMOTE_NOT_MIRROR              | Knowledge is promoted from awareness via explicit gate. Only reviewed, repeated, or outcome-backed artifacts cross the boundary.                                                          |
+| PORT_BEFORE_BACKEND             | All knowledge access goes through `KnowledgeStorePort`. Consumers use standard Drizzle queries.                                                                                           |
+| SCHEMA_GENERIC_CONTENT_SPECIFIC | Domain specificity lives in row content (`domain`, `tags`), not table structure. Companion tables are added only for genuinely new entities.                                              |
+| KNOWLEDGE_VERSION_PINNED        | Analysis runs record `knowledge_commit` (Doltgres commit hash). Same inputs + same knowledge → same outputs.                                                                              |
+| FORK_TAKES_KNOWLEDGE            | When a node self-hosts, it takes its Doltgres database with full commit history.                                                                                                          |
+| SCHEMA_VIA_DRIZZLE_PRESYNC      | Knowledge-plane schema is applied by the node's drizzle-kit migrator as a k8s PreSync Job. `provision.sh` creates databases + roles only; it never issues DDL.                            |
+| AUTO_COMMIT_ON_WRITE            | Every `core__knowledge_write` call commits via the capability layer (`SELECT dolt_commit('-Am', ...)`). The schema migrator also commits post-migration via `stamp-commit.mjs`.           |
+| RUNTIME_URL_IS_SUPERUSER        | `DOLTGRES_URL_<NODE>` runtime secret connects as the `postgres` superuser. Doltgres 0.56 RBAC is non-functional (GRANT silently no-ops); revisit when upstream lands working role access. |
+| NODES_BOOT_EMPTY                | New nodes boot with an empty knowledge database; they do not inherit an operator seed. The dev-only `scripts/db/seed-doltgres.mts` populates local dev only, never production.            |
 
 ---
 
 ## Non-Goals
 
 - Replacing Postgres for hot operational data (awareness plane stays where it is)
-- Branching or remotes in MVP (future — get comfortable with commits first)
+- Branching, remotes, or cross-node sharing — single branch (`main`) only
+- Operator → node seed on provision — nodes boot empty
 - Real-time knowledge updates during analysis (read at start, not mid-flight)
 - Automatic promotion without any validation gate (human or statistical)
 - Embedding/vector search in knowledge plane (stays in Postgres with pgvector if needed)
 
+### File Pointers
+
+| File                                                           | Purpose                                                                                           |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `packages/knowledge-store/src/port/knowledge-store.port.ts`    | `KnowledgeStorePort` interface                                                                    |
+| `packages/knowledge-store/src/adapters/doltgres/`              | `DoltgresKnowledgeStoreAdapter` + `buildDoltgresClient()`                                         |
+| `packages/knowledge-store/src/capability.ts`                   | `createKnowledgeCapability()` — wraps port with auto-commit on writes                             |
+| `packages/ai-tools/src/tools/knowledge-{read,search,write}.ts` | Tool contracts + impls (registered in `TOOL_CATALOG`)                                             |
+| `nodes/poly/packages/doltgres-schema/`                         | Per-node Doltgres drizzle schema (re-exports base `knowledge`; companion tables here)             |
+| `nodes/poly/drizzle.doltgres.config.ts`                        | drizzle-kit config for poly's Doltgres plane (dialect-separated from Postgres)                    |
+| `nodes/poly/app/src/adapters/server/db/doltgres-migrations/`   | Checked-in drizzle-kit output                                                                     |
+| `nodes/poly/packages/doltgres-schema/stamp-commit.mjs`         | Post-migrate `dolt_commit` hook (per dolthub/dolt#4843 — DDL doesn't auto-commit)                 |
+| `infra/k8s/base/poly-doltgres/`                                | PreSync Job manifest (`migrate-poly-doltgres`)                                                    |
+| `infra/compose/runtime/doltgres-init/provision.sh`             | Idempotent database + role provisioning (no DDL)                                                  |
+| `scripts/ci/deploy-infra.sh`                                   | Derives `DOLTGRES_*` from `POSTGRES_ROOT_PASSWORD`, writes `DOLTGRES_URL_<NODE>` into k8s secrets |
+
 ## Open Questions
 
-- [ ] Doltgres maturity: verify `dolt_commit`, `dolt_log`, `dolt_diff` work through standard `postgres` driver
-- [ ] Doltgres server resource footprint alongside Postgres in dev stack
-- [ ] Seed mechanism: SQL dump from `knowledge_operator` → `knowledge_{node}`, or Drizzle seeds?
-- [ ] Should the promotion gate be a Temporal workflow or a simpler batch?
+<!-- none -->
 
 ## Related
 

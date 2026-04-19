@@ -5,12 +5,15 @@ set -euo pipefail
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Module: infra/compose/doltgres-init/provision.sh
-# Purpose: Idempotent Doltgres provisioning — databases, roles, schema, initial commit.
-# Scope: Executed by doltgres-provision container. Creates knowledge databases,
-#   reader/writer roles, applies DDL, and creates initial Dolt commit.
+# Purpose: Idempotent Doltgres DB + role provisioning. Schema is owned by
+#   drizzle-kit (see nodes/<node>/drizzle.doltgres.config.ts +
+#   nodes/<node>/app/schema/ + generated .../doltgres-migrations/*.sql). This
+#   script only creates the per-node knowledge databases and the reader/
+#   writer roles. The migrator (doltgres-migrate-<node>) creates tables.
+# Scope: Executed by doltgres-provision compose service (bootstrap profile).
 # Invariants: Follows postgres-init/provision.sh pattern. Idempotent.
 # Side-effects: IO (psql commands against Doltgres server)
-# Links: docs/spec/knowledge-data-plane.md
+# Links: docs/spec/knowledge-data-plane.md, nodes/poly/app/schema/README.md
 
 DG_HOST="${DOLTGRES_HOST:-doltgres}"
 DG_PORT="${DOLTGRES_PORT:-5432}"
@@ -41,7 +44,7 @@ run_sql_quiet() {
 echo "⏳ Waiting for Doltgres at $DG_HOST:$DG_PORT..."
 ELAPSED=0
 TIMEOUT=60
-until PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d postgres -c '\q' >/dev/null 2>&1; do
+until PGPASSWORD="$DG_PASS" pg_isready -h "$DG_HOST" -p "$DG_PORT" -U postgres >/dev/null 2>&1; do
   if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
     echo "❌ Timed out waiting for Doltgres after ${TIMEOUT}s"
     exit 1
@@ -54,57 +57,34 @@ echo "✅ Doltgres is up."
 # ── Roles ──────────────────────────────────────────────────────────────────
 echo "🔧 Creating roles..."
 # Doltgres doesn't support psql :'var' binding or pg_roles checks.
-# Passwords are dev defaults (not user input) — direct interpolation is safe.
+# Passwords are dev defaults or CI-derived (not user input) — direct interpolation is safe.
 run_sql_quiet "postgres" "CREATE ROLE knowledge_reader WITH LOGIN PASSWORD '${DG_READER_PASS}'"
 run_sql_quiet "postgres" "CREATE ROLE knowledge_writer WITH LOGIN PASSWORD '${DG_WRITER_PASS}'"
-# Verify roles were created (don't silently continue if they failed)
-echo "   Verifying roles..."
 run_sql "postgres" "SELECT 1" > /dev/null
 echo "   -> Roles ready (knowledge_reader, knowledge_writer)"
 
-# ── Per-node databases + schema ────────────────────────────────────────────
+# ── Per-node databases (no schema; drizzle-kit owns that) ──────────────────
 for COGNI_DB in $(echo "$COGNI_NODE_DBS" | tr ',' ' '); do
   # cogni_operator → knowledge_operator
   DB="knowledge_${COGNI_DB#cogni_}"
   echo "🔧 Provisioning database '$DB'..."
   run_sql_quiet "postgres" "CREATE DATABASE $DB"
 
-  # Apply schema (idempotent)
-  run_sql "$DB" "
-    CREATE TABLE IF NOT EXISTS knowledge (
-      id TEXT PRIMARY KEY,
-      domain TEXT NOT NULL,
-      entity_id TEXT,
-      title TEXT NOT NULL,
-      content TEXT NOT NULL,
-      confidence_pct INTEGER,
-      source_type TEXT NOT NULL,
-      source_ref TEXT,
-      tags JSONB,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  "
+  # Doltgres has partial/evolving GRANT support. Each statement is best-effort:
+  # GRANT USAGE works on Doltgres 0.56.x; ALTER DEFAULT PRIVILEGES does not yet
+  # (dolthub/doltgresql: "ALTER DEFAULT PRIVILEGES statement is not yet supported").
+  # Doltgres roles are permissive by default, so missing grants don't block reads/writes.
+  run_sql_quiet "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_reader"
+  run_sql_quiet "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_writer"
+  run_sql_quiet "$DB" "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO knowledge_reader"
+  run_sql_quiet "$DB" "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO knowledge_writer"
 
-  # Indexes (idempotent)
-  run_sql "$DB" "CREATE INDEX IF NOT EXISTS idx_knowledge_domain ON knowledge(domain)"
-  run_sql "$DB" "CREATE INDEX IF NOT EXISTS idx_knowledge_entity ON knowledge(entity_id)"
-  run_sql "$DB" "CREATE INDEX IF NOT EXISTS idx_knowledge_source_type ON knowledge(source_type)"
+  # Initial Dolt commit marks the empty DB. Subsequent dolt_commit calls come
+  # from the migrator (after applying each generated SQL file) and from the
+  # seeder. Tolerate "nothing to commit" on re-runs.
+  run_sql_quiet "$DB" "SELECT dolt_commit('-Am', 'provision: database + roles')"
 
-  # Grants — Doltgres has limited GRANT support; attempt but warn on failure.
-  # First probe whether GRANT works at all on this Doltgres version.
-  if PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d "$DB" \
-       -c "GRANT USAGE ON SCHEMA public TO knowledge_reader" 2>/dev/null; then
-    run_sql "$DB" "GRANT SELECT ON ALL TABLES IN SCHEMA public TO knowledge_reader"
-    run_sql "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_writer"
-    run_sql "$DB" "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO knowledge_writer"
-  else
-    echo "   ⚠ GRANT not supported by this Doltgres version — skipping (roles are permissive by default)"
-  fi
-
-  # Dolt commit (schema + roles only — seed data comes from pnpm db:seed:doltgres)
-  run_sql "$DB" "SELECT dolt_commit('-Am', 'provision: schema + roles')"
-
-  echo "   -> $DB provisioned and committed."
+  echo "   -> $DB provisioned."
 done
 
-echo "✅ Doltgres provisioning complete."
+echo "✅ Doltgres provisioning complete (DBs + roles only; tables created by drizzle-kit migrator)."

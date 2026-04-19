@@ -1,52 +1,40 @@
+// SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+// SPDX-FileCopyrightText: 2025 Cogni-DAO
+
 /**
  * Module: `@cogni/poly-knowledge/seeds/poly`
- * Purpose: Prediction market domain knowledge seeds for the poly node.
+ * Purpose: Poly-specific knowledge seeds. Intentionally empty — nodes boot
+ *   clean, and the brain accumulates knowledge itself via its research +
+ *   observation + promotion loop. The only "starter state" a node ships with
+ *   is the schema created by the drizzle-kit migration (the `knowledge` table
+ *   exists, but has zero rows).
+ * Scope: Seed data definitions only. No I/O — scripts/db/seed-doltgres.mts
+ *   applies these when a contributor explicitly invokes `pnpm db:seed:doltgres:poly`
+ *   locally (e.g., for manual dev exploration). No deploy-time seeding.
  * Side-effects: none
  * @public
  */
 
 import type { NewKnowledge } from "@cogni/knowledge-store";
-import { CONFIDENCE } from "@cogni/ai-tools";
 
-/** Base seeds inherited from node-template */
+/** Base seeds inherited from node-template (owned by that package, not this one). */
 export { BASE_KNOWLEDGE_SEEDS } from "@cogni/node-template-knowledge";
 
-/** Poly-specific prediction market knowledge seeds */
-export const POLY_KNOWLEDGE_SEEDS: NewKnowledge[] = [
-  {
-    id: "poly-strategy-001",
-    domain: "strategy",
-    title: "Calibrated market analyst",
-    content:
-      "Base rate anchoring → news update integration → fair probability estimation → thesis formation. " +
-      "Always start from historical base rates before incorporating current information. " +
-      "Explicitly state confidence intervals. Flag when market price diverges >15% from estimated fair value.",
-    sourceType: "human",
-    confidencePct: CONFIDENCE.VERIFIED,
-    tags: ["strategy", "analysis", "methodology"],
-  },
-  {
-    id: "poly-impl-001",
-    domain: "implementation",
-    title: "Market data polling architecture",
-    content:
-      "Polymarket data flows through MarketProviderPort → PollAdapter → Redis stream → selective Postgres persistence. " +
-      "Polling interval is configured per market based on liquidity and time-to-resolution. " +
-      "High-liquidity markets (>$1M) poll every 60s. Low-liquidity markets poll every 300s.",
-    sourceType: "derived",
-    confidencePct: CONFIDENCE.DRAFT,
-    tags: ["implementation", "architecture", "polling"],
-  },
-  {
-    id: "poly-impl-002",
-    domain: "implementation",
-    title: "Signal generation pipeline",
-    content:
-      "Signals are generated when observation triggers fire (price movement >5%, volume spike >2x baseline). " +
-      "Trigger → analysis graph → scored signal → persist to awareness plane. " +
-      "High-confidence signals (>70%) are promoted to knowledge via the promotion gate.",
-    sourceType: "derived",
-    confidencePct: CONFIDENCE.DRAFT,
-    tags: ["implementation", "signals", "pipeline"],
-  },
-];
+/**
+ * Poly-specific seeds — intentionally empty (clean-slate by design).
+ *
+ * Why no seeds:
+ * - A knowledge store seeded with AI-authored strategy prose pollutes retrieval
+ *   (every search returns plausible-sounding noise the brain cites as
+ *   authoritative). The brain must accumulate knowledge itself.
+ * - Protocol facts considered earlier (CLOB mechanics, Kelly formula reference)
+ *   are reference data that the brain can fetch on-demand via tools; baking
+ *   them into the store as rows just creates a stale-cache problem.
+ * - "Node boots clean" matches the Postgres-side pattern: fresh nodes get the
+ *   schema and the system-tenant migration, not curated content.
+ *
+ * When to add rows here: only if there's a concrete runtime need (e.g., the
+ * brain cannot function without a specific curated row and on-demand fetch is
+ * not viable). Such additions should be reviewed against the pollution risk.
+ */
+export const POLY_KNOWLEDGE_SEEDS: NewKnowledge[] = [];

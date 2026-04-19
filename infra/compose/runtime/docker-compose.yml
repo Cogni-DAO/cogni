@@ -267,6 +267,73 @@ services:
       postgres:
         condition: service_healthy
 
+  # =============================================================================
+  # Doltgres (Knowledge Data Plane)
+  # Per knowledge-data-plane spec + multi-node-tenancy (DB_PER_NODE):
+  # one Doltgres server, one database per node (knowledge_operator, knowledge_poly, ...).
+  # Schema owned by drizzle-kit (nodes/<node>/drizzle.doltgres.config.ts); the
+  # migrator applies checked-in SQL via psql (divergence from the Postgres per-node
+  # migrator image rationale documented in nodes/poly/app/schema/README.md).
+  # App pods read via DOLTGRES_URL_<NODE>; URL optional — knowledge tools off when absent.
+  # =============================================================================
+
+  doltgres:
+    image: dolthub/doltgresql:latest
+    restart: unless-stopped
+    labels:
+      - "autoheal=true"
+    networks:
+      - internal
+    environment:
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+    # Host port 5435 (5432 is Postgres); k3s pods reach via EndpointSlice → node InternalIP:5435.
+    ports:
+      - "5435:5432"
+    volumes:
+      - doltgres_data:/var/lib/doltgres
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c 'echo > /dev/tcp/127.0.0.1/5432' 2>/dev/null || exit 1",
+        ]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 15s
+
+  doltgres-provision:
+    image: postgres:15
+    profiles:
+      - bootstrap
+    restart: "no"
+    networks:
+      - internal
+    environment:
+      DOLTGRES_HOST: doltgres
+      DOLTGRES_PORT: 5432
+      DOLTGRES_PASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+      DOLTGRES_READER_PASSWORD: ${DOLTGRES_READER_PASSWORD:-knowledge_reader}
+      DOLTGRES_WRITER_PASSWORD: ${DOLTGRES_WRITER_PASSWORD:-knowledge_writer}
+      COGNI_NODE_DBS: ${COGNI_NODE_DBS}
+    volumes:
+      - ./doltgres-init/provision.sh:/app/provision.sh:ro
+    entrypoint: ["/bin/bash", "/app/provision.sh"]
+    depends_on:
+      doltgres:
+        condition: service_healthy
+
+  # Doltgres schema migration is a k8s PreSync Job (infra/k8s/base/poly-doltgres/
+  # doltgres-migration-job.yaml), NOT a compose service. Argo CD runs it on every
+  # env before the poly Deployment syncs, using the poly migrator image that
+  # kustomize overlays patch by digest — identical shape to the Postgres migrator.
+  # This keeps the env var / image-plumbing 1:1 with Postgres and removes the
+  # need for POLY_MIGRATOR_IMAGE in workflow env blocks.
+
+  # No doltgres-seed-poly: nodes boot clean. The drizzle-kit migration IS the
+  # starter state (table exists, zero rows). The brain accumulates its own
+  # knowledge via research + observation + promotion loops.
+
   repo-init:
     image: busybox:1.37
     user: "0:0"
@@ -637,6 +704,8 @@ networks:
 volumes:
   postgres_data:
     name: postgres_data
+  doltgres_data:
+    name: doltgres_data
   alloy_data:
     name: alloy_data
   temporal_postgres_data:

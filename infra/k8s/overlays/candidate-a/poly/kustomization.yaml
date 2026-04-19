@@ -7,6 +7,7 @@ namespace: cogni-candidate-a
 
 resources:
   - ../../../base/node-app
+  - ../../../base/poly-doltgres
 
 namePrefix: poly-
 
@@ -84,6 +85,13 @@ patches:
         path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
         value: "poly-node-app-secrets"
   - target:
+      kind: Job
+      name: migrate-poly-doltgres
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/env/0/valueFrom/secretKeyRef/name
+        value: "poly-node-app-secrets"
+  - target:
       kind: EndpointSlice
       name: postgres-external-1
     patch: |
@@ -123,3 +131,13 @@ patches:
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "poly-redis-external"
+  - target:
+      kind: EndpointSlice
+      name: doltgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.160"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "poly-doltgres-external"

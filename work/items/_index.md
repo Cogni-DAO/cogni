@@ -346,6 +346,7 @@
 | 1 | task.0250 | Extract @cogni/graph-execution-host package | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | story.0262 | Agent contributor protocol — shared workflow for AI agents coordinating on a codebase | Development Workflows | proj.development-workflows |
 | 1 | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
+| 1 | task.0311 | Poly Knowledge Plane v0 — Candidate-a Wiring + Upsert Bug Fix (Clean-Slate Nodes) | Cogni Poly | proj.poly-prediction-bot |
 | 1 | bug.0328 | promote-build-payload silent abort + release-slot treats skipped verify as success — verify-candidate bypassed on real flight | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | task.0328 | Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health) | Cogni Poly | proj.poly-prediction-bot |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |

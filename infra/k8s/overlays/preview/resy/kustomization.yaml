@@ -130,3 +130,13 @@ patches:
       - op: replace
         path: /metadata/labels/kubernetes.io~1service-name
         value: "resy-redis-external"
+  - target:
+      kind: EndpointSlice
+      name: doltgres-external-1
+    patch: |
+      - op: replace
+        path: /endpoints/0/addresses
+        value: ["84.32.109.222"]
+      - op: replace
+        path: /metadata/labels/kubernetes.io~1service-name
+        value: "resy-doltgres-external"

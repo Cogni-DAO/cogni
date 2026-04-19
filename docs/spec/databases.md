@@ -45,6 +45,8 @@ pnpm dev:stack                # Same as above, but hits real LiteLLM/OpenRouter
 
 **Per-Node Databases (DB_PER_NODE):** Each node gets its own database on a shared Postgres server. The database IS the node boundary — no tenancy columns. See [Multi-Node Tenancy](multi-node-tenancy.md).
 
+**Postgres vs Doltgres:** This spec covers the Postgres (awareness plane) side. The knowledge plane runs on a separate Doltgres server with per-node `knowledge_<node>` databases and git-like versioning — see [Knowledge Data Plane](knowledge-data-plane.md).
+
 | Environment | Databases                                                         | Configured via                   |
 | ----------- | ----------------------------------------------------------------- | -------------------------------- |
 | Development | `cogni_operator`, `cogni_poly`, `cogni_resy`                      | `COGNI_NODE_DBS` in `.env.local` |

@@ -8,7 +8,7 @@
  */
 
 // Re-export base knowledge table from node-template
-export { knowledge, KNOWLEDGE_TABLE_DDL, KNOWLEDGE_INDEXES_DDL } from "@cogni/node-template-knowledge";
+export { knowledge } from "@cogni/node-template-knowledge";
 
 // Future: add poly-specific companion tables here
 // export const polyMarketCategories = pgTable("poly_market_categories", { ... });

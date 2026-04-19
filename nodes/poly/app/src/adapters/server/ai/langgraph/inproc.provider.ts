@@ -238,6 +238,19 @@ export class LangGraphInProcProvider implements GraphExecutorPort {
                   modelToolCallId: toolCallId,
                 })
               : await toolRunner.exec(name, args);
+          if (!result.ok) {
+            this.log.warn(
+              {
+                event: EVENT_NAMES.AI_TOOL_CALL_ERROR,
+                runId,
+                graphName,
+                tool: name,
+                errorCode: result.errorCode,
+                safeMessage: result.safeMessage.slice(0, 300),
+              },
+              "tool call failed"
+            );
+          }
           return result;
         };
       };

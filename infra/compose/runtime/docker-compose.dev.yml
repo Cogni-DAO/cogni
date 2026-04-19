@@ -335,6 +335,15 @@ services:
       doltgres:
         condition: service_healthy
 
+  # Doltgres schema migration is a k8s PreSync Job in prod/candidate-a/preview
+  # (see infra/k8s/base/poly-doltgres/). In dev, run `pnpm db:migrate:poly:doltgres`
+  # manually — it shells out to drizzle-kit natively against the local Doltgres.
+  # The trailing SELECT dolt_commit is stamped inside the npm script (see
+  # package.json db:migrate:poly:doltgres:container), not a separate service.
+
+  # No doltgres-seed-poly: nodes boot clean. For manual dev seeding, use
+  # `pnpm db:seed:doltgres:poly` which runs scripts/db/seed-doltgres.mts.
+
   db-provision:
     image: postgres:15
     container_name: db-provision

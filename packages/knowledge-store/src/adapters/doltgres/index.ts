@@ -179,15 +179,28 @@ export class DoltgresKnowledgeStoreAdapter implements KnowledgeStorePort {
       entry.tags ? escapeValue(entry.tags) : "NULL",
     ];
 
+    // Doltgres does not support EXCLUDED or ON CONFLICT DO UPDATE reliably.
+    // Use insert-or-update: try INSERT, on duplicate key fall back to UPDATE.
+    try {
+      const rows = await this.sql.unsafe(
+        `INSERT INTO knowledge (${cols.join(", ")}) VALUES (${vals.join(", ")}) RETURNING *`
+      );
+      return rowToKnowledge(rows[0] as Record<string, unknown>);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("duplicate") && !msg.includes("Duplicate")) throw e;
+    }
+    // Row exists — update it
+    const updateCols = cols.slice(1); // skip id (PK)
+    const updateVals = vals.slice(1);
+    const setClauses = updateCols
+      .map((col, i) => `${col} = ${updateVals[i]}`)
+      .join(", ");
     const rows = await this.sql.unsafe(
-      `INSERT INTO knowledge (${cols.join(", ")}) VALUES (${vals.join(", ")}) ` +
-        `ON CONFLICT (id) DO UPDATE SET ` +
-        `domain = EXCLUDED.domain, entity_id = EXCLUDED.entity_id, title = EXCLUDED.title, ` +
-        `content = EXCLUDED.content, confidence_pct = EXCLUDED.confidence_pct, ` +
-        `source_type = EXCLUDED.source_type, source_ref = EXCLUDED.source_ref, ` +
-        `tags = EXCLUDED.tags ` +
-        `RETURNING *`
+      `UPDATE knowledge SET ${setClauses} WHERE id = ${escapeValue(entry.id)} RETURNING *`
     );
+    if (rows.length === 0)
+      throw new Error(`Knowledge ${entry.id} not found after upsert`);
     return rowToKnowledge(rows[0] as Record<string, unknown>);
   }
 
