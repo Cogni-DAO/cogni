@@ -154,6 +154,12 @@ export async function runReconcileOnce(
     limit: DEFAULT_LIMIT,
   });
 
+  // Collect ids for which getOrder returned a typed answer (found OR not_found).
+  // Rows where getOrder threw (network error) are excluded — their staleness
+  // grows until we can verify. Bulk-stamped via markSynced after the loop.
+  // SYNCED_AT_WRITTEN_ON_EVERY_SYNC invariant (task.0328 CP3).
+  const syncedIds: string[] = [];
+
   for (const row of rows) {
     if (!row.order_id) {
       // Can't prove anything without a CLOB order id — placement may still be
@@ -163,6 +169,9 @@ export async function runReconcileOnce(
 
     try {
       const result = await deps.getOrder(row.order_id);
+      // getOrder returned a typed response — mark as synced regardless of branch.
+      syncedIds.push(row.client_order_id);
+
       if (!("found" in result)) {
         const ageMs = clock().getTime() - row.created_at.getTime();
         if (ageMs < deps.notFoundGraceMs) {
@@ -226,6 +235,7 @@ export async function runReconcileOnce(
         "reconciler: status updated"
       );
     } catch (err: unknown) {
+      // getOrder threw — do NOT add to syncedIds; row staleness grows.
       deps.metrics.incr(RECONCILER_METRICS.errorsTotal, {});
       log.error(
         {
@@ -239,6 +249,10 @@ export async function runReconcileOnce(
       );
     }
   }
+
+  // Bulk-stamp synced_at for all rows that got a typed CLOB response this tick.
+  // One UPDATE vs N — correct and efficient.
+  await deps.ledger.markSynced(syncedIds);
 
   // TODO(task.0323 §2): redemption-sync — call getOperatorPositions once per
   // tick and mark filled rows as redeemed when the operator no longer holds

@@ -25,7 +25,10 @@ export type LedgerStatus =
 /**
  * Row shape returned by `listRecent` — mirrors `polyCopyTradeFills` $inferSelect
  * but with the fields the read APIs + mirror-coordinator actually consume.
- * Extra columns (`attributes`, `created_at`, `updated_at`) surface as-is.
+ * Extra columns (`attributes`, `created_at`, `updated_at`, `synced_at`) surface as-is.
+ *
+ * `synced_at` is NULL until the reconciler first touches the row
+ * (SYNCED_AT_WRITTEN_ON_EVERY_SYNC invariant — see task.0328 CP3).
  */
 export interface LedgerRow {
   target_id: string;
@@ -35,6 +38,8 @@ export interface LedgerRow {
   order_id: string | null;
   status: LedgerStatus;
   attributes: Record<string, unknown> | null;
+  /** Last time the reconciler received a typed CLOB response for this row. NULL = never checked. */
+  synced_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -168,4 +173,18 @@ export interface OrderLedger {
    * after placement (mirror-coordinator owns `markOrderId` / `markError`).
    */
   updateStatus(input: UpdateStatusInput): Promise<void>;
+
+  /**
+   * Bulk-stamp `synced_at = now()` on the rows whose `client_order_id` values
+   * are in the given array. Called once per reconciler tick after iterating all
+   * rows for which `getOrder` returned a typed answer (found OR not_found).
+   *
+   * Rows where `getOrder` threw (network error) are NOT included — their
+   * staleness grows until the next successful check.
+   *
+   * No-op when the array is empty (no SQL emitted).
+   *
+   * SYNCED_AT_WRITTEN_ON_EVERY_SYNC invariant (task.0328 CP3).
+   */
+  markSynced(client_order_ids: string[]): Promise<void>;
 }

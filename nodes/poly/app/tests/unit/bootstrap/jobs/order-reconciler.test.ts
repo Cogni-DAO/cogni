@@ -44,6 +44,7 @@ function makeRow(overrides: Partial<LedgerRow> = {}): LedgerRow {
     order_id: "order-abc",
     status: "pending",
     attributes: null,
+    synced_at: null,
     created_at: now,
     updated_at: now,
     ...overrides,
@@ -338,5 +339,83 @@ describe("runReconcileOnce", () => {
 
     expect(ledger.rows[0]?.status).toBe("canceled");
     expect(counts[ORDER_RECONCILER_METRICS.notFoundUpgradesTotal]).toBe(1);
+  });
+
+  // ─── CP3: markSynced wiring ───────────────────────────────────────────────
+
+  it("markSynced called with ids of rows that got a typed CLOB response; thrown rows excluded", async () => {
+    // 3 rows with order_ids; row1 + row2 = typed response, row3 = throws.
+    const row1 = makeRow({
+      client_order_id: "coid-1",
+      fill_id: "fill-1",
+      order_id: "order-1",
+      status: "open",
+    });
+    const row2 = makeRow({
+      client_order_id: "coid-2",
+      fill_id: "fill-2",
+      order_id: "order-2",
+      status: "open",
+    });
+    // row3 has order_id but getOrder throws — should NOT appear in markSynced.
+    const row3 = makeRow({
+      client_order_id: "coid-3",
+      fill_id: "fill-3",
+      order_id: "order-3",
+      status: "pending",
+    });
+    const ledger = new FakeOrderLedger({ initial: [row1, row2, row3] });
+    const markSyncedSpy = vi.spyOn(ledger, "markSynced");
+
+    const getOrder = vi
+      .fn()
+      .mockResolvedValueOnce(
+        found(
+          makeReceipt({
+            status: "open",
+            order_id: "order-1",
+            client_order_id: "coid-1",
+          })
+        )
+      )
+      .mockResolvedValueOnce(NOT_FOUND) // within-grace (notFoundGraceMs = 900s)
+      .mockRejectedValueOnce(new Error("network timeout"));
+
+    await runReconcileOnce({
+      ledger,
+      getOrder,
+      getOperatorPositions: async () => [],
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+      metrics: noopMetrics,
+      notFoundGraceMs: 900_000,
+    });
+
+    // markSynced was called once with the two ids that got typed responses.
+    expect(markSyncedSpy).toHaveBeenCalledTimes(1);
+    const calledWith = markSyncedSpy.mock.calls[0]?.[0] ?? [];
+    expect(calledWith).toHaveLength(2);
+    expect(calledWith).toContain("coid-1");
+    expect(calledWith).toContain("coid-2");
+    expect(calledWith).not.toContain("coid-3");
+  });
+
+  it("markSynced called with empty array when no rows had order_ids", async () => {
+    // All rows lack order_id — no CLOB calls made, markSynced([]).
+    const row = makeRow({ order_id: null, status: "pending" });
+    const ledger = new FakeOrderLedger({ initial: [row] });
+    const markSyncedSpy = vi.spyOn(ledger, "markSynced");
+
+    await runReconcileOnce({
+      ledger,
+      getOrder: vi.fn(),
+      getOperatorPositions: async () => [],
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+      metrics: noopMetrics,
+      notFoundGraceMs: 900_000,
+    });
+
+    expect(markSyncedSpy).toHaveBeenCalledWith([]);
   });
 });

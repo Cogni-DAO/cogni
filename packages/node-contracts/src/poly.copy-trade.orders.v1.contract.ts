@@ -50,6 +50,18 @@ const orderRowSchema = z.object({
   updated_at: z.string(),
   /** Polymarket profile URL for this order; null when there's no `order_id` yet. */
   polymarket_profile_url: z.string().url().nullable(),
+  /**
+   * ISO-8601 timestamp of the last reconciler tick that received a typed CLOB
+   * response (found OR not_found) for this row. Null = never re-checked.
+   * SYNCED_AT_WRITTEN_ON_EVERY_SYNC invariant (task.0328 CP3).
+   */
+  synced_at: z.string().datetime().nullable(),
+  /**
+   * Milliseconds since `synced_at`. Null when `synced_at` is null.
+   * Computed at response time — use as a freshness signal only.
+   * STALENESS_VISIBLE_IN_UI invariant (task.0328 CP3).
+   */
+  staleness_ms: z.number().int().min(0).nullable(),
 });
 
 export const polyCopyTradeOrdersOperation = {

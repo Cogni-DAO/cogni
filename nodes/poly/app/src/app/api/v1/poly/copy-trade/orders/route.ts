@@ -60,6 +60,10 @@ function toContractRow(
       ? `https://polymarket.com/profile/${operatorAddress.toLowerCase()}/trade/${r.order_id}`
       : null;
 
+  const syncedAt = r.synced_at ?? null;
+  const staleness_ms =
+    syncedAt !== null ? Date.now() - syncedAt.getTime() : null;
+
   return {
     target_id: r.target_id,
     target_wallet: readStr("target_wallet"),
@@ -80,6 +84,8 @@ function toContractRow(
     created_at: r.created_at.toISOString(),
     updated_at: r.updated_at.toISOString(),
     polymarket_profile_url: profile,
+    synced_at: syncedAt?.toISOString() ?? null,
+    staleness_ms,
   };
 }
 

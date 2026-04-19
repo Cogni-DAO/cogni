@@ -111,6 +111,7 @@ export class FakeOrderLedger implements OrderLedger {
       order_id: null,
       status: "pending",
       attributes: attrs,
+      synced_at: null,
       created_at: now,
       updated_at: now,
     });
@@ -195,6 +196,17 @@ export class FakeOrderLedger implements OrderLedger {
           : {}),
         ...(input.reason !== undefined ? { reason: input.reason } : {}),
       };
+    }
+  }
+
+  async markSynced(client_order_ids: string[]): Promise<void> {
+    // No-op on empty array — matches real adapter behaviour.
+    if (client_order_ids.length === 0) return;
+    const now = new Date();
+    for (const row of this.rows) {
+      if (client_order_ids.includes(row.client_order_id)) {
+        row.synced_at = now;
+      }
     }
   }
 }

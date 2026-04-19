@@ -56,6 +56,13 @@ export const polyCopyTradeFills = pgTable(
     status: text("status").notNull(),
     /** Provenance + mirror amount + raw normalized fill for debugging. */
     attributes: jsonb("attributes").$type<Record<string, unknown>>(),
+    /**
+     * Timestamp of the last reconciler tick that received a typed CLOB response
+     * (found OR not_found) for this row. NULL until the reconciler first checks
+     * this order. Written by `markSynced` — never by the placement path.
+     * Used by the dashboard staleness badge (STALENESS_VISIBLE_IN_UI invariant).
+     */
+    syncedAt: timestamp("synced_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -70,6 +77,8 @@ export const polyCopyTradeFills = pgTable(
     // `client_order_id` is unique-by-construction across all rows (deterministic
     // from the PK pair); index lets the executor detect repeat submits.
     index("poly_copy_trade_fills_client_order_id_idx").on(table.clientOrderId),
+    // Supports fast "oldest unsynced" queries for the sync-health endpoint (CP4).
+    index("idx_poly_copy_trade_fills_synced_at").on(table.syncedAt),
     // Executor-bug canary — Polymarket order ids are unique by construction, so
     // two fills ever carrying the same `order_id` indicates the mirror path
     // double-submitted. Partial index skips the (common) null rows.

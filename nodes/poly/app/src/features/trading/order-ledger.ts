@@ -22,7 +22,7 @@ import {
   polyCopyTradeDecisions,
   polyCopyTradeFills,
 } from "@cogni/poly-db-schema/copy-trade";
-import { and, count, desc, eq, gte, sql, sum } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, sql, sum } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "pino";
 
@@ -257,6 +257,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         // Schema CHECK enforces the set; cast is safe at the type boundary.
         status: r.status as LedgerRow["status"],
         attributes: (r.attributes as Record<string, unknown> | null) ?? null,
+        synced_at: r.syncedAt,
         created_at: r.createdAt,
         updated_at: r.updatedAt,
       }));
@@ -288,6 +289,7 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         order_id: r.orderId,
         status: r.status as LedgerRow["status"],
         attributes: (r.attributes as Record<string, unknown> | null) ?? null,
+        synced_at: r.syncedAt,
         created_at: r.createdAt,
         updated_at: r.updatedAt,
       }));
@@ -316,6 +318,15 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
             : {}),
         })
         .where(eq(polyCopyTradeFills.clientOrderId, input.client_order_id));
+    },
+
+    async markSynced(client_order_ids: string[]): Promise<void> {
+      // No-op on empty array — avoids a vacuous UPDATE that touches no rows.
+      if (client_order_ids.length === 0) return;
+      await deps.db
+        .update(polyCopyTradeFills)
+        .set({ syncedAt: sql`now()` })
+        .where(inArray(polyCopyTradeFills.clientOrderId, client_order_ids));
     },
   };
 }

@@ -108,6 +108,42 @@ function RowCopyButton({ row }: { row: PolyCopyTradeOrderRow }): ReactElement {
   );
 }
 
+const STALE_THRESHOLD_MS = 60_000;
+
+/**
+ * Small dot rendered next to the status label.
+ * - No dot when the row is fresh (synced within 60 s).
+ * - Grey dot with tooltip "Never synced" when `synced_at` is null.
+ * - Yellow dot with relative-time tooltip when staleness > 60 s.
+ */
+function StalenessDot({
+  synced_at,
+  staleness_ms,
+}: {
+  synced_at: string | null;
+  staleness_ms: number | null;
+}): ReactElement | null {
+  if (synced_at !== null && (staleness_ms ?? 0) <= STALE_THRESHOLD_MS) {
+    return null; // Fresh — no badge needed.
+  }
+
+  const isNeverSynced = synced_at === null;
+  const tooltip = isNeverSynced
+    ? "Never synced"
+    : `Last synced ${timeAgo(synced_at)} ago`;
+
+  return (
+    // biome-ignore lint/a11y/useAriaPropsForRole: decorative dot uses title for tooltip only
+    <span
+      title={tooltip}
+      className={cn(
+        "inline-block size-1.5 rounded-full",
+        isNeverSynced ? "bg-muted-foreground" : "bg-yellow-400"
+      )}
+    />
+  );
+}
+
 export function OrderActivityCard(): ReactElement {
   const [filter, setFilter] = useState<OrdersStatusFilter>("all");
 
@@ -205,6 +241,10 @@ export function OrderActivityCard(): ReactElement {
                           )}
                         />
                         {row.status}
+                        <StalenessDot
+                          synced_at={row.synced_at}
+                          staleness_ms={row.staleness_ms}
+                        />
                       </span>
                     </TableCell>
                     <TableCell
