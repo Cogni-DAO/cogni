@@ -150,6 +150,14 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           typeof input.intent.attributes?.source_fill_id === "string"
             ? input.intent.attributes.source_fill_id
             : undefined,
+        title:
+          typeof input.intent.attributes?.title === "string"
+            ? input.intent.attributes.title
+            : undefined,
+        transaction_hash:
+          typeof input.intent.attributes?.transaction_hash === "string"
+            ? input.intent.attributes.transaction_hash
+            : undefined,
       };
 
       await deps.db

@@ -9,10 +9,11 @@
  *   - READ_ONLY: no mutation buttons.
  *   - COPY_PAYLOAD_IS_AGENT_INPUT: per-row copy emits a JSON block shaped for an AI agent prompt.
  *   - LEDGER_STATUS_MAY_BE_STALE: `status` is set at placement time and is not reconciled with the CLOB. (task.0323 §2)
- *   - VISUAL_RESTRAINT: only BUY (green) / SELL (red) carry color. Status uses a tiny dot + muted text. Matches the rest of the dashboard's minimal palette.
- *   - NO_EOA_PROFILE_LINKS: row links point to the market page (`polymarket.com/market/<slug>`), never to `/profile/<operator>` — EOA-direct operator profiles redirect to an empty Safe proxy. See `.claude/skills/poly-dev-expert/SKILL.md`.
+ *   - VISUAL_RESTRAINT: only BUY (green) / SELL (red) carry color. Status uses a tiny dot + muted text.
+ *   - NO_EOA_PROFILE_LINKS: row click points at the target's Polygon tx (authoritative on-chain proof), never at polymarket.com/profile/<operator> — that redirects to an empty Safe-proxy for EOA-direct operators. See `.claude/skills/poly-dev-expert/SKILL.md`.
+ *   - NO_EXTERNAL_PROXY: market title + tx hash are read directly from the row (denormalized at write time in `decide.ts` + `order-ledger.ts`). We do NOT proxy Polymarket Gamma from the client.
  * Side-effects: IO (via React Query), clipboard (user-triggered).
- * Links: [fetchOrders](../_api/fetchOrders.ts), [fetchMarketTitles](../_api/fetchMarketTitles.ts)
+ * Links: [fetchOrders](../_api/fetchOrders.ts), packages/node-contracts/src/poly.copy-trade.orders.v1.contract.ts
  * @public
  */
 
@@ -20,7 +21,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
-import { type ReactElement, useMemo, useState } from "react";
+import { type ReactElement, useState } from "react";
 import {
   Card,
   CardContent,
@@ -37,11 +38,6 @@ import {
 } from "@/components";
 import { cn } from "@/shared/util/cn";
 import {
-  extractConditionId,
-  fetchMarketTitles,
-  type MarketTitleMap,
-} from "../_api/fetchMarketTitles";
-import {
   fetchOrders,
   type OrdersStatusFilter,
   type PolyCopyTradeOrderRow,
@@ -55,7 +51,6 @@ const FILTERS: readonly { value: OrdersStatusFilter; label: string }[] = [
   { value: "all", label: "All" },
 ] as const;
 
-/** Dot color = fast-scan status cue. Text color is always muted-foreground. */
 const STATUS_DOT: Record<string, string> = {
   pending: "bg-muted-foreground animate-pulse",
   open: "bg-success",
@@ -65,34 +60,30 @@ const STATUS_DOT: Record<string, string> = {
   error: "bg-destructive",
 };
 
-function buildAgentPayload(
-  row: PolyCopyTradeOrderRow,
-  title: string | undefined
-): string {
+function buildAgentPayload(row: PolyCopyTradeOrderRow): string {
   return JSON.stringify(
     {
       action: "paste-me-to-your-agent",
       hint: "Inspect / cancel / reprice this Polymarket copy-trade order via core__poly_place_trade and related tools. Ledger status may be stale (task.0323 §2) — cross-check against Data-API /positions.",
-      order: { ...row, market_title: title ?? null },
-      ground_truth: row.target_wallet
-        ? {
-            positions_url: `https://data-api.polymarket.com/positions?user=${row.target_wallet}`,
-            trades_url: `https://data-api.polymarket.com/trades?user=${row.target_wallet}&limit=10`,
-          }
-        : null,
+      order: row,
+      ground_truth: {
+        target_wallet_positions: row.target_wallet
+          ? `https://data-api.polymarket.com/positions?user=${row.target_wallet}`
+          : null,
+        target_wallet_trades: row.target_wallet
+          ? `https://data-api.polymarket.com/trades?user=${row.target_wallet}&limit=10`
+          : null,
+        polygon_tx: row.market_tx_hash
+          ? `https://polygonscan.com/tx/${row.market_tx_hash}`
+          : null,
+      },
     },
     null,
     2
   );
 }
 
-function RowCopyButton({
-  row,
-  title,
-}: {
-  row: PolyCopyTradeOrderRow;
-  title: string | undefined;
-}): ReactElement {
+function RowCopyButton({ row }: { row: PolyCopyTradeOrderRow }): ReactElement {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -100,13 +91,11 @@ function RowCopyButton({
       aria-label="Copy order details for agent"
       title="Copy order JSON — paste to your agent to cancel or edit"
       onClick={(e) => {
-        e.stopPropagation(); // don't trigger the row-link navigation
-        void navigator.clipboard
-          .writeText(buildAgentPayload(row, title))
-          .then(() => {
-            setCopied(true);
-            setTimeout(() => setCopied(false), 1500);
-          });
+        e.stopPropagation();
+        void navigator.clipboard.writeText(buildAgentPayload(row)).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        });
       }}
       className="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
     >
@@ -132,47 +121,6 @@ export function OrderActivityCard(): ReactElement {
   });
 
   const orders = data?.orders ?? [];
-
-  const conditionIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          orders.flatMap((o) => {
-            const cid = extractConditionId(o.market_id);
-            return cid ? [cid.toLowerCase()] : [];
-          })
-        )
-      ),
-    [orders]
-  );
-
-  const { data: titles } = useQuery<MarketTitleMap>({
-    queryKey: ["dashboard-market-titles", conditionIds],
-    queryFn: () => fetchMarketTitles(conditionIds),
-    enabled: conditionIds.length > 0,
-    staleTime: 5 * 60_000,
-    gcTime: 30 * 60_000,
-    retry: 1,
-  });
-
-  const lookupFor = (
-    marketId: string | null
-  ): {
-    question: string | undefined;
-    slug: string | undefined;
-    conditionId: string | null;
-  } => {
-    const cid = extractConditionId(marketId);
-    if (!cid) {
-      return { conditionId: null, question: undefined, slug: undefined };
-    }
-    const hit = titles?.[cid.toLowerCase()];
-    return {
-      conditionId: cid,
-      question: hit?.question,
-      slug: hit?.slug,
-    };
-  };
 
   return (
     <Card>
@@ -228,18 +176,17 @@ export function OrderActivityCard(): ReactElement {
             </TableHeader>
             <TableBody>
               {orders.map((row) => {
-                const { question: title, slug } = lookupFor(row.market_id);
-                const href = slug
-                  ? `https://polymarket.com/market/${slug}`
+                // Authoritative click target: the target wallet's on-chain tx
+                // that triggered this mirror. Falls back to null → row not
+                // clickable (old rows written before the title stash).
+                const href = row.market_tx_hash
+                  ? `https://polygonscan.com/tx/${row.market_tx_hash}`
                   : null;
-                const displayMarket =
-                  title ??
+                const display =
+                  row.market_title ??
                   (row.market_id
-                    ? (() => {
-                        const cid = extractConditionId(row.market_id);
-                        return cid ? `${cid.slice(0, 10)}…` : "(unknown)";
-                      })()
-                    : "(unknown)");
+                    ? `${row.market_id.slice(-12)}`
+                    : "(unknown market)");
 
                 return (
                   <TableRow
@@ -262,9 +209,9 @@ export function OrderActivityCard(): ReactElement {
                     </TableCell>
                     <TableCell
                       className="font-medium text-sm"
-                      title={title ?? undefined}
+                      title={row.market_title ?? undefined}
                     >
-                      {displayMarket}
+                      {display}
                     </TableCell>
                     <TableCell className="text-center">
                       {row.side === "BUY" ? (
@@ -294,7 +241,7 @@ export function OrderActivityCard(): ReactElement {
                       {timeAgo(row.observed_at)}
                     </TableCell>
                     <TableCell className="pl-0 text-right">
-                      <RowCopyButton row={row} title={title} />
+                      <RowCopyButton row={row} />
                     </TableCell>
                   </TableRow>
                 );

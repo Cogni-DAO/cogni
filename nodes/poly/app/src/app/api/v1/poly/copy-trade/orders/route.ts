@@ -68,6 +68,8 @@ function toContractRow(
     order_id: r.order_id,
     status: r.status,
     market_id: readStr("market_id"),
+    market_title: readStr("title"),
+    market_tx_hash: readStr("transaction_hash"),
     outcome: readStr("outcome"),
     side,
     size_usdc: readNum("size_usdc"),

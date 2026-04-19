@@ -95,6 +95,17 @@ function buildIntent(
       token_id: tokenId,
       source_fill_id: fill.fill_id,
       target_wallet: fill.target_wallet,
+      // Denormalize display-only fields from the source fill so the read
+      // API + dashboard don't have to re-fetch Polymarket for them.
+      // See `polymarket.normalize-fill.ts` for the source of these values.
+      title:
+        typeof fill.attributes?.title === "string"
+          ? fill.attributes.title
+          : undefined,
+      transaction_hash:
+        typeof fill.attributes?.transaction_hash === "string"
+          ? fill.attributes.transaction_hash
+          : undefined,
     },
   };
 }
