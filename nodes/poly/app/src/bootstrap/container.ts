@@ -33,6 +33,7 @@ import {
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import {
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
+  EVENT_NAMES,
   initAnalytics,
   shutdownAnalytics,
 } from "@cogni/node-shared";
@@ -117,6 +118,7 @@ import { createWalletCapability } from "@/bootstrap/capabilities/wallet";
 import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
+import { startMirrorPoll } from "@/bootstrap/jobs/copy-trade-mirror.job";
 import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import type {
   AccountService,
@@ -234,6 +236,28 @@ export interface Container {
   modelCatalog: ModelCatalogPort;
   /** Provider resolver — resolves providerKey to ModelProviderPort for runtime dispatch */
   providerResolver: ModelProviderResolverPort;
+  /**
+   * Polymarket copy-trade bundle — agent-callable capability + raw placeIntent
+   * seam + operator wallet address. Undefined when Polymarket env is incomplete.
+   * Consumed by the autonomous mirror poll AND the /api/v1/poly/* read APIs.
+   */
+  polyTradeBundle:
+    | import("@/bootstrap/capabilities/poly-trade").PolyTradeBundle
+    | undefined;
+  /**
+   * Service-role DB client (BYPASSRLS). Exposed for read APIs against
+   * `poly_copy_trade_*` — the v0 copy-trade prototype's three tables are
+   * system-owned (no RLS per migration 0027). This is a **deliberate v0
+   * shortcut**, not a pattern to extend.
+   *
+   * **TODO(task.0315 P2 — MUST_FIX_P2):** add RLS to the three tables +
+   * an `owner_user_id` column + mirror-coordinator writes via
+   * `withTenantScope(db, operatorUserId, ...)` + routes migrate to
+   * `getAppDb()` + session-scoped reads + this field gets REMOVED. See
+   * `packages/db-client/src/tenant-scope.ts` for the existing pattern.
+   * Any new route reaching for this field should instead gate on RLS.
+   */
+  serviceDb: Database;
 }
 
 // Feature-specific dependency types
@@ -582,7 +606,7 @@ function createContainer(): Container {
       env.POLY_CLOB_API_SECRET &&
       env.POLY_CLOB_PASSPHRASE
   );
-  const polyTradeCapability = createPolyTradeCapability({
+  const polyTradeBundle = createPolyTradeCapability({
     logger: log,
     isTestMode: env.isTestMode,
     host: env.POLY_CLOB_HOST,
@@ -604,6 +628,77 @@ function createContainer(): Container {
         }
       : undefined,
   });
+
+  // Autonomous 30s mirror poll (task.0315 CP4.3e, @scaffolding).
+  // Starts when Polymarket creds are present (polyTradeBundle defined) AND a
+  // target wallet is configured. That's it — no role-gating, no mode switch,
+  // no cap env vars. Size + cadence + caps are hardcoded in the job shim;
+  // the `poly_copy_trade_config.enabled` kill-switch remains the ops gate
+  // between "poll is running" and "poll actually places orders."
+  if (polyTradeBundle !== undefined && env.COPY_TRADE_TARGET_WALLET) {
+    // Lazy-load the poll wiring so its transitive imports (Data-API HTTP
+    // client, Drizzle queries) don't run on pods without Polymarket creds.
+    void (async () => {
+      try {
+        const { createOrderLedger } = await import("@/features/trading");
+        const { createPolymarketActivitySource } = await import(
+          "@/features/wallet-watch"
+        );
+        const { PolymarketDataApiClient } = await import(
+          "@cogni/market-provider/adapters/polymarket"
+        );
+        // noopMetrics for v0 — real prom-client wiring folds into a follow-up
+        // once the `poly_mirror_*` series has a Grafana dashboard to back it.
+        const { noopMetrics } = await import("@cogni/market-provider");
+        const { buildMirrorTargetConfig } = await import(
+          "@/bootstrap/jobs/copy-trade-mirror.job"
+        );
+        const targetWallet = env.COPY_TRADE_TARGET_WALLET as `0x${string}`;
+        const target = buildMirrorTargetConfig(targetWallet);
+        const dataApiClient = new PolymarketDataApiClient();
+        // pino's Logger is structurally compatible with LoggerPort's subset
+        // (debug/info/warn/error/child with object + optional msg).
+        const mirrorLogger =
+          log as unknown as import("@cogni/market-provider").LoggerPort;
+        const source = createPolymarketActivitySource({
+          client: dataApiClient,
+          wallet: targetWallet,
+          logger: mirrorLogger,
+          metrics: noopMetrics,
+        });
+        const ledger = createOrderLedger({
+          db: getServiceDb() as unknown as import("drizzle-orm/node-postgres").NodePgDatabase,
+          logger: log,
+        });
+        startMirrorPoll({
+          target,
+          source,
+          ledger,
+          placeIntent: polyTradeBundle.placeIntent,
+          logger: mirrorLogger,
+          metrics: noopMetrics,
+        });
+      } catch (err: unknown) {
+        log.error(
+          {
+            event: EVENT_NAMES.POLY_MIRROR_POLL_BOOT_FAILED,
+            errorCode: "boot_init_failed",
+            err: err instanceof Error ? err.message : String(err),
+          },
+          "mirror poll boot failed — continuing without autonomous mirror"
+        );
+      }
+    })();
+  } else {
+    log.info(
+      {
+        event: EVENT_NAMES.POLY_MIRROR_POLL_SKIPPED,
+        has_bundle: polyTradeBundle !== undefined,
+        has_target_wallet: Boolean(env.COPY_TRADE_TARGET_WALLET),
+      },
+      "mirror poll not started (Polymarket creds missing OR COPY_TRADE_TARGET_WALLET unset)"
+    );
+  }
 
   // KnowledgeCapability for AI tools (optional — requires DOLTGRES_URL_POLY)
   // When configured, wraps KnowledgeStorePort with auto-commit on writes.
@@ -639,7 +734,7 @@ function createContainer(): Container {
     knowledgeCapability,
     marketCapability,
     metricsCapability,
-    polyTradeCapability,
+    polyTradeCapability: polyTradeBundle?.capability,
     webSearchCapability,
     repoCapability,
     scheduleCapability,
@@ -849,6 +944,8 @@ function createContainer(): Container {
         providerResolver: new ProviderResolver(providers),
       };
     })(),
+    polyTradeBundle,
+    serviceDb,
   };
 }
 

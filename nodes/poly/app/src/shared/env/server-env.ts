@@ -251,6 +251,16 @@ export const serverSchema = z.object({
   POLY_CLOB_PASSPHRASE: optionalString,
   POLY_CLOB_HOST: optionalUrl,
 
+  // Copy-trade scaffolding (task.0315 Phase 1, @scaffolding, Deleted-in-phase: 4).
+  // `COPY_TRADE_TARGET_WALLET` is the ONE runtime input for v0 — every other
+  // knob (mode, mirror size, caps, poll cadence, role-gating) is hardcoded in
+  // `bootstrap/jobs/copy-trade-mirror.job.ts`. P2 replaces the env fallback
+  // with DB-backed `poly_copy_trade_targets`.
+  COPY_TRADE_TARGET_WALLET: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional(),
+
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.
   OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().default(500),

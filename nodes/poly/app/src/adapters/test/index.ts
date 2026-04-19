@@ -31,6 +31,10 @@ export {
 } from "./poly-trade/fake-polymarket-clob.adapter";
 export { FakeRepoAdapter } from "./repo/fake-repo.adapter";
 export {
+  FakeOrderLedger,
+  type FakeOrderLedgerConfig,
+} from "./trading/fake-order-ledger";
+export {
   FakeOperatorWalletAdapter,
   getTestOperatorWallet,
   resetTestOperatorWallet,

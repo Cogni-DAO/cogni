@@ -3,7 +3,7 @@
 
 /**
  * Module: `@bootstrap/capabilities/poly-trade`
- * Purpose: Factory for `PolyTradeCapability` — binds the PolymarketClobAdapter (+ Privy signer + pino + prom-client sinks) behind the agent-callable `core__poly_place_trade` AI tool. Test mode substitutes `FakePolymarketClobAdapter` from `@/adapters/test/`. Sole legal importer of `@polymarket/clob-client` and `@privy-io/node/viem` in this app.
+ * Purpose: Factory for `PolyTradeBundle` — binds the PolymarketClobAdapter (+ Privy signer + pino + prom-client sinks) and exposes BOTH the agent-callable `PolyTradeCapability` AND the raw `placeIntent(OrderIntent) => OrderReceipt` seam. The mirror-coordinator (CP4.3) consumes `placeIntent` with a caller-supplied `client_order_id`; the agent tool consumes `capability.placeTrade`. Both paths share one executor + one lazy adapter + one Privy wallet — zero duplication. Test mode substitutes `FakePolymarketClobAdapter` from `@/adapters/test/`. Sole legal importer of `@polymarket/clob-client` and `@privy-io/node/viem` in this app.
  * Scope: Runtime wiring only. Does not read env directly (server-env supplies strings); does not persist anything; does not place orders itself. Holds the adapter + Privy wallet lifecycle for the process.
  * Invariants:
  *   - ENV_IS_SOLE_SWITCH — production factory branches only on env.isTestMode and env-presence. No per-call test knobs on the public config interface. Matches the `createRepoCapability` / `createMetricsCapability` pattern.
@@ -33,11 +33,12 @@ import {
   type OrderIntent,
   type OrderReceipt,
 } from "@cogni/market-provider";
+import { EVENT_NAMES } from "@cogni/node-shared";
 import type { Counter, Histogram } from "prom-client";
 import client from "prom-client";
 
 import { FakePolymarketClobAdapter } from "@/adapters/test";
-import { createClobExecutor } from "@/features/copy-trade/clob-executor";
+import { createClobExecutor } from "@/features/trading/clob-executor";
 import type { Logger } from "@/shared/observability/server";
 import { metricsRegistry } from "@/shared/observability/server";
 
@@ -218,24 +219,44 @@ export interface CreateFromAdapterDeps {
 }
 
 /**
- * Pure composition: wrap any `placeOrder` function in the CP4.2 executor
- * (structured logs + bounded-label metrics) and map the tool's
- * `PolyPlaceTradeRequest` through → `OrderIntent` → `OrderReceipt` → `PolyPlaceTradeReceipt`.
+ * Bundle returned by the factory. Holds both placement surfaces + shared state:
  *
- * Client-order-id is generated here via the pinned `clientOrderIdFor` helper
- * from `@cogni/market-provider`. Every placement path (this tool, CP4.3's
- * autonomous poll, a future WS ingester) must produce compatible keys so the
+ * - `capability` — agent-callable `PolyTradeCapability` (place/list/cancel).
+ *   Generates its own `client_order_id` via `clientOrderIdFor("agent", …)`.
+ * - `placeIntent` — raw `(OrderIntent) => OrderReceipt` seam for callers that
+ *   supply their own `client_order_id` (the mirror-coordinator uses
+ *   `clientOrderIdFor(target_id, fill_id)` so the ledger composite PK dedupes).
+ * - `operatorWalletAddress` — exposed for read APIs (e.g. balance).
+ *
+ * Both surfaces wrap the SAME executor + the SAME lazy adapter, so there is
+ * exactly one Privy wallet init, one `@polymarket/clob-client` load, and one
+ * prom-client registry across agent + autonomous paths.
+ */
+export interface PolyTradeBundle {
+  capability: PolyTradeCapability;
+  placeIntent: (intent: OrderIntent) => Promise<OrderReceipt>;
+  operatorWalletAddress: `0x${string}`;
+}
+
+/**
+ * Pure composition: wrap any `placeOrder` function in the CP4.2 executor
+ * (structured logs + bounded-label metrics) and return a `PolyTradeBundle`
+ * that exposes both the agent-tool surface and the raw `placeIntent` seam.
+ *
+ * `capability.placeTrade` generates `client_order_id` via `clientOrderIdFor`;
+ * `placeIntent` does not — callers pass a full `OrderIntent` with the id
+ * already computed. Every placement path must produce compatible keys so the
  * composite PK on `poly_copy_trade_fills` dedupes correctly (CP3.3 invariant).
  *
- * This function is called from BOTH the production path (real Polymarket
- * adapter) and the test path (`FakePolymarketClobAdapter`). It contains zero
- * environment awareness; the env branch lives in `createPolyTradeCapability`.
+ * Called from BOTH the production path (real Polymarket adapter) and the test
+ * path (`FakePolymarketClobAdapter`). No environment awareness; env branching
+ * lives in `createPolyTradeCapability`.
  *
  * @public
  */
 export function createPolyTradeCapabilityFromAdapter(
   deps: CreateFromAdapterDeps
-): PolyTradeCapability {
+): PolyTradeBundle {
   const metrics = deps.metrics ?? buildMetricsPort();
   // No `component` binding here — the real adapter binds
   // `component: "poly-clob-adapter"` in its own constructor (PR #890). The
@@ -250,7 +271,7 @@ export function createPolyTradeCapabilityFromAdapter(
   });
   const operatorAddress = deps.operatorWalletAddress;
 
-  return {
+  const capability: PolyTradeCapability = {
     async placeTrade(
       request: PolyPlaceTradeRequest
     ): Promise<PolyPlaceTradeReceipt> {
@@ -259,9 +280,10 @@ export function createPolyTradeCapabilityFromAdapter(
           "poly-trade: SELL orders are out of scope for the prototype (requires CTF setApprovalForAll)."
         );
       }
-      // `target_id="agent"` marks the placement as tool-initiated; when CP4.3
-      // lands, the autonomous path passes the target wallet's synthetic UUID
-      // here. Both routes share the pinned hash function.
+      // `target_id="agent"` marks the placement as tool-initiated. The mirror-
+      // coordinator (CP4.3) calls `placeIntent` directly with a caller-supplied
+      // `client_order_id` = `clientOrderIdFor(target_id, fill_id)`, so the two
+      // paths share the pinned hash function without colliding.
       const client_order_id = clientOrderIdFor(
         "agent",
         `${request.tokenId}:${Date.now()}`
@@ -301,6 +323,12 @@ export function createPolyTradeCapabilityFromAdapter(
       await deps.cancelOrder(orderId);
     },
   };
+
+  return {
+    capability,
+    placeIntent: executor,
+    operatorWalletAddress: operatorAddress,
+  };
 }
 
 function receiptToPolyOpenOrder(r: OrderReceipt): PolyOpenOrder {
@@ -338,22 +366,25 @@ function receiptToPolyOpenOrder(r: OrderReceipt): PolyOpenOrder {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Build a `PolyTradeCapability` from environment. Three outcomes:
+ * Build a `PolyTradeBundle` from environment. Three outcomes:
  *
- * - **`env.isTestMode === true`** → capability backed by `FakePolymarketClobAdapter`.
+ * - **`env.isTestMode === true`** → bundle backed by `FakePolymarketClobAdapter`.
  *   No dynamic imports, no network, no Privy.
  * - **Env incomplete** (missing `operatorWalletAddress` / `creds` / `privy`) → returns
  *   `undefined`. The tool binding installs the ai-tools stub which throws a clear
- *   error if an agent tries to place on an unconfigured pod.
- * - **Env complete** → returns a capability that lazily resolves the Privy
- *   wallet + builds the real `PolymarketClobAdapter` on first `placeTrade()`.
- *   Matches `getTemporalWorkflowClient` — sync factory, async first-call init.
+ *   error if an agent tries to place on an unconfigured pod. The mirror-coordinator
+ *   boot path likewise declines to start the 30s poll when the bundle is undefined.
+ * - **Env complete** → returns a bundle that lazily resolves the Privy wallet +
+ *   builds the real `PolymarketClobAdapter` on the first call to either
+ *   `capability.placeTrade` or `placeIntent` (whichever fires first — both share
+ *   the cached adapter). Matches `getTemporalWorkflowClient` — sync factory,
+ *   async first-call init.
  *
  * @public
  */
 export function createPolyTradeCapability(
   config: CreatePolyTradeCapabilityConfig
-): PolyTradeCapability | undefined {
+): PolyTradeBundle | undefined {
   // Test mode — canonical fake from @/adapters/test/. No env-decoding required;
   // matches createRepoCapability(env.isTestMode → FakeRepoAdapter) pattern.
   if (config.isTestMode) {
@@ -361,7 +392,7 @@ export function createPolyTradeCapability(
     const operator = config.operatorWalletAddress ?? TEST_MODE_OPERATOR_ADDRESS;
     config.logger.info(
       {
-        event: "poly.trade.capability.test_mode",
+        event: EVENT_NAMES.POLY_TRADE_CAPABILITY_TEST_MODE,
         operator_wallet_address: operator,
       },
       "poly-trade capability wired to FakePolymarketClobAdapter (APP_ENV=test)"
@@ -378,7 +409,7 @@ export function createPolyTradeCapability(
   if (!config.operatorWalletAddress || !config.creds || !config.privy) {
     config.logger.info(
       {
-        event: "poly.trade.capability.unavailable",
+        event: EVENT_NAMES.POLY_TRADE_CAPABILITY_UNAVAILABLE,
         has_operator_wallet: Boolean(config.operatorWalletAddress),
         has_clob_creds: Boolean(config.creds),
         has_privy: Boolean(config.privy),
@@ -400,7 +431,7 @@ export function createPolyTradeCapability(
   // line on trader pods without waiting for the first agent-initiated trade.
   config.logger.info(
     {
-      event: "poly.trade.capability.env_ok",
+      event: EVENT_NAMES.POLY_TRADE_CAPABILITY_ENV_OK,
       operator_wallet_address: operatorWalletAddress,
       host,
     },
@@ -564,7 +595,7 @@ async function buildRealAdapterMethods(
 
   deps.logger.info(
     {
-      event: "poly.trade.capability.ready",
+      event: EVENT_NAMES.POLY_TRADE_CAPABILITY_READY,
       wallet_id: walletId,
       address: deps.operatorWalletAddress,
       host: deps.host,

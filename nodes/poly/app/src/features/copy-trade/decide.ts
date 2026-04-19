@@ -17,7 +17,7 @@
 
 import type { OrderIntent } from "@cogni/market-provider";
 
-import type { DecideInput, MirrorDecision } from "./types.js";
+import type { DecideInput, MirrorDecision } from "./types";
 
 /**
  * Cogni's "should we mirror this fill?" function.

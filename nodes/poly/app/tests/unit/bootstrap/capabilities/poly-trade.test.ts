@@ -3,9 +3,9 @@
 
 /**
  * Module: `@tests/unit/bootstrap/capabilities/poly-trade`
- * Purpose: Unit tests for the poly-trade capability — the env-driven `createPolyTradeCapability` (test mode wiring, env-gating) and the adapter-agnostic `createPolyTradeCapabilityFromAdapter` composition layer.
+ * Purpose: Unit tests for the poly-trade bundle — the env-driven `createPolyTradeCapability` (test mode wiring, env-gating) and the adapter-agnostic `createPolyTradeCapabilityFromAdapter` composition layer. Also asserts the CP4.3a seam split: `bundle.capability.placeTrade` and `bundle.placeIntent` share a single underlying `placeOrder` seam.
  * Scope: Does not invoke dynamic imports of `@polymarket/clob-client` or `@privy-io/node`. Uses `FakePolymarketClobAdapter` from `@/adapters/test` — the same fake the production test-mode branch wires.
- * Invariants: ENV_IS_SOLE_SWITCH (no test knob on the production factory); BUY_ONLY; PIN_CLIENT_ORDER_ID_HELPER (capability generates via `clientOrderIdFor`).
+ * Invariants: ENV_IS_SOLE_SWITCH (no test knob on the production factory); BUY_ONLY; PIN_CLIENT_ORDER_ID_HELPER (capability generates via `clientOrderIdFor`); SEAM_SHARES_ADAPTER (agent + placeIntent paths share one executor + one adapter).
  * Side-effects: none
  * Links: src/bootstrap/capabilities/poly-trade.ts, src/adapters/test/poly-trade/fake-polymarket-clob.adapter.ts
  * @internal
@@ -41,12 +41,14 @@ const OK_RECEIPT: OrderReceipt = {
 
 describe("createPolyTradeCapability — test mode", () => {
   it("wires FakePolymarketClobAdapter when isTestMode=true (no env required)", async () => {
-    const cap = createPolyTradeCapability({
+    const bundle = createPolyTradeCapability({
       logger: LOGGER,
       isTestMode: true,
     });
-    expect(cap).toBeDefined();
-    const receipt = await cap?.placeTrade({
+    expect(bundle).toBeDefined();
+    expect(bundle?.placeIntent).toBeTypeOf("function");
+    expect(bundle?.operatorWalletAddress).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    const receipt = await bundle?.capability.placeTrade({
       conditionId: CONDITION_ID,
       tokenId: "12345",
       outcome: "Yes",
@@ -61,33 +63,33 @@ describe("createPolyTradeCapability — test mode", () => {
 
 describe("createPolyTradeCapability — env gating (production)", () => {
   it("returns undefined when operatorWalletAddress is missing", () => {
-    const cap = createPolyTradeCapability({
+    const bundle = createPolyTradeCapability({
       logger: LOGGER,
       isTestMode: false,
       creds: { apiKey: "k", apiSecret: "s", passphrase: "p" },
       privy: { appId: "a", appSecret: "b", signingKey: "c" },
     });
-    expect(cap).toBeUndefined();
+    expect(bundle).toBeUndefined();
   });
 
   it("returns undefined when CLOB creds are missing", () => {
-    const cap = createPolyTradeCapability({
+    const bundle = createPolyTradeCapability({
       logger: LOGGER,
       isTestMode: false,
       operatorWalletAddress: OPERATOR,
       privy: { appId: "a", appSecret: "b", signingKey: "c" },
     });
-    expect(cap).toBeUndefined();
+    expect(bundle).toBeUndefined();
   });
 
   it("returns undefined when Privy env is missing", () => {
-    const cap = createPolyTradeCapability({
+    const bundle = createPolyTradeCapability({
       logger: LOGGER,
       isTestMode: false,
       operatorWalletAddress: OPERATOR,
       creds: { apiKey: "k", apiSecret: "s", passphrase: "p" },
     });
-    expect(cap).toBeUndefined();
+    expect(bundle).toBeUndefined();
   });
 });
 
@@ -98,7 +100,7 @@ describe("createPolyTradeCapability — env gating (production)", () => {
 describe("createPolyTradeCapabilityFromAdapter", () => {
   it("wraps a fake placeOrder and produces a receipt with profile_url", async () => {
     const fake = new FakePolymarketClobAdapter();
-    const cap = createPolyTradeCapabilityFromAdapter({
+    const { capability: cap } = createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
@@ -132,7 +134,7 @@ describe("createPolyTradeCapabilityFromAdapter", () => {
 
   it("generates a distinct client_order_id across successive placements", async () => {
     const fake = new FakePolymarketClobAdapter();
-    const cap = createPolyTradeCapabilityFromAdapter({
+    const { capability: cap } = createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
@@ -148,8 +150,9 @@ describe("createPolyTradeCapabilityFromAdapter", () => {
     };
 
     await cap.placeTrade(request);
-    // `clientOrderIdFor` mixes Date.now(); advance the clock a tick.
-    await new Promise((r) => setTimeout(r, 1));
+    // `clientOrderIdFor` mixes Date.now(); advance the clock a couple ticks to
+    // deflake — 1ms setTimeout sometimes resolves in the same millisecond.
+    await new Promise((r) => setTimeout(r, 3));
     await cap.placeTrade(request);
 
     expect(fake.calls[0]?.client_order_id).not.toBe(
@@ -159,7 +162,7 @@ describe("createPolyTradeCapabilityFromAdapter", () => {
 
   it("rejects SELL (BUY-only prototype)", async () => {
     const placeOrder = vi.fn().mockResolvedValue(OK_RECEIPT);
-    const cap = createPolyTradeCapabilityFromAdapter({
+    const { capability: cap } = createPolyTradeCapabilityFromAdapter({
       placeOrder,
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
@@ -183,7 +186,7 @@ describe("createPolyTradeCapabilityFromAdapter", () => {
     const fake = new FakePolymarketClobAdapter({
       rejectWith: new Error("CLOB rejected order"),
     });
-    const cap = createPolyTradeCapabilityFromAdapter({
+    const { capability: cap } = createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
@@ -215,17 +218,73 @@ describe("createPolyTradeCapabilityFromAdapter", () => {
     // against the shared prom-client registry. Without this, the counters are
     // never created and the "metric already registered" regression wouldn't
     // fire regardless of how many factory instances exist.
-    const cap1 = createPolyTradeCapabilityFromAdapter({
+    const { capability: cap1 } = createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
     });
     await cap1.placeTrade(request);
-    const cap2 = createPolyTradeCapabilityFromAdapter({
+    const { capability: cap2 } = createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
     });
     await expect(cap2.placeTrade(request)).resolves.toBeDefined();
+  });
+
+  it("agent path + placeIntent seam share ONE underlying placeOrder (SEAM_SHARES_ADAPTER)", async () => {
+    // CP4.3a invariant: `bundle.capability.placeTrade` and `bundle.placeIntent`
+    // both route through the same executor + the same injected placeOrder seam.
+    // Zero adapter duplication across agent and autonomous paths.
+    const placeOrder = vi.fn(
+      async (intent: OrderIntent): Promise<OrderReceipt> => ({
+        order_id: `0xfrom_seam_${placeOrder.mock.calls.length}`,
+        client_order_id: intent.client_order_id,
+        status: "open",
+        filled_size_usdc: 0,
+        submitted_at: new Date().toISOString(),
+      })
+    );
+    const bundle = createPolyTradeCapabilityFromAdapter({
+      placeOrder,
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+    });
+
+    // 1) Agent-tool path
+    await bundle.capability.placeTrade({
+      conditionId: CONDITION_ID,
+      tokenId: "12345",
+      outcome: "Yes",
+      side: "BUY",
+      size_usdc: 1,
+      limit_price: 0.5,
+    });
+
+    // 2) Raw placeIntent seam (what the mirror-coordinator uses)
+    const callerIntent: OrderIntent = {
+      provider: "polymarket",
+      market_id: "prediction-market:polymarket:0xabc",
+      outcome: "Yes",
+      side: "BUY",
+      size_usdc: 1,
+      limit_price: 0.5,
+      // Caller-supplied client_order_id — mirror path uses
+      // `clientOrderIdFor(target_id, fill_id)` here, not the agent-path helper.
+      client_order_id:
+        "0x1111111111111111111111111111111111111111111111111111111111111111",
+      attributes: { token_id: "12345", source_fill_id: "data-api:0xtx" },
+    };
+    await bundle.placeIntent(callerIntent);
+
+    // Both paths hit the SAME placeOrder seam — two calls total.
+    expect(placeOrder).toHaveBeenCalledTimes(2);
+    // Agent path generated a cid via `clientOrderIdFor("agent", …)`; seam path
+    // passed the caller-supplied cid through untouched.
+    const agentCid = placeOrder.mock.calls[0]?.[0].client_order_id;
+    const seamCid = placeOrder.mock.calls[1]?.[0].client_order_id;
+    expect(agentCid).toMatch(/^0x[0-9a-f]{64}$/);
+    expect(seamCid).toBe(callerIntent.client_order_id);
+    expect(agentCid).not.toBe(seamCid);
   });
 });

@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@features/copy-trade/clob-executor.test`
+ * Module: `@features/trading/clob-executor.test`
  * Purpose: Unit tests for `createClobExecutor` — verifies that the injected `placeOrder` seam is the only code path called, that ok/rejected/error bucket the metric label correctly, and that structured log shape is stable.
  * Scope: Pure wrapper tests. Does not import the real adapter, does not hit the network.
  * Invariants: EXECUTOR_SEAM_IS_PLACE_ORDER_FN; BOUNDED_METRIC_RESULT.
@@ -21,7 +21,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   COPY_TRADE_EXECUTOR_METRICS,
   createClobExecutor,
-} from "@/features/copy-trade/clob-executor.js";
+} from "@/features/trading/clob-executor.js";
 
 function makeRecordingLogger() {
   const lines: Array<{ level: string; fields: unknown; msg: string }> = [];

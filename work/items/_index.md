@@ -199,6 +199,7 @@
 | 2 | 99 | 2 | needs_triage | bug.0317 | candidate-flight-infra.yml checks out main, so a feature branch cannot ship new env/secret plumbing via the infra lever | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 5 | needs_triage | bug.0319 | Split @cogni/ai-tools into per-node packages; kill the shared TOOL_CATALOG stub dance | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 5 | needs_design | task.0322 | Poly copy-trade Phase 4 design prep — dual-path ingestion, hot signer, target ranker, counterfactual baseline | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 99 | 3 | needs_triage | task.0323 | Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
 | 3 | 10 | 2 | needs_design | bug.0262 | Operator Postgres env vars lack _OPERATOR suffix — inconsistent with multi-node pattern | Cogni Poly | proj.poly-prediction-bot |

@@ -129,6 +129,30 @@ export const EVENT_NAMES = {
   // Langfuse Lifecycle (per OBSERVABILITY.md#langfuse-integration)
   LANGFUSE_TRACE_CREATED: "langfuse.trace_created",
   LANGFUSE_TRACE_COMPLETED: "langfuse.trace_completed",
+
+  // Poly trade capability lifecycle (shipped PR #900 CP4.25, pre-existing
+  // inline strings migrated to the registry in CP4.3e observability pass)
+  POLY_TRADE_CAPABILITY_TEST_MODE: "poly.trade.capability.test_mode",
+  POLY_TRADE_CAPABILITY_UNAVAILABLE: "poly.trade.capability.unavailable",
+  POLY_TRADE_CAPABILITY_ENV_OK: "poly.trade.capability.env_ok",
+  POLY_TRADE_CAPABILITY_READY: "poly.trade.capability.ready",
+  POLY_COPY_TRADE_EXECUTE: "poly.copy_trade.execute",
+
+  // Poly copy-trade mirror (task.0315 Phase 1 — emitted only on poly node)
+  POLY_MIRROR_POLL_SINGLETON_CLAIM: "poly.mirror.poll.singleton_claim",
+  POLY_MIRROR_POLL_STOPPED: "poly.mirror.poll.stopped",
+  POLY_MIRROR_POLL_TICK_ERROR: "poly.mirror.poll.tick_error",
+  POLY_MIRROR_POLL_SKIPPED: "poly.mirror.poll.skipped",
+  POLY_MIRROR_POLL_BOOT_FAILED: "poly.mirror.poll.boot_failed",
+  POLY_MIRROR_SOURCE_ERROR: "poly.mirror.source_error",
+  POLY_MIRROR_DECISION: "poly.mirror.decision",
+  POLY_WALLET_WATCH_FETCH: "poly.wallet_watch.fetch",
+  POLY_WALLET_WATCH_NORMALIZE_ERROR: "poly.wallet_watch.normalize_error",
+  POLY_WALLET_BALANCE_POLYGON_READ_FAILED:
+    "poly.wallet.balance.polygon_read_failed",
+  POLY_WALLET_BALANCE_OPEN_ORDERS_FAILED:
+    "poly.wallet.balance.open_orders_failed",
+  ADAPTER_ORDER_LEDGER_SNAPSHOT_ERROR: "adapter.order_ledger.snapshot_error",
 } as const;
 
 export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];

@@ -9,12 +9,14 @@
 
 ## Purpose
 
-Copy-trade feature slice — the pure `decide()` function that, given a normalized Polymarket `Fill`, a per-target `TargetConfig`, and a `RuntimeState` snapshot, returns either `{action: "place", intent}` or `{action: "skip", reason}`. Plus the `clob-executor` (CP4.2) that takes an `OrderIntent` and actually places the order via an injected adapter seam. Pure + testable; all I/O belongs to the caller (poll job in P1, Temporal workflow in P4).
+Thin copy-trade coordinator — the pure `decide()` policy that, given a normalized Polymarket `Fill`, a per-target `TargetConfig`, and a `RuntimeState` snapshot, returns either `{action: "place", intent}` or `{action: "skip", reason}`; plus the `mirror-coordinator` (CP4.3) that glues `features/wallet-watch/` → `decide` → `features/trading/`. **This is the only slice with copy-trade-specific vocabulary** — placement primitives + order ledger live in `features/trading/`, Polymarket wallet observation lives in `features/wallet-watch/`.
 
 ## Pointers
 
 - [task.0315 — Phase 1 plan](../../../../../../work/items/task.0315.poly-copy-trade-prototype.md)
+- [Phase 1 spec](../../../../../../docs/spec/poly-copy-trade-phase1.md)
 - [Root poly node AGENTS.md](../AGENTS.md)
+- Sibling layers: [../trading/AGENTS.md](../trading/AGENTS.md), [../wallet-watch/AGENTS.md](../wallet-watch/AGENTS.md)
 
 ## Boundaries
 
@@ -32,14 +34,17 @@ Copy-trade feature slice — the pure `decide()` function that, given a normaliz
 }
 ```
 
+`copy-trade/` may import from sibling `features/trading/` and `features/wallet-watch/`. It is the ONLY slice that crosses both.
+
 ## Public Surface
 
 - **Exports (pure):** `decide()` — the stable-boundary decision function.
 - **Exports (types):** `TargetConfig`, `RuntimeState`, `MirrorDecision`, `MirrorReason`, `DecideInput`.
-- **Exports (executor, CP4.2):** `createClobExecutor(deps)`, `CopyTradeExecutorDeps`.
+- **Exports (coordinator, CP4.3):** `mirror-coordinator.runOnce(deps)` — pure orchestration of wallet-watch → decide → trading.
 
 ## Invariants
 
+- **COPY_TRADE_ONLY_COORDINATES** — files in this slice MAY import `features/trading/` and `features/wallet-watch/`. They MUST NOT import each other's internals except through the public barrel.
 - **FAIL_CLOSED** — kill-switch disabled or unreadable → skip. Callers MUST NOT default to `enabled: true` on DB read failure.
 - **INTENT_BASED_CAPS** — caps count against intent submissions, not partial fills. Revisit in P3 with paper-PnL data.
 - **IDEMPOTENT_BY_CLIENT_ID** — repeat decisions with the same `(target_id, fill_id)` are silently dropped via `already_placed_ids`.
@@ -49,10 +54,9 @@ Copy-trade feature slice — the pure `decide()` function that, given a normaliz
 ## Responsibilities
 
 - Own the pure `decide()` function and its input/output types.
-- Own the copy-trade-specific executor wrapper that adapts `MarketProviderPort.placeOrder` into a single `(intent) → receipt` function with structured logs + metrics (CP4.2).
-- Stay pure — the caller (poll job, Temporal workflow) is responsible for reading DB state, reading the kill-switch, and writing fills/decisions rows.
+- Own the `mirror-coordinator` that wires observation → policy → placement.
+- Stay thin — placement mechanics (executor, order-ledger) live in `features/trading/`; observation (Data-API, activity-poll) lives in `features/wallet-watch/`.
 
 ## Notes
 
-- **Not in this slice:** poll orchestration + DB reads/writes (CP4.3 in `bootstrap/jobs/copyTradeMirror.job.ts`); adapter construction + Privy wiring (CP4.4 in `bootstrap/capabilities/copy-trade.ts`); kill-switch UI (deferred to P2 — P1 flips via psql).
-- **Caps are intent-based**, not fill-based. Revisit in P3 once paper-PnL data exists to tell us whether partial-fill drift materially breaks cap semantics.
+- **Not in this slice:** CLOB executor (moved to `features/trading/clob-executor.ts` in CP4.3b); order-ledger I/O (in `features/trading/order-ledger.ts`); scheduler tick + bootstrap wiring (in `bootstrap/jobs/copy-trade-mirror.job.ts`, CP4.3e); adapter construction + Privy wiring (`bootstrap/capabilities/poly-trade.ts`); kill-switch UI (deferred to P2 — P1 flips via psql).
