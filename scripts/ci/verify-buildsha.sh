@@ -115,6 +115,15 @@ fi
 
 FAILED=0
 
+# Rolling-update endpoint cutover race: kubectl rollout status returns when
+# the new ReplicaSet is Available, but the old pod can stay in Service
+# endpoints during its termination grace period. A single curl through
+# Ingress in that window can hit the old pod and report stale version.
+# Retry with backoff up to ATTEMPTS × SLEEP seconds per node — covers the
+# default 30s terminationGracePeriodSeconds. (bug.0331)
+ATTEMPTS="${VERIFY_BUILDSHA_ATTEMPTS:-6}"
+SLEEP_SECONDS="${VERIFY_BUILDSHA_SLEEP:-5}"
+
 for node in "${NODE_ARR[@]}"; do
   expected="${EXPECTED_BY_NODE[$node]}"
 
@@ -125,12 +134,26 @@ for node in "${NODE_ARR[@]}"; do
   fi
   url="https://${host}/readyz"
 
-  body=$(curl -sk --max-time 10 "$url" || echo "")
-  actual=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("version",""))' 2>/dev/null || echo "")
-  actual=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
+  actual=""
+  body=""
+  for attempt in $(seq 1 "$ATTEMPTS"); do
+    body=$(curl -sk --max-time 10 "$url" || echo "")
+    actual=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("version",""))' 2>/dev/null || echo "")
+    actual=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
+
+    if [ -n "$actual" ] && [ "$actual" = "$expected" ]; then
+      break
+    fi
+
+    if [ "$attempt" -lt "$ATTEMPTS" ]; then
+      reason="version=${actual:-<unparseable>}"
+      echo "  ⏳ ${node} attempt ${attempt}/${ATTEMPTS}: ${reason} != expected ${expected:0:12} — retrying in ${SLEEP_SECONDS}s"
+      sleep "$SLEEP_SECONDS"
+    fi
+  done
 
   if [ -z "$actual" ]; then
-    echo "  ❌ ${node}: ${url} returned no parseable version (body: ${body:0:120})"
+    echo "  ❌ ${node}: ${url} returned no parseable version after ${ATTEMPTS} attempts (last body: ${body:0:120})"
     FAILED=1
     continue
   fi
@@ -138,7 +161,7 @@ for node in "${NODE_ARR[@]}"; do
   if [ "$actual" = "$expected" ]; then
     echo "  ✅ ${node}: version=${actual:0:12} matches expected ${expected:0:12}"
   else
-    echo "  ❌ ${node}: version=${actual:0:12} != expected ${expected:0:12}"
+    echo "  ❌ ${node}: version=${actual:0:12} != expected ${expected:0:12} after ${ATTEMPTS} attempts"
     FAILED=1
   fi
 done
@@ -150,7 +173,7 @@ if [ "$FAILED" -ne 0 ]; then
   echo "     1. pr-build built no images (affected-only scope missed a node or CI-only PR)."
   echo "     2. promote-k8s found no new digest for an app (image not in GHCR)."
   echo "     3. Argo stuck on prior reconcile (check wait-for-argocd output)."
-  echo "     4. Ingress still serving old pod (uncommon — verify with kubectl)."
+  echo "     4. Ingress still serving old pod after ${ATTEMPTS}×${SLEEP_SECONDS}s — terminationGracePeriodSeconds longer than retry window? (bug.0331)"
   exit 1
 fi
 
