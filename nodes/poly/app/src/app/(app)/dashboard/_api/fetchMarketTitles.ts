@@ -37,8 +37,13 @@ export function extractConditionId(marketId: string | null): string | null {
  * Fetches market titles for up to ~50 condition IDs in one call.
  * The caller should dedupe + chunk if it has more than that.
  *
- * Returns an empty map on network / parse failure (graceful degrade — the
- * card falls back to rendering the truncated condition id).
+ * Calls our own `/api/v1/poly/markets` route, NOT Gamma directly —
+ * gamma-api.polymarket.com returns no CORS headers, so direct browser
+ * fetches are blocked. The proxy route on the poly-node forwards to
+ * Gamma server-side.
+ *
+ * Returns an empty map on network / parse failure (graceful degrade —
+ * the card falls back to rendering the truncated condition id).
  */
 export async function fetchMarketTitles(
   conditionIds: readonly string[]
@@ -49,13 +54,11 @@ export async function fetchMarketTitles(
   const qs = new URLSearchParams({ condition_ids: unique.join(",") });
 
   try {
-    const res = await fetch(
-      `https://gamma-api.polymarket.com/markets?${qs.toString()}`
-    );
+    const res = await fetch(`/api/v1/poly/markets?${qs.toString()}`);
     if (!res.ok) return {};
-    const rows = (await res.json()) as MarketTitle[];
+    const body = (await res.json()) as { markets: MarketTitle[] };
     const out: MarketTitleMap = {};
-    for (const r of rows) {
+    for (const r of body.markets ?? []) {
       if (!r.conditionId) continue;
       out[r.conditionId.toLowerCase()] = {
         question: r.question ?? "",

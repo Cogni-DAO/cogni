@@ -120,7 +120,7 @@ function RowCopyButton({
 }
 
 export function OrderActivityCard(): ReactElement {
-  const [filter, setFilter] = useState<OrdersStatusFilter>("open");
+  const [filter, setFilter] = useState<OrdersStatusFilter>("all");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-orders", filter],
@@ -261,7 +261,7 @@ export function OrderActivityCard(): ReactElement {
                       </span>
                     </TableCell>
                     <TableCell
-                      className="max-w-80 truncate font-medium text-sm"
+                      className="font-medium text-sm"
                       title={title ?? undefined}
                     >
                       {displayMarket}
