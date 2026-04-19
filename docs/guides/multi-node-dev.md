@@ -101,20 +101,34 @@ when you change node-specific code. This will be unified in task.0248.
 
 ## Database & Auth
 
-All nodes share one Postgres database (`cogni_template_dev`) and one set of
-migrations (from `nodes/operator/app/src/adapters/server/db/migrations/`). Standard
-setup applies:
+**Each node has its own Postgres database.** Operator → `cogni_template_dev`,
+poly → `cogni_poly`, resy → `cogni_resy`. Dev URLs live in `.env.local` as
+`DATABASE_URL`, `DATABASE_URL_POLY`, `DATABASE_URL_RESY`. Production k8s
+overlays patch the DB secret per node the same way.
+
+**Schema source (task.0324):** each node owns its own drizzle config + migrations:
+
+- **Core tables** live in `@cogni/db-schema` (`packages/db-schema/`) — cross-node platform surface (auth, billing, identity, etc.).
+- **Node-local tables** live in `@cogni/<node>-db-schema` workspace packages under `nodes/<node>/packages/db-schema/`. Today only `@cogni/poly-db-schema` exists (copy-trade prototype). Per-node packages are spun up when a node ships its first node-local table.
+- **Per-node drizzle configs** at `nodes/<node>/drizzle.config.ts`. Each config's schema glob unions core + its node-local package source. drizzle-kit reads raw TS — no dist/ needed for migration generation.
+- **Migrations dir** at `nodes/<node>/app/src/adapters/server/db/migrations/` — node-owned. The shared-era `0027_silent_nextwave.sql` is byte-duplicated across operator/poly/resy dirs (tripwire READMEs in each explain why — do not delete).
 
 ```bash
-pnpm db:setup           # provision + migrate + seed (first time)
-pnpm db:migrate:dev     # run pending migrations (after schema changes)
+pnpm db:setup           # provision cogni_template_dev + migrate + seed (operator)
+pnpm db:migrate:dev     # operator DB via nodes/operator/drizzle.config.ts
+pnpm db:migrate:poly    # cogni_poly via nodes/poly/drizzle.config.ts
+pnpm db:migrate:resy    # cogni_resy via nodes/resy/drizzle.config.ts
+pnpm db:migrate:nodes   # run all three in sequence
+pnpm db:generate:poly   # generate a new migration for poly (schema diff)
 ```
 
-**Auth:** NextAuth sessions are shared across all apps (same DB, same JWT secret).
-The `dev:stack:*` scripts automatically set `NEXTAUTH_URL` per node so OAuth
-redirects return to the correct port. Each node can sign in independently.
+**Migrator images:** each deployed node ships its own migrator image (`cogni-template:TAG-{operator,poly,resy}-migrate`) built from its own Dockerfile `migrator` stage. Argo PreSync Jobs invoke the image's default CMD (`pnpm db:migrate:<node>:container`) per-node.
 
-**Future (task.0247):** Per-node databases for data isolation in production.
+**Production migration gap:** the production k8s overlays for poly and resy currently ship a no-op migration Job (`exit 0` — see `infra/k8s/overlays/production/{poly,resy}/kustomization.yaml`). Preview + candidate-a DO migrate. Un-no-opping prod is task.0324 Phase 3 (follow-up, gated on `pg_dump` DB-state inspection).
+
+**Auth:** Because each node has its own DB, NextAuth session rows do **not** transit between nodes. Signing in on poly creates a session row in `cogni_poly`; the same cookie on operator authenticates against `cogni_template_dev` separately. Shared `AUTH_SECRET` means JWT decoding works across ports, but DB-backed session state is per-node. OAuth redirects are scoped to the right port via the `NEXTAUTH_URL_*` env vars set by the `dev:stack:*` scripts.
+
+**Future upgrade (task.0325):** Atlas + GitOps migrations — declarative schema, destructive-change linting, `AtlasMigration` CRD replacing PreSync Jobs. Deferred pending contributor-scale triggers.
 
 ## Architecture Notes
 
@@ -122,6 +136,6 @@ redirects return to the correct port. Each node can sign in independently.
   billing, treasury) minus the DAO formation wizard
 - Node-specific features (e.g. resy's reservations) live in `app/src/features/`
 - Shared packages (`@cogni/ai-tools`, `@cogni/market-provider`, etc.) are in `packages/`
-- All nodes share one DB and one migration path for now (task.0247 adds isolation)
+- Each node has its own DB + its own drizzle config + its own migrator image (task.0324). Core tables live in `@cogni/db-schema`; node-local tables live in `@cogni/<node>-db-schema` workspace packages under `nodes/<node>/packages/db-schema/`.
 - Future: task.0248 will extract the shared platform into `packages/node-platform`
   so nodes become thin shells instead of full copies

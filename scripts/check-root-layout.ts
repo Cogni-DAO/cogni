@@ -111,7 +111,6 @@ const ALLOWED_ROOT_ENTRIES = new Set<string>([
   "commitlint.config.cjs",
   "config",
   "docs",
-  "drizzle.config.ts",
   "e2e",
   "eslint",
   "eslint.config.mjs",

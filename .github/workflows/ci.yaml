@@ -336,7 +336,10 @@ jobs:
 
       - name: Compute migrator fingerprint and tag
         run: |
-          FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh)
+          # Stack test runs migrations against cogni_template_stack_test via operator's
+          # schema — per-node migrators (task.0322) are exercised in pr-build.yml and
+          # candidate-flight. Operator fingerprint suffices here.
+          FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh operator)
           echo "MIGRATOR_FINGERPRINT=$FINGERPRINT" >> $GITHUB_ENV
           # Content-addressed migrator tag (decoupled from app commit, lowercase for GHCR)
           REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')

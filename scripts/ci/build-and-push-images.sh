@@ -84,7 +84,9 @@ resolve_tag() {
     operator) printf '%s:%s' "$image_name_lower" "$IMAGE_TAG" ;;
     poly) printf '%s:%s-poly' "$image_name_lower" "$IMAGE_TAG" ;;
     resy) printf '%s:%s-resy' "$image_name_lower" "$IMAGE_TAG" ;;
-    migrator) printf '%s:%s-migrate' "$image_name_lower" "$IMAGE_TAG" ;;
+    operator-migrator) printf '%s:%s-operator-migrate' "$image_name_lower" "$IMAGE_TAG" ;;
+    poly-migrator) printf '%s:%s-poly-migrate' "$image_name_lower" "$IMAGE_TAG" ;;
+    resy-migrator) printf '%s:%s-resy-migrate' "$image_name_lower" "$IMAGE_TAG" ;;
     scheduler-worker) printf '%s:%s-scheduler-worker' "$image_name_lower" "$IMAGE_TAG" ;;
     *)
       log_error "Unknown target: $target"
@@ -143,7 +145,7 @@ build_target() {
         --push \
         .
       ;;
-    migrator)
+    operator-migrator)
       docker buildx build \
         --platform "$PLATFORM" \
         --file nodes/operator/app/Dockerfile \
@@ -151,8 +153,36 @@ build_target() {
         --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
         --label "org.opencontainers.image.revision=${git_sha}" \
         --label "org.opencontainers.image.created=${build_timestamp}" \
-        --cache-from "type=gha,scope=build-migrator" \
-        --cache-to "type=gha,mode=max,scope=build-migrator" \
+        --cache-from "type=gha,scope=build-operator-migrator" \
+        --cache-to "type=gha,mode=max,scope=build-operator-migrator" \
+        --tag "$tag" \
+        --push \
+        .
+      ;;
+    poly-migrator)
+      docker buildx build \
+        --platform "$PLATFORM" \
+        --file nodes/poly/app/Dockerfile \
+        --target migrator \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.revision=${git_sha}" \
+        --label "org.opencontainers.image.created=${build_timestamp}" \
+        --cache-from "type=gha,scope=build-poly-migrator" \
+        --cache-to "type=gha,mode=max,scope=build-poly-migrator" \
+        --tag "$tag" \
+        --push \
+        .
+      ;;
+    resy-migrator)
+      docker buildx build \
+        --platform "$PLATFORM" \
+        --file nodes/resy/app/Dockerfile \
+        --target migrator \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.revision=${git_sha}" \
+        --label "org.opencontainers.image.created=${build_timestamp}" \
+        --cache-from "type=gha,scope=build-resy-migrator" \
+        --cache-to "type=gha,mode=max,scope=build-resy-migrator" \
         --tag "$tag" \
         --push \
         .

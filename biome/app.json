@@ -59,7 +59,7 @@
         "nodes/*/app/src/app/**/twitter-image.tsx",
         "nodes/*/app/next.config.ts",
         "nodes/*/app/postcss.config.mjs",
-        "drizzle.config.ts",
+        "nodes/*/drizzle.config.ts",
         "playwright.config.ts",
         "vitest.config.mts",
         "nodes/*/app/vitest.*.config.mts",

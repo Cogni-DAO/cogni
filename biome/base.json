@@ -143,7 +143,7 @@
         "**/*.config.js",
         "**/*.config.cjs",
         "**/*.config.mts",
-        "drizzle.config.ts"
+        "nodes/*/drizzle.config.ts"
       ],
       "linter": {
         "rules": {
@@ -165,7 +165,7 @@
         "**/*.config.js",
         "**/*.config.cjs",
         "**/*.config.mts",
-        "drizzle.config.ts",
+        "nodes/*/drizzle.config.ts",
         "nodes/*/app/src/shared/observability/logging/logger.ts",
         "nodes/*/app/src/shared/observability/clientLogger.ts"
       ],

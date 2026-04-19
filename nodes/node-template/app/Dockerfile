@@ -57,20 +57,20 @@ ENV AUTH_SECRET=${AUTH_SECRET_BUILD}
 RUN --mount=type=cache,id=next-cache-node-template,target=/app/nodes/node-template/app/.next/cache,sharing=locked \
     pnpm --filter @cogni/node-template-app build
 
-# Migrator – minimal image for database migrations via drizzle-kit
-# All nodes share one migration set from operator (single DB schema)
+# Migrator — node-template scaffold migrator (task.0324).
+# node-template is not deployed; this stage exists so forks have a working template.
+# Copy only core schema + node-template's own migrations + its drizzle config.
 FROM base AS migrator
 WORKDIR /app
 
-# Copy from builder (includes built workspace packages)
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/nodes/operator/app/src/shared/db ./nodes/operator/app/src/shared/db
-COPY --from=builder /app/nodes/operator/app/src/adapters/server/db/migrations ./nodes/operator/app/src/adapters/server/db/migrations
+COPY --from=builder /app/nodes/node-template/drizzle.config.ts ./nodes/node-template/drizzle.config.ts
+COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
+COPY --from=builder /app/nodes/node-template/app/src/shared/db ./nodes/node-template/app/src/shared/db
+COPY --from=builder /app/nodes/node-template/app/src/adapters/server/db/migrations ./nodes/node-template/app/src/adapters/server/db/migrations
 
-# Run canonical migration script (drizzle-kit migrate)
-CMD ["pnpm", "db:migrate:container"]
+CMD ["tsx", "node_modules/drizzle-kit/bin.cjs", "migrate", "--config=nodes/node-template/drizzle.config.ts"]
 
 # Runner – lean production image
 FROM node:22-alpine AS runner

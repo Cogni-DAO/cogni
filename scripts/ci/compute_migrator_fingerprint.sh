@@ -3,30 +3,71 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Script: scripts/ci/compute_migrator_fingerprint.sh
-# Purpose: Compute content-based fingerprint for migrator image
-# Returns: 12-char hex fingerprint (stdout) based on hash of migrator inputs
-# Usage: MIGRATOR_FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh)
+# Purpose: Compute content-based fingerprint for a per-node migrator image (task.0322).
+# Returns: 12-char hex fingerprint (stdout) based on hash of that node's migrator inputs.
+# Usage:
+#   MIGRATOR_FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh operator)
+#   MIGRATOR_FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh poly)
+#   MIGRATOR_FINGERPRINT=$(scripts/ci/compute_migrator_fingerprint.sh resy)
+#
+# Each node's fingerprint hashes only the files that end up in that node's migrator
+# image: its own drizzle config, its own schema barrel + migrations, plus the shared
+# packages/db-schema/src (core tables) and root build context files.
 
 set -euo pipefail
 
-# Migrator input paths (order matters for stable hashing)
-MIGRATOR_INPUTS=(
-    "drizzle.config.ts"
-    "nodes/operator/app/src/shared/db"
-    "nodes/operator/app/src/adapters/server/db/migrations"
-    "package.json"
-    "pnpm-lock.yaml"
-    "nodes/operator/app/Dockerfile"
-)
+NODE="${1:-}"
+if [[ -z "$NODE" ]]; then
+    echo "[ERROR] usage: $0 <operator|poly|resy>" >&2
+    exit 1
+fi
 
-# Create concatenated hash of all inputs
+case "$NODE" in
+    operator)
+        MIGRATOR_INPUTS=(
+            "nodes/operator/drizzle.config.ts"
+            "packages/db-schema/src"
+            "nodes/operator/app/src/shared/db"
+            "nodes/operator/app/src/adapters/server/db/migrations"
+            "nodes/operator/app/Dockerfile"
+            "package.json"
+            "pnpm-lock.yaml"
+        )
+        ;;
+    poly)
+        MIGRATOR_INPUTS=(
+            "nodes/poly/drizzle.config.ts"
+            "packages/db-schema/src"
+            "nodes/poly/packages/db-schema/src"
+            "nodes/poly/packages/db-schema/package.json"
+            "nodes/poly/app/src/adapters/server/db/migrations"
+            "nodes/poly/app/Dockerfile"
+            "package.json"
+            "pnpm-lock.yaml"
+        )
+        ;;
+    resy)
+        MIGRATOR_INPUTS=(
+            "nodes/resy/drizzle.config.ts"
+            "packages/db-schema/src"
+            "nodes/resy/app/src/shared/db"
+            "nodes/resy/app/src/adapters/server/db/migrations"
+            "nodes/resy/app/Dockerfile"
+            "package.json"
+            "pnpm-lock.yaml"
+        )
+        ;;
+    *)
+        echo "[ERROR] unknown node '$NODE' (expected: operator, poly, or resy)" >&2
+        exit 1
+        ;;
+esac
+
 COMBINED_HASH=""
 for input in "${MIGRATOR_INPUTS[@]}"; do
     if [[ -f "$input" ]]; then
-        # File: hash content
         HASH=$(git hash-object "$input")
     elif [[ -d "$input" ]]; then
-        # Directory: hash tree
         HASH=$(git ls-tree -r HEAD "$input" | git hash-object --stdin)
     else
         echo "[ERROR] Migrator input not found: $input" >&2
@@ -35,7 +76,6 @@ for input in "${MIGRATOR_INPUTS[@]}"; do
     COMBINED_HASH="${COMBINED_HASH}${HASH}"
 done
 
-# Final fingerprint: hash of all hashes, truncated to 12 chars
 FINGERPRINT=$(echo -n "$COMBINED_HASH" | git hash-object --stdin | cut -c1-12)
 
 echo "$FINGERPRINT"

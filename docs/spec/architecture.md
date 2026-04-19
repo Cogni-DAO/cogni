@@ -131,7 +131,7 @@ Libraries accessing browser APIs (IndexedDB, localStorage) at module load cause 
 [x] tsconfig.scripts.json # tsx tooling path resolution
 [x] tsconfig.eslint.json # ESLint parser config
 [x] package.json # deps, scripts, engines (db scripts added)
-[x] drizzle.config.ts # database migrations config
+[x] nodes/<node>/drizzle.config.ts # per-node drizzle-kit config (task.0324)
 [x] Dockerfile # reproducible build
 [x] .dockerignore # ignore node*modules, artifacts, .env.\*
 [x] LICENSE # OSS license

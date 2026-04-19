@@ -29,7 +29,7 @@
     "src/contracts/**",
     "src/mcp/**",
     "src/shared/**",
-    "drizzle.config.ts"
+    "../drizzle.config.ts"
   ],
   "ignoreDependencies": [
     "@types/*",

@@ -57,20 +57,20 @@ ENV AUTH_SECRET=${AUTH_SECRET_BUILD}
 RUN --mount=type=cache,id=next-cache-resy,target=/app/nodes/resy/app/.next/cache,sharing=locked \
     pnpm --filter @cogni/resy-app build
 
-# Migrator – minimal image for database migrations via drizzle-kit
-# All nodes share one migration set from operator (single DB schema)
+# Migrator — resy-only migration image (task.0322).
+# Carries only resy's schema + migrations + nodes/resy/drizzle.config.ts, plus shared
+# packages/db-schema/src for core tables.
 FROM base AS migrator
 WORKDIR /app
 
-# Copy from builder (includes built workspace packages)
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/drizzle.config.ts ./
-COPY --from=builder /app/nodes/operator/app/src/shared/db ./nodes/operator/app/src/shared/db
-COPY --from=builder /app/nodes/operator/app/src/adapters/server/db/migrations ./nodes/operator/app/src/adapters/server/db/migrations
+COPY --from=builder /app/nodes/resy/drizzle.config.ts ./nodes/resy/drizzle.config.ts
+COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
+COPY --from=builder /app/nodes/resy/app/src/shared/db ./nodes/resy/app/src/shared/db
+COPY --from=builder /app/nodes/resy/app/src/adapters/server/db/migrations ./nodes/resy/app/src/adapters/server/db/migrations
 
-# Run canonical migration script (drizzle-kit migrate)
-CMD ["pnpm", "db:migrate:container"]
+CMD ["pnpm", "db:migrate:resy:container"]
 
 # Runner – lean production image
 FROM node:22-alpine AS runner

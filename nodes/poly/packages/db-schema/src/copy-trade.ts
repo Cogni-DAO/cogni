@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@cogni/db-schema/poly-copy-trade`
+ * Module: `@cogni/poly-db-schema/copy-trade`
  * Purpose: Schema for the Polymarket copy-trade prototype — fills ledger, global kill-switch singleton, append-only decisions log.
- * Scope: Table definitions only (task.0315 Phase 1 CP3.3). Does not contain queries, RLS policies, or runtime logic. System-owned tables (single-operator prototype) — no tenant-scoped RLS.
+ * Scope: Poly-local table definitions (task.0315 Phase 1 CP3.3; relocated from @cogni/db-schema into @cogni/poly-db-schema by task.0324 for per-node schema independence — consumed by poly-app AND future cross-process importers such as the Temporal worker). Does not contain queries, RLS policies, or runtime logic. System-owned tables (single-operator prototype) — no tenant-scoped RLS.
  * Invariants:
  *   - FILL_ID_SHAPE_DECIDED: composite `<source>:<native_id>` per task.0315 P0.2, enforced by CHECK.
  *   - IDEMPOTENT_BY_CLIENT_ID: `client_order_id = clientOrderIdFor(target_id, fill_id)` (pinned helper).

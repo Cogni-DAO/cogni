@@ -133,6 +133,18 @@ Already tracked in DATABASE_RLS_SPEC.md P1:
 
 **Scope boundary:** DSN host changes + network topology. No app code changes. No RLS changes.
 
+### Per-Node Schema Independence
+
+**Goal:** Each node owns its DB schema — no cross-node table leak, no shared migration numbering.
+
+| Deliverable                                                        | Status       | Est | Work Item                                                                  |
+| ------------------------------------------------------------------ | ------------ | --- | -------------------------------------------------------------------------- |
+| Per-node drizzle configs + per-node migrator images + legacy purge | in-review    | 2   | task.0324 ([PR #916](https://github.com/Cogni-DAO/node-template/pull/916)) |
+| Un-no-op prod poly/resy migration Jobs (gated on DB inspection)    | needs_design | 1   | task.0324 Phase 3 (follow-up)                                              |
+| **Future:** Atlas + GitOps migrations (declarative schema, CRD)    | needs_design | 5   | task.0325                                                                  |
+
+task.0324 is the current-priority minimal fix (no new tooling). task.0325 preserves the Atlas adoption plan for when contributor scale or destructive-change linting warrants the investment.
+
 ### P3 — DSN-Only Provisioning
 
 **Goal:** 3 DSNs become the only database secrets.
@@ -182,7 +194,7 @@ Already tracked in DATABASE_URL_ALIGNMENT_SPEC.md P1-P2:
 
 ## As-Built Specs
 
-- (none yet — specs created when code merges)
+- [databases.md](../../docs/spec/databases.md) — §2 Migration Strategy + §4 Technical Implementation updated for per-node drizzle configs + per-node migrator images (task.0324).
 
 ### Roadmap — Supabase Evaluation Decisions Track
 

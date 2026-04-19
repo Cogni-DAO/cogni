@@ -44,13 +44,14 @@ Per DATABASE_RLS_SPEC.md design decision 7: runtime app uses explicit DSNs, no U
 
 **Exports (barrel `@/shared/db`):**
 
-- Schema tables from `@cogni/db-schema` (users, billingAccounts, schedules, etc.)
+- Core platform tables from `@cogni/db-schema` (users, billingAccounts, schedules, etc.)
+- Poly-local tables from `@cogni/poly-db-schema` (workspace package at `nodes/poly/packages/db-schema`): `polyCopyTradeFills`, `polyCopyTradeConfig`, `polyCopyTradeDecisions`. Promoted out of this directory by task.0324 so cross-process importers (scheduler-worker, Temporal worker, future graphs) can consume them without reaching into app internals.
 
 **Direct imports (not in barrel):**
 
-- `db-url.ts`: `buildDatabaseUrl`, `DbEnvInput` — tooling only
+- `db-url.ts`: `buildDatabaseUrl`, `DbEnvInput` — tooling only (test scripts). Poly's drizzle config at `nodes/poly/drizzle.config.ts` does NOT import this — it reads `DATABASE_URL` from env directly per task.0324.
 
-**Files considered API:** index.ts (barrel), db-url.ts (tooling)
+**Files considered API:** index.ts (barrel), schema.ts, db-url.ts (tooling)
 **Routes/CLI:** none
 **Env/Config keys:** none
 
@@ -91,4 +92,4 @@ import { buildDatabaseUrl } from "@/shared/db/db-url";
 ## Notes
 
 - `buildDatabaseUrl` excluded from barrel to prevent runtime DSN construction
-- Tooling scripts (drizzle.config.ts, reset-db.ts, drop-test-db.ts) import directly from `db-url.ts`
+- Tooling scripts (reset-db.ts, drop-test-db.ts) import directly from `db-url.ts`. Poly's drizzle config (`nodes/poly/drizzle.config.ts`) does NOT import buildDatabaseUrl — it requires `DATABASE_URL` from env and throws if missing, matching the "explicit DSN, no fallback" invariant in `docs/spec/databases.md`.

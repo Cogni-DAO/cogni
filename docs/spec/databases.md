@@ -8,7 +8,7 @@ summary: Database organization, migration strategies, and URL construction patte
 read_when: Working with databases, migrations, or connection configuration
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-02-05
+verified: 2026-04-18
 tags: [databases]
 ---
 
@@ -106,7 +106,7 @@ Per [Database RLS Spec](database-rls.md) design decision 7, the runtime app requ
 - **Local testing:** `postgresql://app_user:password@localhost:55432/cogni_template_stack_test`
 - **Production:** `postgresql://app_user:<secret>@postgres:5432/cogni_template_production?sslmode=require`
 
-**Tooling-Only:** The `buildDatabaseUrl()` helper in `src/shared/db/db-url.ts` is used only by CLI tooling (`drizzle.config.ts`, `drop-test-db.ts`, `reset-db.ts`). It is **not** used by the runtime app.
+**Tooling-Only:** The `buildDatabaseUrl()` helper in `nodes/<node>/app/src/shared/db/db-url.ts` is used only by CLI test tooling (`drop-test-db.ts`, `reset-db.ts`). It is **not** used by the runtime app and **not** used by drizzle configs — per-node drizzle configs (`nodes/<node>/drizzle.config.ts`) require `DATABASE_URL` from env explicitly (task.0324).
 
 ## Database Security Architecture
 
@@ -148,34 +148,45 @@ See [Database RLS Spec](database-rls.md) for the dual-client architecture and st
 
 ## 2. Migration Strategy
 
-**Core Principle:** Migrations run via a dedicated `MIGRATOR_IMAGE` that contains only migration tooling. The app runtime image has no pnpm or migration capabilities.
+**Core Principle:** Each node owns its migrations. task.0324 split the previously-shared drizzle config into per-node configs (`nodes/<node>/drizzle.config.ts`). Each node ships its own migrator image built from its own Dockerfile, carrying only that node's schema + migrations + config + the shared `@cogni/db-schema` core.
 
 **Architecture:**
 
-- **MIGRATOR_IMAGE:** Separate Docker image (`IMAGE_NAME:IMAGE_TAG-migrate`) containing drizzle-kit and migrations
-- **db-migrate service:** Docker Compose service that runs migrations using the migrator image
-- **Runner image:** Lean production image (~80MB) with no migration tooling
+- **Per-node migrator images:** `IMAGE_NAME:IMAGE_TAG-{operator,poly,resy}-migrate` — one image per node, built from `nodes/<node>/app/Dockerfile` stage `migrator`.
+- **Per-node drizzle configs:** `nodes/<node>/drizzle.config.ts` (operator, poly, resy, node-template). Schema glob is core-only for operator/resy/node-template, core + local for poly. Each config requires `DATABASE_URL` from env and throws if unset — no fallback.
+- **Core schema package:** `packages/db-schema` (`@cogni/db-schema`) — cross-node platform tables.
+- **Per-node schema packages:** `nodes/<node>/packages/db-schema` (`@cogni/<node>-db-schema`) — node-local tables. Created per-node when that node ships its first node-local table. Today only `@cogni/poly-db-schema` exists (copy-trade prototype tables). Node-local packages mirror `@cogni/db-schema`'s exports shape (root barrel + per-slice subpath exports) so any workspace consumer (app, worker, graph) can import tables without reaching into app internals.
+- **Migration history per DB:** one `drizzle.__drizzle_migrations` table per database (standard drizzle default). `0027_silent_nextwave.sql` is byte-duplicated across `nodes/{operator,poly,resy}/app/src/adapters/server/db/migrations/` because it was applied to every deployed DB before the split — READMEs in each migrations dir warn against deletion.
+- **Runner image:** Lean production image (~80MB) with no migration tooling.
+
+**Invariants:**
+
+- **NO_CROSS_NODE_TABLE_LEAK** — node-local tables are defined in that node's own workspace package (e.g. poly's tables live in `@cogni/poly-db-schema` at `nodes/poly/packages/db-schema/`). Adding a node-local table to `@cogni/db-schema` is a review-blocking error.
+- **CORE_TABLES_IN_SHARED_PACKAGE** — `@cogni/db-schema` contains only tables every node needs (intersection, not union).
+- **EACH_NODE_OWNS_ITS_MIGRATIONS** — `nodes/<node>/app/src/adapters/server/db/migrations/` is that node's authoritative history. Core-table changes are copied to each node's dir manually.
+- **EXPLICIT_DATABASE_URL_NO_FALLBACK** — drizzle configs read `DATABASE_URL` from env and throw if unset. No component-piece fallback (matches runtime app invariant from §Database URL Configuration).
 
 **Migration Commands:**
 
-- `pnpm db:migrate` — Alias for `db:migrate:dev` (operator dev database)
+- `pnpm db:migrate` — alias for `db:migrate:dev` (operator dev database via `nodes/operator/drizzle.config.ts`)
 - `pnpm db:migrate:dev` — drizzle-kit with `.env.local` (operator dev database)
-- `pnpm db:migrate:poly` — drizzle-kit with `DATABASE_URL_POLY` from `.env.local`
-- `pnpm db:migrate:resy` — drizzle-kit with `DATABASE_URL_RESY` from `.env.local`
-- `pnpm db:migrate:nodes` — runs `db:migrate:dev` + `db:migrate:poly` + `db:migrate:resy`
+- `pnpm db:migrate:poly` / `:resy` — drizzle-kit with `DATABASE_URL_POLY` / `DATABASE_URL_RESY` from `.env.local` + that node's config
+- `pnpm db:migrate:nodes` — runs all three in sequence
 - `pnpm db:migrate:test` — drizzle-kit with `.env.test` (operator test database)
-- `pnpm db:migrate:test:poly` — drizzle-kit with `DATABASE_URL_POLY` from `.env.test`
-- `pnpm db:migrate:test:resy` — drizzle-kit with `DATABASE_URL_RESY` from `.env.test`
+- `pnpm db:migrate:test:poly` / `:resy` — same pattern with `.env.test`
 - `pnpm db:migrate:test:nodes` — runs all 3 test DB migrations
-- `pnpm db:migrate:direct` — drizzle-kit using `DATABASE_URL` from current environment
-- `pnpm db:migrate:container` — container-only: used inside migrator Docker image
+- `pnpm db:migrate:direct` — drizzle-kit using operator config + `DATABASE_URL` from current environment (used by testcontainers)
+- `pnpm db:migrate:{operator,poly,resy}:container` — container-only: invoked by each node's Dockerfile default CMD
+- `pnpm db:generate:{operator,poly,resy}` — generate new migrations for a node's schema (runs drizzle-kit diff)
 
 **Execution Contexts:**
 
-- **Local Dev** (`db:migrate`, `db:migrate:dev`): Runs `drizzle-kit migrate` with `.env.local`. For daily development.
-- **Local Test** (`db:migrate:test`): Runs `drizzle-kit migrate` with `.env.test`. For test database setup.
-- **Direct** (`db:migrate:direct`): Runs `drizzle-kit migrate` using `DATABASE_URL` from environment. For testcontainers and CI.
-- **Container** (`db:migrate:container`): Internal command used by Docker migrator image. Not for direct use.
+- **Local Dev** (`db:migrate:dev` / `:poly` / `:resy`): runs `drizzle-kit migrate` with `.env.local` + per-node config. For daily development.
+- **Local Test** (`db:migrate:test*`): runs with `.env.test`. For test database setup.
+- **Direct** (`db:migrate:direct`): runs with operator config using `DATABASE_URL` from environment. For testcontainers (`testcontainers-postgres.global.ts` sets `process.env.DATABASE_URL` before `execSync`).
+- **Container** (`db:migrate:{operator,poly,resy}:container`): default CMD of each per-node migrator image. K8s `AtlasMigration`/`migrate-node-app` Jobs invoke these via overlays.
+
+**Future: Atlas + GitOps migrations** — declarative schema, CRD-based Argo integration, destructive-change linting. Deferred to task.0325 with full spike intel preserved.
 
 ### 2.1 Local Development
 
@@ -347,76 +358,76 @@ env:
 
 ### 4.1 Docker Image Architecture
 
-**Two-Image Strategy:**
+**Per-node image strategy (task.0324):** each deployed node ships two images from its own `nodes/<node>/app/Dockerfile`:
 
-- **Runner image** (`IMAGE_NAME:IMAGE_TAG`): Lean production image (~80MB) for app runtime only
-- **Migrator image** (`IMAGE_NAME:IMAGE_TAG-migrate`): Contains drizzle-kit and migrations (~480MB)
+- **Runner image** (`IMAGE_NAME:IMAGE_TAG` for operator; `IMAGE_NAME:IMAGE_TAG-{poly,resy}` for node variants): Lean production image (~80MB) for app runtime only.
+- **Migrator image** (`IMAGE_NAME:IMAGE_TAG-{operator,poly,resy}-migrate`): Contains drizzle-kit + that node's migrations + core schema (`packages/db-schema/src`). Node-template ships a scaffold migrator image for forks.
 
-**Runner Stage (no migration tools):**
+**Runner Stage (no migration tools):** unchanged — same pattern as before.
 
-```dockerfile
-FROM node:22-alpine AS runner
-WORKDIR /app
-
-RUN addgroup --system --gid 1001 nodejs \
-  && adduser --system --uid 1001 nextjs \
-  && apk add --no-cache curl
-
-ENV NODE_ENV=production
-
-# Copy runtime bundle only (no pnpm, no migrations)
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-USER nextjs
-CMD ["node", "server.js"]
-```
-
-**Migrator Stage:**
+**Per-node Migrator Stage:** each node's Dockerfile has a `FROM base AS migrator` stage. Stage copies only that node's slice:
 
 ```dockerfile
 FROM base AS migrator
 WORKDIR /app
 
-RUN apk add --no-cache g++ make python3
+COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/nodes/<node>/drizzle.config.ts ./nodes/<node>/drizzle.config.ts
+COPY --from=builder /app/packages/db-schema/src ./packages/db-schema/src
+COPY --from=builder /app/nodes/<node>/app/src/shared/db ./nodes/<node>/app/src/shared/db
+COPY --from=builder /app/nodes/<node>/app/src/adapters/server/db/migrations ./nodes/<node>/app/src/adapters/server/db/migrations
 
-# Install deps with drizzle-kit
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod=false
-
-# Copy migration files only
-COPY drizzle.config.ts ./
-COPY src/shared/db ./src/shared/db
-COPY src/adapters/server/db/migrations ./src/adapters/server/db/migrations
-
-CMD ["pnpm", "db:migrate:container"]
+CMD ["pnpm", "db:migrate:<node>:container"]
 ```
+
+**Partial isolation, not full sovereignty:** each migrator image still carries `packages/db-schema/src`, so core schema changes rebuild all three migrators. The win is per-node cache invalidation + pattern consistency with existing per-node app images + forks inheriting trivially.
+
+**CI wiring (see `scripts/ci/`):**
+
+Adding a new build-target name requires updating this full chain — missing any one step causes silent failure modes (target gets built but never promoted, or promoted but never resolved on re-flight).
+
+- `detect-affected.sh` — emits the target name when its paths change.
+- `build-and-push-images.sh` — builds the image tag from a Dockerfile stage with a distinct GHA cache scope.
+- `merge-build-fragments.sh` — `canonical_order` array must include the target for stable JSON ordering across matrix leg merges.
+- `compute_migrator_fingerprint.sh` — (migrators only) takes a node arg and hashes only that node's inputs for content-addressed image caching.
+- `resolve-pr-build-images.sh` — `ALL_TARGETS` + `resolve_tag()` must know about the tag shape, or the flight's PR-image resolver silently drops the target from the promoted payload (bug.0321 documents the vacuous-green failure mode this produces).
+- `promote-build-payload.sh` — pairs each app with its companion migrator digest (`operator-migrator` digest → operator overlay, etc.).
 
 ### 4.2 Drizzle Configuration
 
-The `drizzle.config.ts` uses `process.env.DATABASE_URL` directly (pure CLI boundary):
+Each node has its own `nodes/<node>/drizzle.config.ts`. Example (operator):
 
 ```typescript
 import { defineConfig } from "drizzle-kit";
 
+function requireDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) {
+    throw new Error(
+      "DATABASE_URL is required for drizzle-kit (nodes/operator/drizzle.config.ts)."
+    );
+  }
+  return url;
+}
+
 export default defineConfig({
-  schema: "./src/shared/db/schema.ts",
-  out: "./src/adapters/server/db/migrations",
+  schema: "./packages/db-schema/src/**/*.ts",
+  out: "./nodes/operator/app/src/adapters/server/db/migrations",
   dialect: "postgresql",
-  dbCredentials: {
-    url: process.env.DATABASE_URL!, // Works in all environments
-  },
+  dbCredentials: { url: requireDatabaseUrl() },
   verbose: true,
   strict: true,
 });
 ```
 
-**Why this works:**
+Poly's config uses an array schema that unions core + poly's per-node package source: `["./packages/db-schema/src/**/*.ts", "./nodes/poly/packages/db-schema/src/**/*.ts"]`. drizzle-kit reads raw TS via these globs — no pre-built `dist/` required for migration generation. Resy and node-template are core-only until they ship their first node-local table, at which point they gain a `nodes/<node>/packages/db-schema/` package.
 
-- No TypeScript path resolution needed in containers
-- Same config file works for host (`dotenv` loads env) and container (env pre-loaded)
-- Pure CLI boundary - reads environment, nothing else
+**Why this shape:**
+
+- **No relative imports in the config.** drizzle-kit compiles configs to a temp directory before executing; relative TypeScript imports break from there. All paths are repo-root-relative (drizzle-kit runs with `CWD=repo root`).
+- **Explicit `DATABASE_URL`, no fallback.** Caller (pnpm script, testcontainer, k8s Job) must set it. Matches the runtime app invariant in §Database URL Configuration.
+- **Per-node `out` dir.** Each node writes migrations to its own `nodes/<node>/app/src/adapters/server/db/migrations/`. Cross-node collisions impossible — nothing shared.
 
 ## 5. Trade-offs of Current Approach
 

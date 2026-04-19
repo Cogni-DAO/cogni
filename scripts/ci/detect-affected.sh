@@ -14,7 +14,7 @@ CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || true)
 EXPLICIT_SCOPE=false
 UPSTREAM_REF=${TURBO_SCM_BASE:-}
 HEAD_REF=${TURBO_SCM_HEAD:-HEAD}
-ALL_TARGETS=(operator migrator poly resy scheduler-worker)
+ALL_TARGETS=(operator operator-migrator poly poly-migrator resy resy-migrator scheduler-worker)
 
 if [ -n "${TURBO_SCM_BASE:-}" ] || [ -n "${TURBO_SCM_HEAD:-}" ]; then
   EXPLICIT_SCOPE=true
@@ -92,9 +92,6 @@ is_global_build_input() {
     tsconfig.app.json | \
     tsconfig.scripts.json | \
     config/* | \
-    scripts/ci/build.sh | \
-    scripts/ci/build-service.sh | \
-    scripts/ci/push.sh | \
     scripts/ci/build-and-push-images.sh | \
     scripts/ci/detect-affected.sh | \
     scripts/ci/write-build-manifest.sh)
@@ -118,24 +115,52 @@ else
     fi
 
     case "$path" in
-      .github/workflows/build-multi-node.yml | \
       .github/workflows/pr-build.yml)
         add_all_targets
         selection_reason="workflow-build-change:${path}"
         break
         ;;
-      packages/* | \
-      nodes/*/packages/*)
+      packages/*)
         add_all_targets
         selection_reason="shared-package-change:${path}"
         break
         ;;
+      nodes/operator/packages/*)
+        add_target operator
+        add_target operator-migrator
+        ;;
+      nodes/poly/packages/*)
+        add_target poly
+        add_target poly-migrator
+        ;;
+      nodes/resy/packages/*)
+        add_target resy
+        add_target resy-migrator
+        ;;
+      nodes/node-template/packages/*)
+        selection_reason="non-deployable-node-template-change:${path}"
+        ;;
+      nodes/operator/app/src/shared/db/* | \
+      nodes/operator/app/src/adapters/server/db/migrations/*)
+        add_target operator
+        add_target operator-migrator
+        ;;
       nodes/operator/*)
         add_target operator
-        add_target migrator
+        add_target operator-migrator
+        ;;
+      nodes/poly/app/src/shared/db/* | \
+      nodes/poly/app/src/adapters/server/db/migrations/*)
+        add_target poly
+        add_target poly-migrator
         ;;
       nodes/poly/*)
         add_target poly
+        ;;
+      nodes/resy/app/src/shared/db/* | \
+      nodes/resy/app/src/adapters/server/db/migrations/*)
+        add_target resy
+        add_target resy-migrator
         ;;
       nodes/resy/*)
         add_target resy
@@ -146,6 +171,9 @@ else
       nodes/node-template/*)
         selection_reason="non-deployable-node-template-change:${path}"
         ;;
+      # Per-node drizzle configs live at nodes/<node>/drizzle.config.ts and are
+      # handled by the nodes/<node>/* catchall above (adds node + node-migrator).
+      # No drizzle-specific case needed.
     esac
   done <<< "$changed_paths"
 fi

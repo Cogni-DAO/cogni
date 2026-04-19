@@ -51,11 +51,6 @@
       "import": "./dist/attribution.js",
       "default": "./dist/attribution.js"
     },
-    "./poly-copy-trade": {
-      "types": "./dist/poly-copy-trade.d.ts",
-      "import": "./dist/poly-copy-trade.js",
-      "default": "./dist/poly-copy-trade.js"
-    },
     "./profile": {
       "types": "./dist/profile.d.ts",
       "import": "./dist/profile.js",
