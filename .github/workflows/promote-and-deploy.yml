@@ -425,36 +425,14 @@ jobs:
           ssh $SSH_OPTS root@"$VM_HOST" "kubectl apply -f /tmp/appset.yaml -n argocd && rm -f /tmp/appset.yaml"
           echo "✅ ApplicationSet reconciled"
 
-      # Skip ArgoCD wait when no image digests were promoted (infra-only deploy).
-      # NOTE: rsync'd base/catalog changes may still trigger Argo reconciliation;
-      # those are not tracked in promoted_apps. Acceptable: deploy-infra is
-      # idempotent and handles its own infra-layer ordering.
-      - name: Wait for ArgoCD sync
-        if: env.VM_HOST != '' && needs.promote-k8s.outputs.promoted_apps != ''
-        env:
-          SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
-          # Argo tracks the deploy branch, not main. EXPECTED_SHA must be the
-          # deploy-branch tip SHA written by promote-k8s, not the source-app SHA.
-          EXPECTED_SHA: ${{ needs.promote-k8s.outputs.deploy_branch_sha }}
-          # Only wait for apps that got new digests in this promotion.
-          # Apps not promoted (e.g. sandbox-openclaw with placeholder image)
-          # are not expected to become Healthy and would false-fail the wait.
-          PROMOTED_APPS: ${{ needs.promote-k8s.outputs.promoted_apps }}
-        run: scripts/ci/wait-for-argocd.sh
-
       - name: Deploy infrastructure
         if: env.VM_HOST != ''
         run: scripts/ci/deploy-infra.sh --ref main
 
-      # Fail the deploy if any in-cluster (no-Ingress) service didn't roll
-      # cleanly. wait-for-argocd runs before deploy-infra; this runs after
-      # so it catches crashloops triggered by the rolling restart of
-      # secrets, not only the initial digest reconcile.
-      - name: Wait for in-cluster services
-        if: env.VM_HOST != ''
-        env:
-          DEPLOY_ENVIRONMENT: ${{ needs.promote-k8s.outputs.environment }}
-        run: scripts/ci/wait-for-in-cluster-services.sh
+      # wait-for-argocd + wait-for-in-cluster-services + verify-buildsha
+      # moved to the verify-deploy job (bug.0321 Fix 3). Those gates are
+      # now visibly skipped at the JOB level when promoted_apps is empty
+      # instead of silently skipped at the step level (green-on-empty).
 
       - name: Upload deployment artifacts
         if: always()
@@ -474,7 +452,84 @@ jobs:
           loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
           job_status: ${{ job.status }}
 
-  # ── Verify deployment ──────────────────────────────────────────
+  # ── Verify promoted apps rolled and serve the expected SHA ──────
+  # bug.0321 Fix 3: job-level gate on promoted_apps. Empty-promotion
+  # run surfaces as visibly SKIPPED (grey in the checks list) — never
+  # a silent-green. Downstream jobs (e2e, lock-preview-on-success)
+  # that consume this via `needs:` also correctly cascade to skipped.
+  #
+  # Order is authoritative:
+  #   1. wait-for-argocd       — Argo reconciled to deploy-branch tip, Healthy
+  #   2. wait-for-in-cluster-services — rollouts clean, catches secrets-restart crashloops
+  #   3. verify-buildsha       — contract probe: /readyz.version matches expectation
+  verify-deploy:
+    runs-on: ubuntu-latest
+    needs: [promote-k8s, deploy-infra]
+    if: needs.promote-k8s.outputs.promoted_apps != ''
+    environment: ${{ needs.promote-k8s.outputs.environment }}
+    env:
+      VM_HOST: ${{ secrets.VM_HOST }}
+      DOMAIN: ${{ vars.DOMAIN }}
+      DEPLOY_ENVIRONMENT: ${{ needs.promote-k8s.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.promote-k8s.outputs.head_sha }}
+
+      - name: Setup SSH
+        if: env.VM_HOST != ''
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "$SSH_DEPLOY_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 10 -H "$VM_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Wait for ArgoCD sync
+        if: env.VM_HOST != ''
+        env:
+          SSH_OPTS: "-i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -o ServerAliveInterval=10 -o ServerAliveCountMax=6"
+          # Argo tracks the deploy branch, not main. EXPECTED_SHA must be the
+          # deploy-branch tip SHA written by promote-k8s (NOT source-app SHA).
+          # See scripts/ci/wait-for-argocd.sh:29-34 — passing the wrong SHA
+          # silently times out.
+          EXPECTED_SHA: ${{ needs.promote-k8s.outputs.deploy_branch_sha }}
+          # Scope the wait to apps actually promoted this run. Untouched apps
+          # (e.g. sandbox-openclaw placeholder) would false-fail.
+          PROMOTED_APPS: ${{ needs.promote-k8s.outputs.promoted_apps }}
+        run: scripts/ci/wait-for-argocd.sh
+
+      - name: Wait for in-cluster services
+        if: env.VM_HOST != ''
+        run: scripts/ci/wait-for-in-cluster-services.sh
+
+      # Authoritative contract probe: pods serve the SHA the flight promoted.
+      # /readyz.version is the BUILD_SHA baked in by pr-build.yml (bug.0313) —
+      # equal to the source-sha the flight dispatched with.
+      #
+      # Preview-only today; production support lands in Fix 4 (per-app
+      # SOURCE_SHA_MAP mode). NODES is scoped to promoted_apps so untouched
+      # nodes (legitimately still on a prior PR's build) are not false-failed.
+      - name: Verify buildSha on endpoints
+        if: |
+          env.VM_HOST != '' &&
+          needs.promote-k8s.outputs.environment == 'preview'
+        env:
+          EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.head_sha }}
+          NODES: ${{ needs.promote-k8s.outputs.promoted_apps }}
+        run: bash scripts/ci/verify-buildsha.sh
+
+      - name: CI Telemetry
+        if: always()
+        uses: ./.github/actions/loki-ci-telemetry
+        with:
+          loki_url: ${{ secrets.GRAFANA_CLOUD_LOKI_URL }}
+          loki_user: ${{ secrets.GRAFANA_CLOUD_LOKI_USER }}
+          loki_token: ${{ secrets.GRAFANA_CLOUD_LOKI_API_KEY }}
+          job_status: ${{ job.status }}
+
+  # ── Verify deployment (DOMAIN probes, independent of promotion) ────
   verify:
     runs-on: ubuntu-latest
     needs: [promote-k8s, deploy-infra]
@@ -526,10 +581,12 @@ jobs:
           job_status: ${{ job.status }}
 
   # ── E2E Smoke Tests ─────────────────────────────────────────────
-  # Runs after verify passes. Same workflow — no workflow_run chaining.
+  # Runs after verify + verify-deploy pass. Same workflow — no workflow_run
+  # chaining. When promoted_apps is empty, verify-deploy is skipped and
+  # e2e correctly cascades to skipped (its `needs:` includes verify-deploy).
   e2e:
     runs-on: ubuntu-latest
-    needs: [promote-k8s, verify]
+    needs: [promote-k8s, verify, verify-deploy]
     timeout-minutes: 10
     environment: ${{ needs.promote-k8s.outputs.environment }}
     env:
@@ -584,27 +641,10 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         run: pnpm e2e:smoke
 
-      # Authoritative gate: promoted pods serve the SHA the flight promoted.
-      # /readyz.version is the BUILD_SHA baked in by pr-build.yml (bug.0313) —
-      # equal to the source-sha the flight dispatched with.
-      #
-      # Preview-only. Production promotions are cross-PR: promote-to-production
-      # copies preview's overlay digests (which can mix different PR head SHAs
-      # across nodes), so a single EXPECTED_BUILDSHA is meaningless there.
-      # Follow-up: a prod-side verifier that reads each node's overlay digest
-      # and checks the corresponding baked SHA.
-      #
-      # NODES is scoped to promoted_apps so untouched nodes (legitimately still
-      # on a prior PR's build) are not false-failed.
-      - name: Verify buildSha on endpoints
-        if: |
-          steps.gate.outputs.skip != 'true' &&
-          needs.promote-k8s.outputs.environment == 'preview'
-        env:
-          DOMAIN: ${{ vars.DOMAIN }}
-          EXPECTED_BUILDSHA: ${{ needs.promote-k8s.outputs.head_sha }}
-          NODES: ${{ needs.promote-k8s.outputs.promoted_apps }}
-        run: bash scripts/ci/verify-buildsha.sh
+      # verify-buildsha moved to the verify-deploy job (bug.0321 Fix 3 +
+      # Fix 4) so the contract probe surfaces at the correct structural
+      # level: a skipped verify-deploy job distinguishes "no promotion"
+      # from "promotion verified", visible in the checks list.
 
       - name: Upload E2E artifacts
         if: always() && steps.gate.outputs.skip != 'true'
@@ -656,18 +696,21 @@ jobs:
 
   unlock-preview-on-failure:
     runs-on: ubuntu-latest
-    needs: [promote-k8s, deploy-infra, verify, e2e]
+    needs: [promote-k8s, deploy-infra, verify, verify-deploy, e2e]
     # Fires when any upstream job did not reach `success` — including failure,
-    # cancelled, and skipped (which happens downstream of a failing job). The
-    # `!= 'success'` form handles all three in one expression. Catastrophic
-    # failure before the `Determine environment` step leaves outputs empty and
-    # this guard skips — that case requires manual unlock.
+    # cancelled, and skipped (which happens downstream of a failing job OR on
+    # the empty-promotion bug.0321 Fix 3 path where verify-deploy and e2e are
+    # visibly skipped). The `!= 'success'` form handles all three in one
+    # expression. Catastrophic failure before the `Determine environment`
+    # step leaves outputs empty and this guard skips — that case requires
+    # manual unlock.
     if: |
       always() &&
       needs.promote-k8s.outputs.environment == 'preview' &&
       (needs.promote-k8s.result != 'success' ||
        needs.deploy-infra.result != 'success' ||
        needs.verify.result != 'success' ||
+       needs.verify-deploy.result != 'success' ||
        needs.e2e.result != 'success')
     steps:
       # Check out main — see note on lock-preview-on-success above.
