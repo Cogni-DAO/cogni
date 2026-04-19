@@ -16,6 +16,13 @@
 #     by verify-buildsha.sh in SOURCE_SHA_MAP mode for cross-env/cross-PR
 #     contract verification (bug.0321 Fix 4).
 #
+# bug.0327: promoted_apps is emitted incrementally after each successful
+# promotion AND re-emitted by an EXIT trap, so a silent abort between
+# promotions and the trailing output write cannot produce an empty
+# promoted_apps while the deploy branch already carries real promotions.
+# Source-sha-map writes are a second pass after all promotions are
+# recorded; a map-write failure is logged but never shadows promoted_apps.
+#
 # Env:
 #   PAYLOAD_FILE    (required) path to resolved-pr-images.json
 #   OVERLAY_ENV     (required) candidate-a | preview | production
@@ -45,8 +52,9 @@ if [ -z "$OVERLAY_ENV" ]; then
 fi
 
 # Top-level source_sha from the payload envelope (written by
-# resolve-pr-build-images.sh). Required for the source-sha-by-app map
-# (bug.0321 Fix 4).
+# resolve-pr-build-images.sh). Used for the source-sha-by-app map
+# (bug.0321 Fix 4). Its absence is a warning, never fatal — overlay
+# promotion is the primary artifact; the map is a provenance side-car.
 source_sha=$(python3 - "$PAYLOAD_FILE" <<'PY'
 import json
 import sys
@@ -57,11 +65,30 @@ PY
 )
 
 # Track which apps actually had a non-empty digest and got written to the
-# overlay. Emitted as $GITHUB_OUTPUT.promoted_apps so downstream verification
-# jobs can (a) scope wait-for-argocd to only the apps that changed and
-# (b) gate at the job level — an empty promoted_apps surfaces as a visibly
-# skipped verify job instead of a silent-green skipped step.
+# overlay. Emitted as $GITHUB_OUTPUT.promoted_apps so downstream
+# verification jobs can (a) scope wait-for-argocd to only the apps that
+# changed and (b) gate at the job level — an empty promoted_apps surfaces
+# as a visibly skipped verify job instead of a silent-green skipped step.
 PROMOTED=()
+
+emit_promoted_apps() {
+  local csv=""
+  if [ ${#PROMOTED[@]} -gt 0 ]; then
+    csv=$(IFS=,; echo "${PROMOTED[*]}")
+  fi
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    # Last-write-wins in $GITHUB_OUTPUT — incremental overwrites are safe.
+    echo "promoted_apps=${csv}" >> "$GITHUB_OUTPUT"
+  fi
+}
+
+# bug.0327: EXIT trap guarantees promoted_apps is written even on abort.
+# Without this, a non-zero return from any command after the last
+# promotion would leave promoted_apps empty despite real overlay writes,
+# and release-slot would treat verify-candidate's (correct) job-level
+# skip as a green flight. The trap pins the invariant: if promoted_apps
+# is empty at gate evaluation time, no overlay was written.
+trap emit_promoted_apps EXIT
 
 extract_digest() {
   local target="$1"
@@ -77,23 +104,9 @@ for item in payload["targets"]:
 PY
 }
 
-# Write a per-app `app → source_sha` entry into .promote-state/source-sha-by-app.json
-# on the deploy branch. Merged, not overwritten — untouched apps retain their
-# prior source_sha. Consumed by verify-buildsha.sh in SOURCE_SHA_MAP mode for
-# cross-env/cross-PR contract verification (bug.0321 Fix 4).
-update_source_sha_map() {
-  local app="$1"
-  if [ -z "$source_sha" ]; then
-    echo "  ⚠️  source_sha missing from payload — skipping map update for ${app}" >&2
-    return 0
-  fi
-  APP="$app" SOURCE_SHA="$source_sha" MAP_FILE="$MAP_FILE" \
-    bash "$MAP_SCRIPT"
-}
-
 promote_target() {
   local target="$1"
-  local digest migrator_digest
+  local digest migrator_digest=""
 
   digest=$(extract_digest "$target")
   [ -z "$digest" ] && return 0
@@ -106,30 +119,48 @@ promote_target() {
     else
       bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest"
     fi
-    PROMOTED+=("$target")
-    update_source_sha_map "$target"
+  elif [ "$target" = "scheduler-worker" ]; then
+    bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest"
+  else
     return 0
   fi
 
-  if [ "$target" = "scheduler-worker" ]; then
-    bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest"
-    PROMOTED+=("$target")
-    update_source_sha_map "$target"
+  PROMOTED+=("$target")
+  # Re-emit after every success so a later abort still leaves an accurate
+  # promoted_apps in $GITHUB_OUTPUT (last-write-wins).
+  emit_promoted_apps
+}
+
+# Write a per-app `app → source_sha` entry into .promote-state/source-sha-by-app.json
+# on the deploy branch. Called in a second pass after all promotions are
+# recorded, so a map-write failure can never shadow promoted_apps. Errors
+# are logged and swallowed — verify-candidate will still run on the
+# promoted set, and bug.0326's downstream digest-match check is the
+# authoritative rollout gate.
+update_source_sha_map() {
+  local app="$1"
+  if [ -z "$source_sha" ]; then
+    echo "  ⚠️  source_sha missing from payload — skipping map update for ${app}" >&2
+    return 0
+  fi
+  if ! APP="$app" SOURCE_SHA="$source_sha" MAP_FILE="$MAP_FILE" \
+       bash "$MAP_SCRIPT"; then
+    echo "  ⚠️  source-sha-map write failed for ${app} — continuing (overlay already promoted)" >&2
   fi
 }
 
+# Pass 1 — promotions. Each appends to PROMOTED and emits $GITHUB_OUTPUT.
 promote_target operator
 promote_target poly
 promote_target resy
 promote_target scheduler-worker
 
-promoted_csv=""
-if [ ${#PROMOTED[@]} -gt 0 ]; then
-  promoted_csv=$(IFS=,; echo "${PROMOTED[*]}")
-fi
+# Pass 2 — source-sha-map. Non-fatal on per-app failure.
+for app in "${PROMOTED[@]}"; do
+  update_source_sha_map "$app"
+done
 
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
-  echo "promoted_apps=${promoted_csv}" >> "$GITHUB_OUTPUT"
-fi
-
-echo "Promoted apps: ${promoted_csv:-none}"
+# Final emission for the happy-path log line; trap EXIT would also fire
+# this, but an explicit end-of-success message helps humans grep.
+emit_promoted_apps
+echo "Promoted apps: $(IFS=,; echo "${PROMOTED[*]:-none}")"
