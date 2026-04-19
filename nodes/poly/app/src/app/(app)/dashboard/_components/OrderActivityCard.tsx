@@ -218,19 +218,35 @@ export function OrderActivityCard(): ReactElement {
                 const href = row.market_tx_hash
                   ? `https://polygonscan.com/tx/${row.market_tx_hash}`
                   : null;
-                // Historic rows pre-dating the title-stash (PR #918) have no
-                // market_title. Show a friendly placeholder rather than a
-                // truncated conditionId hex — the full id is still available
-                // via the cell `title` attribute for devs.
-                const display = row.market_title ?? "—";
+                // Data-API trades always carry a human-readable title (Zod
+                // schema default=""), so for rows written post-#918 this is
+                // always populated. Pre-#918 legacy rows may render empty;
+                // that's a finite migration tail, not worth placeholder UX.
+                const display = row.market_title ?? "";
 
+                const openHref = () => {
+                  if (href) window.open(href, "_blank", "noopener");
+                };
                 return (
                   <TableRow
                     key={`${row.target_id}:${row.fill_id}`}
-                    onClick={() => {
-                      if (href) window.open(href, "_blank", "noopener");
+                    role={href ? "link" : undefined}
+                    tabIndex={href ? 0 : undefined}
+                    onClick={openHref}
+                    onAuxClick={(e) => {
+                      // middle-click → new tab (same as left-click today).
+                      if (e.button === 1) openHref();
                     }}
-                    className={cn(href && "cursor-pointer hover:bg-muted/30")}
+                    onKeyDown={(e) => {
+                      if (href && (e.key === "Enter" || e.key === " ")) {
+                        e.preventDefault();
+                        openHref();
+                      }
+                    }}
+                    className={cn(
+                      href &&
+                        "cursor-pointer hover:bg-muted/30 focus-visible:bg-muted/30 focus-visible:outline-none"
+                    )}
                   >
                     <TableCell className="text-muted-foreground text-sm">
                       <span className="inline-flex items-center gap-2">
@@ -247,10 +263,7 @@ export function OrderActivityCard(): ReactElement {
                         />
                       </span>
                     </TableCell>
-                    <TableCell
-                      className="font-medium text-sm"
-                      title={row.market_title ?? row.market_id ?? undefined}
-                    >
+                    <TableCell className="font-medium text-sm">
                       {display}
                     </TableCell>
                     <TableCell className="text-center">
