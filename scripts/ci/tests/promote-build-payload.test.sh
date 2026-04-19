@@ -4,7 +4,7 @@
 #
 # scripts/ci/tests/promote-build-payload.test.sh
 #
-# Regression harness for bug.0327. Three cases:
+# Regression harness for bug.0328. Three cases:
 #   1. Happy path           → promoted_apps=<all4>, map written.
 #   2. MAP_SCRIPT failing   → promoted_apps=<all4>, map absent (defense:
 #                             source-sha-map failure must NOT shadow

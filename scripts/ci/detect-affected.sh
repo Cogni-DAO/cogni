@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-# Canonical target catalog (bug.0327 architectural follow-up). One edit
+# Canonical target catalog (bug.0328 architectural follow-up). One edit
 # to add a node, everywhere — see scripts/ci/lib/image-tags.sh.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./lib/image-tags.sh

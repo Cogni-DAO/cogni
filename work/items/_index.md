@@ -341,7 +341,7 @@
 | 1 | task.0250 | Extract @cogni/graph-execution-host package | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | story.0262 | Agent contributor protocol — shared workflow for AI agents coordinating on a codebase | Development Workflows | proj.development-workflows |
 | 1 | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
-| 1 | bug.0327 | promote-build-payload silent abort + release-slot treats skipped verify as success — verify-candidate bypassed on real flight | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | bug.0328 | promote-build-payload silent abort + release-slot treats skipped verify as success — verify-candidate bypassed on real flight | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |

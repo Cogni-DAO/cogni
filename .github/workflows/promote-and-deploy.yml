@@ -124,7 +124,7 @@ jobs:
         env:
           HEAD_SHA: ${{ steps.env.outputs.head_sha }}
         run: |
-          # Canonical target catalog + tag-suffix mapping (bug.0327
+          # Canonical target catalog + tag-suffix mapping (bug.0328
           # architectural follow-up). Checkout step places the repo under
           # `app-src/` (see `path: app-src` above), so the lib lives there.
           # shellcheck source=../../scripts/ci/lib/image-tags.sh

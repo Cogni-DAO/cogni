@@ -372,7 +372,7 @@ jobs:
         # is empty — that is the same signal the verify-candidate job-level
         # `if:` gate used to decide whether to run.
         #
-        # bug.0327: a VERIFY_RESULT=skipped with non-empty promoted_apps is
+        # bug.0328: a VERIFY_RESULT=skipped with non-empty promoted_apps is
         # a contradiction — the flight job pushed real promotions to
         # deploy/candidate-a but verification never ran (promoted_apps got
         # wedged empty in $GITHUB_OUTPUT because promote-build-payload
@@ -431,7 +431,7 @@ jobs:
           TARGET_URL: ${{ needs.flight.outputs.status_url }}
         run: bash app-src/scripts/ci/report-candidate-status.sh
 
-      # bug.0327: when Decide chose STATUS=failure, the commit status has
+      # bug.0328: when Decide chose STATUS=failure, the commit status has
       # been reported and the lease released; now fail the job itself so
       # the workflow run shows red in the GitHub UI and downstream
       # automations (the pr-coordinator loop) don't auto-advance as if

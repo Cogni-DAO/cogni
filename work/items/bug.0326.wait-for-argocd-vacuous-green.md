@@ -13,7 +13,7 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch: fix/bug.0327-promote-silent-abort
+branch: fix/bug.0328-promote-silent-abort
 pr: https://github.com/Cogni-DAO/node-template/pull/924
 reviewer: claude-code
 revision: 0
@@ -124,7 +124,7 @@ Needs to also check migration Jobs, not just Deployments — a failed Job (bad i
 
 -
 
-## Closure (2026-04-19 — bundled with bug.0327)
+## Closure (2026-04-19 — bundled with bug.0328)
 
 **Live repro confirmed** on PR #918 flight of SHA `54f8462` (run
 [24622761291](https://github.com/Cogni-DAO/node-template/actions/runs/24622761291)):
@@ -164,8 +164,8 @@ helper mapping `{env}-{app}` Argo Application names to the actual
 Deployment name convention (`<app>-node-app` for node-apps,
 `scheduler-worker` for the worker).
 
-Bundled with bug.0327 because both close the same silent-green class
-— bug.0327 at release-slot (accepts skipped verify), bug.0326 at
+Bundled with bug.0328 because both close the same silent-green class
+— bug.0328 at release-slot (accepts skipped verify), bug.0326 at
 wait-for-argocd (accepts half-rolled pods). Adjacent layers of the
 same trust chain.
 

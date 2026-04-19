@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-# Canonical target catalog + tag-suffix mapping (bug.0327 architectural
+# Canonical target catalog + tag-suffix mapping (bug.0328 architectural
 # follow-up). Keep build + discovery + promotion consistent from a single
 # source file. See scripts/ci/lib/image-tags.sh for the contract.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

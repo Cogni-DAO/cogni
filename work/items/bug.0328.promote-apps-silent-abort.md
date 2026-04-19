@@ -1,5 +1,5 @@
 ---
-id: bug.0327
+id: bug.0328
 type: bug
 title: promote-build-payload silent abort + release-slot treats skipped verify as success — verify-candidate bypassed on real flight
 status: done
@@ -13,7 +13,7 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch: fix/bug.0327-promote-silent-abort
+branch: fix/bug.0328-promote-silent-abort
 pr: https://github.com/Cogni-DAO/node-template/pull/924
 reviewer: claude-code
 revision: 0

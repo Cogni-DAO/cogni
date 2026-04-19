@@ -25,7 +25,7 @@
 
 set -euo pipefail
 
-# Canonical target catalog + tag-suffix mapping (bug.0327 architectural
+# Canonical target catalog + tag-suffix mapping (bug.0328 architectural
 # follow-up). Single source of truth for `target → image:tag` across the
 # producer (build-and-push-images), this discoverer, the flight-preview
 # retag step, and promote-and-deploy's resolve/promote steps.

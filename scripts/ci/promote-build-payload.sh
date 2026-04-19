@@ -16,7 +16,7 @@
 #     by verify-buildsha.sh in SOURCE_SHA_MAP mode for cross-env/cross-PR
 #     contract verification (bug.0321 Fix 4).
 #
-# bug.0327: promoted_apps is emitted incrementally after each successful
+# bug.0328: promoted_apps is emitted incrementally after each successful
 # promotion AND re-emitted by an EXIT trap, so a silent abort between
 # promotions and the trailing output write cannot produce an empty
 # promoted_apps while the deploy branch already carries real promotions.
@@ -82,7 +82,7 @@ emit_promoted_apps() {
   fi
 }
 
-# bug.0327: EXIT trap guarantees promoted_apps is written even on abort.
+# bug.0328: EXIT trap guarantees promoted_apps is written even on abort.
 # Without this, a non-zero return from any command after the last
 # promotion would leave promoted_apps empty despite real overlay writes,
 # and release-slot would treat verify-candidate's (correct) job-level

@@ -168,7 +168,7 @@ jobs:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           RESOLVED_TARGETS: ${{ steps.images.outputs.resolved_targets }}
         run: |
-          # Canonical target catalog + tag-suffix mapping (bug.0327
+          # Canonical target catalog + tag-suffix mapping (bug.0328
           # architectural follow-up). Iterating ALL_TARGETS means adding a
           # new node is a one-line edit in scripts/ci/lib/image-tags.sh —
           # no inline list to drift here (the root cause of PR #923).
