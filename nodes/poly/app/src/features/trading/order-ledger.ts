@@ -11,8 +11,9 @@
  *   - INSERT_IS_IDEMPOTENT — `insertPending` uses `ON CONFLICT (target_id, fill_id) DO NOTHING`, so repeat inserts are silent no-ops. Ordering guarantee lives in the caller, not here.
  *   - STATUS_ENUM_PINNED — the `status` CHECK in migration 0027 rejects any writer that tries to store an unknown value; that + `LedgerStatus` keep the runtime + schema in sync.
  *   - CAPS_COUNT_INTENTS — `today_spent_usdc` + `fills_last_hour` count every row whose `observed_at` falls in the window, regardless of terminal status. Matches `decide.ts::INTENT_BASED_CAPS`.
+ *   - SYNCED_AT_WRITTEN_ON_EVERY_SYNC — `markSynced` sets `synced_at = now()` for every row for which the reconciler received a typed CLOB response (found OR not_found). Rows never checked show `synced_at IS NULL`. (task.0328 CP3)
  * Side-effects: IO (Postgres reads + writes).
- * Links: work/items/task.0315.poly-copy-trade-prototype.md (CP4.3b), docs/spec/poly-copy-trade-phase1.md
+ * Links: work/items/task.0315.poly-copy-trade-prototype.md (CP4.3b), work/items/task.0328.poly-sync-truth-ledger-cache.md, docs/spec/poly-copy-trade-phase1.md
  * @public
  */
 

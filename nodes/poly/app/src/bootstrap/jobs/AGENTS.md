@@ -30,7 +30,9 @@ Job modules that wire business logic to the application container for ops-trigge
 
 - **Exports:** `runGovernanceSchedulesSyncJob()`
 - **CLI (if any):** `pnpm governance:schedules:sync` (calls internal ops route)
-- **Files considered API:** `syncGovernanceSchedules.job.ts`
+- **Files considered API:** `syncGovernanceSchedules.job.ts`, `order-reconciler.job.ts`
+
+**order-reconciler.job.ts** — 60s interval reconciler for `poly_copy_trade_fills`. Resolves typed `GetOrderResult` per row (no null skips); promotes not_found rows older than `notFoundGraceMs` to `canceled`; writes `synced_at` via `markSynced`; stamps `reconcilerLastTickAt` for the sync-health endpoint. Pure `runReconcileOnce` export for unit tests. Scaffolding — deleted in phase 4.
 
 ## Ports (optional)
 

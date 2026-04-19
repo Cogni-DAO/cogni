@@ -2,7 +2,7 @@
 id: task.0328
 type: task
 title: "Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health)"
-status: needs_review
+status: needs_merge
 revision: 2
 priority: 1
 rank: 50

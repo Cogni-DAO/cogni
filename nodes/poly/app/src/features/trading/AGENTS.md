@@ -39,8 +39,8 @@ Generic Polymarket placement + order-ledger substrate. Every path that places an
 ## Public Surface
 
 - **Exports (executor):** `createClobExecutor(deps) → ClobExecutor`, `ClobExecutorDeps`, `CLOB_EXECUTOR_METRICS`.
-- **Exports (order ledger):** `createOrderLedger(deps) → OrderLedger`, `OrderLedgerDeps`, `snapshotState`, `insertPending`, `markOrderId`, `markError`, `recordDecision`, `listRecent`.
-- **Exports (types):** `LedgerRow`, `LedgerStatus`, `StateSnapshot`.
+- **Exports (order ledger):** `createOrderLedger(deps) → OrderLedger`, `OrderLedgerDeps`, `snapshotState`, `insertPending`, `markOrderId`, `markError`, `updateStatus` (accepts optional `reason?`), `recordDecision`, `listRecent`, `listOpenOrPending`, `markSynced`, `syncHealthSummary`.
+- **Exports (types):** `LedgerRow` (includes `synced_at`), `LedgerStatus`, `StateSnapshot`, `UpdateStatusInput`, `ListOpenOrPendingOptions`, `SyncHealthSummary`.
 
 ## Invariants
 

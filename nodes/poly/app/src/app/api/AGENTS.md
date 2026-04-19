@@ -63,6 +63,8 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/users/me/ownership` [GET] - current ownership summary derived from linked identities
   - `/api/v1/work/items` [GET] - list work items with optional filters (SIWE auth)
   - `/api/v1/work/items/[id]` [GET] - get single work item by ID (SIWE auth)
+  - `/api/v1/poly/copy-trade/orders` [GET] - recent order ledger rows with `synced_at` + `staleness_ms` (session auth)
+  - `/api/v1/poly/internal/sync-health` [GET] - aggregate sync-freshness stats for the reconciler (no auth; aggregate-only)
 - **Files considered API:** v1/_/route.ts, admin/_/route.ts
 
 ## Responsibilities

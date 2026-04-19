@@ -4,11 +4,11 @@
 /**
  * Module: `@app/api/v1/poly/copy-trade/orders`
  * Purpose: HTTP GET — recent rows from the order ledger (copy-trade placements from the autonomous mirror poll). v0 orders are not yet user-scoped.
- * Scope: Thin validator — parses query params, reads via `createOrderLedger().listRecent`, maps to contract response shape.
+ * Scope: Thin validator — parses query params, reads via `container.orderLedger.listRecent`, maps to contract response shape including `synced_at` (ISO-8601 or null) and `staleness_ms` (derived server-side as `now - synced_at`).
  * Invariants: Response shape is contract-defined; ordering is `observed_at DESC`; agent-tool placements are NOT in the ledger in v0 (follow-up).
  * Side-effects: IO (one DB SELECT via service-role client).
  * Notes: Authenticated via session. HARDCODED_USER — response is not user-scoped in v0.
- * Links: docs/spec/poly-copy-trade-phase1.md
+ * Links: docs/spec/poly-copy-trade-phase1.md, work/items/task.0328.poly-sync-truth-ledger-cache.md (CP3)
  * @public
  */
 

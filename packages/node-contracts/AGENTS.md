@@ -47,6 +47,11 @@ All contract files re-exported via `src/index.ts`. Selective re-export for `ai.c
 
 All require `Authorization: Bearer ${SCHEDULER_API_TOKEN}`.
 
+**Poly copy-trade contracts:**
+
+- `poly.copy-trade.orders.v1.contract` — `GET /api/v1/poly/copy-trade/orders`; response rows include `synced_at: string | null` + `staleness_ms: number | null` (task.0328 CP3)
+- `poly.sync-health.v1.contract` — `GET /api/v1/poly/internal/sync-health`; returns `{oldest_synced_row_age_ms, rows_stale_over_60s, rows_never_synced, reconciler_last_tick_at}` (task.0328 CP4)
+
 ## Responsibilities
 
 - This directory **does**: Define Zod schemas for API request/response shapes, HTTP router contracts, OpenAPI specs

@@ -22,6 +22,17 @@
  *     remaining rows and never crashes the interval.
  *   - NO_REDEMPTION_SYNC_V0 — reconciler only syncs from `getOrder`. Position-
  *     based redemption detection is deferred (task.0329).
+ *   - GETORDER_NEVER_NULL — `getOrder` returns `GetOrderResult`; null is never a
+ *     valid return. Callers branch on the discriminant. (task.0328 CP1)
+ *   - GRACE_WINDOW_IS_CONFIG — not_found rows older than `notFoundGraceMs` are
+ *     promoted to `canceled`; value sourced from `POLY_CLOB_NOT_FOUND_GRACE_MS`
+ *     env var (default 900 000 ms). (task.0328 CP2)
+ *   - UPGRADE_IS_METERED — each not_found-to-canceled promotion increments
+ *     `poly_reconciler_not_found_upgrades_total`. (task.0328 CP2)
+ *   - SYNCED_AT_WRITTEN_ON_EVERY_SYNC — `markSynced` is called for every row
+ *     for which `getOrder` returned a typed answer. (task.0328 CP3)
+ *   - SYNC_HEALTH_IS_PUBLIC — `reconcilerLastTickAt` is stamped each tick and
+ *     surfaced by the `/api/v1/poly/internal/sync-health` endpoint. (task.0328 CP4)
  * Side-effects: starts a `setInterval`, emits logs + metrics.
  * Links: work/items/task.0323 §2, docs/spec/poly-copy-trade-phase1.md
  *

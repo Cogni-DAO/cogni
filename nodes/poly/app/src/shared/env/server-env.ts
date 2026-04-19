@@ -9,6 +9,7 @@
  * Side-effects: process.env
  * Notes: Extracted from server.ts so that bootstrap/job code can import without pulling in "server-only".
  *        APP_ENV for adapter wiring; SERVICE_NAME for observability; LLM config; DATABASE_URL required (no component-piece fallback).
+ *        POLY_CLOB_NOT_FOUND_GRACE_MS — grace window (ms) before a not_found order is promoted to canceled (default 900 000; task.0328 GRACE_WINDOW_IS_CONFIG).
  *        Lazy init prevents build-time access. Per DATABASE_RLS_SPEC.md design decision 7: no DSN construction in runtime code.
  * Links: Environment configuration specification
  * @public

@@ -41,7 +41,7 @@ Standalone workspace package (`@cogni/market-provider`) providing a typed port f
 
 **Root barrel** (`@cogni/market-provider`):
 
-- Types: `MarketProviderPort`, `MarketCredentials`, `MarketProviderConfig`, `NormalizedMarket`, `MarketProvider`, `ListMarketsParams`, `MarketOutcome`, `OrderIntent`, `OrderReceipt`, `OrderStatus`, `OrderSide`, `Fill`, `FillSource`
+- Types: `MarketProviderPort`, `MarketCredentials`, `MarketProviderConfig`, `NormalizedMarket`, `MarketProvider`, `ListMarketsParams`, `MarketOutcome`, `OrderIntent`, `OrderReceipt`, `OrderStatus`, `OrderSide`, `Fill`, `FillSource`, `GetOrderResult`
 - Schemas: `NormalizedMarketSchema`, `MarketProviderSchema`, `ListMarketsParamsSchema`, `MarketOutcomeSchema`, `OrderIntentSchema`, `OrderReceiptSchema`, `OrderStatusSchema`, `OrderSideSchema`, `FillSchema`, `FillSourceSchema`
 - Errors: `OrderNotSupportedError`
 - Pure fns: `normalizePolymarketMarket()`, `normalizeKalshiMarket()`

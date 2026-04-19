@@ -45,7 +45,7 @@ Cross-process importers (scheduler-worker, Temporal worker, `@cogni/poly-graphs`
 
 - **Subpath exports (mirrors `@cogni/db-schema` shape):**
   - `@cogni/poly-db-schema` — root barrel re-exports every slice
-  - `@cogni/poly-db-schema/copy-trade` — `polyCopyTradeFills`, `polyCopyTradeConfig`, `polyCopyTradeDecisions` (task.0315 copy-trade prototype tables)
+  - `@cogni/poly-db-schema/copy-trade` — `polyCopyTradeFills` (includes `syncedAt` column — nullable `timestamptz`, migration 0028), `polyCopyTradeConfig`, `polyCopyTradeDecisions` (task.0315 copy-trade prototype tables; `syncedAt` added task.0328 CP3)
 - **Files considered API:** all `src/*.ts` via package.json exports
 
 ## Ports

@@ -10,7 +10,7 @@ summary: Build an autonomous prediction market bot that ingests live market data
 outcome: A self-improving prediction market intelligence system — from read-only market access through autonomous analysis to simulated trading with tracked P&L.
 assignees: derekg1729
 created: 2026-03-31
-updated: 2026-04-17
+updated: 2026-04-19
 labels: [poly, prediction-markets, ai, langgraph, temporal, copy-trading]
 ---
 
@@ -69,6 +69,7 @@ Build a prediction market bot that starts by reading and searching live markets 
 | Deliverable                                                                | Status      | Est | Work Item            |
 | -------------------------------------------------------------------------- | ----------- | --- | -------------------- |
 | Follow-a-wallet — trade library + migration (no VM wiring yet) (PR #890)   | In Review   | 5   | task.0315            |
+| Sync-truth: typed not_found, grace window, synced_at, sync-health endpoint | In Review   | 1   | task.0328            |
 | Multi-tenant wallet auth — per-user EOA + RLS + durable trade grants       | Not Started | 5   | task.0318            |
 | Paper trading engine — simulated order execution against live odds         | Not Started | 4   | (create at P2 start) |
 | Position tracking + P&L ledger (integrated with `@cogni/financial-ledger`) | Not Started | 3   | (create at P2 start) |
@@ -102,6 +103,7 @@ Build a prediction market bot that starts by reading and searching live markets 
 
 - [Data Streams](../../docs/spec/data-streams.md) — Redis live plane, selective Postgres persistence, SSE
 - [Knowledge Data Plane](../../docs/spec/knowledge-data-plane.md) — versioned strategy/prompt expertise (draft)
+- [Poly Mirror v0](../../docs/spec/poly-copy-trade-phase1.md) — three-layer decomposition (trading / wallet-watch / copy-trade), order-ledger, placement invariants (task.0315)
 - ~~AI Awareness & Decision Plane (`docs/spec/monitoring-engine.md`)~~ — referenced in the original roadmap but the file does not exist. Deleted from pointers until it's written.
 
 ## Design Notes
