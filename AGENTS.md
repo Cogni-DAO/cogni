@@ -54,23 +54,20 @@ Each stage is a real signal, not a ceremony. Skipping a stage does not save time
 
 ## Pull Request Discipline
 
-PRs are the durable artifact of a work item — write them like one. The `/closeout` command (or [`/pull-request`](.claude/commands/pull-request.md) for manual flows) is the authoritative entry point; both need upgrading to enforce the checklist below. Until they do, you are responsible for it manually.
-
-Every PR body must answer, explicitly:
+PRs are the durable artifact of a work item. [`/closeout`](.claude/commands/closeout.md) creates them. Every PR body answers:
 
 - **TLDR** — what changed, in 1–2 lines.
-- **Deployment impact** — does this need a `candidate-flight-infra` run? Does it add or rotate secrets? Does it change `deploy/*` surface area? If any answer is yes, say so and link the affected workflow.
-- **E2E validation plan** — the `exercise:` + `observability:` pair from the work item's `## Validation` block, verbatim. What you will run against candidate-a and what telemetry will prove it worked.
-- **Validation result (post-flight comment)** — once flighted, comment on the PR with the real `exercise:` response + the Loki log line (or equivalent) that confirms your own request hit the deployed SHA. This is what flips `deploy_verified: true`.
-
-If `/closeout` / `/pull-request` do not yet prompt for these, add them manually and file a follow-up to upgrade the commands. Do not ship PRs without this checklist — it _is_ the Definition of Done, written down.
+- **Deployment impact** — does this need `candidate-flight-infra`? Add or rotate secrets? Touch `deploy/*`? Name it and link the workflow, or say `none`.
+- **E2E validation plan** — the `exercise:` + `observability:` pair from the work item's `## Validation` block, verbatim.
+- **Validation result** — post-flight comment with the real `exercise:` response and the Loki line proving your own request hit the deployed SHA. This flips `deploy_verified: true`.
 
 ## Agent Behavior
 
 - Follow this file as primary instruction. Subdir `AGENTS.md` may extend but may not override core principles.
+- **Drive the work to `deploy_verified: true`.** Don't wait for a human to unblock the next step — run the command, read the log, fix the error, try again. Escalate only on truly critical blockers (missing auth, revoked access, destructive-op confirmation).
+- **Scale your learnings.** When you hit a mistake or blocker another agent is likely to repeat, edit the relevant guide / spec / command file so the next agent doesn't rediscover it. A 3-line fix to a pointer doc beats a 30-minute onboarding by the next agent. This is how the playbook gets better.
 - Never modify files outside your assigned scope. Never commit on a branch you did not create.
 - Use git worktrees for isolated work — never `checkout`/`stash` on the user's main worktree.
-- Treat corrections as durable rules. When the user corrects an approach, update this file or the relevant guide so the mistake doesn't repeat.
 - If asked to install tools: `pnpm install --frozen-lockfile`.
 
 ## API Contracts are the Single Source of Truth
