@@ -290,6 +290,12 @@ jobs:
           git push origin HEAD:${DEPLOY_BRANCH}
           DEPLOY_SHA=$(git rev-parse HEAD)
           echo "pushed=true" >> $GITHUB_OUTPUT
+          # Symmetric with the no-op branch above: emit deploy_branch_sha +
+          # promoted_apps on the PUSH path too, otherwise downstream verify-deploy
+          # gate (if: promoted_apps != '') sees empty and skips when promotions
+          # actually happened — the inverse of the intended behavior.
+          echo "deploy_branch_sha=$DEPLOY_SHA" >> $GITHUB_OUTPUT
+          echo "promoted_apps=${PROMOTED_CSV}" >> $GITHUB_OUTPUT
 
       - name: Summarise promotion
         env:
