@@ -500,10 +500,6 @@ async function main(): Promise<void> {
   );
 
   // 5. CLOB fallback for unmapped tokens — only for CIDS we need and that are resolved
-  const neededCids = new Set<string>();
-  for (const [tid] of Array.from(allTokens).map((t) => [t] as const)) {
-    // placeholder, real loop below
-  }
   const unmappedTokens: string[] = [];
   for (const tok of allTokens)
     if (!tokenMaps.has(tok)) unmappedTokens.push(tok);
