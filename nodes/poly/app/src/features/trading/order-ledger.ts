@@ -16,12 +16,12 @@
  * @public
  */
 
+import { EVENT_NAMES } from "@cogni/node-shared";
 import {
   polyCopyTradeConfig,
   polyCopyTradeDecisions,
   polyCopyTradeFills,
-} from "@cogni/db-schema/poly-copy-trade";
-import { EVENT_NAMES } from "@cogni/node-shared";
+} from "@cogni/poly-db-schema/copy-trade";
 import { and, count, desc, eq, gte, sql, sum } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { Logger } from "pino";
