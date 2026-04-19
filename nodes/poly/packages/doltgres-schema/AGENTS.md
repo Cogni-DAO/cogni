@@ -56,6 +56,22 @@ Today's contents: a single re-export of the base `knowledge` table from `@cogni/
 - **Does:** define Drizzle table schemas for poly-local Doltgres tables; re-export inherited tables from `@cogni/node-template-knowledge`.
 - **Does not:** contain queries, adapters, business logic, RLS policies, or any I/O.
 
+## Syntropy rule — BEFORE adding a new table here, read this
+
+This package is for **AI-written, AI-refined compounding knowledge**. It is NOT a general node-local table dumping ground. Operational data (auth, user activity, billing, ingestion receipts, append-only system events) belongs in the Postgres-side `@cogni/poly-db-schema`, never here.
+
+**Default: add rows to the existing `knowledge` table with a different `domain` + `tags` set. Do NOT add new tables.**
+
+Before adding a table, answer all three:
+
+1. Can this live as rows in `knowledge` with a different `domain` + `tags`? (Almost always yes for v0/v1.)
+2. Does it need genuinely different columns, or just different content? Different content → rows, not tables.
+3. Will AI agents need to query this independently of the rest of knowledge, forever? If not, join-via-another-table creates retrieval fragmentation. Stay in `knowledge`.
+
+Companion tables (e.g., `polyMarketCategories`) are allowed **when a genuinely new entity exists and is referenced from `knowledge`**. They're not a license to shard `knowledge` by topic.
+
+See [docs/spec/knowledge-data-plane.md](../../../../docs/spec/knowledge-data-plane.md) § "Generic schema, domain-specific content" and [database-expert skill](../../../../.claude/skills/database-expert/SKILL.md) § "Doltgres syntropy" for the canonical framing.
+
 ## Dialect separation (non-negotiable)
 
 This package is globbed ONLY by `nodes/poly/drizzle.doltgres.config.ts` (Doltgres target). `nodes/poly/drizzle.config.ts` (Postgres target) MUST NOT include this path — if it did, the Postgres migrator would try creating the `knowledge` table in Postgres.

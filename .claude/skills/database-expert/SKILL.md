@@ -1,6 +1,6 @@
 ---
 name: database-expert
-description: Cogni-template DB architecture reference — per-node schema independence, drizzle configs, RLS (`app_user`/`app_service`), migrator images, and the gotchas. Use when adding/modifying DB tables, writing migrations, running `pnpm db:*`, debugging drizzle-kit errors, touching `@cogni/db-schema` or any `@cogni/<node>-db-schema`, or dealing with `DATABASE_URL` / `__drizzle_migrations` / per-node migrator Dockerfiles.
+description: Cogni-template DB architecture reference — Postgres-vs-Doltgres split (operational vs AI-written data), per-node schema independence, drizzle configs, RLS (`app_user`/`app_service`), migrator images, Doltgres syntropy rules, and the gotchas. Use when adding/modifying DB tables, deciding which DB a new table belongs in, writing migrations, running `pnpm db:*`, debugging drizzle-kit errors, touching `@cogni/db-schema` or any `@cogni/<node>-{db,doltgres}-schema`, or dealing with `DATABASE_URL` / `DOLTGRES_URL` / `__drizzle_migrations` / per-node migrator Dockerfiles.
 ---
 
 # database-expert
@@ -33,16 +33,52 @@ nodes/<node>/packages/db-schema/  @cogni/<node>-db-schema  (only created when no
 
 Only `@cogni/poly-db-schema` exists today. Resy/operator/node-template spin up a per-node package on their first node-local table — no empty scaffolds.
 
+## Postgres vs Doltgres — the first question for any new table
+
+**Both DBs exist and serve different purposes. Choosing wrong is the hardest class of error to undo.**
+
+|                | **Postgres**                                                                                                      | **Doltgres**                                                                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What it holds  | **Operational data** — auth, user activity, billing, scheduling, ingestion receipts, awareness-plane observations | **AI-written / AI-read knowledge** — compounding expertise, strategies, research notes, niche-domain facts, work items, prompt versions, evidence |
+| Edit pattern   | Append-mostly. Rows written by humans or system flows; rarely revised after write. Historical integrity matters.  | Edit-and-refine. Rows are **expected to be churned** by agents over time as understanding deepens. Version history comes free via Dolt commits.   |
+| Invariant test | "Does a human or system-of-record action generate this row?"                                                      | "Does an AI agent produce, refine, or cite this row as part of its reasoning loop?"                                                               |
+| Examples today | `users`, `billing_accounts`, `credit_ledger`, `graph_runs`, `observations`, `poly_copy_trade_fills`               | `knowledge` (today's only table) — and every future row is an AI-editable fact with provenance                                                    |
+
+If the new table is borderline, the tiebreaker is **"would versioned history be valuable on this?"** Yes → Doltgres. No → Postgres. An append-only Postgres table with a `created_at` column and no updates is a strong signal it belongs in Postgres; a table where rows get rewritten as confidence scores change or new evidence lands is a strong signal it belongs in Doltgres.
+
+### Doltgres syntropy — prevent the exponential-entropy failure mode
+
+Doltgres is easy to abuse: "I have a new domain, let me add `poly_strategies`, `poly_signals`, `poly_targets`, `poly_evaluations`, `poly_backtests`, …" — and now the AI has 20 tables to search across, each with a handful of rows, each with subtly different columns, and retrieval is fragmented.
+
+**The syntropy rule for Doltgres: few tables, generic columns, domain specificity in rows (via `domain` + `tags`), schema refined over time.** Mirrors [knowledge-data-plane spec](../../../docs/spec/knowledge-data-plane.md) § "Generic schema, domain-specific content".
+
+Before adding a Doltgres table, ask:
+
+1. **Can this live as rows in `knowledge` with a different `domain` + `tags` set?** Almost always yes for v0/v1. Default: yes.
+2. **Does it need genuinely different columns, or just a different shape of content?** Different content → rows. Different columns (FK references, typed enums, compound constraints) → maybe a new table.
+3. **Will AI agents need to search it independently?** If the AI's natural query is "give me everything about prediction markets," a second table creates a join the AI has to remember. Stay in one table unless the domain boundary is sharp enough that cross-table queries are NEVER needed.
+
+Companion tables (e.g., `poly_market_categories`) are allowed **when a genuinely new entity exists and is referenced from the base `knowledge` table**. They're not a license to shard `knowledge` by topic. See the knowledge-data-plane spec "If a domain truly needs domain-specific columns, it adds a companion table" for the sanctioned pattern.
+
+### The anti-pattern to flag in review
+
+> New Doltgres table per domain/feature. e.g., `poly_strategies`, `poly_signals`, `poly_targets` each with 5–15 rows.
+
+Ask: "why not `knowledge` rows with `domain: 'poly-strategies'`?" Usually there's no good answer. Reject and refactor into the base table unless there's a concrete entity (not a content category) that requires its own columns.
+
 ## Adding a table — decision flow
 
-1. **Will anything outside the owning node import this?** (scheduler-worker, Temporal worker, graphs, another node's app)
-   - Yes → `packages/db-schema/src/<slice>.ts` (core). See [packages/db-schema/AGENTS.md](../../../packages/db-schema/AGENTS.md) Change Protocol for the 4 coordinated edits (source file, index barrel, tsup entry, package.json exports).
+1. **Postgres or Doltgres?** See the split above. This is the first question — every later decision depends on it.
+2. **Will anything outside the owning node import this?** (scheduler-worker, Temporal worker, graphs, another node's app)
+   - Yes → core package (`packages/db-schema/src/<slice>.ts` for Postgres; core Doltgres packages don't exist yet — cross-node Doltgres would need a new shared package, file as a design task). See [packages/db-schema/AGENTS.md](../../../packages/db-schema/AGENTS.md) Change Protocol for the 4 coordinated edits (source file, index barrel, tsup entry, package.json exports).
    - No → node-local. Continue.
-2. **Does the node already have `packages/db-schema/`?** (Only poly does.)
-   - Yes → add a slice + update its 4 coordination points.
-   - No → create `nodes/<node>/packages/db-schema/` by copying `nodes/poly/packages/db-schema/` structure. Add `"@cogni/<node>-db-schema": "workspace:*"` to the node app's dependencies. Update `nodes/<node>/drizzle.config.ts` schema array to include the new package's `src/**/*.ts`.
-3. **Generate + apply:** `pnpm db:generate:<node>` → inspect the SQL → `pnpm db:migrate:<node>`.
-4. **If CORE table:** copy the migration file + its `_journal.json` entry into every OTHER node's migrations dir. Drizzle-kit does not auto-propagate across nodes; each deployed DB needs its own applied copy so `__drizzle_migrations` hash lookups line up.
+3. **Does the node already have the right per-node package?**
+   - Postgres: `nodes/<node>/packages/db-schema/` (only poly does today).
+   - Doltgres: `nodes/<node>/packages/doltgres-schema/` (only poly does today).
+   - Yes → add a slice + update its 4 coordination points (package.json exports, tsup entry, barrel re-export, drizzle config glob — though the glob is `**/*.ts` so usually nothing to edit there).
+   - No → create the package by copying the poly version; add `"@cogni/<node>-{db,doltgres}-schema": "workspace:*"` to the node app's dependencies (if needed at runtime); update the appropriate `nodes/<node>/drizzle.{config,doltgres.config}.ts` schema array.
+4. **Generate + apply:** `pnpm db:generate:<node>[:doltgres]` → inspect the SQL → `pnpm db:migrate:<node>[:doltgres]`.
+5. **If CORE Postgres table:** copy the migration file + its `_journal.json` entry into every OTHER node's migrations dir. Drizzle-kit does not auto-propagate across nodes; each deployed DB needs its own applied copy so `__drizzle_migrations` hash lookups line up. (Doltgres is per-node today — no cross-node propagation needed yet.)
 
 ## Commands — see spec for the full list
 
@@ -175,3 +211,6 @@ Atlas + Drizzle official integration; `atlas migrate diff`, destructive-change l
 - `ON CONFLICT ... EXCLUDED` added to any Doltgres write path — use try-INSERT / catch-duplicate / fallback-UPDATE instead
 - `SET @@dolt_transaction_commit = 1` added to a script targeting Doltgres — MySQL-dialect syntax, unverified on pg wire
 - Missing trailing `SELECT dolt_commit('-Am', ...)` after a Doltgres schema change — working-set changes exist but not captured in `dolt_log` (per dolt#4843)
+- New Doltgres table per domain or feature when it could be rows in the existing `knowledge` table with a different `domain` + `tags` — violates syntropy, fragments AI retrieval across tables
+- Operational/human-sourced data added to Doltgres — auth events, billing, user activity, ingestion receipts belong in Postgres; Doltgres is for AI-written compounding knowledge
+- AI-written/refined knowledge added to Postgres — strategy notes, research, confidence-scored observations belong in Doltgres; Postgres lacks the version history those edits deserve
