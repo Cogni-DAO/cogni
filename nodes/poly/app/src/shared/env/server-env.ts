@@ -271,6 +271,17 @@ export const serverSchema = z.object({
     .regex(/^0x[a-fA-F0-9]{40}$/)
     .optional(),
 
+  // Reconciler not-found grace window (task.0328 CP2, @scaffolding, Deleted-in-phase: 4).
+  // If CLOB returns not_found for a row whose age (now − created_at) exceeds
+  // this many ms, the reconciler promotes the row to `canceled` with
+  // reason="clob_not_found". Default: 15 min (900000 ms). Set lower in
+  // staging/test to exercise the promotion path faster.
+  POLY_CLOB_NOT_FOUND_GRACE_MS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(900_000),
+
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.
   OPERATOR_MAX_TOPUP_USD: z.coerce.number().positive().default(500),

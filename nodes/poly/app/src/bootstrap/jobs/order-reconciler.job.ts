@@ -58,6 +58,21 @@ export const RECONCILER_METRICS = {
   errorsTotal: "poly_mirror_reconcile_errors_total",
 } as const;
 
+/**
+ * Metrics exported under the canonical `ORDER_RECONCILER_METRICS` name.
+ * Extends `RECONCILER_METRICS` with CP2 counters. Callers should prefer this
+ * export going forward; `RECONCILER_METRICS` is kept for back-compat.
+ */
+export const ORDER_RECONCILER_METRICS = {
+  ...RECONCILER_METRICS,
+  /**
+   * One per row promoted from open/pending → canceled because CLOB returned
+   * not_found beyond the grace window. A spike here signals CLOB changed its
+   * order-retention / pruning behavior. Alert threshold: >5 in 10 min.
+   */
+  notFoundUpgradesTotal: "poly_reconciler_not_found_upgrades_total",
+} as const;
+
 const RECONCILE_POLL_MS = 60_000;
 const DEFAULT_OLDER_THAN_MS = 30_000;
 const DEFAULT_LIMIT = 200;
@@ -81,6 +96,18 @@ export interface OrderReconcilerDeps {
   operatorWalletAddress: `0x${string}`;
   logger: LoggerPort;
   metrics: MetricsPort;
+  /**
+   * Grace window (ms) before a not_found row is promoted to canceled.
+   * GRACE_WINDOW_IS_CONFIG invariant (task.0328 CP2): read from
+   * `POLY_CLOB_NOT_FOUND_GRACE_MS` via server-env; default 900 000 (15 min).
+   */
+  notFoundGraceMs: number;
+  /**
+   * Injected clock — returns the current wall time. Defaults to `() => new Date()`
+   * at production call sites. Injected in tests for deterministic age calculations.
+   * Mirrors the `clock` dep pattern in `mirror-coordinator.ts`.
+   */
+  clock?: () => Date;
 }
 
 /** Stops the reconciler. Returned so the container can call on SIGTERM. */
@@ -120,6 +147,7 @@ export async function runReconcileOnce(
   deps: OrderReconcilerDeps
 ): Promise<void> {
   const log = deps.logger.child({ component: "order-reconciler" });
+  const clock = deps.clock ?? (() => new Date());
 
   const rows: LedgerRow[] = await deps.ledger.listOpenOrPending({
     olderThanMs: DEFAULT_OLDER_THAN_MS,
@@ -136,14 +164,36 @@ export async function runReconcileOnce(
     try {
       const result = await deps.getOrder(row.order_id);
       if (!("found" in result)) {
-        // CP2 will promote stale rows here. For now, behavior is unchanged: no-op.
-        // Add a log at debug so we can see the rate in Loki pre-CP2.
-        log.debug(
+        const ageMs = clock().getTime() - row.created_at.getTime();
+        if (ageMs < deps.notFoundGraceMs) {
+          // Still within grace — assume CLOB is just slow to index.
+          log.debug(
+            {
+              event: EVENT_NAMES.POLY_RECONCILER_NOT_FOUND,
+              client_order_id: row.client_order_id,
+              ageMs,
+            },
+            "CLOB getOrder returned not_found (within grace window)"
+          );
+          continue;
+        }
+        // Beyond grace — CLOB has pruned or the order was canceled and we
+        // missed the transition. Promote to canceled with a distinct reason
+        // so forensics can tell this apart from a normal user/market cancel.
+        await deps.ledger.updateStatus({
+          client_order_id: row.client_order_id,
+          status: "canceled",
+          reason: "clob_not_found",
+        });
+        deps.metrics.incr(ORDER_RECONCILER_METRICS.notFoundUpgradesTotal, {});
+        log.info(
           {
-            event: "poly.reconciler.not_found",
+            event: EVENT_NAMES.POLY_RECONCILER_NOT_FOUND_UPGRADE,
             client_order_id: row.client_order_id,
+            order_id: row.order_id,
+            ageMs,
           },
-          "CLOB getOrder returned not_found"
+          "reconciler: promoting stuck row to canceled (CLOB not_found > grace)"
         );
         continue;
       }

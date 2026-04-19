@@ -299,6 +299,9 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
       if (input.filled_size_usdc !== undefined) {
         patch.filled_size_usdc = input.filled_size_usdc;
       }
+      if (input.reason !== undefined) {
+        patch.reason = input.reason;
+      }
 
       await deps.db
         .update(polyCopyTradeFills)

@@ -187,10 +187,13 @@ export class FakeOrderLedger implements OrderLedger {
     if (input.order_id !== undefined) {
       row.order_id = input.order_id;
     }
-    if (input.filled_size_usdc !== undefined) {
+    if (input.filled_size_usdc !== undefined || input.reason !== undefined) {
       row.attributes = {
         ...(row.attributes ?? {}),
-        filled_size_usdc: input.filled_size_usdc,
+        ...(input.filled_size_usdc !== undefined
+          ? { filled_size_usdc: input.filled_size_usdc }
+          : {}),
+        ...(input.reason !== undefined ? { reason: input.reason } : {}),
       };
     }
   }

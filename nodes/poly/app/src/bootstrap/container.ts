@@ -698,6 +698,7 @@ function createContainer(): Container {
           operatorWalletAddress: polyTradeBundle.operatorWalletAddress,
           logger: mirrorLogger,
           metrics: noopMetrics,
+          notFoundGraceMs: env.POLY_CLOB_NOT_FOUND_GRACE_MS,
         });
       } catch (err: unknown) {
         log.error(

@@ -96,6 +96,13 @@ export interface UpdateStatusInput {
   filled_size_usdc?: number;
   /** Stamp order_id if the adapter returns it on a late acknowledgement. */
   order_id?: string;
+  /**
+   * Machine-readable promotion reason stored in `attributes.reason`.
+   * Used by the reconciler to distinguish "clob_not_found" cancelations from
+   * normal user/market cancelations. Mirrors the pattern of `markError` →
+   * `attributes.error`.
+   */
+  reason?: string;
 }
 
 /**

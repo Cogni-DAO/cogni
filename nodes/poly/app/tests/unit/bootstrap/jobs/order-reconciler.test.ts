@@ -5,7 +5,8 @@
  * Module: `@tests/unit/bootstrap/jobs/order-reconciler`
  * Purpose: Unit tests for `runReconcileOnce` — pure tick logic with
  * FakeOrderLedger + controllable fake `getOrder`. Validates CLOB status sync,
- * skipping rows without order_id, error isolation, and no-op when unchanged.
+ * skipping rows without order_id, error isolation, no-op when unchanged,
+ * and not_found grace-window promotion (task.0328 CP2).
  * Scope: Does not touch DB or CLOB. Uses `FakeOrderLedger` + `noopMetrics`.
  * Side-effects: none
  * Links: src/bootstrap/jobs/order-reconciler.job.ts
@@ -18,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FakeOrderLedger } from "@/adapters/test/trading/fake-order-ledger";
 import {
+  ORDER_RECONCILER_METRICS,
   RECONCILER_METRICS,
   runReconcileOnce,
 } from "@/bootstrap/jobs/order-reconciler.job";
@@ -102,6 +104,7 @@ describe("runReconcileOnce", () => {
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
       metrics: noopMetrics,
+      notFoundGraceMs: 900_000,
     });
 
     expect(ledger.rows[0]?.status).toBe("filled");
@@ -125,6 +128,7 @@ describe("runReconcileOnce", () => {
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
       metrics: noopMetrics,
+      notFoundGraceMs: 900_000,
     });
 
     expect(ledger.rows[0]?.status).toBe("canceled");
@@ -143,6 +147,7 @@ describe("runReconcileOnce", () => {
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
       metrics: noopMetrics,
+      notFoundGraceMs: 900_000,
     });
 
     expect(getOrder).not.toHaveBeenCalled();
@@ -186,6 +191,7 @@ describe("runReconcileOnce", () => {
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
       metrics,
+      notFoundGraceMs: 900_000,
     });
 
     // First row errored — status unchanged
@@ -217,29 +223,12 @@ describe("runReconcileOnce", () => {
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
       metrics: noopMetrics,
+      notFoundGraceMs: 900_000,
     });
 
     expect(updateSpy).not.toHaveBeenCalled();
     // updated_at must not have changed
     expect(ledger.rows[0]?.updated_at).toEqual(originalUpdatedAt);
-  });
-
-  it("getOrder returns not_found → row skipped, status unchanged (was: null — task.0328 CP1; CP2 will add grace-window promotion)", async () => {
-    const ledger = new FakeOrderLedger({
-      initial: [makeRow({ status: "pending", order_id: "order-gone" })],
-    });
-    const getOrder = vi.fn().mockResolvedValue(NOT_FOUND);
-
-    await runReconcileOnce({
-      ledger,
-      getOrder,
-      getOperatorPositions: async () => [],
-      operatorWalletAddress: OPERATOR,
-      logger: LOGGER,
-      metrics: noopMetrics,
-    });
-
-    expect(ledger.rows[0]?.status).toBe("pending");
   });
 
   it("ticks total counter is incremented once per tick", async () => {
@@ -253,8 +242,101 @@ describe("runReconcileOnce", () => {
       operatorWalletAddress: OPERATOR,
       logger: LOGGER,
       metrics,
+      notFoundGraceMs: 900_000,
     });
 
     expect(counts[RECONCILER_METRICS.ticksTotal]).toBe(1);
+  });
+
+  // ─── CP2: not_found grace-window promotion ────────────────────────────────
+
+  it("not_found + stale row (age > grace) → promoted to canceled with reason=clob_not_found; counter incremented", async () => {
+    // Row created 20 min ago; grace window is 10 min → stale.
+    const createdAt = new Date(Date.now() - 20 * 60 * 1000);
+    const row = makeRow({
+      status: "pending",
+      order_id: "order-gone",
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+    const ledger = new FakeOrderLedger({ initial: [row] });
+    const { metrics, counts } = makeTrackingMetrics();
+
+    await runReconcileOnce({
+      ledger,
+      getOrder: vi.fn().mockResolvedValue(NOT_FOUND),
+      getOperatorPositions: async () => [],
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+      metrics,
+      notFoundGraceMs: 10 * 60 * 1000, // 10 min grace
+    });
+
+    expect(ledger.rows[0]?.status).toBe("canceled");
+    expect(
+      (ledger.rows[0]?.attributes as Record<string, unknown> | null)?.reason
+    ).toBe("clob_not_found");
+    expect(counts[ORDER_RECONCILER_METRICS.notFoundUpgradesTotal]).toBe(1);
+    // ticks counter still fires
+    expect(counts[RECONCILER_METRICS.ticksTotal]).toBe(1);
+  });
+
+  it("not_found + fresh row (age < grace) → no updateStatus call, no counter, status unchanged", async () => {
+    // Row created 5 min ago; grace window is 15 min → still within grace.
+    const createdAt = new Date(Date.now() - 5 * 60 * 1000);
+    const row = makeRow({
+      status: "open",
+      order_id: "order-fresh",
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+    const ledger = new FakeOrderLedger({ initial: [row] });
+    const { metrics, counts } = makeTrackingMetrics();
+    const updateSpy = vi.spyOn(ledger, "updateStatus");
+
+    await runReconcileOnce({
+      ledger,
+      getOrder: vi.fn().mockResolvedValue(NOT_FOUND),
+      getOperatorPositions: async () => [],
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+      metrics,
+      notFoundGraceMs: 15 * 60 * 1000, // 15 min grace
+    });
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(ledger.rows[0]?.status).toBe("open");
+    expect(
+      counts[ORDER_RECONCILER_METRICS.notFoundUpgradesTotal]
+    ).toBeUndefined();
+  });
+
+  it("not_found + stale row: injected clock pins age deterministically", async () => {
+    // Row whose created_at is exactly 1 ms before the pinned clock time.
+    // Grace = 0 ms → any age > 0 is stale.
+    const pinnedNow = new Date("2025-01-01T00:00:01.000Z");
+    const createdAt = new Date("2025-01-01T00:00:00.999Z"); // 1 ms before pinnedNow
+    const row = makeRow({
+      status: "pending",
+      order_id: "order-pinned",
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+    const ledger = new FakeOrderLedger({ initial: [row] });
+    const { metrics, counts } = makeTrackingMetrics();
+
+    await runReconcileOnce({
+      ledger,
+      getOrder: vi.fn().mockResolvedValue(NOT_FOUND),
+      getOperatorPositions: async () => [],
+      operatorWalletAddress: OPERATOR,
+      logger: LOGGER,
+      metrics,
+      notFoundGraceMs: 0,
+      clock: () => pinnedNow,
+    });
+
+    expect(ledger.rows[0]?.status).toBe("canceled");
+    expect(counts[ORDER_RECONCILER_METRICS.notFoundUpgradesTotal]).toBe(1);
   });
 });

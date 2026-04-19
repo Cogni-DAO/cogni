@@ -158,6 +158,12 @@ export const EVENT_NAMES = {
   POLY_WALLET_BALANCE_OPEN_ORDERS_FAILED:
     "poly.wallet.balance.open_orders_failed",
   ADAPTER_ORDER_LEDGER_SNAPSHOT_ERROR: "adapter.order_ledger.snapshot_error",
+
+  // Poly reconciler not-found branch (task.0328 CP2)
+  // Emitted at debug when a row is within the grace window.
+  POLY_RECONCILER_NOT_FOUND: "poly.reconciler.not_found",
+  // Emitted at info when a stale row is promoted to canceled.
+  POLY_RECONCILER_NOT_FOUND_UPGRADE: "poly.reconciler.not_found_upgrade",
 } as const;
 
 export type EventName = (typeof EVENT_NAMES)[keyof typeof EVENT_NAMES];

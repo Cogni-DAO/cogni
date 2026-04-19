@@ -178,6 +178,21 @@ These same five values must land on the candidate-a / canary / production GH env
 
 Re-running steps 1–6 against a fresh signing key + new wallet creates a fully independent prototype wallet. Then update GH env secrets and redeploy. The old wallet keeps any unspent USDC.e until you Transfer it out.
 
+## Reconciler tuning
+
+The order reconciler (task.0328) runs every 60 s and syncs `pending`/`open` rows
+against CLOB. When CLOB returns `not_found` for a row, the reconciler waits for a
+configurable grace window before promoting the row to `canceled`.
+
+| Env var                        | Default           | Meaning                                                                                                          |
+| ------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `POLY_CLOB_NOT_FOUND_GRACE_MS` | `900000` (15 min) | How long to wait after `created_at` before treating a not_found response as authoritative and canceling the row. |
+
+If the Grafana counter `poly_reconciler_not_found_upgrades_total` spikes, it means
+CLOB returned not_found for many orders that were previously visible — likely a CLOB
+pruning-window change. Lower the grace value to react faster, or raise it to suppress
+false positives while investigating.
+
 ## Related
 
 - Spec: `work/items/task.0315.poly-copy-trade-prototype.md` — design + checkpoint plan
