@@ -121,6 +121,10 @@ import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
 import { startMirrorPoll } from "@/bootstrap/jobs/copy-trade-mirror.job";
 import { startOrderReconciler } from "@/bootstrap/jobs/order-reconciler.job";
 import { startProcessHealthPublisher } from "@/bootstrap/publishers";
+import {
+  type CopyTradeTargetSource,
+  envTargetSource,
+} from "@/features/copy-trade/target-source";
 import type {
   AccountService,
   AiTelemetryPort,
@@ -245,6 +249,13 @@ export interface Container {
   polyTradeBundle:
     | import("@/bootstrap/capabilities/poly-trade").PolyTradeBundle
     | undefined;
+  /**
+   * Copy-trade target source — strongly-typed seam for "which wallets are we
+   * monitoring right now?". v0 impl reads from `COPY_TRADE_TARGET_WALLETS`
+   * env. P2 swaps in a DB-backed impl over `poly_copy_trade_targets` with
+   * zero caller changes (see `@/features/copy-trade/target-source.ts`).
+   */
+  copyTradeTargetSource: CopyTradeTargetSource;
   /**
    * Service-role DB client (BYPASSRLS). Exposed for read APIs against
    * `poly_copy_trade_*` — the v0 copy-trade prototype's three tables are
@@ -637,17 +648,38 @@ function createContainer(): Container {
       : undefined,
   });
 
-  // Autonomous 30s mirror poll (task.0315 CP4.3e, @scaffolding).
-  // Starts when Polymarket creds are present (polyTradeBundle defined) AND a
-  // target wallet is configured. That's it — no role-gating, no mode switch,
-  // no cap env vars. Size + cadence + caps are hardcoded in the job shim;
-  // the `poly_copy_trade_config.enabled` kill-switch remains the ops gate
-  // between "poll is running" and "poll actually places orders."
-  if (polyTradeBundle !== undefined && env.COPY_TRADE_TARGET_WALLET) {
+  // Copy-trade target source (env-backed in v0; DB-backed impl lands at P2).
+  // Captured once at container init; pod restart picks up env changes.
+  const copyTradeTargetSource = envTargetSource(
+    env.COPY_TRADE_TARGET_WALLETS as readonly `0x${string}`[]
+  );
+
+  // Autonomous 30s mirror poll per target wallet (task.0315 CP4.3e, @scaffolding).
+  // Starts when Polymarket creds are present (polyTradeBundle defined) AND the
+  // target source yields at least one wallet. One `startMirrorPoll` per wallet;
+  // exactly one `startOrderReconciler` regardless of target count (operator-
+  // wide CLOB reconciliation, not per-target). Size + cadence + caps are
+  // hardcoded in the job shim; the `poly_copy_trade_config.enabled` kill-switch
+  // remains the global ops gate between "polls are running" and "polls actually
+  // place orders."
+  if (polyTradeBundle !== undefined) {
     // Lazy-load the poll wiring so its transitive imports (Data-API HTTP
     // client, Drizzle queries) don't run on pods without Polymarket creds.
     void (async () => {
       try {
+        const wallets = await copyTradeTargetSource.listTargets();
+        if (wallets.length === 0) {
+          log.info(
+            {
+              event: EVENT_NAMES.POLY_MIRROR_POLL_SKIPPED,
+              has_bundle: true,
+              target_count: 0,
+            },
+            "mirror poll not started (COPY_TRADE_TARGET_WALLETS empty)"
+          );
+          return;
+        }
+
         const { createOrderLedger } = await import("@/features/trading");
         const { createPolymarketActivitySource } = await import(
           "@/features/wallet-watch"
@@ -661,35 +693,38 @@ function createContainer(): Container {
         const { buildMirrorTargetConfig } = await import(
           "@/bootstrap/jobs/copy-trade-mirror.job"
         );
-        const targetWallet = env.COPY_TRADE_TARGET_WALLET as `0x${string}`;
-        const target = buildMirrorTargetConfig(targetWallet);
         const dataApiClient = new PolymarketDataApiClient();
         // pino's Logger is structurally compatible with LoggerPort's subset
         // (debug/info/warn/error/child with object + optional msg).
         const mirrorLogger =
           log as unknown as import("@cogni/market-provider").LoggerPort;
-        const source = createPolymarketActivitySource({
-          client: dataApiClient,
-          wallet: targetWallet,
-          logger: mirrorLogger,
-          metrics: noopMetrics,
-        });
         const ledger = createOrderLedger({
           db: getServiceDb() as unknown as import("drizzle-orm/node-postgres").NodePgDatabase,
           logger: log,
         });
-        startMirrorPoll({
-          target,
-          source,
-          ledger,
-          placeIntent: polyTradeBundle.placeIntent,
-          closePosition: polyTradeBundle.closePosition,
-          getOperatorPositions: polyTradeBundle.getOperatorPositions,
-          logger: mirrorLogger,
-          metrics: noopMetrics,
-        });
 
-        // Ledger reconciler — syncs open/pending rows from CLOB getOrder
+        for (const targetWallet of wallets) {
+          const target = buildMirrorTargetConfig(targetWallet);
+          const source = createPolymarketActivitySource({
+            client: dataApiClient,
+            wallet: targetWallet,
+            logger: mirrorLogger,
+            metrics: noopMetrics,
+          });
+          startMirrorPoll({
+            target,
+            source,
+            ledger,
+            placeIntent: polyTradeBundle.placeIntent,
+            closePosition: polyTradeBundle.closePosition,
+            getOperatorPositions: polyTradeBundle.getOperatorPositions,
+            logger: mirrorLogger,
+            metrics: noopMetrics,
+          });
+        }
+
+        // Ledger reconciler — syncs open/pending rows from CLOB getOrder.
+        // Operator-wide (not per-target), so it runs exactly once.
         // (task.0323 §2, @scaffolding, Deleted-in-phase: 4)
         startOrderReconciler({
           ledger,
@@ -714,10 +749,10 @@ function createContainer(): Container {
     log.info(
       {
         event: EVENT_NAMES.POLY_MIRROR_POLL_SKIPPED,
-        has_bundle: polyTradeBundle !== undefined,
-        has_target_wallet: Boolean(env.COPY_TRADE_TARGET_WALLET),
+        has_bundle: false,
+        target_count: env.COPY_TRADE_TARGET_WALLETS.length,
       },
-      "mirror poll not started (Polymarket creds missing OR COPY_TRADE_TARGET_WALLET unset)"
+      "mirror poll not started (Polymarket creds missing)"
     );
   }
 
@@ -966,6 +1001,7 @@ function createContainer(): Container {
       };
     })(),
     polyTradeBundle,
+    copyTradeTargetSource,
     serviceDb,
   };
 }

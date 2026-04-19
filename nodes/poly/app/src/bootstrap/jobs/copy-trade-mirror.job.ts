@@ -3,7 +3,7 @@
 
 /**
  * Module: `@bootstrap/jobs/copy-trade-mirror.job`
- * Purpose: Disposable 30s scheduler that drives `mirror-coordinator.runOnce()`. Boot-guarded by Polymarket-capability-bundle presence + `COPY_TRADE_TARGET_WALLET`. Uses `setInterval` (not `@cogni/scheduler-core` — that package is governance-schedule machinery, not a tick library). In-memory cursor + one-shot singleton claim.
+ * Purpose: Disposable 30s scheduler that drives `mirror-coordinator.runOnce()`. Boot-guarded by Polymarket-capability-bundle presence + a non-empty `CopyTradeTargetSource`. Uses `setInterval` (not `@cogni/scheduler-core` — that package is governance-schedule machinery, not a tick library). In-memory cursor + one-shot singleton claim. One poll instance per target wallet.
  * Scope: Wiring + cadence only. Does not build adapters (container injects), does not own decision logic, does not touch DB directly. One function: `startMirrorPoll(deps) → stop()`.
  * Invariants:
  *   - SCAFFOLDING_LABELED — this file and its wiring are `@scaffolding` / `Deleted-in-phase: 4`. P4's cutover PR deletes this file + the env-based target config.

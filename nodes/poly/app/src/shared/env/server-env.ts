@@ -262,14 +262,21 @@ export const serverSchema = z.object({
   POLY_CLOB_HOST: optionalUrl,
 
   // Copy-trade scaffolding (task.0315 Phase 1, @scaffolding, Deleted-in-phase: 4).
-  // `COPY_TRADE_TARGET_WALLET` is the ONE runtime input for v0 — every other
-  // knob (mode, mirror size, caps, poll cadence, role-gating) is hardcoded in
-  // `bootstrap/jobs/copy-trade-mirror.job.ts`. P2 replaces the env fallback
-  // with DB-backed `poly_copy_trade_targets`.
-  COPY_TRADE_TARGET_WALLET: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
+  // `COPY_TRADE_TARGET_WALLETS` is a comma-separated list of 0x addresses — the
+  // ONE runtime input for v0. Every other knob (mode, mirror size, caps, poll
+  // cadence, role-gating) is hardcoded in `bootstrap/jobs/copy-trade-mirror.job.ts`.
+  // Empty / unset ⇒ no mirror polls start. P2 replaces this with a DB-backed
+  // `CopyTradeTargetSource` reading `poly_copy_trade_targets`.
+  COPY_TRADE_TARGET_WALLETS: z.preprocess(
+    (v) =>
+      typeof v === "string"
+        ? v
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0)
+        : [],
+    z.array(z.string().regex(/^0x[a-fA-F0-9]{40}$/))
+  ),
 
   // Operator wallet top-up cap (USD)
   // Per operator-wallet.md: MAX_TOPUP_CAP — per-tx ceiling for OpenRouter top-ups.

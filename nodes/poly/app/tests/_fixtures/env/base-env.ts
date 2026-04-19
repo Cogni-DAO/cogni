@@ -106,6 +106,8 @@ export const MOCK_SERVER_ENV = {
   ...BASE_VALID_ENV,
   // Computed fields that serverEnv() adds (DATABASE_URL already in BASE_VALID_ENV)
   COGNI_REPO_ROOT: DEFAULT_COGNI_REPO_PATH,
+  // Parsed list fields serverSchema produces (empty by default for tests)
+  COPY_TRADE_TARGET_WALLETS: [] as readonly string[],
   isDev: false,
   isTest: true,
   isProd: false,

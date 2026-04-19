@@ -6,8 +6,9 @@
  * Purpose: Contract for listing Polymarket wallets the operator is monitoring / copy-trading.
  * Scope: Defines response schema for GET /api/v1/poly/copy-trade/targets. Does not execute trades, does not modify state, does not own target-resolution logic.
  * Invariants:
- *   - V0_ENV_DERIVED: exactly one env-derived target when `COPY_TRADE_TARGET_WALLET` is set; empty otherwise.
+ *   - V0_ENV_DERIVED: zero or more env-derived targets from `COPY_TRADE_TARGET_WALLETS` (comma-separated list).
  *   - P2_DB_BACKED: returns rows from `poly_copy_trade_targets` once the table exists.
+ *   - GLOBAL_KILL_SWITCH_V0: all rows share `poly_copy_trade_config.enabled` in v0 — no per-target enable flag.
  * Side-effects: none
  * Notes: HARDCODED_USER — response is not user-scoped in v0 (single-operator prototype). Tracked as task.0315 P2 follow-up.
  * Links: work/items/task.0315.poly-copy-trade-prototype.md, docs/spec/poly-copy-trade-phase1.md
@@ -39,7 +40,7 @@ export const polyCopyTradeTargetsOperation = {
   id: "poly.copy-trade.targets.v1",
   summary: "List wallets the operator is monitoring / copy-trading",
   description:
-    "Returns the active monitoring list. v0 returns the env-derived target when COPY_TRADE_TARGET_WALLET is set; otherwise empty.",
+    "Returns the active monitoring list. v0 returns env-derived targets parsed from COPY_TRADE_TARGET_WALLETS (comma-separated); empty when unset.",
   input: z.object({}),
   output: z.object({
     targets: z.array(targetSchema),

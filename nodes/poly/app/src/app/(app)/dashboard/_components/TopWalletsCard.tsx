@@ -56,12 +56,14 @@ const TIME_PERIOD_OPTIONS: readonly {
   { value: "ALL", label: "All" },
 ] as const;
 
+const TOP_WALLETS_LIMIT = 10;
+
 export function TopWalletsCard(): ReactElement {
   const [timePeriod, setTimePeriod] = useState<WalletTimePeriod>("WEEK");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-top-wallets", timePeriod],
-    queryFn: () => fetchTopWallets({ timePeriod, limit: 10 }),
+    queryFn: () => fetchTopWallets({ timePeriod, limit: TOP_WALLETS_LIMIT }),
     staleTime: 60_000,
     gcTime: 5 * 60_000,
     retry: 1,
@@ -78,14 +80,51 @@ export function TopWalletsCard(): ReactElement {
     retry: 1,
   });
 
+  const targetList = targetsData?.targets ?? [];
   const trackedWallets = new Set(
-    (targetsData?.targets ?? []).map((t) => t.target_wallet.toLowerCase())
+    targetList.map((t) => t.target_wallet.toLowerCase())
   );
   const targetsByWallet = new Map(
-    (targetsData?.targets ?? []).map((t) => [t.target_wallet.toLowerCase(), t])
+    targetList.map((t) => [t.target_wallet.toLowerCase(), t])
   );
 
   const traders = data?.traders ?? [];
+
+  // Pin tracked wallets to the top of the table. A tracked wallet may or may
+  // not be in the leaderboard's top N; if it's missing, synthesize a minimal
+  // row from the target metadata so the operator can always see what they're
+  // copying.
+  type TraderRow = (typeof traders)[number];
+  type MissingTrackedRow = {
+    kind: "missing";
+    proxyWallet: string;
+  };
+  type DisplayRow =
+    | { kind: "present"; tracked: boolean; trader: TraderRow }
+    | MissingTrackedRow;
+
+  const presentWalletSet = new Set(
+    traders.map((t) => t.proxyWallet.toLowerCase())
+  );
+  const trackedPresent: DisplayRow[] = [];
+  const untrackedPresent: DisplayRow[] = [];
+  for (const trader of traders) {
+    const isTracked = trackedWallets.has(trader.proxyWallet.toLowerCase());
+    (isTracked ? trackedPresent : untrackedPresent).push({
+      kind: "present",
+      tracked: isTracked,
+      trader,
+    });
+  }
+  const trackedMissing: DisplayRow[] = targetList
+    .filter((t) => !presentWalletSet.has(t.target_wallet.toLowerCase()))
+    .map((t) => ({ kind: "missing", proxyWallet: t.target_wallet }));
+
+  const displayRows: DisplayRow[] = [
+    ...trackedMissing,
+    ...trackedPresent,
+    ...untrackedPresent,
+  ];
 
   return (
     <Card>
@@ -125,7 +164,7 @@ export function TopWalletsCard(): ReactElement {
           <p className="px-5 py-6 text-center text-muted-foreground text-sm">
             Failed to load top wallets. Try again shortly.
           </p>
-        ) : traders.length > 0 ? (
+        ) : displayRows.length > 0 ? (
           <Table>
             <TableHeader>
               <TableRow>
@@ -149,12 +188,71 @@ export function TopWalletsCard(): ReactElement {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {traders.map((t) => {
+              {displayRows.map((row) => {
+                if (row.kind === "missing") {
+                  const target = targetsByWallet.get(
+                    row.proxyWallet.toLowerCase()
+                  );
+                  return (
+                    <TableRow
+                      key={`tracked-missing-${row.proxyWallet}`}
+                      className="border-success/40 border-l-2 bg-success/10"
+                    >
+                      <TableCell className="text-muted-foreground text-sm tabular-nums">
+                        ★
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span
+                          className="inline-flex size-2 animate-pulse rounded-full bg-success"
+                          title={
+                            target
+                              ? `Tracked — ${target.mode} · $${target.mirror_usdc}/fill · source=${target.source}`
+                              : "Currently tracked"
+                          }
+                        />
+                      </TableCell>
+                      <TableCell className="max-w-40 truncate font-medium text-muted-foreground text-sm italic">
+                        (outside top {TOP_WALLETS_LIMIT})
+                      </TableCell>
+                      <TableCell className="font-mono text-muted-foreground text-xs">
+                        <a
+                          href={`https://polymarket.com/profile/${row.proxyWallet}`}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="hover:underline"
+                        >
+                          {formatShortWallet(row.proxyWallet)}
+                        </a>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground text-sm">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground text-sm">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground text-sm">
+                        —
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground text-sm">
+                        —
+                      </TableCell>
+                      <TableCell />
+                    </TableRow>
+                  );
+                }
+                const t = row.trader;
+                const tracked = row.tracked;
                 const walletKey = t.proxyWallet.toLowerCase();
-                const tracked = trackedWallets.has(walletKey);
                 const target = targetsByWallet.get(walletKey);
                 return (
-                  <TableRow key={t.proxyWallet}>
+                  <TableRow
+                    key={t.proxyWallet}
+                    className={
+                      tracked
+                        ? "border-success/40 border-l-2 bg-success/10"
+                        : ""
+                    }
+                  >
                     <TableCell className="text-muted-foreground text-sm tabular-nums">
                       {t.rank}
                     </TableCell>

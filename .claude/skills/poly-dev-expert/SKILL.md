@@ -68,7 +68,7 @@ RPC flakiness: `polygon-bor-rpc.publicnode.com` round-robins and occasionally re
 
 - `POLY_PROTO_WALLET_ADDRESS`, `POLY_PROTO_PRIVY_SIGNING_KEY`, `POLY_PROTO_PRIVY_APP_ID`, `POLY_PROTO_PRIVY_APP_SECRET`
 - `POLY_CLOB_API_KEY`, `POLY_CLOB_API_SECRET`, `POLY_CLOB_PASSPHRASE`
-- `COPY_TRADE_TARGET_WALLET` — **not in the overlay**. Patched directly into the secret (scaffolding per handoff). Without it, mirror skips boot + logs `poly.mirror.poll.skipped`.
+- `COPY_TRADE_TARGET_WALLETS` — **comma-separated list** of 0x addresses. **Not in the overlay**; patched directly into the secret (scaffolding per handoff). Empty / unset ⇒ mirror skips boot + logs `poly.mirror.poll.skipped`. Each wallet spawns its own 30s poll; exactly one `startOrderReconciler` runs regardless of target count. Source-of-truth is `CopyTradeTargetSource` (`@/features/copy-trade/target-source`) — P2 swaps the env impl for a DB-backed one.
 
 **Enable switch:** `UPDATE poly_copy_trade_config SET enabled=true WHERE singleton_id=1;` on the poly DB. Takes effect within one poll tick (≤30s).
 
