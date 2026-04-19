@@ -155,8 +155,11 @@ jobs:
           # Resolve every target and emit a single JSON blob the promote step
           # iterates — keeps the "one edit to add a node" promise: lib/image-tags.sh
           # is the only file that knows the target list. GHA outputs with dashes
-          # are accessible only via bracket notation in `${{ }}`; JSON via jq is
-          # uniform and matches the underscore-key pattern used elsewhere.
+          # are accessible only via the bracket-accessor form of a GHA
+          # expression; JSON via jq is uniform and matches the underscore-key
+          # pattern used elsewhere. NOTE: don't write a literal two-curly GHA
+          # expression in this comment — GHA's expression scanner parses comment
+          # text inside a run-block and an empty expression crashes dispatch.
           echo "Resolved digests:"
           DIGESTS_JSON="{}"
           for target in "${ALL_TARGETS[@]}"; do
