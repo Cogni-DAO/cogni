@@ -2,7 +2,7 @@
 id: task.0311
 type: task
 title: "Poly Knowledge Plane v0 — Candidate-a Wiring + Upsert Bug Fix (Clean-Slate Nodes)"
-status: done
+status: needs_merge
 priority: 1
 rank: 2
 estimate: 2
@@ -16,7 +16,8 @@ spec_refs:
 assignees: derekg1729
 project: proj.poly-prediction-bot
 created: 2026-04-15
-updated: 2026-04-18
+updated: 2026-04-19
+pr: https://github.com/Cogni-DAO/node-template/pull/894
 labels: [poly, knowledge, doltgres, candidate-a]
 ---
 
@@ -325,6 +326,8 @@ Leaves Postgres, LiteLLM, Temporal, Redis untouched. Poly pod's Zod schema treat
 4. **Backups** — follow Postgres WAL-G pattern once `proj.database-ops` lands.
 5. **@cogni/{operator,resy}-doltgres-schema packages** — create when those nodes adopt Doltgres (fork `@cogni/poly-doltgres-schema` structure + add per-node PreSync Job under `infra/k8s/base/<node>-doltgres/`).
 6. **Production overlay** — explicitly deferred. Production adoption of Doltgres is a separate, gated decision (prod VM provisioning, backups, rollback rehearsal, etc.).
+7. **Doltgres RBAC — postgres superuser at runtime** — `DOLTGRES_URL_<NODE>` connects as `postgres` because Doltgres 0.56 silently denies everything to non-superuser roles (even `SELECT current_user`). `knowledge_reader` / `knowledge_writer` are still provisioned (vestigially) so the compose+env contract stays stable. Revisit when upstream lands working role access. Captured as `RUNTIME_URL_IS_SUPERUSER` invariant in the spec.
+8. **Tool-runner observability** — `ai.tool_call.error` is logged at the graph-provider seam (1 warn per failed tool call with `errorCode` enum + truncated `safeMessage`). Remaining gap: successful tool calls still emit only to the in-process event queue, not pino. Revisit if we need success-path audit in Loki.
 
 ## Related
 

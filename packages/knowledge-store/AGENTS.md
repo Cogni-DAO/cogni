@@ -14,7 +14,8 @@ Shared port + adapter for versioned domain knowledge backed by Doltgres. Generic
 ## Pointers
 
 - [Spec](../../docs/spec/knowledge-data-plane.md) — authoritative design
-- [task.0231](../../work/items/task.0231.knowledge-data-plane.md) — implementation work item
+- [task.0231](../../work/items/task.0231.knowledge-data-plane.md) — port + adapter
+- [task.0311](../../work/items/task.0311.poly-knowledge-syntropy-seed.md) — candidate-a wiring, clean-slate seeds, Doltgres 0.56 RBAC workaround
 - [Design doc](../../docs/design/knowledge-data-plane-prototype.md) — spike results + agent tooling roadmap
 - [proj.poly-prediction-bot](../../work/projects/proj.poly-prediction-bot.md) — parent project
 
@@ -62,7 +63,9 @@ Shared port + adapter for versioned domain knowledge backed by Doltgres. Generic
 ## Notes
 
 - **postgres.js parameterized queries don't work on Doltgres** — adapter uses `sql.unsafe()` + `escapeValue()` for all queries.
+- **`ON CONFLICT ... EXCLUDED` unsupported** — `upsertKnowledge` uses try-INSERT / catch-duplicate / fallback-UPDATE.
 - **JSONB `@>` and ILIKE not supported** — fallbacks: `CAST(tags AS TEXT) LIKE` and `LOWER(col) LIKE`.
-- **`fetch_types: false` required** on all non-superuser postgres.js connections. Use `buildDoltgresClient()`.
-- Schema lives in node packages (`nodes/{node}/packages/knowledge/`) because nodes may add companion tables and fork takes schema with it.
-- Walk phase will add `core__knowledge_search` / `core__knowledge_read` BoundTools in ai-tools.
+- **Doltgres 0.56 RBAC is non-functional** — GRANT reports success but roles can't even `SELECT current_user`. Runtime `DOLTGRES_URL_*` must connect as `postgres` superuser until upstream lands working role access.
+- **`fetch_types: false` required** on all postgres.js connections (pg_type grants missing).
+- Schema lives in node packages (`nodes/{node}/packages/doltgres-schema/`) because nodes may add companion tables and fork takes schema with it.
+- `core__knowledge_search` / `core__knowledge_read` / `core__knowledge_write` BoundTools shipped in `@cogni/ai-tools`; brain graph uses them via tool runtime.

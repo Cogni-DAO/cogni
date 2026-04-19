@@ -62,6 +62,10 @@ Pure tool definitions for AI agent execution. Defines `ToolContract`, `ToolImple
   - `workItemQueryBoundTool`, `WORK_ITEM_QUERY_NAME`, `createWorkItemQueryImplementation` - Work item query tool
   - `workItemTransitionBoundTool`, `WORK_ITEM_TRANSITION_NAME`, `createWorkItemTransitionImplementation` - Work item transition tool
   - `WorkItemCapability`, `WorkItemInfo`, `WorkItemQueryParams`, `WorkItemTransitionResult` - Work item capability types
+  - `knowledgeReadBoundTool`, `KNOWLEDGE_READ_NAME`, `createKnowledgeReadImplementation` - Knowledge read tool (read_only: get by id or list by domain+tags)
+  - `knowledgeSearchBoundTool`, `KNOWLEDGE_SEARCH_NAME`, `createKnowledgeSearchImplementation` - Knowledge search tool (read_only: text search by domain+query)
+  - `knowledgeWriteBoundTool`, `KNOWLEDGE_WRITE_NAME`, `createKnowledgeWriteImplementation` - Knowledge write tool (state_change: upsert + auto dolt_commit)
+  - `KnowledgeCapability`, `KnowledgeEntry`, `KnowledgeWriteParams`, `CONFIDENCE` - Knowledge capability types (see `@cogni/knowledge-store` for port + adapter)
   - `TOOL_CATALOG` - Singleton catalog of all registered tools (Record<string, CatalogBoundTool>)
   - `createToolCatalog()`, `getToolById()`, `getToolIds()`, `hasToolId()` - Catalog accessors
   - `toBoundToolRuntime()`, `contractToRuntime()` - Runtime adapter converters (contractToRuntime for DI)

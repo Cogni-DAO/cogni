@@ -102,7 +102,7 @@ Build a prediction market bot that starts by reading and searching live markets 
 ## As-Built Specs
 
 - [Data Streams](../../docs/spec/data-streams.md) — Redis live plane, selective Postgres persistence, SSE
-- [Knowledge Data Plane](../../docs/spec/knowledge-data-plane.md) — versioned strategy/prompt expertise (draft)
+- [Knowledge Data Plane](../../docs/spec/knowledge-data-plane.md) — Doltgres knowledge plane, per-node DBs, agent tools (active)
 - [Poly Mirror v0](../../docs/spec/poly-copy-trade-phase1.md) — three-layer decomposition (trading / wallet-watch / copy-trade), order-ledger, placement invariants (task.0315)
 - ~~AI Awareness & Decision Plane (`docs/spec/monitoring-engine.md`)~~ — referenced in the original roadmap but the file does not exist. Deleted from pointers until it's written.
 
