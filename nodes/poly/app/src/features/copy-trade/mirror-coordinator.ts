@@ -354,6 +354,7 @@ async function processSellFill(args: {
   // Both deps are guaranteed non-undefined here (checked above). Capture into
   // a narrowed const so TypeScript tracks the non-optional type.
   const boundClose = deps.closePosition;
+  if (!boundClose) return; // narrowing — guard above already proved this
   const closeExecutor = (intent: OrderIntent): Promise<OrderReceipt> =>
     boundClose({
       tokenId: intent.attributes?.token_id as string,
