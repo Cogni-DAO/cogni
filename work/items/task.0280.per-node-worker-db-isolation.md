@@ -2,7 +2,7 @@
 id: task.0280
 type: task
 title: "Worker HTTP delegation: scheduler-worker drops direct-DB access for runs/grants"
-status: done
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 3

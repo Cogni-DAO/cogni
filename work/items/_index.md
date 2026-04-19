@@ -66,6 +66,7 @@
 | 1 | 1 | 3 | needs_design | spike.0229 | Knowledge Aggregation — KnowledgeCapability Port | OSS Research AI Node | proj.oss-research-node |
 | 1 | 1 | 2 | needs_design | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 1 | 3 | needs_merge | task.0241 | Schedule Management AI Tools + Planner UI | Scheduler Evolution | proj.scheduler-evolution |
+| 1 | 1 | 3 | needs_merge | task.0280 | Worker HTTP delegation: scheduler-worker drops direct-DB access for runs/grants | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 1 | 1 | needs_implement | bug.0313 | pr-build bakes BUILD_SHA from ephemeral pull_request merge commit — /readyz version ≠ image tag | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_merge | bug.0315 | deploy-infra.sh silently overrides overlay ConfigMap COGNI_NODE_ENDPOINTS with LiteLLM-flavored value — scheduler-worker crashloops on every rebuild | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_merge | bug.0316 | candidate-flight reports green while node-app pods still serve old image — /readyz is served by any running pod, no rollout verification | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -340,7 +341,6 @@
 | 1 | task.0248 | Deduplicate node platform: capability extractions + thin app shell | Operator Plane | proj.operator-plane |
 | 1 | task.0250 | Extract @cogni/graph-execution-host package | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | story.0262 | Agent contributor protocol — shared workflow for AI agents coordinating on a codebase | Development Workflows | proj.development-workflows |
-| 1 | task.0280 | Worker HTTP delegation: scheduler-worker drops direct-DB access for runs/grants | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
