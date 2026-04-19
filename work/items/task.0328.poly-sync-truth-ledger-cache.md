@@ -8,6 +8,7 @@ priority: 1
 rank: 50
 estimate: 1
 branch: feat/poly-sync-truth
+pr: "930"
 created: 2026-04-19
 updated: 2026-04-19
 summary: "PR #918 shipped the copy-trade dashboard + reconciler, but validation revealed split-brain: CLOB says an order was canceled, dashboard DB still shows `open` because (a) reconciler skips when CLOB returns null, (b) nothing exposes sync staleness to the UI or ops. This task lands the first slice of the sync-truth architecture — DB rows are a cache of CLOB state, with observable staleness and no silent skips."
