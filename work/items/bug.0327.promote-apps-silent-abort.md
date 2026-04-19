@@ -2,7 +2,7 @@
 id: bug.0327
 type: bug
 title: promote-build-payload silent abort + release-slot treats skipped verify as success — verify-candidate bypassed on real flight
-status: done
+status: needs_merge
 priority: 1
 rank: 5
 estimate: 2
