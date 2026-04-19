@@ -143,7 +143,8 @@
         "**/*.config.js",
         "**/*.config.cjs",
         "**/*.config.mts",
-        "nodes/*/drizzle.config.ts"
+        "nodes/*/drizzle.config.ts",
+        "nodes/*/drizzle.doltgres.config.ts"
       ],
       "linter": {
         "rules": {
@@ -166,6 +167,7 @@
         "**/*.config.cjs",
         "**/*.config.mts",
         "nodes/*/drizzle.config.ts",
+        "nodes/*/drizzle.doltgres.config.ts",
         "nodes/*/app/src/shared/observability/logging/logger.ts",
         "nodes/*/app/src/shared/observability/clientLogger.ts"
       ],
@@ -247,7 +249,9 @@
         "nodes/*/app/vitest.external-money.config.mts",
         "nodes/*/app/postcss.config.mjs",
         "nodes/*/app/next.config.ts",
-        "nodes/*/graphs/tsup.config.ts"
+        "nodes/*/graphs/tsup.config.ts",
+        "nodes/*/drizzle.config.ts",
+        "nodes/*/drizzle.doltgres.config.ts"
       ],
       "linter": {
         "rules": {

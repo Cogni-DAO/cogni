@@ -1,14 +1,20 @@
 /**
  * Module: `@cogni/node-template-knowledge/schema`
- * Purpose: Base knowledge table definition for the knowledge data plane.
- * Scope: Drizzle table definitions only. Lives in Doltgres (not Postgres).
+ * Purpose: Base knowledge Drizzle table — single source of truth.
+ *   Consumed by drizzle-kit via per-node Doltgres drizzle configs
+ *   (e.g., nodes/poly/drizzle.doltgres.config.ts) that re-export this table
+ *   through their own schema entry point (nodes/<node>/app/schema/knowledge.ts).
+ *   drizzle-kit `generate` emits SQL migrations; application happens via psql
+ *   on the VM (see nodes/poly/app/schema/README.md for the Doltgres-specific
+ *   runtime-migrator divergence rationale).
+ * Scope: Drizzle table definitions only. Targets Doltgres (pg wire).
  * Invariants:
  *   - SCHEMA_GENERIC_CONTENT_SPECIFIC: Domain specificity in `domain` column + `tags` JSONB.
  *   - AWARENESS_HOT_KNOWLEDGE_COLD: Separate from awareness tables in Postgres.
  *   - No FK references to Postgres tables (different database server).
  *   - No RLS — access control via Doltgres roles (knowledge_reader / knowledge_writer).
  * Side-effects: none
- * Links: docs/spec/knowledge-data-plane.md
+ * Links: docs/spec/knowledge-data-plane.md, nodes/poly/app/schema/README.md
  * @public
  */
 
@@ -18,10 +24,8 @@ import { index, jsonb, pgTable, text, integer, timestamp } from "drizzle-orm/pg-
  * Knowledge — domain-specific facts, claims, and curated assertions with provenance.
  * Generic schema: domain specificity lives in row content, not table structure.
  *
- * This is the base table inherited by all nodes. Nodes may add companion tables
- * for domain-specific extensions (e.g., poly_market_categories).
- *
- * SYNC: KNOWLEDGE_TABLE_DDL and KNOWLEDGE_INDEXES_DDL below must match this definition.
+ * Nodes inherit this table via their own schema entry point and may add
+ * companion tables for domain-specific extensions (e.g., poly_market_categories).
  */
 export const knowledge = pgTable(
   "knowledge",
@@ -43,27 +47,3 @@ export const knowledge = pgTable(
     index("idx_knowledge_source_type").on(table.sourceType),
   ],
 );
-
-/**
- * SQL DDL for the knowledge table.
- * Used by the adapter for Doltgres provisioning (Drizzle migrations don't run against Doltgres).
- */
-export const KNOWLEDGE_TABLE_DDL = `
-CREATE TABLE IF NOT EXISTS knowledge (
-  id TEXT PRIMARY KEY,
-  domain TEXT NOT NULL,
-  entity_id TEXT,
-  title TEXT NOT NULL,
-  content TEXT NOT NULL,
-  confidence_pct INTEGER,
-  source_type TEXT NOT NULL,
-  source_ref TEXT,
-  tags JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-)`;
-
-export const KNOWLEDGE_INDEXES_DDL = [
-  "CREATE INDEX IF NOT EXISTS idx_knowledge_domain ON knowledge(domain)",
-  "CREATE INDEX IF NOT EXISTS idx_knowledge_entity ON knowledge(entity_id)",
-  "CREATE INDEX IF NOT EXISTS idx_knowledge_source_type ON knowledge(source_type)",
-];

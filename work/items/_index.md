@@ -66,7 +66,6 @@
 | 1 | 1 | 3 | needs_design | spike.0229 | Knowledge Aggregation — KnowledgeCapability Port | OSS Research AI Node | proj.oss-research-node |
 | 1 | 1 | 2 | needs_design | task.0235 | Chat activity status line — consume StatusEvent in thread UI | Premium Frontend UX | proj.premium-frontend-ux |
 | 1 | 1 | 3 | needs_merge | task.0241 | Schedule Management AI Tools + Planner UI | Scheduler Evolution | proj.scheduler-evolution |
-| 1 | 1 | 3 | needs_merge | task.0280 | Worker HTTP delegation: scheduler-worker drops direct-DB access for runs/grants | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 1 | 1 | needs_implement | bug.0313 | pr-build bakes BUILD_SHA from ephemeral pull_request merge commit — /readyz version ≠ image tag | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_merge | bug.0315 | deploy-infra.sh silently overrides overlay ConfigMap COGNI_NODE_ENDPOINTS with LiteLLM-flavored value — scheduler-worker crashloops on every rebuild | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_merge | bug.0316 | candidate-flight reports green while node-app pods still serve old image — /readyz is served by any running pod, no rollout verification | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -109,7 +108,6 @@
 | 1 | 5 | 2 | needs_triage | bug.0231 | Token usage has three disagreeing sources — app logs, LiteLLM spend_logs, and billing callback |  |  |
 | 1 | 5 | 3 | needs_merge | task.0273 | Unify workspace: move operator to nodes/operator/app | Operator Plane | proj.operator-plane |
 | 1 | 5 | 3 | needs_design | bug.0297 | POST /api/v1/agent/register is an unauthenticated account + API-key factory | Accounts, API Keys & Wallet Authentication | proj.accounts-api-keys |
-| 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -174,6 +172,7 @@
 | 2 | 5 | 3 | needs_design | task.0317 | Per-node LangGraph catalogs — factory library + node-owned catalog registry |  |  |
 | 2 | 5 | 5 | needs_design | task.0318 | Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables | Cogni Poly | proj.poly-prediction-bot |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
+| 2 | 8 | 2 | needs_design | task.0280 | Per-node DB isolation for worker activities — evaluate approach | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
 | 2 | 10 | 2 | needs_design | bug.0198 | Single Privy app shared across preview and production — no env isolation | Reliability & Uptime | proj.reliability |
@@ -189,6 +188,7 @@
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |
 | 2 | 50 | 2 | needs_implement | task.0134 | EIP-4824 daoURI v0 — lightweight DAOstar metadata endpoint | Financial Ledger | proj.financial-ledger |
 | 2 | 50 | 2 | needs_merge | task.0324 | Per-node DB schema split (minimal — no new tooling) | Database Operations | proj.database-ops |
+| 2 | 60 | 2 | needs_triage | bug.0326 | wait-for-argocd.sh reports green when promoted digests never reach pods | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 1 | needs_design | bug.0093 | Ownership facade N+1 — sequential DB queries per epoch | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 2 | needs_design | task.0104 | Ledger production hardening — upsert batching, connection pooling, activity tests | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 3 | needs_design | task.0105 | Allocation algorithm expansion — multi-source credit estimate algos + per-source weight derivation | Transparent Credit Payouts | proj.transparent-credit-payouts |
@@ -199,11 +199,9 @@
 | 2 | 99 | 2 | needs_triage | bug.0317 | candidate-flight-infra.yml checks out main, so a feature branch cannot ship new env/secret plumbing via the infra lever | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 5 | needs_triage | bug.0319 | Split @cogni/ai-tools into per-node packages; kill the shared TOOL_CATALOG stub dance | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 5 | needs_design | task.0322 | Poly copy-trade Phase 4 design prep — dual-path ingestion, hot signer, target ranker, counterfactual baseline | Cogni Poly | proj.poly-prediction-bot |
-| 2 | 99 | 3 | needs_review | task.0323 | Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 99 | 3 | needs_triage | task.0323 | Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
-| 3 | 6 | 2 | needs_design | task.0326 | Ledger/attribution worker: rename DATABASE_URL and enforce no-DB-creds invariant on scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
-| 3 | 7 | 2 | needs_design | task.0327 | Drain legacy Temporal queue + add HTTP circuit breaker on scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | 10 | 2 | needs_design | bug.0262 | Operator Postgres env vars lack _OPERATOR suffix — inconsistent with multi-node pattern | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 20 | 2 | needs_design | task.0274 | Wire NodeAppConfig into sidebar + layout components | Operator Plane | proj.operator-plane |
 | 3 | 30 | 3 | needs_merge | task.0207 | Run: BYO-AI hosted OSS provider — user connects their OpenAI-compatible endpoint | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
@@ -344,14 +342,12 @@
 | 1 | task.0250 | Extract @cogni/graph-execution-host package | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | story.0262 | Agent contributor protocol — shared workflow for AI agents coordinating on a codebase | Development Workflows | proj.development-workflows |
 | 1 | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
-| 1 | bug.0328 | promote-build-payload silent abort + release-slot treats skipped verify as success — verify-candidate bypassed on real flight | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | task.0311 | Poly Knowledge Plane v0 — Protocol-Fact Seeds + Upsert Bug Fix | Cogni Poly | proj.poly-prediction-bot |
+| 1 | task.0311 | Poly Knowledge Plane v0 — Candidate-a Wiring + Upsert Bug Fix (Clean-Slate Nodes) | Cogni Poly | proj.poly-prediction-bot |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
 | 2 | spike.0314 | Research: copy-trading existing Polymarket wallets from the poly node | Cogni Poly | proj.poly-prediction-bot |
 | 2 | spike.0323 | Research: Polymarket copy-trade candidate identification | Cogni Poly | proj.poly-prediction-bot |
-| 2 | bug.0326 | wait-for-argocd.sh reports green when promoted digests never reach pods | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | bug.0194 | Internal graph API conflates stateKey with runId — headless runs create phantom threads | Unified Graph Launch | proj.unified-graph-launch |
 

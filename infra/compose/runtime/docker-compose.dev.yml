@@ -335,6 +335,40 @@ services:
       doltgres:
         condition: service_healthy
 
+  doltgres-commit-poly:
+    image: postgres:15
+    container_name: doltgres-commit-poly
+    profiles:
+      - bootstrap
+    restart: "no"
+    networks:
+      - cogni-edge
+    environment:
+      PGPASSWORD: ${DOLTGRES_PASSWORD:-doltgres}
+    entrypoint:
+      - "/bin/bash"
+      - "-c"
+      - |
+        set -euo pipefail
+        LOG=$$(mktemp)
+        if psql -h doltgres -p 5432 -U postgres -d knowledge_poly \
+               -v ON_ERROR_STOP=1 \
+               -c "SELECT dolt_commit('-Am', 'migration: drizzle-kit batch (dev)')" \
+               >$$LOG 2>&1; then
+          cat $$LOG
+        elif grep -qi "nothing to commit" $$LOG; then
+          echo "(dolt_commit: nothing to commit — idempotent re-run)"
+        else
+          cat $$LOG
+          echo "❌ dolt_commit failed"
+          exit 1
+        fi
+    # NOTE: no depends_on in dev — dev doesn't have the migrator image locally.
+    # Run `pnpm db:migrate:poly:doltgres` manually first, then this service.
+
+  # No doltgres-seed-poly: nodes boot clean. For manual dev seeding, use
+  # `pnpm db:seed:doltgres:poly` which runs scripts/db/seed-doltgres.mts.
+
   db-provision:
     image: postgres:15
     container_name: db-provision

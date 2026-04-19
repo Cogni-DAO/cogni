@@ -582,6 +582,9 @@ POSTHOG_HOST=${POSTHOG_HOST}
 # Use placeholder values; k8s/Argo manages the real images.
 APP_IMAGE=${APP_IMAGE:-cogni-template-local}
 MIGRATOR_IMAGE=${MIGRATOR_IMAGE:-unused-by-infra-deploy}
+# POLY_MIGRATOR_IMAGE is consumed by the doltgres-migrate-poly compose service.
+# Empty default triggers a skip of the Doltgres migrate/commit/seed steps in Step 6a.
+POLY_MIGRATOR_IMAGE=${POLY_MIGRATOR_IMAGE-}
 SCHEDULER_WORKER_IMAGE=${SCHEDULER_WORKER_IMAGE:-unused-by-infra-deploy}
 # LiteLLM image — set above from GHCR content-hash tag.
 LITELLM_IMAGE=${LITELLM_IMAGE}
@@ -644,6 +647,28 @@ LITELLM_NODE_ENDPOINTS="4ff8eac1-4eba-4ed0-931b-b1fe4f64713d=http://host.docker.
 printf '%s=%s\n' COGNI_NODE_ENDPOINTS "$LITELLM_NODE_ENDPOINTS" >> "$RUNTIME_ENV"
 # Multi-node DB provisioning
 append_env_if_set "$RUNTIME_ENV" COGNI_NODE_DBS "${COGNI_NODE_DBS-}"
+
+# ── Doltgres (knowledge data plane) credentials ──────────────────────────
+# Derived deterministically from POSTGRES_ROOT_PASSWORD + salt so no new GitHub
+# Environment secrets are required. Rotating POSTGRES_ROOT_PASSWORD rotates
+# these. Doltgres has weak GRANT support so roles are near-permissive today;
+# derived secrets are still a least-privilege improvement over a shared root pw.
+derive_secret() {
+  local salt="$1"
+  if command -v openssl >/dev/null 2>&1; then
+    printf '%s:%s' "$salt" "${POSTGRES_ROOT_PASSWORD:-doltgres}" | openssl dgst -sha256 -hex | awk '{print $NF}' | cut -c1-32
+  elif command -v sha256sum >/dev/null 2>&1; then
+    printf '%s:%s' "$salt" "${POSTGRES_ROOT_PASSWORD:-doltgres}" | sha256sum | cut -c1-32
+  else
+    echo "dev-${salt}"
+  fi
+}
+DOLTGRES_PASSWORD="${DOLTGRES_PASSWORD:-$(derive_secret doltgres-root)}"
+DOLTGRES_READER_PASSWORD="${DOLTGRES_READER_PASSWORD:-$(derive_secret doltgres-reader)}"
+DOLTGRES_WRITER_PASSWORD="${DOLTGRES_WRITER_PASSWORD:-$(derive_secret doltgres-writer)}"
+printf '%s=%s\n' DOLTGRES_PASSWORD "$DOLTGRES_PASSWORD" >> "$RUNTIME_ENV"
+printf '%s=%s\n' DOLTGRES_READER_PASSWORD "$DOLTGRES_READER_PASSWORD" >> "$RUNTIME_ENV"
+printf '%s=%s\n' DOLTGRES_WRITER_PASSWORD "$DOLTGRES_WRITER_PASSWORD" >> "$RUNTIME_ENV"
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Step 2: Start edge stack (idempotent - only starts if not running)
@@ -753,6 +778,38 @@ fi
 log_info "[$(date -u +%H:%M:%S)] Running DB provisioning..."
 emit_deployment_event "infra_deployment.db_provision_started" "in_progress" "Provisioning database users and schemas"
 $RUNTIME_COMPOSE --profile bootstrap run --rm db-provision
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 6a: Bring up Doltgres + provision DBs + apply drizzle migrations + seed
+# Parallel to postgres/db-provision above, but for the knowledge data plane.
+# Guarded on presence — tolerates envs where doltgres is not in the compose file.
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+if $RUNTIME_COMPOSE config --services 2>/dev/null | grep -q '^doltgres$'; then
+  log_info "[$(date -u +%H:%M:%S)] Bringing up doltgres..."
+  $RUNTIME_COMPOSE up -d doltgres
+
+  log_info "[$(date -u +%H:%M:%S)] Provisioning Doltgres DBs + roles..."
+  $RUNTIME_COMPOSE --profile bootstrap run --rm doltgres-provision
+
+  # drizzle-kit native migrator inside the poly migrator image. Requires
+  # POLY_MIGRATOR_IMAGE to be set (flight-infra derives it from the promoted
+  # image manifest; local dev uses the locally-built image tag).
+  if [ -n "${POLY_MIGRATOR_IMAGE-}" ]; then
+    log_info "[$(date -u +%H:%M:%S)] Applying drizzle-kit migrations to knowledge_poly..."
+    $RUNTIME_COMPOSE --profile bootstrap run --rm doltgres-migrate-poly
+
+    log_info "[$(date -u +%H:%M:%S)] Stamping Dolt commit for migration batch..."
+    $RUNTIME_COMPOSE --profile bootstrap run --rm doltgres-commit-poly
+
+    # No deploy-time seeding. Nodes boot clean; the brain accumulates knowledge
+    # itself. For manual dev seeding: pnpm db:seed:doltgres:poly.
+    log_info "[$(date -u +%H:%M:%S)] Doltgres provision + migrate + commit complete (clean slate, no seeds)"
+  else
+    log_warn "POLY_MIGRATOR_IMAGE not set — skipping Doltgres migrate/commit/seed. Doltgres is up but schema is not applied."
+  fi
+else
+  log_info "Doltgres not present in compose config — skipping knowledge plane bootstrap"
+fi
 log_info "[$(date -u +%H:%M:%S)] DB provisioning complete"
 emit_deployment_event "infra_deployment.db_provision_complete" "success" "Database provisioned successfully"
 
@@ -770,6 +827,10 @@ $RUNTIME_COMPOSE stop autoheal 2>/dev/null || true
 
 # Infra services only — excludes app, scheduler-worker, db-migrate
 INFRA_SERVICES="postgres litellm redis alloy temporal-postgres temporal temporal-ui autoheal repo-init git-sync"
+# Doltgres is optional — only include if it's in the compose file for this env.
+if $RUNTIME_COMPOSE config --services 2>/dev/null | grep -q '^doltgres$'; then
+  INFRA_SERVICES="$INFRA_SERVICES doltgres"
+fi
 $RUNTIME_COMPOSE up -d --remove-orphans $INFRA_SERVICES
 
 # Sandbox-openclaw disabled — removed from k8s catalog and compose deploy path.
@@ -861,10 +922,19 @@ if command -v kubectl &>/dev/null; then
 
   # ── Per-node secrets (operator, poly, resy) ────────────────────────────────
   for node in operator poly resy; do
+    # Doltgres URL points to this node's own DB (knowledge_<node>).
+    # Poly reads DOLTGRES_URL_POLY in its Zod schema; operator/resy read generic DOLTGRES_URL.
+    DOLTGRES_URL_NODE="postgresql://knowledge_writer:${DOLTGRES_WRITER_PASSWORD}@${HOST_IP}:5435/knowledge_${node}?sslmode=disable"
+    if [ "$node" = "poly" ]; then
+      DOLTGRES_ENV_LINE="DOLTGRES_URL_POLY=${DOLTGRES_URL_NODE}"
+    else
+      DOLTGRES_ENV_LINE="DOLTGRES_URL=${DOLTGRES_URL_NODE}"
+    fi
     SECRET_FILE=$(mktemp)
     cat > "$SECRET_FILE" <<SECEOF
 DATABASE_URL=postgresql://${APP_DB_USER}:${APP_DB_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
 DATABASE_SERVICE_URL=postgresql://${APP_DB_SERVICE_USER}:${APP_DB_SERVICE_PASSWORD}@${HOST_IP}:5432/cogni_${node}?sslmode=disable
+${DOLTGRES_ENV_LINE}
 AUTH_SECRET=${AUTH_SECRET}
 LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
 OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
