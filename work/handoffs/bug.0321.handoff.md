@@ -2,12 +2,17 @@
 id: bug.0321.handoff
 type: handoff
 work_item_id: bug.0321
-status: active
+status: archived
 created: 2026-04-18
 updated: 2026-04-18
 branch: fix/flight-preview-queue-visible
-last_commit: 9ed58908e
+last_commit: 395646539
 ---
+
+> **Archived 2026-04-18.** All four gaps fixed in PR #921 (four commits:
+> Fix 1–4 below). See `bug.0321.cicd-silent-green-remaining.md` for the
+> as-shipped acceptance checklist. Gap #4 (OutOfSync/readiness race) was
+> folded into this bug rather than split out as bug.0322 per user direction.
 
 # Handoff: CICD silent-green — three remaining paths
 

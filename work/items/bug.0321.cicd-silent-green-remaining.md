@@ -2,13 +2,13 @@
 id: bug.0321
 type: bug
 title: "CICD silent-green: three remaining paths that report success without verifying deploy state"
-status: needs_implement
+status: needs_review
 priority: 1
 rank: 1
 estimate: 2
 created: 2026-04-18
 updated: 2026-04-18
-summary: "After PRs #913 (scheduler-worker ConfigMap), #914 (rollout gate for all deployments), #915 (flight-preview PR-lookup race), #917 (verify-buildsha + flight-preview hard-fail on no-PR push), #921 (flight-preview queue-only surfaces as skipped), three silent-green paths remain where a workflow reports success without verifying the deploy-state delta. Consolidating them under one bug so we can close them together and stop calling CICD 'proper' until they're gone."
+summary: "After PRs #913 (scheduler-worker ConfigMap), #914 (rollout gate for all deployments), #915 (flight-preview PR-lookup race), #917 (verify-buildsha + flight-preview hard-fail on no-PR push), #921 (flight-preview queue-only surfaces as skipped), four silent-green paths remain where a workflow reports success without verifying the deploy-state delta. Consolidating them under one bug so we can close them together and stop calling CICD 'proper' until they're gone."
 outcome: "Every CICD path either (a) proves the expected state-delta held, or (b) visibly reports a non-green outcome (skipped/failed/warning). No workflow ever reports success for a run that produced no verified state change."
 spec_refs:
   - docs/spec/ci-cd.md
@@ -17,8 +17,8 @@ assignees: [derekg1729]
 credit:
 project: proj.cicd-services-gitops
 initiative:
-branch:
-pr:
+branch: fix/flight-preview-queue-visible
+pr: 921
 related:
   - bug.0315
   - bug.0316
@@ -34,7 +34,7 @@ related:
 
 ## Context
 
-The 2026-04-18 incident surfaced a class of failure: GitHub Actions workflows reporting `success` (green checkmark) while the actual deploy state never advanced. Five back-to-back fixes closed the most egregious instances. Three remain — same class, different workflow.
+The 2026-04-18 incident surfaced a class of failure: GitHub Actions workflows reporting `success` (green checkmark) while the actual deploy state never advanced. Five back-to-back fixes closed the most egregious instances. Four remain — same class, different workflow.
 
 ## Remaining gaps
 
@@ -82,11 +82,18 @@ PR #917's `verify-buildsha.sh` is preview-only. Production promotions via `promo
 
 Preferred simpler path: have `promote-to-production.sh` write a per-node `source-sha` map into `.promote-state/` (operator → SHA_A, poly → SHA_B, ...), and have the production verifier read that map + assert per-node.
 
+### 4. `wait-for-candidate-ready.sh` passes while Argo `sync.status=OutOfSync`
+
+The readiness gate in `candidate-flight.yml` only curls `/readyz` — any running pod answers HTTP 200 regardless of Argo sync state. Cosmetic EndpointSlice drift today; load-bearing when the drift isn't cosmetic tomorrow.
+
+**Fix**: dissolved by gap #1's fix. Once `wait-for-argocd.sh` runs first (proving `sync.revision == EXPECTED_SHA && Healthy`), the readiness probe can no longer accept old-pod 200s. Reinforced structurally: `wait-for-argocd.sh` exports `ARGOCD_SYNC_VERIFIED=true` to `$GITHUB_ENV`; `wait-for-candidate-ready.sh` refuses to run without the marker. Runtime-enforced, not review-time convention.
+
 ## Acceptance
 
-- [ ] PR wires `wait-for-argocd.sh` into `candidate-flight.yml`, with `promote-build-payload.sh` emitting `promoted_apps` so the gate is correctly scoped.
-- [ ] `promote-and-deploy.yml` produces a visibly-distinct outcome (grey-skipped job or explicit `noop` status) when `promoted_apps=""`, not a plain green success.
-- [ ] Production `verify-buildsha` variant exists and is wired into `promote-and-deploy.yml`'s production path. `promote-to-production.sh` emits the per-node source-sha map it needs.
+- [x] PR wires `wait-for-argocd.sh` into `candidate-flight.yml`, with `promote-build-payload.sh` emitting `promoted_apps` so the gate is correctly scoped. (Fix 1 + Fix 2)
+- [x] `promote-and-deploy.yml` produces a visibly-distinct outcome (grey-skipped `verify-deploy` job) when `promoted_apps=""`, not a plain green success. (Fix 3)
+- [x] Production `verify-buildsha` variant exists and is wired into `promote-and-deploy.yml`'s production path. `promote-to-production.sh` forwards the per-node source-sha map from preview. (Fix 4)
+- [x] Gate-ordering invariant enforced structurally: `wait-for-candidate-ready.sh` refuses to run without `ARGOCD_SYNC_VERIFIED=true`. (Fix 4)
 
 ## Validation
 
