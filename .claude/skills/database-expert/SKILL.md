@@ -18,6 +18,9 @@ Navigation aid for database schema, migrations, and DSN plumbing. Per-node schem
 - [work/items/task.0325…md](../../../work/items/task.0325.atlas-gitops-migrations.md) — Atlas spike intel, deferred.
 - `nodes/poly/packages/db-schema/AGENTS.md` — reference example for the per-node db-schema package pattern (fork it for new nodes).
 - READMEs under `nodes/<node>/app/src/adapters/server/db/migrations/` — tripwires explaining the shared-era `0027_silent_nextwave.sql` duplicate.
+- [docs/spec/knowledge-data-plane.md](../../../docs/spec/knowledge-data-plane.md) — Doltgres knowledge plane architecture (separate from the awareness/Postgres side).
+- [work/items/task.0311…md](../../../work/items/task.0311.poly-knowledge-syntropy-seed.md) — why the Doltgres migrator pattern (per-node migrator image + trailing `dolt_commit`) exists; body has the Doltgres 0.56.0 compatibility test results.
+- `nodes/poly/packages/doltgres-schema/AGENTS.md` — reference example for the per-node doltgres-schema package pattern (fork it when a node adopts Doltgres).
 
 ## Layout at a glance
 
@@ -92,6 +95,56 @@ import { polyCopyTradeFills } from "@cogni/poly-db-schema/copy-trade";
 
 They share a Dockerfile (`nodes/<node>/app/Dockerfile`) but use different stages. `cogni-template:TAG-poly` = app runtime (`runner`). `cogni-template:TAG-poly-migrate` = migrator (`migrator`). The k8s overlay uses both — the Job targets `-migrate`, the Deployment targets the app tag.
 
+## Doltgres knowledge plane (per-node, parallel to the Postgres side)
+
+Each node that adopts Doltgres follows the exact pattern above, but against a **separate** workspace package + drizzle config + migrations dir. Dialects do not mix in one package.
+
+### Layout
+
+```
+nodes/<node>/packages/doltgres-schema/         @cogni/<node>-doltgres-schema (NEW per-node package; only poly today)
+nodes/<node>/drizzle.doltgres.config.ts        dialect: postgresql, schema glob targets ONLY the doltgres-schema package
+nodes/<node>/app/src/adapters/server/db/doltgres-migrations/   generated SQL, checked in
+```
+
+Only `@cogni/poly-doltgres-schema` exists today (task.0311). Operator/resy spin up their own packages when they adopt Doltgres — don't pre-scaffold.
+
+### Adding a Doltgres table
+
+Identical to the Postgres flow — with one caveat:
+
+1. Define the table in the node's doltgres-schema package.
+2. `pnpm db:generate:poly:doltgres` — generates SQL.
+3. `pnpm db:migrate:poly:doltgres` (local dev) or deploy pipeline (candidate-a+) applies via drizzle-kit migrate.
+4. **One Dolt-specific step**: the migrator compose service chains a trailing `doltgres-commit-poly` (postgres:15 + psql one-shot) that runs `SELECT dolt_commit('-Am', 'migration: drizzle-kit batch')`. This captures DDL into `dolt_log`; without it, drizzle-kit's changes exist in the working set but aren't committed to the Dolt history ([dolt#4843](https://github.com/dolthub/dolt/issues/4843)).
+
+### Migrator image reuse
+
+The poly migrator image (`nodes/poly/app/Dockerfile AS migrator`) carries BOTH Postgres AND Doltgres migration inputs — same image, different entry command:
+
+- `pnpm db:migrate:poly:container` — Postgres (default CMD)
+- `pnpm db:migrate:poly:doltgres:container` — Doltgres (compose overrides command)
+
+When operator/resy adopt Doltgres, their `Dockerfile AS migrator` extends similarly.
+
+### Doltgres is NOT a drop-in in every way — two caveats verified against 0.56.0
+
+1. **Runtime tagged-template parameterized queries fail** with `unhandled message "&{}"` (extended query protocol). The `DoltgresKnowledgeStoreAdapter` uses `sql.unsafe()` for all runtime reads/writes because of this. Don't try to "upgrade" the adapter to tagged-templates.
+2. **`ON CONFLICT ... EXCLUDED` is unreliable.** The adapter uses a try-INSERT / catch-duplicate / fallback-UPDATE pattern instead. Don't fold it back to the simpler ON CONFLICT form.
+
+Everything schema-time (drizzle-kit migrate, `CREATE SCHEMA`, `__drizzle_migrations__` tracking table, idempotent re-runs) works natively as of Doltgres 0.56.0 — validated end-to-end.
+
+### POLY_MIGRATOR_IMAGE env var (current gap)
+
+`docker-compose.yml`'s `doltgres-migrate-poly` service reads `${POLY_MIGRATOR_IMAGE:-unused-by-infra-deploy}`. `deploy-infra.sh` gates the `run --rm` invocation on `-n "$POLY_MIGRATOR_IMAGE"`. Today neither `candidate-flight-infra.yml` nor `promote-and-deploy.yml` sets this env var, so Doltgres comes up + provisions but the schema isn't applied (warn-and-continue). Remediation: either self-resolve the image in deploy-infra.sh (mirror the `LITELLM_IMAGE` pattern at line ~547) or add as a workflow input. Tracked as task.0311 follow-up #1.
+
+### Doltgres-specific gotchas
+
+- **`SET @@dolt_transaction_commit = 1` is MySQL-dialect syntax** — not verified on Doltgres's pg wire protocol. Don't add it to compose/scripts. The explicit trailing `SELECT dolt_commit('-Am', ...)` pattern is the repo's verified approach.
+- **DROP SCHEMA … CASCADE is not supported** (per the 0.56.0 error message). Drop tables individually, then DROP SCHEMA.
+- **Per-node DB name convention**: `cogni_<node>` (Postgres) → `knowledge_<node>` (Doltgres). `provision.sh` derives one from the other.
+- **Port 5435** on the host (not 5432 — Postgres owns that). k8s pods reach via `{node}-doltgres-external` EndpointSlice → node InternalIP:5435.
+
 ## When to promote a node-local slice to core
 
 Trigger: a second node genuinely needs the same table (import would cross node boundaries). **One-way move** — flipping back and forth causes migration file churn. Rule of thumb: core = strict intersection. When in doubt, keep node-local.
@@ -116,3 +169,9 @@ Atlas + Drizzle official integration; `atlas migrate diff`, destructive-change l
 - Deleting `0027_silent_nextwave.sql` from any node without coordinating across all deployed DBs' `__drizzle_migrations`
 - Auto-generated `DROP TABLE "poly_copy_trade_*"` committed on operator/resy (orphans are intentional)
 - Component-piece fallback (`POSTGRES_HOST`, etc.) added to any new script — explicit DSN or fail fast
+- Doltgres table added to a Postgres-targeted package (`@cogni/db-schema` or `@cogni/<node>-db-schema`) — dialects must stay separated via per-package path
+- `@cogni/<node>-doltgres-schema` path included in `nodes/<node>/drizzle.config.ts` (Postgres) — would cause Postgres to try creating knowledge tables
+- `sql\`... WHERE id = ${x}\``tagged-template parameterized queries added to the Doltgres adapter — extended protocol unsupported; use`sql.unsafe()`
+- `ON CONFLICT ... EXCLUDED` added to any Doltgres write path — use try-INSERT / catch-duplicate / fallback-UPDATE instead
+- `SET @@dolt_transaction_commit = 1` added to a script targeting Doltgres — MySQL-dialect syntax, unverified on pg wire
+- Missing trailing `SELECT dolt_commit('-Am', ...)` after a Doltgres schema change — working-set changes exist but not captured in `dolt_log` (per dolt#4843)
