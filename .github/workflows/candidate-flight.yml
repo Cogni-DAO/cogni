@@ -322,6 +322,7 @@ jobs:
         if: steps.ssh-setup.outputs.has_vm == 'true'
         env:
           DOMAIN: ${{ vars.DOMAIN }}
+          PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
         run: bash app-src/scripts/ci/smoke-candidate.sh
 
       # Authoritative contract probe: promoted pods serve the SHA that built
