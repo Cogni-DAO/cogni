@@ -17,7 +17,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Check, Copy, ExternalLink } from "lucide-react";
+import { AlertTriangle, Check, Copy } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import {
   Badge,
@@ -208,23 +208,13 @@ export function OrderActivityCard(): ReactElement {
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-56 truncate font-medium text-sm">
-                    {row.polymarket_profile_url ? (
-                      <a
-                        href={row.polymarket_profile_url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="inline-flex items-center gap-1 hover:underline"
-                      >
-                        {row.market_id ? (
-                          <span className="font-mono text-xs">
-                            {row.market_id.slice(0, 10)}…
-                          </span>
-                        ) : (
-                          "(unknown)"
-                        )}
-                        <ExternalLink className="size-3" />
-                      </a>
-                    ) : row.market_id ? (
+                    {/* NB: Intentionally NOT linking `row.polymarket_profile_url` —
+                        that URL points at the operator's Polymarket profile
+                        trade-detail page, and the operator is EOA-direct.
+                        Polymarket auto-redirects `/profile/<EOA>` to an empty
+                        Safe-proxy page. Copy-payload carries the ground-truth
+                        Data-API URLs instead. See `.claude/skills/poly-dev-expert/SKILL.md`. */}
+                    {row.market_id ? (
                       <span className="font-mono text-muted-foreground text-xs">
                         {row.market_id.slice(0, 10)}…
                       </span>

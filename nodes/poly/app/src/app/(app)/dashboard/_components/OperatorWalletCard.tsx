@@ -54,7 +54,7 @@ function CopyAddressButton({ address }: { address: string }): ReactElement {
 }
 
 export function OperatorWalletCard(): ReactElement {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-operator-wallet"],
     queryFn: fetchWalletBalance,
     refetchInterval: 15_000,
@@ -63,6 +63,11 @@ export function OperatorWalletCard(): ReactElement {
     retry: 1,
   });
 
+  // Two distinct "no data" states:
+  //   - configured=false (wallet env unset, zero-address sentinel) → show
+  //     the setup hint.
+  //   - isError / !data after load                                 → show
+  //     a load-failure message, NOT the setup hint (which would be a lie).
   const configured = Boolean(data && data.operator_address !== ZERO_ADDR);
   const total = data?.usdc_total ?? 0;
   const availablePct =
@@ -104,6 +109,10 @@ export function OperatorWalletCard(): ReactElement {
             <div className="h-16 rounded bg-muted" />
             <div className="h-2 rounded bg-muted" />
           </div>
+        ) : isError || !data ? (
+          <p className="text-center text-muted-foreground text-sm">
+            Couldn't load wallet balance. Will retry shortly.
+          </p>
         ) : !configured ? (
           <p className="text-center text-muted-foreground text-sm">
             No operator wallet configured. Set{" "}
@@ -112,18 +121,14 @@ export function OperatorWalletCard(): ReactElement {
             </code>{" "}
             to enable.
           </p>
-        ) : data ? (
+        ) : (
           <>
             {/* Three-stat header */}
             <div className="grid grid-cols-3 gap-4">
               <Stat
                 label="Total"
                 value={formatUsdc(total)}
-                hint={
-                  data.stale
-                    ? "(last good value — stale)"
-                    : "available + locked"
-                }
+                hint={data.stale ? "(partial data)" : "available + locked"}
               />
               <Stat
                 label="Locked in orders"
@@ -169,7 +174,14 @@ export function OperatorWalletCard(): ReactElement {
             <div className="flex items-center justify-between border-t pt-3 text-sm">
               <span className="flex items-center gap-2 text-muted-foreground">
                 POL (gas)
-                {data.pol_gas < 0.1 && data.pol_gas > 0 ? (
+                {data.pol_gas <= 0 ? (
+                  <span
+                    className="rounded bg-destructive/20 px-1.5 py-0.5 text-destructive text-xs"
+                    title="No POL balance — operator cannot pay gas. Top up now."
+                  >
+                    empty
+                  </span>
+                ) : data.pol_gas < 0.1 ? (
                   <span
                     className="rounded bg-warning/20 px-1.5 py-0.5 text-warning text-xs"
                     title="Low POL balance — top up before the operator can't pay gas."
@@ -207,7 +219,7 @@ export function OperatorWalletCard(): ReactElement {
               </p>
             ) : null}
           </>
-        ) : null}
+        )}
       </CardContent>
     </Card>
   );
