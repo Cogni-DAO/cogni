@@ -70,15 +70,14 @@ for COGNI_DB in $(echo "$COGNI_NODE_DBS" | tr ',' ' '); do
   echo "🔧 Provisioning database '$DB'..."
   run_sql_quiet "postgres" "CREATE DATABASE $DB"
 
-  # Doltgres has limited GRANT support; attempt but warn on failure.
-  if PGPASSWORD="$DG_PASS" psql -h "$DG_HOST" -p "$DG_PORT" -U postgres -d "$DB" \
-       -c "GRANT USAGE ON SCHEMA public TO knowledge_reader" 2>/dev/null; then
-    run_sql "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_writer"
-    run_sql "$DB" "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO knowledge_reader"
-    run_sql "$DB" "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO knowledge_writer"
-  else
-    echo "   ⚠ GRANT not supported by this Doltgres version — skipping (roles are permissive by default)"
-  fi
+  # Doltgres has partial/evolving GRANT support. Each statement is best-effort:
+  # GRANT USAGE works on Doltgres 0.56.x; ALTER DEFAULT PRIVILEGES does not yet
+  # (dolthub/doltgresql: "ALTER DEFAULT PRIVILEGES statement is not yet supported").
+  # Doltgres roles are permissive by default, so missing grants don't block reads/writes.
+  run_sql_quiet "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_reader"
+  run_sql_quiet "$DB" "GRANT USAGE ON SCHEMA public TO knowledge_writer"
+  run_sql_quiet "$DB" "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO knowledge_reader"
+  run_sql_quiet "$DB" "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO knowledge_writer"
 
   # Initial Dolt commit marks the empty DB. Subsequent dolt_commit calls come
   # from the migrator (after applying each generated SQL file) and from the
