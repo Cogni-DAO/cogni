@@ -10,11 +10,16 @@
 
 set -euo pipefail
 
+# Canonical target catalog (bug.0328 architectural follow-up). One edit
+# to add a node, everywhere — see scripts/ci/lib/image-tags.sh.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/image-tags.sh
+. "$SCRIPT_DIR/lib/image-tags.sh"
+
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || true)
 EXPLICIT_SCOPE=false
 UPSTREAM_REF=${TURBO_SCM_BASE:-}
 HEAD_REF=${TURBO_SCM_HEAD:-HEAD}
-ALL_TARGETS=(operator operator-migrator poly poly-migrator resy resy-migrator scheduler-worker)
 
 if [ -n "${TURBO_SCM_BASE:-}" ] || [ -n "${TURBO_SCM_HEAD:-}" ]; then
   EXPLICIT_SCOPE=true

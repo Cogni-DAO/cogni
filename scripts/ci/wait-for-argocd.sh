@@ -15,6 +15,16 @@
 # authoritative signal for "did Argo deploy what we pushed" is the revision
 # on the last sync operation, not the drift comparator.
 #
+# bug.0326: sync.revision + health.status are Application-level signals and
+# go green while a rolling update is still in flight — "Healthy" fires as
+# soon as enough pods are Ready, which includes the OLD ReplicaSet's pods
+# during the window between sync and rollout completion. /readyz from those
+# pods serves the prior BUILD_SHA, so downstream verify-buildsha.sh fails
+# on a green flight. After Argo reports Healthy for an app, this script now
+# also runs `kubectl rollout status` on the app's Deployment — that command
+# only returns 0 when the new ReplicaSet is fully available AND the old
+# pods are torn down. Only then is the app considered done.
+#
 # Belt-and-suspenders active sync trigger: if an app's sync.revision has not
 # caught up to EXPECTED_SHA after ACTIVE_SYNC_AFTER seconds, we kubectl-patch
 # the Application to kick an explicit sync. This unblocks deploys in clusters
@@ -89,6 +99,47 @@ if ! kubectl get crd applications.argoproj.io &>/dev/null; then
   exit 0
 fi
 
+# Map an Argo Application name ({env}-{app}) to the Deployment name and
+# namespace the overlay actually creates. candidate-a / preview / production
+# all use namePrefix=<app>- on namespace cogni-<env>; node-apps have resource
+# name `node-app` (→ <app>-node-app), scheduler-worker keeps its own name.
+# Any new app added to the catalog must be added here (bug.0326).
+resolve_deployment() {
+  local app_name="$1"  # {env}-{app}
+  local app="${app_name#${DEPLOY_ENVIRONMENT}-}"
+  case "$app" in
+    scheduler-worker) echo "scheduler-worker" ;;
+    operator | poly | resy) echo "${app}-node-app" ;;
+    *) echo "" ;;  # unknown app — caller treats empty as "skip digest check"
+  esac
+}
+
+# Block until the Deployment's new ReplicaSet is fully available AND the old
+# ReplicaSet's pods are gone. Called AFTER sync.revision + Healthy to close
+# bug.0326 (Argo-level Healthy ≠ pods-serving-new-image). Uses the remaining
+# overall deadline so we don't double-budget the wait.
+rollout_check() {
+  local app_name="$1"
+  local deadline="$2"
+  local deployment namespace remaining
+
+  deployment=$(resolve_deployment "$app_name")
+  if [ -z "$deployment" ]; then
+    echo "    ⚠️  ${app_name}: no Deployment mapping — skipping rollout-status check"
+    return 0
+  fi
+  namespace="cogni-${DEPLOY_ENVIRONMENT}"
+
+  remaining=$((deadline - SECONDS))
+  [ "$remaining" -lt 10 ] && remaining=10
+
+  echo "    ↻ ${app_name}: kubectl rollout status deployment/${deployment} -n ${namespace} (up to ${remaining}s)"
+  if kubectl -n "$namespace" rollout status "deployment/${deployment}" --timeout="${remaining}s" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
 # Kick a manual sync on an Application by patching an operation into its spec.
 # Argo CD's application-controller picks this up within the reconciliation loop
 # and runs it even if automated sync is disabled or misconfigured.
@@ -114,8 +165,19 @@ wait_for_app() {
     SYNC_PHASE=$(kubectl -n argocd get application "$app_name" -o jsonpath='{.status.operationState.phase}' 2>/dev/null || echo "")
 
     if [ "$REV" = "$EXPECTED_SHA" ] && [ "$HEALTH" = "Healthy" ]; then
-      echo "  ✅ ${app_name} at ${REV:0:8} (Healthy)"
-      return 0
+      # bug.0326: sync.revision + health.status are Argo-Application-level
+      # signals. During a rolling update, "Healthy" fires as soon as enough
+      # pods are Ready — which includes the OLD ReplicaSet's pods. /readyz
+      # from those pods serves the prior BUILD_SHA. Before declaring this
+      # app done, block on `kubectl rollout status`: it only returns 0 when
+      # the new ReplicaSet is fully available AND the old pods are torn
+      # down. That is the signal verify-buildsha.sh needs downstream.
+      if rollout_check "$app_name" "$deadline"; then
+        echo "  ✅ ${app_name} at ${REV:0:8} (Healthy + rollout complete)"
+        return 0
+      fi
+      echo "  ❌ ${app_name} rollout did not complete (sync.revision=${REV:0:8} Healthy but stale ReplicaSet still present)"
+      return 1
     fi
     echo "    ${app_name}: rev=${REV:0:8} expected=${EXPECTED_SHA:0:8} health=${HEALTH} phase=${SYNC_PHASE} (waiting...)"
 

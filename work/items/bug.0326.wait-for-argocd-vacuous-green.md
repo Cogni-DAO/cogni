@@ -2,7 +2,7 @@
 id: bug.0326
 type: bug
 title: wait-for-argocd.sh reports green when promoted digests never reach pods
-status: needs_triage
+status: done
 priority: 2
 rank: 60
 estimate: 2
@@ -13,14 +13,14 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch:
-pr:
-reviewer:
+branch: fix/bug.0328-promote-silent-abort
+pr: https://github.com/Cogni-DAO/node-template/pull/924
+reviewer: claude-code
 revision: 0
 blocked_by:
 deploy_verified: false
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-04-19
 labels: [cicd, flight, argo, observability]
 external_refs:
 ---
@@ -123,3 +123,54 @@ Needs to also check migration Jobs, not just Deployments — a failed Job (bad i
 ## Attribution
 
 -
+
+## Closure (2026-04-19 — bundled with bug.0328)
+
+**Live repro confirmed** on PR #918 flight of SHA `54f8462` (run
+[24622761291](https://github.com/Cogni-DAO/node-template/actions/runs/24622761291)):
+
+- `detect-affected.sh` selected all 7 targets for PR #918
+- `pr-build` built a fresh resy image at `pr-918-54f8462b…-resy` with
+  `org.opencontainers.image.revision=54f8462b…` (verified via
+  `docker buildx imagetools inspect`)
+- flight pushed new digests to `deploy/candidate-a` for all 4 apps
+- Argo reported `sync.revision=54f8462` + `health.status=Healthy`
+- `wait-for-argocd.sh` returned 0 → `ARGOCD_SYNC_VERIFIED=true`
+- `verify-buildsha.sh` probed `https://resy-test.cognidao.org/readyz`
+- response: `version=a377bad` (the PRIOR build — resy pod had not rolled yet)
+- flight failed red on the buildSha check
+
+Confirmed the exact prediction in this ticket: `sync.revision` matched
+because the deploy-branch commit was processed; `health.status=Healthy`
+fired because _some_ pods were Ready (the OLD ReplicaSet's). The new
+ReplicaSet hadn't completed its rollout yet. Previous gates were
+vacuously green on image identity.
+
+**Fix applied** (`scripts/ci/wait-for-argocd.sh` REMOTESCRIPT block):
+
+After the `sync.revision == EXPECTED_SHA && health.status == Healthy`
+check passes for an app, the script now also runs:
+
+```bash
+kubectl -n cogni-${DEPLOY_ENVIRONMENT} rollout status \
+  deployment/${deployment_name} --timeout=${remaining}s
+```
+
+`rollout status` only returns 0 when the new ReplicaSet is fully
+available AND the old ReplicaSet's pods are torn down — i.e. `/readyz`
+is guaranteed to serve the new BUILD_SHA. Uses the remaining overall
+`ARGOCD_TIMEOUT` budget (no double-budgeting). Added `resolve_deployment`
+helper mapping `{env}-{app}` Argo Application names to the actual
+Deployment name convention (`<app>-node-app` for node-apps,
+`scheduler-worker` for the worker).
+
+Bundled with bug.0328 because both close the same silent-green class
+— bug.0328 at release-slot (accepts skipped verify), bug.0326 at
+wait-for-argocd (accepts half-rolled pods). Adjacent layers of the
+same trust chain.
+
+The proposed kubectl digest-match check (explicit
+`containerStatuses[].imageID contains <digest>`) was considered but
+`rollout status` is a strict superset: it cannot return 0 while old
+pods serve traffic, so digest identity is implicit. Simpler, uses the
+standard kubectl primitive, no hand-rolled digest parsing.

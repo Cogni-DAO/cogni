@@ -366,23 +366,42 @@ jobs:
 
       - name: Decide lease state
         id: decide
-        # STATE=free only when the deploy was verified (or legitimately
-        # skipped because nothing was promoted — treat as clean exit: the
-        # lease was acquired but there was nothing to verify, so free it).
-        # Any failure in flight after acquire, or in verify-candidate, is
-        # STATE=failed so the operator sees the lease state explicitly.
+        # STATE=free only when the deploy was verified, OR when nothing was
+        # promoted and verify-candidate therefore legitimately skipped. The
+        # latter case is only valid when needs.flight.outputs.promoted_apps
+        # is empty — that is the same signal the verify-candidate job-level
+        # `if:` gate used to decide whether to run.
+        #
+        # bug.0328: a VERIFY_RESULT=skipped with non-empty promoted_apps is
+        # a contradiction — the flight job pushed real promotions to
+        # deploy/candidate-a but verification never ran (promoted_apps got
+        # wedged empty in $GITHUB_OUTPUT because promote-build-payload
+        # aborted after the overlay writes but before the trailing output
+        # line). Treating that skip as success is exactly the silent-green
+        # class PR #921 eliminated; this gate closes the remaining path.
         run: |
           FLIGHT_RESULT="${{ needs.flight.result }}"
           VERIFY_RESULT="${{ needs.verify-candidate.result }}"
-          echo "flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT}"
-          if [ "$FLIGHT_RESULT" = "success" ] && { [ "$VERIFY_RESULT" = "success" ] || [ "$VERIFY_RESULT" = "skipped" ]; }; then
-            echo "state=free" >> "$GITHUB_OUTPUT"
-            echo "status=success" >> "$GITHUB_OUTPUT"
-            echo "description=Candidate flight passed" >> "$GITHUB_OUTPUT"
+          PROMOTED_APPS="${{ needs.flight.outputs.promoted_apps }}"
+          echo "flight=${FLIGHT_RESULT} verify=${VERIFY_RESULT} promoted_apps='${PROMOTED_APPS}'"
+          if [ "$FLIGHT_RESULT" != "success" ]; then
+            STATE=failed; STATUS=failure; DESC="Candidate flight failed"
+          elif [ "$VERIFY_RESULT" = "success" ]; then
+            STATE=free; STATUS=success; DESC="Candidate flight passed"
+          elif [ "$VERIFY_RESULT" = "skipped" ] && [ -z "$PROMOTED_APPS" ]; then
+            STATE=free; STATUS=success; DESC="Candidate flight passed (no-op — nothing to verify)"
+          elif [ "$VERIFY_RESULT" = "skipped" ]; then
+            # Contradiction: flight promoted apps but verify was skipped.
+            STATE=failed; STATUS=failure
+            DESC="Candidate flight failed: promoted apps (${PROMOTED_APPS}) but verify-candidate was skipped"
           else
-            echo "state=failed" >> "$GITHUB_OUTPUT"
-            echo "status=failure" >> "$GITHUB_OUTPUT"
-            echo "description=Candidate flight failed" >> "$GITHUB_OUTPUT"
+            STATE=failed; STATUS=failure; DESC="Candidate flight failed in verify-candidate"
+          fi
+          echo "state=${STATE}" >> "$GITHUB_OUTPUT"
+          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
+          echo "description=${DESC}" >> "$GITHUB_OUTPUT"
+          if [ "$STATUS" = "failure" ]; then
+            echo "::error::${DESC}"
           fi
 
       - name: Release candidate slot
@@ -411,6 +430,17 @@ jobs:
           DESCRIPTION: ${{ steps.decide.outputs.description }}
           TARGET_URL: ${{ needs.flight.outputs.status_url }}
         run: bash app-src/scripts/ci/report-candidate-status.sh
+
+      # bug.0328: when Decide chose STATUS=failure, the commit status has
+      # been reported and the lease released; now fail the job itself so
+      # the workflow run shows red in the GitHub UI and downstream
+      # automations (the pr-coordinator loop) don't auto-advance as if
+      # this were a green flight.
+      - name: Fail job on decided failure
+        if: steps.decide.outputs.status == 'failure'
+        run: |
+          echo "::error::${{ steps.decide.outputs.description }}"
+          exit 1
 
   # ── Failure reporting when flight never acquired the lease (acquire
   # failed or slot was busy). No release needed — we don't own the lease.

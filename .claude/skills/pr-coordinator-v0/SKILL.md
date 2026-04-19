@@ -242,6 +242,13 @@ Manual direct commits to `deploy/candidate-a` are incident-only per `docs/spec/c
 
 Use the `Agent` tool with `subagent_type: general-purpose`. Give each a tight, self-contained prompt — they don't share context with the coordinator.
 
+## Gotchas I keep tripping on
+
+- **Lease has 3 states, not 2:** `free` / `busy` / `failed`. `failed` means a prior flight's verify-candidate failed and left the slot stuck — do **not** flight over it. Unstick first (manual commit of `{"state":"free"}` to `infra/control/candidate-lease.json` on `deploy/candidate-a`), then dispatch.
+- **Bound every Loki query with `startRfc3339` = flight dispatch time.** Unbounded windows return logs from prior flights and look like "didn't roll." This is how you mistake an old `buildSha=a377bad` entry for a rollout failure when the new pod is fine.
+- **Shutdown logs are normal during rolling restarts** — the _old_ pod drains cleanly. Rollout proof is a _new_ pod emitting `app started` (node apps) or `worker.lifecycle.ready` (scheduler-worker) with matching `buildSha`. Absence of shutdown is not the signal.
+- **`.promote-state/source-sha-by-app.json` is authoritative**, not decorative. It's the expected-SHA map that `verify-buildsha.sh` curls endpoints against. If this file is stale or missing, verify-buildsha falls back to single-SHA mode and may compare against the wrong SHA.
+
 ## Hard Rules
 
 - **One slot, one PR.** Never flight while `candidate-lease.state == busy`.

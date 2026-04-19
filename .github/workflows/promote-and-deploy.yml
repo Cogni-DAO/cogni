@@ -124,6 +124,12 @@ jobs:
         env:
           HEAD_SHA: ${{ steps.env.outputs.head_sha }}
         run: |
+          # Canonical target catalog + tag-suffix mapping (bug.0328
+          # architectural follow-up). Checkout step places the repo under
+          # `app-src/` (see `path: app-src` above), so the lib lives there.
+          # shellcheck source=../../scripts/ci/lib/image-tags.sh
+          . app-src/scripts/ci/lib/image-tags.sh
+
           IMAGE_NAME="ghcr.io/cogni-dao/cogni-template"
           TAG="preview-${HEAD_SHA}"
 
@@ -131,7 +137,7 @@ jobs:
           # Empty digest = service not in this build; promote-k8s-image skips it,
           # leaving the existing digest in the overlay unchanged.
           resolve_optional() {
-            local full_tag="${IMAGE_NAME}:${1}"
+            local full_tag="$1"
             local digest
             digest=$(docker buildx imagetools inspect "$full_tag" --raw 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null) || true
             # Fallback: parse from --format if raw didn't work
@@ -146,28 +152,21 @@ jobs:
             echo "${IMAGE_NAME}@${digest}"
           }
 
-          # Operator image: required for node-code PRs, optional for infra-only.
-          # When absent (infra-only deploy), the overlay keeps its existing digest
-          # and promote-k8s is effectively a no-op for k8s apps.
-          OPERATOR_DIGEST=$(resolve_optional "${TAG}")
-
-          POLY_DIGEST=$(resolve_optional "${TAG}-poly")
-          RESY_DIGEST=$(resolve_optional "${TAG}-resy")
-          MIGRATOR_DIGEST=$(resolve_optional "${TAG}-migrate")
-          SW_DIGEST=$(resolve_optional "${TAG}-scheduler-worker")
-
-          echo "operator=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
-          echo "poly=$POLY_DIGEST" >> $GITHUB_OUTPUT
-          echo "resy=$RESY_DIGEST" >> $GITHUB_OUTPUT
-          echo "migrator=$MIGRATOR_DIGEST" >> $GITHUB_OUTPUT
-          echo "scheduler_worker=$SW_DIGEST" >> $GITHUB_OUTPUT
-
+          # Resolve every target and emit a single JSON blob the promote step
+          # iterates — keeps the "one edit to add a node" promise: lib/image-tags.sh
+          # is the only file that knows the target list. GHA outputs with dashes
+          # are accessible only via bracket notation in `${{ }}`; JSON via jq is
+          # uniform and matches the underscore-key pattern used elsewhere.
           echo "Resolved digests:"
-          echo "  operator:         ${OPERATOR_DIGEST:-"(not built)"}"
-          echo "  poly:             ${POLY_DIGEST:-"(not built)"}"
-          echo "  resy:             ${RESY_DIGEST:-"(not built)"}"
-          echo "  migrator:         ${MIGRATOR_DIGEST:-"(not built)"}"
-          echo "  scheduler-worker: ${SW_DIGEST:-"(not built)"}"
+          DIGESTS_JSON="{}"
+          for target in "${ALL_TARGETS[@]}"; do
+            full_tag=$(image_tag_for_target "$IMAGE_NAME" "$TAG" "$target")
+            digest=$(resolve_optional "$full_tag")
+            DIGESTS_JSON=$(printf '%s' "$DIGESTS_JSON" | jq -c --arg k "$target" --arg v "$digest" '. + {($k): $v}')
+            printf '  %-18s %s\n' "${target}:" "${digest:-"(not built)"}"
+          done
+          # Single compact-JSON output consumed by the promote step.
+          echo "digests_json=${DIGESTS_JSON}" >> "$GITHUB_OUTPUT"
 
       # Checkout the deploy branch — promote-k8s-image.sh runs HERE, not on app-src.
       # This preserves env-specific state (EndpointSlice IPs) written by provision.
@@ -229,11 +228,23 @@ jobs:
               bash ../app-src/scripts/ci/update-source-sha-map.sh
           }
 
-          MIGRATOR_DIGEST="${{ steps.digests.outputs.migrator }}"
-          promote_app operator         "${{ steps.digests.outputs.operator }}"         "$MIGRATOR_DIGEST"
-          promote_app poly             "${{ steps.digests.outputs.poly }}"             "$MIGRATOR_DIGEST"
-          promote_app resy             "${{ steps.digests.outputs.resy }}"             "$MIGRATOR_DIGEST"
-          promote_app scheduler-worker "${{ steps.digests.outputs.scheduler_worker }}" ""
+          # Per-node migrator pairing (task.0324): each node is promoted with
+          # its own `<node>-migrator` digest, not a shared single one. Closes
+          # the half that PR #923 flagged. Iterates NODE_TARGETS from the lib
+          # so adding a new node `mynode` is a one-line lib edit — no change
+          # to this step.
+          # shellcheck source=../../scripts/ci/lib/image-tags.sh
+          . ../app-src/scripts/ci/lib/image-tags.sh
+          DIGESTS='${{ steps.digests.outputs.digests_json }}'
+
+          for node in "${NODE_TARGETS[@]}"; do
+            app_digest=$(printf '%s' "$DIGESTS" | jq -r --arg k "$node" '.[$k] // ""')
+            mig_digest=$(printf '%s' "$DIGESTS" | jq -r --arg k "${node}-migrator" '.[$k] // ""')
+            promote_app "$node" "$app_digest" "$mig_digest"
+          done
+          # scheduler-worker has no migrator pairing.
+          sw_digest=$(printf '%s' "$DIGESTS" | jq -r '."scheduler-worker" // ""')
+          promote_app scheduler-worker "$sw_digest" ""
 
           # Export for deploy-push step
           echo "PROMOTED_CSV=$(IFS=,; echo "${PROMOTED[*]}")" >> $GITHUB_ENV

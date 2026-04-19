@@ -8,7 +8,7 @@ summary: Trunk-based CI/CD where PRs prove safety in fixed candidate slots befor
 read_when: Understanding deployment pipelines, release workflow, or CI configuration
 owner: derekg1729
 created: 2026-02-05
-verified: 2026-04-17
+verified: 2026-04-19
 tags: []
 ---
 
@@ -40,6 +40,9 @@ This document supersedes the old canary-first branch model. The branch model, de
 11. **Verification is a job-level gate, never a step-level skip** (bug.0321). GitHub treats a skipped step inside a running job as green. Every verification that is allowed to no-op (e.g. empty `promoted_apps`) must be gated at the _job_ level with `needs:` and `if:` so the job surfaces as **skipped (grey)** in the checks list, not as a silent-green success.
 12. **Gate ordering is enforced structurally, not by convention** (bug.0321 Fix 4). When step A must precede step B in the same job, A writes a marker to `$GITHUB_ENV` (e.g. `ARGOCD_SYNC_VERIFIED=true`) and B refuses to run without it. Comments rot at the next refactor; runtime checks don't.
 13. **Artifact provenance travels with the artifact** (bug.0321 Fix 4). `.promote-state/source-sha-by-app.json` on each deploy branch records per-app `source_sha` at promotion time. Production promotions copy it forward from preview; verifiers read it to assert per-app contract (`/readyz.version == map[app]`), which is the only cross-PR-safe check when affected-only CI produces a mixed-SHA overlay.
+14. **Skipped verification is not success** (bug.0328). When a downstream job (`release-slot`, `lock-preview-on-success`) consumes the result of a verification job that was gated `if: promoted_apps != ''` per Axiom 11, a `skipped` result is only a valid green signal when `promoted_apps == ''`. A skipped verification combined with a non-empty `promoted_apps` is a **contradiction** (the promote job pushed real digests but verification never ran, e.g. because `promote-build-payload.sh` aborted mid-run and left `$GITHUB_OUTPUT` empty), and must hard-fail the workflow. The job-level skip gate from Axiom 11 prevents _silent step-skip_ success; this axiom prevents _silent job-skip_ success at the consumer. Defense: emit `promoted_apps` incrementally + via `trap EXIT` so the signal survives abort, AND have consumers treat skip-with-promotions as failure.
+15. **Argo "Healthy" is necessary but not sufficient** (bug.0326). `status.health.status == Healthy` fires as soon as enough pods are Ready — including pods from the **old** ReplicaSet during a rolling update. `/readyz` served from those pods returns the prior `BUILD_SHA`, so downstream `verify-buildsha.sh` fails on a green-up-stream flight. `wait-for-argocd.sh` therefore runs `kubectl rollout status deployment/<name>` per promoted app **after** the Healthy check; `rollout status` only returns 0 when the new ReplicaSet is fully available AND the old pods are torn down. That is the authoritative "new pods are live" signal.
+16. **Image target catalog is single-sourced** (bug.0328 architectural follow-up). `scripts/ci/lib/image-tags.sh` defines `ALL_TARGETS`, `NODE_TARGETS`, and `tag_suffix_for_target()` once. Every producer (`build-and-push-images.sh`), discoverer (`resolve-pr-build-images.sh`), dispatcher (`detect-affected.sh`), re-tagger (`flight-preview.yml` retag step), and promoter (`promote-and-deploy.yml` resolve + promote steps) sources that lib instead of maintaining its own copy. Adding a new node `mynode` is a single-file edit — workflows pick it up on the next run. Duplicate target lists across workflows are a code-smell of this axiom.
 
 ## Branch And Deploy-State Model
 
@@ -218,7 +221,7 @@ promote-k8s ─► deploy-infra ─┬─► verify-deploy ─┐
 - `verify-deploy` is job-level gated `if: promote-k8s.outputs.promoted_apps != ''` (Axiom 11). Runs `wait-for-argocd` → `wait-for-in-cluster-services` → `verify-buildsha` (`SOURCE_SHA_MAP` mode). Depends on `deploy-infra` so secrets-restart completes before the contract probes run.
 - `verify` and `verify-deploy` run in parallel from the `deploy-infra` fan-out; `verify` is the always-on DOMAIN probe, `verify-deploy` is the gated contract probe.
 - Empty-promotion runs (infra-only, docs-only, queue-only) → `verify-deploy` skipped → `e2e` skipped → `lock-preview-on-success` skipped → `unlock-preview-on-failure` fires (Axiom 11 + Axiom 12).
-- The `candidate-flight.yml` workflow mirrors this with a `flight → verify-candidate → release-slot` graph (plus `report-no-acquire-failure` for pre-acquire failures). `verify-candidate` uses the same `wait-for-argocd → readiness → verify-buildsha` chain and the same `if: promoted_apps != ''` job-level gate.
+- The `candidate-flight.yml` workflow mirrors this with a `flight → verify-candidate → release-slot` graph (plus `report-no-acquire-failure` for pre-acquire failures). `verify-candidate` uses the same `wait-for-argocd → readiness → verify-buildsha` chain and the same `if: promoted_apps != ''` job-level gate. `release-slot.Decide lease state` enforces Axiom 14 — `verify-candidate.result == skipped` is only accepted as success when `flight.outputs.promoted_apps == ''`; a skip against a non-empty promoted_apps fails the job with an explicit `::error::`. `wait-for-argocd.sh` enforces Axiom 15 — after Argo reports Healthy, runs `kubectl rollout status` per promoted app to guarantee old pods are torn down before `verify-buildsha` curls `/readyz`.
 
 ### Source-SHA Map Provenance
 

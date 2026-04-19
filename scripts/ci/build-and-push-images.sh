@@ -8,6 +8,13 @@
 
 set -euo pipefail
 
+# Canonical target catalog + tag-suffix mapping (bug.0328 architectural
+# follow-up). Keep build + discovery + promotion consistent from a single
+# source file. See scripts/ci/lib/image-tags.sh for the contract.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/image-tags.sh
+. "$SCRIPT_DIR/lib/image-tags.sh"
+
 TARGETS=${TARGETS:-}
 IMAGE_NAME=${IMAGE_NAME:-ghcr.io/cogni-dao/cogni-template}
 IMAGE_TAG=${IMAGE_TAG:-}
@@ -78,21 +85,7 @@ git_sha="${BUILD_SHA:-${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unk
 build_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 resolve_tag() {
-  local target="$1"
-
-  case "$target" in
-    operator) printf '%s:%s' "$image_name_lower" "$IMAGE_TAG" ;;
-    poly) printf '%s:%s-poly' "$image_name_lower" "$IMAGE_TAG" ;;
-    resy) printf '%s:%s-resy' "$image_name_lower" "$IMAGE_TAG" ;;
-    operator-migrator) printf '%s:%s-operator-migrate' "$image_name_lower" "$IMAGE_TAG" ;;
-    poly-migrator) printf '%s:%s-poly-migrate' "$image_name_lower" "$IMAGE_TAG" ;;
-    resy-migrator) printf '%s:%s-resy-migrate' "$image_name_lower" "$IMAGE_TAG" ;;
-    scheduler-worker) printf '%s:%s-scheduler-worker' "$image_name_lower" "$IMAGE_TAG" ;;
-    *)
-      log_error "Unknown target: $target"
-      exit 1
-      ;;
-  esac
+  image_tag_for_target "$image_name_lower" "$IMAGE_TAG" "$1"
 }
 
 build_target() {
