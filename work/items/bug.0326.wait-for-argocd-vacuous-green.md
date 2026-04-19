@@ -1,12 +1,12 @@
 ---
-id: bug.0321
+id: bug.0326
 type: bug
 title: wait-for-argocd.sh reports green when promoted digests never reach pods
 status: needs_triage
 priority: 2
 rank: 60
 estimate: 2
-summary: Flight's Argo readiness gate passes on `sync.revision == SHA && health.status == Healthy` only. If promote-build-payload silently drops a digest (e.g. because the resolver doesn't know about a new target name), the overlay doesn't change, pods stay on the old digest, sync.revision still matches the deploy-branch SHA, health still reports Healthy because pods are running *something* — and flight reports green. No verification that promoted digests actually appear in the cluster's pod `containerStatuses[].imageID`.
+summary: Flight's Argo readiness gate passes on `sync.revision == SHA && health.status == Healthy` only. If promote-build-payload silently drops a digest (e.g. because the resolver doesn't know about a new target name), the overlay doesn't change, pods stay on the old digest, sync.revision still matches the deploy-branch SHA, health still reports Healthy because pods are running *something* — and flight reports green. No verification that promoted digests actually appear in the cluster's pod `containerStatuses[].imageID`. (Filed as bug.0321 on main while bug.0321 was already taken by the silent-green umbrella; renumbered to bug.0326 during merge. PR #921 Fix 4 partially closes this via verify-buildsha asserting /readyz.version per-app; a stronger kubectl digest-match check remains as a follow-up hardening.)
 outcome: Flight fails loudly when a promoted digest does not become a running pod digest within the reconciliation window, instead of vacuously passing on revision + health alone.
 spec_refs:
   - ci-cd-spec

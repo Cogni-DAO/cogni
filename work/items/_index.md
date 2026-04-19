@@ -70,6 +70,7 @@
 | 1 | 1 | 1 | needs_merge | bug.0315 | deploy-infra.sh silently overrides overlay ConfigMap COGNI_NODE_ENDPOINTS with LiteLLM-flavored value — scheduler-worker crashloops on every rebuild | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_merge | bug.0316 | candidate-flight reports green while node-app pods still serve old image — /readyz is served by any running pod, no rollout verification | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_merge | bug.0320 | flight-preview silently skips every auto-triggered run — gh api commits/{sha}/pulls is eventually consistent | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 2 | needs_merge | bug.0321 | CICD silent-green: remaining paths that report success without verifying deploy state | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -187,7 +188,7 @@
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |
 | 2 | 50 | 2 | needs_implement | task.0134 | EIP-4824 daoURI v0 — lightweight DAOstar metadata endpoint | Financial Ledger | proj.financial-ledger |
 | 2 | 50 | 2 | needs_merge | task.0324 | Per-node DB schema split (minimal — no new tooling) | Database Operations | proj.database-ops |
-| 2 | 60 | 2 | needs_triage | bug.0321 | wait-for-argocd.sh reports green when promoted digests never reach pods | CI/CD Pipeline | proj.cicd-services-gitops |
+| 2 | 60 | 2 | needs_triage | bug.0326 | wait-for-argocd.sh reports green when promoted digests never reach pods | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 1 | needs_design | bug.0093 | Ownership facade N+1 — sequential DB queries per epoch | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 2 | needs_design | task.0104 | Ledger production hardening — upsert batching, connection pooling, activity tests | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 2 | 99 | 3 | needs_design | task.0105 | Allocation algorithm expansion — multi-source credit estimate algos + per-source weight derivation | Transparent Credit Payouts | proj.transparent-credit-payouts |

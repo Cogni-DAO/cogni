@@ -32,10 +32,18 @@
 #                       deploy branch, not main. Passing COGNI_REPO_REF here
 #                       is wrong — it will never match sync.revision and the
 #                       script will silently time out.
+#   PROMOTED_APPS       (optional) CSV of app names to scope the wait to.
+#                       Empty → fall back to full catalog. Apps not promoted
+#                       in this run may legitimately be pinned at prior digest
+#                       (e.g. sandbox-openclaw placeholder) and would false-fail.
 #   ARGOCD_TIMEOUT      (optional, default 300) overall timeout in seconds
 #   ACTIVE_SYNC_AFTER   (optional, default 30) seconds of no-progress before
 #                       triggering an active sync via kubectl patch
 #   SSH_OPTS            (optional) ssh flags
+#
+# Side-effect on success: writes ARGOCD_SYNC_VERIFIED=true to $GITHUB_ENV
+# so downstream steps in the same job can see the marker. wait-for-candidate-ready.sh
+# refuses to run without it (runtime-enforced gate ordering, bug.0321 Fix 4).
 
 set -euo pipefail
 
@@ -152,3 +160,11 @@ rm -f "$REMOTE_SCRIPT"
 # shellcheck disable=SC2086
 ssh $SSH_OPTS root@"$VM_HOST" \
   "bash /tmp/wait-for-argocd-remote.sh '$DEPLOY_ENVIRONMENT' '$EXPECTED_SHA' '$ARGOCD_TIMEOUT' '$ACTIVE_SYNC_AFTER' ${APPS[*]}; RC=\$?; rm -f /tmp/wait-for-argocd-remote.sh; exit \$RC"
+
+# Gate-ordering invariant (bug.0321 Fix 4): signal downstream steps in the
+# same job that Argo sync was verified at EXPECTED_SHA. wait-for-candidate-ready.sh
+# refuses to run without this marker so /readyz probes can never silently
+# accept a 200 from old pods while Argo is still reconciling.
+if [ -n "${GITHUB_ENV:-}" ]; then
+  echo "ARGOCD_SYNC_VERIFIED=true" >> "$GITHUB_ENV"
+fi

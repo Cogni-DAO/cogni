@@ -4,6 +4,21 @@
 
 set -euo pipefail
 
+# Gate-ordering invariant (bug.0321 Fix 4, structural — not a comment):
+# wait-for-argocd.sh MUST run first in the same job. Without Argo proven
+# at EXPECTED_SHA + Healthy, a /readyz 200 may come from old pods still
+# serving the prior digest — the silent-green class this script used to
+# embody. wait-for-argocd.sh writes ARGOCD_SYNC_VERIFIED=true to
+# $GITHUB_ENV on success; we refuse to run if it's unset. Local CLI /
+# test callers can opt out with ARGOCD_SYNC_VERIFIED=skip.
+if [ "${ARGOCD_SYNC_VERIFIED:-}" != "true" ] && [ "${ARGOCD_SYNC_VERIFIED:-}" != "skip" ]; then
+  echo "[ERROR] wait-for-candidate-ready.sh must run after wait-for-argocd.sh" >&2
+  echo "        Set ARGOCD_SYNC_VERIFIED=true (automatic when wait-for-argocd.sh precedes" >&2
+  echo "        this step in the same job) or ARGOCD_SYNC_VERIFIED=skip for local/test" >&2
+  echo "        callers that do not have Argo in the loop." >&2
+  exit 1
+fi
+
 DOMAIN=${DOMAIN:-}
 MAX_ATTEMPTS=${MAX_ATTEMPTS:-30}
 SLEEP_SECONDS=${SLEEP_SECONDS:-15}

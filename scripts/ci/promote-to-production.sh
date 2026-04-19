@@ -10,6 +10,12 @@
 #   - Writes those digests into deploy/production overlays (env-specific
 #     fields like namespace / APP_ENV are preserved on production)
 #   - Syncs infra/k8s/base and infra/catalog from main (code-truth)
+#   - Copies .promote-state/source-sha-by-app.json forward from preview →
+#     production so verify-buildsha.sh can assert per-app contract on
+#     production's cross-PR mixed-SHA overlay (bug.0321 Fix 4). Silently
+#     skipped on first-deploy bootstrap when the file is absent on preview.
+#   - Writes the single-SHA marker .promote-state/source-sha for
+#     promote-and-deploy.yml's push trigger
 #   - Opens a review PR against deploy/production with a commit delta and
 #     validation notes so a human can inspect before promoting
 #
@@ -126,6 +132,20 @@ done
 # Record the source-artifact SHA for promote-and-deploy.yml's push trigger.
 mkdir -p .promote-state
 echo "$SOURCE_SHA" > .promote-state/source-sha
+
+# Copy the per-app source-SHA map forward from preview → production
+# (bug.0321 Fix 4). Production promotions are cross-PR: different nodes
+# may have been built from different PR head SHAs (affected-only CI).
+# verify-buildsha.sh reads this map in SOURCE_SHA_MAP mode to assert each
+# node's /readyz.version matches the SHA that built that node's digest.
+# On first-deploy bootstrap, preview may not yet have the file — skip
+# silently; verify-buildsha.sh falls back to single-SHA mode.
+if git show "origin/${PREVIEW_BRANCH}:.promote-state/source-sha-by-app.json" > .promote-state/source-sha-by-app.json 2>/dev/null; then
+  echo "🔄 Copied .promote-state/source-sha-by-app.json from ${PREVIEW_BRANCH}"
+else
+  echo "⚠️  No .promote-state/source-sha-by-app.json on ${PREVIEW_BRANCH} (first-deploy / pre-Fix-4)"
+  rm -f .promote-state/source-sha-by-app.json
+fi
 
 git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
