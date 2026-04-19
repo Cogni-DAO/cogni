@@ -32,10 +32,18 @@
 #                       deploy branch, not main. Passing COGNI_REPO_REF here
 #                       is wrong — it will never match sync.revision and the
 #                       script will silently time out.
+#   PROMOTED_APPS       (optional) CSV of app names to scope the wait to.
+#                       Empty → fall back to full catalog. Apps not promoted
+#                       in this run may legitimately be pinned at prior digest
+#                       (e.g. sandbox-openclaw placeholder) and would false-fail.
 #   ARGOCD_TIMEOUT      (optional, default 300) overall timeout in seconds
 #   ACTIVE_SYNC_AFTER   (optional, default 30) seconds of no-progress before
 #                       triggering an active sync via kubectl patch
 #   SSH_OPTS            (optional) ssh flags
+#
+# Side-effect on success: writes ARGOCD_SYNC_VERIFIED=true to $GITHUB_ENV
+# so downstream steps in the same job can see the marker. wait-for-candidate-ready.sh
+# refuses to run without it (runtime-enforced gate ordering, bug.0321 Fix 4).
 
 set -euo pipefail
 

@@ -3,7 +3,25 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Script: scripts/ci/resolve-pr-build-images.sh
-# Purpose: Resolve the pushed digest refs for a PR image tag convention.
+# Purpose: Resolve pushed PR image digests from GHCR for the `pr-{N}-{sha}`
+#   tag convention. Emits a JSON payload consumed by promote-build-payload.sh.
+#
+# Envelope shape (written to $OUTPUT_FILE):
+#   { image_name, image_tag, source_sha, targets: [{target, tag, digest}, ...] }
+#
+# `source_sha` is the PR head SHA (BUILD_SHA label baked into every image by
+# pr-build.yml per bug.0313). Flows into .promote-state/source-sha-by-app.json
+# for cross-env contract verification (bug.0321 Fix 4). Derived from the
+# `pr-{N}-{sha}` suffix of IMAGE_TAG when the caller doesn't pass it.
+#
+# Outputs on $GITHUB_OUTPUT:
+#   resolved_file, resolved_targets (CSV), has_images (bool)
+#
+# Env:
+#   IMAGE_NAME    (default ghcr.io/cogni-dao/cogni-template)
+#   IMAGE_TAG     (required) the pr-{N}-{sha} tag
+#   SOURCE_SHA    (optional) the 40-char PR head SHA — overrides IMAGE_TAG parse
+#   OUTPUT_FILE   (default $RUNNER_TEMP/resolved-pr-images.json)
 
 set -euo pipefail
 

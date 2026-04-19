@@ -2,12 +2,13 @@
 id: bug.0321
 type: bug
 title: "CICD silent-green: remaining paths that report success without verifying deploy state"
-status: needs_review
+status: needs_merge
 priority: 1
 rank: 1
 estimate: 2
 created: 2026-04-18
 updated: 2026-04-18
+reviewer: derekg1729
 summary: "After PRs #913 (scheduler-worker ConfigMap), #914 (rollout gate for all deployments), #915 (flight-preview PR-lookup race), #917 (verify-buildsha + flight-preview hard-fail on no-PR push), #921 (flight-preview queue-only surfaces as skipped), four silent-green paths remain where a workflow reports success without verifying the deploy-state delta. Consolidating them under one bug so we can close them together and stop calling CICD 'proper' until they're gone."
 outcome: "Every CICD path either (a) proves the expected state-delta held, or (b) visibly reports a non-green outcome (skipped/failed/warning). No workflow ever reports success for a run that produced no verified state change."
 spec_refs:

@@ -10,6 +10,12 @@
 #   - Writes those digests into deploy/production overlays (env-specific
 #     fields like namespace / APP_ENV are preserved on production)
 #   - Syncs infra/k8s/base and infra/catalog from main (code-truth)
+#   - Copies .promote-state/source-sha-by-app.json forward from preview →
+#     production so verify-buildsha.sh can assert per-app contract on
+#     production's cross-PR mixed-SHA overlay (bug.0321 Fix 4). Silently
+#     skipped on first-deploy bootstrap when the file is absent on preview.
+#   - Writes the single-SHA marker .promote-state/source-sha for
+#     promote-and-deploy.yml's push trigger
 #   - Opens a review PR against deploy/production with a commit delta and
 #     validation notes so a human can inspect before promoting
 #

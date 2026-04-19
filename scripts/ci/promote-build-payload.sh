@@ -3,7 +3,25 @@
 # SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 # Script: scripts/ci/promote-build-payload.sh
-# Purpose: Apply a resolved image payload to an overlay using promote-k8s-image.sh.
+# Purpose: Apply a resolved image payload to a deploy-branch overlay via
+#   promote-k8s-image.sh. Runs from the deploy-branch checkout.
+#
+# Side-effects:
+#   - Writes overlay digest fields under infra/k8s/overlays/{OVERLAY_ENV}/.
+#   - Emits $GITHUB_OUTPUT.promoted_apps = CSV of apps that received a new
+#     digest. Empty string when the payload had no new digests — consumed
+#     by verify-candidate / verify-deploy job-level gates (bug.0321 Fix 1).
+#   - Merges per-promoted-app {app → source_sha} entries into
+#     .promote-state/source-sha-by-app.json on the deploy branch. Consumed
+#     by verify-buildsha.sh in SOURCE_SHA_MAP mode for cross-env/cross-PR
+#     contract verification (bug.0321 Fix 4).
+#
+# Env:
+#   PAYLOAD_FILE    (required) path to resolved-pr-images.json
+#   OVERLAY_ENV     (required) candidate-a | preview | production
+#   MAP_FILE        (optional) .promote-state/source-sha-by-app.json path
+#   PROMOTE_SCRIPT  (optional) path to promote-k8s-image.sh
+#   MAP_SCRIPT      (optional) path to update-source-sha-map.sh
 
 set -euo pipefail
 

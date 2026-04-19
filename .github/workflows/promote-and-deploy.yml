@@ -6,9 +6,21 @@ name: Promote and Deploy
 # deploy-branch SHA as Healthy, deploys Compose infra via SSH, verifies health,
 # runs E2E, and drives the preview review-state lease.
 #
+# Job graph (bug.0321):
+#
+#   promote-k8s ─┬─► deploy-infra ──┐
+#                └─► verify-deploy ─┴─► verify + e2e ─► lock-on-success
+#                                                     └► unlock-on-failure
+#
+# verify-deploy is job-level gated on promote-k8s.outputs.promoted_apps != ''
+# (Axiom 11). Empty-promotion runs visibly skip it → e2e skipped →
+# lock-preview-on-success skipped → unlock-preview-on-failure fires. Preview
+# lease stays unlocked instead of silently advancing against an unchanged
+# overlay.
+#
 # Job outputs that downstream jobs care about:
 #   promote-k8s.deploy_branch_sha  — tip SHA of deploy/{env} after promote
-#                                    pushes. deploy-infra passes this to
+#                                    pushes. verify-deploy passes this to
 #                                    wait-for-argocd as the Argo reconcile
 #                                    target. On no-op promotes (overlay
 #                                    unchanged) this still carries the
@@ -18,6 +30,9 @@ name: Promote and Deploy
 #                                    (merge commit SHA for normal flow).
 #                                    Written into deploy/preview current-sha
 #                                    by lock-preview-on-success.
+#   promote-k8s.promoted_apps      — CSV of apps that actually got a new
+#                                    digest this run. Gates verify-deploy
+#                                    at the job level.
 #
 # Checkout refs (each job picks the right one):
 #   promote-k8s, deploy-infra, verify, e2e          — ref=head_sha

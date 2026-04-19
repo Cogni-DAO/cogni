@@ -37,6 +37,9 @@ This document supersedes the old canary-first branch model. The branch model, de
 8. **Release branches are exceptional only**. They are not the default path for accepted code.
 9. **Direct edits to `deploy/*` are incident-only**. Repair the live environment first when necessary, then mirror the fix back into the normal source-of-truth path.
 10. **Agent guidance is part of the control plane**. Prompts, skills, AGENTS files, and workflow docs must not tell agents to PR into or diff against legacy branches.
+11. **Verification is a job-level gate, never a step-level skip** (bug.0321). GitHub treats a skipped step inside a running job as green. Every verification that is allowed to no-op (e.g. empty `promoted_apps`) must be gated at the _job_ level with `needs:` and `if:` so the job surfaces as **skipped (grey)** in the checks list, not as a silent-green success.
+12. **Gate ordering is enforced structurally, not by convention** (bug.0321 Fix 4). When step A must precede step B in the same job, A writes a marker to `$GITHUB_ENV` (e.g. `ARGOCD_SYNC_VERIFIED=true`) and B refuses to run without it. Comments rot at the next refactor; runtime checks don't.
+13. **Artifact provenance travels with the artifact** (bug.0321 Fix 4). `.promote-state/source-sha-by-app.json` on each deploy branch records per-app `source_sha` at promotion time. Production promotions copy it forward from preview; verifiers read it to assert per-app contract (`/readyz.version == map[app]`), which is the only cross-PR-safe check when affected-only CI produces a mixed-SHA overlay.
 
 ## Branch And Deploy-State Model
 
@@ -117,11 +120,15 @@ Do not block the rewrite on perfect black-box E2E maturity. For PRs explicitly s
 
 - affected-only static checks plus unit tests
 - successful image build for the exact PR SHA
-- candidate deployment reaches healthy pods
+- **Argo CD reconciled to the deploy-branch tip SHA with `Healthy` status** for every app in `PROMOTED_APPS` (`scripts/ci/wait-for-argocd.sh`)
+- **`kubectl rollout status` clean** for every in-cluster Deployment (`scripts/ci/wait-for-in-cluster-services.sh`)
 - a prototype smoke pack passes:
   - `/readyz` returns `200` on operator, poly, and resy
   - `/livez` returns structured JSON on operator, poly, and resy
+- **contract probe passes**: `/readyz.version` on each promoted node-app matches the SHA that built its overlay digest (`scripts/ci/verify-buildsha.sh` in `SOURCE_SHA_MAP` mode, reading `.promote-state/source-sha-by-app.json` from the deploy branch)
 - any human or AI validation needed to call the change safe
+
+These gates run inside a **`verify-candidate` job** (for pre-merge candidate flight) or **`verify-deploy` job** (for post-merge preview + production promotion), both gated `if: promoted_apps != ''` at the job level per Axiom 11.
 
 Optional but non-authoritative in v0:
 
@@ -166,12 +173,12 @@ This spec does not require a `canary` environment. If one is retained during mig
 
 Transitions:
 
-| From → To                 | Written by                                                  | Trigger                                                                                                       |
-| ------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `unlocked → dispatching`  | `scripts/ci/flight-preview.sh`                              | merge to main (or manual flight dispatch); atomic with `candidate-sha` update                                 |
-| `dispatching → reviewing` | `lock-preview-on-success` job in `promote-and-deploy.yml`   | preview deploy reaches E2E success; writes `current-sha`                                                      |
-| `dispatching → unlocked`  | `unlock-preview-on-failure` job in `promote-and-deploy.yml` | any of `promote-k8s`, `deploy-infra`, `verify`, `e2e` does not reach success (failure, cancelled, or skipped) |
-| `reviewing → unlocked`    | `auto-merge-release-prs.yml`                                | release PR merges                                                                                             |
+| From → To                 | Written by                                                  | Trigger                                                                                                                                                                                                                                                                                                                       |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `unlocked → dispatching`  | `scripts/ci/flight-preview.sh`                              | merge to main (or manual flight dispatch); atomic with `candidate-sha` update                                                                                                                                                                                                                                                 |
+| `dispatching → reviewing` | `lock-preview-on-success` job in `promote-and-deploy.yml`   | preview deploy reaches E2E success; writes `current-sha`                                                                                                                                                                                                                                                                      |
+| `dispatching → unlocked`  | `unlock-preview-on-failure` job in `promote-and-deploy.yml` | any of `promote-k8s`, `deploy-infra`, `verify`, `verify-deploy`, `e2e` does not reach success (failure, cancelled, or skipped). Empty-promotion runs legitimately skip `verify-deploy` and therefore `e2e`, which fires unlock — preview stays unlocked instead of silently advancing its lease against an unchanged overlay. |
+| `reviewing → unlocked`    | `auto-merge-release-prs.yml`                                | release PR merges                                                                                                                                                                                                                                                                                                             |
 
 On release-merge unlock, if `candidate-sha != current-sha` the workflow dispatches a fresh flight with `sha=candidate-sha` to drain the queue. A flight concurrency group (`flight-preview`) serializes entry to the `unlocked → dispatching` transition; the three-value lease is the correctness guarantee even if concurrency is bypassed.
 
@@ -200,7 +207,42 @@ Candidate-a deploy has two orthogonal levers; either can be dispatched independe
 - **Infra lever** rsyncs `infra/compose/**` from a named git ref (default `main`) to the candidate-a VM and runs `compose up`. It never writes to a `deploy/*` branch.
 - `scripts/ci/deploy-infra.sh` accepts `--ref <git-ref>` (default `main`) and `--dry-run`. The rsync source is a detached `git worktree add` of the ref, NOT the caller workflow's checkout — app PRs branched before an infra change can be flown without rebasing.
 
-For `promote-and-deploy.yml` (preview/prod merge path), the existing 5-job graph (`promote-k8s → deploy-infra → verify → lock-preview-on-success / unlock-preview-on-failure`) is unchanged. Only the `deploy-infra` job's `Checkout` step now uses `ref: main` so it picks up `deploy-infra.sh`'s new default.
+For `promote-and-deploy.yml` (preview/prod merge path), the job graph is:
+
+```text
+promote-k8s ─┬─► deploy-infra ──┐
+             └─► verify-deploy ─┴─► verify + e2e ─► lock-preview-on-success
+                                                 └► unlock-preview-on-failure
+```
+
+- `verify-deploy` is job-level gated `if: promote-k8s.outputs.promoted_apps != ''` (Axiom 11). Runs `wait-for-argocd` → `wait-for-in-cluster-services` → `verify-buildsha` (`SOURCE_SHA_MAP` mode).
+- Empty-promotion runs (infra-only, docs-only, queue-only) → `verify-deploy` skipped → `e2e` skipped → `lock-preview-on-success` skipped → `unlock-preview-on-failure` fires (Axiom 11 + Axiom 12).
+- `deploy-infra` runs in parallel with `verify-deploy` from the `promote-k8s` fan-out; it's independent of app promotion (rsync+compose up handles infra-only changes).
+- The `candidate-flight.yml` workflow mirrors this with a `flight → verify-candidate → release-slot` graph (plus `report-no-acquire-failure` for pre-acquire failures). `verify-candidate` uses the same `wait-for-argocd → readiness → verify-buildsha` chain and the same `if: promoted_apps != ''` job-level gate.
+
+### Source-SHA Map Provenance
+
+Every deploy branch carries `.promote-state/source-sha-by-app.json` — a merge-semantics JSON map from app name to the PR head SHA that built that app's current overlay digest.
+
+```json
+{
+  "operator": "abc123...",
+  "poly": "def456...",
+  "resy": "abc123...",
+  "scheduler-worker": "abc123..."
+}
+```
+
+**Writers** (bug.0321 Fix 4):
+
+- `scripts/ci/update-source-sha-map.sh` — shared primitive that merges a single `app → sha` entry into the file. Untouched apps retain their prior entry (merge, not overwrite).
+- `scripts/ci/promote-build-payload.sh` — calls the primitive after each promoted app (candidate-flight path).
+- `.github/workflows/promote-and-deploy.yml` promote-k8s loop — calls the primitive after each promoted app (preview + production path).
+- `scripts/ci/promote-to-production.sh` — copies the map forward from `deploy/preview` → `deploy/production` alongside the overlay digests (digest-only promotion preserves the provenance).
+
+**Reader**: `scripts/ci/verify-buildsha.sh` in `SOURCE_SHA_MAP` mode. For each Ingress-probeable app in the map, curls `/readyz`, asserts `.version == map[app]`. Fails red on any mismatch.
+
+**Why the map instead of a single `EXPECTED_BUILDSHA`**: production promotions copy preview's overlays, which can mix digests from different PR head SHAs (affected-only CI rebuilds a subset). A single SHA check is only valid when every promoted app comes from the same build; the map is the only cross-PR-safe contract.
 
 ## Deploy Branch Rules
 
