@@ -31,6 +31,12 @@ import type { WalletActivitySource } from "@/features/wallet-watch";
 import { decide } from "./decide";
 import type { MirrorReason, TargetConfig } from "./types";
 
+/** Minimal position shape needed by the coordinator — subset of PolymarketUserPosition. */
+export interface OperatorPosition {
+  asset: string;
+  size: number;
+}
+
 /** Metric names emitted by the coordinator. */
 export const MIRROR_COORDINATOR_METRICS = {
   /** `poly_mirror_decisions_total{outcome, reason, source}` — always fired, bounded labels. */
@@ -61,6 +67,24 @@ export interface MirrorCoordinatorDeps {
   metrics: MetricsPort;
   /** Clock injection — tests pin `Date`. Default = real `Date`. */
   clock?: () => Date;
+  /**
+   * Optional — SELL-to-close path. When present, SELL fills route through
+   * this after a position check. When absent, SELL fills degrade to
+   * `skip/sell_without_position` (safe: we never open a short).
+   * Signature matches `PolyTradeBundle.closePosition` exactly.
+   */
+  closePosition?: (params: {
+    tokenId: string;
+    max_size_usdc: number;
+    limit_price: number;
+    client_order_id: `0x${string}`;
+  }) => Promise<OrderReceipt>;
+  /**
+   * Optional — position query used by the SELL branch. When absent (or no
+   * `closePosition`), SELL fills degrade to `skip/sell_without_position`.
+   * Returns a minimal position list; the coordinator only needs `asset` + `size`.
+   */
+  getOperatorPositions?: () => Promise<OperatorPosition[]>;
 }
 
 /**
@@ -133,6 +157,30 @@ async function processFill(
   // caps tighten mid-tick (e.g. first fill tips over the daily cap).
   const snapshot = await deps.ledger.snapshotState(deps.target.target_id);
 
+  const source: DecisionSource = fill.source as DecisionSource;
+  const decisionBase = {
+    target_id: deps.target.target_id,
+    fill_id: fill.fill_id,
+    decided_at: clock(),
+  };
+
+  // ── SELL branch: close-vs-short discrimination ──────────────────────────────
+  // Must run BEFORE decide() so we never pass a bare SELL through the BUY-only
+  // decide() path. If deps are missing or operator has no position, skip safely
+  // (never open a short — CLOB would reject it and semantically it's wrong).
+  if (fill.side === "SELL") {
+    await processSellFill({
+      fill,
+      deps,
+      client_order_id,
+      source,
+      decisionBase,
+      log,
+    });
+    return;
+  }
+
+  // ── BUY branch: existing path unchanged ─────────────────────────────────────
   const decision = decide({
     fill,
     config: { ...deps.target, enabled: snapshot.enabled },
@@ -143,13 +191,6 @@ async function processFill(
     },
     client_order_id,
   });
-
-  const source: DecisionSource = fill.source as DecisionSource;
-  const decisionBase = {
-    target_id: deps.target.target_id,
-    fill_id: fill.fill_id,
-    decided_at: clock(),
-  };
 
   if (decision.action === "skip") {
     emitDecisionMetric(deps.metrics, "skipped", decision.reason, source);
@@ -174,19 +215,212 @@ async function processFill(
     return;
   }
 
-  // action === "place" — insert pending BEFORE placeIntent.
+  // action === "place" — delegate to shared insert+execute helper.
+  await executePlacement(
+    deps,
+    fill,
+    client_order_id,
+    decisionBase,
+    source,
+    decision.intent,
+    decision.reason,
+    log
+  );
+}
+
+/** Handles a SELL fill: position-check then close, or skip. */
+async function processSellFill(args: {
+  fill: import("@cogni/market-provider").Fill;
+  deps: MirrorCoordinatorDeps;
+  client_order_id: `0x${string}`;
+  source: DecisionSource;
+  decisionBase: {
+    target_id: string;
+    fill_id: string;
+    decided_at: Date;
+  };
+  log: LoggerPort;
+}): Promise<void> {
+  const { fill, deps, client_order_id, source, decisionBase, log } = args;
+  const { closePosition, getOperatorPositions } = deps;
+
+  // Degrade-gracefully: if either dep is absent, skip safely.
+  if (!closePosition || !getOperatorPositions) {
+    emitDecisionMetric(
+      deps.metrics,
+      "skipped",
+      "sell_without_position",
+      source
+    );
+    await deps.ledger.recordDecision({
+      ...decisionBase,
+      outcome: "skipped",
+      reason: "sell_without_position",
+      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+        close: false,
+      }),
+      receipt: null,
+    });
+    log.info(
+      {
+        event: EVENT_NAMES.POLY_MIRROR_DECISION,
+        outcome: "skipped",
+        reason: "sell_without_position",
+        source,
+        fill_id: fill.fill_id,
+        client_order_id,
+        detail: "closePosition/getOperatorPositions deps absent",
+      },
+      "mirror coordinator: skip (no close deps)"
+    );
+    return;
+  }
+
+  const tokenId =
+    typeof fill.attributes?.asset === "string" ? fill.attributes.asset : "";
+
+  // Query operator positions for the token.
+  let positions: OperatorPosition[];
+  try {
+    positions = await deps.getOperatorPositions();
+  } catch {
+    // Position-query failure: skip safely, do not open a short.
+    emitDecisionMetric(
+      deps.metrics,
+      "skipped",
+      "sell_without_position",
+      source
+    );
+    await deps.ledger.recordDecision({
+      ...decisionBase,
+      outcome: "skipped",
+      reason: "sell_without_position",
+      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+        close: false,
+      }),
+      receipt: null,
+    });
+    log.warn(
+      {
+        event: EVENT_NAMES.POLY_MIRROR_DECISION,
+        outcome: "skipped",
+        reason: "sell_without_position",
+        source,
+        fill_id: fill.fill_id,
+        client_order_id,
+        detail: "getOperatorPositions threw; skipping to avoid short",
+      },
+      "mirror coordinator: skip (position query failed)"
+    );
+    return;
+  }
+
+  const position = positions.find((p) => p.asset === tokenId);
+  const hasPosition = position !== undefined && position.size > 0;
+
+  if (!hasPosition) {
+    emitDecisionMetric(
+      deps.metrics,
+      "skipped",
+      "sell_without_position",
+      source
+    );
+    await deps.ledger.recordDecision({
+      ...decisionBase,
+      outcome: "skipped",
+      reason: "sell_without_position",
+      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+        close: false,
+      }),
+      receipt: null,
+    });
+    log.info(
+      {
+        event: EVENT_NAMES.POLY_MIRROR_DECISION,
+        outcome: "skipped",
+        reason: "sell_without_position",
+        source,
+        fill_id: fill.fill_id,
+        client_order_id,
+        token_id: tokenId,
+      },
+      "mirror coordinator: skip (no position to close)"
+    );
+    return;
+  }
+
+  // Operator holds a position — route through closePosition.
+  // The bundle's closePosition caps size at position value; no double-capping here.
+  // Both deps are guaranteed non-undefined here (checked above). Capture into
+  // a narrowed const so TypeScript tracks the non-optional type.
+  const boundClose = deps.closePosition;
+  const closeExecutor = (intent: OrderIntent): Promise<OrderReceipt> =>
+    boundClose({
+      tokenId: intent.attributes?.token_id as string,
+      max_size_usdc: deps.target.mirror_usdc,
+      limit_price: fill.price,
+      client_order_id,
+    });
+
+  // Build a synthetic SELL intent for the INSERT_BEFORE_PLACE ledger record.
+  const closeIntent: OrderIntent = {
+    provider: "polymarket",
+    market_id: fill.market_id,
+    outcome: fill.outcome,
+    side: "SELL",
+    size_usdc: deps.target.mirror_usdc,
+    limit_price: fill.price,
+    client_order_id,
+    attributes: {
+      token_id: tokenId,
+      source_fill_id: fill.fill_id,
+      target_wallet: fill.target_wallet,
+    },
+  };
+
+  await executePlacement(
+    deps,
+    fill,
+    client_order_id,
+    decisionBase,
+    source,
+    closeIntent,
+    "sell_closed_position",
+    log,
+    closeExecutor
+  );
+}
+
+/**
+ * Shared INSERT_BEFORE_PLACE + mark/record sequence used by both the BUY path
+ * and the SELL-close path. The only difference between the two callers is:
+ *   - `intent` (what goes in the ledger's pending row)
+ *   - `intentExecutor` (BUY = `deps.placeIntent`; SELL-close = `closePosition` wrapper)
+ *   - `reason` (BUY = from `decide()`; SELL = `"sell_closed_position"`)
+ */
+async function executePlacement(
+  deps: MirrorCoordinatorDeps,
+  fill: import("@cogni/market-provider").Fill,
+  client_order_id: `0x${string}`,
+  decisionBase: { target_id: string; fill_id: string; decided_at: Date },
+  source: DecisionSource,
+  intent: OrderIntent,
+  reason: MirrorReason,
+  log: LoggerPort,
+  intentExecutor?: (intent: OrderIntent) => Promise<OrderReceipt>
+): Promise<void> {
+  const executor = intentExecutor ?? deps.placeIntent;
+
   try {
     await deps.ledger.insertPending({
       target_id: deps.target.target_id,
       fill_id: fill.fill_id,
       observed_at: new Date(fill.observed_at),
-      intent: decision.intent,
+      intent,
     });
   } catch {
     // Pending-insert failure is fatal for this fill — cannot prove
     // INSERT_BEFORE_PLACE without it. Log + record error, do not place.
-    // Raw error intentionally not logged (command rule 5); the error path
-    // is identifiable via the `errorCode: "pending_insert_failed"` below.
     emitDecisionMetric(deps.metrics, "error", "pending_insert_failed", source);
     await deps.ledger.recordDecision({
       ...decisionBase,
@@ -210,17 +444,20 @@ async function processFill(
   }
 
   try {
-    const receipt = await deps.placeIntent(decision.intent);
+    const receipt = await executor(intent);
     await deps.ledger.markOrderId({
       client_order_id,
       receipt,
     });
-    emitDecisionMetric(deps.metrics, "placed", decision.reason, source);
+    emitDecisionMetric(deps.metrics, "placed", reason, source);
     await deps.ledger.recordDecision({
       ...decisionBase,
       outcome: "placed",
-      reason: decision.reason,
-      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id),
+      reason,
+      intent: buildDecisionIntentBlob(fill, deps.target, client_order_id, {
+        side: intent.side,
+        close: intent.side === "SELL",
+      }),
       receipt: {
         order_id: receipt.order_id,
         client_order_id: receipt.client_order_id,
@@ -233,7 +470,7 @@ async function processFill(
       {
         event: EVENT_NAMES.POLY_MIRROR_DECISION,
         outcome: "placed",
-        reason: decision.reason,
+        reason,
         source,
         fill_id: fill.fill_id,
         client_order_id,
@@ -285,11 +522,15 @@ function emitDecisionMetric(
  * Snapshot of the fill + config context for the `decisions.intent` jsonb
  * column. Used across skip/place/error branches so the audit log has the
  * full decision context regardless of outcome.
+ *
+ * `extra` may carry `{ side, close }` for SELL-close decisions so the
+ * audit log clearly distinguishes a position-close from a BUY.
  */
 function buildDecisionIntentBlob(
   fill: import("@cogni/market-provider").Fill,
   target: TargetConfig,
-  client_order_id: `0x${string}`
+  client_order_id: `0x${string}`,
+  extra?: Record<string, unknown>
 ): Record<string, unknown> {
   return {
     target_wallet: target.target_wallet,
@@ -301,5 +542,6 @@ function buildDecisionIntentBlob(
     mirror_usdc: target.mirror_usdc,
     mode: target.mode,
     client_order_id,
+    ...extra,
   };
 }

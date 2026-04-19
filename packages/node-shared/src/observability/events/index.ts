@@ -144,6 +144,11 @@ export const EVENT_NAMES = {
   POLY_MIRROR_POLL_TICK_ERROR: "poly.mirror.poll.tick_error",
   POLY_MIRROR_POLL_SKIPPED: "poly.mirror.poll.skipped",
   POLY_MIRROR_POLL_BOOT_FAILED: "poly.mirror.poll.boot_failed",
+  // Ledger reconciler (task.0323 §2)
+  POLY_MIRROR_RECONCILE_SINGLETON_CLAIM:
+    "poly.mirror.reconcile.singleton_claim",
+  POLY_MIRROR_RECONCILE_STOPPED: "poly.mirror.reconcile.stopped",
+  POLY_MIRROR_RECONCILE_TICK_ERROR: "poly.mirror.reconcile.tick_error",
   POLY_MIRROR_SOURCE_ERROR: "poly.mirror.source_error",
   POLY_MIRROR_DECISION: "poly.mirror.decision",
   POLY_WALLET_WATCH_FETCH: "poly.wallet_watch.fetch",

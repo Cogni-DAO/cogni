@@ -63,6 +63,10 @@ export const MirrorReasonSchema = z.enum([
   "mode_paper",
   "market_unknown",
   "ok",
+  /** SELL fill where the operator holds no position — skip, do not open a short. */
+  "sell_without_position",
+  /** SELL fill routed through closePosition — recorded as the reason on the `placed` row. */
+  "sell_closed_position",
 ]);
 export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
 
@@ -72,7 +76,10 @@ export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
  */
 export type MirrorDecision =
   | { action: "place"; reason: "ok" | "mode_paper"; intent: OrderIntent }
-  | { action: "skip"; reason: Exclude<MirrorReason, "ok"> };
+  | {
+      action: "skip";
+      reason: Exclude<MirrorReason, "ok" | "sell_closed_position">;
+    };
 
 /** Inputs to `decide()` — bundled for clarity + testability. */
 export interface DecideInput {

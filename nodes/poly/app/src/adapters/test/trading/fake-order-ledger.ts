@@ -15,10 +15,12 @@ import type {
   InsertPendingInput,
   LedgerRow,
   LedgerStatus,
+  ListOpenOrPendingOptions,
   ListRecentOptions,
   OrderLedger,
   RecordDecisionInput,
   StateSnapshot,
+  UpdateStatusInput,
 } from "@/features/trading/order-ledger.types";
 
 export interface FakeOrderLedgerConfig {
@@ -157,6 +159,40 @@ export class FakeOrderLedger implements OrderLedger {
     return filtered
       .sort((a, b) => b.observed_at.getTime() - a.observed_at.getTime())
       .slice(0, limit);
+  }
+
+  async listOpenOrPending(
+    opts?: ListOpenOrPendingOptions
+  ): Promise<LedgerRow[]> {
+    const olderThanMs = opts?.olderThanMs ?? 30_000;
+    const limit = opts?.limit ?? 200;
+    const cutoff = new Date(Date.now() - olderThanMs);
+    return this.rows
+      .filter(
+        (r) =>
+          (r.status === "pending" || r.status === "open") &&
+          r.created_at < cutoff
+      )
+      .sort((a, b) => a.created_at.getTime() - b.created_at.getTime())
+      .slice(0, limit);
+  }
+
+  async updateStatus(input: UpdateStatusInput): Promise<void> {
+    const row = this.rows.find(
+      (r) => r.client_order_id === input.client_order_id
+    );
+    if (!row) return;
+    row.status = input.status;
+    row.updated_at = new Date();
+    if (input.order_id !== undefined) {
+      row.order_id = input.order_id;
+    }
+    if (input.filled_size_usdc !== undefined) {
+      row.attributes = {
+        ...(row.attributes ?? {}),
+        filled_size_usdc: input.filled_size_usdc,
+      };
+    }
   }
 }
 
