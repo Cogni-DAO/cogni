@@ -14,7 +14,7 @@ assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
 branch: fix/bug.0327-promote-silent-abort
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/924
 reviewer: claude-code
 revision: 0
 blocked_by:
