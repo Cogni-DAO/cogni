@@ -124,6 +124,12 @@ jobs:
         env:
           HEAD_SHA: ${{ steps.env.outputs.head_sha }}
         run: |
+          # Canonical target catalog + tag-suffix mapping (bug.0327
+          # architectural follow-up). Every consumer of the target list now
+          # sources one file; adding a new node is a one-line edit.
+          # shellcheck source=../../scripts/ci/lib/image-tags.sh
+          . scripts/ci/lib/image-tags.sh
+
           IMAGE_NAME="ghcr.io/cogni-dao/cogni-template"
           TAG="preview-${HEAD_SHA}"
 
@@ -131,7 +137,7 @@ jobs:
           # Empty digest = service not in this build; promote-k8s-image skips it,
           # leaving the existing digest in the overlay unchanged.
           resolve_optional() {
-            local full_tag="${IMAGE_NAME}:${1}"
+            local full_tag="$1"
             local digest
             digest=$(docker buildx imagetools inspect "$full_tag" --raw 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('digest',''))" 2>/dev/null) || true
             # Fallback: parse from --format if raw didn't work
@@ -146,28 +152,17 @@ jobs:
             echo "${IMAGE_NAME}@${digest}"
           }
 
-          # Operator image: required for node-code PRs, optional for infra-only.
-          # When absent (infra-only deploy), the overlay keeps its existing digest
-          # and promote-k8s is effectively a no-op for k8s apps.
-          OPERATOR_DIGEST=$(resolve_optional "${TAG}")
-
-          POLY_DIGEST=$(resolve_optional "${TAG}-poly")
-          RESY_DIGEST=$(resolve_optional "${TAG}-resy")
-          MIGRATOR_DIGEST=$(resolve_optional "${TAG}-migrate")
-          SW_DIGEST=$(resolve_optional "${TAG}-scheduler-worker")
-
-          echo "operator=$OPERATOR_DIGEST" >> $GITHUB_OUTPUT
-          echo "poly=$POLY_DIGEST" >> $GITHUB_OUTPUT
-          echo "resy=$RESY_DIGEST" >> $GITHUB_OUTPUT
-          echo "migrator=$MIGRATOR_DIGEST" >> $GITHUB_OUTPUT
-          echo "scheduler_worker=$SW_DIGEST" >> $GITHUB_OUTPUT
-
+          # Emit one output per target — `target` stays canonical (dashes,
+          # "migrator" spelling), so downstream steps read it verbatim from
+          # ALL_TARGETS. No more hand-maintained mapping here (bug.0327).
           echo "Resolved digests:"
-          echo "  operator:         ${OPERATOR_DIGEST:-"(not built)"}"
-          echo "  poly:             ${POLY_DIGEST:-"(not built)"}"
-          echo "  resy:             ${RESY_DIGEST:-"(not built)"}"
-          echo "  migrator:         ${MIGRATOR_DIGEST:-"(not built)"}"
-          echo "  scheduler-worker: ${SW_DIGEST:-"(not built)"}"
+          for target in "${ALL_TARGETS[@]}"; do
+            full_tag=$(image_tag_for_target "$IMAGE_NAME" "$TAG" "$target")
+            digest=$(resolve_optional "$full_tag")
+            # Emit GITHUB_OUTPUT key as target name (dash-preserving).
+            echo "${target}=${digest}" >> "$GITHUB_OUTPUT"
+            printf '  %-18s %s\n' "${target}:" "${digest:-"(not built)"}"
+          done
 
       # Checkout the deploy branch — promote-k8s-image.sh runs HERE, not on app-src.
       # This preserves env-specific state (EndpointSlice IPs) written by provision.
@@ -229,11 +224,15 @@ jobs:
               bash ../app-src/scripts/ci/update-source-sha-map.sh
           }
 
-          MIGRATOR_DIGEST="${{ steps.digests.outputs.migrator }}"
-          promote_app operator         "${{ steps.digests.outputs.operator }}"         "$MIGRATOR_DIGEST"
-          promote_app poly             "${{ steps.digests.outputs.poly }}"             "$MIGRATOR_DIGEST"
-          promote_app resy             "${{ steps.digests.outputs.resy }}"             "$MIGRATOR_DIGEST"
-          promote_app scheduler-worker "${{ steps.digests.outputs.scheduler_worker }}" ""
+          # Per-node migrator pairing (task.0324): each node is promoted with
+          # its own `<node>-migrator` digest, not a shared single one. Closes
+          # the half that PR #923 flagged — the resolve step above emits one
+          # output per canonical target name. Bracket accessor is required
+          # because GHA parses `-` as minus in dot syntax.
+          promote_app operator         "${{ steps.digests.outputs.operator }}"                    "${{ steps.digests.outputs['operator-migrator'] }}"
+          promote_app poly             "${{ steps.digests.outputs.poly }}"                        "${{ steps.digests.outputs['poly-migrator'] }}"
+          promote_app resy             "${{ steps.digests.outputs.resy }}"                        "${{ steps.digests.outputs['resy-migrator'] }}"
+          promote_app scheduler-worker "${{ steps.digests.outputs['scheduler-worker'] }}"         ""
 
           # Export for deploy-push step
           echo "PROMOTED_CSV=$(IFS=,; echo "${PROMOTED[*]}")" >> $GITHUB_ENV

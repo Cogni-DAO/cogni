@@ -25,11 +25,18 @@
 
 set -euo pipefail
 
+# Canonical target catalog + tag-suffix mapping (bug.0327 architectural
+# follow-up). Single source of truth for `target → image:tag` across the
+# producer (build-and-push-images), this discoverer, the flight-preview
+# retag step, and promote-and-deploy's resolve/promote steps.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/image-tags.sh
+. "$SCRIPT_DIR/lib/image-tags.sh"
+
 IMAGE_NAME=${IMAGE_NAME:-ghcr.io/cogni-dao/cogni-template}
 IMAGE_TAG=${IMAGE_TAG:-}
 SOURCE_SHA=${SOURCE_SHA:-}
 OUTPUT_FILE=${OUTPUT_FILE:-${RUNNER_TEMP:-/tmp}/resolved-pr-images.json}
-ALL_TARGETS=(operator operator-migrator poly poly-migrator resy resy-migrator scheduler-worker)
 
 if [ -z "$IMAGE_TAG" ]; then
   echo "[ERROR] IMAGE_TAG is required" >&2
@@ -57,21 +64,7 @@ if ! docker buildx version >/dev/null 2>&1; then
 fi
 
 resolve_tag() {
-  local target="$1"
-
-  case "$target" in
-    operator) printf '%s:%s' "$IMAGE_NAME" "$IMAGE_TAG" ;;
-    poly) printf '%s:%s-poly' "$IMAGE_NAME" "$IMAGE_TAG" ;;
-    resy) printf '%s:%s-resy' "$IMAGE_NAME" "$IMAGE_TAG" ;;
-    operator-migrator) printf '%s:%s-operator-migrate' "$IMAGE_NAME" "$IMAGE_TAG" ;;
-    poly-migrator) printf '%s:%s-poly-migrate' "$IMAGE_NAME" "$IMAGE_TAG" ;;
-    resy-migrator) printf '%s:%s-resy-migrate' "$IMAGE_NAME" "$IMAGE_TAG" ;;
-    scheduler-worker) printf '%s:%s-scheduler-worker' "$IMAGE_NAME" "$IMAGE_TAG" ;;
-    *)
-      echo "[ERROR] Unknown target: $target" >&2
-      exit 1
-      ;;
-  esac
+  image_tag_for_target "$IMAGE_NAME" "$IMAGE_TAG" "$1"
 }
 
 resolve_digest_ref() {
