@@ -119,6 +119,7 @@ import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
 import { startMirrorPoll } from "@/bootstrap/jobs/copy-trade-mirror.job";
+import { startOrderReconciler } from "@/bootstrap/jobs/order-reconciler.job";
 import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import type {
   AccountService,
@@ -682,6 +683,19 @@ function createContainer(): Container {
           source,
           ledger,
           placeIntent: polyTradeBundle.placeIntent,
+          closePosition: polyTradeBundle.closePosition,
+          getOperatorPositions: polyTradeBundle.getOperatorPositions,
+          logger: mirrorLogger,
+          metrics: noopMetrics,
+        });
+
+        // Ledger reconciler — syncs open/pending rows from CLOB getOrder
+        // (task.0323 §2, @scaffolding, Deleted-in-phase: 4)
+        startOrderReconciler({
+          ledger,
+          getOrder: polyTradeBundle.getOrder,
+          getOperatorPositions: polyTradeBundle.getOperatorPositions,
+          operatorWalletAddress: polyTradeBundle.operatorWalletAddress,
           logger: mirrorLogger,
           metrics: noopMetrics,
         });

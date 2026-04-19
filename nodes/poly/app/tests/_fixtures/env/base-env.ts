@@ -83,6 +83,7 @@ export const PRODUCTION_VALID_ENV = {
   APP_ENV: "production",
   // DSNs inherited from CORE_TEST_ENV (already have distinct users)
   EVM_RPC_URL: "https://eth-sepolia.example.com/v2/test-key",
+  POLYGON_RPC_URL: "https://polygon-mainnet.example.com/v2/test-key",
   // COGNI_REPO_PATH inherited from CORE_TEST_ENV
 } as const;
 

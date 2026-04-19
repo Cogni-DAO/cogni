@@ -164,9 +164,19 @@ export const serverSchema = z.object({
   ANALYTICS_K_THRESHOLD: z.coerce.number().int().positive().default(50),
   ANALYTICS_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),
 
-  // EVM RPC - On-chain verification (Phase 3)
-  // Required for production/preview/dev; not used in test mode (FakeEvmOnchainClient)
+  // EVM RPC — Base-chain (or Sepolia in local) endpoint used by the Privy
+  // operator wallet for payments_in confirmation. See docs/guides/alchemy-webhook-setup.md.
+  // Required for production/preview/dev; not used in test mode (FakeEvmOnchainClient).
   EVM_RPC_URL: z.string().url().optional(),
+
+  // Polygon RPC — mainnet (chain 137) endpoint used by poly-node read paths:
+  // /api/v1/poly/wallet/balance (USDC.e / POL reads), future reconciler +
+  // allowance checks. Separate from EVM_RPC_URL (different chain, different
+  // semantics — do NOT repurpose one for the other).
+  // When unset, viem falls back to `polygon-rpc.com` public which is tenant-
+  // rate-limited in practice. Provision via Alchemy (free tier): new Polygon
+  // Mainnet app under the same account as EVM_RPC_URL.
+  POLYGON_RPC_URL: z.string().url().optional(),
 
   // Langfuse (AI observability) - Optional
   // Only required when Langfuse tracing is enabled

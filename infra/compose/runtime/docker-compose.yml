@@ -35,6 +35,7 @@ services:
       - APP_ENV=${APP_ENV?APP_ENV is required}
       - AUTH_SECRET=${AUTH_SECRET?AUTH_SECRET is required}
       - EVM_RPC_URL=${EVM_RPC_URL?EVM_RPC_URL is required}
+      - POLYGON_RPC_URL=${POLYGON_RPC_URL:-}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY?LITELLM_MASTER_KEY is required}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY?OPENROUTER_API_KEY is required}
       # Database connections — both required, pass-through only (no DSN construction).

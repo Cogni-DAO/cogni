@@ -241,6 +241,10 @@ LITELLM_DB_NAME="litellm"
 
 # EVM RPC — use public Base mainnet endpoint for test
 EVM_RPC_URL="${EVM_RPC_URL:-https://mainnet.base.org}"
+# Polygon RPC — optional; poly-node reads fall back to viem default (public
+# polygon-rpc.com, often tenant-rate-limited). Pass a real Alchemy/QuickNode
+# URL via env to unblock /api/v1/poly/wallet/balance on candidate-a.
+POLYGON_RPC_URL="${POLYGON_RPC_URL:-}"
 
 # PostHog — use placeholder (app logs warning but starts)
 POSTHOG_API_KEY="${POSTHOG_API_KEY:-phc_placeholder_test}"
@@ -510,6 +514,7 @@ PROMETHEUS_PASSWORD=${PROMETHEUS_PASSWORD:-}
 # App service vars (placeholders — services not started, but compose validates all)
 AUTH_SECRET=${AUTH_SECRET}
 EVM_RPC_URL=${EVM_RPC_URL}
+POLYGON_RPC_URL=${POLYGON_RPC_URL}
 DATABASE_URL=${DATABASE_URL}
 DATABASE_SERVICE_URL=${DATABASE_SERVICE_URL}
 POSTHOG_API_KEY=${POSTHOG_API_KEY}
@@ -599,6 +604,7 @@ for node in operator poly resy; do
     --from-literal=LITELLM_MASTER_KEY='${LITELLM_MASTER_KEY}' \
     --from-literal=OPENROUTER_API_KEY='${OPENROUTER_API_KEY}' \
     --from-literal=EVM_RPC_URL='${EVM_RPC_URL}' \
+    --from-literal=POLYGON_RPC_URL='${POLYGON_RPC_URL}' \
     --from-literal=POSTHOG_API_KEY='${POSTHOG_API_KEY}' \
     --from-literal=POSTHOG_HOST='${POSTHOG_HOST}' \
     --from-literal=OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}' \

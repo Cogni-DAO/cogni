@@ -35,6 +35,10 @@ const orderRowSchema = z.object({
   order_id: z.string().nullable(),
   status: ledgerStatusSchema,
   market_id: z.string().nullable(),
+  /** Human-readable market question (Polymarket Data API `title`). Denormalized at write time. Null for rows written before the title-stash was added. */
+  market_title: z.string().nullable(),
+  /** Polygon tx hash of the *target's* fill that triggered this mirror — authoritative on-chain proof. Null for non-Polymarket sources. */
+  market_tx_hash: z.string().nullable(),
   outcome: z.string().nullable(),
   side: sideSchema.nullable(),
   size_usdc: z.number().nullable(),

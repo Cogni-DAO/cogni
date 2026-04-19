@@ -54,6 +54,8 @@ import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
 import { StatusPill, TypeIcon } from "../work/_components/work-item-icons";
 import { fetchRuns } from "./_api/fetchRuns";
+import { OperatorWalletCard } from "./_components/OperatorWalletCard";
+import { OrderActivityCard } from "./_components/OrderActivityCard";
 import { TopWalletsCard } from "./_components/TopWalletsCard";
 
 type Tab = "user" | "system";
@@ -282,7 +284,12 @@ export function DashboardView(): ReactElement {
         </ToggleGroup>
       </div>
 
-      {/* Two-column top section: Agents + Work */}
+      {/* Polymarket primary section (top of fold) */}
+      <OperatorWalletCard />
+      <OrderActivityCard />
+      <TopWalletsCard />
+
+      {/* Two-column section: Agents + Work (demoted below the Polymarket cards) */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Left — Agents */}
         <Card>
@@ -416,9 +423,6 @@ export function DashboardView(): ReactElement {
           </CardContent>
         </Card>
       </div>
-
-      {/* Top Polymarket Wallets */}
-      <TopWalletsCard />
 
       {/* Activity Section */}
       <div className="flex flex-col gap-4">

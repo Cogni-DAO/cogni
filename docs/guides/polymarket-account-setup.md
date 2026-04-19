@@ -17,12 +17,12 @@ tags: [poly, polymarket, prototype-wallet, setup]
 ## TL;DR
 
 ```
-1.  Create a key quorum (one-time per app)         — API
-2.  Create wallet with owner_id = that quorum      — API
-3.  Fund the wallet on Polygon (USDC.e + POL)      — manual
-4.  Approve 3 CLOB contracts to spend USDC.e       — API
-5.  Derive POLY_CLOB_* creds                       — API
-6.  Save POLY_PROTO_* + POLY_CLOB_* into .env.local — manual
+1.  Create a key quorum (one-time per app)              — API
+2.  Create wallet with owner_id = that quorum           — API
+3.  Fund the wallet on Polygon (USDC.e + POL)           — manual
+4.  Approve 3 CLOB contracts + CTF operators            — API
+5.  Derive POLY_CLOB_* creds                            — API
+6.  Save POLY_PROTO_* + POLY_CLOB_* into .env.local     — manual
 ```
 
 Total time: ~10 min including funding confirmation.
@@ -84,9 +84,9 @@ Send to the new address on **Polygon (chainId 137)**, NOT Base:
 
 Note: Polymarket settles in **USDC.e** (the bridged USDC, contract above), not native USDC. Sending native USDC means it's stuck on the wrong contract.
 
-### 4. Approve the three CLOB contracts to spend USDC.e
+### 4. Approve the three CLOB contracts + CTF operators
 
-Spends ~3× POL gas. Idempotent (skips spenders already at MaxUint256):
+This single script handles **both** approval types in one run. Idempotent (skips allowances already at MaxUint256 and CTF operators already approved).
 
 ```bash
 OPERATOR_WALLET_ADDRESS=$POLY_PROTO_WALLET_ADDRESS \
@@ -96,7 +96,32 @@ OPERATOR_WALLET_ADDRESS=$POLY_PROTO_WALLET_ADDRESS \
 
 The script reads `OPERATOR_WALLET_ADDRESS` and `PRIVY_SIGNING_KEY` (legacy names — the inline overrides above point them at the prototype wallet's identity for this one invocation).
 
-Expected output: 3 `tx confirmed` lines for spenders Exchange, Neg-Risk Exchange, Neg-Risk Adapter.
+Expected output: 3 `tx confirmed` lines for USDC.e spenders, then 2 more for CTF operators.
+
+#### USDC.e (`approve`) — required for BUY
+
+Three spenders receive `approve(spender, MaxUint256)` on the USDC.e contract (`0x2791…4174`):
+
+| Contract          | Address                                      |
+| ----------------- | -------------------------------------------- |
+| Exchange          | `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E` |
+| Neg-Risk Exchange | `0xC5d563A36AE78145C45a50134d48A1215220f80a` |
+| Neg-Risk Adapter  | `0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296` |
+
+#### CTF ERC-1155 (`setApprovalForAll`) — required for SELL
+
+Without this, SELL orders are silently rejected by the CLOB (`success=undefined, errorMsg=""`).
+
+The CTF contract (`0x4D97DCd97eC945f40cF65F87097ACe5EA0476045`) must grant `setApprovalForAll(operator, true)` to two operators:
+
+| Operator          | Address                                      |
+| ----------------- | -------------------------------------------- |
+| Exchange          | `0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E` |
+| Neg-Risk Exchange | `0xC5d563A36AE78145C45a50134d48A1215220f80a` |
+
+(The Neg-Risk Adapter is intentionally excluded — it never takes ERC-1155 custody.)
+
+Verify both are set: `isApprovedForAll(owner, operator)` returns `true` for each.
 
 ### 5. Derive Polymarket L2 CLOB API credentials
 
@@ -124,7 +149,7 @@ OPERATOR_WALLET_ADDRESS=$POLY_PROTO_WALLET_ADDRESS \
   pnpm dotenv -e .env.local -- pnpm tsx scripts/experiments/probe-polymarket-account.ts
 ```
 
-Expect non-zero USDC.e balance and three `MaxUint256` allowances.
+Expect non-zero USDC.e balance, three `MaxUint256` USDC.e allowances, and two CTF `isApprovedForAll=true` results.
 
 ## Final `.env.local` block
 

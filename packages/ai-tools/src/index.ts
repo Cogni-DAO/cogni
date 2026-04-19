@@ -182,6 +182,19 @@ export {
   polyCancelOrderStubImplementation,
 } from "./tools/poly-cancel-order";
 export {
+  createPolyClosePositionImplementation,
+  POLY_CLOSE_POSITION_NAME,
+  type PolyClosePositionDeps,
+  type PolyClosePositionInput,
+  PolyClosePositionInputSchema,
+  type PolyClosePositionOutput,
+  PolyClosePositionOutputSchema,
+  type PolyClosePositionRedacted,
+  polyClosePositionBoundTool,
+  polyClosePositionContract,
+  polyClosePositionStubImplementation,
+} from "./tools/poly-close-position";
+export {
   createPolyListOrdersImplementation,
   POLY_LIST_ORDERS_NAME,
   type PolyListOrdersDeps,
@@ -197,6 +210,7 @@ export {
 export {
   createPolyPlaceTradeImplementation,
   POLY_PLACE_TRADE_NAME,
+  type PolyClosePositionRequest,
   type PolyListOpenOrdersRequest,
   type PolyOpenOrder,
   type PolyPlaceTradeDeps,

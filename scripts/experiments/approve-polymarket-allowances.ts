@@ -3,8 +3,8 @@
 
 /**
  * Module: `@scripts/experiments/approve-polymarket-allowances`
- * Purpose: task.0315 Phase 1 CP3.1 — grant USDC.e approvals from the operator EOA to Polymarket's three CLOB exchange contracts on Polygon, signed by Privy HSM. One-time per wallet; idempotent (skips if current allowance is already uint256 max). Does not sell-approve the CTF ERC-1155; that lands when SELL mirroring is in scope.
- * Scope: Reads current `allowance(owner, spender)` for each target, calls `approve(spender, MaxUint256)` via Privy-backed viem WalletClient, waits for receipts. Prints final state. Does not place orders, deposit, or derive creds.
+ * Purpose: task.0315 Phase 1 CP3.1 + task.0323 §0 — grant USDC.e approvals from the operator EOA to Polymarket's three CLOB exchange contracts, and CTF ERC-1155 setApprovalForAll to the two exchange operators (required for SELL), all on Polygon, signed by Privy HSM. One-time per wallet; idempotent (skips MaxUint256 allowances and already-set CTF approvals).
+ * Scope: Reads current `allowance(owner, spender)` for each USDC.e target, calls `approve(spender, MaxUint256)`; then reads `isApprovedForAll(owner, operator)` for each CTF operator, calls `setApprovalForAll(operator, true)` if needed. All via Privy-backed viem WalletClient, waits for receipts. Prints final state. Does not place orders, deposit, or derive creds.
  * Invariants: Polygon chainId 137; EOA path only (no Safe proxy); MaxUint256 allowance.
  * Side-effects: IO (reads .env.local; Polygon RPC reads + writes; up to 3 signed txs costing ≈0.02 POL total gas).
  * Links: docs/guides/polymarket-account-setup.md step 4; work/items/task.0315.poly-copy-trade-prototype.md CP3

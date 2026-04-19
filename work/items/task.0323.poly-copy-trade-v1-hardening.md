@@ -2,12 +2,14 @@
 id: task.0323
 type: task
 title: "Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation"
-status: needs_triage
+status: needs_review
 priority: 2
 rank: 99
 estimate: 3
+branch: feat/poly-mirror-dashboard
+pr: "918"
 created: 2026-04-18
-updated: 2026-04-18
+updated: 2026-04-19
 summary: "v0 prototype (task.0315) validated end-to-end on candidate-a 2026-04-18 with a real mirrored $0.985 BUY. Validation exposed a set of v0 shortcuts that are NOT tracked anywhere (only in the task.0315 handoff prose). This task is the single bucket for hardening them before P2 multi-tenant or P4 streaming lands. Most critical: both operator + target wallets were onboarded for BUY only — no CTF ERC-1155 `setApprovalForAll` means we physically cannot SELL positions we've opened. That's a one-way-trade bug, not a v0 scope trim."
 outcome: "All items below either (a) landed, (b) filed as follow-up tasks with durable tracking, or (c) explicitly re-scoped out with a written rationale. No item silently carries forward into P2/P4 work."
 spec_refs:

@@ -6,8 +6,9 @@ status: needs_implement
 priority: 2
 estimate: 5
 rank: 5
-branch: design/poly-copy-trade-pr-b
-revision: 4
+branch: feat/poly-mirror-dashboard
+pr: "918"
+revision: 5
 summary: "One-shot prototype task. v0 (PR-A, this PR): poly-brain + dashboard answer 'who are the top Polymarket wallets?' via a new core__wallet_top_traders tool + /dashboard Top Wallets card backed by the Polymarket Data API. v0.1 (PR-B, not in this PR): single-wallet shadow mirror via @polymarket/clob-client. No new packages, no ports, no ranking pipeline, no awareness-plane tables. If it works, we scale it; if it doesn't, we learned cheaply."
 outcome: "A running prototype in the poly node. v0 (PR-A, shipped): ask poly-brain 'top wallets this week' and get a ranked list in chat + dashboard. v0.1 = four phases on a stable `decide()` boundary — P1 ships first live Polymarket order_id on one hardcoded target via disposable 30s poll scaffolding; P2 adds click-to-copy UI (DB-authoritative-when-populated, env fallback retained); P3 ships paper-adapter body so paper PnL over a real shadow soak becomes the evidence gate; P4 upgrades to WS → Redis streams → Temporal, gated on P3 evidence that edge survives slippage."
 spec_refs:
@@ -16,7 +17,7 @@ spec_refs:
 assignees: derekg1729
 project: proj.poly-prediction-bot
 created: 2026-04-17
-updated: 2026-04-18
+updated: 2026-04-19
 labels: [poly, polymarket, follow-wallet, copy-trading, prototype]
 external_refs:
   - docs/research/poly-copy-trading-wallets.md

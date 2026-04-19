@@ -20,11 +20,16 @@
  * @internal
  */
 
-import type { LoggerPort, MetricsPort } from "@cogni/market-provider";
+import type {
+  LoggerPort,
+  MetricsPort,
+  OrderReceipt,
+} from "@cogni/market-provider";
 import { EVENT_NAMES } from "@cogni/node-shared";
 import { v5 as uuidv5 } from "uuid";
 import {
   type MirrorCoordinatorDeps,
+  type OperatorPosition,
   runOnce,
 } from "@/features/copy-trade/mirror-coordinator";
 import type { TargetConfig } from "@/features/copy-trade/types";
@@ -91,6 +96,21 @@ export interface MirrorJobDeps {
   logger: LoggerPort;
   /** Metrics sink. */
   metrics: MetricsPort;
+  /**
+   * Optional SELL-to-close path from `PolyTradeBundle.closePosition`.
+   * When absent, SELL fills degrade to `skip/sell_without_position`.
+   */
+  closePosition?: (params: {
+    tokenId: string;
+    max_size_usdc: number;
+    limit_price: number;
+    client_order_id: `0x${string}`;
+  }) => Promise<OrderReceipt>;
+  /**
+   * Optional position query from `PolyTradeBundle.getOperatorPositions`.
+   * When absent, SELL fills degrade to `skip/sell_without_position`.
+   */
+  getOperatorPositions?: () => Promise<OperatorPosition[]>;
 }
 
 /** Stops the poll. Returned so the container can call on SIGTERM (future). */
@@ -135,6 +155,14 @@ export function startMirrorPoll(deps: MirrorJobDeps): MirrorJobStopFn {
     },
     logger: deps.logger,
     metrics: deps.metrics,
+    // exactOptionalPropertyTypes: only spread when defined to avoid
+    // assigning `undefined` to a property typed as `T` (not `T | undefined`).
+    ...(deps.closePosition !== undefined
+      ? { closePosition: deps.closePosition }
+      : {}),
+    ...(deps.getOperatorPositions !== undefined
+      ? { getOperatorPositions: deps.getOperatorPositions }
+      : {}),
   };
 
   async function tick(): Promise<void> {

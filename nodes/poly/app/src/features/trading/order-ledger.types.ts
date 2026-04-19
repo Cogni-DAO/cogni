@@ -80,6 +80,24 @@ export interface ListRecentOptions {
   target_id?: string;
 }
 
+/** Options for `listOpenOrPending` — used by the reconciler tick. */
+export interface ListOpenOrPendingOptions {
+  /** Only return rows older than this many milliseconds. Default 30000. */
+  olderThanMs?: number;
+  /** Max rows to return. Default 200. */
+  limit?: number;
+}
+
+/** Input to `updateStatus` — reconciler writes new CLOB-derived status. */
+export interface UpdateStatusInput {
+  client_order_id: string;
+  status: LedgerStatus;
+  /** Updated filled size in USDC — stored into `attributes.filled_size_usdc`. */
+  filled_size_usdc?: number;
+  /** Stamp order_id if the adapter returns it on a late acknowledgement. */
+  order_id?: string;
+}
+
 /**
  * Order ledger port. Production adapter is `createOrderLedger({ db })` in
  * `order-ledger.ts`; tests use `FakeOrderLedger` from
@@ -125,4 +143,22 @@ export interface OrderLedger {
    * Default limit 50. Ordered by `observed_at DESC` to match the dashboard card.
    */
   listRecent(opts?: ListRecentOptions): Promise<LedgerRow[]>;
+
+  /**
+   * Return all rows with `status IN ('pending', 'open')` that are older than
+   * `olderThanMs` milliseconds (default 30 000). Ordered by `created_at ASC`
+   * so the reconciler processes oldest-first. Default limit 200.
+   *
+   * Used exclusively by the order reconciler job (task.0323 §2).
+   */
+  listOpenOrPending(opts?: ListOpenOrPendingOptions): Promise<LedgerRow[]>;
+
+  /**
+   * Overwrite `status` (and optionally `filled_size_usdc` / `order_id`) on
+   * the row identified by `client_order_id`. Touches `updated_at`.
+   *
+   * Called only by the order reconciler — no other path should drive status
+   * after placement (mirror-coordinator owns `markOrderId` / `markError`).
+   */
+  updateStatus(input: UpdateStatusInput): Promise<void>;
 }

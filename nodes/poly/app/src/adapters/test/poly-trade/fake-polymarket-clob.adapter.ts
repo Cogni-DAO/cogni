@@ -3,10 +3,10 @@
 
 /**
  * Module: `@adapters/test/poly-trade/fake-polymarket-clob`
- * Purpose: Deterministic test double for the Polymarket CLOB `placeOrder` port. Test mode of `createPolyTradeCapability` returns a capability backed by this fake so stack + unit tests never load `@polymarket/clob-client`, `@privy-io/node`, or touch the network.
- * Scope: In-memory. Configurable canned receipt and/or canned error; records every call for assertions. Does not validate intents beyond what `OrderIntent` already enforces upstream.
+ * Purpose: Deterministic test double for the Polymarket CLOB adapter. Test mode of `createPolyTradeCapability` returns a capability backed by this fake so stack + unit tests never load `@polymarket/clob-client`, `@privy-io/node`, or touch the network.
+ * Scope: In-memory. Configurable canned receipt and/or canned error; records every call for assertions. Tracks positions: BUY increments size, SELL decrements. `getOrder` returns stored receipt by id. `listPositions` returns injected positions or the tracked in-memory set.
  * Invariants:
- *   - PORT_SHAPE_ONLY — implements `placeOrder` only. Does not know about LoggerPort, MetricsPort, or the PolyTradeCapability shape; the capability factory wraps this in the executor + metrics.
+ *   - PORT_SHAPE_ONLY — implements adapter methods only; capability factory wraps in executor + metrics.
  *   - DETERMINISTIC — same config + same intent → same result. No random data, no clock reads.
  * Side-effects: none (in-memory only; records calls on `this.calls`).
  * Links: Used by `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts` when `env.isTestMode === true`.
@@ -14,6 +14,7 @@
  */
 
 import type { OrderIntent, OrderReceipt } from "@cogni/market-provider";
+import type { PolymarketUserPosition } from "@cogni/market-provider/adapters/polymarket";
 
 export interface FakePolymarketClobConfig {
   /** Canned happy-path receipt. Defaults to a generic "filled" shape. */
@@ -30,6 +31,12 @@ export interface FakePolymarketClobConfig {
   listRejectWith?: Error;
   /** If set, `cancelOrder` rejects with this error. */
   cancelRejectWith?: Error;
+  /**
+   * Pre-seeded positions for `listPositions`. When set, the fake returns these
+   * directly without applying in-memory BUY/SELL tracking. Useful for
+   * deterministic `closePosition` test scenarios.
+   */
+  positions?: PolymarketUserPosition[];
 }
 
 /**
@@ -47,12 +54,23 @@ const DEFAULT_RECEIPT: Omit<OrderReceipt, "client_order_id"> = {
 };
 
 /**
- * Fake implementation of the `MarketProviderPort.placeOrder` function. Pass
- * `adapter.placeOrder.bind(adapter)` to `createPolyTradeCapabilityFromAdapter`.
+ * Fake implementation of the Polymarket CLOB adapter methods. Pass
+ * `adapter.placeOrder.bind(adapter)` etc. to `createPolyTradeCapabilityFromAdapter`.
+ *
+ * Position tracking: BUY intents increment `positions[tokenId].size` by
+ * `size_usdc / (limit_price ?? 0.5)`. SELL intents decrement it. Only used
+ * when `config.positions` is NOT provided (pre-seeded positions take priority).
  */
 export class FakePolymarketClobAdapter {
   public calls: OrderIntent[] = [];
   public cancelCalls: string[] = [];
+  /** Indexed by order_id for `getOrder` lookups. */
+  public orderStore = new Map<string, OrderReceipt>();
+  /** In-memory position tracking (size in shares, keyed by tokenId). */
+  private readonly trackedPositions = new Map<
+    string,
+    { size: number; curPrice: number }
+  >();
   private readonly config: FakePolymarketClobConfig;
 
   constructor(config: FakePolymarketClobConfig = {}) {
@@ -65,7 +83,36 @@ export class FakePolymarketClobAdapter {
     const base = this.config.receipt ?? DEFAULT_RECEIPT;
     // Echo the intent's client_order_id on the receipt — matches how the real
     // adapter maps response → OrderReceipt via `mapOrderResponseToReceipt`.
-    return { ...base, client_order_id: intent.client_order_id };
+    const receipt: OrderReceipt = {
+      ...base,
+      client_order_id: intent.client_order_id,
+    };
+    this.orderStore.set(receipt.order_id, receipt);
+    // Track position: BUY adds shares, SELL removes shares.
+    const tokenId =
+      typeof intent.attributes?.token_id === "string"
+        ? intent.attributes.token_id
+        : undefined;
+    if (tokenId && !this.config.positions) {
+      const price = intent.limit_price ?? 0.5;
+      const shares = price > 0 ? intent.size_usdc / price : 0;
+      const existing = this.trackedPositions.get(tokenId) ?? {
+        size: 0,
+        curPrice: price,
+      };
+      if (intent.side === "BUY") {
+        this.trackedPositions.set(tokenId, {
+          size: existing.size + shares,
+          curPrice: price,
+        });
+      } else {
+        this.trackedPositions.set(tokenId, {
+          size: Math.max(0, existing.size - shares),
+          curPrice: price,
+        });
+      }
+    }
+    return receipt;
   }
 
   async listOpenOrders(_params?: {
@@ -79,5 +126,37 @@ export class FakePolymarketClobAdapter {
   async cancelOrder(orderId: string): Promise<void> {
     this.cancelCalls.push(orderId);
     if (this.config.cancelRejectWith) throw this.config.cancelRejectWith;
+  }
+
+  /** Returns stored receipt by id, or null if not found. */
+  async getOrder(orderId: string): Promise<OrderReceipt | null> {
+    return this.orderStore.get(orderId) ?? null;
+  }
+
+  /** Returns pre-seeded positions (config) or in-memory tracked positions. */
+  async listPositions(_wallet: string): Promise<PolymarketUserPosition[]> {
+    if (this.config.positions) return this.config.positions;
+    const results: PolymarketUserPosition[] = [];
+    for (const [asset, { size, curPrice }] of this.trackedPositions.entries()) {
+      if (size > 0) {
+        results.push({
+          proxyWallet: _wallet,
+          asset,
+          conditionId: `0x${"0".repeat(64)}`,
+          size,
+          avgPrice: curPrice,
+          initialValue: size * curPrice,
+          currentValue: size * curPrice,
+          cashPnl: 0,
+          percentPnl: 0,
+          realizedPnl: 0,
+          curPrice,
+          redeemable: false,
+          title: "",
+          outcome: "",
+        });
+      }
+    }
+    return results;
   }
 }

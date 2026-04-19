@@ -43,10 +43,11 @@ pnpm dev  # You're ready!
    - `LITELLM_MASTER_KEY` (sk-xxx format)
    - `DATABASE_URL` (postgresql://postgres:postgres@localhost:5432/cogni_template_dev)
 3. Prompt for `OPENROUTER_API_KEY`
-4. Prompt for `EVM_RPC_URL` (Sepolia RPC from alchemy.com or infura.io)
-5. Prompt for `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (optional, from cloud.walletconnect.com)
-6. Run `scripts/bootstrap/install/install-pnpm.sh`
-7. `pnpm install` and setup git hooks
+4. Prompt for `EVM_RPC_URL` (Sepolia RPC from alchemy.com or infura.io — Base-chain operator wallet confirmation)
+5. Prompt for `POLYGON_RPC_URL` (Polygon mainnet RPC from alchemy.com — poly-node reads USDC.e / POL + Polymarket on-chain state). Optional: if unset, poly-node falls back to public polygon-rpc.com and may rate-limit.
+6. Prompt for `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (optional, from cloud.walletconnect.com)
+7. Run `scripts/bootstrap/install/install-pnpm.sh`
+8. `pnpm install` and setup git hooks
 
 **No SSH keys, no Docker, no Cherry VMs, no GitHub secrets.**
 
@@ -119,7 +120,8 @@ pnpm setup github --env production
      - `LITELLM_MASTER_KEY` (new random sk-xxx key)
      - `AUTH_SECRET` (generated random string)
      - `OPENROUTER_API_KEY` (prompt if not in local env)
-     - `EVM_RPC_URL` (prompt if not in local env - Sepolia RPC from alchemy.com or infura.io)
+     - `EVM_RPC_URL` (prompt if not in local env — Base-chain RPC from alchemy.com or infura.io)
+     - `POLYGON_RPC_URL` (optional, Polygon mainnet RPC from alchemy.com — required for poly-node `/api/v1/poly/wallet/balance` to return live data; falls back to public polygon-rpc.com when absent)
      - `OPENCLAW_GATEWAY_TOKEN` (generated random, ≥32 chars — gateway WS auth)
      - `OPENCLAW_GITHUB_RW_TOKEN` (GitHub PAT with Contents:Write + Pull requests:Write — host-side git relay)
      - `DISCORD_BOT_TOKEN` (Discord bot token — from discord.com/developers/applications → Bot → Reset Token)

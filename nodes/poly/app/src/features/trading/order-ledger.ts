@@ -29,10 +29,12 @@ import type { Logger } from "pino";
 import type {
   InsertPendingInput,
   LedgerRow,
+  ListOpenOrPendingOptions,
   ListRecentOptions,
   OrderLedger,
   RecordDecisionInput,
   StateSnapshot,
+  UpdateStatusInput,
 } from "./order-ledger.types";
 
 /** Dependencies injected at the `bootstrap/container.ts` boundary. */
@@ -148,6 +150,14 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
           typeof input.intent.attributes?.source_fill_id === "string"
             ? input.intent.attributes.source_fill_id
             : undefined,
+        title:
+          typeof input.intent.attributes?.title === "string"
+            ? input.intent.attributes.title
+            : undefined,
+        transaction_hash:
+          typeof input.intent.attributes?.transaction_hash === "string"
+            ? input.intent.attributes.transaction_hash
+            : undefined,
       };
 
       await deps.db
@@ -250,6 +260,59 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         created_at: r.createdAt,
         updated_at: r.updatedAt,
       }));
+    },
+
+    async listOpenOrPending(
+      opts?: ListOpenOrPendingOptions
+    ): Promise<LedgerRow[]> {
+      const olderThanMs = opts?.olderThanMs ?? 30_000;
+      const limit = opts?.limit ?? 200;
+
+      const rows = await deps.db
+        .select()
+        .from(polyCopyTradeFills)
+        .where(
+          and(
+            sql`${polyCopyTradeFills.status} IN ('pending','open')`,
+            sql`${polyCopyTradeFills.createdAt} < now() - interval '${sql.raw(String(olderThanMs))} milliseconds'`
+          )
+        )
+        .orderBy(polyCopyTradeFills.createdAt)
+        .limit(limit);
+
+      return rows.map((r) => ({
+        target_id: r.targetId,
+        fill_id: r.fillId,
+        observed_at: r.observedAt,
+        client_order_id: r.clientOrderId,
+        order_id: r.orderId,
+        status: r.status as LedgerRow["status"],
+        attributes: (r.attributes as Record<string, unknown> | null) ?? null,
+        created_at: r.createdAt,
+        updated_at: r.updatedAt,
+      }));
+    },
+
+    async updateStatus(input: UpdateStatusInput): Promise<void> {
+      // Build the attributes patch only for the fields actually provided.
+      const patch: Record<string, unknown> = {};
+      if (input.filled_size_usdc !== undefined) {
+        patch.filled_size_usdc = input.filled_size_usdc;
+      }
+
+      await deps.db
+        .update(polyCopyTradeFills)
+        .set({
+          status: input.status,
+          ...(input.order_id !== undefined ? { orderId: input.order_id } : {}),
+          updatedAt: new Date(),
+          ...(Object.keys(patch).length > 0
+            ? {
+                attributes: sql`COALESCE(${polyCopyTradeFills.attributes}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+              }
+            : {}),
+        })
+        .where(eq(polyCopyTradeFills.clientOrderId, input.client_order_id));
     },
   };
 }

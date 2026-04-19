@@ -11,7 +11,8 @@
  *   - CAPABILITY_FAIL_LOUD — Privy wallet resolution errors throw on first `placeTrade` invocation with a clear message; the capability logs a boot-time `env_ok` positive signal before that point so ops sees "configured" without waiting for the first trade.
  *   - NO_STATIC_CLOB_IMPORT — uses `await import(...)` in production; deployments without CLOB creds never pull in `@polymarket/clob-client`. Enforced additionally by Biome `noRestrictedImports`.
  *   - PROM_REGISTRY_SHARED — counters + histograms register on the app's singleton registry with idempotent get-or-create helpers; no duplicate-registration errors across HMR / test boots.
- *   - BUY_ONLY — the capability rejects SELL until CTF setApprovalForAll is wired (out of prototype scope).
+ *   - PLACE_TRADE_IS_BUY_ONLY — `capability.placeTrade` rejects SELL (agent-safety). The coordinator/reconciler lift this via `closePosition` which is SELL-only.
+ *   - CLOSE_POSITION_IS_SELL_ONLY — `closePosition` exclusively issues SELL orders; `placeIntent` has no side filter.
  *   - KEY_NEVER_IN_APP — CLOB L2 creds + Privy signing key stay in env; the adapter holds them in-memory only for the lifetime of the process.
  *   - HARDCODED_WALLET_SECRETS_OK — per task.0315 prototype constraint, the env → single-operator Privy-wallet resolution block is the ONE place where non-multi-tenant wiring is allowed. Every other branch (test fake; tool invocation; executor wrap) is production-generic.
  * Side-effects: none on factory call; on first `placeTrade` invocation: Privy wallet list pagination to resolve `operatorWalletAddress`, then HTTPS to Polymarket CLOB on each subsequent call.
@@ -20,6 +21,7 @@
  */
 
 import type {
+  PolyClosePositionRequest,
   PolyListOpenOrdersRequest,
   PolyOpenOrder,
   PolyPlaceTradeReceipt,
@@ -33,6 +35,7 @@ import {
   type OrderIntent,
   type OrderReceipt,
 } from "@cogni/market-provider";
+import type { PolymarketUserPosition } from "@cogni/market-provider/adapters/polymarket";
 import { EVENT_NAMES } from "@cogni/node-shared";
 import type { Counter, Histogram } from "prom-client";
 import client from "prom-client";
@@ -210,7 +213,11 @@ export interface CreateFromAdapterDeps {
   }) => Promise<OrderReceipt[]>;
   /** `cancelOrder(orderId)` — production adapter OR fake. */
   cancelOrder: (orderId: string) => Promise<void>;
-  /** Operator EOA (used for the receipt's profile_url). */
+  /** `getOrder(orderId)` — used by the reconciler to poll fill status. */
+  getOrder?: (orderId: string) => Promise<OrderReceipt | null>;
+  /** `listPositions(wallet)` — used by `closePosition` + coordinator. */
+  listPositions?: (wallet: string) => Promise<PolymarketUserPosition[]>;
+  /** Operator EOA (used for the receipt's profile_url and position lookups). */
   operatorWalletAddress: `0x${string}`;
   /** Pino logger (factory wraps in a LoggerPort + adds executor child). */
   logger: Logger;
@@ -219,23 +226,51 @@ export interface CreateFromAdapterDeps {
 }
 
 /**
- * Bundle returned by the factory. Holds both placement surfaces + shared state:
+ * Bundle returned by the factory. Holds all placement surfaces + shared state:
  *
- * - `capability` — agent-callable `PolyTradeCapability` (place/list/cancel).
- *   Generates its own `client_order_id` via `clientOrderIdFor("agent", …)`.
- * - `placeIntent` — raw `(OrderIntent) => OrderReceipt` seam for callers that
- *   supply their own `client_order_id` (the mirror-coordinator uses
- *   `clientOrderIdFor(target_id, fill_id)` so the ledger composite PK dedupes).
+ * - `capability` — agent-callable `PolyTradeCapability` (place/list/cancel/close).
+ *   `placeTrade` is BUY-only (agent-safety). `closePosition` is SELL-only.
+ * - `placeIntent` — raw `(OrderIntent) => OrderReceipt` seam; no side filter.
+ * - `closePosition` — autonomous SELL exit path. Looks up the operator position,
+ *   caps size, and routes through the executor.
+ * - `getOrder` — reconciler poll; returns `null` when the order is not found.
+ * - `getOperatorPositions` — coordinator + reconciler position queries.
  * - `operatorWalletAddress` — exposed for read APIs (e.g. balance).
  *
- * Both surfaces wrap the SAME executor + the SAME lazy adapter, so there is
- * exactly one Privy wallet init, one `@polymarket/clob-client` load, and one
- * prom-client registry across agent + autonomous paths.
+ * All surfaces share ONE executor + ONE lazy adapter, so there is exactly one
+ * Privy wallet init, one `@polymarket/clob-client` load, and one prom-client
+ * registry across agent + autonomous paths.
  */
 export interface PolyTradeBundle {
   capability: PolyTradeCapability;
   placeIntent: (intent: OrderIntent) => Promise<OrderReceipt>;
+  closePosition: (params: ClosePositionParams) => Promise<OrderReceipt>;
+  getOrder: (orderId: string) => Promise<OrderReceipt | null>;
+  getOperatorPositions: () => Promise<PolymarketUserPosition[]>;
   operatorWalletAddress: `0x${string}`;
+}
+
+/** Parameters for the autonomous SELL-to-close path. */
+export interface ClosePositionParams {
+  /** ERC-1155 asset id (Polymarket token). */
+  tokenId: string;
+  /** Notional USDC cap. Actual size = min(cap, position_size * curPrice). */
+  max_size_usdc: number;
+  /** Limit price for the SELL; if omitted, capability uses aggressive take-bid. */
+  limit_price?: number;
+  /** Caller-supplied idempotency key. */
+  client_order_id: `0x${string}`;
+}
+
+/** Thrown when `closePosition` finds no open position for the given tokenId. */
+export class PolyTradeError extends Error {
+  constructor(
+    public readonly code: "no_position_to_close",
+    message: string
+  ) {
+    super(message);
+    this.name = "PolyTradeError";
+  }
 }
 
 /**
@@ -322,11 +357,90 @@ export function createPolyTradeCapabilityFromAdapter(
     async cancelOrder(orderId: string): Promise<void> {
       await deps.cancelOrder(orderId);
     },
+    async closePosition(
+      request: PolyClosePositionRequest
+    ): Promise<PolyPlaceTradeReceipt> {
+      const client_order_id = clientOrderIdFor(
+        "agent-close",
+        `${request.tokenId}:${Date.now()}`
+      );
+      const receipt = await bundleClosePosition({
+        tokenId: request.tokenId,
+        max_size_usdc: request.max_size_usdc,
+        ...(request.limit_price !== undefined
+          ? { limit_price: request.limit_price }
+          : {}),
+        client_order_id,
+      });
+      return {
+        order_id: receipt.order_id,
+        client_order_id: receipt.client_order_id,
+        status: receipt.status,
+        filled_size_usdc: receipt.filled_size_usdc,
+        submitted_at: receipt.submitted_at,
+        profile_url: profileUrl(operatorAddress),
+      };
+    },
   };
+
+  // ── closePosition implementation (shared by capability.closePosition + bundle.closePosition) ──
+
+  async function bundleClosePosition(
+    params: ClosePositionParams
+  ): Promise<OrderReceipt> {
+    const positions = deps.listPositions
+      ? await deps.listPositions(operatorAddress)
+      : [];
+    const position = positions.find((p) => p.asset === params.tokenId);
+    if (!position || position.size <= 0) {
+      throw new PolyTradeError(
+        "no_position_to_close",
+        `poly-trade closePosition: no open position found for tokenId=${params.tokenId} on wallet=${operatorAddress}`
+      );
+    }
+    const positionValueUsdc = position.size * position.curPrice;
+    const effective_size_usdc = Math.min(
+      params.max_size_usdc,
+      positionValueUsdc
+    );
+    // Aggressive take-bid default: 1 tick below current price, minimum 0.01.
+    const limit_price =
+      params.limit_price ?? Math.max(0.01, position.curPrice - 0.01);
+    const intent: OrderIntent = {
+      provider: "polymarket",
+      market_id: `prediction-market:polymarket:${position.conditionId}`,
+      outcome: position.outcome ?? "",
+      side: "SELL",
+      size_usdc: effective_size_usdc,
+      limit_price,
+      client_order_id: params.client_order_id,
+      attributes: { token_id: params.tokenId },
+    };
+    return executor(intent);
+  }
+
+  async function bundleGetOrder(orderId: string): Promise<OrderReceipt | null> {
+    if (!deps.getOrder) return null;
+    try {
+      return await deps.getOrder(orderId);
+    } catch {
+      return null;
+    }
+  }
+
+  async function bundleGetOperatorPositions(): Promise<
+    PolymarketUserPosition[]
+  > {
+    if (!deps.listPositions) return [];
+    return deps.listPositions(operatorAddress);
+  }
 
   return {
     capability,
     placeIntent: executor,
+    closePosition: bundleClosePosition,
+    getOrder: bundleGetOrder,
+    getOperatorPositions: bundleGetOperatorPositions,
     operatorWalletAddress: operatorAddress,
   };
 }
@@ -401,6 +515,8 @@ export function createPolyTradeCapability(
       placeOrder: fake.placeOrder.bind(fake),
       listOpenOrders: fake.listOpenOrders.bind(fake),
       cancelOrder: fake.cancelOrder.bind(fake),
+      getOrder: fake.getOrder.bind(fake),
+      listPositions: fake.listPositions.bind(fake),
       operatorWalletAddress: operator,
       logger: config.logger,
     });
@@ -452,6 +568,8 @@ export function createPolyTradeCapability(
       market?: string;
     }) => Promise<OrderReceipt[]>;
     cancelOrder: (orderId: string) => Promise<void>;
+    getOrder: (orderId: string) => Promise<OrderReceipt>;
+    listPositions: (wallet: string) => Promise<PolymarketUserPosition[]>;
   };
   let cached: AdapterMethods | undefined;
   let initPromise: Promise<AdapterMethods> | undefined;
@@ -485,11 +603,23 @@ export function createPolyTradeCapability(
     const m = await ensureMethods();
     return m.cancelOrder(orderId);
   }
+  async function lazyGetOrder(orderId: string): Promise<OrderReceipt> {
+    const m = await ensureMethods();
+    return m.getOrder(orderId);
+  }
+  async function lazyListPositions(
+    wallet: string
+  ): Promise<PolymarketUserPosition[]> {
+    const m = await ensureMethods();
+    return m.listPositions(wallet);
+  }
 
   return createPolyTradeCapabilityFromAdapter({
     placeOrder: lazyPlaceOrder,
     listOpenOrders: lazyListOpenOrders,
     cancelOrder: lazyCancelOrder,
+    getOrder: lazyGetOrder,
+    listPositions: lazyListPositions,
     operatorWalletAddress,
     logger: config.logger,
     metrics,
@@ -522,6 +652,8 @@ async function buildRealAdapterMethods(
     market?: string;
   }) => Promise<OrderReceipt[]>;
   cancelOrder: (orderId: string) => Promise<void>;
+  getOrder: (orderId: string) => Promise<OrderReceipt>;
+  listPositions: (wallet: string) => Promise<PolymarketUserPosition[]>;
 }> {
   // Dynamic imports — keep `@polymarket/clob-client` + `@privy-io/node` out of
   // bundles that don't configure the capability.
@@ -593,6 +725,11 @@ async function buildRealAdapterMethods(
     metrics: deps.metrics,
   });
 
+  const { PolymarketDataApiClient } = await import(
+    "@cogni/market-provider/adapters/polymarket"
+  );
+  const dataApiClient = new PolymarketDataApiClient();
+
   deps.logger.info(
     {
       event: EVENT_NAMES.POLY_TRADE_CAPABILITY_READY,
@@ -607,5 +744,7 @@ async function buildRealAdapterMethods(
     placeOrder: adapter.placeOrder.bind(adapter),
     listOpenOrders: adapter.listOpenOrders.bind(adapter),
     cancelOrder: adapter.cancelOrder.bind(adapter),
+    getOrder: adapter.getOrder.bind(adapter),
+    listPositions: (wallet: string) => dataApiClient.listUserPositions(wallet),
   };
 }

@@ -26,7 +26,9 @@ export const polyWalletBalanceOperation = {
     usdc_available: z.number().nonnegative(),
     /** Sum of `price * original_size_shares` across Polymarket open orders (USD). */
     usdc_locked: z.number().nonnegative(),
-    /** `usdc_available + usdc_locked`. */
+    /** Current mark-to-market value of held positions (USD). Source: Polymarket Data API `/positions` → sum of `currentValue`. */
+    usdc_positions_mtm: z.number().nonnegative(),
+    /** `usdc_available + usdc_locked + usdc_positions_mtm`. */
     usdc_total: z.number().nonnegative(),
     /** Polygon native gas token balance. */
     pol_gas: z.number().nonnegative(),

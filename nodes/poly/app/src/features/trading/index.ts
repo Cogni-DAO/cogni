@@ -25,8 +25,10 @@ export type {
   InsertPendingInput,
   LedgerRow,
   LedgerStatus,
+  ListOpenOrPendingOptions,
   ListRecentOptions,
   OrderLedger,
   RecordDecisionInput,
   StateSnapshot,
+  UpdateStatusInput,
 } from "./order-ledger.types";

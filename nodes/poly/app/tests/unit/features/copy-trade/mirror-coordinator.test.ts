@@ -24,6 +24,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeOrderLedger } from "@/adapters/test";
 import {
   MIRROR_COORDINATOR_METRICS,
+  type OperatorPosition,
   runOnce,
 } from "@/features/copy-trade/mirror-coordinator";
 import type { TargetConfig } from "@/features/copy-trade/types";
@@ -354,6 +355,304 @@ describe("mirror-coordinator.runOnce — cap-hit", () => {
       (d) => d.outcome === "skipped" && d.reason === "rate_cap_hit"
     );
     expect(rateCap).toBeDefined();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scenario F — SELL fill discrimination: close vs short.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeSellFill(overrides?: Partial<Fill>): Fill {
+  return makeFill({
+    fill_id: "data-api:0xabc:0xasset:SELL:1713302500",
+    side: "SELL",
+    ...overrides,
+  });
+}
+
+function makePosition(asset: string, size: number): OperatorPosition {
+  return { asset, size };
+}
+
+describe("mirror-coordinator.runOnce — SELL fill: no position → skip", () => {
+  it("skips with sell_without_position when operator holds no position for the asset", async () => {
+    const fill = makeSellFill({ attributes: { asset: "12345" } });
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const closePosition =
+      vi.fn<
+        (p: {
+          tokenId: string;
+          max_size_usdc: number;
+          limit_price: number;
+          client_order_id: `0x${string}`;
+        }) => Promise<OrderReceipt>
+      >();
+    const getOperatorPositions = vi
+      .fn<() => Promise<OperatorPosition[]>>()
+      .mockResolvedValue([]); // no positions
+
+    await runOnce({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      closePosition,
+      getOperatorPositions,
+    });
+
+    expect(placeIntent).not.toHaveBeenCalled();
+    expect(closePosition).not.toHaveBeenCalled();
+    const skipDec = ledger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "sell_without_position"
+    );
+    expect(skipDec).toBeDefined();
+    expect(skipDec?.fill_id).toBe(fill.fill_id);
+  });
+
+  it("skips with sell_without_position when position exists but size=0", async () => {
+    const fill = makeSellFill({ attributes: { asset: "12345" } });
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const closePosition =
+      vi.fn<
+        (p: {
+          tokenId: string;
+          max_size_usdc: number;
+          limit_price: number;
+          client_order_id: `0x${string}`;
+        }) => Promise<OrderReceipt>
+      >();
+    const getOperatorPositions = vi
+      .fn<() => Promise<OperatorPosition[]>>()
+      .mockResolvedValue([makePosition("12345", 0)]);
+
+    await runOnce({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      closePosition,
+      getOperatorPositions,
+    });
+
+    expect(placeIntent).not.toHaveBeenCalled();
+    expect(closePosition).not.toHaveBeenCalled();
+    const skipDec = ledger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "sell_without_position"
+    );
+    expect(skipDec).toBeDefined();
+  });
+});
+
+describe("mirror-coordinator.runOnce — SELL fill: has position → closePosition called", () => {
+  it("calls closePosition with matching token_id and max_size_usdc=mirror_usdc, records placed/sell_closed_position", async () => {
+    const TOKEN = "12345";
+    const fill = makeSellFill({ attributes: { asset: TOKEN }, price: 0.75 });
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const cid = cidFor(fill);
+    const closeReceipt: OrderReceipt = makeReceipt("0xcloseorder", cid);
+    const closePosition = vi
+      .fn<
+        (p: {
+          tokenId: string;
+          max_size_usdc: number;
+          limit_price: number;
+          client_order_id: `0x${string}`;
+        }) => Promise<OrderReceipt>
+      >()
+      .mockResolvedValue(closeReceipt);
+    const getOperatorPositions = vi
+      .fn<() => Promise<OperatorPosition[]>>()
+      .mockResolvedValue([makePosition(TOKEN, 10)]); // holds 10 shares
+
+    await runOnce({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      closePosition,
+      getOperatorPositions,
+    });
+
+    expect(placeIntent).not.toHaveBeenCalled();
+    expect(closePosition).toHaveBeenCalledTimes(1);
+    const callArgs = closePosition.mock.calls[0]?.[0];
+    expect(callArgs?.tokenId).toBe(TOKEN);
+    expect(callArgs?.max_size_usdc).toBe(BASE_TARGET.mirror_usdc);
+    expect(callArgs?.limit_price).toBe(fill.price);
+    expect(callArgs?.client_order_id).toBe(cid);
+
+    // INSERT_BEFORE_PLACE — pending row written before close
+    expect(ledger.rows).toHaveLength(1);
+    expect(ledger.rows[0]?.order_id).toBe("0xcloseorder");
+
+    // Decision recorded as placed/sell_closed_position
+    const placedDec = ledger.decisions.find((d) => d.outcome === "placed");
+    expect(placedDec).toBeDefined();
+    expect(placedDec?.reason).toBe("sell_closed_position");
+    expect(placedDec?.receipt).toMatchObject({ order_id: "0xcloseorder" });
+  });
+
+  it("still calls closePosition when operator position size < mirror_usdc notional (bundle caps it)", async () => {
+    // Position worth $0.50: size=1 share × curPrice=0.5 < mirror_usdc=$5
+    // Coordinator should NOT double-cap; pass mirror_usdc as-is, let bundle decide.
+    const TOKEN = "tok-small";
+    const fill = makeSellFill({ attributes: { asset: TOKEN }, price: 0.5 });
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const cid = cidFor(fill);
+    const closePosition = vi
+      .fn<
+        (p: {
+          tokenId: string;
+          max_size_usdc: number;
+          limit_price: number;
+          client_order_id: `0x${string}`;
+        }) => Promise<OrderReceipt>
+      >()
+      .mockResolvedValue(makeReceipt("0xsmallclose", cid));
+    const getOperatorPositions = vi
+      .fn<() => Promise<OperatorPosition[]>>()
+      .mockResolvedValue([makePosition(TOKEN, 1)]); // size > 0
+
+    await runOnce({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      closePosition,
+      getOperatorPositions,
+    });
+
+    expect(closePosition).toHaveBeenCalledTimes(1);
+    // max_size_usdc is mirror_usdc, not capped by position value
+    expect(closePosition.mock.calls[0]?.[0].max_size_usdc).toBe(
+      BASE_TARGET.mirror_usdc
+    );
+  });
+});
+
+describe("mirror-coordinator.runOnce — SELL fill: deps absent → degrade to skip", () => {
+  it("skips sell_without_position when closePosition dep is absent", async () => {
+    const fill = makeSellFill({ attributes: { asset: "12345" } });
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    // No closePosition or getOperatorPositions wired
+
+    await runOnce({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      // intentionally omit closePosition + getOperatorPositions
+    });
+
+    expect(placeIntent).not.toHaveBeenCalled();
+    expect(ledger.rows).toHaveLength(0);
+    const skipDec = ledger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "sell_without_position"
+    );
+    expect(skipDec).toBeDefined();
+  });
+
+  it("skips sell_without_position when only getOperatorPositions is absent", async () => {
+    const fill = makeSellFill({ attributes: { asset: "12345" } });
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn<(i: OrderIntent) => Promise<OrderReceipt>>();
+    const closePosition =
+      vi.fn<
+        (p: {
+          tokenId: string;
+          max_size_usdc: number;
+          limit_price: number;
+          client_order_id: `0x${string}`;
+        }) => Promise<OrderReceipt>
+      >();
+
+    await runOnce({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      closePosition,
+      // intentionally omit getOperatorPositions
+    });
+
+    expect(closePosition).not.toHaveBeenCalled();
+    expect(placeIntent).not.toHaveBeenCalled();
+    const skipDec = ledger.decisions.find(
+      (d) => d.outcome === "skipped" && d.reason === "sell_without_position"
+    );
+    expect(skipDec).toBeDefined();
+  });
+});
+
+describe("mirror-coordinator.runOnce — BUY fill smoke (unchanged path)", () => {
+  it("BUY fill routes through placeIntent unchanged when SELL deps are present", async () => {
+    const fill = makeFill(); // side: "BUY"
+    const ledger = new FakeOrderLedger();
+    const placeIntent = vi.fn(
+      async (i: OrderIntent): Promise<OrderReceipt> =>
+        makeReceipt("0xbuyorder", i.client_order_id)
+    );
+    const closePosition =
+      vi.fn<
+        (p: {
+          tokenId: string;
+          max_size_usdc: number;
+          limit_price: number;
+          client_order_id: `0x${string}`;
+        }) => Promise<OrderReceipt>
+      >();
+    const getOperatorPositions = vi
+      .fn<() => Promise<OperatorPosition[]>>()
+      .mockResolvedValue([]);
+
+    await runOnce({
+      source: makeSource([fill]),
+      ledger,
+      placeIntent,
+      target: BASE_TARGET,
+      getCursor: () => undefined,
+      setCursor: () => {},
+      logger: noopLogger,
+      metrics: createRecordingMetrics(),
+      closePosition,
+      getOperatorPositions,
+    });
+
+    expect(placeIntent).toHaveBeenCalledTimes(1);
+    expect(closePosition).not.toHaveBeenCalled();
+    // getOperatorPositions should NOT be called for BUY fills
+    expect(getOperatorPositions).not.toHaveBeenCalled();
+    const placedDec = ledger.decisions.find((d) => d.outcome === "placed");
+    expect(placedDec).toBeDefined();
   });
 });
 
