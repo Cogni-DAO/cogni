@@ -2,7 +2,7 @@
 id: task.0328
 type: task
 title: "Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health)"
-status: needs_merge
+status: done
 revision: 2
 priority: 1
 rank: 50
@@ -131,6 +131,16 @@ This task is the **first slice** of that architecture. Follow-ups (event log, Pn
     - [ ] contract: `sync-health.v1.contract.ts` parses expected shape
     - [ ] unit: ledger test — `syncHealthSummary` returns correct counts on a fixture
     - [ ] stack or component (pick one): route returns 200 + valid body
+
+## Review Feedback (revision 2 — 2026-04-19) — APPROVED
+
+Verified all 11 rev1 fixes landed correctly. Three non-blocking UI a11y/opacity nits filed as follow-ups; not blocking merge:
+
+- `focus-visible:outline-none` on clickable row removes focus indicator without a visible substitute — add `focus-visible:ring-2 focus-visible:ring-ring`.
+- `role="link"` on `<tr>` with multiple cells produces incoherent screen-reader narration — either drop the role or wrap the market-title cell in a real `<a>`.
+- `bg-[hsl(var(--chart-1))]/70` — Tailwind arbitrary-value syntax for opacity likely doesn't apply; positions segment probably renders at 100%. Fix: `bg-[hsl(var(--chart-1)/0.7)]`.
+
+Minor perf nit (not worth blocking): the grace-window `not_found → canceled` path does two UPDATEs per row (status + markSynced). Fold into one inline stamp on a follow-up.
 
 ## Review Feedback (revision 1 — 2026-04-19)
 
