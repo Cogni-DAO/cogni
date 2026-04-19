@@ -2,15 +2,18 @@
 id: task.0318
 type: task
 title: "Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables"
-status: needs_design
+status: needs_implement
 priority: 2
 estimate: 5
 rank: 5
 summary: "Replace the env-directed single-operator wallet model shipped in task.0315 P1 with per-user wallet custody + durable authorization grants. Users connect a Privy-managed (or BYO) wallet to their Cogni account; copy-trade targets and fills are RLS-scoped to the owning user; scheduled executors run under a durable `WalletGrant` (pattern from scheduler's `execution_grants`) rather than a live user session."
 outcome: "A Cogni user logs in, provisions or connects an operator wallet, and triggers copy-trade mirroring that places real Polymarket orders through THEIR wallet — no shared env credentials, no single-operator assumption. A second user's targets, fills, and decisions are invisible cross-tenant. Scheduled 30s poll and (P4) Temporal workflows run under a durable `WalletGrant` even when the user is offline."
 spec_refs:
+  - poly-multi-tenant-auth
   - operator-wallet
   - tenant-connections
+  - database-rls
+  - system-tenant
   - scheduler
   - poly-multi-tenant-auth
 assignees: derekg1729
@@ -153,28 +156,76 @@ Add tenant columns and enable RLS:
 
 In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymarketOrder` as dead surface because CP2 proved `createViemAccount` is enough. That remains correct for a single-operator path. With multi-tenant, the question is whether the **credential broker** (not the signer) belongs on `OperatorWalletPort` — something like `operatorWallet.resolvePolymarketAccount(walletConnectionId): Promise<LocalAccount>`. Decide at `/design` — but default to keeping the `createViemAccount` call inline in the executor if the indirection buys nothing.
 
-## Plan (draft checkpoints — revise at `/design`)
+## Plan — Phase A checkpoints (implementation-ready)
 
-### Phase A — tracked-wallet RLS (shared execution)
+> Reference: [docs/spec/poly-multi-tenant-auth.md](../../docs/spec/poly-multi-tenant-auth.md). Spec is `spec_state: proposed`.
+> Implementation lands on a fresh branch off the PR #932 head. Each checkpoint is a `pnpm check`-clean commit.
 
-- [ ] **A1 — Schema + migration for `poly_copy_trade_targets`**. Born tenant-scoped (`billing_account_id NOT NULL`). RLS policy mirrors `connections`. Seed dev helper for the bootstrap operator.
-- [ ] **A2 — Add `billing_account_id` + RLS to `poly_copy_trade_{fills, decisions}`**. Migrate `poly_copy_trade_config` from singleton (`singleton_id=1`) to per-tenant PK. Drop P1 prototype rows.
-- [ ] **A3 — `dbTargetSource(serviceDb)` impl** in `nodes/poly/app/src/features/copy-trade/target-source.ts`. Returns wallets keyed by tenant; container `CopyTradeTargetSource` swaps env → DB. `envTargetSource` retained for local-dev only (gated on `APP_ENV=test`).
-- [ ] **A4 — CRUD routes + contract**: `POST /api/v1/poly/copy-trade/targets`, `DELETE /api/v1/poly/copy-trade/targets/:id`. Update `polyCopyTradeTargetsOperation` contract. RLS-enforced via `appDb`.
-- [ ] **A5 — Dashboard wire-up**: enable the `+` CTA on `TopWalletsCard` (currently `disabled`). Add `−` removal button on user-owned tracked rows. Disclaimer: "Mirror execution is pooled across operators in this node; per-user wallets ship in Phase B."
-- [ ] **A6 — Container poll change**: iterate the **union** of all users' enabled targets (deduped by `target_wallet`). Reconciler still single, operator-wide.
-- [ ] **A7 — Delete `COPY_TRADE_TARGET_WALLETS` env var** from `server-env.ts`, `.env.local.example`, SKILL.md, candidate-a secret.
-- [ ] **A8 — Phase A isolation tests**: two users → two target lists; user-A cannot SELECT user-B's targets via `appDb`. Mirror correctly polls the union.
+- [ ] **A1 — DB migration** (`nodes/poly/app/src/adapters/server/db/migrations/0028_poly_copy_trade_multitenant.sql`)
+  - Drop existing rows in `poly_copy_trade_fills`, `poly_copy_trade_decisions`, `poly_copy_trade_config` (prototype debris per `/design` decision).
+  - Add `billing_account_id text NOT NULL` + `created_by_user_id text NOT NULL` to `poly_copy_trade_fills` and `poly_copy_trade_decisions`. FK → `billing_accounts(id)` and `users(id)`. `ON DELETE CASCADE` on the billing FK.
+  - Recreate `poly_copy_trade_config` with PK `(billing_account_id)`, `enabled boolean NOT NULL DEFAULT false`, `updated_at timestamptz NOT NULL DEFAULT now()`. Drop `singleton_id`.
+  - Create `poly_copy_trade_targets` table per spec § Schema.
+  - Enable RLS + force RLS on all four tables. Policy `tenant_isolation` USING/WITH CHECK `created_by_user_id = current_setting('app.current_user_id', true)`. Mirrors `connections` policy from migration `0025_add_connections.sql`.
+  - Seed bootstrap rows owned by `COGNI_SYSTEM_PRINCIPAL_USER_ID` + `COGNI_SYSTEM_BILLING_ACCOUNT_ID`: one `poly_copy_trade_config` row with `enabled = true`, plus one optional `poly_copy_trade_targets` row reading from the existing dev env var as a one-shot helper (deletable after operators provision real targets).
+  - `pnpm db:generate` — confirm zero drift against the new schema.
 
-### Phase B — per-user signing wallets (isolated execution)
+- [ ] **A2 — Drizzle schema update** (`packages/poly-db-schema/` — or wherever `poly_copy_trade_*` lives today)
+  - Add new columns + the `poly_copy_trade_targets` table to the Drizzle schema. Re-export from `@cogni/poly-db-schema` (or the local poly path).
+  - `pnpm packages:build`.
 
-- [ ] **B1 — Spike: Safe + ERC-4337 session keys**. Prove a Safe session key granted from a RainbowKit connection can place a CLOB order from the operator pod. Spike timebox: 2 days. If green, B2+ commit to Safe. If blocked, reopen Privy-per-user debate.
-- [ ] **B2 — Schema + migration for `poly_wallet_connections` + `poly_wallet_grants`**. Both tenant-scoped with RLS policies. Schema in spec doc.
-- [ ] **B3 — Wallet-connection CRUD** (server actions + dashboard): connect Safe via RainbowKit; provision session key; surface address + allowance state; "Connect wallet" button; revocation UI.
-- [ ] **B4 — Grant issuance UI + server actions**: user-set caps (daily / hourly / per-order); explicit "authorize trading" step that creates the `poly_wallet_grants` row.
-- [ ] **B5 — Executor + poll rewiring**: shared-operator path removed; poll iterates grants; per-tenant kill-switch; per-tenant `decide()` state.
-- [ ] **B6 — Add `created_by_user_id` to `poly_copy_trade_fills`** for per-user attribution. Backfill or drop Phase A pooled rows.
-- [ ] **B7 — Cross-tenant isolation tests**: two users, two wallets, two target sets; proves RLS forbids cross-reads, fills isolated, kill-switch isolated.
+- [ ] **A3 — `dbTargetSource` impl** (`nodes/poly/app/src/features/copy-trade/target-source.ts`)
+  - Add `dbTargetSource({ serviceDb })`. Implements:
+    - `listAllActive(): Promise<readonly { billingAccountId: string; createdByUserId: string; targetWallet: WalletAddress }[]>` — single SELECT joining `poly_copy_trade_targets` × `poly_copy_trade_config` where `config.enabled = true AND target.disabled_at IS NULL`. Runs on `serviceDb` (BYPASSRLS). The **only** cross-tenant read.
+    - `listForActor(userId: ActorId): Promise<readonly WalletAddress[]>` — used by the GET route. Wraps SELECT in `withTenantScope(appDb, userId, ...)`.
+  - Extend the `CopyTradeTargetSource` interface so both methods are part of the port. `envTargetSource` implements `listAllActive` returning `[{ billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID, createdByUserId: COGNI_SYSTEM_PRINCIPAL_USER_ID, targetWallet }, …]` (preserved for local-dev only, gated on `APP_ENV=test`).
+  - Container default: `dbTargetSource` outside test mode.
+
+- [ ] **A4 — CRUD routes + contract** (`packages/node-contracts/src/poly.copy-trade.targets.v1.contract.ts` + new route files)
+  - Add `polyCopyTradeTargetCreateOperation` (POST input: `{ target_wallet }`; output: target row) and `polyCopyTradeTargetDeleteOperation` (DELETE param: `id`; output: `{ deleted: boolean }`). GET keeps existing shape but switches `source: "env" | "db"` semantics to be sourced from the port.
+  - New routes: `POST /api/v1/poly/copy-trade/targets/route.ts`, `DELETE /api/v1/poly/copy-trade/targets/[id]/route.ts`. `auth: { mode: "required", getSessionUser }`. Both use `withTenantScope(appDb, sessionUser.id, ...)` — RLS enforces tenant boundary.
+  - GET route: switch from system-scope to `dbTargetSource.listForActor(sessionUser.id)` so each user sees only their own targets.
+
+- [ ] **A5 — Dashboard CRUD wire-up** (`nodes/poly/app/src/app/(app)/dashboard/_components/TopWalletsCard.tsx` + new fetch helpers)
+  - Replace the disabled `+` button with a real handler: `POST /api/v1/poly/copy-trade/targets { target_wallet }` → invalidate the targets query. Add a `−` button on tracked rows: `DELETE /api/v1/poly/copy-trade/targets/{id}` → invalidate.
+  - Add the pooled-execution disclaimer above the table: "Mirror execution is shared across all operators in this node. Per-wallet isolation ships in Phase B."
+
+- [ ] **A6 — Container poll cross-tenant enumerator** (`nodes/poly/app/src/bootstrap/container.ts` + `copy-trade-mirror.job.ts`)
+  - Replace the per-wallet loop with two passes:
+    1. Service-role SELECT via `copyTradeTargetSource.listAllActive()` → `EnumeratedTarget[]`.
+    2. **Dedup by `target_wallet`** (one wallet → one Polymarket Data-API source instance). Group attribution: each enumerated target carries `(billing_account_id, created_by_user_id)` so fills + decisions inherit tenant on insert.
+  - `mirror-coordinator.runOnce` opens `withTenantScope(appDb, target.created_by_user_id, ...)` for the fills/decisions insert path. The placement itself still uses the shared operator wallet (Phase A non-goal).
+  - Reconciler stays single, operator-wide (BYPASSRLS via `serviceDb`).
+
+- [ ] **A7 — Delete `COPY_TRADE_TARGET_WALLETS` env var**
+  - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, `.claude/skills/poly-dev-expert/SKILL.md`, candidate-a `poly-node-app-secrets`. Update `MOCK_SERVER_ENV` test fixture.
+  - `envTargetSource` is no longer wired by default; it's reachable only by direct construction in tests.
+
+- [ ] **A8 — Phase A integration + isolation tests**
+  - **Component test** (`tests/component/copy-trade/db-target-source.test.ts`, testcontainers): seed two users + two billing accounts + targets in each. Assert `listForActor(userA)` returns user-A's targets only; `listAllActive()` returns the union with correct tenant attribution.
+  - **Component test** (`tests/component/copy-trade/targets-route.test.ts`): user-A POSTs a target; user-B GETs and sees zero rows; user-B DELETE on user-A's `id` returns 404 (RLS scopes the row to invisible).
+  - **Stack test** (`tests/stack/copy-trade/multi-tenant-mirror.stack.test.ts`): seed two tenants with disjoint targets, run one mirror tick, assert (a) both tenants' decisions tables get rows, (b) cross-tenant SELECT via `appDb` returns only own rows, (c) shared operator wallet placed orders for both via the existing single placeIntent path.
+  - **psql smoke** (commit a `scripts/experiments/poly-rls-smoke.sh`): `SET LOCAL app.current_user_id = '<userA>'; INSERT INTO poly_copy_trade_targets (..., created_by_user_id) VALUES (..., '<userB>');` is rejected by `WITH CHECK`.
+
+### Phase A invariants (block PR merge)
+
+- TENANT_SCOPED_ROWS, GRANT_REQUIRED_FOR_PLACEMENT (vacuous in A — no per-user grants yet), PER_TENANT_KILL_SWITCH, KEY_NEVER_IN_APP, TARGET_SOURCE_TENANT_SCOPED, CROSS_TENANT_ISOLATION_TESTED, FAIL_CLOSED_ON_DB_ERROR per [poly-multi-tenant-auth](../../docs/spec/poly-multi-tenant-auth.md).
+- Bootstrap-tenant rows created in A1 are valid system-tenant rows; they survive the migration and pass RLS when the executor runs under `withTenantScope(appDb, COGNI_SYSTEM_PRINCIPAL_USER_ID, ...)`.
+
+## Plan — Phase B sketch (defer detailed design until after B1 spike)
+
+- [ ] **B1 — Spike: Safe + ERC-4337 session keys** (timebox: 2 days). Prove a session key granted from a Safe (connected via RainbowKit) can place a Polymarket CLOB order from the operator pod. Capture: bundler cost per order ($1 mirror size has thin margin), session-key scope expressivity, revocation latency.
+- [ ] **B2-B7 — re-design after the spike**. Spec bumps to cover backend-specific schema for `poly_wallet_connections.backend_ref`, grant scope semantics, and the executor rewiring. Existing draft checkpoints in this section are the target shape; concrete sequencing depends on the B1 outcome.
+
+| Checkpoint                                                            | Status     |
+| --------------------------------------------------------------------- | ---------- |
+| B1 — Safe + 4337 spike                                                | Pending    |
+| B2 — `poly_wallet_connections` + `poly_wallet_grants` schema + RLS    | Pending B1 |
+| B3 — Wallet-connection CRUD (RainbowKit → Safe → session key)         | Pending B1 |
+| B4 — Grant issuance UI + server actions                               | Pending B1 |
+| B5 — Executor + poll rewiring (per-tenant signers, per-grant caps)    | Pending B1 |
+| B6 — Per-user fill attribution (drop Phase A pooled rows or backfill) | Pending B1 |
+| B7 — Cross-tenant isolation tests across wallets + grants + fills     | Pending B1 |
 
 ## Invariants
 
@@ -190,18 +241,20 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
 - [ ] CROSS_TENANT_ISOLATION_TESTED: an integration test with two users proves user-A cannot read / cancel / see user-B's fills, decisions, or config.
 - [ ] REVOCATION_HALTS_PLACEMENT: setting `poly_wallet_grants.revoked_at` halts placement from the NEXT poll cycle. In-flight orders complete; no new orders place.
 
-## Open questions (resolve at `/design`)
+## Decisions (resolved 2026-04-19 at `/design`)
 
-- **Safe session-keys vs Privy-per-user (B-phase)**: leaning Safe (OSS-aligned, CLAUDE.md mission). Decide after B1 spike.
-- **Phase A pooled-execution UX**: how to message that fills are not user-attributable yet. Disclaimer banner vs feature-flag the "fills" view per-user-only.
-- **Bootstrap operator**: do we keep a "system" operator that the existing P1 tests / scripts can use, or move everything to a real `billing_account_id`? Leaning toward a `billing_accounts` row with `id='system:poly-bootstrap'` + a helper seed migration.
-- **Pre-existing P1 rows**: drop (prototype debris) vs backfill to bootstrap operator. Drop is simpler; backfill preserves the CP5 dress-rehearsal `order_id` evidence if anyone already placed one.
-- **BYO wallet (imported EOAs) timeline**: punt to follow-up task, or include a thin import path in CP3? Leaning punt — Privy-only is enough to exercise the whole grant flow.
-- **SSR vs client wallet creation**: Privy HSM wallets are server-provisioned; ensure the dashboard CRUD happens through a server action, not client SDK (avoid leaking app-secret key material).
-- **Revocation during an active poll tick**: do we cancel placed orders, or just halt future placements? Leaning halt-only — cancellation via a separate explicit "emergency cancel" action.
-- **Per-tenant observability**: `decisions_total{outcome, reason, source, billing_account_id}` — is `billing_account_id` as a Prometheus label safe, or do we need to hash / bucket? Follow-up with observability owner.
+See [docs/spec/poly-multi-tenant-auth.md § Decisions](../../docs/spec/poly-multi-tenant-auth.md#decisions-resolved-2026-04-19-at-design) for the canonical record. Summary:
 
-## Alignment decisions (TBD at `/design`)
+- **Bootstrap operator**: reuse `COGNI_SYSTEM_PRINCIPAL_USER_ID` + `COGNI_SYSTEM_BILLING_ACCOUNT_ID` from [system-tenant](../../docs/spec/system-tenant.md). The A1 migration seeds the system tenant's `poly_copy_trade_config` + (optionally) one `poly_copy_trade_targets` row. Existing dev / candidate-a flights run as the system tenant.
+- **Pre-existing prototype rows**: drop in the migration. No production users to preserve.
+- **Per-tenant Prometheus labels**: do not add `billing_account_id` as a label (cardinality bomb). Pino JSON → Loki for per-tenant slicing.
+- **Revocation**: halt-future-only. Cancellation is a separate emergency-cancel action, out of scope.
+- **Safe vs Privy (Phase B)**: leaning Safe + 4337 session keys (OSS-aligned). Final decision after the B1 spike.
+- **BYO imported EOAs**: punt to a follow-up task. Phase B's recognized backends are Safe / Privy / Turnkey only.
+- **SSR vs client wallet creation**: server actions only. The Privy app secret never touches the browser; same rule applies to Safe session-key signing material.
+- **Phase A pooled-execution UX**: disclaimer banner above the targets table.
+
+## Alignment decisions
 
 - This task does NOT touch the on-chain allowance flow (task.0315 CP3.1) — allowances are per-EOA and set once at wallet provisioning; wallet-scoped, not user-scoped.
 - This task does NOT introduce DAO-wide treasury trading (that was the original project charter's end-state). Per-user wallets are the correct step; DAO treasury re-enters as a separate wallet-kind after paper-soak evidence.

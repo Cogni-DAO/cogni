@@ -3,14 +3,14 @@ id: poly-multi-tenant-auth
 type: spec
 title: Poly Multi-Tenant Auth — Tracked Wallets, Actor Wallets, Grants & RLS
 status: draft
-spec_state: draft
+spec_state: proposed
 trust: draft
 summary: Tenant-isolated copy-trade for the poly node — `poly_copy_trade_*` tables RLS-scoped by `billing_account_id`, per-tenant signing wallet via a portable `WalletSignerPort` (Safe + ERC-4337 session keys preferred over Privy-per-user), and durable `poly_wallet_grants` that authorize autonomous placement when the user is offline.
 read_when: Adding tables to the poly node, touching the copy-trade executor, wiring a new signing backend, implementing the dashboard CRUD for tracked wallets or wallet connections, or auditing tenant isolation.
 implements: proj.poly-prediction-bot
 owner: derekg1729
 created: 2026-04-19
-verified: null
+verified: 2026-04-19
 tags: [poly, polymarket, copy-trading, auth, rls, multi-tenant, wallets, web3]
 ---
 
@@ -39,7 +39,7 @@ Define the contract for a multi-tenant Polymarket copy-trade system in which (a)
 - Multiple actor wallets per tenant. One active `poly_wallet_connections` row per `billing_account_id`.
 - Mid-flight cancellation when a grant is revoked. Revocation halts **future** placements; in-flight orders complete.
 - DAO-treasury-funded trading. Per-user wallets only — DAO treasury is a future, separate wallet kind.
-- Migrating Phase-0 single-tenant prototype rows. They are dropped on the migration that introduces tenant columns.
+- Backfilling Phase-0 single-tenant prototype rows to a tenant. They are dropped by the migration that introduces tenant columns (see Decisions).
 
 ## Design
 
@@ -84,7 +84,15 @@ graph TD
 | **Tracked wallets** | "Which Polymarket wallets is this user mirroring?"                                       | `poly_copy_trade_targets`                        | `CopyTradeTargetSource` (already exists; today env-backed, lands DB-backed under this spec) |
 | **Actor wallets**   | "Which on-chain wallet places this user's mirror trades, and who's authorized to do so?" | `poly_wallet_connections` + `poly_wallet_grants` | `WalletSignerPort` (new — abstracts Safe / Privy / Turnkey)                                 |
 
-Both layers share the same tenant key: `billing_account_id`. RLS enforces isolation at the database; the executor is a thin orchestrator over the two ports.
+Both layers share the same tenant boundary: `billing_account_id` is the **data column**, but RLS policies key on `created_by_user_id = current_setting('app.current_user_id', true)` — the established pattern from [`connections`](./tenant-connections.md) and [database-rls](./database-rls.md). One billing account → one user (today; multi-user-per-account is a future RBAC concern). The executor is a thin orchestrator over the two ports.
+
+### Tenant resolution & bootstrap
+
+| Caller                                                          | DB role                                           | RLS context                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authenticated HTTP route (CRUD on targets, connections, grants) | `app_user` (RLS enforced)                         | `withTenantScope(appDb, sessionUser.id, ...)` — uses existing helper from `@cogni/db-client/tenant-scope`                                                                                                                                                                                                                                                                                             |
+| Mirror-poll cross-tenant enumerator                             | `app_service` (BYPASSRLS)                         | none — the enumerator returns `(billing_account_id, created_by_user_id, target_wallet)` triples and the **per-tenant inner loop** then opens a `withTenantScope(appDb, created_by_user_id, ...)` for fills/decisions/config writes                                                                                                                                                                    |
+| Bootstrap operator (seed migration + dev / candidate-a flights) | `app_service` for the seed; `app_user` thereafter | `COGNI_SYSTEM_PRINCIPAL_USER_ID` (`00000000-0000-4000-a000-000000000001`) + `COGNI_SYSTEM_BILLING_ACCOUNT_ID` (`00000000-0000-4000-b000-000000000000`) per [system-tenant](./system-tenant.md). The seed migration inserts a `poly_copy_trade_config` row + (optionally) a `poly_copy_trade_targets` row owned by the system tenant so the existing single-operator candidate-a flight keeps working. |
 
 ### Signing backends — `WalletSignerPort` abstracts the choice
 
@@ -127,7 +135,7 @@ Then `decide()` runs against `grant`-scoped caps (`per_order_usdc_cap`, `daily_u
 Constraints:
 
 - `UNIQUE (billing_account_id, target_wallet) WHERE disabled_at IS NULL` — one active row per (tenant, wallet)
-- RLS: `USING (billing_account_id = current_setting('app.current_billing_account_id', true))`
+- RLS: `USING (billing_account_id = current_setting('app.current_user_id', true))`
 
 > No per-target `enabled` flag, no per-target caps. Per-tenant `poly_copy_trade_config.enabled` is the kill-switch; caps come from `poly_wallet_grants`.
 
@@ -219,7 +227,7 @@ Per [database-rls](./database-rls.md) § `SERVICE_BYPASS_CONTAINED`: the service
 
 | Rule                              | Constraint                                                                                                                                                                                                                                                                                                 |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TENANT_SCOPED_ROWS                | Every `poly_copy_trade_*` and `poly_wallet_*` table has `billing_account_id NOT NULL` + RLS policy `USING (billing_account_id = current_setting('app.current_billing_account_id', true))`. No row may exist without a tenant.                                                                              |
+| TENANT_SCOPED_ROWS                | Every `poly_copy_trade_*` and `poly_wallet_*` table has `billing_account_id NOT NULL` + RLS policy `USING (billing_account_id = current_setting('app.current_user_id', true))`. No row may exist without a tenant.                                                                                         |
 | GRANT_REQUIRED_FOR_PLACEMENT      | Executor MUST resolve an active, unrevoked, unexpired `poly_wallet_grants` row before invoking `walletSigner.placeOrder`. Missing grant → skip with `reason = no_active_grant`.                                                                                                                            |
 | SCOPES_ENFORCED                   | A grant's `scopes` array gates the corresponding intent: `poly:trade:buy` for BUY, `poly:trade:sell` for SELL. Missing scope → skip with `reason = scope_missing`.                                                                                                                                         |
 | PER_TENANT_KILL_SWITCH            | `poly_copy_trade_config.enabled` is per-`billing_account_id`. Flipping one tenant's row has zero effect on other tenants. Default-`false` is fail-closed.                                                                                                                                                  |
@@ -261,13 +269,15 @@ Per [database-rls](./database-rls.md) § `SERVICE_BYPASS_CONTAINED`: the service
 | 8   | Address uniqueness: attempting to insert a second un-revoked `poly_wallet_connections` row with an existing `(chain_id, address)` is rejected by the partial unique index.                                                                      |
 | 9   | `pnpm check` clean. `pnpm check:docs` clean. Drizzle `db:generate` produces zero drift against the new schema.                                                                                                                                  |
 
-## Open Questions
+## Decisions (resolved 2026-04-19 at `/design`)
 
-- [ ] Bootstrap operator: keep a `system:poly-bootstrap` `billing_accounts` row for the existing PR #932 single-operator path, or hard-cut everything to real tenants on the migration? Default-leaning: bootstrap row + helper seed migration so dev / candidate-a flights keep working.
-- [ ] Pre-existing Phase-0 rows in `poly_copy_trade_fills`: drop or backfill to `system:poly-bootstrap`?
-- [ ] Per-tenant Prometheus labels (`billing_account_id` on `poly_mirror_decisions_total`): cardinality-safe, or hash / bucket? Coordinate with observability owner.
-- [ ] Safe + 4337 spike: confirm session-key scope can be narrow enough to authorize **only** Polymarket Exchange + Neg-Risk Exchange + CTF approvals + CLOB order signing, and that the bundler cost is acceptable per fill ($1 mirror size has thin margin).
-- [ ] Revocation during an active poll tick: best-effort cancel placed-but-unfilled orders, or pure halt-future-only? Default-leaning: halt-only; an explicit "emergency cancel" action is a separate UI affordance.
+| Question                                                            | Decision                                                                                                                                                                                                                                                                                                                                                         | Rationale                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Bootstrap operator                                                  | Reuse `COGNI_SYSTEM_PRINCIPAL_USER_ID` + `COGNI_SYSTEM_BILLING_ACCOUNT_ID` from [system-tenant](./system-tenant.md). The same migration that creates `poly_copy_trade_targets` seeds one row owned by the system tenant + one `poly_copy_trade_config` row with `enabled = true`.                                                                                | Avoids inventing a new `system:poly-bootstrap` ID. The system tenant is already the canonical "no human owner" identity in the codebase. Dev / candidate-a flights run as the system tenant; real users are layered on top. |
+| Pre-existing Phase-0 rows in `poly_copy_trade_fills` / `_decisions` | **Drop** in the migration.                                                                                                                                                                                                                                                                                                                                       | Prototype debris, no production users (pre-PR-#932). Backfill is engineering time spent on data with no readers.                                                                                                            |
+| Per-tenant Prometheus labels                                        | **Do not add `billing_account_id` as a Prometheus label.** Aggregate counters stay across-tenant (`poly_mirror_decisions_total{outcome, reason, source}`). Per-tenant slicing comes from Pino JSON → Loki query.                                                                                                                                                 | Tenant cardinality is unbounded; adding it as a label is a known anti-pattern. Loki is the correct slice layer.                                                                                                             |
+| Revocation during an active poll tick                               | **Halt-future-only.** Setting `revoked_at` halts placement from the next coordinator tick; in-flight orders complete. Cancellation is a separate explicit "emergency cancel" UI affordance, out of scope here.                                                                                                                                                   | Cancellation logic introduces failure modes (CLOB-side race conditions, partial-fill ambiguity) that aren't worth bundling with the auth contract. Revocation is about future authority, not undoing the past.              |
+| Safe + 4337 spike scope                                             | Defer detailed design until after the **B1 spike** (timeboxed in [task.0318](../../work/items/task.0318.poly-wallet-multi-tenant-auth.md)). Phase B's signing-backend invariants in this spec hold regardless of which backend(s) ship; concrete schema for `poly_wallet_connections.backend_ref` and `poly_wallet_grants` lands in a spec-bump after the spike. | The Phase A contract (tracked-wallet RLS over the existing shared operator wallet) does not depend on Phase B's backend choice and can ship independently.                                                                  |
 
 ## Related
 
