@@ -10,10 +10,10 @@
  *   - EFFECT_TYPED: effect is `external_side_effect` — real money moves on success
  *   - REDACTION_REQUIRED: allowlist limited to fields safe for agent surfacing; no client secrets
  *   - NO_LANGCHAIN: no LangChain imports
- *   - BUY_ONLY: SELL requires CTF setApprovalForAll which is out of prototype scope
+ *   - PLACE_TRADE_IS_BUY_ONLY: `placeTrade` on the capability rejects SELL (agent-safety). The coordinator/reconciler use `closePosition` which lifts this restriction for autonomous exit.
  *   - CAPABILITY_NOT_ADAPTER: the tool talks to `PolyTradeCapability`, never `PolymarketClobAdapter` directly
  * Side-effects: none
- * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.25)
+ * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.25), work/items/task.0323.md
  * @public
  */
 
@@ -90,6 +90,19 @@ export interface PolyListOpenOrdersRequest {
 }
 
 /**
+ * Request to close an open position. Coordinator/reconciler use this path;
+ * agents use the dedicated `core__poly_close_position` tool which calls here.
+ */
+export interface PolyClosePositionRequest {
+  /** ERC-1155 asset id (token) whose position to close. */
+  tokenId: string;
+  /** Notional USDC cap. Actual size = min(cap, position market value). */
+  max_size_usdc: number;
+  /** Limit price; defaults to aggressive take-bid pricing if omitted. */
+  limit_price?: number;
+}
+
+/**
  * Minimal capability the poly-app container wires. The real implementation
  * (in `bootstrap/capabilities/poly-trade.ts`) injects the Privy signer + CLOB
  * adapter; the tool layer never sees those.
@@ -98,6 +111,10 @@ export interface PolyTradeCapability {
   placeTrade(request: PolyPlaceTradeRequest): Promise<PolyPlaceTradeReceipt>;
   listOpenOrders(request?: PolyListOpenOrdersRequest): Promise<PolyOpenOrder[]>;
   cancelOrder(orderId: string): Promise<void>;
+  /** Close an open position via SELL. Routes through `bundle.closePosition`. */
+  closePosition(
+    request: PolyClosePositionRequest
+  ): Promise<PolyPlaceTradeReceipt>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
