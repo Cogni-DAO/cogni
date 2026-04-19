@@ -113,6 +113,18 @@ export interface OrderReconcilerDeps {
 /** Stops the reconciler. Returned so the container can call on SIGTERM. */
 export type ReconcilerStopFn = () => void;
 
+/**
+ * Handle returned by `startOrderReconciler`.
+ * `stop` clears the interval; `getLastTickAt` returns the wall time of the last
+ * successful tick (after `markSynced` completed), or null before the first tick.
+ *
+ * SYNC_HEALTH_IS_PUBLIC invariant (task.0328 CP4).
+ */
+export interface OrderReconcilerHandle {
+  stop: ReconcilerStopFn;
+  getLastTickAt: () => Date | null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Receipt status → LedgerStatus map (mirrors order-ledger.ts `mapReceiptStatus`)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,13 +282,14 @@ export async function runReconcileOnce(
 
 /**
  * Start the 60s reconciler poll. Emits
- * `poly.mirror.reconcile.singleton_claim` at boot. Returns a stop fn.
+ * `poly.mirror.reconcile.singleton_claim` at boot. Returns an
+ * `OrderReconcilerHandle` with `stop` + `getLastTickAt`.
  *
  * @public
  */
 export function startOrderReconciler(
   deps: OrderReconcilerDeps
-): ReconcilerStopFn {
+): OrderReconcilerHandle {
   const log = deps.logger.child({
     component: "order-reconciler-job",
     operator_wallet: deps.operatorWalletAddress,
@@ -290,9 +303,16 @@ export function startOrderReconciler(
     "order reconciler starting (SINGLE_WRITER — alert on duplicate pods running this)"
   );
 
+  // In-memory last-tick timestamp. Updated at the END of each successful tick
+  // (after markSynced completes). Null before first tick completes.
+  // SYNC_HEALTH_IS_PUBLIC invariant (task.0328 CP4).
+  let lastTickAt: Date | null = null;
+
   async function tick(): Promise<void> {
     try {
       await runReconcileOnce(deps);
+      // Stamp AFTER the full tick (including markSynced) succeeds.
+      lastTickAt = new Date();
     } catch (err: unknown) {
       // Belt-and-suspenders: `runReconcileOnce` already catches per-row errors.
       // Anything escaping here is a structural bug (e.g. ledger query threw).
@@ -311,15 +331,20 @@ export function startOrderReconciler(
   // First tick fires immediately.
   void tick();
 
-  const handle = setInterval(() => {
+  const intervalHandle = setInterval(() => {
     void tick();
   }, RECONCILE_POLL_MS);
 
-  return function stop() {
-    clearInterval(handle);
-    log.info(
-      { event: EVENT_NAMES.POLY_MIRROR_RECONCILE_STOPPED },
-      "order reconciler stopped"
-    );
+  return {
+    stop() {
+      clearInterval(intervalHandle);
+      log.info(
+        { event: EVENT_NAMES.POLY_MIRROR_RECONCILE_STOPPED },
+        "order reconciler stopped"
+      );
+    },
+    getLastTickAt() {
+      return lastTickAt;
+    },
   };
 }

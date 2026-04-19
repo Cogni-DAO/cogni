@@ -119,7 +119,10 @@ import { createWebSearchCapability } from "@/bootstrap/capabilities/web-search";
 import { createWorkItemCapability } from "@/bootstrap/capabilities/work-item";
 import type { RateLimitBypassConfig } from "@/bootstrap/http/wrapPublicRoute";
 import { startMirrorPoll } from "@/bootstrap/jobs/copy-trade-mirror.job";
-import { startOrderReconciler } from "@/bootstrap/jobs/order-reconciler.job";
+import {
+  type OrderReconcilerHandle,
+  startOrderReconciler,
+} from "@/bootstrap/jobs/order-reconciler.job";
 import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import type {
   AccountService,
@@ -259,6 +262,14 @@ export interface Container {
    * Any new route reaching for this field should instead gate on RLS.
    */
   serviceDb: Database;
+  /**
+   * Returns the wall time of the last completed reconciler tick, or null if
+   * the reconciler has not ticked in this process (e.g. Polymarket creds
+   * absent, or still awaiting first tick).
+   *
+   * SYNC_HEALTH_IS_PUBLIC invariant (task.0328 CP4).
+   */
+  reconcilerLastTickAt: () => Date | null;
 }
 
 // Feature-specific dependency types
@@ -289,6 +300,9 @@ let _workflowClientPromise: Promise<{
   client: WorkflowClient;
   taskQueue: string;
 }> | null = null;
+// Reconciler handle — set when the reconciler starts (async boot path).
+// Null until Polymarket creds are present and the async initialiser fires.
+let _reconcilerHandle: OrderReconcilerHandle | null = null;
 
 /**
  * Get the singleton container instance.
@@ -308,6 +322,7 @@ export function getContainer(): Container {
 export function resetContainer(): void {
   _container = null;
   _webhookRegistrations = null;
+  _reconcilerHandle = null;
   if (_temporalConnection) {
     void _temporalConnection.close();
   }
@@ -691,7 +706,7 @@ function createContainer(): Container {
 
         // Ledger reconciler — syncs open/pending rows from CLOB getOrder
         // (task.0323 §2, @scaffolding, Deleted-in-phase: 4)
-        startOrderReconciler({
+        _reconcilerHandle = startOrderReconciler({
           ledger,
           getOrder: polyTradeBundle.getOrder,
           getOperatorPositions: polyTradeBundle.getOperatorPositions,
@@ -968,6 +983,9 @@ function createContainer(): Container {
     })(),
     polyTradeBundle,
     serviceDb,
+    reconcilerLastTickAt() {
+      return _reconcilerHandle?.getLastTickAt() ?? null;
+    },
   };
 }
 

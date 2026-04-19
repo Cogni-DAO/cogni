@@ -30,5 +30,6 @@ export type {
   OrderLedger,
   RecordDecisionInput,
   StateSnapshot,
+  SyncHealthSummary,
   UpdateStatusInput,
 } from "./order-ledger.types";

@@ -72,6 +72,7 @@ export * from "./payments.submit.v1.contract";
 // ── Poly copy-trade (task.0315, @scaffolding surfaces — removed in Phase 4) ─
 export * from "./poly.copy-trade.orders.v1.contract";
 export * from "./poly.copy-trade.targets.v1.contract";
+export * from "./poly.sync-health.v1.contract";
 export * from "./poly.wallet.balance.v1.contract";
 // ── Runs ────────────────────────────────────────────────────────────────────
 export * from "./run-stream.contract";

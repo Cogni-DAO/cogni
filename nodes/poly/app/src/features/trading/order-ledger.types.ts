@@ -111,6 +111,22 @@ export interface UpdateStatusInput {
 }
 
 /**
+ * Aggregate freshness stats returned by `syncHealthSummary`.
+ * Used by GET /api/v1/poly/internal/sync-health.
+ *
+ * `oldest_unsynced_row_age_ms` — age in ms of the least-recently-synced row
+ *   that HAS a non-null `synced_at`. Null when no row has ever been synced.
+ *   Never-synced rows are counted in `rows_never_synced` instead.
+ *
+ * SYNC_HEALTH_IS_PUBLIC invariant (task.0328 CP4).
+ */
+export interface SyncHealthSummary {
+  oldest_unsynced_row_age_ms: number | null;
+  rows_stale_over_60s: number;
+  rows_never_synced: number;
+}
+
+/**
  * Order ledger port. Production adapter is `createOrderLedger({ db })` in
  * `order-ledger.ts`; tests use `FakeOrderLedger` from
  * `adapters/test/trading/fake-order-ledger`. Every placement path in the poly
@@ -187,4 +203,12 @@ export interface OrderLedger {
    * SYNCED_AT_WRITTEN_ON_EVERY_SYNC invariant (task.0328 CP3).
    */
   markSynced(client_order_ids: string[]): Promise<void>;
+
+  /**
+   * Return aggregate sync-freshness stats for the health endpoint.
+   * One DB round-trip (three filtered aggregates in a single SELECT).
+   *
+   * SYNC_HEALTH_IS_PUBLIC invariant (task.0328 CP4).
+   */
+  syncHealthSummary(): Promise<SyncHealthSummary>;
 }

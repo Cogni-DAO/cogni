@@ -34,6 +34,7 @@ import type {
   OrderLedger,
   RecordDecisionInput,
   StateSnapshot,
+  SyncHealthSummary,
   UpdateStatusInput,
 } from "./order-ledger.types";
 
@@ -327,6 +328,48 @@ export function createOrderLedger(deps: OrderLedgerDeps): OrderLedger {
         .update(polyCopyTradeFills)
         .set({ syncedAt: sql`now()` })
         .where(inArray(polyCopyTradeFills.clientOrderId, client_order_ids));
+    },
+
+    async syncHealthSummary(): Promise<SyncHealthSummary> {
+      // Single round-trip: three filtered aggregates in one SELECT.
+      // oldest_ms — age of least-recently-synced row that HAS synced_at.
+      //   Only rows with non-null synced_at qualify; never-synced rows are
+      //   counted separately in never_synced.
+      // stale_60s — rows whose synced_at is older than 60 seconds.
+      // never_synced — rows with NULL synced_at.
+      const rows = await deps.db.execute(
+        sql<{
+          oldest_ms: string | null;
+          stale_60s: string;
+          never_synced: string;
+        }>`
+          SELECT
+            CAST(
+              EXTRACT(EPOCH FROM (now() - MIN(${polyCopyTradeFills.syncedAt})))
+              * 1000
+              AS bigint
+            ) FILTER (WHERE ${polyCopyTradeFills.syncedAt} IS NOT NULL) AS oldest_ms,
+            COUNT(*) FILTER (
+              WHERE ${polyCopyTradeFills.syncedAt} IS NOT NULL
+                AND ${polyCopyTradeFills.syncedAt} < now() - interval '60 seconds'
+            ) AS stale_60s,
+            COUNT(*) FILTER (
+              WHERE ${polyCopyTradeFills.syncedAt} IS NULL
+            ) AS never_synced
+          FROM ${polyCopyTradeFills}
+        `
+      );
+
+      const row = rows.rows[0] as
+        | { oldest_ms: string | null; stale_60s: string; never_synced: string }
+        | undefined;
+
+      return {
+        oldest_unsynced_row_age_ms:
+          row?.oldest_ms != null ? Number(row.oldest_ms) : null,
+        rows_stale_over_60s: Number(row?.stale_60s ?? 0),
+        rows_never_synced: Number(row?.never_synced ?? 0),
+      };
     },
   };
 }
