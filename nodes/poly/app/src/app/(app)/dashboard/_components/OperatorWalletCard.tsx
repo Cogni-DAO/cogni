@@ -3,25 +3,24 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/OperatorWalletCard`
- * Purpose: Operator wallet snapshot — USDC.e available, USDC locked in Polymarket open orders, total, POL gas.
+ * Purpose: Operator wallet snapshot — one horizontal stacked bar showing USDC available vs. locked in Polymarket open orders, plus the operator address and a compact stale / low-gas pill.
  * Scope: Client component. React Query poll. Read-only.
  * Invariants:
- *   - SINGLE_TENANT_PROTOTYPE: card reflects a single env-pinned wallet (POLY_PROTO_WALLET_ADDRESS).
- *   - READ_ONLY: no deposit/withdraw controls.
- *   - EOA_PROFILE_PITFALL: we link to Polygonscan + Data-API /positions, NOT the polymarket.com profile, because EOA-direct trades redirect the profile page to an empty Safe-proxy. See `.claude/skills/poly-dev-expert/SKILL.md`.
+ *   - SINGLE_TENANT_PROTOTYPE: reflects a single env-pinned wallet (POLY_PROTO_WALLET_ADDRESS).
+ *   - READ_ONLY.
+ *   - NO_RAW_ERRORS: backend `error_reason` string is never rendered directly — only a compact pill.
  * Side-effects: IO (via React Query)
  * Links: packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
  * @public
  */
 
-// TODO(task.0315 P2 / single-tenant auth):
-// This card assumes one operator wallet shared across all UI sessions.
-// Replace with per-user wallet resolution once multi-tenant Privy auth lands.
+// TODO(task.0315 P2 / single-tenant auth): replace env-pinned wallet with
+// per-user resolution once multi-tenant Privy auth lands.
 
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Wallet } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components";
 import { cn } from "@/shared/util/cn";
@@ -42,7 +41,7 @@ function CopyAddressButton({ address }: { address: string }): ReactElement {
           setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground text-xs hover:bg-muted hover:text-foreground"
+      className="inline-flex items-center rounded px-1 py-0.5 text-muted-foreground hover:text-foreground"
     >
       {copied ? (
         <Check className="size-3 text-success" />
@@ -63,11 +62,6 @@ export function OperatorWalletCard(): ReactElement {
     retry: 1,
   });
 
-  // Two distinct "no data" states:
-  //   - configured=false (wallet env unset, zero-address sentinel) → show
-  //     the setup hint.
-  //   - isError / !data after load                                 → show
-  //     a load-failure message, NOT the setup hint (which would be a lie).
   const configured = Boolean(data && data.operator_address !== ZERO_ADDR);
   const total = data?.usdc_total ?? 0;
   const availablePct =
@@ -78,196 +72,117 @@ export function OperatorWalletCard(): ReactElement {
     <Card>
       <CardHeader className="px-5 py-3">
         <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Wallet className="size-4 text-muted-foreground" />
-            <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
-              Operator Wallet
-            </CardTitle>
-          </div>
-          {configured && data ? (
-            <div className="flex items-center gap-1 font-mono text-muted-foreground text-xs">
-              <a
-                href={`https://polygonscan.com/address/${data.operator_address}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="hover:underline"
-                title="View on Polygonscan"
+          <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+            Operator Wallet
+          </CardTitle>
+          <div className="flex items-center gap-2 text-xs">
+            {data?.stale ? (
+              <span
+                className="rounded bg-warning/15 px-1.5 py-0.5 text-warning"
+                title="Some reads failed. Values may be partial."
               >
-                {formatShortWallet(data.operator_address)}
-              </a>
-              <CopyAddressButton address={data.operator_address} />
-              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs uppercase tracking-wide">
-                USDC.e · Polygon
+                stale
               </span>
-            </div>
-          ) : null}
+            ) : null}
+            {data && data.pol_gas <= 0.1 ? (
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5",
+                  data.pol_gas <= 0
+                    ? "bg-destructive/15 text-destructive"
+                    : "bg-warning/15 text-warning"
+                )}
+                title={
+                  data.pol_gas <= 0
+                    ? "No POL balance — operator cannot pay gas."
+                    : `Low POL — ${data.pol_gas.toFixed(4)}`
+                }
+              >
+                {data.pol_gas <= 0 ? "no gas" : "low gas"}
+              </span>
+            ) : null}
+            {configured && data ? (
+              <span className="inline-flex items-center gap-1 font-mono text-muted-foreground">
+                <a
+                  href={`https://polygonscan.com/address/${data.operator_address}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="hover:text-foreground"
+                >
+                  {formatShortWallet(data.operator_address)}
+                </a>
+                <CopyAddressButton address={data.operator_address} />
+              </span>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 px-5 pb-5">
+      <CardContent className="px-5 pt-1 pb-4">
         {isLoading ? (
-          <div className="animate-pulse space-y-3">
-            <div className="h-16 rounded bg-muted" />
-            <div className="h-2 rounded bg-muted" />
-          </div>
+          <div className="h-10 animate-pulse rounded bg-muted" />
         ) : isError || !data ? (
-          <p className="text-center text-muted-foreground text-sm">
+          <p className="py-2 text-muted-foreground text-sm">
             Couldn't load wallet balance. Will retry shortly.
           </p>
         ) : !configured ? (
-          <p className="text-center text-muted-foreground text-sm">
+          <p className="py-2 text-muted-foreground text-sm">
             No operator wallet configured. Set{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
               POLY_PROTO_WALLET_ADDRESS
-            </code>{" "}
-            to enable.
+            </code>
+            .
           </p>
+        ) : total === 0 ? (
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-semibold tabular-nums">$0.00</span>
+          </div>
         ) : (
-          <>
-            {/* Three-stat header */}
-            <div className="grid grid-cols-3 gap-4">
-              <Stat
-                label="Total"
-                value={formatUsdc(total)}
-                hint={data.stale ? "(partial data)" : "available + locked"}
-              />
-              <Stat
-                label="Locked in orders"
-                value={formatUsdc(data.usdc_locked)}
-                hint={
-                  data.usdc_locked > 0
-                    ? `${((data.usdc_locked / total) * 100).toFixed(1)}%`
-                    : "—"
-                }
-                tone="locked"
-              />
-              <Stat
-                label="Available"
-                value={formatUsdc(data.usdc_available)}
-                hint="USDC.e"
-                tone="available"
-              />
-            </div>
-
-            {/* Stacked allocation bar */}
-            {total > 0 ? (
-              <div className="space-y-1.5">
-                <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="bg-success/70"
-                    style={{ width: `${availablePct}%` }}
-                    title={`Available: ${formatUsdc(data.usdc_available)}`}
-                  />
-                  <div
-                    className="bg-warning/70"
-                    style={{ width: `${lockedPct}%` }}
-                    title={`Locked: ${formatUsdc(data.usdc_locked)}`}
-                  />
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-xs">
-                  <Legend swatch="bg-success/70" label="Available" />
-                  <Legend swatch="bg-warning/70" label="Locked" />
-                </div>
+          <div className="space-y-2">
+            {/* Single-row summary: total on the left, component legend+values on the right. */}
+            <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-sm">
+              <div className="flex items-baseline gap-2">
+                <span className="text-muted-foreground text-xs uppercase tracking-wide">
+                  Total
+                </span>
+                <span className="font-semibold text-base tabular-nums">
+                  {formatUsdc(total)}
+                </span>
               </div>
-            ) : null}
-
-            {/* POL gas + ground-truth links */}
-            <div className="flex items-center justify-between border-t pt-3 text-sm">
-              <span className="flex items-center gap-2 text-muted-foreground">
-                POL (gas)
-                {data.pol_gas <= 0 ? (
-                  <span
-                    className="rounded bg-destructive/20 px-1.5 py-0.5 text-destructive text-xs"
-                    title="No POL balance — operator cannot pay gas. Top up now."
-                  >
-                    empty
+              <div className="flex items-center gap-4 text-muted-foreground text-xs">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block size-2 rounded-sm bg-success/70" />
+                  Available{" "}
+                  <span className="text-foreground tabular-nums">
+                    {formatUsdc(data.usdc_available)}
                   </span>
-                ) : data.pol_gas < 0.1 ? (
-                  <span
-                    className="rounded bg-warning/20 px-1.5 py-0.5 text-warning text-xs"
-                    title="Low POL balance — top up before the operator can't pay gas."
-                  >
-                    low
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block size-2 rounded-sm bg-warning/70" />
+                  Locked{" "}
+                  <span className="text-foreground tabular-nums">
+                    {formatUsdc(data.usdc_locked)}
                   </span>
-                ) : null}
-              </span>
-              <span className="tabular-nums">{data.pol_gas.toFixed(4)}</span>
+                </span>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 border-t pt-3 text-xs">
-              <span className="text-muted-foreground">Ground truth:</span>
-              <a
-                href={`https://data-api.polymarket.com/positions?user=${data.operator_address}`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                positions <ExternalLink className="size-3" />
-              </a>
-              <a
-                href={`https://data-api.polymarket.com/trades?user=${data.operator_address}&limit=10`}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-              >
-                trades <ExternalLink className="size-3" />
-              </a>
+            {/* Horizontal stacked bar. */}
+            <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="bg-success/70"
+                style={{ width: `${availablePct}%` }}
+                title={`Available: ${formatUsdc(data.usdc_available)}`}
+              />
+              <div
+                className="bg-warning/70"
+                style={{ width: `${lockedPct}%` }}
+                title={`Locked: ${formatUsdc(data.usdc_locked)}`}
+              />
             </div>
-
-            {data.stale && data.error_reason ? (
-              <p className="text-muted-foreground/70 text-xs">
-                Partial data — {data.error_reason}
-              </p>
-            ) : null}
-          </>
+          </div>
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "locked" | "available";
-}): ReactElement {
-  return (
-    <div className="space-y-0.5">
-      <div className="text-muted-foreground text-xs uppercase tracking-wide">
-        {label}
-      </div>
-      <div
-        className={cn(
-          "font-bold text-2xl tabular-nums",
-          tone === "locked" && "text-warning",
-          tone === "available" && "text-success"
-        )}
-      >
-        {value}
-      </div>
-      {hint ? (
-        <div className="text-muted-foreground/70 text-xs">{hint}</div>
-      ) : null}
-    </div>
-  );
-}
-
-function Legend({
-  swatch,
-  label,
-}: {
-  swatch: string;
-  label: string;
-}): ReactElement {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn("size-2 rounded-full", swatch)} />
-      {label}
-    </span>
   );
 }
