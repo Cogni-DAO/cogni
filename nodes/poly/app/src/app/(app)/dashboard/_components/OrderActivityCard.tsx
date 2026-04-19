@@ -3,20 +3,21 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/OrderActivityCard`
- * Purpose: "Active Orders" dashboard card — live table of mirror-order rows from `poly_copy_trade_fills` with a status filter and per-row copy-to-clipboard for paste-into-agent flows.
+ * Purpose: "Active Orders" dashboard card — live table of mirror-order rows from the copy-trade ledger with a status filter and per-row copy-to-clipboard for paste-into-agent flows.
  * Scope: Client component. Read-only. No cancel/edit actions (agent tools handle that via copied payload).
  * Invariants:
  *   - READ_ONLY: no mutation buttons.
  *   - COPY_PAYLOAD_IS_AGENT_INPUT: per-row copy emits a JSON block shaped for an AI agent prompt.
+ *   - LEDGER_STATUS_MAY_BE_STALE: `status` is set at placement time and is not reconciled with the CLOB. An `open` row may already be filled/canceled on-chain. (task.0323 §2)
  * Side-effects: IO (via React Query), clipboard (user-triggered).
- * Links: [fetchOrders](../_api/fetchOrders.ts), work/items/task.0315
+ * Links: [fetchOrders](../_api/fetchOrders.ts), packages/node-contracts/src/poly.copy-trade.orders.v1.contract.ts
  * @public
  */
 
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy } from "lucide-react";
+import { AlertTriangle, Check, Copy, ExternalLink } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import {
   Badge,
@@ -36,8 +37,8 @@ import {
 import { cn } from "@/shared/util/cn";
 import {
   fetchOrders,
-  type OrderRow,
   type OrdersStatusFilter,
+  type PolyCopyTradeOrderRow,
 } from "../_api/fetchOrders";
 import { formatPrice, formatUsdc, timeAgo } from "./wallet-format";
 
@@ -66,32 +67,25 @@ const STATUS_BADGE: Record<string, "default" | "secondary" | "destructive"> = {
   error: "destructive",
 };
 
-function buildAgentPayload(row: OrderRow): string {
+function buildAgentPayload(row: PolyCopyTradeOrderRow): string {
   return JSON.stringify(
     {
       action: "paste-me-to-your-agent",
-      hint: "Inspect / cancel / reprice this Polymarket order via core__poly_place_trade and related tools.",
-      order: {
-        client_order_id: row.clientOrderId,
-        order_id: row.orderId,
-        status: row.status,
-        market_id: row.marketId,
-        market_title: row.marketTitle,
-        side: row.side,
-        size_usdc: row.sizeUsdc,
-        limit_price: row.limitPrice,
-        observed_at: row.observedAt,
-        target_id: row.targetId,
-        fill_id: row.fillId,
-        attributes: row.attributes,
-      },
+      hint: "Inspect / cancel / reprice this Polymarket copy-trade order via core__poly_place_trade and related tools. Ledger status may be stale (task.0323 §2) — cross-check against Data-API /positions.",
+      order: row,
+      ground_truth: row.target_wallet
+        ? {
+            positions_url: `https://data-api.polymarket.com/positions?user=${row.target_wallet}`,
+            trades_url: `https://data-api.polymarket.com/trades?user=${row.target_wallet}&limit=10`,
+          }
+        : null,
     },
     null,
     2
   );
 }
 
-function RowCopyButton({ row }: { row: OrderRow }): ReactElement {
+function RowCopyButton({ row }: { row: PolyCopyTradeOrderRow }): ReactElement {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -134,11 +128,17 @@ export function OrderActivityCard(): ReactElement {
       <CardHeader className="px-5 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-col gap-0.5">
-            <CardTitle className="font-semibold text-muted-foreground text-xs uppercase tracking-wider">
+            <CardTitle className="flex items-center gap-2 font-semibold text-muted-foreground text-xs uppercase tracking-wider">
               Active Orders
+              <span
+                title="Ledger status is set at placement and not reconciled with the CLOB — an 'open' row may already be filled on-chain. Cross-check via the ground-truth links (task.0323 §2)."
+                className="inline-flex items-center text-warning"
+              >
+                <AlertTriangle className="size-3" />
+              </span>
             </CardTitle>
             <p className="text-muted-foreground/70 text-xs">
-              Our mirror-order ledger — read-only. Copy a row to paste into your
+              Mirror-order ledger — read-only. Copy a row to paste into your
               agent for cancel / reprice.
             </p>
           </div>
@@ -182,6 +182,7 @@ export function OrderActivityCard(): ReactElement {
                 <TableHead>Market</TableHead>
                 <TableHead className="text-center">Side</TableHead>
                 <TableHead className="text-right">Size</TableHead>
+                <TableHead className="text-right">Filled</TableHead>
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead className="text-right">Placed</TableHead>
                 <TableHead className="w-10" />
@@ -189,7 +190,7 @@ export function OrderActivityCard(): ReactElement {
             </TableHeader>
             <TableBody>
               {orders.map((row) => (
-                <TableRow key={`${row.targetId}:${row.fillId}`}>
+                <TableRow key={`${row.target_id}:${row.fill_id}`}>
                   <TableCell className="pr-0">
                     <span
                       className={cn(
@@ -207,17 +208,38 @@ export function OrderActivityCard(): ReactElement {
                     </Badge>
                   </TableCell>
                   <TableCell className="max-w-56 truncate font-medium text-sm">
-                    {row.marketTitle ?? (
+                    {row.polymarket_profile_url ? (
+                      <a
+                        href={row.polymarket_profile_url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="inline-flex items-center gap-1 hover:underline"
+                      >
+                        {row.market_id ? (
+                          <span className="font-mono text-xs">
+                            {row.market_id.slice(0, 10)}…
+                          </span>
+                        ) : (
+                          "(unknown)"
+                        )}
+                        <ExternalLink className="size-3" />
+                      </a>
+                    ) : row.market_id ? (
                       <span className="font-mono text-muted-foreground text-xs">
-                        {row.marketId
-                          ? `${row.marketId.slice(0, 10)}…`
-                          : "(unknown market)"}
+                        {row.market_id.slice(0, 10)}…
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        (unknown market)
                       </span>
                     )}
                   </TableCell>
                   <TableCell className="text-center">
                     {row.side ? (
-                      <Badge intent="secondary" size="sm">
+                      <Badge
+                        intent={row.side === "BUY" ? "default" : "secondary"}
+                        size="sm"
+                      >
                         {row.side}
                       </Badge>
                     ) : (
@@ -225,13 +247,18 @@ export function OrderActivityCard(): ReactElement {
                     )}
                   </TableCell>
                   <TableCell className="text-right text-sm tabular-nums">
-                    {row.sizeUsdc !== null ? formatUsdc(row.sizeUsdc) : "—"}
+                    {row.size_usdc !== null ? formatUsdc(row.size_usdc) : "—"}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm tabular-nums">
-                    {formatPrice(row.limitPrice)}
+                    {row.filled_size_usdc !== null
+                      ? formatUsdc(row.filled_size_usdc)
+                      : "—"}
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground text-sm tabular-nums">
+                    {formatPrice(row.limit_price)}
                   </TableCell>
                   <TableCell className="text-right text-muted-foreground text-sm">
-                    {timeAgo(row.observedAt)}
+                    {timeAgo(row.observed_at)}
                   </TableCell>
                   <TableCell className="pl-0 text-right">
                     <RowCopyButton row={row} />

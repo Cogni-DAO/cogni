@@ -3,47 +3,33 @@
 
 /**
  * Module: `@app/(app)/dashboard/_api/fetchWalletBalance`
- * Purpose: Client-side fetch for the Operator Wallet balance card. Calls GET /api/v1/poly/wallet-balance.
- * Scope: Data fetching only. Graceful empty state on failure.
+ * Purpose: Client-side fetch for the Operator Wallet balance card. Calls GET /api/v1/poly/wallet/balance (task.0315 backend).
+ * Scope: Data fetching only. Returns the Zod-contract shape straight through; graceful empty on network/404.
  * Side-effects: IO (HTTP fetch)
+ * Links: packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
  * @public
  */
 
-export interface OperatorWalletBalance {
-  /** The wallet address queried. Flagged single-operator; see task.0315 P2. */
-  wallet: string | null;
-  /** USDC.e balance on Polygon in dollars. */
-  usdcAvailable: number;
-  /** Sum of currentValue across open positions (Data API). */
-  positionsMtmValue: number;
-  /** Sum of cashPnl across open positions. */
-  positionsPnl: number;
-  /** Total USDC notional locked in pending/open/partial mirror orders (our ledger). */
-  lockedInOrders: number;
-  /** Count of pending/open/partial rows in our mirror ledger. */
-  openOrderCount: number;
-  /** Whether the underlying data sources all returned cleanly. */
-  ok: boolean;
-  /** Non-null when the route degraded (RPC / Data API / DB failures). */
-  error: string | null;
-}
+import type { PolyWalletBalanceOutput } from "@cogni/node-contracts";
 
-const EMPTY: OperatorWalletBalance = {
-  wallet: null,
-  usdcAvailable: 0,
-  positionsMtmValue: 0,
-  positionsPnl: 0,
-  lockedInOrders: 0,
-  openOrderCount: 0,
-  ok: false,
-  error: "unavailable",
+export type { PolyWalletBalanceOutput };
+
+const EMPTY: PolyWalletBalanceOutput = {
+  operator_address: "0x0000000000000000000000000000000000000000",
+  usdc_available: 0,
+  usdc_locked: 0,
+  usdc_total: 0,
+  pol_gas: 0,
+  profile_url: "https://polymarket.com/profile/unconfigured",
+  stale: true,
+  error_reason: "unavailable",
 };
 
-export async function fetchWalletBalance(): Promise<OperatorWalletBalance> {
+export async function fetchWalletBalance(): Promise<PolyWalletBalanceOutput> {
   try {
-    const res = await fetch("/api/v1/poly/wallet-balance");
+    const res = await fetch("/api/v1/poly/wallet/balance");
     if (res.ok) {
-      return (await res.json()) as OperatorWalletBalance;
+      return (await res.json()) as PolyWalletBalanceOutput;
     }
     if (res.status === 404) return EMPTY;
     throw new Error(

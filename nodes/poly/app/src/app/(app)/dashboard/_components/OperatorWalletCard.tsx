@@ -3,12 +3,14 @@
 
 /**
  * Module: `@app/(app)/dashboard/_components/OperatorWalletCard`
- * Purpose: Operator wallet snapshot — USDC available, locked in orders, open-position MTM + PnL.
+ * Purpose: Operator wallet snapshot — USDC.e available, USDC locked in Polymarket open orders, total, POL gas.
  * Scope: Client component. React Query poll. Read-only.
  * Invariants:
  *   - SINGLE_TENANT_PROTOTYPE: card reflects a single env-pinned wallet (POLY_PROTO_WALLET_ADDRESS).
  *   - READ_ONLY: no deposit/withdraw controls.
+ *   - EOA_PROFILE_PITFALL: we link to Polygonscan + Data-API /positions, NOT the polymarket.com profile, because EOA-direct trades redirect the profile page to an empty Safe-proxy. See `.claude/skills/poly-dev-expert/SKILL.md`.
  * Side-effects: IO (via React Query)
+ * Links: packages/node-contracts/src/poly.wallet.balance.v1.contract.ts
  * @public
  */
 
@@ -19,12 +21,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, Copy, Wallet } from "lucide-react";
+import { Check, Copy, ExternalLink, Wallet } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components";
 import { cn } from "@/shared/util/cn";
 import { fetchWalletBalance } from "../_api/fetchWalletBalance";
-import { formatPnl, formatShortWallet, formatUsdc } from "./wallet-format";
+import { formatShortWallet, formatUsdc } from "./wallet-format";
+
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 
 function CopyAddressButton({ address }: { address: string }): ReactElement {
   const [copied, setCopied] = useState(false);
@@ -59,16 +63,11 @@ export function OperatorWalletCard(): ReactElement {
     retry: 1,
   });
 
-  const total =
-    (data?.usdcAvailable ?? 0) +
-    (data?.lockedInOrders ?? 0) +
-    (data?.positionsMtmValue ?? 0);
-
+  const configured = Boolean(data && data.operator_address !== ZERO_ADDR);
+  const total = data?.usdc_total ?? 0;
   const availablePct =
-    total > 0 ? ((data?.usdcAvailable ?? 0) / total) * 100 : 0;
-  const lockedPct = total > 0 ? ((data?.lockedInOrders ?? 0) / total) * 100 : 0;
-  const positionsPct =
-    total > 0 ? ((data?.positionsMtmValue ?? 0) / total) * 100 : 0;
+    total > 0 ? ((data?.usdc_available ?? 0) / total) * 100 : 0;
+  const lockedPct = total > 0 ? ((data?.usdc_locked ?? 0) / total) * 100 : 0;
 
   return (
     <Card>
@@ -80,17 +79,18 @@ export function OperatorWalletCard(): ReactElement {
               Operator Wallet
             </CardTitle>
           </div>
-          {data?.wallet ? (
+          {configured && data ? (
             <div className="flex items-center gap-1 font-mono text-muted-foreground text-xs">
               <a
-                href={`https://polygonscan.com/address/${data.wallet}`}
+                href={`https://polygonscan.com/address/${data.operator_address}`}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="hover:underline"
+                title="View on Polygonscan"
               >
-                {formatShortWallet(data.wallet)}
+                {formatShortWallet(data.operator_address)}
               </a>
-              <CopyAddressButton address={data.wallet} />
+              <CopyAddressButton address={data.operator_address} />
               <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-xs uppercase tracking-wide">
                 USDC.e · Polygon
               </span>
@@ -104,7 +104,7 @@ export function OperatorWalletCard(): ReactElement {
             <div className="h-16 rounded bg-muted" />
             <div className="h-2 rounded bg-muted" />
           </div>
-        ) : !data?.wallet ? (
+        ) : !configured ? (
           <p className="text-center text-muted-foreground text-sm">
             No operator wallet configured. Set{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
@@ -112,28 +112,32 @@ export function OperatorWalletCard(): ReactElement {
             </code>{" "}
             to enable.
           </p>
-        ) : (
+        ) : data ? (
           <>
             {/* Three-stat header */}
             <div className="grid grid-cols-3 gap-4">
               <Stat
                 label="Total"
                 value={formatUsdc(total)}
-                hint={`${data.openOrderCount} open orders`}
+                hint={
+                  data.stale
+                    ? "(last good value — stale)"
+                    : "available + locked"
+                }
               />
               <Stat
                 label="Locked in orders"
-                value={formatUsdc(data.lockedInOrders)}
+                value={formatUsdc(data.usdc_locked)}
                 hint={
-                  data.lockedInOrders > 0
-                    ? `${((data.lockedInOrders / total) * 100).toFixed(1)}%`
+                  data.usdc_locked > 0
+                    ? `${((data.usdc_locked / total) * 100).toFixed(1)}%`
                     : "—"
                 }
                 tone="locked"
               />
               <Stat
                 label="Available"
-                value={formatUsdc(data.usdcAvailable)}
+                value={formatUsdc(data.usdc_available)}
                 hint="USDC.e"
                 tone="available"
               />
@@ -146,56 +150,64 @@ export function OperatorWalletCard(): ReactElement {
                   <div
                     className="bg-success/70"
                     style={{ width: `${availablePct}%` }}
-                    title={`Available: ${formatUsdc(data.usdcAvailable)}`}
+                    title={`Available: ${formatUsdc(data.usdc_available)}`}
                   />
                   <div
                     className="bg-warning/70"
                     style={{ width: `${lockedPct}%` }}
-                    title={`Locked: ${formatUsdc(data.lockedInOrders)}`}
-                  />
-                  <div
-                    className="bg-primary/60"
-                    style={{ width: `${positionsPct}%` }}
-                    title={`Positions MTM: ${formatUsdc(
-                      data.positionsMtmValue
-                    )}`}
+                    title={`Locked: ${formatUsdc(data.usdc_locked)}`}
                   />
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground text-xs">
                   <Legend swatch="bg-success/70" label="Available" />
                   <Legend swatch="bg-warning/70" label="Locked" />
-                  <Legend swatch="bg-primary/60" label="Positions (MTM)" />
                 </div>
               </div>
             ) : null}
 
-            {/* Positions PnL line */}
+            {/* POL gas + ground-truth links */}
             <div className="flex items-center justify-between border-t pt-3 text-sm">
-              <span className="text-muted-foreground">
-                Open positions (MTM)
+              <span className="flex items-center gap-2 text-muted-foreground">
+                POL (gas)
+                {data.pol_gas < 0.1 && data.pol_gas > 0 ? (
+                  <span
+                    className="rounded bg-warning/20 px-1.5 py-0.5 text-warning text-xs"
+                    title="Low POL balance — top up before the operator can't pay gas."
+                  >
+                    low
+                  </span>
+                ) : null}
               </span>
-              <div className="flex items-center gap-3 tabular-nums">
-                <span>{formatUsdc(data.positionsMtmValue)}</span>
-                <span
-                  className={cn(
-                    "font-medium",
-                    data.positionsPnl > 0 && "text-success",
-                    data.positionsPnl < 0 && "text-destructive",
-                    data.positionsPnl === 0 && "text-muted-foreground"
-                  )}
-                >
-                  {formatPnl(data.positionsPnl)}
-                </span>
-              </div>
+              <span className="tabular-nums">{data.pol_gas.toFixed(4)}</span>
             </div>
 
-            {data.error ? (
+            <div className="flex flex-wrap items-center gap-3 border-t pt-3 text-xs">
+              <span className="text-muted-foreground">Ground truth:</span>
+              <a
+                href={`https://data-api.polymarket.com/positions?user=${data.operator_address}`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                positions <ExternalLink className="size-3" />
+              </a>
+              <a
+                href={`https://data-api.polymarket.com/trades?user=${data.operator_address}&limit=10`}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                trades <ExternalLink className="size-3" />
+              </a>
+            </div>
+
+            {data.stale && data.error_reason ? (
               <p className="text-muted-foreground/70 text-xs">
-                Partial data — {data.error}
+                Partial data — {data.error_reason}
               </p>
             ) : null}
           </>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );

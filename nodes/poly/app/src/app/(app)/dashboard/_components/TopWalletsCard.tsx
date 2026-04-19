@@ -36,6 +36,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components";
+import { fetchCopyTargets } from "../_api/fetchCopyTargets";
 import { fetchTopWallets } from "../_api/fetchTopWallets";
 import {
   formatNumTrades,
@@ -55,12 +56,6 @@ const TIME_PERIOD_OPTIONS: readonly {
   { value: "ALL", label: "All" },
 ] as const;
 
-// TODO(task.0315 P2 / single-tenant auth):
-// Tracked-wallet set is currently empty (prototype, P1 = env fallback only).
-// Wire to GET /api/v1/poly/copy-targets once Phase 2 lands the
-// `poly_copy_trade_targets` table + click-to-copy flow.
-const TRACKED_WALLETS = new Set<string>();
-
 export function TopWalletsCard(): ReactElement {
   const [timePeriod, setTimePeriod] = useState<WalletTimePeriod>("WEEK");
 
@@ -71,6 +66,24 @@ export function TopWalletsCard(): ReactElement {
     gcTime: 5 * 60_000,
     retry: 1,
   });
+
+  // TODO(task.0315 P2 / single-tenant auth):
+  // v0 returns a single env-derived target; P2 adds DB-backed per-user targets
+  // + click-to-copy writes. When that ships, the `+` CTA below becomes real.
+  const { data: targetsData } = useQuery({
+    queryKey: ["dashboard-copy-targets"],
+    queryFn: fetchCopyTargets,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    retry: 1,
+  });
+
+  const trackedWallets = new Set(
+    (targetsData?.targets ?? []).map((t) => t.target_wallet.toLowerCase())
+  );
+  const targetsByWallet = new Map(
+    (targetsData?.targets ?? []).map((t) => [t.target_wallet.toLowerCase(), t])
+  );
 
   const traders = data?.traders ?? [];
 
@@ -144,9 +157,9 @@ export function TopWalletsCard(): ReactElement {
             </TableHeader>
             <TableBody>
               {traders.map((t) => {
-                const tracked = TRACKED_WALLETS.has(
-                  t.proxyWallet.toLowerCase()
-                );
+                const walletKey = t.proxyWallet.toLowerCase();
+                const tracked = trackedWallets.has(walletKey);
+                const target = targetsByWallet.get(walletKey);
                 return (
                   <TableRow key={t.proxyWallet}>
                     <TableCell className="text-muted-foreground text-sm tabular-nums">
@@ -156,7 +169,11 @@ export function TopWalletsCard(): ReactElement {
                       {tracked ? (
                         <span
                           className="inline-flex size-2 animate-pulse rounded-full bg-success"
-                          title="Currently tracked"
+                          title={
+                            target
+                              ? `Tracked — ${target.mode} · $${target.mirror_usdc}/fill · source=${target.source}`
+                              : "Currently tracked"
+                          }
                         />
                       ) : (
                         <span className="text-muted-foreground/40">—</span>
