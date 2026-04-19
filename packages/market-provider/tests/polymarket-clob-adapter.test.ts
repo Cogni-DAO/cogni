@@ -290,7 +290,7 @@ describe("PolymarketClobAdapter", () => {
     expect(cancelOrder).toHaveBeenCalledWith({ orderID: "0xorder" });
   });
 
-  it("getOrder maps OpenOrder response to OrderReceipt", async () => {
+  it("getOrder maps OpenOrder response to { found: receipt } (GETORDER_NEVER_NULL, task.0328 CP1)", async () => {
     const getOrder = vi.fn().mockResolvedValue({
       id: "0xopen",
       status: "live",
@@ -300,10 +300,20 @@ describe("PolymarketClobAdapter", () => {
       price: "0.25",
     });
     const adapter = makeAdapter({ getOrder });
-    const receipt = await adapter.getOrder("0xopen");
+    const result = await adapter.getOrder("0xopen");
     expect(getOrder).toHaveBeenCalledWith("0xopen");
-    expect(receipt.status).toBe("open");
-    expect(receipt.filled_size_usdc).toBe(0.25); // 1 * 0.25
+    expect("found" in result).toBe(true);
+    if ("found" in result) {
+      expect(result.found.status).toBe("open");
+      expect(result.found.filled_size_usdc).toBe(0.25); // 1 * 0.25
+    }
+  });
+
+  it("getOrder returns { status: 'not_found' } when CLOB returns null/empty body", async () => {
+    const getOrder = vi.fn().mockResolvedValue(null);
+    const adapter = makeAdapter({ getOrder });
+    const result = await adapter.getOrder("0xgone");
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("listMarkets rejects — CLOB adapter is trade-only", async () => {
@@ -570,7 +580,8 @@ describe("PolymarketClobAdapter — observability", () => {
     });
     const adapter = makeAdapter({ getOrder }, { logger, metrics });
 
-    await adapter.getOrder("0xq");
+    const result = await adapter.getOrder("0xq");
+    expect("found" in result).toBe(true);
 
     const okCounter = metrics.emissions.find(
       (e) =>
@@ -579,5 +590,23 @@ describe("PolymarketClobAdapter — observability", () => {
         e.labels.result === "ok"
     );
     expect(okCounter).toBeDefined();
+  });
+
+  it("getOrder emits get_order metrics with result=not_found for null CLOB response", async () => {
+    const { logger } = makeRecordingLogger();
+    const metrics = createRecordingMetrics();
+    const getOrder = vi.fn().mockResolvedValue(null);
+    const adapter = makeAdapter({ getOrder }, { logger, metrics });
+
+    const result = await adapter.getOrder("0xgone");
+    expect(result).toEqual({ status: "not_found" });
+
+    const nfCounter = metrics.emissions.find(
+      (e) =>
+        e.kind === "counter" &&
+        e.name === POLY_CLOB_METRICS.getOrderTotal &&
+        e.labels.result === "not_found"
+    );
+    expect(nfCounter).toBeDefined();
   });
 });

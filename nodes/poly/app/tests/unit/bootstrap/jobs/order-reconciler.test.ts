@@ -12,7 +12,7 @@
  * @internal
  */
 
-import type { OrderReceipt } from "@cogni/market-provider";
+import type { GetOrderResult, OrderReceipt } from "@cogni/market-provider";
 import { noopMetrics } from "@cogni/market-provider";
 import { describe, expect, it, vi } from "vitest";
 
@@ -60,6 +60,14 @@ function makeReceipt(overrides: Partial<OrderReceipt> = {}): OrderReceipt {
   };
 }
 
+/** Wrap a receipt in the GetOrderResult discriminated union. */
+function found(receipt: OrderReceipt): GetOrderResult {
+  return { found: receipt };
+}
+
+/** Sentinel for orders not found on CLOB. */
+const NOT_FOUND: GetOrderResult = { status: "not_found" };
+
 /** Tracking metrics adapter — counts incr calls per metric name. */
 function makeTrackingMetrics() {
   const counts: Record<string, number> = {};
@@ -85,7 +93,7 @@ describe("runReconcileOnce", () => {
     });
     const getOrder = vi
       .fn()
-      .mockResolvedValue(makeReceipt({ status: "filled" }));
+      .mockResolvedValue(found(makeReceipt({ status: "filled" })));
 
     await runReconcileOnce({
       ledger,
@@ -107,7 +115,7 @@ describe("runReconcileOnce", () => {
     const getOrder = vi
       .fn()
       .mockResolvedValue(
-        makeReceipt({ status: "canceled", order_id: "order-xyz" })
+        found(makeReceipt({ status: "canceled", order_id: "order-xyz" }))
       );
 
     await runReconcileOnce({
@@ -162,11 +170,13 @@ describe("runReconcileOnce", () => {
       .fn()
       .mockRejectedValueOnce(new Error("CLOB timeout"))
       .mockResolvedValueOnce(
-        makeReceipt({
-          status: "filled",
-          order_id: "order-2",
-          client_order_id: "coid-2",
-        })
+        found(
+          makeReceipt({
+            status: "filled",
+            order_id: "order-2",
+            client_order_id: "coid-2",
+          })
+        )
       );
 
     await runReconcileOnce({
@@ -194,7 +204,9 @@ describe("runReconcileOnce", () => {
     const row = makeRow({ status: "open", order_id: "order-abc" });
     const originalUpdatedAt = row.updated_at;
     const ledger = new FakeOrderLedger({ initial: [row] });
-    const getOrder = vi.fn().mockResolvedValue(makeReceipt({ status: "open" }));
+    const getOrder = vi
+      .fn()
+      .mockResolvedValue(found(makeReceipt({ status: "open" })));
 
     const updateSpy = vi.spyOn(ledger, "updateStatus");
 
@@ -212,11 +224,11 @@ describe("runReconcileOnce", () => {
     expect(ledger.rows[0]?.updated_at).toEqual(originalUpdatedAt);
   });
 
-  it("getOrder returns null → row skipped, status unchanged", async () => {
+  it("getOrder returns not_found → row skipped, status unchanged (was: null — task.0328 CP1; CP2 will add grace-window promotion)", async () => {
     const ledger = new FakeOrderLedger({
       initial: [makeRow({ status: "pending", order_id: "order-gone" })],
     });
-    const getOrder = vi.fn().mockResolvedValue(null);
+    const getOrder = vi.fn().mockResolvedValue(NOT_FOUND);
 
     await runReconcileOnce({
       ledger,

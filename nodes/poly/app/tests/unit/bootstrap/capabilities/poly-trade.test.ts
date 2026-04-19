@@ -458,7 +458,7 @@ describe("closePosition", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("getOrder", () => {
-  it("returns stored receipt after a placeOrder call", async () => {
+  it("returns { found: receipt } after a placeOrder call", async () => {
     const fake = new FakePolymarketClobAdapter();
     const bundle = createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
@@ -480,11 +480,15 @@ describe("getOrder", () => {
     });
 
     const storedReceipt = fake.orderStore.values().next().value as OrderReceipt;
-    const fetched = await bundle.getOrder(storedReceipt.order_id);
-    expect(fetched?.order_id).toBe(storedReceipt.order_id);
+    const result = await bundle.getOrder(storedReceipt.order_id);
+    // GETORDER_NEVER_NULL (task.0328 CP1): result is a discriminated union
+    expect("found" in result).toBe(true);
+    if ("found" in result) {
+      expect(result.found.order_id).toBe(storedReceipt.order_id);
+    }
   });
 
-  it("returns null for unknown order id", async () => {
+  it("returns { status: 'not_found' } for unknown order id (was: null — task.0328 CP1)", async () => {
     const fake = new FakePolymarketClobAdapter();
     const bundle = createPolyTradeCapabilityFromAdapter({
       placeOrder: fake.placeOrder.bind(fake),
@@ -497,7 +501,7 @@ describe("getOrder", () => {
     });
 
     const result = await bundle.getOrder("0xunknown");
-    expect(result).toBeNull();
+    expect(result).toEqual({ status: "not_found" });
   });
 });
 

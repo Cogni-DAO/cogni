@@ -11,7 +11,11 @@
  * @public
  */
 
-import type { OrderIntent, OrderReceipt } from "../../domain/order.js";
+import type {
+  GetOrderResult,
+  OrderIntent,
+  OrderReceipt,
+} from "../../domain/order.js";
 import type {
   ListMarketsParams,
   NormalizedMarket,
@@ -98,7 +102,7 @@ export class PolymarketAdapter implements MarketProviderPort {
     );
   }
 
-  getOrder(_orderId: string): Promise<OrderReceipt> {
+  getOrder(_orderId: string): Promise<GetOrderResult> {
     return Promise.reject(
       new OrderNotSupportedError(
         "polymarket",

@@ -19,6 +19,7 @@ export {
   FillSchema,
   type FillSource,
   FillSourceSchema,
+  type GetOrderResult,
   type OrderIntent,
   OrderIntentSchema,
   type OrderReceipt,

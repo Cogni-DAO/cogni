@@ -35,9 +35,10 @@
  */
 
 import type {
+  GetOrderResult,
   LoggerPort,
   MetricsPort,
-  OrderReceipt,
+  OrderStatus,
 } from "@cogni/market-provider";
 import type { PolymarketUserPosition } from "@cogni/market-provider/adapters/polymarket";
 import { EVENT_NAMES } from "@cogni/node-shared";
@@ -67,8 +68,11 @@ const DEFAULT_LIMIT = 200;
 
 export interface OrderReconcilerDeps {
   ledger: OrderLedger;
-  /** `PolyTradeBundle.getOrder` — returns `null` when the order is not found. */
-  getOrder: (orderId: string) => Promise<OrderReceipt | null>;
+  /**
+   * `PolyTradeBundle.getOrder` — returns a discriminated `GetOrderResult`.
+   * GETORDER_NEVER_NULL invariant (task.0328 CP1): null is never returned.
+   */
+  getOrder: (orderId: string) => Promise<GetOrderResult>;
   /**
    * `PolyTradeBundle.getOperatorPositions` — fetched once per tick for future
    * redemption-sync. Currently unused beyond the TODO below.
@@ -86,7 +90,7 @@ export type ReconcilerStopFn = () => void;
 // Receipt status → LedgerStatus map (mirrors order-ledger.ts `mapReceiptStatus`)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function mapReceiptStatus(s: OrderReceipt["status"]): LedgerStatus {
+function mapReceiptStatus(s: OrderStatus): LedgerStatus {
   switch (s) {
     case "filled":
       return "filled";
@@ -130,11 +134,20 @@ export async function runReconcileOnce(
     }
 
     try {
-      const receipt = await deps.getOrder(row.order_id);
-      if (!receipt) {
-        // Order not found on CLOB — could be very new or purged. Skip.
+      const result = await deps.getOrder(row.order_id);
+      if (!("found" in result)) {
+        // CP2 will promote stale rows here. For now, behavior is unchanged: no-op.
+        // Add a log at debug so we can see the rate in Loki pre-CP2.
+        log.debug(
+          {
+            event: "poly.reconciler.not_found",
+            client_order_id: row.client_order_id,
+          },
+          "CLOB getOrder returned not_found"
+        );
         continue;
       }
+      const receipt = result.found;
 
       const newStatus = mapReceiptStatus(receipt.status);
       if (newStatus === row.status) {

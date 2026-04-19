@@ -14,7 +14,11 @@
  * @public
  */
 
-import type { OrderIntent, OrderReceipt } from "../domain/order.js";
+import type {
+  GetOrderResult,
+  OrderIntent,
+  OrderReceipt,
+} from "../domain/order.js";
 import type {
   ListMarketsParams,
   MarketProvider,
@@ -108,7 +112,11 @@ export interface MarketProviderPort {
   /**
    * Look up an order's current status by platform `order_id`.
    *
+   * Returns `{ found: receipt }` when the order exists, or `{ status: "not_found" }`
+   * when the CLOB returns a 404 / empty body. Network errors still throw.
+   * GETORDER_NEVER_NULL invariant (task.0328 CP1): null is never returned.
+   *
    * @throws OrderNotSupportedError if the adapter is read-only.
    */
-  getOrder(orderId: string): Promise<OrderReceipt>;
+  getOrder(orderId: string): Promise<GetOrderResult>;
 }

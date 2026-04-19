@@ -13,7 +13,11 @@
  * @internal
  */
 
-import type { OrderIntent, OrderReceipt } from "@cogni/market-provider";
+import type {
+  GetOrderResult,
+  OrderIntent,
+  OrderReceipt,
+} from "@cogni/market-provider";
 import type { PolymarketUserPosition } from "@cogni/market-provider/adapters/polymarket";
 
 export interface FakePolymarketClobConfig {
@@ -128,9 +132,14 @@ export class FakePolymarketClobAdapter {
     if (this.config.cancelRejectWith) throw this.config.cancelRejectWith;
   }
 
-  /** Returns stored receipt by id, or null if not found. */
-  async getOrder(orderId: string): Promise<OrderReceipt | null> {
-    return this.orderStore.get(orderId) ?? null;
+  /**
+   * Returns stored receipt by id, or `{ status: "not_found" }` if unknown.
+   * GETORDER_NEVER_NULL invariant (task.0328 CP1): null is never returned.
+   */
+  async getOrder(orderId: string): Promise<GetOrderResult> {
+    const receipt = this.orderStore.get(orderId);
+    if (receipt === undefined) return { status: "not_found" };
+    return { found: receipt };
   }
 
   /** Returns pre-seeded positions (config) or in-memory tracked positions. */

@@ -30,6 +30,7 @@ import type {
 } from "@cogni/ai-tools";
 import {
   clientOrderIdFor,
+  type GetOrderResult,
   type LoggerPort,
   type MetricsPort,
   type OrderIntent,
@@ -213,8 +214,11 @@ export interface CreateFromAdapterDeps {
   }) => Promise<OrderReceipt[]>;
   /** `cancelOrder(orderId)` — production adapter OR fake. */
   cancelOrder: (orderId: string) => Promise<void>;
-  /** `getOrder(orderId)` — used by the reconciler to poll fill status. */
-  getOrder?: (orderId: string) => Promise<OrderReceipt | null>;
+  /**
+   * `getOrder(orderId)` — used by the reconciler to poll fill status.
+   * GETORDER_NEVER_NULL invariant (task.0328 CP1): must return `GetOrderResult`.
+   */
+  getOrder?: (orderId: string) => Promise<GetOrderResult>;
   /** `listPositions(wallet)` — used by `closePosition` + coordinator. */
   listPositions?: (wallet: string) => Promise<PolymarketUserPosition[]>;
   /** Operator EOA (used for the receipt's profile_url and position lookups). */
@@ -233,7 +237,7 @@ export interface CreateFromAdapterDeps {
  * - `placeIntent` — raw `(OrderIntent) => OrderReceipt` seam; no side filter.
  * - `closePosition` — autonomous SELL exit path. Looks up the operator position,
  *   caps size, and routes through the executor.
- * - `getOrder` — reconciler poll; returns `null` when the order is not found.
+ * - `getOrder` — reconciler poll; returns `GetOrderResult` (never null).
  * - `getOperatorPositions` — coordinator + reconciler position queries.
  * - `operatorWalletAddress` — exposed for read APIs (e.g. balance).
  *
@@ -245,7 +249,7 @@ export interface PolyTradeBundle {
   capability: PolyTradeCapability;
   placeIntent: (intent: OrderIntent) => Promise<OrderReceipt>;
   closePosition: (params: ClosePositionParams) => Promise<OrderReceipt>;
-  getOrder: (orderId: string) => Promise<OrderReceipt | null>;
+  getOrder: (orderId: string) => Promise<GetOrderResult>;
   getOperatorPositions: () => Promise<PolymarketUserPosition[]>;
   operatorWalletAddress: `0x${string}`;
 }
@@ -419,13 +423,9 @@ export function createPolyTradeCapabilityFromAdapter(
     return executor(intent);
   }
 
-  async function bundleGetOrder(orderId: string): Promise<OrderReceipt | null> {
-    if (!deps.getOrder) return null;
-    try {
-      return await deps.getOrder(orderId);
-    } catch {
-      return null;
-    }
+  async function bundleGetOrder(orderId: string): Promise<GetOrderResult> {
+    if (!deps.getOrder) return { status: "not_found" };
+    return deps.getOrder(orderId);
   }
 
   async function bundleGetOperatorPositions(): Promise<
@@ -568,7 +568,7 @@ export function createPolyTradeCapability(
       market?: string;
     }) => Promise<OrderReceipt[]>;
     cancelOrder: (orderId: string) => Promise<void>;
-    getOrder: (orderId: string) => Promise<OrderReceipt>;
+    getOrder: (orderId: string) => Promise<GetOrderResult>;
     listPositions: (wallet: string) => Promise<PolymarketUserPosition[]>;
   };
   let cached: AdapterMethods | undefined;
@@ -603,7 +603,7 @@ export function createPolyTradeCapability(
     const m = await ensureMethods();
     return m.cancelOrder(orderId);
   }
-  async function lazyGetOrder(orderId: string): Promise<OrderReceipt> {
+  async function lazyGetOrder(orderId: string): Promise<GetOrderResult> {
     const m = await ensureMethods();
     return m.getOrder(orderId);
   }
@@ -652,7 +652,7 @@ async function buildRealAdapterMethods(
     market?: string;
   }) => Promise<OrderReceipt[]>;
   cancelOrder: (orderId: string) => Promise<void>;
-  getOrder: (orderId: string) => Promise<OrderReceipt>;
+  getOrder: (orderId: string) => Promise<GetOrderResult>;
   listPositions: (wallet: string) => Promise<PolymarketUserPosition[]>;
 }> {
   // Dynamic imports — keep `@polymarket/clob-client` + `@privy-io/node` out of

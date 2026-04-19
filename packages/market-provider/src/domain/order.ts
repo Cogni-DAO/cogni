@@ -3,12 +3,14 @@
 
 /**
  * Module: `@cogni/market-provider/domain/order`
- * Purpose: Zod schemas for Run-phase order types — OrderIntent, OrderReceipt, OrderStatus, Fill.
+ * Purpose: Zod schemas for Run-phase order types — OrderIntent, OrderReceipt, OrderStatus, Fill, GetOrderResult.
  * Scope: Pure type definitions used by the MarketProviderPort Run methods and by node-level copy-trade decision logic. Does not contain I/O or adapter dependencies.
  * Invariants:
  *   - IDEMPOTENT_BY_CLIENT_ID: every OrderIntent carries a caller-provided client_order_id.
  *   - PROVIDER_AGNOSTIC: provider-specific fields live under `attributes`, never as first-class fields.
  *   - FILL_ID_COMPOSITE: Fill.fill_id is `"<source>:<native_id>"` per P0.2 (task.0315 Phase 0 Findings).
+ *   - GETORDER_NEVER_NULL: `getOrder` callers receive a discriminated `GetOrderResult`; null is
+ *     never a valid return. Callers MUST branch on the discriminant. (task.0328 CP1)
  * Side-effects: none
  * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 — First live order)
  * @public
@@ -125,3 +127,16 @@ export const FillSchema = z.object({
   attributes: z.record(z.string(), z.unknown()).optional(),
 });
 export type Fill = z.infer<typeof FillSchema>;
+
+/**
+ * Discriminated-union result for `getOrder` calls.
+ *
+ * GETORDER_NEVER_NULL invariant (task.0328 CP1): `getOrder` must never return
+ * `null`. 404 / empty-body responses from the CLOB produce `{ status: "not_found" }`.
+ * Network errors still throw — those are unrelated failure modes.
+ *
+ * Callers MUST branch on the discriminant:
+ *   if (result.status === "not_found") { ... }
+ *   const receipt = result.found;
+ */
+export type GetOrderResult = { found: OrderReceipt } | { status: "not_found" };

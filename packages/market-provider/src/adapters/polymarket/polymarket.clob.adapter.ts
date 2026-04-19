@@ -24,7 +24,11 @@ import {
   SignatureType,
 } from "@polymarket/clob-client";
 
-import type { OrderIntent, OrderReceipt } from "../../domain/order.js";
+import type {
+  GetOrderResult,
+  OrderIntent,
+  OrderReceipt,
+} from "../../domain/order.js";
 import type {
   ListMarketsParams,
   NormalizedMarket,
@@ -301,7 +305,7 @@ export class PolymarketClobAdapter implements MarketProviderPort {
     }
   }
 
-  async getOrder(orderId: string): Promise<OrderReceipt> {
+  async getOrder(orderId: string): Promise<GetOrderResult> {
     const start = Date.now();
     this.log.debug(
       { event: "poly.clob.get_order", phase: "start", order_id: orderId },
@@ -309,6 +313,29 @@ export class PolymarketClobAdapter implements MarketProviderPort {
     );
     try {
       const open = await this.client.getOrder(orderId);
+      // GETORDER_NEVER_NULL (task.0328 CP1): a null / empty body from the CLOB
+      // means the order is not found — return the discriminant rather than null.
+      if (!open || !open.id) {
+        const duration_ms = Date.now() - start;
+        this.metrics.incr(POLY_CLOB_METRICS.getOrderTotal, {
+          result: "not_found",
+        });
+        this.metrics.observeDurationMs(
+          POLY_CLOB_METRICS.getOrderDurationMs,
+          duration_ms,
+          { result: "not_found" }
+        );
+        this.log.debug(
+          {
+            event: "poly.clob.get_order",
+            phase: "not_found",
+            duration_ms,
+            order_id: orderId,
+          },
+          "getOrder: not_found"
+        );
+        return { status: "not_found" };
+      }
       const receipt = mapOpenOrderToReceipt(open);
       const duration_ms = Date.now() - start;
       this.metrics.incr(POLY_CLOB_METRICS.getOrderTotal, { result: "ok" });
@@ -328,8 +355,39 @@ export class PolymarketClobAdapter implements MarketProviderPort {
         },
         "getOrder: ok"
       );
-      return receipt;
+      return { found: receipt };
     } catch (err) {
+      // 404-style errors from the CLOB client surface as thrown errors with
+      // messages like "Order not found" or HTTP 404. Treat those as not_found
+      // rather than hard errors — the order may have been purged from CLOB.
+      const errMsg =
+        err instanceof Error ? err.message.toLowerCase() : String(err);
+      if (
+        errMsg.includes("not found") ||
+        errMsg.includes("404") ||
+        errMsg.includes("order does not exist")
+      ) {
+        const duration_ms = Date.now() - start;
+        this.metrics.incr(POLY_CLOB_METRICS.getOrderTotal, {
+          result: "not_found",
+        });
+        this.metrics.observeDurationMs(
+          POLY_CLOB_METRICS.getOrderDurationMs,
+          duration_ms,
+          { result: "not_found" }
+        );
+        this.log.debug(
+          {
+            event: "poly.clob.get_order",
+            phase: "not_found",
+            duration_ms,
+            order_id: orderId,
+            error: truncErr(err),
+          },
+          "getOrder: not_found (CLOB 404)"
+        );
+        return { status: "not_found" };
+      }
       const duration_ms = Date.now() - start;
       this.metrics.incr(POLY_CLOB_METRICS.getOrderTotal, { result: "error" });
       this.metrics.observeDurationMs(

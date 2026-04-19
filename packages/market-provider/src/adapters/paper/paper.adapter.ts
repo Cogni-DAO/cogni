@@ -13,7 +13,11 @@
  * @public
  */
 
-import type { OrderIntent, OrderReceipt } from "../../domain/order.js";
+import type {
+  GetOrderResult,
+  OrderIntent,
+  OrderReceipt,
+} from "../../domain/order.js";
 import type {
   ListMarketsParams,
   MarketProvider,
@@ -73,7 +77,7 @@ export class PaperAdapter implements MarketProviderPort {
     return Promise.reject(notImplemented("cancelOrder"));
   }
 
-  getOrder(_orderId: string): Promise<OrderReceipt> {
+  getOrder(_orderId: string): Promise<GetOrderResult> {
     return Promise.reject(notImplemented("getOrder"));
   }
 }

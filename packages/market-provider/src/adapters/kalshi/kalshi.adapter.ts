@@ -12,7 +12,11 @@
  */
 
 import { constants, createSign } from "node:crypto";
-import type { OrderIntent, OrderReceipt } from "../../domain/order.js";
+import type {
+  GetOrderResult,
+  OrderIntent,
+  OrderReceipt,
+} from "../../domain/order.js";
 import type {
   ListMarketsParams,
   NormalizedMarket,
@@ -155,7 +159,7 @@ export class KalshiAdapter implements MarketProviderPort {
     );
   }
 
-  getOrder(_orderId: string): Promise<OrderReceipt> {
+  getOrder(_orderId: string): Promise<GetOrderResult> {
     return Promise.reject(
       new OrderNotSupportedError(
         "kalshi",
