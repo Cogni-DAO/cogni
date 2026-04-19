@@ -67,6 +67,8 @@ export function OperatorWalletCard(): ReactElement {
   const availablePct =
     total > 0 ? ((data?.usdc_available ?? 0) / total) * 100 : 0;
   const lockedPct = total > 0 ? ((data?.usdc_locked ?? 0) / total) * 100 : 0;
+  const positionsPct =
+    total > 0 ? ((data?.usdc_positions_mtm ?? 0) / total) * 100 : 0;
 
   return (
     <Card>
@@ -164,10 +166,19 @@ export function OperatorWalletCard(): ReactElement {
                     {formatUsdc(data.usdc_locked)}
                   </span>
                 </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block size-2 rounded-sm bg-primary/70" />
+                  Positions{" "}
+                  <span className="text-foreground tabular-nums">
+                    {formatUsdc(data.usdc_positions_mtm)}
+                  </span>
+                </span>
               </div>
             </div>
 
-            {/* Horizontal stacked bar. */}
+            {/* Horizontal stacked bar — three segments: available (on-chain
+                USDC), locked (open-order notional), positions (MTM of held
+                shares). Together they reconstruct the wallet's total worth. */}
             <div className="flex h-2 overflow-hidden rounded-full bg-muted">
               <div
                 className="bg-success/70"
@@ -178,6 +189,11 @@ export function OperatorWalletCard(): ReactElement {
                 className="bg-warning/70"
                 style={{ width: `${lockedPct}%` }}
                 title={`Locked: ${formatUsdc(data.usdc_locked)}`}
+              />
+              <div
+                className="bg-primary/70"
+                style={{ width: `${positionsPct}%` }}
+                title={`Positions (MTM): ${formatUsdc(data.usdc_positions_mtm)}`}
               />
             </div>
           </div>

@@ -101,32 +101,50 @@ export const GET = wrapRouteHandlerWithLogging(
       );
     }
 
-    // ── Polymarket open orders (locked notional) ─────────────────────────────
+    // ── Polymarket open orders (locked notional) + held positions (MTM) ─────
     let usdc_locked = 0;
-    try {
-      const container = getContainer();
-      const capability = container.polyTradeBundle?.capability;
-      if (!capability) {
-        errors.push("poly_capability: not configured");
-      } else {
+    let usdc_positions_mtm = 0;
+    const container = getContainer();
+    const capability = container.polyTradeBundle?.capability;
+    if (!capability) {
+      errors.push("poly_capability: not configured");
+    } else {
+      try {
         const openOrders = await capability.listOpenOrders();
         usdc_locked = openOrders.reduce((sum, o) => {
           const remaining =
             (o.original_size_shares ?? 0) - (o.filled_size_shares ?? 0);
           return sum + Math.max(remaining, 0) * (o.price ?? 0);
         }, 0);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`poly_open_orders: ${msg}`);
+        ctx.log.warn(
+          {
+            event: EVENT_NAMES.POLY_WALLET_BALANCE_OPEN_ORDERS_FAILED,
+            errorCode: "open_orders_read_failed",
+            err: msg,
+          },
+          "polymarket open orders read failed"
+        );
       }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      errors.push(`poly_open_orders: ${msg}`);
-      ctx.log.warn(
-        {
-          event: EVENT_NAMES.POLY_WALLET_BALANCE_OPEN_ORDERS_FAILED,
-          errorCode: "open_orders_read_failed",
-          err: msg,
-        },
-        "polymarket open orders read failed"
-      );
+      try {
+        const positions = await capability.getOperatorPositions();
+        usdc_positions_mtm = positions.reduce(
+          (sum, p) => sum + (p.currentValue ?? 0),
+          0
+        );
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`poly_positions: ${msg}`);
+        ctx.log.warn(
+          {
+            errorCode: "positions_read_failed",
+            err: msg,
+          },
+          "polymarket positions read failed"
+        );
+      }
     }
 
     const stale = errors.length > 0;
@@ -136,7 +154,8 @@ export const GET = wrapRouteHandlerWithLogging(
         operator_address,
         usdc_available,
         usdc_locked,
-        usdc_total: usdc_available + usdc_locked,
+        usdc_positions_mtm,
+        usdc_total: usdc_available + usdc_locked + usdc_positions_mtm,
         pol_gas,
         profile_url,
         stale,
