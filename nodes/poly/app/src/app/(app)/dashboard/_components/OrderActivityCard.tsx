@@ -9,7 +9,8 @@
  *   - READ_ONLY: no mutation buttons.
  *   - COPY_PAYLOAD_IS_AGENT_INPUT: per-row copy emits a JSON block shaped for an AI agent prompt.
  *   - LEDGER_STATUS_MAY_BE_STALE: `status` is set at placement time and is not reconciled with the CLOB. (task.0323 §2)
- *   - NO_EOA_PROFILE_LINKS: market cells never link to polymarket.com/profile/<operator> — that URL redirects to an empty Safe-proxy for EOA-direct operators. See `.claude/skills/poly-dev-expert/SKILL.md`.
+ *   - VISUAL_RESTRAINT: only BUY (green) / SELL (red) carry color. Status uses a tiny dot + muted text. Matches the rest of the dashboard's minimal palette.
+ *   - NO_EOA_PROFILE_LINKS: row links point to the market page (`polymarket.com/market/<slug>`), never to `/profile/<operator>` — EOA-direct operator profiles redirect to an empty Safe proxy. See `.claude/skills/poly-dev-expert/SKILL.md`.
  * Side-effects: IO (via React Query), clipboard (user-triggered).
  * Links: [fetchOrders](../_api/fetchOrders.ts), [fetchMarketTitles](../_api/fetchMarketTitles.ts)
  * @public
@@ -21,7 +22,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Check, Copy } from "lucide-react";
 import { type ReactElement, useMemo, useState } from "react";
 import {
-  Badge,
   Card,
   CardContent,
   CardHeader,
@@ -37,6 +37,7 @@ import {
 } from "@/components";
 import { cn } from "@/shared/util/cn";
 import {
+  extractConditionId,
   fetchMarketTitles,
   type MarketTitleMap,
 } from "../_api/fetchMarketTitles";
@@ -54,22 +55,14 @@ const FILTERS: readonly { value: OrdersStatusFilter; label: string }[] = [
   { value: "all", label: "All" },
 ] as const;
 
+/** Dot color = fast-scan status cue. Text color is always muted-foreground. */
 const STATUS_DOT: Record<string, string> = {
   pending: "bg-muted-foreground animate-pulse",
-  open: "bg-primary animate-pulse",
+  open: "bg-success",
   partial: "bg-warning",
   filled: "bg-success",
   canceled: "bg-muted-foreground",
   error: "bg-destructive",
-};
-
-const STATUS_BADGE: Record<string, "default" | "secondary" | "destructive"> = {
-  pending: "secondary",
-  open: "default",
-  partial: "secondary",
-  filled: "secondary",
-  canceled: "secondary",
-  error: "destructive",
 };
 
 function buildAgentPayload(
@@ -106,7 +99,8 @@ function RowCopyButton({
       type="button"
       aria-label="Copy order details for agent"
       title="Copy order JSON — paste to your agent to cancel or edit"
-      onClick={() => {
+      onClick={(e) => {
+        e.stopPropagation(); // don't trigger the row-link navigation
         void navigator.clipboard
           .writeText(buildAgentPayload(row, title))
           .then(() => {
@@ -143,9 +137,10 @@ export function OrderActivityCard(): ReactElement {
     () =>
       Array.from(
         new Set(
-          orders.flatMap((o) =>
-            o.market_id ? [o.market_id.toLowerCase()] : []
-          )
+          orders.flatMap((o) => {
+            const cid = extractConditionId(o.market_id);
+            return cid ? [cid.toLowerCase()] : [];
+          })
         )
       ),
     [orders]
@@ -160,13 +155,23 @@ export function OrderActivityCard(): ReactElement {
     retry: 1,
   });
 
-  const titleFor = (marketId: string | null): string | undefined => {
-    if (!marketId || !titles) return undefined;
-    return titles[marketId.toLowerCase()]?.question;
-  };
-  const slugFor = (marketId: string | null): string | undefined => {
-    if (!marketId || !titles) return undefined;
-    return titles[marketId.toLowerCase()]?.slug;
+  const lookupFor = (
+    marketId: string | null
+  ): {
+    question: string | undefined;
+    slug: string | undefined;
+    conditionId: string | null;
+  } => {
+    const cid = extractConditionId(marketId);
+    if (!cid) {
+      return { conditionId: null, question: undefined, slug: undefined };
+    }
+    const hit = titles?.[cid.toLowerCase()];
+    return {
+      conditionId: cid,
+      question: hit?.question,
+      slug: hit?.slug,
+    };
   };
 
   return (
@@ -211,10 +216,9 @@ export function OrderActivityCard(): ReactElement {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8" />
-                <TableHead>Status</TableHead>
+                <TableHead className="w-32">Status</TableHead>
                 <TableHead>Market</TableHead>
-                <TableHead className="text-center">Side</TableHead>
+                <TableHead className="w-16 text-center">Side</TableHead>
                 <TableHead className="text-right">Size</TableHead>
                 <TableHead className="text-right">Filled</TableHead>
                 <TableHead className="text-right">Price</TableHead>
@@ -224,55 +228,53 @@ export function OrderActivityCard(): ReactElement {
             </TableHeader>
             <TableBody>
               {orders.map((row) => {
-                const title = titleFor(row.market_id);
-                const slug = slugFor(row.market_id);
+                const { question: title, slug } = lookupFor(row.market_id);
+                const href = slug
+                  ? `https://polymarket.com/market/${slug}`
+                  : null;
+                const displayMarket =
+                  title ??
+                  (row.market_id
+                    ? (() => {
+                        const cid = extractConditionId(row.market_id);
+                        return cid ? `${cid.slice(0, 10)}…` : "(unknown)";
+                      })()
+                    : "(unknown)");
+
                 return (
-                  <TableRow key={`${row.target_id}:${row.fill_id}`}>
-                    <TableCell className="pr-0">
-                      <span
-                        className={cn(
-                          "inline-block size-2 rounded-full",
-                          STATUS_DOT[row.status] ?? "bg-muted-foreground"
-                        )}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        intent={STATUS_BADGE[row.status] ?? "secondary"}
-                        size="sm"
-                      >
+                  <TableRow
+                    key={`${row.target_id}:${row.fill_id}`}
+                    onClick={() => {
+                      if (href) window.open(href, "_blank", "noopener");
+                    }}
+                    className={cn(href && "cursor-pointer hover:bg-muted/30")}
+                  >
+                    <TableCell className="text-muted-foreground text-sm">
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "inline-block size-2 rounded-full",
+                            STATUS_DOT[row.status] ?? "bg-muted-foreground"
+                          )}
+                        />
                         {row.status}
-                      </Badge>
+                      </span>
                     </TableCell>
-                    <TableCell className="max-w-80 truncate font-medium text-sm">
-                      {title && slug ? (
-                        <a
-                          href={`https://polymarket.com/market/${slug}`}
-                          target="_blank"
-                          rel="noreferrer noopener"
-                          className="hover:underline"
-                          title={title}
-                        >
-                          {title}
-                        </a>
-                      ) : title ? (
-                        <span title={title}>{title}</span>
-                      ) : row.market_id ? (
-                        <span className="font-mono text-muted-foreground text-xs">
-                          {row.market_id.slice(0, 10)}…
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                    <TableCell
+                      className="max-w-80 truncate font-medium text-sm"
+                      title={title ?? undefined}
+                    >
+                      {displayMarket}
                     </TableCell>
                     <TableCell className="text-center">
-                      {row.side ? (
-                        <Badge
-                          intent={row.side === "BUY" ? "default" : "secondary"}
-                          size="sm"
-                        >
-                          {row.side}
-                        </Badge>
+                      {row.side === "BUY" ? (
+                        <span className="font-mono font-semibold text-success text-xs tracking-wide">
+                          BUY
+                        </span>
+                      ) : row.side === "SELL" ? (
+                        <span className="font-mono font-semibold text-destructive text-xs tracking-wide">
+                          SELL
+                        </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}

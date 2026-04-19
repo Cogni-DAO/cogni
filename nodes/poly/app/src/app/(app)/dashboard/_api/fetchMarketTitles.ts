@@ -19,6 +19,21 @@ export interface MarketTitle {
 export type MarketTitleMap = Record<string, { question: string; slug: string }>;
 
 /**
+ * The copy-trade ledger stores market_id as a namespaced string —
+ * `"prediction-market:polymarket:<conditionId>"` per the normalize-fill
+ * adapter. Gamma only accepts the bare 0x... conditionId, so strip the
+ * prefix before querying. Returns `null` when the input isn't a Polymarket
+ * market id.
+ */
+export function extractConditionId(marketId: string | null): string | null {
+  if (!marketId) return null;
+  const prefix = "prediction-market:polymarket:";
+  if (marketId.startsWith(prefix)) return marketId.slice(prefix.length);
+  if (marketId.startsWith("0x") && marketId.length >= 10) return marketId; // tolerate bare conditionIds
+  return null;
+}
+
+/**
  * Fetches market titles for up to ~50 condition IDs in one call.
  * The caller should dedupe + chunk if it has more than that.
  *
