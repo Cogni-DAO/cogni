@@ -93,8 +93,23 @@ RPC flakiness: `polygon-bor-rpc.publicnode.com` round-robins and occasionally re
 
 - Base: `https://data-api.polymarket.com`
 - `/trades?user=<addr>` — the mirror's input. Filters by `timestamp >= sinceTs` client-side.
-- `/positions?user=<addr>` — canonical source of truth for what a wallet holds. Use this, not the UI (UI lags by minutes).
+- `/positions?user=<addr>` — canonical source of truth for what a wallet holds. Use this, not the UI.
 - Lag: ~30–60s between CLOB fill and Data-API surfacing.
+
+## EOA-direct vs Safe-proxy — why the UI profile looks empty
+
+The `PolymarketClobAdapter` hardcodes `signatureType: SignatureType.EOA` (`EOA_PATH_ONLY` invariant). Trades settle against the EOA on-chain. **Polymarket's `/profile/<addr>` UI auto-redirects any EOA to its deterministic Safe-proxy address and renders _that_ profile.** For EOA-direct users, the Safe was never instantiated — its profile is empty forever.
+
+**Symptom:** shares show up on Data-API + Polygonscan + market "Activity" tab, but `polymarket.com/profile/<our-eoa>` looks like a blank new account. Easy to mistake for "the trade never happened."
+
+**Ground-truth checks (in order):**
+
+1. `https://data-api.polymarket.com/positions?user=<EOA>` — authoritative
+2. `https://data-api.polymarket.com/trades?user=<EOA>&limit=10`
+3. Market page → Activity tab → filter by EOA
+4. Polygonscan tx hash (from Data-API `transactionHash` field)
+
+Do not rely on the Polymarket profile page for EOA-direct accounts.
 
 ## Anti-patterns to flag
 

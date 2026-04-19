@@ -2,7 +2,7 @@
 id: task.0323
 type: task
 title: "Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation"
-status: todo
+status: needs_triage
 priority: 2
 rank: 99
 estimate: 3
@@ -77,3 +77,7 @@ No Grafana alerts on `poly.mirror.poll.tick_error`, `poly.mirror.source_error`, 
 - Item 0 (CTF SELL) is merged + both wallets re-onboarded + verified by an actual SELL on Polymarket.
 - Items 1–3 are merged into `main` or filed as separate tasks with durable tracking.
 - Items 4–7 are either merged or explicitly deferred with a written note (inline here or on [task.0322](./task.0322.poly-copy-trade-phase4-design-prep.md) if they fold into P4 naturally).
+
+## Validation
+
+Fixed when: (a) a real SELL from both the operator and test wallets succeeds end-to-end (CTF approvals proven live), (b) items 1–3 land as merged PRs or are re-filed as standalone tasks, (c) every remaining bullet has a merged PR or a one-line rationale for deferral. "The handoff said so" is not durable tracking.

@@ -6,7 +6,7 @@
  * Purpose: Reusable place/cancel against Polymarket CLOB signed by a raw-private-key EOA (loads `TEST_WALLET_*` + `TEST_WALLET_POLY_CLOB_*` from `.env.test`). Raw-PK sibling of the Privy-based `place-polymarket-order.ts`.
  * Scope: Two subcommands — `place` (BUY GTC post-only; prints order_id) and `cancel --order-id <id>`. Requires `--yes-real-money` for `place`. Does not onboard the wallet (use `onboard-raw-pk-wallet.ts`).
  * Invariants: Polygon chainId 137; EOA path; post-only GTC (CLOB rejects if would match).
- * Side-effects: reads .env.test; HTTPS to Polymarket CLOB; ONE real placement OR cancel per invocation.
+ * Side-effects: IO (reads .env.test + .env.local; HTTPS to Polymarket CLOB; one real placement or cancel per invocation).
  * Links: docs/guides/polymarket-account-setup.md
  * @internal — experiment code, not shipped to production
  */

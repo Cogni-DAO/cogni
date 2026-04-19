@@ -5,8 +5,8 @@
  * Module: `@scripts/experiments/privy-polymarket-order`
  * Purpose: Reusable place/cancel against Polymarket CLOB signed by a Privy HSM wallet (defaults to POLY_PROTO operator via `.env.local`). Privy sibling of `raw-pk-polymarket-order.ts` + generalized variant of the scope-specific `place-polymarket-order.ts` dress-rehearsal script.
  * Scope: Two subcommands — `place` (GTC; configurable `--side`, `--outcome`, `--size`, `--price`, optional `--post-only`) and `cancel --order-id <id>`. Requires `--yes-real-money` for `place`. Does not onboard.
- * Invariants: Polygon chainId 137; EOA path; GTC. Caller must already have derived CLOB creds + funded the Privy wallet + approved USDC.e spenders + (for SELL) CTF operators.
- * Side-effects: reads .env.local; HTTPS to Polymarket CLOB; ONE real placement OR cancel per invocation.
+ * Invariants: Polygon chainId 137; EOA path only; GTC (caller owns onboarding — USDC.e + CTF approvals + CLOB creds must already be in place).
+ * Side-effects: IO (reads .env.local; HTTPS to Polymarket CLOB; one real placement or cancel per invocation).
  * Links: docs/guides/polymarket-account-setup.md, work/items/task.0323.poly-copy-trade-v1-hardening.md
  * @internal — experiment code, not shipped to production
  */

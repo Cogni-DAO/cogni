@@ -6,7 +6,7 @@
  * Purpose: One-shot onboarding of a raw-private-key EOA to Polymarket CLOB — approve 3 exchange contracts for USDC.e + derive L2 API creds. Raw-PK sibling of the Privy-based `approve-polymarket-allowances.ts` + `derive-polymarket-api-keys.ts`.
  * Scope: Signs with viem `privateKeyToAccount`; idempotent (skips MaxUint256 allowances). Prints a paste-ready env block. Does not place orders or move USDC.e.
  * Invariants: Polygon chainId 137; EOA path only.
- * Side-effects: reads .env.test; Polygon RPC reads + up to 3 approve txs (~0.02 POL gas); one signed HTTPS request to Polymarket CLOB auth endpoint.
+ * Side-effects: IO (reads .env.test; Polygon RPC reads + up to 5 approve txs ~0.04 POL gas; one signed HTTPS request to Polymarket CLOB auth endpoint).
  * Links: docs/guides/polymarket-account-setup.md (Privy variant)
  * @internal — experiment code, not shipped to production
  */
