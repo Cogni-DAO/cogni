@@ -16,7 +16,7 @@ credit:
 project: proj.unified-graph-launch
 initiative:
 branch: worktree-task.0280-worker-http-persistence
-pr:
+pr: https://github.com/Cogni-DAO/node-template/pull/922
 reviewer:
 revision: 1
 blocked_by:
