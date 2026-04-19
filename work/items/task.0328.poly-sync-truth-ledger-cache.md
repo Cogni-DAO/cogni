@@ -2,7 +2,8 @@
 id: task.0328
 type: task
 title: "Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health)"
-status: needs_closeout
+status: needs_implement
+revision: 1
 priority: 1
 rank: 50
 estimate: 1
@@ -129,6 +130,53 @@ This task is the **first slice** of that architecture. Follow-ups (event log, Pn
     - [ ] contract: `sync-health.v1.contract.ts` parses expected shape
     - [ ] unit: ledger test — `syncHealthSummary` returns correct counts on a fixture
     - [ ] stack or component (pick one): route returns 200 + valid body
+
+## Review Feedback (revision 1 — 2026-04-19)
+
+**Blocking issues** from /review-implementation:
+
+### 1. Migration 0028 not registered with drizzle-kit (CRITICAL)
+
+`nodes/poly/app/src/adapters/server/db/migrations/0028_synced_at_column.sql` exists but:
+
+- Not listed in `meta/_journal.json` (journal ends at idx 27)
+- No corresponding `meta/0028_snapshot.json`
+
+Drizzle-orm's migrator reads `_journal.json` to decide which migrations to apply. The orphaned SQL file will be silently skipped at deploy. Production DB will not get the `synced_at` column, so every `listRecent` / `listOpenOrPending` / `markSynced` / `syncHealthSummary` call will throw at runtime. `pnpm check` doesn't catch it because unit tests use the fake ledger; stack tests in CI would.
+
+**Fix**: regenerate the migration via drizzle-kit. Either:
+
+- `cd` to repo root and run `DATABASE_URL=<local> pnpm --filter ./nodes/poly/app exec drizzle-kit generate` (preferred — regenerates journal + snapshot automatically), OR
+- Delete the hand-authored `0028_synced_at_column.sql`, add the `syncedAt` column to the Drizzle schema only, then run drizzle-kit generate.
+
+### 2. `sql.raw(String(olderThanMs))` in `listOpenOrPending`
+
+`order-ledger.ts:279` — raw interpolation of a numeric into SQL. Not a user-input-injection exploit but fragile and bypasses parameter binding. A future caller passing a float produces invalid SQL silently.
+
+**Fix**: `sql\`now() - make_interval(secs => ${olderThanMs} / 1000.0)\``or`sql\`now() - ${olderThanMs} \* interval '1 millisecond'\``.
+
+### 3. `/sync-health` leaks `err.message`
+
+`nodes/poly/app/src/app/api/v1/poly/internal/sync-health/route.ts:45-48` — `err.message` is returned directly in the 500-response body. Potential information disclosure (SQL errors, stack messages, connection strings).
+
+**Fix**: log the error via `ctx.log`; return only `{ error: "sync_health_error" }`.
+
+### 4. Contract field `oldest_unsynced_row_age_ms` is misnamed
+
+`packages/node-contracts/src/poly.sync-health.v1.contract.ts:20` — the field represents the age of the least-recently-**synced** row. A truly unsynced row has no age (counted in `rows_never_synced`). The contract's own docstring L10–11 admits the contradiction. Consumers will misread it.
+
+**Fix**: rename to `oldest_synced_row_age_ms` (or `oldest_sync_age_ms`). Zero-cost now; expensive after downstream consumers subscribe.
+
+### Non-blocking suggestions
+
+- **Outdated invariant**: `OrderActivityCard.tsx:11` still claims `LEDGER_STATUS_MAY_BE_STALE: status is set at placement time and is not reconciled with the CLOB.` That's exactly what this PR fixes. Replace with an accurate `LEDGER_STATUS_IS_RECONCILED` invariant noting the `synced_at` freshness signal.
+- **Outdated agent hint** `OrderActivityCard.tsx:67` — the agent payload hint still references task.0323 §2 and tells the agent to cross-check against Data-API. Update to reflect the new truth: staleness is self-declared via `staleness_ms`.
+- **Dead metric alias**: `order-reconciler.job.ts:52-74` — drop `RECONCILER_METRICS` and keep only `ORDER_RECONCILER_METRICS`. The "back-compat" comment is wrong; this PR is the first consumer.
+- **Unused dep**: `getOperatorPositions` on reconciler deps is accepted but never called. Either use it (redemption-sync) or remove it; required-but-unused wastes test scaffolding.
+- **Discriminant style**: `order-reconciler.job.ts:187` uses `!("found" in result)` — prefer `if (result.status === "not_found")` to match the contract's discriminator.
+- **Per-request ledger instantiation**: both routes (`orders/route.ts:112`, `sync-health/route.ts:28`) build a fresh `createOrderLedger` per request. Container should expose a singleton.
+- **No wrapRouteHandlerWithLogging on /sync-health**: loses correlation ids that every other route has.
+- **Redundant SQL FILTER**: `order-ledger.ts:348-361` applies `FILTER (WHERE synced_at IS NOT NULL)` to `MIN(synced_at)` — MIN already ignores NULLs.
 
 ## Validation
 
