@@ -138,7 +138,7 @@ function StalenessDot({
       title={tooltip}
       className={cn(
         "inline-block size-1.5 rounded-full",
-        isNeverSynced ? "bg-muted-foreground" : "bg-yellow-400"
+        isNeverSynced ? "bg-muted-foreground" : "bg-warning"
       )}
     />
   );
