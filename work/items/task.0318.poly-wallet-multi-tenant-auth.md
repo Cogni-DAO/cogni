@@ -15,7 +15,7 @@ spec_refs:
 assignees: derekg1729
 project: proj.poly-prediction-bot
 created: 2026-04-17
-updated: 2026-04-17
+updated: 2026-04-19
 labels: [poly, polymarket, wallets, auth, rls, multi-tenant, privy, security]
 external_refs:
   - work/items/task.0315.poly-copy-trade-prototype.md
@@ -96,6 +96,55 @@ Add tenant columns and enable RLS:
 - `PolymarketClobAdapter` still constructed per-request / per-tenant, not once at boot. Caller (CP4 executor or a future Temporal activity) resolves `(billing_account_id, wallet_connection_id)` → fetches Privy `walletId` + decrypts `ApiKeyCreds` → calls `createViemAccount` → passes into adapter constructor.
 - Poll job (task.0315 CP4 scaffolding) iterates over active `poly_wallet_grants` instead of reading env vars. One grant → one tenant's targets → one adapter instance.
 - **Fail-closed kill-switch becomes per-tenant**: the poll's config SELECT is per `billing_account_id`; a missing or failed row skips that tenant without affecting others.
+
+### Env vars this task deletes (current single-operator scaffolding)
+
+The poly-node mirror currently runs on a cluster of env vars that encode _the single operator wallet_ + _the single target being copied_ + _the single CLOB credential set_. When this task ships, these become per-tenant rows in `poly_wallet_grants` / `poly_copy_trade_targets` and the env vars are removed from the pod entirely.
+
+Listed below for visibility — and because preview/production currently require these to be **manually set on the VM's `poly-node-app-secrets`** (not propagated through CI/CD). The decision to defer propagation: given this task flips the whole shape, investing in compose / ci.yaml / promote-and-deploy / provision-test-vm.sh wiring for env vars about to be deleted would be churn. Candidate-a is the only env where they're CI-wired (via `candidate-flight-infra.yml`). Preview + prod copies are manually seeded from candidate-a's values until this task lands.
+
+| Env var                        | Source            | Role                  | Preview state    | Replaced by                                                                          |
+| ------------------------------ | ----------------- | --------------------- | ---------------- | ------------------------------------------------------------------------------------ |
+| `POLY_PROTO_WALLET_ADDRESS`    | Privy wallet addr | Operator EOA          | manual k8s patch | `poly_wallet_grants.wallet_address` per tenant                                       |
+| `POLY_PROTO_PRIVY_APP_ID`      | Privy app         | Operator Privy creds  | manual k8s patch | Shared Privy creds live in a node-level secret; per-tenant just holds the `walletId` |
+| `POLY_PROTO_PRIVY_APP_SECRET`  | Privy app         | Operator Privy creds  | manual k8s patch | same                                                                                 |
+| `POLY_PROTO_PRIVY_SIGNING_KEY` | Privy app         | Operator Privy creds  | manual k8s patch | same                                                                                 |
+| `POLY_CLOB_API_KEY`            | Polymarket CLOB   | Operator API key      | manual k8s patch | Per-tenant `poly_clob_credentials` row (AEAD-encrypted)                              |
+| `POLY_CLOB_API_SECRET`         | Polymarket CLOB   | Operator API key      | manual k8s patch | same                                                                                 |
+| `POLY_CLOB_PASSPHRASE`         | Polymarket CLOB   | Operator API key      | manual k8s patch | same                                                                                 |
+| `POLY_CLOB_HOST`               | Polymarket CLOB   | Operator API endpoint | manual k8s patch | Shared config / env                                                                  |
+| `COPY_TRADE_TARGET_WALLET`     | Env               | Single target wallet  | manual k8s patch | `poly_copy_trade_targets` rows per tenant                                            |
+
+**Preview bootstrap recipe** (one-time, until this task ships):
+
+```bash
+# From the preview VM, copy candidate-a's values into preview's secret
+kubectl -n cogni-preview patch secret poly-node-app-secrets --type=merge -p "$(jq -n \
+  --arg addr    "<candidate-a POLY_PROTO_WALLET_ADDRESS>" \
+  --arg appId   "<candidate-a POLY_PROTO_PRIVY_APP_ID>" \
+  --arg appSec  "<candidate-a POLY_PROTO_PRIVY_APP_SECRET>" \
+  --arg signKey "<candidate-a POLY_PROTO_PRIVY_SIGNING_KEY>" \
+  --arg clobKey "<candidate-a POLY_CLOB_API_KEY>" \
+  --arg clobSec "<candidate-a POLY_CLOB_API_SECRET>" \
+  --arg clobPas "<candidate-a POLY_CLOB_PASSPHRASE>" \
+  --arg clobHos "<candidate-a POLY_CLOB_HOST>" \
+  --arg target  "0x331bf91c132af9d921e1908ca0979363fc47193f" \
+  '{stringData: {
+    POLY_PROTO_WALLET_ADDRESS: $addr,
+    POLY_PROTO_PRIVY_APP_ID: $appId,
+    POLY_PROTO_PRIVY_APP_SECRET: $appSec,
+    POLY_PROTO_PRIVY_SIGNING_KEY: $signKey,
+    POLY_CLOB_API_KEY: $clobKey,
+    POLY_CLOB_API_SECRET: $clobSec,
+    POLY_CLOB_PASSPHRASE: $clobPas,
+    POLY_CLOB_HOST: $clobHos,
+    COPY_TRADE_TARGET_WALLET: $target
+  }}')"
+
+kubectl -n cogni-preview rollout restart deployment poly-node-app
+```
+
+Exit criteria for this task: the bootstrap recipe above **deletes itself** — there are no env-driven poly-operator secrets in the pod, only the AEAD encryption key + DB-held per-tenant credentials.
 
 ### Scoped signer — reinstate the narrow port?
 
