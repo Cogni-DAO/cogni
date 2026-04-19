@@ -6,66 +6,72 @@ status: active
 created: 2026-04-19
 updated: 2026-04-19
 branch: main
-last_commit: df95f6c3a
+last_commit: 1a27f7564
 ---
 
-# Handoff: poly copy-trade — preview live on BeefSlayer, 3 open UI/adapter bugs
+# Handoff: poly copy-trade — mirror running, 0 fills landed, preview env wedged
 
 ## Context
 
-- PR #918 merged to main 2026-04-19 — shipped dashboard slice (Operator Wallet, Active Orders, Monitored Wallets) + task.0323 hardening cherry-picks (CTF approvals, reconciler, closePosition, close-vs-short).
-- Preview is live on PR #918's code. Running operator wallet `0x7A33…0aEB`. Mirror target set per [spike.0323 research](../../docs/research/polymarket-copy-trade-candidates.md) to **BeefSlayer** (`0x331bf91c132af9d921e1908ca0979363fc47193f`, weather-markets specialist, 78% WR n=118, 10.7% max DD).
-- Candidate-a frozen — kill switch `poly_copy_trade_config.enabled = false`. No new orders placed there.
-- 2 orphan positions sit on operator wallet from earlier candidate-a mirror (LeBron 2028 YES 500 shares / $3.25, Iran peace YES 5 shares / $0.78). Can't SELL them — see risk #1 below.
-- Three UI/adapter bugs surfaced during preview validation — captured as the follow-up bug listed in §Decisions.
+- PR #930 (task.0328 sync-truth) merged 2026-04-19 and was flighted to candidate-a. Ships: typed `GetOrderResult`, `POLY_CLOB_NOT_FOUND_GRACE_MS` grace window, stuck-row → canceled promotion + counter, `synced_at` column + staleness badge, `/api/v1/poly/internal/sync-health` endpoint, link-semantics on Active Orders rows, `bg-[hsl(var(--chart-1))]` on positions segment.
+- Preview target is **BeefSlayer** (`0x331bf91c132af9d921e1908ca0979363fc47193f`). Operator is `0x7a33…0aEB`.
+- **Mirror is polling BeefSlayer's Data-API every 30s.** 15+ BeefSlayer trades in the last ~48h. Zero fills landed on the operator: the only placement attempt errored, everything else was correctly skipped.
+- **bug.0329 filed**: SELL on neg_risk markets returns empty-error CLOB response. Operator holds two orphan positions that cannot be closed (LeBron 2028 YES 500 sh / $3.25; Iran peace YES 5 sh / $0.82 — Iran resolves 2026-04-22).
 
 ## Current State
 
-- Preview: `https://poly-preview.cognidao.org` → readyz version `0e75b4a65e41…` (PR #918 HEAD build).
-- Preview pod env contains all 9 poly-proto/clob vars + `POLYGON_RPC_URL` + `COPY_TRADE_TARGET_WALLET=0x331bf91c…` — seeded manually per task.0318 decision ([deferred env-update for vars RLS will delete](../items/task.0318.poly-wallet-multi-tenant-auth.md)).
-- Preview kill switch: `enabled=true` as of 2026-04-19T10:10:43Z. Mirror polling every 30s, last tick ok, 0 fills observed (BeefSlayer hadn't traded in the warmup window yet).
-- Candidate-a kill switch: `enabled=false` as of 2026-04-19T10:10:39Z.
-- Preview poly image overlay was manually promoted on the `deploy/preview` branch (commit `8bf684644`) because PR #924's flight rebuilt poly from pre-#918 code; a proper promote-and-deploy re-run on current main will overwrite that with the correct digest next merge.
-- Dashboard renders on preview with live Alchemy RPC balances. Three visible regressions listed in §Next Actions.
+- PR #930: merged + flighted to candidate-a. Main ahead of canary by one merge at handoff time.
+- Candidate-a kill switch: verify current state (was `enabled=false` during #918 freeze).
+- **Preview**: running, but partially wedged.
+  - Old pod `6c545fc995-*` boots fine, serves dashboard, runs the mirror loop against BeefSlayer — observed in Loki as `poly.mirror.decision outcome:skipped reason:sell_without_position` every ~30s.
+  - New pod `7f6664947d-*` (post-#930 promotion) throws `EnvValidationError: invalid: ['POLY_PROTO_WALLET_ADDRESS']` on every request that pulls server-env. Not a crashloop — the process runs, but anything using that code path returns 500. Likely the preview ConfigMap/Secret's value drifted (empty string / bad format). Regex unchanged since task.0315.
+- Dashboard shows **1 Active Order with `status: error`** — that is the only row that made it past `decide()` into `insertPending`. Placement threw `placement_failed` at 2026-04-19 17:14:53 UTC on a mirror BUY of BeefSlayer's Chicago 48-49°F YES @ 0.697 ($1 notional). Reason not captured in decision log — need clob-executor / adapter logs for that tick.
+- Every BeefSlayer SELL since has been skipped with reason `sell_without_position` (correct — operator never held those positions, so we're not opening shorts).
+- Candidate-a still has the two orphan positions. SELL path blocked by bug.0329 on neg_risk.
 
 ## Decisions Made
 
-- **Preview env secrets seeded manually, not propagated through CI**: codified in [task.0318 §"Env vars this task deletes"](../items/task.0318.poly-wallet-multi-tenant-auth.md#env-vars-this-task-deletes-current-single-operator-scaffolding). Avoided env-update churn on vars RLS will remove.
-- **BeefSlayer as preview v0 target**: selected for clean category (weather, no insider-flag risk), largest resolved sample in the v3 cross-category screen. See [polymarket-copy-trade-candidates.md §"v0 paper-mirror roster"](../../docs/research/polymarket-copy-trade-candidates.md).
-- **Orphan positions left to resolve naturally**: Iran market resolves 2026-04-22 (3d); LeBron 2028 is a write-off. SELL adapter bug makes force-close uneconomical. Logged as bug to file.
-- **Bug #918 follow-ups consolidated into one bug** (not 3): adapter SELL failure + market-title hash fallback + stacked-bar color collision are the same release surface area.
+- **BUY_ONLY on `capability.placeTrade`, SELL routed via `closePosition`**: agent-tool safety boundary. Mirror coordinator detects target SELLs and calls `closePosition` only when operator already holds the asset; else skips with `sell_without_position`. This is why the dashboard sees no SELL activity from BeefSlayer — all correct.
+- **bug.0329 kept out of PR #930 scope**: EIP-712 domain/verifyingContract investigation on neg_risk SELL is a distinct adapter bug; filed separately.
+- **Legacy Market column renders empty for pre-#918 rows**: Data-API title is always populated for modern rows; no conditionId-in-tooltip, no truncated-hex fallback. Finite migration tail, not worth placeholder UX.
+- **Reconciler stamps `synced_at` for every typed CLOB response** (found OR not_found); skips only on network throw. `/sync-health` returns `{oldest_synced_row_age_ms, rows_stale_over_60s, rows_never_synced, reconciler_last_tick_at}`.
 
 ## Next Actions
 
-- [ ] File consolidated bug covering: (a) `PolymarketClobAdapter` SELL on neg_risk markets returns empty-error (`success=undefined, orderID=<missing>, errorMsg=""`) despite all approvals / valid tick / notional; (b) Active Orders "Market" column falls back to truncated conditionId for pre-stash rows (expected, but UX is worse than "(unknown)"); (c) Operator Wallet stacked bar shows positions segment indistinguishable from available because both `--primary` (HSL 160 65% 45%) and `--color-success` (HSL 142 71% 45%) are near-green. Use a `--chart-N` token or amber/cyan for positions.
-- [ ] Fix (a) adapter bug: trace CLOB raw response, verify neg-risk verifyingContract + EIP-712 domain are set correctly on SELL signing path. Likely in `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts` around line 180–215.
-- [ ] Fix (c) in `nodes/poly/app/src/app/(app)/dashboard/_components/OperatorWalletCard.tsx` — swap `bg-primary/70` to a distinct chart token (e.g. `bg-[hsl(var(--chart-3))]/70` = amber).
-- [ ] Fix (b): either (i) backfill `attributes.title` for historic rows via a one-off Gamma-lookup script, or (ii) render a friendlier placeholder than `slice(-12)` of the hash.
-- [ ] After adapter fix lands, retry SELL on the LeBron/Iran orphans. If Iran has resolved by then, redeem via CTF instead.
-- [ ] Replace manual preview secret seeding with CI propagation once [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) ships RLS — at that point env vars listed there are deleted entirely.
-- [ ] Watch preview for BeefSlayer fills over the next 24–48h; first mirror order is the real edge-validation signal.
+- [ ] **Fix preview env**: `kubectl -n cogni-preview get secret poly-node-app-secrets -o json | jq '.data.POLY_PROTO_WALLET_ADDRESS|@base64d'` — should be `0x7a3347d25a69e735f6e3a793ecbdca08f97a0aeb`. If empty / malformed, patch. Then `kubectl rollout restart deployment/poly-node-app -n cogni-preview`.
+- [ ] **Investigate `placement_failed` on the 2026-04-19 17:14 UTC BUY** (Chicago 48-49°F YES @ 0.697). Pull the clob-executor log around that timestamp from preview (Loki `{namespace="cogni-preview"} |~ "poly_copy_trade_execute"` around 17:14:53Z). If Chicago daily-temperature markets are neg_risk, this may be bug.0329 extended to BUY too — escalating bug.0329 from "can't close" to "can't open either on neg_risk".
+- [ ] **File bug for the env-validation regression** on the new pod — env config drift is a recurring failure mode; needs a `task.0318` follow-up to CI-propagate the value rather than hand-seeding.
+- [ ] **Fix bug.0329** (neg_risk SELL signing path). See `work/items/bug.0329.poly-sell-neg-risk-empty-reject.md` for symptom, reproducer, and suspected root cause.
+- [ ] **Address three UI follow-ups** from the task.0328 rev2 review (filed in-line on the work item): `focus-visible:outline-none` a11y regression, `role="link"` semantics on `<tr>`, `bg-[hsl(var(--chart-1))]/70` opacity-modifier syntax (probably renders at 100%).
+- [ ] Confirm BeefSlayer fills start landing once the env + placement-failure issues are resolved; watch for the first `outcome:placed reason:ok` in Loki.
+- [ ] After Iran market resolves (2026-04-22), verify CTF redemption path works end-to-end — non-SELL exit path, never exercised.
 
 ## Risks / Gotchas
 
-- **Adapter SELL bug blocks ALL close-position flows on neg_risk markets.** Every position we open in a neg-risk market becomes roach-motel until the bug lands. Cancel path (pre-fill) works; post-fill SELL does not.
-- **Preview `deploy/preview` branch is ahead of what promote-and-deploy will produce next merge.** The manual `ops:` commit will be overwritten on the next promote run unless the promoter re-picks the correct digest. Watch for poly image regression on the next post-merge preview deploy.
-- **Pre-#918 ledger rows have no `attributes.title`** — permanent UX degradation until backfilled. Rows from the mirror post-#918 will populate correctly via `decide.ts` title passthrough.
-- **CTF ERC-1155 approvals landed for operator wallet via `approve-polymarket-allowances.ts` run 2026-04-19** — same wallet now works across candidate-a + preview. Don't re-provision Privy; you'll churn allowances.
-- **Preview wallet is the SAME as candidate-a** (`0x7A33…0aEB`). Cross-env positions can interfere if both mirrors run concurrently. Candidate-a is frozen; don't re-enable without coordinating.
+- **The errored row will never be reconciled**: reconciler skips rows without `order_id` (`order-reconciler.job.ts:176-180`). The one row on the dashboard will show "Never synced" (grey dot) until manually canceled / dropped.
+- **New pod serves HTML fine**, so visiting the dashboard "works" — but `/api/v1/poly/wallet/balance` and `/api/v1/poly/copy-trade/orders` return 500 on that pod. Old pod masks this at the service level via load balancing.
+- **Preview and candidate-a share the operator wallet** (`0x7A33…0aEB`). Cross-env positions interfere if both mirrors run with `enabled=true`. Coordinate before flipping switches.
+- **Mirror BUYs at BeefSlayer's limit price** — if the book moved between his fill and our tick, our limit may be too far off-market and the order errors. 17:14 error on @ 0.697 is a candidate case.
+- **Preview manual env seeding** is the upstream cause of the new-pod failure. Until task.0318 RLS ships and deletes these vars, every pod rollout is a chance for drift.
 
 ## Pointers
 
-| File / Resource                                                                                                                 | Why it matters                                                                                                                                             |
-| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [PR #918](https://github.com/Cogni-DAO/node-template/pull/918)                                                                  | Merged dashboard + hardening scope                                                                                                                         |
-| [spike.0323 research](../../docs/research/polymarket-copy-trade-candidates.md)                                                  | BeefSlayer rationale + v0 roster methodology                                                                                                               |
-| [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md#env-vars-this-task-deletes-current-single-operator-scaffolding) | Env vars manually seeded on preview (deferred by design)                                                                                                   |
-| [poly-dev-expert skill](../../.claude/skills/poly-dev-expert/SKILL.md)                                                          | Runbook — wallet roles, approvals, empty-error-SELL symptom                                                                                                |
-| `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts`                                                   | Adapter SELL bug lives here (L180–230 neg-risk path)                                                                                                       |
-| `nodes/poly/app/src/app/(app)/dashboard/_components/OperatorWalletCard.tsx`                                                     | Stacked bar color collision (bg-primary vs bg-success)                                                                                                     |
-| `nodes/poly/app/src/app/(app)/dashboard/_components/OrderActivityCard.tsx`                                                      | Market-title fallback logic (L185-190)                                                                                                                     |
-| `nodes/poly/app/src/features/copy-trade/decide.ts`                                                                              | Title/tx_hash passthrough into intent.attributes (post-#918)                                                                                               |
-| `nodes/poly/app/src/features/trading/order-ledger.ts`                                                                           | Attribute allow-list on write (L135-160)                                                                                                                   |
-| `scripts/experiments/privy-polymarket-order.ts`                                                                                 | Reproduce SELL bug: `place --side SELL --size 2.5 --price 0.005 --token-id <LeBron-YES>`                                                                   |
-| Kill switch                                                                                                                     | `docker exec cogni-runtime-postgres-1 psql -U postgres -d cogni_poly -c "UPDATE poly_copy_trade_config SET enabled=<bool>…"` (from preview/candidate-a VM) |
-| Grafana Loki                                                                                                                    | `{namespace="cogni-preview",app="poly"} \|~ "poly.mirror.decision"` — watch for first placed-mirror                                                        |
+| File / Resource                                                               | Why it matters                                                                                                                      |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [PR #930](https://github.com/Cogni-DAO/node-template/pull/930)                | Sync-truth slice + release-surface cleanup — most recent merge                                                                      |
+| [task.0328 work item](../items/task.0328.poly-sync-truth-ledger-cache.md)     | Sync-truth design, invariants, rev2 UI follow-ups                                                                                   |
+| [bug.0329 work item](../items/bug.0329.poly-sell-neg-risk-empty-reject.md)    | neg_risk SELL blocker — symptom, reproducer, suspected root cause                                                                   |
+| [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md)              | Multi-tenant RLS — will delete manual env seeding                                                                                   |
+| [task.0322](../items/task.0322.poly-copy-trade-phase4-design-prep.md)         | P4 WS cutover design prep                                                                                                           |
+| [poly-dev-expert skill](../../.claude/skills/poly-dev-expert/SKILL.md)        | Wallet roles, approvals, onboarding runbook                                                                                         |
+| `packages/market-provider/src/adapters/polymarket/polymarket.clob.adapter.ts` | SELL signing path — bug.0329 lives here                                                                                             |
+| `nodes/poly/app/src/features/copy-trade/mirror-coordinator.ts`                | `processSellFill` = close-vs-short discrimination                                                                                   |
+| `nodes/poly/app/src/bootstrap/jobs/order-reconciler.job.ts`                   | Grace-window promotion, last-tick tracking                                                                                          |
+| `nodes/poly/app/src/features/trading/order-ledger.ts`                         | `markSynced`, `syncHealthSummary`, `updateStatus(reason?)`                                                                          |
+| `nodes/poly/app/src/app/api/v1/poly/internal/sync-health/route.ts`            | New endpoint — Grafana-scrape shape                                                                                                 |
+| `scripts/experiments/privy-polymarket-order.ts`                               | Reproducer for bug.0329: `place --side SELL …`                                                                                      |
+| Operator profile                                                              | `https://polymarket.com/profile/0x7a3347d25a69e735f6e3a793ecbdca08f97a0aeb`                                                         |
+| BeefSlayer trades                                                             | `https://data-api.polymarket.com/trades?user=0x331bf91c132af9d921e1908ca0979363fc47193f&limit=20`                                   |
+| Operator positions                                                            | `https://data-api.polymarket.com/positions?user=0x7a3347d25a69e735f6e3a793ecbdca08f97a0aeb`                                         |
+| Kill switch                                                                   | `docker exec <postgres> psql -U postgres -d cogni_poly -c "UPDATE poly_copy_trade_config SET enabled=<bool> WHERE singleton_id=1;"` |
+| Loki query                                                                    | `{namespace="cogni-preview"} \|~ "poly.mirror.decision"`                                                                            |
