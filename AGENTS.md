@@ -40,6 +40,7 @@ Reference interaction patterns:
 - **Think before coding.** State assumptions. Surface ambiguity. Push back when the prompt implies over-scope or a simpler path exists. _Then ship._
 - **Simplicity first.** Write the minimum code that solves the problem. No speculative abstractions. No error handling for impossible cases.
 - **Surgical changes.** Edit only what the task demands. Match existing style. Mention drive-by issues — don't fix them in the same PR.
+- **Deterministic reproducibility.** Everything the system runs on lives in git — infra as code (GitOps via Argo + OpenTofu), memory as code (Dolt ops). Ad-hoc `ssh`, `kubectl`, one-off env vars, and console clicks are fine for a 5-minute experiment; anything that needs to stay gets captured as a script, terraform change, or GitOps commit before the session ends. If it isn't in git, it didn't happen.
 - **Port, don't rewrite.** When refactoring, copy working logic verbatim and change only the boundary. Rewrites reintroduce bugs the original already solved.
 - **Prune aggressively.** Delete noise; keep signal. Summarize after each step. Keep context <40% of the window.
 
