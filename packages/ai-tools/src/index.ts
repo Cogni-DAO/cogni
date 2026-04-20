@@ -17,6 +17,7 @@ export type {
   CiStatusResult,
   ClockCapability,
   CreateBranchResult,
+  DispatchCandidateFlightResult,
   KnowledgeCapability,
   KnowledgeEntry,
   KnowledgeListParams,
@@ -306,6 +307,19 @@ export {
   vcsCreateBranchContract,
   vcsCreateBranchStubImplementation,
 } from "./tools/vcs-create-branch";
+export {
+  createVcsFlightCandidateImplementation,
+  VCS_FLIGHT_CANDIDATE_NAME,
+  type VcsFlightCandidateDeps,
+  type VcsFlightCandidateInput,
+  VcsFlightCandidateInputSchema,
+  type VcsFlightCandidateOutput,
+  VcsFlightCandidateOutputSchema,
+  type VcsFlightCandidateRedacted,
+  vcsFlightCandidateBoundTool,
+  vcsFlightCandidateContract,
+  vcsFlightCandidateStubImplementation,
+} from "./tools/vcs-flight-candidate";
 export {
   createVcsGetCiStatusImplementation,
   VCS_GET_CI_STATUS_NAME,

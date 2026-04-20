@@ -4,14 +4,16 @@
 /**
  * Module: `@adapters/server/vcs/github-vcs`
  * Purpose: VcsCapability adapter using Octokit + GitHub App authentication.
- * Scope: Implements VcsCapability for GitHub API operations (list PRs, CI status, merge, create branch).
+ * Scope: Implements VcsCapability for GitHub API operations (list PRs, CI status, merge, create branch, dispatch candidate-flight).
  * Invariants:
  *   - AUTH_VIA_APP: Uses @octokit/auth-app for GitHub App JWT + installation token management
  *   - INSTALLATION_CACHED: Installation ID resolved once per owner/repo and cached
  *   - TOKEN_AUTO_REFRESH: Octokit auth-app handles token caching and refresh automatically
  *   - ADAPTER_SWAPPABLE: Implements VcsCapability — can be swapped for gh CLI adapter later
+ *   - FLIGHT_WORKFLOW_REF_MAIN: `candidate-flight.yml` is dispatched against `ref: main`.
+ *     The workflow YAML lives on main; dispatching from a feature branch would fail.
  * Side-effects: IO (GitHub REST API)
- * Links: task.0242, services/scheduler-worker/src/adapters/ingestion/github-auth.ts
+ * Links: task.0242, task.0297, services/scheduler-worker/src/adapters/ingestion/github-auth.ts
  * @internal
  */
 
@@ -19,6 +21,7 @@ import type {
   CheckInfo,
   CiStatusResult,
   CreateBranchResult,
+  DispatchCandidateFlightResult,
   MergeResult,
   PrSummary,
   VcsCapability,
@@ -229,6 +232,50 @@ export class GitHubVcsAdapter implements VcsCapability {
       const message = error instanceof Error ? error.message : "Merge failed";
       return { merged: false, message };
     }
+  }
+
+  async dispatchCandidateFlight(params: {
+    owner: string;
+    repo: string;
+    prNumber: number;
+    headSha?: string;
+  }): Promise<DispatchCandidateFlightResult> {
+    const octokit = await this.getOctokit(params.owner, params.repo);
+
+    // workflow_dispatch inputs are always strings at the GitHub API boundary
+    // even when the workflow declares `type: string` — LiteLLM / Octokit
+    // preserves values as-is. We stringify prNumber explicitly.
+    const inputs: Record<string, string> = {
+      pr_number: String(params.prNumber),
+    };
+    if (params.headSha) {
+      inputs.head_sha = params.headSha;
+    }
+
+    // GitHub returns HTTP 204 with no body on success. There is no run_id in
+    // the response — do NOT attempt to correlate here; the caller observes
+    // the resulting `candidate-flight` check on the PR head via getCiStatus.
+    await octokit.request(
+      "POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches",
+      {
+        owner: params.owner,
+        repo: params.repo,
+        workflow_id: "candidate-flight.yml",
+        ref: "main",
+        inputs,
+      }
+    );
+
+    const workflowUrl = `https://github.com/${params.owner}/${params.repo}/actions/workflows/candidate-flight.yml`;
+
+    const shortSha = params.headSha ? params.headSha.slice(0, 8) : "HEAD";
+    return {
+      dispatched: true,
+      prNumber: params.prNumber,
+      headSha: params.headSha ?? null,
+      workflowUrl,
+      message: `Flight dispatched for PR #${params.prNumber} @ ${shortSha}. Observe via core__vcs_get_ci_status (look for 'candidate-flight' check).`,
+    };
   }
 
   async createBranch(params: {

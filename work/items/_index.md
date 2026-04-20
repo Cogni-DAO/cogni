@@ -86,7 +86,7 @@
 | 1 | 2 | 3 | needs_design | task.0282 | Secure secret delivery for CI/CD deploys — replace SSH command-line passing | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0283 | Provision VM as GitHub Action — eliminate local .env.{env} dependency |  |  |
 | 1 | 2 | 3 | needs_implement | task.0286 | Eval POC — 2 evals with 4o-mini judge, Langfuse datasets, canary HTTP target |  |  |
-| 1 | 2 | 2 | needs_design | task.0297 | Add candidate-flight tool to VCS capability / git manager agent | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 2 | 2 | needs_merge | task.0297 | Add candidate-flight tool to VCS capability | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 1 | needs_implement | bug.0308 | Alloy DaemonSet hardcodes docker.io image — brittle under mirror failure, blocks ghcr.io-only clusters | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | task.0308 | Deployment observability scorecard — build/log correlation + git manager health matrix | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 2 | 3 | needs_design | bug.0312 | Purge canary and staging legacy naming from docs, workflows, and scorecards; document the e2e CI/CD flow | CI/CD Pipeline | proj.cicd-services-gitops |

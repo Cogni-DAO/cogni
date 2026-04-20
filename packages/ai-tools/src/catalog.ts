@@ -29,6 +29,7 @@ import { repoSearchBoundTool } from "./tools/repo-search";
 import { scheduleListBoundTool } from "./tools/schedule-list";
 import { scheduleManageBoundTool } from "./tools/schedule-manage";
 import { vcsCreateBranchBoundTool } from "./tools/vcs-create-branch";
+import { vcsFlightCandidateBoundTool } from "./tools/vcs-flight-candidate";
 import { vcsGetCiStatusBoundTool } from "./tools/vcs-get-ci-status";
 import { vcsListPrsBoundTool } from "./tools/vcs-list-prs";
 import { vcsMergePrBoundTool } from "./tools/vcs-merge-pr";
@@ -123,6 +124,7 @@ export const TOOL_CATALOG: ToolCatalog = createToolCatalog([
   scheduleListBoundTool as CatalogBoundTool,
   scheduleManageBoundTool as CatalogBoundTool,
   vcsCreateBranchBoundTool as CatalogBoundTool,
+  vcsFlightCandidateBoundTool as CatalogBoundTool,
   vcsGetCiStatusBoundTool as CatalogBoundTool,
   vcsListPrsBoundTool as CatalogBoundTool,
   vcsMergePrBoundTool as CatalogBoundTool,
