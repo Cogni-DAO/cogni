@@ -1,5 +1,5 @@
 ---
-id: bug.0333
+id: bug.0336
 type: bug
 title: candidate-flight false-fails on rolling-update endpoint cutover race
 status: needs_review
