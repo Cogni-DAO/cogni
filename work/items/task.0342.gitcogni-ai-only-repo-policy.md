@@ -82,11 +82,23 @@ auto_merge: true
 
 ## Deliverables
 
-- [x] `.cogni/rules/ai-only-repo-policy.yaml` stub committed in this PR
-- [ ] Rule schema validation — does gitcogni currently support `allowed_paths`/`denied_paths`/`allowed_authors`/`auto_merge`? If not, design + implement the schema extension
-- [ ] `.cogni/repo-spec.yaml` gates block — add `- type: ai-rule / rule_file: ai-only-repo-policy.yaml`
+- [x] `.cogni/rules/ai-only-repo-policy.yaml` — policy file rooted in `docs/spec/ai-only-repo-policy.md`
+- [x] `docs/spec/ai-only-repo-policy.md` — federated AI-rules spec (operator-owned infra, node-owned self, DAO override)
+- [x] `docs/spec/node-ci-cd-contract.md` — `AI_RULES_FEDERATED` invariant added
+- [ ] **gitcogni schema extensions** (blocks all below):
+  - [ ] `scope.owner_node` + `scope.owns_paths` — declare authoritative paths per rule
+  - [ ] `applies_when.all_of` with `author_in` + `affects_owned_paths` — CI-affected routing
+  - [ ] `evaluations[].denied_paths` / `evaluations[].required_checks` — declarative gate eval
+  - [ ] `evaluations[].override_source` — `cogni_signal` type reads DAO action events
+  - [ ] `success_criteria.any_of` with nested `all_of` — override branch vs clean branch
+  - [ ] `auto_merge: true` — invoke GitHub native `--auto`
+  - [ ] `on_failure.action: comment_and_block` + templated `comment_template` with `{operator_propose_merge_url}` variable
+- [ ] **CI-affected path routing** in cogni-git-review loader — mirror `scripts/ci/detect-affected.sh` algorithm when selecting which `.cogni/rules/*.yaml` files apply to a PR
+- [ ] **DAO-override poller** in cogni-git-review — on PR-open and periodic re-check, query Alchemy / EVM RPC for `CogniAction(action="merge-pr", pr=N, sha=X)` events on operator DAO's CogniSignal. Reuse existing `handleSignal()` wiring where possible
+- [ ] `.cogni/repo-spec.yaml` root gates block — add `- type: ai-rule / rule_file: ai-only-repo-policy.yaml`
 - [ ] GitHub App / PAT for `canary-bot[bot]` — scoped write to `nodes/canary/**`, `work/items/**`, `docs/research/**` only
-- [ ] Branch protection on `main` — require `ai-only-repo-policy` check for PRs from canary authors
+- [ ] Branch protection on `main` — require `ai-only-repo-policy` check for PRs from allowlisted bot authors
+- [ ] Loki audit event: `pr_merged_by_dao_override` emitted every time the override path fires
 
 ## Validation
 
@@ -100,5 +112,7 @@ auto_merge: true
 
 ## Open questions
 
-- Does gitcogni's current schema support path-based allow/deny? If not, this task balloons into a gitcogni feature PR first. Check `@cogni/git-cogni` package schema before implementing.
+- Does gitcogni's current schema support path-based allow/deny? Spot-check says **no** — this task starts with a gitcogni feature PR that adds the schema fields enumerated under "gitcogni schema extensions" above. The canary policy YAML cannot be enforced until that lands.
 - Auto-merge mechanism: GitHub's native `--auto` flag vs. an explicit merge bot. Lean: native `--auto` is simpler.
+- DAO-override re-check cadence: poll every 30s during PR open state, or subscribe to Alchemy webhooks and push? Webhooks are cheaper + faster but require the ingestion path to tolerate retries. Lean: reuse the existing `/api/internal/webhooks/alchemy` handler so we get dedup + RPC reverification for free.
+- Multi-node bot identity: when a second AI-run node joins, do we add each bot to every rule's `author_in` list, or namespace `author_in` per rule? Lean: per-rule allowlist; operator rule lists all AI bots, node-local rules list only that node's bots.
