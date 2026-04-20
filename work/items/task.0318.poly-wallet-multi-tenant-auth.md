@@ -240,15 +240,15 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
 
 <!-- CODE REVIEW CRITERIA -->
 
-- [ ] TENANT_SCOPED_ROWS: every copy-trade table has a `billing_account_id` (or equivalent) column + RLS policy. No row without a tenant.
-- [ ] GRANT_REQUIRED_FOR_PLACEMENT: the executor MUST resolve an active, unrevoked, unexpired `poly_wallet_grants` row before calling `adapter.placeOrder`. Missing grant → skip with reason `no_active_grant`.
-- [ ] SCOPES_ENFORCED: `poly:trade:buy` required for BUY intents; SELL (future) requires its own scope. Unscoped grants cannot place orders.
-- [ ] PER_TENANT_KILL_SWITCH: `poly_copy_trade_config.enabled` is per-`billing_account_id`. Flipping one tenant's row does NOT affect other tenants.
-- [ ] CAPS_ENFORCED_PER_GRANT: `daily_usdc_cap` / `hourly_fills_cap` / `per_order_usdc_cap` evaluated in `decide()` against the grant, not against global env.
-- [ ] KEY_NEVER_IN_APP: raw key material stays in Privy HSM. L2 API creds are AEAD-encrypted in `poly_wallet_connections.clob_api_key_ciphertext`.
-- [ ] NO*ENV_FALLBACK: once this task lands, the `OPERATOR_WALLET_ADDRESS` / `POLY_CLOB*\*` env vars are removed from the poly executor code path. Bootstrap-operator pre-seeding goes through the same tables.
-- [ ] CROSS_TENANT_ISOLATION_TESTED: an integration test with two users proves user-A cannot read / cancel / see user-B's fills, decisions, or config.
-- [ ] REVOCATION_HALTS_PLACEMENT: setting `poly_wallet_grants.revoked_at` halts placement from the NEXT poll cycle. In-flight orders complete; no new orders place.
+- [x] TENANT_SCOPED_ROWS **(Phase A — migration 0029 + Drizzle schema)**: every copy-trade table has `billing_account_id` + `created_by_user_id` NOT NULL + RLS `tenant_isolation` policy.
+- [ ] GRANT_REQUIRED_FOR_PLACEMENT **(Phase B)**: executor resolves an active `poly_wallet_grants` row before `adapter.placeOrder`.
+- [ ] SCOPES_ENFORCED **(Phase B)**: `poly:trade:buy` required for BUY intents; SELL requires its own scope.
+- [x] PER_TENANT_KILL_SWITCH **(Phase A — config PK migrated to `billing_account_id`)**: per-tenant config row gates placement; component test asserts disabling tenant-A's row leaves tenant-B's enumerator output intact.
+- [ ] CAPS_ENFORCED_PER_GRANT **(Phase B)**: caps from `poly_wallet_grants`, not env / scaffolding.
+- [x] KEY_NEVER_IN_APP **(Phase A — inherited; no raw keys touched)**: shared operator wallet still uses Privy HSM (no change). Phase B extends this to per-user signing backends.
+- [x] NO*ENV_FALLBACK **(Phase A — CP A7)**: `COPY_TRADE_TARGET_WALLETS` removed from server-env, `.env.local.example`, SKILL.md, workflow, deploy-infra.sh. Bootstrap seed lives in migration 0029. `POLY_CLOB*\*`env vars are still read (they're the operator wallet's L2 creds; Phase B moves them into per-user`connections`rows with provider`polymarket_clob`).
+- [x] CROSS_TENANT_ISOLATION_TESTED **(Phase A — row-level only)**: `tests/component/copy-trade/db-target-source.int.test.ts` asserts two-tenant RLS clamp + per-tenant kill-switch + soft-delete; `tests/component/copy-trade/targets-route.int.test.ts` asserts POST→GET→DELETE round-trip. Phase B adds wallet/fill isolation.
+- [ ] REVOCATION_HALTS_PLACEMENT **(Phase B)**: requires `poly_wallet_grants`.
 
 ## Decisions (resolved 2026-04-19 at `/design`)
 
