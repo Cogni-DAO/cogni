@@ -45,9 +45,9 @@ set -euo pipefail
 DOMAIN="${DOMAIN:?DOMAIN required}"
 SOURCE_SHA_MAP="${SOURCE_SHA_MAP:-}"
 
-# Only node-apps expose /readyz via HTTPS Ingress. scheduler-worker and
-# migrator are promoted-apps too but are in-cluster only — they're covered
-# by wait-for-in-cluster-services (kubectl rollout status) upstream.
+# Only node-apps expose /readyz via HTTPS Ingress. scheduler-worker,
+# rust-node, and migrators are promoted-apps too but are in-cluster only —
+# they're covered by wait-for-in-cluster-services upstream.
 NODE_APPS="operator poly resy"
 
 declare -A EXPECTED_BY_NODE=()
@@ -97,7 +97,7 @@ else
 fi
 
 # Filter down to Ingress-probeable node-apps. Entries for scheduler-worker /
-# migrator are upstream-covered (kubectl rollout status); skip them here.
+# rust-node / migrators are upstream-covered; skip them here.
 NODE_ARR=()
 for app in "${!EXPECTED_BY_NODE[@]}"; do
   for p in $NODE_APPS; do

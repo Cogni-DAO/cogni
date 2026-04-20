@@ -33,7 +33,7 @@ PRODUCTION_BRANCH="deploy/production"
 # it still rides a mutable `:latest` tag (proj.cicd-services-gitops blocker #10).
 # Keep in sync with the overlay directories under infra/k8s/overlays/preview/
 # whenever a new node is introduced.
-APPS=(operator poly resy scheduler-worker)
+APPS=(operator poly resy scheduler-worker rust-node)
 
 # Extract the first and (optional) second image digest from a preview
 # overlay kustomization.yaml. The first entry is the app image; the

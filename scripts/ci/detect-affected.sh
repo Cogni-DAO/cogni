@@ -98,6 +98,7 @@ is_global_build_input() {
     tsconfig.scripts.json | \
     config/* | \
     scripts/ci/build-and-push-images.sh | \
+    scripts/ci/lib/image-tags.sh | \
     scripts/ci/detect-affected.sh | \
     scripts/ci/write-build-manifest.sh)
       return 0
@@ -172,6 +173,10 @@ else
         ;;
       services/scheduler-worker/*)
         add_target scheduler-worker
+        ;;
+      services/rust-node/* | \
+      scripts/rust/*)
+        add_target rust-node
         ;;
       nodes/node-template/*)
         selection_reason="non-deployable-node-template-change:${path}"

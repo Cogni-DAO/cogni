@@ -119,7 +119,7 @@ promote_target() {
     else
       bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest"
     fi
-  elif [ "$target" = "scheduler-worker" ]; then
+  elif [ "$target" = "scheduler-worker" ] || [ "$target" = "rust-node" ]; then
     bash "$PROMOTE_SCRIPT" --no-commit --env "$OVERLAY_ENV" --app "$target" --digest "$digest"
   else
     return 0
@@ -158,6 +158,7 @@ promote_target operator
 promote_target poly
 promote_target resy
 promote_target scheduler-worker
+promote_target rust-node
 
 # Pass 2 — source-sha-map. Non-fatal on per-app failure.
 for app in "${PROMOTED[@]}"; do

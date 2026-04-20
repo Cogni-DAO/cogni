@@ -120,6 +120,7 @@ Essentials only — full catalog in [Developer Setup](docs/guides/developer-setu
 pnpm dev:stack                # primary dev loop (operator + infra)
 pnpm dev:stack:full           # operator + all nodes + infra
 pnpm dev:stack:test           # dev server + infra for stack tests
+pnpm rust:check               # Dockerized Rust parity/runtime gate
 pnpm check:fast               # iteration gate (typecheck + lint/format fix + unit)
 pnpm check                    # pre-commit gate — once per session
 pnpm check:full               # CI-parity gate (~20 min)

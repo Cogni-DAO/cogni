@@ -15,6 +15,93 @@
 
 import postgres from "postgres";
 
+const RESET_RETRYABLE_CODES = new Set(["40P01", "55P03"]);
+const ACTIVE_APP_QUERY_BUDGET_MS = 10_000;
+const ACTIVE_APP_QUERY_POLL_MS = 250;
+const MAX_TRUNCATE_ATTEMPTS = 5;
+
+type SqlClient = ReturnType<typeof postgres>;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableResetError(error: unknown): error is { code?: string } {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && RESET_RETRYABLE_CODES.has(code);
+}
+
+async function waitForAppDatabaseActivityToDrain(sql: SqlClient) {
+  const maxAttempts = Math.ceil(
+    ACTIVE_APP_QUERY_BUDGET_MS / ACTIVE_APP_QUERY_POLL_MS
+  );
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const activeSessions = await sql<
+      {
+        pid: number;
+        application_name: string | null;
+        state: string | null;
+      }[]
+    >`
+      SELECT pid, application_name, state
+      FROM pg_stat_activity
+      WHERE datname = current_database()
+        AND pid <> pg_backend_pid()
+        AND application_name = 'cogni_template_app'
+        AND coalesce(state, 'idle') <> 'idle'
+      ORDER BY query_start NULLS LAST
+    `;
+
+    if (activeSessions.length === 0) {
+      return;
+    }
+
+    if (attempt === 1) {
+      const sessionSummary = activeSessions
+        .map(
+          (session) =>
+            `${session.application_name ?? "unknown"}:${session.state ?? "unknown"}`
+        )
+        .join(", ");
+      console.log(
+        `⏳ Waiting for in-flight app database activity to drain before reset (${sessionSummary})...`
+      );
+    }
+
+    await sleep(ACTIVE_APP_QUERY_POLL_MS);
+  }
+
+  console.warn(
+    "⚠️  App database activity did not fully drain before reset; attempting truncate anyway"
+  );
+}
+
+async function truncateAllTables(sql: SqlClient, tableNames: string) {
+  for (let attempt = 1; attempt <= MAX_TRUNCATE_ATTEMPTS; attempt++) {
+    await waitForAppDatabaseActivityToDrain(sql);
+
+    try {
+      await sql.unsafe(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE`);
+      return;
+    } catch (error) {
+      if (!isRetryableResetError(error) || attempt === MAX_TRUNCATE_ATTEMPTS) {
+        throw error;
+      }
+
+      const backoffMs = attempt * ACTIVE_APP_QUERY_POLL_MS;
+      console.warn(
+        `⚠️  Retryable reset contention (${error.code}) on attempt ${attempt}/${MAX_TRUNCATE_ATTEMPTS}; retrying in ${backoffMs}ms`
+      );
+      await sleep(backoffMs);
+    }
+  }
+}
+
 export async function setup() {
   console.log("🧹 Resetting stack test database...");
 
@@ -88,7 +175,7 @@ export async function setup() {
     const tableNames = tables.map((t) => `"${t.tablename}"`).join(", ");
 
     // TRUNCATE with CASCADE handles foreign key constraints automatically
-    await sql.unsafe(`TRUNCATE TABLE ${tableNames} RESTART IDENTITY CASCADE`);
+    await truncateAllTables(sql, tableNames);
 
     // Re-seed system tenant data (wiped by truncation, required by verifySystemTenant healthcheck + revenue share).
     // Mirrors 0008_seed_system_tenant.sql. Wrapped in a transaction so set_config (transaction-local) persists

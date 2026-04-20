@@ -51,6 +51,7 @@ k8s/
 │   └── production-applicationset.yaml  # Git file generator → cogni-production
 ├── base/                    # Kustomize bases
 │   ├── node-app/            # Shared base for operator, poly, resy
+│   ├── rust-node/           # Internal Rust runtime service
 │   ├── scheduler-worker/    # Temporal worker service
 │   └── sandbox-openclaw/    # OpenClaw gateway service
 ├── overlays/                # Environment-specific patches

@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-node
+  labels:
+    app.kubernetes.io/name: rust-node
+    app.kubernetes.io/part-of: cogni
+spec:
+  selector:
+    app.kubernetes.io/name: rust-node
+  ports:
+    - port: 9101
+      targetPort: health
+      protocol: TCP
+      name: health

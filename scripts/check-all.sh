@@ -108,6 +108,7 @@ run_check "ui-tokens" "bash scripts/check-ui-tokens.sh"
 
 run_check "workspace:test" "bash scripts/run-turbo-checks.sh test --concurrency=1"
 run_check "check:docs" "pnpm check:docs"
+run_check "rust:check" "pnpm -s rust:check"
 run_check "check:root-layout" "pnpm check:root-layout"
 run_check "arch:check" "pnpm arch:check"
 

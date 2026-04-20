@@ -193,6 +193,21 @@ build_target() {
         --push \
         .
       ;;
+    rust-node)
+      docker buildx build \
+        --platform "$PLATFORM" \
+        --file services/rust-node/Dockerfile \
+        --build-arg "GIT_SHA=${git_sha}" \
+        --build-arg "BUILD_TS=${build_timestamp}" \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.revision=${git_sha}" \
+        --label "org.opencontainers.image.created=${build_timestamp}" \
+        --cache-from "type=gha,scope=build-rust-node" \
+        --cache-to "type=gha,mode=max,scope=build-rust-node" \
+        --tag "$tag" \
+        --push \
+        .
+      ;;
   esac
 }
 

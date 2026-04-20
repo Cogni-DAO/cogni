@@ -989,6 +989,15 @@ SECEOF
   rm -f "$SECRET_FILE"
   log_info "  Applied scheduler-worker-secrets"
 
+  SECRET_FILE=$(mktemp)
+  cat > "$SECRET_FILE" <<SECEOF
+SCHEDULER_API_TOKEN=${SCHEDULER_API_TOKEN:-}
+SECEOF
+  kubectl -n "${K8S_NS}" create secret generic rust-node-secrets \
+    --from-env-file="$SECRET_FILE" --dry-run=client -o yaml | kubectl apply -f -
+  rm -f "$SECRET_FILE"
+  log_info "  Applied rust-node-secrets"
+
   # Sandbox-openclaw secret removed — sandbox-openclaw disabled.
 
   log_info "[$(date -u +%H:%M:%S)] k8s secrets applied"
@@ -1032,6 +1041,15 @@ SECEOF
   if ! kubectl -n "${K8S_NS}" rollout status deployment/scheduler-worker --timeout=300s 2>/dev/null; then
     log_warn "scheduler-worker rollout did not complete within 300s"
     ROLLOUT_FAILED=1
+  fi
+  if kubectl -n "${K8S_NS}" get deployment/rust-node >/dev/null 2>&1; then
+    kubectl -n "${K8S_NS}" rollout restart deployment/rust-node 2>/dev/null || true
+    if ! kubectl -n "${K8S_NS}" rollout status deployment/rust-node --timeout=300s 2>/dev/null; then
+      log_warn "rust-node rollout did not complete within 300s"
+      ROLLOUT_FAILED=1
+    fi
+  else
+    log_info "[$(date -u +%H:%M:%S)] rust-node deployment not present — skipping rollout"
   fi
   log_info "[$(date -u +%H:%M:%S)] All rollouts complete"
   emit_deployment_event "infra_deployment.rollouts_complete" "success" "All k8s deployments rolled out"

@@ -24,6 +24,7 @@
 #   - <node>            → "-<node>"
 #   - <node>-migrator   → "-<node>-migrate" (migrator → migrate; task.0324)
 #   - scheduler-worker  → "-scheduler-worker"
+#   - rust-node         → "-rust-node"
 #
 # Example:
 #   base="pr-918-a377bad" ; tag_suffix_for_target poly
@@ -43,6 +44,7 @@ ALL_TARGETS=(
   resy
   resy-migrator
   scheduler-worker
+  rust-node
 )
 
 # Target names that pair with a per-node migrator (task.0324). Used by
@@ -61,6 +63,7 @@ tag_suffix_for_target() {
     poly-migrator)     printf -- '-poly-migrate' ;;
     resy-migrator)     printf -- '-resy-migrate' ;;
     scheduler-worker)  printf -- '-scheduler-worker' ;;
+    rust-node)         printf -- '-rust-node' ;;
     *)
       echo "[ERROR] image-tags: unknown target: $target" >&2
       return 1

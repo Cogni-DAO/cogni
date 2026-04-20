@@ -74,7 +74,7 @@ if [ -n "$PROMOTED_APPS" ]; then
   IFS=',' read -r -a APPS <<< "$PROMOTED_APPS"
   echo "⏳ Waiting for promoted apps (${PROMOTED_APPS}) to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
 else
-  APPS=(operator poly resy scheduler-worker sandbox-openclaw)
+  APPS=(operator poly resy scheduler-worker rust-node sandbox-openclaw)
   echo "⏳ Waiting for all catalog apps to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
 fi
 
@@ -102,13 +102,14 @@ fi
 # Map an Argo Application name ({env}-{app}) to the Deployment name and
 # namespace the overlay actually creates. candidate-a / preview / production
 # all use namePrefix=<app>- on namespace cogni-<env>; node-apps have resource
-# name `node-app` (→ <app>-node-app), scheduler-worker keeps its own name.
+# name `node-app` (→ <app>-node-app); shared services keep their own names.
 # Any new app added to the catalog must be added here (bug.0326).
 resolve_deployment() {
   local app_name="$1"  # {env}-{app}
   local app="${app_name#${DEPLOY_ENVIRONMENT}-}"
   case "$app" in
     scheduler-worker) echo "scheduler-worker" ;;
+    rust-node) echo "rust-node" ;;
     operator | poly | resy) echo "${app}-node-app" ;;
     *) echo "" ;;  # unknown app — caller treats empty as "skip digest check"
   esac

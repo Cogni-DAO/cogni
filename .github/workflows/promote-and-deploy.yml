@@ -255,9 +255,11 @@ jobs:
             mig_digest=$(printf '%s' "$DIGESTS" | jq -r --arg k "${node}-migrator" '.[$k] // ""')
             promote_app "$node" "$app_digest" "$mig_digest"
           done
-          # scheduler-worker has no migrator pairing.
+          # Shared services have no migrator pairing.
           sw_digest=$(printf '%s' "$DIGESTS" | jq -r '."scheduler-worker" // ""')
           promote_app scheduler-worker "$sw_digest" ""
+          rust_digest=$(printf '%s' "$DIGESTS" | jq -r '."rust-node" // ""')
+          promote_app rust-node "$rust_digest" ""
 
           # Export for deploy-push step
           echo "PROMOTED_CSV=$(IFS=,; echo "${PROMOTED[*]}")" >> $GITHUB_ENV
@@ -554,6 +556,8 @@ jobs:
 
       - name: Wait for in-cluster services
         if: env.VM_HOST != ''
+        env:
+          PROMOTED_APPS: ${{ needs.promote-k8s.outputs.promoted_apps }}
         run: bash app-src/scripts/ci/wait-for-in-cluster-services.sh
 
       # Authoritative contract probe: pods serve the SHA that built their
