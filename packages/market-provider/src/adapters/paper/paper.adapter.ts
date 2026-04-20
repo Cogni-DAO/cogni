@@ -24,6 +24,7 @@ import type {
   NormalizedMarket,
 } from "../../domain/schemas.js";
 import type {
+  MarketConstraints,
   MarketProviderConfig,
   MarketProviderPort,
 } from "../../port/market-provider.port.js";
@@ -79,6 +80,10 @@ export class PaperAdapter implements MarketProviderPort {
 
   getOrder(_orderId: string): Promise<GetOrderResult> {
     return Promise.reject(notImplemented("getOrder"));
+  }
+
+  getMarketConstraints(_tokenId: string): Promise<MarketConstraints> {
+    return Promise.reject(notImplemented("getMarketConstraints"));
   }
 }
 

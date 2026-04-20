@@ -21,6 +21,7 @@ import type {
   NormalizedMarket,
 } from "../../domain/schemas.js";
 import {
+  type MarketConstraints,
   type MarketProviderConfig,
   type MarketProviderPort,
   OrderNotSupportedError,
@@ -108,6 +109,16 @@ export class PolymarketAdapter implements MarketProviderPort {
         "polymarket",
         "getOrder",
         "PolymarketAdapter (Gamma read-only) does not support getOrder. Use PolymarketClobAdapter (CP3)."
+      )
+    );
+  }
+
+  getMarketConstraints(_tokenId: string): Promise<MarketConstraints> {
+    return Promise.reject(
+      new OrderNotSupportedError(
+        "polymarket",
+        "getMarketConstraints",
+        "PolymarketAdapter (Gamma read-only) does not support getMarketConstraints. Use PolymarketClobAdapter."
       )
     );
   }

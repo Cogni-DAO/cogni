@@ -22,6 +22,7 @@ import type {
   NormalizedMarket,
 } from "../../domain/schemas.js";
 import {
+  type MarketConstraints,
   type MarketCredentials,
   type MarketProviderConfig,
   type MarketProviderPort,
@@ -164,6 +165,16 @@ export class KalshiAdapter implements MarketProviderPort {
       new OrderNotSupportedError(
         "kalshi",
         "getOrder",
+        "KalshiAdapter is read-only by design."
+      )
+    );
+  }
+
+  getMarketConstraints(_tokenId: string): Promise<MarketConstraints> {
+    return Promise.reject(
+      new OrderNotSupportedError(
+        "kalshi",
+        "getMarketConstraints",
         "KalshiAdapter is read-only by design."
       )
     );

@@ -17,7 +17,45 @@
 
 import type { OrderIntent } from "@cogni/market-provider";
 
-import type { DecideInput, MirrorDecision } from "./types";
+import type {
+  DecideInput,
+  MirrorDecision,
+  SizingPolicy,
+  SizingResult,
+} from "./types";
+
+/**
+ * Apply a sizing policy to derive the notional USDC to submit for a mirrored
+ * fill. Share-space math: compute `targetShares` directly, then project back
+ * to USDC only for accounting. Avoids the float round-trip `min × price /
+ * price = min − ε` that re-triggered CLOB's sub-min rejection.
+ *
+ * Invariant SHARE_SPACE_MATH — returned `size_usdc`, when divided by `price`,
+ * yields shares ≥ `minShares` (or `minShares === undefined` → share-space
+ * guard skipped for backward compat).
+ *
+ * Future policies (proportional, percentile) add cases on `policy.kind`.
+ */
+export function applySizingPolicy(
+  policy: SizingPolicy,
+  price: number,
+  minShares: number | undefined
+): SizingResult {
+  switch (policy.kind) {
+    case "fixed": {
+      const desiredShares = policy.mirror_usdc / price;
+      const targetShares =
+        minShares === undefined
+          ? desiredShares
+          : Math.max(desiredShares, minShares);
+      const effectiveUsdc = targetShares * price;
+      if (effectiveUsdc > policy.max_usdc_per_trade) {
+        return { ok: false, reason: "below_market_min" };
+      }
+      return { ok: true, size_usdc: effectiveUsdc };
+    }
+  }
+}
 
 /**
  * Cogni's "should we mirror this fill?" function.
@@ -34,7 +72,7 @@ import type { DecideInput, MirrorDecision } from "./types";
  * which adapter to route to; only the `provider` on `OrderIntent` differs.
  */
 export function decide(input: DecideInput): MirrorDecision {
-  const { fill, config, state, client_order_id } = input;
+  const { fill, config, state, client_order_id, min_shares } = input;
 
   if (!config.enabled) return { action: "skip", reason: "kill_switch_off" };
 
@@ -42,8 +80,17 @@ export function decide(input: DecideInput): MirrorDecision {
     return { action: "skip", reason: "already_placed" };
   }
 
-  // Intent-based cap check — adds THIS intent's mirror_usdc against today's spent.
-  if (state.today_spent_usdc + config.mirror_usdc > config.max_daily_usdc) {
+  // Apply the sizing policy. May scale UP to the market share-min; skips
+  // (below_market_min) when the scaled notional would exceed the user's
+  // per-trade ceiling. Runs before the daily-cap check so the cap gates the
+  // EFFECTIVE size, not the unscaled one. bug.0342.
+  const sizing = applySizingPolicy(config.sizing, fill.price, min_shares);
+  if (!sizing.ok) {
+    return { action: "skip", reason: sizing.reason };
+  }
+
+  // Intent-based cap check — adds THIS intent's effective size against today's spent.
+  if (state.today_spent_usdc + sizing.size_usdc > config.max_daily_usdc) {
     return { action: "skip", reason: "daily_cap_hit" };
   }
 
@@ -51,7 +98,7 @@ export function decide(input: DecideInput): MirrorDecision {
     return { action: "skip", reason: "rate_cap_hit" };
   }
 
-  const intent = buildIntent(fill, config, client_order_id);
+  const intent = buildIntent(fill, sizing.size_usdc, client_order_id);
 
   return {
     action: "place",
@@ -71,7 +118,7 @@ export function decide(input: DecideInput): MirrorDecision {
  */
 function buildIntent(
   fill: DecideInput["fill"],
-  config: DecideInput["config"],
+  size_usdc: number,
   client_order_id: `0x${string}`
 ): OrderIntent {
   const tokenId =
@@ -86,7 +133,7 @@ function buildIntent(
     market_id: fill.market_id,
     outcome: fill.outcome,
     side: fill.side,
-    size_usdc: config.mirror_usdc,
+    size_usdc,
     // Copy the target's fill price verbatim. Executor may adjust per book
     // microstructure (tick / best_ask) before signing; decide() stays pure.
     limit_price: fill.price,

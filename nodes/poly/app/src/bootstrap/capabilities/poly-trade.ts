@@ -219,6 +219,11 @@ export interface CreateFromAdapterDeps {
    * GETORDER_NEVER_NULL invariant (task.0328 CP1): must return `GetOrderResult`.
    */
   getOrder?: (orderId: string) => Promise<GetOrderResult>;
+  /**
+   * `getMarketConstraints(tokenId)` — used by the copy-trade coordinator to
+   * pre-flight intent sizing against the market's share-min. bug.0342.
+   */
+  getMarketConstraints?: (tokenId: string) => Promise<{ minShares: number }>;
   /** `listPositions(wallet)` — used by `closePosition` + coordinator. */
   listPositions?: (wallet: string) => Promise<PolymarketUserPosition[]>;
   /** Operator EOA (used for the receipt's profile_url and position lookups). */
@@ -248,6 +253,13 @@ export interface CreateFromAdapterDeps {
 export interface PolyTradeBundle {
   capability: PolyTradeCapability;
   placeIntent: (intent: OrderIntent) => Promise<OrderReceipt>;
+  /**
+   * Market-constraints fetch — returns `{ minShares }` for a token id. Used by
+   * the copy-trade coordinator to pre-flight intent sizing against the
+   * market's share-minimum. Raw passthrough to `PolymarketClobAdapter.
+   * getMarketConstraints`. bug.0342.
+   */
+  getMarketConstraints: (tokenId: string) => Promise<{ minShares: number }>;
   closePosition: (params: ClosePositionParams) => Promise<OrderReceipt>;
   getOrder: (orderId: string) => Promise<GetOrderResult>;
   getOperatorPositions: () => Promise<PolymarketUserPosition[]>;
@@ -435,9 +447,22 @@ export function createPolyTradeCapabilityFromAdapter(
     return deps.listPositions(operatorAddress);
   }
 
+  async function bundleGetMarketConstraints(
+    tokenId: string
+  ): Promise<{ minShares: number }> {
+    if (!deps.getMarketConstraints) {
+      // Safe fallback: unknown market → minShares=0 means the sizing policy
+      // treats the intent as-is (no scale-up, no skip). The adapter's
+      // defense-in-depth guard still catches sub-min at placement time.
+      return { minShares: 0 };
+    }
+    return deps.getMarketConstraints(tokenId);
+  }
+
   return {
     capability,
     placeIntent: executor,
+    getMarketConstraints: bundleGetMarketConstraints,
     closePosition: bundleClosePosition,
     getOrder: bundleGetOrder,
     getOperatorPositions: bundleGetOperatorPositions,
@@ -653,6 +678,7 @@ async function buildRealAdapterMethods(
   }) => Promise<OrderReceipt[]>;
   cancelOrder: (orderId: string) => Promise<void>;
   getOrder: (orderId: string) => Promise<GetOrderResult>;
+  getMarketConstraints: (tokenId: string) => Promise<{ minShares: number }>;
   listPositions: (wallet: string) => Promise<PolymarketUserPosition[]>;
 }> {
   // Dynamic imports — keep `@polymarket/clob-client` + `@privy-io/node` out of
@@ -745,6 +771,7 @@ async function buildRealAdapterMethods(
     listOpenOrders: adapter.listOpenOrders.bind(adapter),
     cancelOrder: adapter.cancelOrder.bind(adapter),
     getOrder: adapter.getOrder.bind(adapter),
+    getMarketConstraints: adapter.getMarketConstraints.bind(adapter),
     listPositions: (wallet: string) => dataApiClient.listUserPositions(wallet),
   };
 }

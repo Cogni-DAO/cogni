@@ -42,6 +42,8 @@ export {
 } from "./domain/schemas.js";
 // Port interface
 export {
+  BELOW_MARKET_MIN_CODE,
+  type MarketConstraints,
   type MarketCredentials,
   type MarketProviderConfig,
   type MarketProviderPort,

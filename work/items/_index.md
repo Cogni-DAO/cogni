@@ -196,7 +196,7 @@
 | 2 | 16 | 3 | needs_design | task.0003 | Sweep stale doc references across the codebase | Maximize OSS Tools | proj.maximize-oss-tools |
 | 2 | 17 | 1 | needs_research | spike.0037 | Research Tailscale/Headscale mesh VPN for Cogni infrastructure |  |  |
 | 2 | 20 | 3 | needs_design | task.0211 | BYO-AI ChatGPT — auth manager + Codex CLI in Docker image | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
-| 2 | 20 | 2 | needs_implement | bug.0342 | poly copy-trade places sub-min orders — CLOB rejects silently (success=undefined, orderID=<missing>, errorMsg="") | Cogni Poly | proj.poly-copy-trading |
+| 2 | 20 | 2 | needs_closeout | bug.0342 | poly copy-trade places sub-min orders — CLOB rejects silently (success=undefined, orderID=<missing>, errorMsg="") | Cogni Poly | proj.poly-copy-trading |
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |
 | 2 | 30 | 1 | needs_merge | bug.0339 | Tenant context missing from request-envelope logs — Loki can't slice by user/billing |  |  |
 | 2 | 50 | 2 | needs_implement | task.0134 | EIP-4824 daoURI v0 — lightweight DAOstar metadata endpoint | Financial Ledger | proj.financial-ledger |

@@ -3,16 +3,45 @@
 
 /**
  * Module: `@features/copy-trade/types`
- * Purpose: Port-level types for the copy-trade decide/execute boundary — `TargetConfig`, `RuntimeState`, `MirrorDecision`, skip-reason enum.
+ * Purpose: Port-level types for the copy-trade decide/execute boundary — `TargetConfig`, `SizingPolicy`, `RuntimeState`, `MirrorDecision`, skip-reason enum.
  * Scope: Pure type surface consumed by `decide.ts`, `clob-executor.ts`, and the poll job. Does not contain logic, does not import adapters.
- * Invariants: MIRROR_REASON_BOUNDED — reason codes are an enum (bounded Prom label cardinality); DECISION_IS_PURE_INPUT — all runtime state is handed to decide() explicitly, never read at decide-time; TARGET_CONFIG_CARRIES_TENANT — every TargetConfig carries `billing_account_id` (data) + `created_by_user_id` (RLS key) so downstream fills/decisions writes inherit tenant attribution.
+ * Invariants:
+ *   - MIRROR_REASON_BOUNDED — reason codes are an enum (bounded Prom label cardinality).
+ *   - DECISION_IS_PURE_INPUT — all runtime state is handed to decide() explicitly, never read at decide-time.
+ *   - TARGET_CONFIG_CARRIES_TENANT — every TargetConfig carries `billing_account_id` (data) + `created_by_user_id` (RLS key) so downstream fills/decisions writes inherit tenant attribution.
+ *   - SIZING_POLICY_IS_DISCRIMINATED — TargetConfig.sizing is a discriminated union on `kind`; future policies (proportional, percentile) add variants, never flat fields.
  * Side-effects: none
- * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.1), docs/spec/poly-multi-tenant-auth.md
+ * Links: work/items/task.0315.poly-copy-trade-prototype.md (Phase 1 CP4.1), work/items/bug.0342.poly-clob-dynamic-min-order-size.md, docs/spec/poly-multi-tenant-auth.md
  * @public
  */
 
 import type { Fill, OrderIntent } from "@cogni/market-provider";
 import { z } from "zod";
+
+/**
+ * Sizing policy — how the coordinator derives `OrderIntent.size_usdc` from a
+ * target's fill. Discriminated union: today one variant; future variants
+ * (proportional, percentile, historical-distribution) plug in by adding a new
+ * `kind` without touching the adapter or the port.
+ */
+export const FixedSizingPolicySchema = z.object({
+  kind: z.literal("fixed"),
+  /** Desired notional USDC per mirrored fill, before market-min adjustment. */
+  mirror_usdc: z.number().positive(),
+  /**
+   * Hard ceiling on notional USDC per mirrored intent. When a market's
+   * share-min forces the notional above this value, the coordinator skips with
+   * `reason: "below_market_min"` rather than overspending. Default equals
+   * `mirror_usdc` (opt-out of scaling); callers opt in by setting it higher.
+   */
+  max_usdc_per_trade: z.number().positive(),
+});
+export type FixedSizingPolicy = z.infer<typeof FixedSizingPolicySchema>;
+
+export const SizingPolicySchema = z.discriminatedUnion("kind", [
+  FixedSizingPolicySchema,
+]);
+export type SizingPolicy = z.infer<typeof SizingPolicySchema>;
 
 /**
  * Per-target configuration. P1 sources from env and constructs one per boot;
@@ -29,8 +58,8 @@ export const TargetConfigSchema = z.object({
   created_by_user_id: z.string(),
   /** `live` → PolymarketClobAdapter; `paper` → paper adapter (P3). */
   mode: z.enum(["live", "paper"]),
-  /** Notional USDC to mirror per fill (fixed size, not proportional). */
-  mirror_usdc: z.number().positive(),
+  /** Per-target sizing policy. See SizingPolicySchema. */
+  sizing: SizingPolicySchema,
   /** Intent-based USDC cap per UTC day (see decide.ts header). */
   max_daily_usdc: z.number().positive(),
   /** Rate cap per rolling-1-hour window, intent-based. */
@@ -71,6 +100,13 @@ export const MirrorReasonSchema = z.enum([
   "sell_without_position",
   /** SELL fill routed through closePosition — recorded as the reason on the `placed` row. */
   "sell_closed_position",
+  /**
+   * Target fill × current limit_price × market share-min exceeds the user's
+   * `max_usdc_per_trade` ceiling — skip rather than scale past the ceiling.
+   * Covers both "target's fill was small" and "user's ceiling was tight".
+   * bug.0342.
+   */
+  "below_market_min",
 ]);
 export type MirrorReason = z.infer<typeof MirrorReasonSchema>;
 
@@ -92,4 +128,21 @@ export interface DecideInput {
   state: RuntimeState;
   /** Pre-computed idempotency key via `clientOrderIdFor(target_id, fill_id)`. */
   client_order_id: `0x${string}`;
+  /**
+   * Market-enforced minimum share count for this fill's token, fetched by the
+   * coordinator via `MarketProviderPort.getMarketConstraints`. Used by the
+   * sizing policy to compute effective notional in share-space (avoids float-
+   * associativity round-trips through USDC). Optional: when absent, the
+   * sizing policy skips the market-min guard (legacy behavior). bug.0342.
+   */
+  min_shares?: number | undefined;
 }
+
+/**
+ * Result of applying `TargetConfig.sizing` to a fill — either a concrete
+ * notional to submit, or a bounded skip reason. Pure output of
+ * `applySizingPolicy(sizing, price, minShares)`; decide() maps onto this.
+ */
+export type SizingResult =
+  | { ok: true; size_usdc: number }
+  | { ok: false; reason: "below_market_min" };

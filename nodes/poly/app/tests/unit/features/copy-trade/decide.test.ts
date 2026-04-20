@@ -42,7 +42,13 @@ const CONFIG: TargetConfig = {
   billing_account_id: "00000000-0000-4000-b000-000000000000",
   created_by_user_id: "00000000-0000-4000-a000-000000000001",
   mode: "live",
-  mirror_usdc: 1.0,
+  sizing: {
+    kind: "fixed",
+    mirror_usdc: 1.0,
+    // Default ceiling = mirror_usdc means "don't scale up"; legacy tests
+    // assume mirror_usdc is placed as-is.
+    max_usdc_per_trade: 1.0,
+  },
   max_daily_usdc: 10.0,
   max_fills_per_hour: 5,
   enabled: true,
@@ -80,7 +86,11 @@ describe("decide() — skip branches", () => {
   it("daily_cap_hit when next intent would exceed max_daily_usdc", () => {
     const d = decide({
       fill: FILL,
-      config: { ...CONFIG, mirror_usdc: 1.0, max_daily_usdc: 5.0 },
+      config: {
+        ...CONFIG,
+        sizing: { kind: "fixed", mirror_usdc: 1.0, max_usdc_per_trade: 1.0 },
+        max_daily_usdc: 5.0,
+      },
       state: { ...CLEAN_STATE, today_spent_usdc: 4.5 },
       client_order_id: COID,
     });
@@ -91,7 +101,11 @@ describe("decide() — skip branches", () => {
     // 4.0 + 1.0 = 5.0, NOT > 5.0 → should be allowed
     const d = decide({
       fill: FILL,
-      config: { ...CONFIG, mirror_usdc: 1.0, max_daily_usdc: 5.0 },
+      config: {
+        ...CONFIG,
+        sizing: { kind: "fixed", mirror_usdc: 1.0, max_usdc_per_trade: 1.0 },
+        max_daily_usdc: 5.0,
+      },
       state: { ...CLEAN_STATE, today_spent_usdc: 4.0 },
       client_order_id: COID,
     });
@@ -143,7 +157,9 @@ describe("decide() — place branches", () => {
     expect(d.intent.market_id).toBe(FILL.market_id);
     expect(d.intent.outcome).toBe("YES");
     expect(d.intent.side).toBe("BUY");
-    expect(d.intent.size_usdc).toBe(CONFIG.mirror_usdc);
+    expect(d.intent.size_usdc).toBe(
+      CONFIG.sizing.kind === "fixed" ? CONFIG.sizing.mirror_usdc : 0
+    );
     expect(d.intent.limit_price).toBe(FILL.price);
     expect(d.intent.client_order_id).toBe(COID);
     expect(d.intent.attributes?.token_id).toBe("0xasset");

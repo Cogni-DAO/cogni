@@ -782,6 +782,7 @@ function createContainer(): Container {
               source,
               ledger: orderLedger,
               placeIntent: polyTradeBundle.placeIntent,
+              getMarketConstraints: polyTradeBundle.getMarketConstraints,
               closePosition: polyTradeBundle.closePosition,
               getOperatorPositions: polyTradeBundle.getOperatorPositions,
               logger: mirrorLogger,

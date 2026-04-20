@@ -34,7 +34,11 @@ import type {
   ListMarketsParams,
   NormalizedMarket,
 } from "../../domain/schemas.js";
-import type { MarketProviderPort } from "../../port/market-provider.port.js";
+import {
+  BELOW_MARKET_MIN_CODE,
+  type MarketConstraints,
+  type MarketProviderPort,
+} from "../../port/market-provider.port.js";
 import {
   type LoggerPort,
   type MetricsPort,
@@ -204,11 +208,31 @@ export class PolymarketClobAdapter implements MarketProviderPort {
       // through a different Exchange contract, and live markets today reject
       // feeRateBps=0 with "fee rate for the market must be 1000". A stale hardcode
       // either rejects at the CLOB or produces a bad EIP-712 signature.
-      [tickSize, negRisk, feeRateBps] = await Promise.all([
+      //
+      // `orderBook.min_order_size` joins the parallel fetch for bug.0342:
+      // Polymarket rejects sub-min orders with an empty `{}` body — the adapter
+      // MUST pre-check before signing. The share-space guard below runs
+      // regardless of whether the coordinator already scaled the intent.
+      const preflight = await Promise.all([
         this.client.getTickSize(tokenId),
         this.client.getNegRisk(tokenId),
         this.client.getFeeRateBps(tokenId),
+        this.client.getOrderBook(tokenId),
       ]);
+      [tickSize, negRisk, feeRateBps] = preflight;
+      const orderBook = preflight[3];
+
+      const minShares = Number(orderBook.min_order_size);
+      if (Number.isFinite(minShares) && shareSize < minShares) {
+        const err = new Error(
+          `PolymarketClobAdapter.placeOrder: intent is below market share-min (gotShares=${shareSize}, minShares=${minShares}, tokenId=${tokenId}). Coordinator should have scaled or skipped. bug.0342.`
+        );
+        // Discriminator for cross-package catch blocks — `err.code` is
+        // bundler-stable where `instanceof` is not.
+        (err as unknown as { code: string }).code = BELOW_MARKET_MIN_CODE;
+        err.name = "BelowMarketMinError";
+        throw err;
+      }
 
       const postOnly = intent.attributes?.post_only === true;
 
@@ -495,6 +519,49 @@ export class PolymarketClobAdapter implements MarketProviderPort {
           error: truncErr(err),
         },
         "listOpenOrders: error"
+      );
+      throw err;
+    }
+  }
+
+  /**
+   * Fetch `min_order_size` from the token's order book. Polymarket exposes
+   * market-min on `OrderBookSummary.min_order_size` (string; verified on SDK
+   * 5.8.1 `types.d.ts`). bug.0342.
+   */
+  async getMarketConstraints(tokenId: string): Promise<MarketConstraints> {
+    const start = Date.now();
+    try {
+      const book = await this.client.getOrderBook(tokenId);
+      const minShares = Number(book.min_order_size);
+      if (!Number.isFinite(minShares) || minShares <= 0) {
+        throw new Error(
+          `PolymarketClobAdapter.getMarketConstraints: unexpected min_order_size=${book.min_order_size} for token ${tokenId}`
+        );
+      }
+      const duration_ms = Date.now() - start;
+      this.log.debug(
+        {
+          event: "poly.clob.get_market_constraints",
+          phase: "ok",
+          duration_ms,
+          token_id: tokenId,
+          min_shares: minShares,
+        },
+        "getMarketConstraints: ok"
+      );
+      return { minShares };
+    } catch (err) {
+      const duration_ms = Date.now() - start;
+      this.log.error(
+        {
+          event: "poly.clob.get_market_constraints",
+          phase: "error",
+          duration_ms,
+          token_id: tokenId,
+          error: truncErr(err),
+        },
+        "getMarketConstraints: error"
       );
       throw err;
     }

@@ -39,7 +39,11 @@ const BASE_TARGET: TargetConfig = {
   billing_account_id: "00000000-0000-4000-b000-000000000000",
   created_by_user_id: "00000000-0000-4000-a000-000000000001",
   mode: "live",
-  mirror_usdc: 5,
+  sizing: {
+    kind: "fixed",
+    mirror_usdc: 5,
+    max_usdc_per_trade: 5,
+  },
   max_daily_usdc: 50,
   max_fills_per_hour: 10,
   enabled: true, // runtime kill-switch comes from ledger snapshot
@@ -298,7 +302,7 @@ describe("mirror-coordinator.runOnce — cap-hit", () => {
   it("places first fill, skips second with daily_cap_hit when mirror_usdc would exceed cap", async () => {
     const target: TargetConfig = {
       ...BASE_TARGET,
-      mirror_usdc: 6,
+      sizing: { kind: "fixed", mirror_usdc: 6, max_usdc_per_trade: 6 },
       max_daily_usdc: 10, // first fill: 0 + 6 <= 10 OK; second: 6 + 6 > 10 SKIP
     };
     const fill1 = makeFill({ fill_id: "data-api:0xtx1:0xasset:BUY:1001" });
@@ -494,7 +498,9 @@ describe("mirror-coordinator.runOnce — SELL fill: has position → closePositi
     expect(closePosition).toHaveBeenCalledTimes(1);
     const callArgs = closePosition.mock.calls[0]?.[0];
     expect(callArgs?.tokenId).toBe(TOKEN);
-    expect(callArgs?.max_size_usdc).toBe(BASE_TARGET.mirror_usdc);
+    expect(callArgs?.max_size_usdc).toBe(
+      BASE_TARGET.sizing.kind === "fixed" ? BASE_TARGET.sizing.mirror_usdc : 0
+    );
     expect(callArgs?.limit_price).toBe(fill.price);
     expect(callArgs?.client_order_id).toBe(cid);
 
@@ -547,7 +553,7 @@ describe("mirror-coordinator.runOnce — SELL fill: has position → closePositi
     expect(closePosition).toHaveBeenCalledTimes(1);
     // max_size_usdc is mirror_usdc, not capped by position value
     expect(closePosition.mock.calls[0]?.[0].max_size_usdc).toBe(
-      BASE_TARGET.mirror_usdc
+      BASE_TARGET.sizing.kind === "fixed" ? BASE_TARGET.sizing.mirror_usdc : 0
     );
   });
 });

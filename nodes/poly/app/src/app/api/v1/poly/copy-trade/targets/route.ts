@@ -74,7 +74,10 @@ function buildTargetView(params: {
     target_id: params.id,
     target_wallet: params.targetWallet,
     mode: config.mode,
-    mirror_usdc: config.mirror_usdc,
+    // Response shape keeps a flat `mirror_usdc` field for contract stability;
+    // the internal sizing policy is a discriminated union (bug.0342). For
+    // `kind: "fixed"`, project the nominal bet size onto the response.
+    mirror_usdc: config.sizing.kind === "fixed" ? config.sizing.mirror_usdc : 0,
     max_daily_usdc: config.max_daily_usdc,
     max_fills_per_hour: config.max_fills_per_hour,
     enabled: params.enabled,
