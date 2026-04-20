@@ -1,5 +1,5 @@
 ---
-id: bug.0331
+id: bug.0335
 type: bug
 title: "Polymarket CLOB rejects every operator BUY on candidate-a with empty error — mirror pipeline boots clean but places zero orders"
 status: needs_triage
