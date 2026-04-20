@@ -7,6 +7,7 @@ priority: 1
 rank: 51
 estimate: 2
 branch: fix/bug-0335-poly-clob-buy-empty-reject
+pr: https://github.com/Cogni-DAO/node-template/pull/964
 created: 2026-04-19
 updated: 2026-04-20
 summary: 'Candidate-a operator wallet `0x7A33…0aEB` has not landed a successful CLOB order in 20+ hours. Every BUY from the autonomous mirror (5 attempts at $1 each, mix of neg_risk=true and neg_risk=false markets) returns the empty-error signature `success=undefined, orderID=<missing>, errorMsg=""`. Same surface as bug.0329, but distinct: that bug is SELL-on-neg-risk-only; this is BUY on every market type. Blocks all mirror validation on candidate-a until diagnosed.'
