@@ -86,8 +86,13 @@ export async function setup() {
   process.env.DATABASE_SERVICE_URL = serviceUserUri;
   process.env.APP_ENV = "test";
 
-  // Run migrations as app_user (DB owner, same as production)
-  execSync("pnpm -w db:migrate:direct", { stdio: "inherit" });
+  // Run POLY migrations (not operator's) as app_user (DB owner, same as production).
+  // Poly's migrations include every core migration 0001-0027 verbatim AND the
+  // poly-specific 0028 (`synced_at`) + 0029 (tenant scoping). Using
+  // `db:migrate:direct` would stop at operator's 0027 and miss those — which
+  // breaks any poly component test that touches `poly_copy_trade_targets` or the
+  // per-tenant `poly_copy_trade_config` PK introduced in 0029.
+  execSync("pnpm -w db:migrate:poly:container", { stdio: "inherit" });
 
   // ── Preflight: verify service role can connect (BYPASSRLS) ─────────────
   const serviceCheck = await c.exec([
