@@ -188,9 +188,22 @@ export async function getSnapshotSlice(
   }
 }
 
-/** Balance slice — positions for any wallet, USDC breakdown only for the operator. */
+/**
+ * Dependency-injected hook for operator-only balance signals (USDC.e available, open-order
+ * locked, POL gas). App layer owns this because it needs `getContainer()` + viem, which
+ * feature layer can't import. Returns `null` fields when the caller can't or shouldn't read.
+ */
+export type FetchOperatorExtras = (operatorAddr: `0x${string}`) => Promise<{
+  available: number | null;
+  locked: number | null;
+  polGas: number | null;
+  errors: string[];
+}>;
+
+/** Balance slice — positions for any wallet; operator-only breakdown via injected fetcher. */
 export async function getBalanceSlice(
-  addr: string
+  addr: string,
+  fetchOperatorExtras?: FetchOperatorExtras
 ): Promise<SliceResult<WalletAnalysisBalance>> {
   try {
     const positions = await coalesce(
@@ -204,11 +217,23 @@ export async function getBalanceSlice(
     );
     const operator = getOperatorAddrLower();
     const isOperator = !!operator && operator === addr.toLowerCase();
+
+    let available: number | undefined;
+    let locked: number | undefined;
+    if (isOperator && fetchOperatorExtras) {
+      const extras = await fetchOperatorExtras(addr as `0x${string}`);
+      if (extras.available !== null) available = extras.available;
+      if (extras.locked !== null) locked = extras.locked;
+    }
+
+    const total = (available ?? 0) + (locked ?? 0) + positionsValue;
     return {
       kind: "ok",
       value: {
+        ...(available !== undefined && { available }),
+        ...(locked !== undefined && { locked }),
         positions: positionsValue,
-        total: positionsValue,
+        total,
         isOperator,
         computedAt: new Date().toISOString(),
       },

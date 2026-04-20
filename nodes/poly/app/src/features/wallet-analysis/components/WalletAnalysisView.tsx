@@ -134,7 +134,9 @@ function PageVariant({
             <TopMarketsList
               markets={data.trades?.topMarkets}
               isLoading={isLoading?.trades}
-              caption="Same playbook daily: stack small BUYs across the probability ladder of a city's high-temp buckets, then let the resolving winner pay for the losing tickets."
+              // TODO(task.0333): replace with Dolt-stored AI analyst summary.
+              // Lorem Cognison until the wallet-analyst graph can author this.
+              caption="Lorem Cognison — a Dolt-stored AI analysis will describe this wallet's playbook here: why they win, which markets they favour, which patterns repeat."
             />
           </div>
         </div>

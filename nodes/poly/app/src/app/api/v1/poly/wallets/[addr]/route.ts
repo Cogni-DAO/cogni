@@ -20,6 +20,7 @@ import {
 } from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/app/_lib/auth/session";
+import { fetchOperatorExtras } from "@/app/_lib/poly/operator-extras";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
 import {
   getBalanceSlice,
@@ -69,7 +70,7 @@ export const GET = wrapRouteHandlerWithLogging<{
     const [snapshotR, tradesR, balanceR] = await Promise.all([
       wantSnapshot ? getSnapshotSlice(addr) : null,
       wantTrades ? getTradesSlice(addr) : null,
-      wantBalance ? getBalanceSlice(addr) : null,
+      wantBalance ? getBalanceSlice(addr, fetchOperatorExtras) : null,
     ]);
 
     const response: WalletAnalysisResponse = {

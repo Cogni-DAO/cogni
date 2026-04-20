@@ -17,7 +17,7 @@
 import { PolyAddressSchema } from "@cogni/node-contracts";
 import { notFound, redirect } from "next/navigation";
 import type { ReactElement } from "react";
-
+import { fetchOperatorExtras } from "@/app/_lib/poly/operator-extras";
 import {
   type WalletAnalysisData,
   WalletAnalysisView,
@@ -61,7 +61,7 @@ export default async function WalletAnalysisPage({
   const [snapR, tradesR, balanceR] = await Promise.all([
     getSnapshotSlice(addr),
     getTradesSlice(addr),
-    getBalanceSlice(addr),
+    getBalanceSlice(addr, fetchOperatorExtras),
   ]);
 
   const snapshot = snapR.kind === "ok" ? snapR.value : undefined;
