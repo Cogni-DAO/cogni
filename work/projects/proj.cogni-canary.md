@@ -118,6 +118,22 @@ Left-to-right reads as "what unlocks what." Each rung below must be true for the
 | Scope-fence enforcement in brain loop (cannot propose charters outside allowed entrypoints) | task.0341 |
 | Dolt table `canary_graph_revenue` — per-graph revenue + cost            | task.0341 |
 
+### CP4.5 — Hard validation gates (before calling anything "proven")
+
+**Goal:** No claim about canary being "live" until both gates pass with real inputs.
+
+| Gate | Claim                                                             | Runbook                                                   | Work Item |
+| ---- | ----------------------------------------------------------------- | --------------------------------------------------------- | --------- |
+| A    | External agent completes PR lifecycle (fork → flight → merge) with ZERO human clicks | `docs/runbooks/GATE_A_EXTERNAL_PR_FLIGHT.md`              | task.0345 |
+| B    | New agent registers, wallet gets funded, paid Kimi K2 call hits ledger | `docs/runbooks/GATE_B_PAID_AGENT_VALIDATION.md`           | task.0345 |
+
+Gate A's public flight surface is missing today — `task.0344` ships the `POST /api/v1/vcs/flight-candidate` HTTP route. Gate B can run first since all its dependencies (register, payments, LiteLLM) already exist on main; it needs Derek to fund the wallet with $2 USDC one time.
+
+Success criteria (both gates):
+- Every step is a documented API call or tool call (no `gh` CLI, no browser click)
+- Success is observable: on-chain confirmation (Gate B) OR GitHub event stream (Gate A)
+- Failures surface discoverable remediation (DAO-vote override, budget top-up, etc.)
+
 ### CP5 — Revenue proof (long-lived)
 
 **Goal:** The canary earns ≥ its monthly cost for 3 consecutive months. Then we promote the brain to Claude Haiku (next-cheapest Anthropic model) and measure the delta.
@@ -152,6 +168,11 @@ Actual winners will be learned, not designed.
 9. [x] `docs/guides/create-service-review.md`
 10. [x] `work/runbooks/canary-dao-formation.md`
 11. [x] `nodes/canary/` scaffold
+12. [x] `docs/guides/external-agent-onboarding.md` — zero-human PR lifecycle for external agents
+13. [x] `task.0344` — public `/api/v1/vcs/flight-candidate` HTTP route (gap for Gate A)
+14. [x] `task.0345` — Gate A + Gate B hard validation criteria + runbooks
+15. [x] `docs/runbooks/GATE_A_EXTERNAL_PR_FLIGHT.md`, `docs/runbooks/GATE_B_PAID_AGENT_VALIDATION.md`
+16. [x] `/.well-known/agent.json` updated to link external-agent-onboarding guide
 12. [x] `infra/catalog/canary.yaml`
 13. [x] `.cogni/repo-spec.yaml` nodes entry
 14. [x] `.cogni/rules/ai-only-repo-policy.yaml` stub

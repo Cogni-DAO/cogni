@@ -65,5 +65,14 @@ export async function GET(request: Request) {
         messages: [{ role: "user", content: "Hello" }],
       },
     },
+    // Lifecycle guides for external agents. The first is the discover →
+    // register → execute flow; the second walks the zero-human PR lifecycle
+    // (branch → PR → flight → merge) that canary-bot follows.
+    guides: {
+      apiValidation:
+        "https://github.com/Cogni-DAO/cogni-template/blob/main/docs/guides/agent-api-validation.md",
+      externalAgentOnboarding:
+        "https://github.com/Cogni-DAO/cogni-template/blob/main/docs/guides/external-agent-onboarding.md",
+    },
   });
 }
