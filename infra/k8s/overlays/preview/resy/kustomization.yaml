@@ -26,9 +26,6 @@ patches:
       name: node-app-config
     patch: |
       - op: replace
-        path: /data/APP_ENV
-        value: "production"
-      - op: replace
         path: /data/NODE_NAME
         value: "resy"
       - op: replace
@@ -46,9 +43,6 @@ patches:
       - op: add
         path: /data/NEXTAUTH_URL
         value: "https://resy-preview.cognidao.org"
-      - op: add
-        path: /data/AUTH_TRUST_HOST
-        value: "true"
   # NodePort + instance label on selector (prevents cross-node routing)
   - target:
       kind: Service

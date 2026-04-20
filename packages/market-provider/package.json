@@ -35,7 +35,7 @@
   },
   "peerDependencies": {
     "@polymarket/clob-client": "^5.8.1",
-    "viem": "^2.48.1"
+    "viem": "^2.0.0"
   },
   "peerDependenciesMeta": {
     "@polymarket/clob-client": {
@@ -49,6 +49,6 @@
     "@polymarket/clob-client": "^5.8.1",
     "tsup": "^8.5.1",
     "typescript": "^5",
-    "viem": "^2.48.1"
+    "viem": "^2.0.0"
   }
 }

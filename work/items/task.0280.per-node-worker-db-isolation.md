@@ -132,3 +132,8 @@ Follow-ups:
 - bug.0322 regression check shipped in `scripts/ci/smoke-candidate.sh` (register-on-poly → chat → assert run on poly, not on operator).
 - Dep-cruiser: `services/scheduler-worker/src` clean; activities import ports, not adapters.
 - Flight to candidate-a via normal app-lever flight; no infra flight required.
+
+## PR / Links
+
+- PR: https://github.com/Cogni-DAO/node-template/pull/922 (merged as commit `27db31327`)
+- Handoff: [handoff](../handoffs/task.0280.handoff.md)

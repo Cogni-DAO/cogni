@@ -24,9 +24,6 @@ patches:
       name: node-app-config
     patch: |
       - op: replace
-        path: /data/APP_ENV
-        value: "production"
-      - op: replace
         path: /data/NODE_NAME
         value: "operator"
       - op: replace
@@ -44,9 +41,6 @@ patches:
       - op: add
         path: /data/NEXTAUTH_URL
         value: "https://test.cognidao.org"
-      - op: add
-        path: /data/AUTH_TRUST_HOST
-        value: "true"
   - target:
       kind: Service
       name: node-app

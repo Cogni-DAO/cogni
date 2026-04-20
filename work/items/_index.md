@@ -110,6 +110,8 @@
 | 1 | 5 | 3 | needs_merge | task.0273 | Unify workspace: move operator to nodes/operator/app | Operator Plane | proj.operator-plane |
 | 1 | 5 | 3 | needs_design | bug.0297 | POST /api/v1/agent/register is an unauthenticated account + API-key factory | Accounts, API Keys & Wallet Authentication | proj.accounts-api-keys |
 | 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 5 | 1 | needs_merge | bug.0333 | Base audit — move envs-identical ConfigMap values out of overlay patches into base | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 5 | 4 | needs_design | bug.0334 | Overlay EndpointSlice IPs + workflow rsync — establish INFRA_K8S_MAIN_DERIVED invariant | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |
@@ -151,7 +153,7 @@
 | 1 | 30 | 1 | needs_review | bug.0333 | candidate-flight false-fails on rolling-update endpoint cutover race | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 40 | 3 | needs_triage | bug.0322 | Runs made on poly are visible via operator's /api/v1/agent/runs (cross-node data pollution) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 50 | 2 | needs_triage | bug.0329 | Polymarket CLOB adapter SELL on neg_risk markets returns empty error — positions unclosable | Cogni Poly | proj.poly-copy-trading |
-| 1 | 51 | 2 | needs_triage | bug.0331 | Polymarket CLOB rejects every operator BUY on candidate-a with empty error — mirror pipeline boots clean but places zero orders | Cogni Poly | proj.poly-copy-trading |
+| 1 | 51 | 2 | needs_triage | bug.0335 | Polymarket CLOB rejects every operator BUY on candidate-a with empty error — mirror pipeline boots clean but places zero orders | Cogni Poly | proj.poly-copy-trading |
 | 1 | 99 | 3 | needs_triage | story.0089 | Discord Bot Conversation Evals |  |  |
 | 1 | 99 | 5 | needs_triage | story.0091 | Clawdbot as High-Level Manager Agent |  |  |
 | 1 | 99 | 4 | needs_design | story.0116 | DAO Gateway MVP — multi-tenant AI billing gateway for external projects | Operator Plane | proj.operator-plane |
