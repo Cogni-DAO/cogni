@@ -21,7 +21,7 @@ external_refs:
   - work/items/task.0318.poly-wallet-multi-tenant-auth.md
 ---
 
-# bug.0331 — CLOB rejects every operator BUY on candidate-a with empty error
+# bug.0335 — CLOB rejects every operator BUY on candidate-a with empty error
 
 > Surfaced during PR #932 flight validation on 2026-04-19. With kill switch ON and a high-frequency target wallet (`0x204f72…5e14`, sports HFT, 296 trades/hr), the mirror pipeline correctly detected 17 fills, wrote 5 INSERT_BEFORE_PLACE rows, signed 5 BUYs via the operator Privy wallet, and got 5 identical empty-error rejects from CLOB. See Grafana `{service_name="app"} |= "poly.copy_trade.execute" |= "rejected"` between `2026-04-19T23:52:40Z` and `2026-04-19T23:52:43Z`.
 

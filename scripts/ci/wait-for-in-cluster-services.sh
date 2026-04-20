@@ -59,10 +59,15 @@ SERVICES=(operator-node-app poly-node-app resy-node-app scheduler-worker)
 NS="cogni-${DEPLOY_ENVIRONMENT}"
 
 # Endpoint cutover wait: poll Service endpoints until the address count
-# drops to <= deployment desired replicas. During a RollingUpdate with
-# maxSurge=1, both old and new pods are routable until the old pod's
-# deletionTimestamp triggers EndpointSlice removal — typically <1s after
-# kubectl rollout status returns, but bounded by terminationGracePeriod.
+# equals deployment desired replicas exactly. During a RollingUpdate with
+# maxSurge=1, count goes desired → desired+1 (old+new both ready) → desired
+# (old removed from EndpointSlice). Strict equality is required:
+#   count > desired → cutover in progress (old pod still routable)
+#   count == desired → cutover complete (success)
+#   count < desired → service degraded (pods missing from endpoints) — NOT
+#                     success; an upstream rollout-status that reported
+#                     Ready followed by a service with fewer endpoints than
+#                     desired indicates a real problem and should fail loud.
 # The dot-counter (jsonpath emits one '.' per Ready address) is jq-free
 # so it works on the candidate VM (jq is not installed there).
 wait_for_endpoint_cutover() {
@@ -81,14 +86,20 @@ wait_for_endpoint_cutover() {
     count=$(ssh "${SSH_OPTS[@]}" "root@${VM_HOST}" \
       "kubectl -n ${NS} get endpoints ${svc} -o jsonpath='{range .subsets[*].addresses[*]}.{end}' 2>/dev/null | tr -cd '.' | wc -c | tr -d ' '" \
       || echo "-1")
-    if [ "$count" -ge 0 ] && [ "$count" -le "$desired" ]; then
-      echo "  ✓ ${svc}: endpoints=${count} <= desired=${desired} (rollout cutover complete)"
+    if [ "$count" -eq "$desired" ]; then
+      echo "  ✓ ${svc}: endpoints=${count} == desired=${desired} (rollout cutover complete)"
       return 0
     fi
     sleep 2
   done
 
-  echo "  ✗ ${svc}: endpoint cutover timed out after ${ENDPOINT_CUTOVER_TIMEOUT}s — endpoints=${count} > desired=${desired}"
+  if [ "$count" -lt 0 ]; then
+    echo "  ✗ ${svc}: endpoint cutover gate failed — kubectl get endpoints unreachable via SSH after ${ENDPOINT_CUTOVER_TIMEOUT}s"
+  elif [ "$count" -gt "$desired" ]; then
+    echo "  ✗ ${svc}: endpoint cutover timed out after ${ENDPOINT_CUTOVER_TIMEOUT}s — endpoints=${count} > desired=${desired} (old pod still routable; check terminationGracePeriodSeconds or finalizers)"
+  else
+    echo "  ✗ ${svc}: endpoint cutover failed after ${ENDPOINT_CUTOVER_TIMEOUT}s — endpoints=${count} < desired=${desired} (service degraded; pods missing from EndpointSlice despite kubectl rollout status returning Ready)"
+  fi
   return 1
 }
 
