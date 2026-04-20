@@ -74,7 +74,13 @@ if [ -n "$PROMOTED_APPS" ]; then
   IFS=',' read -r -a APPS <<< "$PROMOTED_APPS"
   echo "⏳ Waiting for promoted apps (${PROMOTED_APPS}) to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
 else
-  APPS=(operator poly resy canary scheduler-worker sandbox-openclaw)
+  # canary intentionally absent from default APPS list until its first real
+  # image digest is promoted. Overlay digests are placeholder (sha256:0000...);
+  # including canary here would block every non-PR-driven flight (full-catalog
+  # syncs, first-boot provisioning) on a pod that can never pull. When canary
+  # is explicitly promoted, it arrives via PROMOTED_APPS (bug-fix during
+  # self-review of task.0338 part 1).
+  APPS=(operator poly resy scheduler-worker sandbox-openclaw)
   echo "⏳ Waiting for all catalog apps to reconcile to ${EXPECTED_SHA:0:8} (${DEPLOY_ENVIRONMENT}, timeout ${ARGOCD_TIMEOUT}s)..."
 fi
 
