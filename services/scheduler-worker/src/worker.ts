@@ -8,7 +8,7 @@
  * Invariants:
  *   - Per WORKER_NEVER_CONTROLS_SCHEDULES: Does NOT depend on ScheduleControlPort
  *   - Per TEMPORAL_DETERMINISM: Workflows are bundled separately from activities
- *   - Per QUEUE_PER_NODE_ISOLATION (task.0280 phase 2): one Temporal Worker per nodeId polling `scheduler-tasks-${nodeId}`. A failing node's queue growing does not starve other nodes.
+ *   - Per QUEUE_PER_NODE_ISOLATION (task.0280 phase 2): one Temporal Worker per nodeId polling `scheduler-tasks-${nodeId}`. A failing node's queue growing does not starve other nodes. Required for chat.completions / ai.chat which submit from node-apps to `scheduler-tasks-${getNodeId()}` — stale scheduler-worker images that only poll the legacy queue will hang every user chat request.
  *   - All dependencies injected via ServiceContainer from bootstrap/container.ts
  *   - No concrete adapter imports — uses container for wiring
  * Side-effects: IO (connects to Temporal, starts workers)
