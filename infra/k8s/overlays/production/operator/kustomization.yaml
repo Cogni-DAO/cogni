@@ -26,9 +26,6 @@ patches:
       name: node-app-config
     patch: |
       - op: replace
-        path: /data/APP_ENV
-        value: "production"
-      - op: replace
         path: /data/NODE_NAME
         value: "operator"
       - op: replace
@@ -46,9 +43,6 @@ patches:
       - op: add
         path: /data/NEXTAUTH_URL
         value: "https://cognidao.org"
-      - op: add
-        path: /data/AUTH_TRUST_HOST
-        value: "true"
   # NodePort assignment (operator = 30000) + instance label on selector.
   # Instance label prevents cross-node service routing: namePrefix only renames
   # resource names, not labels/selectors, so without this every Service

@@ -8,8 +8,9 @@ kind: ConfigMap
 metadata:
   name: node-app-config
 data:
-  # Patched by overlay
-  APP_ENV: "preview"
+  # All deployed envs (preview, candidate-a, canary, production) run in production mode.
+  APP_ENV: "production"
+  AUTH_TRUST_HOST: "true"
   NODE_NAME: "node-app"
   # Internal service URLs (same for all nodes on same VM)
   LITELLM_BASE_URL: "http://litellm-external:4000"

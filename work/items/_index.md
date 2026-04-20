@@ -110,7 +110,7 @@
 | 1 | 5 | 3 | needs_merge | task.0273 | Unify workspace: move operator to nodes/operator/app | Operator Plane | proj.operator-plane |
 | 1 | 5 | 3 | needs_design | bug.0297 | POST /api/v1/agent/register is an unauthenticated account + API-key factory | Accounts, API Keys & Wallet Authentication | proj.accounts-api-keys |
 | 1 | 5 | 3 | needs_triage | bug.0327 | No client-side crash telemetry — node apps can serve broken UX to users and we don't know | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 5 | 4 | needs_implement | bug.0329 | Overlay config drift — deploy branches are a mutable state store with no single truth source | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 5 | 4 | needs_implement | bug.0331 | Overlay config drift — deploy branches are a mutable state store with no single truth source | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 6 | 1 | needs_triage | bug.0036 | Chat route enqueues to closed assistant-stream controller — unhandled TypeError |  |  |
 | 1 | 6 | 1 | needs_triage | bug.0070 | OpenClaw CLI binary not executable as `openclaw` — agent CLI commands fail | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 6 | 2 | needs_design | task.0183 | Run list API: GET /api/v1/ai/runs — query graph_runs with filtering | Live Operations Dashboard | proj.live-dashboard |

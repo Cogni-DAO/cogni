@@ -1,5 +1,5 @@
 ---
-id: bug.0329
+id: bug.0331
 type: bug
 title: Overlay config drift — deploy branches are a mutable state store with no single truth source
 status: needs_implement
@@ -14,7 +14,7 @@ spec_refs:
 assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
-branch: fix/bug.0329-overlay-drift
+branch: fix/bug.0331-overlay-drift
 pr:
 reviewer: claude-code
 revision: 1
@@ -123,6 +123,42 @@ Owned by this work item — update at implement time:
 - `services/scheduler-worker/AGENTS.md` — if it currently documents `COGNI_NODE_ENDPOINTS` as overlay-patched, correct to base.
 
 Not expected to change: `docs/spec/multi-node-tenancy.md` (tenancy invariants are unaffected), `docs/spec/scheduler.md` (HTTP delegation shape unchanged).
+
+## Plan
+
+- [ ] **Checkpoint 1 — Base audit: move byte-identical patches into base configmaps**
+  - Milestone: `COGNI_NODE_ENDPOINTS` (scheduler-worker) + `APP_ENV` / `AUTH_TRUST_HOST` (node-app) live in base. Overlays stop patching them. `kustomize build` output is byte-identical before/after.
+  - Invariants: BASE_OWNS_STATIC, SIMPLE_SOLUTION.
+  - Todos:
+    - [ ] Update `infra/k8s/base/scheduler-worker/configmap.yaml`: set `COGNI_NODE_ENDPOINTS` to the real (envs-identical) value, update comment.
+    - [ ] Remove `COGNI_NODE_ENDPOINTS` patch from `infra/k8s/overlays/{preview,candidate-a,canary,production}/scheduler-worker/kustomization.yaml`.
+    - [ ] Update `infra/k8s/base/node-app/configmap.yaml`: set `APP_ENV=production`, `AUTH_TRUST_HOST=true`.
+    - [ ] Remove `APP_ENV` + `AUTH_TRUST_HOST` patches from all 12 node-app overlays.
+  - Validation/Testing: `kustomize build infra/k8s/overlays/<env>/<app>` output `diff` vs pre-checkpoint baseline in `/tmp/bug0331-baseline/` must be empty (or only whitespace).
+
+- [ ] **Checkpoint 2 — env-state.yaml + kustomize replacements for EndpointSlice IPs**
+  - Milestone: `VM_INTERNAL_IP` flows from one per-env `env-state.yaml` into every EndpointSlice. No inline IP literals in `kustomization.yaml`. Same effective addresses.
+  - Invariants: ENV_STATE_IS_TRUTH, REPLACEMENTS_NOT_INLINE.
+  - Todos:
+    - [ ] Create `infra/k8s/overlays/<env>/env-state.yaml` × 4 with `VM_INTERNAL_IP`:
+      - preview: `84.32.109.222`, candidate-a: `84.32.109.160`, canary: `<current>`, production: `127.0.0.1`
+      - Annotate `config.kubernetes.io/local-config: "true"` so the ConfigMap doesn't render into output.
+    - [ ] Each overlay `kustomization.yaml` adds `resources: - ../env-state.yaml` (or inline resource reference) + `replacements:` section targeting every EndpointSlice `/endpoints/0/addresses/0`.
+    - [ ] Delete inline `/endpoints/0/addresses` patches. Keep `/metadata/labels/kubernetes.io~1service-name` patches (they're static per-node namePrefix fixes).
+  - Validation/Testing: `kustomize build` rendered EndpointSlice addresses match baseline per env.
+
+- [ ] **Checkpoint 3 — Workflow + provision scripts (⚠ CI/CD change, confirm before)**
+  - Milestone: `INFRA_K8S_MAIN_DERIVED` holds in CI.
+  - Invariants: INFRA_K8S_MAIN_DERIVED, ENV_STATE_IS_TRUTH.
+  - Todos:
+    - [ ] `.github/workflows/promote-and-deploy.yml`: extend "Sync base and catalog" step to `rsync -a --delete --exclude='env-state.yaml' app-src/infra/k8s/ deploy-branch/infra/k8s/` (replaces the separate base/catalog rsyncs).
+    - [ ] Update the step's comment block (lines 184-192) — delete the "overlays are NOT synced" lie, document new contract.
+    - [ ] `scripts/ci/deploy-infra.sh`: write only `env-state.yaml`; remove inline EndpointSlice sed/awk.
+    - [ ] `scripts/setup/provision-test-vm.sh`: same.
+    - [ ] (Optional follow-up) CI guard step: `git diff <promoted-sha> HEAD -- infra/k8s/ ':!**/env-state.yaml'` — fail if non-digest non-env-state drift.
+
+- [ ] **Checkpoint 4 — Docs / spec updates**
+  - See "Docs / specs to update when this lands" list in the Design section.
 
 ## Validation
 
