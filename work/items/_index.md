@@ -25,6 +25,7 @@
 | 0 | 1 | 2 | needs_triage | bug.0276 | K8s deployed app crashes to white — client-side exception after initial render | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 3 | needs_implement | task.0285 | Provision script resilience — credential reset, migrations, complete .env |  |  |
 | 0 | 1 | 3 | needs_merge | bug.0287 | Provision script incompatible with deploy branch model — 3 gaps |  |  |
+| 0 | 1 | 3 | needs_implement | bug.0295 | VM IPs in git — deploy-branch env-state.yaml drifts from reality, causes outages | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 3 | needs_design | task.0296 | Candidate slot controller v0 — one-slot PR flight control plane | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 1 | needs_implement | bug.0307 | Operator OOM on candidate-a — memory limit too low, manual canary bump never landed in overlay | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | 1 | 4 | needs_design | task.0309 | QA agent — reads work item, exercises feature, confirms observability post-flight | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -184,7 +185,6 @@
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
 | 2 | 10 | 2 | needs_design | bug.0198 | Single Privy app shared across preview and production — no env isolation | Reliability & Uptime | proj.reliability |
 | 2 | 10 | 1 | needs_implement | bug.0201 | Runbook gap: secret changes require container recreation, not just workflow re-runs | Reliability & Uptime | proj.reliability |
-| 2 | 10 | 2 | needs_design | bug.0295 | VM IPs committed to public repo via deploy branch env-endpoints.yaml | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 11 | 3 | needs_triage | task.0048 | Sub-agent billing attribution — track which OpenClaw sub-agent made each LLM call | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 12 | 3 | needs_triage | task.0040 | Gateway memory curation worker — scan ephemeral state, persist valuable context, reset container | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 2 | 14 | 1 | needs_design | task.0079 | Create bot-generated Discord invite link for website |  |  |
