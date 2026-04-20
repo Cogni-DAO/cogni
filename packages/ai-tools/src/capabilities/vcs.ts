@@ -10,7 +10,7 @@
  *   - VCS_WRITE_CAPABLE: Supports both read and write operations (merge, branch creation)
  *   - ADAPTER_SWAPPABLE: Interface supports Octokit (v0) or gh CLI (future sandbox agents)
  * Side-effects: none (interface only)
- * Links: task.0242, docs/guides/github-app-webhook-setup.md
+ * Links: task.0242, task.0297, docs/guides/github-app-webhook-setup.md
  * @public
  */
 
@@ -67,6 +67,24 @@ export interface CreateBranchResult {
   readonly sha: string;
 }
 
+/**
+ * Result of dispatching a candidate-a flight.
+ *
+ * GitHub's `POST /dispatches` returns HTTP 204 with no body — there is no
+ * reliable way to identify the specific run it created short of a racey
+ * polling lookup. We deliberately don't attempt that correlation here.
+ * The caller observes the resulting run via `getCiStatus` — the
+ * `candidate-flight` check appears on the PR head once GitHub picks up
+ * the dispatch.
+ */
+export interface DispatchCandidateFlightResult {
+  readonly dispatched: boolean;
+  readonly prNumber: number;
+  readonly headSha: string | null;
+  readonly workflowUrl: string;
+  readonly message: string;
+}
+
 // ---------------------------------------------------------------------------
 // Capability interface
 // ---------------------------------------------------------------------------
@@ -110,4 +128,21 @@ export interface VcsCapability {
     branch: string;
     fromRef: string;
   }): Promise<CreateBranchResult>;
+
+  /**
+   * Dispatch the `candidate-flight.yml` workflow for a pull request.
+   *
+   * Thin wrapper over GitHub's `workflow_dispatch` API. Does not check slot
+   * availability, CI status, or permissions — those gates live in the
+   * workflow (flight slot lease, PR Build prerequisite, Argo reconciliation).
+   *
+   * Per NO_AUTO_FLIGHT: agents must be explicitly instructed to call this.
+   * The tool description repeats this to the planner.
+   */
+  dispatchCandidateFlight(params: {
+    owner: string;
+    repo: string;
+    prNumber: number;
+    headSha?: string;
+  }): Promise<DispatchCandidateFlightResult>;
 }

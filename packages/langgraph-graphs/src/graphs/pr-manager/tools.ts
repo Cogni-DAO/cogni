@@ -14,6 +14,7 @@
 import {
   REPO_OPEN_NAME,
   VCS_CREATE_BRANCH_NAME,
+  VCS_FLIGHT_CANDIDATE_NAME,
   VCS_GET_CI_STATUS_NAME,
   VCS_LIST_PRS_NAME,
   VCS_MERGE_PR_NAME,
@@ -24,8 +25,12 @@ import {
  * Tool IDs available to the PR Manager agent.
  *
  * - repo_open: reads the evolving playbook at docs/guides/pr-management-playbook.md
- * - VCS tools: PR lifecycle management
+ * - VCS tools: PR lifecycle management (list / CI status / merge / branch / flight)
  * - work item query: cross-reference PR ↔ task
+ *
+ * NO_AUTO_FLIGHT invariant: `core__vcs_flight_candidate` must only be invoked
+ * when a human or scheduled run explicitly requests a flight. The tool's own
+ * description repeats this to the planner.
  */
 export const PR_MANAGER_TOOL_IDS = [
   REPO_OPEN_NAME,
@@ -33,5 +38,6 @@ export const PR_MANAGER_TOOL_IDS = [
   VCS_GET_CI_STATUS_NAME,
   VCS_MERGE_PR_NAME,
   VCS_CREATE_BRANCH_NAME,
+  VCS_FLIGHT_CANDIDATE_NAME,
   WORK_ITEM_QUERY_NAME,
 ] as const;
