@@ -3,51 +3,92 @@
 
 /**
  * Module: `@contracts/poly.copy-trade.targets.v1.contract`
- * Purpose: Contract for listing Polymarket wallets the operator is monitoring / copy-trading.
- * Scope: Defines response schema for GET /api/v1/poly/copy-trade/targets. Does not execute trades, does not modify state, does not own target-resolution logic.
+ * Purpose: Contracts for managing the calling user's Polymarket copy-trade tracked wallets.
+ *          List (GET), create (POST), delete (DELETE) — all RLS-scoped to the session user.
+ * Scope: Schema-only. Does not execute trades, does not modify on-chain state, does not own
+ *        target-resolution logic (lives in `CopyTradeTargetSource`).
  * Invariants:
- *   - V0_ENV_DERIVED: zero or more env-derived targets from `COPY_TRADE_TARGET_WALLETS` (comma-separated list).
- *   - P2_DB_BACKED: returns rows from `poly_copy_trade_targets` once the table exists.
- *   - GLOBAL_KILL_SWITCH_V0: all rows share `poly_copy_trade_config.enabled` in v0 — no per-target enable flag.
+ *   - TENANT_SCOPED: rows are RLS-clamped to `created_by_user_id = current_setting('app.current_user_id', true)`.
+ *     Cross-tenant reads/writes blocked at the DB layer.
+ *   - GLOBAL_KILL_SWITCH_PER_TENANT: every target row shares its tenant's
+ *     `poly_copy_trade_config.enabled` row — no per-target enable flag.
+ *   - SOURCE_REFLECTS_PORT: the `source` field reflects which `CopyTradeTargetSource` impl
+ *     produced the row (`"env"` for the local-dev fallback, `"db"` for production).
  * Side-effects: none
- * Notes: HARDCODED_USER — response is not user-scoped in v0 (single-operator prototype). Tracked as task.0315 P2 follow-up.
- * Links: work/items/task.0315.poly-copy-trade-prototype.md, docs/spec/poly-copy-trade-phase1.md
+ * Notes: Phase B will add per-tenant caps/mode from `poly_wallet_grants`. For now those
+ *        fields surface the operator-wide hardcoded scaffolding values.
+ * Links: docs/spec/poly-multi-tenant-auth.md, work/items/task.0318
  * @public
  */
 
 import { z } from "zod";
 
 const targetSchema = z.object({
-  /** Synthetic UUIDv5 derived from `target_wallet` in v0 (`targetIdFromWallet`). */
+  /** UUIDv5 derived from `target_wallet` (deterministic across rows for the same wallet). */
   target_id: z.string().uuid(),
   /** 0x-prefixed 40-hex — the wallet being watched / copied. */
   target_wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   /** `"paper"` = shadow into paper_orders (P3); `"live"` = real Polymarket placement. */
   mode: z.enum(["paper", "live"]),
-  /** Fixed mirror notional per fill (USDC). */
+  /** Fixed mirror notional per fill (USDC). Operator-wide scaffolding in Phase A. */
   mirror_usdc: z.number().positive(),
-  /** Intent-based daily USDC cap. */
+  /** Intent-based daily USDC cap. Operator-wide scaffolding in Phase A. */
   max_daily_usdc: z.number().positive(),
-  /** Intent-based rate cap per rolling hour. */
+  /** Intent-based rate cap per rolling hour. Operator-wide scaffolding in Phase A. */
   max_fills_per_hour: z.number().int().positive(),
-  /** Per-target enable flag. v0 uses the global kill-switch; this field is always true in v0. */
+  /** Mirrors the per-tenant `poly_copy_trade_config.enabled` row. */
   enabled: z.boolean(),
-  /** Provenance: `"env"` in v0 (env fallback); `"db"` in P2 when row is in `poly_copy_trade_targets`. */
+  /** Provenance: `"env"` for the local-dev fallback; `"db"` once `dbTargetSource` is wired. */
   source: z.enum(["env", "db"]),
 });
 
 export const polyCopyTradeTargetsOperation = {
   id: "poly.copy-trade.targets.v1",
-  summary: "List wallets the operator is monitoring / copy-trading",
+  summary: "List wallets the calling user is monitoring / copy-trading",
   description:
-    "Returns the active monitoring list. v0 returns env-derived targets parsed from COPY_TRADE_TARGET_WALLETS (comma-separated); empty when unset.",
+    "Returns the calling user's tracked wallets. RLS-scoped: a user sees only their own rows.",
   input: z.object({}),
   output: z.object({
     targets: z.array(targetSchema),
   }),
 } as const;
 
+const targetCreateInputSchema = z.object({
+  target_wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+});
+
+export const polyCopyTradeTargetCreateOperation = {
+  id: "poly.copy-trade.targets.create.v1",
+  summary: "Add a wallet to the calling user's tracked list",
+  description:
+    "Creates a new `poly_copy_trade_targets` row owned by the session user. Tenant-scoped via RLS. Returns the created row in the same shape as GET.",
+  input: targetCreateInputSchema,
+  output: z.object({
+    target: targetSchema,
+  }),
+} as const;
+
+export const polyCopyTradeTargetDeleteOperation = {
+  id: "poly.copy-trade.targets.delete.v1",
+  summary: "Remove a wallet from the calling user's tracked list",
+  description:
+    "Soft-deletes a `poly_copy_trade_targets` row by setting `disabled_at`. Tenant-scoped via RLS — a user cannot delete another user's row (returns 404).",
+  input: z.object({ id: z.string().uuid() }),
+  output: z.object({
+    deleted: z.boolean(),
+  }),
+} as const;
+
 export type PolyCopyTradeTarget = z.infer<typeof targetSchema>;
 export type PolyCopyTradeTargetsOutput = z.infer<
   typeof polyCopyTradeTargetsOperation.output
+>;
+export type PolyCopyTradeTargetCreateInput = z.infer<
+  typeof polyCopyTradeTargetCreateOperation.input
+>;
+export type PolyCopyTradeTargetCreateOutput = z.infer<
+  typeof polyCopyTradeTargetCreateOperation.output
+>;
+export type PolyCopyTradeTargetDeleteOutput = z.infer<
+  typeof polyCopyTradeTargetDeleteOperation.output
 >;
