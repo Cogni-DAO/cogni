@@ -5,174 +5,140 @@ title: "Wallet Analysis — Reusable Components + Live Data Plane"
 status: draft
 spec_refs:
 created: 2026-04-19
-updated: 2026-04-19
+updated: 2026-04-20
 ---
 
 # Wallet Analysis — Reusable Components + Live Data Plane
 
-> Extract the BeefSlayer hero from `/research` + the Operator Wallet balance bar into a reusable `WalletAnalysisView` that any **roster wallet** can render, with live data where it matters and snapshot data where it doesn't. Then wire selection from `Monitored Wallets` → view.
+> Any 0x Polymarket wallet renders the same full-fidelity analysis view, fed by a thin HTTP route that computes deterministic metrics on demand (no DB, no migration) and defers authored judgment to [task.0333](../../work/items/task.0333.wallet-analyst-agent-and-dolt-store.md) (Dolt) + event grounding to [task.0334](../../work/items/task.0334.poly-niche-research-engine.md) (Postgres EDO).
 
 ## Problem
 
-- `/research` renders **BeefSlayer** as a bespoke hero — hardcoded stats, hardcoded trades, no other wallet can render like this.
-- `OperatorWalletCard` on `/dashboard` renders the **balance bar** (Available / Locked / Positions) only for the operator.
-- `TopWalletsCard` ("Monitored Wallets") lists wallets but has no drill-in.
-
-Goal: click any roster wallet → full analysis view, composed of pieces we've already drawn, with data loaded efficiently.
+- `/research` renders **BeefSlayer** as a bespoke hero. Hardcoded stats, hardcoded trades, no other wallet can render.
+- `OperatorWalletCard` on `/dashboard` renders the balance bar only for the operator.
+- `TopWalletsCard` lists wallets but has no drill-in.
 
 ## Component decomposition
 
-Three variants. Same molecules.
+One organism, seven molecules, two variants.
 
 ```
-WalletAnalysisView(address, variant)
+WalletAnalysisView(address, variant, size)
 │
 ├─ WalletIdentityHeader   ─ name · wallet · Polymarket / Polygonscan · category chip
-├─ StatGrid               ─ 1–6 metric tiles (WR · ROI · PnL · DD · hold · avg/day) [snapshot]
-├─ BalanceBar             ─ Available · Locked · Positions stacked bar              [live · 15s]
-├─ TradesPerDayChart      ─ last 14 d bars                                          [live · 30s] · lazy
-├─ RecentTradesTable      ─ last N trades                                           [live · 30s] · lazy
-├─ TopMarketsList         ─ top 4 derived from trades                               [derived]
-├─ EdgeHypothesis         ─ analyst text from snapshot row (hypothesis_md column)
-└─ CopyTradeCTA           ─ vNext · set-as-mirror-target button
+├─ StatGrid               ─ WR · ROI · PnL · DD · hold · avg/day     [snapshot · 30 s]
+├─ BalanceBar             ─ Available · Locked · Positions           [balance  · 30 s]
+├─ TradesPerDayChart      ─ last 14 d bars                           [trades   · 30 s · lazy]
+├─ RecentTradesTable      ─ last N trades                            [trades   · 30 s · lazy]
+├─ TopMarketsList         ─ top 4 derived from trades                [derived]
+├─ EdgeHypothesis         ─ markdown prose, authored                 [from task.0333 Dolt · prop fallback today]
+└─ CopyTradeCTA           ─ vNext · set-as-mirror-target
 ```
 
-| variant   | where                                                    | shows                                                 |
-| --------- | -------------------------------------------------------- | ----------------------------------------------------- |
-| `page`    | `/research/w/[addr]` AND hero on `/research` (size prop) | all molecules; `size="hero"` enlarges typography only |
-| `drawer`  | dashboard slide-over                                     | identity + stats + balance + last 5 trades            |
-| `compact` | row-inline (vNext)                                       | identity + WR + ROI + DD                              |
+| variant  | used by                                                   | shows                                            |
+| -------- | --------------------------------------------------------- | ------------------------------------------------ |
+| `page`   | `/research/w/[addr]` AND `/research` hero (`size="hero"`) | all molecules                                    |
+| `drawer` | `/dashboard` row → `Sheet`                                | identity · StatGrid · BalanceBar · last 5 trades |
 
-`compact` ships only when there's a caller for it. v1 ships `page` + `drawer`.
+Molecules accept `{ data, isLoading, error }` and render their own skeleton / empty / error states. **No sub-component fetches on its own.**
 
-All molecules accept `{ data, isLoading }` and render their own skeleton. **No sub-component fetches on its own.**
+`EdgeHypothesis` reads from `data.hypothesisMd` (the snapshot slice). In Checkpoint B that prop is a **hardcoded fallback for BeefSlayer only**, inlined in `view.tsx`. When task.0333 ships it comes from a Dolt `poly_wallet_analyses` row without any component change.
 
-> **2026-04-20 revision (pending Checkpoint B implementation).** The Postgres `poly_wallet_screen_snapshots` table described below is **superseded** by [task.0333](../../work/items/task.0333.wallet-analyst-agent-and-dolt-store.md):
->
-> - **Numbers** (WR / ROI / DD / median hold / trades-per-day) are deterministic `f(trades × resolutions)` from public Polymarket Data-API + CLOB — compute-on-fetch with a module-scoped TTL cache, **no table, no migration, no seed script**.
-> - **Qualitative analysis** (edge hypothesis, category specialty, risk flags, verdict) goes into a **Dolt** `poly_wallet_analyses` table written by a DAO-funded `poly-brain::wallet-analyst` graph run, triggered by an "Analyze" button on the wallet page. Dolt gives authorship, confidence scores, diffable refinements.
->
-> Checkpoint B still describes the API route + hook + dynamic page shape; ignore every reference to the Postgres snapshot table and seed script.
+## Data plane — compute, not store
 
-## Data plane
+Three slices, three independent fetches.
 
-Three slices, three independent fetches, one shared coalescing layer.
+| Slice      | Source                                                                                       | Availability                                              | Freshness |
+| ---------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------- | --------- |
+| `snapshot` | compute: `PolymarketDataApiClient` trades + CLOB resolutions                                 | any addr (metrics `null` until enough resolved positions) | 30 s      |
+| `trades`   | `PolymarketDataApiClient` `/trades?user=`                                                    | any addr                                                  | 30 s      |
+| `balance`  | `PolymarketDataApiClient` `/positions?user=` (any addr) + operator CLOB USDC (operator only) | any addr (positions-only) · operator (full breakdown)     | 30 s      |
 
-| Slice      | Source                                                                                                                | Availability                               | Freshness                                                                                |
-| ---------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `snapshot` | `poly_wallet_screen_snapshots` table (seeded from `docs/research/fixtures/poly-wallet-screen-v3-*.json`)              | any addr (returns null if unscreened)      | snapshot-versioned; UI shows `taken_at`; muted pill if >100 days old (1 quarter + grace) |
-| `trades`   | existing `PolymarketDataApiClient` `/trades?user=`                                                                    | any addr                                   | 30 s                                                                                     |
-| `balance`  | existing `PolymarketDataApiClient` `/positions?user=` (any addr) **plus** USDC available/locked via operator CLOB key | **operator addr only — omitted otherwise** | 30 s                                                                                     |
+**No Postgres snapshot table.** No `poly_wallet_screen_snapshots`. No seed script. No migration. Numbers are deterministic `f(trades × resolutions)` — compute every request, cache the result. Research fixtures remain documentation.
 
-**Reuse mandate.** All Data-API calls go through the existing `PolymarketDataApiClient`. **Do not add a second Data-API client** in `nodes/poly/app/`. Adding one is a review-blocking violation.
+**Reuse mandate.** All Polymarket Data-API calls go through the existing `PolymarketDataApiClient` in `packages/market-provider`. Metrics math lives in a new sibling package module `packages/market-provider/src/analysis/wallet-metrics.ts` — pure function over `{ trades, resolutions }`, unit-testable. Adding a second Data-API client in `nodes/poly/app/` is a review-blocking violation.
 
-**Coalescing.** Module-scoped `Map<string, { value, expiresAt }>` in the route handler — 30 s TTL keyed by `(slice, addr)`. Ten simultaneous requests for the same key resolve to one upstream call. Chosen over Next.js `unstable_cache` because: (a) the underlying API is experimental; (b) the cache is request-scoped in App Router; (c) a 30-line in-process map is testable and obvious. Single-replica deployment per the SINGLE_WRITER invariant — cache is effectively pod-global. Revisit (Redis / KV) if/when replicas > 1.
+**Coalescing + concurrency.**
 
-**Per-slice fetching.** `useWalletAnalysis(addr)` fans out to **three independent React Query calls**, one per slice (`["wallet", addr, "snapshot"]`, `…trades`, `…balance`). Each call hits the API route with `?include=<slice>` so each slice has its own coalesce key, its own loading state, and renders its own skeleton independently. The molecule sees the slice arrive when it arrives.
+- Module-scoped `Map<string, { value, expiresAt }>` at the handler, 30 s TTL keyed `(slice, addr)`. Ten simultaneous requests for the same key → one upstream call.
+- `p-limit(4)` shared across all upstream client calls caps in-flight requests when prefetching many wallets at once (e.g. a Monitored-Wallets hover sweep).
+- Single-replica assert at boot (`instrumentation.ts`) throws if `POLY_REPLICA_INDEX != 0` or pod-name suffix is not `-0`. The module-Map cache silently corrupts with >1 replica — hard-fail, not a comment. Single-replica deployment is enforced by the SINGLE_WRITER invariant (see `poly-dev-expert` skill).
 
-**Lazy code-split.** `TradesPerDayChart` + `RecentTradesTable` are `next/dynamic` imports — only pulled when `variant === "page"`.
+**Per-slice fetching.** `useWalletAnalysis(addr)` fans out to three React Query calls, one per slice. Each call hits `/api/v1/poly/wallets/[addr]?include=<slice>`. Three keys, three independent loading states, three skeletons render independently.
 
-**Prefetch.** `TopWalletsCard` row → `onPointerEnter`, `onFocus`, `onTouchStart` (debounced 50 ms) → `queryClient.prefetchQuery` for `snapshot` + `trades` (skip `balance` — operator-only). Drawer opens already-warmed on every input modality.
+**Lazy.** `TradesPerDayChart` + `RecentTradesTable` are `next/dynamic` imports — only pulled when `variant === "page"`.
 
-### Address policy — any 0x wallet
+**Prefetch.** `TopWalletsCard` row → `onPointerEnter` / `onFocus` / `onTouchStart` (debounced 50 ms) → `queryClient.prefetchQuery` for `snapshot` + `trades`. `balance` skipped to spare the cap for operator use.
 
-Any 0x address is accepted. Snapshot data is `null` for unscreened wallets; live `trades` + `balance` always populated (Data-API + RPC are public). Three guardrails replace the roster gate:
+## API surface
 
-- **Auth.** Route requires an authenticated session.
-- **Validation.** Zod regex `^0x[a-f0-9]{40}$` (lowercased) before any handler logic.
-- **Coalescing.** Server-side `unstable_cache` per `(slice, addr)`, 30 s TTL → at most one upstream Data-API call per (slice, addr) per 30 s, regardless of concurrent users.
-
-A future per-IP rate-limit middleware tightens this further if the surface gets abused.
-
-### API surface (contract owns the shape)
-
-One route, one slice per call:
+One route. Contract owns the shape.
 
 ```
-GET /api/v1/poly/wallets/{addr}?include=snapshot
-GET /api/v1/poly/wallets/{addr}?include=trades
-GET /api/v1/poly/wallets/{addr}?include=balance
+GET /api/v1/poly/wallets/{addr}?include=snapshot|trades|balance
 ```
 
-Request + response shapes are defined in **`nodes/poly/app/src/contracts/http/poly.wallet-analysis.v1.contract.ts`** (Zod), not here. Invariants the contract enforces:
+Contract: [`nodes/poly/app/src/contracts/http/poly.wallet-analysis.v1.contract.ts`](../../nodes/poly/app/src/contracts/http/poly.wallet-analysis.v1.contract.ts) (Zod). Enforces:
 
-- `addr` validated `^0x[a-f0-9]{40}$` then lowercased before any handler logic.
-- `include` accepted as repeated query params (`?include=snapshot&include=trades`) parsed via Zod array; subset of `{snapshot, trades, balance}`; default = `snapshot`.
-- Each slice is independently optional in the response. A `warnings: { slice, code, message }[]` field surfaces partial failures so the UI can render "trades unavailable, retrying" rather than silently empty.
-- `balance` slice is omitted when `addr !== POLY_PROTO_WALLET_ADDRESS` (the operator). The contract response shape declares `balance` optional.
-- `addr` always returns 200 with whatever slices are available. Snapshot is `null` for unscreened wallets; trades empty array for never-traded wallets.
+- `addr` matches `^0x[a-f0-9]{40}$` then lowercased before any handler logic.
+- `include` repeated query params parsed as a Zod array subset of `{snapshot, trades, balance}`; default `["snapshot"]`.
+- Each slice independently optional in the response. `warnings: Array<{ slice, code, message }>` surfaces partial failures — UI renders "trades unavailable, retrying" instead of silently empty.
+- Any 0x address returns 200. Snapshot metrics null until resolved positions count is large enough for meaningful math (≥5 resolved).
+- `balance` has two modes: operator addr → `{ available, locked, positions, total }`; any other addr → `{ positions, total }` only. Contract response shape makes `available` / `locked` optional.
 
-**Auth.** Verified at the route handler with `await getServerSessionUser()` — explicit, not delegated to middleware. Acceptance test asserts `401` for an unauthenticated request to `/api/v1/poly/wallets/0x…`.
-
-### Snapshot table — DDL only in migration; data via seed script
-
-- Drizzle schema in `nodes/poly/packages/db-schema/src/wallet-screen-snapshots.ts`; migration generated by `drizzle-kit generate` and committed under `nodes/poly/packages/db-schema/migrations/`.
-- Columns: `wallet text`, `screen_version text`, `taken_at timestamptz`, `category text`, `n integer`, `wr_pct numeric(5,2)`, `roi_pct numeric(7,2)`, `pnl_usd numeric(14,2)`, `dd_pct numeric(5,2)`, `median_dur_min numeric(8,2)`. Primary key `(wallet, screen_version)`. **No hypothesis column.**
-- **Edge hypothesis lives as markdown files**, not a DB column. Path: `docs/research/wallet-hypotheses/<address>.md`. Read at request time by the route handler (cached in same TTL map as the live slices) and merged into the `snapshot` slice. Rationale: analyst prose wants git diffs, authorship, PR review — none of which a nullable text column gives you. Files key on lowercased address. Missing file → no hypothesis rendered.
-- Seeding via `pnpm --filter @cogni/poly-app run seed:wallet-screen` — script that reads `docs/research/fixtures/poly-wallet-screen-v3-*.json`, parses messy money strings (`"+$2,137k"` → `2137000.00`; `"$5k"` → `5000.00`; supports `+`, `$`, `,`, `k`, `M`; raises on unknown shapes), and inserts via `INSERT … ON CONFLICT (wallet, screen_version) DO NOTHING` (immutable snapshot rows). Re-runs are no-ops.
-- Migration rollbacks do not touch data. Seed re-runs are no-ops. **Verify before adding the migration:** the existing per-node migrator image picks up new SQL files automatically (per `database-expert`); confirm via the `pnpm db:migrate:poly` invocation path before opening the PR.
-- UI surfaces `taken_at`; rows older than **100 days** render with a muted "stale snapshot" pill (1 quarter + grace, matches the research doc's quarterly cadence).
+**Auth.** Handler calls `await getServerSessionUser()` explicitly — no middleware trust. Acceptance test: unauthed request → `401`.
 
 ## Routes & UX flow
 
-```mermaid
-flowchart LR
-  DB[/dashboard/] -- row click --> DR[drawer · WalletAnalysisView variant=drawer]
-  DB -- "Open in page" link --> WP[/research/w/0x.../]
-  RS[/research/] -- BeefSlayer block uses --> WA((WalletAnalysisView variant=page size=hero))
-  WP --> WA
-  DR --> WA
-  CTA[Copy-trade CTA] -.vNext.-> PUT[POST /api/v1/poly/copy-trade/target]
+```
+/research                  → WalletAnalysisView variant=page size=hero  (BeefSlayer block)
+/research/w/[addr]         → WalletAnalysisView variant=page            (any wallet)
+/dashboard row click       → Sheet with WalletAnalysisView variant=drawer + ?w=0x… deep-link
 ```
 
-- `/research` keeps its dossier shape (intro · categories · no-fly zone) but its BeefSlayer block becomes `<WalletAnalysisView address=BEEF variant="page" size="hero" />`.
+- `/research` keeps its dossier shape (intro · categories · no-fly zone). The BeefSlayer block becomes `<WalletAnalysisView address=BEEF variant="page" size="hero" />`, fed by the hook.
 - `/research/w/[addr]` — dynamic Next.js route, auth-gated server shell, client `WalletAnalysisView`.
-- Dashboard drawer — `Sheet` from `nodes/poly/app/src/components/vendor/shadcn/sheet.tsx` (already vendored). Deep-link via `?w=0x…`. Esc / click-out closes.
+- Dashboard drawer — shadcn `Sheet` (already vendored). Deep-link via `?w=0x…`. Esc / click-out closes and clears the param.
 
-## Rollout — one PR with checkpoints
+## Rollout — one PR, three commits
 
-Single work item, single PR, three commits ([task.0329](../../work/items/task.0329.wallet-analysis-component-extraction.md)):
+[task.0329](../../work/items/task.0329.wallet-analysis-component-extraction.md):
 
-- **A · Extract** — molecules + `WalletAnalysisView` (page variant); `/research` re-renders BeefSlayer through it with hardcoded props. Gate: Playwright visual diff vs main ≤ 0.5 %.
-- **B · Data plane** — snapshot DDL + seed script + Zod contract + `GET /api/v1/poly/wallets/[addr]` (any 0x wallet, one slice per call) routed through `PolymarketDataApiClient` with module-scoped TTL coalesce + three-key `useWalletAnalysis` hook + `/research/w/[addr]` page. Gate: BeefSlayer numbers via API match Checkpoint-A baseline; cache-stampede test passes; 401 when unauthenticated; non-operator addr response omits `balance`.
-- **C · Drawer** — `Sheet` from Monitored Wallets row + pointer/focus/touch prefetch + `?w=…` deep-link. Gate: drawer interactive ≤ 200 ms on prefetched row.
+| Checkpoint                 | Scope                                                                                                                                                                                                                                                                                                    | Gate                                                                                                                                                                          |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A · Extract** ✅ shipped | 7 molecules + `WalletAnalysisView` page variant; `/research` re-renders BeefSlayer through it with hardcoded props                                                                                                                                                                                       | Visual parity with main                                                                                                                                                       |
+| **B · Data plane**         | `packages/market-provider/src/analysis/wallet-metrics.ts` pure function + Zod contract + `GET /api/v1/poly/wallets/[addr]` route + module-scoped TTL coalesce + `p-limit(4)` + single-replica boot assert + `useWalletAnalysis` hook + `/research/w/[addr]` page. BeefSlayer block switches to the hook. | BeefSlayer numbers via API match Checkpoint-A baseline; 10-concurrent-request stampede test passes; `401` when unauthenticated; non-operator addr gets positions-only balance |
+| **C · Drawer**             | `drawer` variant + `Sheet` from Monitored Wallets row + pointer/focus/touch prefetch + `?w=…` deep-link                                                                                                                                                                                                  | Drawer interactive ≤ 200 ms on prefetched row                                                                                                                                 |
 
-### vNext — Copy-trade CTA (parked, not designed)
+### vNext — Copy-trade CTA (parked)
 
-Two unresolved questions block design:
-
-1. **Where does the Harvard-flagged dataset live?** 210k (wallet, market) pairs — inline JSON bloats the bundle, DB table needs an importer, external service needs an SLA. **Decision required before any vNext design.**
-2. **What is "admin"?** Today every authed poly user is operator-aligned. Multi-tenant (task.0318 RLS) makes this a per-tenant operator-role check. vNext design depends on RLS landing.
-
-When both are resolved, file `task.NNNN.wallet-copy-trade-cta.md` and run `/design`.
+Blocked on two decisions: where the Harvard-flagged dataset lives, what "admin" means under multi-tenant RLS (`task.0318`). File a design when both land.
 
 ## Invariants
 
-- One `useWalletAnalysis(addr)` hook fans out to three React Query calls (one per slice). Each slice exposes `{ data, isLoading, error }` (not just data + isLoading) so molecules can render "trades unavailable, retrying" instead of silently empty.
-- Molecules consume props; molecules never fetch.
-- Address validation lives in the **contract** (Zod regex), not in the handler.
-- Any 0x address is accepted (200 OK with whatever slices apply); auth is enforced explicitly at the route via `getServerSessionUser()`.
-- Module-scoped TTL map enforces ≤ 1 upstream Data-API call per (slice, addr) per 30 s, regardless of concurrent requesters.
-- **Concurrency cap.** A `p-limit(4)` shared across all `PolymarketDataApiClient` calls inside the route handler caps in-flight upstream requests independent of the per-(slice,addr) coalesce. Coalesce dedups same key; `p-limit` caps fan-out across different keys (3 slices × N wallets visible in a Monitored-Wallets prefetch).
-- **Single-replica assert at boot.** `instrumentation.ts` checks a `POLY_REPLICA_INDEX=0` env or pod-name suffix; throws on startup if a second replica boots. The module-Map cache silently corrupts under replica >1, so this is a hard fail not a comment.
-- `balance` slice is operator-only and omitted from non-operator responses.
-- Snapshot rows are immutable per `(wallet, screen_version)`; freshness is a UI affordance via `taken_at`, never a TTL.
-- Edge hypothesis lives in `docs/research/wallet-hypotheses/<address>.md`, not the DB. Git owns authorship + diffs.
-- All Polymarket Data-API calls go through `packages/market-provider`. Adding a second client in the app layer is a review-blocking violation.
+- Numbers are compute, not store. No poly_wallet_screen_snapshots table ever. Follow-ups that need versioned judgment go to Dolt via task.0333.
+- One `useWalletAnalysis(addr)` hook, three React Query calls, three independent `{ data, isLoading, error }` slices. Molecules consume; molecules never fetch.
+- Address validation in the Zod contract, not the handler.
+- Any 0x address → 200. Auth enforced explicitly at the route via `getServerSessionUser()`.
+- Coalesce dedups same `(slice, addr)`; `p-limit(4)` caps cross-key fan-out. Both at the handler, not the client.
+- Single-replica deployment enforced by boot assert — cache corruption on replicas>1 is a hard fail.
+- `balance` slice always available; operator addr gets full USDC breakdown, others get positions value only.
+- All Polymarket Data-API calls go through `packages/market-provider`. Metrics computation lives in that same package — `packages/market-provider/src/analysis/`.
+- `EdgeHypothesis` renders from `data.hypothesisMd`. The prop source is a hardcoded BeefSlayer fallback for Checkpoint B; task.0333 swaps it to Dolt with zero component change.
 
-## Open questions (logged, not blocking)
+## Open questions (non-blocking)
 
-1. **Snapshot rescreen automation.** Quarterly fixture re-seed in v1; nightly job graduates after the v3 rate-limit story (research doc §D.5) is resolved.
-2. **What does "off-roster" lookup look like for ops?** A read-only ad-hoc CLI script using the same `PolymarketDataApiClient` covers ops needs without exposing it to the web.
-3. **Drawer variant on mobile narrow viewports.** Sheet vs full-screen modal? Decide in Part-3 implementation; not a design concern.
+1. **Minimum resolved-positions threshold before rendering metrics** — research doc's screen used n ≥ 15. Start there; surface "insufficient data" state if under.
+2. **Calibration of `snapshot` cache vs `trades` cache** — both 30 s. Snapshot is `f(trades)` so they could share a key; kept separate for per-slice loading isolation. Worth a bench during implementation.
+3. **Drawer variant on narrow viewports** — Sheet vs full-screen modal. Decide in Checkpoint C; not a design concern.
 
 ## Pointers
 
-- Extract source: [`/research/view.tsx`](<../../nodes/poly/app/src/app/(app)/research/view.tsx>)
-- Balance bar to generalize: [`OperatorWalletCard.tsx`](<../../nodes/poly/app/src/app/(app)/dashboard/_components/OperatorWalletCard.tsx>)
-- Selection source: [`TopWalletsCard.tsx`](<../../nodes/poly/app/src/app/(app)/dashboard/_components/TopWalletsCard.tsx>)
+- Reusable view (shipped A): [`features/wallet-analysis/`](../../nodes/poly/app/src/features/wallet-analysis/)
 - Data adapter (mandatory): [`polymarket.data-api.client.ts`](../../packages/market-provider/src/adapters/polymarket/polymarket.data-api.client.ts)
+- Metrics math source: [`scripts/experiments/wallet-screen-resolved.ts`](../../scripts/experiments/wallet-screen-resolved.ts) — extract into `packages/market-provider/src/analysis/wallet-metrics.ts`
+- Selection source: [`TopWalletsCard.tsx`](<../../nodes/poly/app/src/app/(app)/dashboard/_components/TopWalletsCard.tsx>)
 - Drawer primitive: [`vendor/shadcn/sheet.tsx`](../../nodes/poly/app/src/components/vendor/shadcn/sheet.tsx)
-- Snapshot input: [`poly-wallet-screen-v3-ranking.md`](../research/fixtures/poly-wallet-screen-v3-ranking.md)
-- Research source-of-truth: [`polymarket-copy-trade-candidates.md`](../research/polymarket-copy-trade-candidates.md)
-- Project: [`proj.poly-prediction-bot.md`](../../work/projects/proj.poly-prediction-bot.md)
+- Dolt follow-up: [`task.0333`](../../work/items/task.0333.wallet-analyst-agent-and-dolt-store.md)
+- EDO follow-up: [`task.0334`](../../work/items/task.0334.poly-niche-research-engine.md)
+- Research context: [`polymarket-copy-trade-candidates.md`](../research/polymarket-copy-trade-candidates.md)

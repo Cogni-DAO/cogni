@@ -19,6 +19,11 @@
       "types": "./dist/adapters/kalshi/index.d.ts",
       "import": "./dist/adapters/kalshi/index.js",
       "default": "./dist/adapters/kalshi/index.js"
+    },
+    "./analysis": {
+      "types": "./dist/analysis/index.d.ts",
+      "import": "./dist/analysis/index.js",
+      "default": "./dist/analysis/index.js"
     }
   },
   "types": "./dist/index.d.ts",
