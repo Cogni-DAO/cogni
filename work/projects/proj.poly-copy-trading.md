@@ -67,7 +67,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 | Bug                                                                                                       | Status       | Impact                                                                                                                                                                                   |
 | --------------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [bug.0329](../items/bug.0329.poly-sell-neg-risk-empty-reject.md) — SELL on neg_risk empty reject          | needs_triage | Every position opened on a neg_risk market becomes roach-motel until resolution. Blocks close-position.                                                                                  |
-| [bug.0331](../items/bug.0331.poly-clob-buy-empty-reject-candidate-a.md) — BUY empty reject on candidate-a | needs_triage | Every autonomous mirror attempt rejected with empty CLOB response. Likely operator-wallet state (balance/allowance/keys), not code. Surfaced during task.0318 Phase A flight validation. |
+| [bug.0335](../items/bug.0335.poly-clob-buy-empty-reject-candidate-a.md) — BUY empty reject on candidate-a | needs_triage | Every autonomous mirror attempt rejected with empty CLOB response. Likely operator-wallet state (balance/allowance/keys), not code. Surfaced during task.0318 Phase A flight validation. |
 
 ## Constraints
 
@@ -86,7 +86,7 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 - [x] `poly_copy_trade_{config,targets,fills}` Postgres tables — task.0315 migration 0027
 - [x] `poly_copy_trade_fills.synced_at` column — task.0328 migration 0028
 - [ ] Target wallet must be onboarded with USDC.e + CTF approvals — per `scripts/experiments/onboard-raw-pk-wallet.ts`
-- [ ] Operator wallet must maintain USDC.e balance + allowances — **currently broken on candidate-a, see bug.0331**
+- [ ] Operator wallet must maintain USDC.e balance + allowances — **currently broken on candidate-a, see bug.0335**
 
 ## As-Built Specs
 
