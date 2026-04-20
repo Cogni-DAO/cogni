@@ -1,5 +1,5 @@
 {
-  "name": "@cogni/node-template-graphs",
+  "name": "@cogni/canary-graphs",
   "version": "0.0.0",
   "private": true,
   "type": "module",

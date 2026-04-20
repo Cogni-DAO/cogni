@@ -1,5 +1,5 @@
 {
-  "name": "@cogni/node-template-knowledge",
+  "name": "@cogni/canary-knowledge",
   "private": true,
   "version": "0.0.0",
   "type": "module",
