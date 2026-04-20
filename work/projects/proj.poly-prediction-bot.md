@@ -65,6 +65,7 @@ Build a prediction market bot that starts by reading and searching live markets 
 | Enrichment sources — GDELT news, Metaculus expert forecasts                  | Not Started | 2   | (create at P1 start) |
 | Wallet analysis components — reusable view + live compute + Monitored drawer | In Progress | 4   | task.0329            |
 | Wallet analyst agent — AI qualitative judgments, Dolt-stored, DAO-funded     | Not Started | 5   | task.0333            |
+| Poly niche-research engine — skill-creator + research graph + EDO evidence   | Not Started | 5   | task.0334            |
 
 ### Run (P2+) — Autonomous Copy-Trading
 
