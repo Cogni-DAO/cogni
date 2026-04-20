@@ -179,7 +179,13 @@
     "validate:chain": "tsx --no-cache --tsconfig tsconfig.scripts.json scripts/validate-chain-config.ts",
     "governance:schedules:sync": "pnpm dotenv -e .env.local -- sh -lc 'curl -fsS -X POST http://localhost:3000/api/internal/ops/governance/schedules/sync -H \"Authorization: Bearer ${INTERNAL_OPS_TOKEN:?INTERNAL_OPS_TOKEN is required}\"'",
     "knip": "dotenv -e .env.local -- knip --include files,exports,dependencies",
-    "prepare": "husky"
+    "prepare": "husky",
+    "rust:fixtures": "node --import tsx/esm scripts/rust/generate-fixtures.mts",
+    "rust:fixtures:check": "bash scripts/rust/fixtures-check.sh",
+    "rust:test": "bash scripts/rust/docker-cargo.sh cargo test --workspace",
+    "rust:fmt": "bash scripts/rust/docker-cargo.sh cargo fmt --all --check",
+    "rust:check": "pnpm rust:fixtures:check && pnpm rust:fmt && pnpm rust:test",
+    "rust:docker:build": "docker build -f services/rust-node/Dockerfile -t cogni-rust-node-local ."
   },
   "engines": {
     "node": "22.x"

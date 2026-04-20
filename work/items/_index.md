@@ -146,6 +146,7 @@
 | 1 | 22 | 2 | needs_design | task.0038 | Rename tests/integration → tests/component with dependency-class subdirs | Reusable CI/CD Rails & Multi-Node Pipeline | proj.ci-cd-reusable |
 | 1 | 22 | 2 | needs_design | task.0142 | Epoch pool value stabilization — minimum activity threshold + carry-over policy | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 22 | 3 | needs_implement | task.0251 | Wire in-process graph execution in scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |
+| 1 | 22 | 5 | needs_closeout | task.0336 | Rust node platform runway — fixtures, core parity, runtime shell | Operator Plane | proj.operator-plane |
 | 1 | 23 | 1 | needs_implement | task.0252 | Strip AI runtime deps from Next.js image | Unified Graph Launch | proj.unified-graph-launch |
 | 1 | 25 | 5 | needs_triage | story.0081 | Work receipts, transparency log, and deterministic epoch payouts | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 3 | needs_implement | task.0130 | Tokenomics Crawl: Budget Policy + kill Score UI | Transparent Credit Payouts | proj.transparent-credit-payouts |

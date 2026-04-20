@@ -24,6 +24,9 @@
 # Env:
 #   VM_HOST                  (required) SSH target for the candidate VM
 #   DEPLOY_ENVIRONMENT       (required) candidate-a | preview | production
+#   PROMOTED_APPS            (optional) CSV of apps promoted in this run.
+#                             Empty/unset → fall back to the full in-cluster
+#                             catalog. Unknown/non-k8s apps are ignored.
 #   SSH_KEY                  (optional, default ~/.ssh/deploy_key) SSH identity
 #   ROLLOUT_TIMEOUT          (optional, default 300) seconds per deployment
 #                             for kubectl rollout status
@@ -32,12 +35,13 @@
 #                             60s comfortably covers the default 30s
 #                             terminationGracePeriodSeconds.
 #
-# Adds: edit SERVICES below when a new in-cluster deployment needs gating.
+# Adds: update resolve_service_name() when a new in-cluster deployment needs gating.
 
 set -euo pipefail
 
 VM_HOST="${VM_HOST:?VM_HOST required}"
 DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT:?DEPLOY_ENVIRONMENT required}"
+PROMOTED_APPS="${PROMOTED_APPS:-}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/deploy_key}"
 ROLLOUT_TIMEOUT="${ROLLOUT_TIMEOUT:-300}"
 ENDPOINT_CUTOVER_TIMEOUT="${ENDPOINT_CUTOVER_TIMEOUT:-60}"
@@ -50,11 +54,42 @@ SSH_OPTS=(
   -o ServerAliveCountMax=6
 )
 
-# All k8s Deployments managed by candidate-a / preview / production overlays.
-# Add a new deployment name here when a new service lands in the catalog.
-# Each entry must be a Deployment AND a Service of the same name (the
-# endpoint-cutover gate dereferences `kubectl get endpoints/<name>`).
-SERVICES=(operator-node-app poly-node-app resy-node-app scheduler-worker)
+resolve_service_name() {
+  local app="$1"
+  case "$app" in
+    operator | poly | resy) echo "${app}-node-app" ;;
+    scheduler-worker | rust-node) echo "$app" ;;
+    *) echo "" ;;
+  esac
+}
+
+add_service() {
+  local service="$1"
+  local existing
+  for existing in "${SERVICES[@]:-}"; do
+    if [ "$existing" = "$service" ]; then
+      return 0
+    fi
+  done
+  SERVICES+=("$service")
+}
+
+SERVICES=()
+if [ -n "$PROMOTED_APPS" ]; then
+  IFS=',' read -r -a promoted_apps <<< "$PROMOTED_APPS"
+  for app in "${promoted_apps[@]}"; do
+    service=$(resolve_service_name "$app")
+    [ -n "$service" ] && add_service "$service"
+  done
+  if [ "${#SERVICES[@]}" -eq 0 ]; then
+    echo "ℹ️  No in-cluster services to gate for PROMOTED_APPS=${PROMOTED_APPS}"
+    exit 0
+  fi
+else
+  for app in operator poly resy scheduler-worker rust-node; do
+    add_service "$(resolve_service_name "$app")"
+  done
+fi
 
 NS="cogni-${DEPLOY_ENVIRONMENT}"
 

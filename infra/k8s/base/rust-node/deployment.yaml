@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rust-node
+  labels:
+    app.kubernetes.io/name: rust-node
+    app.kubernetes.io/part-of: cogni
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rust-node
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rust-node
+        app.kubernetes.io/part-of: cogni
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: rust-node
+          image: ghcr.io/cogni-dao/cogni-template:placeholder
+          ports:
+            - containerPort: 9101
+              name: health
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          envFrom:
+            - configMapRef:
+                name: rust-node-config
+            - secretRef:
+                name: rust-node-secrets
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

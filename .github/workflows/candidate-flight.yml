@@ -316,6 +316,7 @@ jobs:
         env:
           VM_HOST: ${{ secrets.VM_HOST }}
           DEPLOY_ENVIRONMENT: candidate-a
+          PROMOTED_APPS: ${{ needs.flight.outputs.promoted_apps }}
         run: bash app-src/scripts/ci/wait-for-in-cluster-services.sh
 
       - name: Run candidate smoke checks

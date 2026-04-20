@@ -124,6 +124,9 @@ jobs:
       - name: Architecture check
         run: pnpm arch:check
 
+      - name: Rust parity/runtime checks
+        run: pnpm rust:check
+
       - name: Unit + contract coverage tests
         run: pnpm test:ci
 

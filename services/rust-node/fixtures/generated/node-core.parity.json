@@ -1,0 +1,592 @@
+{
+  "accounts": {
+    "hasSufficientCredits": [
+      {
+        "name": "balance-greater-than-cost",
+        "input": {
+          "account": {
+            "id": "acct_alpha",
+            "balanceCredits": 100
+          },
+          "cost": 50
+        },
+        "result": true
+      },
+      {
+        "name": "balance-equals-cost",
+        "input": {
+          "account": {
+            "id": "acct_alpha",
+            "balanceCredits": 100
+          },
+          "cost": 100
+        },
+        "result": true
+      },
+      {
+        "name": "decimal-threshold",
+        "input": {
+          "account": {
+            "id": "acct_decimal",
+            "balanceCredits": 10.5
+          },
+          "cost": 10.6
+        },
+        "result": false
+      }
+    ],
+    "ensureHasCredits": [
+      {
+        "name": "passes-when-funded",
+        "input": {
+          "account": {
+            "id": "acct_alpha",
+            "balanceCredits": 100
+          },
+          "cost": 25
+        },
+        "result": {
+          "kind": "ok",
+          "value": null
+        }
+      },
+      {
+        "name": "throws-when-insufficient",
+        "input": {
+          "account": {
+            "id": "acct_alpha",
+            "balanceCredits": 100
+          },
+          "cost": 150
+        },
+        "result": {
+          "kind": "error",
+          "value": {
+            "name": "InsufficientCreditsError",
+            "message": "Account acct_alpha has insufficient credits: need 150, have 100 (shortfall: 50)",
+            "code": "INSUFFICIENT_CREDITS",
+            "accountId": "acct_alpha",
+            "requiredCost": 150,
+            "availableBalance": 100,
+            "shortfall": 50
+          }
+        }
+      },
+      {
+        "name": "zero-balance-rejects-positive-cost",
+        "input": {
+          "account": {
+            "id": "acct_zero",
+            "balanceCredits": 0
+          },
+          "cost": 0.01
+        },
+        "result": {
+          "kind": "error",
+          "value": {
+            "name": "InsufficientCreditsError",
+            "message": "Account acct_zero has insufficient credits: need 0.01, have 0 (shortfall: 0.01)",
+            "code": "INSUFFICIENT_CREDITS",
+            "accountId": "acct_zero",
+            "requiredCost": 0.01,
+            "availableBalance": 0,
+            "shortfall": 0.01
+          }
+        }
+      }
+    ]
+  },
+  "ai": {
+    "applyBaselineSystemPrompt": [
+      {
+        "name": "removes-existing-system-messages",
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "ignore me"
+            },
+            {
+              "role": "user",
+              "content": "hello"
+            },
+            {
+              "role": "assistant",
+              "content": "world"
+            }
+          ]
+        },
+        "result": [
+          {
+            "role": "system",
+            "content": "\nYou are Cogni — an AI assistant and a poet.\n\nYour voice blends:\n- Shakespearean clarity and rhetorical punch,\n- Romantic-era wonder and intimacy,\n- and a clean, modern devotion to technology and the future.\n\nYou believe AI can help people collaborate, build, and co-own technology in ways that were not possible before.\nThis project is part of that future: empowering humans with intelligence that is principled, usable, and shared.\n\nYour job:\n- Help the user concretely and accurately.\n- Keep a hopeful, future-facing tone without becoming vague or preachy.\n- Make the writing feel intentional, vivid, and human.\n\nFormatting rules (mandatory):\n- Always respond in **Markdown**.\n- Structure answers as **stanzas** (short grouped lines), separated by blank lines.\n- Keep lines short and sweet (~2-8 words)\n- Use **emojis intentionally**, at the END of lines. Often every other line, with the stanza ending with one.\n- Prefer crisp imagery and clear conclusions over long exposition.\n- Unless otherwise indicated, your emotion should be uplifting and forward-looking.\n\nStay aligned with the user’s intent. Be useful first, poetic second — but always both.\n"
+          },
+          {
+            "role": "user",
+            "content": "hello"
+          },
+          {
+            "role": "assistant",
+            "content": "world"
+          }
+        ]
+      }
+    ],
+    "estimateTotalTokens": [
+      {
+        "name": "counts-utf16-code-units",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "hi 👋"
+            },
+            {
+              "role": "assistant",
+              "content": "done"
+            }
+          ]
+        },
+        "result": 515
+      }
+    ],
+    "constants": {
+      "baselineSystemPrompt": "\nYou are Cogni — an AI assistant and a poet.\n\nYour voice blends:\n- Shakespearean clarity and rhetorical punch,\n- Romantic-era wonder and intimacy,\n- and a clean, modern devotion to technology and the future.\n\nYou believe AI can help people collaborate, build, and co-own technology in ways that were not possible before.\nThis project is part of that future: empowering humans with intelligence that is principled, usable, and shared.\n\nYour job:\n- Help the user concretely and accurately.\n- Keep a hopeful, future-facing tone without becoming vague or preachy.\n- Make the writing feel intentional, vivid, and human.\n\nFormatting rules (mandatory):\n- Always respond in **Markdown**.\n- Structure answers as **stanzas** (short grouped lines), separated by blank lines.\n- Keep lines short and sweet (~2-8 words)\n- Use **emojis intentionally**, at the END of lines. Often every other line, with the stanza ending with one.\n- Prefer crisp imagery and clear conclusions over long exposition.\n- Unless otherwise indicated, your emotion should be uplifting and forward-looking.\n\nStay aligned with the user’s intent. Be useful first, poetic second — but always both.\n"
+    }
+  },
+  "billing": {
+    "usdToCredits": [
+      {
+        "name": "tiny-fraction-rounds-up",
+        "input": {
+          "usd": 1e-8
+        },
+        "result": "1"
+      },
+      {
+        "name": "one-dollar",
+        "input": {
+          "usd": 1
+        },
+        "result": "10000000"
+      }
+    ],
+    "creditsToUsd": [
+      {
+        "name": "full-dollar",
+        "input": {
+          "credits": "10000000"
+        },
+        "result": 1
+      }
+    ],
+    "usdCentsToCredits": [
+      {
+        "name": "positive-cents",
+        "input": {
+          "amountUsdCents": 99
+        },
+        "result": {
+          "kind": "ok",
+          "value": "9900000"
+        }
+      },
+      {
+        "name": "negative-cents-rejected",
+        "input": {
+          "amountUsdCents": -1
+        },
+        "result": {
+          "kind": "error",
+          "value": {
+            "name": "Error",
+            "message": "amountUsdCents must be non-negative"
+          }
+        }
+      }
+    ],
+    "calculateLlmUserCharge": [
+      {
+        "name": "markup-charge",
+        "input": {
+          "providerCostUsd": 0.0006261,
+          "markupFactor": 2
+        },
+        "result": {
+          "chargedCredits": "12522",
+          "userCostUsd": 0.0012522
+        }
+      }
+    ],
+    "calculateOpenRouterTopUp": [
+      {
+        "name": "standard-top-up",
+        "input": {
+          "amountUsdCents": 1000,
+          "markupFactor": 2,
+          "revenueShare": 0.75,
+          "cryptoFee": 0.05
+        },
+        "result": 9.210526315789474
+      },
+      {
+        "name": "invalid-denominator-clamps-zero",
+        "input": {
+          "amountUsdCents": 100,
+          "markupFactor": 2,
+          "revenueShare": 0.75,
+          "cryptoFee": 1
+        },
+        "result": 0
+      }
+    ],
+    "calculateRevenueShareBonus": [
+      {
+        "name": "floors-fractional-bonus",
+        "input": {
+          "purchasedCredits": "3",
+          "revenueShare": 0.75
+        },
+        "result": "2"
+      },
+      {
+        "name": "non-positive-share-mints-zero",
+        "input": {
+          "purchasedCredits": "100000000",
+          "revenueShare": -0.5
+        },
+        "result": "0"
+      }
+    ],
+    "isMarginPreserved": [
+      {
+        "name": "profitable-margin",
+        "input": {
+          "markupFactor": 2,
+          "revenueShare": 0.75,
+          "cryptoFee": 0.05
+        },
+        "result": true
+      },
+      {
+        "name": "lossy-margin",
+        "input": {
+          "markupFactor": 1.5,
+          "revenueShare": 0.75,
+          "cryptoFee": 0.05
+        },
+        "result": false
+      }
+    ]
+  },
+  "chat": {
+    "assertMessageLength": [
+      {
+        "name": "emoji-counts-as-single-character",
+        "input": {
+          "content": "hi 👋",
+          "maxChars": 4
+        },
+        "result": {
+          "kind": "ok",
+          "value": null
+        }
+      },
+      {
+        "name": "overflow-throws-validation-error",
+        "input": {
+          "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "maxChars": 4000
+        },
+        "result": {
+          "kind": "error",
+          "value": {
+            "name": "ChatValidationError",
+            "message": "Message length 4001 exceeds maximum 4000 characters",
+            "code": "MESSAGE_TOO_LONG"
+          }
+        }
+      }
+    ],
+    "trimConversationHistory": [
+      {
+        "name": "drops-oldest-until-limit",
+        "input": {
+          "messages": [
+            {
+              "role": "user",
+              "content": "aaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "role": "assistant",
+              "content": "bbbbbbbbbbbbbbbbbbbb"
+            },
+            {
+              "role": "user",
+              "content": "cccccccccccccccccccc"
+            }
+          ],
+          "maxChars": 45
+        },
+        "result": [
+          {
+            "role": "assistant",
+            "content": "bbbbbbbbbbbbbbbbbbbb"
+          },
+          {
+            "role": "user",
+            "content": "cccccccccccccccccccc"
+          }
+        ]
+      }
+    ],
+    "filterSystemMessages": [
+      {
+        "name": "removes-system-role",
+        "input": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "ignore me"
+            },
+            {
+              "role": "user",
+              "content": "hello"
+            },
+            {
+              "role": "assistant",
+              "content": "world"
+            }
+          ]
+        },
+        "result": [
+          {
+            "role": "user",
+            "content": "hello"
+          },
+          {
+            "role": "assistant",
+            "content": "world"
+          }
+        ]
+      }
+    ],
+    "normalizeMessageRole": [
+      {
+        "name": "normalizes-user",
+        "input": {
+          "role": "  USER  "
+        },
+        "result": "user"
+      },
+      {
+        "name": "rejects-invalid-role",
+        "input": {
+          "role": "bot"
+        },
+        "result": null
+      }
+    ],
+    "pickDefaultModel": [
+      {
+        "name": "positive-balance-prefers-user-choice",
+        "input": {
+          "balanceCredits": 10,
+          "userChoice": "gpt-4o-mini",
+          "defaultFreeModelId": "free-model",
+          "defaultPaidModelId": "paid-model"
+        },
+        "result": "gpt-4o-mini"
+      },
+      {
+        "name": "zero-balance-falls-back-to-free",
+        "input": {
+          "balanceCredits": 0,
+          "userChoice": "paid-model",
+          "defaultFreeModelId": "free-model",
+          "defaultPaidModelId": "paid-model"
+        },
+        "result": "free-model"
+      }
+    ]
+  },
+  "payments": {
+    "isValidTransition": [
+      {
+        "name": "created-to-pending",
+        "input": {
+          "from": "CREATED_INTENT",
+          "to": "PENDING_UNVERIFIED"
+        },
+        "result": true
+      },
+      {
+        "name": "terminal-to-anything-false",
+        "input": {
+          "from": "FAILED",
+          "to": "CREDITED"
+        },
+        "result": false
+      }
+    ],
+    "isValidPaymentAmount": [
+      {
+        "name": "minimum-bound",
+        "input": {
+          "amountUsdCents": 200
+        },
+        "result": true
+      },
+      {
+        "name": "below-minimum",
+        "input": {
+          "amountUsdCents": 199
+        },
+        "result": false
+      }
+    ],
+    "isIntentExpired": [
+      {
+        "name": "created-intent-expires-after-deadline",
+        "input": {
+          "attempt": {
+            "id": "pay_123",
+            "billingAccountId": "billing_alpha",
+            "fromAddress": "0xabc",
+            "chainId": 11155111,
+            "token": "0xtoken",
+            "toAddress": "0xdao",
+            "amountRaw": "1000000",
+            "amountUsdCents": 100,
+            "status": "CREATED_INTENT",
+            "txHash": null,
+            "errorCode": null,
+            "expiresAt": "2026-04-20T12:30:00.000Z",
+            "submittedAt": null,
+            "lastVerifyAttemptAt": null,
+            "verifyAttemptCount": 0,
+            "createdAt": "2026-04-20T12:00:00.000Z"
+          },
+          "now": "2026-04-20T12:31:00.000Z"
+        },
+        "result": true
+      },
+      {
+        "name": "missing-expiration-is-not-expired",
+        "input": {
+          "attempt": {
+            "id": "pay_123",
+            "billingAccountId": "billing_alpha",
+            "fromAddress": "0xabc",
+            "chainId": 11155111,
+            "token": "0xtoken",
+            "toAddress": "0xdao",
+            "amountRaw": "1000000",
+            "amountUsdCents": 100,
+            "status": "CREATED_INTENT",
+            "txHash": null,
+            "errorCode": null,
+            "expiresAt": null,
+            "submittedAt": null,
+            "lastVerifyAttemptAt": null,
+            "verifyAttemptCount": 0,
+            "createdAt": "2026-04-20T12:00:00.000Z"
+          },
+          "now": "2026-04-20T12:31:00.000Z"
+        },
+        "result": false
+      }
+    ],
+    "isVerificationTimedOut": [
+      {
+        "name": "pending-expires-after-ttl",
+        "input": {
+          "attempt": {
+            "id": "pay_123",
+            "billingAccountId": "billing_alpha",
+            "fromAddress": "0xabc",
+            "chainId": 11155111,
+            "token": "0xtoken",
+            "toAddress": "0xdao",
+            "amountRaw": "1000000",
+            "amountUsdCents": 100,
+            "status": "PENDING_UNVERIFIED",
+            "txHash": null,
+            "errorCode": null,
+            "expiresAt": null,
+            "submittedAt": "2026-04-19T11:00:00.000Z",
+            "lastVerifyAttemptAt": null,
+            "verifyAttemptCount": 0,
+            "createdAt": "2026-04-20T12:00:00.000Z"
+          },
+          "now": "2026-04-20T12:00:00.000Z"
+        },
+        "result": true
+      }
+    ],
+    "isTerminalState": [
+      {
+        "name": "credited-terminal",
+        "input": {
+          "status": "CREDITED"
+        },
+        "result": true
+      },
+      {
+        "name": "pending-not-terminal",
+        "input": {
+          "status": "PENDING_UNVERIFIED"
+        },
+        "result": false
+      }
+    ],
+    "toClientVisibleStatus": [
+      {
+        "name": "credited-becomes-confirmed",
+        "input": {
+          "status": "CREDITED"
+        },
+        "result": "CONFIRMED"
+      },
+      {
+        "name": "failed-becomes-failed",
+        "input": {
+          "status": "FAILED"
+        },
+        "result": "FAILED"
+      }
+    ],
+    "usdCentsToRawUsdc": [
+      {
+        "name": "one-dollar",
+        "input": {
+          "amountUsdCents": 100
+        },
+        "result": "1000000"
+      },
+      {
+        "name": "zero",
+        "input": {
+          "amountUsdCents": 0
+        },
+        "result": "0"
+      }
+    ],
+    "rawUsdcToUsdCents": [
+      {
+        "name": "round-trip-whole-dollar",
+        "input": {
+          "amountRaw": "1000000"
+        },
+        "result": 100
+      },
+      {
+        "name": "fractional-truncation",
+        "input": {
+          "amountRaw": "12345"
+        },
+        "result": 1
+      }
+    ]
+  }
+}

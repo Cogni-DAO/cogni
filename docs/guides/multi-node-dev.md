@@ -82,11 +82,12 @@ pnpm --filter @cogni/resy-graphs test
 ## Pre-commit Gate
 
 ```bash
-pnpm check          # Operator: typecheck + lint + format + tests + docs + arch
+pnpm check          # Operator + Rust: typecheck + lint + format + tests + docs + arch
 ```
 
-Node typechecks are not yet in the `pnpm check` pipeline — run them manually
-when you change node-specific code. This will be unified in task.0248.
+TypeScript node-app typechecks are not yet in the `pnpm check` pipeline — run
+them manually when you change node-specific code. Rust parity/runtime checks
+are now included in `pnpm check`.
 
 ## Creating a New Node
 

@@ -13,9 +13,11 @@
 **/coverage
 **/out
 **/.nyc_output
+apps
 
 # Build outputs
 **/dist
+**/target
 **/*.tsbuildinfo
 
 # Claude Code worktrees (can be 30GB+)

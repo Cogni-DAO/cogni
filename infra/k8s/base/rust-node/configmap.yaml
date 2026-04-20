@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rust-node-config
+  labels:
+    app.kubernetes.io/name: rust-node
+    app.kubernetes.io/part-of: cogni
+data:
+  HOST: "0.0.0.0"
+  PORT: "9101"
+  DEFAULT_ACCOUNT_BALANCE_CREDITS: "50000"
+  LOG_LEVEL: "info"
+  SERVICE_NAME: "rust-node"
+  IMAGE_DIGEST: "placeholder"

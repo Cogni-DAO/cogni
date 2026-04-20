@@ -74,6 +74,7 @@ scripts/fetch_github_job_logs.sh  # Fetch job logs from GitHub Actions API (requ
 - `build.sh` builds both APP_IMAGE (runner target) and MIGRATOR_IMAGE (migrator target)
 - Tag coupling: MIGRATOR_IMAGE = IMAGE_NAME:IMAGE_TAG-migrate
 - `detect-affected.sh` mirrors the repo's turbo-aware SCM base/head selection and maps changed paths onto deployable image targets
+- `scripts/ci/lib/image-tags.sh` is the deployable-image target catalog for app, migrator, scheduler-worker, and rust-node images; add new targets there first
 - `build-and-push-images.sh` is the PR-build entrypoint for affected image pushes; workflows should pass resolved targets, not inline Docker command graphs
 - `write-build-manifest.sh` writes the canonical build artifact consumed by later candidate-flight automation
 - `resolve-pr-build-images.sh` resolves digest refs from the deterministic PR tag convention when candidate-flight needs the current pushed image set
@@ -87,3 +88,5 @@ scripts/fetch_github_job_logs.sh  # Fetch job logs from GitHub Actions API (requ
 - `deploy.sh` SSH connections use `ServerAliveInterval=15 ServerAliveCountMax=12` to prevent broken pipe on long operations
 - `COGNI_REPO_URL`, `COGNI_REPO_REF`, `GIT_READ_TOKEN`, and `GIT_READ_USERNAME` are required env vars for deploy.sh, set by CI workflows
 - `wait-for-argocd.sh` waits for Argo CD `status.sync.revision == EXPECTED_SHA` AND `status.health.status == Healthy`, not the top-level `sync.status`. The required `EXPECTED_SHA` MUST be the deploy-branch tip SHA (what `promote-k8s` just pushed), not the source-app `COGNI_REPO_REF` — Argo tracks the deploy branch, not main. The script triggers an active `argocd app sync` via `kubectl patch` after `ACTIVE_SYNC_AFTER` (default 30s) of no progress per app to unblock deploys against a drifted AppSet template. After Argo reports Healthy, the script also runs `kubectl rollout status` on each promoted app's Deployment (`<app>-node-app` or `scheduler-worker`) — Application-level Healthy can fire while the old ReplicaSet is still serving traffic, so rollout-status is the authoritative new-pods-are-live signal (bug.0326).
+- `wait-for-in-cluster-services.sh` now scopes rollouts to `PROMOTED_APPS` when provided and covers the internal `rust-node` service alongside node-apps and scheduler-worker
+- `deploy-infra.sh` and `scripts/setup/provision-test-vm.sh` create `rust-node-secrets` alongside `scheduler-worker-secrets`; no new candidate-flight secret beyond `SCHEDULER_API_TOKEN`

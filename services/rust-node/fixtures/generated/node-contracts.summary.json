@@ -1,0 +1,547 @@
+{
+  "summary": {
+    "meta.livez.read.v1": {
+      "input": {
+        "kind": "null"
+      },
+      "output": {
+        "type": "object",
+        "required": ["status", "timestamp"],
+        "properties": {
+          "status": {
+            "enum": ["alive"]
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "meta.readyz.read.v1": {
+      "input": {
+        "kind": "null"
+      },
+      "output": {
+        "type": "object",
+        "required": ["status", "timestamp"],
+        "properties": {
+          "status": {
+            "enum": ["healthy"]
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "version": {
+            "kind": "optional-string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "graph-runs.create.internal.v1": {
+      "input": {
+        "type": "object",
+        "required": ["runId"],
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "graphId": {
+            "kind": "optional-string"
+          },
+          "runKind": {
+            "kind": "optional-enum",
+            "enum": ["user_immediate", "system_scheduled", "system_webhook"]
+          },
+          "triggerSource": {
+            "kind": "optional-string"
+          },
+          "triggerRef": {
+            "kind": "optional-string"
+          },
+          "requestedBy": {
+            "kind": "optional-string"
+          },
+          "scheduleId": {
+            "kind": "optional-string"
+          },
+          "scheduledFor": {
+            "kind": "optional-string"
+          },
+          "stateKey": {
+            "kind": "optional-string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "required": ["ok", "runId"],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "graph-runs.update.internal.v1": {
+      "input": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "enum": ["running", "success", "error", "skipped", "cancelled"]
+          },
+          "traceId": {
+            "kind": "optional-nullable-string"
+          },
+          "errorMessage": {
+            "kind": "optional-string"
+          },
+          "errorCode": {
+            "kind": "optional-string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "required": ["ok", "runId"],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "grants.validate.internal.v1": {
+      "input": {
+        "type": "object",
+        "required": ["graphId"],
+        "properties": {
+          "graphId": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "required": ["ok", "grant"],
+        "properties": {
+          "ok": {
+            "const": true
+          },
+          "grant": {
+            "type": "object",
+            "required": [
+              "id",
+              "userId",
+              "billingAccountId",
+              "scopes",
+              "expiresAt",
+              "revokedAt",
+              "createdAt"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "userId": {
+                "type": "string"
+              },
+              "billingAccountId": {
+                "type": "string"
+              },
+              "scopes": {
+                "kind": "string-array"
+              },
+              "expiresAt": {
+                "kind": "nullable-string"
+              },
+              "revokedAt": {
+                "kind": "nullable-string"
+              },
+              "createdAt": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "errorOutput": {
+        "type": "object",
+        "required": ["ok", "error"],
+        "properties": {
+          "ok": {
+            "const": false
+          },
+          "error": {
+            "enum": [
+              "grant_not_found",
+              "grant_expired",
+              "grant_revoked",
+              "grant_scope_mismatch"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "graphs.run.internal.v1": {
+      "input": {
+        "type": "object",
+        "required": ["input"],
+        "properties": {
+          "executionGrantId": {
+            "kind": "optional-nullable-string"
+          },
+          "input": {
+            "kind": "record"
+          },
+          "runId": {
+            "kind": "optional-string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "kind": "discriminated-union",
+        "discriminator": "ok",
+        "variants": [
+          {
+            "ok": true,
+            "required": ["ok", "runId", "traceId"],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "traceId": {
+                "kind": "nullable-string"
+              },
+              "structuredOutput": {
+                "kind": "optional-unknown"
+              }
+            }
+          },
+          {
+            "ok": false,
+            "required": ["ok", "runId", "traceId", "error"],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "traceId": {
+                "kind": "nullable-string"
+              },
+              "error": {
+                "enum": [
+                  "invalid_request",
+                  "not_found",
+                  "timeout",
+                  "aborted",
+                  "rate_limit",
+                  "internal",
+                  "insufficient_credits"
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "source": {
+    "meta.livez.read.v1": {
+      "input": null,
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["alive"]
+          },
+          "timestamp": {
+            "type": "string"
+          }
+        },
+        "required": ["status", "timestamp"],
+        "additionalProperties": false
+      }
+    },
+    "meta.readyz.read.v1": {
+      "input": null,
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["healthy"]
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": ["status", "timestamp"],
+        "additionalProperties": false
+      }
+    },
+    "graph-runs.create.internal.v1": {
+      "input": {
+        "required": ["runId"],
+        "runKind": ["user_immediate", "system_scheduled", "system_webhook"]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": ["ok", "runId"],
+        "additionalProperties": false
+      }
+    },
+    "graph-runs.update.internal.v1": {
+      "input": {
+        "required": ["status"],
+        "status": ["running", "success", "error", "skipped", "cancelled"]
+      },
+      "output": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": ["ok", "runId"],
+        "additionalProperties": false
+      }
+    },
+    "grants.validate.internal.v1": {
+      "input": {
+        "required": ["graphId"],
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "graphId": {
+              "type": "string"
+            }
+          },
+          "required": ["graphId"],
+          "additionalProperties": false
+        }
+      },
+      "output": {
+        "errorCodes": [
+          "grant_not_found",
+          "grant_expired",
+          "grant_revoked",
+          "grant_scope_mismatch"
+        ],
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "boolean",
+              "const": true
+            },
+            "grant": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "userId": {
+                  "type": "string"
+                },
+                "billingAccountId": {
+                  "type": "string"
+                },
+                "scopes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "expiresAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revokedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "userId",
+                "billingAccountId",
+                "scopes",
+                "expiresAt",
+                "revokedAt",
+                "createdAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": ["ok", "grant"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "graphs.run.internal.v1": {
+      "input": {
+        "required": ["input"],
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "executionGrantId": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "input": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            },
+            "runId": {
+              "type": "string"
+            }
+          },
+          "required": ["input"],
+          "additionalProperties": false
+        }
+      },
+      "output": {
+        "aiExecutionErrorCodes": [
+          "invalid_request",
+          "not_found",
+          "timeout",
+          "aborted",
+          "rate_limit",
+          "internal",
+          "insufficient_credits"
+        ],
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean",
+                  "const": true
+                },
+                "runId": {
+                  "type": "string"
+                },
+                "traceId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "structuredOutput": {}
+              },
+              "required": ["ok", "runId", "traceId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "ok": {
+                  "type": "boolean",
+                  "const": false
+                },
+                "runId": {
+                  "type": "string"
+                },
+                "traceId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "error": {
+                  "type": "string",
+                  "enum": [
+                    "invalid_request",
+                    "not_found",
+                    "timeout",
+                    "aborted",
+                    "rate_limit",
+                    "internal",
+                    "insufficient_credits"
+                  ]
+                }
+              },
+              "required": ["ok", "runId", "traceId", "error"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      }
+    }
+  }
+}

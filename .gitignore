@@ -19,6 +19,7 @@ node_modules
 # next.js
 .next/
 /out/
+/apps/
 
 # production
 /build
@@ -101,6 +102,7 @@ id_*
 infra/provision/cherry/base/keys/*
 !infra/provision/cherry/base/keys/*.pub
 services/*/dist
+services/rust-node/target
 
 # Claude Code worktrees
 .claude/worktrees/

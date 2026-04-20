@@ -639,6 +639,11 @@ ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} create secret generic s
   --dry-run=client -o yaml | kubectl apply -f -"
 log_info "  Created scheduler-worker-secrets"
 
+ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} create secret generic rust-node-secrets \
+  --from-literal=SCHEDULER_API_TOKEN='${SCHEDULER_API_TOKEN}' \
+  --dry-run=client -o yaml | kubectl apply -f -"
+log_info "  Created rust-node-secrets"
+
 # Sandbox-openclaw secret (placeholder)
 ssh $SSH_OPTS root@"$VM_IP" "kubectl -n ${K8S_NAMESPACE} create secret generic sandbox-openclaw-secrets \
   --from-literal=OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}' \
@@ -664,6 +669,7 @@ ssh $SSH_OPTS root@"$VM_IP" "
   kubectl -n ${K8S_NAMESPACE} get secret poly-node-app-secrets >/dev/null || { echo 'FATAL: poly secrets missing'; exit 1; }
   kubectl -n ${K8S_NAMESPACE} get secret resy-node-app-secrets >/dev/null || { echo 'FATAL: resy secrets missing'; exit 1; }
   kubectl -n ${K8S_NAMESPACE} get secret scheduler-worker-secrets >/dev/null || { echo 'FATAL: scheduler-worker secrets missing'; exit 1; }
+  kubectl -n ${K8S_NAMESPACE} get secret rust-node-secrets >/dev/null || { echo 'FATAL: rust-node secrets missing'; exit 1; }
   echo 'All prerequisite secrets verified'
 "
 

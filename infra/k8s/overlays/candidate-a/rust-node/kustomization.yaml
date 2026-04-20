@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: cogni-candidate-a
+
+resources:
+  - ../../../base/rust-node
+
+images:
+  - name: ghcr.io/cogni-dao/cogni-template
+    newName: ghcr.io/cogni-dao/cogni-template
+    digest: "sha256:3678ece16d8cf87d3941fd5ce4915e54ab5aab053f458f54fb8b3c3bb324e0c8"
+
+patches:
+  - target:
+      kind: ConfigMap
+      name: rust-node-config
+    patch: |
+      - op: replace
+        path: /data/IMAGE_DIGEST
+        value: "candidate-a-placeholder-rust-node"

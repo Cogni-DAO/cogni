@@ -203,6 +203,7 @@ See [Environments](../spec/environments.md) for deployment modes and [Databases]
 
 ```bash
 pnpm check          # lint + type + format validation
+pnpm rust:check     # rust parity/runtime validation via Dockerized cargo
 pnpm test           # run unit tests (no infra required)
 ```
 

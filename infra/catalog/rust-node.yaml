@@ -1,0 +1,4 @@
+name: rust-node
+type: service
+port: 9101
+dockerfile: services/rust-node/Dockerfile
