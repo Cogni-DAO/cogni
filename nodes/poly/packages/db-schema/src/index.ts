@@ -12,3 +12,4 @@
  */
 
 export * from "./copy-trade";
+export * from "./wallet-connections";

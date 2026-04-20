@@ -256,6 +256,19 @@ export const serverSchema = z.object({
   POLY_PROTO_PRIVY_APP_ID: optionalString,
   POLY_PROTO_PRIVY_APP_SECRET: optionalString,
   POLY_PROTO_PRIVY_SIGNING_KEY: optionalString,
+
+  // User-wallets Privy app (task.0318 Phase B).
+  // SEPARATE_PRIVY_APP invariant: per-tenant Polymarket trading wallets live
+  // in a DEDICATED Privy app distinct from the operator / poly-proto triples.
+  // See docs/spec/poly-trader-wallet-port.md § Env.
+  PRIVY_USER_WALLETS_APP_ID: optionalString,
+  PRIVY_USER_WALLETS_APP_SECRET: optionalString,
+  PRIVY_USER_WALLETS_SIGNING_KEY: optionalString,
+  // AEAD key material for poly_wallet_connections.clob_api_key_ciphertext.
+  // Generated per-environment; stored in the candidate-a secret set.
+  // Format: 64 hex chars (32 bytes) for AES-256-GCM.
+  POLY_WALLET_AEAD_KEY_HEX: optionalString,
+  POLY_WALLET_AEAD_KEY_ID: optionalString,
   POLY_PROTO_WALLET_ADDRESS: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
