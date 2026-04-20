@@ -2,7 +2,8 @@
 id: task.0318
 type: task
 title: "Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables"
-status: needs_merge
+status: needs_implement
+revision: 1
 priority: 2
 estimate: 5
 rank: 5
@@ -276,3 +277,26 @@ See [docs/spec/poly-multi-tenant-auth.md § Decisions](../../docs/spec/poly-mult
 - [ ] Cap enforcement: a mirror target configured above `per_order_usdc_cap` is skipped with reason `cap_exceeded_per_order`; day-two spending past `daily_usdc_cap` is skipped with `cap_exceeded_daily`.
 - [ ] No env fallback: removing `OPERATOR_WALLET_ADDRESS` + `POLY_CLOB_*` from `.env.local` does not regress any test; the env lookup is gone from the executor code path.
 - [ ] `pnpm check` clean; `pnpm check:docs` clean; fresh `db:generate` produces no drift against the new schema.
+
+## Review Feedback (revision 1 — 2026-04-19)
+
+`/review-implementation` against PR #944 found two blocking bugs and a handful of smaller items. Status returned to `needs_implement`. Both blockers are small fixes; round-trip test would pin Bug #2.
+
+### Blocking
+
+1. **Migration 0029 will fail under FORCE RLS on apply.** The bootstrap seed INSERT at `migrations/0029_poly_copy_trade_multitenant.sql:165-172` runs after `ALTER TABLE … FORCE ROW LEVEL SECURITY` (L85). With no `app.current_user_id` set, the `WITH CHECK` policy rejects the INSERT in any environment whose migrator role is not `BYPASSRLS`.
+   - **Fix:** add `SELECT set_config('app.current_user_id', '00000000-0000-4000-a000-000000000001', true);--> statement-breakpoint` immediately before the INSERT. Mirror `0008_seed_system_tenant.sql:6`.
+
+2. **Dashboard DELETE button is broken end-to-end.** `targets/route.ts:52-75` (`buildTargetView`) declares `params.id?: string` but never reads it; the response's `target_id` is always `targetIdFromWallet(target_wallet)` (UUIDv5). The DELETE route at `targets/[id]/route.ts:64` queries `polyCopyTradeTargets.id` (DB row PK = random uuid v4). Dashboard sends the UUIDv5 → server queries by PK → **404 every time**.
+   - **Fix in three places:**
+     - `target-source.ts:127-138` — `listForActor` returns `{ id, target_wallet }[]` (or a sibling `listRowsForActor` if the bare-string return must stay).
+     - `targets/route.ts:52-75` — `target_id: params.id ?? config.target_id`; GET populates `params.id` from `listForActor` rows; POST passes `inserted.id`.
+     - `node-contracts/src/poly.copy-trade.targets.v1.contract.ts:22` — update docstring to clarify `target_id` is the DB row uuid (Phase A); UUIDv5 stays internal to the fills ledger for `client_order_id` correlation.
+   - **Add a component test** at `tests/component/copy-trade/targets-route.int.test.ts` (or extend `db-target-source.int.test.ts`) exercising `POST → GET → DELETE` round-trip. Would have caught this.
+
+### Non-blocking suggestions
+
+- **Use memoized `container.orderLedger`** in `targets/route.ts:105, 236` instead of `createOrderLedger(...)` per request.
+- **Narrow `TENANT_DEFENSE_IN_DEPTH`** invariant scope in `targets/route.ts:13-17` — it's verified on POST writes only; GET returns bare wallet strings, nothing row-shaped to verify.
+- **Document migration 0029's CASCADE drop** in the PR body. `DROP TABLE … CASCADE` on `poly_copy_trade_{fills,decisions,config}` wipes Phase-0 candidate-a trading history irreversibly. The `/design` decision approved this, but the operator should explicitly know.
+- **Duplicate polls on shared wallets** (container loop) — flagged in PR body, covered by task.0332. No fix needed in this PR.
