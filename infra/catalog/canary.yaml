@@ -1,0 +1,5 @@
+name: canary
+type: node
+port: 3400
+node_id: "89612f02-114d-460d-87a5-c2ab212ccf6f"
+dockerfile: nodes/canary/app/Dockerfile

@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: LicenseRef-PolyForm-Shield-1.0.0
+# SPDX-FileCopyrightText: 2025 Cogni-DAO
+#
+# gitcogni rule: ai-only-repo-policy
+# Status: SCAFFOLD — schema fields below may not all be supported by the current
+#         gitcogni implementation. Implementation landing in task.0342.
+#
+# Purpose: Enable scope-fenced, auto-mergeable PR authorship by AI-run nodes
+#          (currently: the canary). Applies to PRs authored by allowlisted bot
+#          identities only; human PRs continue under the standard review gates.
+#
+# Enforcement layers (defense in depth — this rule is layer 2):
+#   1. Tool implementation — canary__propose_charter etc. refuse out-of-scope writes
+#   2. This rule — gitcogni gate rejects the PR if scope fence is violated
+#   3. Branch protection — requires this rule's check before merge
+#   4. GitHub App / PAT scope — canary-bot token can only write to allowed paths
+#
+# See: work/items/task.0342.gitcogni-ai-only-repo-policy.md
+#      work/projects/proj.cogni-canary.md § Scope fence
+
+id: cogni-git-review-ai-only-repo-policy
+schema_version: "0.3"
+blocking: true
+workflow_id: ai-only-repo
+
+# ═══════════════════════════════════════════════════════════════
+# Applicability: only evaluate this rule when the PR author is on
+# the allowed-authors list. Human PRs skip this rule entirely.
+# ═══════════════════════════════════════════════════════════════
+applies_when:
+  author_in:
+    - canary-bot[bot]
+    - canary-4omini[bot]
+
+evaluations:
+  # 1. Scope fence — PR must touch only allowed paths, none of the denied.
+  - scope_fence:
+      description: PR modifies only files within the canary's allowed scope.
+      allowed_paths:
+        - "nodes/canary/**"
+        - "work/items/**"
+        - "docs/research/**"
+      denied_paths:
+        - ".github/workflows/**"
+        - "scripts/ci/**"
+        - "infra/**"
+        - "work/charters/**"
+        - "work/projects/**"
+        - "nodes/operator/**"
+        - "nodes/poly/**"
+        - "nodes/resy/**"
+        - "nodes/node-template/**"
+        - ".cogni/rules/**"
+        - ".cogni/repo-spec.yaml"
+        - "packages/**"
+        - "services/**"
+
+  # 2. Standard CI passed.
+  - ci_green:
+      description: The standard CI pipeline (pnpm check + pnpm check:full) passed.
+      required_checks:
+        - ci/check
+        - ci/check-full
+
+  # 3. Candidate flight verified.
+  - candidate_flight_green:
+      description: candidate-flight.yml promoted the PR to candidate-a, Argo reported Healthy, verify-buildsha passed.
+      required_checks:
+        - candidate-flight/verify-buildsha
+
+  # 4. Budget — the PR's associated model spend did not exceed the canary's monthly cap.
+  - budget_within_cap:
+      description: Cumulative LiteLLM spend for this PR's agent session is under the canary's per-day budget.
+      # TODO: wire to LiteLLM audit API; placeholder eq:true until implemented.
+      placeholder: true
+
+success_criteria:
+  all_of:
+    - metric: scope_fence
+      eq: true
+    - metric: ci_green
+      eq: true
+    - metric: candidate_flight_green
+      eq: true
+    - metric: budget_within_cap
+      eq: true
+
+# When all criteria pass, auto-merge the PR (GitHub's native --auto is used).
+# Human review is NOT required for AI-authored PRs under this policy.
+auto_merge: true
+
+# Rejection behavior — instead of blocking quietly, POST a comment on the PR
+# with which criterion failed and the remediation (e.g., "scope_fence: false —
+# PR touches infra/**; open a human-review issue instead"). This keeps the
+# canary's loop observable.
+on_failure:
+  action: comment_and_block
+  comment_template: |
+    ai-only-repo-policy blocked this PR.
+    Failure: {failed_metric}
+    Details: {failure_details}
+    To proceed: either narrow the PR scope, or escalate to Derek via an issue.

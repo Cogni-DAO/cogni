@@ -49,6 +49,10 @@ nodes:
     node_name: "Resy Helper"
     path: "nodes/resy"
     endpoint: "http://resy:3300/api/internal/billing/ingest"
+  - node_id: "89612f02-114d-460d-87a5-c2ab212ccf6f"
+    node_name: "Cogni Canary"
+    path: "nodes/canary"
+    endpoint: "http://canary:3400/api/internal/billing/ingest"
 
 # Control GitHub check conclusion behavior for gate errors/timeouts
 # false (default): errors/timeouts result in 'neutral' conclusion (non-blocking)
