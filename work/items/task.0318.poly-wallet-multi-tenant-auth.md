@@ -198,8 +198,13 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
   - `mirror-coordinator.runOnce` opens `withTenantScope(appDb, target.created_by_user_id, ...)` for the fills/decisions insert path. The placement itself still uses the shared operator wallet (Phase A non-goal).
   - Reconciler stays single, operator-wide (BYPASSRLS via `serviceDb`).
 
-- [ ] **A7 — Delete `COPY_TRADE_TARGET_WALLETS` env var**
-  - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, `.claude/skills/poly-dev-expert/SKILL.md`, candidate-a `poly-node-app-secrets`. Update `MOCK_SERVER_ENV` test fixture.
+- [ ] **A7 — Delete `COPY_TRADE_TARGET_WALLETS` env var (and its CI plumbing)**
+  - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, `.claude/skills/poly-dev-expert/SKILL.md`. Update `MOCK_SERVER_ENV` test fixture.
+  - **CI plumbing added by PR #932 commit `3e61f45f1`** (must be removed in the same A7 commit so nothing orphans):
+    - `.github/workflows/candidate-flight-infra.yml` — drop the `COPY_TRADE_TARGET_WALLETS: ${{ secrets.COPY_TRADE_TARGET_WALLETS }}` env line
+    - `scripts/ci/deploy-infra.sh` — drop the `COPY_TRADE_TARGET_WALLETS=${COPY_TRADE_TARGET_WALLETS:-}` declaration and the forwarded env var on the SSH command
+    - GH secret `COPY_TRADE_TARGET_WALLETS` at candidate-a env scope — delete via `gh secret delete COPY_TRADE_TARGET_WALLETS --env candidate-a`
+    - Candidate-a k8s secret `poly-node-app-secrets` — drop the key from the next `deploy-infra` rollout (handled automatically once the workflow stops writing it)
   - `envTargetSource` is no longer wired by default; it's reachable only by direct construction in tests.
 
 - [ ] **A8 — Phase A integration + isolation tests** (scope-pinned per spec § Phase A scope clarification)
