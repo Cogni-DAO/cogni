@@ -45,6 +45,15 @@ set -euo pipefail
 DOMAIN="${DOMAIN:?DOMAIN required}"
 SOURCE_SHA_MAP="${SOURCE_SHA_MAP:-}"
 
+# Cutover polling (task.0341): Argo "Healthy" fires before ingress endpoints
+# fully cut over to new pods, so a one-shot /readyz can hit the old pod
+# serving the prior SHA. Retry per-node until the expected SHA appears or
+# CUTOVER_TIMEOUT expires. Default 90s covers normal pod-startup + endpoint
+# propagation; anything longer is a real deploy issue, not a cutover race,
+# and SHOULD fail loudly — do not inflate this number to mask pathologies.
+CUTOVER_TIMEOUT="${CUTOVER_TIMEOUT:-90}"
+CUTOVER_SLEEP="${CUTOVER_SLEEP:-5}"
+
 # Only node-apps expose /readyz via HTTPS Ingress. scheduler-worker and
 # migrator are promoted-apps too but are in-cluster only — they're covered
 # by wait-for-in-cluster-services (kubectl rollout status) upstream.
@@ -113,6 +122,41 @@ if [ "${#NODE_ARR[@]}" -eq 0 ]; then
   exit 0
 fi
 
+# Allow the test harness (or future callers) to inject a curl wrapper so we
+# don't need a real HTTPS endpoint to cover the polling logic.
+CURL_CMD="${CURL_CMD:-curl -sk --max-time 10}"
+
+# Poll $url/readyz until .version matches $expected or CUTOVER_TIMEOUT elapses.
+# Returns 0 on match, 1 on timeout. Prints the final line outcome.
+check_node() {
+  local node="$1" expected="$2" url="$3"
+  local deadline=$(( SECONDS + CUTOVER_TIMEOUT ))
+  local attempts=0 actual="" body=""
+
+  while :; do
+    attempts=$((attempts + 1))
+    body=$($CURL_CMD "$url" 2>/dev/null || echo "")
+    actual=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("version",""))' 2>/dev/null || echo "")
+    actual=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
+
+    if [ "$actual" = "$expected" ] && [ -n "$actual" ]; then
+      echo "  ✅ ${node}: version=${actual:0:12} matches expected ${expected:0:12} (attempt ${attempts})"
+      return 0
+    fi
+
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      if [ -z "$actual" ]; then
+        echo "  ❌ ${node}: ${url} returned no parseable version after ${CUTOVER_TIMEOUT}s / ${attempts} attempts (body: ${body:0:120})"
+      else
+        echo "  ❌ ${node}: version=${actual:0:12} != expected ${expected:0:12} after ${CUTOVER_TIMEOUT}s / ${attempts} attempts"
+      fi
+      return 1
+    fi
+
+    sleep "$CUTOVER_SLEEP"
+  done
+}
+
 FAILED=0
 
 for node in "${NODE_ARR[@]}"; do
@@ -125,22 +169,7 @@ for node in "${NODE_ARR[@]}"; do
   fi
   url="https://${host}/readyz"
 
-  body=$(curl -sk --max-time 10 "$url" || echo "")
-  actual=$(printf '%s' "$body" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("version",""))' 2>/dev/null || echo "")
-  actual=$(printf '%s' "$actual" | tr '[:upper:]' '[:lower:]')
-
-  if [ -z "$actual" ]; then
-    echo "  ❌ ${node}: ${url} returned no parseable version (body: ${body:0:120})"
-    FAILED=1
-    continue
-  fi
-
-  if [ "$actual" = "$expected" ]; then
-    echo "  ✅ ${node}: version=${actual:0:12} matches expected ${expected:0:12}"
-  else
-    echo "  ❌ ${node}: version=${actual:0:12} != expected ${expected:0:12}"
-    FAILED=1
-  fi
+  check_node "$node" "$expected" "$url" || FAILED=1
 done
 
 if [ "$FAILED" -ne 0 ]; then
