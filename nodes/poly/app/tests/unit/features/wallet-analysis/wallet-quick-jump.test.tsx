@@ -56,7 +56,9 @@ describe("WalletQuickJump", () => {
     fireEvent.change(input, {
       target: { value: "0x7A3347D25A69e735f6E3a793ecbdca08F97A0aEB" },
     });
-    fireEvent.submit(input.closest("form")!);
+    const form = input.closest("form");
+    if (!form) throw new Error("expected wrapping form element");
+    fireEvent.submit(form);
     expect(pushMock).toHaveBeenCalledWith(
       "/research/w/0x7a3347d25a69e735f6e3a793ecbdca08f97a0aeb"
     );

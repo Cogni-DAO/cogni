@@ -2,13 +2,12 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/dashboard/_api/fetchCopyTargets`
- * Purpose: Client-side helpers for the monitored-wallet list — list (GET), create
- *          (POST), and delete (DELETE) the calling user's tracked Polymarket wallets.
- * Scope: Data fetching only. Returns contract shapes; empty on failure for reads,
- *        thrown errors for mutations so React Query can surface them in the UI.
+ * Module: `@features/wallet-analysis/client/copy-trade-targets`
+ * Purpose: Client-side helpers for the per-user copy-trade target list — list (GET), create (POST), delete (DELETE) over `/api/v1/poly/copy-trade/targets`.
+ * Scope: Data fetching helpers only. Returns contract shapes; reads degrade to empty on failure, mutations throw so React Query surfaces errors. Does not render UI.
+ * Invariants: RLS_SCOPED — server enforces per-user visibility + writes; client never passes user_id. COPY_TARGETS_QUERY_KEY is the single source of truth that both the Monitored Wallets card and the per-wallet toggle cross-invalidate.
  * Side-effects: IO (HTTP fetch).
- * Links: packages/node-contracts/src/poly.copy-trade.targets.v1.contract.ts
+ * Links: packages/node-contracts/src/poly.copy-trade.targets.v1.contract.ts, docs/spec/poly-multi-tenant-auth.md
  * @public
  */
 
@@ -22,10 +21,16 @@ import type {
 
 export type {
   PolyCopyTradeTarget,
-  PolyCopyTradeTargetsOutput,
   PolyCopyTradeTargetCreateInput,
   PolyCopyTradeTargetCreateOutput,
+  PolyCopyTradeTargetsOutput,
 };
+
+/**
+ * Shared React Query key for the user's copy-trade targets. Every caller uses
+ * this key so mutations from one UI surface invalidate the list everywhere.
+ */
+export const COPY_TARGETS_QUERY_KEY = ["copy-trade-targets"] as const;
 
 const EMPTY: PolyCopyTradeTargetsOutput = { targets: [] };
 

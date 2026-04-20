@@ -42,12 +42,13 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components";
-import { cn } from "@/shared/util/cn";
 import {
+  COPY_TARGETS_QUERY_KEY,
   createCopyTarget,
   deleteCopyTarget,
   fetchCopyTargets,
-} from "../_api/fetchCopyTargets";
+} from "@/features/wallet-analysis/client/copy-trade-targets";
+import { cn } from "@/shared/util/cn";
 import { fetchTopWallets } from "../_api/fetchTopWallets";
 import {
   formatNumTrades,
@@ -92,10 +93,9 @@ export function TopWalletsCard(): ReactElement {
   });
 
   const queryClient = useQueryClient();
-  const COPY_TARGETS_KEY = ["dashboard-copy-targets"] as const;
 
   const { data: targetsData } = useQuery({
-    queryKey: COPY_TARGETS_KEY,
+    queryKey: COPY_TARGETS_QUERY_KEY,
     queryFn: fetchCopyTargets,
     staleTime: 30_000,
     gcTime: 5 * 60_000,
@@ -106,13 +106,13 @@ export function TopWalletsCard(): ReactElement {
     mutationFn: (targetWallet: string) =>
       createCopyTarget({ target_wallet: targetWallet }),
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: COPY_TARGETS_KEY }),
+      queryClient.invalidateQueries({ queryKey: COPY_TARGETS_QUERY_KEY }),
   });
 
   const deleteTargetMutation = useMutation({
     mutationFn: (id: string) => deleteCopyTarget(id),
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: COPY_TARGETS_KEY }),
+      queryClient.invalidateQueries({ queryKey: COPY_TARGETS_QUERY_KEY }),
   });
 
   const targetList = targetsData?.targets ?? [];

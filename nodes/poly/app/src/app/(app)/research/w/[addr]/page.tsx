@@ -19,6 +19,7 @@ import { notFound, redirect } from "next/navigation";
 import type { ReactElement } from "react";
 import { fetchOperatorExtras } from "@/app/_lib/poly/operator-extras";
 import {
+  CopyTradeToggle,
   type WalletAnalysisData,
   WalletAnalysisView,
 } from "@/features/wallet-analysis";
@@ -140,6 +141,7 @@ export default async function WalletAnalysisPage({
         variant="page"
         size="default"
         capturedAt={new Date().toISOString().slice(0, 16).replace("T", " ")}
+        headerActions={<CopyTradeToggle addr={addr} />}
       />
     </main>
   );

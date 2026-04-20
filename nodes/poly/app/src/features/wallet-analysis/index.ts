@@ -11,6 +11,7 @@
 
 export { useWalletAnalysis } from "./client/use-wallet-analysis";
 export { BalanceBar } from "./components/BalanceBar";
+export { CopyTradeToggle } from "./components/CopyTradeToggle";
 export { EdgeHypothesis } from "./components/EdgeHypothesis";
 export { RecentTradesTable } from "./components/RecentTradesTable";
 export { StatGrid } from "./components/StatGrid";
