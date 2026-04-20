@@ -23,7 +23,7 @@ labels: [infra, cicd, drift, bug.0334-followup]
 
 ## Problem
 
-`provision-test-vm.sh` writes real VM IPs into `env-state.yaml` on deploy branches (`deploy/canary`, `deploy/preview`, `deploy/production`). main's seed copies of the same files carry IPs too. **Git is the wrong place to hold VM IPs** — it makes silent drift possible on every VM lifecycle event, and today proved it.
+`provision-test-vm.sh` writes real VM IPs into `env-state.yaml` on deploy branches (`deploy/candidate-a`, `deploy/preview`, `deploy/production`). main's seed copies of the same files carry IPs too. **Git is the wrong place to hold VM IPs** — it makes silent drift possible on every VM lifecycle event, and today proved it.
 
 **Not a security fix.** VM IPs remain publicly resolvable after this change (they move from a public git tree to public Cloudflare DNS under `*.cognidao.org`). That's by design for now; the operational drift problem is the entire reason this bug is P0. A follow-up (private-zone / split-horizon DNS) is worth filing only if public-DNS discoverability becomes a real problem.
 
