@@ -13,7 +13,7 @@ outcome: "A SELL via `core__poly_close_position` (or the `scripts/experiments/pr
 spec_refs:
   - architecture
 assignees: []
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 labels: [poly, polymarket, adapter, bug, neg-risk]
 ---
 

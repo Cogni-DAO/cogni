@@ -11,7 +11,7 @@ outcome: "Research doc at docs/research/polymarket-copy-trade-candidates.md with
 spec_refs:
 assignees: derekg1729
 credit:
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 branch: worktree-poly-top-wallet-v0
 pr:
 reviewer:

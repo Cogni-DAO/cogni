@@ -13,7 +13,7 @@ outcome: "A single PR that adds `docs/spec/poly-copy-trade-phase4.md` covering: 
 spec_refs:
   - architecture
 assignees: []
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 labels: [poly, polymarket, copy-trading, design, phase4, adversarial]
 ---
 

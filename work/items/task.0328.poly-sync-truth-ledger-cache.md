@@ -16,7 +16,7 @@ outcome: "After this slice merges: (1) reconciler never silently skips — CLOB 
 spec_refs:
   - architecture
 assignees: []
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 labels: [poly, polymarket, copy-trading, sync, observability]
 ---
 

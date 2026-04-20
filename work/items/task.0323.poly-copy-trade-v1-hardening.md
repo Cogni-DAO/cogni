@@ -15,7 +15,7 @@ outcome: "All items below either (a) landed, (b) filed as follow-up tasks with d
 spec_refs:
   - architecture
 assignees: []
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 labels: [poly, polymarket, copy-trading, hardening, v1]
 ---
 

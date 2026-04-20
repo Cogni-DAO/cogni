@@ -13,7 +13,7 @@ outcome: "Operator wallet `0x7A33…0aEB` places a $1 BUY via `scripts/experimen
 spec_refs:
   - poly-copy-trade-phase1
 assignees: []
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 labels: [poly, polymarket, adapter, bug, candidate-a, operator-wallet]
 external_refs:
   - work/items/bug.0329.poly-sell-neg-risk-empty-reject.md

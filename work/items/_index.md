@@ -148,7 +148,8 @@
 | 1 | 25 | 3 | needs_implement | task.0130 | Tokenomics Crawl: Budget Policy + kill Score UI | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 25 | 2 | needs_closeout | task.0165 | Live money e2e test — full OpenRouter top-up chain on Base mainnet | AI Operator Wallet | proj.ai-operator-wallet |
 | 1 | 40 | 3 | needs_triage | bug.0322 | Runs made on poly are visible via operator's /api/v1/agent/runs (cross-node data pollution) | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | 50 | 2 | needs_triage | bug.0329 | Polymarket CLOB adapter SELL on neg_risk markets returns empty error — positions unclosable | Cogni Poly | proj.poly-prediction-bot |
+| 1 | 50 | 2 | needs_triage | bug.0329 | Polymarket CLOB adapter SELL on neg_risk markets returns empty error — positions unclosable | Cogni Poly | proj.poly-copy-trading |
+| 1 | 51 | 2 | needs_triage | bug.0331 | Polymarket CLOB rejects every operator BUY on candidate-a with empty error — mirror pipeline boots clean but places zero orders | Cogni Poly | proj.poly-copy-trading |
 | 1 | 99 | 3 | needs_triage | story.0089 | Discord Bot Conversation Evals |  |  |
 | 1 | 99 | 5 | needs_triage | story.0091 | Clawdbot as High-Level Manager Agent |  |  |
 | 1 | 99 | 4 | needs_design | story.0116 | DAO Gateway MVP — multi-tenant AI billing gateway for external projects | Operator Plane | proj.operator-plane |
@@ -171,9 +172,9 @@
 | 2 | 5 | 1 | needs_merge | bug.0233 | Model picker shows wrong icons, leaks codex models into OpenRouter tab, shows embedding models |  |  |
 | 2 | 5 | 1 | needs_review | bug.0275 | k8s migration Job fails — standalone app image lacks tsx + drizzle-kit | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 5 | 2 | needs_design | task.0310 | Rename k8s staging namespace and overlays to preview | CI/CD Pipeline | proj.cicd-services-gitops |
-| 2 | 5 | 5 | needs_implement | task.0315 | Poly copy-trade prototype — v0 top-wallet scoreboard, v0.1 shadow 1-wallet mirror | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 5 | 5 | needs_implement | task.0315 | Poly copy-trade prototype — v0 top-wallet scoreboard, v0.1 shadow 1-wallet mirror | Cogni Poly | proj.poly-copy-trading |
 | 2 | 5 | 3 | needs_design | task.0317 | Per-node LangGraph catalogs — factory library + node-owned catalog registry |  |  |
-| 2 | 5 | 5 | needs_design | task.0318 | Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 5 | 5 | needs_design | task.0318 | Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables | Cogni Poly | proj.poly-copy-trading |
 | 2 | 8 | 1 | needs_design | task.0064 | OpenClaw preflight cost estimate 10x audit — real token consumption | Reliability & Uptime | proj.reliability |
 | 2 | 9 | 2 | needs_design | task.0039 | Billing reconciler — LiteLLM spend/logs polling in scheduler worker | Unified Graph Launch | proj.unified-graph-launch |
 | 2 | 10 | 2 | needs_triage | task.0055 | Dedicated DB migrator role — separate DDL from runtime DML | Database Operations | proj.database-ops |
@@ -200,8 +201,8 @@
 | 2 | 99 | 2 | needs_triage | bug.0314 | External tests fail when only .env.test is loaded — need EVM_RPC_URL, smee webhook delivery, or safer skip-gates | System Test Architecture | proj.system-test-architecture |
 | 2 | 99 | 2 | needs_triage | bug.0317 | candidate-flight-infra.yml checks out main, so a feature branch cannot ship new env/secret plumbing via the infra lever | CI/CD Pipeline | proj.cicd-services-gitops |
 | 2 | 99 | 5 | needs_triage | bug.0319 | Split @cogni/ai-tools into per-node packages; kill the shared TOOL_CATALOG stub dance | CI/CD Pipeline | proj.cicd-services-gitops |
-| 2 | 99 | 5 | needs_design | task.0322 | Poly copy-trade Phase 4 design prep — dual-path ingestion, hot signer, target ranker, counterfactual baseline | Cogni Poly | proj.poly-prediction-bot |
-| 2 | 99 | 3 | needs_review | task.0323 | Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation | Cogni Poly | proj.poly-prediction-bot |
+| 2 | 99 | 5 | needs_design | task.0322 | Poly copy-trade Phase 4 design prep — dual-path ingestion, hot signer, target ranker, counterfactual baseline | Cogni Poly | proj.poly-copy-trading |
+| 2 | 99 | 3 | needs_review | task.0323 | Poly copy-trade v1 hardening — close the v0 gaps uncovered during candidate-a validation | Cogni Poly | proj.poly-copy-trading |
 | 3 | 5 | 5 | needs_design | story.0248 | Dolt Branching CI/CD — experiment branches, A/B evaluation, confidence-gated promotion to main | Cogni Poly | proj.poly-prediction-bot |
 | 3 | 6 | 2 | needs_design | task.0326 | Ledger/attribution worker: rename DATABASE_URL and enforce no-DB-creds invariant on scheduler-worker | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | 7 | 2 | needs_triage | bug.0034 | Secrets redaction uses regex on serialized JSON — adopt fast-redact for structured fields |  |  |
@@ -348,12 +349,12 @@
 | 1 | task.0281 | Canary CI/CD parity + staging promotion — no regression from staging-preview.yml |  |  |
 | 1 | task.0311 | Poly Knowledge Plane v0 — Candidate-a Wiring + Upsert Bug Fix (Clean-Slate Nodes) | Cogni Poly | proj.poly-prediction-bot |
 | 1 | bug.0328 | promote-build-payload silent abort + release-slot treats skipped verify as success — verify-candidate bypassed on real flight | CI/CD Pipeline | proj.cicd-services-gitops |
-| 1 | task.0328 | Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health) | Cogni Poly | proj.poly-prediction-bot |
+| 1 | task.0328 | Poly sync-truth — DB as CLOB cache (first slice: typed not_found, grace window, synced_at, sync-health) | Cogni Poly | proj.poly-copy-trading |
 | 2 | bug.0050 | Negative credit balance breaks /credits/summary — Zod rejects balanceCredits < 0 |  |  |
 | 2 | bug.0061 | UI balance display hides negative with $0 default | Payments & Billing Enhancements | proj.payments-enhancements |
 | 2 | task.0231 | Knowledge Data Plane — Doltgres Server, Schema, Adapter, Poly Seeds | Cogni Poly | proj.poly-prediction-bot |
-| 2 | spike.0314 | Research: copy-trading existing Polymarket wallets from the poly node | Cogni Poly | proj.poly-prediction-bot |
-| 2 | spike.0323 | Research: Polymarket copy-trade candidate identification | Cogni Poly | proj.poly-prediction-bot |
+| 2 | spike.0314 | Research: copy-trading existing Polymarket wallets from the poly node | Cogni Poly | proj.poly-copy-trading |
+| 2 | spike.0323 | Research: Polymarket copy-trade candidate identification | Cogni Poly | proj.poly-copy-trading |
 | 2 | bug.0326 | wait-for-argocd.sh reports green when promoted digests never reach pods | CI/CD Pipeline | proj.cicd-services-gitops |
 | 3 | bug.0193 | scheduler-worker houses workflow definitions — should be thin composition root | Unified Graph Launch | proj.unified-graph-launch |
 | 3 | bug.0194 | Internal graph API conflates stateKey with runId — headless runs create phantom threads | Unified Graph Launch | proj.unified-graph-launch |

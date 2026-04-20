@@ -11,7 +11,7 @@ outcome: "Research doc shipped at docs/research/poly-copy-trading-wallets.md wit
 spec_refs:
 assignees: derekg1729
 credit:
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 branch:
 pr:
 reviewer:

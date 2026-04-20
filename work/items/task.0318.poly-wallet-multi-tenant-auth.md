@@ -12,8 +12,10 @@ spec_refs:
   - operator-wallet
   - tenant-connections
   - scheduler
+  - poly-multi-tenant-auth
 assignees: derekg1729
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
+pr: https://github.com/Cogni-DAO/node-template/pull/932
 created: 2026-04-17
 updated: 2026-04-19
 labels: [poly, polymarket, wallets, auth, rls, multi-tenant, privy, security]

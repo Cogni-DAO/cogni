@@ -15,7 +15,7 @@ spec_refs:
   - architecture
   - langgraph-patterns
 assignees: derekg1729
-project: proj.poly-prediction-bot
+project: proj.poly-copy-trading
 created: 2026-04-17
 updated: 2026-04-19
 labels: [poly, polymarket, follow-wallet, copy-trading, prototype]
