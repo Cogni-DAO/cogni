@@ -73,6 +73,7 @@
 | 1 | 1 | 1 | needs_merge | bug.0316 | candidate-flight reports green while node-app pods still serve old image — /readyz is served by any running pod, no rollout verification | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 1 | needs_merge | bug.0320 | flight-preview silently skips every auto-triggered run — gh api commits/{sha}/pulls is eventually consistent | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 1 | 2 | needs_merge | bug.0321 | CICD silent-green: remaining paths that report success without verifying deploy state | CI/CD Pipeline | proj.cicd-services-gitops |
+| 1 | 1 | 1 | needs_closeout | task.0341 | verify-buildsha polling: close the pod-cutover race | Observability Hardening | proj.observability-hardening |
 | 1 | 2 | 2 | needs_triage | task.0114 | Work-item budget enrichment + budget allocation algorithm | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 2 | 5 | needs_implement | task.0122 | Operator: node registration lifecycle — discovery, repo-spec fetch, scope reconciliation | Node Formation & Launch | proj.node-formation-ui |
 | 1 | 2 | 2 | needs_design | task.0187 | AI-accessible production debugging — K8s + Argo CD API access | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -196,7 +197,7 @@
 | 2 | 17 | 1 | needs_research | spike.0037 | Research Tailscale/Headscale mesh VPN for Cogni infrastructure |  |  |
 | 2 | 20 | 3 | needs_design | task.0211 | BYO-AI ChatGPT — auth manager + Codex CLI in Docker image | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 2 | 30 | 1 | needs_implement | bug.0168 | App container uses seccomp=unconfined for TigerBeetle io_uring — replace with targeted profile | AI Operator Wallet | proj.ai-operator-wallet |
-| 2 | 30 | 1 | needs_triage | bug.0339 | Tenant context missing from request-envelope logs — Loki can't slice by user/billing |  |  |
+| 2 | 30 | 1 | needs_merge | bug.0339 | Tenant context missing from request-envelope logs — Loki can't slice by user/billing |  |  |
 | 2 | 50 | 2 | needs_implement | task.0134 | EIP-4824 daoURI v0 — lightweight DAOstar metadata endpoint | Financial Ledger | proj.financial-ledger |
 | 2 | 50 | 2 | needs_merge | task.0324 | Per-node DB schema split (minimal — no new tooling) | Database Operations | proj.database-ops |
 | 2 | 50 | 3 | needs_triage | bug.0330 | poly /api/v1/chat/completions intermittently returns empty body on candidate-a | CI/CD Pipeline | proj.cicd-services-gitops |

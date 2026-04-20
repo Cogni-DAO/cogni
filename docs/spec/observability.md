@@ -178,6 +178,7 @@ metricsRegistry          (node_id default label — every metric series inherits
 - `reqId` attached as OTel span attribute (`cogni.request_id`)
 - `reqId` + `traceId` forwarded in LiteLLM metadata for correlation
 - Child loggers inherit `reqId` + `traceId` + `nodeId` from parent bindings
+- `userId` bound onto the request-scoped child logger by `createRequestContext` when the session is resolved (authenticated requests only); all envelope + downstream feature logs inherit it. Anonymous / `mode:"none"` routes emit no `userId`.
 
 ---
 

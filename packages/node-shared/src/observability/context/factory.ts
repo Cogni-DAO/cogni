@@ -5,10 +5,10 @@
  * Module: `@shared/observability/context/factory`
  * Purpose: Factory for creating request-scoped context with sanitized reqId.
  * Scope: Create RequestContext with child logger; sanitize incoming x-request-id. Does not manage context lifecycle.
- * Invariants: reqId is validated (max 64 chars, alphanumeric + _-); routeId is stable identifier.
+ * Invariants: reqId is validated; routeId is stable; child logger binds userId from session when present.
  * Side-effects: none
  * Notes: Use in route handlers to create ctx for request. Cross-cutting observability concern.
- * Links: Returns RequestContext type; called at route handler entry points.
+ * Links: Returns RequestContext type; called at route handler entry points; referenced by docs/spec/observability.md § Context Propagation.
  * @public
  */
 
@@ -57,6 +57,7 @@ export function createRequestContext(
       traceId: meta.traceId,
       route: meta.routeId,
       method: request.method,
+      userId: meta.session?.id,
     }),
     reqId,
     traceId: meta.traceId,

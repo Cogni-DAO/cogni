@@ -2,7 +2,7 @@
 id: bug.0339
 type: bug
 title: Tenant context missing from request-envelope logs — Loki can't slice by user/billing
-status: needs_triage
+status: needs_merge
 priority: 2
 rank: 30
 estimate: 1
@@ -13,8 +13,9 @@ spec_refs:
 assignees: derekg1729
 credit:
 project:
-branch:
-pr:
+branch: fix/bug-0339-tenant-context-envelope-logs
+pr: https://github.com/Cogni-DAO/node-template/pull/962
+deploy_verified: true
 reviewer:
 revision: 0
 blocked_by:
@@ -50,7 +51,47 @@ external_refs:
 - Per-domain event inventory. The envelope already emits `request complete {status, durationMs}` with enough fields to be the terminal event per request. Domain `*_success` / `*_failed` events on top of that are usually duplicate instrumentation — a separate cleanup.
 - Adding `user_id` as a Prometheus label. Cardinality forbids it; Loki slicing is the correct plane.
 
+## Design
+
+### Outcome
+
+Every log line inside any instrumented HTTP request handler (envelope `request received` / `request complete` / `request warning handled` / `request failed` **plus** every downstream feature/domain log emitted via `ctx.log`) carries `userId` when the request is authenticated. Ops slice Loki by tenant with `|~ "<userId>"` — no per-route boilerplate, no new domain events, zero added log volume.
+
+### Approach
+
+**Solution**: One-line change in the shared `createRequestContext` factory. Today it already receives `meta.session?: SessionUser` and constructs a pino child logger with `reqId + traceId + route + method`. Add `userId: meta.session?.id` to that same `.child({...})` call. Pino drops `undefined` fields, so anonymous / `mode: "none"` requests emit the envelope exactly as before; authenticated requests ride `userId` through every descendant logger for free (pino child semantics).
+
+**Reuses**:
+
+- Existing `SessionUser.id` (`packages/node-shared/src/auth/session.ts` — "Primary database identifier (UUID)").
+- Existing `session` parameter already wired through all four node wrap handlers (`nodes/{node-template,operator,poly,resy}/app/src/bootstrap/http/wrapRouteHandlerWithLogging.ts:149`, `nodes/node-template/...:180`).
+- Existing observability spec convention (`docs/spec/observability.md:120` — `userId` is already listed as a high-cardinality JSON field).
+
+**Rejected**:
+
+- _Rebind `ctx.log` in each node's `wrapRouteHandlerWithLogging` after auth resolves_ (the shape the bug report initially proposed). Rejected: duplicates the same 3-line change across 4 nodes, and `createRequestContext` already has `session` in hand at construction time — rebinding later is strictly redundant.
+- _Add `billingAccountId` to the envelope._ Rejected: not cheaply resolvable per-request; many routes never look it up. Leave to route-local code, per bug item "Not in scope".
+- _Emit a new `tenant_bound` domain event._ Rejected: adds log volume without improving sliceability beyond what child-logger inheritance gives us for free.
+
+### Invariants
+
+<!-- CODE REVIEW CRITERIA -->
+
+- [ ] ENVELOPE_CARRIES_USERID: When `session` is provided to `createRequestContext`, every log line emitted via `ctx.log` (or any `.child()` of it) includes `userId`. Anonymous / `mode:"none"` requests are unchanged — no `userId` field.
+- [ ] NO_PER_ROUTE_BOILERPLATE: Fix lives in one shared factory. No node's `wrapRouteHandlerWithLogging.ts` needs editing.
+- [ ] FIELD_NAMING: Uses `userId` (camelCase), matching `docs/spec/observability.md:120` and existing envelope fields (`reqId`, `traceId`, `routeId`).
+- [ ] NO_NEW_EVENTS: No new domain log events added; no `logRequestStart/End/Warn/Error` signature changes.
+- [ ] SIMPLE_SOLUTION: Leverages pino `.child({...})` inheritance over bespoke per-route rebinding (spec: architecture).
+- [ ] ARCHITECTURE_ALIGNMENT: Shared factory remains the single source of request-scoped logger construction (spec: observability).
+
+### Files
+
+<!-- High-level scope -->
+
+- Modify: `packages/node-shared/src/observability/context/factory.ts` — add `userId: meta.session?.id` to the `.child({...})` call in `createRequestContext`.
+- Test: `packages/node-shared/src/observability/context/factory.test.ts` — new unit test covering (a) `userId` appears on child logger bindings when session is provided, (b) `userId` absent when session is omitted.
+
 ## Validation
 
 - **exercise**: Two agents POST a target within 10s of each other on candidate-a.
-- **observability**: `{...} |~ "request complete" |~ "<agent-A user_id>"` returns only agent A's request line; same query with agent B's `user_id` returns only agent B's. Same applies to `request warning handled` / `request failed`.
+- **observability**: `{...} |~ "request complete" |~ "<agent-A userId>"` returns only agent A's request line; same query with agent B's `userId` returns only agent B's. Same applies to `request warning handled` / `request failed`.
