@@ -32,7 +32,6 @@ import {
 } from "@cogni/knowledge-store/adapters/doltgres";
 import { parseMcpConfigFromEnv } from "@cogni/langgraph-graphs";
 import {
-  COGNI_SYSTEM_BILLING_ACCOUNT_ID,
   COGNI_SYSTEM_PRINCIPAL_USER_ID,
   EVENT_NAMES,
   initAnalytics,
@@ -127,6 +126,7 @@ import {
 import { startProcessHealthPublisher } from "@/bootstrap/publishers";
 import {
   type CopyTradeTargetSource,
+  dbTargetSource,
   envTargetSource,
 } from "@/features/copy-trade/target-source";
 import { createOrderLedger, type OrderLedger } from "@/features/trading";
@@ -680,11 +680,25 @@ function createContainer(): Container {
       : undefined,
   });
 
-  // Copy-trade target source (env-backed in v0; DB-backed impl lands at P2).
-  // Captured once at container init; pod restart picks up env changes.
-  const copyTradeTargetSource = envTargetSource(
-    env.COPY_TRADE_TARGET_WALLETS as readonly `0x${string}`[]
-  );
+  // Copy-trade target source. Production wires `dbTargetSource` over
+  // poly_copy_trade_targets (RLS-enforced via appDb for `listForActor`,
+  // BYPASSRLS via serviceDb for the `listAllActive` enumerator). Test mode
+  // falls back to `envTargetSource` so test stacks without poly_copy_trade
+  // tables still boot. The COPY_TRADE_TARGET_WALLETS env var is dropped in
+  // CP A7; the env source then becomes empty in test mode unless tests
+  // construct it directly.
+  const copyTradeTargetSource: CopyTradeTargetSource = env.isTestMode
+    ? envTargetSource(env.COPY_TRADE_TARGET_WALLETS as readonly `0x${string}`[])
+    : dbTargetSource({
+        appDb:
+          db as unknown as import("drizzle-orm/postgres-js").PostgresJsDatabase<
+            Record<string, unknown>
+          >,
+        serviceDb:
+          serviceDb as unknown as import("drizzle-orm/postgres-js").PostgresJsDatabase<
+            Record<string, unknown>
+          >,
+      });
 
   // Autonomous 30s mirror poll per target wallet (task.0315 CP4.3e, @scaffolding).
   // Starts when Polymarket creds are present (polyTradeBundle defined) AND the
@@ -699,15 +713,19 @@ function createContainer(): Container {
     // client, Drizzle queries) don't run on pods without Polymarket creds.
     void (async () => {
       try {
-        const wallets = await copyTradeTargetSource.listTargets();
-        if (wallets.length === 0) {
+        // The ONE sanctioned cross-tenant read — see TARGET_SOURCE_TENANT_SCOPED
+        // invariant in docs/spec/poly-multi-tenant-auth.md. Each enumerated
+        // target carries (billing_account_id, created_by_user_id) so per-tenant
+        // fills/decisions writes can fan out under withTenantScope downstream.
+        const enumerated = await copyTradeTargetSource.listAllActive();
+        if (enumerated.length === 0) {
           log.info(
             {
               event: EVENT_NAMES.POLY_MIRROR_POLL_SKIPPED,
               has_bundle: true,
               target_count: 0,
             },
-            "mirror poll not started (COPY_TRADE_TARGET_WALLETS empty)"
+            "mirror poll not started (no active targets across any tenant)"
           );
           return;
         }
@@ -729,14 +747,12 @@ function createContainer(): Container {
         // (debug/info/warn/error/child with object + optional msg).
         const mirrorLogger =
           log as unknown as import("@cogni/market-provider").LoggerPort;
-        // TODO(task.0318 A6): swap to dbTargetSource.listAllActive() so each
-        // target carries its own (billingAccountId, createdByUserId). Until
-        // CP A6 lands, every env-derived wallet runs as the system tenant.
-        for (const targetWallet of wallets) {
+        for (const enumeratedTarget of enumerated) {
+          const targetWallet = enumeratedTarget.targetWallet;
           const target = buildMirrorTargetConfig({
             targetWallet,
-            billingAccountId: COGNI_SYSTEM_BILLING_ACCOUNT_ID,
-            createdByUserId: COGNI_SYSTEM_PRINCIPAL_USER_ID,
+            billingAccountId: enumeratedTarget.billingAccountId,
+            createdByUserId: enumeratedTarget.createdByUserId,
           });
           const source = createPolymarketActivitySource({
             client: dataApiClient,

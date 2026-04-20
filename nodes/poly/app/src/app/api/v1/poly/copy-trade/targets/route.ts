@@ -42,13 +42,15 @@ export const GET = wrapRouteHandlerWithLogging(
     routeId: "poly.copy_trade.targets",
     auth: { mode: "required", getSessionUser },
   },
-  // TODO(task.0318 A4): swap from system-tenant scope to `withTenantScope(appDb,
-  // sessionUser.id, ...)` + `dbTargetSource.listForActor(sessionUser.id)` once
-  // CP A3+A4 land. For now this route reads the system tenant's targets so the
-  // existing single-operator candidate-a flight keeps rendering on the dashboard.
+  // TODO(task.0318 A4): switch from `listAllActive` (system-wide enumerator)
+  // to `listForActor(sessionUser.id)` so each user sees only their own
+  // tracked wallets. CP A4 also lands the POST + DELETE routes for CRUD.
+  // Today the read uses listAllActive so the existing single-operator
+  // candidate-a flight (system-tenant rows) keeps rendering on the dashboard.
   async (ctx, _request, _sessionUser) => {
     const container = getContainer();
-    const wallets = await container.copyTradeTargetSource.listTargets();
+    const enumerated = await container.copyTradeTargetSource.listAllActive();
+    const wallets = enumerated.map((e) => e.targetWallet);
     const targets: PolyCopyTradeTarget[] = [];
     if (wallets.length > 0) {
       const ledger = createOrderLedger({
