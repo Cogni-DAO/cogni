@@ -2,10 +2,10 @@
 id: task.0318
 type: task
 title: "Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables"
-status: needs_merge
-revision: 1
+status: needs_implement
+revision: 2
 priority: 2
-estimate: 5
+estimate: 8
 rank: 5
 summary: "Replace the env-directed single-operator wallet model shipped in task.0315 P1 with per-user wallet custody + durable authorization grants. Users connect a Privy-managed (or BYO) wallet to their Cogni account; copy-trade targets and fills are RLS-scoped to the owning user; scheduled executors run under a durable `WalletGrant` (pattern from scheduler's `execution_grants`) rather than a live user session."
 outcome: "A Cogni user logs in, provisions or connects an operator wallet, and triggers copy-trade mirroring that places real Polymarket orders through THEIR wallet — no shared env credentials, no single-operator assumption. A second user's targets, fills, and decisions are invisible cross-tenant. Scheduled 30s poll and (P4) Temporal workflows run under a durable `WalletGrant` even when the user is offline."
@@ -21,8 +21,8 @@ project: proj.poly-copy-trading
 pr: https://github.com/Cogni-DAO/node-template/pull/944
 created: 2026-04-17
 updated: 2026-04-20
-branch: feat/task-0318-phase-a
-deploy_verified: true
+branch: feat/task-0318-phase-b
+deploy_verified: false
 labels: [poly, polymarket, wallets, auth, rls, multi-tenant, privy, security]
 external_refs:
   - work/items/task.0315.poly-copy-trade-prototype.md
@@ -222,10 +222,92 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
 - TENANT_SCOPED_ROWS, GRANT_REQUIRED_FOR_PLACEMENT (vacuous in A — no per-user grants yet), PER_TENANT_KILL_SWITCH, KEY_NEVER_IN_APP, TARGET_SOURCE_TENANT_SCOPED, CROSS_TENANT_ISOLATION_TESTED, FAIL_CLOSED_ON_DB_ERROR per [poly-multi-tenant-auth](../../docs/spec/poly-multi-tenant-auth.md).
 - Bootstrap-tenant rows created in A1 are valid system-tenant rows; they survive the migration and pass RLS when the executor runs under `withTenantScope(appDb, COGNI_SYSTEM_PRINCIPAL_USER_ID, ...)`.
 
-## Plan — Phase B sketch (defer detailed design until after B1 spike)
+## Plan — Phase B (B1 spike designed; B2-B7 deferred to post-verdict)
 
-- [ ] **B1 — Spike: Safe + ERC-4337 session keys** (timebox: 2 days). Prove a session key granted from a Safe (connected via RainbowKit) can place a Polymarket CLOB order from the operator pod. Capture: bundler cost per order ($1 mirror size has thin margin), session-key scope expressivity, revocation latency.
-- [ ] **B2-B7 — re-design after the spike**. Spec bumps to cover backend-specific schema for `poly_wallet_connections.backend_ref`, grant scope semantics, and the executor rewiring. Existing draft checkpoints in this section are the target shape; concrete sequencing depends on the B1 outcome.
+### B1 — Safe + ERC-4337 session-key spike (timebox: 2 days, default-deny on expiry)
+
+**Outcome**: A verdict with evidence on whether Safe + 4337 session keys can autonomously sign Polymarket flow from an operator pod with the five scope/cost/revocation properties pinned in [poly-multi-tenant-auth § Phase B escalation criteria](../../docs/spec/poly-multi-tenant-auth.md#phase-b-escalation-criteria--safe-vs-privy-fallback).
+
+**Approach — reuse, don't build**:
+
+| Need                                                     | Reuse                                                                                                                                      |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Safe deploy + module enable                              | `@safe-global/protocol-kit`                                                                                                                |
+| ERC-4337 userOp construction + bundler submission        | `@safe-global/relay-kit` (`Safe4337Pack`) + Pimlico bundler API (Polygon mainnet)                                                          |
+| Session-key validator with contract + selector allowlist | `@rhinestone/module-sdk` (SmartSessions) — Safe's native 4337 module is all-or-nothing; Rhinestone adds scoped `signTypedData` + call gating |
+| Polymarket signing + CLOB post                           | existing `@polymarket/clob-client` + `viem.createViemAccount`                                                                              |
+| Wallet connect (owner EOA side)                          | RainbowKit in a scratch Next.js page OR a hardcoded dev EOA — UX polish not part of the verdict                                            |
+
+**Critical mechanics clarification (shapes the cost metric)**: CLOB orders are signed off-chain (EIP-712) and posted via the clob-client HTTP API — they do NOT route through the 4337 bundler. The bundler pays gas only for on-chain ops (USDC/CTF `approve` + `setApprovalForAll` on Exchange / Neg-Risk / Neg-Risk-Adapter). For a session-key scheme this means two separate authorizations:
+
+1. **Off-chain signing authority**: session key authorized by the Safe to sign Polymarket EIP-712 order hashes (Rhinestone SmartSessions `PermissionId` scoped to the CLOB `OrderStruct` typehash). No bundler cost per fill in steady state.
+2. **On-chain approvals**: first-fill-with-new-wallet authorizes USDC + CTF approvals via bundler userOp. Amortized across all subsequent fills.
+
+The spike therefore reports **two** cost numbers: (a) first-fill with approvals, (b) steady-state fill. The spec's `≤$0.10/fill` ceiling applies to the amortized / steady-state path — if first-fill approvals are a one-time ~$0.30 but steady-state is $0.00 on-chain, that passes. If the scheme requires a per-order on-chain op > $0.10, that fails. This framing is captured in the verdict.
+
+**Spike layout (`scripts/experiments/poly-safe-4337-spike/`)**:
+
+```
+poly-safe-4337-spike/
+├── README.md                 ← goal, run instructions, verdict template
+├── package.json              ← local deps; not hoisted into workspace root
+├── src/
+│   ├── deploy-safe.ts        ← Protocol-kit deploy (4337-compatible Safe 1.4.1) + enable SmartSessions validator
+│   ├── grant-session-key.ts  ← owner EOA signs module-config granting session key scoped to:
+│   │                           - CLOB order EIP-712 typehash signing
+│   │                           - USDC.e `approve(Exchange|NegRiskExchange|NegRiskAdapter, uint256)`
+│   │                           - CTF `setApprovalForAll(Exchange|NegRiskExchange|NegRiskAdapter, bool)`
+│   │                           - expiry: T+1d and T+3d variants
+│   ├── operator-place-buy.ts ← session-key-only: build approvals userOp (first time) + sign CLOB BUY + POST to clob-client
+│   ├── operator-place-sell.ts← session-key-only: sign CLOB SELL + POST
+│   ├── revoke-and-retry.ts   ← owner EOA revokes → operator-place-buy → expect rejection → measure wall-clock
+│   ├── expiry-test.ts        ← grant T+1d → attempt at T+25h → expect rejection (fast-forward via anvil fork OR real-time proof via recorded evidence)
+│   └── lib/
+│       ├── clob.ts           ← CLOB client + order-hash helpers
+│       ├── pimlico.ts        ← bundler client + cost extraction from receipt
+│       └── contracts.ts      ← address constants (Exchange 0x4bFb…982E, NegRiskExchange 0xC5d5…f80a, NegRiskAdapter 0xd91E…5296, CTF 0x4D97…6045, USDC.e)
+└── evidence/                 ← committed artifacts proving the verdict
+    ├── userop-receipts.json
+    ├── costs.csv
+    ├── revoke-timing.md
+    ├── scope-tx.md
+    └── verdict.md            ← pass/fail on each of the 5 pinned criteria + recommendation
+```
+
+**Secrets needed (spike-only, not candidate-a)**: `PIMLICO_API_KEY`, `SPIKE_OWNER_EOA_PK` (throwaway dev EOA funded with ~$10 USDC.e + ~0.5 MATIC for gas), `SPIKE_SAFE_ADDRESS` (populated after deploy). Stored in a gitignored `.env.spike`; **never** promoted to candidate-a.
+
+**Pass evaluation matrix** — the spike commits `evidence/verdict.md` filling this table. All five must be `PASS` for the spike to pass.
+
+| # | Criterion                                                                          | Evidence                                                                                     |
+| - | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 1 | Session key scoped to exactly Exchange / NegRisk / NegRisk-Adapter / CTF + CLOB typehash | `scope-tx.md` lists the enabled `PermissionId` config; decoded event logs enumerate selectors |
+| 2 | BUY + SELL placed from operator pod with no owner signature after grant            | `userop-receipts.json` + clob-client response bodies; owner EOA private key NOT imported in those scripts |
+| 3 | Amortized bundler cost ≤ $0.10/fill at $1 mirror size                              | `costs.csv` reports first-fill (with approvals) + steady-state fill; spec ceiling applies to steady-state |
+| 4 | Revocation invalidates session key ≤ 5 min                                         | `revoke-timing.md`: revoke-tx confirmation timestamp + first-rejected-placement timestamp    |
+| 5 | Expiry enforced with day-granularity                                               | `expiry-test.ts` output: placement at T+25h rejected with module-level error, not a bundler / relay surface error |
+
+**Spike deliverables (completion criteria for B1 itself)**:
+
+- [ ] B1.1 — `poly-safe-4337-spike/` scaffolded with scripts + README
+- [ ] B1.2 — Safe deployed on Polygon mainnet with SmartSessions module enabled (tx hash in `scope-tx.md`)
+- [ ] B1.3 — Session key granted with scoped permissions (tx hash + decoded events in `scope-tx.md`)
+- [ ] B1.4 — BUY + SELL placed via session key; receipts committed
+- [ ] B1.5 — Cost measurements captured in `costs.csv`
+- [ ] B1.6 — Revocation + expiry tests captured
+- [ ] B1.7 — `verdict.md` fills the pass matrix; task.0318 review feedback block appended with the verdict
+
+**Out of scope for B1** (defer to B2+):
+
+- Integration with `nodes/poly/app` — spike runs standalone.
+- Any `poly_wallet_connections` / `poly_wallet_grants` schema work.
+- `WalletSignerPort` abstraction — the spike is throwaway; if B2 proceeds, the port is designed fresh against the verified primitives.
+- Dashboard / RainbowKit polish — owner EOA can be a hardcoded dev key; the `RainbowKit → meta-tx` UX is B3's problem.
+
+**If spike passes**: `/design` runs again on this task for detailed B2-B7 decomposition — including spec bump for `poly_wallet_connections.backend_ref` + grant-scope semantics + the `WalletSignerPort` interface shape.
+
+**If spike fails (incl. timebox expiry)**: file a `/triage` decision record in this task's review-feedback block enumerating the options (Turnkey / Privy-per-user / re-spike Safe with relaxed scope) with updated cost + engineering estimates. **Do NOT** default to Privy — spec's escalation rule is load-bearing.
+
+### B2-B7 checkpoint table (pending B1 verdict)
 
 | Checkpoint                                                            | Status     |
 | --------------------------------------------------------------------- | ---------- |
