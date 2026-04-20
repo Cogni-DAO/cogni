@@ -170,6 +170,14 @@ else
       nodes/resy/*)
         add_target resy
         ;;
+      nodes/canary/app/src/shared/db/* | \
+      nodes/canary/app/src/adapters/server/db/migrations/*)
+        add_target canary
+        add_target canary-migrator
+        ;;
+      nodes/canary/*)
+        add_target canary
+        ;;
       services/scheduler-worker/*)
         add_target scheduler-worker
         ;;

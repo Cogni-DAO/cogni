@@ -42,6 +42,8 @@ ALL_TARGETS=(
   poly-migrator
   resy
   resy-migrator
+  canary
+  canary-migrator
   scheduler-worker
 )
 
@@ -49,7 +51,7 @@ ALL_TARGETS=(
 # promote-and-deploy's promote loop to pass each node its own migrator
 # digest rather than a single shared one.
 # shellcheck disable=SC2034
-NODE_TARGETS=(operator poly resy)
+NODE_TARGETS=(operator poly resy canary)
 
 tag_suffix_for_target() {
   local target="$1"
@@ -57,9 +59,11 @@ tag_suffix_for_target() {
     operator)          printf '%s' '' ;;
     poly)              printf -- '-poly' ;;
     resy)              printf -- '-resy' ;;
+    canary)            printf -- '-canary' ;;
     operator-migrator) printf -- '-operator-migrate' ;;
     poly-migrator)     printf -- '-poly-migrate' ;;
     resy-migrator)     printf -- '-resy-migrate' ;;
+    canary-migrator)   printf -- '-canary-migrate' ;;
     scheduler-worker)  printf -- '-scheduler-worker' ;;
     *)
       echo "[ERROR] image-tags: unknown target: $target" >&2

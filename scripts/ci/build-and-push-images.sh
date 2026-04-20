@@ -180,6 +180,35 @@ build_target() {
         --push \
         .
       ;;
+    canary)
+      docker buildx build \
+        --platform "$PLATFORM" \
+        --file nodes/canary/app/Dockerfile \
+        --target runner \
+        --build-arg "BUILD_SHA=${git_sha}" \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.revision=${git_sha}" \
+        --label "org.opencontainers.image.created=${build_timestamp}" \
+        --cache-from "type=gha,scope=build-canary" \
+        --cache-to "type=gha,mode=max,scope=build-canary" \
+        --tag "$tag" \
+        --push \
+        .
+      ;;
+    canary-migrator)
+      docker buildx build \
+        --platform "$PLATFORM" \
+        --file nodes/canary/app/Dockerfile \
+        --target migrator \
+        --label "org.opencontainers.image.source=https://github.com/cogni-dao/cogni-template" \
+        --label "org.opencontainers.image.revision=${git_sha}" \
+        --label "org.opencontainers.image.created=${build_timestamp}" \
+        --cache-from "type=gha,scope=build-canary-migrator" \
+        --cache-to "type=gha,mode=max,scope=build-canary-migrator" \
+        --tag "$tag" \
+        --push \
+        .
+      ;;
     scheduler-worker)
       docker buildx build \
         --platform "$PLATFORM" \
