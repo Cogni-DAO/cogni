@@ -17,7 +17,7 @@ spec_refs:
   - scheduler
 assignees: derekg1729
 project: proj.poly-copy-trading
-pr: https://github.com/Cogni-DAO/node-template/pull/932
+pr: https://github.com/Cogni-DAO/node-template/pull/944
 created: 2026-04-17
 updated: 2026-04-19
 branch: feat/task-0318-phase-a
