@@ -42,6 +42,7 @@ import {
   createScheduleListImplementation,
   createScheduleManageImplementation,
   createVcsCreateBranchImplementation,
+  createVcsFlightCandidateImplementation,
   createVcsGetCiStatusImplementation,
   createVcsListPrsImplementation,
   createVcsMergePrImplementation,
@@ -68,6 +69,7 @@ import {
   SCHEDULE_LIST_NAME,
   SCHEDULE_MANAGE_NAME,
   VCS_CREATE_BRANCH_NAME,
+  VCS_FLIGHT_CANDIDATE_NAME,
   VCS_GET_CI_STATUS_NAME,
   VCS_LIST_PRS_NAME,
   VCS_MERGE_PR_NAME,
@@ -198,6 +200,10 @@ export function createToolBindings(deps: ToolBindingDeps): ToolBindings {
     }) as AnyToolImplementation,
 
     [VCS_CREATE_BRANCH_NAME]: createVcsCreateBranchImplementation({
+      vcsCapability: deps.vcsCapability,
+    }) as AnyToolImplementation,
+
+    [VCS_FLIGHT_CANDIDATE_NAME]: createVcsFlightCandidateImplementation({
       vcsCapability: deps.vcsCapability,
     }) as AnyToolImplementation,
 
