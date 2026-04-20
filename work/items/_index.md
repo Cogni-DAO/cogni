@@ -14,7 +14,6 @@
 | 0 | 1 | 3 | needs_implement | task.0179 | Extract packages/graph-execution-core — decouple execution ports from Next.js | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | 1 | 1 | needs_merge | bug.0224 | Codex binary not found in Docker — standalone misses platform-specific optional dep | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 0 | 1 | 5 | needs_triage | bug.0242 | Codex MCP tool calls invisible to platform — no persistence, no observability, no history |  |  |
-| 0 | 1 | 3 | needs_merge | task.0242 | VCS tool plane + PR Manager agent | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | 1 | 2 | needs_merge | bug.0243 | Same-scope epoch selection re-selects receipts from prior epochs — credits double-counted |  |  |
 | 0 | 1 | 3 | needs_merge | task.0243 | Work item AI tools + actor eligibility + Operating Review agent | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | 1 | 5 | needs_closeout | task.0245 | Multi-node architecture — nodes/ directory, per-node graph packages, dep-cruiser boundaries | CI/CD Pipeline | proj.cicd-services-gitops |
@@ -126,6 +125,7 @@
 | 1 | 10 | 1 | needs_review | task.0210 | BYO-AI ChatGPT v0 — OAuth hardening + security review fixes | BYO-AI: Bring Your Own LLM Provider | proj.byo-ai |
 | 1 | 10 | 1 | needs_implement | spike.0220 | Validate AiMo Network x402 passthrough — 402 flow, model coverage, E2E feasibility | x402 E2E Migration: Hyperbolic + Per-Request Settlement | proj.x402-e2e-migration |
 | 1 | 10 | 3 | needs_design | task.0332 | Poly mirror — shared batched poller (N wallets, 1 loop) replacing per-wallet setInterval | Cogni Poly | proj.poly-copy-trading |
+| 1 | 10 | 1 | needs_triage | bug.0336 | preview `/api/v1/agent/register` returns 401 despite proxy.ts public-route exception | CI/CD Pipeline | proj.cicd-services-gitops |
 | 1 | 11 | 3 | needs_design | task.0045 | Enable OpenClaw subagent spawning — upstream header fix + Cogni config + delegation instructions | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 12 | 2 | needs_design | task.0034 | Wire OpenClaw memory search + bootstrap files for cogni-template repo context | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 1 | 13 | 1 | needs_design | task.0018 | Dynamic agent catalog in UI + OpenClaw model sync | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
@@ -277,6 +277,7 @@
 | 0 | task.0177 | Unified streaming API: chat endpoint → Temporal + Redis + idempotency | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | task.0178 | Delete old scheduled run path, prune dead tables, observability + documentation finish | Unified Graph Launch | proj.unified-graph-launch |
 | 0 | bug.0186 | Chat disconnect persists truncated assistant response — move thread persistence to execution layer | Unified Graph Launch | proj.unified-graph-launch |
+| 0 | task.0242 | VCS tool plane + PR Manager agent | DAO Agentic Project Management | proj.agentic-project-management |
 | 0 | task.0244 | Absorb cogni-resy-helper into monorepo — make fork obsolete | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | task.0292 | Deploy branches: switch preview/production to direct commits (kill PR noise) | CI/CD Pipeline | proj.cicd-services-gitops |
 | 0 | task.0293 | Flight merged-PR digests to preview with lock-gate | CI/CD Pipeline | proj.cicd-services-gitops |

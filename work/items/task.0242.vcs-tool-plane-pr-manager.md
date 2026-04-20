@@ -2,7 +2,7 @@
 id: task.0242
 type: task
 title: "VCS tool plane + PR Manager agent"
-status: needs_merge
+status: done
 priority: 0
 rank: 1
 estimate: 3
@@ -19,10 +19,12 @@ revision: 1
 blocked_by:
 deploy_verified: false
 created: 2026-04-01
-updated: 2026-04-01
+updated: 2026-04-20
 labels: [ai-tools, vcs, agents, pr-manager]
 external_refs:
 ---
+
+> **Status note (2026-04-20):** PR #687 merged 2026-04-02 with `allGreen` CI (stack-test + SonarCloud failures were non-blocking for the feature). VcsCapability + 4 tools (`core__vcs_list_prs`, `get_ci_status`, `merge_pr`, `create_branch`) are live on `main` at `packages/ai-tools/src/capabilities/vcs.ts` and `nodes/operator/app/src/adapters/server/vcs/github-vcs.adapter.ts`. PR Manager graph registered as `langgraph:pr-manager`. Follow-up gap for the zero-human external agent lifecycle: `POST /api/v1/vcs/flight-candidate` (tracked in task.0344 on PR #955).
 
 # VCS Tool Plane + PR Manager Agent
 
