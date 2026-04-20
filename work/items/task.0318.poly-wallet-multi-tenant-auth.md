@@ -161,11 +161,11 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
 
 - [ ] **A1 — DB migration** (`nodes/poly/app/src/adapters/server/db/migrations/0028_poly_copy_trade_multitenant.sql`)
   - Drop existing rows in `poly_copy_trade_fills`, `poly_copy_trade_decisions`, `poly_copy_trade_config` (prototype debris per `/design` decision).
-  - Add `billing_account_id text NOT NULL` + `created_by_user_id text NOT NULL` to `poly_copy_trade_fills` and `poly_copy_trade_decisions`. FK → `billing_accounts(id)` and `users(id)`. `ON DELETE CASCADE` on the billing FK.
-  - Recreate `poly_copy_trade_config` with PK `(billing_account_id)`, `enabled boolean NOT NULL DEFAULT false`, `updated_at timestamptz NOT NULL DEFAULT now()`. Drop `singleton_id`.
-  - Create `poly_copy_trade_targets` table per spec § Schema.
-  - Enable RLS + force RLS on all four tables. Policy `tenant_isolation` USING/WITH CHECK `created_by_user_id = current_setting('app.current_user_id', true)`. Mirrors `connections` policy from migration `0025_add_connections.sql`.
-  - Seed bootstrap rows owned by `COGNI_SYSTEM_PRINCIPAL_USER_ID` + `COGNI_SYSTEM_BILLING_ACCOUNT_ID`: one `poly_copy_trade_config` row with `enabled = true`, plus one optional `poly_copy_trade_targets` row reading from the existing dev env var as a one-shot helper (deletable after operators provision real targets).
+  - Add `billing_account_id text NOT NULL` (FK → `billing_accounts(id)` ON DELETE CASCADE) + `created_by_user_id text NOT NULL` (FK → `users(id)`) to `poly_copy_trade_fills` and `poly_copy_trade_decisions`. **`created_by_user_id` is the RLS key; `billing_account_id` is the data column.** Mirrors `connections` exactly (migration `0025_add_connections.sql`).
+  - Recreate `poly_copy_trade_config` with PK `(billing_account_id)`, `enabled boolean NOT NULL DEFAULT false`, `created_by_user_id text NOT NULL`, `updated_at timestamptz NOT NULL DEFAULT now()`. Drop `singleton_id`.
+  - Create `poly_copy_trade_targets` table per spec § Schema (both `billing_account_id` and `created_by_user_id` NOT NULL).
+  - `ALTER TABLE … ENABLE ROW LEVEL SECURITY; ALTER TABLE … FORCE ROW LEVEL SECURITY;` on all four tables. Policy `tenant_isolation` USING + WITH CHECK clause: `created_by_user_id = current_setting('app.current_user_id', true)` — copy-paste-equivalent to the `connections` policy.
+  - Seed bootstrap rows owned by `COGNI_SYSTEM_PRINCIPAL_USER_ID` + `COGNI_SYSTEM_BILLING_ACCOUNT_ID`: one `poly_copy_trade_config` row with `enabled = true`, plus one optional `poly_copy_trade_targets` row preserving the existing single-operator candidate-a flight.
   - `pnpm db:generate` — confirm zero drift against the new schema.
 
 - [ ] **A2 — Drizzle schema update** (`packages/poly-db-schema/` — or wherever `poly_copy_trade_*` lives today)
@@ -182,6 +182,7 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
 - [ ] **A4 — CRUD routes + contract** (`packages/node-contracts/src/poly.copy-trade.targets.v1.contract.ts` + new route files)
   - Add `polyCopyTradeTargetCreateOperation` (POST input: `{ target_wallet }`; output: target row) and `polyCopyTradeTargetDeleteOperation` (DELETE param: `id`; output: `{ deleted: boolean }`). GET keeps existing shape but switches `source: "env" | "db"` semantics to be sourced from the port.
   - New routes: `POST /api/v1/poly/copy-trade/targets/route.ts`, `DELETE /api/v1/poly/copy-trade/targets/[id]/route.ts`. `auth: { mode: "required", getSessionUser }`. Both use `withTenantScope(appDb, sessionUser.id, ...)` — RLS enforces tenant boundary.
+  - **Defense-in-depth**: after every RLS-scoped SELECT, verify `row.billing_account_id === sessionUser.billingAccountId` before returning to the caller. Mirrors `DrizzleConnectionBrokerAdapter.resolve()` (`adapters/server/connections/drizzle-broker.adapter.ts`). On mismatch, log a security warning + reject with a typed error.
   - GET route: switch from system-scope to `dbTargetSource.listForActor(sessionUser.id)` so each user sees only their own targets.
 
 - [ ] **A5 — Dashboard CRUD wire-up** (`nodes/poly/app/src/app/(app)/dashboard/_components/TopWalletsCard.tsx` + new fetch helpers)
@@ -199,10 +200,12 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
   - Remove from `nodes/poly/app/src/shared/env/server-env.ts`, `.env.local.example`, `.claude/skills/poly-dev-expert/SKILL.md`, candidate-a `poly-node-app-secrets`. Update `MOCK_SERVER_ENV` test fixture.
   - `envTargetSource` is no longer wired by default; it's reachable only by direct construction in tests.
 
-- [ ] **A8 — Phase A integration + isolation tests**
+- [ ] **A8 — Phase A integration + isolation tests** (scope-pinned per spec § Phase A scope clarification)
+  - **In-scope assertions (row-level isolation only)**: A user cannot SELECT, INSERT, UPDATE, or DELETE another tenant's `poly_copy_trade_targets / fills / decisions / config` rows via `appDb`. The mirror-poll cross-tenant enumerator correctly attributes fills/decisions to the originating tenant.
+  - **Out-of-scope assertions (cannot be tested in Phase A)**: per-user USDC balance, per-user CTF positions, per-user spend caps, per-user P&L. The operator wallet is shared. Tests MUST NOT assert these — they require Phase B.
   - **Component test** (`tests/component/copy-trade/db-target-source.test.ts`, testcontainers): seed two users + two billing accounts + targets in each. Assert `listForActor(userA)` returns user-A's targets only; `listAllActive()` returns the union with correct tenant attribution.
-  - **Component test** (`tests/component/copy-trade/targets-route.test.ts`): user-A POSTs a target; user-B GETs and sees zero rows; user-B DELETE on user-A's `id` returns 404 (RLS scopes the row to invisible).
-  - **Stack test** (`tests/stack/copy-trade/multi-tenant-mirror.stack.test.ts`): seed two tenants with disjoint targets, run one mirror tick, assert (a) both tenants' decisions tables get rows, (b) cross-tenant SELECT via `appDb` returns only own rows, (c) shared operator wallet placed orders for both via the existing single placeIntent path.
+  - **Component test** (`tests/component/copy-trade/targets-route.test.ts`): user-A POSTs a target; user-B GETs and sees zero rows; user-B DELETE on user-A's `id` returns 404 (RLS scopes the row to invisible). User-A POSTs a target with a tampered `billing_account_id` belonging to user-B → defense-in-depth check rejects with a typed error.
+  - **Stack test** (`tests/stack/copy-trade/multi-tenant-mirror.stack.test.ts`): seed two tenants with disjoint targets, run one mirror tick, assert (a) both tenants' decisions tables get rows attributed correctly, (b) cross-tenant SELECT via `appDb` returns only own rows, (c) the shared operator wallet placed orders for both via the existing placeIntent path. Do NOT assert per-user balance changes.
   - **psql smoke** (commit a `scripts/experiments/poly-rls-smoke.sh`): `SET LOCAL app.current_user_id = '<userA>'; INSERT INTO poly_copy_trade_targets (..., created_by_user_id) VALUES (..., '<userB>');` is rejected by `WITH CHECK`.
 
 ### Phase A invariants (block PR merge)
