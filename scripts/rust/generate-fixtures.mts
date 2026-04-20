@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import prettier from "prettier";
 import { z } from "zod";
 import { AI_EXECUTION_ERROR_CODES } from "../../packages/ai-core/src/index.ts";
 import {
@@ -51,8 +52,8 @@ import {
 const ROOT = process.cwd();
 const FIXTURES_DIR = path.join(ROOT, "services/rust-node/fixtures/generated");
 
-function json(value: unknown): string {
-  return JSON.stringify(
+async function json(value: unknown): Promise<string> {
+  const serialized = JSON.stringify(
     value,
     (_key, current) => {
       if (typeof current === "bigint") return current.toString();
@@ -61,6 +62,7 @@ function json(value: unknown): string {
     },
     2
   );
+  return prettier.format(serialized, { filepath: "fixture.json" });
 }
 
 function errorShape(error: unknown) {
@@ -715,10 +717,10 @@ const contractFixtures = {
 await fs.mkdir(FIXTURES_DIR, { recursive: true });
 await fs.writeFile(
   path.join(FIXTURES_DIR, "node-core.parity.json"),
-  `${json(coreFixtures)}\n`
+  await json(coreFixtures)
 );
 await fs.writeFile(
   path.join(FIXTURES_DIR, "node-contracts.summary.json"),
-  `${json(contractFixtures)}\n`
+  await json(contractFixtures)
 );
 console.log(`wrote fixtures to ${FIXTURES_DIR}`);
