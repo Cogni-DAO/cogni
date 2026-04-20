@@ -17,6 +17,7 @@ export { TopMarketsList } from "./components/TopMarketsList";
 export { TradesPerDayChart } from "./components/TradesPerDayChart";
 export { WalletAnalysisView } from "./components/WalletAnalysisView";
 export { WalletIdentityHeader } from "./components/WalletIdentityHeader";
+export { WalletQuickJump } from "./components/WalletQuickJump";
 export type {
   WalletAnalysisData,
   WalletAnalysisSize,

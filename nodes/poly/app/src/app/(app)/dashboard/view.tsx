@@ -49,6 +49,7 @@ import {
   buildGroupedChartData,
 } from "@/components/kit/data-display/activity-chart-utils";
 import type { RunCardData } from "@/components/kit/data-display/RunCard";
+import { WalletQuickJump } from "@/features/wallet-analysis";
 import { cn } from "@/shared/util/cn";
 import { fetchActivity } from "../activity/_api/fetchActivity";
 import { WorkItemDetail } from "../work/_components/WorkItemDetail";
@@ -287,6 +288,12 @@ export function DashboardView(): ReactElement {
       {/* Polymarket primary section (top of fold) */}
       <OperatorWalletCard />
       <OrderActivityCard />
+      <div className="flex flex-col gap-2">
+        <h2 className="font-semibold text-muted-foreground text-xs uppercase tracking-widest">
+          Open any wallet
+        </h2>
+        <WalletQuickJump />
+      </div>
       <TopWalletsCard />
 
       {/* Two-column section: Agents + Work (demoted below the Polymarket cards) */}

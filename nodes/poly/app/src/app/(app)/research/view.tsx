@@ -35,6 +35,7 @@ import {
 import {
   type WalletAnalysisData,
   WalletAnalysisView,
+  WalletQuickJump,
 } from "@/features/wallet-analysis";
 import { cn } from "@/shared/util/cn";
 
@@ -442,6 +443,7 @@ export function ResearchView(): ReactElement {
           tech &amp; finance. Everything else is either the no-fly zone or a
           trap.
         </p>
+        <WalletQuickJump className="max-w-xl" />
       </header>
 
       {/* ─── §01 THE TARGET — BEEFSLAYER ─────────── */}

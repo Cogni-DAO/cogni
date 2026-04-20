@@ -25,7 +25,8 @@
 import type { WalletTimePeriod } from "@cogni/ai-tools";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Minus, Plus } from "lucide-react";
-import type { ReactElement } from "react";
+import { useRouter } from "next/navigation";
+import type { KeyboardEvent, ReactElement } from "react";
 import { useState } from "react";
 import {
   Card,
@@ -41,6 +42,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components";
+import { cn } from "@/shared/util/cn";
 import {
   createCopyTarget,
   deleteCopyTarget,
@@ -68,7 +70,18 @@ const TIME_PERIOD_OPTIONS: readonly {
 const TOP_WALLETS_LIMIT = 10;
 
 export function TopWalletsCard(): ReactElement {
+  const router = useRouter();
   const [timePeriod, setTimePeriod] = useState<WalletTimePeriod>("WEEK");
+
+  const navigateToWallet = (addr: string): void => {
+    router.push(`/research/w/${addr.toLowerCase()}`);
+  };
+  const rowKeyDown = (addr: string) => (e: KeyboardEvent<HTMLElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      navigateToWallet(addr);
+    }
+  };
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard-top-wallets", timePeriod],
@@ -227,7 +240,12 @@ export function TopWalletsCard(): ReactElement {
                   return (
                     <TableRow
                       key={`tracked-missing-${row.proxyWallet}`}
-                      className="border-success/40 border-l-2 bg-success/10"
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => navigateToWallet(row.proxyWallet)}
+                      onKeyDown={rowKeyDown(row.proxyWallet)}
+                      title={`Open wallet analysis for ${row.proxyWallet}`}
+                      className="cursor-pointer border-success/40 border-l-2 bg-success/10 hover:bg-success/20"
                     >
                       <TableCell className="text-muted-foreground text-sm tabular-nums">
                         ★
@@ -250,6 +268,7 @@ export function TopWalletsCard(): ReactElement {
                           href={`https://polymarket.com/profile/${row.proxyWallet}`}
                           target="_blank"
                           rel="noreferrer noopener"
+                          onClick={(e) => e.stopPropagation()}
                           className="hover:underline"
                         >
                           {formatShortWallet(row.proxyWallet)}
@@ -273,9 +292,10 @@ export function TopWalletsCard(): ReactElement {
                           aria-label={`Untrack ${row.proxyWallet}`}
                           title="Stop tracking this wallet"
                           disabled={deleteTargetMutation.isPending}
-                          onClick={() =>
-                            deleteTargetMutation.mutate(row.targetId)
-                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteTargetMutation.mutate(row.targetId);
+                          }}
                           className="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-success/20 hover:text-success disabled:cursor-wait disabled:opacity-40"
                         >
                           <Minus className="size-3.5" />
@@ -291,11 +311,16 @@ export function TopWalletsCard(): ReactElement {
                 return (
                   <TableRow
                     key={t.proxyWallet}
-                    className={
-                      tracked
-                        ? "border-success/40 border-l-2 bg-success/10"
-                        : ""
-                    }
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => navigateToWallet(t.proxyWallet)}
+                    onKeyDown={rowKeyDown(t.proxyWallet)}
+                    title={`Open wallet analysis for ${t.userName || t.proxyWallet}`}
+                    className={cn(
+                      "cursor-pointer hover:bg-muted/40",
+                      tracked &&
+                        "border-success/40 border-l-2 bg-success/10 hover:bg-success/20"
+                    )}
                   >
                     <TableCell className="text-muted-foreground text-sm tabular-nums">
                       {t.rank}
@@ -322,6 +347,7 @@ export function TopWalletsCard(): ReactElement {
                         href={`https://polymarket.com/profile/${t.proxyWallet}`}
                         target="_blank"
                         rel="noreferrer noopener"
+                        onClick={(e) => e.stopPropagation()}
                         className="hover:underline"
                       >
                         {formatShortWallet(t.proxyWallet)}
@@ -350,7 +376,8 @@ export function TopWalletsCard(): ReactElement {
                           aria-label={`Untrack ${t.proxyWallet}`}
                           title="Stop tracking this wallet"
                           disabled={deleteTargetMutation.isPending}
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             if (!target) return;
                             deleteTargetMutation.mutate(target.target_id);
                           }}
@@ -364,9 +391,10 @@ export function TopWalletsCard(): ReactElement {
                           aria-label={`Track ${t.proxyWallet}`}
                           title="Track this wallet (mirror its fills)"
                           disabled={createTargetMutation.isPending}
-                          onClick={() =>
-                            createTargetMutation.mutate(t.proxyWallet)
-                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            createTargetMutation.mutate(t.proxyWallet);
+                          }}
                           className="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:cursor-wait disabled:opacity-40"
                         >
                           <Plus className="size-3.5" />
