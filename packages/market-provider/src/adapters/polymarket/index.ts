@@ -24,6 +24,10 @@ export {
   type PolymarketClobAdapterConfig,
 } from "./polymarket.clob.adapter.js";
 export {
+  type ClobMarketResolutionConfig,
+  PolymarketClobPublicClient,
+} from "./polymarket.clob-public.client.js";
+export {
   type ListTopTradersParams,
   type ListUserActivityParams,
   PolymarketDataApiClient,

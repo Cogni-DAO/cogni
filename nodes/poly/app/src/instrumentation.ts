@@ -126,6 +126,7 @@ export async function register(): Promise<void> {
 
   await initOtelSdk();
   logAppStarted();
+  assertSingleReplica();
 
   // Dev mode (not test): warn if LiteLLM has stale test config from a previous session.
   // Inlined here (not in bootstrap/) because dep-cruiser forbids instrumentation→bootstrap imports.
@@ -176,4 +177,42 @@ export async function register(): Promise<void> {
  */
 export function getOtelSdk(): NodeSDK | null {
   return sdk;
+}
+
+/**
+ * Hard-fail when this pod is replica index > 0.
+ * The wallet-analysis service holds a module-scoped TTL cache that silently
+ * corrupts under multi-replica fan-in (per `docs/design/wallet-analysis-components.md`).
+ * The pod naming convention used by the existing operator/poly StatefulSets ends
+ * `-N`; we accept replica `0` (or absence of a numeric suffix in dev/test).
+ *
+ * Detection precedence:
+ *   1. `POLY_REPLICA_INDEX` env (explicit override)
+ *   2. `HOSTNAME` numeric suffix after the last `-`
+ *
+ * Test/dev runs (`APP_ENV=test`, `NODE_ENV=development`) skip the check.
+ */
+function assertSingleReplica(): void {
+  // biome-ignore lint/style/noProcessEnv: startup gate before config framework
+  if (process.env.APP_ENV === "test") return;
+  // biome-ignore lint/style/noProcessEnv: startup gate before config framework
+  if (process.env.NODE_ENV === "development") return;
+  // biome-ignore lint/style/noProcessEnv: startup gate before config framework
+  const explicit = process.env.POLY_REPLICA_INDEX;
+  if (explicit !== undefined) {
+    if (explicit !== "0") {
+      throw new Error(
+        `[wallet-analysis] POLY_REPLICA_INDEX=${explicit} but service requires single-replica deployment (module-scoped TTL cache corrupts under >1 replica). See docs/design/wallet-analysis-components.md.`
+      );
+    }
+    return;
+  }
+  // biome-ignore lint/style/noProcessEnv: pod hostname inspection
+  const hostname = process.env.HOSTNAME ?? "";
+  const m = /-(\d+)$/.exec(hostname);
+  if (m && m[1] !== "0") {
+    throw new Error(
+      `[wallet-analysis] HOSTNAME=${hostname} suggests replica index ${m[1]} > 0; service requires single-replica deployment.`
+    );
+  }
 }
