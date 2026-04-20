@@ -2,7 +2,7 @@
 id: bug.0331
 type: bug
 title: Base audit — move envs-identical ConfigMap values out of overlay patches into base
-status: needs_closeout
+status: needs_merge
 priority: 1
 rank: 5
 estimate: 1

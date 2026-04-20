@@ -8,7 +8,7 @@ summary: End-to-end specification for multi-node GitOps deployment aligned to tr
 read_when: Aligning the multi-node deployment pipeline, updating GitHub workflows, or deriving implementation tasks from the trunk-based CI/CD model
 owner: cogni-dev
 created: 2026-04-02
-verified: 2026-04-14
+verified: 2026-04-19
 initiative: proj.cicd-services-gitops
 ---
 
@@ -623,16 +623,16 @@ infra/k8s/
 
 All node apps use `base/node-app/` as a shared Kustomize base. Overlays customize:
 
-| Field                | Base (shared) | Overlay (per-node)               |
-| -------------------- | ------------- | -------------------------------- |
-| Deployment replicas  | 1             | Override if needed               |
-| Container image      | Placeholder   | `@sha256:...` digest             |
-| Container port       | 3000          | 3000                             |
-| Service NodePort     | —             | 30000, 30100, 30300              |
-| ConfigMap: APP_ENV   | —             | candidate / preview / production |
-| ConfigMap: NODE_NAME | —             | `operator` / `poly` / `resy`     |
-| Secret ref           | —             | `{node}-secrets`                 |
-| Migration Job image  | Placeholder   | Migrator `@sha256:...`           |
+| Field                | Base (shared) | Overlay (per-node)           |
+| -------------------- | ------------- | ---------------------------- |
+| Deployment replicas  | 1             | Override if needed           |
+| Container image      | Placeholder   | `@sha256:...` digest         |
+| Container port       | 3000          | 3000                         |
+| Service NodePort     | —             | 30000, 30100, 30300          |
+| ConfigMap: APP_ENV   | `production`  | —                            |
+| ConfigMap: NODE_NAME | —             | `operator` / `poly` / `resy` |
+| Secret ref           | —             | `{node}-secrets`             |
+| Migration Job image  | Placeholder   | Migrator `@sha256:...`       |
 
 ---
 
