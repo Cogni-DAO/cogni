@@ -71,27 +71,37 @@ export default async function WalletAnalysisPage({
   const inferredCategory = trades
     ? inferCategory(trades.topMarkets)
     : undefined;
+  const isOperator = balance?.isOperator === true;
+  const displayName = isOperator
+    ? "Operator Wallet"
+    : `Wallet ${addr.slice(0, 6)}…${addr.slice(-4)}`;
   const data: WalletAnalysisData = {
     address: addr,
     identity: {
+      name: displayName,
       ...(inferredCategory && { category: inferredCategory }),
       isPrimaryTarget: false,
     },
     ...(snapshot && {
       snapshot: {
         n: snapshot.resolvedPositions,
-        wr: snapshot.trueWinRatePct ?? 0,
-        roi: snapshot.realizedRoiPct ?? 0,
+        // Nulls preserved: StatGrid renders "—" for insufficient-data state.
+        // Silent 0 coercion misreads "1 resolved position" as "0% WR".
+        wr: snapshot.trueWinRatePct,
+        roi: snapshot.realizedRoiPct,
         pnl:
           snapshot.realizedPnlUsdc !== null
             ? formatUsd(snapshot.realizedPnlUsdc)
             : "—",
-        dd: snapshot.maxDrawdownPctOfPeak ?? 0,
+        dd: snapshot.maxDrawdownPctOfPeak,
         medianDur:
           snapshot.medianDurationHours !== null
             ? formatDuration(snapshot.medianDurationHours)
             : "—",
-        avgPerDay: Math.round(snapshot.tradesPerDay30d),
+        avgPerDay:
+          snapshot.tradesPerDay30d > 0
+            ? Math.round(snapshot.tradesPerDay30d)
+            : null,
         ...(inferredCategory && { category: inferredCategory }),
       },
     }),

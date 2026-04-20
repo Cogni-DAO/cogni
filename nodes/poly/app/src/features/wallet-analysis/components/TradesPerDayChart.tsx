@@ -38,17 +38,23 @@ export function TradesPerDayChart({
   }
 
   const maxN = Math.max(...daily.map((d) => d.n), 1);
+  const total = daily.reduce((s, d) => s + d.n, 0);
   const today = daily.at(-1);
 
   return (
     <div className="flex flex-col gap-3">
-      <h4 className="font-semibold text-sm uppercase tracking-widest">
-        Trades / day, last 14 days
-      </h4>
-      <div className="flex h-28 items-end gap-1">
+      <div className="flex items-baseline justify-between">
+        <h4 className="font-semibold text-sm uppercase tracking-widest">
+          Trades / day, last 14 days
+        </h4>
+        <span className="font-mono text-muted-foreground text-xs">
+          {total} total · max {maxN}/day
+        </span>
+      </div>
+      <div className="flex h-32 items-end gap-1">
         {daily.map((d, i) => {
-          // pixel heights — h-28 is 7rem ≈ 112px. Percentage heights don't
-          // work here because the column wrapper sizes to content.
+          // pixel heights — h-32 is 8rem ≈ 128px. Reserve ~14px at the top
+          // for an inline count label so it never clips the upper edge.
           const CHART_PX = 112;
           const heightPx =
             d.n === 0 ? 4 : Math.max(8, Math.round((d.n / maxN) * CHART_PX));
@@ -56,9 +62,23 @@ export function TradesPerDayChart({
           return (
             <div
               key={d.d}
-              className="group relative flex flex-1 items-end"
-              title={`${d.d} · ${d.n} trades`}
+              className="group relative flex flex-1 flex-col items-center justify-end gap-1"
+              title={`${d.d} · ${d.n} trade${d.n === 1 ? "" : "s"}`}
             >
+              {/* Always-visible count label above each non-zero bar; reserves
+                  a blank row above zero bars so bars stay aligned. */}
+              <span
+                className={cn(
+                  "font-mono text-xs tabular-nums leading-none",
+                  d.n === 0
+                    ? "invisible"
+                    : isToday
+                      ? "text-primary"
+                      : "text-muted-foreground"
+                )}
+              >
+                {d.n}
+              </span>
               <div
                 style={{ height: `${heightPx}px` }}
                 className={cn(
@@ -68,6 +88,10 @@ export function TradesPerDayChart({
                     : "bg-muted-foreground/40 group-hover:bg-primary/60"
                 )}
               />
+              <span className="font-mono text-muted-foreground text-xs leading-none">
+                {/* last 2 chars ≈ day-of-month for both "MM-DD" and "Mon MM-DD" */}
+                {d.d.slice(-2)}
+              </span>
             </div>
           );
         })}

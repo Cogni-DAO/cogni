@@ -44,26 +44,42 @@ export function StatGrid({ snapshot, isLoading }: StatGridProps): ReactElement {
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border md:grid-cols-6">
       <Cell
         label="True WR"
-        value={`${snapshot.wr.toFixed(1)}%`}
-        tone="success"
-        hint={`over n=${snapshot.n}`}
+        value={snapshot.wr === null ? "—" : `${snapshot.wr.toFixed(1)}%`}
+        tone={snapshot.wr === null ? "muted" : "success"}
+        hint={
+          snapshot.wr === null
+            ? snapshot.n === 0
+              ? "no resolved positions"
+              : `n=${snapshot.n} — need ≥5 for stats`
+            : `over n=${snapshot.n}`
+        }
       />
       <Cell
         label="Realized ROI"
-        value={`+${snapshot.roi.toFixed(1)}%`}
-        tone="success"
+        value={snapshot.roi === null ? "—" : `+${snapshot.roi.toFixed(1)}%`}
+        tone={snapshot.roi === null ? "muted" : "success"}
       />
       <Cell label="Realized PnL" value={snapshot.pnl} />
       <Cell
         label="Max DD"
-        value={`${snapshot.dd.toFixed(1)}%`}
-        tone={snapshot.dd <= 10 ? "success" : "warn"}
+        value={snapshot.dd === null ? "—" : `${snapshot.dd.toFixed(1)}%`}
+        tone={
+          snapshot.dd === null
+            ? "muted"
+            : snapshot.dd <= 10
+              ? "success"
+              : "warn"
+        }
         hint="of peak equity"
       />
       <Cell label="Median hold" value={snapshot.medianDur} />
       <Cell
         label="Avg trades / day"
-        value={`≈ ${snapshot.avgPerDay}`}
+        value={
+          snapshot.avgPerDay === null || snapshot.avgPerDay === 0
+            ? "—"
+            : `≈ ${snapshot.avgPerDay}`
+        }
         hint="30-day mean"
       />
     </div>
@@ -78,7 +94,7 @@ function Cell({
 }: {
   label: string;
   value: ReactNode;
-  tone?: "default" | "success" | "warn" | undefined;
+  tone?: "default" | "success" | "warn" | "muted" | undefined;
   hint?: string | undefined;
 }): ReactElement {
   const toneCls =
@@ -86,7 +102,9 @@ function Cell({
       ? "text-success"
       : tone === "warn"
         ? "text-destructive"
-        : "text-foreground";
+        : tone === "muted"
+          ? "text-muted-foreground"
+          : "text-foreground";
   return (
     <div className="flex flex-col gap-1 bg-background p-4">
       <span className="text-muted-foreground text-xs uppercase tracking-widest">
