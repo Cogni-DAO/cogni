@@ -142,7 +142,7 @@
 | 1 | 20 | 3 | needs_design | task.0135 | Rewards-Ready Token Formation: Governance Decisions + Implementation | Financial Ledger | proj.financial-ledger |
 | 1 | 20 | 3 | needs_design | task.0141 | Category pool allocation — split epoch budget across source categories before per-source scoring | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 20 | 5 | needs_implement | task.0181 | Worker-local graph execution — move AI runtime out of Next.js | Unified Graph Launch | proj.unified-graph-launch |
-| 1 | 20 | 1 | needs_triage | bug.0338 | Phase A migration seeds system-tenant config but no tracked-wallet rows — pre-flight mirror targets dropped | Cogni Poly | proj.poly-copy-trading |
+| 1 | 20 | 2 | needs_triage | bug.0338 | Phase A targets never copy-trade — POST doesn't upsert kill-switch config, enumerator is boot-time only | Cogni Poly | proj.poly-copy-trading |
 | 1 | 21 | 2 | needs_triage | task.0076 | Dedicated Discord community agent — separate agent config with Discord-specific personality and skills | Messenger Channels | proj.messenger-channels |
 | 1 | 22 | 2 | needs_design | task.0038 | Rename tests/integration → tests/component with dependency-class subdirs | Reusable CI/CD Rails & Multi-Node Pipeline | proj.ci-cd-reusable |
 | 1 | 22 | 2 | needs_design | task.0142 | Epoch pool value stabilization — minimum activity threshold + carry-over policy | Transparent Credit Payouts | proj.transparent-credit-payouts |
