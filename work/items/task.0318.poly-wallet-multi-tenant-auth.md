@@ -96,15 +96,19 @@ Goal: each user's mirror fills settle on **their own** wallet. Real isolation, r
 
 **RainbowKit ≠ alternative to Privy for autonomous signing.** RainbowKit is a connect-wallet UI on top of wagmi; once connected, every signature still goes through the user's browser wallet. A 30-second autonomous poll cannot survive popups. You need either (a) a custodial signer the app controls (Privy / Turnkey) or (b) delegated signing authority from a Safe via session keys.
 
-#### Recommendation: ship **B.2 (Safe + session keys)**, skip Privy-per-user
+#### Recommendation (revised 2026-04-20): ship **Privy-per-user**, defer Safe+4337 to a future OSS-hardening task
 
-The week saved by shipping Privy is paid back the moment the DAO asks to remove the closed-source dependency. The only argument for B.1 (Privy) is a revenue milestone blocked on user wallets in <1 week.
+The original recommendation (Safe + session keys) rested on an OSS-mission argument that doesn't survive contact with reality:
 
-Suggested sequencing:
+- **Phase A already shipped Privy.** The shared operator wallet is Privy-custodied; `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts:660-726` uses `@privy-io/node` + `createViemAccount` → viem LocalAccount → `PolymarketClobAdapter` constructor. Per-user is a credential-lookup change, not an architecture change.
+- **Safe+4337 still depends on a closed bundler SaaS** (Pimlico / Alchemy / Biconomy) unless we also self-host a bundler (`silius` / `skandin` — another multi-week project). "Safe + 4337 = OSS" is true for contracts, false for operations. Trading Privy for Pimlico is not an OSS win; it's a different vendor lock.
+- The real Safe+4337 win is **custody sovereignty** (user owns the Safe; Pimlico is swappable) — a genuine benefit, but one that earns its cost only when the DAO explicitly asks for it. Bundling it into Phase B inflates scope without isolated benefit over the per-user-custody-goal Phase B is chartered for.
 
-1. Ship Phase A.
-2. Spike B.2 in parallel (1–2 days): prove a Safe session key granted from a RainbowKit connection can place a CLOB order from the operator pod. If clean, commit to B.2. If blocked, reopen the Privy debate.
-3. Ship B.2.
+**Ruled out** — the "SIWE + store CLOB creds + skip custody" path: autonomous polling requires an EIP-712 order signature from the funder's key at order time. CLOB L2 creds only authenticate the HTTP POST. Without custody of a signing key OR a delegation (session key / Safe module), no autonomous trading. SIWE proves wallet ownership; it does not delegate signing.
+
+**Phase B plan**: per-user Privy embedded wallets, reusing the existing Privy SDK + `createViemAccount` path. Each tenant gets a Privy wallet on first Polymarket opt-in; the wallet's `walletId` + tenant-encrypted CLOB L2 creds live in `poly_wallet_connections`; `mirror-coordinator` resolves the per-tenant signing context per tick. Zero new vendor deps; zero new on-chain contracts; zero bundler cost.
+
+**Filed separately (not Phase B)**: a future task `Cogni-wide OSS custody hardening` to replace Privy across all signing paths (operator wallet, per-user wallets, any Temporal-worker signers) with a self-hosted Safe+4337+bundler stack. That scope-spans the repo and earns its engineering budget by eliminating one vendor, not by adding an alternate backend to Phase B.
 
 ## Design sketch
 
@@ -222,102 +226,69 @@ In CP3.1.5 we deleted `PolymarketOrderSigner` + `OperatorWalletPort.signPolymark
 - TENANT_SCOPED_ROWS, GRANT_REQUIRED_FOR_PLACEMENT (vacuous in A — no per-user grants yet), PER_TENANT_KILL_SWITCH, KEY_NEVER_IN_APP, TARGET_SOURCE_TENANT_SCOPED, CROSS_TENANT_ISOLATION_TESTED, FAIL_CLOSED_ON_DB_ERROR per [poly-multi-tenant-auth](../../docs/spec/poly-multi-tenant-auth.md).
 - Bootstrap-tenant rows created in A1 are valid system-tenant rows; they survive the migration and pass RLS when the executor runs under `withTenantScope(appDb, COGNI_SYSTEM_PRINCIPAL_USER_ID, ...)`.
 
-## Plan — Phase B (B1 spike designed; B2-B7 deferred to post-verdict)
+## Plan — Phase B (Privy-per-user; decomposed into B1-B7 shippable slices)
 
-### B1 — Safe + ERC-4337 session-key spike (timebox: 2 days, default-deny on expiry)
+**Design shift (2026-04-20)**: the earlier Safe + ERC-4337 B1 spike is withdrawn — see the revised recommendation above. Phase B ships per-user Privy wallets leveraging the existing operator-wallet code path. The only real unknown is the per-tenant credential-broker wiring, which a **B1 end-to-end script spike** pins in ~1 day, not 2.
 
-**Outcome**: A verdict with evidence on whether Safe + 4337 session keys can autonomously sign Polymarket flow from an operator pod with the five scope/cost/revocation properties pinned in [poly-multi-tenant-auth § Phase B escalation criteria](../../docs/spec/poly-multi-tenant-auth.md#phase-b-escalation-criteria--safe-vs-privy-fallback).
+### B1 — End-to-end Privy-per-user script spike (~1 day)
 
-**Approach — reuse, don't build**:
+**Goal**: prove, on Polygon mainnet, that a freshly-created Privy embedded wallet (not the shared operator wallet) can (a) be provisioned via `privyClient.walletApi.createWallet()`, (b) sign a Polymarket CLOB L2 api-key exchange, (c) have USDC + CTF allowances granted idempotently, (d) place a $1 BUY + SELL via the existing `PolymarketClobAdapter` with zero changes to the adapter.
 
-| Need                                                     | Reuse                                                                                                                                      |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Safe deploy + module enable                              | `@safe-global/protocol-kit`                                                                                                                |
-| ERC-4337 userOp construction + bundler submission        | `@safe-global/relay-kit` (`Safe4337Pack`) + Pimlico bundler API (Polygon mainnet)                                                          |
-| Session-key validator with contract + selector allowlist | `@rhinestone/module-sdk` (SmartSessions) — Safe's native 4337 module is all-or-nothing; Rhinestone adds scoped `signTypedData` + call gating |
-| Polymarket signing + CLOB post                           | existing `@polymarket/clob-client` + `viem.createViemAccount`                                                                              |
-| Wallet connect (owner EOA side)                          | RainbowKit in a scratch Next.js page OR a hardcoded dev EOA — UX polish not part of the verdict                                            |
+**Why this is 1 day, not 2**: every moving part is already proven in the operator-wallet code path (`bootstrap/capabilities/poly-trade.ts:660-726`). The spike swaps the env-sourced wallet for a `walletApi.createWallet()` result and calls the same helpers. No new contracts, no bundler, no module wiring, no RainbowKit UX.
 
-**Critical mechanics clarification (shapes the cost metric)**: CLOB orders are signed off-chain (EIP-712) and posted via the clob-client HTTP API — they do NOT route through the 4337 bundler. The bundler pays gas only for on-chain ops (USDC/CTF `approve` + `setApprovalForAll` on Exchange / Neg-Risk / Neg-Risk-Adapter). For a session-key scheme this means two separate authorizations:
-
-1. **Off-chain signing authority**: session key authorized by the Safe to sign Polymarket EIP-712 order hashes (Rhinestone SmartSessions `PermissionId` scoped to the CLOB `OrderStruct` typehash). No bundler cost per fill in steady state.
-2. **On-chain approvals**: first-fill-with-new-wallet authorizes USDC + CTF approvals via bundler userOp. Amortized across all subsequent fills.
-
-The spike therefore reports **two** cost numbers: (a) first-fill with approvals, (b) steady-state fill. The spec's `≤$0.10/fill` ceiling applies to the amortized / steady-state path — if first-fill approvals are a one-time ~$0.30 but steady-state is $0.00 on-chain, that passes. If the scheme requires a per-order on-chain op > $0.10, that fails. This framing is captured in the verdict.
-
-**Spike layout (`scripts/experiments/poly-safe-4337-spike/`)**:
+**Spike layout (`scripts/experiments/poly-privy-per-user-spike/`)**:
 
 ```
-poly-safe-4337-spike/
-├── README.md                 ← goal, run instructions, verdict template
-├── package.json              ← local deps; not hoisted into workspace root
+poly-privy-per-user-spike/
+├── README.md             ← goal, run instructions, evidence template
 ├── src/
-│   ├── deploy-safe.ts        ← Protocol-kit deploy (4337-compatible Safe 1.4.1) + enable SmartSessions validator
-│   ├── grant-session-key.ts  ← owner EOA signs module-config granting session key scoped to:
-│   │                           - CLOB order EIP-712 typehash signing
-│   │                           - USDC.e `approve(Exchange|NegRiskExchange|NegRiskAdapter, uint256)`
-│   │                           - CTF `setApprovalForAll(Exchange|NegRiskExchange|NegRiskAdapter, bool)`
-│   │                           - expiry: T+1d and T+3d variants
-│   ├── operator-place-buy.ts ← session-key-only: build approvals userOp (first time) + sign CLOB BUY + POST to clob-client
-│   ├── operator-place-sell.ts← session-key-only: sign CLOB SELL + POST
-│   ├── revoke-and-retry.ts   ← owner EOA revokes → operator-place-buy → expect rejection → measure wall-clock
-│   ├── expiry-test.ts        ← grant T+1d → attempt at T+25h → expect rejection (fast-forward via anvil fork OR real-time proof via recorded evidence)
-│   └── lib/
-│       ├── clob.ts           ← CLOB client + order-hash helpers
-│       ├── pimlico.ts        ← bundler client + cost extraction from receipt
-│       └── contracts.ts      ← address constants (Exchange 0x4bFb…982E, NegRiskExchange 0xC5d5…f80a, NegRiskAdapter 0xd91E…5296, CTF 0x4D97…6045, USDC.e)
-└── evidence/                 ← committed artifacts proving the verdict
-    ├── userop-receipts.json
-    ├── costs.csv
-    ├── revoke-timing.md
-    ├── scope-tx.md
-    └── verdict.md            ← pass/fail on each of the 5 pinned criteria + recommendation
+│   ├── 1-create-wallet.ts   ← privyClient.walletApi.createWallet({ chainType: 'ethereum' }) → print { walletId, address }
+│   ├── 2-fund.md            ← manual step: deposit ~$5 USDC.e + ~0.2 MATIC to the printed address
+│   ├── 3-approvals.ts       ← reuses scripts/experiments/approve-polymarket-allowances.ts patterns via createViemAccount
+│   ├── 4-clob-creds.ts      ← POST /auth/api-key (clob-client) signed by the new wallet → print ApiKeyCreds
+│   ├── 5-place-buy.ts       ← construct PolymarketClobAdapter({ signer, creds, funderAddress }) → placeOrder BUY $1
+│   └── 6-place-sell.ts      ← placeOrder SELL of the outcome token bought in step 5
+└── evidence/
+    ├── wallet-provision.md  ← walletId + address + tx hash of first funding
+    ├── approvals-tx.json    ← USDC + CTF approve receipts
+    ├── clob-creds.md        ← api-key generation response (redacted in repo; kept in operator-only notes)
+    ├── buy-sell-receipts.json ← CLOB order receipts for BUY + SELL
+    └── verdict.md           ← pass/fail + notes for B2
 ```
 
-**Secrets needed (spike-only, not candidate-a)**: `PIMLICO_API_KEY`, `SPIKE_OWNER_EOA_PK` (throwaway dev EOA funded with ~$10 USDC.e + ~0.5 MATIC for gas), `SPIKE_SAFE_ADDRESS` (populated after deploy). Stored in a gitignored `.env.spike`; **never** promoted to candidate-a.
+**Pass criteria** (all must hold):
 
-**Pass evaluation matrix** — the spike commits `evidence/verdict.md` filling this table. All five must be `PASS` for the spike to pass.
+| # | Criterion                                                                                       | Evidence                              |
+|---|-------------------------------------------------------------------------------------------------|---------------------------------------|
+| 1 | `createWallet` returns a distinct `walletId` from the operator wallet's                         | `wallet-provision.md`                 |
+| 2 | `createViemAccount` + `createWalletClient` produce a working viem `LocalAccount` for that wallet| step 3 runs without signing errors    |
+| 3 | Allowances (USDC to Exchange/NegRisk/NegRiskAdapter + CTF `setApprovalForAll`) land idempotently | `approvals-tx.json`                   |
+| 4 | CLOB L2 creds generated via the new wallet's signature (not the operator's)                     | `clob-creds.md` signer matches step 1 |
+| 5 | BUY + SELL orders placed and acknowledged by CLOB against the new funder address                | `buy-sell-receipts.json`              |
 
-| # | Criterion                                                                          | Evidence                                                                                     |
-| - | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| 1 | Session key scoped to exactly Exchange / NegRisk / NegRisk-Adapter / CTF + CLOB typehash | `scope-tx.md` lists the enabled `PermissionId` config; decoded event logs enumerate selectors |
-| 2 | BUY + SELL placed from operator pod with no owner signature after grant            | `userop-receipts.json` + clob-client response bodies; owner EOA private key NOT imported in those scripts |
-| 3 | Amortized bundler cost ≤ $0.10/fill at $1 mirror size                              | `costs.csv` reports first-fill (with approvals) + steady-state fill; spec ceiling applies to steady-state |
-| 4 | Revocation invalidates session key ≤ 5 min                                         | `revoke-timing.md`: revoke-tx confirmation timestamp + first-rejected-placement timestamp    |
-| 5 | Expiry enforced with day-granularity                                               | `expiry-test.ts` output: placement at T+25h rejected with module-level error, not a bundler / relay surface error |
+**Secrets needed**: `PRIVY_APP_ID` + `PRIVY_APP_SECRET` (reuse existing), ~$5 USDC.e + ~0.2 MATIC deposit (user-funded, one-time). No new vendor accounts. No new env surface in the app.
 
-**Spike deliverables (completion criteria for B1 itself)**:
+**If B1 passes**: commit to Privy-per-user, proceed to B2 immediately.
+**If B1 fails**: the failure mode is almost certainly mechanical (Privy API surface, CLOB signature type) rather than strategic — fix in place; no direction change.
 
-- [ ] B1.1 — `poly-safe-4337-spike/` scaffolded with scripts + README
-- [ ] B1.2 — Safe deployed on Polygon mainnet with SmartSessions module enabled (tx hash in `scope-tx.md`)
-- [ ] B1.3 — Session key granted with scoped permissions (tx hash + decoded events in `scope-tx.md`)
-- [ ] B1.4 — BUY + SELL placed via session key; receipts committed
-- [ ] B1.5 — Cost measurements captured in `costs.csv`
-- [ ] B1.6 — Revocation + expiry tests captured
-- [ ] B1.7 — `verdict.md` fills the pass matrix; task.0318 review feedback block appended with the verdict
+### B2-B7 — production decomposition
 
-**Out of scope for B1** (defer to B2+):
+| Checkpoint                                                                          | Size   | Ships                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **B2** — `poly_wallet_connections` schema + credential broker                       | ~2d    | Migration 0030 creates `poly_wallet_connections` (RLS on `created_by_user_id`, unique per tenant). Drizzle schema + AEAD envelope reuses `packages/connections/` encryption helpers. `packages/operator-wallet/src/ports/poly-signing-context.ts` adds `resolvePolySigningContext(billingAccountId): Promise<{ account: LocalAccount, creds, funderAddress }>` + `DrizzlePolySigningContextAdapter` (service-role DB read + tenant defense-in-depth equality check, mirrors `DrizzleConnectionBrokerAdapter.resolve`). Component test: two-tenant broker returns distinct signers. |
+| **B3** — Wallet provisioning API + onboarding UX                                    | ~2d    | `POST /api/v1/poly/wallet/connect` (auth-required, session-scoped): calls `privyClient.walletApi.createWallet`, runs the allowance flow, generates CLOB L2 creds, encrypts + persists the row. Idempotent (returns existing row if present). Dashboard adds a "Set up your trading wallet" card showing address / USDC balance / allowance status / "fund me" QR. Contract lives in `packages/node-contracts/src/poly.wallet.connections.v1.contract.ts`. |
+| **B4** — `poly_wallet_grants` schema + issuance API                                 | ~1.5d  | Migration 0031 creates `poly_wallet_grants` (caps + scopes + expiry + revoked_at). `POST /api/v1/poly/wallet/grants` issues; `DELETE /:id` revokes. Default grant auto-created by B3 with operator-safe caps (per-order $2, daily $10, hourly-fills 20); user can tighten via dashboard.                                                                                    |
+| **B5** — Executor + coordinator rewiring                                            | ~2d    | `mirror-coordinator` per-tenant loop: for each tenant with an active grant + enabled config + targets → resolve signing context → build per-tenant `PolymarketClobAdapter` → run the existing placeIntent path. Drop the shared `POLY_PROTO_WALLET_ADDRESS` + `POLY_CLOB_*` reads from `server-env.ts` (these remain only for system-tenant bootstrap until B6). Per-tenant adapter instances are LRU-cached keyed on `poly_wallet_connections.id` to avoid rebuilding per tick. |
+| **B6** — Per-grant cap + scope enforcement + revocation checks                      | ~1.5d  | `mirror-coordinator` reads grant before each placement attempt: expired / revoked / missing-scope / cap-exceeded paths all log `poly.mirror.decision reason=…` and skip. Per-grant running-total cache (daily/hourly) read from `poly_copy_trade_fills` via a windowed SELECT on the per-tenant scope. System-tenant bootstrap grant removed; candidate-a runs as a normal tenant from here on.                                                             |
+| **B7** — Cross-tenant wallet + grant + fill isolation tests                         | ~1.5d  | Component tests: two tenants each with their own connection + grant + targets; assert placements land on distinct funder addresses; revocation on tenant-A halts only tenant-A's next tick; cap-breach skips only the breaching tenant. Stack test: full dev-stack two-tenant poll with fake CLOB adapter proving the per-tenant adapter wiring (no mainnet). Mainnet-verification by a single candidate-a flight + deploy_verified handshake on Loki. |
 
-- Integration with `nodes/poly/app` — spike runs standalone.
-- Any `poly_wallet_connections` / `poly_wallet_grants` schema work.
-- `WalletSignerPort` abstraction — the spike is throwaway; if B2 proceeds, the port is designed fresh against the verified primitives.
-- Dashboard / RainbowKit polish — owner EOA can be a hardcoded dev key; the `RainbowKit → meta-tx` UX is B3's problem.
+**Phase B total**: ~11 days engineering + 1 day flight + verification. vs. Safe+4337's ~3 weeks of which ~0 days are mechanically de-risked before committing.
 
-**If spike passes**: `/design` runs again on this task for detailed B2-B7 decomposition — including spec bump for `poly_wallet_connections.backend_ref` + grant-scope semantics + the `WalletSignerPort` interface shape.
+**Deferred to follow-up (explicitly NOT in Phase B)**:
 
-**If spike fails (incl. timebox expiry)**: file a `/triage` decision record in this task's review-feedback block enumerating the options (Turnkey / Privy-per-user / re-spike Safe with relaxed scope) with updated cost + engineering estimates. **Do NOT** default to Privy — spec's escalation rule is load-bearing.
-
-### B2-B7 checkpoint table (pending B1 verdict)
-
-| Checkpoint                                                            | Status     |
-| --------------------------------------------------------------------- | ---------- |
-| B1 — Safe + 4337 spike                                                | Pending    |
-| B2 — `poly_wallet_connections` + `poly_wallet_grants` schema + RLS    | Pending B1 |
-| B3 — Wallet-connection CRUD (RainbowKit → Safe → session key)         | Pending B1 |
-| B4 — Grant issuance UI + server actions                               | Pending B1 |
-| B5 — Executor + poll rewiring (per-tenant signers, per-grant caps)    | Pending B1 |
-| B6 — Per-user fill attribution (drop Phase A pooled rows or backfill) | Pending B1 |
-| B7 — Cross-tenant isolation tests across wallets + grants + fills     | Pending B1 |
+- `poly_wallet_connections.backend_ref` column / `WalletSignerPort` abstraction — Phase B is single-backend (Privy). A port makes sense once there's a second backend; premature today.
+- Safe + 4337 + self-hosted bundler — filed as a separate OSS-hardening task that spans the repo, not bolted onto Phase B.
+- Hardware / BYO-imported EOA support — user asked for Privy-reuse.
 
 ## Invariants
 
@@ -341,7 +312,7 @@ See [docs/spec/poly-multi-tenant-auth.md § Decisions](../../docs/spec/poly-mult
 - **Pre-existing prototype rows**: drop in the migration. No production users to preserve.
 - **Per-tenant Prometheus labels**: do not add `billing_account_id` as a label (cardinality bomb). Pino JSON → Loki for per-tenant slicing.
 - **Revocation**: halt-future-only. Cancellation is a separate emergency-cancel action, out of scope.
-- **Safe vs Privy (Phase B)**: leaning Safe + 4337 session keys (OSS-aligned). Final decision after the B1 spike.
+- **Safe vs Privy (Phase B)**: **superseded 2026-04-20** — committing to Privy-per-user. Reasons in the recommendation block above; Safe+4337 moved to a separate repo-wide OSS-hardening task.
 - **BYO imported EOAs**: punt to a follow-up task. Phase B's recognized backends are Safe / Privy / Turnkey only.
 - **SSR vs client wallet creation**: server actions only. The Privy app secret never touches the browser; same rule applies to Safe session-key signing material.
 - **Phase A pooled-execution UX**: disclaimer banner above the targets table.

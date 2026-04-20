@@ -5,7 +5,7 @@ title: Poly Multi-Tenant Auth — Tracked Wallets, Actor Wallets, Grants & RLS
 status: draft
 spec_state: proposed
 trust: draft
-summary: Tenant-isolated copy-trade for the poly node — `poly_copy_trade_*` tables RLS-scoped by `billing_account_id`, per-tenant signing wallet via a portable `WalletSignerPort` (Safe + ERC-4337 session keys preferred over Privy-per-user), and durable `poly_wallet_grants` that authorize autonomous placement when the user is offline.
+summary: Tenant-isolated copy-trade for the poly node — `poly_copy_trade_*` tables RLS-scoped by `billing_account_id`, per-tenant signing wallet (Phase B ships Privy-per-user; a portable `WalletSignerPort` is retained for a future OSS-hardening task that swaps Privy for self-hosted Safe+4337), and durable `poly_wallet_grants` that authorize autonomous placement when the user is offline.
 read_when: Adding tables to the poly node, touching the copy-trade executor, wiring a new signing backend, implementing the dashboard CRUD for tracked wallets or wallet connections, or auditing tenant isolation.
 implements: proj.poly-prediction-bot
 owner: derekg1729
@@ -298,7 +298,7 @@ Per [database-rls](./database-rls.md) § `SERVICE_BYPASS_CONTAINED`: the service
 | 4   | B     | ⏳     | Grant revocation: set `poly_wallet_grants.revoked_at = now()` on an active grant; the next poll cycle for that tenant logs `poly.mirror.decision outcome=skipped reason=no_active_grant`. No order is placed.                                                                                                                                               |
 | 5   | B     | ⏳     | Grant scope: a BUY-only grant rejects a SELL intent with `reason = scope_missing`.                                                                                                                                                                                                                                                                          |
 | 6   | B     | ⏳     | Cap enforcement: a target whose `mirror_usdc` exceeds the grant's `per_order_usdc_cap` is skipped with `reason = cap_exceeded_per_order`. Day-two spending past `daily_usdc_cap` is skipped with `cap_exceeded_daily`.                                                                                                                                      |
-| 7   | B     | ⏳     | Backend portability spike: a `WalletSignerPort` test double places an order without touching the executor. Replacing the impl with a Safe-4337 backed signer in a stack test places a real CLOB order against a Safe-controlled wallet.                                                                                                                     |
+| 7   | B     | 🔀    | **Deferred** to the future OSS-hardening task. Phase B ships a single signing backend (Privy-per-user); a portable `WalletSignerPort` with a second (Safe+4337) backend is the acceptance gate for that follow-up task, not for Phase B.                                                                                                                    |
 | 8   | B     | ⏳     | Address uniqueness: attempting to insert a second un-revoked `poly_wallet_connections` row with an existing `(chain_id, address)` is rejected by the partial unique index.                                                                                                                                                                                  |
 | 9   | A     | ✅     | `pnpm check:fast` clean. `pnpm check:docs` clean.                                                                                                                                                                                                                                                                                                           |
 | 10  | A     | ⏳     | **New-user end-to-end (bug.0338 fix).** Freshly-registered tenant with no pre-seeded config POSTs a `target_wallet` via `/api/v1/poly/copy-trade/targets`. Within ≤60s the mirror pod emits `poly.mirror.poll.singleton_claim` for that wallet under the tenant's `billing_account_id`, with no intervening pod boot event. Proven on candidate-a via Loki. |
@@ -316,21 +316,22 @@ Per [database-rls](./database-rls.md) § `SERVICE_BYPASS_CONTAINED`: the service
 
 **Phase A test contract:** A8 isolation tests assert **row-level isolation only**. They MUST NOT assert "user-A's USDC balance differs from user-B's" or "user-B's CTF positions are unaffected by user-A's mirror." Those isolations require Phase B's per-user `WalletSignerPort` impl — pinning them in Phase A would be testing for an illusion.
 
-## Phase B escalation criteria — Safe-vs-Privy fallback
+## Phase B signing-backend decision (revised 2026-04-20)
 
-The Phase B detailed design follows a timeboxed (2-day) **B1 spike** on Safe + ERC-4337 session keys. To prevent the spike from quietly graduating Privy-per-user via timebox expiry, the spec pins the escalation conditions before the spike begins.
+The earlier Safe-vs-Privy escalation criteria in this section — five pinned pass conditions on a 2-day Safe + ERC-4337 spike, with Privy as "last option" — are **withdrawn**. The revised Phase B commits to **Privy-per-user** as the signing backend and moves Safe + 4337 to a separate repo-wide OSS-hardening task.
 
-**Spike succeeds** (commit to Safe + 4337) iff ALL of the following hold:
+**Why revised**:
 
-1. A user can grant a session key from a Safe (connected via RainbowKit) that is **scoped to exactly** Polymarket Exchange (`0x4bFb…982E`) + Neg-Risk Exchange (`0xC5d5…f80a`) + Neg-Risk Adapter (`0xd91E…5296`) + CTF (`0x4D97…6045`) + CLOB order signing — no broader contract-call surface.
-2. The session key can place a CLOB BUY + SELL from the operator pod with no user-in-the-loop.
-3. Bundler cost per fill is ≤ **$0.10** at $1 mirror size (10% margin ceiling). If higher, the economics don't survive prototype scale; spike fails on cost grounds.
-4. Revocation by the user invalidates the session key within ≤ 5 minutes (validated by attempting placement after revoke).
-5. Session-key expiry can be set with day-granularity and is enforced by the bundler / Safe module.
+1. **The OSS argument didn't survive the Pimlico dependency.** "Safe + 4337" is OSS for contracts, closed SaaS for bundlers (Pimlico / Alchemy / Biconomy). A genuine OSS-end-to-end stack requires self-hosting a bundler (`silius` / `skandin`) — ~1 week of additional engineering. Without that leg, Safe+4337 trades Privy-the-vendor for Pimlico-the-vendor, not an OSS win.
+2. **Phase A already ships Privy.** `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts:660-726` uses `@privy-io/node` + `createViemAccount` → `PolymarketClobAdapter({ signer, creds, funderAddress })`. Per-user is a credential-lookup change, not an architecture change. Incremental cost: ~11 days.
+3. **Custody sovereignty is a real Safe+4337 benefit** — user owns the Safe; Pimlico is swappable — but one that earns its engineering cost when the DAO explicitly asks for it, not by being bolted onto a multi-tenant-isolation task.
+4. **SIWE + stored CLOB creds (no custody) was considered and ruled out.** Autonomous 30 s polling requires an EIP-712 order signature at order time; CLOB L2 creds only authenticate HTTP. Without a custodial signer or a delegated-signing scheme, no autonomous trading.
 
-**Spike fails → Privy-per-user is NOT the automatic fallback.** A failed spike triggers an explicit go/no-go review with the open options being (a) Turnkey, (b) Privy-per-user, (c) re-spike Safe with a relaxed scope (e.g., wider contract allowlist + tighter $/day cap). Privy is the **last** option, not the default, because shipping it locks Cogni to a closed-source dependency and meaningfully delays B-phase OSS-alignment work later.
+**Phase B backend**: per-user Privy embedded wallet, one per `billing_account_id`, provisioned via `privyClient.walletApi.createWallet` on first opt-in, keys stored HSM-side (never in app).
 
-**Default-deny on timebox expiry**: if the 2-day timebox elapses without a clean pass on all five criteria, the spike is treated as failed for the purposes of this gate.
+**Filed separately**: `Cogni-wide OSS custody hardening` — a future task to replace Privy across all signing paths (operator wallet + per-user wallets + future Temporal-worker signers) with a self-hosted Safe + 4337 + bundler stack. That scope spans the repo and earns its engineering budget by eliminating one vendor, not by adding an alternate backend to this task.
+
+**Invariant carried forward from the original escalation block**: `KEY_NEVER_IN_APP`. Whatever backend ships, raw key material never enters the app process — satisfied by Privy HSM today, would be satisfied by a self-hosted Safe module tomorrow.
 
 ## Decisions (resolved 2026-04-19 at `/design`)
 
