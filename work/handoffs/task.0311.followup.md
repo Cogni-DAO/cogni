@@ -57,11 +57,11 @@ If AI contributors are going to spin up candidate slots on demand and multiple f
 
 Committed `chore(infra): correct preview VM_IP to 84.32.110.92 [known-hack]` to `deploy/preview` (commit `214ef15`) — env-state.yaml × 4 files, `.109.222` → `.110.92`. main untouched.
 
-This is explicitly a known hack, not a design change. Permanent fix is task.0336.
+This is explicitly a known hack, not a design change. Permanent fix is bug.0295.
 
 ## What's left on the board
 
-### The real fix: [bug.0295 — replace VM_IP with DNS](../items/task.0336.remove-vm-ip-from-git.md)
+### The real fix: [bug.0295 — replace VM_IP with DNS](../items/bug.0295.public-repo-ip-leak.md) (design-reviewed 2026-04-20)
 
 VM IPs do not belong in git. Every way to write them (main seed, provision-to-deploy, direct corrections) is a drift vector. The fix is:
 
@@ -106,7 +106,7 @@ eb832de78  feat(doltgres): candidate-a wiring  (#894 — task.0311 merge)
 ## Related
 
 - [task.0311 work item](../items/task.0311.poly-knowledge-syntropy-seed.md) — the shipped task
-- [bug.0295 work item](../items/task.0336.remove-vm-ip-from-git.md) — the real infra fix
+- [bug.0295 work item](../items/bug.0295.public-repo-ip-leak.md) — the real infra fix
 - [Knowledge Data Plane spec](../../docs/spec/knowledge-data-plane.md) — as-built after task.0311
 - [CI/CD spec](../../docs/spec/ci-cd.md) — where the DNS invariant needs to land after bug.0295 /design
 - [devops-expert skill](../../.claude/skills/devops-expert/SKILL.md) — pipeline orientation (read before touching anything here)

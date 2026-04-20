@@ -7,7 +7,7 @@ priority: 0
 rank: 1
 estimate: 3
 summary: "VM IPs live in git (main seed + deploy-branch env-state.yaml). Git is the wrong substrate for runtime state. Silent drift on VM reprovision: main's seed IP stays stale, provision writes deploy-branch IPs, workflow rsync preserves them. Today (2026-04-20) this chain caused a 6-hour preview outage after bug.0334 / PR #943's authoritative overlay sync exposed a 2-week-old stale preview IP — scheduler-worker crashlooped on wrong Temporal IP, all user chat.completions hung. Fix: VM IPs do not belong in git; use DNS (ExternalName Service + Cloudflare A-record) as the discovery layer."
-outcome: "No bare VM IPs in any file under `infra/k8s/` on main OR deploy branches. EndpointSlices removed (or reduced to name-only references). Cross-VM dependencies (Temporal, Postgres, LiteLLM, Redis) resolved by hostname via cluster DNS. VM reprovision: single DNS A-record update. Zero git commits. Fresh deploy branches are byte-identical to main under `infra/k8s/`."
+outcome: "No bare VM IPs in any file under `infra/k8s/` on main OR deploy branches. `env-state.yaml` deleted entirely (16 files). Cross-VM dependencies (Temporal, Postgres, LiteLLM, Redis, Doltgres) resolved by hostname via cluster DNS. VM reprovision: single DNS A-record update + pod restart. Zero git commits. Fresh deploy branches are byte-identical to main under `infra/k8s/`."
 spec_refs: [ci-cd, cd-pipeline]
 assignees: derekg1729
 credit:
@@ -16,14 +16,16 @@ branch:
 pr_url:
 created: 2026-04-06
 updated: 2026-04-20
-labels: [security, infra, cicd, drift, bug.0334-followup]
+labels: [infra, cicd, drift, bug.0334-followup]
 ---
 
 # VM IPs in git — drift → outages
 
 ## Problem
 
-`provision-test-vm.sh` writes real VM IPs into `env-state.yaml` on deploy branches (`deploy/canary`, `deploy/preview`, `deploy/production`). main's seed copies of the same files carry IPs too. Deploy branches are public, so the security angle matters — but the operational angle is worse: **git is the wrong place to hold VM IPs** and today proved it.
+`provision-test-vm.sh` writes real VM IPs into `env-state.yaml` on deploy branches (`deploy/canary`, `deploy/preview`, `deploy/production`). main's seed copies of the same files carry IPs too. **Git is the wrong place to hold VM IPs** — it makes silent drift possible on every VM lifecycle event, and today proved it.
+
+**Not a security fix.** VM IPs remain publicly resolvable after this change (they move from a public git tree to public Cloudflare DNS under `*.cognidao.org`). That's by design for now; the operational drift problem is the entire reason this bug is P0. A follow-up (private-zone / split-horizon DNS) is worth filing only if public-DNS discoverability becomes a real problem.
 
 ## 2026-04-20 outage — the full chain
 
@@ -84,28 +86,45 @@ flowchart LR
 
 ## File pointers (expected changes)
 
-| File                                              | Change                                                                                                                               |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `infra/k8s/overlays/**/env-state.yaml` (16 files) | Deleted (or reduced to non-IP metadata)                                                                                              |
-| `infra/k8s/overlays/**/kustomization.yaml` × 16   | Drop `replacements:` block; reference ExternalName Services                                                                          |
-| `infra/k8s/base/node-app/external-services.yaml`  | EndpointSlices → ExternalName Services; hostname points at env-specific DNS zone                                                     |
-| `scripts/setup/provision-test-vm.sh`              | Phase 4c: delete env-state.yaml writing; add Cloudflare DNS API call to update A-record                                              |
-| `.github/workflows/promote-and-deploy.yml`        | Collapse two-pass rsync to a single `rsync -a --delete app-src/infra/k8s/ deploy-branch/infra/k8s/`; no `--exclude='env-state.yaml'` |
-| `docs/spec/ci-cd.md`                              | Add `DNS_IS_THE_DISCOVERY_LAYER` invariant                                                                                           |
+| File                                                     | Change                                                                                                                                                                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `infra/k8s/overlays/**/env-state.yaml` (16 files)        | **Deleted.** Every file today holds only `VM_IP`; no non-IP state to preserve                                                                                                          |
+| `infra/k8s/overlays/**/kustomization.yaml` × 16          | Drop `replacements:` block; reference ExternalName Services                                                                                                                            |
+| `infra/k8s/base/node-app/external-services.yaml`         | EndpointSlices → ExternalName Services; hostname points at env-specific DNS record (all five point to the same per-env VM hostname)                                                    |
+| `infra/k8s/base/scheduler-worker/external-services.yaml` | Same: EndpointSlices → ExternalName Services                                                                                                                                           |
+| `scripts/setup/provision-test-vm.sh`                     | Phase 4c: delete env-state.yaml writing. Phase 4b already writes A-records — extend to cover the new VM-hostname record. Document required pod restart on A-record change              |
+| `.github/workflows/promote-and-deploy.yml`               | Collapse two-pass rsync (lines 197-201) to a single `rsync -a --delete app-src/infra/k8s/ deploy-branch/infra/k8s/`. Audit confirmed env-state.yaml is the only load-bearing exclusion |
+| `docs/spec/ci-cd.md`                                     | Add `DNS_IS_THE_DISCOVERY_LAYER` invariant                                                                                                                                             |
+
+## Migration
+
+All five external services (Postgres, Temporal, LiteLLM, Redis, Doltgres) resolve to the **same VM IP per env**. One A-record per env suffices — every ExternalName Service in that env points to the same hostname (e.g. `preview.vm.cognidao.org`).
+
+### Cutover order (per env, independently)
+
+1. **Pre-step:** create DNS A-record for the env's VM hostname pointing at the current VM IP. Verify from a pod: `nslookup preview.vm.cognidao.org` returns the right IP.
+2. **Single PR replaces EndpointSlices with ExternalName Services in `base/**/external-services.yaml`.** Overlays drop `replacements:`and`env-state.yaml`. Merged to main, promoted one env at a time.
+3. **Rollout:** `kubectl rollout restart` all deployments in the env after the overlay lands (required — see caching note below). Watch `scheduler-worker` + node-app pods boot clean. Exercise chat.completions end-to-end.
+4. **Repeat per env.** `preview` first (already on a known-hack unblock, lowest risk), then `candidate-a`, then `production`. Do not batch.
+5. **Revert `deploy/preview` commit `214ef15`** once preview cut over cleanly.
+
+### DNS caching / pod restart contract
+
+`ExternalName` resolves via CoreDNS → upstream → Cloudflare. Long-lived pooled connections (node-postgres, Go Temporal SDK) cache the resolved IP for the life of the pool. **On VM reprovision (new IP), pods MUST be restarted after the A-record update.** No reconnect-on-error logic in application code — not worth the scope. Provision script documents this as a required final step; the trade-off is a ~30s restart vs. the elimination of every git-based drift vector.
 
 ## Validation
 
 - [ ] `git grep -E '([0-9]{1,3}\.){3}[0-9]{1,3}' infra/k8s/` on main returns zero non-comment matches
 - [ ] No `env-state.yaml` files remain under `infra/k8s/overlays/**/`
 - [ ] Preview + candidate-a + production continue to function end-to-end (brain V2 on poly: `core__knowledge_write` + `core__knowledge_search`)
-- [ ] VM reprovision simulation: update the DNS A-record; pod restart picks up new address with zero git commits
-- [ ] `promote-and-deploy.yml` rsync block is a single `rsync -a --delete`
+- [ ] VM reprovision simulation: update the DNS A-record + `kubectl rollout restart`; pods pick up new address with zero git commits
+- [ ] `promote-and-deploy.yml` rsync block is a single `rsync -a --delete` (env-state.yaml confirmed as only prior load-bearing exclusion)
 - [ ] `deploy/preview` commit `214ef15` (known-hack) is reverted as part of the cleanup
 
 ## Blocked by / prerequisites
 
-- Cloudflare API token with A-record write scope for the chosen internal zone (e.g., `*.vm.cogni.internal`)
-- Decision: internal zone name (`vm.cogni.internal` vs subdomain under existing `cognidao.org` vs standalone)
+- **Zone decision:** hostname pattern for VM records. Proposed: `<env>.vm.cognidao.org` (e.g. `preview.vm.cognidao.org`, `candidate-a.vm.cognidao.org`), public zone, reuses existing Cloudflare integration. Confirm before `/implement`.
+- Cloudflare A-record write is **already wired** in `provision-test-vm.sh:377-387` (`CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID`); no new credentials needed — extension of existing Phase 4b.
 
 ## Related
 
