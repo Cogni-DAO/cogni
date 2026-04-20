@@ -3,7 +3,8 @@ id: task.0318
 type: task
 title: "Poly wallet multi-tenant auth — per-user operator-wallet binding + RLS on copy-trade tables"
 status: needs_implement
-revision: 2
+revision: 3
+pr_b: https://github.com/Cogni-DAO/node-template/pull/968
 priority: 2
 estimate: 8
 rank: 5
@@ -356,3 +357,38 @@ See [docs/spec/poly-multi-tenant-auth.md § Decisions](../../docs/spec/poly-mult
 - **Narrow `TENANT_DEFENSE_IN_DEPTH`** invariant scope in `targets/route.ts:13-17` — it's verified on POST writes only; GET returns bare wallet strings, nothing row-shaped to verify.
 - **Document migration 0029's CASCADE drop** in the PR body. `DROP TABLE … CASCADE` on `poly_copy_trade_{fills,decisions,config}` wipes Phase-0 candidate-a trading history irreversibly. The `/design` decision approved this, but the operator should explicitly know.
 - **Duplicate polls on shared wallets** (container loop) — flagged in PR body, covered by task.0332. No fix needed in this PR.
+
+## Review Feedback (revision 3 — 2026-04-20, Phase B slice on PR #968)
+
+`/review-implementation` on commits `6224cec8c..32a58aa19` found blocking gaps. Status back to `needs_implement`. Summary:
+
+### Blocking
+
+1. **Stub CLOB creds ship silently.** `nodes/poly/app/src/adapters/server/wallet/index.ts:83-91` returns literal `"placeholder-*"` strings on every provision. Once this lands on candidate-a, any caller that then tries to actually trade will hit CLOB auth errors that look like production bugs.
+   - **Fix**: gate the stub behind an explicit `POLY_WALLET_ALLOW_STUB_CREDS=1` env flag. Without it, the factory throws `ClobCredsFactoryNotWiredError`. Add a `logger.warn` inside the stub naming `billing_account_id` + "NOT tradeable, plumbing test only".
+
+2. **Agent-consent path is unguarded.** `nodes/poly/app/src/app/api/v1/poly/wallet/connect/route.ts:89-97` allows `custodialConsentActorKind: "agent"` through session auth without validating the actor id against any agent-API-key binding. The "agent auth comes later" deferral left a bypass.
+   - **Fix**: reject `actorKind: "agent"` with **501 Not Implemented** until B3 wires agent API keys. Don't ship a half-guarded enum branch.
+
+3. **Spec claim about dep-cruiser doesn't match reality.** `docs/spec/poly-trader-wallet-port.md` § Invariants `SEPARATE_PRIVY_APP` claims "dep-cruiser rule forbids imports of `PRIVY_APP_ID`..." — dep-cruiser enforces import-graph, not source-string identifiers. No such rule could be written; none was written.
+   - **Fix**: rewrite the invariant to reflect the ACTUAL enforcement: the adapter is constructor-injected with `PrivyClient`, so package source has no reachable path to env vars. Acceptance check #3 updates accordingly.
+
+4. **`@cogni/node-shared` import unverified.** `privy-poly-trader-wallet.adapter.ts:40` imports `{ aeadEncrypt, aeadDecrypt, AeadAAD }` from the package root — not verified that the barrel re-exports these. Either verify or use `@cogni/node-shared/crypto/aead` submodule.
+
+5. **`pnpm check` was not run on this branch.** The worktree has no installed deps from this session and I did not bootstrap + verify. Typecheck correctness is unproven.
+   - **Fix**: bootstrap the phase-b worktree, run `pnpm check`, fix any errors, post the green result on the PR.
+
+6. **Zero tests shipped.** Spec acceptance checks #4–#11 are unimplemented — no component test, no unit test, no type-level compile test, no orphan-reconciler script. The adapter ships to candidate-a completely untested.
+   - **Fix**: at minimum one component test (testcontainers PG) proving `provision → resolve → getAddress → revoke → resolve=null` end-to-end under two tenants with RLS defense-in-depth.
+
+### Non-blocking suggestions
+
+- Use `crypto.randomUUID()` instead of `tx.execute(\`SELECT gen_random_uuid()::text\`)` roundtrip in adapter provision.
+- Delete `brandAuthorized` dead method or document it clearly as the seed for B4's `authorizeIntent`.
+- Move route Zod schemas into `packages/node-contracts/src/poly.wallet.connections.v1.contract.ts` — deviation from every other poly route.
+- Add `poly.wallet.connect` info log on success in route; current implementation only logs failure paths. Validation plan on PR body says Loki query must find this event.
+- Add hex-format regex validation on `POLY_WALLET_AEAD_KEY_HEX` before `Buffer.from(..., "hex")` — current length-check catches short output but not e.g. 64 chars of `"z"`.
+- Decide system-tenant bootstrap: migration 0030 has no seed; § Onboarding claims "same provision code path" but container boot may rely on a system-tenant wallet row existing.
+- Add index on `created_at` to support the B2 orphan reconciler's "older than 24h" query.
+- Migration 0030 could default `custodial_consent_accepted_at` to `now()` as belt-and-suspenders; app-side is authoritative.
+- Consider extracting `deploy-infra.sh` remote-SSH env block from the megaline into a heredoc — typo risk is high today.
