@@ -57,6 +57,7 @@
 | 0 | 23 | 2 | needs_design | task.0078 | OpenClaw reasoning token streaming — display model thinking in collapsible UI | OpenClaw Capabilities Integration | proj.openclaw-capabilities |
 | 0 | 24 | 4 | needs_design | task.0001 | Docs Migration Tracker | Docs + Work System Infrastructure | proj.docs-system-infrastructure |
 | 0 | 25 | 2 | needs_implement | task.0090 | Keep Cogni Alive - direct system account funding on credits page | System Tenant & Governance Execution Infrastructure | proj.system-tenant-governance |
+| 0 | 99 | 2 | needs_triage | bug.0343 | poly-migrate-poly-doltgres Job fails — "db:migrate:poly:doltgres:container" not found in migrator image |  |  |
 | 1 | 0 | 2 | needs_triage | task.0108 | Collection completeness verification for epoch ingestion | Transparent Credit Payouts | proj.transparent-credit-payouts |
 | 1 | 1 | 2 | needs_design | bug.0060 | Cost authority bug: OpenRouter billed cost not flowing through LiteLLM callback (response_cost=0) | Reliability & Uptime | proj.reliability |
 | 1 | 1 | 4 | needs_implement | task.0119 | Epoch approver UI — EIP-712 signing, review/edit/finalize admin panel | Transparent Credit Payouts | proj.transparent-credit-payouts |
