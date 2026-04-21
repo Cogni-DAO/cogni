@@ -4,7 +4,7 @@ type: guide
 title: Poly per-tenant Trading Wallet — Provisioning Runbook
 status: draft
 trust: draft
-summary: Operator-facing runbook for task.0318 Phase B PR #968 — shows what's shipped, explains the three-location split + visible smells, and pins the 5-GH-secret + curl + Loki handshake to exercise on candidate-a.
+summary: Operator-facing runbook for task.0318 Phase B PR #968 — shows what's shipped, explains the three-location split + visible smells, and pins the 6-GH-secret + curl + Loki handshake to exercise on candidate-a.
 read_when: Creating the user-wallets Privy app, setting candidate-a secrets, exercising POST /api/v1/poly/wallet/connect, or reviewing PR #968's architecture.
 owner: derekg1729
 created: 2026-04-21
@@ -27,9 +27,9 @@ tags: [poly, polymarket, wallets, multi-tenant, privy, runbook]
 | Bootstrap factory `getPolyTraderWalletAdapter` + stub CLOB-creds gate           | ✅ shipped (`nodes/poly/app/src/bootstrap/poly-trader-wallet.ts`)        |
 | `POST /api/v1/poly/wallet/connect` route                                        | ✅ shipped (session-auth, `CUSTODIAL_CONSENT` enforced, 503 on unconfig) |
 | Agent-actor auth path                                                           | ⛔ explicit 501 until agent-API-key auth lands                           |
-| CI secret plumbing (`candidate-flight-infra.yml` + `deploy-infra.sh`)           | ✅ wired for all 5 new secrets                                           |
-| Orphan-wallet reconciler (`scripts/ops/sweep-orphan-poly-wallets.ts`)           | ⛔ not yet shipped — named in spec acceptance, follow-up                 |
-| Component / concurrency / defense-in-depth tests                                | ⛔ none yet — blocking per review feedback r3                            |
+| CI secret plumbing (`candidate-flight-infra.yml` + `deploy-infra.sh`)           | ✅ wired for all 6 new secrets                                           |
+| Orphan-wallet reconciler (`scripts/ops/sweep-orphan-poly-wallets.ts`)           | ⛔ deferred to follow-up task.0345                                       |
+| Component / concurrency / defense-in-depth tests                                | ✅ B2.10 landed: two-tenant adapter round-trip component test            |
 | `pnpm check:fast` on branch                                                     | ✅ green (2026-04-21)                                                    |
 
 ## Architecture (honest accounting)
@@ -60,7 +60,7 @@ nodes/poly/app/src/bootstrap/                   ← Factory + env wiring
 - **`biome-ignore lint/suspicious/noExplicitAny` on two sites in the adapter** — `createViemAccount` from `@privy-io/node/viem` ships its own viem (`2.48.1`) as a peer-dep; this app pins `2.39.3`. The shapes are runtime-identical but TypeScript rejects the assignment across the two installations. The exact same `const x: any = account` workaround is used in `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts:696-700` for the operator-wallet signer. Clean fix = unify viem versions, out of scope for this slice.
 - **v0 CLOB creds factory is a stub** returning `"placeholder-*"` strings. Gated behind `POLY_WALLET_ALLOW_STUB_CREDS=1`; the bootstrap throws at startup if the flag isn't "1" and real CLOB derivation isn't wired. Non-trade-eligible until a follow-up lands `@polymarket/clob-client createOrDeriveApiKey`.
 - **`provision` generates the row id via a Postgres roundtrip** (`SELECT gen_random_uuid()::text`) instead of `crypto.randomUUID()`. Noise, should be removed in the test PR.
-- **No tests yet.** The spec pins 11 acceptance checks; this PR ships zero. Landing a 1-tenant component round-trip test is the gate before any production rollout.
+- **One component test now exists, but only at the adapter / DB layer.** It proves the tenant-safe wallet lifecycle and caught the missing `0030` journal entry. It does **not** prove real Polymarket creds or tradeability; B2.12 is still the meaningful remaining blocker.
 
 ## Candidate-a exercise path
 
@@ -159,15 +159,14 @@ When the provision call returns 200 AND the Loki line appears at the deployed SH
 
 Ordered by blocking priority:
 
-1. **Real CLOB L2 creds factory** — wire `@polymarket/clob-client createOrDeriveApiKey` as a `clobCredsFactory` injection; drop the `POLY_WALLET_ALLOW_STUB_CREDS` gate in the factory.
-2. **Component test(s)** — testcontainers PG + stubbed Privy mock; prove `provision → resolve → getAddress → revoke → resolve=null` round-trip under two tenants with RLS defense-in-depth. Covers review-feedback r3 gap #6.
-3. **Orphan reconciler** — `scripts/ops/sweep-orphan-poly-wallets.ts` dry-run + `--apply`. Covers `NO_ORPHAN_BACKEND_WALLETS`.
-4. **`authorizeIntent` implementation** — requires `poly_wallet_grants` table (B4) + windowed fills-cap queries.
-5. **`withdrawUsdc` implementation** — ERC-20 transfer via Privy HSM; requires `WITHDRAW_BEFORE_REVOKE` UX in the dashboard (B3).
-6. **Agent-API-key auth path** — unlock `custodialConsentActorKind: "agent"` in the route (currently 501).
-7. **viem version unification** — drop the two `noExplicitAny` ignores in the adapter once `@privy-io/node`'s peer viem matches the app's.
-8. **`UUID round-trip`** — replace `tx.execute("SELECT gen_random_uuid()::text")` with `crypto.randomUUID()`.
-9. **Move adapter + port into a single package** once per-node DB schemas are available as shared packages.
+1. **Real CLOB L2 creds factory** — keep `@polymarket/clob-client` at the bootstrap boundary, wrap the Privy `LocalAccount` in `createWalletClient({ account, chain: polygon, transport: http() })`, dynamically import `ClobClient`, call `createOrDeriveApiKey()`, persist the returned creds through the existing AEAD envelope, then remove `POLY_WALLET_ALLOW_STUB_CREDS`.
+2. **`authorizeIntent` implementation** — requires `poly_wallet_grants` table (B4) + windowed fills-cap queries.
+3. **`withdrawUsdc` implementation** — ERC-20 transfer via Privy HSM; requires `WITHDRAW_BEFORE_REVOKE` UX in the dashboard (B3).
+4. **Agent-API-key auth path** — unlock `custodialConsentActorKind: "agent"` in the route (currently 501).
+5. **Orphan reconciler** — tracked separately in [task.0345](../../work/items/task.0345.poly-wallet-orphan-sweep.md). Keep it out of the v0 trading path.
+6. **viem version unification** — drop the two `noExplicitAny` ignores in the adapter once `@privy-io/node`'s peer viem matches the app's.
+7. **`UUID round-trip`** — replace `tx.execute("SELECT gen_random_uuid()::text")` with `crypto.randomUUID()`.
+8. **Move adapter + port into a single package** once per-node DB schemas are available as shared packages.
 
 ## Related
 

@@ -6,7 +6,7 @@ status: active
 created: 2026-04-21
 updated: 2026-04-21
 branch: feat/task-0318-phase-b
-last_commit: 88b28535f
+last_commit: 921413314
 ---
 
 # Handoff: task.0318 Phase B — per-tenant Polymarket trading wallets
@@ -15,8 +15,9 @@ last_commit: 88b28535f
 
 - Phase A (merged PR #944) shipped tenant-isolated RLS on the copy-trade tables but kept a single shared Privy operator wallet doing all execution. Phase B (this PR #968) is "each user trades from their own wallet," using per-tenant Privy server-wallets under a **dedicated user-wallets Privy app** (not the operator system app).
 - Phase B is decomposed B1–B7. B1 (Safe+4337 spike) was designed then **withdrawn** after review surfaced that the OSS framing didn't survive the Pimlico dependency and Privy-per-user reuses existing operator-wallet infra. The pivot is committed in the spec.
-- This slice (PR #968) lands the port + schema + adapter + API route + CI plumbing for B2 — enough to exercise `POST /api/v1/poly/wallet/connect` on candidate-a, but not yet enough to place a real trade (CLOB creds factory is a gated stub).
-- **Reviewers have already flagged the code as partially hacky** — three-location split, two `biome-ignore noExplicitAny`, stub CLOB creds, and zero tests. All five smells are named explicitly in the runbook + PR body; see § Risks.
+- This slice (PR #968) lands the port + schema + adapter + API route + CI plumbing for B2 — enough to exercise `POST /api/v1/poly/wallet/connect` on candidate-a, but not yet enough to place a real trade (CLOB creds factory is still a gated stub).
+- B2.10 is now covered locally by `nodes/poly/app/tests/component/wallet/privy-poly-trader-wallet.adapter.int.test.ts`, which round-trips `provision → resolve → getAddress → revoke → resolve=null` across two tenants and caught a real bug: fresh poly DBs were skipping `0030_poly_wallet_connections` because the Drizzle journal was missing that entry.
+- **Reviewers have already flagged the code as partially hacky** — three-location split, two `biome-ignore noExplicitAny`, stub CLOB creds. Those smells remain named explicitly in the runbook + PR body; the zero-tests complaint is now addressed.
 
 ## Current State
 
@@ -26,8 +27,8 @@ last_commit: 88b28535f
 - Bootstrap factory at `nodes/poly/app/src/bootstrap/poly-trader-wallet.ts` (routes can't import `@/adapters/**` per ESLint).
 - `POST /api/v1/poly/wallet/connect` — session-authed, `CUSTODIAL_CONSENT` enforced, **501** on `actorKind: "agent"` (agent auth deferred), **503** on unconfigured env, info log on success.
 - CI secret plumbing wires `PRIVY_USER_WALLETS_{APP_ID,APP_SECRET,SIGNING_KEY}` + `POLY_WALLET_AEAD_KEY_{HEX,ID}` + `POLY_WALLET_ALLOW_STUB_CREDS` through `candidate-flight-infra.yml` + `scripts/ci/deploy-infra.sh`.
-- `pnpm check:fast` **green** locally on the head. CI `static` **green** on merge commit `88b28535f`; build matrix + `unit` + `component` + `stack-test` still pending as of handoff.
-- Branch was merged with main at `88b28535f` (not rebased; no conflict). No upstream PR reviewers have signed off yet.
+- `pnpm check:fast` is green on the branch, and the targeted component lane for `privy-poly-trader-wallet.adapter.int.test.ts` now passes locally.
+- Branch includes the latest main merge carried into PR #968; no new architectural churn beyond the B2.10 test + docs truth-sync.
 
 ## Decisions Made
 
@@ -36,15 +37,15 @@ last_commit: 88b28535f
 - [Branded `AuthorizedSigningContext` for compile-time scope/cap bypass protection](../../packages/poly-wallet/src/port/poly-trader-wallet.port.ts) — `placeOrder` will accept only the branded type
 - [Advisory-locked `provision` + halt-future-only `revoke` + WITHDRAW_BEFORE_REVOKE UX contract](../../docs/spec/poly-trader-wallet-port.md#invariants)
 - [Custodial consent persisted on row; agent-actor path requires follow-up API-key auth](../../docs/spec/poly-trader-wallet-port.md#onboarding)
-- [Review feedback r3 status matrix — 5 of 6 blockers resolved, tests remain open](../items/task.0318.poly-wallet-multi-tenant-auth.md#review-feedback-revision-3--2026-04-20-phase-b-slice-on-pr-968)
+- [B2.11 orphan sweep deferred to follow-up task.0345](../items/task.0345.poly-wallet-orphan-sweep.md)
+- [Review feedback r3/r4 truth-sync — B2.10 fixed, B2.12 remains](../items/task.0318.poly-wallet-multi-tenant-auth.md#review-feedback-revision-3--2026-04-20-phase-b-slice-on-pr-968)
 
 ## Next Actions
 
-- [ ] **B2.10 — component test (BLOCKING before merge).** Testcontainers PG; two-tenant round-trip `provision → resolve → getAddress → revoke → resolve=null` exercising RLS + tenant defense-in-depth + AEAD round-trip. At minimum one test file.
-- [ ] **B2.11 — orphan reconciler.** `scripts/ops/sweep-orphan-poly-wallets.ts` dry-run + `--apply` mode. Lists Privy wallets under the user-wallets app, cross-refs DB active-set, flags wallets > 24h old with no match.
-- [ ] **B2.12 — real CLOB L2 creds factory.** Wire `@polymarket/clob-client createOrDeriveApiKey` into the `clobCredsFactory` injection; remove the `POLY_WALLET_ALLOW_STUB_CREDS=1` gate.
-- [ ] Verify CI build matrix + unit + component + stack-test pass on `88b28535f` (pending at handoff).
-- [ ] **Derek (human) — create the user-wallets Privy app + set the 6 GH secrets** at candidate-a env scope per [runbook § 1–3](../../docs/guides/poly-wallet-provisioning.md#candidate-a-exercise-path). Agent cannot do this. Unblocks candidate-a exercise after merge.
+- [x] **B2.10 — component test.** Testcontainers PG; two-tenant round-trip `provision → resolve → getAddress → revoke → resolve=null` exercising RLS + tenant defense-in-depth + AEAD round-trip. Landed locally in `nodes/poly/app/tests/component/wallet/privy-poly-trader-wallet.adapter.int.test.ts`.
+- [ ] **B2.12 — real CLOB L2 creds factory (remaining v0 blocker in this PR).** Keep `@polymarket/clob-client` out of the adapter package; wire the real `clobCredsFactory` in bootstrap by wrapping the Privy `LocalAccount` in `createWalletClient({ account, chain: polygon, transport: http() })`, dynamically importing `ClobClient`, and calling `createOrDeriveApiKey()` during `provision`. Once that lands, delete `POLY_WALLET_ALLOW_STUB_CREDS`.
+- [ ] **Post-v0 follow-up — orphan reconciler.** `scripts/ops/sweep-orphan-poly-wallets.ts` moved to [task.0345](../items/task.0345.poly-wallet-orphan-sweep.md). Useful hygiene, but not required to prove tenant-safe provisioning or real trading.
+- [ ] Candidate-a secrets are now created for the dedicated user-wallets app. After merge, preview / production still need the same env rollout pattern before broader promotion.
 - [ ] After merge → flight `candidate-flight-infra.yml` → exercise `POST /api/v1/poly/wallet/connect` per runbook § 5 → confirm Loki `poly.wallet.connect` line at the deployed SHA → post `deploy_verified` on PR.
 - [ ] **Non-blocking cleanup** (follow-up PR): `crypto.randomUUID()` instead of PG roundtrip, delete dead `brandAuthorized`, move route Zod schemas to `packages/node-contracts/`, add `created_at` index, viem version unification to remove both `biome-ignore noExplicitAny`.
 - [ ] B3–B7 remain unscoped beyond the checkpoint table. B3 (onboarding UX, both user + agent paths, withdraw) is the next meaningful slice.

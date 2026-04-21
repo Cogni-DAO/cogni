@@ -10,7 +10,7 @@ summary: "Autonomous mirror of selected Polymarket wallets from a Cogni-controll
 outcome: "A Cogni node autonomously mirrors N Polymarket target wallets onto M per-user operator wallets with sub-30s latency, RLS-enforced tenancy, at-most-once idempotency, and real-money caps enforced in code. DAO treasury earns measurable realized PnL tracked against a counterfactual baseline."
 assignees: derekg1729
 created: 2026-04-19
-updated: 2026-04-19
+updated: 2026-04-21
 labels: [poly, polymarket, copy-trading, mirror, privy, rls, multi-tenant]
 ---
 
@@ -47,12 +47,13 @@ Take a Polymarket wallet that demonstrably trades with edge, and mirror its fill
 
 ### Phase 3 (P3) — Multi-tenant: per-user operator wallets + RLS
 
-> **Needs design.** The current single-operator env-directed model ships one Cogni instance = one Polymarket EOA. Users cannot bring their own wallet; copy-trade tables have no tenant column. Phase 3 replaces env with `poly_wallet_connections` + `poly_wallet_grants` + RLS on `poly_copy_trade_*`.
+> **Active.** Phase A already shipped tenant-scoped copy-trade rows + RLS. Phase B pivots to Privy-per-user and is partially landed in PR #968: port, schema, adapter, route, env plumbing, and B2.10 component coverage are in. The remaining v0-critical step is real CLOB creds (B2.12). Orphan cleanup is now tracked separately as follow-up ops work.
 
-| Deliverable                                                                                                   | Status       | Est | Work Item                                                                |
-| ------------------------------------------------------------------------------------------------------------- | ------------ | --- | ------------------------------------------------------------------------ |
-| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A)        | Needs Design | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B |
-| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — see task.0318 §signing-backend-comparison | Needs Design | 2   | (inline in task.0318)                                                    |
+| Deliverable                                                                                            | Status       | Est | Work Item                                                                |
+| ------------------------------------------------------------------------------------------------------ | ------------ | --- | ------------------------------------------------------------------------ |
+| Per-user operator wallet binding + durable `WalletGrant` (RLS on copy-trade tables shipped in Phase A) | In Review    | 5   | [task.0318](../items/task.0318.poly-wallet-multi-tenant-auth.md) Phase B |
+| Signing-backend decision (Safe+4337 vs Privy-per-user vs Turnkey) — resolved to Privy-per-user for v0  | Done         | 2   | (inline in task.0318)                                                    |
+| User-wallet orphan sweep for the dedicated Privy app (ops hygiene, not v0 trading path)                | Needs Design | 2   | [task.0345](../items/task.0345.poly-wallet-orphan-sweep.md)              |
 
 ### Phase 4 (P4) — Streaming + adversarial-robust ranking
 

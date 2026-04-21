@@ -256,9 +256,9 @@ export interface PolyTraderWalletPort {
 - `CREDS_ENCRYPTED_AT_REST` — CLOB API creds stored in `poly_wallet_connections.clob_api_key_ciphertext` via the existing `connections` AEAD envelope.
 - `PROVISION_IS_IDEMPOTENT` — calling `provision` twice for the same tenant (concurrently or sequentially) returns the same connection. Implementations MUST serialize the create-wallet → derive-creds → insert sequence per tenant (advisory lock); partial failures roll back inside the lock so orphaned backend wallets cannot be created.
 - `REVOKE_IS_DURABLE` — `revoked_at` is the authoritative kill-switch; the executor's `resolve` call is the only enforcement point. Revocation is halt-future-only: in-flight orders complete, funds on the revoked address remain until the user withdraws.
-- `SEPARATE_PRIVY_APP` — the Privy adapter MUST NOT read `PRIVY_APP_ID` / `PRIVY_APP_SECRET` / `PRIVY_SIGNING_KEY` (those are the system / operator-wallet app). It reads a distinct env scope; see § Env below. Enforcement: a dep-cruiser rule at `packages/poly-wallet/` forbids imports of `PRIVY_APP_ID` / `PRIVY_APP_SECRET` / `PRIVY_SIGNING_KEY` identifiers from any module under `src/`, and typed env loading uses a separate Zod schema with the `PRIVY_USER_WALLETS_*` shape.
+- `SEPARATE_PRIVY_APP` — the Privy adapter MUST NOT read `PRIVY_APP_ID` / `PRIVY_APP_SECRET` / `PRIVY_SIGNING_KEY` (those are the system / operator-wallet app). It reads a distinct env scope; see § Env below. Enforcement: the adapter is constructor-injected with a `PrivyClient` and signing key, so it stays env-free; bootstrap loads only `PRIVY_USER_WALLETS_*`, and routes import bootstrap rather than `@/adapters/**` directly.
 - `AUTHORIZED_SIGNING_ONLY` — `PolymarketClobAdapter.placeOrder` accepts `AuthorizedSigningContext` (branded), not `PolyTraderSigningContext`. Grant scope + cap enforcement is compile-checked at the call site, not left to coordinator discipline.
-- `NO_ORPHAN_BACKEND_WALLETS` — a reconciler script (`scripts/ops/sweep-orphan-poly-wallets.ts`, shipping in B2) lists Privy server-wallets under the user-wallets app, cross-references `poly_wallet_connections`, and flags wallets with no matching un-revoked row older than 24h for inspection + deletion. Runs on demand in B2; scheduled in follow-up ops work.
+- `NO_ORPHAN_BACKEND_WALLETS` — provisioning failures may still leave bounded backend-wallet orphans because Privy wallet creation happens before the DB row commits. Cleanup is handled by a follow-up ops task (`task.0345` / `scripts/ops/sweep-orphan-poly-wallets.ts`), not by the runtime path. The v0 requirement is to keep the orphan set bounded and make it sweepable later, not to block trading on shipping the sweep first.
 - `WITHDRAW_BEFORE_REVOKE` — the dashboard MUST expose manual `withdrawUsdc` before offering `revoke`. Stranding funds at a revoked address is a UX failure mode, not an acceptable edge case.
 - `CUSTODIAL_CONSENT` — a plain-English disclosure screen ("Cogni creates and holds this trading wallet via our custody provider Privy; only you can trigger trades and withdrawals through this app; if you lose access to your Cogni account, wallet recovery requires Cogni operator assistance") ships in the B3 onboarding flow. The tenant's acknowledgement is persisted (`poly_wallet_connections.custodial_consent_accepted_at`) before `provision` is permitted to run.
 
@@ -278,7 +278,7 @@ interface PrivyPolyTraderWalletAdapterDeps {
   serviceDb: ServiceDb;
   /** AEAD envelope used by `@cogni/connections` for at-rest encryption. */
   credentialEnvelope: CredentialEnvelope;
-  /** Polymarket CLOB client factory — the adapter calls it to derive L2 creds at provision time. */
+  /** Polymarket CLOB client factory — injected from bootstrap so the adapter never imports `@polymarket/clob-client` directly. */
   clobFactory: (signer: LocalAccount) => Promise<ApiKeyCreds>;
   /** Logger. */
   logger: Logger;
@@ -306,11 +306,11 @@ interface PrivyPolyTraderWalletAdapterDeps {
   3. `SELECT` existing un-revoked row for this tenant; if present, COMMIT + return the signing context (idempotent, no Privy call).
   4. `privyClient.wallets().create({ chain_type: "ethereum" })` → `{ walletId, address }`. **External dependency: Privy HSM must be reachable.**
   5. `createViemAccount(...)` → `LocalAccount`.
-  6. `clobFactory(account)` → `ApiKeyCreds` via Polymarket `/auth/api-key`. **External dependency: CLOB API must be reachable.**
+  6. `clobFactory(account)` → `ApiKeyCreds` via Polymarket `/auth/api-key`. The production implementation lives at the bootstrap boundary: wrap the Privy `LocalAccount` in `createWalletClient({ account, chain: polygon, transport: http() })`, dynamically import `ClobClient`, then call `createOrDeriveApiKey()`. **External dependency: CLOB API must be reachable.**
   7. `credentialEnvelope.encrypt(JSON.stringify(creds))` → `{ ciphertext, encryptionKeyId }`.
   8. `INSERT INTO poly_wallet_connections(...) VALUES (...)`.
   9. `COMMIT` and return the `PolyTraderSigningContext`.
-  - **Any failure at steps 4–8** rolls back the transaction, releasing the advisory lock. The unsued Privy wallet from step 4 is _not_ automatically deleted — an out-of-band reconciler (future ops task) sweeps Privy wallets with no matching DB row older than 24h. This is the cheapest correctness story: callers retry `provision`; retries either hit step 3 (if a prior attempt committed) or get a fresh wallet (if not); orphans are bounded and cleaned asynchronously.
+  - **Any failure at steps 4–8** rolls back the transaction, releasing the advisory lock. The unsued Privy wallet from step 4 is _not_ automatically deleted — an out-of-band reconciler (follow-up ops task `task.0345`) sweeps Privy wallets with no matching DB row older than 24h. This is the cheapest correctness story: callers retry `provision`; retries either hit step 3 (if a prior attempt committed) or get a fresh wallet (if not); orphans are bounded and cleaned asynchronously.
 
 - `revoke({ billingAccountId, revokedByUserId })`:
   1. `UPDATE poly_wallet_connections SET revoked_at = now(), revoked_by_user_id = $2 WHERE billing_account_id = $1 AND revoked_at IS NULL`.
@@ -340,7 +340,7 @@ interface PrivyPolyTraderWalletAdapterDeps {
   4. `UPDATE poly_wallet_connections SET clob_api_key_ciphertext = ..., encryption_key_id = ...`.
   5. Return a fresh `PolyTraderSigningContext` with the new creds.
 
-### Orphan reconciler (`scripts/ops/sweep-orphan-poly-wallets.ts`, ships in B2)
+### Orphan reconciler (`scripts/ops/sweep-orphan-poly-wallets.ts`, follow-up ops task `task.0345`)
 
 Minimal TypeScript script run on demand (cron comes later):
 
@@ -349,7 +349,7 @@ Minimal TypeScript script run on demand (cron comes later):
 3. For each Privy wallet NOT in the active-set **AND** older than 24h **AND** carrying zero USDC.e + zero MATIC: log flag.
 4. `--apply` flag deletes the flagged wallets via Privy `DELETE wallet`; default is dry-run.
 
-Output: summary table (total listed / matched / orphans flagged / deleted). Run before + after major provisioning churn; re-run weekly by hand until the scheduled job lands.
+Output: summary table (total listed / matched / orphans flagged / deleted). Run before + after major provisioning churn; re-run weekly by hand until the scheduled job lands. This is intentionally separate from the v0 trading path.
 
 ### What the adapter deliberately does NOT do
 
@@ -499,8 +499,8 @@ The port is designed to accept additional backends without caller churn:
 | #   | Check                                                                                                                                                                                                                                                                                                    |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | `PolyTraderWalletPort` interface defined in `packages/poly-wallet/src/port/` with all invariants doc-pinned.                                                                                                                                                                                             |
-| 2   | `PrivyPolyTraderWalletAdapter` in `packages/poly-wallet/src/adapters/privy/` implements all four methods; unit tests cover each.                                                                                                                                                                         |
-| 3   | **`SEPARATE_PRIVY_APP` enforcement shipped in B2**: a dep-cruiser rule forbids `PRIVY_APP_ID` / `PRIVY_APP_SECRET` / `PRIVY_SIGNING_KEY` identifiers anywhere under `packages/poly-wallet/src/`; env loading uses a Zod schema scoped to `PRIVY_USER_WALLETS_*`. CI fails on violation.                  |
+| 2   | `PrivyPolyTraderWalletAdapter` lives node-local in `nodes/poly/app/src/adapters/server/wallet/` (because it depends on `@cogni/poly-db-schema`) and implements `resolve`, `getAddress`, `provision`, and `revoke`; component tests cover the shipped lifecycle.                                          |
+| 3   | **`SEPARATE_PRIVY_APP` enforcement shipped in B2**: the adapter is constructor-injected with a user-wallets `PrivyClient` and signing key, bootstrap loads only `PRIVY_USER_WALLETS_*`, and routes import bootstrap rather than `@/adapters/**` directly.                                                |
 | 4   | **Concurrent-provision test**: two simultaneous `provision(tenantA)` calls (promise-level `Promise.all`) return the same `connectionId`; Privy is called exactly once. Validates the advisory-lock contract.                                                                                             |
 | 5   | Component test: `provision(tenantA)` + `provision(tenantB)` return distinct `funderAddress`; `resolve(tenantA)` ≠ `resolve(tenantB)`.                                                                                                                                                                    |
 | 6   | Component test: calling `provision(tenantA)` sequentially twice returns the same `connectionId` (idempotent, DB-hit-only).                                                                                                                                                                               |
@@ -511,7 +511,7 @@ The port is designed to accept additional backends without caller churn:
 | 11  | **Operational runbook**: `docs/guides/poly-wallet-provisioning.md` documents how to create the user-wallets Privy app, populate the three `PRIVY_USER_WALLETS_*` secrets in candidate-a / preview / production, and verify the separation from the operator-wallet app. Link from this spec's § Related. |
 | 12  | **`authorizeIntent` grant enforcement tests**: unit tests cover every `AuthorizationFailure` variant — no_connection, no_active_grant, grant_expired, grant_revoked, scope_missing, cap_exceeded_per_order, cap_exceeded_daily, cap_exceeded_hourly_fills.                                               |
 | 13  | **Type-level enforcement**: a TS compile-test fixture proves `PolymarketClobAdapter.placeOrder(rawContext)` fails to type-check; only `AuthorizedSigningContext` is accepted.                                                                                                                            |
-| 14  | **Orphan reconciler shipped**: `scripts/ops/sweep-orphan-poly-wallets.ts` commits in B2 with a dry-run + `--apply` mode. README entry in `scripts/ops/` covers the cadence.                                                                                                                              |
+| 14  | **Orphan reconciler deferred cleanly**: `scripts/ops/sweep-orphan-poly-wallets.ts` is tracked separately in `task.0345` as follow-up ops hygiene. Its absence does not block v0 provisioning or real-credentials trading, but the runtime path must keep orphan creation bounded and sweepable later.    |
 | 15  | **Withdraw path tested**: component test + local fake ERC-20 prove `withdrawUsdc` sends USDC.e from the tenant funder to an external destination and emits the expected Pino log.                                                                                                                        |
 | 16  | **Custodial consent persisted**: B3 onboarding test asserts `provision` rejects (409) when `custodial_consent_accepted_at` is NULL; accepts when set.                                                                                                                                                    |
 | 17  | **User + agent onboarding paths both exercised**: B3 ships integration tests for (a) the dashboard flow through step 7, (b) the API path with an agent-bound key.                                                                                                                                        |
