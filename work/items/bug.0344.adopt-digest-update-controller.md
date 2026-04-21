@@ -2,7 +2,7 @@
 id: bug.0344
 type: bug
 title: Hand-curated overlay digests drift on every unrelated flight — adopt a digest-update controller
-status: needs_review
+status: done
 priority: 0
 rank: 1
 estimate: 5
@@ -14,13 +14,13 @@ assignees: derekg1729
 credit:
 project: proj.cicd-services-gitops
 branch: design/bug-0344-digest-updater
-pr:
+pr: 974
 deploy_verified: false
-reviewer:
+reviewer: claude-opus
 revision: 3
 blocked_by:
 created: 2026-04-20
-updated: 2026-04-20
+updated: 2026-04-21
 labels: [cicd, infra, gitops, drift, argo]
 external_refs:
   - scripts/ci/promote-k8s-image.sh
