@@ -16,7 +16,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib/image-tags.sh"
 
 TARGETS=${TARGETS:-}
+# Legacy single-repo input. bug.0344 split migrator images into a distinct
+# GHCR package; the producer now picks the push repo per-target via
+# image_name_for_target. IMAGE_NAME is preserved as the APP-repo override
+# knob (back-compat with existing workflow env; it feeds IMAGE_NAME_APP).
 IMAGE_NAME=${IMAGE_NAME:-ghcr.io/cogni-dao/cogni-template}
+export IMAGE_NAME_APP=${IMAGE_NAME_APP:-$IMAGE_NAME}
+export IMAGE_NAME_MIGRATOR=${IMAGE_NAME_MIGRATOR:-${IMAGE_NAME_APP}-migrate}
 IMAGE_TAG=${IMAGE_TAG:-}
 PLATFORM=${PLATFORM:-linux/amd64}
 OUTPUT_FILE=${OUTPUT_FILE:-${RUNNER_TEMP:-/tmp}/build-images.json}
@@ -38,7 +44,7 @@ mkdir -p "$(dirname "$OUTPUT_FILE")"
 trimmed_targets=$(printf "%s" "$TARGETS" | tr -d '[:space:]')
 if [ -z "$trimmed_targets" ]; then
   printf '{\n  "image_name": "%s",\n  "image_tag": "%s",\n  "platform": "%s",\n  "targets": []\n}\n' \
-    "$IMAGE_NAME" "$IMAGE_TAG" "$PLATFORM" > "$OUTPUT_FILE"
+    "$IMAGE_NAME_APP" "$IMAGE_TAG" "$PLATFORM" > "$OUTPUT_FILE"
 
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
@@ -52,7 +58,8 @@ if [ -z "$trimmed_targets" ]; then
     {
       echo "## Built PR Images"
       echo ""
-      echo "- Image name: \`$IMAGE_NAME\`"
+      echo "- App package: \`$IMAGE_NAME_APP\`"
+      echo "- Migrator package: \`$IMAGE_NAME_MIGRATOR\`"
       echo "- Image tag: \`$IMAGE_TAG\`"
       echo "- Targets: none"
     } >> "$GITHUB_STEP_SUMMARY"
@@ -77,15 +84,18 @@ if [ -n "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_USERNAME:-}" ]; then
   printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin >/dev/null
 fi
 
-image_name_lower=$(printf "%s" "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
+IMAGE_NAME_APP=$(printf "%s" "$IMAGE_NAME_APP" | tr '[:upper:]' '[:lower:]')
+IMAGE_NAME_MIGRATOR=$(printf "%s" "$IMAGE_NAME_MIGRATOR" | tr '[:upper:]' '[:lower:]')
 # BUILD_SHA wins so pull_request-triggered workflows can pass the real PR head
 # instead of the ephemeral refs/pull/{N}/merge SHA that GitHub puts in GITHUB_SHA.
 # See bug.0313.
 git_sha="${BUILD_SHA:-${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}}"
 build_timestamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+# bug.0344: image_name_for_target picks APP vs MIGRATOR package per-target.
+# image-tags.sh's image_tag_for_target joins them with the tag suffix.
 resolve_tag() {
-  image_tag_for_target "$image_name_lower" "$IMAGE_TAG" "$1"
+  image_tag_for_target "$(image_name_for_target "$1")" "$IMAGE_TAG" "$1"
 }
 
 build_target() {
@@ -233,7 +243,8 @@ fi
 
 cat > "$OUTPUT_FILE" <<EOF
 {
-  "image_name": "${image_name_lower}",
+  "image_name": "${IMAGE_NAME_APP}",
+  "image_name_migrator": "${IMAGE_NAME_MIGRATOR}",
   "image_tag": "${IMAGE_TAG}",
   "platform": "${PLATFORM}",
   "targets": [
@@ -256,7 +267,8 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   {
     echo "## Built PR Images"
     echo ""
-    echo "- Image name: \`${image_name_lower}\`"
+    echo "- App package: \`${IMAGE_NAME_APP}\`"
+    echo "- Migrator package: \`${IMAGE_NAME_MIGRATOR}\`"
     echo "- Image tag: \`${IMAGE_TAG}\`"
     echo "- Targets: \`${built_targets_csv}\`"
     echo ""

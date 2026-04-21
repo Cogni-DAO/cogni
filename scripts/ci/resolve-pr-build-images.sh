@@ -18,10 +18,14 @@
 #   resolved_file, resolved_targets (CSV), has_images (bool)
 #
 # Env:
-#   IMAGE_NAME    (default ghcr.io/cogni-dao/cogni-template)
-#   IMAGE_TAG     (required) the pr-{N}-{sha} tag
-#   SOURCE_SHA    (optional) the 40-char PR head SHA — overrides IMAGE_TAG parse
-#   OUTPUT_FILE   (default $RUNNER_TEMP/resolved-pr-images.json)
+#   IMAGE_NAME           (default ghcr.io/cogni-dao/cogni-template) legacy
+#                        APP-repo override; feeds IMAGE_NAME_APP.
+#   IMAGE_NAME_APP       (default = IMAGE_NAME) APP-repo override.
+#   IMAGE_NAME_MIGRATOR  (default = ${IMAGE_NAME_APP}-migrate) migrator-repo
+#                        override (bug.0344 GHCR split).
+#   IMAGE_TAG            (required) the pr-{N}-{sha} tag
+#   SOURCE_SHA           (optional) the 40-char PR head SHA — overrides IMAGE_TAG parse
+#   OUTPUT_FILE          (default $RUNNER_TEMP/resolved-pr-images.json)
 
 set -euo pipefail
 
@@ -34,6 +38,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$SCRIPT_DIR/lib/image-tags.sh"
 
 IMAGE_NAME=${IMAGE_NAME:-ghcr.io/cogni-dao/cogni-template}
+export IMAGE_NAME_APP=${IMAGE_NAME_APP:-$IMAGE_NAME}
+export IMAGE_NAME_MIGRATOR=${IMAGE_NAME_MIGRATOR:-${IMAGE_NAME_APP}-migrate}
 IMAGE_TAG=${IMAGE_TAG:-}
 SOURCE_SHA=${SOURCE_SHA:-}
 OUTPUT_FILE=${OUTPUT_FILE:-${RUNNER_TEMP:-/tmp}/resolved-pr-images.json}
@@ -64,7 +70,7 @@ if ! docker buildx version >/dev/null 2>&1; then
 fi
 
 resolve_tag() {
-  image_tag_for_target "$IMAGE_NAME" "$IMAGE_TAG" "$1"
+  image_tag_for_target "$(image_name_for_target "$1")" "$IMAGE_TAG" "$1"
 }
 
 resolve_digest_ref() {
@@ -99,7 +105,8 @@ fi
 
 cat > "$OUTPUT_FILE" <<EOF
 {
-  "image_name": "${IMAGE_NAME}",
+  "image_name": "${IMAGE_NAME_APP}",
+  "image_name_migrator": "${IMAGE_NAME_MIGRATOR}",
   "image_tag": "${IMAGE_TAG}",
   "source_sha": "${SOURCE_SHA}",
   "targets": [

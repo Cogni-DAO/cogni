@@ -26,6 +26,10 @@ metadata:
   namespace: argocd
 data:
   registries.conf: |
+    # prefix: ghcr.io is deliberately registry-wide, not per-package. It
+    # covers BOTH cogni-template (app) and cogni-template-migrate (migrator)
+    # from the bug.0344 GHCR split via the same credentials — the PAT has
+    # admin access to every package under the cogni-dao org.
     registries:
       - name: GitHub Container Registry
         api_url: https://ghcr.io

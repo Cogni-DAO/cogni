@@ -168,10 +168,13 @@ jobs:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           RESOLVED_TARGETS: ${{ steps.images.outputs.resolved_targets }}
         run: |
-          # Canonical target catalog + tag-suffix mapping (bug.0328
-          # architectural follow-up). Iterating ALL_TARGETS means adding a
-          # new node is a one-line edit in scripts/ci/lib/image-tags.sh —
-          # no inline list to drift here (the root cause of PR #923).
+          # Canonical target catalog + tag-suffix + GHCR-package mapping
+          # (bug.0328 + bug.0344). Iterating ALL_TARGETS means adding a new
+          # node is a one-line edit in scripts/ci/lib/image-tags.sh — no
+          # inline list to drift here (root cause of PR #923). image_name_for_target
+          # picks the APP vs MIGRATOR GHCR package per target (bug.0344
+          # GHCR split — gives ACIU app/migrator aliases independent
+          # Status.Summary.Images entries).
           # shellcheck source=../../scripts/ci/lib/image-tags.sh
           . scripts/ci/lib/image-tags.sh
 
@@ -183,9 +186,10 @@ jobs:
               continue
             fi
             suffix=$(tag_suffix_for_target "$target")
-            src="${IMAGE_NAME}:${PR_IMAGE_TAG}${suffix}"
-            dst="${IMAGE_NAME}:${PREVIEW_TAG}${suffix}"
-            echo "Re-tagging ${target}: ${PR_IMAGE_TAG}${suffix} → ${PREVIEW_TAG}${suffix}"
+            image_name=$(image_name_for_target "$target")
+            src="${image_name}:${PR_IMAGE_TAG}${suffix}"
+            dst="${image_name}:${PREVIEW_TAG}${suffix}"
+            echo "Re-tagging ${target}: ${image_name##*/}:${PR_IMAGE_TAG}${suffix} → ${PREVIEW_TAG}${suffix}"
             docker buildx imagetools create --tag "$dst" "$src"
           done
 

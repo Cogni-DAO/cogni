@@ -124,18 +124,23 @@ jobs:
         env:
           HEAD_SHA: ${{ steps.env.outputs.head_sha }}
         run: |
-          # Canonical target catalog + tag-suffix mapping (bug.0328
-          # architectural follow-up). Checkout step places the repo under
+          # Canonical target catalog + tag-suffix + GHCR-package mapping
+          # (bug.0328 + bug.0344). Checkout step places the repo under
           # `app-src/` (see `path: app-src` above), so the lib lives there.
+          # image_name_for_target picks the APP vs MIGRATOR GHCR package
+          # per target (bug.0344 GHCR split).
           # shellcheck source=../../scripts/ci/lib/image-tags.sh
           . app-src/scripts/ci/lib/image-tags.sh
 
-          IMAGE_NAME="ghcr.io/cogni-dao/cogni-template"
           TAG="preview-${HEAD_SHA}"
 
           # Non-fatal: affected-only CI builds only changed services.
           # Empty digest = service not in this build; promote-k8s-image skips it,
-          # leaving the existing digest in the overlay unchanged.
+          # leaving the existing digest in the overlay unchanged. The emitted
+          # `repo@sha256:...` form takes the repo from the looked-up tag so
+          # app-repo and migrator-repo digests are each preserved correctly
+          # (bug.0344 — do not re-stamp the outer IMAGE_NAME onto migrator
+          # digests, that was the single-repo-world bug).
           resolve_optional() {
             local full_tag="$1"
             local digest
@@ -149,7 +154,7 @@ jobs:
               echo ""
               return 0
             fi
-            echo "${IMAGE_NAME}@${digest}"
+            echo "${full_tag%%:*}@${digest}"
           }
 
           # Resolve every target and emit a single JSON blob the promote step
@@ -163,7 +168,7 @@ jobs:
           echo "Resolved digests:"
           DIGESTS_JSON="{}"
           for target in "${ALL_TARGETS[@]}"; do
-            full_tag=$(image_tag_for_target "$IMAGE_NAME" "$TAG" "$target")
+            full_tag=$(image_tag_for_target "$(image_name_for_target "$target")" "$TAG" "$target")
             digest=$(resolve_optional "$full_tag")
             DIGESTS_JSON=$(printf '%s' "$DIGESTS_JSON" | jq -c --arg k "$target" --arg v "$digest" '. + {($k): $v}')
             printf '  %-18s %s\n' "${target}:" "${digest:-"(not built)"}"
