@@ -254,11 +254,41 @@ clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_STREAM_ERROR, { messageId });
 
 **Core app metrics:** `http_requests_total`, `http_request_duration_ms`, `ai_chat_stream_duration_ms`, `ai_llm_call_duration_ms`, `ai_llm_tokens_total`, `ai_llm_cost_usd_total`, `ai_llm_errors_total`
 
+**Build info metric:** `app_build_info{version,commit_sha}` — standard Prometheus gauge for image version identification. Exposed via `GET /api/metrics` (Bearer auth). Canonical source for build verification. See [Build Verification section](#build-verification).
+
 **Infra metrics (via Alloy exporters, strict allowlist):** `container_memory_working_set_bytes`, `container_memory_rss`, `container_spec_memory_limit_bytes`, `container_cpu_usage_seconds_total`, `container_oom_events_total`, `container_network_*`, `container_fs_*`, `node_filesystem_avail_bytes` (excl. tmpfs/overlay), `node_memory_MemAvailable_bytes`, `node_cpu_seconds_total`, `node_network_*`, `up`
 
 **Labels:** All low-cardinality—`route` (routeId), `method`, `status` (2xx/4xx/5xx), `provider`, `model_class` (free/standard/premium), `code` (`AiExecutionErrorCode` — pre-normalized, no heuristics)
 
 **Error Metrics:** `ai_llm_errors_total` receives pre-normalized `AiExecutionErrorCode` from the completion layer. Metrics never introspect error objects or use string heuristics. See [Error Handling Architecture](ERROR_HANDLING_ARCHITECTURE.md#ai-execution-errors).
+
+---
+
+## Build Verification
+
+**Canonical source:** `GET /api/metrics` returns `app_build_info{version="1.0.0",commit_sha="<sha>"}`. Query with:
+
+```logql
+app_build_info{commit_sha=~".*"}
+```
+
+**Deprecated path:** `/readyz.version` was a pragmatic interim gate for `verify-buildsha.sh`. It is deprecated and will be removed. `/metrics` is the correct layer per K8s/Prometheus standards.
+
+**Invariant: BUILD_SHA_IN_METRICS** — Every deployed image MUST expose `app_build_info{version,commit_sha}` via its `/api/metrics` endpoint. No `/readyz` fallback for build verification.
+
+**Implementation:** Add to `src/shared/observability/server/metrics.ts`:
+
+```typescript
+new client.Gauge({
+  name: "app_build_info",
+  help: "Build information",
+  labelNames: ["version", "commit_sha"],
+  registers: [metricsRegistry],
+}).set(
+  { version: "1.0.0", commit_sha: process.env.APP_BUILD_SHA || "unknown" },
+  1
+);
+```
 
 ---
 
@@ -299,6 +329,7 @@ clientLogger.warn(EVENT_NAMES.CLIENT_CHAT_STREAM_ERROR, { messageId });
 4. **No sensitive data:** Redact paths cover passwords, keys, tokens; never log prompts or full request bodies
 5. **Streaming determinism:** Every SSE request emits exactly one terminal event (completed OR finalization_lost)
 6. **NODE_IDENTITY_IN_OBSERVABILITY:** Every log line and metric series carries `nodeId` from repo-spec. See [Multi-Node Identity](#multi-node-identity).
+7. **BUILD_SHA_IN_METRICS:** `app_build_info{version,commit_sha}` is the canonical source for build verification via `/api/metrics`. `/readyz.version` is deprecated.
 
 ---
 

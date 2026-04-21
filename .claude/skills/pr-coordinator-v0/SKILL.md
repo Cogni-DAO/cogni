@@ -56,13 +56,22 @@ This coordinator flights PRs to the `test` environment (slot `candidate-a`). Pre
 
 ## Observability Anchors
 
-**Primary rollout proof channel: Grafana Loki.** The flight workflow already runs its own `wait-for-candidate-ready.sh` smoke test (endpoint 200s). The coordinator's extra gate is the app startup log:
+**Primary rollout proof channel: Grafana Loki.** The flight workflow already runs its own `wait-for-candidate-ready.sh` smoke test (endpoint 200s). The coordinator's extra gate is the `app_build_info` metric from `/api/metrics`:
+
+```logql
+{namespace="cogni-candidate-a", pod=~"<app>-node-app-.*"}
+  |= "app_build_info" | json | commit_sha = "<PR head SHA>"
+```
+
+Query the metrics scrapes (last 5m) to confirm the new SHA is reflected. Alternatively, the app startup log:
 
 ```logql
 {namespace="cogni-candidate-a"} |= "app started" | json | buildSha = "<PR head SHA>"
 ```
 
 If that line exists for the affected pods, the new image booted. Don't poll `/readyz` yourself — ingress lags pod rollout by minutes and is a known false-positive channel.
+
+**Canonical verification:** `/api/metrics` (Bearer auth, `METRICS_TOKEN`). The `app_build_info{version,commit_sha}` metric is the canonical source. `/readyz.version` is deprecated.
 
 **Also from Loki:** Argo sync events (`{namespace="argocd"} |= "<app-name>"`), pod startup errors, and feature-specific "success" signals the `grafana-watcher` sub-agent is tasked with reading.
 
@@ -141,16 +150,25 @@ On flight failure, collect the failing step's logs, summarize, **halt the loop**
 
 ### 3a. Proof of rollout (REQUIRED)
 
-The workflow's own `wait-for-candidate-ready.sh` is endpoint-only and passes before ingress switches over. The coordinator's gate is the **app startup log in Loki**:
+The workflow's own `wait-for-candidate-ready.sh` is endpoint-only and passes before ingress switches over. The coordinator's gate is the **metrics scrape in Loki** (canonical) or the **app startup log** (alternative):
+
+**Canonical — query metrics scrapes:**
+
+```logql
+{namespace="cogni-candidate-a", pod=~"<app>-node-app-.*"}
+  |= "app_build_info{" | json | commit_sha = "<PR head SHA>"
+```
+
+**Alternative — app startup log:**
 
 ```logql
 {namespace="cogni-candidate-a", pod=~"<app>-node-app-.*"}
   |= "app started" | json | buildSha = "<PR head SHA>"
 ```
 
-For each app the PR affects (poly / resy / operator): **first** poll Argo logs (`{namespace="argocd"} |= "candidate-a-<app>"`) until you see `Progressing → Healthy` for the flight's commit SHA. **Then** query the `app started` log and confirm `buildSha` exactly matches the PR head SHA. Do not report rollout success until both are observed — pod-hash changes, `/readyz` 200s, and "new pod appeared" are not proof. If Argo hasn't gone Healthy within ~10 min, escalate.
+For each app the PR affects (poly / resy / operator): **first** poll Argo logs (`{namespace="argocd"} |= "candidate-a-<app>"`) until you see `Progressing → Healthy` for the flight's commit SHA. **Then** query the `app_build_info` metric and confirm `commit_sha` exactly matches the PR head SHA. Do not report rollout success until both are observed — pod-hash changes, `/readyz` 200s, and "new pod appeared" are not proof. If Argo hasn't gone Healthy within ~10 min, escalate.
 
-**Don't `curl /readyz` yourself.** Ingress serves the old pod for minutes after Argo reports Healthy; `/readyz` is a known false-positive channel. The workflow already runs endpoint checks internally.
+**Use `/api/metrics`, not `/readyz`.** `/readyz.version` is deprecated. `/api/metrics` with Bearer auth (`METRICS_TOKEN`) exposes `app_build_info{version,commit_sha}` as the canonical build identifier. Ingress serves the old pod for minutes after Argo reports Healthy; endpoint checks are known false-positive channels.
 
 ### 4. Observe
 
@@ -258,7 +276,7 @@ Use the `Agent` tool with `subagent_type: general-purpose`. Give each a tight, s
 - **Flight failures halt the loop.** Collect logs, escalate, do not auto-advance.
 - **Never `--admin` on merge.** Non-release PRs to main will always require human admin-merge until `release/*` policy lands — this is **expected, not a failure**. Post the scorecard, name it as the blocker, hand off to Derek.
 - **Verify rollout before opening QA window.** Run the Proof of Rollout ritual (step 3a) after every flight. An unrolled flight silently serves the previous build — worse than a hard failure.
-- **Trust Loki, not `/readyz`.** Rollout proof = app-startup log with matching buildSha. Don't curl endpoints as a gate.
+- **Trust Loki `/metrics`, not `/readyz`.** Rollout proof = `app_build_info{commit_sha="<SHA>"}` in metrics scrapes. `/readyz.version` is deprecated.
 - **Read `flight-preview.yml`'s checks correctly.** On merge to main, two jobs appear in the commit's checks list:
   - `flight ✓` + `deploy-preview ✓` — preview actually deployed. Proof-of-rollout applies to `cogni-preview` pods.
   - `flight ✓` + `deploy-preview ⊘ skipped` — preview lease was locked (a prior SHA still `reviewing`/`dispatching`). The merged SHA is queued as `deploy/preview:.promote-state/candidate-sha`, **nothing rolled**. Do not proof-of-rollout preview for this SHA — it won't match. Wait for the prior reviewer to release the lease (or `set-preview-review-state.sh unlocked`) for the drain to fire.

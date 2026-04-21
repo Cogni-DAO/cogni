@@ -30,13 +30,13 @@ external_refs:
 
 ## Context
 
-Every node-app already knows its build SHA (`APP_BUILD_SHA` Docker ARG) and already exposes Prometheus metrics via `/api/metrics` and a readiness probe via `/readyz`. What's inconsistent is *where buildSha shows up*:
+Every node-app already knows its build SHA (`APP_BUILD_SHA` Docker ARG) and already exposes Prometheus metrics via `/api/metrics` and a readiness probe via `/readyz`. What's inconsistent is _where buildSha shows up_:
 
-| Surface | Currently | Target |
-| ------- | --------- | ------ |
-| `/readyz.version` | optional, sometimes emitted | required `.buildSha`, `.version` deprecated alias |
-| `/api/metrics` | prom-client live, no build_info gauge | `build_info{sha, version, node_id} 1` gauge |
-| `.well-known/agent.json` | URLs + auth only | top-level `buildSha` field |
+| Surface                  | Currently                             | Target                                            |
+| ------------------------ | ------------------------------------- | ------------------------------------------------- |
+| `/readyz.version`        | optional, sometimes emitted           | required `.buildSha`, `.version` deprecated alias |
+| `/api/metrics`           | prom-client live, no build_info gauge | `build_info{sha, version, node_id} 1` gauge       |
+| `.well-known/agent.json` | URLs + auth only                      | top-level `buildSha` field                        |
 
 ## Scope (narrowed — surfaces plumbing only)
 
@@ -57,7 +57,7 @@ buildInfo.set(
     version: packageJson.version ?? "unknown",
     node_id: readNodeIdForMetrics(),
   },
-  1,
+  1
 );
 ```
 
@@ -82,7 +82,12 @@ In all 4 nodes' `src/app/(infra)/readyz/route.ts` (operator, poly, resy, node-te
 
 ```ts
 const sha = process.env.APP_BUILD_SHA ?? "unknown";
-const payload = { status: "healthy" as const, timestamp: new Date().toISOString(), buildSha: sha, version: sha };
+const payload = {
+  status: "healthy" as const,
+  timestamp: new Date().toISOString(),
+  buildSha: sha,
+  version: sha,
+};
 ```
 
 ### 3. `.well-known/agent.json` — add top-level `buildSha`
