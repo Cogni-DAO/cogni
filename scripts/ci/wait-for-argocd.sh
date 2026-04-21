@@ -144,8 +144,41 @@ rollout_check() {
 # Argo CD's application-controller picks this up within the reconciliation loop
 # and runs it even if automated sync is disabled or misconfigured. This MUST
 # use hook sync (not apply sync) so PreSync migration jobs still execute.
+# Named hook Jobs are sticky: if a prior no-hook sync left them in-cluster as
+# obj->obj, Argo can decide the first out-of-sync wave is Sync/0 and never
+# recreate the PreSync Jobs even with hook sync enabled. Remove those stale
+# named Jobs first so the active sync has to materialize them again.
+delete_stale_hook_jobs() {
+  local app_name="$1"
+  local app namespace jobs=()
+  app="${app_name#${DEPLOY_ENVIRONMENT}-}"
+  namespace="cogni-${DEPLOY_ENVIRONMENT}"
+
+  case "$app" in
+    operator | poly | resy)
+      jobs+=("${app}-migrate-node-app")
+      ;;
+  esac
+
+  case "$app" in
+    poly)
+      jobs+=("${app}-migrate-poly-doltgres")
+      ;;
+  esac
+
+  if [ "${#jobs[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  for job in "${jobs[@]}"; do
+    echo "    🧹 deleting stale hook job ${namespace}/${job}"
+    kubectl -n "$namespace" delete job "$job" --ignore-not-found >/dev/null 2>&1 || true
+  done
+}
+
 trigger_sync() {
   local app_name="$1"
+  delete_stale_hook_jobs "$app_name"
   echo "    ⚡ triggering active sync on ${app_name}"
   kubectl -n argocd patch application "$app_name" --type=merge -p \
     '{"operation":{"sync":{"syncStrategy":{"hook":{"force":false}}}}}' >/dev/null 2>&1 || true
