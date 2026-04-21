@@ -3,10 +3,22 @@
 
 /**
  * Module: `@app/(app)/research/view`
- * Purpose: Wallets browse dashboard — search + faceted filters + clickable data grid, modelled on `/work` for component consistency.
- * Scope: Client view. Joins live leaderboard (fetchTopWallets) with the user's tracked targets (fetchCopyTargets) and renders a TanStack data grid. Click row → /research/w/[addr]. Does not place orders.
- * Invariants: KIT_IS_ONLY_API, MOBILE_FIRST, URL_DRIVEN_STATE, COPY_TARGETS_QUERY_KEY shared with TopWalletsCard so flips reflect across surfaces.
- * Side-effects: IO (React Query — fetchTopWallets + fetchCopyTargets).
+ * Purpose: Wallets research portal — search, faceted filters, sort, pagination, track/untrack
+ *          actions, and the side-sheet drawer drill-in. Full discovery surface for Polymarket
+ *          wallets. Renders the app-wide `WalletsTable` component (variant="full").
+ * Scope: Client view. Joins live leaderboard (`fetchTopWallets`) with the user's tracked
+ *        targets (`fetchCopyTargets`) and passes rows into the shared table. Track/untrack
+ *        mutations moved from the dashboard to this page, where wallet discovery lives.
+ *        Does not place orders.
+ * Invariants:
+ *   - WALLET_TABLE_SINGLETON: renders via `@app/(app)/_components/wallets-table`, never
+ *     hand-rolls a table.
+ *   - URL_DRIVEN_STATE: q / period / category / tracked / sort all round-trip through
+ *     the URL for shareable views.
+ *   - COPY_TARGETS_QUERY_KEY shared with the dashboard's CopyTradedWalletsCard so flips
+ *     reflect across surfaces.
+ * Side-effects: IO (React Query — fetchTopWallets, fetchCopyTargets, createCopyTarget,
+ *               deleteCopyTarget).
  * Links: [ResearchPage](./page.tsx), work/items/task.0343.wallets-dashboard-page.md
  * @public
  */
@@ -14,46 +26,33 @@
 "use client";
 
 import type { WalletTimePeriod } from "@cogni/ai-tools";
-import { useQuery } from "@tanstack/react-query";
-import {
-  type ColumnFiltersState,
-  getCoreRowModel,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  type SortingState,
-  useReactTable,
-} from "@tanstack/react-table";
-import { Ban, Shield } from "lucide-react";
+import { PolyAddressSchema } from "@cogni/node-contracts";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ColumnFiltersState, SortingState } from "@tanstack/react-table";
+import { Ban, Minus, Plus, Shield } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-
-import { Input } from "@/components";
 import {
-  DataGrid,
-  DataGridContainer,
-} from "@/components/reui/data-grid/data-grid";
-import { DataGridPagination } from "@/components/reui/data-grid/data-grid-pagination";
-import { DataGridTable } from "@/components/reui/data-grid/data-grid-table";
+  buildWalletRows,
+  WALLET_CATEGORIES,
+  type WalletRow,
+  WalletsTable,
+} from "@/app/(app)/_components/wallets-table";
+import { Input } from "@/components";
 import {
   WalletDetailDrawer,
   WalletQuickJump,
 } from "@/features/wallet-analysis";
 
-import { fetchCopyTargets } from "../dashboard/_api/fetchCopyTargets";
-import { fetchTopWallets } from "../dashboard/_api/fetchTopWallets";
-
-// NOTE: when PR #965 (copy-trade toggle) merges, both the helper and the
-// shared query key will move into `@/features/wallet-analysis/client/
-// copy-trade-targets`. Rebase swaps these two imports for one.
-const COPY_TARGETS_QUERY_KEY = ["dashboard-copy-targets"] as const;
-
-import { FacetedFilter } from "../work/_components/FacetedFilter";
 import {
-  buildWalletRows,
-  columns,
-  WALLET_CATEGORIES,
-} from "./_components/columns";
+  createCopyTarget,
+  deleteCopyTarget,
+  fetchCopyTargets,
+} from "../dashboard/_api/fetchCopyTargets";
+import { fetchTopWallets } from "../dashboard/_api/fetchTopWallets";
+import { FacetedFilter } from "../work/_components/FacetedFilter";
+
+const COPY_TARGETS_QUERY_KEY = ["dashboard-copy-targets"] as const;
 
 const PERIOD_OPTIONS: readonly WalletTimePeriod[] = [
   "DAY",
@@ -62,11 +61,12 @@ const PERIOD_OPTIONS: readonly WalletTimePeriod[] = [
   "ALL",
 ] as const;
 const TRACKED_OPTIONS = ["Tracked", "Not tracked"] as const;
-const TOP_N = 50;
+const TOP_N = 100;
 
 export function ResearchView() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
   // ── URL-driven state ──────────────────────────────────────────────
   const initialPeriod = useMemo<WalletTimePeriod>(() => {
@@ -151,42 +151,90 @@ export function ResearchView() {
     [targetsData]
   );
 
+  const targetsByWallet = useMemo(
+    () =>
+      new Map(
+        (targetsData?.targets ?? []).map((t) => [
+          t.target_wallet.toLowerCase(),
+          t,
+        ])
+      ),
+    [targetsData]
+  );
+
   const rows = useMemo(
     () => buildWalletRows(walletsData?.traders ?? [], trackedSet),
     [walletsData, trackedSet]
   );
 
-  // ── Table ─────────────────────────────────────────────────────────
-  const table = useReactTable({
-    data: rows,
-    columns,
-    state: { sorting, columnFilters, globalFilter },
-    onSortingChange: (updater) => {
-      const next = typeof updater === "function" ? updater(sorting) : updater;
-      setSorting(next);
-      syncUrl({ sorting: next });
-    },
-    onColumnFiltersChange: (updater) => {
-      const next =
-        typeof updater === "function" ? updater(columnFilters) : updater;
-      setColumnFilters(next);
-      syncUrl({ filters: next });
-    },
-    onGlobalFilterChange: setGlobalFilter,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    globalFilterFn: (row, _id, filterValue: string) => {
-      const q = filterValue.toLowerCase().trim();
-      if (!q) return true;
-      const r = row.original;
+  // ── Mutations (track / untrack) ───────────────────────────────────
+  const createTargetMutation = useMutation({
+    mutationFn: (targetWallet: string) =>
+      createCopyTarget({ target_wallet: targetWallet }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: COPY_TARGETS_QUERY_KEY }),
+  });
+
+  const deleteTargetMutation = useMutation({
+    mutationFn: (id: string) => deleteCopyTarget(id),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: COPY_TARGETS_QUERY_KEY }),
+  });
+
+  const renderActions = useCallback(
+    (row: WalletRow) => {
+      const target = targetsByWallet.get(row.proxyWallet.toLowerCase());
+      if (row.tracked && target) {
+        return (
+          <button
+            type="button"
+            aria-label={`Untrack ${row.proxyWallet}`}
+            title="Stop tracking this wallet"
+            disabled={deleteTargetMutation.isPending}
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteTargetMutation.mutate(target.target_id);
+            }}
+            className="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-success/20 hover:text-success disabled:cursor-wait disabled:opacity-40"
+          >
+            <Minus className="size-3.5" />
+          </button>
+        );
+      }
       return (
-        r.proxyWallet.toLowerCase().includes(q) ||
-        (r.userName ?? "").toLowerCase().includes(q)
+        <button
+          type="button"
+          aria-label={`Track ${row.proxyWallet}`}
+          title="Track this wallet (mirror its fills)"
+          disabled={createTargetMutation.isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            createTargetMutation.mutate(row.proxyWallet);
+          }}
+          className="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:cursor-wait disabled:opacity-40"
+        >
+          <Plus className="size-3.5" />
+        </button>
       );
     },
-  });
+    [createTargetMutation, deleteTargetMutation, targetsByWallet]
+  );
+
+  // ── Off-roster address jump ───────────────────────────────────────
+  // If the search box contains a full valid 0x address not present in the
+  // current leaderboard window, surface a direct-analyze affordance so the
+  // user is never limited to the in-memory top-N.
+  const addressMatch = useMemo(
+    () => PolyAddressSchema.safeParse(globalFilter.trim()),
+    [globalFilter]
+  );
+  const offRosterAddress =
+    addressMatch.success &&
+    !rows.some(
+      (r) => r.proxyWallet.toLowerCase() === addressMatch.data.toLowerCase()
+    )
+      ? addressMatch.data
+      : null;
 
   const setFacet = (id: string, values: string[]): void => {
     const next = columnFilters.filter((f) => f.id !== id);
@@ -213,10 +261,10 @@ export function ResearchView() {
         </p>
       </div>
 
-      {/* Quick-jump for off-roster addresses */}
+      {/* Quick-jump for off-roster addresses (persistent affordance) */}
       <WalletQuickJump className="max-w-xl" />
 
-      {/* Toolbar — same shape as /work */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <Input
           data-search-input
@@ -266,37 +314,47 @@ export function ResearchView() {
         )}
       </div>
 
-      {/* Grid */}
-      {walletsLoading ? (
-        <p className="py-8 text-center text-muted-foreground">
-          Loading wallets…
-        </p>
-      ) : (
-        <DataGrid
-          table={table}
-          recordCount={rows.length}
-          isLoading={walletsLoading}
-          onRowClick={(row) => setSelectedAddr(row.proxyWallet.toLowerCase())}
-          tableLayout={{
-            headerSticky: true,
-            headerBackground: true,
-            rowBorder: true,
-            dense: true,
-          }}
-          tableClassNames={{ bodyRow: "cursor-pointer" }}
-          emptyMessage="No wallets match the current filters."
+      {/* Off-roster address hint — "you pasted a valid 0x, open its analysis" */}
+      {offRosterAddress && (
+        <button
+          type="button"
+          onClick={() => setSelectedAddr(offRosterAddress)}
+          className="self-start rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-left text-sm hover:bg-primary/10"
         >
-          <DataGridContainer className="overflow-x-auto">
-            <DataGridTable />
-          </DataGridContainer>
-          <DataGridPagination sizes={[25, 50, 100]} />
-        </DataGrid>
+          Open wallet analysis for{" "}
+          <code className="font-mono">{offRosterAddress}</code> · not in top{" "}
+          {TOP_N} for this window →
+        </button>
       )}
 
-      {/* Compact no-fly footer (replaces the old multi-section dossier) */}
+      {/* Grid — single shared component, same on /dashboard */}
+      <WalletsTable
+        rows={rows}
+        variant="full"
+        isLoading={walletsLoading}
+        onRowClick={(row) => setSelectedAddr(row.proxyWallet.toLowerCase())}
+        renderActions={renderActions}
+        emptyMessage="No wallets match the current filters."
+        fullState={{
+          sorting,
+          onSortingChange: (next) => {
+            setSorting(next);
+            syncUrl({ sorting: next });
+          },
+          columnFilters,
+          onColumnFiltersChange: (next) => {
+            setColumnFilters(next);
+            syncUrl({ filters: next });
+          },
+          globalFilter,
+          onGlobalFilterChange: setGlobalFilter,
+        }}
+      />
+
+      {/* Compact no-fly footer */}
       <NoFlyFooter />
 
-      {/* Inline drawer — keeps the table context, skeletons render instantly. */}
+      {/* Inline drawer — skeletons render instantly. */}
       <WalletDetailDrawer
         addr={selectedAddr}
         open={selectedAddr !== null}

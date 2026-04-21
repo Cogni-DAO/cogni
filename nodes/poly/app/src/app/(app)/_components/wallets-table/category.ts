@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025 Cogni-DAO
 
 /**
- * Module: `@app/(app)/research/_components/category`
+ * Module: `@app/(app)/_components/wallets-table/category`
  * Purpose: v0 heuristic that maps a leaderboard wallet to a coarse category from its display name + wallet address. Real categorization (Dolt-stored, AI-authored) lands with task.0333.
  * Scope: Pure function. No I/O. Stable enum so the FacetedFilter values agree across renders.
  * Invariants: Always returns one of the WALLET_CATEGORIES strings; defaults to "Other" when nothing matches.
