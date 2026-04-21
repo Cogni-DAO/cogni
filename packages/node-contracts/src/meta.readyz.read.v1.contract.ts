@@ -22,6 +22,9 @@ export const metaReadyzOutputSchema = z.object({
   status: readyzStatusSchema,
   timestamp: z.string(), // RFC3339/ISO-8601 format
   version: z.string().optional(),
+  // Canonical source: APP_BUILD_SHA from serverEnv()
+  // Aligns buildSha across /metrics, /readyz, and agent.json per BUILD_SHA_IN_METRICS invariant
+  buildSha: z.string().optional(),
 });
 
 // Protocol-neutral operation metadata.

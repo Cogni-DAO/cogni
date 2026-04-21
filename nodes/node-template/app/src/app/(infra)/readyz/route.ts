@@ -30,6 +30,7 @@ import {
   RuntimeSecretError,
 } from "@/shared/env/invariants";
 import type { RequestContext } from "@/shared/observability";
+import { setBuildInfo } from "@/shared/observability/server/metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +89,13 @@ export const GET = wrapRouteHandlerWithLogging(
       const env = serverEnv();
       const container = getContainer();
 
+      // Set build info for metrics (canonical source: APP_BUILD_SHA from serverEnv())
+      setBuildInfo(
+        // biome-ignore lint/style/noProcessEnv: build-time constant from npm_package_version
+        process.env.npm_package_version || "unknown",
+        env.APP_BUILD_SHA || "unknown"
+      );
+
       // MVP readiness: Validate env + runtime secrets + EVM RPC + Temporal connectivity
       assertRuntimeSecrets(env);
 
@@ -114,7 +122,8 @@ export const GET = wrapRouteHandlerWithLogging(
         status: "healthy" as const,
         timestamp: new Date().toISOString(),
         // biome-ignore lint/style/noProcessEnv: build-time plumbing injected via Dockerfile ARG
-        version: process.env.APP_BUILD_SHA || undefined,
+        version: process.env.npm_package_version || undefined,
+        buildSha: env.APP_BUILD_SHA || undefined,
       };
 
       const parsed = metaReadyzOperation.output.parse(payload);

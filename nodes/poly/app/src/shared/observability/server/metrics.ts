@@ -17,8 +17,23 @@ import path from "node:path";
 
 import type { AiExecutionErrorCode } from "@cogni/ai-core";
 import { extractNodeId, parseRepoSpec } from "@cogni/repo-spec";
-import type { Counter, Histogram, Registry } from "prom-client";
+import type { Counter, Gauge, Histogram, Registry } from "prom-client";
 import client from "prom-client";
+
+function getOrCreateGauge<T extends string>(
+  name: string,
+  help: string,
+  labelNames: readonly T[] = [] as readonly T[]
+): Gauge<T> {
+  const existing = metricsRegistry.getSingleMetric(name);
+  if (existing) return existing as Gauge<T>;
+  return new client.Gauge({
+    name,
+    help,
+    labelNames: labelNames as T[],
+    registers: [metricsRegistry],
+  });
+}
 
 /**
  * Read node_id from .cogni/repo-spec.yaml at module scope.
@@ -187,6 +202,16 @@ export const billingInvariantViolationTotal = getOrCreateCounter(
   "Billing invariant violations by type",
   ["type"] as const
 );
+
+export const appBuildInfo = getOrCreateGauge(
+  "app_build_info",
+  "Build metadata (version, commit SHA) — updated at runtime from APP_BUILD_SHA",
+  ["version", "commit_sha"] as const
+);
+
+export function setBuildInfo(version: string, commitSha: string) {
+  appBuildInfo.labels({ version, commit_sha: commitSha }).set(1);
+}
 
 // =============================================================================
 // BYO-AI Auth Metrics (alertable — critical auth path)

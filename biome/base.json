@@ -132,6 +132,8 @@
         "nodes/*/app/src/shared/env/**/*.tsx",
         "nodes/*/app/src/auth.ts",
         "nodes/*/app/src/shared/observability/clientLogger.ts",
+        "nodes/*/app/src/shared/observability/server/**/*.ts",
+        "nodes/*/app/src/app/(infra)/readyz/route.ts",
         "e2e/**/*.{ts,tsx}",
         "playwright.config.ts",
         "tests/**/*.ts",
