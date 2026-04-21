@@ -325,6 +325,11 @@ OPTIONAL_SECRETS=(
     "PRIVY_APP_ID"
     "PRIVY_APP_SECRET"
     "PRIVY_SIGNING_KEY"
+    "PRIVY_USER_WALLETS_APP_ID"
+    "PRIVY_USER_WALLETS_APP_SECRET"
+    "PRIVY_USER_WALLETS_SIGNING_KEY"
+    "POLY_WALLET_AEAD_KEY_HEX"
+    "POLY_WALLET_AEAD_KEY_ID"
     "CONNECTIONS_ENCRYPTION_KEY"
     # bug.0344: required for Argo CD Image Updater git write-back to main.
     # Optional (warn-only) during rollout — Step 7b skips gracefully if unset so
@@ -637,6 +642,12 @@ append_env_if_set "$RUNTIME_ENV" GH_WEBHOOK_SECRET "${GH_WEBHOOK_SECRET-}"
 append_env_if_set "$RUNTIME_ENV" PRIVY_APP_ID "${PRIVY_APP_ID-}"
 append_env_if_set "$RUNTIME_ENV" PRIVY_APP_SECRET "${PRIVY_APP_SECRET-}"
 append_env_if_set "$RUNTIME_ENV" PRIVY_SIGNING_KEY "${PRIVY_SIGNING_KEY-}"
+# Privy (Per-tenant Poly Trading Wallets)
+append_env_if_set "$RUNTIME_ENV" PRIVY_USER_WALLETS_APP_ID "${PRIVY_USER_WALLETS_APP_ID-}"
+append_env_if_set "$RUNTIME_ENV" PRIVY_USER_WALLETS_APP_SECRET "${PRIVY_USER_WALLETS_APP_SECRET-}"
+append_env_if_set "$RUNTIME_ENV" PRIVY_USER_WALLETS_SIGNING_KEY "${PRIVY_USER_WALLETS_SIGNING_KEY-}"
+append_env_if_set "$RUNTIME_ENV" POLY_WALLET_AEAD_KEY_HEX "${POLY_WALLET_AEAD_KEY_HEX-}"
+append_env_if_set "$RUNTIME_ENV" POLY_WALLET_AEAD_KEY_ID "${POLY_WALLET_AEAD_KEY_ID-}"
 # BYO-AI: Connection encryption
 append_env_if_set "$RUNTIME_ENV" CONNECTIONS_ENCRYPTION_KEY "${CONNECTIONS_ENCRYPTION_KEY-}"
 # Grafana observability (for OpenClaw grafana-health skill)

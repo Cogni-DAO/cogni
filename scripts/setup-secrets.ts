@@ -756,18 +756,6 @@ const SECRETS: Secret[] = [
     ],
     generate: () => "v1",
   },
-  {
-    name: "POLY_WALLET_ALLOW_STUB_CREDS",
-    required: false,
-    category: "Poly Wallets (Privy)",
-    source: "agent",
-    description: "Temporary B2 plumbing gate for stub Polymarket CLOB creds",
-    steps: [
-      'Set to "1" while the real createOrDeriveApiKey factory is not wired',
-      "Remove or stop using once the real per-tenant CLOB creds path ships",
-    ],
-    generate: () => "1",
-  },
 
   // ── Optional: Polymarket CLOB (L2 API creds derived from Privy wallet) ──
   // See docs/guides/polymarket-account-setup.md for the full flow.

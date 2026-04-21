@@ -119,11 +119,6 @@ POLY_WALLET_AEAD_KEY_HEX=<64-hex-chars>
 
 # Key-ring label stored on rows for future key rotation
 POLY_WALLET_AEAD_KEY_ID=v1
-
-# Temporary plumbing flag: Phase B can provision per-tenant wallets, but the
-# real Polymarket CLOB creds factory is not wired yet, so candidate/local uses
-# a stub creds path gated behind this value.
-POLY_WALLET_ALLOW_STUB_CREDS=1
 ```
 
 Generate the AEAD key with:

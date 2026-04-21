@@ -83,7 +83,6 @@ services:
       - PRIVY_USER_WALLETS_SIGNING_KEY
       - POLY_WALLET_AEAD_KEY_HEX
       - POLY_WALLET_AEAD_KEY_ID
-      - POLY_WALLET_ALLOW_STUB_CREDS
       # BYO-AI: Connection encryption (optional — BYO-AI disabled when unset)
       - CONNECTIONS_ENCRYPTION_KEY
       # Prometheus query (for analytics/AI tools) - read-only credentials

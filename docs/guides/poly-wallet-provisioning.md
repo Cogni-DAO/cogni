@@ -4,8 +4,8 @@ type: guide
 title: Poly per-tenant Trading Wallet — Provisioning Runbook
 status: draft
 trust: draft
-summary: Operator-facing runbook for task.0318 Phase B PR #968 — shows what's shipped, explains the three-location split + visible smells, and pins the 6-GH-secret + curl + Loki handshake to exercise on candidate-a.
-read_when: Creating the user-wallets Privy app, setting candidate-a secrets, exercising POST /api/v1/poly/wallet/connect, or reviewing PR #968's architecture.
+summary: Operator-facing runbook for task.0318 Phase B PR #968 — shows what's shipped, explains the three-location split + visible smells, and pins the 5-GH-secret + /profile/API + Loki handshake to exercise on candidate-a.
+read_when: Creating the user-wallets Privy app, setting candidate-a secrets, exercising `/profile` or the poly wallet APIs on candidate-a, or reviewing PR #968's architecture.
 owner: derekg1729
 created: 2026-04-21
 verified: 2026-04-21
@@ -24,10 +24,11 @@ tags: [poly, polymarket, wallets, multi-tenant, privy, runbook]
 | Migration `0030_poly_wallet_connections.sql` + Drizzle schema                   | ✅ shipped                                                               |
 | `PrivyPolyTraderWalletAdapter` (`provision`, `resolve`, `getAddress`, `revoke`) | ✅ shipped (node-local: `nodes/poly/app/src/adapters/server/wallet/`)    |
 | `authorizeIntent` / `withdrawUsdc` / `rotateClobCreds`                          | ⛔ stubbed (throw) — B4 / follow-up                                      |
-| Bootstrap factory `getPolyTraderWalletAdapter` + stub CLOB-creds gate           | ✅ shipped (`nodes/poly/app/src/bootstrap/poly-trader-wallet.ts`)        |
+| Bootstrap factory `getPolyTraderWalletAdapter` + real CLOB-creds derivation     | ✅ shipped (`nodes/poly/app/src/bootstrap/poly-trader-wallet.ts`)        |
 | `POST /api/v1/poly/wallet/connect` route                                        | ✅ shipped (session-auth, `CUSTODIAL_CONSENT` enforced, 503 on unconfig) |
+| `GET /api/v1/poly/wallet/status` + `/profile` create-wallet control             | ✅ shipped                                                               |
 | Agent-actor auth path                                                           | ⛔ explicit 501 until agent-API-key auth lands                           |
-| CI secret plumbing (`candidate-flight-infra.yml` + `deploy-infra.sh`)           | ✅ wired for all 6 new secrets                                           |
+| CI secret plumbing (`candidate-flight-infra.yml` + `deploy-infra.sh`)           | ✅ wired for all 5 new secrets                                           |
 | Orphan-wallet reconciler (`scripts/ops/sweep-orphan-poly-wallets.ts`)           | ⛔ deferred to follow-up task.0345                                       |
 | Component / concurrency / defense-in-depth tests                                | ✅ B2.10 landed: two-tenant adapter round-trip component test            |
 | `pnpm check:fast` on branch                                                     | ✅ green (2026-04-21)                                                    |
@@ -58,9 +59,9 @@ nodes/poly/app/src/bootstrap/                   ← Factory + env wiring
 
 - **Three locations for one capability is more moving parts than an ideal single-package story.** The reason it isn't one package today is the `@cogni/poly-db-schema` dependency — if/when per-node DB schemas move into their own packages that shared packages can depend on, the adapter could move to `packages/poly-wallet/src/adapters/privy/`. Today it shouldn't.
 - **`biome-ignore lint/suspicious/noExplicitAny` on two sites in the adapter** — `createViemAccount` from `@privy-io/node/viem` ships its own viem (`2.48.1`) as a peer-dep; this app pins `2.39.3`. The shapes are runtime-identical but TypeScript rejects the assignment across the two installations. The exact same `const x: any = account` workaround is used in `nodes/poly/app/src/bootstrap/capabilities/poly-trade.ts:696-700` for the operator-wallet signer. Clean fix = unify viem versions, out of scope for this slice.
-- **v0 CLOB creds factory is a stub** returning `"placeholder-*"` strings. Gated behind `POLY_WALLET_ALLOW_STUB_CREDS=1`; the bootstrap throws at startup if the flag isn't "1" and real CLOB derivation isn't wired. Non-trade-eligible until a follow-up lands `@polymarket/clob-client createOrDeriveApiKey`.
+- **Live CLOB creds now derive at provision time.** The bootstrap keeps `@polymarket/clob-client` at the existing `bootstrap/capabilities/poly-trade.ts` dynamic-import boundary and fails closed if `createOrDeriveApiKey()` cannot mint the tenant wallet's L2 creds. This proves credential bootstrapping, not full trade execution or allowances.
 - **`provision` generates the row id via a Postgres roundtrip** (`SELECT gen_random_uuid()::text`) instead of `crypto.randomUUID()`. Noise, should be removed in the test PR.
-- **One component test now exists, but only at the adapter / DB layer.** It proves the tenant-safe wallet lifecycle and caught the missing `0030` journal entry. It does **not** prove real Polymarket creds or tradeability; B2.12 is still the meaningful remaining blocker.
+- **One component test now exists, but only at the adapter / DB layer.** It proves the tenant-safe wallet lifecycle and caught the missing `0030` journal entry. It does **not** prove trade placement, funding, or allowances; live validation on candidate-a is still required.
 
 ## Candidate-a exercise path
 
@@ -90,11 +91,9 @@ gh secret set PRIVY_USER_WALLETS_APP_SECRET --env candidate-a
 gh secret set PRIVY_USER_WALLETS_SIGNING_KEY --env candidate-a
 gh secret set POLY_WALLET_AEAD_KEY_HEX --env candidate-a
 gh secret set POLY_WALLET_AEAD_KEY_ID --env candidate-a
-# Gate for the v0 stub CLOB-creds factory — set "1" to allow plumbing tests.
-gh secret set POLY_WALLET_ALLOW_STUB_CREDS --env candidate-a --body 1
 ```
 
-The first 5 are missing → `getPolyTraderWalletAdapter` throws `WalletAdapterUnconfiguredError` → route returns 503 cleanly. No panic.
+Those 5 are the only new secrets for this slice. If any are missing, `getPolyTraderWalletAdapter` throws `WalletAdapterUnconfiguredError` and the route returns 503 cleanly. No panic.
 
 ### 4. Flight to candidate-a
 
@@ -109,7 +108,17 @@ Verify:
 - **Endpoint cutover** clears (buildsha matches `/readyz.version`).
 - Env reached the pod: `pod-exec poly-node-app -- env | grep PRIVY_USER_WALLETS_APP_ID` shows the new id (truncated; don't log the secret).
 
-### 5. Exercise the provision endpoint
+### 5. Exercise the wallet from candidate-a
+
+Primary path:
+
+1. Open the deployed poly app and sign in normally with your Ethereum wallet.
+2. Visit `/profile`.
+3. Under **Polymarket Trading Wallet**, click **Create trading wallet**.
+4. Confirm the consent copy and click **I understand — create trading wallet**.
+5. Expect the row to flip to a connected state with the tenant wallet address and a Polygonscan link.
+
+API fallback:
 
 ```bash
 SESSION_COOKIE=<your-candidate-a-session>
@@ -147,7 +156,7 @@ Loki query (replace `<sha>` with the deployed SHA):
   | line_format "{{.billing_account_id}} {{.connection_id}} {{.funder_address}}"
 ```
 
-Expect 1 info line per successful request, plus (because the stub is in use) a WARN line `poly.wallet.provision using STUB CLOB creds — NOT tradeable, plumbing test only`.
+Expect 1 info line per successful request. There should be no stub-creds warning anymore.
 
 ### 7. Deploy-verified handshake
 
@@ -159,14 +168,13 @@ When the provision call returns 200 AND the Loki line appears at the deployed SH
 
 Ordered by blocking priority:
 
-1. **Real CLOB L2 creds factory** — keep `@polymarket/clob-client` at the bootstrap boundary, wrap the Privy `LocalAccount` in `createWalletClient({ account, chain: polygon, transport: http() })`, dynamically import `ClobClient`, call `createOrDeriveApiKey()`, persist the returned creds through the existing AEAD envelope, then remove `POLY_WALLET_ALLOW_STUB_CREDS`.
-2. **`authorizeIntent` implementation** — requires `poly_wallet_grants` table (B4) + windowed fills-cap queries.
-3. **`withdrawUsdc` implementation** — ERC-20 transfer via Privy HSM; requires `WITHDRAW_BEFORE_REVOKE` UX in the dashboard (B3).
-4. **Agent-API-key auth path** — unlock `custodialConsentActorKind: "agent"` in the route (currently 501).
-5. **Orphan reconciler** — tracked separately in [task.0345](../../work/items/task.0345.poly-wallet-orphan-sweep.md). Keep it out of the v0 trading path.
-6. **viem version unification** — drop the two `noExplicitAny` ignores in the adapter once `@privy-io/node`'s peer viem matches the app's.
-7. **`UUID round-trip`** — replace `tx.execute("SELECT gen_random_uuid()::text")` with `crypto.randomUUID()`.
-8. **Move adapter + port into a single package** once per-node DB schemas are available as shared packages.
+1. **`authorizeIntent` implementation** — requires `poly_wallet_grants` table (B4) + windowed fills-cap queries.
+2. **`withdrawUsdc` implementation** — ERC-20 transfer via Privy HSM; requires `WITHDRAW_BEFORE_REVOKE` UX in the dashboard (B3).
+3. **Agent-API-key auth path** — unlock `custodialConsentActorKind: "agent"` in the route (currently 501).
+4. **Orphan reconciler** — tracked separately in [task.0345](../../work/items/task.0345.poly-wallet-orphan-sweep.md). Keep it out of the v0 trading path.
+5. **viem version unification** — drop the two `noExplicitAny` ignores in the adapter once `@privy-io/node`'s peer viem matches the app's.
+6. **`UUID round-trip`** — replace `tx.execute("SELECT gen_random_uuid()::text")` with `crypto.randomUUID()`.
+7. **Move adapter + port into a single package** once per-node DB schemas are available as shared packages.
 
 ## Related
 

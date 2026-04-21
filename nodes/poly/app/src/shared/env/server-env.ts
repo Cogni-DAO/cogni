@@ -269,9 +269,6 @@ export const serverSchema = z.object({
   // Format: 64 hex chars (32 bytes) for AES-256-GCM.
   POLY_WALLET_AEAD_KEY_HEX: optionalString,
   POLY_WALLET_AEAD_KEY_ID: optionalString,
-  // "1" to allow the stub CLOB-creds factory; any other value fails-closed.
-  // Never set in production until real @polymarket/clob-client wiring lands.
-  POLY_WALLET_ALLOW_STUB_CREDS: optionalString,
   POLY_PROTO_WALLET_ADDRESS: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/)
