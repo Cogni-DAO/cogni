@@ -252,6 +252,7 @@ Every deploy branch carries `.promote-state/source-sha-by-app.json` — a merge-
 
 - Deploy branches are long-lived, machine-written environment-state refs.
 - `infra/k8s/` tracks `main` under invariant `INFRA_K8S_MAIN_DERIVED` (Axiom 17). Only image digests (mutated by `promote-k8s-image.sh`) and `env-state.yaml` files (written by provision) are allowed to differ from main. All other overlay content — ConfigMap patches, Service patches, resource lists, `replacements:` blocks — is rsynced from main every promote.
+- **⚠️ Known anti-pattern: main's overlay digests are hand-curated seeds.** Every flight `rsync -a --delete`s main's current digests onto the deploy branch, then `promote-k8s-image.sh` bumps only the apps affected by the flight's PR. Services not affected inherit main's seed — if the seed is stale, the deploy branch silently reverts on every unrelated flight. This is the root cause class behind #970 (migrator stale image) and #971 (scheduler-worker multi-queue). The proper fix is a dedicated digest-update controller (Argo CD Image Updater, Flux `ImageUpdateAutomation`, or Renovate digest-pinning) watching GHCR and committing digest updates back to `main` — git becomes eventually-consistent with the registry, and the drift class disappears. Tracked as bug.0344. **Do not extend `promote-k8s-image.sh` or add bespoke GitHub Actions to close this gap — that is reinvention of an existing tool.**
 - They are never merged back into app branches.
 - PRs are not required for routine automated deploy-state updates; git history is the audit trail.
 - Push access on `deploy/*` should be restricted to the CI app or bot, with incident-only human bypass if needed.
@@ -267,6 +268,10 @@ Track these explicitly during the spec rewrite, following the CI/CD scorecard st
       Decide what stays in the authoritative v0 gate versus what remains advisory, and define how smoke tests, richer black-box E2E, and post-merge validation divide across the PR lane and main lane.
 - [ ] **Git-manager agent as a first-class control-plane actor**
       Define whether a git-manager style agent owns PR build tracking, candidate slot coordination, deploy-branch promotion, and status reporting, or whether those responsibilities stay in plain workflows with agent assistance around them.
+- [ ] **Adopt a digest-update controller (bug.0344)**
+      Main's overlay digests are hand-curated today — an anti-pattern that produced #970 and #971. Proper fix: Argo CD Image Updater (or Flux `ImageUpdateAutomation` / Renovate digest-pinning) watches GHCR for new builds matching per-image policy and commits digest updates back to `main`. Git becomes eventually-consistent with the registry, retires the manual-bump class, closes the silent-regression footgun. Not a new workflow file — adoption of a dedicated controller.
+- [ ] **Rollout-status health check to replace task.0341 polling (bug.0345)**
+      Argo reporting Healthy before the old ReplicaSet drains is a health-check-semantics bug, not a polling-interval bug. Bumping the poll window doesn't fix it. Fix: `kubectl rollout status deployment/X --timeout=5m` (observes `observedGeneration`, `updatedReplicas == replicas`, `Progressing=NewReplicaSetAvailable`) OR a proper Argo Deployment health check with correctly-wired probes. task.0341 solved at the wrong layer; replacement is bug.0345.
 - [ ] **OpenFeature flags**
       Decide how feature flags reduce PR scope, shrink risky surface area, and let code merge when safe without requiring every incomplete capability to be fully user-exposed.
 - [ ] **Merge queue integration later**
