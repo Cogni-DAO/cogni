@@ -10,7 +10,7 @@ Argo CD Image Updater runs as a Deployment in the `argocd` namespace. Every 2 mi
 
 1. Lists all Argo CD `Application`s carrying the annotation `argocd-image-updater.argoproj.io/image-list`.
 2. For each matched Application, scans GHCR for tags matching the Application's `allow-tags` regex.
-3. Picks the newest tag by image-manifest creation timestamp (`update-strategy: newest-build`).
+3. Picks the newest tag by image-manifest creation timestamp (`update-strategy: latest` — v0.15.2's name for build-time-ordered selection, filtered by the `allow-tags` regex).
 4. If the newest tag's digest differs from the one currently rendered in the Application's Kustomize overlay, clones `main`, rewrites the `digest:` field in `infra/k8s/overlays/preview/<app>/kustomization.yaml`, and pushes the commit back to `main` as `Cogni-1729`.
 
 Every commit is prefixed `chore(deps): argocd-image-updater` so `git log --grep='argocd-image-updater' -- infra/k8s/overlays/` is the audit filter.
@@ -19,29 +19,36 @@ Every commit is prefixed `chore(deps): argocd-image-updater` so `git log --grep=
 
 Run these once per cluster. Both credentials reuse existing repo-wide values — nothing new needs minting.
 
-### 1. Author the encrypted secrets
+### 1. Create the two Kubernetes secrets imperatively
 
-The `image-updater/kustomization.yaml` references two encrypted Secrets which are **not** committed as templates — you create them from the `.example` files and encrypt them in place:
+ksops was retired from this repo's Argo CD bootstrap (see `infra/provision/cherry/base/bootstrap.yaml`, task.0284 ESO migration). The Image Updater's two credentials are therefore created with `kubectl create secret generic --dry-run=client -o yaml | kubectl apply -f -` — the same idempotent-apply pattern `scripts/ci/deploy-infra.sh` uses for every other node secret. They are **not** committed to git.
+
+Export the two values from your env (or 1Password), then apply both:
 
 ```bash
-cd infra/k8s/argocd/image-updater
+# GHCR read:packages PAT — same value used by every other pull consumer.
+export GHCR_DEPLOY_TOKEN="<paste from secret store>"
 
-# GHCR credentials: reuse the existing GHCR_DEPLOY_TOKEN org PAT (read:packages).
-cp ghcr-secret.enc.yaml.example ghcr-secret.enc.yaml
-# Edit ghcr-secret.enc.yaml: replace <GHCR_DEPLOY_TOKEN> with the real value.
-sops --encrypt --in-place ghcr-secret.enc.yaml
+# Git push PAT — same ACTIONS_AUTOMATION_BOT_PAT used by release.yml,
+# promote-to-production.yml, promote-and-deploy.yml, flight-preview.yml.
+export ACTIONS_AUTOMATION_BOT_PAT="<paste from secret store>"
 
-# Git push credentials: reuse the existing ACTIONS_AUTOMATION_BOT_PAT used by
-# release.yml / promote-to-production.yml / promote-and-deploy.yml / flight-preview.yml.
-cp git-creds-secret.enc.yaml.example git-creds-secret.enc.yaml
-# Edit git-creds-secret.enc.yaml: replace <ACTIONS_AUTOMATION_BOT_PAT> with the real value.
-sops --encrypt --in-place git-creds-secret.enc.yaml
+# GHCR creds — Opaque Secret with `token` key; matches
+# `credentials: secret:argocd/argocd-image-updater-ghcr#token` in config-patch.yaml.
+kubectl -n argocd create secret generic argocd-image-updater-ghcr \
+  --from-literal=token="Cogni-1729:${GHCR_DEPLOY_TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-git add ghcr-secret.enc.yaml git-creds-secret.enc.yaml
-git commit -m "feat(argocd): bootstrap image-updater credentials"
+# Git push creds — Opaque Secret with `username` + `password` keys; matches
+# `write-back-method: git:secret:argocd/argocd-image-updater-git-creds` in
+# preview-applicationset.yaml.
+kubectl -n argocd create secret generic argocd-image-updater-git-creds \
+  --from-literal=username="Cogni-1729" \
+  --from-literal=password="${ACTIONS_AUTOMATION_BOT_PAT}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-(The age recipient is already configured in the repo root `.sops.yaml` — you need the matching age private key on your machine. Same prerequisite every other `*.enc.yaml` has today.)
+These two commands are safe to re-run — `create --dry-run=client -o yaml | apply` upserts.
 
 ### 2. Apply the argocd Kustomize tree
 
@@ -120,20 +127,27 @@ The bespoke anti-pattern `promote-k8s-image.sh` still works for every environmen
 When `ACTIONS_AUTOMATION_BOT_PAT` rotates (see `docs/runbooks/SECRET_ROTATION.md`):
 
 ```bash
-cd infra/k8s/argocd/image-updater
-# 1. Decrypt, swap the password, re-encrypt.
-sops git-creds-secret.enc.yaml    # edit password in the opened editor, save
-# (sops re-encrypts on save — no separate --encrypt step needed)
+export ACTIONS_AUTOMATION_BOT_PAT="<new value>"
 
-git add git-creds-secret.enc.yaml
-git commit -m "chore(argocd): rotate image-updater git credentials"
+# Re-apply the Secret (idempotent upsert).
+kubectl -n argocd create secret generic argocd-image-updater-git-creds \
+  --from-literal=username="Cogni-1729" \
+  --from-literal=password="${ACTIONS_AUTOMATION_BOT_PAT}" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
-# 2. Apply + force controller reload (it caches creds on startup).
-kubectl kustomize infra/k8s/argocd/ | kubectl apply -f -
+# Force controller reload (it caches creds on startup).
 kubectl rollout restart deployment/argocd-image-updater -n argocd
 ```
 
-Same procedure for `GHCR_DEPLOY_TOKEN` — swap `ghcr-secret.enc.yaml` instead.
+Same procedure for `GHCR_DEPLOY_TOKEN`:
+
+```bash
+export GHCR_DEPLOY_TOKEN="<new value>"
+kubectl -n argocd create secret generic argocd-image-updater-ghcr \
+  --from-literal=token="Cogni-1729:${GHCR_DEPLOY_TOKEN}" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/argocd-image-updater -n argocd
+```
 
 ## Upgrades
 

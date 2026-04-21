@@ -5,12 +5,14 @@
 # with:
 #   1. registries: — how the controller authenticates to ghcr.io to scan tags
 #      and resolve digests. Credentials live in the `argocd-image-updater-ghcr`
-#      Secret (ksops-decrypted from ghcr-secret.enc.yaml at apply-time).
-#   2. git.commit-message-template — stable `chore(deps): argocd-image-updater`
+#      Opaque Secret (created imperatively — see
+#      docs/runbooks/image-updater-bootstrap.md §1).
+#   2. git.user / git.email — commit authorship for the write-back (Cogni-1729,
+#      same identity as ACTIONS_AUTOMATION_BOT_PAT-driven automation in
+#      release.yml, promote-to-production.yml, promote-and-deploy.yml,
+#      flight-preview.yml).
+#   3. git.commit-message-template — stable `chore(deps): argocd-image-updater`
 #      prefix so `git log --grep='argocd-image-updater'` is the audit filter.
-#      Commit author is Cogni-1729 (ACTIONS_AUTOMATION_BOT_PAT), identical to
-#      every other automated commit on main (release.yml, promote-to-production.yml,
-#      promote-and-deploy.yml, flight-preview.yml).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -24,9 +26,15 @@ data:
         prefix: ghcr.io
         ping: yes
         credentials: secret:argocd/argocd-image-updater-ghcr#token
+  # Git commit authorship. Per v0.15.2 update-methods docs, the HTTPS creds
+  # Secret only controls authentication — authorship comes from these keys
+  # (or CLI flags). Without them, commits land as `argocd-image-updater
+  # <noreply@argoproj.io>`, which breaks the COMMIT_PROVENANCE invariant.
+  git.user: Cogni-1729
+  git.email: Cogni-1729@users.noreply.github.com
   git.commit-message-template: |
     chore(deps): argocd-image-updater update {{ range .AppChanges -}}
-    - {{ .Image }} to {{ .NewTag }}@{{ .NewDigest }} (from {{ .OldTag }}@{{ .OldDigest }})
+    - {{ .Image }}: {{ .OldTag }} -> {{ .NewTag }}
     {{ end }}
 
     Automated digest refresh by argocd-image-updater (bug.0344).

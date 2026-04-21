@@ -24,16 +24,21 @@ spec:
         - resources-finalizer.argocd.argoproj.io
       # bug.0344 — Argo CD Image Updater annotations.
       # Keeps main's infra/k8s/overlays/preview/{{name}}/kustomization.yaml
-      # digest seed eventually-consistent with GHCR. Reads ghcr/git creds
-      # from ksops-encrypted secrets in the argocd namespace (see
-      # ../argocd/image-updater/). Scope-limited to the primary app image;
-      # migrator images and sibling-env overlays are follow-up work — see
-      # bug.0344 § MVP scope boundaries.
+      # digest seed eventually-consistent with GHCR. GHCR credentials are
+      # configured at the registry level (see ../argocd/image-updater/
+      # config-patch.yaml → registries.conf); git push credentials come from
+      # the imperatively-created argocd-image-updater-git-creds Secret (see
+      # docs/runbooks/image-updater-bootstrap.md §1). Scope-limited to the
+      # primary app image; migrator images and sibling-env overlays are
+      # follow-up work — see bug.0344 § MVP scope boundaries.
+      #
+      # update-strategy: latest = pick the tag with the newest image-manifest
+      # creation timestamp among those matching allow-tags (v0.15.2 terminology
+      # — `newest-build` is not a valid strategy name).
       annotations:
         argocd-image-updater.argoproj.io/image-list: "app=ghcr.io/cogni-dao/cogni-template"
-        argocd-image-updater.argoproj.io/app.update-strategy: newest-build
+        argocd-image-updater.argoproj.io/app.update-strategy: latest
         argocd-image-updater.argoproj.io/app.allow-tags: "regexp:^preview-[0-9a-f]{40}{{image_tag_suffix}}$"
-        argocd-image-updater.argoproj.io/app.pull-secret: "pullsecret:argocd/argocd-image-updater-ghcr"
         argocd-image-updater.argoproj.io/write-back-method: "git:secret:argocd/argocd-image-updater-git-creds"
         argocd-image-updater.argoproj.io/git-branch: main
         argocd-image-updater.argoproj.io/write-back-target: kustomization
