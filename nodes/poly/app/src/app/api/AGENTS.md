@@ -5,7 +5,7 @@
 ## Metadata
 
 - **Owners:** @derek @core-dev
-- **Last reviewed:** 2026-04-16
+- **Last reviewed:** 2026-04-21
 - **Status:** draft
 
 ## Purpose
@@ -64,6 +64,8 @@ HTTP API endpoints using Next.js App Router. Contract-validated entry points tha
   - `/api/v1/work/items` [GET] - list work items with optional filters (SIWE auth)
   - `/api/v1/work/items/[id]` [GET] - get single work item by ID (SIWE auth)
   - `/api/v1/poly/copy-trade/orders` [GET] - recent order ledger rows with `synced_at` + `staleness_ms` (session auth)
+  - `/api/v1/poly/wallet/connect` [POST] - provision the calling user's dedicated Polymarket trading wallet (session auth)
+  - `/api/v1/poly/wallet/status` [GET] - read whether the calling user already has a resolvable dedicated Polymarket trading wallet (session auth)
   - `/api/v1/poly/internal/sync-health` [GET] - aggregate sync-freshness stats for the reconciler (no auth; aggregate-only)
 - **Files considered API:** v1/_/route.ts, admin/_/route.ts
 

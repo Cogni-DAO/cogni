@@ -14,12 +14,12 @@
  * @internal
  */
 
-import type { PolyClobApiKeyCreds } from "@cogni/poly-wallet";
 import { PrivyClient } from "@privy-io/node";
 import type { Logger } from "pino";
 import type { LocalAccount } from "viem";
 import { getServiceDb } from "@/adapters/server/db/drizzle.service-client";
 import { PrivyPolyTraderWalletAdapter } from "@/adapters/server/wallet";
+import { createOrDerivePolymarketApiKeyForSigner } from "@/bootstrap/capabilities/poly-trade";
 import { serverEnv } from "@/shared/env/server-env";
 
 export class WalletAdapterUnconfiguredError extends Error {
@@ -32,6 +32,42 @@ export class WalletAdapterUnconfiguredError extends Error {
 }
 
 let cached: PrivyPolyTraderWalletAdapter | null = null;
+
+export function createRealClobCredsFactory({
+  logger,
+  polygonRpcUrl,
+  deriveCreds = createOrDerivePolymarketApiKeyForSigner,
+}: {
+  logger: Logger;
+  polygonRpcUrl?: string | undefined;
+  deriveCreds?: (input: {
+    signer: LocalAccount;
+    polygonRpcUrl?: string | undefined;
+  }) => Promise<{
+    key: string;
+    secret: string;
+    passphrase: string;
+  }>;
+}) {
+  return async (signer: LocalAccount) => {
+    try {
+      return await deriveCreds({ signer, polygonRpcUrl });
+    } catch (err) {
+      logger.error(
+        {
+          component: "poly-trader-wallet-bootstrap",
+          funder_address: signer.address,
+          err: err instanceof Error ? err.message : String(err),
+        },
+        "poly.wallet.provision failed to derive live CLOB creds"
+      );
+      throw new Error(
+        "Failed to derive Polymarket CLOB API credentials for the tenant wallet",
+        { cause: err }
+      );
+    }
+  };
+}
 
 /**
  * Lazy-construct + memoize the adapter. Follow-up will move this into the
@@ -79,39 +115,16 @@ export function getPolyTraderWalletAdapter(
     appSecret,
   });
 
-  // v0 stub: returns synthetic CLOB L2 creds so the plumbing round-trip on
-  // candidate-a can succeed without Polymarket reachability. Real derivation
-  // (@polymarket/clob-client createOrDeriveApiKey) lands in a follow-up.
-  // Gated behind POLY_WALLET_ALLOW_STUB_CREDS=1 so production paths can
-  // never silently trade against placeholder creds.
-  if (env.POLY_WALLET_ALLOW_STUB_CREDS !== "1") {
-    throw new Error(
-      "PolyTraderWalletAdapter has no real CLOB creds factory wired; " +
-        "set POLY_WALLET_ALLOW_STUB_CREDS=1 to use the plumbing-only stub."
-    );
-  }
-
-  const stubClobCredsFactory = async (
-    _signer: LocalAccount
-  ): Promise<PolyClobApiKeyCreds> => {
-    logger.warn(
-      { component: "poly-trader-wallet-bootstrap" },
-      "poly.wallet.provision using STUB CLOB creds — NOT tradeable, plumbing test only"
-    );
-    return {
-      key: "placeholder-key",
-      secret: "placeholder-secret",
-      passphrase: "placeholder-passphrase",
-    };
-  };
-
   cached = new PrivyPolyTraderWalletAdapter({
     privyClient,
     privySigningKey: signingKey,
     serviceDb: getServiceDb(),
     encryptionKey,
     encryptionKeyId: aeadKeyId,
-    clobCredsFactory: stubClobCredsFactory,
+    clobCredsFactory: createRealClobCredsFactory({
+      logger,
+      polygonRpcUrl: env.POLYGON_RPC_URL,
+    }),
     logger,
   });
   return cached;

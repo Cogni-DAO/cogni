@@ -22,8 +22,11 @@
  */
 
 import { toUserId } from "@cogni/ids";
+import {
+  type PolyWalletConnectOutput,
+  polyWalletConnectOperation,
+} from "@cogni/node-contracts";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { getSessionUser } from "@/app/_lib/auth/session";
 import { getContainer } from "@/bootstrap/container";
 import { wrapRouteHandlerWithLogging } from "@/bootstrap/http";
@@ -33,25 +36,6 @@ import {
 } from "@/bootstrap/poly-trader-wallet";
 
 export const dynamic = "force-dynamic";
-
-const ConnectRequestSchema = z.object({
-  custodialConsentAcknowledged: z.literal(true, {
-    message:
-      "Custodial consent must be explicitly acknowledged — set custodialConsentAcknowledged: true.",
-  }),
-  custodialConsentActorKind: z.enum(["user", "agent"]),
-  custodialConsentActorId: z.string().min(1),
-});
-
-const ConnectResponseSchema = z.object({
-  connection_id: z.string().uuid(),
-  funder_address: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  requires_funding: z.boolean(),
-  suggested_usdc: z.number().positive(),
-  suggested_matic: z.number().positive(),
-});
-
-export type PolyWalletConnectResponse = z.infer<typeof ConnectResponseSchema>;
 
 export const POST = wrapRouteHandlerWithLogging(
   {
@@ -68,7 +52,7 @@ export const POST = wrapRouteHandlerWithLogging(
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const parsed = ConnectRequestSchema.safeParse(body);
+    const parsed = polyWalletConnectOperation.input.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid input", issues: parsed.error.issues },
@@ -133,7 +117,7 @@ export const POST = wrapRouteHandlerWithLogging(
       },
     });
 
-    const payload: PolyWalletConnectResponse = {
+    const payload: PolyWalletConnectOutput = {
       connection_id: result.connectionId,
       funder_address: result.funderAddress,
       requires_funding: true,
@@ -149,6 +133,6 @@ export const POST = wrapRouteHandlerWithLogging(
       },
       "poly.wallet.connect — provisioned per-tenant Polymarket trading wallet"
     );
-    return NextResponse.json(ConnectResponseSchema.parse(payload));
+    return NextResponse.json(polyWalletConnectOperation.output.parse(payload));
   }
 );

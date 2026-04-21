@@ -75,6 +75,7 @@ export * from "./poly.copy-trade.orders.v1.contract";
 export * from "./poly.copy-trade.targets.v1.contract";
 export * from "./poly.sync-health.v1.contract";
 export * from "./poly.wallet.balance.v1.contract";
+export * from "./poly.wallet.connection.v1.contract";
 export * from "./poly.wallet-analysis.v1.contract";
 // ── Runs ────────────────────────────────────────────────────────────────────
 export * from "./run-stream.contract";

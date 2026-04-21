@@ -40,6 +40,7 @@ import type { PolymarketUserPosition } from "@cogni/market-provider/adapters/pol
 import { EVENT_NAMES } from "@cogni/node-shared";
 import type { Counter, Histogram } from "prom-client";
 import client from "prom-client";
+import type { LocalAccount } from "viem";
 
 import { FakePolymarketClobAdapter } from "@/adapters/test";
 import { createClobExecutor } from "@/features/trading/clob-executor";
@@ -80,6 +81,7 @@ export interface CreatePolyTradeCapabilityConfig {
 }
 
 const DEFAULT_CLOB_HOST = "https://clob.polymarket.com";
+const POLYGON_CHAIN_ID = 137;
 
 /** Placeholder address used in test mode so receipts carry a stable profile URL. */
 const TEST_MODE_OPERATOR_ADDRESS =
@@ -198,6 +200,47 @@ function adaptLogger(pinoLogger: Logger): LoggerPort {
 
 function profileUrl(address: string): string {
   return `https://polymarket.com/profile/${address.toLowerCase()}`;
+}
+
+/**
+ * Build a viem wallet client around a Privy-backed signer, then ask the
+ * Polymarket CLOB API to create or derive L2 API credentials for it.
+ *
+ * Lives in this file because Biome restricts all `@polymarket/clob-client`
+ * imports in the app to the `bootstrap/capabilities/poly-trade.ts` boundary.
+ */
+export async function createOrDerivePolymarketApiKeyForSigner({
+  signer,
+  polygonRpcUrl,
+  host = DEFAULT_CLOB_HOST,
+}: {
+  signer: LocalAccount;
+  polygonRpcUrl?: string | undefined;
+  host?: string | undefined;
+}): Promise<{
+  key: string;
+  secret: string;
+  passphrase: string;
+}> {
+  const { ClobClient } = await import("@polymarket/clob-client");
+  const { createWalletClient, http } = await import("viem");
+  const { polygon } = await import("viem/chains");
+
+  // viem version drift between @privy-io/node/viem peerDep and this app's viem
+  // forces a cast; runtime shape matches WalletClient.account exactly.
+  // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+  const signerAny: any = signer;
+  const walletClient = createWalletClient({
+    account: signerAny,
+    chain: polygon,
+    transport: http(polygonRpcUrl),
+  });
+
+  // Same cast rationale as above — dual-peerDep viem typing.
+  // biome-ignore lint/suspicious/noExplicitAny: cross-peerDep viem type drift
+  const clobSignerAny: any = walletClient;
+  const clob = new ClobClient(host, POLYGON_CHAIN_ID, clobSignerAny);
+  return await clob.createOrDeriveApiKey();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
