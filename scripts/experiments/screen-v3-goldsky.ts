@@ -189,7 +189,7 @@ function cacheSet(cid: string, m: MarketCache): void {
 }
 async function fetchMarketCached(cid: string): Promise<MarketCache | null> {
   const hit = cacheGet(cid);
-  if (hit && hit.closed) return hit;
+  if (hit?.closed) return hit;
   const j = await getJson<Record<string, unknown>>(
     `${BASE_CLOB}/markets/${cid}`,
     clobBucket
